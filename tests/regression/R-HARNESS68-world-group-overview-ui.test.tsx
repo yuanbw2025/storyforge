@@ -150,6 +150,9 @@ describe('R-HARNESS68 · 世界建议 UI', () => {
     }))
     expect(host.textContent).toContain('世界建议候选尚未写入')
     expect(host.textContent).toContain('灰烬钟庭')
+    const review = Array.from(host.querySelectorAll('details')).find(item => item.textContent?.includes('查看完整世界建议'))
+    expect(review).toBeTruthy()
+    expect(review!.textContent).toContain(candidate.worlds[0].powerRestriction)
     expect(mocks.adopt).not.toHaveBeenCalled()
 
     const choices = Array.from(host.querySelectorAll('button')).filter(item => item.textContent?.includes('选择'))

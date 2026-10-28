@@ -29,6 +29,8 @@ import {
 } from '../shared/initial-record-target'
 import HarnessEvidencePanel from '../agent/HarnessEvidencePanel'
 import CopilotGenerationStatus from '../agent/CopilotGenerationStatus'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
+import CharacterReadStatus from './CharacterReadStatus'
 
 // ── 常量 ───────────────────────────────────────────────────────
 
@@ -51,7 +53,12 @@ interface Props {
 // ── 主面板 ─────────────────────────────────────────────────────
 
 export default function CharacterPanel({ project, view = 'generator', initialCharacterId }: Props) {
-  const { characters, loadAll, addCharacter, updateCharacter, deleteCharacter } = useCharacterStore()
+  const { characters, loading, loadError, loadedScope, loadAll, addCharacter, updateCharacter, deleteCharacter } = useCharacterStore()
+  const [actionError, setActionError] = useState('')
+  const guarded = async (operation: () => void | Promise<unknown>) => {
+    try { await flushPendingEditsV1(); await operation(); setActionError('') }
+    catch (cause) { setActionError(cause instanceof Error ? cause.message : '角色操作失败，输入已保留。') }
+  }
   const { groups, activeGroupId } = useWorldGroupStore()
   // 多世界：角色世界过滤器（'all' | 'cross' | 世界组 id）
   const [worldFilter, setWorldFilter] = useState<'all' | 'cross' | number>('all')
@@ -75,7 +82,7 @@ export default function CharacterPanel({ project, view = 'generator', initialCha
   const [showDimPicker, setShowDimPicker] = useState(false)
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
-  useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
+  useEffect(() => { void loadAll(project.id!) }, [project.id, project.activeWorldId, project.activeWorkId, loadAll])
 
   // 多世界过滤：跨世界角色在任意世界都显示
   const worldFilteredChars = !project.enableMultiWorld || worldFilter === 'all'
@@ -109,7 +116,7 @@ export default function CharacterPanel({ project, view = 'generator', initialCha
 
   const handleAdd = async () => {
     if (!draftAxes.roleWeight || !draftAxes.moralAxis || !draftAxes.orderAxis) return
-    setShowRolePicker(false)
+    await flushPendingEditsV1()
     const id = await addCharacter({
       projectId: project.id!, name: '新角色',
       roleWeight: draftAxes.roleWeight,
@@ -121,11 +128,12 @@ export default function CharacterPanel({ project, view = 'generator', initialCha
       isCrossWorld: project.enableMultiWorld && worldFilter === 'cross',
     })
     setDraftAxes({ roleWeight: null, moralAxis: null, orderAxis: null })
+    setShowRolePicker(false)
     setSelected(id)
   }
 
   const handleUpdate = (field: keyof Character, value: string) => {
-    if (selectedChar?.id) updateCharacter(selectedChar.id, { [field]: value })
+    if (selectedChar?.id) return updateCharacter(selectedChar.id, { [field]: value }, { scope: loadedScope ?? undefined, expected: selectedChar })
   }
 
   const handleAIGenerate = async () => {
@@ -176,7 +184,10 @@ export default function CharacterPanel({ project, view = 'generator', initialCha
   ))
 
   return (
-    <div className="space-y-3">
+    <>
+    <CharacterReadStatus projectId={project.id!} />
+    {actionError && <p role="alert" className="text-sm text-error">{actionError}</p>}
+    <div inert={loading || Boolean(loadError)} className="space-y-3">
       {/* 工具栏 */}
       <div className="flex items-center gap-3 flex-wrap">
         {view === 'generator' && (
@@ -194,7 +205,7 @@ export default function CharacterPanel({ project, view = 'generator', initialCha
                   <div className="fixed left-4 right-4 top-32 z-50 max-h-[calc(100dvh-10rem)] overflow-y-auto bg-bg-surface border border-border rounded-lg shadow-lg p-3 sm:absolute sm:top-full sm:left-0 sm:right-auto sm:mt-1 sm:w-[430px]">
                     <CharacterAxesPicker {...draftAxes} onChange={setDraftAxes} compact />
                     <button
-                      onClick={handleAdd}
+                      onClick={() => { void guarded(handleAdd) }}
                       disabled={!draftAxes.roleWeight || !draftAxes.moralAxis || !draftAxes.orderAxis}
                       className="mt-3 w-full px-3 py-2 bg-accent text-white text-sm rounded disabled:opacity-40"
                     >
@@ -348,7 +359,7 @@ export default function CharacterPanel({ project, view = 'generator', initialCha
                 <button
                   key={c.id}
                   {...initialRecordTargetAttributes(c.id === initialCharacterId, c.id)}
-                  onClick={() => setSelected(active ? null : c.id!)}
+                  onClick={() => { void guarded(() => setSelected(active ? null : c.id!)) }}
                   className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-left transition-all ${
                     active
                       ? 'bg-accent/8 border-l-2 border-accent'
@@ -356,12 +367,12 @@ export default function CharacterPanel({ project, view = 'generator', initialCha
                   } ${c.id === initialCharacterId ? INITIAL_RECORD_TARGET_CLASS : ''}`}
                 >
                   <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${colorClass}`}>
-                    {c.name.charAt(0)}
+                    {typeof c.name === 'string' ? c.name.charAt(0) : '?'}
                   </span>
                   <div className="min-w-0">
-                    <p className={`text-sm font-medium truncate ${active ? 'text-accent' : 'text-text-primary'}`}>{c.name}</p>
+                    <p className={`text-sm font-medium truncate ${active ? 'text-accent' : 'text-text-primary'}`}>{typeof c.name === 'string' ? c.name : '名称格式异常'}</p>
                     <p className="text-[10px] text-text-muted truncate">
-                      {c.shortDescription?.slice(0, 10) || `${ROLE_WEIGHT_LABELS[c.roleWeight]} · ${MORAL_AXIS_LABELS[c.moralAxis]}`}
+                      {(typeof c.shortDescription === 'string' ? c.shortDescription.slice(0, 10) : '') || `${ROLE_WEIGHT_LABELS[c.roleWeight]} · ${MORAL_AXIS_LABELS[c.moralAxis]}`}
                     </p>
                   </div>
                 </button>
@@ -373,13 +384,14 @@ export default function CharacterPanel({ project, view = 'generator', initialCha
           <div className="flex-1 min-w-0">
             {selectedChar ? (
               <CharacterDetailCard
+                key={selectedChar.id}
                 char={selectedChar}
                 glyphColor={GLYPH_COLORS[characters.findIndex(c => c.id === selectedChar.id) % GLYPH_COLORS.length]}
                 project={project}
                 onUpdateField={handleUpdate}
-                onPatch={patch => updateCharacter(selectedChar.id!, patch)}
+                onPatch={(patch, expected) => updateCharacter(selectedChar.id!, patch, { scope: loadedScope ?? undefined, expected: expected ?? selectedChar })}
                 onReload={() => loadAll(project.id!)}
-                onDelete={() => { deleteCharacter(selectedChar.id!); setSelected(null) }}
+                onDelete={() => { void guarded(async () => { await deleteCharacter(selectedChar.id!); setSelected(null) }) }}
                 multiWorld={!!project.enableMultiWorld}
                 worldGroups={groups}
                 activeWorldGroupId={activeGroupId}
@@ -393,6 +405,7 @@ export default function CharacterPanel({ project, view = 'generator', initialCha
         </div>
       )}
     </div>
+    </>
   )
 }
 

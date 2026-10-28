@@ -79,6 +79,18 @@ describe('LFQ9 · 节点复用正式全文评审', () => {
     expect(executeRegisteredAIEntryV1).not.toHaveBeenCalled()
   })
 
+  it('Agnes使用同一冻结思考参数匹配缓存，分步骤报告回读后再次运行节点不重复调用', async () => {
+    const f = await seed(); const aiConfig = { ...cfg, provider: 'agnes' as const, model: 'agnes-2.5-flash', apiKey: 'isolated-test-token' }
+    const input = { ...args(f), aiConfig }
+    const first = await executeDomainNode(input)
+    expect(vi.mocked(executeRegisteredAIEntryV1).mock.calls[0][6]).toEqual({ responseFormat: 'json_object', thinkingMode: 'disabled' })
+    const report = await readLatestWholeChapterQualityReviewV1({ scope: f.scope, chapterId: f.chapterId, mode: 'quality' })
+    expect(report?.report.reviewer.settings.parameters.chat_template_kwargs).toEqual({ enable_thinking: false })
+    const second = await executeDomainNode(input)
+    expect(JSON.parse(second!.output)).toEqual(JSON.parse(first!.output))
+    expect(executeRegisteredAIEntryV1).toHaveBeenCalledTimes(1)
+  })
+
   it('节点图刷新记录只保存报告证据；作品变更即过期，导入历史不能恢复旧回执或写正文', async () => {
     const f = await seed(); const graph = { ...emptyAuthoringGraph(), nodes: [node()] }
     const id = await db.nodeFlows.add(stampNewRecord(f.scope, 'nodeFlows', { projectId: f.scope.projectId, worldGroupId: null, name: '审修', description: '', graphJson: JSON.stringify(graph), createdAt: 1, updatedAt: 1 }, { owner: 'work' })) as number

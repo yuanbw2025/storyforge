@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "kind": "detailed-outline-author-save-and-recovery-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "0d93ae4915dd262a8e88e213ec4b78781080629e",
+    "files": {
+      "src/components/outline/DetailedOutlinePanel.tsx": "6a01cd5d267dc151c1c2ebf71d399e6503e72ffc066226be0e1d70dccfc8a903",
+      "src/components/outline/DetailedSceneCard.tsx": "23390b73b50b2ff65f42306a093f1aa875ad6b50ab6c181ab5b507722a5ee513",
+      "src/components/outline/ScenePanel.tsx": "36e3131053ab3d40dc2f6b70397b1bb2e3024918a1ee1d67b55ecbd2c5ea3d9a",
+      "src/components/shared/AcknowledgedTextField.tsx": "5be3d700ab3f629a5ee2712c76f8a84acd039d4c11e044d9d28ee243d0ca78d5",
+      "src/lib/ai/adapters/detail-scene-adapter.ts": "b311a178abf4fce073b910e7c6137375864a200d3afe7de4222b823f8d1bd553",
+      "src/lib/registry/context-sources.ts": "c26aceb1988f9c6ca192a7d94e148df31ec9e446302ab4e428c4a31413b3e604",
+      "src/lib/types/detailed-outline.ts": "a7a424fec00428943781aa8f619ecd21e22e782610b87e790d6b4a87f2a89558",
+      "src/stores/detailed-outline.ts": "d513d686746ba06a39e464202d418c1cc823b8abcc7a6e9f2e22d2540a21d908",
+      "tests/e2e/longform-step-quality.spec.ts": "cf03bc53ffb6f419c2a7be013f08eb9a1a7d2acb96a1d6c98e6521d9c3b6870a",
+      "tests/helpers/seed-full-project.ts": "66fd52d45a88115e587154e4cf3575e694a6c0e6ff76665f3238ebd69c37f5eb",
+      "tests/regression/R-AUDIT6-detailed-outline-views.test.tsx": "8d93eee99d09a0e81cc9b27cfa56fbd982bed6b3535e9b34c18715d272eb7ba8",
+      "tests/regression/R-FB9-detailed-outline-source.test.ts": "528c477b93ff2a397fd81928be00fb76681dba468807f497ed5886c3a14498b3",
+      "tests/regression/R-HARNESS19-prose-semantic-durable.test.ts": "8ac29689427276299d21b7c820f78a2c8bc72677bc29b02a2046da6b1cfd05bb",
+      "tests/regression/R-HARNESS7-prose-generation-durable.test.ts": "dd8a6e6081961ba64e36fb9e1208a9c63db5d6bf280147318d0bfa1365c9c5e5",
+      "tests/regression/R-PHASE4-long-form-scale-gate.test.ts": "ccbcccf28018101ebf9228704ab1165294540cadea26429afcbfd5b2cadf0e52",
+      "tests/regression/R-PROSE1-gateway-prose.test.ts": "ccd524394d00ec8831fa936765bc0d9661b98a6ca97ed8f06d766606ea03b4b3",
+      "tests/regression/R-export-import-roundtrip.test.ts": "bbd917795a955a4763aa3f517567ee3f78bb30c523492c9307087631b6f15e69",
+      "tests/regression/R-DETAILED-author-save-boundary.test.ts": "234cd06cbec1f4cbed104bc13ef5ad0002e26b5dbb175bfa3336e7e56b11b294",
+      "tests/e2e/longform-detailed-save.spec.ts": "98c5cbf2843b72d36dc4aa7e25a20cd1d829f3a196b2a528eb64e305c924019f"
+    }
+  },
+  "status": "AUTHOR_SAVES_AND_REGISTERED_DOWNSTREAM_VERIFIED_REAL_DETAIL_GENERATION_CONTINUES",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "originalFailures": {
+    "store": {
+      "failed": 18,
+      "log": "detailed-save-before.log",
+      "examples": [
+        "Parallel first additions create duplicate detail rows",
+        "Deleted cached row returned as if present",
+        "Deleted/zero-row save falsely succeeds",
+        "Owner and identity patches are persisted",
+        "Caller mutation changes a queued scene edit",
+        "Failed load remains loading",
+        "Malformed scene fields and sparse/duplicate scene identities accepted"
+      ]
+    },
+    "nativeClick": {
+      "log": "detailed-task-open-diagnostic.log",
+      "finding": "Inserting saving text during blur moved the next native click target; the task summary received no click event and remained closed. Original trace and diagnostic runner retained.",
+      "fix": "Reserve the saving status slot so blur acknowledgement does not change geometry."
+    },
+    "compatibilityFixtures": {
+      "log": "detailed-related-broad.log",
+      "failed": 29,
+      "files": 7,
+      "finding": "Strict current scene boundary exposed incomplete test fixtures (missing notes/pace/estimatedWords or invalid normal pace). Updated synthetic fixtures to the existing current scene contract; no production body repair or weaker assertions."
+    }
+  },
+  "regression": {
+    "passed": 322,
+    "files": 41,
+    "log": "detailed-related-broad-delivery.log",
+    "coverage": [
+      "Manual scope/field/CAS/zero-row checks",
+      "Scene array/metadata and optional task boundaries",
+      "Late read/write ownership",
+      "Generation, batch, candidate repair/adoption and prose Gateway",
+      "130-table export/import and reference remapping; 100k/300k/1m-character engineering scale gates",
+      "Shared character and outline save contracts"
+    ]
+  },
+  "isolatedNativeBrowser": {
+    "finalStorePassed": 6,
+    "finalStoreLog": "detailed-final-store-native.log",
+    "sharedCallerUniquePathsVerified": 39,
+    "runs": [
+      {
+        "log": "detailed-native-final.log",
+        "passed": 38,
+        "failed": 1,
+        "failure": "One fixture still selected the old placeholder accessible name; no model request in that failed case."
+      },
+      {
+        "log": "detailed-step-quality-final.log",
+        "passed": 9,
+        "includes": "All nine step-quality paths, including the corrected selector and author-edited prose adoption"
+      }
+    ],
+    "sourceQualification": "The 39-path cohort preceded only the read-only allowance for explicit undefined optional metadata. That one-line compatibility adjustment has a new regression and the six final-store native paths. Full final-head CI/E2E continues.",
+    "modelTransport": "Simulated where model responses are needed; zero provider calls in these native suites.",
+    "paths": [
+      "Rapid first additions keep one canonical detail row and every scene after reload",
+      "All scene fields/tasks save before chapter switch and survive 320px reload",
+      "Quota failure retains draft; explicit retry clears the failure and permits chapter navigation",
+      "A stale field cannot overwrite another page; draft remains visible",
+      "Malformed stored data stays unchanged; local error ends loading and explicit recovery rereads",
+      "Native click after blur still opens tasks",
+      "Chromium CDP Chinese composition, middle deletion/caret and reload",
+      "Existing character four-role save/clear/quota and outline title/CAS/rollback paths",
+      "Detail-to-prose long notes/author instructions, stop/unknown-response and predecessor-memory handoff"
+    ]
+  },
+  "implementation": [
+    "getOrCreate queries and creates under one scoped native transaction; duplicates are retained and rejected, never silently merged",
+    "Freeze Work and queued payloads, registry-derived author fields, stable identities, touched-field CAS, scoped references and affected-row checks; publish after commit to the same owner only",
+    "Load sequencing ends waiting, preserves the current view on failure and offers reread; formal registered detailedOutline source rejects corrupt or duplicate rows",
+    "Reuse AcknowledgedTextField for scene text, task, pace and word-count editing; composition, draft retention, explicit retry and unload/navigation barriers",
+    "Add/delete command errors have no permanent nonexistent draft failure; patch failures retain the edit barrier",
+    "No schema/table/owner migration; optional undefined row metadata stays missing without rewriting"
+  ],
+  "checks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS:130",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "build": "PASS",
+    "logs": [
+      "detailed-required-gates.log",
+      "detailed-delivery-gates.log"
+    ],
+    "fullCiFinalHead": "NOT_RUN",
+    "fullE2eFinalHead": "NOT_RUN",
+    "release": "NOT_RELEASED"
+  },
+  "limits": [
+    "Real Agnes detail/enhancement/prose/review paths and remaining matrix continue",
+    "Deterministic/scale fixtures are engineering evidence, not long-term author acceptance",
+    "Original malformed responses, failed runs, native diagnostic failures and prior CI failures remain retained"
+  ]
+}

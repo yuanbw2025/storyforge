@@ -50,23 +50,21 @@ export async function updateStoryArcStagesLifecycle(args: {
   await db.transaction('rw', db.storyArcs, db.storylineProgress, async () => {
     const current = await db.storyArcs.get(args.arcId)
     if (!current) throw new Error('故事线已不存在，请重新载入。')
-    if (args.expectedStagesJson !== undefined && current.stages !== args.expectedStagesJson) {
-      throw new Error('故事线阶段已变化，请刷新页面后检查，当前修复尚未保存。')
+    if (args.expectedStagesJson !== undefined && current.stages !== args.expectedStagesJson) throw new Error('故事线阶段已变化，请刷新页面后检查，当前修复尚未保存。')
+    if (!inspectStages(current.stages).valid && args.expectedStagesJson === undefined) throw new Error('原阶段数据格式异常，请先检查原始数据并显式保存修复。')
+    if (await db.storyArcs.update(args.arcId, { stages: args.stages, updatedAt: Date.now() }) !== 1) {
+      throw new Error('故事线写入0行，阶段和进度均未保存。')
     }
-    if (!inspectStages(current.stages).valid && args.expectedStagesJson === undefined) {
-      throw new Error('原阶段数据格式异常，请先检查原始数据并显式保存修复。')
-    }
-    await db.storyArcs.update(args.arcId, { stages: args.stages, updatedAt: Date.now() })
     const progress = await db.storylineProgress.where('arcId').equals(args.arcId).first()
     if (
       progress?.id != null
       && progress.currentStageId != null
       && !inspected.stages.some(stage => stage.id === progress.currentStageId)
     ) {
-      await db.storylineProgress.update(progress.id, {
+      if (await db.storylineProgress.update(progress.id, {
         currentStageId: null,
         updatedAt: Date.now(),
-      })
+      }) !== 1) throw new Error('故事线进度写入0行，阶段和进度均未保存。')
     }
   })
 }

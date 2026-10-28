@@ -4,6 +4,10 @@
 
 NW-0B 交付时只完成评测基础设施，没有模型调用、浏览器产品 E2E、真人验收或规模性能验收。后续各卡证据分别记录在下文，不回填为 NW-0B 的成绩。
 
+**2026-10-27 状态字段写入反例补验**：补齐稀疏数组写入拒绝后，再次实际运行三组110项测试，生成[基线v2](./baseline-20261027-longform-stability-v2.json)、[IR契约v2](./ir-contract-20261027-longform-stability-v2.json)和[投影契约v2](./domain-projection-20261027-longform-stability-v2.json)。[v2对照](./shared-source-refresh-20261027-longform-stability-v2.json)确认观察与v1一致，v1及更早回执均保留。完整交付检查另行核对。
+
+**2026-10-27 长篇稳定性修复的共享依赖回归**：完整 CI 中 5648 项测试通过、3 项跳过，三组末尾比较仍因来源指纹变化失败。保留历史回执和原失败后，实际重新运行三组 110 项测试，生成[新确定性基线](./baseline-20261027-longform-stability-v1.json)、[新 IR 契约](./ir-contract-20261027-longform-stability-v1.json)与[新领域投影契约](./domain-projection-20261027-longform-stability-v1.json)。[逐项对照记录](./shared-source-refresh-20261027-longform-stability-v1.json)确认原观察、gold 和历史文件不变，补充绑定新状态字段校验器。此更新只用于工程回归；完整 CI 继续复验，不新增世界引擎模型、性能或人工验收结论。
+
 **2026-10-26 PR134 主干整合复验**：[原始 CI](https://github.com/yuanbw2025/storyforge/actions/runs/40285762186)的 5597 项断言通过、3 项跳过，三组收尾比较因输入指纹变化而失败。实际重新执行三文件 110 项后，[IR 编码](./ir-contract-20261026-pr134-integration-v1.json)、[领域投影](./domain-projection-20261026-pr134-integration-v1.json)与[确定性基线](./baseline-20261026-pr134-integration-v1.json)的业务观察均与 20261025 回执逐项相同；输入变化来自主干的依赖、产品生产及生命周期接缝，随后另记录新回执引用与清单自身的指纹。保留旧回执、原语料和全部判定标准；不新增模型、性能或人工验收结论。
 
 **2026-10-25 工程交付收束**：本批以已保留的工程检查点为起点，整合当前主干后重新验证并交付；自动接续已按作者要求停止。本目录的历史失败、未知和未完成验收保持，不因主干合并改写为通过。增强入口仍仅在 DEV + `narrative-preview` 显式试用；原 41.67% 修改影响精确率、正式三档性能缺口、固定读者缺项以及作者实际改稿/用时缺失均保留。
@@ -524,4 +528,10 @@ IR lexical 为 47 正确、2 部分正确、71 合理拒答；原文 lexical 为
 
 PR208/mainline integration receipt: `baseline-20261027-pr208-integration-v3.json`; all deterministic observations match the preserved browser-helper-v2 and PR134 integration receipts. No model, performance or human acceptance upgrade.
 
+2026-10-27 分步骤后续巡检合入当前 main 的 provider 生命周期与既有状态表校验边界。`manifest-v1.json` 及 R-NW-1A/1B 当前回读指向 `20261027-workflow-continuation-v1` 三份新回执，旧回执和冻结 corpus 保持原样。生成与默认回读均为 110 项通过，与上一组回执的语义观察逐项相同；对应记录为 `shared-source-refresh-20261027-workflow-continuation-v1.json`。这部分是确定性工程证据，模型调用为 0，不代表产品、原生安装包或读者验收。
+
 2026-10-27 PR209/TTRPG 集成保留双方全部既有回执与历史记录；活动基线使用独立新回执，须逐项确认观测结果与双方原件一致。该工程取证不代表模型质量、真人或商业验收。
+
+2026-10-27 长篇后续修复与 main `301d38ef` 再次集成：双方既有回执原件保留，新增 continuation-v3 回执须独立执行并逐项核对观察；不能用输入摘要更新替代观察验证。
+
+continuation-v3 集成的四个文件分别覆盖 NW-0B 25 项、IR codec 73 项、领域投影 17 项与独立领域 corpus 12 项；四者共 127 项。旧长篇 222 项回归中的 NW 子集为前 115 项，不包含独立 corpus；[口径更正](../longform-stability/world-readback-20261027-8aacf3b0-clarification-v1.json)保留原记录并说明，不能把投影测试当作 corpus 回执默认回读。

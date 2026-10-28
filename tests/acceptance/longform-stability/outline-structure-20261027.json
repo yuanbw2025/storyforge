@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "kind": "longform-outline-structure-partial-evidence",
+  "date": "2026-10-27",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "6ef76143e8314913fb192d5183f231596f752f60",
+    "files": {
+      "src/stores/outline.ts": "9bc54f8f9c10e9b6d3ba7b7c4ab0a6e2a2f51e824e21201039932a1fec9b6a1d",
+      "src/stores/chapter.ts": "dc10b811015b61f8f3a478819b27a01a234828b6c7a1f39cf42e55781f73ebd1",
+      "src/lib/outline/normalize.ts": "aff84b96bda649476a51a7f8e170bd7aea1811ee64808e0d036983f043ffcf76",
+      "src/lib/outline/selectors.ts": "3ad6973929122afbc20f68e92e9ba713b0e627633973fa711b110135f1d6e357",
+      "src/components/outline/OutlinePanel.tsx": "8afea5740c7ed6d1a8c9c762e87f39f29ac842726141d1e579b8169b9d6e98be",
+      "src/components/outline/OutlineChapterTree.tsx": "dfdc414a7cadfdd8940773868d8bca3069c251eee0f28f7787d626b818e57d51",
+      "src/components/outline/OutlineVolumeDetail.tsx": "5858e44169a0de3a98ab3306e16b7428f568c618ce603de26bc8f79d2e51e4de",
+      "tests/regression/R-OUTLINE-structure-owner-lifecycle.test.ts": "71651cd9a0a3f6167eaba296512ed8bc40df9e87a5c95e04eb737bc3dac7c6ba",
+      "tests/e2e/longform-outline-structure.spec.ts": "987072ccccdd07a5902ef846d951c3efc97e397f5016297d9b4d56516de098f1"
+    }
+  },
+  "status": "STRUCTURAL_NORMAL_AND_TARGETED_FAILURES_VERIFIED_CONTINUING",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "owner": "Work; references to World-owned groups validated; no schema or new tables",
+  "aiCalls": 0,
+  "originalRegression": {
+    "failed": 8,
+    "sourceCommit": "6ef76143e8314913fb192d5183f231596f752f60",
+    "log": "outline-structure-before-6ef76143.log"
+  },
+  "regression": {
+    "passed": 36,
+    "files": [
+      "tests/regression/R-OUTLINE-structure-owner-lifecycle.test.ts",
+      "tests/regression/R-OUTLINE-author-save-atomic.test.ts",
+      "tests/regression/R-FB2-outline-reorder.test.ts",
+      "tests/regression/R-QUICKWIN6-outline-cross-parent-move.test.ts",
+      "tests/regression/R-CF-chapter-title-sync.test.ts",
+      "tests/regression/R-06-delete-node-cascade.test.ts"
+    ],
+    "log": "outline-structure-closure.log"
+  },
+  "isolatedBrowser": {
+    "mainRun": {
+      "passed": 14,
+      "log": "outline-structure-browser-final.log"
+    },
+    "expandedCommandDetails": {
+      "passed": 4,
+      "log": "outline-structure-final-command-details.log",
+      "sameProductionSource": true
+    },
+    "paths": [
+      "Create volume/chapter and insert between exact sibling identities",
+      "Native mouse chapter reorder, volume reorder and cross-volume move; no synthetic drop dispatch",
+      "Cancel and confirm chapter, story-block and volume deletion",
+      "Clear direct and story-block chapters with linked prose/scenes, preserving parent structures",
+      "Root deletion failure rolls back the complete native tree, prose, scenes and cache; explicit retry succeeds",
+      "Insertion reorder failure rolls back the new row; explicit retry is not blocked by a failed command marker",
+      "Ungrouped chapters remain visible after adding story blocks; whole-volume review entry remains accessible"
+    ],
+    "driverEvidence": "Initial Playwright dragTo produced no native drag events; explicit real mouse movement produced dragstart, dragover, drop and dragend and verified actual persisted orders. Original diagnostics retained.",
+    "faultReporting": "Command errors persist in the outline panel until a subsequent operation rather than depending on an expiring toast"
+  },
+  "architecture": {
+    "lifecycle": "Uses existing cascadeDeleteChapterRecords and PROJECT_TABLES-derived reference cascade in one outer native transaction. Caches update only after commit.",
+    "scope": "Capture original Work before queueing; revalidate parent, cycle, group and complete sibling identity inside transaction; late writes do not append into another Work cache.",
+    "commands": "Local structural commands serialize independently; in-flight UI commands expose a pending draft flusher and disable conflicting controls; failed commands reject visibly without leaving a phantom unsaved text key."
+  },
+  "checks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "build": "PASS",
+    "fullCiFinalSource": "NOT_RUN",
+    "fullE2e": "NOT_RUN",
+    "release": "NOT_RELEASED"
+  },
+  "remaining": [
+    "The full fault/platform matrix remains incomplete",
+    "A real Agnes single-volume candidate survived in its ledger but did not hydrate after a development StrictMode reload on source 6ef76143; original one-call evidence retained, remediation follows",
+    "Scene-outline, prose, review, lifecycle and available native clients continue"
+  ],
+  "privateEvidenceDirectoryId": "step-mode-stability-continuation-20261027"
+}

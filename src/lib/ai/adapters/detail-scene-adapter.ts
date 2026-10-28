@@ -1,4 +1,5 @@
 import type { ChatMessage, DetailedScene, ScenePace } from '../../types'
+import { SCENE_PACES } from '../../types/detailed-outline'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../prompt-engine'
 import { nanoid } from '../../utils/id'
@@ -139,7 +140,6 @@ export function parseEnhancedDetailResult(raw: string): {
 
 export type EnhancedDetailResult = NonNullable<ReturnType<typeof parseEnhancedDetailResult>>
 
-const VALID_PACES: ScenePace[] = ['slow', 'medium', 'fast', 'climax']
 
 export function normalizeParsedScenes(
   scenes: EnhancedDetailResult['scenes'] | null | undefined,
@@ -150,7 +150,7 @@ export function normalizeParsedScenes(
   return scenes
     .filter(scene => scene && (scene.title || scene.summary || scene.location || scene.conflict))
     .map(scene => {
-      const pace = VALID_PACES.includes(scene.pace as ScenePace)
+      const pace = SCENE_PACES.includes(scene.pace as ScenePace)
         ? scene.pace as ScenePace
         : 'medium'
       return {

@@ -1,8 +1,9 @@
-import { chat } from '../../ai/client'
+import { chat, type ChatRequestOptions } from '../../ai/client'
 import { estimateTokens } from '../../ai/context-budget'
 import {
   buildCodexExtractPromptFromRegisteredContextV1,
   buildCodexEnrichPromptFromRegisteredContextV1,
+  codexEntryTransportOptionsV1,
   parseCodexEntriesStrictV1,
   readCodexExtractPromptTemplateSnapshotV1,
   readCodexEnrichPromptTemplateSnapshotV1,
@@ -10,7 +11,7 @@ import {
 } from '../../ai/adapters/structured-extract-adapter'
 import { splitExtractionText } from '../../ai/structured-extraction'
 import type { AIConfig, ChatMessage, WorkspaceScope } from '../../types'
-import { parseFieldSchema } from '../../types/codex'
+import { codexCategoryFormatIssueV1, codexEntryFormatIssueV1, parseFieldSchema } from '../../types/codex'
 import { db } from '../../db/schema'
 import { assembleContext } from '../../registry/assemble-context'
 import { adopt } from '../../registry/adopt'
@@ -44,7 +45,7 @@ export const CODEX_EXTRACTION_VERIFIER_SET_V1 = 'codex-extraction-terminal-v1' a
 const MAX_MODEL_CALLS = 64
 const MAX_CANDIDATES = 200
 
-type RunAI = (messages: ChatMessage[], callIndex: number) => Promise<string>
+type RunAI = (messages: ChatMessage[], callIndex: number, options?: ChatRequestOptions) => Promise<string>
 
 export interface CodexExtractionRequestV1 {
   categoryId: number
@@ -277,6 +278,7 @@ async function prepareSources(scope: WorkspaceScope, rawRequest: CodexExtraction
   const baseline = await readCodexExtractionBaselineV1({
     scope, categoryId: request.categoryId, worldGroupId: request.worldGroupId,
   })
+  if (codexCategoryFormatIssueV1(baseline.category) || baseline.entries.some(entry => codexEntryFormatIssueV1(entry))) throw new Error('词条格式异常，原始数据已保留；请先恢复有效数据再生成。')
   if (!isPortableResourceUidV1(baseline.category.ragDocumentId, 'codex-category')
     || baseline.entries.some(entry => !isPortableResourceUidV1(entry.ragDocumentId, 'codex-entry'))) {
     throw new Error('Codex 资源缺少有效的 portable resource UID，拒绝继续执行。')
@@ -511,6 +513,7 @@ async function parsePlan(value: unknown): Promise<CodexExtractionPlanV1> {
     || typeof category.fieldSchema !== 'string' || !Array.isArray(category.fields)
     || !Number.isFinite(category.updatedAt)
   ) throw new Error('Codex 分类基线无效。')
+  if (codexCategoryFormatIssueV1({ fieldSchema: category.fieldSchema as string })) throw new Error('Codex 分类的专属字段格式异常；原始数据已保留。')
   const parsedFields = parseFieldSchema(category.fieldSchema as string)
   if (canonicalStringify(parsedFields) !== canonicalStringify(category.fields)) {
     throw new Error('Codex 分类字段 schema 快照不匹配。')
@@ -757,6 +760,7 @@ async function continueExtraction(input: {
           authorRequest: progress.plan.request.authorRequest,
           supplementTags: progress.plan.request.supplementTags,
         })
+    const responseOptions = codexEntryTransportOptionsV1(input.aiConfig, progress.plan.baseline.category.fields, progress.plan.request)
     const promptInputHash = await hashCanonicalValue({
       promptTemplateHash: progress.plan.promptTemplateHash,
       baselineContextHash: progress.plan.baselineContextHash,
@@ -765,6 +769,7 @@ async function continueExtraction(input: {
       supplementTags: progress.plan.request.supplementTags,
       operation: progress.plan.request.operation,
       authorRequest: progress.plan.request.authorRequest,
+      responseOptions: responseOptions ?? null,
     })
     snapshot = await append(input.scope, snapshot, 'model.requested', {
       stepId: CODEX_EXTRACTION_STEP_ID_V1, attempt: 1,
@@ -775,11 +780,11 @@ async function continueExtraction(input: {
     let raw: string
     try {
       raw = await (input.runAI
-        ? input.runAI(messages, callIndex)
+        ? input.runAI(messages, callIndex, responseOptions)
         : chat(messages, input.aiConfig!, {
             category: progress.plan.request.operation === 'extract' ? 'codex.extract' : 'codex.enrich',
             projectId: input.scope.projectId,
-          }))
+          }, undefined, undefined, responseOptions))
     } catch (error) {
       snapshot = await pauseUnsafeRun(input.scope, snapshot, 'codex-extraction-model-outcome-unknown')
       throw error

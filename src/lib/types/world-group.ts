@@ -7,7 +7,7 @@ import type { RagDocumentMetadata } from './rag-library'
 
 /** 世界组类型 */
 export type WorldGroupType =
-  | 'primary'      // 主世界（每项目有且仅有一个）
+  | 'primary'      // 主世界（每个 World 有且仅有一个）
   | 'traversal'    // 穿越目标（诸天流）
   | 'instance'     // 副本世界（无限流）
   | 'parallel'     // 平行世界
@@ -20,6 +20,8 @@ type WorldGroupNarrativeFieldsV1 = NarrativeDomainMetadataV1 & Pick<NarrativeDom
 export interface WorldGroup extends RagDocumentMetadata, WorldGroupNarrativeFieldsV1 {
   id?: number
   projectId: number
+  /** 登记作用域盖章的 World owner；读取旧/损坏记录时仍须经 scope 校验。 */
+  worldId?: number
   /** 世界组名称（如"斗破世界"、"遮天世界"） */
   name: string
   /** 世界组描述 */
@@ -64,6 +66,7 @@ export type WorldGroupLinkType =
 export interface WorldGroupLink extends RagDocumentMetadata {
   id?: number
   projectId: number
+  worldId?: number
   /** 源世界组 ID */
   fromGroupId: number
   /** 目标世界组 ID */

@@ -22,7 +22,7 @@ interface PendingWriteV1 {
 const draftFlushers = new Map<symbol, () => void | Promise<void>>()
 const pendingWrites = new Map<number, PendingWriteV1>()
 const writeTails = new Map<string, Promise<void>>()
-const unresolvedFailures = new Map<string, unknown>()
+const unresolvedFailures = new Map<string, { writeId: number; error: unknown }>()
 let nextWriteId = 1
 
 function message(error: unknown): string {
@@ -57,7 +57,7 @@ export function coordinatePendingEditV1<T>(input: {
       unresolvedFailures.delete(key)
     },
     error => {
-      unresolvedFailures.set(key, error)
+      unresolvedFailures.set(key, { writeId: id, error })
     },
   )
   writeTails.set(key, tail)
@@ -90,7 +90,7 @@ export async function flushPendingEditsV1(): Promise<PendingEditFlushReceiptV1> 
     await Promise.resolve()
   }
 
-  const failures = [...draftFailures, ...unresolvedFailures.values()]
+  const failures = [...draftFailures, ...[...unresolvedFailures.values()].map(failure => failure.error)]
   if (failures.length) {
     throw new Error(`作者编辑保存失败，已阻止正式生成：${failures.map(message).join('；')}`)
   }
@@ -100,6 +100,30 @@ export async function flushPendingEditsV1(): Promise<PendingEditFlushReceiptV1> 
     draftFlushersInvoked: flushers.length,
     writesAwaited: awaitedIds.size,
   }
+}
+
+export interface PendingEditFailureTokenV1 { readonly key: string; readonly writeId: number }
+
+/** A command may acknowledge only the exact rejected write it received.
+ * Draft flushers still guard unsaved text, and no acknowledgement claims a save. */
+export function capturePendingEditFailureV1(error: unknown): PendingEditFailureTokenV1 | undefined {
+  const matches = [...unresolvedFailures].filter(([, failure]) => failure.error === error)
+  if (matches.length !== 1) return undefined
+  return { key: matches[0][0], writeId: matches[0][1].writeId }
+}
+
+export function acknowledgePendingEditFailureV1(input: {
+  token: PendingEditFailureTokenV1
+  decision: 'retry-command' | 'abandon-command'
+}): void {
+  const { token, decision } = input
+  if (!token || typeof token.key !== 'string' || !token.key.trim() || !Number.isSafeInteger(token.writeId) || token.writeId < 1
+    || !['retry-command', 'abandon-command'].includes(decision)) throw new Error('作者操作失败回执无效。')
+  if ([...pendingWrites.values()].some(write => write.key === token.key)) throw new Error('该保存仍在执行，不能结束失败回执。')
+  const current = unresolvedFailures.get(token.key)
+  if (!current) return
+  if (current.writeId !== token.writeId) throw new Error('失败回执已变化，不能忽略新的保存错误。')
+  unresolvedFailures.delete(token.key)
 }
 
 export function pendingEditDiagnosticsV1(): {

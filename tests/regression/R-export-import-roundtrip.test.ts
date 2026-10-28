@@ -44,7 +44,7 @@ async function seedFullProject(): Promise<number> {
 
   await db.detailedOutlines.add({
     projectId, outlineNodeId: chapNodeId, openingHook: '承接序章', endingCliffhanger: '黑影现身',
-    scenes: [{ sceneId: 's1', title: '废墟苏醒', summary: '主角醒来', characterIds: [], location: '废墟', conflict: '失忆', pace: 'normal', estimatedWords: 800, notes: '' }],
+    scenes: [{ sceneId: 's1', title: '废墟苏醒', summary: '主角醒来', characterIds: [], location: '废墟', conflict: '失忆', pace: 'medium', estimatedWords: 800, notes: '' }],
     createdAt: now, updatedAt: now,
   } as any)
   const chapterContent = '<p>主角在废墟中睁开眼，记忆一片空白……</p>'

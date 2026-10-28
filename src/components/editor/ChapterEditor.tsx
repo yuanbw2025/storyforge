@@ -1,3 +1,4 @@
+import { readStateCardFields, StateFieldsParseError } from '../../lib/types/state-card'
 import { prepareChapterPostAdoptionV1, runChapterPostAdoptionV1, type ChapterPostAdoptionTaskV1 } from '../../lib/prose/post-adoption-runner'
 import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router'
@@ -29,6 +30,8 @@ import { resolveRequestConfig, describeResolvedAIRequestSettingsV1, type AIReque
 import { observeProseLengthV1, proseLengthExpectationV1 } from '../../lib/prose/length-observation'
 import { observeSeparatedProseFrameV1 } from '../../lib/prose/provider-frame-observation'
 import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
+import { chapterOrganizationRequestOptionsV1, CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4 } from '../../lib/agent/chapter-organization-model'
+import { recordAgentRunArtifactV1 } from '../../lib/memory/artifact-store'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { db } from '../../lib/db/schema'
 import { assembleContext } from '../../lib/registry/assemble-context'
@@ -377,6 +380,14 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [impactStoryTimelineRegenerationReceipt, setImpactStoryTimelineRegenerationReceipt] = useState<string | null>(null)
   const [impactStoryTimelineRegenerationError, setImpactStoryTimelineRegenerationError] = useState('')
   const [pendingDiffs, setPendingDiffs] = useState<StateDiffItem[] | null>(null)
+  const stateCardIssue = useMemo(() => {
+    try { stateCards.forEach(readStateCardFields); return '' }
+    catch (error) {
+      if (!(error instanceof StateFieldsParseError)) throw error
+      return error.message
+    }
+  }, [stateCards])
+
   // A2: 按需召回 — 手动额外勾选/取消的状态卡 ID
   const [extraStateIds, setExtraStateIds] = useState<number[]>([])
   const [showStatePreview, setShowStatePreview] = useState(false)
@@ -1174,7 +1185,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
   // A2: 按需召回 — 根据章节大纲+标题+已有文本筛选相关状态卡
   const selectiveState = useMemo(() => {
-    if (!stateCards.length) return { text: '', matchedIds: [] as number[], allIds: [] as number[] }
+    if (stateCardIssue || !stateCards.length) return { text: '', matchedIds: [] as number[], allIds: [] as number[] }
     const refParts: string[] = []
     if (outlineNode?.title) refParts.push(outlineNode.title)
     if (outlineNode?.summary) refParts.push(outlineNode.summary)
@@ -1183,7 +1194,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     const ref = refParts.join(' ')
     if (!ref.trim()) return { text: buildStateContext(), matchedIds: stateCards.map(c => c.id!), allIds: stateCards.map(c => c.id!) }
     return buildSelectiveStateContext(ref, extraStateIds)
-  }, [stateCards, outlineNode?.title, outlineNode?.summary, currentChapter?.title, plainText, extraStateIds, buildSelectiveStateContext, buildStateContext])
+  }, [stateCardIssue, stateCards, outlineNode?.title, outlineNode?.summary, currentChapter?.title, plainText, extraStateIds, buildSelectiveStateContext, buildStateContext])
 
   const handleCreateFromOutline = async () => {
     if (!outlineNodeId) return
@@ -1600,6 +1611,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleGenerate = async () => {
+    if (stateCardIssue) { setProseGenerationError(stateCardIssue); return }
     if (!outlineNode) return
     setProseGenerationError('')
     try {
@@ -1675,6 +1687,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleContinue = async () => {
+    if (stateCardIssue) { setProseGenerationError(stateCardIssue); return }
     if (!plainText || !outlineNode) return
     setProseGenerationError('')
     try {
@@ -1777,6 +1790,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleRunChapterOrganization = async (force = false) => {
+    if (stateCardIssue) { setProseGenerationError(stateCardIssue); return }
     if (!currentChapter?.id || !plainText.trim()) return
     if (organizingChapter) {
       organizationAbortRef.current?.abort()
@@ -1794,7 +1808,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       }
     }
 
-    const effectiveConfig = resolveRequestConfig(aiConfig, { category: 'chapter.organize' }).config
+    const organizationResolution = resolveRequestConfig(aiConfig, { category: 'chapter.organize', projectId: project.id!, configOverrides: { maxTokens: 8_000 }, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none' })
+    const effectiveConfig = organizationResolution.config
+    const organizationOptions = chapterOrganizationRequestOptionsV1(effectiveConfig)
+    const organizationRequestSettings = describeResolvedAIRequestSettingsV1(organizationResolution, false, organizationOptions)
     if (!isAIConfigReady(effectiveConfig)) {
       const message = getAIConfigRequiredMessage(effectiveConfig)
       setOrganizationError(message)
@@ -1848,6 +1865,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         binding: {
           chapterId: currentChapter.id,
           sourceKeys: CHAPTER_ORGANIZATION_SOURCE_KEYS_V1,
+          sourceTextHash: await hashChapterText(persisted.html),
+          promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4,
+          requestSettings: organizationRequestSettings,
         },
       })
       const [allRelations] = await Promise.all([
@@ -1871,6 +1891,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       const budget = new AgentTeamBudgetTracker(useAIConfigStore.getState().agentTeamBudgetProfile)
       const candidate = await runChapterOrganization({
         projectId: project.id!,
+        strictModelOutput: true,
         chapterId: currentChapter.id,
         chapterTitle,
         worldGroupId: chapterWorldGroupId ?? null,
@@ -1884,12 +1905,18 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         // 正文已在专用区完整提供；这里只追加其它登记来源，避免正文重复消耗 tokens。
         contextSnapshot: organizationContextSnapshot,
         budget,
-        call: messages => executeRegisteredAIEntryV1('prose.chapter.organize', messages, aiConfig, {
-          category: 'chapter.organize',
-          projectId: project.id!,
-          configOverrides: { maxTokens: 8_000 },
-          contextOverflowPolicy: 'reject',
-        }, controller.signal),
+        call: async messages => {
+          if (!durableSnapshot) throw new Error('整理本章缺少有效的运行记录。')
+          const rendered = await recordAgentRunArtifactV1({ scope: workspaceScope, runId: durableSnapshot.run.id, stepId: CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1, attempt: 1, expectedLastSequence: durableSnapshot.projection.lastSequence, artifactKind: 'rendered-request', content: JSON.stringify({ promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4, messages, requestSettings: organizationRequestSettings }) })
+          durableSnapshot = rendered.snapshot
+          const raw = await executeRegisteredAIEntryV1('prose.chapter.organize', messages, aiConfig, {
+            category: 'chapter.organize', projectId: project.id!, configOverrides: { maxTokens: 8_000 },
+            contextOverflowPolicy: 'reject', transportRetryPolicy: 'none',
+          }, controller.signal, undefined, organizationOptions, organizationResolution)
+          const response = await recordAgentRunArtifactV1({ scope: workspaceScope, runId: durableSnapshot.run.id, stepId: CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1, attempt: 1, expectedLastSequence: durableSnapshot.projection.lastSequence, artifactKind: 'raw-response', content: raw })
+          durableSnapshot = response.snapshot
+          return raw
+        },
       })
       const candidateHash = await hashChapterOrganizationCandidateV1(candidate)
       const run = await persistChapterOrganizationCandidate(candidate, {
@@ -2775,6 +2802,16 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     })
   }
 
+  const handleSaveProseCandidateDraft = async (text: string) => {
+    const candidate = proseCandidate
+    if (!candidate || candidate.semanticReview) throw new Error('当前结果不能保存为正文候选，请重新打开对应章节。')
+    const scope = await resolveScopeLike(project.id!)
+    const revised = await reviseProseGenerationCandidateV1({ scope, candidate, outputText: text })
+    setProseCandidate(revised)
+    proseCandidateRef.current = revised
+    restoreAI({ output: revised.outputText, operation: revised.operation })
+  }
+
   const handleAcceptAI = async (text: string) => {
     if (ai.operation === 'revise-full') {
       await dialog.alert({ title: '旧修订预览只读', message: '请从质量审校重新选择问题与可改范围。旧报告输出不能直接写回当前章节。' })
@@ -2915,13 +2952,18 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           runId: candidate.durable.runId,
           candidate,
         })
+        if (proseCandidateRef.current !== candidate) return
         proseSnapshotRef.current = snapshot
       } catch (error) {
-        console.warn('[ProseGeneration] 候选拒绝证据写入失败:', error)
+        if (proseCandidateRef.current === candidate) {
+          setProseGenerationError(`未能保存拒绝决定，候选已保留，请重试。${error instanceof Error ? ` ${error.message}` : ''}`)
+        }
+        return
       }
       setProseCandidate(null)
       proseCandidateRef.current = null
     }
+    setProseGenerationError('')
     ai.reset()
   }
 
@@ -2960,8 +3002,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
   return (
     <div className="min-h-full bg-bg-base/40">
-      {/* 标题栏 —— sticky 固定在顶部，必须不透光，否则正文下滑时会从底下透出来 */}
-      <div className="sticky top-0 z-20 border-b border-border bg-bg-base">
+      {/* 窄屏工具栏随正文滚动，避免高度超过可视区时遮住候选操作；桌面仍固定。 */}
+      <div className="border-b border-border bg-bg-base md:sticky md:top-0 md:z-20">
         <ChapterEditorHeader
           title={chapterDisplay?.title ?? currentChapter.title}
           wordCount={wordCount}
@@ -2977,6 +3019,18 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onOpenCompare={() => { void handleOpenComparePolish() }}
           onSave={() => { void handleManualSave() }}
         />
+
+      {stateCardIssue && <div data-testid="state-card-data-warning" role="alert" className="m-3 rounded-lg border border-warning/50 bg-bg-surface p-3 text-sm">
+        <p>{stateCardIssue} 正文仍可手工编辑和保存。</p>
+        <button type="button" className="mt-2 text-accent" onClick={() => {
+          void (async () => {
+            await flushPendingEditsV1()
+            const saved = await persistCurrentEditorContent()
+            if (!saved) throw new Error('正文尚未保存，请保存后再切换。')
+            navigate(`/workspace/${project.id}?module=state-table`)
+          })().catch(error => setManualSaveError(error instanceof Error ? error.message : '切换前未保存，已保留当前正文。'))
+        }}>修复状态字段</button>
+      </div>}
 
       {showContext && (
         <ChapterContextPreview
@@ -3302,7 +3356,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
       {proseGenerationError && (
         <div className="mb-3 rounded-lg border border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
-          正文候选未通过质量门：{proseGenerationError}
+          正文候选处理未完成：{proseGenerationError}
         </div>
       )}
 
@@ -3323,8 +3377,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             }}>保留分隔后的正文供核对</button>
           </div>}
           {proseCandidate?.lengthObservation?.message && <p role="status" className="mb-2 rounded border border-warning/30 bg-warning/5 p-3 text-xs text-text-secondary">生成时：{proseCandidate.lengthObservation.message}</p>}
-          <AIStreamOutput output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
+          <AIStreamOutput key={proseCandidate?.durable.runId ?? 'active-prose-output'} output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
             editable={!!proseCandidate && !proseCandidate.semanticReview}
+            onSaveDraft={proseCandidate && !proseCandidate.semanticReview ? handleSaveProseCandidateDraft : undefined}
             onStop={ai.stop}
             onAccept={(
               ai.operation === 'generate' || ai.operation === 'continue'

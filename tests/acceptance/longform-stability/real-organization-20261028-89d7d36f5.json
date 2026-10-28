@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "real-organization-ui-round-with-silent-parser-loss-discovered",
+  "sourceCommit": "89d7d36f5bad49c16e148896c648aa576ae100e8",
+  "status": "CANDIDATE_RELOAD_ADOPTION_UI_PASSED_BUT_SILENT_DROPS_REMAIN",
+  "evidenceDirectory": "live-organization-2026-10-27T23-47-14-186Z",
+  "priorUnknownReceipt": "tests/acceptance/longform-stability/real-organization-20261028-979d931a8.json",
+  "result": {
+    "status": "passed-real-organization-candidate-reload-adopt",
+    "sourceCommit": "89d7d36f5bad49c16e148896c648aa576ae100e8",
+    "model": "agnes-2.5-flash",
+    "modelRequests": 1,
+    "knownTotalTokens": 5968,
+    "unknownUsageRequests": 0,
+    "domainStatus": {
+      "state": "skipped",
+      "facts": "adopted",
+      "inventory": "adopted",
+      "timeline": "skipped",
+      "relations": "skipped",
+      "foreshadows": "skipped",
+      "storyline": "skipped"
+    },
+    "chapterProtected": true,
+    "reloadRequests": 0,
+    "pageErrors": []
+  },
+  "rawCounts": {
+    "stateDiffs": 1,
+    "facts": 2,
+    "inventoryEvents": 3,
+    "storyEvents": 1,
+    "relations": 0,
+    "foreshadowUpdates": 0,
+    "storylineProgress": 1
+  },
+  "candidateCounts": {
+    "stateDiffs": 0,
+    "facts": 2,
+    "inventoryEvents": 3,
+    "storyEvents": 0,
+    "relations": 0,
+    "foreshadowUpdates": 0,
+    "storylineProgress": 0
+  },
+  "remaining": "Retain the raw original result. New model output must expose/reject invalid rows instead of silently dropping them; improve literal evidence and closed targets. No whole seven-domain semantic pass.",
+  "wholeCasePass": false,
+  "overallPlanComplete": false
+}

@@ -1,4 +1,4 @@
-import { act, createElement } from 'react'
+import { act, createElement, StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AssembleContextResult } from '../../src/lib/registry/types'
@@ -78,7 +78,7 @@ function candidate(volumeId: number, batchIndex = 0): any {
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
 let controller: ReturnType<typeof useOutlineBatchGeneration>
 
-async function mount(options: Parameters<typeof useOutlineBatchGeneration>[0]) {
+async function mount(options: Parameters<typeof useOutlineBatchGeneration>[0], strict = false) {
   function Harness() {
     controller = useOutlineBatchGeneration(options)
     return createElement('div', null, controller.running ? 'running' : 'idle')
@@ -87,7 +87,7 @@ async function mount(options: Parameters<typeof useOutlineBatchGeneration>[0]) {
   document.body.append(host)
   const root = createRoot(host)
   mounted.push({ host, root })
-  await act(async () => root.render(createElement(Harness)))
+  await act(async () => root.render(strict ? createElement(StrictMode, null, createElement(Harness)) : createElement(Harness)))
   return host
 }
 
@@ -148,6 +148,17 @@ afterEach(async () => {
 })
 
 describe('AUDIT-6 · 批量章纲 controller', () => {
+  it('StrictMode replays effects without losing the saved batch candidate or invoking the model', async () => {
+    const entry = candidate(1, 0)
+    entry.output = JSON.stringify([{ title: '刷新前的第一章', summary: '已存储且尚未采纳的章纲' }])
+    mocks.restoreBatch.mockResolvedValue({ candidates: [entry] })
+    await mount(options(), true)
+    expect(controller.result?.get(1)?.[0].title).toBe('刷新前的第一章')
+    expect(mocks.restoreBatch).toHaveBeenCalledTimes(1)
+    expect(mocks.restoreBatch).toHaveBeenCalledWith({ projectId: 1, worldId: 1, workId: 1 })
+    expect(mocks.runBatch).not.toHaveBeenCalled()
+  })
+
   it('基础上下文装配失败后退出运行态并反馈错误', async () => {
     const onError = vi.fn()
     const assembleContext = vi.fn(async () => { throw new Error('装配失败') })

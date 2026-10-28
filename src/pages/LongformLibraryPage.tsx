@@ -18,10 +18,18 @@ import { LONGFORM_SECTIONS, LONGFORM_STEPS, sectionForModule, type LongformSecti
 import type { SidebarModule } from '../components/layout/sidebar-tree'
 import LongformBrowsePage from '../components/longform/LongformBrowsePage'
 import LongformLayout from '../components/longform/LongformLayout'
+import { useBeforeUnload } from '../hooks/useBeforeUnload'
+import type { WorkspaceScope } from '../lib/types'
 
 export default function LongformLibraryPage() {
   const navigate = useNavigate()
   const dialog = useDialog()
+  const [renameDraft, setRenameDraft] = useState<{ scope: WorkspaceScope; original: string; value: string } | null>(null)
+  const [renaming, setRenaming] = useState(false)
+  const [renameError, setRenameError] = useState('')
+  const renameBusyRef = useRef(false)
+  const renameComposingRef = useRef(false)
+  useBeforeUnload(Boolean(renameDraft && (renaming || renameDraft.value !== renameDraft.original)))
   const [params, setParams] = useSearchParams()
   const requestedSection = params.get('section')
   const section: LongformSection = LONGFORM_SECTIONS.some(([id]) => id === requestedSection) ? requestedSection as LongformSection : 'library'
@@ -74,11 +82,20 @@ export default function LongformLibraryPage() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
     finally { setBusy(false) }
   }
-  const rename = async (project: Project, work: Work) => {
-    const value = await dialog.prompt({ title: '重命名长篇', defaultValue: work.title, confirmText: '保存名称' })
-    if (!value?.trim()) return
-    try { await switchActiveWork(project.id!, work.id!); await useProjectStore.getState().updateActiveWork(project.id!, { title: value.trim() }) }
-    catch (cause) { setError(String(cause)) }
+  const rename = (project: Project, work: Work) => {
+    setRenameError('')
+    setRenameDraft({ scope: { projectId: project.id!, worldId: work.worldId, workId: work.id! }, original: work.title, value: work.title })
+  }
+  const saveRename = async () => {
+    if (!renameDraft || !renameDraft.value.trim() || renameBusyRef.current || renameComposingRef.current) return
+    const snapshot = renameDraft
+    renameBusyRef.current = true
+    setRenaming(true); setRenameError('')
+    try {
+      await useProjectStore.getState().updateActiveWork(snapshot.scope.projectId, { title: snapshot.value.trim() }, snapshot.scope)
+      setRenameDraft(current => current === snapshot ? null : current)
+    } catch (cause) { setRenameError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { renameBusyRef.current = false; setRenaming(false) }
   }
   const open = async (project: Project, work: Work, path = destination(project.id!)) => {
     try { await switchActiveWork(project.id!, work.id!); navigate(path) }
@@ -95,6 +112,22 @@ export default function LongformLibraryPage() {
     onSection={next => browse(next, next === 'versions' ? 'version-history' : next === 'import' ? 'import-doc' : next === 'settings' ? 'settings' : 'info')}
     onMode={next => browse('workbench', next === 'nodes' ? 'visual-workflows' : 'info', next)}
     onModule={next => browse(sectionForModule(next), next)}>
+    {renameDraft && <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/55 p-4">
+      <section role="dialog" aria-modal="true" aria-labelledby="longform-rename-title" className="lf-paper w-full max-w-lg p-6">
+        <h2 id="longform-rename-title">重命名长篇</h2>
+        <form onSubmit={event => { event.preventDefault(); void saveRename() }} className="mt-4 space-y-4">
+          <input aria-label="新作品名称" autoFocus maxLength={200} value={renameDraft.value} disabled={renaming}
+            onCompositionStart={() => { renameComposingRef.current = true }}
+            onCompositionEnd={event => { const value = event.currentTarget.value; renameComposingRef.current = false; setRenameDraft(current => current ? { ...current, value } : current) }}
+            onChange={event => { const value = event.target.value; setRenameDraft(current => current ? { ...current, value } : current) }}
+            onKeyDown={event => { if (event.nativeEvent.isComposing || renameComposingRef.current) { if (event.key === 'Enter') event.preventDefault(); return } if (event.key === 'Escape' && !renameBusyRef.current) setRenameDraft(null) }} />
+          {renameError && <p role="alert">未保存：{renameError}。名称仍保留，可以重试。</p>}
+          {renaming && <p role="status">正在保存作品名称…</p>}
+          <div className="flex justify-end gap-2"><button type="button" className="lf-action" disabled={renaming} onClick={() => setRenameDraft(null)}>取消</button>
+            <button type="submit" className="lf-action lf-action-primary" disabled={renaming || !renameDraft.value.trim()}>保存名称</button></div>
+        </form>
+      </section>
+    </div>}
     {section !== 'library' && choosing && <section ref={chooserRef} className="lf-paper" aria-label="选择操作的作品">
       <h3>选择或创建一部作品</h3><p role="status">这个操作需要一部作品。选择后会进入当前功能页，由你继续操作。</p>
       {rows.length > 0 && <div className="flex flex-wrap gap-3 mb-4"><select aria-label="选择长篇作品" value={selectedProjectId} onChange={event => setSelectedProjectId(event.target.value)}><option value="">请选择作品</option>{rows.map(row => <option key={row.work.id} value={row.work.id}>{row.work.title}</option>)}</select><button className="lf-action lf-action-primary" disabled={!selectedProjectId || !rows.some(row => String(row.work.id) === selectedProjectId)} onClick={() => { const row = rows.find(item => String(item.work.id) === selectedProjectId); if (row) void open(row.project, row.work) }}>使用这部作品</button></div>}

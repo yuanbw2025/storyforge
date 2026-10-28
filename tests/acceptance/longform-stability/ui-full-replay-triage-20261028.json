@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "kind": "longform-full-browser-replay-triage-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "2bcc67bd8dd57080eec70786db21490a18826a62",
+    "files": {
+      "src/components/worldview/WorldviewOriginPanel.tsx": "8564f0e3d43327475fcc470f1356a1155364d89be2d678f518ef35ace9d0d22d",
+      "src/styles/workspace-layout.css": "e0009e830b5dba46b29fa359b2c2ab961c4925c1f1d86a93173ad8457f4a935a",
+      "tests/e2e/core-workflow.spec.ts": "2e4db630c0eb948885ed4c7e885b6d7d85221945d31ba98e484dde0173e6adf4",
+      "tests/e2e/feedback-fixes.spec.ts": "66ba8ba8de53cf8089262de32403811a33b905b0d51082aa5f854794a74bb165",
+      "tests/e2e/inkwash-theme.spec.ts": "71d02ff1b73477eb929d1812174f2101a8a980a7375f5765e12716953e93a6af",
+      "tests/e2e/new-ui-foundation.spec.ts": "16032b6fb4e6a07876c8150e585652c53b1b939d02a3473b78a651101d54c025",
+      "tests/e2e/longform-state-card-recovery.spec.ts": "6390e35e2c34f11fd7c21f47503b47591820d103e5a3752feb1fc811d174a565"
+    }
+  },
+  "status": "WIDTH_FIXED_AND_NINE_DETERMINISTIC_REPLAYS_COVERED_FULL_RERUN_PENDING",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "originalFullRun": {
+    "sourceCommit": "45ccf3c1b958fc794e65ab9836835d8d2b55490f",
+    "failed": 10,
+    "passed": 469,
+    "skipped": 166,
+    "log": "full-e2e-45ccf3c1.log",
+    "artifacts": "full-e2e-45ccf3c1-artifacts"
+  },
+  "focusedOriginalReplay": {
+    "sourceCommit": "3435e2257cd811908a979c03e773a16bb64ba0c1",
+    "failed": 9,
+    "passed": 1,
+    "log": "full-e2e-failures-focused-3435e225.log"
+  },
+  "productionChange": "Only the longform world-origin panel can fill available desktop workspace width; independent world-engine max width remains intact. Existing desktop and mobile geometry assertions unchanged.",
+  "testMaintenance": [
+    "Choose checkboxes by role when textareas share their labels",
+    "Select summary in its explicit chapter row instead of assuming direct parent markup",
+    "Find the scroll owner containing the dragged chapter handle instead of a fixed wrapper path",
+    "Open and inspect all six world fields in the actual details group",
+    "Select world suggestion title instead of duplicated summary/detail text",
+    "Use current compact dialog radius and inkwash alpha, without altering production theme colors",
+    "Explicitly authorize the current prose prompt dialog after state repair; candidate/adoption/reload assertions preserved"
+  ],
+  "nativeReplays": [
+    {
+      "passed": 9,
+      "failed": 1,
+      "log": "full-e2e-failures-repair-first.log",
+      "note": "Remaining chapter selector initially used drag-handle identity as an ancestor; retained as driver failure"
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "log": "replan-selector-final.log",
+      "note": "Correct chapter-row identity; same production source hashes as the preceding run"
+    }
+  ],
+  "coverageNotSingleAllGreenRun": true,
+  "unrelatedWebExport": {
+    "sourceChanged": false,
+    "originalFailure": "Choice remained disabled within the original full-run deadline",
+    "focusedReproductionsPassed": 2,
+    "rootCauseResolved": false,
+    "status": "Original failure retained; final full rerun and resource/timing evidence still required"
+  },
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "build": "PASS",
+    "docs": "PASS",
+    "roadmap": "PASS",
+    "generatedMetrics": "PASS",
+    "diffCheck": "PASS"
+  },
+  "fullChecks": "Frozen full CI at 2bcc continues. Latest-source full E2E not yet run."
+}

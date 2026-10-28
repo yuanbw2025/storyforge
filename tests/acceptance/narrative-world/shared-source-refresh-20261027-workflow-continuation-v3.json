@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "kind": "reviewed-source-refresh",
+  "status": "DETERMINISTIC_OBSERVATIONS_UNCHANGED",
+  "parents": [
+    "cf37af74f",
+    "301d38efdac191e25afa98e37f93a5472561c6ab"
+  ],
+  "comparisons": [
+    {
+      "old": "baseline-20261027-workflow-continuation-v2.json",
+      "new": "baseline-20261027-workflow-continuation-v3.json",
+      "semanticEqual": true,
+      "changedKeys": [
+        "input",
+        "run"
+      ],
+      "oldSha256": "0c3e40fb45a718a4e2326e66781b2c1f9abccf43a50606848e8a5c7617e043fc"
+    },
+    {
+      "old": "baseline-20261027-pr209-ttrpg-integration-v1.json",
+      "new": "baseline-20261027-workflow-continuation-v3.json",
+      "semanticEqual": true,
+      "changedKeys": [
+        "input",
+        "run"
+      ],
+      "oldSha256": "5dad164cdf9f612f124b8149b05128967f30f636d123330ae4f170be7b836eec"
+    },
+    {
+      "old": "ir-contract-20261027-workflow-continuation-v1.json",
+      "new": "ir-contract-20261027-workflow-continuation-v3.json",
+      "semanticEqual": true,
+      "changedKeys": [
+        "inputHashes"
+      ],
+      "oldSha256": "3bbeea6065df2411ef97f5ee2f1082dcfd3fde9c5c8f6df62eb8f305e54cdb26"
+    },
+    {
+      "old": "ir-contract-20261026-ttrpg-integration-v1.json",
+      "new": "ir-contract-20261027-workflow-continuation-v3.json",
+      "semanticEqual": true,
+      "changedKeys": [
+        "inputHashes"
+      ],
+      "oldSha256": "a0c20d9586c813d35d0d2ab854da239a5771249019e5edd3dbc1db8fdfc0d5fa"
+    },
+    {
+      "old": "domain-projection-20261027-workflow-continuation-v1.json",
+      "new": "domain-projection-20261027-workflow-continuation-v3.json",
+      "semanticEqual": true,
+      "changedKeys": [
+        "inputHashes"
+      ],
+      "oldSha256": "180a9e9b2544657214f104a8ae2fe2d176713a7090cdff7f4c7d0f8ee449e0e8"
+    },
+    {
+      "old": "domain-projection-20261026-ttrpg-integration-v1.json",
+      "new": "domain-projection-20261027-workflow-continuation-v3.json",
+      "semanticEqual": true,
+      "changedKeys": [
+        "inputHashes"
+      ],
+      "oldSha256": "114f89995946666ee544f401e18b52b46134022e67659b6dd0c299fffe369e56"
+    }
+  ],
+  "generationTestsPassed": 127,
+  "projectionAndIRTests": 115,
+  "domainCorpusTests": 12,
+  "modelCalls": 0,
+  "productE2ERuns": 0,
+  "independentHumanReviews": 0,
+  "targetAcceptance": false
+}

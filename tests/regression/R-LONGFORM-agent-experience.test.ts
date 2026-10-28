@@ -13,6 +13,7 @@ import { parseAuthorOrdinalV1 } from '../../src/lib/agent/author-intent'
 import { seedCurrentMasterCandidate } from '../helpers/current-master-candidate'
 import { rejectMasterAgentCandidateV1 } from '../../src/lib/agent/run/master-adoption'
 import { findResumableMasterAgentRunV1, parseMasterAgentPlanV1, hashMasterAgentPlanV1 } from '../../src/lib/agent/run/master-durable'
+import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 
 async function fixture() {
   const { project, scope } = await seedCurrentWorkspace('自由选写')
@@ -112,11 +113,16 @@ describe('R-LONGFORM · 作者自由选写和目标保护', () => {
 
   it('作者拒绝候选后不会把该运行当成中断并提示恢复', async () => {
     const { scope, conversation, candidate } = await seedCurrentMasterCandidate()
-    await rejectMasterAgentCandidateV1({
+    const rejected = await rejectMasterAgentCandidateV1({
       scope, worldGroupId: null, runId: candidate.payload.runId!,
       candidateEventId: candidate.event.id!,
     })
     expect(await findResumableMasterAgentRunV1({ scope, conversationId: conversation.id! })).toBeNull()
+    expect(rejected.projection.state).toBe('cancelled')
+    const before = rejected.events.length
+    const repeated = await rejectMasterAgentCandidateV1({ scope, worldGroupId: null, runId: candidate.payload.runId!, candidateEventId: candidate.event.id! })
+    expect(repeated.events).toHaveLength(before)
+    expect((await readAgentRunV1(scope, candidate.payload.runId!)).projection.state).toBe('cancelled')
     expect(await db.agentRuns.count()).toBe(1)
     expect(await db.characters.count()).toBe(0)
   })

@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "bounded-context-compression-transport-and-json-envelope",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "979d931a8486520db1a731f26198ecf9cf86bc57",
+    "files": {
+      "src/lib/agent/context-compression.ts": "277279f4d82c479efbb50f8c832f1e6c7b5b67cb47ca91e22b72e7f7b0f8e963",
+      "tests/regression/R-STAB-context-compression-transport.test.ts": "6ef3d82b1ebe544cc3c363218dd2a3c20074ae208a9edda1e39250a75373cd8f",
+      "tests/e2e/context-compression-transport.spec.ts": "8a2e8d2d94939e4b0155fc16be7ff02480c9f5b62ca2cd2073cc2759ec73306c"
+    }
+  },
+  "status": "TARGETED_AND_NATIVE_TRANSPORT_PASSED_REAL_REPLAY_NEXT",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "productBoundary": "Shared existing read-only context compression; original registered sources, canonical data, Skill policies and source budgets remain authoritative. No table, field, AI entry or candidate/adoption path added.",
+  "changes": [
+    "Size the complete required JSON envelope plus literal anchor quotations and summary within the existing output cap",
+    "Use verified JSON capability and bounded Agnes 2.5 thinking options against a frozen actual task-route resolution; no other model default change",
+    "One accountable transport dispatch; failed or unknown response is not replayed. Completed invalid content retains bounded semantic repair",
+    "Impossible envelope falls back before dispatch; original full-source/truncation fallback and evidence remain visible; old prompt/schema version retained"
+  ],
+  "before": {
+    "log": "context-compression-transport-before.log",
+    "failed": 8,
+    "passed": 1,
+    "budget": "Old 928-token request could not hold an estimated 954-token allowed JSON result",
+    "transport": "400, 401 and unknown dispatch each replayed twice"
+  },
+  "intermediateNative": {
+    "log": "context-compression-transport-native.log",
+    "failed": 1,
+    "passed": 3,
+    "cause": "New request options initially passed in the ChatResult argument slot; native wire assertion caught missing format/thinking settings before commit. Fixed to the options slot and frozen route."
+  },
+  "regression": {
+    "log": "context-compression-transport-exact-related.log",
+    "status": "PASS",
+    "passed": 54,
+    "files": 8
+  },
+  "nativeBrowser": {
+    "log": "context-compression-transport-native-exact.log",
+    "status": "PASS",
+    "passed": 4,
+    "files": 1
+  },
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "build": "PASS",
+    "targetedEslint": "PASS",
+    "docs": "PASS",
+    "roadmap": "PASS",
+    "diffCheck": "PASS"
+  },
+  "remaining": "Exact committed real compression replay, full post-task workflow, remaining matrix and final/client checks. Older full CI still at 2f4ebb26; its full E2E is separately recorded."
+}

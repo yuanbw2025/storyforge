@@ -34,6 +34,7 @@ import { beginProseGenerationGatewayStepV1, buildProseGenerationRunContractV3, p
 type Call = (messages: ChatMessage[], resolution: AIRequestConfigResolution, result: StreamResult) => Promise<string>
 export interface QualityRevisionDraftV1 { version: 'quality-revision-draft-v1'; plan: QualityRevisionPlanV1; sourceHtml: string; contentHtml: string; outputText: string; rawPatches: string }
 export interface QualityRevisionViewV1 { runId: number; state: string; current: boolean; draft: QualityRevisionDraftV1; candidate: ProseGenerationCandidateV1 | null; protectionError?: string }
+export interface QualityRevisionRecoveryV1 { runId: number; state: string }
 
 async function append(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, type: Parameters<typeof appendAgentRunEventV1>[0]['type'], payload: any) {
   return appendAgentRunEventV1({ scope, runId: snapshot.run.id, type, payload, expectedLastSequence: snapshot.projection.lastSequence } as any)
@@ -161,15 +162,33 @@ async function runQualityRevisionLockedV1(input: QualityRevisionInputV1): Promis
   }
 }
 
-export async function readLatestQualityRevisionV1(input: { scope: WorkspaceScope; chapterId: number }): Promise<QualityRevisionViewV1 | null> {
+async function latestQualityRevisionSnapshot(input: { scope: WorkspaceScope; chapterId: number }): Promise<AgentRunSnapshotV1 | null> {
   const chapter = await db.chapters.get(input.chapterId)
   if (!chapter || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) return null
   const runs = (await readOwnedRows<AgentRunRecord>(input.scope, 'agentRuns', { owner: 'work' })).filter(row => { try { const c = JSON.parse(row.contractJson); return c.scope.chapterIds?.[0] === input.chapterId && c.executionBindings.some((b: { skillId: string }) => b.skillId === 'prose.quality-revise') } catch { return false } }).sort((a, b) => b.createdAt - a.createdAt || (b.id ?? 0) - (a.id ?? 0))
   if (!runs[0]?.id) return null
-  const snapshot = await readAgentRunV1(input.scope, runs[0].id)
-  const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope, runs[0].id)
+  return readAgentRunV1(input.scope, runs[0].id)
+}
+
+/** Read-only recovery marker. No request or fabricated preview is created. */
+export async function readLatestUnfinishedQualityRevisionV1(input: { scope: WorkspaceScope; chapterId: number }): Promise<QualityRevisionRecoveryV1 | null> {
+  const snapshot = await latestQualityRevisionSnapshot(input)
+  if (!snapshot || ['completed', 'cancelled', 'failed', 'recovery_required'].includes(snapshot.projection.state)) return null
+  const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope, snapshot.run.id)
   const draft = checkpoint?.resumePayload as QualityRevisionDraftV1 | undefined
-  if (!draft || draft.version !== 'quality-revision-draft-v1' || draft.plan.scope.workId !== input.scope.workId || draft.plan.chapterId !== input.chapterId || snapshot.contract.runtimeBindingHash !== draft.plan.planHash) return null
+  if (draft?.version === 'quality-revision-draft-v1' && draft.plan?.scope?.workId === input.scope.workId
+    && draft.plan.chapterId === input.chapterId && snapshot.contract.runtimeBindingHash === draft.plan.planHash) return null
+  return { runId: snapshot.run.id, state: snapshot.projection.state }
+}
+
+export async function readLatestQualityRevisionV1(input: { scope: WorkspaceScope; chapterId: number }): Promise<QualityRevisionViewV1 | null> {
+  const snapshot = await latestQualityRevisionSnapshot(input)
+  if (!snapshot) return null
+  const chapter = await db.chapters.get(input.chapterId)
+  if (!chapter || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) return null
+  const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope, snapshot.run.id)
+  const draft = checkpoint?.resumePayload as QualityRevisionDraftV1 | undefined
+  if (!draft || draft.version !== 'quality-revision-draft-v1' || draft.plan?.scope?.workId !== input.scope.workId || draft.plan.chapterId !== input.chapterId || snapshot.contract.runtimeBindingHash !== draft.plan.planHash) return null
   const rebuilt = await previewQualityRevisionHTMLV1({ sourceHtml: draft.sourceHtml, plan: draft.plan, raw: draft.rawPatches, normalize: normalizeRichEditorHTMLV1 })
   if (rebuilt.contentHtml !== draft.contentHtml || rebuilt.outputText !== draft.outputText) throw new Error('修订预演证据已损坏。')
   const stored = await readLatestProseGenerationCandidateV1({ ...input, operations: ['quality-revise'] })

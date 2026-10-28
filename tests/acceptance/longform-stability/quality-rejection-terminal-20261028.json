@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "kind": "quality-revision-rejection-terminal-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "3435e2257cd811908a979c03e773a16bb64ba0c1",
+    "files": {
+      "src/lib/agent/run/prose-generation-durable.ts": "948cd83abe96c424e87977a9685ce241bf1f57ab7c5034aad2433baeea4c0bb4",
+      "tests/regression/R-LFQ8-quality-revision-durable.test.ts": "5fe833bf837a1e9cd6c7bc641791dce6df38eb5d5619c522d6e47e593ab97c38",
+      "tests/e2e/longform-selected-revision.spec.ts": "5fed6d115c20f55321d4788fec740b4b1b2a3a7f9133430f249a254ff93428d7"
+    }
+  },
+  "status": "ATOMIC_CANCELLATION_AND_UI_RECOVERY_VERIFIED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "scope": "Shared longform prose helper preserves specialized quality-revision cancellation instead of turning an explicit author decline into a failed-review UI",
+  "originalRegression": {
+    "failed": 3,
+    "passed": 15,
+    "log": "quality-rejection-terminal-before.log",
+    "sourceCommit": "3435e2257cd811908a979c03e773a16bb64ba0c1",
+    "productionRelease": false
+  },
+  "regression": {
+    "passed": 63,
+    "files": 8,
+    "log": "quality-rejection-related-final.log"
+  },
+  "nativeBrowser": {
+    "passed": 2,
+    "files": 2,
+    "log": "quality-prose-rejection-native.log",
+    "transport": "simulated, isolated Chromium native IndexedDB",
+    "checks": [
+      "Prose rejection storage recovery remains valid",
+      "Quality revision cancellation/settlement failure rolls back decision",
+      "Preview and source remain intact; reload and explicit retry cancel original run",
+      "UI says author declined with original text retained",
+      "No extra review/revision/recheck model request"
+    ]
+  },
+  "implementation": "Frozen prose.quality-revise binding selects existing cancelled reason author-rejected-quality-revision inside the same transaction; generate/continue still end failed author_rejected. Existing terminals remain unchanged.",
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "build": "PASS",
+    "docs": "PASS",
+    "roadmap": "PASS",
+    "generatedMetrics": "PASS",
+    "diffCheck": "PASS"
+  },
+  "fullChecks": "Final-head full CI and E2E pending; original 45cc full E2E had 10 failures, 469 passes and 166 conditional skips, all retained for triage"
+}

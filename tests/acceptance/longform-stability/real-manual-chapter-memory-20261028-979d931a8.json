@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "real-manual-chapter-memory-20261028-979d931a8",
+  "sourcePin": {
+    "kind": "commit",
+    "commit": "979d931a8486520db1a731f26198ecf9cf86bc57"
+  },
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "boundary": "Explicit existing chapter-memory action on synthetic chapter. Summary and handoff match frozen source hash; protected prose/title/scope unchanged; reload without a new model request. Does not accept the entire post-task/seven-domain workflow.",
+  "evidenceDirectory": "live-chapter-memory-2026-10-27T23-25-27-509Z",
+  "result": {
+    "status": "passed-real-manual-memory-and-reload",
+    "sourceCommit": "979d931a8486520db1a731f26198ecf9cf86bc57",
+    "model": "agnes-2.5-flash",
+    "modelRequests": 1,
+    "knownTotalTokens": 5512,
+    "unknownUsageRequests": 0,
+    "chapterId": 1,
+    "memoryWritten": true,
+    "protectedFieldsUnchanged": true,
+    "sourceHashMatchesHandoff": true,
+    "reloadRequests": 0,
+    "pageErrors": [],
+    "consoleEvidence": [
+      "[ChapterMemory] 开始统一抽取: 第1章：雪岭栈道",
+      "[ChapterMemory] summary + handoff 已原子写回"
+    ]
+  }
+}

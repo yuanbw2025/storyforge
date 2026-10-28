@@ -76,4 +76,3 @@ export function parseTtrpgOpenRuleRequestV1(value: unknown): TtrpgOpenRuleReques
     controllerMode: p.oneOf(r.controllerMode, ['human', 'ai'], 'controllerMode'), effectBindings,
     ...(hasDiscovery ? { discovery: parseTtrpgOpenDiscoveryRequestV1(r.discovery) } : {}) }
 }
-

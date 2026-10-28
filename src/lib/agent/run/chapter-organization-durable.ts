@@ -16,24 +16,18 @@ import {
   type ChapterOrganizationDomain,
 } from '../chapter-organization'
 import { assertRecordInScope, readOwnedRows, resolveScopeLike } from '../../workspace/scope'
+import { CHAPTER_ORGANIZATION_SOURCE_KEYS_CURRENT_V1, CHAPTER_ORGANIZATION_WRITE_TARGETS_CURRENT_V1 } from './chapter-organization-authority'
 
 export const CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1 = 'chapter-organization'
 export const CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V1 = 'chapter-organization-terminal-v1'
+export const CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V2 = 'chapter-organization-terminal-v2'
 
 /**
  * 整理本章只写候选事件和作者确认后的既有业务表；业务字段继续由
  * ChapterOrganization 的 parser/adopt 负责。这里的 contract 只声明读取边界，
  * 避免把 agentEvents 当成 AI 可写业务表。
  */
-export const CHAPTER_ORGANIZATION_SOURCE_KEYS_V1 = [
-  'chapterContent',
-  'stateCards',
-  'currentFacts',
-  'characters',
-  'characterRelations',
-  'itemLedger',
-  'foreshadows',
-] as const
+export const CHAPTER_ORGANIZATION_SOURCE_KEYS_V1 = CHAPTER_ORGANIZATION_SOURCE_KEYS_CURRENT_V1
 
 export interface ChapterOrganizationDurableRunV1 {
   snapshot: AgentRunSnapshotV1
@@ -81,6 +75,24 @@ export async function hashChapterOrganizationPostStateV1(input: {
   })
 }
 
+/** V2 covers the actual frozen direct write set, including facts and all three
+ * storyline tables. V1's six-table preimage stays available for old receipts. */
+export async function hashChapterOrganizationPostStateForContractV2(input: {
+  scope: WorkspaceScope
+  chapterId: number
+  contract: AgentRunSnapshotV1['contract']
+}): Promise<string> {
+  if (input.contract.scope.projectId !== input.scope.projectId
+    || !input.contract.scope.chapterIds?.includes(input.chapterId)) throw new Error('整理本章终态核验的章节与合同作用域不匹配。')
+  const tableNames = [...new Set(input.contract.permissions.writeTargets.map(target => target.table))]
+  const entries = await Promise.all(tableNames.map(async tableName => [
+    tableName,
+    (await readOwnedRows<Record<string, unknown>>(input.scope, tableName))
+      .map(row => ({ ...row })).sort((left, right) => Number(left.id ?? 0) - Number(right.id ?? 0)),
+  ] as const))
+  return hashCanonicalValue({ version: 2, chapterId: input.chapterId, tables: Object.fromEntries(entries) })
+}
+
 export function buildChapterOrganizationRunContractV1(input: {
   projectId: number
   worldGroupId: number | null
@@ -89,7 +101,7 @@ export function buildChapterOrganizationRunContractV1(input: {
 }) {
   return {
     version: 1 as const,
-    objective: `整理章节 #${input.chapterId} 的状态、事实、物品、年表、关系与伏笔候选`,
+    objective: `整理章节 #${input.chapterId} 的状态、事实、物品、年表、关系、伏笔与故事线候选`,
     workflowKind: 'long-running-resumable' as const,
     scope: {
       projectId: input.projectId,
@@ -98,33 +110,7 @@ export function buildChapterOrganizationRunContractV1(input: {
     },
     permissions: {
       contextSourceKeys: [...CHAPTER_ORGANIZATION_SOURCE_KEYS_V1],
-      writeTargets: [
-        {
-          table: 'stateCards',
-          fields: ['category', 'entityName', 'fields', 'lastChapterId'],
-          mode: 'author-confirmed' as const,
-        },
-        {
-          table: 'itemLedger',
-          fields: ['itemName', 'action', 'quantity', 'heldByName', 'characterId', 'chapterId', 'chapterTitle', 'note'],
-          mode: 'author-confirmed' as const,
-        },
-        {
-          table: 'storyTimelineEvents',
-          fields: ['title', 'storyTime', 'importance', 'description', 'chapterId', 'chapterTitle', 'order'],
-          mode: 'author-confirmed' as const,
-        },
-        {
-          table: 'characterRelations',
-          fields: ['fromCharacterId', 'toCharacterId', 'relationType', 'label', 'description', 'isBidirectional'],
-          mode: 'author-confirmed' as const,
-        },
-        {
-          table: 'foreshadows',
-          fields: ['status', 'plantChapterId', 'echoChapterIds', 'resolveChapterId', 'notes'],
-          mode: 'author-confirmed' as const,
-        },
-      ],
+      writeTargets: CHAPTER_ORGANIZATION_WRITE_TARGETS_CURRENT_V1.map(target => ({ ...target, fields: [...target.fields] })),
     },
     runtimeBindingHash: input.runtimeBindingHash,
     budget: {
@@ -157,7 +143,7 @@ export function buildChapterOrganizationRunContractV1(input: {
       {
         id: 'chapter-organization.terminal',
         kind: 'terminal' as const,
-        verifier: CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V1,
+        verifier: CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V2,
         criterionIds: ['chapter-organization.post-state'],
       },
     ],
@@ -183,9 +169,9 @@ export async function createChapterOrganizationDurableRunV1(input: {
       chapterId: input.chapterId,
       runtimeBindingHash: await hashCanonicalValue({
         schema: 'storyforge.chapter-organization-runtime',
-        version: 1,
+        version: 2,
         stepId: CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1,
-        verifierSet: CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V1,
+        verifierSet: CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V2,
       }),
     }),
   })
@@ -443,13 +429,13 @@ export async function verifyChapterOrganizationDurableRunV1(input: {
   if (!chapter || await hashChapterText(chapter.content ?? '') !== input.candidate.sourceTextHash) {
     throw new Error('整理本章 durable 终态验证发现正文已变化。')
   }
-  snapshot = await append(input.scope, snapshot, 'verification.started', {
-    verifierSetVersion: CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V1,
-  })
-  const postStateHash = await hashChapterOrganizationPostStateV1({
-    scope: input.scope,
-    chapterId: input.candidate.chapterId,
-  })
+  const verifierSetVersion = snapshot.contract.verificationPlan.find(plan => plan.kind === 'terminal')?.verifier
+  if (verifierSetVersion !== CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V1
+    && verifierSetVersion !== CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V2) throw new Error('不支持的整理本章终态核验版本。')
+  snapshot = await append(input.scope, snapshot, 'verification.started', { verifierSetVersion })
+  const postStateHash = verifierSetVersion === CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V1
+    ? await hashChapterOrganizationPostStateV1({ scope: input.scope, chapterId: input.candidate.chapterId })
+    : await hashChapterOrganizationPostStateForContractV2({ scope: input.scope, chapterId: input.candidate.chapterId, contract: snapshot.contract })
   const receipt = await createVerificationReceiptV1({
     version: 1,
     runId: input.runId,
@@ -459,7 +445,7 @@ export async function verifyChapterOrganizationDurableRunV1(input: {
     candidateHashes: [durable.candidateHash],
     adoptionEventIds: [adoptionRecord.id],
     postStateHash,
-    verifierSetVersion: CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V1,
+    verifierSetVersion,
     criteria: [
       { id: 'chapter-organization.candidate', status: 'passed', evidenceRefs: [`candidate:${durable.candidateHash}`] },
       { id: 'chapter-organization.confirmed', status: 'passed', evidenceRefs: [`run:${input.runId}:confirmation`] },

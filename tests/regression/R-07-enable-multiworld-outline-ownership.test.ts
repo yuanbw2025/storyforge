@@ -17,6 +17,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useWorldGroupStore } from '../../src/stores/world-group'
 import { seedCurrentProject } from '../helpers/current-workspace'
+import { resolveScopeLike, stampNewRecord } from '../../src/lib/workspace/scope'
 
 describe('R-07: enableMultiWorld 归属 outlineNodes', () => {
   beforeEach(async () => {
@@ -35,14 +36,16 @@ describe('R-07: enableMultiWorld 归属 outlineNodes', () => {
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
 
+    const scope = await resolveScopeLike(projectId)
+
     // 单世界状态:建多个大纲节点(全部 worldGroupId 为空)
     const makeNode = async (type: string, order: number, parentId: number | null) =>
-      await db.outlineNodes.add({
+      await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
         projectId, parentId, type,
         title: `${type}-${order}`, summary: '', order,
         // 单世界当前态不需要 worldGroupId。
         createdAt: now, updatedAt: now,
-      } as any) as number
+      } as any, { owner: 'work' })) as number
 
     const volId = await makeNode('volume', 0, null)
     await makeNode('storyBlock', 0, volId)
@@ -52,9 +55,9 @@ describe('R-07: enableMultiWorld 归属 outlineNodes', () => {
     await makeNode('chapter', 0, vol2Id)
 
     // 也建一个 worldview(单世界,worldGroupId 为空)
-    await db.worldviews.add({
+    await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
       projectId, worldOrigin: '上古创世', createdAt: now, updatedAt: now,
-    } as any)
+    } as any, { owner: 'world' }))
 
     // 验证准备:所有大纲节点 worldGroupId 为空
     const before = await db.outlineNodes.where('projectId').equals(projectId).toArray()
@@ -93,13 +96,15 @@ describe('R-07: enableMultiWorld 归属 outlineNodes', () => {
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
 
+    const scope = await resolveScopeLike(projectId)
+
     // 50 卷大纲，覆盖大规模当前内容。
     for (let i = 0; i < 50; i++) {
-      await db.outlineNodes.add({
+      await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
         projectId, parentId: null, type: 'volume',
         title: `第${i + 1}卷`, summary: '', order: i,
         createdAt: now, updatedAt: now,
-      } as any)
+      } as any, { owner: 'work' }))
     }
 
     await useWorldGroupStore.getState().enableMultiWorld(projectId)
@@ -123,4 +128,14 @@ describe('R-07: enableMultiWorld 归属 outlineNodes', () => {
       '启用多世界后,主世界视图应能看到全部 50 卷(旧 bug 会显示 0 卷)',
     ).toBe(50)
   })
+  it('rejects an unowned legacy row without inferring a World or changing the original data', async () => {
+    const projectId = await seedCurrentProject({ name: '未知归属', genres: [], description: '', targetWordCount: 0 })
+    const id = await db.worldviews.add({ projectId, worldOrigin: '归属未知的原文', createdAt: 1, updatedAt: 1 } as never)
+    const before = await db.worldviews.get(id)
+    await expect(useWorldGroupStore.getState().enableMultiWorld(projectId)).rejects.toThrow('未能确认归属')
+    expect(await db.worldviews.get(id)).toEqual(before)
+    expect((await db.projects.get(projectId))!.enableMultiWorld).not.toBe(true)
+    expect(await db.worldGroups.where('projectId').equals(projectId).count()).toBe(0)
+  })
+
 })

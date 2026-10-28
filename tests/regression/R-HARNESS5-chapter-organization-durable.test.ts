@@ -11,6 +11,7 @@ import {
 } from '../../src/lib/agent/chapter-organization'
 import {
   beginChapterOrganizationDurableStepV1,
+  buildChapterOrganizationRunContractV1,
   commitChapterOrganizationDurableAdoptionV1,
   createChapterOrganizationDurableRunV1,
   hashChapterOrganizationCandidateV1,
@@ -18,9 +19,10 @@ import {
   recoverChapterOrganizationCandidateV1,
   recordChapterOrganizationCandidateV1,
   CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1,
+  CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V1,
   CHAPTER_ORGANIZATION_SOURCE_KEYS_V1,
 } from '../../src/lib/agent/run/chapter-organization-durable'
-import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
+import { createAgentRunV1, readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { seedCurrentProject } from '../helpers/current-workspace'
@@ -82,9 +84,13 @@ async function createWorkspace(label: string): Promise<{
   return { scope: { projectId, worldId, workId }, worldGroupId, outlineNodeId, chapterId }
 }
 
-async function createPendingCandidate(label: string, recordDurableCandidate = true) {
+async function createPendingCandidate(label: string, recordDurableCandidate = true, legacyVerifier = false) {
   const fixture = await createWorkspace(label)
-  let snapshot = await createChapterOrganizationDurableRunV1({
+  const currentContract = buildChapterOrganizationRunContractV1({ projectId: fixture.scope.projectId, worldGroupId: fixture.worldGroupId, chapterId: fixture.chapterId, runtimeBindingHash: '1'.repeat(64) })
+  let snapshot = legacyVerifier ? await createAgentRunV1({
+    scope: fixture.scope, worldGroupId: fixture.worldGroupId,
+    contract: { ...currentContract, verificationPlan: currentContract.verificationPlan.map(plan => plan.kind === 'terminal' ? { ...plan, verifier: CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V1 } : plan) },
+  }) : await createChapterOrganizationDurableRunV1({
     scope: fixture.scope,
     worldGroupId: fixture.worldGroupId,
     chapterId: fixture.chapterId,
@@ -165,6 +171,15 @@ describe.sequential('R-HARNESS5 · 整理本章 durable run', { timeout: 15_000 
   })
 
   afterEach(() => db.close())
+
+  it('a frozen V1 verifier still issues its original six-table receipt after recovery', async () => {
+    const pending = await createPendingCandidate('旧核验版本恢复', true, true)
+    const adopted = await adoptChapterOrganizationSelection({ run: pending.run, selection: selectAllChapterOrganizationCandidates(pending.run.candidate) })
+    const completed = await commitChapterOrganizationDurableAdoptionV1({ scope: pending.fixture.scope, runId: pending.run.candidate.durable!.runId, candidate: adopted.run.candidate, written: adopted.written })
+    expect(completed.snapshot.projection.state).toBe('completed')
+    const started = completed.snapshot.events.find(event => event.type === 'verification.started')
+    expect(started?.payload.verifierSetVersion).toBe(CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V1)
+  })
 
   it('候选绑定受控上下文和正文 hash，作者确认后才签发终态 receipt', async () => {
     const pending = await createPendingCandidate('整理 durable')

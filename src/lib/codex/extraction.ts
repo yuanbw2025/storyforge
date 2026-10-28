@@ -126,7 +126,7 @@ export async function readCodexExtractionBaselineV1(input: {
 }
 
 export function formatCodexExtractionBaselineV1(baseline: CodexExtractionBaselineV1): string {
-  const schema = baseline.category.fields.map(field => ({
+  const schema = baseline.category.fields.filter(field => field.type !== 'ref').map(field => ({
     key: field.key,
     label: field.label,
     type: field.type,
@@ -135,7 +135,8 @@ export function formatCodexExtractionBaselineV1(baseline: CodexExtractionBaselin
   return [
     '【Codex 词条抽取登记基线】',
     `目标分类：${baseline.category.name}`,
-    `允许字段 schema：${JSON.stringify(schema)}`,
+    `AI 可填写 fields 字段 schema：${JSON.stringify(schema)}`,
+    `仅供作者后续关联，禁止出现在输出 fields 的字段：${JSON.stringify(baseline.category.fields.filter(field => field.type === 'ref').map(field => ({ key: field.key, label: field.label })))}`,
     `已有同类词条：${baseline.entries.length ? baseline.entries.map(entry => entry.name).join('、') : '无'}`,
   ].join('\n')
 }

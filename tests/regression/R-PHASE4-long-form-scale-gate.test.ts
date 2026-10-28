@@ -118,7 +118,7 @@ async function seedScale(tier: LongFormScaleTierV1) {
     outlineNodeId: targetOutlineId,
     scenes: [{
       sceneId: 'phase4-target-scene', title: '钟楼调查', summary: '目标细纲标记：先核对银潮钟，再决定是否使用星砂钥。',
-      characterIds: [], location: '银潮钟楼', conflict: '公开承诺与救援时限冲突', pace: 'medium', estimatedWords: 2200,
+      characterIds: [], location: '银潮钟楼', conflict: '公开承诺与救援时限冲突', pace: 'medium', estimatedWords: 2200, notes: '',
     }],
     openingHook: '承接银潮钟停止鸣响。',
     endingCliffhanger: '蓝羽誓约出现新的见证人。',

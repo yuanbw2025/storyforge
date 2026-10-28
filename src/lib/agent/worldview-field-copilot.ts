@@ -919,7 +919,7 @@ export function createWorldviewFieldCopilotNode(
       contextOverflowPolicy: 'reject',
     }, input.signal, result)
     if (result.finishReason === 'length') {
-      throw new Error('模型因达到输出上限而停止；本次不是完整候选，已拒绝标记成功。请缩小目标或等待 LONGOUT-1 分段协议。')
+      throw new Error('模型达到输出上限，本次候选不完整，正式内容未改变。请缩小生成范围，或在 AI 配置中调高输出上限后重新生成。')
     }
     return content
   })

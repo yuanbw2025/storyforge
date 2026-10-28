@@ -73,7 +73,7 @@ export function defaultDimensionsForWeight(weight: CharacterRoleWeight): Charact
 
 /** 已填(非空)的维度 key 集。 */
 export function filledDimensions(c: Character): CharacterDimensionKey[] {
-  return CHARACTER_DIMENSIONS.filter(d => (c[d.key] as string)?.trim()).map(d => d.key)
+  return CHARACTER_DIMENSIONS.filter(d => typeof c[d.key] === 'string' && c[d.key]!.trim()).map(d => d.key)
 }
 
 /** 按分组归类(供面板分组渲染)。 */

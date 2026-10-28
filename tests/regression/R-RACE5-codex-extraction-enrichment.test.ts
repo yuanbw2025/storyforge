@@ -104,6 +104,7 @@ describe.sequential('RACE-5 · Codex extraction/enrichment separation', () => {
     })
     expect(prompt).toContain('潮民以七次退潮为成年礼')
     expect(prompt).toContain('AI 新建建议')
+    expect(prompt).toContain('tags 必须是字符串数组且最多 5 项')
     expect(generated.candidate.plan.request.operation).toBe('enrich')
     expect(generated.candidate.entries[0]).toMatchObject({
       name: '听潮使', provenance: 'ai-created-suggestion', evidenceQuotes: [],

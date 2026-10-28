@@ -10,6 +10,7 @@ import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outlin
 import type { AssembleContextResult } from '../registry/types'
 import type { AIConfig, Chapter, OutlineNode, WorkspaceScope } from '../types'
 import { parseStages } from '../types/story-arc'
+import { readStateCardFields } from '../types/state-card'
 import { readOwnedRows, resolveScope } from '../workspace/scope'
 
 type StableRow = {
@@ -101,6 +102,8 @@ export async function prepareProseGatewayAssemblyV1(input: {
     readOwnedRows<StableRow>(scope, 'cultivationProgress', { owner: 'work' }),
     readOwnedRows<StableRow>(scope, 'userStyleProfiles', { owner: 'work' }),
   ])
+  // A malformed state cannot silently enter a formal prose/review packet.
+  states.forEach(state => readStateCardFields({ entityName: state.entityName, fields: state.fields }))
   if (!work || work.projectId !== scope.projectId || work.worldId !== scope.worldId) throw new Error('正文的作品意图缺少当前 Work。')
   const authorIntentKey = workAuthoringIntentResourceKeyV1(work)
   const enabledStyles = styleProfiles.filter(row => row.enabled === true && typeof row.profile === 'string' && row.profile.trim())

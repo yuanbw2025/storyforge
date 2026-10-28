@@ -1,5 +1,7 @@
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chat, resolveRequestConfig } from '../ai/client'
+import { supportsVerifiedJsonObjectResponseForModelV1 } from '../ai/provider-capabilities'
+import { resolveStorylineModelEvidenceV1, storylineEvidenceAnchorsV1 } from '../storyline/evidence-anchors'
 import type {
   GenerationGateIssue,
   GenerationNode,
@@ -17,6 +19,7 @@ import type {
 } from '../types'
 import {
   adoptStorylineAnalysisCandidates,
+  buildStorylineProgressPrompt,
   parseCanonicalStorylineCandidateV1,
   parseStorylineProgressResult,
   validateCanonicalStorylineCandidateV1,
@@ -165,7 +168,7 @@ function parseCandidateDraft(
     raw: draft,
     contract: {
       version: 1,
-      schemaId: 'storyline-progress-analysis.v1',
+      schemaId: 'storyline-progress-analysis.v2',
       target: `chapter:${input.snapshot.chapterId}:storyline-progress`,
       root: 'object',
       maxChars: 120_000,
@@ -178,13 +181,14 @@ function parseCandidateDraft(
         throw new Error('故事线进度候选的三个字段都必须是数组。')
       }
       const normalized = parseStorylineProgressResult({
-        raw: JSON.stringify(source),
+        raw: JSON.stringify(resolveStorylineModelEvidenceV1(source, input.chapterContent)),
         chapterContent: input.chapterContent,
         arcs: input.snapshot.arcs,
       })
       if (
-        source.progress.length + source.crossings.length + source.newArcs.length > 0
-        && normalized.progress.length + normalized.crossings.length + normalized.newArcs.length === 0
+        source.progress.length !== normalized.progress.length
+        || source.crossings.length !== normalized.crossings.length
+        || source.newArcs.length !== normalized.newArcs.length
       ) throw new Error('候选没有通过故事线闭集或正文逐字证据校验。')
       if (normalized.progress.length + normalized.crossings.length + normalized.newArcs.length === 0) {
         throw new Error('本章没有足够证据映射到故事线。')
@@ -217,15 +221,19 @@ function buildMessages(input: StorylineProgressCopilotInputV1): ChatMessage[] {
   const supplemental = input.supplementalContext.trim()
     ? `\n\n【本轮已验证上游候选（尚未采纳，不属于 Canon）】\n${input.supplementalContext.trim()}`
     : ''
+  // Frozen write-target bindings and chapter body are derived from the same
+  // registered storyArcs/chapterContent snapshot that adoption validates.
+  const [contract, targetInput] = buildStorylineProgressPrompt({ chapterTitle: input.chapterTitle, chapterContent: input.chapterContent, arcs: input.snapshot.arcs, evidenceAnchors: storylineEvidenceAnchorsV1(input.chapterContent).map(({ anchorId, quote }) => ({ anchorId, quote })) })
   return [
     {
       role: 'system',
-      content: `你是 StoryForge 大纲 Agent，当前执行 storyline-progress Skill。你的职责是把一章已写正文映射到作者已登记的故事线，形成作者确认候选，不得改写正文或自动改变故事线规划。\n\n硬规则：\n1. progress/crossings 只能使用正式上下文里的故事线 ID 和阶段 ID；\n2. quote 必须逐字出现在当前章节正文中；没有证据就不要输出；\n3. 同一故事线本章最多一条 progress，交汇必须是两条不同的已登记故事线；\n4. 新故事线只能放进 newArcs，不能伪装成已登记故事线；\n5. 不确定时返回空数组，但至少有一条可靠证据才生成候选；\n6. 只输出严格 JSON 对象，不输出 Markdown 或解释：{"progress":[],"crossings":[],"newArcs":[]}`,
+      content: `你是StoryForge大纲Agent，当前执行storyline-progress Skill，形成作者确认候选，不改写正文或自动改变故事线规划。\n${contract.content}`,
     },
     {
       role: 'user',
       content: [
         input.inputGuidance,
+        targetInput.content,
         `【作者要求】\n${input.authorRequest}${supplemental}`,
         `【正式上下文】\n${input.assembled.text || '（当前没有可用的正式上下文）'}`,
         '请只输出本章有逐字证据支持的故事线映射 JSON。',
@@ -371,7 +379,7 @@ export function createStorylineProgressCopilotNodeV1(
       temperature: input.generationOverrides?.temperature ?? 0.2,
     },
     contextOverflowPolicy: 'reject',
-  }, input.signal))
+  }, input.signal, undefined, supportsVerifiedJsonObjectResponseForModelV1(input.config) ? { responseFormat: 'json_object' } : undefined))
   return {
     id: `agent.outline.storyline-progress:${input.projectId}:${input.chapterId}:${input.snapshot.chapterContentHash.slice(0, 12)}`,
     kind: 'outline.storyline-progress',

@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "real-mapping-and-compression-output-budget-replay",
+  "sourceCommit": "89d7d36f5bad49c16e148896c648aa576ae100e8",
+  "status": "MAPPING_PASSED_COMPRESSION_COMPLETE_WITH_BOUNDED_LENGTH_REPAIR",
+  "evidenceDirectory": "live-storyline-progress-2026-10-27T23-41-22-500Z",
+  "result": {
+    "status": "passed-real-storyline-progress-reject-edit-reload-adopt",
+    "sourceCommit": "89d7d36f5bad49c16e148896c648aa576ae100e8",
+    "model": "agnes-2.5-flash",
+    "modelRequests": 6,
+    "knownTotalTokens": 21758,
+    "unknownUsageRequests": 0,
+    "results": [
+      {
+        "decision": "reject",
+        "modelRequests": 3,
+        "canonicalGuard": true,
+        "progressRows": 0
+      },
+      {
+        "decision": "adopt",
+        "modelRequests": 3,
+        "canonicalGuard": true,
+        "progressRows": 1
+      }
+    ],
+    "pageErrors": []
+  },
+  "compression": {
+    "requests": 4,
+    "allFinishStop": true,
+    "jsonObjects": true,
+    "literalAnchorsPreserved": true,
+    "thinkingDisabled": true,
+    "initialOverBudgetResponses": 2,
+    "completedRepairResponses": 2,
+    "delivery": [
+      {
+        "compressionResponse": 2,
+        "mainRequest": 3,
+        "summaryDeliveredVerbatim": true,
+        "navigationMarkerDelivered": true
+      },
+      {
+        "compressionResponse": 5,
+        "mainRequest": 6,
+        "summaryDeliveredVerbatim": true,
+        "navigationMarkerDelivered": true
+      }
+    ],
+    "remaining": "The first summary in each round remained too long; improve explicit summary-length guidance separately. No length-truncation or unknown request in this cohort."
+  },
+  "wholeCasePass": false,
+  "overallPlanComplete": false
+}

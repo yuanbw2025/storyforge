@@ -127,7 +127,7 @@ describe('AUDIT-6 · 大纲纯视图拆分', () => {
     expect(host.textContent).not.toContain('（3 块）')
   })
 
-  it('章节摘要只在失焦且内容变化后保存', async () => {
+  it('章节摘要失焦提交变更，并传回原字段前值', async () => {
     const onUpdate = vi.fn()
     const host = await mount(createElement(OutlineChapterRow, {
       ch: { id: 21, title: '旧标题', summary: '旧摘要' },
@@ -153,7 +153,7 @@ describe('AUDIT-6 · 大纲纯视图拆分', () => {
 
     await act(async () => textarea.dispatchEvent(new FocusEvent('focusout', { bubbles: true })))
     expect(onUpdate).toHaveBeenCalledOnce()
-    expect(onUpdate).toHaveBeenCalledWith(21, { summary: '新摘要' })
+    expect(onUpdate).toHaveBeenCalledWith(21, { summary: '新摘要' }, { expected: { summary: '旧摘要' } })
   })
 
   it('章节生成、插入和打开按钮继续回传原有操作', async () => {

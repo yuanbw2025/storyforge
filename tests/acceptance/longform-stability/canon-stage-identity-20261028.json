@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "kind": "portable-same-title-story-stage-canon-identity-foundation",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "101beb8668963f76898e71c7889d4e53740f8e6e",
+    "files": {
+      "src/lib/context-gateway/canon-provider.ts": "c8a190cc0692083ccf74e7ac77aeae68a9904773d707cccaa0fb8fa9725b07ac",
+      "tests/regression/R-CTXG3-canon-resource-provider.test.ts": "dd2e9496d70277440adbdc4841c558f55732e3b4a95d82ec5b12a68c508ae5eb",
+      "tests/e2e/longform-story-arc-save.spec.ts": "d5668dc92a1d32b9e23d91157a0a1268639f6a1d07d14d2c3c950ac941e4323b"
+    }
+  },
+  "status": "TARGETED_FOUNDATION_AND_NATIVE_PATHS_PASSED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "productBoundary": "Shared Canon projection used by longform Step/Node. No new table, write target, context source or formal AI entry; no author rows modified by projection.",
+  "originalFailure": {
+    "workflowLog": "story-arc-rich-transform-related.log",
+    "message": "context-gateway-execution:hard-sufficiency / same-name-conflict:story-arc / same-name-different-canon for distinct same-titled stage IDs",
+    "focusedLog": "canon-stage-identity-before.log",
+    "focusedFailed": 1,
+    "meaning": "One identity defect, not multiple independent failures"
+  },
+  "changes": {
+    "providerVersion": "canon-resource-provider-v8",
+    "identity": "Nested stage and event descriptor titles carry a deterministic SHA-256 of the portable parent resource key and exact stage ID. Distinct opaque IDs a-b/ab remain distinct even after normalized-name matching. Resource keys and raw author data are preserved.",
+    "scope": "Only nested stage/event title projection; actual character and single-value conflicts remain enforced"
+  },
+  "regression": {
+    "log": "canon-stage-identity-related.log",
+    "passed": 55,
+    "files": 5,
+    "checks": [
+      "Provider metadata/read isolation and full export/import title/key stability",
+      "No author Arc write during projection",
+      "Gateway positive selection and mandatory/budget semantics",
+      "Existing real character same-name conflicts remain hard failures",
+      "Existing scoped event adoption and recovery"
+    ]
+  },
+  "nativeBrowser": {
+    "originalLog": "canon-stage-identity-native.log",
+    "originalResult": "8 passed; new duplicate-title case had a driver locator ambiguity before model dispatch",
+    "originalArtifactsRetained": true,
+    "finalLog": "canon-stage-identity-native-final.log",
+    "passed": 9,
+    "checks": [
+      "Same-titled stages with opaque IDs enter actual Gateway and event AI path",
+      "Exactly one mocked model dispatch; candidate does not write Canon; explicit adoption changes target events only",
+      "Refresh does not redispatch; no page errors",
+      "Existing author saves, quota/zero-row recovery, deletion and event sort tests retained"
+    ]
+  },
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "build": "PASS",
+    "targetedEslint": "PASS"
+  },
+  "fullChecks": "Full CI and E2E continue on exact earlier 2f4ebb26; no current-head full-green claim.",
+  "next": "Restore preserved rich-transform unit on this independently validated shared foundation, then continue real model and remaining plan operations."
+}

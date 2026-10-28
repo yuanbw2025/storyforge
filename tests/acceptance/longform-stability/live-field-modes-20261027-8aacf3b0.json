@@ -1,0 +1,2098 @@
+{
+  "schemaVersion": 1,
+  "kind": "longform-step-stability-real-field-mode-replay",
+  "date": "2026-10-27",
+  "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+  "status": "NORMAL_FIELD_MODES_VERIFIED_FULL_PLAN_CONTINUES",
+  "model": "agnes-2.5-flash",
+  "provider": "agnes",
+  "browser": "isolated Chromium through private forwarding fixture",
+  "fieldCount": 25,
+  "modeCount": 75,
+  "completedNormalStages": 125,
+  "acceptedCohortRequests": 127,
+  "allTrialRequests": 135,
+  "allTrialKnownTokens": 514907,
+  "allTrialUnknownUsageRequests": 2,
+  "allTrialTransportUnknownRequests": 2,
+  "trials": [
+    {
+      "trialId": "live-field-journeys-2026-10-27T07-03-46-588Z",
+      "originalRunnerStatus": "failed",
+      "requests": 32,
+      "knownTokens": 126106,
+      "unknownUsageRequests": 1,
+      "transportOutcomeUnknownRequests": 1,
+      "runnerSha256": "334bf6a98c96326f9256b4dafb314264850694b3148d3034c0b4b34171e6b047",
+      "qualification": "原始未知结果保留；对应完整用例使用独立作品重测。2026-10-27T07-27-36 的 LF-057 rewrite 发生浏览器透明重复 POST，原通过标记不作为该条接受证据。"
+    },
+    {
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "originalRunnerStatus": "passed",
+      "requests": 93,
+      "knownTokens": 350348,
+      "unknownUsageRequests": 1,
+      "transportOutcomeUnknownRequests": 1,
+      "runnerSha256": "9b82eb76fdfccb2058bc7e46f3f2da5a605d74841a0bdae25cbb15df6714cebc",
+      "qualification": "原始未知结果保留；对应完整用例使用独立作品重测。2026-10-27T07-27-36 的 LF-057 rewrite 发生浏览器透明重复 POST，原通过标记不作为该条接受证据。"
+    },
+    {
+      "trialId": "live-field-journeys-2026-10-27T07-58-35-465Z",
+      "originalRunnerStatus": "passed",
+      "requests": 5,
+      "knownTokens": 21085,
+      "unknownUsageRequests": 0,
+      "transportOutcomeUnknownRequests": 0,
+      "runnerSha256": "9b82eb76fdfccb2058bc7e46f3f2da5a605d74841a0bdae25cbb15df6714cebc"
+    },
+    {
+      "trialId": "live-field-journeys-2026-10-27T09-14-49-126Z",
+      "originalRunnerStatus": "passed",
+      "requests": 5,
+      "knownTokens": 17368,
+      "unknownUsageRequests": 0,
+      "transportOutcomeUnknownRequests": 0,
+      "runnerSha256": "adaf4b437abb486711bd96935675ca319330c0725e96d7ab827a133566bb93fe"
+    }
+  ],
+  "fields": [
+    {
+      "caseId": "LF-036",
+      "field": "worldOrigin",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-03-46-588Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            1
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "16b2a3fbe6384c970a031dfdb4bf6e133daed7b04de6ff65e80eaf79bf5a91ad"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            2
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "a9adb55124142ec91745881c1a4d3ff29609f7bc593059e0b673e8c9b77cd9ca"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            3
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "2e469536dee3a906a612a17253a9412212d0244a4f777c0848a9d70fb7f277a4"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            4
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "8646f7353bcbb9500a02c5192a1c0edc9d07a2db491d9a7bf4f17ec8dcbfdb68"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            5
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "e2869ad20154fe5a9fb15eebea50c2ba0f348d553bbc7d7e60d6f141a1c95d9d"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-037",
+      "field": "powerHierarchy",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-03-46-588Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            6
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            7
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "3392c1b4496108428736f116a5bc44e2c2600c52bb44793629e70374b9899bfe"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            8
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "049d0ee124526fcb54c4ac1096f8f9e2f5087cb7899c6a5fe6bcd242ed09e5f8"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            9
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "f2b885a1898be8e4202c3fbeb09121cb751ba837f112df40e418b32f9295265f"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            10
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "fc4f31898f2cb83a2282b24b52969514831a4f0ae8c6750b1d37679146d17944"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-038",
+      "field": "divineDesign",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-03-46-588Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            11
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            12
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "957f357e28635547adaac9d5cea350224ecaa8a92c546fe0f26ec0e57af1bda4"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            13
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "cbb9ea6321b1511eb7dc532ed632f2b5a0a052e8c2f425af6cea5f208a1e5950"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            14
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "e10603c7f9b11735e1726af92705ce0bf90d53802c2275d5eeb2d24a56c03bf0"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            15
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "74dc271bf8c8dc0c30bd6c80f9d7bd8f8f3bcac124a2637ce2180c6a367c9c34"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-039",
+      "field": "worldStructure",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-03-46-588Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            16
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            17
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "97923e9642d187060ad189b703f939a0c6ab656126cfc2c7cc666918f9214c39"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            18
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "9ff6d0bbe666aab495db4884a9ed6eb0116ccd34684f8feec2a282b949790277"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            19
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "d832d97c4a91e4b0f3162408e4c146908483d13e4b8ce4f222023d31b12431c8"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            20
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "d5e634e8146962647507e4f0b14ed398fcb71df9af0fff78947d3a2db3952514"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-040",
+      "field": "worldDimensions",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-03-46-588Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            21
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            22
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "339a97b042e6633e03ccb7670805289a795cd150e76cfb63df2fc890778ef85d"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            23
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "35a1996a81d5b37622813e94744c050bd543e113e29bb5fa3776564540547c09"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            24
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "451a83d0ac9fe346b613d4e859f3354032efb34e41c933f356a8aa3c82de0140"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            25
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "bcd4adf94f091aebf82e53c96d549a7911eb57306b7dee9ff7f798bb17498fcd"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-041",
+      "field": "continentLayout",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-03-46-588Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            26
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            27
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "f54c69718d3e0af849bf6c05570215a4e81e0050216dd3d2c08d6255afd472b0"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            28
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "98e960e1ef527ea2a12814241e7a55dee4d23d2ca8bde7de1a899dda2ba51670"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            29
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "2d017b10c1d3e987800050f1fbcfba442d94256833de31de5af753990913fb0e"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            30
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "68be1b61ea78b47c249e8bfd55bb71f8e5f45de1cbb4a7d08fa262f9b0a0cd6f"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-042",
+      "field": "regionDimensions",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-58-35-465Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            1
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            2
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "87ca443e86f69a9c6e3ac4ab887f3450f758c56d81fe4024aab029602baa860d"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            3
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "59d8eb5233a8d87cb077d051c81830b0b01e413c23492c0ed677a19a7de97da7"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            4
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "4b1740f07bdf3355582602abc6d2e3f9fad29c3acf9f0cc2a79dbbfe7b9e9dce"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            5
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "28b60b050b64528e6001c6151624792cbaa7c3238725aba0bde2d52a4164d605"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-043",
+      "field": "mountainsRivers",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            1
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            2
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "a5cb7d076f890052db7d0603b91071f011e4fa12e91fa2fabca134bc3a078bc1"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            3
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "117ff5b80cd32ea2e0b26bfca315f76a859acd097f84f4cab6b0d85f32bb0a06"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            4
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "8f84c9b98f11297e7e7646623f57159e530ea1b8c4e0d6e91c0aacdb54edbaa7"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            5
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "4d7d89cf738830873f30ba779179a34f8a481a14d9901e4479a14f8e82a99556"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-044",
+      "field": "climateByRegion",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            6,
+            7
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            8
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "bb4bf7aee63413bf97f9ee9985469806d37fae32b50eec8b348c5be21dd49cb3"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            9
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "e8c8ecec32a7166b33b7f4e2ffa9f1af4c84054ac744359a6aa2cee3a083603a"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            10
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "55f0af1419ee2dc5feaf1a696a954fe8f89b46b7dce96088737dd40e32119405"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            11
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "ed22de15f2dbf6dde637dc14c400831eff6a55103ff6bde9007ec32c46c54354"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-045",
+      "field": "naturalResourceOverview",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            12
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            13
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "94687eef37393eac34292c7cd7fb179e4cee9347bf78f432cb4dc2d36f91b567"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            14
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "81b3f034bd7af7a44da9dda9eb4c3ab8cd1da12451393f2593bda7506004979a"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            15
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "8941bf9939f764b5ce7adb274ffb1772aabc11247e6953f4778460564b96c63b"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            16
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "46609541d7d0ffb3225f5fa29f13092d331d672f04dfbfacf70b48f291534d86"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-046",
+      "field": "naturalResources",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            17
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            18
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "4311af4b570d33fde8c443e74cf7105135508f302e2fbf398371ab3da84d23fc"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            19
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "d30bb6533c56361aca77e353002192e7b67bf3d8a6c896920484a0579b2aac1a"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            20
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "fa38152ce7c2c88ca35e55eb3033877b14a596c71af40904522d9b6c2185308c"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            21
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "0368e0f528d3b9b249f52ad31c047103ee03218451f3c0911269af7a0f5ac82d"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-047",
+      "field": "races",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            22
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            23
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "0eb98fb5ff8de3d4dfdde70661ad71de36a5f4d72634a9195de1681533519977"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            24
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "b3258692e69198294c818aee785a7ce54e30c72c118753f1f8c4efff51111cdf"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            25
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "a55e2a9bf8a8538921da8c385afe3e96ddb9f9a1eb63046ea3e5914f0237d051"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            26
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "f19826bb2b1a5eae1d386b1ffd846147ededbfcdcfeec0272d3ed2a457ec44a8"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-048",
+      "field": "factionLayout",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            27,
+            28
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            29
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "e3f9f3d7885f581d23f12eb397f6a7f524413d943f21d16bbfdcb807f38bc618"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            30
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "31825478d1b6ea9066113bda937fe08df9a4c41c7e360746c00869e64006d909"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            31
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "bb7f58305206c2f661d3940379f77a66f318da40258446c3b39220090ee58f85"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            32
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "57918c6ea29592cf4386eab2482bffb16deb21c051709fae71c802fdb1ad0b16"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-049",
+      "field": "politicsOverview",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            33
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            34
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "c818412c038ceb6b1306ed0fa82925bd5d4e850e39aa59abb47d4f6fb91f0a53"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            35
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "d8640649df8a1d9fa3cd7457be6460636f86828060a38e39652564805a68757b"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            36
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "6b44e797d41a778a707cbe40ff66d0aae3a2b19576fb416003a5cbbd674f88ee"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            37
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "f1c558246b4506d59dc70e2f74db1df12491f77a84115f491e679d4227ae0814"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-050",
+      "field": "economyOverview",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            38
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            39
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "d72bfa13019ff26fda8e2ac45e8688e2a320b328466e4b71cbbe994cb7f5a4d5"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            40
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "1126621fe1c0c5fcadb50ef9165eb6b39081dcee4622965cf2ed69d4e93edb3d"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            41
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "bef4c100f0302b04ab855bc6ff8e96cdbb81f9a791bad34824f6372e36ab061c"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            42
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "96e6e8f6b0683c168234e84e6ae14754b92f61f6bc14fdd5a5d898c0787f0efa"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-051",
+      "field": "cultureOverview",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            43
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            44
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "e42539fffd5537a1e1f906df7f149d71713c1a27256c0b0d48313737cbd8ee00"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            45
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "cc1f04dc9ef6c8d8d3ccb62c70b2276d2c31275365d41aa24809e0d04b9889d5"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            46
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "6235eca3de8fa268e5e5157e527bda6c6dcb05abd847637d62089d8b99afa1a7"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            47
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "0cb4373eac95504afeae1de622a5474d87eca252009c62d1199d9b766bf00fb5"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-052",
+      "field": "internalConflicts",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            48
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            49
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "3351f9479bda9c5ee87c4cd6beac4789a76c94266caf9ff2fa63023553666abf"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            50
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "4a7faf9ff41639f0853fc5aa1671e2b2037b4d55f3ca4f4e24957682fd8ccb0c"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            51
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "3a26dbb41077cbe99080be9c9b81ce434b5c0091a0e4f996c2ef000e9a128655"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            52
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "79ea62fa17918ecc2a014653a09558ad0ec7b69f7c387fb8d1ea08bdd12483d0"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-053",
+      "field": "itemDesign",
+      "target": "worldviews",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            53
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            54
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "a3d4c6ae8c4f19d8b2cf8cd16f9a50679066c289c89b651abd1f7a88d70b7e47"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            55
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "dc87a6f716adaf1e9d5dda6b59fcee42afc8a8a20f384e16795c641095df1287"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            56
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "2131b9e3c573b8f2fe940b52071b8972d8407fa99e6dec7e5d86c2ac57d66e76"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            57
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "93c2f856d2b2c5e6b0486fa76acef59bb915e2a50afe44bdec24c97ee5bce5ca"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-054",
+      "field": "logline",
+      "target": "storyCores",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            58
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            59
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "1d4729265549bf78d0f74d6e250615e6351ed7205ab9006f2ce9912d4304534e"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            60
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "d0bd8537b06558853c2528bac4e3a2ca539db8c66f9e8e8bc708a945c5627c98"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            61
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "ff985ec7909d1da354514086c94b9993daa6686d7f6c617949913da39a1afe10"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            62
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "fb3bdccf303b9e94502c324510a8463650913915ea6dd038857b8b8cf4239fab"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-055",
+      "field": "concept",
+      "target": "storyCores",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            63
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            64
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "507fed6f960166df899d7f8dcbdcc519379d90b9e89ae00e4c9d8e91d8c623dc"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            65
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "f18719589f3d0479a8dbb85a39ab9c7c85db1b3d543cdf24a5e2098de83f727e"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            66
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "34d96393489200a0653b771837fc654a4b7af93f80ddd818971de8f46de15d37"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            67
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "f753bf8c562780c2e69fc9b7a4e491e441b4bb2cac10eecf46b2f52ec02bc092"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-056",
+      "field": "theme",
+      "target": "storyCores",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            68
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "16b2a3fbe6384c970a031dfdb4bf6e133daed7b04de6ff65e80eaf79bf5a91ad"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            69
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "6c7be4b468a074b0ee1744310d0a8dd95f20cdf3ee13d4698dca1b726b3e297e"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            70
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "54c9b6d4c7429c675d5e44b4baefadf4eb3ea67708b74dd4f382b154057dd2de"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            71
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "358f0c692a7db7474f8e1e3e608299c54735be474da9f099af0435f5581010db"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            72
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "af72d446e1d5fe66e25495d865e496878253f6840bc54764f8616c7635000167"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-057",
+      "field": "centralConflict",
+      "target": "storyCores",
+      "trialId": "live-field-journeys-2026-10-27T09-14-49-126Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            1
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "16b2a3fbe6384c970a031dfdb4bf6e133daed7b04de6ff65e80eaf79bf5a91ad"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            2
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "977c1cb1238812f645d1c387a8c9a1704af242e86ac939ea37bfa629382de514"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            3
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "074d654f2e7ceca834e83e12688a933a5a39ea6dd1e49a3562b868e7c9c08dcd"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            4
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "69baf5957bbc1fd26e9f4cf46e4a78908ad4ca52e0c5307422b6c214d2465992"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            5
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "9b318b98cc7580242510ffc382c05a150d1c4e79ccde20ff1facbf37dcf86bed"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-058",
+      "field": "plotPattern",
+      "target": "storyCores",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            79
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "16b2a3fbe6384c970a031dfdb4bf6e133daed7b04de6ff65e80eaf79bf5a91ad"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            80
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "ac8bf773985cb5a7c0c476e0fc0a0f57d6f9b7150d36b3f91b747f85d35c199c"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            81
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "eee818c0489982a3ce0bc635a0804ef8460bdcbdfed4b3dfd61630e034338c60"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            82
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "b694361dd9fb4e8183efebfeeb43880491bc3433dacdbec95e849c3496a66914"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            83
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "63275da714645664fb21f03630ba8d2be1703a38e89b58140ce1759474bea84b"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-059",
+      "field": "mainPlot",
+      "target": "storyCores",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            84
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "16b2a3fbe6384c970a031dfdb4bf6e133daed7b04de6ff65e80eaf79bf5a91ad"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            85
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "63f43766987a201a72df8883b8f3da40160670e8b31befcb19c5b74ee63d4c89"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            86
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "099c14ec26d9ce3c331f30325d13b9c4b04f8dc0e029414ef99f54c7dec879bd"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            87
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "84b2daeb5367450a839e647abc3751f13b301a21a511d5caf071cd7e05be3d3c"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            88
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "c1ac0cfb8bb373827df538bccb8463a945a59e58fa6638b61c995bdba9491fdf"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    },
+    {
+      "caseId": "LF-060",
+      "field": "subPlots",
+      "target": "storyCores",
+      "trialId": "live-field-journeys-2026-10-27T07-27-36-942Z",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "stages": [
+        {
+          "name": "create-reject",
+          "mode": "扩写",
+          "decision": "reject",
+          "status": "passed",
+          "requests": [
+            89
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": false,
+          "canonicalReadbackSha256": "f35a0cf0ef896a2236d8419cac8a2d85bfb33d12859af555f9cf7825dc785109"
+        },
+        {
+          "name": "create-adopt",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            90
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "fdf482c047cbb0f4ad7dfbd908c50f4bf56e8e595e296000da35b08d34214f0c"
+        },
+        {
+          "name": "expand",
+          "mode": "扩写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            91
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "c3b4f81f2e2de069c7cbcbac840cba01d8a624d3da197aa1288c811e8fd6ceca"
+        },
+        {
+          "name": "rewrite",
+          "mode": "重写",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            92
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "df44827d702051f7a909544515115a7beedec2583758d2a9b9766aee7c2dcf97"
+        },
+        {
+          "name": "polish",
+          "mode": "润色",
+          "decision": "adopt",
+          "status": "passed",
+          "requests": [
+            93
+          ],
+          "candidateUnchangedCanonical": true,
+          "candidateEditPersisted": true,
+          "reload": true,
+          "canonicalFieldPresent": true,
+          "canonicalReadbackSha256": "39caff45a1866c99bb6843660a64f4067f1536d7e362d243d741ebf0a513a0b8"
+        }
+      ],
+      "downstreamManualRead": true,
+      "pageErrors": 0
+    }
+  ],
+  "retryPolicy": "保留两个传输结果未知及全部原始试验。发现浏览器在转发层无响应断连后重复POST，修正转发层显式返回带unknown标记的503，并用新建隔离作品重测LF-057全部五步。离线控制验证断连2POST、显式unknown响应1POST，真实模型调用0。两个不同prompt的登记协议修复调用独立计数；不把未知结果或未知usage记为0。",
+  "transportProbe": {
+    "file": "tests/acceptance/longform-stability/transport-post-replay-20261027.json",
+    "sha256": "e73710d9d82b89a1af8999d38583fd1a0798214b21c1150db8c5ec5b4f47318f",
+    "liveModelCalls": 0
+  },
+  "nativePackageEvidence": false,
+  "literaryAcceptance": false,
+  "wholeCasePass": false,
+  "overallPlanCompleted": false,
+  "releaseStatus": "NOT_RELEASED"
+}

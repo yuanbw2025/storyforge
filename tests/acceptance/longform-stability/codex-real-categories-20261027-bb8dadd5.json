@@ -1,0 +1,1310 @@
+{
+  "schemaVersion": 1,
+  "kind": "longform-codex-real-category-normal-evidence",
+  "date": "2026-10-27",
+  "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+  "status": "18_CATEGORY_NORMAL_PATHS_VERIFIED_CONTINUING_FAULT_MATRIX",
+  "model": "agnes-2.5-flash",
+  "scope": "Isolated synthetic longform projects; real configured provider. No author browser data used.",
+  "acceptedCategories": [
+    "artifact",
+    "beast",
+    "city",
+    "faction",
+    "herb",
+    "humConflict",
+    "humCulture",
+    "humEconomy",
+    "humPolitics",
+    "mineral",
+    "natClimate",
+    "natDimension",
+    "natStructure",
+    "natTerrain",
+    "natWater",
+    "originDeity",
+    "originPower",
+    "race"
+  ],
+  "normalStages": 72,
+  "acceptedRequests": 72,
+  "acceptedKnownTokens": 135707,
+  "acceptedUnknownUsage": 0,
+  "allSourceTrialsRequests": 78,
+  "allSourceTrialsKnownTokens": 142577,
+  "allSourceTrialsUnknownUsage": 1,
+  "accepted": {
+    "artifact": {
+      "trial": "live-codex-categories-artifact-2026-10-27T13-01-40-928Z",
+      "category": "artifact",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7810,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "0b57d0b9084831d896603893ab24f831e2a48dfda68a598a04b458ca975b44d2",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "记路绳"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "记路绳"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "探灵网"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "盐鸣盘"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "记路绳"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "beast": {
+      "trial": "live-codex-categories-beast-2026-10-27T13-07-39-072Z",
+      "category": "beast",
+      "status": "passed",
+      "sourceSample": "independent-structured-card-v2",
+      "requests": 4,
+      "knownTokens": 8115,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "1e0fc8a80fe2bc0156c18f7ecd27b79eb6539288778118520e8b1a09e6bf0b36",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "回潮鹿"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "回潮鹿"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "礁牙伏兽"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "锈滩铁螯蟹"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "回潮鹿"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "city": {
+      "trial": "live-codex-categories-city-2026-10-27T13-01-02-905Z",
+      "category": "city",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7826,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "c6fa0e780930ec66e8404750598c6a43fc4602702b1c60a4e2c3280a8a6da51e",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "北盐镇"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "北盐镇"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "沉闸镇",
+            "汇流驿"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "隐盐窟"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "北盐镇"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "faction": {
+      "trial": "live-codex-categories-faction-2026-10-27T13-00-31-436Z",
+      "category": "faction",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 8712,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "edbb4348ffa28c3cbcfca285232db11d435a77484fce71676e22b46aca58e948",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "测绳会"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "测绳会"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "黑市绳匠"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "钩锁帮"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "测绳会"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "herb": {
+      "trial": "live-codex-categories-herb-2026-10-27T13-07-07-765Z",
+      "category": "herb",
+      "status": "passed",
+      "sourceSample": "independent-structured-card-v2",
+      "requests": 4,
+      "knownTokens": 7656,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "e2035ee00fd77806adf47d342133700092009f0c3c73a02fb86447a094403a07",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "岩眠藤"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "岩眠藤"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "蚀月草"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "银敛草"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "岩眠藤"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "humConflict": {
+      "trial": "live-codex-categories-humConflict-2026-10-27T13-03-31-109Z",
+      "category": "humConflict",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7457,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "f5c962c590b85589c74918f9370cdc671b3df483b025e762de535d3ca4ad082f",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "北岸封路争议"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "北岸封路争议"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "雾陷黑市霸权"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "北岸探路队补给限额争议"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "北岸封路争议"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "humCulture": {
+      "trial": "live-codex-categories-humCulture-2026-10-27T13-02-58-852Z",
+      "category": "humCulture",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7318,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "63433a8436fdb8e27065489abfbfb4bccf1ed02d8cd209f0fc58fe1a9f9fb479",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "测绳礼"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "测绳礼"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "立盐仪"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "盐债绳礼"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "测绳礼"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "humEconomy": {
+      "trial": "live-codex-categories-humEconomy-2026-10-27T13-08-44-323Z",
+      "category": "humEconomy",
+      "status": "passed",
+      "sourceSample": "independent-structured-card-v2",
+      "requests": 4,
+      "knownTokens": 7802,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "c5f27d906d67d709a260498cea962fb2b0c305be4e55d7bbb44e370d7726fc60",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "工时券制"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "工时券制"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "黑盐配给制"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "盐镇实物信用贷"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "工时券制"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "humPolitics": {
+      "trial": "live-codex-categories-humPolitics-2026-10-27T13-02-10-838Z",
+      "category": "humPolitics",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7648,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "3c5a33a16e6533af5bb8e16cc599fb746445b0a7de964eace955693f4de9d5bb",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "轮值议事制"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "轮值议事制"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "镇守司"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "探路工准入制"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "轮值议事制"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "mineral": {
+      "trial": "live-codex-categories-mineral-2026-10-27T12-46-11-983Z",
+      "category": "mineral",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 8375,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "1ecfd1c977dfa65942f541765084254d00fcb50715f60433d07f8dc03ba6d468",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "响盐晶",
+            "灰纹石"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "响盐晶",
+            "灰纹石"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "哑烬砂"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "盲石"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "响盐晶",
+        "灰纹石"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 0
+    },
+    "natClimate": {
+      "trial": "live-codex-categories-natClimate-2026-10-27T12-59-28-213Z",
+      "category": "natClimate",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7462,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "bf5729b52741bf87ba9ef2a0777a10cb784eb79503a095cf29bfee5f0a7bec3b",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "灰潮季"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "灰潮季"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "盲风隙"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "盲风脊"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "灰潮季"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "natDimension": {
+      "trial": "live-codex-categories-natDimension-2026-10-27T12-57-43-528Z",
+      "category": "natDimension",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 6849,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "f20d5804d30830844ef085ebcf6c5b38bbe1e40dc613a866b5fa734c79bd63d0",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "东盐域"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "东盐域"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "北盐荒"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "北盐滩"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "东盐域"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "natStructure": {
+      "trial": "live-codex-categories-natStructure-2026-10-27T13-08-14-939Z",
+      "category": "natStructure",
+      "status": "passed",
+      "sourceSample": "independent-structured-card-v2",
+      "requests": 4,
+      "knownTokens": 6932,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "98bc10ab84cf62ff7a074a5d8c92f03a8fcdf569db66e0de09c2d3377fe38d4f",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "玄盐壳界"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "玄盐壳界"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "海盆深渊"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "玄盐闸顶"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "玄盐壳界"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "natTerrain": {
+      "trial": "live-codex-categories-natTerrain-2026-10-27T12-58-11-304Z",
+      "category": "natTerrain",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 6942,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "0ce6cc8abf97328a11c97312ea7551bc98da7eef0e92418d620ae67ce45d9fe5",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "断桥峡"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "断桥峡"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "盐雾裂谷"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "白盐荒漠"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "断桥峡"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "natWater": {
+      "trial": "live-codex-categories-natWater-2026-10-27T12-58-44-583Z",
+      "category": "natWater",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 6966,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "4b9085559d55b0cfa4d903b1685a13256d27650a5f6aefe4b7d62580b8fccb67",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "回声河"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "回声河"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "盐雾裂口"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "幽蓝暗河"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "回声河"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "originDeity": {
+      "trial": "live-codex-categories-originDeity-2026-10-27T13-04-31-997Z",
+      "category": "originDeity",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7219,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "d3a33e452b01e9e0f68d655e674d1c081f29f711b1e975fe9501b7d37d75bb09",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "守桥者白灯"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "守桥者白灯"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "沉沙女"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "灯塔祭司"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "守桥者白灯"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "originPower": {
+      "trial": "live-codex-categories-originPower-2026-10-27T13-04-03-821Z",
+      "category": "originPower",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 6718,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "443cdb05e1b8ce124ca904ce05ff1f40592ed35daa06a3ecc940f574f21097df",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "潮息体系"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "潮息体系"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "渊潜"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "破潮体修"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "潮息体系"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    },
+    "race": {
+      "trial": "live-codex-categories-race-2026-10-27T13-00-00-136Z",
+      "category": "race",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7900,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "ea39a8e6e4b2fdf71c990bf994f1712989e2b6106005b386f034f2b5c5f092fe",
+      "pageErrors": [],
+      "observations": [
+        {
+          "operation": "extract",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "盐民"
+          ]
+        },
+        {
+          "operation": "extract",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "盐民"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "雾潜者"
+          ]
+        },
+        {
+          "operation": "enrich",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "entries": [
+            "雾栖者"
+          ]
+        }
+      ],
+      "extractAdoptedNamesSeenInEnrichment": [
+        "盐民"
+      ],
+      "schemaWireVerifiedRequests": 4,
+      "thinkingDisabledWireRequests": 4
+    }
+  },
+  "allTrials": [
+    {
+      "trial": "live-codex-categories-artifact-2026-10-27T13-01-40-928Z",
+      "category": "artifact",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7810,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "0b57d0b9084831d896603893ab24f831e2a48dfda68a598a04b458ca975b44d2",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-beast-2026-10-27T12-53-14-108Z",
+      "category": "beast",
+      "status": "failed",
+      "sourceSample": "narrative-v1",
+      "requests": 1,
+      "knownTokens": 1500,
+      "unknownUsage": 0,
+      "failure": "Visible generation failure: 词条候选 2 的名称未在原文中出现。",
+      "resultSha256": "edc1c5bc99294e2017f1ab6cca5026ce7b85ca316922efbd7391823251ae4c33",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-beast-2026-10-27T13-07-39-072Z",
+      "category": "beast",
+      "status": "passed",
+      "sourceSample": "independent-structured-card-v2",
+      "requests": 4,
+      "knownTokens": 8115,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "1e0fc8a80fe2bc0156c18f7ecd27b79eb6539288778118520e8b1a09e6bf0b36",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-city-2026-10-27T13-01-02-905Z",
+      "category": "city",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7826,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "c6fa0e780930ec66e8404750598c6a43fc4602702b1c60a4e2c3280a8a6da51e",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-faction-2026-10-27T13-00-31-436Z",
+      "category": "faction",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 8712,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "edbb4348ffa28c3cbcfca285232db11d435a77484fce71676e22b46aca58e948",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-herb-2026-10-27T12-48-52-277Z",
+      "category": "herb",
+      "status": "failed",
+      "sourceSample": "narrative-v1",
+      "requests": 1,
+      "knownTokens": 0,
+      "unknownUsage": 1,
+      "failure": "Candidate timeout",
+      "resultSha256": "2bd91652c5b0c2e881be26b2106b900420d0bc3c23e592878e0f43e94f18f708",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-herb-2026-10-27T13-07-07-765Z",
+      "category": "herb",
+      "status": "passed",
+      "sourceSample": "independent-structured-card-v2",
+      "requests": 4,
+      "knownTokens": 7656,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "e2035ee00fd77806adf47d342133700092009f0c3c73a02fb86447a094403a07",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-humConflict-2026-10-27T13-03-31-109Z",
+      "category": "humConflict",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7457,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "f5c962c590b85589c74918f9370cdc671b3df483b025e762de535d3ca4ad082f",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-humCulture-2026-10-27T13-02-58-852Z",
+      "category": "humCulture",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7318,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "63433a8436fdb8e27065489abfbfb4bccf1ed02d8cd209f0fc58fe1a9f9fb479",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-humEconomy-2026-10-27T13-02-45-443Z",
+      "category": "humEconomy",
+      "status": "failed",
+      "sourceSample": "narrative-v1",
+      "requests": 2,
+      "knownTokens": 2657,
+      "unknownUsage": 0,
+      "failure": "Visible generation failure: 词条候选 2 的名称未在原文中出现。",
+      "resultSha256": "d50e1b76149bc70d352f7d29224ac044099b39630e7da365a97866c5537dfc25",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-humEconomy-2026-10-27T13-08-44-323Z",
+      "category": "humEconomy",
+      "status": "passed",
+      "sourceSample": "independent-structured-card-v2",
+      "requests": 4,
+      "knownTokens": 7802,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "c5f27d906d67d709a260498cea962fb2b0c305be4e55d7bbb44e370d7726fc60",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-humPolitics-2026-10-27T13-02-10-838Z",
+      "category": "humPolitics",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7648,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "3c5a33a16e6533af5bb8e16cc599fb746445b0a7de964eace955693f4de9d5bb",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-mineral-2026-10-27T12-46-11-983Z",
+      "category": "mineral",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 8375,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "1ecfd1c977dfa65942f541765084254d00fcb50715f60433d07f8dc03ba6d468",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-natClimate-2026-10-27T12-59-28-213Z",
+      "category": "natClimate",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7462,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "bf5729b52741bf87ba9ef2a0777a10cb784eb79503a095cf29bfee5f0a7bec3b",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-natDimension-2026-10-27T12-57-43-528Z",
+      "category": "natDimension",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 6849,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "f20d5804d30830844ef085ebcf6c5b38bbe1e40dc613a866b5fa734c79bd63d0",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-natStructure-2026-10-27T12-57-24-628Z",
+      "category": "natStructure",
+      "status": "failed",
+      "sourceSample": "narrative-v1",
+      "requests": 2,
+      "knownTokens": 2713,
+      "unknownUsage": 0,
+      "failure": "Visible generation failure: 词条候选 2 的名称未在原文中出现。",
+      "resultSha256": "38b1e1010d43f48ab8c4429505dc18feda97d68c1735e011e54c2f288e75af1f",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-natStructure-2026-10-27T13-08-14-939Z",
+      "category": "natStructure",
+      "status": "passed",
+      "sourceSample": "independent-structured-card-v2",
+      "requests": 4,
+      "knownTokens": 6932,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "98bc10ab84cf62ff7a074a5d8c92f03a8fcdf569db66e0de09c2d3377fe38d4f",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-natTerrain-2026-10-27T12-58-11-304Z",
+      "category": "natTerrain",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 6942,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "0ce6cc8abf97328a11c97312ea7551bc98da7eef0e92418d620ae67ce45d9fe5",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-natWater-2026-10-27T12-58-44-583Z",
+      "category": "natWater",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 6966,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "4b9085559d55b0cfa4d903b1685a13256d27650a5f6aefe4b7d62580b8fccb67",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-originDeity-2026-10-27T13-04-31-997Z",
+      "category": "originDeity",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7219,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "d3a33e452b01e9e0f68d655e674d1c081f29f711b1e975fe9501b7d37d75bb09",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-originPower-2026-10-27T13-04-03-821Z",
+      "category": "originPower",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 6718,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "443cdb05e1b8ce124ca904ce05ff1f40592ed35daa06a3ecc940f574f21097df",
+      "pageErrors": []
+    },
+    {
+      "trial": "live-codex-categories-race-2026-10-27T13-00-00-136Z",
+      "category": "race",
+      "status": "passed",
+      "sourceSample": "narrative-v1",
+      "requests": 4,
+      "knownTokens": 7900,
+      "unknownUsage": 0,
+      "failure": null,
+      "resultSha256": "ea39a8e6e4b2fdf71c990bf994f1712989e2b6106005b386f034f2b5c5f092fe",
+      "pageErrors": []
+    }
+  ],
+  "failedTrialPolicy": "Original narrative trials retained. One timed-out original request was not replayed. Fresh independent projects and different named source cards tested the four remaining categories; their input/request evidence is retained separately.",
+  "earlierVersionTrials": "Fenced JSON, author-ref projection, tag count and schema reasoning-budget failures remain in earlier-version evidence; they are not counted as bb8dadd5 normal stages.",
+  "notVerified": [
+    "candidate text editing unavailable in the current custom selector UI",
+    "all fault profiles",
+    "real prose downstream semantic use",
+    "all native packaged platforms",
+    "full final-head delivery CI/E2E",
+    "literary quality"
+  ],
+  "wholeCasePass": false,
+  "overallPlanComplete": false
+}

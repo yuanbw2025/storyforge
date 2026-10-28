@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "kind": "retained-full-ci-failure-triage",
+  "date": "2026-10-27",
+  "sourceCommit": "938900d318ca8fe087e0f2e443b03d7eab508e12",
+  "command": "npm run ci",
+  "fullCiPassed": false,
+  "testSummary": {
+    "filesPassed": 1242,
+    "filesFailed": 1,
+    "testsPassed": 8340,
+    "testsFailed": 2,
+    "testsSkipped": 3,
+    "seconds": 5038.54
+  },
+  "failures": {
+    "file": "tests/regression/R-TTRPGOPEN3-intent-rejection.test.ts",
+    "cases": [
+      "records and replays one genuine rejection (invalid=false)",
+      "records and replays one genuine rejection (invalid=true)"
+    ],
+    "reason": "Local coverage invocation inherited the ordinary 5000ms timeout; both exceeded that bound under whole-suite contention."
+  },
+  "sameHeadTargetedEvidence": {
+    "testCasesPassed": 4,
+    "recordReplayDurationsMs": [
+      2498,
+      2433
+    ],
+    "coverageEnabled": true,
+    "commandExitCode": 1,
+    "qualification": "All four test cases passed. This single-file coverage command still failed global coverage thresholds and is not full CI success."
+  },
+  "followup": {
+    "sourceCommit": "6774a760f6d265ddd73bffc624c9510c907f7219",
+    "command": "CI=1 npm run ci",
+    "existingCiTimeoutMs": 20000,
+    "existingCoverageWorkers": 1,
+    "status": "RUNNING",
+    "productLogicOrAssertionsChangedForTimeout": false
+  },
+  "logSha256": "2092082362fa3a2038a96f4af0bd7a1aed3ab8976b3ac36054bedc9afda84114"
+}

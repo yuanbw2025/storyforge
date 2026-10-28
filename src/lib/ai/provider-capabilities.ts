@@ -1,4 +1,4 @@
-import type { AIProvider } from '../types'
+import type { AIConfig, AIProvider } from '../types'
 
 export const AI_PROVIDER_CAPABILITY_PROFILE_VERSION_V1 = 'ai-provider-capabilities-v1' as const
 
@@ -92,4 +92,11 @@ export function getJsonObjectResponseCapabilityV1(
 
 export function supportsVerifiedJsonObjectResponseV1(provider: AIProvider): boolean {
   return getJsonObjectResponseCapabilityV1(provider) === 'supported'
+}
+
+/** Model-scoped opt-in backed by exact-source real JSON-object receipts.
+ * Keep the whole Agnes provider unverified: other models are not implied. */
+export function supportsVerifiedJsonObjectResponseForModelV1(config: Pick<AIConfig, 'provider' | 'model'>): boolean {
+  return supportsVerifiedJsonObjectResponseV1(config.provider)
+    || (config.provider === 'agnes' && config.model === 'agnes-2.5-flash')
 }

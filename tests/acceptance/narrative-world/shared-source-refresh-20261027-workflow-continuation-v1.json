@@ -1,0 +1,17 @@
+{
+  "schema": "storyforge.shared-source-refresh.v1",
+  "date": "2026-10-27",
+  "reason": "Merge current provider lifecycle and longform state-card validation inputs without changing the frozen narrative corpus.",
+  "receipts": {
+    "baseline": "baseline-20261027-workflow-continuation-v1.json",
+    "ir-contract": "ir-contract-20261027-workflow-continuation-v1.json",
+    "domain-projection": "domain-projection-20261027-workflow-continuation-v1.json"
+  },
+  "testsPassed": 110,
+  "observationsUnchanged": true,
+  "historicalReceiptsUnchanged": true,
+  "frozenCorpusUnchanged": true,
+  "evidenceLevel": "deterministic contract fixtures; not model, native package, reader, or release acceptance",
+  "modelCalls": 0,
+  "independentHumanReviews": 0
+}
