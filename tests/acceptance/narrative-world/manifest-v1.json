@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261028-longform-stability-integration-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261028-longform-avg-integration-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -548,6 +548,45 @@
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261027-pr172-post-ttrpg-v2.json"
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261025-avg-source-integration-v1.json",
+        "workPackage": "AVG-exact-source-integration",
+        "implementationCommit": "55d77799",
+        "note": "Preserved prior exact-source integration receipt before the legacy quality-fixture and exact failed-consumer-retirement repair; corpus and observations unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261026-avg-media-retention-v1.json",
+        "workPackage": "AVG-media-retention",
+        "note": "Preserved unchanged before final integration with origin/main 63af1fba3; the new receipt remeasures the merged input fingerprints without changing corpus, observations or findings."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261026-avg-final-integration-v1.json",
+        "workPackage": "AVG-final-integration",
+        "note": "Preserved original AVG final integration input receipt before main 69e2a928."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-avg-final-main69e-v1.json",
+        "workPackage": "AVG-final-main69e",
+        "note": "Preserved before latest main ddd673ebb integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-avg-main-integration-v1.json",
+        "workPackage": "AVG-main-integration",
+        "implementationCommit": "3f2487b92f9fc3fa0540a9512aa53b77317d6155",
+        "note": "Preserved before nullable open-TTRPG Brief dispatch repair. Frozen corpus and observed results remain unchanged; only implementation and manifest input fingerprints change."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261028-avg-ttrpg-brief-integration-v1.json",
+        "workPackage": "AVG-TTRPG-brief-integration",
+        "implementationCommit": "a23496b3e8e148fd465dbc8d284aa7382b28e67d",
+        "note": "Preserved before integrating PR172 mainline."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261028-longform-stability-integration-v1.json"
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261028-avg-pr172-main-integration-v1.json"
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

@@ -1,0 +1,938 @@
+{
+  "schema": "storyforge.avg.licensed-audio-catalogue",
+  "version": 1,
+  "publisher": "Kenney",
+  "license": "CC0-1.0",
+  "archives": [
+    {
+      "key": "interface",
+      "publisherPage": "https://kenney.nl/assets/interface-sounds",
+      "downloadUrl": "https://kenney.nl/media/pages/assets/interface-sounds/fa43c1dd4d-1677589452/kenney_interface-sounds.zip",
+      "archiveBytes": 834536,
+      "archiveHash": "f2193d072726d6758a5f7871b2dcc54dcce0d5c35c6f0a62f92549b327c81232",
+      "licenseMember": "License.txt",
+      "licenseHash": "f7966c773bbed0eca6a9c75081c44a178b38eae112724dbb5fdfbd4192d118a9",
+      "licenseText": "\t\r\n\r\n\tInterface Sounds (1.0)\r\n\r\n\tCreated/distributed by Kenney (www.kenney.nl)\r\n\tCreation date: 11-02-2020\r\n\r\n\t\t\t------------------------------\r\n\r\n\tLicense: (Creative Commons Zero, CC0)\r\n\thttp://creativecommons.org/publicdomain/zero/1.0/\r\n\r\n\tThis content is free to use in personal, educational and commercial projects.\r\r\n\tSupport us by crediting Kenney or www.kenney.nl (this is not mandatory)\r\n\r\n\t\t\t------------------------------\r\n\r\n\tDonate:   http://support.kenney.nl\r\n\tPatreon:  http://patreon.com/kenney/\r\n\r\n\tFollow on Twitter for updates:\r\n\thttp://twitter.com/KenneyNL",
+      "members": [
+        {
+          "memberPath": "Audio/back_001.ogg",
+          "memberHash": "07db973f79f6ae0f2edc34561e7592e24d0577455919fb602cb8ecc0da991dcf",
+          "bytes": 6997,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/back_002.ogg",
+          "memberHash": "61581c58194e3f19f531072edabbc344204c7e0a2887b8ededce4357bcf09195",
+          "bytes": 7029,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/back_003.ogg",
+          "memberHash": "ff5e87de1230b1a5f1fa83e5a4ba9d7eb1c07154267ac34b510a17d4caa03cef",
+          "bytes": 7208,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/back_004.ogg",
+          "memberHash": "c22e3c49f42c2a5ba6748e91283efe124f32822469c1258c3e5d7b3d7ab9361c",
+          "bytes": 6923,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/bong_001.ogg",
+          "memberHash": "d21d0f0b782445db579d11e2506b24cd1ac9d664ee33aeaf807761aa7b6fd710",
+          "bytes": 4848,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/click_001.ogg",
+          "memberHash": "ccfb7fa0cccdd9faec0eb16033c732b1e308d139d80f799161495d58f7adcdb9",
+          "bytes": 4876,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/click_002.ogg",
+          "memberHash": "adcd1f4adc35f1b41bc1b5bbefeff7aa44f2f3f0d96d3199b544140c7c1e761c",
+          "bytes": 4275,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/click_003.ogg",
+          "memberHash": "2fa929138bc3a0f432696588f66eac94b8f6d463905ec8808c6461ce4b054292",
+          "bytes": 4371,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/click_004.ogg",
+          "memberHash": "09e2c1b643b71b9aff9932b4e02d78db116446b9a14b00a5b2a9b28d2668fd8e",
+          "bytes": 4486,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/click_005.ogg",
+          "memberHash": "a3ee7ebb036bc3cdc218ae52bb27548c4f49bcf07505274f8b61b1af8236acc2",
+          "bytes": 4410,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/close_001.ogg",
+          "memberHash": "44af8249b933e0fd35ec957a638bb1a0b01f85b53fbe9674bf77bd3ca3168ef4",
+          "bytes": 9915,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/close_002.ogg",
+          "memberHash": "bc4279d2bb2bf86592473eab6a8eab55e51b54a8619315000dbd780a83b102d8",
+          "bytes": 14752,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/close_003.ogg",
+          "memberHash": "39a1a7f3bc001766c1881841e9903c6b16f5a10b5666e0791d7f6444677d8b05",
+          "bytes": 15648,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/close_004.ogg",
+          "memberHash": "41b41e01ac75f4bc5a9c8dc3b0de744fa7f877757463692783c12a8ae4bfae6b",
+          "bytes": 16263,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/confirmation_001.ogg",
+          "memberHash": "063564703b6094d70718a3e787a55cc9141611e4ecd6b6637f8828f79b4a8c3a",
+          "bytes": 8968,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/confirmation_002.ogg",
+          "memberHash": "33b17a9a9a2397c62b285c52c33a907fdffb476909c99e42dde603f6a7a8b12c",
+          "bytes": 14169,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/confirmation_003.ogg",
+          "memberHash": "3091bf0be0497f825769ee0733ca7bdc3bcd59bd6c6e8f2ba8f93d580ff38022",
+          "bytes": 9535,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/confirmation_004.ogg",
+          "memberHash": "568967a3d9f8a8f6af54ea01729c4882284308f2a27d78c07ffd7ee0d6951661",
+          "bytes": 12391,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/drop_001.ogg",
+          "memberHash": "692ee3a6f1821402ca649ff735bee9591dc4846c8098fc7d6a90fd15fa57c1af",
+          "bytes": 5859,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/drop_002.ogg",
+          "memberHash": "4ac4d1cef7e936965cbf795852ca2020300b9e2ba7daa59f2bf4f1f7bf416218",
+          "bytes": 6411,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/drop_003.ogg",
+          "memberHash": "43d086d50f90493a98cd2e09aa6dbf150d164f1578e1ec768d21cb185571ad87",
+          "bytes": 6288,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/drop_004.ogg",
+          "memberHash": "10738707f9300f9b963ceba46d5da2ed4a221faf7d39484a643c2d3bc151c5f2",
+          "bytes": 7230,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/error_001.ogg",
+          "memberHash": "46e67425d16339772e8d328fb36a49426c9467418686e11beeb71ff84b0f6433",
+          "bytes": 7373,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/error_002.ogg",
+          "memberHash": "76810ec365f41078fd0507101da5bb7b8730fe011dde43908329fdabd8575e79",
+          "bytes": 7369,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/error_003.ogg",
+          "memberHash": "885b28175c7b511118bcffab95675b48bbac9005cf6514656ebdad979276b3ab",
+          "bytes": 12256,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/error_004.ogg",
+          "memberHash": "0b574cea597d96507e782ae9764f88482ce49f46e931e57054bf7150047f2d69",
+          "bytes": 6393,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/error_005.ogg",
+          "memberHash": "3f75b11df5b06d68d2c25fbf0e9c9d9e7dd9250562a4007ee34856b8a309a2ae",
+          "bytes": 7266,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/error_006.ogg",
+          "memberHash": "a97513d7fd2b12b1210c423be943b4c1ab0e899b11db95855e9b74836e646ae0",
+          "bytes": 8288,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/error_007.ogg",
+          "memberHash": "f1ee4c1ac8bfe1a82eacb54b26f49e8974bab93bcf10c01800bc10dbf730f559",
+          "bytes": 10225,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/error_008.ogg",
+          "memberHash": "eba17ecb2a426bfd4a8a6acff5f8a86202b6424a77af0fd842e37809a1ab6d81",
+          "bytes": 9215,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/glass_001.ogg",
+          "memberHash": "183eebee20eb0a532b0b85104d139cbf2673eb66d95c3cc733ac9ea98362e7e8",
+          "bytes": 6103,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/glass_002.ogg",
+          "memberHash": "08e972c73e53c91d6d310e107e80db60edce78ae47225889a028e628a6f3da49",
+          "bytes": 4917,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/glass_003.ogg",
+          "memberHash": "9a6f16e3c2eff6fe5d017a4755a28306b14555728831cd00d70308e8f9689566",
+          "bytes": 5732,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/glass_004.ogg",
+          "memberHash": "2379b58f953e3d86982aa8cddcae763022c6258e9820171bf905ce58b4e97766",
+          "bytes": 8323,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/glass_005.ogg",
+          "memberHash": "1f6c88008d0d9fe449197512811785e1d4638daf408a96a4a02756530e019172",
+          "bytes": 6206,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/glass_006.ogg",
+          "memberHash": "840500be48078f1210f1fd7a9ac4e5665ed9b6f4a2b8dce91a237152a65e94cc",
+          "bytes": 6956,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/glitch_001.ogg",
+          "memberHash": "da78c642bbd95da2c364ed0e991ebbfc5a4c0d281165d932b5819e0dd31a39d2",
+          "bytes": 5121,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/glitch_002.ogg",
+          "memberHash": "1da06a2e63ce131f5e0316ca27c75fc0d672db7a8f9b986c70693f2bd992eabc",
+          "bytes": 5473,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/glitch_003.ogg",
+          "memberHash": "d55e0c64aee9f1ab2ba9523d0e256ca76639c3ec2f230405e2ff25aff36020b3",
+          "bytes": 4915,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/glitch_004.ogg",
+          "memberHash": "d0f4db4d12f88592bc328bd621d356d099eaa2dda37bab37a6cf17891c5026d1",
+          "bytes": 5225,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/maximize_001.ogg",
+          "memberHash": "fd3e75e1de2f2fda90aceeacaeb0427ac8bddd3b07a6ce2a8f9ba923df3771f9",
+          "bytes": 12111,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/maximize_002.ogg",
+          "memberHash": "cc51162cb4506158b953b121bf479aad070056533ade5c5cd2f980183127ceb4",
+          "bytes": 9915,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/maximize_003.ogg",
+          "memberHash": "df16f25d45189f5d44d6a482ab20d5067350ca8525a9affa1f8ce599e31a20a5",
+          "bytes": 11748,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/maximize_004.ogg",
+          "memberHash": "59c7a24b204be24d2a44a86d1e4d18c2cf51fa0446967a14b2590e8fb3afaf34",
+          "bytes": 17723,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/maximize_005.ogg",
+          "memberHash": "0ee06fc3ee494723fc95b2224f9dc0af857f2903e7f94d5d33d8e67f454b3cf7",
+          "bytes": 20900,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/maximize_006.ogg",
+          "memberHash": "f050b3bb77cb0b901bc8df43d2cc1872c353aebae10b4030cf8ae681726ad343",
+          "bytes": 11618,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/maximize_007.ogg",
+          "memberHash": "3400931f3f3a1e9cf253efef9069bcdf053edd2234e4ee9bf88977c389943484",
+          "bytes": 8097,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/maximize_008.ogg",
+          "memberHash": "57c074e600e193a303ce781c04c0ccc191c6030f9f106594fd94a65e55435c17",
+          "bytes": 9085,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/maximize_009.ogg",
+          "memberHash": "b4d56386258b3cc1c8f6e5a22465f8cd65de3d4309e022664050f43151e466cd",
+          "bytes": 7650,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/minimize_001.ogg",
+          "memberHash": "8481912bc7fa5828924a00ef15b6cd613b994956e0817bd3122065c9b2896d2d",
+          "bytes": 11924,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/minimize_002.ogg",
+          "memberHash": "670e47846dc003fe29d39c8dfebb8635bfcacae3c0916392c0e8bff659493ad6",
+          "bytes": 9441,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/minimize_003.ogg",
+          "memberHash": "400e1041499de85ec8b5529a35ff36787288175c4696cf2018ecff24a3a3fd29",
+          "bytes": 11739,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/minimize_004.ogg",
+          "memberHash": "fcfe6fbb03a728e90b907f34d2ec7bf3ea1857397c3e47ee01990c1be059e4f6",
+          "bytes": 17099,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/minimize_005.ogg",
+          "memberHash": "4e6792a98c75d3ff187c0c55561c38c569e02c64757ebebb98831cfe84e3e172",
+          "bytes": 19501,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/minimize_006.ogg",
+          "memberHash": "39d7c47855b9642f43548b7b132c20e20a1490c7eb13d10008c32fcb24da19f8",
+          "bytes": 11292,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/minimize_007.ogg",
+          "memberHash": "e951505044de0d5d87b72ce7f312ac3fbbdde025ec8c10db70f9d2651a2c8947",
+          "bytes": 7677,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/minimize_008.ogg",
+          "memberHash": "bc14c17875436dcaaf809c25db5e61454dbc35612880f329ff37a95ef9b6a865",
+          "bytes": 9298,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/minimize_009.ogg",
+          "memberHash": "885c20fc8b5b52226288794842a403821cd16e9800ec1d76be7a2f1655542eb8",
+          "bytes": 7665,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/open_001.ogg",
+          "memberHash": "a27c6bb0df7da1e6af5dd5937593c98bc58b6e513f42fe6a3254cd6a6949c648",
+          "bytes": 9834,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/open_002.ogg",
+          "memberHash": "24ff224fe2c09c6aed1b41249825382dc74cf324b887ff279d8494912ce2beee",
+          "bytes": 14975,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/open_003.ogg",
+          "memberHash": "bcdca6b5c9c33aa15ca3fb18a1fa8d98a01b528b85be08c5a610e57c75fc022d",
+          "bytes": 15046,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/open_004.ogg",
+          "memberHash": "4e02b8287bc4d9e7bf7a889cb9e48613c8eb22a310dfb0bf29c2bfd0a1e4bea5",
+          "bytes": 15879,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/pluck_001.ogg",
+          "memberHash": "be97ec4893a02d6eccfb678daa76c83e34cb2583b834ec2593d2641def739fa4",
+          "bytes": 6317,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/pluck_002.ogg",
+          "memberHash": "c977fe249ff42d1c93a552b33abc13a8399df3879fa510475426e5c4bbac1da9",
+          "bytes": 6941,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/question_001.ogg",
+          "memberHash": "abb8f9e4eb2071491b0b15f84ee302386b1847609310c1b000ae174639a6cc5a",
+          "bytes": 11700,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/question_002.ogg",
+          "memberHash": "46056f10c70dda860e93bd27b66f4d33c0b7154eff28def06471b50028efa5b3",
+          "bytes": 9455,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/question_003.ogg",
+          "memberHash": "00bafc564e29c12e99da584864a750260e7110378251d63d3aa5b3d727836efe",
+          "bytes": 8233,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/question_004.ogg",
+          "memberHash": "585ecb58b529dc49b5c5ce5ba93427bf73b7052bae55e49c43ba8f169c93ac99",
+          "bytes": 9821,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/scratch_001.ogg",
+          "memberHash": "5c294d2e1a6b6d07ee2d75b17105a55ad3527e5482dd60652dc49c2ea4c70096",
+          "bytes": 8989,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/scratch_002.ogg",
+          "memberHash": "2b07edafc1f3f49c4813f2b0ae9481c566c1f9962a22d5f5b79da7111e058e56",
+          "bytes": 9319,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/scratch_003.ogg",
+          "memberHash": "2d80371b55ebe2e8b916b84093a8ae7717d09a80c6b617079ade5bd0dacba7b7",
+          "bytes": 8849,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/scratch_004.ogg",
+          "memberHash": "26009c67ef90ee7a5a2bc458ef9e7f5a9da83da9397a830cff9e4a1813914687",
+          "bytes": 16478,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/scratch_005.ogg",
+          "memberHash": "65742c15dca9853611e1c9e83bd04ac0d693f79896715cafa90bad39745d7a62",
+          "bytes": 15824,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/scroll_001.ogg",
+          "memberHash": "320c6aafb2c7a503eae508dc443b72d7f7c0a317bfd16813157ed400cd04cf16",
+          "bytes": 21633,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/scroll_002.ogg",
+          "memberHash": "6fbcda22bc45349c66f1ba4b56d6c211b12264e83667de4b9af1e4ffcef74be5",
+          "bytes": 24628,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/scroll_003.ogg",
+          "memberHash": "c2fecaa6e37c73d7141d0bd303d1c2231428d97c19ce83d50236a56804818643",
+          "bytes": 29488,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/scroll_004.ogg",
+          "memberHash": "431398a3c12ba3aa30ead97f3e2f9b05eb00978facf04b31bda138ab77a2f54c",
+          "bytes": 20348,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/scroll_005.ogg",
+          "memberHash": "e39d059462225efa31f758fb2e01871cc96781972b5062873a24a55c88174e02",
+          "bytes": 20448,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/select_001.ogg",
+          "memberHash": "aec0c31ea934a35936ae0d2ab8fac8123c93aa5647f935853a58dbaf90278b7a",
+          "bytes": 5468,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/select_002.ogg",
+          "memberHash": "4cc6ac5341b9b2c86fef80c347de028e9ab9f2e037586ac7d9fa59a403a1c012",
+          "bytes": 5463,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/select_003.ogg",
+          "memberHash": "9a612fd2f513d52a296906b41071c990f75defe56be3bee60d2d4e2423b51b8b",
+          "bytes": 6901,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/select_004.ogg",
+          "memberHash": "eb6cb435f3f2ab14f85f46a2bdd9073ec511d0f1f8d8c890c6636045703a5fd4",
+          "bytes": 6909,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/select_005.ogg",
+          "memberHash": "ad09146e4ea33b931b2f5dfb4051a4f1fe4a36f1a48c42c5e9269c292ae21214",
+          "bytes": 6767,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/select_006.ogg",
+          "memberHash": "b44550fa8d3276c072ce7c3c1315d949f7a28a95bc22b3618ad4eea62eac8abe",
+          "bytes": 8101,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/select_007.ogg",
+          "memberHash": "cd4390dd2b24f09016a5fa1be63334fa0f1859811f4cf29c02e8e2750f6a2cd0",
+          "bytes": 6580,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/select_008.ogg",
+          "memberHash": "f703b6b1c62dae1c246a46d5c2442802588f68be2df4d17e0d65cf7e0dbfc826",
+          "bytes": 6339,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/switch_001.ogg",
+          "memberHash": "3b74efad87f1e69dbd1d05c5ad952ab90859b5a3d11da6ec5bd79b4f03b42afa",
+          "bytes": 6753,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/switch_002.ogg",
+          "memberHash": "6fc395be2ad1f99ce318a5d28f98fb76dbeb676d83a0b28239d8c1fb90736180",
+          "bytes": 7097,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/switch_003.ogg",
+          "memberHash": "ca12dd32103f401481d5aff56d5e9831174e99bb577139c09b07d046eb8b837e",
+          "bytes": 9653,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/switch_004.ogg",
+          "memberHash": "541c19cc1ab712a9efc5765df602e7d0da09d9cafdd297ce1e19b092289fd62f",
+          "bytes": 7248,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/switch_005.ogg",
+          "memberHash": "e94dfab6fd6558068ab3ea97e22e4b4f16b83ee440e6abf33ec4c4e9fbe8a70e",
+          "bytes": 7814,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/switch_006.ogg",
+          "memberHash": "2676ddc4e341ee557b4d1dc8767ef8655540d66fb3ded6a1614080dbc4dc6f18",
+          "bytes": 7873,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/switch_007.ogg",
+          "memberHash": "eeaf60c2abc7e1b715e2b032401bcbf6b3753b77f96b238f861a034a75515967",
+          "bytes": 7921,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/tick_001.ogg",
+          "memberHash": "9d057b918024c787bbe6c00beed13a7ef72a3fa0c259add3cef36582792f4230",
+          "bytes": 4497,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/tick_002.ogg",
+          "memberHash": "869442f54214be902ec7437f79e400dc91c1bfd90d18a6dd2d5b7e41ffbf457b",
+          "bytes": 4514,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/tick_004.ogg",
+          "memberHash": "0253d5f7d8d2afbbc370eac2a4539bb844239f0c98343e516d376b137c06d27c",
+          "bytes": 5031,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/toggle_001.ogg",
+          "memberHash": "ca1d2dde5f0b286abac4f070e23edab8f30927c8a533665cdf2ac6492a415e49",
+          "bytes": 7369,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/toggle_002.ogg",
+          "memberHash": "1f564f5520cfa0764028ce245ad97599d3ece8f0ab504554c403af92ac72b900",
+          "bytes": 8056,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/toggle_003.ogg",
+          "memberHash": "7e69aba356d590826cce291bbd9dc6a85d7c53858b0e3712fcad30e1ad080b23",
+          "bytes": 8654,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/toggle_004.ogg",
+          "memberHash": "d7bf2236fc95a0fe1e3b278259392bcb062644e2d4ec5f9c96f7c09a9928262f",
+          "bytes": 6695,
+          "mimeType": "audio/ogg"
+        }
+      ]
+    },
+    {
+      "key": "rpg",
+      "publisherPage": "https://kenney.nl/assets/rpg-audio",
+      "downloadUrl": "https://kenney.nl/media/pages/assets/rpg-audio/8e99002d76-1677590336/kenney_rpg-audio.zip",
+      "archiveBytes": 964837,
+      "archiveHash": "6dbeaf8544da958d8f2adcb4a4a4b76c1ade34a05f8ab9edccd327da7375f38b",
+      "licenseMember": "License.txt",
+      "licenseHash": "5735dfd72cb64cbbceda4ebc00c380c41ca680edb82ff153aa7c9ab97614c539",
+      "licenseText": "\t\r\n\r\n\tRPG Audio\r\n\r\n\tby  Kenney Vleugels (Kenney.nl)\r\n\r\n\t\t\t------------------------------\r\n\r\n\tLicense (Creative Commons Zero, CC0)\r\n\thttp://creativecommons.org/publicdomain/zero/1.0/\r\n\r\n\tYou may use these assets in personal and commercial projects.\r\n\tCredit (Kenney or www.kenney.nl) would be nice but is not mandatory.\r\n\r\n\t\t\t------------------------------\r\n\r\n\tDonate:   http://support.kenney.nl\r\n\tRequest:  http://request.kenney.nl\r\n\r\n\tFollow on Twitter for updates:\r\n\t@KenneyNL",
+      "members": [
+        {
+          "memberPath": "Audio/beltHandle1.ogg",
+          "memberHash": "2ef665bd8b65dbe669f4560be38a6d8f04a162e618b15a49e3e71b58e558aab0",
+          "bytes": 10820,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/beltHandle2.ogg",
+          "memberHash": "f3b692d5c83263c25bce779805b212dbab515d18a603c695fc6a1e8650cf5366",
+          "bytes": 15410,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/bookClose.ogg",
+          "memberHash": "81e976532565f4372abd14e83d2684195fa548d0a28d345de221e56052454f32",
+          "bytes": 9292,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/bookFlip1.ogg",
+          "memberHash": "fa81ac2fedc8c641661b87e349630a36c9800e795e0c800e029214efdbe26a7d",
+          "bytes": 18248,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/bookFlip2.ogg",
+          "memberHash": "3409042acbfaebc24c1a6327dc073e36f9250841712e96c5040da566a97df73c",
+          "bytes": 12393,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/bookFlip3.ogg",
+          "memberHash": "c85db5dceb3f1df073e960630277eaa88a5afda0477c1ddd68dad707621767be",
+          "bytes": 9077,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/bookOpen.ogg",
+          "memberHash": "953390534377222bee89ac8cd9e60a58fdc037c71a4d7c18c43cd647c7f34ba8",
+          "bytes": 8273,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/bookPlace1.ogg",
+          "memberHash": "26f3ce60fbde85b678b0ad7f6624d80535fe540d88232ad1e38e47a96662d977",
+          "bytes": 9901,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/bookPlace2.ogg",
+          "memberHash": "831874e8fd142d4d0a03ff009f1f83966338a7878c0f6f38c613ae5b80dd731e",
+          "bytes": 11185,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/bookPlace3.ogg",
+          "memberHash": "b1afa711e1cabfe5b2c56e20e20e0f9d82142d067727447fa992ddc43dbdb06e",
+          "bytes": 9570,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/chop.ogg",
+          "memberHash": "d00c2b3c9fff07e376145c8c8c45c90e5084ec192f6ce0387db233f7b86f1486",
+          "bytes": 9370,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/cloth1.ogg",
+          "memberHash": "ddb93a3671233f95da0e0b10367f082f7eb42fa6caaddcf776410aa8833c747d",
+          "bytes": 16508,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/cloth2.ogg",
+          "memberHash": "8a7451193c38bc05483aec25dd193e163a15d44cf7fff04ac7912573231b0201",
+          "bytes": 11787,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/cloth3.ogg",
+          "memberHash": "a48632d17a4f1416541d261a32a31612e01267144c407fa3ecab3ff410f0085b",
+          "bytes": 12432,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/cloth4.ogg",
+          "memberHash": "e7ab9a6c4466dea874196c61f59bf1da05cfe58748f42fadd695d441a154a99b",
+          "bytes": 11043,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/clothBelt.ogg",
+          "memberHash": "f29560a2aea95bbfeb643e1e8f56ec2b6f7e32f32ce4e140645a36db81de3253",
+          "bytes": 21491,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/clothBelt2.ogg",
+          "memberHash": "d545b1d9f20e6188140aaf551a96f1e82fe0d15f7ca066fac8b065e1231e0038",
+          "bytes": 20013,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/creak1.ogg",
+          "memberHash": "8a346186fd297254248cab8e8117060a52a5cf2a84f603153a762108550ea95e",
+          "bytes": 15761,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/creak2.ogg",
+          "memberHash": "8a990afdc03aebb91d528f5385e2f95582dbfa8e2c12c71098ab01be9142294a",
+          "bytes": 19012,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/creak3.ogg",
+          "memberHash": "f9638787f95004b9d2d06f8eff8e99d4e594c21b51947daf562856fbcec905d1",
+          "bytes": 10408,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/doorClose_1.ogg",
+          "memberHash": "834d29c60a8a8bfb50b158cdb6b7dfa8f02812a408a1ee9703d038dfab0b1aeb",
+          "bytes": 18564,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/doorClose_2.ogg",
+          "memberHash": "4aa4fe79836c53cd6d0cb0b22ddc33b9901429463ae1bb75131f072683f63f21",
+          "bytes": 17598,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/doorClose_3.ogg",
+          "memberHash": "d0a2540e5e1639bc2fbeef34e76f28e9f9cb8a151736a0ac4c13859994328d0e",
+          "bytes": 20889,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/doorClose_4.ogg",
+          "memberHash": "fd21c0e7a9d0317375d2561590f0770dd3380ee35507d064862cb44d6f71595b",
+          "bytes": 16902,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/doorOpen_1.ogg",
+          "memberHash": "4ab93bab96522d8eb109ff96dc57cb6765deb02448fe14c10472084be5bb2a0b",
+          "bytes": 22848,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/doorOpen_2.ogg",
+          "memberHash": "68962fb0458c9bac59dec3adefa9849703c7c89d34712de03dd0075d095e79e9",
+          "bytes": 30280,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/drawKnife1.ogg",
+          "memberHash": "276403e72c3b71c47bc24db3083970c23f8e5551ffa78f436f83483c56f3f0bb",
+          "bytes": 11134,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/drawKnife2.ogg",
+          "memberHash": "d5df6a4130cbb016f97b4883769a418917b9629cb4c21717030b186e0c73281a",
+          "bytes": 12395,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/drawKnife3.ogg",
+          "memberHash": "a11ae62fb1a628425769d11a9de394980ad8909c31f4c9a4316f226963e21caf",
+          "bytes": 12726,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/dropLeather.ogg",
+          "memberHash": "097e1d3b74949b0145fda0519d40b7e0773ab82ec4858727f95be830927e1a45",
+          "bytes": 11695,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/footstep00.ogg",
+          "memberHash": "6fe61ef1fc3bcf0e253bf2eb64759db6cb69e2fe452f4d88cc597ecf78a3d601",
+          "bytes": 9475,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/footstep01.ogg",
+          "memberHash": "313472dba31fd0c855376069fa368bb5a198c27251cc8398ef464578b7047a4c",
+          "bytes": 9900,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/footstep02.ogg",
+          "memberHash": "2d9575b7dead6e1217ca113991fc5229e9b6d998ea0726ebbb277e7398ab888f",
+          "bytes": 9528,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/footstep03.ogg",
+          "memberHash": "a86756b9af9f370455ab47844239bb07fd1bee7a113068c91f0fcd9b72703fae",
+          "bytes": 10559,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/footstep04.ogg",
+          "memberHash": "fd264d72a7cd622b82abde202f4ed09fa7de95d34c36473ee938ce66cdf39830",
+          "bytes": 11303,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/footstep05.ogg",
+          "memberHash": "817957e1f95d97fd36870064c41673895575cde17bccb245f50364c86ed10198",
+          "bytes": 10288,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/footstep06.ogg",
+          "memberHash": "6cabfe7ae95d227a84066c6e17014ac31cc7c89b14ef51d7877e98352d4a64fb",
+          "bytes": 9885,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/footstep07.ogg",
+          "memberHash": "42924cdbf998d5b3db180a339fd74afc94c570d594a536687e337ef1bdfdb346",
+          "bytes": 10264,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/footstep08.ogg",
+          "memberHash": "668f14dc1254d0d0f33025e9c7dbcdf2c2f00462ed0e07fb8f099c1d711c1337",
+          "bytes": 9242,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/footstep09.ogg",
+          "memberHash": "9324ebb9b2c5bcd078dcb523c6518d38a9f34081069d511602c2efb14ce06ce2",
+          "bytes": 9356,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/handleCoins.ogg",
+          "memberHash": "8a91f969e932df709df80ee124d86a51389eed9b67f22e5e716bc2bbf60d8dab",
+          "bytes": 25394,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/handleCoins2.ogg",
+          "memberHash": "4b857968d64f9ac9336a10ffac6694d7547e1f01566ad6857b30bc8db3ee6c32",
+          "bytes": 13094,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/handleSmallLeather.ogg",
+          "memberHash": "ae3cbf695aa0a8b98b5a80a835be5a3ccbd5446a24db2235cd4c3cd6fc92ed96",
+          "bytes": 10492,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/handleSmallLeather2.ogg",
+          "memberHash": "a66f6db5918ad016c28a9f2768f127a7f39b5fa04481e5a3b4e78ebe2a1c282d",
+          "bytes": 10028,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/knifeSlice.ogg",
+          "memberHash": "4cd96dc630bed9840c15f1dd2306da2cc56a4da26a5d3f1a03c5a7265ac5e54f",
+          "bytes": 15532,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/knifeSlice2.ogg",
+          "memberHash": "6c2064d0ef988d1ec3d56868e823ea8823a5cac00f2742560052633529407def",
+          "bytes": 15099,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/metalClick.ogg",
+          "memberHash": "9851a69d0c613e13bceef08060ecc4148f098ef487927cbebe270d642398a3b3",
+          "bytes": 13615,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/metalLatch.ogg",
+          "memberHash": "ba9ba60b172b3ebc131a940f25793cd2e207aca7af73dc80d637277f060f1708",
+          "bytes": 10208,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/metalPot1.ogg",
+          "memberHash": "159def979e8e386c2c539f5e99cc30a080eb2dcb6c911fa2e4ccc0785b2522fd",
+          "bytes": 31619,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/metalPot2.ogg",
+          "memberHash": "8e1f820d217d380fde10e969d109db34303e3f4d11c3951926eddef813d04ae2",
+          "bytes": 22471,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "memberPath": "Audio/metalPot3.ogg",
+          "memberHash": "d306e5b848f6843332d0ca19f8f7dfe5796aeb56d8273902b085df463273f1dc",
+          "bytes": 23142,
+          "mimeType": "audio/ogg"
+        }
+      ]
+    }
+  ]
+}

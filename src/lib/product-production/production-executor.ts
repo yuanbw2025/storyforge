@@ -25,6 +25,12 @@ import { TTRPG_COMPATIBLE_OPENING_AUTHORED_TASKS_V1 } from '../ttrpg/open-compat
 import { produceTtrpgCompatibleOpeningArtifactV1 } from '../ttrpg/open-compatible-opening-production';
 
 import { parseTextAdventureQuestScriptArtifact, textAdventureQuestRecipientsV3 } from '../adventure/quest-settlement'
+import { createAvgAssemblyExecutorV1 } from '../avg/assembly-executor'
+import { parseProductionModelJsonObjectV1 } from './model-json-object'
+import { avgVisualPlanningExecutionReadyV4 } from '../avg/visual-planning-brief'
+import { avgVisualPlanningExecutionReadyV5 } from '../avg/visual-planning-brief-v5'
+import { avgSoundProductionExecutionReadyV1 } from '../avg/sound-production-brief'
+import { avgAudioProcessingExecutionReadyV1 } from '../avg/audio-production-brief'
 import { hasFrozenAuthorUploadRightsV1 } from './media-rights'
 import { ttrpgOpenProductionSystemPromptV1, ttrpgOpenProductionSystemPromptV2, ttrpgOpenProductionSystemPromptV3 } from '../ttrpg/open-production-prompts'
 import { isTtrpgOpenProductionTaskV2, isTtrpgOpenProductionTaskV3, isTtrpgOpenEmptyMediaTaskV3 } from '../ttrpg/open-production-bindings'
@@ -391,6 +397,7 @@ export type ProductionTextRunnerV1 = (input: {
   system: string
   contextText: string
   maximumOutputTokens: number
+  expectedCapabilityHash?: string
   jsonSchema?: ChatRequestOptions['jsonSchema']
   signal: AbortSignal
   /** Only the normal TTRPG executor supplies a real durable owner. */
@@ -495,74 +502,7 @@ function textArray(value: unknown, label: string, maximumItems: number, stable =
   return parsed
 }
 
-export function parseProductionModelJsonObjectV1(output: string, label: string): JsonRecord {
-  const normalized = output.trim().replace(/^\uFEFF/, '')
-  if (!normalized || normalized.length > 2_000_000) fail(`${label} 模型输出为空或过长`)
-
-  try {
-    return record(JSON.parse(normalized), label)
-  } catch (cause) {
-    if (cause instanceof Error && cause.message.startsWith('[product-production-executor]')) throw cause
-  }
-
-  // Some OpenAI-compatible providers ignore response_format and wrap the one requested
-  // object in prose or a Markdown fence. Recover only one unambiguous, balanced object;
-  // the strict artifact parsers below still enforce every field and relationship.
-  const spans: Array<{ start: number; end: number }> = []
-  let objectStart = -1
-  let objectDepth = 0
-  let arrayDepth = 0
-  let inString = false
-  let escaped = false
-  let malformedStructure = false
-  for (let index = 0; index < normalized.length; index++) {
-    const character = normalized[index]
-    if (inString) {
-      if (escaped) escaped = false
-      else if (character === '\\') escaped = true
-      else if (character === '"') inString = false
-      continue
-    }
-    if ((objectDepth > 0 || arrayDepth > 0) && character === '"') {
-      inString = true
-      continue
-    }
-    if (character === '[') {
-      arrayDepth++
-      continue
-    }
-    if (character === ']') {
-      if (arrayDepth === 0) malformedStructure = true
-      else arrayDepth--
-      continue
-    }
-    if (character === '{') {
-      if (objectDepth === 0 && arrayDepth === 0) objectStart = index
-      objectDepth++
-      continue
-    }
-    if (character === '}') {
-      if (objectDepth === 0) {
-        malformedStructure = true
-        continue
-      }
-      objectDepth--
-      if (objectDepth === 0 && objectStart >= 0) {
-        spans.push({ start: objectStart, end: index + 1 })
-        objectStart = -1
-      }
-    }
-  }
-  if (inString || objectDepth !== 0 || arrayDepth !== 0 || malformedStructure || spans.length !== 1) {
-    fail(`${label} 必须只包含一个完整 JSON 对象`)
-  }
-  try {
-    return record(JSON.parse(normalized.slice(spans[0].start, spans[0].end)), label)
-  } catch (cause) {
-    if (cause instanceof Error && cause.message.startsWith('[product-production-executor]')) throw cause
-    fail(`${label} 不是合法 JSON`)
-  }
-}
+export { parseProductionModelJsonObjectV1 } from './model-json-object'
 
 export interface ProductionModelProtocolLegalizationV1 {
   payload: JsonRecord
@@ -5871,7 +5811,8 @@ async function defaultTextRunner(input: Parameters<ProductionTextRunnerV1>[0]): 
   const response = await runConfiguredProductionTextV1({
     projectId: input.projectId, category: input.category, requirementKey: input.requirementKey,
     messages,
-    ...(input.localRequestOwner ? { expectedCapabilityHash: input.localRequestOwner.expectedCapabilityHash } : {}),
+    ...(input.localRequestOwner ? { expectedCapabilityHash: input.localRequestOwner.expectedCapabilityHash }
+      : input.expectedCapabilityHash ? { expectedCapabilityHash: input.expectedCapabilityHash } : {}),
     maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result,
     responseFormat: 'json_object',
     ...(input.jsonSchema ? {jsonSchema: input.jsonSchema} : {}),
@@ -11069,11 +11010,41 @@ export function createConfiguredProductProductionExecutorV1(input: {
   runText?: ProductionTextRunnerV1
   runVision?: ProductionVisionRunnerV1
   mediaCapabilities?: ReadonlyMap<string, ResolvedProductMediaCapabilityV1>
+  avgImageEndpointRouteHash?: string
+  avgVoiceTransport?: Parameters<typeof createAvgAssemblyExecutorV1>[0]['voiceTransport']
 }): ProductProductionTaskExecutorV1 {
   if (input.brief.source.selection.version === 2
     && (input.sourcePlan?.version !== 2 || input.sourcePlan.worldReference.version !== 2)) {
     fail('增强世界生产执行器缺少已确认的精确 SourcePlan')
   }
+  if (input.brief.avgAudioProcessing && !avgAudioProcessingExecutionReadyV1()) throw new Error('[avg-audio-process] 本地声音加工链尚未就绪，不能创建执行器或回退到原音频任务')
+  if (input.brief.avgSoundPlanning) {
+    if (!avgSoundProductionExecutionReadyV1()) throw new Error('[avg-sound] 声音实际生产、审听和采用闭环尚未接通，不能创建执行器或回退通用任务')
+    const options = { brief: structuredClone(input.brief), runText: input.runText ?? defaultTextRunner }
+    let executor: Promise<ProductProductionTaskExecutorV1> | undefined
+    return async request => {
+      executor ??= import('../avg/sound-planning-executor').then(module => module.createAvgSoundPlanningExecutorV1(options))
+      return (await executor)(request)
+    }
+  }
+  if (input.brief.avgVisualPlanning) {
+    if(input.brief.avgVisualPlanning.version===5){
+      if(!avgVisualPlanningExecutionReadyV5())throw new Error('[avg-visual-plan] 本方案版本的专业视觉执行尚未接通，不能创建执行器')
+      const options={brief:structuredClone(input.brief),runText:input.runText??defaultTextRunner,
+        mediaCapabilities:input.mediaCapabilities,imageEndpointRouteHash:input.avgImageEndpointRouteHash}
+      let executor:Promise<ProductProductionTaskExecutorV1>|undefined
+      return async request=>{executor??=import('../avg/visual-planning-executor-v5').then(module=>module.createAvgVisualPlanningExecutorV5(options));return (await executor)(request)}
+    }
+    if (!avgVisualPlanningExecutionReadyV4()) throw new Error('[avg-visual-plan] 专业视觉候选采用和需求消费尚未接通，不能调用旧通用执行器')
+    const options = { brief: structuredClone(input.brief), runText: input.runText ?? defaultTextRunner,
+      mediaCapabilities: input.mediaCapabilities, imageEndpointRouteHash: input.avgImageEndpointRouteHash }
+    let executor: Promise<ProductProductionTaskExecutorV1> | undefined
+    return async request => {
+      executor ??= import('../avg/visual-planning-executor').then(module => module.createAvgVisualPlanningExecutorV4(options))
+      return (await executor)(request)
+    }
+  }
+  if (input.brief.avgAssembly) return createAvgAssemblyExecutorV1({ ...input, imageEndpointRouteHash: input.avgImageEndpointRouteHash, voiceTransport: input.avgVoiceTransport })
   if (input.brief.intent.productType === 'text-open-world') {
     fail('文字开放世界已下线通用生产执行器；必须使用专属 Creator P0-P10 / V1-V3 执行器')
   }

@@ -8,6 +8,10 @@ NW-0B 交付时只完成评测基础设施，没有模型调用、浏览器产�
 
 **2026-10-27 长篇稳定性修复的共享依赖回归**：完整 CI 中 5648 项测试通过、3 项跳过，三组末尾比较仍因来源指纹变化失败。保留历史回执和原失败后，实际重新运行三组 110 项测试，生成[新确定性基线](./baseline-20261027-longform-stability-v1.json)、[新 IR 契约](./ir-contract-20261027-longform-stability-v1.json)与[新领域投影契约](./domain-projection-20261027-longform-stability-v1.json)。[逐项对照记录](./shared-source-refresh-20261027-longform-stability-v1.json)确认原观察、gold 和历史文件不变，补充绑定新状态字段校验器。此更新只用于工程回归；完整 CI 继续复验，不新增世界引擎模型、性能或人工验收结论。
 
+**2026-10-27 后继主干整合**：接入 `ddd673ebb` 后，现有三文件110项实际生成[确定性基线](./baseline-20261027-avg-final-ddd-v1.json)、[IR契约](./ir-contract-20261027-avg-final-ddd-v1.json)与[领域投影](./domain-projection-20261027-avg-final-ddd-v1.json)。语料、观察和已知缺口与AVG/main69e回执相同，当前输入hash逐项核对；双方旧回执及失败保持，不新增模型、性能或真人结论。
+
+**2026-10-27 AVG 最终整合候选**：接入主干 `69e2a928a`，保留双方历史回执与 AVG 来源路径。现有三文件110项已实际运行；[确定性基线](./baseline-20261027-avg-final-main69e-v1.json)、[IR契约](./ir-contract-20261027-avg-final-main69e-v1.json)及[领域投影](./domain-projection-20261027-avg-final-main69e-v1.json)的语料、观察和已知缺口与前版一致，仅清单/收据指针及其输入hash更新。此结果不代表整包CI、模型、性能或人工验收，旧件未改。
+
 **2026-10-26 PR134 主干整合复验**：[原始 CI](https://github.com/yuanbw2025/storyforge/actions/runs/40285762186)的 5597 项断言通过、3 项跳过，三组收尾比较因输入指纹变化而失败。实际重新执行三文件 110 项后，[IR 编码](./ir-contract-20261026-pr134-integration-v1.json)、[领域投影](./domain-projection-20261026-pr134-integration-v1.json)与[确定性基线](./baseline-20261026-pr134-integration-v1.json)的业务观察均与 20261025 回执逐项相同；输入变化来自主干的依赖、产品生产及生命周期接缝，随后另记录新回执引用与清单自身的指纹。保留旧回执、原语料和全部判定标准；不新增模型、性能或人工验收结论。
 
 **2026-10-25 工程交付收束**：本批以已保留的工程检查点为起点，整合当前主干后重新验证并交付；自动接续已按作者要求停止。本目录的历史失败、未知和未完成验收保持，不因主干合并改写为通过。增强入口仍仅在 DEV + `narrative-preview` 显式试用；原 41.67% 修改影响精确率、正式三档性能缺口、固定读者缺项以及作者实际改稿/用时缺失均保留。

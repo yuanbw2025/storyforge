@@ -1,0 +1,82 @@
+import { expect, test } from '@playwright/test'
+
+test('native AVG inventory guards knowledge, preserves dialogue, presents without consuming and restores a real save', async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
+  await page.goto('./avg/library')
+  const owned = await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const [native, items, runtime, media] = await Promise.all([load('/storyforge/tests/helpers/avg-native-fixture.ts'),
+      load('/storyforge/tests/helpers/avg-inventory-fixture.ts'), load('/storyforge/src/lib/product/runtime-instances.ts'), load('/storyforge/tests/helpers/avg-inventory-media-fixture.ts')])
+    const plan = items.avgInventoryFixture(), assets = await media.avgInventoryMediaFixture()
+    plan.inventory.items[0].iconAssetKey = 'ui.envelope'
+    plan.inventory.items[0].variants[0].iconAssetKey = 'ui.envelope'
+    plan.inventory.items[0].variants[0].detailAssetKey = 'cg.seal-detail'
+    const s = await native.seedAvgNativePreview(plan, assets)
+    const session = await runtime.createProductRuntimeInstance({ scope: s.scope, kind: 'avg', title: '物品与证据试玩',
+      productSource: { kind: 'build', productBuildId: s.buildId, expectedPreviewHash: s.preview.previewHash } })
+    return { scope: s.scope, sessionId: session.id }
+  })
+  await page.goto(`./avg/play?project=${owned.scope.projectId}&work=${owned.scope.workId}&session=${owned.sessionId}`)
+  await expect(page.locator('.avg-dialogue p')).toHaveText('封口仍在。')
+  await page.getByRole('button', { name: '自动播放', exact: true }).click()
+  await page.getByRole('button', { name: '物品与证据', exact: true }).click()
+  let panel = page.getByRole('dialog', { name: '物品与证据' })
+  await expect(panel.getByRole('heading', { name: '封好的信封', exact: true })).toBeVisible()
+  // Verify a real automatic-advance interval stays paused behind the panel.
+  await page.waitForTimeout(1200)
+  await expect(page.locator('.avg-dialogue p')).toHaveText('封口仍在。')
+  await expect(panel).not.toContainText('不应泄露的档案')
+  await expect(panel).not.toContainText('旧缺口')
+  await expect(panel.locator('nav img')).toHaveCount(1)
+  await expect(panel.locator('.avg-inventory-detail-image')).toHaveCount(0)
+  await expect.poll(() => panel.locator('nav img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth)).toBe(256)
+  await expect(panel.getByRole('button', { name: '向保管员出示', exact: true })).toBeDisabled()
+  await panel.getByRole('button', { name: '检查信封', exact: true }).click()
+  await expect(panel.getByRole('heading', { name: '带缺口的封印信', exact: true })).toBeVisible()
+  await expect.poll(() => panel.locator('nav img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth)).toBe(256)
+  await expect.poll(() => panel.locator('.avg-inventory-detail-image').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth)).toBe(640)
+  await expect(panel.getByRole('status')).toHaveText('你确认了封印上的旧缺口。')
+  await expect.poll(() => panel.locator('.avg-inventory-detail-image').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth)).toBe(640)
+  await expect(panel.getByRole('button', { name: '检查信封', exact: true })).toHaveCount(0)
+  await page.screenshot({ path: info.outputPath('avg-inventory-inspected.png'), fullPage: true })
+  await panel.getByRole('button', { name: '向保管员出示', exact: true }).click()
+  await expect(panel.getByRole('status')).toHaveText('保管员辨认出了缺口，信封仍由你保管。')
+  await expect(panel.getByRole('heading', { name: '带缺口的封印信', exact: true })).toBeVisible()
+  await expect.poll(() => panel.locator('nav img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth)).toBe(256)
+  await expect.poll(() => panel.locator('.avg-inventory-detail-image').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth)).toBe(640)
+  await panel.getByRole('button', { name: '关闭', exact: true }).click()
+  await page.getByRole('button', { name: '自动播放', exact: true }).click()
+  await expect(page.locator('.avg-dialogue p')).toHaveText('封口仍在。')
+  await page.getByRole('button', { name: '快速存档', exact: true }).click()
+  await expect(page.getByRole('status').filter({ hasText: '已快速存档' })).toBeVisible()
+  await page.reload()
+  await expect(page.locator('.avg-dialogue p')).toHaveText('封口仍在。')
+  await page.getByRole('button', { name: '物品与证据', exact: true }).click()
+  panel = page.getByRole('dialog', { name: '物品与证据' })
+  await expect(panel.getByRole('heading', { name: '带缺口的封印信', exact: true })).toBeVisible()
+  await expect.poll(() => panel.locator('nav img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth)).toBe(256)
+  await expect.poll(() => panel.locator('.avg-inventory-detail-image').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth)).toBe(640)
+  await expect(panel.getByRole('button', { name: '向保管员出示', exact: true })).toBeDisabled()
+  await panel.getByRole('button', { name: '交给保管员', exact: true }).click()
+  await expect(panel).not.toContainText('带缺口的封印信')
+  await panel.getByRole('button', { name: '关闭', exact: true }).click()
+  await page.getByRole('button', { name: '存读档', exact: true }).click()
+  await page.getByRole('button', { name: '从这里开始新分支' }).first().click()
+  await page.getByRole('button', { name: '物品与证据', exact: true }).click()
+  panel = page.getByRole('dialog', { name: '物品与证据' })
+  await expect(panel.getByRole('heading', { name: '带缺口的封印信', exact: true })).toBeVisible()
+  await expect.poll(() => panel.locator('nav img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth)).toBe(256)
+  await expect.poll(() => panel.locator('.avg-inventory-detail-image').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth)).toBe(640)
+  await expect(panel.getByRole('button', { name: '向保管员出示', exact: true })).toBeDisabled()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(panel).toBeVisible()
+  expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('avg-inventory-mobile.png'), fullPage: true })
+  const saved = await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const [{ db }, player, runtime] = await Promise.all([load('/storyforge/src/lib/db/schema.ts'), load('/storyforge/src/stores/avg-game-player.ts'), load('/storyforge/src/lib/product/runtime-core.ts')])
+    const state = await runtime.readProductRuntimeState(player.useAvgGamePlayerStore.getState().selectedSessionId)
+    return { items: state.narrative.variables.avg.inventory, knowledge: state.narrative.variables.avg.knowledge, visits: state.narrative.visitedNodeKeys, currentBeatKey: state.presentation.currentBeatKey, runs: await db.agentRuns.count() }
+  })
+  expect(saved).toMatchObject({ items: { instances: { envelope: { holder: 'player', quantity: 1, inspected: true } }, actions: { inspectLetter: { performed: true }, presentLetter: { performed: true } } }, knowledge: { player: { seal: true }, keeper: { seal: true } }, visits: ['desk'], currentBeatKey: null, runs: 0 })
+})

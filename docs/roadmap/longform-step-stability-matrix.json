@@ -24439,6 +24439,14 @@
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Delivery-only synchronization with already merged PR219 mainline",
+      "sourcePin": "tests/acceptance/longform-stability/final-main-integration-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
     }
   ]
 }

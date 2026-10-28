@@ -1,4 +1,6 @@
 export const CHARACTER_ALPHA_MATTING_ID_V1 = 'storyforge.character-alpha.edge-connected.v2'
+export const DECLARED_MAGENTA_ALPHA_MATTING_ID_V1 = 'storyforge.character-alpha.declared-magenta.v1'
+export const DECLARED_MAGENTA_PIXEL_LIMIT_V1 = 4 * 1024 * 1024
 
 export interface CharacterAlphaMattingResultV1 {
   data: ArrayBuffer
@@ -120,6 +122,10 @@ export function matteEdgeConnectedCharacterBackdropV1(input: RgbaRasterV1): {
   alreadyTransparent: boolean
   changed: boolean
 } {
+  return matteCharacterBackdrop(input, false)
+}
+
+function matteCharacterBackdrop(input: RgbaRasterV1, strictReservedMagenta: boolean) {
   const { width, height } = input
   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 2 || height < 2
     || width > 10_000 || height > 10_000 || input.data.length !== width * height * 4) {
@@ -139,8 +145,10 @@ export function matteEdgeConnectedCharacterBackdropV1(input: RgbaRasterV1): {
   }
 
   const borders = borderOffsets(width, height)
-  const magenta = (offset: number) => Math.min(data[offset], data[offset + 2]) - data[offset + 1] > 55
-    && Math.min(data[offset], data[offset + 2]) > 100
+  const magenta = (offset: number) => strictReservedMagenta
+    ? isDeclaredMagenta(data, offset)
+    : Math.min(data[offset], data[offset + 2]) - data[offset + 1] > 55
+      && Math.min(data[offset], data[offset + 2]) > 100
   const useReservedMagenta = input.reservedMagentaBackdrop === true
     && borders.filter(magenta).length / borders.length > 0.8
   const buckets = new Map<string, { count: number; red: number; green: number; blue: number }>()
@@ -226,6 +234,40 @@ export function matteEdgeConnectedCharacterBackdropV1(input: RgbaRasterV1): {
       : Math.round(Math.min(1, (distance - transparentDistance) / (opaqueDistance - transparentDistance)) * 255)
   }
   return { data, removedPixelRatio, alreadyTransparent: false, changed: true }
+}
+
+function isDeclaredMagenta(data: Uint8ClampedArray, offset: number) {
+  return data[offset] >= 230 && data[offset + 1] <= 25 && data[offset + 2] >= 230
+    && Math.abs(data[offset] - data[offset + 2]) <= 25
+}
+
+/** Pure pixels, without production or adoption authority. This explicit mode
+ * never guesses another backdrop or treats transparent padding as a cutout.
+ * A caller must prove the frozen reservation before invoking it. */
+export function matteDeclaredMagentaCharacterBackdropV1(input: RgbaRasterV1) {
+  const { width, height, data } = input
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 2 || height < 2
+    || width > 10_000 || height > 10_000 || width * height > DECLARED_MAGENTA_PIXEL_LIMIT_V1
+    || data.length !== width * height * 4) fail('声明底色加工的 RGBA 栅格或像素上限无效')
+  for (let offset = 3; offset < data.length; offset += 4) {
+    if (data[offset] !== 255) fail('声明底色加工只接受不透明原图；已有或混合 alpha 须使用明确的其他配方')
+  }
+  const borders = borderOffsets(width, height)
+  const reservedBorderRatio = borders.filter(offset => isDeclaredMagenta(data, offset)).length / borders.length
+  if (reservedBorderRatio < 0.95) {
+    fail(`原图边缘不符合已声明的纯品红保留底色（边缘精确色键覆盖率 ${reservedBorderRatio.toFixed(4)}，要求至少 0.9500）`)
+  }
+  const result = matteCharacterBackdrop({ ...input, reservedMagentaBackdrop: true }, true)
+  let clearedPixelCount = 0, translucentPixelCount = 0, opaquePixelCount = 0
+  for (let offset = 3; offset < result.data.length; offset += 4) {
+    const alpha = result.data[offset]
+    if (alpha === 0) clearedPixelCount += 1
+    else if (alpha === 255) opaquePixelCount += 1
+    else translucentPixelCount += 1
+  }
+  if (!clearedPixelCount || !opaquePixelCount) fail('声明底色加工缺少实际透明背景或保留主体')
+  return { ...result, algorithm: DECLARED_MAGENTA_ALPHA_MATTING_ID_V1, reservedBorderRatio,
+    clearedPixelCount, translucentPixelCount, opaquePixelCount }
 }
 
 async function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {

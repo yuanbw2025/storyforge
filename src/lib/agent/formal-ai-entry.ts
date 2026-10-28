@@ -194,7 +194,8 @@ export function parseFormalAIEntryRegistryV1(
     for (const raw of root.offlineEvaluations) {
       const entry = asRecord(raw, '离线评测入口')
       if (JSON.stringify(Object.keys(entry).sort()) !== JSON.stringify(keys)
-        || entry.adoptAllowed !== false || entry.boundary !== 'eval-only' || entry.transport !== 'local-codex-subscription') {
+        || entry.adoptAllowed !== false || entry.boundary !== 'eval-only'
+        || (entry.transport !== 'local-codex-subscription' && entry.transport !== 'configured-chat-audio-input-v1')) {
         fail('离线评测入口不得获得作品采纳或正式执行权限')
       }
       const id = readString(entry, 'entryId', '离线评测入口')

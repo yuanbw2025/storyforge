@@ -416,7 +416,7 @@ describe('R-PRODUCTPROD-1E · central media provider adapters', () => {
     }, browserTransport, new AbortController().signal)).rejects.toThrow(/商业候选/)
 
     expect(listProductMediaProviderCapabilitiesV1().map(item => item.adapterId)).toEqual([
-      'agnes.image-2.1-flash.v1', 'elevenlabs.music.v2', 'elevenlabs.sound-effects.v2', 'existing-project-media.v1',
+      'agnes.image-2.1-flash.v1', 'agnes.image-2.5-flash.v1', 'elevenlabs.music.v2', 'elevenlabs.sound-effects.v2', 'existing-project-media.v1',
       'fixture.media.v1', 'local-import-media.v1', 'openai.gpt-image-2.v1', 'procedural-audio.v1',
       'storyforge.authored-image-pack.v1',
     ])

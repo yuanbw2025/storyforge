@@ -26,6 +26,9 @@ export default function BuildInspector({ scope, productionId, page, onProduction
                 return;
             }
             const resolved = await verifyProductRuntimeSource({scope, source: {kind: 'build', productBuildId: build.id!, expectedPreviewHash: build.previewHash}});
+            if (resolved.runtimePackage.version !== 1 || resolved.runtimePackage.productType !== 'character-interaction') {
+                throw new Error('当前版本不属于角色聊天作品。');
+            }
             if (active) setLoaded({identity, pkg: resolved.runtimePackage, buildId: build.id!, previewHash: build.previewHash, error: ''});
         })().catch(cause => {if (active) setLoaded({identity, pkg: null, buildId: null, previewHash: '', error: String(cause)});});
         return () => {active = false;};

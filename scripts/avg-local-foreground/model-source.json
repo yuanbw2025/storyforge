@@ -1,0 +1,25 @@
+{
+  "schema": "storyforge.avg.local-foreground.model-source",
+  "version": 1,
+  "code": {
+    "repository": "https://github.com/facebookresearch/sam2",
+    "revision": "2b90b9f5ceec907a1c18123530e92e794ad901a4",
+    "license": "Apache-2.0"
+  },
+  "model": {
+    "id": "sam2.1-hiera-tiny",
+    "configuration": "configs/sam2.1/sam2.1_hiera_t.yaml",
+    "weightsUrl": "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_tiny.pt",
+    "weightsSha256": "7402e0d864fa82708a20fbd15bc84245c2f26dff0eb43a4b5b93452deb34be69",
+    "license": "Apache-2.0",
+    "source": "official Meta Research release; checkpoint downloaded from the official URL and hashed locally"
+  },
+  "matting": {
+    "package": "PyMatting",
+    "version": "1.1.15",
+    "repository": "https://github.com/pymatting/pymatting",
+    "license": "MIT"
+  },
+  "inputPolicy": "local loopback only; image bytes are held in memory for one request and are not persisted or logged",
+  "licenseReview": "Code and weights licenses are recorded separately. Recheck upstream terms before distributing the model or generated media."
+}

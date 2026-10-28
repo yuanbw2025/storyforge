@@ -2362,6 +2362,56 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: readProductProductionBriefContext,
   },
   {
+    key: 'product-production.avg-task-inputs',
+    label: 'AVG 准确任务需求与依赖凭证',
+    scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 20_000, protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId) && !!input.productProductionTaskKey,
+    read: async input => {
+      // This reader is also used by sealed audio admission. Only module loading
+      // is transaction-free; all context/producer reads keep the caller's RW
+      // transaction and its exact scope/version fences.
+      const load = () => import('../avg/task-context')
+      const reader = await (Dexie.currentTransaction ? Dexie.waitFor(Dexie.ignoreTransaction(load)) : load())
+      return reader.readAvgTaskExecutionContextV1(input)
+    },
+  },
+  {
+    key: 'product-production.avg-sound-planning-inputs',
+    label: 'AVG 声音用途及冻结来源闭集',
+    scope: 'project', layer: 'L0', ownerFrom: 'work', budgetTokens: 24_000, protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId) && !!input.productProductionTaskKey,
+    read: async input => {
+      const load = () => import('../avg/sound-planning-context')
+      const reader = await (Dexie.currentTransaction ? Dexie.waitFor(Dexie.ignoreTransaction(load)) : load())
+      return reader.readAvgSoundPlanningContextV1(input)
+    },
+  },
+  {
+    key: 'product-production.avg-visual-planning-inputs',
+    label: 'AVG 专业视觉用途与已确认方向',
+    scope: 'project', layer: 'L0', ownerFrom: 'work', budgetTokens: 24_000, protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId) && !!input.productProductionTaskKey,
+    read: async input => {
+      // A cached browser import can still yield beyond the current IDB turn.
+      // Keep only module loading alive; the reader must use the same snapshot.
+      const load = () => import('../avg/visual-planning-context')
+      const reader = await (Dexie.currentTransaction ? Dexie.waitFor(Dexie.ignoreTransaction(load)) : load())
+      return reader.readAvgVisualPlanningContextV4(input)
+    },
+  },
+  {
+    key: 'product-production.avg-visual-planning-inputs-v5',
+    label: 'AVG 新参考策略、公开用途与已确认方向',
+    scope: 'project', layer: 'L0', ownerFrom: 'work', budgetTokens: 24_000, protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId) && !!input.productProductionTaskKey,
+    read: async input => {
+      const load = () => import('../avg/visual-planning-context-v5')
+      const reader = await (Dexie.currentTransaction ? Dexie.waitFor(Dexie.ignoreTransaction(load)) : load())
+      return reader.readAvgVisualPlanningContextV5(input)
+    },
+  },
+  {
     key: 'product-production.ttrpg-open-task-brief', label: '开放跑团 V3 原授权任务方案投影',
     // A complete frozen author policy must not hit an unrelated 8k atom cap.
     // The atomic source is still bounded by this ceiling AND the exact task input budget.

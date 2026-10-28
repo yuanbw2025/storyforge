@@ -142,6 +142,9 @@ test('科幻游戏手机操作、逐句阅读、设置保留当前台词与进�
 test('文字开放世界三款作品入口独立，科幻三维地图可到达十个区域并保留显示偏好', async ({ page }) => {
   test.setTimeout(210_000)
   await page.goto('openworld')
+  // A cold lazy route may still be loading after document navigation. Wait
+  // for the real page before checking route identity and preference isolation.
+  await page.getByRole('link', { name: '游玩内置游戏：潮痕，最后一盏灯' }).waitFor({ timeout: 30_000 })
   await expect(page.getByRole('link', { name: '游玩内置游戏：潮痕，最后一盏灯' })).toHaveAttribute('href', '/storyforge/play/tidemark')
   await page.getByRole('link', { name: '游玩内置游戏：远日点，第七码头' }).click()
   await page.getByRole('button', { name: '航程设置', exact: true }).click()
@@ -159,6 +162,7 @@ test('文字开放世界三款作品入口独立，科幻三维地图可到达�
   await page.getByRole('button', { name: '航程设置', exact: true }).click()
   for (const name of [/轻量画面/, /文字探索/, /整幕阅读/]) await expect(page.getByRole('checkbox', { name })).toBeChecked()
   await page.goto('play/tidemark')
+  await page.getByRole('heading', { name: '最后一盏灯', exact: true }).waitFor({ timeout: 30_000 })
   await expect(page.getByRole('heading', { name: '最后一盏灯', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '继续旅程', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: '游戏设置', exact: true }).click()

@@ -13,6 +13,7 @@ import { canonicalStringify, hashCanonicalValue } from './hash'
 import {
   replayAgentRunEventsV1,
   toAgentRunProjectionBodyV1,
+  completedAgentRunEvidencePrefixV1,
 } from './projection'
 import {
   portableizeAgentRunContractV1,
@@ -126,11 +127,8 @@ export async function verifyPortableCompletedAgentRunEvidenceV1(
     || last.payload.reason !== 'project-import-scope-rebound') {
     fail(`run ${run._exportId} 不含可接受的完成态证据`)
   }
-  const completed = replayAgentRunEventsV1(verified.events.slice(0, -1))
-  if (completed.errors.length > 0
-    || completed.state !== 'completed'
-    || !completed.terminalReceiptHash
-    || completed.terminalReceiptHash !== last.payload.previousReceiptHash) {
+  const completed = completedAgentRunEvidencePrefixV1(verified.events)
+  if (!completed) {
     fail(`run ${run._exportId} 的导入失效事件没有匹配完成态前缀`)
   }
   return { projection: completed, events: verified.events.slice(0, -1) }

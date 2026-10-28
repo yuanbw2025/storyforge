@@ -159,6 +159,22 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
     expect(() => parseFormalAIEntryRegistryV1(duplicate)).toThrow(/重复/)
   })
 
+  it('显式音频评测传输保持脚本、只读和零采纳边界，不进入正式创作执行器', () => {
+    const full = JSON.parse(JSON.stringify(registry))
+    const entry = { entryId: 'eval.avg.audio-input-test', boundary: 'eval-only', adoptAllowed: false,
+      caller: 'scripts/evaluate-avg-audio-input.mjs', contract: 'scripts/avg-audio-input-contract.mjs',
+      transport: 'configured-chat-audio-input-v1', reason: '仅显式工程WAV/静音对照；不读作者数据库、不采纳、不发布。' }
+    full.offlineEvaluations.push(entry)
+    expect(parseFormalAIEntryRegistryV1(full).entries).toEqual(FORMAL_AI_ENTRY_REGISTRY_V1.entries)
+    expect(() => assertFormalAIEntryCallV1({ formalEntryId: entry.entryId, category: 'chapter.content' })).toThrow(/未登记正式/)
+    for (const patch of [{ adoptAllowed: true }, { adoptionTargets: ['productBuildArtifacts'] }, { boundary: 'durable-run' },
+      { caller: 'src/lib/avg/assembly-service.ts' }, { contract: '../outside.mjs' }, { transport: 'unrestricted-http' }]) {
+      const bad = structuredClone(full)
+      Object.assign(bad.offlineEvaluations.at(-1), patch)
+      expect(() => parseFormalAIEntryRegistryV1(bad)).toThrow(/离线评测/)
+    }
+  })
+
   it('删除 Skill 绑定、非法开放辅助采纳和未知 schema 字段均被拒绝', () => {
     const base = JSON.parse(JSON.stringify(registry)) as typeof registry
     const unknownSkill = JSON.parse(JSON.stringify(base)) as typeof registry

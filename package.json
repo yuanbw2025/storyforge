@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "avg:local-foreground": "bash scripts/avg-local-foreground/start.sh",
     "docs:dev": "vitepress dev website-docs",
     "docs:build": "vitepress build website-docs",
     "docs:preview": "vitepress preview website-docs",

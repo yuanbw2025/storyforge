@@ -1,3 +1,8 @@
+import { assertAvgPrototypeBuildWriteEnabledV1 } from '../avg/prototype-write-guard'
+import { avgRuntimeStage } from '../avg/executable-module'
+import { classifyAvgAuthorPrototypeBriefV1, assertAvgSoundPrototypeWriteEnabledV1, assertAvgVoicePrototypeWriteEnabledV3, assertAvgVisualPrototypeWriteEnabledV5, avgPrototypeTechnicalQualitySatisfiedV1 } from '../avg/prototype-contract'
+import { parseProductBuildQualityReportV1 } from './quality-contract'
+export { parseProductBuildQualityReportV1 } from './quality-contract'
 import { db } from '../db/schema'
 import { readProductProductionBuildWorldScopeV1 } from './world-binding'
 import type {
@@ -8,12 +13,13 @@ import type {
   ProductBuildArtifactRecordV1,
   ProductBuildManifestV1,
   ProductBuildPreviewManifestV1,
-  ProductBuildQualityReportV1,
   ProductProductionCommandRecordV1,
   ProductProductionCommandV1,
   ProductRelease,
   ProductReleaseManifestV1,
   ProductRuntimePackageV1,
+  AnyProductRuntimePackage,
+  ProductReleaseManifestV2,
   ProductReleaseLineageV1,
   ProductSourceManifest,
   ProductSourcePlan,
@@ -32,7 +38,7 @@ import { parseProductProductionBriefV3, parseProductProductionCommandV1 } from '
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import { readVerifiedMediaBlobObjectData } from './media-blob-store'
 import { parseProductProductionPlanV3 } from './plan'
-import { verifyProductBuildPreviewManifestV1 } from './preview-manifest'
+import { verifyProductBuildPreviewManifestV1, verifyProductBuildPreviewManifest } from './preview-manifest'
 import {
   requirePassedProductBrowserPerformanceGateV1,
   requirePassedProductBuildMainRouteGateV1,
@@ -40,12 +46,14 @@ import {
 } from './quality-receipts'
 import {
   createProductReleaseManifestV1,
+  createProductReleaseManifestV2,
   productProductionTerminalArtifactKeysV1,
   productReleaseIdentityHashV1,
+  productReleaseIdentityHashV2,
+  verifyProductReleaseManifest,
   verifyProductReleaseManifestV1,
   parseProductRuntimePackageV1,
 } from './runtime-package'
-import type { ProductRuntimePackageWithTtrpgV2, ProductReleaseManifestWithTtrpgV2 } from '../ttrpg/content-version'
 import { verifyProductBuildRootTerminalReceiptV1 } from './receipts'
 import { verifyStoredProductBuildRootBudgetEvidenceV1 } from './root-budget-evidence-store'
 import { readAgentRunV1 } from '../agent/run/event-store'
@@ -132,7 +140,11 @@ export interface ProductProductionPublishReceiptV1 {
 
 interface VerifiedAdoption extends PreparedProductProductionAdoptionV1 {
   scope: WorkspaceScope
-  runtimePackage: ProductRuntimePackageWithTtrpgV2
+  runtimePackage: AnyProductRuntimePackage
+  nativePrototype: boolean
+  prototypeKind: ReturnType<typeof classifyAvgAuthorPrototypeBriefV1>
+  usesOriginalSound: boolean
+  usesOriginalVoice: boolean
   artifacts: ProductBuildArtifactRecordV1[]
   mediaArtifacts: Map<string, ProductBuildArtifactRecordV1>
   /** In-memory physical-byte witnesses. They are never serialized into a
@@ -271,38 +283,6 @@ export function parseProductBuildManifestV1(value: string): ProductBuildManifest
   }
 }
 
-export function parseProductBuildQualityReportV1(value: string): ProductBuildQualityReportV1 {
-  let raw: unknown
-  try { raw = JSON.parse(value) } catch { fail('Quality report 不是合法 JSON') }
-  const row = object(raw, 'Quality report')
-  exactKeys(row, [
-    'schema', 'version', 'buildNumber', 'packageHash', 'hardGateResults', 'softGateResults',
-    'mediaCoverage', 'playable', 'releaseReady', 'warnings',
-  ], 'Quality report')
-  if (row.schema !== 'storyforge.product-build-quality-report' || row.version !== 1
-    || !Number.isInteger(row.buildNumber) || !isSha256Hash(row.packageHash)
-    || !Array.isArray(row.hardGateResults) || !Array.isArray(row.softGateResults)
-    || !Array.isArray(row.warnings) || typeof row.playable !== 'boolean'
-    || typeof row.releaseReady !== 'boolean' || typeof row.mediaCoverage !== 'number'
-    || row.mediaCoverage < 0 || row.mediaCoverage > 1) fail('Quality report 基础字段无效')
-  const gates = (values: unknown[], label: string) => values.map((value, index) => {
-    const gate = object(value, `${label}[${index}]`)
-    exactKeys(gate, ['gateId', 'passed', 'evidence'], `${label}[${index}]`)
-    if (typeof gate.gateId !== 'string' || !gate.gateId.trim() || typeof gate.passed !== 'boolean'
-      || !Array.isArray(gate.evidence) || gate.evidence.some(item => typeof item !== 'string' || !item.trim())) {
-      fail(`${label}[${index}] 无效`)
-    }
-    return { gateId: gate.gateId.trim(), passed: gate.passed, evidence: [...gate.evidence] as string[] }
-  })
-  return {
-    schema: 'storyforge.product-build-quality-report', version: 1,
-    buildNumber: Number(row.buildNumber), packageHash: row.packageHash,
-    hardGateResults: gates(row.hardGateResults, 'hardGateResults'),
-    softGateResults: gates(row.softGateResults, 'softGateResults'),
-    mediaCoverage: row.mediaCoverage, playable: row.playable, releaseReady: row.releaseReady,
-    warnings: row.warnings.map(value => String(value)),
-  }
-}
 
 async function worldContextManifestPointersV1(input: {
   scope: WorkspaceScope
@@ -350,7 +330,7 @@ async function priorReleaseLineageV1(input: {
     .sort((left, right) => right.version - left.version)
   const latest = rows[0]
   if (!latest) return { version: 1, parentRelease: null, sourceManifest: null }
-  const manifest = await verifyProductReleaseManifestV1(latest.manifestJson, { ttrpgProtocol: 2 })
+  const manifest = await verifyProductReleaseManifest(latest.manifestJson, { ttrpgProtocol: 2 })
   const creatorSource = 'schema' in manifest.sourceContracts
     && manifest.sourceContracts.schema === 'storyforge.text-open-world-creator-release-source-contracts'
   return {
@@ -401,10 +381,19 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
   if (creatorDerived == null && await hashProductProductionValueV2(brief) !== briefRow.briefHash) {
     fail('Brief hash 校验失败')
   }
-  const mediaRuntimeRequired = brief.media.requiredMediaKinds.length > 0
-  const [browserPerformance, mainRoutePlaythrough, mediaRuntime] = brief.qualityProfile === 'commercial-candidate'
+  const preview = await verifyProductBuildPreviewManifest(build.previewManifestJson, { ttrpgProtocol: 2 })
+  if (preview.previewHash !== build.previewHash || preview.buildManifestHash !== build.manifestHash
+    || preview.packageHash !== build.packageHash || preview.productionKey !== production.productionKey
+    || preview.buildNumber !== build.buildNumber || preview.runtimePackage.sourceWorld.contentHash !== brief.source.worldContentHash) {
+    fail('Preview 与 Build/Brief 不闭合')
+  }
+  const { prototypeKind, usesOriginalSound, usesOriginalVoice } = await assertAvgPrototypeBuildWriteEnabledV1(scope,build.id!,brief)
+  const nativePrototype=prototypeKind!==null&&preview.version===2
+  if(preview.version===2&&!nativePrototype)fail('V2 当前只支持已登记的 AVG 作者本地原型发布')
+  const mediaRuntimeRequired = (avgRuntimeStage(preview.runtimePackage)?.assets.length??0)>0 || brief.media.requiredMediaKinds.length > 0
+  const [browserPerformance, mainRoutePlaythrough, mediaRuntime] = brief.qualityProfile === 'commercial-candidate' || nativePrototype
     ? await Promise.all([
-      requirePassedProductBrowserPerformanceGateV1({ scope, productBuildId: build.id! }),
+      nativePrototype?Promise.resolve(null):requirePassedProductBrowserPerformanceGateV1({ scope, productBuildId: build.id! }),
       requirePassedProductBuildMainRouteGateV1({ scope, productBuildId: build.id! }),
       mediaRuntimeRequired
         ? requirePassedProductMediaRuntimeGateV1({ scope, productBuildId: build.id! })
@@ -424,7 +413,8 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
   const quality = parseProductBuildQualityReportV1(build.qualityReportJson)
   if (await hashProductProductionValueV2(quality) !== build.qualityReportHash
     || quality.buildNumber !== build.buildNumber || quality.packageHash !== build.packageHash
-    || !quality.playable || !quality.releaseReady || quality.hardGateResults.some(gate => !gate.passed)) {
+    || !quality.playable || (!quality.releaseReady && !nativePrototype) || quality.hardGateResults.some(gate => !gate.passed)
+    || nativePrototype && !avgPrototypeTechnicalQualitySatisfiedV1({brief,runtimePackage:preview.runtimePackage,quality,buildNumber:build.buildNumber,packageHash:build.packageHash})) {
     fail('Quality report 未通过发布硬门')
   }
   const hardGates = new Set(quality.hardGateResults.filter(gate => gate.passed).map(gate => gate.gateId))
@@ -432,12 +422,7 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     || brief.completionContract.requiredGateIds.some(gate => !manifest.completedGateIds.includes(gate))) {
     fail('Brief 要求的完成门未全部进入质量报告和 Build manifest')
   }
-  const preview = await verifyProductBuildPreviewManifestV1(build.previewManifestJson, { ttrpgProtocol: 2 })
-  if (preview.previewHash !== build.previewHash || preview.buildManifestHash !== build.manifestHash
-    || preview.packageHash !== build.packageHash || preview.productionKey !== production.productionKey
-    || preview.buildNumber !== build.buildNumber || preview.runtimePackage.sourceWorld.contentHash !== brief.source.worldContentHash) {
-    fail('Preview 与 Build/Brief 不闭合')
-  }
+
   const artifacts = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
     .filter(row => row.status === 'accepted' || row.status === 'carried-forward')
     .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey) || left.version - right.version)
@@ -572,6 +557,7 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
       sourcePin,
       sourceManifestValue as TextOpenWorldSourceManifestV1,
     )
+    if (preview.runtimePackage.version !== 1) fail('Creator Release 必须使用 V1 RuntimePackage')
     const integrationReport = await validateTextOpenWorldIntegrationReportV1({
       runtimePackage: parseProductRuntimePackageV1(preview.runtimePackage),
       report: integrationValue as TextOpenWorldIntegrationReportV1,
@@ -689,7 +675,11 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
   ].filter((value): value is string => value != null)
 
   const mediaArtifacts = new Map<string, ProductBuildArtifactRecordV1>()
-  const runtimeAssets = preview.runtimePackage.presentation?.assets ?? []
+  const runtimeAssets = avgRuntimeStage(preview.runtimePackage)?.assets ?? []
+  const avgMediaRights = nativePrototype
+    ? await (await import('../avg/assembly-media-rights')).readAvgPrototypeMediaRightsV1({ scope, buildId: build.id!,
+      expectedBuildRevision: build.stateRevision, controlEpoch: build.controlEpoch })
+    : null
   if (preview.mediaBindings.length !== runtimeAssets.length) fail('Release-ready Preview 必须绑定全部 RuntimePackage 媒资')
   for (const asset of runtimeAssets) {
     const binding = preview.mediaBindings.find(row => row.assetKey === asset.assetKey)
@@ -697,7 +687,10 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     if (!binding || !artifact || artifact.blobObjectId == null || artifact.contentHash !== asset.blobContentHash
       || artifact.mimeType !== asset.mimeType || artifact.byteSize !== asset.byteSize) fail(`媒资 Artifact 绑定无效:${asset.assetKey}`)
     const rights = object(JSON.parse(artifact.rightsJson), `rights:${artifact.artifactKey}`)
-    if (rights.commercialUse !== true || typeof rights.license !== 'string' || !rights.license.trim()) {
+    if(nativePrototype){
+      if(avgMediaRights?.get(asset.assetKey)!==canonicalProductProductionJsonV2(rights)
+        ||canonicalProductProductionJsonV2(JSON.parse(artifact.metadataJson))!==canonicalProductProductionJsonV2(asset))fail(`AVG 本地原型媒资缺少准确作者采用及授权声明:${artifact.artifactKey}`)
+    }else if (rights.commercialUse !== true || typeof rights.license !== 'string' || !rights.license.trim()) {
       fail(`媒资商业权利不完整:${artifact.artifactKey}`)
     }
     const blob = await db.mediaBlobObjects.get(artifact.blobObjectId)
@@ -755,7 +748,7 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     }
   }
   return {
-    scope, intent, adoptionIntentHash: await hashProductProductionValueV2(intent),
+    nativePrototype,prototypeKind,usesOriginalSound,usesOriginalVoice,scope, intent, adoptionIntentHash: await hashProductProductionValueV2(intent),
     productType: preview.runtimePackage.productType, title: preview.runtimePackage.definition.title,
     mediaAssetKeys: runtimeAssets.map(asset => asset.assetKey).sort(),
     creatorRelease,
@@ -809,6 +802,7 @@ export async function prepareCommunityPrototypeProductReleaseV1(input: {
 }> {
   const scope = await resolveScope({ scope: input.scope })
   const verified = await inspectAdoption(scope, input.productionId)
+  if(verified.runtimePackage.version!==1)fail('AVG 本地原型尚未取得社区分发验收')
   if (verified.creatorReleaseAuthority || !verified.sourcePlan
     || !verified.confirmedBrief || !verified.sourceManifest) {
     fail('社区候选包当前只支持共享WorldRelease来源产品')
@@ -891,7 +885,7 @@ async function materializeReleaseMedia(
   productReleaseId: number,
   now: number,
 ): Promise<void> {
-  for (const asset of verified.runtimePackage.presentation?.assets ?? []) {
+  for (const asset of avgRuntimeStage(verified.runtimePackage)?.assets ?? []) {
     const artifact = verified.mediaArtifacts.get(asset.assetKey)!
     const existing = await db.productMediaAssets
       .where('[productReleaseId+assetKey+version]')
@@ -1090,6 +1084,7 @@ export async function publishProductProductionBuild(input: {
   let portableSourcePlan: ProductSourcePlan | null = null
   let sourceContracts: ProductReleaseManifestV1['sourceContracts']
   if (prepared.creatorReleaseAuthority && creatorAuthorization) {
+    if (prepared.runtimePackage.version !== 1) fail('Creator Release 必须使用 V1 RuntimePackage')
     const { createTextOpenWorldCreatorReleaseSourceContractsV1 } = await import(
       '../open-world/creator-release-contract'
     )
@@ -1113,17 +1108,15 @@ export async function publishProductProductionBuild(input: {
       sourceManifest: prepared.sourceManifest,
     }
   }
-  const identityBody: Omit<ProductReleaseManifestWithTtrpgV2, 'releaseIdentityHash' | 'lineage'> = {
-    schema: 'storyforge.product-release',
-    version: 1,
-    productType: prepared.runtimePackage.productType,
-    sourceWorldRelease: { contentHash: prepared.runtimePackage.sourceWorld.contentHash },
-    runtimePackage: prepared.runtimePackage,
-    packageHash: await hashProductProductionValueV2(prepared.runtimePackage),
-    productionProvenance,
-    sourceContracts,
-  }
-  const releaseIdentityHash = await productReleaseIdentityHashV1(identityBody)
+  if(prepared.runtimePackage.version===2&&prepared.creatorReleaseAuthority)fail('AVG V2 不能使用 Creator 来源')
+  const identityShared={schema:'storyforge.product-release' as const,sourceWorldRelease:{contentHash:prepared.runtimePackage.sourceWorld.contentHash},
+    packageHash:await hashProductProductionValueV2(prepared.runtimePackage),productionProvenance,sourceContracts}
+  const identityBody=prepared.runtimePackage.version===1
+    ? {...identityShared,version:1 as const,productType:prepared.runtimePackage.productType,runtimePackage:prepared.runtimePackage}
+    : {...identityShared,version:2 as const,productType:'avg' as const,runtimePackage:prepared.runtimePackage}
+  const releaseIdentityHash = identityBody.version===1
+    ? await productReleaseIdentityHashV1(identityBody)
+    : await productReleaseIdentityHashV2({...identityBody,sourceContracts:sourceContracts as ProductReleaseManifestV2['sourceContracts']})
   const releaseCreatedAt = Date.now()
   const releaseUid = productReleaseUidV1({
     productType: prepared.productType,
@@ -1170,7 +1163,9 @@ export async function publishProductProductionBuild(input: {
         createdAt: releaseCreatedAt,
       })
   const releaseManifest = prepared.creatorReleaseAuthority
-    ? await verifyProductReleaseManifestV1({ ...identityBody, releaseIdentityHash, lineage }, { ttrpgProtocol: 2 })
+    ? await verifyProductReleaseManifestV1({ ...identityBody, releaseIdentityHash, lineage })
+    : prepared.runtimePackage.version===2 ? await createProductReleaseManifestV2({runtimePackage:prepared.runtimePackage,productionProvenance,
+        sourceContracts:sourceContracts as ProductReleaseManifestV2['sourceContracts'],lineage:lineage as ProductReleaseLineageV1})
     : await createProductReleaseManifestV1({
         runtimePackage: prepared.runtimePackage,
         productionProvenance,
@@ -1204,6 +1199,9 @@ export async function publishProductProductionBuild(input: {
       const duplicateCommand = await db.productProductionCommands
         .where('[productionId+commandId]').equals([input.productionId, command.commandId]).first()
       if (duplicateCommand) fail('publish command 已被并发 claim')
+      if (verified.usesOriginalSound) assertAvgSoundPrototypeWriteEnabledV1()
+      if (verified.usesOriginalVoice) assertAvgVoicePrototypeWriteEnabledV3()
+      if (verified.prototypeKind === 'visual-v5') assertAvgVisualPrototypeWriteEnabledV5()
       const now = releaseCreatedAt
       const claim = stampNewRecord(scope, 'productProductionCommands', {
         projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
@@ -1228,7 +1226,7 @@ export async function publishProductProductionBuild(input: {
         productType: verified.productType,
         worldReleaseId: verified.intent.worldReleaseId,
         version: verified.releaseVersion,
-        label: input.label?.trim() || `${verified.title} v${verified.releaseVersion}`,
+        label: input.label?.trim() || `${verified.title}${verified.nativePrototype ? ' 本地原型' : ''} v${verified.releaseVersion}`,
         manifestJson, contentHash, createdAt: now,
       }
       transactionStage = 'insert-release'

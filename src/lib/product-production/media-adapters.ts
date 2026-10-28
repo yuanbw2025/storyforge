@@ -68,7 +68,9 @@ export interface MediaTransportResponseV1 {
 
 export interface MediaProviderTransportV1 {
   executionLocation: MediaExecutionLocationV1
-  request(input: RedactedMediaTransportRequestV1, signal: AbortSignal): Promise<MediaTransportResponseV1>
+  rawResponseEvidence?: 'utf8-text-v1'
+  request(input: RedactedMediaTransportRequestV1, signal: AbortSignal,
+    onRawResponse?: (response: { status: number; contentType: string | null; providerRequestId: string | null; text: string }) => Promise<void>): Promise<MediaTransportResponseV1>
   fetchExternalAsset?(input: { url: string; maximumBytes: number }, signal: AbortSignal): Promise<ArrayBuffer>
 }
 
@@ -371,81 +373,88 @@ function agnesImageRatio(width: number | null, height: number | null): string {
  * but a dedicated image model and endpoint. The adapter receives only a
  * credential-holding transport; requests and durable receipts stay redacted.
  */
-export const agnesImage21FlashAdapterV1: ProductMediaProviderAdapterV1 = {
-  capability: AGNES_IMAGE_CAPABILITY,
-  async estimate(request) { assertRequest(request, AGNES_IMAGE_CAPABILITY); return estimate(request, 4_000_000, 120_000) },
-  async generate(request, transport, signal) {
-    assertRequest(request, AGNES_IMAGE_CAPABILITY)
-    if (!AGNES_IMAGE_CAPABILITY.executionLocations.includes(transport.executionLocation)) {
-      fail('Agnes 图片 transport 位置未授权')
-    }
-    const ratio = agnesImageRatio(request.width, request.height)
-    const prompt = request.negativePrompt.trim()
-      ? `${request.prompt}\nAvoid: ${request.negativePrompt}`
-      : request.prompt
-    const requiresAlpha = request.mediaKind === 'character-pose' || request.mediaKind === 'character-expression'
-    const response = await transport.request({
-      adapterId: AGNES_IMAGE_CAPABILITY.adapterId, requestId: request.requestId, method: 'POST',
-      endpoint: '/v1/images/generations', allowedDataClasses: [...request.allowedDataClasses],
-      body: {
-        model: 'agnes-image-2.1-flash', prompt, size: '1K', ratio, return_base64: true,
-        extra_body: { response_format: 'b64_json' },
-      },
-    }, signal)
-    assertProviderResponse(response, 'Agnes 图片')
-    const root = row(response.json, 'Agnes image response')
-    allowedKeys(root, [
-      'created', 'data', 'usage',
-      'background', 'output_format', 'quality', 'size', 'task_id',
-    ], 'Agnes image response')
-    if (root.task_id != null && (typeof root.task_id !== 'string' || !KEY.test(root.task_id))) {
-      fail('Agnes image response.task_id 元数据无效')
-    }
-    for (const metadataKey of ['background', 'output_format', 'quality', 'size'] as const) {
-      const value = root[metadataKey]
-      if (value != null && (typeof value !== 'string' || value.length > 100)) {
-        fail(`Agnes image response.${metadataKey} 元数据无效`)
+function createAgnesImageAdapterV1(model:'agnes-image-2.1-flash'|'agnes-image-2.5-flash'):ProductMediaProviderAdapterV1 {
+  const capability:ProductMediaProviderCapabilityV1=model==='agnes-image-2.1-flash'?AGNES_IMAGE_CAPABILITY
+    :{...AGNES_IMAGE_CAPABILITY,adapterId:'agnes.image-2.5-flash.v1'}
+  return {
+    capability,
+    async estimate(request) { assertRequest(request, capability); return estimate(request, 4_000_000, 120_000) },
+    async generate(request, transport, signal) {
+      assertRequest(request, capability)
+      if (!capability.executionLocations.includes(transport.executionLocation)) {
+        fail('Agnes 图片 transport 位置未授权')
       }
-    }
-    if (!Array.isArray(root.data) || root.data.length !== request.count) fail('Agnes 图片数量不一致')
-    return Promise.all(root.data.map(async (raw, index) => {
-      const image = row(raw, `Agnes image data[${index}]`)
-      allowedKeys(image, ['url', 'b64_json', 'revised_prompt'], `Agnes image data[${index}]`)
-      const hasBase64 = typeof image.b64_json === 'string' && image.b64_json.trim().length > 0
-      const hasUrl = typeof image.url === 'string' && image.url.trim().length > 0
-      if (hasBase64 === hasUrl) fail(`Agnes image data[${index}] 必须且只能提供一个图片载荷`)
-      let data: ArrayBuffer
-      let providerDelivery: 'base64' | 'url'
-      let providerAssetOrigin: string | null = null
-      if (hasBase64) {
-        data = decodeBase64(image.b64_json)
-        providerDelivery = 'base64'
-      } else {
-        if (!transport.fetchExternalAsset) fail('Agnes URL 图片 transport 未授权')
-        data = await transport.fetchExternalAsset({ url: String(image.url), maximumBytes: 100 * 1024 * 1024 }, signal)
-        providerDelivery = 'url'
-        try { providerAssetOrigin = new URL(String(image.url)).origin } catch { fail('Agnes 图片 URL 无效') }
-      }
-      return candidate({
-        adapterId: AGNES_IMAGE_CAPABILITY.adapterId, request, candidateIndex: index,
-        data, expectedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
-        origin: 'generated', commercialUse: true, transport, response,
-        metadata: {
-          model: 'agnes-image-2.1-flash', providerSize: '1K', providerRatio: ratio,
-          requestedWidth: request.width, requestedHeight: request.height,
-          requestedTransparentBackground: requiresAlpha,
-          providerDelivery, providerAssetOrigin,
-          providerBackground: typeof root.background === 'string' ? root.background : null,
-          providerOutputFormat: typeof root.output_format === 'string' ? root.output_format : null,
-          providerQuality: typeof root.quality === 'string' ? root.quality : null,
-          providerResolvedSize: typeof root.size === 'string' ? root.size : null,
-          revisedPrompt: typeof image.revised_prompt === 'string' ? image.revised_prompt : null,
+      const ratio = agnesImageRatio(request.width, request.height)
+      const prompt = request.negativePrompt.trim()
+        ? `${request.prompt}\nAvoid: ${request.negativePrompt}`
+        : request.prompt
+      const requiresAlpha = request.mediaKind === 'character-pose' || request.mediaKind === 'character-expression'
+      const response = await transport.request({
+        adapterId: capability.adapterId, requestId: request.requestId, method: 'POST',
+        endpoint: '/v1/images/generations', allowedDataClasses: [...request.allowedDataClasses],
+        body: {
+          model, prompt, size: '1K', ratio, return_base64: true,
+          extra_body: { response_format: 'b64_json' },
         },
-      })
-    }))
-  },
-  parseAndVerify(value) { return verifyCandidate(value, AGNES_IMAGE_CAPABILITY.adapterId) },
+      }, signal)
+      assertProviderResponse(response, 'Agnes 图片')
+      const root = row(response.json, 'Agnes image response')
+      allowedKeys(root, [
+        'created', 'data', 'usage',
+        'background', 'output_format', 'quality', 'size', 'task_id',
+      ], 'Agnes image response')
+      if (root.task_id != null && (typeof root.task_id !== 'string' || !KEY.test(root.task_id))) {
+        fail('Agnes image response.task_id 元数据无效')
+      }
+      for (const metadataKey of ['background', 'output_format', 'quality', 'size'] as const) {
+        const value = root[metadataKey]
+        if (value != null && (typeof value !== 'string' || value.length > 100)) {
+          fail(`Agnes image response.${metadataKey} 元数据无效`)
+        }
+      }
+      if (!Array.isArray(root.data) || root.data.length !== request.count) fail('Agnes 图片数量不一致')
+      return Promise.all(root.data.map(async (raw, index) => {
+        const image = row(raw, `Agnes image data[${index}]`)
+        allowedKeys(image, ['url', 'b64_json', 'revised_prompt'], `Agnes image data[${index}]`)
+        const hasBase64 = typeof image.b64_json === 'string' && image.b64_json.trim().length > 0
+        const hasUrl = typeof image.url === 'string' && image.url.trim().length > 0
+        if (hasBase64 === hasUrl) fail(`Agnes image data[${index}] 必须且只能提供一个图片载荷`)
+        let data: ArrayBuffer
+        let providerDelivery: 'base64' | 'url'
+        let providerAssetOrigin: string | null = null
+        if (hasBase64) {
+          data = decodeBase64(image.b64_json)
+          providerDelivery = 'base64'
+        } else {
+          if (!transport.fetchExternalAsset) fail('Agnes URL 图片 transport 未授权')
+          data = await transport.fetchExternalAsset({ url: String(image.url), maximumBytes: 100 * 1024 * 1024 }, signal)
+          providerDelivery = 'url'
+          try { providerAssetOrigin = new URL(String(image.url)).origin } catch { fail('Agnes 图片 URL 无效') }
+        }
+        return candidate({
+          adapterId: capability.adapterId, request, candidateIndex: index,
+          data, expectedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
+          origin: 'generated', commercialUse: true, transport, response,
+          metadata: {
+            model, providerSize: '1K', providerRatio: ratio,
+            requestedWidth: request.width, requestedHeight: request.height,
+            requestedTransparentBackground: requiresAlpha,
+            providerDelivery, providerAssetOrigin,
+            providerBackground: typeof root.background === 'string' ? root.background : null,
+            providerOutputFormat: typeof root.output_format === 'string' ? root.output_format : null,
+            providerQuality: typeof root.quality === 'string' ? root.quality : null,
+            providerResolvedSize: typeof root.size === 'string' ? root.size : null,
+            revisedPrompt: typeof image.revised_prompt === 'string' ? image.revised_prompt : null,
+          },
+        })
+      }))
+    },
+    parseAndVerify(value) { return verifyCandidate(value, capability.adapterId) },
+  }
 }
+
+export const agnesImage21FlashAdapterV1=createAgnesImageAdapterV1('agnes-image-2.1-flash')
+export const agnesImage25FlashAdapterV1=createAgnesImageAdapterV1('agnes-image-2.5-flash')
 
 /**
  * Imports a project-owned, pre-generated image from a deployment-bundled media
@@ -663,6 +672,7 @@ const UNIMPLEMENTED_CAPABILITIES: ProductMediaProviderCapabilityV1[] = [
 const IMPLEMENTED_ADAPTERS = new Map<string, ProductMediaProviderAdapterV1>([
   authoredImagePackAdapterV1,
   agnesImage21FlashAdapterV1,
+  agnesImage25FlashAdapterV1,
   openAIGptImage2AdapterV1,
   elevenLabsSoundEffectsAdapterV2,
   elevenLabsMusicAdapterV2,

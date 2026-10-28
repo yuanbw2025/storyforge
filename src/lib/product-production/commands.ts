@@ -1,3 +1,14 @@
+import { deriveAvgAssemblyRecoveryBaseV1 } from '../avg/assembly-recovery'
+import { resetAvgImageRecoveryForEvolutionV1 } from '../avg/media-production-policy'
+import { avgMediaProductionEnabledV2, avgVoiceProductionEnabledV3 } from '../avg/assembly-contract'
+import { assertAvgStoredAssemblyBriefV3 } from '../avg/voice-assembly-storage'
+import { avgVisualPlanningExecutionReadyV4 } from '../avg/visual-planning-brief'
+import { avgVisualPlanningExecutionReadyV5 } from '../avg/visual-planning-brief-v5'
+import { avgSoundProductionExecutionReadyV1 } from '../avg/sound-production-brief'
+import { avgAudioProcessingExecutionReadyV1 } from '../avg/audio-production-brief'
+import { assertAvgNoUnresolvedVoiceRequestsV1 } from '../avg/voice-request-safety'
+import { avgPendingVoiceRequestsV1, resetAvgVoiceRecoveryForEvolutionV1, validateAvgVoiceRecoveryV1 } from '../avg/voice-recovery'
+import { avgVoiceRecoveryParentNumber } from '../avg/voice-local-repair-contract'
 import {CHAT_OPENING_REVIEW_KEY, assertChatOpeningReviewedV1, minimumChatOpeningReviewVersionV1} from '../character-interaction/situation-production-review'
 import {CHAT_MEDIA_AUTHOR_GATE, readCurrentChatMediaReviewV1} from './chat-media-authority'
 import {confirmChatMediaSelectionV1} from '../character-interaction/media-selection'
@@ -24,8 +35,8 @@ import type {
   MediaBlobObjectRecordV1,
   ProductBuildArtifactRecordV1,
   ProductBuildRecordV1,
-  ProductProductionBriefV3,
   ProductProductionPlanV3,
+  ProductProductionBriefV3,
   ProductProductionBriefRecordV1,
   ProductProductionCommandRecordV1,
   ProductProductionCommandV1,
@@ -117,6 +128,7 @@ import { prepareTextOpenWorldBudgetRecoveryV1, createTextOpenWorldBudgetRecovery
   type TextOpenWorldBudgetRecoveryPreparationV1, type TextOpenWorldBudgetRecoveryAuthorizationV1,
 } from '../open-world/creator-budget-recovery'
 import type { TextOpenWorldCreatorMediaAuthorizationV1 } from '../open-world/creator-media-contract'
+import { applyAvgAuthorArtifactAdoptionV1, AvgAuthorArtifactErrorV1 } from '../avg/author-artifacts'
 
 export type ProductProductionErrorCodeV1 =
   | 'production-not-found'
@@ -139,6 +151,7 @@ export type ProductProductionErrorCodeV1 =
   | 'preview-stale'
   | 'publication-intent-stale'
   | 'media-revision-invalid'
+  | 'avg-artifact-invalid'
   | 'publication-transaction-failed'
 
 export interface ProductProductionCommandReceiptV1 {
@@ -171,6 +184,24 @@ class ExpectedCommandFailure extends Error {
 
 function reject(code: ProductProductionErrorCodeV1, message: string): never {
   throw new ExpectedCommandFailure(code, message)
+}
+
+async function assertVoicePacketForCommand(brief: ProductProductionBriefV3, scope: WorkspaceScope,
+  productionId: number, expectedParentBuildNumber: number | null) {
+  let resolved: Awaited<ReturnType<typeof assertAvgStoredAssemblyBriefV3>>
+  try {
+    const check = () => assertAvgStoredAssemblyBriefV3(brief.avgAssembly)
+    resolved = Dexie.currentTransaction ? await Dexie.waitFor(Dexie.ignoreTransaction(check), 20_000) : await check()
+  } catch { reject('brief-not-authorized', '配音合同的精确字符、请求或能力绑定无效，请重新准备') }
+  try {
+    if (resolved.assembly.voice.recovery) {
+      if (avgVoiceRecoveryParentNumber(resolved.assembly.voice.recovery) !== expectedParentBuildNumber) throw new Error('[avg-voice] 配音恢复必须绑定当前准确父版本')
+      await validateAvgVoiceRecoveryV1({ scope, productionId, brief })
+    }
+    const pending = avgPendingVoiceRequestsV1(resolved.assembly, resolved.requests)
+    if (pending.length) await assertAvgNoUnresolvedVoiceRequestsV1({ scope, requests: pending })
+  }
+  catch (error) { reject('brief-not-authorized', error instanceof Error ? error.message : '历史配音调用状态不可验证，不能重发') }
 }
 
 // authorDraftJson is contractually capped at 120k characters. Keep enough
@@ -1117,6 +1148,14 @@ async function applyCommand(input: {
     reject('production-state-conflict', `Production revision 已从 ${command.expectedStateRevision} 变为 ${production.stateRevision}`)
   }
 
+  if (command.type === 'adopt-avg-artifact') {
+    try { return await applyAvgAuthorArtifactAdoptionV1({ scope, production, command, now }) }
+    catch (cause) {
+      if (cause instanceof AvgAuthorArtifactErrorV1) reject('avg-artifact-invalid', cause.message)
+      throw cause
+    }
+  }
+
   if (command.type === 'book-local-no-dispatch') {
     const prepared = input.preparedLocalNoDispatchBooking
     if (!prepared || production.productType !== 'ttrpg') reject('invalid-state-transition', '缺少已核对的未发送证明')
@@ -1180,11 +1219,11 @@ async function applyCommand(input: {
   }
 
   if (command.type === 'save-brief-revision') {
+    const brief = command.brief
     const expectedParent = production.currentBriefRevision
     if (command.parentRevision !== expectedParent) reject('production-state-conflict', 'Brief parent revision 已过期')
     const revision = await nextBriefRevision(production.id)
     const openBrief = input.preparedTtrpgOpenBrief
-    const brief = command.brief
     const briefHash = openBrief?.contentHash ?? input.preparedBriefHash
     const sourcePlan = openBrief?.content.sourcePlan ?? input.preparedSourcePlan
     if (!briefHash || !sourcePlan) {
@@ -1206,6 +1245,14 @@ async function applyCommand(input: {
       if (brief.intent.productType !== production.productType) {
         reject('production-state-conflict', 'Brief 产品身份与 Production 根记录不一致')
       }
+      // AVG extensions belong to this legacy Brief. Open TTRPG V3 carries
+      // its own prepared content and deliberately has no legacy Brief.
+      if (brief.avgAudioProcessing && !avgAudioProcessingExecutionReadyV1()) reject('brief-not-authorized', 'AVG 本地声音加工链尚未就绪，请保留原件，稍后再开始')
+      if (brief.avgSoundPlanning && !avgSoundProductionExecutionReadyV1()) reject('brief-not-authorized', 'AVG 声音实际生产、审听和采用闭环尚未接通，不能准备新任务')
+      if (brief.avgVisualPlanning && !(brief.avgVisualPlanning.version===5?avgVisualPlanningExecutionReadyV5():avgVisualPlanningExecutionReadyV4())) reject('brief-not-authorized', 'AVG 专业视觉候选采用和需求消费尚未接通，不能准备新任务')
+      if (brief.avgAssembly?.version === 3 && !avgVoiceProductionEnabledV3()) reject('brief-not-authorized', 'AVG 配音生产的采用、编译与恢复闭环尚未开放，不能准备新任务')
+      if (brief.avgAssembly?.version === 3) await assertVoicePacketForCommand(brief, scope, production.id, production.currentBuildNumber)
+      if (brief.avgAssembly?.version === 2 && !avgMediaProductionEnabledV2()) reject('brief-not-authorized', 'AVG 实验性媒资生产尚未启用，不能准备新任务')
       if (sourcePlan.productInstanceKey !== production.productionKey
         || sourcePlan.productType !== brief.intent.productType
         || sourcePlan.worldReference.localReleaseRecordId !== brief.source.worldReleaseId
@@ -1362,6 +1409,14 @@ async function applyCommand(input: {
       reject('brief-not-authorized', 'open Brief 当前保存内容或 SourcePlan 已变化')
     }
     const brief = openBrief ? null : parseProductProductionBriefV3(briefRow.briefJson)
+    if (brief) {
+      if (brief.avgAudioProcessing && !avgAudioProcessingExecutionReadyV1()) reject('brief-not-authorized', 'AVG 本地声音加工链尚未就绪，请保留原件，稍后再开始')
+      if (brief.avgSoundPlanning && !avgSoundProductionExecutionReadyV1()) reject('brief-not-authorized', 'AVG 声音实际生产、审听和采用闭环尚未接通，不能开始新调用')
+      if (brief.avgVisualPlanning && !(brief.avgVisualPlanning.version===5?avgVisualPlanningExecutionReadyV5():avgVisualPlanningExecutionReadyV4())) reject('brief-not-authorized', 'AVG 专业视觉候选采用和需求消费尚未接通，不能开始新调用')
+      if (brief.avgAssembly?.version === 3 && !avgVoiceProductionEnabledV3()) reject('brief-not-authorized', 'AVG 配音生产的采用、编译与恢复闭环尚未开放，不能开始新任务')
+      if (brief.avgAssembly?.version === 3) await assertVoicePacketForCommand(brief, scope, production.id, production.currentBuildNumber)
+      if (brief.avgAssembly?.version === 2 && !avgMediaProductionEnabledV2()) reject('brief-not-authorized', 'AVG 实验性媒资生产尚未启用，不能开始新任务')
+    }
     if (brief && brief.unresolvedDecisionKeys.length > 0) reject('brief-unresolved', 'Brief 仍有未解决决策')
     const confirmedBrief = input.preparedConfirmedBrief
     if (!confirmedBrief || confirmedBrief.productInstanceKey !== production.productionKey
@@ -2163,9 +2218,13 @@ async function applyCommand(input: {
     if (build.status === 'released' || production.status === 'released') reject('invalid-state-transition', '已发布 Build 不允许 stop 回滚')
     const controlEpoch = production.controlEpoch + 1
     const stateRevision = production.stateRevision + 1
+    const stoppedBrief = production.productType === 'avg' ? await db.productProductionBriefs.where('[productionId+revision]').equals([production.id,build.briefRevision]).first() : null
+    const stoppedAvg = stoppedBrief ? parseProductProductionBriefV3(stoppedBrief.briefJson) : null
+    const nativeFailure = stoppedAvg && (stoppedAvg.avgAssembly || stoppedAvg.avgVisualPlanning) && build.failureJson !== '{}'
+      ? { priorFailureJson: build.failureJson } : {}
     await db.productBuilds.update(build.id, {
       status: 'cancelled', resumeState: null, controlEpoch, stateRevision: build.stateRevision + 1,
-      failureJson: safeJson({ code: 'user-stopped', retention: command.retention }), completedAt: now, updatedAt: now,
+      failureJson: safeJson({ code: 'user-stopped', retention: command.retention, ...nativeFailure }), completedAt: now, updatedAt: now,
     })
     if (command.retention === 'discard-unreleased') {
       await db.productBuildArtifacts.where('buildId').equals(build.id).filter(row => row.status !== 'orphaned').modify({ status: 'orphaned', updatedAt: now })
@@ -2983,9 +3042,25 @@ async function applyCommand(input: {
     && affectedLanes.includes('content') && affectedLanes.includes('visual')
   const runtimeCopyRecovery = recoveryBase != null
     && affectedLanes.length === 1 && affectedLanes[0] === 'runtime'
-  const recoveryEvolution = budgetRecovery || planUpgradeRecovery || visualContractRecovery
+  let nativeRecovery = false
+  if (recoveryBase && production.productType === 'avg'
+    && canonicalProductProductionJsonV2([...affectedLanes].sort()) === canonicalProductProductionJsonV2(['audio','content','product','visual'])) {
+    const base = await db.productBuilds.where('[productionId+buildNumber]').equals([production.id,recoveryBase.buildNumber]).first()
+    const briefRow = base ? await db.productProductionBriefs.where('[productionId+revision]').equals([production.id,base.briefRevision]).first() : null
+    if (!base || !briefRow || production.currentBuildNumber !== base.buildNumber || production.currentBriefRevision !== base.briefRevision
+      || briefRow.status !== 'authorized' || briefRow.authorizedAt !== base.authorizedAt
+      || !await assertRecordInScope(scope,'productBuilds',base,{owner:'work'}) || !await assertRecordInScope(scope,'productProductionBriefs',briefRow,{owner:'work'})) reject('source-stale','AVG 恢复基线已变化')
+    try {
+      nativeRecovery = canonicalProductProductionJsonV2(await deriveAvgAssemblyRecoveryBaseV1(base,parseProductProductionBriefV3(briefRow.briefJson),scope)) === canonicalProductProductionJsonV2(recoveryBase)
+    } catch { reject('source-stale','AVG 恢复基线缺少准确的冻结来源证据') }
+    if (!nativeRecovery) reject('source-stale','AVG 恢复请求与当前冻结基线不一致')
+  }
+  const recoveryEvolution = nativeRecovery || budgetRecovery || planUpgradeRecovery || visualContractRecovery
     || preMediaContentRecovery || runtimeCopyRecovery
-  if (recoveryEvolution) {
+  if (nativeRecovery) {
+    // Native recovery keeps every old byte/receipt and requires a new start.
+  } else if (recoveryEvolution) {
+    if (!recoveryBase) reject('source-stale', '恢复版本缺少冻结基线')
     if (production.productType !== 'text-adventure'
       || production.currentBuildNumber !== recoveryBase.buildNumber) {
       reject('invalid-state-transition', '只有当前文字冒险恢复 Build 可以升级生产预算、执行计划或视觉合同')
@@ -3083,7 +3158,7 @@ async function applyCommand(input: {
     generationPolicy = original
   }
   const publicSemanticsAffected = contentAffected || runtimeCopyRecovery
-  const budgetFloor = recoveryEvolution ? textAdventureProductionBudgetFloorV1(priorBrief) : null
+  const budgetFloor = recoveryEvolution && production.productType === 'text-adventure' ? textAdventureProductionBudgetFloorV1(priorBrief) : null
   if (budgetRecovery && budgetFloor
     && !isTextAdventureBuildLifetimeBudgetExhaustedV1(
       (await db.productBuilds.where('[productionId+buildNumber]')
@@ -3119,6 +3194,8 @@ async function applyCommand(input: {
     } : generationPolicy.productionBudget,
     capabilityRequirements: generationPolicy.capabilityRequirements,
     completionContract: generationPolicy.completionContract,
+    ...resetAvgImageRecoveryForEvolutionV1(priorBrief),
+    ...await resetAvgVoiceRecoveryForEvolutionV1(priorBrief),
     unresolvedDecisionKeys: [],
     evolution: {
       schema: 'storyforge.product-evolution-impact', version: 1,
@@ -3202,6 +3279,14 @@ async function executeTransaction(input: {
     db.productReleases,
     db.productProductions, db.productProductionBriefs, db.productProductionCommands,
     db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects, db.productQualityGateReceipts,
+    // AVG recovery re-reads the original author reference while proving a
+    // received failure; it must share this transaction rather than lose that
+    // proof or read outside the command's consistent snapshot.
+    ...(command.type === 'adopt-avg-artifact' || command.type === 'evolve' && command.base.kind === 'recovery-build' ? [db.avgDraftMedia] : []),
+    // Single-line local voice repair proves the adopted parent stage in the
+    // same command snapshot; its manually imported companion media stay scoped.
+    ...(command.type === 'save-brief-revision' && command.brief?.avgAssembly?.version === 3
+      || command.type === 'authorize-start' && input.preparedSourcePlan?.productType === 'avg' ? [db.avgDraftMedia] : []),
     db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, db.agentRunArtifacts,
     ...(command.type === 'authorize-text-open-world-creator-start'
       // Creator source adapters expose only opaque transaction capabilities;

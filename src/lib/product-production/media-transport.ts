@@ -53,6 +53,14 @@ export interface ConfiguredAgnesImageBindingReceiptV1 {
   receiptHash: string
 }
 
+/** Explicit second image route. V1 remains the original 2.1 identity. */
+export interface ConfiguredAgnesImageBindingReceiptV2 extends Omit<ConfiguredAgnesImageBindingReceiptV1,'version'|'adapterId'|'model'> {
+  version:2
+  adapterId:'agnes.image-2.5-flash.v1'
+  model:'agnes-image-2.5-flash'
+}
+export interface ConfiguredAgnesImageReadinessV2 extends Omit<ConfiguredAgnesImageReadinessV1,'model'> {model:'agnes-image-2.5-flash'}
+
 export interface AuthoredImagePackBindingReceiptV1 {
   schema: 'storyforge.authored-image-pack-binding-receipt'
   version: 1
@@ -72,6 +80,7 @@ export interface AuthoredImagePackBindingReceiptV1 {
 export type ProductMediaCapabilityBindingReceiptV1 =
   | MediaRelayBindingReceiptV1
   | ConfiguredAgnesImageBindingReceiptV1
+  | ConfiguredAgnesImageBindingReceiptV2
   | AuthoredImagePackBindingReceiptV1
 
 export interface ResolvedProductMediaCapabilityV1 {
@@ -263,6 +272,25 @@ function agnesImageEndpoint(baseUrl: string): URL {
   return endpoint
 }
 
+/** Non-secret exact route identity for products that freeze provider routes.
+ * Existing capability receipts keep their V1 bytes and identity semantics. */
+export async function configuredAgnesImageEndpointHashV1(input: { projectId: number; config?: AIConfig }): Promise<string> {
+  const endpoint = agnesImageEndpoint(configuredAgnesConfig(input.config).baseUrl)
+  return hashProductProductionValueV2({ schema: 'storyforge.agnes-image-route', version: 1,
+    method: 'POST', origin: endpoint.origin, path: endpoint.pathname, model: 'agnes-image-2.1-flash' })
+}
+
+/** No dispatch/selection authority. Callers must freeze the explicit model and
+ * route instead of rewriting an earlier 2.1 request or receipt. */
+export async function configuredAgnesImageEndpointHashV2(input:{projectId:number;config?:AIConfig}):Promise<string>{
+  const endpoint=agnesImageEndpoint(configuredAgnesConfig(input.config).baseUrl)
+  return hashProductProductionValueV2({schema:'storyforge.agnes-image-route',version:2,
+    method:'POST',origin:endpoint.origin,path:endpoint.pathname,model:'agnes-image-2.5-flash'})
+}
+export function inspectConfiguredAgnesImageCapabilityV2(input:{projectId:number;config?:AIConfig}):ConfiguredAgnesImageReadinessV2{
+  return {...inspectConfiguredAgnesImageCapabilityV1(input),model:'agnes-image-2.5-flash'}
+}
+
 export function inspectConfiguredAgnesImageCapabilityV1(input: {
   projectId: number
   config?: AIConfig
@@ -298,9 +326,10 @@ function responseRequestId(response: Response, json?: unknown): string | null {
   return null
 }
 
-async function readAgnesJson(response: Response): Promise<unknown> {
+async function readAgnesJson(response: Response, onRawResponse?: Parameters<MediaProviderTransportV1['request']>[2]): Promise<unknown> {
   boundedContentLength(response)
   const text = await response.text()
+  await onRawResponse?.({ status: response.status, contentType: response.headers.get('content-type'), providerRequestId: responseRequestId(response), text })
   if (new TextEncoder().encode(text).byteLength > MAX_RELAY_RESPONSE_BYTES) fail('Agnes 图片响应过大')
   try { return text ? JSON.parse(text) : null } catch { fail('Agnes 图片响应不是合法 JSON') }
 }
@@ -308,7 +337,10 @@ async function readAgnesJson(response: Response): Promise<unknown> {
 function createConfiguredAgnesImageTransportV1(input: {
   config: AIConfig
   fetcher?: Fetcher
+  image25?: boolean
 }): MediaProviderTransportV1 {
+  const adapterId=input.image25?'agnes.image-2.5-flash.v1':'agnes.image-2.1-flash.v1'
+  const model=input.image25?'agnes-image-2.5-flash':'agnes-image-2.1-flash'
   const endpoint = agnesImageEndpoint(input.config.baseUrl)
   const fetcher = input.fetcher ?? DEFAULT_FETCHER
   const validateAssetUrl = (raw: string): URL => {
@@ -324,8 +356,9 @@ function createConfiguredAgnesImageTransportV1(input: {
   }
   return {
     executionLocation: 'browser-direct',
-    async request(request: RedactedMediaTransportRequestV1, signal: AbortSignal) {
-      if (request.adapterId !== 'agnes.image-2.1-flash.v1' || !SAFE_ID.test(request.requestId)
+    rawResponseEvidence: 'utf8-text-v1',
+    async request(request: RedactedMediaTransportRequestV1, signal: AbortSignal, onRawResponse?: Parameters<MediaProviderTransportV1['request']>[2]) {
+      if (request.adapterId !== adapterId || request.body.model!==model || !SAFE_ID.test(request.requestId)
         || request.method !== 'POST' || request.endpoint !== '/v1/images/generations'
         || request.allowedDataClasses.some(item => !SAFE_ID.test(item))) {
         fail('Agnes 图片请求不符合已登记能力合同')
@@ -342,7 +375,7 @@ function createConfiguredAgnesImageTransportV1(input: {
         },
         body: JSON.stringify(request.body),
       })
-      const json = await readAgnesJson(response)
+      const json = await readAgnesJson(response, onRawResponse)
       const usage = json && typeof json === 'object' && !Array.isArray(json)
         ? (json as Record<string, unknown>).usage ?? null
         : null
@@ -376,48 +409,56 @@ function createConfiguredAgnesImageTransportV1(input: {
   }
 }
 
-export async function resolveConfiguredAgnesImageCapabilityV1(input: {
+interface ConfiguredAgnesImageInput {
   projectId: number
   requirement: ProviderCapabilityRequirementV1
   config?: AIConfig
   fetcher?: Fetcher
   now?: number
-}): Promise<ResolvedProductMediaCapabilityV1> {
+}
+async function resolveConfiguredAgnesImage(input:ConfiguredAgnesImageInput,image25:boolean):Promise<ResolvedProductMediaCapabilityV1>{
   if (input.requirement.mediaClass !== 'image') fail('Agnes 图片 capability 只能绑定 image requirement')
   const config = configuredAgnesConfig(input.config)
   const readiness = inspectConfiguredAgnesImageCapabilityV1({ projectId: input.projectId, config })
   if (!readiness.ready) fail(readiness.issue || 'Agnes 图片能力未就绪')
-  const adapterId = 'agnes.image-2.1-flash.v1' as const
+  const adapterId = image25?'agnes.image-2.5-flash.v1' as const:'agnes.image-2.1-flash.v1' as const
+  const model=image25?'agnes-image-2.5-flash' as const:'agnes-image-2.1-flash' as const
+  const version=image25?2 as const:1 as const
   const adapter = resolveProductMediaProviderAdapterV1(adapterId)
   const identity = {
-    schema: 'storyforge.configured-agnes-image-capability' as const, version: 1 as const,
+    schema: 'storyforge.configured-agnes-image-capability' as const, version,
     requirementKey: input.requirement.requirementKey, adapterId, adapterVersion: 1 as const,
-    provider: 'agnes' as const, model: 'agnes-image-2.1-flash' as const,
+    provider: 'agnes' as const, model,
     endpointOrigin: readiness.endpointOrigin, executionLocation: 'browser-direct' as const,
     credentialSource: 'existing-ai-config' as const, credentialPresent: true as const,
   }
   const capabilityHash = await hashProductProductionValueV2(identity)
   const body = {
-    schema: 'storyforge.configured-agnes-image-binding-receipt' as const, version: 1 as const,
+    schema: 'storyforge.configured-agnes-image-binding-receipt' as const, version,
     requirementKey: input.requirement.requirementKey, adapterId, adapterVersion: 1 as const,
-    provider: 'agnes' as const, model: 'agnes-image-2.1-flash' as const,
+    provider: 'agnes' as const, model,
     endpointOrigin: readiness.endpointOrigin, executionLocation: 'browser-direct' as const,
     credentialSource: 'existing-ai-config' as const, credentialPresent: true as const,
     capabilityHash, boundAt: input.now ?? Date.now(),
   }
-  const receipt: ConfiguredAgnesImageBindingReceiptV1 = {
+  const receipt = {
     ...body, receiptHash: await hashProductProductionValueV2(body),
-  }
+  } as ConfiguredAgnesImageBindingReceiptV1|ConfiguredAgnesImageBindingReceiptV2
   if (/api[-_]?key|authorization|bearer/i.test(JSON.stringify(receipt))) {
     fail('Agnes 图片 binding receipt 含敏感字段')
   }
   return {
     adapter,
-    transport: createConfiguredAgnesImageTransportV1({ config, fetcher: input.fetcher }),
+    transport: createConfiguredAgnesImageTransportV1({ config, fetcher: input.fetcher,image25 }),
     binding: { requirementKey: input.requirement.requirementKey, adapterId, bindingHash: capabilityHash },
     receipt,
   }
 }
+
+/** Legacy route remains exactly 2.1 regardless of the configured text model. */
+export function resolveConfiguredAgnesImageCapabilityV1(input:ConfiguredAgnesImageInput){return resolveConfiguredAgnesImage(input,false)}
+/** Explicit 2.5 route only; no fallback to 2.1 on any failure. */
+export function resolveConfiguredAgnesImageCapabilityV2(input:ConfiguredAgnesImageInput){return resolveConfiguredAgnesImage(input,true)}
 
 export function configuredAuthoredImagePackUrlV1(): string | null {
   const value = import.meta.env.VITE_STORYFORGE_AUTHORED_IMAGE_PACK_URL?.trim()
@@ -581,6 +622,7 @@ export async function resolveAuthoredImagePackCapabilityV1(input: {
   }
 }
 
+
 function relayEndpoint(value: string, environment: 'test' | 'development' | 'production'): URL {
   let base: URL
   try { base = new URL(value) } catch { fail('Relay URL 无效') }
@@ -625,6 +667,7 @@ function providerUsage(response: Response): unknown {
   const bytes = Uint8Array.from(binary, character => character.charCodeAt(0))
   try { return JSON.parse(new TextDecoder().decode(bytes)) } catch { fail('Relay usage header 不是合法 JSON') }
 }
+
 
 async function readRelayResponse(response: Response): Promise<Pick<MediaTransportResponseV1, 'body' | 'json'>> {
   boundedContentLength(response)

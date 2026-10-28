@@ -1,12 +1,12 @@
 import type {
-  ProductBuildPreviewManifestV1, ProductReleaseManifestV1, ProductRuntimePackageV1,
+  AnyProductBuildPreviewManifest, ProductReleaseManifestV1, ProductRuntimePackageV1,
   ProductRuntimeSourceManifestV1, ProductSourcePlan,
   ProductBuildRecordV1, ProductProductionBriefRecordV1,
 } from '../types'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../product-production/hash'
 import { validateProductSourcePlan } from './source-contracts'
 import { parseProductProductionSourcePlanV1 } from '../product-production/source-contracts'
-import { verifyProductBuildPreviewManifestV1 } from '../product-production/preview-manifest'
+import { verifyProductBuildPreviewManifest } from '../product-production/preview-manifest'
 
 /** Only the neutral source envelope is consumed here. Product-private payloads
  * remain on the original object for whole-package hashing and their own parser. */
@@ -70,7 +70,7 @@ export async function runtimeSourceManifestFromReleaseV1(
 
 /** Preview has no release SourceManifest; do not invent production read evidence. */
 export async function runtimeSourceManifestFromPreviewV1(input: {
-  preview: ProductBuildPreviewManifestV1
+  preview: AnyProductBuildPreviewManifest
   sourcePlan: ProductSourcePlan
 }): Promise<ProductRuntimeSourceManifestV1 | null> {
   return createManifest({ sourcePlan: input.sourcePlan, runtimePackage: input.preview.runtimePackage,
@@ -94,7 +94,7 @@ export async function runtimeSourceManifestFromBuildRecordsV1(input: {
     return null
   }
   const sourcePlan = await parseProductProductionSourcePlanV1(input.brief)
-  const preview = await verifyProductBuildPreviewManifestV1(input.build.previewManifestJson)
+  const preview = await verifyProductBuildPreviewManifest(input.build.previewManifestJson)
   if (input.build.briefHash !== input.brief.briefHash || input.build.previewHash !== preview.previewHash
     || input.build.packageHash !== preview.packageHash || input.build.manifestHash !== preview.buildManifestHash) {
     fail('预览会话的 Build 或 Brief 绑定损坏')

@@ -1,3 +1,4 @@
+import { parseAvgOnceAudioStateV1 } from './once-audio-runtime'
 import type {
   AvgCueType,
   AvgPresentationContentV1,
@@ -235,6 +236,7 @@ export function parseAvgPresentationState(value: unknown): AvgRuntimePresentatio
     reachedBeatKeys: (row.reachedBeatKeys as unknown[]).map(item => stableKey(item, 'reachedBeatKey')),
     readBeatKeys: (row.readBeatKeys as unknown[]).map(item => stableKey(item, 'readBeatKey')),
     stage, snapshots: structuredClone(snapshots), mediaFailures: failures,
+    ...(Object.prototype.hasOwnProperty.call(row, 'onceAudio') ? { onceAudio: parseAvgOnceAudioStateV1(row.onceAudio) } : {}),
   }
 }
 

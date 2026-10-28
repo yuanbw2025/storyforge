@@ -35,6 +35,17 @@ function byteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength
 }
 
+/** Only the native hash runs outside the caller's transaction context. Keep
+ * its transaction alive until that pure calculation finishes, then perform
+ * all subsequent reads in the same atomic snapshot. Wrapping the complete
+ * reader in waitFor would also enclose database work and can block it.
+ */
+function hashExactArtifactContent(content: string): PromiseLike<string> {
+  return Dexie.currentTransaction
+    ? Dexie.waitFor(Dexie.ignoreTransaction(() => sha256Text(content)), 20_000)
+    : sha256Text(content)
+}
+
 function assertSafeContent(artifactKind: ExactRunArtifactKindV1, content: string): void {
   assertExactRunArtifactBodySafeV1({ artifactKind, body: content })
   try {
@@ -173,8 +184,7 @@ export async function inspectAgentRunArtifactAvailabilityV1(input: {
       pruneReceiptHash: row.pruneReceiptHash,
     }
   }
-  const contentHash = row.content == null ? null : await (Dexie.currentTransaction ? Dexie.waitFor(sha256Text(row.content)) : sha256Text(row.content))
-  if (row.content == null || contentHash !== row.contentHash || byteLength(row.content) !== row.byteLength) {
+  if (row.content == null || await hashExactArtifactContent(row.content) !== row.contentHash || byteLength(row.content) !== row.byteLength) {
     return {
       artifactKind: row.artifactKind,
       contentHash: row.contentHash,

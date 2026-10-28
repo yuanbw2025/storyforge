@@ -31,6 +31,7 @@ import {
   runProductProductionSchedulerCycleV1,
   runProductProductionUntilBlockedV1,
   ProductProductionDraftRejectedErrorV1,
+  ProductProductionRetryableExecutionErrorV1,
   textAdventureInvalidQualityRollbackSourceV1,
   invalidTextAdventureQualityReviewRollbackEpochV1,
   textAdventureQualityRollbackAlreadyAppliedV1,
@@ -2313,6 +2314,58 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
       outcome: 'failed', usageKnown: true, errorCode: 'task-draft-rejected',
       usage: expect.objectContaining({ modelCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 }),
     })])
+  })
+
+  it.each([
+    {label: 'draft', Failure: ProductProductionDraftRejectedErrorV1, storageBytes: 0, errorCode: 'task-executor-nonretryable'},
+    {label: 'retryable', Failure: ProductProductionRetryableExecutionErrorV1, storageBytes: 0, errorCode: 'task-executor-nonretryable'},
+    {label: 'over-budget', Failure: ProductProductionDraftRejectedErrorV1, storageBytes: 19, errorCode: 'task-budget-exceeded'},
+  ])('跨模块已观察失败保留实际用量且不增加重试权限: $label', async ({Failure, storageBytes, errorCode}) => {
+    const owned = await fixture('scheduler-observed-foreign-constructor')
+    const otherTasks = executorFor(owned, new Map(), {active: 0, peak: 0})
+    const usage = { modelCalls: 1, inputTokens: 101, outputTokens: 11, mediaCalls: 0, costUsd: null, durationMs: 7, storageBytes }
+    let calls = 0
+    const input = { scope: owned.scope, productionId: owned.productionId,
+      executor: async (request: Parameters<ProductProductionTaskExecutorV1>[0]) => {
+        if (request.task.taskKey !== 'content.design') return otherTasks(request)
+        calls++
+        await request.onModelOutput?.('controlled observed response before draft rejection')
+        const error = new Failure('已收到响应后校验失败', usage)
+        // Same runtime shape as a class loaded by another module/realm.
+        // Preserve the real constructor's own fields, only lose its prototype.
+        Object.setPrototypeOf(error, Error.prototype)
+        expect(error).not.toBeInstanceOf(Failure)
+        throw error
+      },
+      capabilityBindings: [{ requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+        adapterId: 'configured-text-provider.v1', bindingHash: 'a'.repeat(64) }] }
+    const result = await runProductProductionUntilBlockedV1(input)
+    const build = (await db.productBuilds.get(result.buildId))!, ledger = JSON.parse(build.budgetLedgerJson)
+    const attempt = ledger.attempts.find((a: {taskKey: string}) => a.taskKey === 'content.design')
+    expect(attempt).toMatchObject({usageKnown: true, usage, errorCode})
+    expect(result.budget.usage.modelCalls).toBe(1)
+    await runProductProductionUntilBlockedV1(input)
+    expect(calls).toBe(1)
+    expect(await db.productBuildArtifacts.where('buildId').equals(result.buildId).filter(row => row.producerRunId === attempt.runId).count()).toBe(0)
+  })
+
+  it.each(['name-only', 'malformed-attachment'] as const)('跨模块失败不从%s推断已知用量或免单', async mode => {
+    const owned = await fixture('scheduler-foreign-unknown-usage')
+    const otherTasks = executorFor(owned, new Map(), {active: 0, peak: 0})
+    let calls = 0
+    const result = await runProductProductionUntilBlockedV1({ scope: owned.scope, productionId: owned.productionId,
+      executor: async request => {
+        if (request.task.taskKey !== 'content.design') return otherTasks(request)
+        calls++
+        const usage = { modelCalls: 1, inputTokens: 1, outputTokens: 0, mediaCalls: 0, costUsd: null, durationMs: 0, storageBytes: 0 }
+        throw Object.assign(new Error('图片响应校验失败，缺少可核验用量'), { name: 'ProductProductionDraftRejectedErrorV1', usage,
+          ...(mode === 'malformed-attachment' ? {productProductionUsage: {...usage, modelCalls: -1}} : {}) })
+      },
+      capabilityBindings: [{ requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+        adapterId: 'configured-text-provider.v1', bindingHash: 'a'.repeat(64) }] })
+    const build = (await db.productBuilds.get(result.buildId))!, ledger = JSON.parse(build.budgetLedgerJson)
+    expect(ledger.attempts.find((a: {taskKey: string}) => a.taskKey === 'content.design').usageKnown).toBe(false)
+    expect(calls).toBe(1)
   })
 
   it.each([

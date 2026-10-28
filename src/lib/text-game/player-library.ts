@@ -1,8 +1,8 @@
-import type { ProductRelease, ProductRuntimePackageV1 } from '../types'
+import type { ProductRelease, AnyProductRuntimePackage } from '../types'
 
 interface PlayerLibraryRelease {
   release: ProductRelease
-  manifest: ProductRuntimePackageV1 | null
+  manifest: AnyProductRuntimePackage | null
 }
 
 function normalizedTitle(title: string): string {

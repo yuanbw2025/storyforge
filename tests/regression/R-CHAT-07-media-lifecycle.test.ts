@@ -83,11 +83,14 @@ it('returns a bounded missing-media fallback and does not mutate story state or 
 it('does not create an orphan image URL when a view is disposed during an outstanding read', async () => {
   const f = await library(), first = f.releases[0]
   let finish!: (data: ArrayBuffer) => void
-  vi.spyOn(releaseMedia, 'readProductReleaseMediaBytes').mockImplementation(() => new Promise(resolve => {finish = resolve}))
+  let beginRead!: () => void
+  const reading = new Promise<void>(resolve => {beginRead = resolve})
+  vi.spyOn(releaseMedia, 'readProductReleaseMediaBytes').mockImplementation(() => new Promise(resolve => {finish = resolve; beginRead()}))
   const createObjectURL = vi.fn(() => 'blob:should-not-exist'), revokeObjectURL = vi.fn()
   vi.stubGlobal('URL', class extends URL {static createObjectURL = createObjectURL; static revokeObjectURL = revokeObjectURL})
   const resolver = await createReleaseProductMediaResolver({scope: f.scope, productReleaseId: first.releaseId, runtimePackage: first.runtimePackage})
   const pending = resolver.preload({assetKeys: [first.asset.assetKey], maximumBytes: 1_000})
+  await reading
   resolver.dispose(); finish(first.data)
   const result = await pending
   expect(result.urls).toEqual({}); expect(result.failures[0].reason).toContain('已释放')

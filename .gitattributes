@@ -4,6 +4,9 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
+# Preserve the verbatim upstream CC0 notice, including its original line endings.
+tests/fixtures/avg-audio/KENNEY-LICENSE.txt -text -diff
+
 # Local voice profiles verify these implementation files by exact SHA-256 bytes.
 # Keep the pinned LF representation even when Windows core.autocrlf is enabled.
 scripts/ttrpg-local-tts/product-contract.mjs text eol=lf

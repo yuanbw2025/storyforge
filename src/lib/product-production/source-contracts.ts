@@ -153,7 +153,8 @@ export async function createProductProductionSourcePlanV1(input: {
 
 export function productProductionTaskUsesWorldGatewayV1(task: ProductProductionPlanTaskV3): boolean {
   const isDeterministicIntegration = task.executionMode === 'deterministic'
-    && ['runtime-package', 'chat-media-requirements', 'chat-media-review'].includes(task.kind)
+    && (['runtime-package', 'chat-media-requirements', 'chat-media-review'].includes(task.kind)
+      || task.kind === 'avg-assembly-integrate' && task.taskKey === 'avg.assembly.integrate')
   const skill = getAgentSkillV1(task.skillId ?? 'product-production.integrate.v1')
   return skill.contextGateway?.providerSourceKeys.includes('worldRelease') === true
     && (task.executionMode === 'model' || task.skillId === 'product-production.integrate.v1'
@@ -322,10 +323,16 @@ export async function executeProductProductionWorldGatewayV1(input: {
 }): Promise<ContextGatewayExecutionV1> {
   const skill = getAgentSkillV1(input.task.skillId ?? 'product-production.integrate.v1')
   await resolveProductProductionWorldScopeV1(input)
+  // Native AVG has its own final task kind. Exact plans still require the
+  // integration slice; a caller's legacy false/default cannot downgrade it
+  // to the smaller adaptation slice. Historical V1 AVG reads stay unchanged.
+  const requireCompilationResources = input.requireCompilationResources === true
+    || input.sourcePlan.version === 2 && input.task.executionMode === 'deterministic'
+      && input.task.kind === 'avg-assembly-integrate' && input.task.taskKey === 'avg.assembly.integrate'
   if (input.sourcePlan.version === 2 && input.sourcePlan.compiler.briefHash !== await hashProductProductionValueV2(input.brief)) {
     throw new Error('[product-production-source] Brief 条件已改变，必须重新确认精确 SourcePlan')
   }
-  const compilationCatalog = input.requireCompilationResources ? await openProductWorldResourceCatalogV2({
+  const compilationCatalog = requireCompilationResources ? await openProductWorldResourceCatalogV2({
     localReleaseRecordId: input.sourcePlan.worldReference.localReleaseRecordId,
     expectedProjectId: input.scope.projectId, expectedWorldId: input.scope.worldId,
     productType: input.brief.intent.productType, sourcePlan: input.sourcePlan,
@@ -337,7 +344,7 @@ export async function executeProductProductionWorldGatewayV1(input: {
   const compilationResources = compilationDescriptors.map(descriptor => descriptor.resourceKey)
   const resolvedBoundary = await resolveProductSourceReadBoundary(input.sourcePlan)
   const exactSlice = input.sourcePlan.version === 2 ? input.sourcePlan.exact.slices.find(slice => slice.key === (
-    input.task.kind === 'runtime-package' || input.requireCompilationResources ? 'integration'
+    input.task.kind === 'runtime-package' || requireCompilationResources ? 'integration'
       : ['narrative', 'product-module'].includes(input.task.kind) ? 'content' : 'adaptation'
   ))! : null
   const boundary = exactSlice ? { ...resolvedBoundary, allowedResourceKeys: [...exactSlice.resourceKeys],
