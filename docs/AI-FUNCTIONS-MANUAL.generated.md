@@ -404,9 +404,9 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:779`<br/>`src/lib/node-authoring/domain-execution.ts:844` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1785` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1763` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1753` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1787` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1765` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1755` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:607` |
@@ -557,4 +557,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `89d7d36f5`
+生成时间基准:commit `426ab6451`

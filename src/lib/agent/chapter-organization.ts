@@ -1,5 +1,8 @@
 import { db } from '../db/schema'
 import { normalizeChapterText, hashChapterText } from '../ai/chapter-memory/text-normalization'
+import { CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3, CHAPTER_ORGANIZATION_MODEL_ARRAYS_V1, resolveChapterOrganizationModelEvidenceV1 } from './chapter-organization-model'
+import { storylineEvidenceAnchorsV1 } from '../storyline/evidence-anchors'
+import { parseAuthorStoryStagesV1 } from '../types/story-arc'
 import { parseStateDiffs } from '../ai/adapters/state-extract-adapter'
 import {
   parseFactExtractResult,
@@ -286,8 +289,8 @@ function parseForeshadowCandidates(
   })
 }
 
-function compactList(values: readonly string[], limit: number): string {
-  return values.map(value => value.trim()).filter(Boolean).slice(0, limit).join('、') || '无'
+function compactList(values: readonly string[]): string {
+  return values.map(value => value.trim()).filter(Boolean).join('、') || '无'
 }
 
 export function buildChapterOrganizationPrompt(input: {
@@ -299,67 +302,62 @@ export function buildChapterOrganizationPrompt(input: {
   existingRelations: CharacterRelation[]
   foreshadows: Foreshadow[]
   storyArcs?: StoryArc[]
-  /** H5: 由 CONTEXT_SOURCES + assembleContext() 生成的受控上下文快照。 */
   contextSnapshot?: string
+  /** Only new governed calls opt into V3; old literal protocol stays readable. */
+  strictModelOutput?: boolean
 }): ChatMessage[] {
-  const characterList = input.characters
-    .filter(character => character.id != null && character.name.trim())
-    .slice(0, 120)
-    .map(character => `- #${character.id} ${character.name}`)
-    .join('\n') || '无'
-  const relationList = input.existingRelations.slice(0, 160).map(relation => (
-    `- ${relation.fromCharacterId} -> ${relation.toCharacterId} (${relation.relationType})`
-  )).join('\n') || '无'
-  const foreshadowList = input.foreshadows
-    .filter(item => item.id != null && item.status !== 'resolved')
-    .slice(0, 80)
-    .map(item => `- #${item.id} ${item.name} [${item.status}] ${item.description.slice(0, 240)}`)
-    .join('\n') || '无'
-  const storyArcList = (input.storyArcs ?? [])
-    .filter(item => item.id != null)
-    .slice(0, 120)
-    .map(item => `- #${item.id} ${item.name} [${item.type}] ${String(item.description ?? '').slice(0, 240)} stages=${item.stages}`)
-    .join('\n') || '无'
-
-  return [
-    {
-      role: 'system',
-      content: `你是 StoryForge 的“整理本章 Agent”。只从本章正文抽取明确发生的变化，输出一个严格 JSON 对象，不要 markdown，不要解释。
-
-每一条候选都必须有 sourceQuote，且必须逐字复制自正文；没有逐字证据就不要输出。只可引用登记清单中的角色和伏笔，不得新建实体。
-
+  const characterList = input.characters.filter(character => character.id != null && character.name.trim())
+    .map(character => `- #${character.id} ${character.name}`).join('\n') || '无'
+  const relationList = input.existingRelations.map(relation => `- ${relation.fromCharacterId} -> ${relation.toCharacterId} (${relation.relationType})`).join('\n') || '无'
+  const foreshadowList = input.foreshadows.filter(item => item.id != null && item.status !== 'resolved')
+    .map(item => `- #${item.id} ${item.name} [${item.status}] ${item.description}`).join('\n') || '无'
+  const arcs = (input.storyArcs ?? []).filter(item => item.id != null)
+  const storyArcList = arcs.map(item => `- #${item.id} ${item.name} [${item.type}] ${String(item.description ?? '')} stages=${item.stages}`).join('\n') || '无'
+  const anchors = storylineEvidenceAnchorsV1(input.chapterText)
+  const firstAnchor = anchors[0]?.anchorId ?? 'p1'
+  const evidence = input.strictModelOutput ? `"anchorId":"${firstAnchor}"` : '"sourceQuote":"逐字引文"'
+  const factEvidence = input.strictModelOutput ? evidence : '"quote":"逐字引文"'
+  const firstArc = arcs[0]
+  const firstStage = firstArc ? parseAuthorStoryStagesV1(firstArc.stages)[0]?.id ?? null : null
+  const storyline = JSON.stringify({
+    progress: firstArc ? [{ arcId: firstArc.id, currentStageId: firstStage, status: 'active', progressNote: '推进说明', involvedEntities: [], ...(input.strictModelOutput ? { anchorId: firstAnchor } : { quote: '逐字引文' }) }] : [],
+    crossings: [], newArcs: [],
+  })
+  const evidenceRule = input.strictModelOutput
+    ? `每条候选只填写当前正文目录的 anchorId，由系统取出准确引文；不得同时填写 quote/sourceQuote，不得猜测定位编号。没有对应证据就不输出。契约：${CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3}。`
+    : '每条候选都必须有逐字证据：普通分类用 sourceQuote，facts 和 storyline 用 quote，必须逐字复制自正文。没有证据就不输出。'
+  return [{ role: 'system', content: `你是 StoryForge 的“整理本章 Agent”。只从本章正文抽取明确发生的变化，输出一个严格 JSON 对象，不要 markdown，不要解释。
+${evidenceRule}
+角色和伏笔只可引用登记清单；清单为空时 stateDiffs、relations 或 foreshadowUpdates 对应返回空数组。故事线只能使用登记的数字 arcId 与所属阶段的准确 id，阶段未知用 JSON null，不能使用名称或字符串 "null"。每条故事线最多一项进度，多个推进点写入同一 progressNote。示例仅说明字段，不得照填目标与证据。
 JSON 结构：
 {
-  "stateDiffs":[{"entityName":"角色名","category":"character","field":"位置","oldValue":"旧值或null","newValue":"新值","sourceQuote":"逐字引文"}],
-  "facts":[{"subject":"角色名","predicate":"location|aliveStatus|healthStatus|powerStage|goal|owns|knows|relation","value":"事实值","object":"可选对象","quote":"逐字引文"}],
-  "inventoryEvents":[{"itemName":"物品","heldByName":"角色名","action":"gain|consume","quantity":1,"note":"说明","sourceQuote":"逐字引文"}],
-  "storyEvents":[{"title":"事件标题","storyTime":"正文明确时间或空串","importance":1,"description":"说明","sourceQuote":"逐字引文"}],
-  "relations":[{"char1":"角色名","char2":"角色名","type":"family|lover|friend|rival|enemy|master|student|ally|subordinate|other","label":"关系名","description":"说明","bidirectional":true,"sourceQuote":"逐字引文"}],
-  "foreshadowUpdates":[{"foreshadowId":1,"toStatus":"planted|echoed|resolved","note":"为何推进","sourceQuote":"逐字引文"}],
-  "storyline":{"progress":[{"arcId":1,"currentStageId":"阶段ID或null","status":"dormant|active|climax|resolved|abandoned","progressNote":"推进说明","involvedEntities":["实体"],"quote":"逐字引文"}],"crossings":[{"arcIdA":1,"arcIdB":2,"note":"交汇说明","quote":"逐字引文"}],"newArcs":[{"name":"候选新线","type":"main|sub","description":"登记理由","quote":"逐字引文"}]}
+  "stateDiffs":[{"entityName":"角色名","category":"character","field":"位置","oldValue":null,"newValue":"新值",${evidence}}],
+  "facts":[{"subject":"角色名","predicate":"location","value":"事实值","object":"可选对象",${factEvidence}}],
+  "inventoryEvents":[{"itemName":"物品","heldByName":"角色名","action":"gain","quantity":1,"note":"说明",${evidence}}],
+  "storyEvents":[{"title":"事件标题","storyTime":"正文明确时间或空串","importance":2,"description":"说明",${evidence}}],
+  "relations":[{"char1":"角色名","char2":"角色名","type":"ally","label":"关系名","description":"说明","bidirectional":true,${evidence}}],
+  "foreshadowUpdates":[{"foreshadowId":1,"toStatus":"echoed","note":"为何推进",${evidence}}],
+  "storyline":${storyline}
 }
-
 规则：
-1. 状态只写本章发生变化后的值，不重复当前状态；category 固定 character。
-2. 事实谓词只能使用给定 key；拿不准时省略。
-3. 物品只写实际获得或消耗，不把看见、提及、计划获得当成流水。
+1. 状态只写正文实际变化的登记角色字段，oldValue 必须与当前状态一致；不把计划和猜测当结果。
+2. 事实谓词仅 location、aliveStatus、healthStatus、powerStage、goal、owns、knows、relation，值必须符合受控语义。
+3. 物品只写实际获得或消耗，action 仅 gain/consume；看见、提及、计划获得不算流水。
 4. 年表只写改变剧情进程的大事，importance 为 1-3。
-5. 关系只写本章新建立或明确改变的关系；已有同类型关系不重复。
-6. 伏笔只可单向推进 planned→planted/echoed/resolved、planted→echoed/resolved、echoed→resolved；普通提及不等于呼应或回收。
-7. 普通分区没有候选时返回空数组；storyline 没有候选时，内部三个字段分别返回空数组。`,
-    },
-    {
-      role: 'user',
-      content: `【章节】${input.chapterTitle}
+5. 关系只写新建立或明确改变的关系；type 仅 family/lover/friend/rival/enemy/master/student/ally/subordinate/other，已有同类型关系不重复。
+6. 伏笔只可单向推进 planned→planted/echoed/resolved、planted→echoed/resolved、echoed→resolved；普通提及不算呼应或回收。
+7. storyline 必须包含 progress/crossings/newArcs 三个数组。crossings 的两条线必须不同；新线候选用 name/type/description 和同样的证据字段，type 为 main/sub；交汇用 arcIdA/arcIdB/note 和证据字段。不重复登记已有名称。
+8. 没有候选的分类返回空数组，不能用省略号、省略字段或拼接引文代替。` }, {
+    role: 'user', content: `【章节】${input.chapterTitle}
 
 【已登记角色】
 ${characterList}
 
 【当前状态】
-${input.stateContext.slice(0, 10_000) || '无'}
+${input.stateContext || '无'}
 
 【已知物品名】
-${compactList(input.knownItemNames, 120)}
+${compactList(input.knownItemNames)}
 
 【已有关系（角色 ID）】
 ${relationList}
@@ -370,14 +368,12 @@ ${foreshadowList}
 【已登记故事线与阶段闭集】
 ${storyArcList}
 
-【正文】
-${input.chapterText}
+【正文${input.strictModelOutput ? '定位目录' : ''}】
+${input.strictModelOutput ? JSON.stringify(anchors.map(({ anchorId, quote }) => ({ anchorId, text: quote }))) : input.chapterText}
 
 ${input.contextSnapshot ? `【Harness 受控上下文快照】\n${input.contextSnapshot}\n` : ''}
-
 请输出严格 JSON：`,
-    },
-  ]
+  }]
 }
 
 export function parseChapterOrganizationOutput(input: {
@@ -394,16 +390,18 @@ export function parseChapterOrganizationOutput(input: {
   storyArcs?: StoryArc[]
   budget: AgentTeamBudgetEvidence
   createdAt?: number
+  strictModelOutput?: boolean
 }): ChapterOrganizationCandidate | null {
-  const root = parseObject(input.raw)
-  if (!root) return null
-  const normalizedText = normalizeChapterText(input.chapterText)
+  const parsedRoot = parseObject(input.raw)
+  if (!parsedRoot) return null
+  const normalizedText = input.chapterText
+  const root = (input.strictModelOutput ? resolveChapterOrganizationModelEvidenceV1(parsedRoot as Record<string, unknown>, normalizedText) : parsedRoot) as RawRoot
   const characterNames = input.characters.map(character => character.name)
   const facts = parseFactExtractResult({
     raw: JSON.stringify({ facts: records(root.facts) }),
     chapterContent: normalizedText,
   })
-  return {
+  const candidate: ChapterOrganizationCandidate = {
     version: CHAPTER_ORGANIZATION_VERSION,
     type: CHAPTER_ORGANIZATION_PAYLOAD_TYPE,
     projectId: input.projectId,
@@ -432,10 +430,21 @@ export function parseChapterOrganizationOutput(input: {
     domainErrors: {},
     budget: input.budget,
   }
+  if (input.strictModelOutput) {
+    const labels = ['状态', '事实', '物品', '年表', '关系', '伏笔']
+    for (const [index, key] of CHAPTER_ORGANIZATION_MODEL_ARRAYS_V1.entries()) {
+      if ((root[key] as unknown[]).length !== candidate[key].length) throw new Error(`${labels[index]}候选没有全部通过目标与正文逐字证据校验；原始返回未作删减，不会静默丢弃条目。`)
+    }
+    const storyline = root.storyline as Record<string, unknown[]>
+    if (['progress', 'crossings', 'newArcs'].some(key => storyline[key].length !== (candidate.storyline?.[key as keyof StorylineAnalysisCandidates]?.length ?? 0))) throw new Error('故事线候选没有全部通过闭集与正文逐字证据校验；不会静默丢弃条目。')
+  }
+  return candidate
+
 }
 
 export async function runChapterOrganization(input: {
   projectId: number
+  strictModelOutput?: boolean
   chapterId: number
   chapterTitle: string
   worldGroupId: number | null

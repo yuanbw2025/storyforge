@@ -19353,6 +19353,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/organization-governance-20261028.json",
           "summary": "先收口手动/章后整理的登记来源与写目标，新终态核验覆盖三张故事线表，旧V1前像和回执保留。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/organization-model-protocol-20261028.json",
+          "summary": "手动/章后新模型协议用定位编号取准确引文，逐条计数拒绝静默过滤，原始响应先保存；55回归及8条明确源码浏览器路径通过，精确版本实模、选择草稿和节点互操作继续。"
         }
       ],
       "defects": [],

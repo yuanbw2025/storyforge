@@ -30,6 +30,8 @@ import { resolveRequestConfig, describeResolvedAIRequestSettingsV1, type AIReque
 import { observeProseLengthV1, proseLengthExpectationV1 } from '../../lib/prose/length-observation'
 import { observeSeparatedProseFrameV1 } from '../../lib/prose/provider-frame-observation'
 import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
+import { chapterOrganizationRequestOptionsV1, CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3 } from '../../lib/agent/chapter-organization-model'
+import { recordAgentRunArtifactV1 } from '../../lib/memory/artifact-store'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { db } from '../../lib/db/schema'
 import { assembleContext } from '../../lib/registry/assemble-context'
@@ -1806,7 +1808,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       }
     }
 
-    const effectiveConfig = resolveRequestConfig(aiConfig, { category: 'chapter.organize' }).config
+    const organizationResolution = resolveRequestConfig(aiConfig, { category: 'chapter.organize', projectId: project.id!, configOverrides: { maxTokens: 8_000 }, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none' })
+    const effectiveConfig = organizationResolution.config
+    const organizationOptions = chapterOrganizationRequestOptionsV1(effectiveConfig)
+    const organizationRequestSettings = describeResolvedAIRequestSettingsV1(organizationResolution, false, organizationOptions)
     if (!isAIConfigReady(effectiveConfig)) {
       const message = getAIConfigRequiredMessage(effectiveConfig)
       setOrganizationError(message)
@@ -1860,6 +1865,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         binding: {
           chapterId: currentChapter.id,
           sourceKeys: CHAPTER_ORGANIZATION_SOURCE_KEYS_V1,
+          sourceTextHash: await hashChapterText(persisted.html),
+          promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3,
+          requestSettings: organizationRequestSettings,
         },
       })
       const [allRelations] = await Promise.all([
@@ -1883,6 +1891,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       const budget = new AgentTeamBudgetTracker(useAIConfigStore.getState().agentTeamBudgetProfile)
       const candidate = await runChapterOrganization({
         projectId: project.id!,
+        strictModelOutput: true,
         chapterId: currentChapter.id,
         chapterTitle,
         worldGroupId: chapterWorldGroupId ?? null,
@@ -1896,12 +1905,18 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         // 正文已在专用区完整提供；这里只追加其它登记来源，避免正文重复消耗 tokens。
         contextSnapshot: organizationContextSnapshot,
         budget,
-        call: messages => executeRegisteredAIEntryV1('prose.chapter.organize', messages, aiConfig, {
-          category: 'chapter.organize',
-          projectId: project.id!,
-          configOverrides: { maxTokens: 8_000 },
-          contextOverflowPolicy: 'reject',
-        }, controller.signal),
+        call: async messages => {
+          if (!durableSnapshot) throw new Error('整理本章缺少有效的运行记录。')
+          const rendered = await recordAgentRunArtifactV1({ scope: workspaceScope, runId: durableSnapshot.run.id, stepId: CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1, attempt: 1, expectedLastSequence: durableSnapshot.projection.lastSequence, artifactKind: 'rendered-request', content: JSON.stringify({ promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3, messages, requestSettings: organizationRequestSettings }) })
+          durableSnapshot = rendered.snapshot
+          const raw = await executeRegisteredAIEntryV1('prose.chapter.organize', messages, aiConfig, {
+            category: 'chapter.organize', projectId: project.id!, configOverrides: { maxTokens: 8_000 },
+            contextOverflowPolicy: 'reject', transportRetryPolicy: 'none',
+          }, controller.signal, undefined, organizationOptions, organizationResolution)
+          const response = await recordAgentRunArtifactV1({ scope: workspaceScope, runId: durableSnapshot.run.id, stepId: CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1, attempt: 1, expectedLastSequence: durableSnapshot.projection.lastSequence, artifactKind: 'raw-response', content: raw })
+          durableSnapshot = response.snapshot
+          return raw
+        },
       })
       const candidateHash = await hashChapterOrganizationCandidateV1(candidate)
       const run = await persistChapterOrganizationCandidate(candidate, {

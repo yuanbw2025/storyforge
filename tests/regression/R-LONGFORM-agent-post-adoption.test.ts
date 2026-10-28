@@ -71,7 +71,7 @@ describe.sequential('longform main Agent chapter post-adoption handoff', () => {
     await authorizeChapterPostAdoptionV1({ scope: fixture.scope, snapshot: child, source: 'author-click' })
     const model = vi.spyOn(entries, 'executeRegisteredAIEntryV1')
       .mockRejectedValueOnce(new Error('临时服务错误'))
-      .mockResolvedValue(taskType === 'organization' ? '{}' : JSON.stringify({
+      .mockResolvedValue(taskType === 'organization' ? JSON.stringify({ stateDiffs: [], facts: [], inventoryEvents: [], storyEvents: [], relations: [], foreshadowUpdates: [], storyline: { progress: [], crossings: [], newArcs: [] } }) : JSON.stringify({
         summary: '守灯人在邮局查验旧信，发现邮戳异常。',
         handoff: { finalScene: { location: '邮局', activeCharacters: ['守灯人'], lastAction: '听见敲门声' }, stateChanges: [], knowledgeChanges: [], commitments: [], openLoops: ['旧信是谁寄的'], immediateNextIntent: '查明敲门声', evidenceQuotes: [{ quote: '门外的钟声骤然中断，守灯人听见失踪亲人的敲门声。' }] },
       }))

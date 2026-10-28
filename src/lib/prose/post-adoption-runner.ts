@@ -4,7 +4,9 @@ import type { Project, AIConfig, Character, CharacterRelation, Foreshadow, Story
 import { assertRecordInScope, readOwnedRows, resolveScopeLike } from '../workspace/scope'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { assembleContext } from '../registry/assemble-context'
-import { resolveRequestConfig } from '../ai/client'
+import { resolveRequestConfig, describeResolvedAIRequestSettingsV1 } from '../ai/client'
+import { chapterOrganizationRequestOptionsV1, CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3 } from '../agent/chapter-organization-model'
+import { recordAgentRunArtifactV1 } from '../memory/artifact-store'
 import { executeRegisteredAIEntryV1 } from '../agent/formal-ai-entry'
 import { runChapterMemoryTask } from '../ai/chapter-memory/run-chapter-memory'
 import { hashChapterText } from '../ai/chapter-memory/text-normalization'
@@ -61,7 +63,10 @@ export async function runChapterPostAdoptionV1(input: {
       : null
     const transitionWorldGroupId = transitionOutline?.worldGroupId ?? null
     const expectedSourceTextHash = await hashChapterText(task.chapterContent)
-    const organizationRequestConfig = resolveRequestConfig(aiConfig, { category: 'chapter.organize' }).config
+    const organizationResolution = resolveRequestConfig(aiConfig, { category: 'chapter.organize', projectId: project.id!, configOverrides: { maxTokens: 8_000 }, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none' })
+    const organizationRequestConfig = organizationResolution.config
+    const organizationOptions = chapterOrganizationRequestOptionsV1(organizationRequestConfig)
+    const organizationRequestSettings = describeResolvedAIRequestSettingsV1(organizationResolution, false, organizationOptions)
     const memoryRequestConfig = resolveRequestConfig(aiConfig, { category: 'chapter.memory' }).config
     let snapshot = task.resumeRunId != null
       ? await readAgentRunV1(scope, task.resumeRunId)
@@ -155,7 +160,7 @@ export async function runChapterPostAdoptionV1(input: {
         snapshot,
         stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization,
         contextManifest: organizationManifest,
-        binding: { chapterId: task.chapterId, sourceTextHash: expectedSourceTextHash },
+        binding: { chapterId: task.chapterId, sourceTextHash: expectedSourceTextHash, promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3, requestSettings: organizationRequestSettings },
         modelIdentity: {
           provider: organizationRequestConfig.provider,
           model: organizationRequestConfig.model,
@@ -181,6 +186,7 @@ export async function runChapterPostAdoptionV1(input: {
       const budget = new AgentTeamBudgetTracker(useAIConfigStore.getState().agentTeamBudgetProfile)
       const candidate = await runChapterOrganization({
         projectId: project.id!,
+        strictModelOutput: true,
         chapterId: task.chapterId,
         chapterTitle: task.chapterTitle,
         worldGroupId: transitionWorldGroupId,
@@ -193,12 +199,19 @@ export async function runChapterPostAdoptionV1(input: {
         storyArcs,
         contextSnapshot: organizationContextSnapshot,
         budget,
-        call: messages => executeRegisteredAIEntryV1('prose.chapter.organize', messages, aiConfig, {
-          category: 'chapter.organize',
-          projectId: project.id!,
-          configOverrides: { maxTokens: 8_000 },
-          contextOverflowPolicy: 'reject',
-        }, signal),
+        call: async messages => {
+          const stepId = CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization
+          const attempt = snapshot.projection.steps[stepId].attempt
+          const rendered = await recordAgentRunArtifactV1({ scope, runId: snapshot.run.id, stepId, attempt, expectedLastSequence: snapshot.projection.lastSequence, artifactKind: 'rendered-request', content: JSON.stringify({ promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3, messages, requestSettings: organizationRequestSettings }) })
+          updateSnapshot(rendered.snapshot)
+          const raw = await executeRegisteredAIEntryV1('prose.chapter.organize', messages, aiConfig, {
+            category: 'chapter.organize', projectId: project.id!, configOverrides: { maxTokens: 8_000 },
+            contextOverflowPolicy: 'reject', transportRetryPolicy: 'none',
+          }, signal, undefined, organizationOptions, organizationResolution)
+          const response = await recordAgentRunArtifactV1({ scope, runId: snapshot.run.id, stepId, attempt, expectedLastSequence: snapshot.projection.lastSequence, artifactKind: 'raw-response', content: raw })
+          updateSnapshot(response.snapshot)
+          return raw
+        },
       })
       await ensureFresh()
       const candidateHash = await hashChapterOrganizationCandidateV1(candidate)
