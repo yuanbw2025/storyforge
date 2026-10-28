@@ -76,4 +76,18 @@ describe('new seven-domain model protocol retains every proposed row or rejects 
     expect(body).toContain('p1')
     expect(body).toContain('hand-over')
   })
+  it('renders unavailable target classifications as empty arrays in the actual model example', () => {
+    const prompt = buildChapterOrganizationPrompt({ chapterTitle: '未登记角色的正文', chapterText: text, stateContext: '', characters: [], knownItemNames: [], existingRelations: [], foreshadows: [], storyArcs: arcs, strictModelOutput: true })
+    const example = JSON.parse(prompt[0].content.match(/JSON 结构：\n([\s\S]+?)\n规则：/u)![1])
+    expect(example.stateDiffs).toEqual([])
+    expect(example.relations).toEqual([])
+    expect(example.foreshadowUpdates).toEqual([])
+  })
+  it('uses actual names and foreshadow identity rather than invented placeholder targets', () => {
+    const prompt = buildChapterOrganizationPrompt({ chapterTitle: '交接', chapterText: text, stateContext: '', characters, knownItemNames: [], existingRelations: [], foreshadows: [{ id: 141, name: '月纹', status: 'echoed', description: '已呼应的月纹' }] as any, storyArcs: arcs, strictModelOutput: true })
+    const example = JSON.parse(prompt[0].content.match(/JSON 结构：\n([\s\S]+?)\n规则：/u)![1])
+    expect(example.stateDiffs[0].entityName).toBe('林舟')
+    expect(example.relations).toEqual([])
+    expect(example.foreshadowUpdates[0]).toMatchObject({ foreshadowId: 141, toStatus: 'resolved' })
+  })
 })

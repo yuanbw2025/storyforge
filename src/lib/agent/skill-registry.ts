@@ -3168,7 +3168,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '章节七域证据整理',
     owner: 'prose-agent',
-    promptVersion: 'chapter-organization-v3',
+    promptVersion: 'chapter-organization-v4',
     executionMode: 'organize',
     contextTaskKind: 'agent-prose',
     readToolNames: [],

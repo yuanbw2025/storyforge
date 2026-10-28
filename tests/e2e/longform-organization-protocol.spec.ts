@@ -161,3 +161,25 @@ test('prose adoption keeps post-organization authorization and raw evidence thro
   expect(after.agentRunArtifacts.some(row => row.artifactKind === 'raw-response' && row.content === organizationRaw)).toBe(true)
   expect(requests).toHaveLength(2)
 })
+test('the actual empty-roster request example leaves unavailable target arrays empty', async ({ page }) => {
+  const seed = await setup(page)
+  await page.evaluate(async projectId => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    await db.characters.where('projectId').equals(projectId).delete()
+    await db.foreshadows.where('projectId').equals(projectId).delete()
+  }, seed.projectId)
+  await page.reload()
+  await page.evaluate(async () => {
+    const { useAIConfigStore } = await (new Function('return import("/storyforge/src/stores/ai-config.ts")'))()
+    useAIConfigStore.setState({ config: { ...useAIConfigStore.getState().config, apiKey: 'isolated-test-token' } })
+  })
+  const requests: any[] = []
+  await page.route('https://organization.invalid/**', async route => { requests.push(route.request().postDataJSON()); await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(empty()) }, finish_reason: 'stop' }] } }) })
+  await page.getByRole('button', { name: '整理本章', exact: true }).click()
+  await expect(page.getByRole('button', { name: '关闭整理本章', exact: true })).toBeVisible()
+  expect(requests).toHaveLength(1)
+  const system = requests[0].messages[0].content
+  const example = JSON.parse(system.match(/JSON 结构：\n([\s\S]+?)\n规则：/u)[1])
+  expect(example.stateDiffs).toEqual([]); expect(example.relations).toEqual([]); expect(example.foreshadowUpdates).toEqual([])
+  expect(system).toContain('chapter-organization-v4')
+})

@@ -3,7 +3,7 @@ import type { ChatRequestOptions } from '../ai/client'
 import { supportsVerifiedJsonObjectResponseForModelV1 } from '../ai/provider-capabilities'
 import { resolveStorylineModelEvidenceV1, storylineEvidenceAnchorsV1 } from '../storyline/evidence-anchors'
 
-export const CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3 = 'chapter-organization-v3' as const
+export const CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4 = 'chapter-organization-v4' as const
 export const CHAPTER_ORGANIZATION_MODEL_ARRAYS_V1 = ['stateDiffs', 'facts', 'inventoryEvents', 'storyEvents', 'relations', 'foreshadowUpdates'] as const
 
 export function chapterOrganizationRequestOptionsV1(config: Pick<AIConfig, 'provider' | 'model'>): ChatRequestOptions {

@@ -5,7 +5,7 @@ import { assertRecordInScope, readOwnedRows, resolveScopeLike } from '../workspa
 import { useAIConfigStore } from '../../stores/ai-config'
 import { assembleContext } from '../registry/assemble-context'
 import { resolveRequestConfig, describeResolvedAIRequestSettingsV1 } from '../ai/client'
-import { chapterOrganizationRequestOptionsV1, CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3 } from '../agent/chapter-organization-model'
+import { chapterOrganizationRequestOptionsV1, CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4 } from '../agent/chapter-organization-model'
 import { recordAgentRunArtifactV1 } from '../memory/artifact-store'
 import { executeRegisteredAIEntryV1 } from '../agent/formal-ai-entry'
 import { runChapterMemoryTask } from '../ai/chapter-memory/run-chapter-memory'
@@ -160,7 +160,7 @@ export async function runChapterPostAdoptionV1(input: {
         snapshot,
         stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization,
         contextManifest: organizationManifest,
-        binding: { chapterId: task.chapterId, sourceTextHash: expectedSourceTextHash, promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3, requestSettings: organizationRequestSettings },
+        binding: { chapterId: task.chapterId, sourceTextHash: expectedSourceTextHash, promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4, requestSettings: organizationRequestSettings },
         modelIdentity: {
           provider: organizationRequestConfig.provider,
           model: organizationRequestConfig.model,
@@ -202,7 +202,7 @@ export async function runChapterPostAdoptionV1(input: {
         call: async messages => {
           const stepId = CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization
           const attempt = snapshot.projection.steps[stepId].attempt
-          const rendered = await recordAgentRunArtifactV1({ scope, runId: snapshot.run.id, stepId, attempt, expectedLastSequence: snapshot.projection.lastSequence, artifactKind: 'rendered-request', content: JSON.stringify({ promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3, messages, requestSettings: organizationRequestSettings }) })
+          const rendered = await recordAgentRunArtifactV1({ scope, runId: snapshot.run.id, stepId, attempt, expectedLastSequence: snapshot.projection.lastSequence, artifactKind: 'rendered-request', content: JSON.stringify({ promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4, messages, requestSettings: organizationRequestSettings }) })
           updateSnapshot(rendered.snapshot)
           const raw = await executeRegisteredAIEntryV1('prose.chapter.organize', messages, aiConfig, {
             category: 'chapter.organize', projectId: project.id!, configOverrides: { maxTokens: 8_000 },

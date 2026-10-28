@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "real-organization-v3-empty-roster-target-rejection",
+  "sourceCommit": "3b4260a7c594dbcfdd38028b5612f96e1f331cf9",
+  "status": "MODEL_RETURNED_UNREGISTERED_STATE_TARGETS_STRICTLY_REJECTED",
+  "evidenceDirectory": "live-organization-2026-10-28T00-35-35-962Z",
+  "result": {
+    "status": "failed",
+    "sourceCommit": "3b4260a7c594dbcfdd38028b5612f96e1f331cf9",
+    "phase": "manual-organization",
+    "message": "Visible organization failure retained",
+    "modelRequests": 1,
+    "knownTotalTokens": 6165,
+    "unknownUsageRequests": 0,
+    "pageErrors": []
+  },
+  "findings": {
+    "registeredCharacters": 0,
+    "rawStateRows": 4,
+    "rawStateTargetRegistered": false,
+    "canonicalDomainTablesUnchanged": true,
+    "exactRawResponsePersisted": true,
+    "modelRequests": 1,
+    "hiddenReplay": false
+  },
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "remaining": "Prompt examples must reflect the frozen empty roster instead of showing nonempty placeholder state/relations/foreshadow rows. Original failure stays retained."
+}

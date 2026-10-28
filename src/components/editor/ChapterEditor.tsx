@@ -30,7 +30,7 @@ import { resolveRequestConfig, describeResolvedAIRequestSettingsV1, type AIReque
 import { observeProseLengthV1, proseLengthExpectationV1 } from '../../lib/prose/length-observation'
 import { observeSeparatedProseFrameV1 } from '../../lib/prose/provider-frame-observation'
 import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
-import { chapterOrganizationRequestOptionsV1, CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3 } from '../../lib/agent/chapter-organization-model'
+import { chapterOrganizationRequestOptionsV1, CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4 } from '../../lib/agent/chapter-organization-model'
 import { recordAgentRunArtifactV1 } from '../../lib/memory/artifact-store'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { db } from '../../lib/db/schema'
@@ -1866,7 +1866,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           chapterId: currentChapter.id,
           sourceKeys: CHAPTER_ORGANIZATION_SOURCE_KEYS_V1,
           sourceTextHash: await hashChapterText(persisted.html),
-          promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3,
+          promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4,
           requestSettings: organizationRequestSettings,
         },
       })
@@ -1907,7 +1907,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         budget,
         call: async messages => {
           if (!durableSnapshot) throw new Error('整理本章缺少有效的运行记录。')
-          const rendered = await recordAgentRunArtifactV1({ scope: workspaceScope, runId: durableSnapshot.run.id, stepId: CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1, attempt: 1, expectedLastSequence: durableSnapshot.projection.lastSequence, artifactKind: 'rendered-request', content: JSON.stringify({ promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3, messages, requestSettings: organizationRequestSettings }) })
+          const rendered = await recordAgentRunArtifactV1({ scope: workspaceScope, runId: durableSnapshot.run.id, stepId: CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1, attempt: 1, expectedLastSequence: durableSnapshot.projection.lastSequence, artifactKind: 'rendered-request', content: JSON.stringify({ promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4, messages, requestSettings: organizationRequestSettings }) })
           durableSnapshot = rendered.snapshot
           const raw = await executeRegisteredAIEntryV1('prose.chapter.organize', messages, aiConfig, {
             category: 'chapter.organize', projectId: project.id!, configOverrides: { maxTokens: 8_000 },

@@ -19358,6 +19358,16 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/organization-model-protocol-20261028.json",
           "summary": "手动/章后新模型协议用定位编号取准确引文，逐条计数拒绝静默过滤，原始响应先保存；55回归及8条明确源码浏览器路径通过，精确版本实模、选择草稿和节点互操作继续。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-organization-20261028-3b4260a7c.json",
+          "summary": "V3实模1次6165已知tokens：空角色表却返回4条未授权角色状态，严格拒绝、原始返回真实保存、九张正式表不变，保留失败。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/organization-empty-targets-20261028.json",
+          "summary": "V4模型示例按冻结目标目录输出空分类或实际登记身份，不再用未授权示例目标；确定性拒绝仍保留。"
         }
       ],
       "defects": [],

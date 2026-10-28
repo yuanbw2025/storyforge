@@ -1,6 +1,6 @@
 import { db } from '../db/schema'
 import { normalizeChapterText, hashChapterText } from '../ai/chapter-memory/text-normalization'
-import { CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3, CHAPTER_ORGANIZATION_MODEL_ARRAYS_V1, resolveChapterOrganizationModelEvidenceV1 } from './chapter-organization-model'
+import { CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4, CHAPTER_ORGANIZATION_MODEL_ARRAYS_V1, resolveChapterOrganizationModelEvidenceV1 } from './chapter-organization-model'
 import { storylineEvidenceAnchorsV1 } from '../storyline/evidence-anchors'
 import { parseAuthorStoryStagesV1 } from '../types/story-arc'
 import { parseStateDiffs } from '../ai/adapters/state-extract-adapter'
@@ -303,20 +303,31 @@ export function buildChapterOrganizationPrompt(input: {
   foreshadows: Foreshadow[]
   storyArcs?: StoryArc[]
   contextSnapshot?: string
-  /** Only new governed calls opt into V3; old literal protocol stays readable. */
+  /** Only new governed calls opt into anchored output; old literal protocol stays readable. */
   strictModelOutput?: boolean
 }): ChatMessage[] {
-  const characterList = input.characters.filter(character => character.id != null && character.name.trim())
-    .map(character => `- #${character.id} ${character.name}`).join('\n') || '无'
+  const authorizedCharacters = input.characters.filter(character => character.id != null && character.name.trim())
+  const characterList = authorizedCharacters.map(character => `- #${character.id} ${character.name}`).join('\n') || '无'
   const relationList = input.existingRelations.map(relation => `- ${relation.fromCharacterId} -> ${relation.toCharacterId} (${relation.relationType})`).join('\n') || '无'
-  const foreshadowList = input.foreshadows.filter(item => item.id != null && item.status !== 'resolved')
-    .map(item => `- #${item.id} ${item.name} [${item.status}] ${item.description}`).join('\n') || '无'
+  const authorizedForeshadows = input.foreshadows.filter(item => item.id != null && item.status !== 'resolved')
+  const foreshadowList = authorizedForeshadows.map(item => `- #${item.id} ${item.name} [${item.status}] ${item.description}`).join('\n') || '无'
   const arcs = (input.storyArcs ?? []).filter(item => item.id != null)
   const storyArcList = arcs.map(item => `- #${item.id} ${item.name} [${item.type}] ${String(item.description ?? '')} stages=${item.stages}`).join('\n') || '无'
   const anchors = storylineEvidenceAnchorsV1(input.chapterText)
   const firstAnchor = anchors[0]?.anchorId ?? 'p1'
   const evidence = input.strictModelOutput ? `"anchorId":"${firstAnchor}"` : '"sourceQuote":"逐字引文"'
   const factEvidence = input.strictModelOutput ? evidence : '"quote":"逐字引文"'
+  const sourceEvidence = input.strictModelOutput ? { anchorId: firstAnchor } : { sourceQuote: '逐字引文' }
+  const stateExample = authorizedCharacters.length ? [{ entityName: authorizedCharacters[0].name, category: 'character', field: '位置', oldValue: null, newValue: '正文中的新位置', ...sourceEvidence }] : []
+  const relationExample = authorizedCharacters.length >= 2 ? [{ char1: authorizedCharacters[0].name, char2: authorizedCharacters[1].name, type: 'ally', label: '盟友', description: '本章明确新建或改变的关系', bidirectional: true, ...sourceEvidence }] : []
+  const firstForeshadow = authorizedForeshadows[0]
+  const foreshadowExample = firstForeshadow ? [{ foreshadowId: firstForeshadow.id, toStatus: firstForeshadow.status === 'planned' ? 'planted' : firstForeshadow.status === 'planted' ? 'echoed' : 'resolved', note: '本章明确推进', ...sourceEvidence }] : []
+  const targetRule = [
+    !authorizedCharacters.length ? '本次没有任何已登记角色：stateDiffs 和 relations 必须为 []。正文、设定或示例中出现名字不构成角色登记。' : `角色状态只能针对这 ${authorizedCharacters.length} 个登记角色。`,
+    authorizedCharacters.length < 2 ? '本次不足两个已登记角色：relations 必须为 []。' : '',
+    !authorizedForeshadows.length ? '本次没有可推进的登记伏笔：foreshadowUpdates 必须为 []，不能从正文另造目标。' : '',
+  ].filter(Boolean).join('\n')
+
   const firstArc = arcs[0]
   const firstStage = firstArc ? parseAuthorStoryStagesV1(firstArc.stages)[0]?.id ?? null : null
   const storyline = JSON.stringify({
@@ -324,19 +335,20 @@ export function buildChapterOrganizationPrompt(input: {
     crossings: [], newArcs: [],
   })
   const evidenceRule = input.strictModelOutput
-    ? `每条候选只填写当前正文目录的 anchorId，由系统取出准确引文；不得同时填写 quote/sourceQuote，不得猜测定位编号。没有对应证据就不输出。契约：${CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V3}。`
+    ? `每条候选只填写当前正文目录的 anchorId，由系统取出准确引文；不得同时填写 quote/sourceQuote，不得猜测定位编号。没有对应证据就不输出。契约：${CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4}。`
     : '每条候选都必须有逐字证据：普通分类用 sourceQuote，facts 和 storyline 用 quote，必须逐字复制自正文。没有证据就不输出。'
   return [{ role: 'system', content: `你是 StoryForge 的“整理本章 Agent”。只从本章正文抽取明确发生的变化，输出一个严格 JSON 对象，不要 markdown，不要解释。
 ${evidenceRule}
+${targetRule}
 角色和伏笔只可引用登记清单；清单为空时 stateDiffs、relations 或 foreshadowUpdates 对应返回空数组。故事线只能使用登记的数字 arcId 与所属阶段的准确 id，阶段未知用 JSON null，不能使用名称或字符串 "null"。每条故事线最多一项进度，多个推进点写入同一 progressNote。示例仅说明字段，不得照填目标与证据。
 JSON 结构：
 {
-  "stateDiffs":[{"entityName":"角色名","category":"character","field":"位置","oldValue":null,"newValue":"新值",${evidence}}],
+  "stateDiffs":${JSON.stringify(stateExample)},
   "facts":[{"subject":"角色名","predicate":"location","value":"事实值","object":"可选对象",${factEvidence}}],
   "inventoryEvents":[{"itemName":"物品","heldByName":"角色名","action":"gain","quantity":1,"note":"说明",${evidence}}],
   "storyEvents":[{"title":"事件标题","storyTime":"正文明确时间或空串","importance":2,"description":"说明",${evidence}}],
-  "relations":[{"char1":"角色名","char2":"角色名","type":"ally","label":"关系名","description":"说明","bidirectional":true,${evidence}}],
-  "foreshadowUpdates":[{"foreshadowId":1,"toStatus":"echoed","note":"为何推进",${evidence}}],
+  "relations":${JSON.stringify(relationExample)},
+  "foreshadowUpdates":${JSON.stringify(foreshadowExample)},
   "storyline":${storyline}
 }
 规则：
