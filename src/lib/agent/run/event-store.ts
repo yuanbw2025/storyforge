@@ -423,6 +423,30 @@ async function verifyMaterializedProjection(
   return projection
 }
 
+const readonlyWorkRunSnapshots = new WeakMap<IDBTransaction, Map<number, Promise<AgentRunSnapshotV1>>>()
+
+function readonlyWorkRunSnapshotMapV1() {
+  const transaction = Dexie.currentTransaction
+  // A readonly Dexie child can share a native readwrite transaction. Reuse
+  // requires the actual native readonly snapshot, never the child's mode.
+  // It adds no transaction, table lock, durable authority or cross-call cache.
+  if (!transaction?.active || transaction.db !== db || transaction.idbtrans?.mode !== 'readonly'
+    || ![db.agentRuns, db.agentRunEvents].every(table => transaction.idbtrans.objectStoreNames.contains(table.name))) return undefined
+  let snapshots = readonlyWorkRunSnapshots.get(transaction.idbtrans)
+  if (!snapshots) {
+    snapshots = new Map()
+    readonlyWorkRunSnapshots.set(transaction.idbtrans, snapshots)
+  }
+  return snapshots
+}
+
+async function verifyRunSnapshotV1(run: AgentRunRecord & { id: number }): Promise<AgentRunSnapshotV1> {
+  const contract = await verifyContractRecord(run)
+  const events = await readRunEvents(run)
+  const projection = await verifyMaterializedProjection(run, events)
+  return { run, contract, events, projection }
+}
+
 /** @internal Checkpoint code reuses this inside the same Dexie transaction. */
 export async function readVerifiedAgentRunInTransactionV1(
   scope: WorkspaceScope,
@@ -440,10 +464,26 @@ export async function readVerifiedAgentRunInTransactionV1(
     if (run.productRuntimeSessionId == null) fail('owner', '运行必须且只能绑定 Work 或运行实例')
     await assertProductRuntimeSessionScope(scope, run.productRuntimeSessionId, run.worldGroupId ?? null)
   }
-  const contract = await verifyContractRecord(run as AgentRunRecord & { id: number })
-  const events = await readRunEvents(run as AgentRunRecord & { id: number })
-  const projection = await verifyMaterializedProjection(run as AgentRunRecord & { id: number }, events)
-  return { run: run as AgentRunRecord & { id: number }, contract, events, projection }
+  // Owner validation above remains per read, including after another scope
+  // has read this Run. Instance reads and all writable snapshots keep their
+  // original complete replay. The two immutable native stores make a second
+  // successful Work replay in this same transaction redundant.
+  const snapshots = run.workId != null ? readonlyWorkRunSnapshotMapV1() : undefined
+  if (!snapshots) return verifyRunSnapshotV1(run as AgentRunRecord & { id: number })
+  let pending = snapshots.get(runId)
+  if (!pending) {
+    if (snapshots.size >= 32) snapshots.delete(snapshots.keys().next().value!)
+    pending = verifyRunSnapshotV1(run as AgentRunRecord & { id: number })
+    snapshots.set(runId, pending)
+  }
+  try {
+    // Keep the verified cache private. Callers have always owned the returned
+    // snapshot and may edit nested objects while preparing later commands.
+    return structuredClone(await pending)
+  } catch (error) {
+    if (snapshots.get(runId) === pending) snapshots.delete(runId)
+    throw error
+  }
 }
 
 function eventRecord(event: AnyAgentRunEventV1): AgentRunEventRecord {

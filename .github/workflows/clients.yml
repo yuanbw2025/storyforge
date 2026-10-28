@@ -142,6 +142,8 @@ jobs:
           path: previous-client
       - name: Build a previous-version Mac application with the same storage identity
         working-directory: previous-client
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: |
           npm ci
           npm run build:portable

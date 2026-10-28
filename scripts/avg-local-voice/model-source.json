@@ -1,0 +1,53 @@
+{
+  "repository": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+  "revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
+  "license": "Apache-2.0",
+  "files": {
+    "config.json": {
+      "size": 4908,
+      "gitBlob": "95d74b20b7485f5dfa09d05988d6c606ec226811"
+    },
+    "generation_config.json": {
+      "size": 245,
+      "gitBlob": "1872b16d4535564abf2db5d6debe6cddd82b7f2e"
+    },
+    "merges.txt": {
+      "size": 1671839,
+      "gitBlob": "20024bfe7c83998e9aeaf98a0cd6a2ce6306c2f0"
+    },
+    "model.safetensors": {
+      "size": 3833402552,
+      "gitBlob": "c01bc81874a6a96fb082d716ce06c87420f01ece",
+      "sha256": "38b1d5971bdbd982b561cccec982669a53b0537c3cf5e9bd4778ed07bb2f5137"
+    },
+    "preprocessor_config.json": {
+      "size": 127,
+      "gitBlob": "0525dd953bb9241912f7147666f0d535165d5d4f"
+    },
+    "speech_tokenizer/config.json": {
+      "size": 2336,
+      "gitBlob": "06cc8dc4c5ec8a1929086b71b98c313020d9268b"
+    },
+    "speech_tokenizer/configuration.json": {
+      "size": 76,
+      "gitBlob": "ab58e2eaf53cd14a1a2a7527d9261ceea93a24cd"
+    },
+    "speech_tokenizer/model.safetensors": {
+      "size": 682293092,
+      "gitBlob": "026d66bfb5d730dcfd56450c5e9e51b3ef4e0712",
+      "sha256": "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258"
+    },
+    "speech_tokenizer/preprocessor_config.json": {
+      "size": 234,
+      "gitBlob": "ba40914f4f49ab98a8ca545d4892ef7291a39592"
+    },
+    "tokenizer_config.json": {
+      "size": 7344,
+      "gitBlob": "6ff9fd60cc623bb54bbd603cbd418c97a11528d7"
+    },
+    "vocab.json": {
+      "size": 2776833,
+      "gitBlob": "4783fe10ac3adce15ac8f358ef5462739852c569"
+    }
+  }
+}

@@ -3,6 +3,15 @@
   "bindingVersion": 1,
   "scope": "formal-ai-execution-entry",
   "offlineEvaluations": [
+    {
+      "entryId": "eval.avg.audio-input-calibration",
+      "boundary": "eval-only",
+      "adoptAllowed": false,
+      "caller": "scripts/evaluate-avg-audio-input.mjs",
+      "contract": "scripts/avg-audio-input-contract.mjs",
+      "transport": "configured-chat-audio-input-v1",
+      "reason": "只读显式工程WAV及合成静音对照，至多两次盲校准；不访问作者数据库，不修改审听、采纳或发布。"
+    },
     { "entryId": "eval.narrative-world.fixed-reader", "boundary": "eval-only", "adoptAllowed": false, "caller": "scripts/evaluate-narrative-reader-local-codex.mjs", "transport": "local-codex-subscription", "contract": "scripts/narrative-reader-contract.mjs", "reason": "只读仓库冻结合成评测输入；本机订阅固定读者模型仅输出不可变调用回执与评分，不连接作者数据库，不采纳、不发布、不自动重试。" },
     { "entryId": "eval.narrative-world.reader-semantic-review", "boundary": "eval-only", "adoptAllowed": false, "caller": "scripts/evaluate-narrative-reader-judge-local-codex.mjs", "transport": "local-codex-subscription", "contract": "scripts/narrative-reader-judge-contract.mjs", "reason": "只读已完成且冻结的合成读者回答，以不同模型按固定标准评审；隐藏条件及原字句分数，保存原文引证与所有失败，不连接作者数据库、不采纳、不发布、不自动重试，不代替真人验收。" },
     { "entryId": "eval.narrative-world.edit-impact", "boundary": "eval-only", "adoptAllowed": false, "caller": "scripts/evaluate-narrative-impact-local-codex.mjs", "transport": "local-codex-subscription", "contract": "scripts/narrative-impact-contract.mjs", "reason": "只读原冻结合成场景与拟议修改，隐藏影响 gold 后生成带逐字证据的复核建议；与确定性计划单独评分，不读作者数据库、不产生写入或 unaffected 证明、不采纳、不发布、不自动重试，不代替独立作者验收。" },

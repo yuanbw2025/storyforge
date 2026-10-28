@@ -1,3 +1,7 @@
+import { assertFrozenRuntimePackageSessionV1, parseProductRuntimeState } from '../product/runtime-core'
+import type { AnyProductBuildPreviewManifest } from '../types'
+import { avgExecutableModule } from '../avg/executable-module'
+import { verifyAvgBranchOriginV1 } from '../avg/branch-origin'
 import { isTtrpgRuntimeContentV2 } from '../ttrpg/content-version'
 /**
  * 注册表派生的项目导出引擎(AUDIT-1)
@@ -20,11 +24,11 @@ import { resolveWorkspaceOwnership } from '../workspace/ownership'
 import { portableizeAgentRunLedgerExportV1 } from '../agent/run/ledger-portability'
 import { assertAgentRunArtifactRecordIntegrityV1 } from '../memory/artifact-record'
 import { readVerifiedMediaBlobObjectData } from '../product-production/media-blob-store'
-import type { ProductReleaseManifestWithTtrpgV2 } from '../ttrpg/content-version'
-import type { ProductRuntimeEvent } from '../types'
+import { assertProductRuntimeSourceSnapshotV3 } from '../product/runtime-source-branch'
 import { remapNarrativeDomainFieldV1 } from '../narrative-domain/references'
 import { assertNarrativeDomainReferenceRowsV1 } from '../narrative-domain/integrity'
 import { assertNarrativeLineageRowsV1 } from '../world-engine/narrative-lineage-lifecycle'
+import type { AnyProductReleaseManifest, ProductRuntimeEvent } from '../types'
 import { mapNarrativeDomainReferencesV1 } from '../narrative-domain/codec'
 import { narrativeDomainReferenceTargetV1 } from '../narrative-domain/references'
 import { canonicalNarrativeJsonV1, compareUnicodeCodePointsV1 } from '../narrative-domain/json'
@@ -162,13 +166,32 @@ async function assertProductRuntimeExportIntegrityV1(
   const checkpoints = rowsByTable.get('productRuntimeCheckpoints') ?? []
   const releases = rowsByTable.get('productReleases') ?? []
   const releasesById = new Map<number, any>()
-  const releaseManifestsById = new Map<number, ProductReleaseManifestWithTtrpgV2>()
+  const releaseManifestsById = new Map<number, AnyProductReleaseManifest>()
   const buildsById = new Map<number, any>()
+  const productionsById = new Map((rowsByTable.get('productProductions') ?? []).map(row => [row.id, row]))
+  const buildPreviewVersions = new Map<number, 1 | 2>()
+  const executableAvgBuilds = new Set<number>()
+  const executableAvgPreviews = new Map<number, AnyProductBuildPreviewManifest>()
+  const previewCodec = builds.length ? await import('../product-production/preview-manifest') : null
   for (const build of builds) {
     if (!Number.isSafeInteger(build.id) || build.id < 1 || buildsById.has(build.id)) {
       throw new Error('[deriveExport] ProductBuild 本地主键无效')
     }
     buildsById.set(build.id, build)
+    try {
+      const preview = await previewCodec!.verifyStoredProductBuildPreview(build, { ttrpgProtocol: 2 })
+      if (preview) {
+        const production = productionsById.get(build.productionId)
+        if (!production || preview.productionKey !== production.productionKey
+          || preview.runtimePackage.productType !== production.productType
+          || build.projectId !== production.projectId || build.worldId !== production.worldId
+          || build.workId !== production.workId) throw new Error('production-mismatch')
+        buildPreviewVersions.set(build.id, preview.version)
+        if (avgExecutableModule(preview.runtimePackage)) { executableAvgBuilds.add(build.id); executableAvgPreviews.set(build.id, preview) }
+      }
+    } catch (error) {
+      throw new Error(`[deriveExport] ProductBuild Preview 无效:${error instanceof Error ? error.message : String(error)}`)
+    }
   }
   if (qualityReceipts.length > 0) {
     const { verifyProductQualityGateReceiptRecordV1 } = await import('../product-production/quality-receipts')
@@ -196,7 +219,7 @@ async function assertProductRuntimeExportIntegrityV1(
         throw new Error('[deriveExport] ProductRelease 本地主键无效')
       }
       try {
-        const manifest = await runtimePackage.verifyProductReleaseManifestV1(release.manifestJson,{ ttrpgProtocol: 2 })
+        const manifest = await runtimePackage.verifyProductReleaseManifest(release.manifestJson, { ttrpgProtocol: 2 })
         if (await productionHash.hashProductProductionValueV2(manifest) !== release.contentHash
           || release.productType !== manifest.productType
           || release.productionKey !== manifest.productionProvenance.productionKey
@@ -219,6 +242,22 @@ async function assertProductRuntimeExportIntegrityV1(
     if (!Number.isSafeInteger(session.id) || session.id < 1 || sessionsById.has(session.id)) {
       throw new Error('[deriveExport] ProductRuntimeSession 本地主键无效')
     }
+    if ((session.productReleaseId != null && releaseManifestsById.get(session.productReleaseId)?.version === 2
+      && !avgExecutableModule(releaseManifestsById.get(session.productReleaseId)!.runtimePackage))
+      || (session.productBuildId != null && buildPreviewVersions.get(session.productBuildId) === 2 && !executableAvgBuilds.has(session.productBuildId))) {
+      throw new Error('[deriveExport] V2 未登记可玩模块，不能包含运行会话')
+    }
+    const avgSource = (session.productReleaseId != null ? releaseManifestsById.get(session.productReleaseId) : executableAvgPreviews.get(session.productBuildId))
+    if (avgSource && avgExecutableModule(avgSource.runtimePackage)) {
+      const sourceRow = session.productReleaseId != null ? releasesById.get(session.productReleaseId) : buildsById.get(session.productBuildId)
+      if (!sourceRow || ['projectId','worldId','workId'].some(key => session[key] !== sourceRow[key])) throw new Error('[deriveExport] AVG 会话跨 owner')
+      if (session.runtimeSourceHash !== avgSource.packageHash) throw new Error('[avg] 备份会话来源 hash 不一致')
+      const branchOrigin = await verifyAvgBranchOriginV1({ canonSnapshotJson: session.canonSnapshotJson,
+        initialState: JSON.parse(session.initialStateJson), runtimeSourceHash: avgSource.packageHash })
+      assertFrozenRuntimePackageSessionV1({ session: { kind: session.kind, initialState: parseProductRuntimeState(session.initialStateJson) },
+        runtimePackage: avgSource.runtimePackage, runtimeSourceHash: avgSource.packageHash,
+        origin: session.parentSessionId != null || branchOrigin ? 'branch' : session.productReleaseId != null ? 'release' : 'preview' })
+    }
     sessionsById.set(session.id, session)
     let runtimeSourceManifest = null
     if (session.productReleaseId != null) {
@@ -233,7 +272,7 @@ async function assertProductRuntimeExportIntegrityV1(
     }
     if (runtimeSourceManifest && (session.runtimeSourceHash !== runtimeSourceManifest.packageHash
       || session.kind !== runtimeSourceManifest.productType)) throw new Error('[deriveExport] ProductRuntimeSession 来源身份不一致')
-    sourceManifestContract.assertProductRuntimeSourceSnapshotV2({ canonSnapshot: session.canonSnapshotJson, manifest: runtimeSourceManifest })
+    await assertProductRuntimeSourceSnapshotV3({ session, manifest: runtimeSourceManifest })
   }
 
   const sequencesBySession = new Map<number, Set<number>>()
@@ -307,7 +346,8 @@ async function assertProductRuntimeExportIntegrityV1(
     const childRelease = releasesById.get(session.productReleaseId)
     const parentManifest = releaseManifestsById.get(parent.productReleaseId)
     const childManifest = releaseManifestsById.get(session.productReleaseId)
-    if (!parentRelease || !childRelease || !parentManifest || !childManifest) {
+    if (!parentRelease || !childRelease || !parentManifest || !childManifest
+      || parentManifest.version !== 1 || childManifest.version !== 1) {
       throw new Error('[deriveExport] ProductRuntimeSession 迁移Release缺失')
     }
     if (parent.kind === 'ttrpg' && JSON.parse(session.initialStateJson).ttrpg?.openRun?.releaseContinuation) {

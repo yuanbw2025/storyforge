@@ -3,6 +3,8 @@
 declare const __STORYFORGE_BUILD_SHA__: string
 
 interface ImportMetaEnv {
+  /** Experimental AVG image production; defaults off. Never put credentials in VITE variables. */
+  readonly VITE_STORYFORGE_AVG_MEDIA_PRODUCTION?: '0' | '1'
   /** Same-origin, hash-verified image pack for an explicitly configured community prototype. */
   readonly VITE_STORYFORGE_AUTHORED_IMAGE_PACK_URL?: string
   readonly VITE_STORYFORGE_MEDIA_RELAY_URL?: string

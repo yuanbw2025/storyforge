@@ -34,7 +34,7 @@ export interface ProductMediaQualityProbeV2 {
 
 /** Returns stable machine-readable failures; an empty list is a policy pass. */
 export function evaluateProductMediaCommercialPolicyV2(input: {
-  runtimePackage: ProductRuntimePackageV1
+  runtimePackage: Pick<ProductRuntimePackageV1, 'presentation' | 'interaction' | 'adventure'>
   probe: ProductMediaQualityProbeV2
 }): string[] {
   const policy = PRODUCT_COMMERCIAL_MEDIA_POLICY_V2

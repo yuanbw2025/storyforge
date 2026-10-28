@@ -59,6 +59,14 @@ test('explicit per-fact review and confirmation survive refresh, compile into v6
   await expect(location.getByLabel('实际发现条件')).toHaveValue(f.permissions[0].discovery!.condition)
   await expect(save).toBeEnabled(); expect(requests).toHaveLength(2)
   await save.click()
+  // Saving advances the draft revision and invalidates the open source view.
+  // Reopen the committed revision before inspecting its confirmed facts.
+  await expect.poll(() => page.evaluate(async scope => {
+    const load = new Function('p', 'return import(p)'), {readChatDraftV1} = await load('/storyforge/src/lib/character-interaction/draft-service.ts')
+    return (await readChatDraftV1(scope)).sourceUnitsJson !== undefined
+  }, f.scope)).toBe(true)
+  await expect(confirm).toBeHidden()
+  await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await expect(confirm.getByTestId('chat-saved-source-units')).toContainText('铜印放在柜台下的木箱里')
   const frozen = await page.evaluate(async scope => {
     const load = new Function('p', 'return import(p)'), helper = await load('/storyforge/tests/helpers/chat-role-profile.ts')

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { legacyPackage } from '../helpers/avg-carrier-fixture'
 import { db } from '../../src/lib/db/schema'
 import {
   PRODUCT_BROWSER_PERFORMANCE_POLICY_V1,
@@ -48,10 +49,11 @@ function commercialBrief() {
     schema: 'storyforge.product-production-brief', version: 3,
     source: {
       worldReleaseId: 1, worldContentHash: PACKAGE_HASH,
-      selection: currentProductSelection('avg', {
-        story: [CURRENT_PRODUCT_RESOURCE_KEYS.story],
-        characters: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
-      }),
+      // This isolated quality-receipt fixture models the historical V1
+      // source grammar, not an enhanced-source production/adoption receipt.
+      selection: {schema:'storyforge.product-world-source-selection',version:1,productType:'avg',worldReferenceHash:'d'.repeat(64),
+        resourceKeys:[CURRENT_PRODUCT_RESOURCE_KEYS.story,CURRENT_PRODUCT_RESOURCE_KEYS.character].sort(),
+        roleBindings:{story:[CURRENT_PRODUCT_RESOURCE_KEYS.story],characters:[CURRENT_PRODUCT_RESOURCE_KEYS.character]}},
       startingPoint: {
         kind: 'mainline', title: '性能路线', summary: '冻结世界的主路线',
         sourceRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.story],
@@ -133,7 +135,20 @@ async function fixture() {
     releasedProductReleaseId: null, failureJson: '{}', authorizedAt: now,
     startedAt: now, completedAt: now, createdAt: now, updatedAt: now,
   }) as number
-  return { ...owned, buildId }
+  // Even a legacy cached-state unit fixture needs a real immutable preview
+  // before a session is allowed to bind it. Empty preview JSON is not a source.
+  const production=await db.productProductions.get(productionId)
+  const runtimePackage=parseProductRuntimePackageV1({...legacyPackage(),
+    definition:{...legacyPackage().definition,productKey:production!.productionKey,title:'性能主路线'},
+    sourceWorld:{contentHash:PACKAGE_HASH,selection:brief.source.selection},
+    narrative:{moduleKind:'main',moduleTitle:'性能主路线',entryNodeKey:'opening',
+      nodes:[{key:'opening',kind:'entry',title:'开场',summary:'进入路线',conditionJson:'{}',effectsJson:'[]',successorKeys:['ending']},
+        {key:'ending',kind:'ending',title:'结局',summary:'完成路线',conditionJson:'{}',effectsJson:'[]',successorKeys:[]}],beats:[],
+      choices:[{choiceKey:'choice.finish',sourceNodeKey:'opening',text:'完成路线',description:'走到结局',unavailableReason:'',targetNodeKey:'ending',displayConditionJson:'{}',availableConditionJson:'{}',effectsJson:'[]',tags:[],order:0}]}})
+  const preview=await createProductBuildPreviewManifestV1({productionKey:production!.productionKey,buildNumber:1,
+    buildManifestHash:PREVIEW_HASH,runtimePackage,mediaBindings:[]})
+  await db.productBuilds.update(buildId,{packageHash:preview.packageHash,previewHash:preview.previewHash,previewManifestJson:canonicalProductProductionJsonV2(preview)})
+  return { ...owned, buildId, packageHash:preview.packageHash,previewHash:preview.previewHash }
 }
 
 async function mediaFixture(input: { width?: number; height?: number } = {}) {
@@ -344,11 +359,12 @@ async function textAdventureHumanVisualFixture() {
 
 async function completePreviewMainRoute(input: Awaited<ReturnType<typeof fixture>>): Promise<number> {
   const now = Date.now()
+  const packageHash=(await db.productBuilds.get(input.buildId))!.packageHash
   const initial = structuredClone(EMPTY_PRODUCT_RUNTIME_STATE)
   initial.narrative = {
     schema: 'storyforge.product-narrative-runtime', version: 2,
     sourceModuleId: null, sourceModuleExportId: 1, moduleKind: 'main', moduleTitle: '性能主路线',
-    sourceHash: PACKAGE_HASH, contentHash: PACKAGE_HASH,
+    sourceHash: packageHash, contentHash: packageHash,
     nodes: [
       { key: 'opening', kind: 'entry', title: '开场', summary: '进入路线', conditionJson: '{}', effectsJson: '[]', successorKeys: ['ending'] },
       { key: 'ending', kind: 'ending', title: '结局', summary: '完成路线', conditionJson: '{}', effectsJson: '[]', successorKeys: [] },
@@ -365,7 +381,7 @@ async function completePreviewMainRoute(input: Awaited<ReturnType<typeof fixture
   }
   const sessionId = await db.productRuntimeSessions.add({
     ...input.scope, worldGroupId: null, productReleaseId: null,
-    productBuildId: input.buildId, runtimeSourceHash: PACKAGE_HASH,
+    productBuildId: input.buildId, runtimeSourceHash: packageHash,
     kind: 'avg', title: '作者主路线试玩', status: 'active', rulesetVersion: 1,
     seed: 'quality-receipt-route', canonSnapshotJson: '{}', initialStateJson: JSON.stringify(initial),
     parentSessionId: null, parentThroughSequence: null, createdAt: now, updatedAt: now,
@@ -374,7 +390,7 @@ async function completePreviewMainRoute(input: Awaited<ReturnType<typeof fixture
     {
       projectId: input.scope.projectId, worldGroupId: null, sessionId, sequence: 1,
       type: 'narrative.started', actorKey: null, targetKey: 'opening',
-      payloadJson: JSON.stringify({ entryNodeKey: 'opening', contentHash: PACKAGE_HASH }), createdAt: now,
+      payloadJson: JSON.stringify({ entryNodeKey: 'opening', contentHash: packageHash }), createdAt: now,
     },
     {
       projectId: input.scope.projectId, worldGroupId: null, sessionId, sequence: 2,
@@ -525,10 +541,10 @@ const humanEnvironment = {
   viewport: { width: 1440, height: 900 },
 }
 
-function measurement(measuredAt = Date.now()): ProductBrowserPerformanceMeasurementV1 {
+function measurement(frozen: {packageHash:string;previewHash:string}, measuredAt = Date.now()): ProductBrowserPerformanceMeasurementV1 {
   return {
     browserName: 'chromium', browserVersion: 'fixture', platform: 'desktop',
-    viewport: { width: 1440, height: 900 }, packageHash: PACKAGE_HASH, previewHash: PREVIEW_HASH,
+    viewport: { width: 1440, height: 900 }, packageHash: frozen.packageHash, previewHash: frozen.previewHash,
     firstInteractiveBytes: 2 * 1024 * 1024,
     cachedSceneLatenciesMs: Array.from({ length: 20 }, (_, index) => 40 + index),
     choiceInputLatenciesMs: Array.from({ length: 20 }, (_, index) => 20 + index),
@@ -546,7 +562,7 @@ describe('R-PRODUCTPROD-1I · durable Build quality receipts', () => {
 
   it('把完整原始测量、聚合结果和 gate hash 作为不可变 Build 证据保存，并对相同测量幂等', async () => {
     const owned = await fixture()
-    const input = measurement()
+    const input = measurement(owned)
     const first = await recordProductBrowserPerformanceMeasurementV1({
       scope: owned.scope, productBuildId: owned.buildId, measurement: input,
     })
@@ -555,7 +571,7 @@ describe('R-PRODUCTPROD-1I · durable Build quality receipts', () => {
     })
     expect(first.gateReceipt).toMatchObject({
       gateId: 'browser.performance.desktop', verifierKind: 'browser-runtime', status: 'passed',
-      inputHashes: [PACKAGE_HASH, PREVIEW_HASH],
+      inputHashes: [owned.packageHash, owned.previewHash],
     })
     expect(first.evidence.receipt.passed).toBe(true)
     expect(replay.row.id).toBe(first.row.id)
@@ -580,7 +596,7 @@ describe('R-PRODUCTPROD-1I · durable Build quality receipts', () => {
 
   it('短时 smoke 作为 failed 证据保留，且最新失败会阻止旧通过回执解锁商业发布', async () => {
     const owned = await fixture()
-    const smoke = measurement(Date.now())
+    const smoke = measurement(owned,Date.now())
     smoke.memorySamples = [{ elapsedMs: 60_000, usedHeapBytes: 90 * 1024 * 1024 }]
     const failed = await recordProductBrowserPerformanceMeasurementV1({
       scope: owned.scope, productBuildId: owned.buildId, measurement: smoke,
@@ -592,7 +608,7 @@ describe('R-PRODUCTPROD-1I · durable Build quality receipts', () => {
       scope: owned.scope, productBuildId: owned.buildId,
     })).rejects.toThrow(/浏览器性能未通过/)
 
-    const passedInput = measurement(smoke.measuredAt + 1)
+    const passedInput = measurement(owned,smoke.measuredAt + 1)
     await recordProductBrowserPerformanceMeasurementV1({
       scope: owned.scope, productBuildId: owned.buildId, measurement: passedInput,
     })
@@ -605,7 +621,7 @@ describe('R-PRODUCTPROD-1I · durable Build quality receipts', () => {
     await confirmPreviewMainRoute(owned, sessionId)
     expect(await db.productBuilds.get(owned.buildId)).toMatchObject({ status: 'release-ready' })
 
-    const newestFailure = measurement(passedInput.measuredAt + 1)
+    const newestFailure = measurement(owned,passedInput.measuredAt + 1)
     newestFailure.firstInteractiveBytes = 13 * 1024 * 1024
     await recordProductBrowserPerformanceMeasurementV1({
       scope: owned.scope, productBuildId: owned.buildId, measurement: newestFailure,
@@ -622,7 +638,7 @@ describe('R-PRODUCTPROD-1I · durable Build quality receipts', () => {
 
   it('Build hash 或 Work scope 不一致时零写入', async () => {
     const owned = await fixture()
-    const badHash = measurement()
+    const badHash = measurement(owned)
     badHash.previewHash = 'd'.repeat(64)
     await expect(recordProductBrowserPerformanceMeasurementV1({
       scope: owned.scope, productBuildId: owned.buildId, measurement: badHash,
@@ -630,7 +646,7 @@ describe('R-PRODUCTPROD-1I · durable Build quality receipts', () => {
 
     const other = await fixture()
     await expect(recordProductBrowserPerformanceMeasurementV1({
-      scope: other.scope, productBuildId: owned.buildId, measurement: measurement(),
+      scope: other.scope, productBuildId: owned.buildId, measurement: measurement(owned),
     })).rejects.toThrow(/Build 不存在或跨 Work/)
     expect(await db.productQualityGateReceipts.count()).toBe(0)
   })

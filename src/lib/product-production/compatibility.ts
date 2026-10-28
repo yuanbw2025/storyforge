@@ -1,19 +1,18 @@
-import type { ProductBuildCompatibilityReportV1 } from '../types'
-import type { ProductRuntimePackageWithTtrpgV2 } from '../ttrpg/content-version'
+import type { ProductBuildCompatibilityReportV1, AnyProductRuntimePackage } from '../types'
 import { TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1 } from '../types'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 
 interface RuntimePackageBuildRefV1 {
   buildNumber: number
   packageHash: string
-  runtimePackage: ProductRuntimePackageWithTtrpgV2
+  runtimePackage: AnyProductRuntimePackage
 }
 
 function fail(message: string): never {
   throw new Error(`[product-production-compatibility] ${message}`)
 }
 
-function stableValues(pkg: ProductRuntimePackageWithTtrpgV2): Map<string, string> {
+function stableValues(pkg: AnyProductRuntimePackage): Map<string, string> {
   const values = new Map<string, string>()
   const add = (prefix: string, key: string, value: unknown) => {
     const stableKey = `${prefix}:${key}`
@@ -46,6 +45,12 @@ function stableValues(pkg: ProductRuntimePackageWithTtrpgV2): Map<string, string
     displayConditionJson: choice.displayConditionJson, availableConditionJson: choice.availableConditionJson,
     effectsJson: choice.effectsJson,
   })
+  if (pkg.version === 2) {
+    // Native AVG reading/history, typed rules and media remain bound to their
+    // exact immutable package. No automatic cross-package save migration exists.
+    add('avg.native', 'frozen-package', pkg)
+    return values
+  }
   for (const profile of pkg.interaction?.profiles ?? []) add('interaction.profile', profile.participantKey, {
     characterKey: profile.characterKey, relationshipDimensions: profile.relationshipDimensions,
   })

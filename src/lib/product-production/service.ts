@@ -1,3 +1,6 @@
+import { canonicalProductProductionJsonV2 } from './hash'
+import { deriveAvgAssemblyRecoveryBaseV1 } from '../avg/assembly-recovery'
+import { AVG_VISUAL_TEXT_CAPABILITY_V4 } from '../avg/visual-planning-roles'
 import { isTtrpgCompatibleOpeningTextFreeProfileV1 } from '../ttrpg/open-compatible-opening-contract'
 import { db } from '../db/schema'
 import type {ChatMediaProductionDecisionV1} from '../character-interaction/media-selection'
@@ -96,6 +99,8 @@ import {
   type ProductProductionSchedulerProjectionV1,
 } from './scheduler'
 import { createProductRuntimeInstanceFromSource } from '../product/runtime-instances'
+import { avgSoundProductionExecutionReadyV1 } from '../avg/sound-production-brief'
+import { avgAudioProcessingExecutionReadyV1 } from '../avg/audio-production-brief'
 import { startAiTownInitialSceneV1 } from '../ai-town/runtime-api'
 import {
   listProductMediaProviderCapabilitiesV1,
@@ -907,22 +912,31 @@ export function inspectProductProductionCapabilityReadinessV1(input: {
  * capability required by that frozen Brief is bound.
  */
 export function evaluateProductProductionAuthorizationReadinessV1(input: {
-  brief: Pick<ProductProductionBriefV3, 'capabilityRequirements' | 'avgRevision'>
-    & Partial<Pick<ProductProductionBriefV3, 'qualityProfile' | 'intent' | 'ttrpgOpen' | 'media'>>
+  brief: Pick<ProductProductionBriefV3, 'capabilityRequirements' | 'avgRevision' | 'avgAssembly' | 'avgVisualPlanning' | 'avgSoundPlanning' | 'avgAudioProcessing'> & Partial<Pick<ProductProductionBriefV3, 'qualityProfile' | 'intent' | 'ttrpgOpen' | 'media'>>
   readiness: ProductProductionCapabilityReadinessV1
 }): ProductProductionAuthorizationReadinessV1 {
   const blockerMessages: string[] = []
+  if (input.brief.avgAudioProcessing && !avgAudioProcessingExecutionReadyV1()) blockerMessages.push('本地声音加工链尚未就绪，原件和当前方案保留。')
+  if (input.brief.avgSoundPlanning && !avgSoundProductionExecutionReadyV1()) blockerMessages.push('声音正式制作尚未开放，已保存需求与原有产物保留。')
+  // The parsed V4 Brief derives this requirement from its unreused roles.
+  // A missing text configuration must not block an entirely local role plan.
+  const visualTextNotRequired = !!input.brief.avgVisualPlanning && input.brief.capabilityRequirements.some(requirement => (
+    requirement.requirementKey === AVG_VISUAL_TEXT_CAPABILITY_V4 && requirement.mediaClass === 'text' && !requirement.required
+  ))
   const authoredWithoutText = isTtrpgCompatibleOpeningTextFreeProfileV1(input.brief)
     && !input.brief.capabilityRequirements.some(r => r.required && r.mediaClass === 'text')
-  if (!input.brief.avgRevision && !authoredWithoutText && !input.readiness.text.ready) {
+  if (!input.brief.avgRevision && !input.brief.avgAssembly && input.brief.avgSoundPlanning?.version !== 2 && !visualTextNotRequired && !authoredWithoutText && !input.readiness.text.ready) {
     blockerMessages.push(input.readiness.text.issue || '设置中的文本生成能力尚未就绪。')
   }
   const requiredMediaRequirementKeys = input.brief.capabilityRequirements
     .filter(requirement => requirement.required && ['image', 'music', 'sfx'].includes(requirement.mediaClass))
     .map(requirement => requirement.requirementKey)
-  const requiresImage = input.brief.capabilityRequirements
+  const image = input.brief.avgAssembly?.version === 3 ? input.brief.avgAssembly.image
+    : input.brief.avgAssembly?.version === 2 ? input.brief.avgAssembly : null
+  const retainedOnly = image?.imageRecovery?.rerunRequirementKeys.length === 0
+  const requiresImage = !retainedOnly&&input.brief.capabilityRequirements
     .some(requirement => requirement.required && requirement.mediaClass === 'image')
-  const requiresAudio = input.brief.capabilityRequirements
+  const requiresAudio = !input.brief.avgSoundPlanning && input.brief.capabilityRequirements
     .some(requirement => requirement.required && ['music', 'sfx'].includes(requirement.mediaClass))
   if (requiresImage && !input.readiness.image.ready && !input.readiness.mediaRelayReady) {
     blockerMessages.push(input.readiness.image.issue || '全局 Agnes 图片能力尚未就绪。')
@@ -1327,6 +1341,11 @@ export async function authorizeProductProductionStartV1(input: {
   const brief = input.details.brief
   if (!brief) throw new Error('[product-production-service] 缺少当前 Brief')
   const parsedBrief = parseProductProductionBriefV3(brief.briefJson)
+  if (parsedBrief.avgSoundPlanning) {
+    await (await import('../avg/sound-planning-workspace')).assertAvgSoundPreparationMatchesBriefV1({
+      scope: input.scope, productionId: input.details.production.id!, brief: parsedBrief,
+    })
+  }
   const readiness = evaluateProductProductionAuthorizationReadinessV1({
     brief: parsedBrief,
     readiness: inspectProductProductionCapabilityReadinessV1({ projectId: input.scope.projectId }),
@@ -1753,6 +1772,11 @@ export async function runAuthorizedProductProductionV1(input: {
   const scope = await resolveScope({ scope: input.scope })
   const details = await readProductProductionDetailsV1(scope, input.productionId)
   if (!details.brief || !details.build) throw new Error('[product-production-service] Production 尚未授权 Build')
+  if (details.executionBrief?.avgSoundPlanning) {
+    return (await import('../avg/sound-production-service')).runAvgSoundProductionV1({
+      ...input, scope, expectedBuildId: details.build.id!,
+    })
+  }
   if (!['producing', 'preview-ready'].includes(details.production.status)) {
     throw new Error(`[product-production-service] Production 状态 ${details.production.status} 不允许自动制作`)
   }
@@ -1786,7 +1810,13 @@ export async function runAuthorizedProductProductionV1(input: {
   }
   const brief = creatorContracts?.executionBrief
     ?? parseProductProductionBriefV3(details.brief.briefJson)
+  if (brief.avgSoundPlanning) throw new Error('[avg-sound] 声音实际生产、审听和采用闭环尚未接通，未解析凭据或创建调用')
   if (brief.avgRevision) return (await import('../avg/revision-production')).runAvgRevisionV1({ ...input, scope, details, brief })
+  if (brief.avgAssembly) {
+    const projection = await (await import('../avg/assembly-service')).runAvgAssemblyV1({ scope, productionId: input.productionId, signal: input.signal })
+    if (input.onProgress) await input.onProgress(projection)
+    return projection
+  }
   const authoredWithoutText = isTtrpgCompatibleOpeningTextFreeProfileV1(brief) && !brief.capabilityRequirements.some(r => r.required && r.mediaClass === 'text')
   const textRequirements = brief.capabilityRequirements.filter(requirement => requirement.mediaClass === 'text')
   if (textRequirements.length !== 1) throw new Error('[product-production-service] 正式制作需要唯一文本 capability requirement')
@@ -2024,9 +2054,14 @@ export async function beginProductProductionEvolutionV1(input: {
     && affectedLanes.includes('content') && affectedLanes.includes('visual')
   const runtimeCopyRecovery = currentTextAdventureRecovery
     && affectedLanes.length === 1 && affectedLanes[0] === 'runtime'
+  const nativeRecovery = (details.executionBrief?.avgAssembly || details.executionBrief?.avgVisualPlanning) && !details.build.previewHash
+    && ['cancelled','failed','recovery-required'].includes(details.build.status)
+    && canonicalProductProductionJsonV2([...affectedLanes].sort()) === canonicalProductProductionJsonV2(['audio','content','product','visual'])
   const recoveryEvolution = budgetRecovery || planUpgradeRecovery || visualContractRecovery
     || preMediaContentRecovery || runtimeCopyRecovery
-  if (recoveryEvolution) {
+  if (nativeRecovery) {
+    base = await deriveAvgAssemblyRecoveryBaseV1(details.build,details.executionBrief!,scope)
+  } else if (recoveryEvolution) {
     const rejectedAnchorRecovery = rejectedAnchorRecoveryCandidate
     if (details.production.productType !== 'text-adventure'
       || (!rejectedAnchorRecovery && (details.production.status !== 'producing'

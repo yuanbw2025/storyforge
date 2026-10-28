@@ -154,6 +154,10 @@
 .avg-stage[data-tone="cold"] .avg-stage-scene { filter: saturate(.82) hue-rotate(8deg); }
 .avg-stage[data-tone="warm"] .avg-stage-scene { filter: sepia(.18) saturate(1.12); }
 .avg-stage[data-tone="dark"] .avg-stage-scene { filter: brightness(.68) contrast(1.08); }
+.avg-playing .avg-stage[data-tone="night"] { background: radial-gradient(circle at center,#15243b,#03060d 72%); }
+.avg-playing .avg-stage[data-tone="day"] { background: radial-gradient(circle at center,#c7c4ac,#637783 82%); }
+.avg-stage[data-tone="night"] .avg-stage-scene { filter: brightness(.72) saturate(.82) hue-rotate(8deg); }
+.avg-stage[data-tone="day"] .avg-stage-scene { filter: brightness(1.08) saturate(1.04); }
 .avg-mask { position: absolute; z-index: 11; inset: 0; background: radial-gradient(circle at center,transparent 42%,rgba(0,0,0,.82)); pointer-events: none; }
 .avg-flash { position: absolute; z-index: 21; inset: 0; background: #fff; animation: avg-flash .55s ease-out both; pointer-events: none; }
 .avg-effect-transition .avg-background { animation: avg-crossfade .65s ease both; }
@@ -235,7 +239,7 @@
   .avg-title-sessions { grid-template-columns: 1fr; }
   .avg-game-title { display: none; }
   .avg-playing .avg-toolbar { justify-content: flex-end; }
-  .avg-playing .avg-toolbar nav { width: auto; overflow: visible; }
+  .avg-playing .avg-toolbar nav { width: 100%; flex-wrap: wrap; justify-content: flex-end; overflow: visible; }
   .avg-playing .avg-actor { width: 52vw; height: 78%; }
   .avg-playing .avg-slot-left { left: 27%; }.avg-playing .avg-slot-right { left: 73%; }
   .avg-playing .avg-dialogue { right: 12px; bottom: 12px; left: 12px; min-height: 96px; padding: 22px 18px 18px; }
@@ -245,6 +249,19 @@
   .avg-panel-backdrop { padding: 12px; }
   .avg-panel { max-height: 90vh; }
   .avg-panel .avg-saves article { align-items: flex-start; flex-direction: column; }
+}
+
+/* Keep the authored art frame above the dialogue. Actor-only foregrounds
+ * may use the taller stage; CG/overlays retain their original shared frame. */
+@media (max-width: 760px) and (orientation: portrait) {
+  .avg-playing .avg-main { display: flex; flex-direction: column; }
+  .avg-playing .avg-toolbar { position: relative; flex: none; padding: 12px 13px; }
+  .avg-playing .avg-stage { position: relative; inset: auto; flex: 1; width: 100%; container-type: size; }
+  .avg-playing .avg-stage-scene { inset: 0 0 auto; aspect-ratio: inherit; }
+  .avg-playing .avg-background img,.avg-playing .avg-cg img,.avg-playing .avg-overlay img { object-fit: contain; }
+  .avg-playing .avg-stage-scene[data-character-layout="portrait-expanded"] .avg-actor { top: 8cqh; bottom: auto; height: 78cqh; }
+  .avg-playing .avg-stage-scene[data-character-layout="portrait-expanded"][data-actor-count="1"] .avg-actor { width: 100cqw; }
+  .avg-playing .avg-scene-title { top: 16px; padding: 12px 18px; }
 }
 
 /* Branching story player v2: book-like presentation with the library outside active play. */

@@ -1,0 +1,163 @@
+{
+  "schema": "storyforge.narrative-ir-contract-evaluation",
+  "version": 1,
+  "workPackage": "NW-1A",
+  "datasetVersion": 1,
+  "evidenceLevel": "deterministic-contract-and-isolated-database; not-semantic-extraction-or-provider-improvement",
+  "modelCalls": 0,
+  "productE2ERuns": 0,
+  "independentHumanReviews": 0,
+  "cases": [
+    {
+      "family": "branch-sluice",
+      "split": "holdout",
+      "distinctEntityCount": 2,
+      "identitySurvivesRenameAndReorder": true,
+      "frozenSequencePreserved": true,
+      "originalQueries": 10,
+      "originalEdits": 4,
+      "verifiedSpans": 21,
+      "originalReleasePreserved": true
+    },
+    {
+      "family": "clock-retelling",
+      "split": "development",
+      "distinctEntityCount": 2,
+      "identitySurvivesRenameAndReorder": true,
+      "frozenSequencePreserved": true,
+      "originalQueries": 10,
+      "originalEdits": 4,
+      "verifiedSpans": 20,
+      "originalReleasePreserved": true
+    },
+    {
+      "family": "ferry-names",
+      "split": "development",
+      "distinctEntityCount": 2,
+      "identitySurvivesRenameAndReorder": true,
+      "frozenSequencePreserved": true,
+      "originalQueries": 10,
+      "originalEdits": 4,
+      "verifiedSpans": 20,
+      "originalReleasePreserved": true
+    },
+    {
+      "family": "garden-causality",
+      "split": "development",
+      "distinctEntityCount": 2,
+      "identitySurvivesRenameAndReorder": true,
+      "frozenSequencePreserved": true,
+      "originalQueries": 10,
+      "originalEdits": 4,
+      "verifiedSpans": 21,
+      "originalReleasePreserved": true
+    },
+    {
+      "family": "harbor-secret",
+      "split": "development",
+      "distinctEntityCount": 2,
+      "identitySurvivesRenameAndReorder": true,
+      "frozenSequencePreserved": true,
+      "originalQueries": 10,
+      "originalEdits": 4,
+      "verifiedSpans": 21,
+      "originalReleasePreserved": true
+    },
+    {
+      "family": "porcelain-repair",
+      "split": "development",
+      "distinctEntityCount": 2,
+      "identitySurvivesRenameAndReorder": true,
+      "frozenSequencePreserved": true,
+      "originalQueries": 10,
+      "originalEdits": 4,
+      "verifiedSpans": 22,
+      "originalReleasePreserved": true
+    },
+    {
+      "family": "reed-longtail",
+      "split": "holdout",
+      "distinctEntityCount": 2,
+      "identitySurvivesRenameAndReorder": true,
+      "frozenSequencePreserved": true,
+      "originalQueries": 10,
+      "originalEdits": 4,
+      "verifiedSpans": 21,
+      "originalReleasePreserved": true
+    },
+    {
+      "family": "sealed-letter",
+      "split": "development",
+      "distinctEntityCount": 2,
+      "identitySurvivesRenameAndReorder": true,
+      "frozenSequencePreserved": true,
+      "originalQueries": 10,
+      "originalEdits": 4,
+      "verifiedSpans": 21,
+      "originalReleasePreserved": true
+    },
+    {
+      "family": "theater-promise",
+      "split": "development",
+      "distinctEntityCount": 2,
+      "identitySurvivesRenameAndReorder": true,
+      "frozenSequencePreserved": true,
+      "originalQueries": 10,
+      "originalEdits": 4,
+      "verifiedSpans": 20,
+      "originalReleasePreserved": true
+    },
+    {
+      "family": "two-calendars",
+      "split": "holdout",
+      "distinctEntityCount": 2,
+      "identitySurvivesRenameAndReorder": true,
+      "frozenSequencePreserved": true,
+      "originalQueries": 10,
+      "originalEdits": 4,
+      "verifiedSpans": 20,
+      "originalReleasePreserved": true
+    },
+    {
+      "family": "unmade-wedding",
+      "split": "development",
+      "distinctEntityCount": 2,
+      "identitySurvivesRenameAndReorder": true,
+      "frozenSequencePreserved": true,
+      "originalQueries": 10,
+      "originalEdits": 4,
+      "verifiedSpans": 21,
+      "originalReleasePreserved": true
+    },
+    {
+      "family": "warehouse-history",
+      "split": "holdout",
+      "distinctEntityCount": 2,
+      "identitySurvivesRenameAndReorder": true,
+      "frozenSequencePreserved": true,
+      "originalQueries": 10,
+      "originalEdits": 4,
+      "verifiedSpans": 21,
+      "originalReleasePreserved": true
+    }
+  ],
+  "inputHashes": {
+    "src/lib/narrative-domain/json.ts": "fc1fe9db86daaf85808ecc1d1754a0dc524a9d57e1c63625edc87d8101bf52b8",
+    "src/lib/narrative-domain/sha256.ts": "d7b19c749bef23f0ebc441765b9ee499d00e7412dd51c7ca597774125246d6d5",
+    "src/lib/registry/field-registry.ts": "e9d301a57f16bb01a3a886d215f865d393aa213ebb63a706f0e556ea59cb6883",
+    "src/lib/registry/project-tables.ts": "e52e3104bd0d89282ac2f36e8a50cee4f9bf50467a60e3b21930e117bd8d140a",
+    "src/lib/registry/types.ts": "ae666e0c6115eb7c3f6152b2d78a5b05fa80e9d8c55bb86e49d7b3d4b774f02f",
+    "src/lib/types/narrative-ir.ts": "1ee040194a4ddaa4020ff46d249d6348e0287aa6fc3225a65704a8cbb159c007",
+    "src/lib/types/narrative-time.ts": "aca70d8243d17288821d3adcaaac3f83aa144580ac2fe1726c7c3e721c39d74e",
+    "src/lib/world-engine/narrative-identity.ts": "7a805850276f0d5723623159c8c4be793de297fccdc8043f9fe3356a23b64f9e",
+    "src/lib/world-engine/narrative-ir-codec.ts": "4a5df3b9250b7ae86350e3ecc104ec4d6f722de8a88e8f097a14999520abb4ad",
+    "src/lib/world-engine/narrative-ir.ts": "e0c6fb309ea5ecb6b850446dff6c93e50f5a9451f48b354d47c17f7b136d9ffa",
+    "src/lib/world-engine/narrative-json.ts": "419260f60a09901d4d69ab3f02e52f65e893433de812592570c0dd7b4192dc26",
+    "src/lib/world-engine/narrative-time.ts": "19318e2b6425efaedac7fed7662247f025c6cc0099be24607c05c3e366d6f894",
+    "tests/acceptance/narrative-world/corpus-v1.json": "2273c9fcda68cb39a3892e2c4d86a47f3a0df77032dae073665c89ff8ab6e014",
+    "tests/acceptance/narrative-world/ir-codec-golden-v1.json": "c2f049f36f022d5d14261efa023b1167c7f6ccc55a0323d370c41f5f557f6f92",
+    "tests/helpers/narrative-ir-fixture.ts": "0701b99e54794f3e259e95e6ef6f7dbb6a24d63d110999cd112578497265281a",
+    "tests/helpers/narrative-world-evaluation.ts": "49dd21ab0451a967f34b5104d52e9c215defbf0153ebc41b47477dbefd33223a",
+    "tests/regression/R-NW-1A-ir-codec.test.ts": "6ec625958bd02145e562324b08c270d828619ef3d22174ba75ecc32cebfb92f5"
+  }
+}

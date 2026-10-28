@@ -36,6 +36,11 @@ import { verifyProductRuntimeSessionSourceV1 } from '../../src/lib/product-produ
 import { createProductBuildPreviewManifestV1 } from '../../src/lib/product-production/preview-manifest'
 import { createConfiguredProductProductionExecutorV1 } from '../../src/lib/product-production/production-executor'
 import { branchProductRuntimeSession } from '../../src/lib/product/runtime-core'
+import { deleteProductRuntimeSession, readProductRuntimeState } from '../../src/lib/product/runtime-core'
+import { parseProductRuntimePackageV2, createProductReleaseManifestV2, productReleaseIdentityHashV2 } from '../../src/lib/product-production/runtime-package'
+import { seedAvgNativePreview } from '../helpers/avg-native-fixture'
+import { avgSystemFixture } from '../helpers/avg-system-fixture'
+import { assertProductRuntimeSourceSnapshotV2 } from '../../src/lib/product/runtime-source-manifest'
 
 async function rehashPlan(plan: ProductSourcePlanV2) {
   const { planHash: _hash, ...body } = plan
@@ -196,6 +201,17 @@ describe('NW-2C · exact SourcePlan / actual evidence / two product compiler sea
     expect(manifests[0].resources.length).toBeLessThan(manifests[1].resources.length)
     await expect(validateProductSourcePlanV1(chat.sourcePlan as never)).rejects.toThrow(/V1/)
   }, 30000)
+
+  it('原生 AVG 确定性集成不能由调用方降成较小的 adaptation 读取片段', async () => {
+    const f = await fixture('avg')
+    const execution = await executeProductProductionWorldGatewayV1({ scope: f.scope, brief: f.brief,
+      sourcePlan: f.sourcePlan, task: {...f.task, kind:'avg-assembly-integrate', taskKey:'avg.assembly.integrate',executionMode:'deterministic'},
+      requireCompilationResources:false, budgetTokens:100000 })
+    const pointer = await persistRead(f.scope, execution)
+    const manifest = await aggregateProductSourceManifestFromExactRuns({scope:f.scope,sourcePlan:f.sourcePlan,runContextManifests:[pointer]})
+    expect(manifest.resources.map(r => r.resourceKey)).toEqual(f.sourcePlan.exact.requiredResourceKeys)
+    expect(manifest.resources.every(r => r.depths.includes('original'))).toBe(true)
+  },30000)
 
   it('真实 run 只读一项时，即使旧版最低数量已满足也拒绝发布；空指针同样拒绝', async () => {
     const f = await fixture('avg'), boundary = await resolveProductSourceReadBoundary(f.sourcePlan)
@@ -422,6 +438,60 @@ describe('NW-2C · exact SourcePlan / actual evidence / two product compiler sea
     expect(await db.productRuntimeSessions.where('projectId').equals(importedProjectId).count()).toBe(4)
     await expect(exportProjectJSON(importedProjectId)).rejects.toThrow(/来源计划|实际读取/)
   }, 30000)
+
+  it('增强世界的原生 AVG 分支同时保留准确世界来源与私域初态，删除父档和备份后不丢任一证明', async () => {
+    const world=await seedNarrativeRelationReleaseV4({explicitEntityEvidence:true}),f=await fixture('avg',world,1)
+    const {manifest}=await readAll(f),legacy=await releaseFor(f,manifest),native=await seedAvgNativePreview(avgSystemFixture())
+    // Deterministic contract fixture: no model, art, or author-quality evidence.
+    const runtimePackage=parseProductRuntimePackageV2({...native.preview.runtimePackage,
+      definition:{...native.preview.runtimePackage.definition,productKey:f.productionKey},sourceWorld:legacy.runtimePackage.sourceWorld})
+    const sourcePlan=await portableProductSourcePlan(f.sourcePlan),sourceContracts={sourcePlan,confirmedBrief:f.confirmedBrief,sourceManifest:manifest}
+    const productionProvenance={...legacy.productionProvenance,buildManifestHash:await hashProductProductionValueV2(runtimePackage)}
+    const releaseHash=await productReleaseIdentityHashV2({schema:'storyforge.product-release',version:2,productType:'avg',
+      sourceWorldRelease:{contentHash:world.release.contentHash},runtimePackage,packageHash:await hashProductProductionValueV2(runtimePackage),
+      productionProvenance,sourceContracts})
+    const lineage=await createProductReleaseLineageV1({productType:'avg',productInstanceKey:f.productionKey,
+      releaseUid:productReleaseUidV1({productType:'avg',productInstanceKey:f.productionKey,releaseVersion:1,releaseHash}),
+      releaseVersion:1,releaseHash,parentRelease:null,worldReference:sourcePlan.worldReference,...sourceContracts,
+      build:{buildUid:`fixture-${f.productionKey}`,buildHash:productionProvenance.buildManifestHash},
+      quality:{passed:true,receiptHashes:[productionProvenance.rootTerminalReceiptHash]},
+      compatibility:{status:'initial',protocolVersion:2,evidenceHashes:[]}})
+    const release=await createProductReleaseManifestV2({runtimePackage,productionProvenance,sourceContracts,lineage})
+    const releaseId=await db.productReleases.add({...f.scope,productionKey:f.productionKey,productType:'avg',
+      worldReleaseId:f.release.id!,version:1,label:'增强原生AVG合同夹具',manifestJson:JSON.stringify(release),
+      contentHash:await hashProductProductionValueV2(release),createdAt:Date.now()})
+    const parent=await createProductRuntimeInstanceFromSource({scope:f.scope,source:{kind:'release',productReleaseId:releaseId},title:'增强原生原档'})
+    const parentSource=JSON.parse(parent.canonSnapshotJson)
+    expect(parentSource.version).toBe(2)
+    const child=await branchProductRuntimeSession({parentSessionId:parent.id!,throughSequence:0,title:'增强原生分支'})
+    const childSource=JSON.parse(child.canonSnapshotJson)
+    expect(childSource).toMatchObject({schema:'storyforge.product-runtime-source',version:3,source:parentSource,
+      avgBranchOrigin:{schema:'storyforge.avg.branch-origin',version:1,runtimeSourceHash:release.packageHash}})
+    const verified=await verifyProductRuntimeSessionSourceV1({scope:f.scope,session:child})
+    expect(()=>assertProductRuntimeSourceSnapshotV2({canonSnapshot:childSource,manifest:verified.sourceManifest})).toThrow()
+    const initial=await readProductRuntimeState(child.id!)
+    await deleteProductRuntimeSession(parent.id!)
+    expect(await readProductRuntimeState(child.id!)).toEqual(initial)
+    const backup=await exportProjectJSON(f.scope.projectId),projectId=await importProjectJSON(structuredClone(backup))
+    const restored=(await db.productRuntimeSessions.where('projectId').equals(projectId).toArray()).find(s=>s.title==='增强原生分支')!
+    expect(restored.parentSessionId).toBeNull();expect(restored.canonSnapshotJson).toBe(child.canonSnapshotJson)
+    expect(await readProductRuntimeState(restored.id!)).toEqual(initial)
+    const again=await branchProductRuntimeSession({parentSessionId:restored.id!,throughSequence:0,title:'增强原生再次分支'})
+    await expect(verifyProductRuntimeSessionSourceV1({scope:again,session:again})).resolves.toMatchObject({sourceManifest:{packageHash:release.packageHash}})
+    for(const mode of ['world','private','missing','extra'] as const){
+      const damaged=JSON.parse(restored.canonSnapshotJson)
+      if(mode==='world')damaged.source.sourceManifest.directWorldReads=[{resourceKey:'invented'}]
+      if(mode==='private')damaged.avgBranchOrigin.initialStateHash='f'.repeat(64)
+      if(mode==='missing')delete damaged.avgBranchOrigin
+      if(mode==='extra')damaged.unregistered='forged'
+      await expect(verifyProductRuntimeSessionSourceV1({scope:restored,session:{...restored,canonSnapshotJson:JSON.stringify(damaged)}})).rejects.toThrow()
+      const invalid=structuredClone(backup),row=(invalid.productRuntimeSessions as typeof backup.productRuntimeSessions)!.find(s=>s.title==='增强原生分支')!
+      row.canonSnapshotJson=JSON.stringify(damaged)
+      const projects=await db.projects.count()
+      await expect(importProjectJSON(invalid)).rejects.toThrow()
+      expect(await db.projects.count()).toBe(projects)
+    }
+  },30000)
 
   it('v4 授权制作导入后用重绑 locator 继续实际 Gateway 和正式编译，原 Brief 字节保持冻结', async () => {
     const world = await seedNarrativeRelationReleaseV4({ explicitEntityEvidence: true })

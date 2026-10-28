@@ -1,12 +1,15 @@
+import { avgExecutableModule, avgRuntimeStage } from '../avg/executable-module'
+import { requirePlayableProductRuntimePackage } from '../product-production/runtime-package'
+import type { AnyProductRuntimePackage, AvgPlayableRuntimePackage } from '../types'
 import { db } from '../db/schema'
 import { hashProductProductionValueV2 } from '../product-production/hash'
 import {
-  parseProductReleaseManifestV1,
-  verifyProductReleaseManifestV1,
+  parseProductReleaseManifest,
+  verifyProductReleaseManifest,
+  requirePlayableProductRuntimePackageV1,
 } from '../product-production/runtime-package'
 import type {
   AdventureProductRuntimePackageV1,
-  AvgProductRuntimePackageV1,
   ProductRelease,
   ProductRuntimePackageV1,
   CharacterInteractionProductRuntimePackageV1,
@@ -62,7 +65,9 @@ function preflightTextOpenWorldReleaseShape(value: string): void {
 }
 
 /** Product-owned display names; runtime never reopens the source WorldRelease. */
-export function runtimePackageSpeakerNames(runtimePackage: ProductRuntimePackageV1): Record<string, string> {
+export function runtimePackageSpeakerNames(runtimePackage: AnyProductRuntimePackage): Record<string, string> {
+  const module = avgExecutableModule(runtimePackage)
+  if (module) return Object.fromEntries(module.systemPlan.characters.map(character => [character.key, character.displayName]))
   return Object.fromEntries((runtimePackage.interaction?.profiles ?? []).flatMap(profile => [
     [profile.characterKey, profile.name],
     [profile.participantKey, profile.name],
@@ -88,8 +93,7 @@ export function runtimePackagePlayerCharacter(runtimePackage: ProductRuntimePack
 export async function assertProductReleaseUnchanged(productReleaseId: number, reader?: { ttrpgProtocol: 2 }): Promise<ProductRelease> {
   const release = await db.productReleases.get(productReleaseId)
   if (!release) throw new Error('[product-release] ProductRelease 不存在')
-  const manifest = reader ? await verifyProductReleaseManifestV1(release.manifestJson, reader)
-    : await verifyProductReleaseManifestV1(release.manifestJson)
+  const manifest = await verifyProductReleaseManifest(release.manifestJson, reader)
   if (release.productType !== manifest.productType
     || release.productType !== manifest.runtimePackage.productType) {
     throw new Error('[product-release] 发布根记录与冻结清单的产品身份不一致')
@@ -103,7 +107,7 @@ export async function assertProductReleaseUnchanged(productReleaseId: number, re
 }
 
 export function parseAnyProductReleaseManifest(value: string): ProductRuntimePackageV1 {
-  return parseProductReleaseManifestV1(value).runtimePackage
+  return requirePlayableProductRuntimePackageV1(parseProductReleaseManifest(value).runtimePackage)
 }
 
 export function parseInteractionProductReleaseManifest(value: string): CharacterInteractionProductRuntimePackageV1 {
@@ -133,10 +137,10 @@ export function parseAdventureCapableProductReleaseManifest(
   return parsed as AdventureProductRuntimePackageV1 | TextOpenWorldProductRuntimePackageV1
 }
 
-export function parseAvgProductReleaseManifest(value: string): AvgProductRuntimePackageV1 {
-  const parsed = parseAnyProductReleaseManifest(value)
-  if (parsed.productType !== 'avg' || !parsed.presentation) throw new Error('[avg] 不是当前 AVG ProductRelease')
-  return parsed as AvgProductRuntimePackageV1
+export function parseAvgProductReleaseManifest(value: string): AvgPlayableRuntimePackage {
+  const pkg = requirePlayableProductRuntimePackage(parseProductReleaseManifest(value).runtimePackage)
+  if (pkg.productType !== 'avg' || !avgRuntimeStage(pkg)) throw new Error('[avg] 不是可玩的 AVG 包')
+  return pkg as AvgPlayableRuntimePackage
 }
 
 export function parseTextOpenWorldProductReleaseManifest(value: string): PlayableTextOpenWorldProductRuntimePackageV1 {

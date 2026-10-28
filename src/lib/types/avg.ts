@@ -65,6 +65,8 @@ export interface AvgStageState {
 }
 
 export interface AvgRuntimePresentationState {
+  /** Absent in legacy states; durable native non-loop transport observations. */
+  onceAudio?: import('../avg/once-audio-runtime').AvgOnceAudioStateV1
   schema: 'storyforge.avg-presentation'
   version: 1
   contentHash: string

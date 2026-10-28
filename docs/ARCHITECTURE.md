@@ -108,11 +108,11 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `4.0.5` | `package.json` |
-| TypeScript 生产源码 | 2214 个文件 / 618640 行 | `tsconfig.json` |
+| TypeScript 生产源码 | 2555 个文件 / 651698 行 | `tsconfig.json` |
 | IndexedDB schema | v13 / 130 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
 | PROJECT_TABLES | 130 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 238 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
-| CONTEXT_SOURCES | 169 个上下文源 | `context-sources.ts` |
+| CONTEXT_SOURCES | 173 个上下文源 | `context-sources.ts` |
 | 写回治理 | 59 个通用 adopt target / 68 个领域扩展 | `adoption-schema.ts` |
 <!-- project-metrics:end -->
 
@@ -271,6 +271,10 @@ src/
 AVG 会谈使用 `avg.consult.v1` 和 `avg.authoring` 注册上下文，经 durable Run、manifest、候选 checkpoint 与验证 receipt 保存。会谈只起草产品定向，正式世界读取仍由生产需求适配器执行。作者确认后回填同一 S2 草稿，历史会谈可归档后继续讨论。
 
 作者修改叙事图、对白、条件、变量和演出，先保存带基线 previewHash 的草稿。提交修订冻结到 Brief 的 AVG 专项 `avgRevision`；同一生产 scheduler 执行素材引用验证、运行包装配和质量检查。旧 Build/Release/存档保持不变，新版本仍需明确开始和发布。没有新增第二套叙事或模型调用系统；商业候选仍受真实试玩、媒资与性能回执限制。
+
+AVG 的逐句配音与背景音乐、音效、环境声加工复用同一零供应商请求的确定性音频任务。可选加工要求保存在原 Work 草稿，准备/开始时精确冻结核对；原件、加工工件、独立审听和作者采用分开留证。声音选择与沿用来源显式使用后继版本，旧 V1 保持严格；Stage、权利和备份恢复读取实际采用的加工字节，不把加工结果改写成原始响应。详见[媒资生产与绑定](products/avg-production/03-MEDIA-PRODUCTION-AND-BINDING.md)。
+
+显式动态与重采样后继使用独立 recipe/receipt/payload/plan V2，原 V1 codec 与算法保持严格。固定计算和复算 Worker 在同一20秒界内真实重建并核对 PCM；主线程不执行完整 DSP。工作台默认原增益，作者选择尖峰缓和或目标采样率后才冻结 V2，未编辑条目的明确参数不降级。 既有 `VITE_STORYFORGE_AVG_AUDIO_PROCESSING=1` 现控制已接通 WAV 加工的实验执行，默认关闭；产品生产、开始授权和独立试听/采用仍各自核对。加工配音在准确当前 Preview 冻结后复用原历史 producer/字节证明只读回听，不恢复作者写权。
 
 ### 角色聊天接入
 

@@ -1,11 +1,11 @@
 ---
 productId: upper.character-interaction
 status: preview
-lastVerified: 2026-09-20
+lastVerified: 2026-10-28
 ---
 # Character chat
 
-> Preview: primarily text interaction. Long conversations, characterization, and behavior across more models remain under validation.
+> Preview: text conversations and the single-character illustrated technical flow are connected, with enhanced entries hidden by default. Stable multi-turn dialogue, cross-image character consistency, and long-term behavior remain unverified.
 
 Entry: Character chat → Library (角色聊天 → 作品库). Let defined characters interact within a background and scene while preserving independent relationships and memories.
 
@@ -28,9 +28,21 @@ These records support ongoing dialogue, but do not guarantee consistent characte
 
 A newer world version does not automatically replace existing session sources. Production drafts, releases, and play saves are managed separately. Confirm the object you are operating on when switching works.
 
-## New flows in the development branch (unreleased)
+<span id="new-flows-in-the-development-branch-unreleased"></span>
 
-The following instructions describe candidate interfaces in the character-chat development branch. **Full validation is unfinished, and these additions are not in an official download.** If your software does not show these entries, use the existing flow above. See [pending development records](/en/updates/development-status#character-chat-candidate) for delivery status.
+## Single-character technical preview and experience packages
+
+The single-character technical preview is merged through [PR #172](https://github.com/yuanbw2025/storyforge/pull/172). Production hides it by default. In an available development environment, explicitly enable the new single-character story flow (启用单角色故事新流程（技术预览）) in the library. Older flows and published works remain. See [development status](/en/updates/development-status) for acceptance scope.
+
+### Three-track production, runtime images, and recovery
+
+1. Select a frozen world, review characters, permitted knowledge, and situation, then save the plan. Content, system-settings, and media tracks assemble one Build. Add optional appearance requirements, then explicitly start image tasks.
+2. Inspect the unified art design and provider originals, check purpose and licensing, and confirm images before publishing. Resolve missing image configuration or blocking issues rather than treating placeholders as completed real media.
+3. If story-driven scene, expression, and illustration generation is enabled, only committed, player-visible events drive images. Runtime images belong to the current save without rewriting the world or older releases. Each save allows at most 60 images, with generation pausable during play.
+4. Failed image tasks retain records. Explicitly failed slots allow user-initiated retries, up to three attempts per slot; unknown outcomes are not automatically resent. Image recovery and pending-dialogue recovery are separate. Inspect existing results after refresh, branching, or import before continuing.
+5. Confirm speech transcription before sending and stop narration when needed. Browser voice capabilities differ from external services.
+
+Real image records do not establish character consistency across images or stable multi-turn narrative. Reference-image conditioning is absent, and rate-limit/domain-rejection failures remain. Continuous dialogue, visual consistency, and commercial experience have no passing acceptance conclusion.
 
 ### Prepare a work from an original starter or character card
 

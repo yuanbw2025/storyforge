@@ -51,6 +51,6 @@ describe('NW-1B · unchanged corpus with explicit fixture author annotations', (
       modelCalls: 0, independentHumanReviews: 0, queryProviderChanged: false,
       cases: observations, inputHashes: Object.fromEntries(paths.sort().map(file => [file, createHash('sha256').update(fs.readFileSync(file)).digest('hex')])) }
     if (process.env.NW_DOMAIN_REPORT) fs.writeFileSync(process.env.NW_DOMAIN_REPORT, JSON.stringify(receipt, null, 2) + '\n')
-    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/domain-projection-20261027-pr172-post-ttrpg-v2.json', 'utf8')))
+    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/domain-projection-20261028-avg-pr172-main-integration-v1.json', 'utf8')))
   })
 })

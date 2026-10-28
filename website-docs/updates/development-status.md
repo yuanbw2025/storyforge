@@ -1,6 +1,29 @@
 # 待合并开发记录与分支核对
 
 
+
+## 2026-10-28 · 合并链与现存分支核对
+
+从成功维护基线 `7b974fbf` 核对至远程 main `46a90c0b`。本轮枚举 **127 个本地分支和 65 个现存注册工作区**（含本维护分支与 detached），30 个分支 head 尚非 main 祖先。只检查现存内容与前轮证据，不重建已清理的开发目录；分支减少不作为功能丢失的证据。
+
+### 已合并与使用步骤
+
+- 文字冒险 [#208](https://github.com/yuanbw2025/storyforge/pull/208)（`69e2a928`）、逐章提示/主题 [#209](https://github.com/yuanbw2025/storyforge/pull/209)（`ddd673eb`）、模型配置 [#217](https://github.com/yuanbw2025/storyforge/pull/217)（`f9deb5e3`）已合并，补齐[导航](/features/interactive/text-adventure)、[本章要求](/features/longform/writing)与[型号/用量](/getting-started/model-config)步骤。模型配置不再静默替换手填型号，缺少用量仍显示未知。
+- 跑团 [#196](https://github.com/yuanbw2025/storyforge/pull/196)（`301d38ef`）、角色聊天 [#172](https://github.com/yuanbw2025/storyforge/pull/172)（`42e4fdf1`）和 AVG [#219](https://github.com/yuanbw2025/storyforge/pull/219)（`d4f92c80`）已合入，不再列为整条未交付分支。补齐各自的实验入口、媒资采用、原型/团局和恢复说明，仍保持产品目录的预览状态。跑团长局与听感、聊天稳定多轮与人物跨图一致性、AVG 专业剧情与商业艺术质量都没有据工程成功提升验收结论。
+- 故事线阶段读取与明确修复 [#226](https://github.com/yuanbw2025/storyforge/pull/226) 已合入 `bcdf9463`，操作见[正文指南](/features/longform/writing#故事线提示阶段数据格式异常)。坏值写入来源、原生退出及其它长篇故障不据此结案。
+- [#210](https://github.com/yuanbw2025/storyforge/pull/210)、[#220](https://github.com/yuanbw2025/storyforge/pull/220)是阶段交接与交付记录，流量归档是统计资料，均不重复计产品功能。当前 schema v13、备份 v17；正式 v4.0.4 与后续候选范围见[兼容说明](/updates/compatibility)。
+
+### 仍待交付或核对
+
+| 分支 / head | 内容 | 状态与去重 |
+| --- | --- | --- |
+| `fix/longform-state-card-recovery-20261026` · `1d758d2f` | 分步骤长篇异常读取、编辑、候选保存/采纳与启动恢复 | [草稿 PR #215](https://github.com/yuanbw2025/storyforge/pull/215)已推送、未合并，工作区干净；原始失败和当前 head 分开记录，160 项矩阵仍为 72 执行中、88 待执行、0 整项验收通过，不当作全部故障已经解决。 |
+| `fix/longform-step-stability-plan-20261026` · `6860b23d` | ST00～ST07 逐功能修复与验收计划 | [草稿 PR #212](https://github.com/yuanbw2025/storyforge/pull/212)未合并，是方案文档，不计已实现功能，也不替 #215 的最终验证。 |
+| `fix/client-release-4.0.5-20261028` · `1b31536e` | 版本绑定的新旧客户端造数、备份转换与签名升级验证输入 | 开放 [PR #228](https://github.com/yuanbw2025/storyforge/pull/228)已推送、未合并，候选输入未公开为正式发行。仅对应该 PR 冻结来源，后续 main 前进不自动证明已包含；不使用旧候选平台成功替代最终树检查。 |
+| `fix/state-card-context-20261026` · `6ff319e2` | 异常状态卡读取保护的早期本地变体 | 2 个提交未被 origin 包含，其中 1 个为仅合并/指标更新；实际维护主题与 #215 重叠，但未证明逐文件等价，保留源码与差异，不另算已交付功能，不代推送。 |
+
+三个带状态条目的工作区中，两个含工作文件变化，一个仅测试缓存。`wechat-articles-screenshots` 有 2 项宣传界面样式修改；旧 `storyforge-builtin-games-release` 保留未完成历史整合，72 项状态中 47 项与当前 main 同 blob，其余 25 项保留差异，不列作 72 项新功能。归档角色录制目录的 78 项仅测试缓存。旧备份、内置作品、同 head、仅 merge 与等价补丁沿证据去重；本轮没有接管、清理、提交或合并其它产品分支，也没有运行产品测试。
+
 ## 2026-10-26 · 待合并开发续核
 
 从成功维护基线 `648b6746` 核对至远程 main `63af1fba`，主干仅新增流量归档，产品指南继续沿用上轮已交付说明。本轮重新枚举 **196 个本地分支和 114 个工作区**（含维护分支及 detached），其中 136 个分支 head 尚非 main 祖先。以下记录核对时的新进展，旧日期段落保留历史快照。

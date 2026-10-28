@@ -36,6 +36,12 @@ A local model or custom OpenAI-compatible service requires a running endpoint an
 
 Local services without authentication and cloud providers have different key requirements. A cloud authentication error does not necessarily mean the software is unsupported. Do not expose a local service to unrelated visitors.
 
+## Custom model IDs, retirement notices, and usage
+
+A manually entered model ID outside the list is preserved across loading, saving, and list refreshes. A blank ID remains incomplete instead of silently becoming a preset. After applying a provider preset, check the exact model and task routing. Confirmed retired official model IDs display a notice; private endpoints do not automatically inherit official lifecycle judgments.
+
+For official Poe, a positive output limit is sent with the request; zero uses the service default. Actual output remains subject to service and context limits. Official Poe/Gemini streaming requests ask for usage, but missing usage remains unknown rather than zero. Check configuration after authentication, permission, or 400/404 failures instead of repeatedly resending. Source: [PR #217](https://github.com/yuanbw2025/storyforge/pull/217).
+
 ## Task models and media models
 
 Configure writing, extraction, analysis, and review routes where offered in settings. Check the model used by the actual task, not only the global default.

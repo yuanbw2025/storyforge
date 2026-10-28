@@ -16,7 +16,7 @@ const offlineIds = new Set()
 for (const entry of registry.offlineEvaluations ?? []) {
   if (!entry.entryId?.startsWith('eval.') || offlineIds.has(entry.entryId)
     || entry.boundary !== 'eval-only' || entry.adoptAllowed !== false || entry.adoptionTargets?.length
-    || entry.transport !== 'local-codex-subscription' || !entry.reason
+    || !['local-codex-subscription', 'configured-chat-audio-input-v1'].includes(entry.transport) || !entry.reason
     || !/^scripts\/evaluate-[a-z-]+\.mjs$/.test(entry.caller ?? '')
     || !/^scripts\/[a-z-]+-contract\.mjs$/.test(entry.contract ?? '')
     || !fs.existsSync(path.join(root, entry.caller ?? '')) || !fs.existsSync(path.join(root, entry.contract ?? ''))) {
@@ -26,8 +26,10 @@ for (const entry of registry.offlineEvaluations ?? []) {
   offlineIds.add(entry.entryId)
   const caller = fs.readFileSync(path.join(root, entry.caller), 'utf8')
   const contract = fs.readFileSync(path.join(root, entry.contract), 'utf8')
-  if (!contract.includes(`'${entry.entryId}'`) || !caller.includes('assertOfflineEntry()')
-    || !caller.includes('runtime.generate(')) failures.push('离线评测缺少实际合同绑定: ' + entry.entryId)
+  const bound = entry.transport === 'local-codex-subscription'
+    ? caller.includes('assertOfflineEntry()') && caller.includes('runtime.generate(')
+    : caller.includes('assertOfflineAudioEntry()') && caller.includes('calibrateAudioInputs(')
+  if (!contract.includes(`'${entry.entryId}'`) || !bound) failures.push('离线评测缺少实际合同绑定: ' + entry.entryId)
 }
 
 function walk(dir, acc = []) {

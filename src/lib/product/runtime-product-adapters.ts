@@ -1,3 +1,7 @@
+import { parseAvgReadingStateV1 } from '../avg/reading-contract'
+import { applyAvgOnceAudioEventV1, assertAvgOnceAudioStateV1 } from '../avg/once-audio-runtime'
+import { createAvgBranchOriginV1, verifyAvgBranchOriginV1 } from '../avg/branch-origin'
+import { applyAvgVoiceEventV1, recordAvgReadingHistoryV1, createAvgReadingStateV1, assertAvgReadingHistoryV1 } from '../avg/reading-runtime'
 /**
  * Composition root for product-owned runtime adapters.
  *
@@ -7,6 +11,7 @@
  * this explicit composition root prevents product code from growing back into
  * the shared runtime engine.
  */
+import { applyAvgInventoryActionV1 } from '../avg/inventory-runtime'
 import { parseAdventureState, adventureNarrativeProjection, applyAdventureEvent, createInitialAdventureState } from '../adventure/runtime'
 import { adventureNarrativeActionCommandIdV1 } from '../adventure/command-identity'
 import { parseAvgPresentationState, applyAvgPresentationEvent, createInitialAvgPresentationState } from '../avg/runtime'
@@ -16,6 +21,9 @@ import {assertChatReleaseUpgradeReceiptV1} from '../character-interaction/releas
 import type {ChatHistoricalOptionBranchIntentV1, ChatMessageEditBranchIntentV1} from '../types/chat-narrative'
 import {prepareChatHistoricalOptionBranchV1} from '../character-interaction/narrative-options-history'
 import { evaluateNarrativeChoices } from './narrative-content'
+import { assertAvgSnapshotKeyV1, avgExecutableModule, avgRuntimeStage, parseAvgRuntimeRulesStateV1 } from '../avg/executable-module'
+import { assertAvgSystemStateV1, previewAvgSystemEffectsV1 } from '../avg/system-state'
+import { buildAvgSystemGraphV1 } from '../avg/system-graph'
 import { parseOpenWorldEvolutionState, applyOpenWorldEvolutionProductRuntimeEvent, openWorldEvolutionProjection, createInitialOpenWorldEvolutionState, rebaseOpenWorldEvolutionStateForBranch } from '../open-world/evolution-runtime'
 import { parseOpenWorldState, applyOpenWorldEvent, openWorldMainlineProjection, createInitialOpenWorldState, rebaseOpenWorldStateForBranch } from '../open-world/runtime'
 import {
@@ -37,10 +45,10 @@ import { applyAiTownEventV1, createInitialAiTownStateV1, parseAiTownStateV1, reb
 import {
   isTtrpgRuntimeContentV1,
   isTtrpgRuntimeContentV2,
-  type ProductRuntimePackageWithTtrpgV2,
 } from '../ttrpg/content-version'
 import type {
   ProductRuntimeEvent,
+  AnyProductRuntimePackage,
   ProductRuntimeSession,
   ProductRuntimeState,
   ProductRuntimeKind,
@@ -52,6 +60,32 @@ import {
   type ProductRuntimeJsonObjectV1,
 } from './runtime-values'
 
+/** Only native AVG snapshots need portable detached-branch admission. Legacy
+ * and other products keep their existing contract and serialized bytes. */
+export async function verifyProductOwnedBranchOriginV1(input: {
+  kind: string; initialState: unknown; canonSnapshotJson: string; runtimeSourceHash: string
+}): Promise<boolean> {
+  if (input.kind !== 'avg') return false
+  return verifyAvgBranchOriginV1(input)
+}
+
+export async function createProductOwnedBranchOriginV1(input: {
+  parent: ProductRuntimeSession; state: ProductRuntimeState; events: ProductRuntimeEvent[]; throughSequence: number
+}): Promise<Record<string, unknown>> {
+  const canon = JSON.parse(input.parent.canonSnapshotJson) as Record<string, unknown>
+  if (input.parent.kind !== 'avg' || (!input.state.avgRules && !input.state.avgReading)) return canon
+  const avgBranchOrigin = await createAvgBranchOriginV1({
+    runtimeSourceHash: input.parent.runtimeSourceHash, initialState: input.state,
+    parentInitialState: JSON.parse(input.parent.initialStateJson), parentThroughSequence: input.throughSequence,
+    parentEventPrefix: input.events.filter(event => event.sequence <= input.throughSequence)
+      .map(({ sequence, type, payloadJson }) => ({ sequence, type, payloadJson })),
+  })
+  if (canon.schema === 'storyforge.product-runtime-source' && canon.version === 2) {
+    return { schema: 'storyforge.product-runtime-source', version: 3, source: canon, avgBranchOrigin }
+  }
+  return { ...canon, avgBranchOrigin }
+}
+
 export type ProductRuntimeBranchIntentV1 = ChatMessageEditBranchIntentV1 | ChatHistoricalOptionBranchIntentV1
 
 export async function prepareProductRuntimeBranchIntentV1(parent: ProductRuntimeSession, before: ProductRuntimeState, after: ProductRuntimeState, intent: ProductRuntimeBranchIntentV1): Promise<void> {
@@ -61,7 +95,7 @@ export async function prepareProductRuntimeBranchIntentV1(parent: ProductRuntime
   else throw new Error('分支改写请求与产品不匹配。')
 }
 
-export type ProductRuntimePackageForAdaptersV1 = ProductRuntimePackageWithTtrpgV2
+export type ProductRuntimePackageForAdaptersV1 = AnyProductRuntimePackage
 
 /** Protocol selection belongs to the product composition root, not the runtime core. */
 export function productRuntimeContentReaderV1(kind: ProductRuntimeKind) {
@@ -72,9 +106,11 @@ export function parseProductOwnedRuntimeStateV1(
   value: ProductRuntimeState,
 ): Pick<
   ProductRuntimeState,
-  'ttrpg' | 'interaction' | 'adventure' | 'presentation' | 'openWorldEvolution' | 'openWorld' | 'town' | 'textOpenWorld'
+  'ttrpg' | 'interaction' | 'adventure' | 'presentation' | 'openWorldEvolution' | 'openWorld' | 'town' | 'textOpenWorld' | 'avgRules' | 'avgReading'
 > {
   return {
+    ...(Object.prototype.hasOwnProperty.call(value, 'avgReading') ? { avgReading: parseAvgReadingStateV1(value.avgReading) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(value, 'avgRules') ? { avgRules: parseAvgRuntimeRulesStateV1(value.avgRules) } : {}),
     ttrpg: value.ttrpg && 'runFormat' in value.ttrpg && value.ttrpg.runFormat === 'open'
       ? parseTtrpgRuntimeStateV2(value.ttrpg)
       : parseTtrpgState(value.ttrpg),
@@ -115,6 +151,36 @@ export function applyProductOwnedRuntimeEventV1(
   event: ProductRuntimeEvent,
   payload: ProductRuntimeJsonObjectV1,
 ): ProductRuntimeState | null {
+  if (event.type.startsWith('avg.audio.')) {
+    if (event.actorKey !== 'player' || event.targetKey !== payload.cueKey) throw new Error('[avg-audio] 观察身份无效')
+    applyAvgOnceAudioEventV1(state, event.type, payload, event.sequence)
+    state.lastSequence = event.sequence
+    return state
+  }
+  if (event.type.startsWith('avg.reading.')) {
+    if (event.actorKey !== 'player' || event.targetKey !== payload.lineKey) throw new Error('[avg-reading] 观察身份无效')
+    applyAvgVoiceEventV1(state, event.type, payload)
+    state.lastSequence = event.sequence
+    return state
+  }
+  if (state.avgReading && event.type === 'presentation.beat.reached') recordAvgReadingHistoryV1(state, 'line', String(payload.beatKey))
+  if (state.avgReading && event.type === 'narrative.choice.committed') recordAvgReadingHistoryV1(state, 'choice', String(payload.choiceKey))
+  if (event.type.startsWith('avg.inventory.')) {
+    if (event.type !== 'avg.inventory.action.committed' || event.actorKey !== 'player' || event.targetKey !== payload.actionKey) throw new Error('[avg-inventory] 事件身份无效')
+    applyAvgInventoryActionV1(state, payload)
+    refreshNarrativeChoices(state)
+    state.lastSequence = event.sequence
+    return state
+  }
+  if (state.avgRules && event.type === 'presentation.beat.reached' && payload.snapshotKey != null) assertAvgSnapshotKeyV1(payload.snapshotKey)
+  if (state.avgRules && event.type === 'narrative.choice.committed') {
+    const plan = state.avgRules.systemPlan
+    const action = plan.actions.find(action => action.key === payload.choiceKey && action.fromSceneKey === state.narrative?.currentNodeKey)
+    const target = action && plan.scenes.find(scene => scene.key === action.toSceneKey)
+    if (!action || !target || !state.narrative) throw new Error('[avg] 规则行动与当前场景不一致')
+    const afterAction = previewAvgSystemEffectsV1(plan, state.narrative.variables, action.effects)
+    previewAvgSystemEffectsV1(plan, afterAction, target.onEnter)
+  }
   if (event.type.startsWith('text-open-world.')) {
     if (state.textOpenWorld) {
       state.textOpenWorld = applyTextOpenWorldSessionEventV1(state.textOpenWorld, event)
@@ -276,11 +342,33 @@ export function withOpenWorldNarrativeProjectionV1(
 
 export function assertFrozenProductRuntimeStateV1(input: {
   initial: ProductRuntimeState
-  runtimePackage: ProductRuntimePackageWithTtrpgV2
+  runtimePackage: AnyProductRuntimePackage
   runtimeSourceHash: string
   origin: 'release' | 'preview' | 'branch'
 }): void {
   const { initial, runtimePackage, runtimeSourceHash } = input
+  const avgModule = avgExecutableModule(runtimePackage)
+  if (initial.presentation?.onceAudio && (input.origin !== 'branch' || !avgModule)) throw new Error('[avg-audio] 新游戏/旧来源不得预置播放回执')
+  assertAvgOnceAudioStateV1(initial)
+  if (initial.avgReading && !avgModule?.reading) throw new Error('[avg-reading] 来源未启用阅读协议')
+  if (avgModule?.reading) {
+    const expected = createAvgReadingStateV1(avgModule)!
+    if (!initial.avgReading || stableProductRuntimeJsonV1(initial.avgReading.plan) !== stableProductRuntimeJsonV1(expected.plan)
+      || stableProductRuntimeJsonV1(initial.avgReading.lines) !== stableProductRuntimeJsonV1(expected.lines)) throw new Error('[avg-reading] 阅读状态与冻结来源不一致')
+    if (input.origin !== 'branch' && (initial.avgReading.current !== null || initial.avgReading.history.length)) throw new Error('[avg-reading] 初始来源不能预置播放/阅读历史')
+    assertAvgReadingHistoryV1(initial.avgReading, initial)
+  }
+  if (initial.avgRules && !avgModule) throw new Error('[avg] 旧来源不得注入新规则状态')
+  if (avgModule) {
+    if (!initial.avgRules || stableProductRuntimeJsonV1(initial.avgRules.systemPlan) !== stableProductRuntimeJsonV1(avgModule.systemPlan) || !initial.narrative) throw new Error('[avg] 规则状态与冻结来源不一致')
+    assertAvgSystemStateV1(avgModule.systemPlan, initial.narrative.variables)
+    if (input.origin !== 'branch') {
+      const compiled = buildAvgSystemGraphV1(avgModule.systemPlan)
+      const entry = avgModule.systemPlan.scenes.find(scene => scene.key === avgModule.systemPlan.entrySceneKey)!
+      const expected = previewAvgSystemEffectsV1(avgModule.systemPlan, compiled.initialVariables, entry.onEnter)
+      if (stableProductRuntimeJsonV1(expected) !== stableProductRuntimeJsonV1(initial.narrative.variables)) throw new Error('[avg] 入口规则状态与冻结初值不一致')
+    }
+  }
   if (runtimePackage.productType === 'character-interaction') {
     const interaction = initial.interaction
     const expected = createInitialInteractionState({
@@ -353,8 +441,8 @@ export function assertFrozenProductRuntimeStateV1(input: {
     const presentation = initial.presentation
     const expected = createInitialAvgPresentationState({
       contentHash: runtimeSourceHash,
-      assets: runtimePackage.presentation!.assets,
-      content: runtimePackage.presentation!,
+      assets: avgRuntimeStage(runtimePackage)!.assets,
+      content: avgRuntimeStage(runtimePackage)!,
       entryNodeKey: runtimePackage.narrative.entryNodeKey,
     })
     const frozenMismatch = !presentation
@@ -536,4 +624,17 @@ export async function cloneProductRuntimeBranchExtensionsV1(input: {
 }): Promise<void> {
   if (input.parent.kind !== 'ttrpg') return
   await cloneTtrpgRuntimeBranchExtensionsV1(input)
+}
+
+/** Product-owned guards apply equally to live commands and event replay. */
+export function assertProductOwnedRuntimeInvariantsV1(state: ProductRuntimeState): void {
+  assertAvgOnceAudioStateV1(state)
+  if (state.avgReading) {
+    if (!state.avgRules || !state.narrative || !state.presentation) throw new Error('[avg-reading] 阅读状态缺少原生规则/舞台')
+    assertAvgReadingHistoryV1(state.avgReading, state)
+  }
+  if (state.avgRules) {
+    if (!state.narrative) throw new Error('[avg] 规则状态缺少叙事投影')
+    assertAvgSystemStateV1(state.avgRules.systemPlan, state.narrative.variables)
+  }
 }

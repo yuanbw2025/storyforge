@@ -1,6 +1,29 @@
 # Pending development and branch audit
 
 
+
+## October 28, 2026 · Merged chains and existing-branch review
+
+Reviewed remote main `46a90c0b` from successful maintenance baseline `7b974fbf`. The inventory covers **127 local branches and 65 existing registered worktrees**, including this maintenance branch and detached checkouts. Heads of 30 branches are not ancestors of main. Existing content and earlier evidence are reviewed without recreating cleaned development directories; fewer branches do not establish lost functionality.
+
+### Merged work and instructions
+
+- Text-adventure [#208](https://github.com/yuanbw2025/storyforge/pull/208) (`69e2a928`), chapter instructions/themes [#209](https://github.com/yuanbw2025/storyforge/pull/209) (`ddd673eb`), and model configuration [#217](https://github.com/yuanbw2025/storyforge/pull/217) (`f9deb5e3`) are merged. Instructions cover [navigation](/en/features/interactive/text-adventure), [chapter requirements](/en/features/longform/writing), and [model IDs/usage](/en/getting-started/model-config). Custom IDs are no longer silently substituted, and missing usage remains unknown.
+- TTRPG [#196](https://github.com/yuanbw2025/storyforge/pull/196) (`301d38ef`), character chat [#172](https://github.com/yuanbw2025/storyforge/pull/172) (`42e4fdf1`), and AVG [#219](https://github.com/yuanbw2025/storyforge/pull/219) (`d4f92c80`) are merged, not wholly pending branches. Guides cover experimental entry points, media adoption, prototypes/sessions, and recovery while retaining preview catalog status. Engineering success does not upgrade TTRPG long-session/listening, chat stable multi-turn/cross-image consistency, or AVG professional-story/commercial-art acceptance.
+- Story-stage reading and explicit repair [#226](https://github.com/yuanbw2025/storyforge/pull/226) merged as `bcdf9463`; see [prose instructions](/en/features/longform/writing#recovering-malformed-story-arc-stages). Malformed-writing origins, native exits, and other longform issues remain separate.
+- [#210](https://github.com/yuanbw2025/storyforge/pull/210) and [#220](https://github.com/yuanbw2025/storyforge/pull/220) contain phase handoff/delivery records; traffic archives contain statistics. None counts again as product functionality. Current schema is v13 and backup v17. See [compatibility](/en/updates/compatibility) for formal v4.0.4 and later candidate scope.
+
+### Pending delivery or review
+
+| Branch / head | Scope | State and deduplication |
+| --- | --- | --- |
+| `fix/longform-state-card-recovery-20261026` · `1d758d2f` | Longform malformed reads, editing, candidate saving/adoption, and startup recovery | [Draft PR #215](https://github.com/yuanbw2025/storyforge/pull/215) is pushed and unmerged, with a clean worktree. Original failures remain distinct from current-head evidence. Its 160-item matrix retains 72 in progress, 88 pending, and zero wholly accepted items, not resolution of all faults. |
+| `fix/longform-step-stability-plan-20261026` · `6860b23d` | ST00–ST07 function-level repair and acceptance plan | [Draft PR #212](https://github.com/yuanbw2025/storyforge/pull/212) is unmerged. A plan is not implemented functionality or final validation of #215. |
+| `fix/client-release-4.0.5-20261028` · `1b31536e` | Version-bound old/new client fixtures, backup conversion, and signed upgrade inputs | Open [PR #228](https://github.com/yuanbw2025/storyforge/pull/228) is pushed and unmerged. Candidate inputs are not a public formal release. They correspond to that PR's frozen source; later main changes are not automatically included, and older candidate platform results do not validate the final tree. |
+| `fix/state-card-context-20261026` · `6ff319e2` | Earlier local malformed-state-card read guards | Two commits are not contained by origin, including one merge/metrics-only update. The maintenance theme overlaps #215, but file equivalence is unproven. Preserve source/differences without counting another delivered feature or pushing it. |
+
+Of three worktrees with status entries, two contain working-file changes and one only test caches. `wechat-articles-screenshots` has two promotional UI style changes. Older `storyforge-builtin-games-release` retains unfinished historical integration: 47 of 72 entries match current main blobs, while 25 retain differences, not 72 new features. The archived character-recording directory's 78 entries are only test caches. Historical backups, built-in works, identical heads, merge-only commits, and equivalent patches remain deduplicated through evidence. This maintenance did not take over, clean, commit, or merge other product work or run product tests.
+
 ## October 26, 2026 · Follow-up development review
 
 Reviewed remote main `63af1fba` from successful maintenance baseline `648b6746`. Main only adds traffic archives, so product guides retain the preceding delivered instructions. This round re-enumerates **196 local branches and 114 worktrees**, including the maintenance branch and detached checkouts; heads of 136 branches are not ancestors of main. The following is a snapshot of new progress. Older dated sections remain historical records.

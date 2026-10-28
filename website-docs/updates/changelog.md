@@ -3,6 +3,14 @@
 本页按用户可感知的变化整理功能更新、修复和操作改进。版本信息见[版本与兼容说明](/updates/compatibility)。
 
 
+
+## 2026-10-28 · 长篇恢复与互动制作操作更新
+
+- 正文生成与续写前可填写本章要求，取消保留输入且不发请求；故事线阶段格式异常会保留原文，提供备份、检查和明确保存修复的路径。见[正文与故事线恢复](/features/longform/writing)，依据 [#209](https://github.com/yuanbw2025/storyforge/pull/209)、[#226](https://github.com/yuanbw2025/storyforge/pull/226)。
+- 文字冒险往返制作台、作品库与存档保留工作区并隔离过期读取；手填型号保存后保留，官方服务的输出上限与流式用量按实际支持传递。见[文字冒险](/features/interactive/text-adventure)和[模型配置](/getting-started/model-config)，依据 [#208](https://github.com/yuanbw2025/storyforge/pull/208)、[#217](https://github.com/yuanbw2025/storyforge/pull/217)。
+- 开放跑团补齐试用、团局恢复与旁白试听步骤；角色聊天补齐三线制作、原图确认与存档配图恢复；AVG 补齐图片、逐句配音、本地处理与原型验收。三者仍为预览，见[跑团](/features/interactive/ttrpg)、[角色聊天](/features/interactive/character-chat)、[AVG](/features/interactive/avg)，依据 [#196](https://github.com/yuanbw2025/storyforge/pull/196)、[#172](https://github.com/yuanbw2025/storyforge/pull/172)、[#219](https://github.com/yuanbw2025/storyforge/pull/219)。
+- [备份指南](/guides/backup-restore)按主干数据库 v13、备份 v17 修正，保留严格旧格式校验；当前正式版本与发行准备见[兼容说明](/updates/compatibility)。[开发记录](/updates/development-status)重新枚举全部现存分支与工作区，区分已合并链、候选发行和长篇待修复项。
+
 ## 2026-10-26 · 开放世界制作与返修整合
 
 制作工作台按游戏内容、产品系统配置、媒资生产检查进度与阻塞；逐张查看并确认图片后再过发布质量门。局部返修生成子 Build，保留旧发布版和存档；玩家可从“更多 → 读取本地体验记录”查看并主动导出本地反馈。操作见[开放世界指南](/features/interactive/open-world#三线制作、图片确认与局部返修)。依据：[PR #134](https://github.com/yuanbw2025/storyforge/pull/134)。通用生产的独立模型校准与真人双结局验收仍待完成。

@@ -1,0 +1,52 @@
+{
+  "schema": "storyforge.avg.publisher-audio-catalogue",
+  "version": 2,
+  "license": "CC0-1.0",
+  "observation": "Pinned original publisher declaration and bytes only; hearing, current use and author adoption are independent.",
+  "archives": [
+    {
+      "key": "rubberduck-sfx-loops",
+      "publisher": "rubberduck",
+      "publisherPage": "https://opengameart.org/content/30-cc0-sfx-loops",
+      "archiveFile": "sfx_loops-original.zip",
+      "archiveBytes": 3526706,
+      "archiveHash": "9c013474c7e56192a0d1b2840535a1e1d8b93166948d4a9f7136bb6c3d5421cd",
+      "licenseEvidence": {
+        "kind": "publisher-page",
+        "publisherPageFile": "rubberduck-30-sfx-loops-page.html",
+        "publisherPageBytes": 23927,
+        "publisherPageHash": "09000d51c607d50af16476566576751d322bfaae582dda6ea7b0f1009e642315",
+        "authorPath": "/users/rubberduck",
+        "licenseUrl": "http://creativecommons.org/publicdomain/zero/1.0/",
+        "downloadUrl": "https://opengameart.org/sites/default/files/sfx_loops.zip",
+        "legalCodeFile": "cc0-1.0-original-legalcode.txt",
+        "legalCodeUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode.txt",
+        "legalCodeBytes": 7048,
+        "legalCodeHash": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+      },
+      "members": [
+        {
+          "sourceKey": "rubberduck.loops.ambient-01",
+          "memberPath": "ambient_01.ogg",
+          "memberHash": "4dca0e4890c0f7658b3e67c624416cdb8379f195ee68915cc076a0ed329b6c8f",
+          "bytes": 258149,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "sourceKey": "rubberduck.loops.rain",
+          "memberPath": "rain.ogg",
+          "memberHash": "8d153f3f6ee266484f679d7149c80a1afcf4dcfeb9f2c1b6206ed780a12273fb",
+          "bytes": 189015,
+          "mimeType": "audio/ogg"
+        },
+        {
+          "sourceKey": "rubberduck.loops.water-flowing",
+          "memberPath": "water_flowing.ogg",
+          "memberHash": "1a431f77d61661becdc87a5b1832d47f83a12a5c0b001077e41a202e739797a7",
+          "bytes": 74344,
+          "mimeType": "audio/ogg"
+        }
+      ]
+    }
+  ]
+}

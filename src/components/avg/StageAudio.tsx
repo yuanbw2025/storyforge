@@ -4,21 +4,28 @@ export default function StageAudio({
   volume,
   loop,
   channel,
+  paused = false,
 }: {
   src: string;
   volume: number;
   loop: boolean;
   channel: string;
+  paused?: boolean;
 }) {
   const ref = useRef<HTMLAudioElement>(null);
   useEffect(() => {
     if (ref.current) ref.current.volume = Math.max(0, Math.min(1, volume));
   }, [volume, src]);
+  useEffect(() => {
+    const audio = ref.current
+    if (!audio) return
+    if (paused) audio.pause(); else if (loop || !audio.ended) void audio.play().catch(() => undefined)
+    return () => audio.pause()
+  }, [src, paused, loop]);
   return (
     <audio
       ref={ref}
       src={src}
-      autoPlay
       loop={loop}
       data-channel={channel}
       onLoadedMetadata={() => {

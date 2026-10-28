@@ -33,6 +33,7 @@
 | 世界检索、世界推演、人物视角/秘密 | world-release-provider、typed query、policy/manifest、hypothesis owner | `products/WORLD-ENGINE.md` §13～16、§19；Gateway、source-contracts、对应测试 | 未实现 query/validate/simulate 不得按现成功能调用 |
 | 产品 Requirement Compiler、上层产品读取世界 | product adapter、精确 selection/依赖闭包、SourcePlan/Manifest | `products/WORLD-ENGINE.md` §14、§17～20；`products/UPPER-PRODUCTS.md`、目标产品契约 | 不读取或复制世界物理表清单，不引入全产品万能 payload |
 | 跑团/聊天/AI 小镇/文字游戏 | WorldReference、产品 requirement adapter、Brief/SourcePlan/SourceManifest、production/build/release/session | `products/UPPER-PRODUCTS.md`、目标产品代码、中立世界资源协议和 owner；角色聊天按 `roadmap/CHARACTER-CHAT-DEVELOPMENT-PLAN.md` 读取命中的工作包；跑团读取 `products/TTRPG-AI-KP.md` 与 `roadmap/TTRPG-DEVELOPMENT-PLAN.md` 的现行版本头、§23/§24/§31/§32及当前单元，不能只读末尾2.0原稿；文字冒险还须读取 `products/TEXT-ADVENTURE.md`，专业生产任务再由其路由到 `products/text-adventure-production/README.md` | 其它上层产品内部细节 |
+| AVG 内容/系统/媒资/播放器 | AVG Work、scene/line/consumer、工件/规则/媒体 revision、V1/V2 包与存档 | `products/AVG.md`、`products/avg-production/README.md` 路由的命中子规格、`roadmap/AVG-IMPLEMENTATION-PLAN.md` 与当前工作包卡；只读取命中闭包和共同契约片段 | 其他产品内部实现、全部历史研究；L4 不代替施工入口 |
 | 新体系或完整产品 | 总纲阶段、稳定 ID、依赖和当前能力状态 | 总纲、对应产品契约、能力基线、路线图与质量标准 | 旧任务名驱动的历史方案 |
 | PR、合并、发布、交接 | branch/commit/PR/check 状态 | `COLLAB-WORKFLOW.md` 相关段、diff、验证证据 | 协作历史全文 |
 | 并行产品开发 | 产品 ID、共同基线、共享热点、各自 owner | 总纲 §12.1、`COLLAB-WORKFLOW.md` §2.1、产品契约和受影响注册表；涉及世界语义时读 `products/WORLD-ENGINE.md` §18、§20 | 其它产品内部实现；禁止多分支各改一套共享协议 |
