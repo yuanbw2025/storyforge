@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Check,
@@ -13,13 +13,16 @@ import type {
   ChapterOrganizationRun,
   ChapterOrganizationSelection,
 } from '../../lib/agent/chapter-organization'
-import { selectAllChapterOrganizationCandidates } from '../../lib/agent/chapter-organization'
+import { readChapterOrganizationSelectionV1 } from '../../lib/agent/chapter-organization-selection'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
+import { acknowledgePendingEditFailureV1, capturePendingEditFailureV1, registerPendingDraftFlusherV1, type PendingEditFailureTokenV1 } from '../../lib/authoring/pending-edit-coordinator'
 
 interface Props {
   run: ChapterOrganizationRun
   current: boolean
   busy: boolean
   error: string
+  onSelectionChange: (selection: ChapterOrganizationSelection) => Promise<ChapterOrganizationRun>
   onApply: (selection: ChapterOrganizationSelection) => void
   onRerun: () => void
   onClose: () => void
@@ -52,30 +55,68 @@ export default function ChapterOrganizationModal({
   busy,
   error,
   onApply,
+  onSelectionChange,
   onRerun,
   onClose,
 }: Props) {
   const { candidate } = run
-  const [selection, setSelection] = useState<ChapterOrganizationSelection>(() => (
-    selectAllChapterOrganizationCandidates(candidate)
-  ))
-
+  const initial = readChapterOrganizationSelectionV1(candidate)
+  const [selection, setSelection] = useState(initial.selection)
+  const [selectionError, setSelectionError] = useState(initial.error ?? '')
+  const [savingSelection, setSavingSelection] = useState(false)
+  const selectionRef = useRef(selection)
+  const dirtyRef = useRef(false)
+  const errorRef = useRef<unknown>(initial.error ? new Error(initial.error) : null)
+  const failureRef = useRef<PendingEditFailureTokenV1 | undefined>(undefined)
+  const inFlightRef = useRef<Promise<void> | null>(null)
+  useBeforeUnload(savingSelection || !!selectionError)
+  useEffect(() => registerPendingDraftFlusherV1(() => {
+    if (inFlightRef.current) return inFlightRef.current
+    if (errorRef.current) return Promise.reject(errorRef.current)
+    if (dirtyRef.current) return Promise.reject(new Error('勾选尚未保存，请先重试或明确放弃。'))
+  }), [])
   useEffect(() => {
-    setSelection(selectAllChapterOrganizationCandidates(candidate))
+    if (dirtyRef.current || inFlightRef.current) return
+    const read = readChapterOrganizationSelectionV1(candidate)
+    selectionRef.current = read.selection; setSelection(read.selection)
+    errorRef.current = read.error ? new Error(read.error) : null; setSelectionError(read.error ?? '')
   }, [candidate])
 
   const total = useMemo(() => Object.values(selection).reduce((sum, indexes) => sum + (indexes?.length ?? 0), 0), [selection])
-  const allResolved = Object.values(candidate.domainStatus).every(
-    status => status === 'adopted' || status === 'skipped',
-  )
-
+  const allResolved = Object.values(candidate.domainStatus).every(status => status === 'adopted' || status === 'skipped')
+  const selectionBlocked = savingSelection || !!selectionError
+  const saveSelection = (next: ChapterOrganizationSelection): Promise<void> => {
+    if (inFlightRef.current) return inFlightRef.current
+    dirtyRef.current = true; setSavingSelection(true); setSelectionError(''); errorRef.current = null
+    const operation = (async () => {
+      try {
+        await onSelectionChange(next)
+        dirtyRef.current = false; failureRef.current = undefined
+      } catch (error) {
+        errorRef.current = error; failureRef.current = capturePendingEditFailureV1(error)
+        setSelectionError(error instanceof Error ? error.message : '勾选保存失败，请重试。')
+        throw error
+      } finally { setSavingSelection(false) }
+    })()
+    inFlightRef.current = operation
+    const clear = () => { if (inFlightRef.current === operation) inFlightRef.current = null }
+    operation.then(clear, clear)
+    return operation
+  }
   const toggle = (key: keyof ChapterOrganizationSelection, index: number) => {
-    setSelection(currentSelection => {
-      const selected = selectedSet(currentSelection, key)
-      if (selected.has(index)) selected.delete(index)
-      else selected.add(index)
-      return { ...currentSelection, [key]: [...selected].sort((a, b) => a - b) }
-    })
+    if (inFlightRef.current || errorRef.current || busy) return
+    const selected = selectedSet(selectionRef.current, key)
+    if (selected.has(index)) selected.delete(index); else selected.add(index)
+    const next = { ...selectionRef.current, [key]: [...selected].sort((a, b) => a - b) }
+    selectionRef.current = next; setSelection(next)
+    void saveSelection(next).catch(() => undefined)
+  }
+  const discardSelection = () => {
+    if (inFlightRef.current) return
+    try {
+      if (failureRef.current) acknowledgePendingEditFailureV1({ token: failureRef.current, decision: 'abandon-command' })
+      dirtyRef.current = false; onClose()
+    } catch (error) { setSelectionError(error instanceof Error ? error.message : '无法结束本次保存，请重试。') }
   }
 
   const renderSection = (input: {
@@ -120,7 +161,7 @@ export default function ChapterOrganizationModal({
                 <input
                   type="checkbox"
                   checked={selected.has(index)}
-                  disabled={busy || !current || (status !== 'pending' && status !== 'failed')}
+                  disabled={busy || selectionBlocked || !current || (status !== 'pending' && status !== 'failed')}
                   onChange={() => toggle(input.key, index)}
                   className="mt-1 accent-accent"
                 />
@@ -152,7 +193,7 @@ export default function ChapterOrganizationModal({
               一次模型调用生成七类候选；未勾选内容不会写入项目。
             </p>
           </div>
-          <button onClick={onClose} disabled={busy} aria-label="关闭整理本章"
+          <button onClick={onClose} disabled={busy || selectionBlocked} aria-label="关闭整理本章"
             className="rounded p-1 text-text-muted hover:bg-bg-hover hover:text-text-primary disabled:opacity-40">
             <X className="h-5 w-5" />
           </button>
@@ -265,21 +306,29 @@ export default function ChapterOrganizationModal({
             })),
           })}
 
+          {selectionError && <div role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            <p>{selectionError}</p>
+            <p className="mt-1 text-xs">本次勾选尚未保存，确认写入已暂停。</p>
+            <div className="mt-2 flex gap-3">
+              <button type="button" disabled={savingSelection} onClick={() => { void saveSelection(selectionRef.current).catch(() => undefined) }}>{initial.error && !dirtyRef.current ? '清空无效勾选并重新选择' : '重试保存选择'}</button>
+              <button type="button" disabled={savingSelection} onClick={discardSelection}>放弃未保存选择并关闭</button>
+            </div>
+          </div>}
           {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</p>}
         </div>
 
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-4">
           <div className="flex items-center gap-2 text-xs text-text-muted">
             <Database className="h-4 w-4" />
-            候选已保存在本地创作事件流，刷新不会丢失
+            {savingSelection ? '正在保存选择…' : '候选与已保存的勾选可在刷新后恢复'}
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onRerun} disabled={busy}
+            <button onClick={onRerun} disabled={busy || selectionBlocked}
               className="flex items-center gap-1.5 rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm text-text-secondary hover:text-text-primary disabled:opacity-40">
               <RefreshCw className="h-4 w-4" /> 重新整理
             </button>
             <button onClick={() => onApply(selection)}
-              disabled={busy || !current || allResolved}
+              disabled={busy || selectionBlocked || !current || allResolved}
               className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40">
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
               {busy ? '正在处理…' : total === 0 ? '本次不写入' : `确认写入所选（${total}）`}

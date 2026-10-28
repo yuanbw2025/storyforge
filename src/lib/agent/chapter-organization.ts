@@ -123,6 +123,8 @@ export interface ChapterOrganizationCandidate {
   storyline?: StorylineAnalysisCandidates
   domainStatus: Record<ChapterOrganizationDomain, ChapterOrganizationDomainStatus>
   domainErrors: Partial<Record<ChapterOrganizationDomain, string>>
+  /** Author UI draft only. Never parsed from model output or part of its hash. */
+  authorSelection?: ChapterOrganizationSelection
   budget: AgentTeamBudgetEvidence
   /** H5 durable Harness evidence; absent only for explicitly manual organization. */
   durable?: ChapterOrganizationDurableEvidence
