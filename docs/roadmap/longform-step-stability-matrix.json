@@ -2075,6 +2075,13 @@
       "sourcePin": "tests/acceptance/longform-stability/organization-selection-20261028.json",
       "symptom": "取消章后整理候选，关闭再打开恢复全选；原选择仅保存在组件内。",
       "remaining": "全交付精确提交检查、跨模式和正式安装包专项继续；不据此声称全部崩溃修复。"
+    },
+    {
+      "id": "BOOTSTRAP-MODULE-NETWORK-FAILURE-20261028",
+      "state": "LOCAL_FAULT_INJECTION_VERIFIED_FINAL_DELIVERY_PENDING",
+      "sourcePin": "tests/acceptance/longform-stability/bootstrap-module-recovery-20261028.json",
+      "symptom": "启动模块请求ERR_NETWORK_CHANGED后停留在加载失败页；已有稿件保留但缺少一次有界恢复。",
+      "remaining": "最终源码完整CI/E2E与实际发行分别留证；不据此宣称所有原生异常退出已修复。"
     }
   ],
   "evidenceSchema": {
@@ -16352,6 +16359,11 @@
           "receipt": "tests/acceptance/longform-stability/main-integration-20261027-1ce8a3f0.json",
           "modelRequests": 0,
           "nativePackageEvidence": false
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/bootstrap-module-recovery-20261028.json",
+          "summary": "启动资源网络中断后一次有界恢复，持续失败停止且可明确重试；17回归与8浏览器路径通过，保护原章节，模型请求0。其余动态模块/CSS/版本组合继续。"
         }
       ],
       "defects": [],
@@ -23631,7 +23643,7 @@
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     }
   ],
-  "executionStatus": "STORY_ARC_MANUAL_RECOVERY_AND_REAL_REVISION_ADOPTION_VERIFIED_CONTINUING",
+  "executionStatus": "STABILITY_BOOTSTRAP_RESOURCE_RECOVERY_VERIFIED_CONTINUING",
   "passPolicy": {
     "closedCase": "全部适用步骤/字段/模式/故障/派生子用例有本轮回执；PASS不推导已发行。",
     "statuses": [
@@ -24416,6 +24428,14 @@
       "date": "2026-10-28",
       "unit": "Preserve upstream malformed-stage recovery with scoped author save acknowledgements",
       "sourcePin": "tests/acceptance/longform-stability/stability-integration-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Bounded pre-application module-load recovery with manuscript preservation",
+      "sourcePin": "tests/acceptance/longform-stability/bootstrap-module-recovery-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

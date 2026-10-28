@@ -3,10 +3,7 @@ import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { recordRuntimeDiagnosticError } from '../../lib/diagnostics/runtime-errors'
 import FailureFeedbackPanel from './FailureFeedbackPanel'
 import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
-
-function isModuleLoadFailure(error: Error | null): boolean {
-  return /^(Failed to fetch dynamically imported module:|error loading dynamically imported module:|Importing a module script failed|Unable to preload CSS for )/.test(error?.message ?? '')
-}
+import { isModuleLoadFailureV1 as isModuleLoadFailure } from '../../lib/module-load-recovery'
 
 interface Props {
   children: ReactNode
