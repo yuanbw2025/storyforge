@@ -1,7 +1,7 @@
 ---
 productId: upper.text-adventure
 status: preview
-lastVerified: 2026-10-14
+lastVerified: 2026-10-28
 ---
 # Text adventure
 
@@ -23,6 +23,12 @@ The Text adventure entry includes Works and playtests (作品与试玩), Product
 4. In Quality and assets, review visual direction and character/scene images. Authors confirm visual requirements and images; independent review must pass before delivery.
 5. Check quest routes, consequences, and endings through automated and actual playtests. Repair failed artifacts and affected dependencies first; follow authorization prompts if the budget is exhausted.
 6. Check the frozen release and product package in Publish and export, then start from that version. After importing a product package, verify sources, assets, and the new save. A package serves a different purpose from a complete-project JSON backup.
+
+## Workspace, library, and save navigation
+
+Returning between the library, production workspace, and play through the top Text adventure tab preserves and revalidates the selected workspace. Invalid Work identities or those outside the current work do not load a player. If a target is missing, return to the library and select it again without clearing browser data.
+
+Switching saves or branching within one work updates the route to the actual selected save while retaining player panels. Older asynchronous reads cannot replace a newer list after a quick switch or leaving the page. For local read errors, use the error area's recovery controls and verify work/save names before continuing. This repair does not establish the cause of occasional whole-window exits. Source: [PR #208](https://github.com/yuanbw2025/storyforge/pull/208).
 
 ## Play and recovery
 

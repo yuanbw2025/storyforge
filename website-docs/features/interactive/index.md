@@ -5,7 +5,7 @@
 | 产品 | 适合的体验 | 当前主要限制 |
 | --- | --- | --- |
 | [跑团](/features/interactive/ttrpg) | AI 主持、调查、规则判定与团局 | 公共联网多人尚未部署 |
-| [角色聊天](/features/interactive/character-chat) | 与确定角色交谈，保存关系和记忆 | 当前主要是文字，长期效果继续验证 |
+| [角色聊天](/features/interactive/character-chat) | 与确定角色交谈，保存关系和记忆 | 单角色图文为技术预览，多轮稳定性与人物跨图一致性待验证 |
 | [AI 小镇](/features/interactive/ai-town) | 观察结局之后的居民生活与关系 | 长期模型、素材和性能仍需实测 |
 | [AVG](/features/interactive/avg) | 分支剧情、背景、立绘与声音演出 | 通用文学与视听质量仍需逐作品验收 |
 | [文字冒险](/features/interactive/text-adventure) | 行动、资源、任务与结局 | 专业生产已接通；真实模型与真人体验仍需验收 |

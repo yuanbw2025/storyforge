@@ -48,7 +48,7 @@ Keep the original backup and folder; do not delete the old environment before ve
 
 Workspace import rebinds identities of local objects. Some historical run receipts may consequently become “Needs review.” This explicitly signals changed references; it does not mean historical evidence was deleted. Do not treat an old success status as current-project verification.
 
-The current complete project backup format is **version 14**, and import requires the exact supported format; arbitrary old JSON does not automatically upgrade. If rejected, retain the original and error details and read [version compatibility](/en/updates/compatibility). Do not change version numbers, fill missing tables with empty values, or remove fields to force import.
+Current main uses complete project backup format **17** and database **v13**. Import strictly validates v14, v15, both historical v16 shapes, and current v17 before registered conversion. Conversion only adds missing new-table empty collections; it does not invent memories or author confirmation. Arbitrary old JSON is not supported. Preserve rejected originals and error details; see [compatibility](/en/updates/compatibility). Do not alter versions, add empty tables, or remove fields manually to force import.
 
 ## Changing browser, device, or address
 

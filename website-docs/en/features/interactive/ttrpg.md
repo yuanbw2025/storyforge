@@ -1,7 +1,7 @@
 ---
 productId: upper.ttrpg
 status: preview
-lastVerified: 2026-09-20
+lastVerified: 2026-10-28
 ---
 # TTRPGs and AI game mastering
 
@@ -21,6 +21,17 @@ Check the work's requirements, start a session, and follow the host's prompts. A
 4. Start Production flow (制作流程), checking campaign/scenes, character sheets, maps, and handbooks.
 5. Resolve blocking issues under Checks and playtest (检查与试玩), then open Publishing and versions (发布与版本).
 6. Play from a definite product version using the tabletop, character inventory, and session records.
+
+## Open TTRPG trial and narration
+
+In the development-preview library, enable Open TTRPG trial (启用开放跑团试用（实验性）), then choose New open TTRPG (preview) (新建开放跑团（预览）). This preference is saved only in the current browser. Existing scripted works and saves remain.
+
+1. Review the frozen world, goals, rules, and budget in the production workspace. Use author design and consultation to prepare requirements. Saving a draft does not generate content; explicitly start after reviewing the plan.
+2. Review campaign, character, and situation candidates, freeze a release, and start a session. Shared facts, clue sharing, Oracle, and action consequences retain their authorization and confirmation steps. Host, companion, and player knowledge stay separate.
+3. After interruption, inspect session records and pending results, then use recovery for the original run. Do not repeatedly resend unknown-result calls or edit saves to bypass settlement.
+4. Use Narration preview and selection (旁白试听与选择) before starting to audition voices and adjust speed. Newly generated narration uses the selected voice; existing audio retains its original voice, with playback speed adjustable separately. Generated tracks still require listening and confirmation; playing is not adoption.
+
+Local Qwen synthesis requires an Apple Silicon Mac with its runtime configured; it does not establish local generation on every device. More than 30 effective turns, independent full human play, and listening quality still require acceptance. Public online multiplayer remains unavailable. Source: [PR #196](https://github.com/yuanbw2025/storyforge/pull/196).
 
 ## Rules, secrets, and saves
 

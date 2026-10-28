@@ -21,6 +21,12 @@ The optional scene tasks, whole-chapter review, and scoped revision below apply 
 5. Review the candidate, edit unsuitable passages, then confirm writing it back.
 6. Check the actual prose and save state, then perform [post-chapter review](/en/features/longform/continuity).
 
+## Add chapter instructions before generating prose
+
+After choosing generation or continuation, use Prose generation instructions (正文生成提示) for this chapter's focus, pace, viewpoint, or length. The text shares the chapter's custom instruction; leaving it blank uses existing material. Confirmation enters the existing save, budget, and generation flow. Cancelling retains temporary input for the chapter without a model request.
+
+Check the chapter name and instructions after switching chapters. Results still require review and explicit adoption. A custom template omitting the hint variable still receives the current instructions. Source: [PR #209](https://github.com/yuanbw2025/storyforge/pull/209).
+
 ## Scene outlines and chapter tasks
 
 Select the chapter in Outline and chapter plans, then open the separate Scene beats page. Expand optional scene tasks (场景任务) to record the entering state, scene goal, key choice, consequences, leaving state, and scene function / reader expectations. Fields may remain blank. Everyday, transition, and closing scenes are supported without requiring a punishment, enemy, or reward in every scene.
@@ -52,6 +58,14 @@ If saving current edits, preparing continuity material, or assembling generation
 When dismissing a scene-outline or batch-outline candidate, a failed save of the rejection shows an error and retains the pending candidate for inspection and retry. The candidate is cleared only after rejection succeeds; failure is not recorded as successful dismissal. Preserve useful content rather than clearing the work.
 
 Both fixes are documented in [PR #166](https://github.com/yuanbw2025/storyforge/pull/166).
+
+## Recovering malformed story-arc stages
+
+A Stage data format error preserves the original data. Pause AI generation for that story arc and export a complete backup first. Open the affected arc and choose Inspect and repair stage data (检查并修复阶段数据), comparing each stage and its key events with the original JSON.
+
+Keep valid stage IDs, existing events, and other content. Use an empty array only when there were no key events; do not erase events merely to remove an error. Once checked, choose Confirm stage repair save (确认保存阶段修复). A failed save or changed original is not a completed repair: review the error and current content. Discard edit draft (放弃编辑稿) restores the original content. Deleting a stage detaches associated progress references, so check its effects first. Preserve the original and report uncertainty when the format cannot be determined.
+
+This addresses malformed reads and explicit author recovery. The original malformed writer remains unconfirmed, and the repair does not resolve native exits or every longform issue. Source: [PR #226](https://github.com/yuanbw2025/storyforge/pull/226).
 
 ## After outline changes
 

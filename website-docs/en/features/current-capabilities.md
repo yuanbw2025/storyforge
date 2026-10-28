@@ -1,6 +1,6 @@
 # Current capabilities and maturity
 
-> Checked October 4, 2026 · main baseline: dd253f85. Tagged releases, current main, and live deployments may differ; see [version compatibility](/en/updates/compatibility).
+> Checked October 28, 2026 · main baseline: 46a90c0b. Tagged releases, current main, and live deployments may differ; see [version compatibility](/en/updates/compatibility).
 
 “Released” follows the product catalog: the declared main workflow is available. It does not announce a new semantic version or guarantee model quality. “Preview” has usable implementation but still needs complete-experience validation. “Experimental” is not an everyday-use commitment.
 
@@ -13,11 +13,11 @@
 | [Motion-comic materials](/en/features/motion-drama) | Released | Episodes, storyboards, assets, and per-shot tool packages; no video generation or finished film |
 | [World engine](/en/features/world-engine) | Released | Independent semantic editing, derivation, sealed versions, and neutral reading |
 | [Node authoring](/en/features/nodes) | Preview | Reuses longform capabilities; full cross-mode interoperability remains under validation |
-| [TTRPG](/en/features/interactive/ttrpg) | Preview | Production, AI hosting, rules, and saves; public online multiplayer is not deployed |
-| [Character chat](/en/features/interactive/character-chat) | Preview | Text conversations, relationship memory, and branches; long-term behavior remains under validation |
+| [TTRPG](/en/features/interactive/ttrpg) | Preview | Production, open trial, AI hosting, rules, saves, and narration; public online multiplayer is not deployed |
+| [Character chat](/en/features/interactive/character-chat) | Preview | Single-character illustrated technical preview, relationship memory, experience packages, and branches; stable multi-turn/cross-image consistency await acceptance |
 | [AI town](/en/features/interactive/ai-town) | Preview | Resident life, schedules, relationships, and replay; long-term model and asset quality need validation |
 | [Text adventure](/en/features/interactive/text-adventure) | Preview / in development | Professional production, asset review, publishing, and runtime are connected; real-model and human acceptance remain |
-| [AVG](/en/features/interactive/avg) | Preview | Production, presentation, and player saves; general audiovisual quality needs per-work acceptance |
+| [AVG](/en/features/interactive/avg) | Preview | Image/audio production, local processing, presentation, prototypes, and recovery; professional narrative/audiovisual quality needs per-work acceptance |
 | [Text open world](/en/features/interactive/open-world) | Preview / in development | Dedicated production, player UI, runtime AI, and Salt Ridge showcase are connected; real-provider calibration and human acceptance of both endings remain |
 | Community marketplace | Experimental | Hidden by default; public accounts, cloud sync, and commercial services are not current commitments |
 
@@ -32,6 +32,6 @@
 - World/work references have explicit versions; later changes do not automatically synchronize everywhere.
 - There is no promise that AI never forgets, works never contradict themselves, or commercial-ready results are automatic.
 
-Engineering evidence: [Product catalog](https://github.com/yuanbw2025/storyforge/blob/dd253f85/src/lib/product/product-catalog.ts) · [Capability baseline](https://github.com/yuanbw2025/storyforge/blob/dd253f85/docs/roadmap/CAPABILITY-BASELINE.md).
+Engineering evidence: [Product catalog](https://github.com/yuanbw2025/storyforge/blob/46a90c0b/src/lib/product/product-catalog.ts) · [Capability baseline](https://github.com/yuanbw2025/storyforge/blob/46a90c0b/docs/roadmap/CAPABILITY-BASELINE.md).
 
 All local branches were also inspected. [Pending development](/en/updates/development-status) separates unmerged work, local-only changes, and historical changes whose equivalence still needs review; these are not counted as delivered mainline capabilities above.

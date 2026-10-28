@@ -1,6 +1,14 @@
 # Changelog
 
 
+
+## October 28, 2026 · Longform recovery and interactive-production instructions
+
+- Chapter generation/continuation accepts instructions before starting; cancellation retains input without a request. Malformed story stages preserve originals and provide explicit backup, inspection, and repair saving. See [prose and story-stage recovery](/en/features/longform/writing), from [#209](https://github.com/yuanbw2025/storyforge/pull/209) and [#226](https://github.com/yuanbw2025/storyforge/pull/226).
+- Text-adventure navigation retains the workspace and isolates stale reads. Custom model IDs remain saved, with official-service output limits and streaming usage passed according to support. See [text adventure](/en/features/interactive/text-adventure) and [model configuration](/en/getting-started/model-config), from [#208](https://github.com/yuanbw2025/storyforge/pull/208) and [#217](https://github.com/yuanbw2025/storyforge/pull/217).
+- Open TTRPG adds trial, session-recovery, and narration-preview instructions; character chat covers three-track production, original-image confirmation, and save-image recovery; AVG covers images, per-line voice, local processing, and prototype acceptance. All remain previews. See [TTRPG](/en/features/interactive/ttrpg), [character chat](/en/features/interactive/character-chat), and [AVG](/en/features/interactive/avg), from [#196](https://github.com/yuanbw2025/storyforge/pull/196), [#172](https://github.com/yuanbw2025/storyforge/pull/172), and [#219](https://github.com/yuanbw2025/storyforge/pull/219).
+- [Backup instructions](/en/guides/backup-restore) now reflect main's database v13 and backup v17 while retaining strict older-format validation. See [compatibility](/en/updates/compatibility) for formal versions and release preparation. [Development status](/en/updates/development-status) re-enumerates all existing branches/worktrees, separating merged chains, candidate release work, and pending longform repairs.
+
 ## 2026-10-27 · Step-mode stability development build
 
 Malformed state fields can be located and repaired individually while preserving their original records. Prose candidates gain separate draft saving and a navigation save barrier, allowing reload before adoption. See [continuity and recovery](/en/features/longform/continuity#recovering-malformed-state-fields). This work remains in unmerged [PR #215](https://github.com/yuanbw2025/storyforge/pull/215); see [development status](/en/updates/development-status) for validation and release progress.

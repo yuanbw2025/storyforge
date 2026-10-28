@@ -5,7 +5,7 @@ These products own their production workflows, assets, and saves, and all remain
 | Product | Experience | Main current limitation |
 | --- | --- | --- |
 | [TTRPG](/en/features/interactive/ttrpg) | AI hosting, investigation, rules, and sessions | Public online multiplayer is not deployed |
-| [Character chat](/en/features/interactive/character-chat) | Conversations with defined characters, relationships, and memory | Primarily text; long-term results remain under validation |
+| [Character chat](/en/features/interactive/character-chat) | Conversations with defined characters, relationships, and memory | Single-character illustrated technical preview; multi-turn stability and cross-image consistency remain unverified |
 | [AI town](/en/features/interactive/ai-town) | Residents' lives and relationships after an ending | Long-term model behavior, assets, and performance need testing |
 | [AVG](/en/features/interactive/avg) | Branching narrative, backgrounds, sprites, and audio presentation | Literary and audiovisual quality require per-work acceptance |
 | [Text adventure](/en/features/interactive/text-adventure) | Actions, resources, quests, and endings | Professional production is connected; real-model and human acceptance remain |
