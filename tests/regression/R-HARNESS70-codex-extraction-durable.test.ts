@@ -7,7 +7,7 @@ import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
 import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
-import { parseCodexEntriesStrictV1 } from '../../src/lib/ai/adapters/structured-extract-adapter'
+import { codexEntryTransportOptionsV1, parseCodexEntriesStrictV1 } from '../../src/lib/ai/adapters/structured-extract-adapter'
 import * as codexAdapter from '../../src/lib/ai/adapters/structured-extract-adapter'
 import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
 import {
@@ -129,13 +129,72 @@ describe.sequential('R-HARNESS70 · Codex 词条 durable 分块抽取与原子�
     expect(names).toEqual(['旧潮草', resumed.candidate.entries[1].name])
   })
 
-  it('严格协议拒绝围栏、额外字段、未知 schema、类型修复、重复名和非法 importance', () => {
+  it('exposes reference keys as author-only context and omits them from the AI writable fields schema', async () => {
+    const fixture = await seed()
+    const category = (await db.codexCategories.get(fixture.categoryId))!
+    await db.codexCategories.update(fixture.categoryId, { fieldSchema: JSON.stringify([
+      ...JSON.parse(category.fieldSchema), { key: 'craftInto', label: '可炼器物', type: 'ref', refCategory: 'artifact' },
+    ]) })
+    const messages: Array<{ content: string }> = []
+    await generateCodexExtractionCandidateV1({ scope: fixture.scope, request: request(fixture), runAI: async input => {
+      messages.push(...input)
+      return response(entry('月栖花'))
+    } })
+    const text = messages.map(message => message.content).join('\n')
+    const line = text.split('\n').map(value => value.trim()).find(value => value.startsWith('AI 可填写 fields 字段 schema：'))!
+    expect(line).toBeTruthy()
+    const fields = JSON.parse(line.slice(line.indexOf('：') + 1))
+    expect(fields.map((field: { key: string }) => field.key)).toContain('habitat')
+    expect(fields.map((field: { key: string }) => field.key)).not.toContain('craftInto')
+    expect(text).toContain('ref 字段的 key 必须从输出 fields 对象完全省略')
+    expect(text).toContain('仅供作者后续关联')
+    expect(text).toContain('tags 必须是字符串数组且最多 5 项')
+  })
+
+  it('accepts one complete JSON container without repairing a body or taking surrounding prose', () => {
+    const body = response(entry('月栖花'))
+    const policy = { operation: 'extract' as const, sourceText: '月栖花生于月潮湿地。' }
+    const expected = parseCodexEntriesStrictV1(body, ['habitat'], policy)
+    expect(parseCodexEntriesStrictV1('```json\n' + body + '\n```', ['habitat'], policy)).toEqual(expected)
+    expect(parseCodexEntriesStrictV1('```\r\n' + body + '\r\n```', ['habitat'], policy)).toEqual(expected)
+    for (const bad of ['说明\n```json\n' + body + '\n```', '```json\n' + body + '\n```\n补充', '```javascript\n' + body + '\n```', '```json\n' + body + '\n```\n```json\n[]\n```', '```json\n[{"name":"未完整的词条",}]\n```']) expect(() => parseCodexEntriesStrictV1(bad, ['habitat'], policy)).toThrow()
+  })
+
+  it('sends a closed typed schema only to the verified Agnes model without losing author-only reference definitions', async () => {
+    const fixture = await seed()
+    await db.codexCategories.update(fixture.categoryId, { fieldSchema: JSON.stringify([
+      { key: 'habitat', label: '生境', type: 'text' },
+      { key: 'craftInto', label: '关联器物', type: 'ref', refCategory: 'artifact' },
+    ]) })
+    let calls = 0
+    const generated = await generateCodexExtractionCandidateV1({
+      scope: fixture.scope, request: request(fixture),
+      aiConfig: { provider: 'agnes', model: 'agnes-2.5-flash', apiKey: 'isolated-test-key' },
+      runAI: async (_messages, _index, options) => {
+        calls++
+        expect(options?.thinkingMode).toBe('disabled')
+        expect(options?.jsonSchema).toMatchObject({ strict: true, schema: { type: 'array', items: { additionalProperties: false, properties: {
+          fields: { additionalProperties: false, properties: { habitat: { type: 'string' } } },
+          tags: { minItems: 2, maxItems: 5 }, evidenceQuotes: { minItems: 1, maxItems: 5 },
+          provenance: { enum: ['verbatim-extraction'] },
+        } } } })
+        expect(JSON.stringify(options)).not.toContain('craftInto')
+        return response(entry('月栖花'))
+      },
+    })
+    expect(calls).toBe(1)
+    expect(generated.candidate.plan.baseline.category.fields.some(field => field.key === 'craftInto')).toBe(true)
+    expect(codexEntryTransportOptionsV1({ provider: 'custom', model: 'unverified-model' }, [], { operation: 'enrich', supplementTags: true })).toBeUndefined()
+    expect(codexEntryTransportOptionsV1({ provider: 'agnes', model: 'agnes-3.0-flash' }, [], { operation: 'enrich', supplementTags: true })).toBeUndefined()
+  })
+
+  it('严格协议拒绝额外字段、未知 schema、类型修复、重复名和非法 importance', () => {
     const valid = entry('月栖花')
     const policy = { operation: 'extract' as const, sourceText: '月栖花生于月潮湿地。' }
-    expect(() => parseCodexEntriesStrictV1(`\`\`\`json\n${response(valid)}\n\`\`\``, ['habitat'], policy)).toThrow('严格 JSON')
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, extra: true }]), ['habitat'], policy)).toThrow('字段')
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, fields: { unknown: '值' } }]), ['habitat'], policy)).toThrow('未登记字段')
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, tags: '月潮' }]), ['habitat'], policy)).toThrow('类型')
+    expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, tags: ['1', '2', '3', '4', '5', '6'] }]), ['habitat'], policy)).toThrow('tags 最多 5 项，实际 6 项')
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([valid, valid]), ['habitat'], policy)).toThrow('名称重复')
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, importance: 9 }]), ['habitat'], policy)).toThrow('范围')
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, summary: '' }]), ['habitat'], policy)).toThrow('范围')

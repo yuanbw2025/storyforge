@@ -1,0 +1,90 @@
+{
+  "schema": "storyforge.shared-source-regression-refresh",
+  "version": 1,
+  "date": "2026-10-27",
+  "task": "B-LF-STAB ST01",
+  "productSourceCommit": "620c55f973ae2e52f3ba5d0c0648c1f68e36c613",
+  "purpose": "Bind reviewed shared-source changes and preceding mainline drift to new dated engineering receipts; no changed gold, observed outcomes, quality thresholds or historical receipts.",
+  "initialFullCI": {
+    "failedSuites": 3,
+    "passedTests": 5648,
+    "skippedTests": 3,
+    "cause": "afterAll source-input receipt comparisons; original failure log retained privately"
+  },
+  "regeneration": {
+    "testFiles": 3,
+    "testsPassed": 110,
+    "modelCalls": 0,
+    "humanReviews": 0
+  },
+  "corpusSha256": "2273c9fcda68cb39a3892e2c4d86a47f3a0df77032dae073665c89ff8ab6e014",
+  "receiptSourcePolicy": "Generated run commit is the production-code base. Recorded file hashes bind the evaluated working tree including the new expected-receipt paths and manifest; final-head CI must compare those hashes again.",
+  "receipts": [
+    {
+      "name": "baseline",
+      "previousPath": "tests/acceptance/narrative-world/baseline-20261025-mainline-integration-v1.json",
+      "previousSha256": "de931ad3769acd67f03bc496f148347aed2f4d6ef2297d035072ae88ba230981",
+      "currentPath": "tests/acceptance/narrative-world/baseline-20261027-longform-stability-v1.json",
+      "currentSha256": "8c7b1b645986e4a5cfac2c0e41bb4b6dfa0da2ca570541aa601df61a5ae8a8b5",
+      "observationsUnchanged": true,
+      "inputHashCount": 290,
+      "changedExistingInputs": [
+        "package-lock.json",
+        "package.json",
+        "src/components/product/ProductProductionStudio.tsx",
+        "src/lib/export/registry-export.ts",
+        "src/lib/export/registry-import.ts",
+        "src/lib/product-production/commands.ts",
+        "src/lib/product-production/preview-source.ts",
+        "src/lib/product-production/service.ts",
+        "src/lib/product/runtime-core.ts",
+        "src/lib/registry/project-tables.ts",
+        "src/lib/registry/types.ts",
+        "tests/acceptance/narrative-world/manifest-v1.json",
+        "tests/regression/R-NW-1A-ir-codec.test.ts",
+        "tests/regression/R-NW-1B-corpus.test.ts"
+      ],
+      "addedInputs": [
+        "src/lib/types/state-card.ts"
+      ]
+    },
+    {
+      "name": "ir-contract",
+      "previousPath": "tests/acceptance/narrative-world/ir-contract-20261025-mainline-integration-v1.json",
+      "previousSha256": "662e7a69ef6cc9f897002293af6aa58f34eed3170b687475c17569b6e7a5379e",
+      "currentPath": "tests/acceptance/narrative-world/ir-contract-20261027-longform-stability-v1.json",
+      "currentSha256": "d63133724f1b8450e1a424e9d777541c773014f92250f3c4b450a92acf64f3e2",
+      "observationsUnchanged": true,
+      "inputHashCount": 18,
+      "changedExistingInputs": [
+        "src/lib/registry/field-registry.ts",
+        "src/lib/registry/project-tables.ts",
+        "src/lib/registry/types.ts",
+        "tests/regression/R-NW-1A-ir-codec.test.ts"
+      ],
+      "addedInputs": [
+        "src/lib/types/state-card.ts"
+      ]
+    },
+    {
+      "name": "domain-projection",
+      "previousPath": "tests/acceptance/narrative-world/domain-projection-20261025-mainline-integration-v1.json",
+      "previousSha256": "ffa46f9f63641acd8b2091c5af9dc1fcb01f532c1a26dff720c054e8e15e7e55",
+      "currentPath": "tests/acceptance/narrative-world/domain-projection-20261027-longform-stability-v1.json",
+      "currentSha256": "7f8b2076bba79654c139a622671dd768ed8b9bb04456255b960baa42c1edbe9d",
+      "observationsUnchanged": true,
+      "inputHashCount": 28,
+      "changedExistingInputs": [
+        "src/lib/export/registry-export.ts",
+        "src/lib/export/registry-import.ts",
+        "src/lib/registry/adopt.ts",
+        "src/lib/registry/field-registry.ts",
+        "src/lib/registry/project-tables.ts",
+        "tests/regression/R-NW-1B-corpus.test.ts"
+      ],
+      "addedInputs": [
+        "src/lib/types/state-card.ts"
+      ]
+    }
+  ]
+}

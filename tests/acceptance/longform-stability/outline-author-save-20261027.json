@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "kind": "longform-outline-author-save-partial-evidence",
+  "date": "2026-10-27",
+  "status": "AUTHOR_TEXT_AND_NATIVE_ROLLBACK_VERIFIED_CONTINUING",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "099e7f34793bdac83437962c023298f65a22c972",
+    "files": {
+      "src/components/shared/AcknowledgedTextField.tsx": "4e7a70f71ac88527b5ff7140e2b6eb56865f102e2a76b2b9e2cd24c80378fd40",
+      "src/components/character/CharacterDimensionFields.tsx": "1d4d3d0543257fd9c31ecf79ef7d8687d9691d7d456741d4cb61a52186622144",
+      "src/components/outline/OutlineChapterTree.tsx": "1fb759694a31320ed5ee3bee8b2a2ca5d6de9b24b2cc27152823c4e07e7f9aef",
+      "src/components/outline/OutlinePanel.tsx": "44e32a100ea1d4b8428fe39d4e428854fed0232a928566ec14b119088c4a61e1",
+      "src/components/outline/OutlineVolumeDetail.tsx": "9fbd0c0dc53ab68c53c94c74c97bd5d92a8399a7dee0d16e8e6a10f1a498e387",
+      "src/stores/outline.ts": "4500a1e4f0cb6073ce49d11136ce04a2197dc8ecde7c548ceb2a9a667015da14",
+      "tests/regression/R-OUTLINE-author-save-atomic.test.ts": "67c0196439b613649a8d63db5d62413a262938fc5bb00fcd8a6d5511ea0e0bd9",
+      "tests/e2e/longform-outline-save.spec.ts": "f126f9e7bbfb43ee7d9b38235632d8852392501f63d1c5ac3cfc348f1d853821",
+      "tests/e2e/longform-character-save.spec.ts": "f269db845e3b3e72d651e576321e0f51fe27cb875405d4e015f07b947f07313a"
+    }
+  },
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "productBoundary": {
+    "product": "independent-step-mode-longform",
+    "lifecycle": "product-development",
+    "owner": "Work outlineNodes and chapters; existing World references remain explicit",
+    "newTables": false,
+    "schemaChanged": false,
+    "aiCalls": 0
+  },
+  "originalRegression": {
+    "sourceCommit": "099e7f34793bdac83437962c023298f65a22c972",
+    "failed": 6,
+    "log": "outline-author-save-before.log",
+    "failures": [
+      "Outline title committed before linked chapter title failed",
+      "Invalid title persisted before renderer normalization threw",
+      "Owner field accepted as author patch",
+      "Missing row silently acknowledged",
+      "Zero-row write published a phantom cache value",
+      "Moved row silently acknowledged"
+    ]
+  },
+  "regression": {
+    "passed": 20,
+    "files": [
+      "tests/regression/R-OUTLINE-author-save-atomic.test.ts",
+      "tests/regression/R-CF-chapter-title-sync.test.ts",
+      "tests/regression/R-CHARACTER-author-save-boundary.test.ts"
+    ],
+    "log": "outline-atomic-store-expanded.log"
+  },
+  "isolatedNativeIndexedDB": {
+    "passed": 19,
+    "files": [
+      "tests/e2e/longform-outline-save.spec.ts",
+      "tests/e2e/longform-character-save.spec.ts",
+      "tests/e2e/longform-integration.spec.ts"
+    ],
+    "log": "outline-character-ui-final.log",
+    "transport": "External network blocked except existing simulated model fixtures. No real provider calls.",
+    "outlinePaths": [
+      "Four author title/summary fields save, clear chapter summary, navigate through scene outlines and reload",
+      "Quota failure retains draft and blocks adding a new volume until explicit successful retry",
+      "Late native write acknowledgement retains newer input and serially saves it",
+      "Concurrent title modification preserves canonical version and unsaved local draft",
+      "Malformed stored summary remains unchanged; explicit synthetic data restoration then visible read retry succeeds",
+      "Linked native chapter-title failure rolls back both records and explicit retry commits both"
+    ],
+    "additionalCharacterPath": "Untouched invalid background retains raw array and permits navigation to export/recovery tools",
+    "driverFailuresRetained": [
+      "First five new tests used an unavailable workId index in the readback driver; corrected to indexed projectId plus exact Work filter, without schema or product changes",
+      "Second invalid-character test did not select a character after reload; corrected to click the actual existing row, without reducing raw-data or navigation assertions"
+    ]
+  },
+  "checks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "build": "PASS",
+    "fullCiAtFinalSource": "NOT_RUN",
+    "fullE2e": "NOT_RUN",
+    "nativeInstallers": "NOT_RUN",
+    "release": "NOT_RELEASED"
+  },
+  "remaining": [
+    "Outline insertion, move, reorder, deletion and clearing have not completed their full owner/lifecycle/failure matrix",
+    "Scene-outline writes, actual model writing and review workflows continue",
+    "No production deployment, Windows/Android acceptance or user-population crash reduction is claimed"
+  ],
+  "privateEvidenceDirectoryId": "step-mode-stability-continuation-20261027"
+}

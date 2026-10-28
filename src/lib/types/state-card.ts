@@ -45,16 +45,61 @@ export interface StateDiffItem {
 
 // ── 工具函数 ──
 
-/** 安全解析 StateCard.fields JSON */
-export function parseFields(fieldsJson: string): StateField[] {
-  try {
-    const parsed = JSON.parse(fieldsJson)
-    if (Array.isArray(parsed)) return parsed
-    console.warn('[StateCard] fields 格式异常，预期数组:', fieldsJson)
-    return []
-  } catch (err) {
-    console.error('[StateCard] parseFields JSON 解析失败:', err, fieldsJson)
-    return []
+/** Invalid data stays in storage until the author explicitly repairs it. */
+export class StateFieldsParseError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'StateFieldsParseError'
+  }
+}
+
+function assertStateFields(value: unknown): asserts value is StateField[] {
+  if (!Array.isArray(value)) throw new StateFieldsParseError('状态字段必须是字段列表。')
+  for (let index = 0; index < value.length; index++) {
+    const field = value[index]
+    if (!field || typeof field !== 'object' || Array.isArray(field)) {
+      throw new StateFieldsParseError(`状态字段第${index + 1}项需要包含字段名和文本值。`)
+    }
+    if (typeof field.key !== 'string' || typeof field.value !== 'string') {
+      throw new StateFieldsParseError(`状态字段第${index + 1}项的字段名和字段值必须是文本。`)
+    }
+  }
+}
+
+/** Strict reader: never convert malformed records into an apparently empty list. */
+export function parseFields(fieldsJson: unknown): StateField[] {
+  if (typeof fieldsJson !== 'string') throw new StateFieldsParseError('状态字段必须是 JSON 文本。')
+  let parsed: unknown
+  try { parsed = JSON.parse(fieldsJson) }
+  catch { throw new StateFieldsParseError('状态字段不是有效 JSON，请修正后保存。') }
+  assertStateFields(parsed)
+  return parsed
+}
+
+/** Registry write validation also accepts the structured array before JSON storage. */
+export function validateStateFields(value: unknown): void {
+  if (typeof value === 'string') parseFields(value)
+  else assertStateFields(value)
+}
+
+/** UI inspection is explicit about corruption; failure never means an empty card. */
+export function inspectStateFields(value: unknown):
+  | { ok: true; fields: StateField[] }
+  | { ok: false; error: string } {
+  try { return { ok: true, fields: parseFields(value) } }
+  catch (error) {
+    if (!(error instanceof StateFieldsParseError)) throw error
+    return { ok: false, error: error.message }
+  }
+}
+
+/** Add identity to recoverable context failures without logging field contents. */
+export function readStateCardFields(card: { entityName?: unknown; fields?: unknown }): StateField[] {
+  try { return parseFields(card.fields) }
+  catch (error) {
+    if (!(error instanceof StateFieldsParseError)) throw error
+    const name = typeof card.entityName === 'string' ? card.entityName : '未命名'
+    throw new StateFieldsParseError(`状态卡「${name}」：${error.message} 请到“状态与物品”修复，原始记录已保留。`)
   }
 }
 

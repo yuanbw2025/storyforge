@@ -91,6 +91,8 @@ const activeDocs = [
   'docs/roadmap/AVG-WORK-PACKAGE-CARDS.md',
   'docs/roadmap/CAPABILITY-BASELINE.md',
   'docs/roadmap/LONGFORM-SYSTEM-FICTION-QUALITY-PLAN.md',
+  'docs/roadmap/LONGFORM-STEP-STABILITY-PLAN.md',
+  'docs/roadmap/longform-step-stability-matrix.json',
   'docs/roadmap/INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md',
   'docs/roadmap/SHORT-NOVEL-DEVELOPMENT-PLAN.md',
   'docs/roadmap/NOVEL-TO-SCREENPLAY-DEVELOPMENT-PLAN.md',

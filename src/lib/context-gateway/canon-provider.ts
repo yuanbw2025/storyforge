@@ -45,7 +45,7 @@ import {
 } from './provider-cache'
 
 const PROVIDER_SOURCE_KEY = 'ragSelection'
-const PROVIDER_VERSION = 'canon-resource-provider-v7'
+const PROVIDER_VERSION = 'canon-resource-provider-v9'
 const NORMALIZATION_VERSION = 'canon-resource-normalization-v1'
 const MAX_PAGE_SIZE = 100
 const MAX_READ_TOKENS = 100_000
@@ -724,13 +724,17 @@ async function nestedStoryStages(
   const relations = await relationsForRow(spec, row)
   const nested = await Promise.all(stages.map(async stage => {
     const stageKey = `${recordKey(spec, row)}:stage:${encodeURIComponent(stage.id)}`
+    // A stage title can recur in the same Arc. Its portable parent+stage key
+    // identifies the occurrence; a digest also preserves opaque IDs that a
+    // normalized-name conflict check would otherwise collapse.
+    const stageTitle = `${rowTitle(spec, row)} · ${stage.title} · ${await sha256Text(stageKey)}`
     const body = canonicalStringify(stage)
     const stageResource = await makeDescriptor({
       spec,
       row,
       frozenScope,
       resourceKey: stageKey,
-      title: `${rowTitle(spec, row)} · ${stage.title}`,
+      title: stageTitle,
       shortSummary: stage.description || stage.title,
       fullContent: body,
       sourceRefs: [ref],
@@ -747,7 +751,7 @@ async function nestedStoryStages(
       // The stable parent stage plus ordinal keeps an unchanged event addressable
       // without inventing a second identity outside the registered schema.
       resourceKey: `${stageKey}:event:${index + 1}`,
-      title: `${rowTitle(spec, row)} · ${stage.title} · 关键事件 ${index + 1}`,
+      title: `${stageTitle} · 关键事件 ${index + 1}`,
       shortSummary: event,
       fullContent: event,
       sourceRefs: [ref],

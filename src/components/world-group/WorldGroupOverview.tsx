@@ -1,7 +1,8 @@
 /**
  * 世界总览面板 — 管理多个世界组 + 世界关系
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { db } from '../../lib/db/schema'
 import { Plus, Trash2, GripVertical, ChevronRight, Sparkles, Loader2, Check, Pencil } from 'lucide-react'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -18,6 +19,8 @@ import { resolveScopeLike } from '../../lib/workspace/scope'
 import { WORLD_GROUP_TYPE_LABELS, WORLD_LINK_TYPE_LABELS } from '../../lib/types/world-group'
 import type { Project, WorkspaceScope, WorldGroup, WorldGroupType, WorldGroupLinkType } from '../../lib/types'
 import WorldGroupDetail from './WorldGroupDetail'
+import { WORLD_SUGGEST_FIELDS_V1 } from '../../lib/ai/world-group-ai'
+import { FIELD_BY_TARGET } from '../../lib/registry/field-registry'
 import WorldRelationGraph from './WorldRelationGraph'
 
 interface Props {
@@ -61,11 +64,17 @@ export default function WorldGroupOverview({ project }: Props) {
   const [suggestBusy, setSuggestBusy] = useState(false)
   const [suggestError, setSuggestError] = useState<string | null>(null)
   const [adoptedCount, setAdoptedCount] = useState(0)
+  const [operationError, setOperationError] = useState('')
+  const [manualBusy, setManualBusy] = useState(false)
+  const manualBusyRef = useRef(false)
+  const [reloadAttempt, setReloadAttempt] = useState(0)
 
   useEffect(() => {
     if (!project.id) return
     let cancelled = false
     setShowSuggest(false)
+    setEditingGroup(null)
+    setOperationError('')
     setConcept('')
     setScope(null)
     setCandidate(null)
@@ -106,10 +115,18 @@ export default function WorldGroupOverview({ project }: Props) {
         setSuggestError('上次世界建议停在模型结果不可判定窗口，系统不会自动重试。请放弃后重新生成。')
       }
     })().catch(reason => {
-      if (!cancelled) setSuggestError(reason instanceof Error ? reason.message : String(reason))
+      if (!cancelled) setOperationError(reason instanceof Error ? reason.message : String(reason))
     })
     return () => { cancelled = true }
-  }, [project.id, project.activeWorldId, project.activeWorkId, loadAll, ensurePrimaryGroup])
+  }, [project.id, project.activeWorldId, project.activeWorkId, loadAll, ensurePrimaryGroup, reloadAttempt])
+
+  const runManual = async (action: () => Promise<void>) => {
+    if (manualBusyRef.current || !scope) return
+    manualBusyRef.current = true; setManualBusy(true); setOperationError('')
+    try { await action() }
+    catch (cause) { setOperationError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { manualBusyRef.current = false; setManualBusy(false) }
+  }
 
   const handleAISuggest = async () => {
     if (!scope || candidate || unsafeRunId != null || suggestBusy) return
@@ -228,7 +245,7 @@ export default function WorldGroupOverview({ project }: Props) {
     }
   }
 
-  const handleAddWorld = async () => {
+  const handleAddWorld = () => runManual(async () => {
     const id = await createGroup({
       projectId: project.id!,
       name: '新世界',
@@ -236,19 +253,19 @@ export default function WorldGroupOverview({ project }: Props) {
       type: 'traversal' as WorldGroupType,
       icon: '🌐',
       order: groups.length,
-    })
+    }, scope!)
     // 自动进入编辑
-    const created = groups.find(g => g.id === id) ||
-      { id, projectId: project.id!, name: '新世界', description: '', type: 'traversal' as WorldGroupType, icon: '🌐', order: groups.length, createdAt: Date.now(), updatedAt: Date.now() }
+    const created = await db.worldGroups.get(id)
+    if (!created) throw new Error('新世界未能回读，请重新读取世界列表。')
     setEditingGroup(created)
-  }
+  })
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = (id: number) => runManual(async () => {
     await deleteGroup(id)
     setConfirmDeleteId(null)
-  }
+  })
 
-  const handleCreateLink = async () => {
+  const handleCreateLink = () => runManual(async () => {
     if (linkForm.from === '' || linkForm.to === '' || linkForm.from === linkForm.to) return
     const patch = {
       fromGroupId: Number(linkForm.from),
@@ -259,14 +276,14 @@ export default function WorldGroupOverview({ project }: Props) {
       bidirectional: linkForm.bidirectional,
     }
     if (editingLinkId == null) {
-      await createLink({ projectId: project.id!, ...patch })
+      await createLink({ projectId: project.id!, ...patch }, scope!)
     } else {
       await updateLink(editingLinkId, patch)
     }
     setEditingLinkId(null)
     setLinkForm(EMPTY_LINK_FORM)
     setShowLinkForm(false)
-  }
+  })
 
   const handleEditLink = (linkId: number) => {
     const link = links.find(item => item.id === linkId)
@@ -314,6 +331,8 @@ export default function WorldGroupOverview({ project }: Props) {
         </p>
       </div>
 
+      {operationError && <div role="alert" className="rounded-lg border border-red-500/20 p-3 text-sm text-error">操作未完成：{operationError}<button type="button" className="ml-3 underline" disabled={manualBusy} onClick={() => setReloadAttempt(value => value + 1)}>重新读取世界列表</button></div>}
+      {manualBusy && <p role="status" className="text-xs text-text-muted">正在保存世界设置…</p>}
       {loading ? (
         <div className="text-text-muted text-sm py-8 text-center">加载中...</div>
       ) : (
@@ -332,6 +351,7 @@ export default function WorldGroupOverview({ project }: Props) {
                 </button>
                 <button
                   onClick={handleAddWorld}
+                  disabled={manualBusy || !scope}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-accent text-white hover:bg-accent-hover transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -401,6 +421,15 @@ export default function WorldGroupOverview({ project }: Props) {
                           </div>
                           <p className="text-xs text-text-muted mt-0.5">{w.description}</p>
                           {w.entryCondition && <p className="text-[10px] text-text-muted mt-0.5">进入：{w.entryCondition}</p>}
+                          <details className="mt-2 text-xs text-text-secondary">
+                            <summary className="cursor-pointer text-accent">查看完整世界建议</summary>
+                            <dl className="mt-2 space-y-2">
+                              {WORLD_SUGGEST_FIELDS_V1.map(field => <div key={field}>
+                                <dt className="text-text-muted">{FIELD_BY_TARGET.get('worldGroups')?.find(item => item.field === field)?.label ?? field}</dt>
+                                <dd className="whitespace-pre-wrap break-words">{field === 'type' ? WORLD_GROUP_TYPE_LABELS[w.type] : String(w[field] ?? '') || '未填写'}</dd>
+                              </div>)}
+                            </dl>
+                          </details>
                         </div>
                         <button
                           onClick={() => toggleSuggested(i)}
@@ -600,7 +629,7 @@ export default function WorldGroupOverview({ project }: Props) {
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => deleteLink(l.id!)}
+                          onClick={() => { void runManual(() => deleteLink(l.id!)) }}
                           className="p-1 rounded text-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
                           title="删除关系"
                         >

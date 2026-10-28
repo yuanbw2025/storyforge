@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-selected-revision-adoption-and-recovery-partial-evidence",
+  "date": "2026-10-28",
+  "sourceCommit": "ddcf92752e847d4f9395baad74f562dac6473730",
+  "status": "REAL_PREFIX_ENDED_NEW_REVIEW_REVISION_ADOPTED_AND_INDEPENDENTLY_READ_BACK",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "modelRequests": 3,
+  "knownTotalTokens": 31407,
+  "unknownUsageRequests": 0,
+  "realCohort": {
+    "directory": "live-longform-revision-2026-10-27T19-36-14-253Z",
+    "originalPrefixRun": 18,
+    "prefixEndModelRequests": 0,
+    "prefixTerminal": "cancelled",
+    "newReviewRun": 19,
+    "revisionRun": 20,
+    "revisionTerminal": "completed",
+    "canonicalEqualsVerifiedPreview": true,
+    "selectedParagraph": 6,
+    "unselectedParagraphsWithExactHtml": 12,
+    "protectedQuoteRetained": true,
+    "authorSeededTaskSentenceRemoved": true,
+    "selectedContainerRetainedEmpty": true,
+    "originalDriverFailure": "The original driver expected deletion of the whole paragraph container; the valid selected-span patch leaves an empty paragraph. Its failed result remains intact."
+  },
+  "independentVerification": {
+    "directory": "revision-adoption-local-verification-2026-10-27T19-40-20-833Z",
+    "modelRequests": 0,
+    "status": "PASS",
+    "log": "revision-adoption-local-ddcf9275.log",
+    "checks": [
+      "Fresh browser reads original successful adoption and readonly UI",
+      "Canonical HTML equals verified preview",
+      "Only selected text changed; all 12 other paragraphs equal original HTML",
+      "Original interrupted run remains cancelled and revision run completed",
+      "No model request or pageerror"
+    ]
+  },
+  "otherAttemptsRetained": [
+    {
+      "directory": "live-longform-revision-2026-10-27T19-18-46-919Z",
+      "result": "Server not ready; zero model requests, environment/driver failure"
+    },
+    {
+      "directory": "live-longform-revision-2026-10-27T19-21-04-493Z",
+      "result": "Original prefix explicitly ended with zero model calls; consumed prior review correctly blocks reuse and requires a fresh review"
+    },
+    {
+      "directory": "live-longform-revision-2026-10-27T19-26-48-784Z",
+      "modelRequests": 1,
+      "knownTotalTokens": 10513,
+      "unknownUsageRequests": 0,
+      "result": "Fresh review had invalid issue element; strict rejection retained, no canonical change or automatic repair"
+    }
+  ],
+  "limits": [
+    "This receipt is an additional immutable checkpoint; prior pending/failed receipts remain unchanged",
+    "Model-output validity and workflow/protection proof do not establish literary or platform quality",
+    "Other operations, complete fault matrix, native packages and release continue"
+  ]
+}

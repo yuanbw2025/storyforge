@@ -139,8 +139,21 @@ describe.sequential('R-HARNESS68 · 多世界建议 durable 候选与选择式�
       .some(row => row.name === '兽潮棋盘')).toBe(false)
   })
 
-  it('严格协议拒绝 Markdown、项数、额外字段、主世界、重复名和越界章节数', async () => {
-    expect(() => parseWorldSuggestOutputStrictV1(`\`\`\`json\n${response()}\n\`\`\``)).toThrow('代码围栏')
+  it('accepts one complete JSON container and rejects prose, multiple blocks and repaired bodies', () => {
+    const raw = response()
+    expect(parseWorldSuggestOutputStrictV1('```json\n' + raw + '\n```')).toEqual(JSON.parse(raw))
+    expect(parseWorldSuggestOutputStrictV1('```\r\n' + raw + '\r\n```')).toEqual(JSON.parse(raw))
+    for (const wrapped of [
+      '说明\n```json\n' + raw + '\n```',
+      '```json\n' + raw + '\n```\n后记',
+      '```javascript\n' + raw + '\n```',
+      '```json\n' + raw + '\n```\n```json\n{}\n```',
+      '```json\n{"broken": true,}\n```',
+    ]) expect(() => parseWorldSuggestOutputStrictV1(wrapped)).toThrow()
+  })
+
+  it('严格协议拒绝无效项数或字段、项数、额外字段、主世界、重复名和越界章节数', async () => {
+
     expect(() => parseWorldSuggestOutputStrictV1(JSON.stringify([JSON.parse(response())[0]]))).toThrow('2-4')
     expect(() => parseWorldSuggestOutputStrictV1(response({ extra: true }))).toThrow('只能包含')
     expect(() => parseWorldSuggestOutputStrictV1(response({ type: 'primary' }))).toThrow('type')

@@ -1,5 +1,8 @@
+import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
+import WorldviewReadBoundary from './WorldviewReadBoundary'
 import { useState, useEffect } from 'react'
-import { useWorldviewStore } from '../../stores/worldview'
+import { EMPTY_DIVINE_DESIGN } from '../../lib/types/worldview'
+import { useWorldviewStore, type WorldviewAuthorPatch } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
 import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
 import { InlineTextarea } from '../shared/InlineEdit'
@@ -41,22 +44,19 @@ interface Props {
 
 /** v3 §2.1 — 世界观.世界起源（三个子模块） */
 export default function WorldviewOriginPanel({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget }: Props) {
-  const { worldview, saveWorldview, loadAll } = useWorldviewStore()
+  const { worldview, saveWorldview } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
+  const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
+  const targetWorldGroupId = project.enableMultiWorld ? activeGroupId : (worldview?.worldGroupId ?? null)
   const copilot = useMasterCopilot({
     project,
-    worldGroupId: project.enableMultiWorld ? activeGroupId : null,
+    worldGroupId: targetWorldGroupId,
   })
 
   const [active, setActive] = useState<WorldviewOriginFieldKey>(initialPowerTarget ? 'power' : initialField ?? 'origin')
   const [worldOrigin, setWorldOrigin] = useState('')
   const [powerHierarchy, setPowerHierarchy] = useState('')
-  const [divineDesign, setDivineDesign] = useState<DivineDesign>({
-    hasDivinity: false,
-    divineRank: '',
-    divineNames: '',
-    divineRules: '',
-  })
+  const [divineDesign, setDivineDesign] = useState<DivineDesign>({ ...EMPTY_DIVINE_DESIGN })
   const [runningField, setRunningField] = useState<WorldviewAgentField | null>(null)
   useInitialRecordTarget(initialWorldviewId, worldview?.id === initialWorldviewId)
 
@@ -65,23 +65,16 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
     setActive(powerTargetKey ? 'power' : initialField ?? 'origin')
   }, [initialField, powerTargetKey])
 
-  // 多世界模式下按当前世界组加载，单世界传 null 走原逻辑
-  useEffect(() => {
-    loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
-  }, [project.id, project.enableMultiWorld, activeGroupId, loadAll])
-
   // 同步 store -> 本地 state
   useEffect(() => {
-    setWorldOrigin(worldview?.worldOrigin || '')
-    setPowerHierarchy(worldview?.powerHierarchy || '')
-    setDivineDesign(worldview?.divineDesign || {
-      hasDivinity: false, divineRank: '', divineNames: '', divineRules: '',
-    })
+    setWorldOrigin(worldview?.worldOrigin ?? '')
+    setPowerHierarchy(worldview?.powerHierarchy ?? '')
+    setDivineDesign(worldview?.divineDesign || { ...EMPTY_DIVINE_DESIGN })
   }, [worldview])
 
   // 通用保存
-  const save = (patch: Partial<typeof worldview>) =>
-    saveWorldview({ projectId: project.id!, ...patch })
+  const save = (patch: WorldviewAuthorPatch) =>
+    saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, ...patch }, authorScope)
 
   const pendingWorldviewCandidates = copilot.pendingCandidates.filter(candidate => (
     candidate.payload.skillId === 'world-origin.worldview-field'
@@ -108,9 +101,10 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
   }, [pendingOriginKey])
 
   return (
+    <WorldviewReadBoundary onRetry={reloadCurrent}>
     <div
       {...initialRecordTargetAttributes(worldview?.id === initialWorldviewId, worldview?.id)}
-      className={`flex flex-col w-full max-w-5xl space-y-4 rounded-xl ${
+      className={`worldview-origin-panel flex flex-col w-full max-w-5xl space-y-4 rounded-xl ${
         worldview?.id === initialWorldviewId ? INITIAL_RECORD_TARGET_CLASS : ''
       }`}
     >
@@ -126,7 +120,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
           定义世界的起源、力量体系与信仰体系。如需声明真实与幻想的规则，请前往「⚖️ 真实与幻想」面板。
         </p>
         <div className="mt-3 max-w-xl">
-          <CodexSearchBar
+          <CodexSearchBar scope={authorScope} worldGroupId={targetWorldGroupId}
             categoryKeys={['originPower', 'originDeity']}
             onJump={(catKey) => setActive(catKey === 'originDeity' ? 'divine' : 'power')}
           />
@@ -153,7 +147,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
             <TextFieldEditor
               field={WORLDVIEW_ORIGIN_FIELDS[0]}
               value={worldOrigin}
-              onChange={v => { setWorldOrigin(v); save({ worldOrigin: v }) }}
+              onChange={v => { setWorldOrigin(v); return save({ worldOrigin: v }) }}
               project={project}
               agentField="worldOrigin"
               activeGroupId={activeGroupId}
@@ -164,7 +158,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
               onRunningChange={running => setRunningField(running ? 'worldOrigin' : null)}
               onAdopted={async candidate => {
                 await copilot.adoptCandidate(candidate)
-                await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                await reloadCurrent()
               }}
             />
           </div>
@@ -174,7 +168,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
             <TextFieldEditor
               field={WORLDVIEW_ORIGIN_FIELDS[1]}
               value={powerHierarchy}
-              onChange={v => { setPowerHierarchy(v); save({ powerHierarchy: v }) }}
+              onChange={v => { setPowerHierarchy(v); return save({ powerHierarchy: v }) }}
               project={project}
               agentField="powerHierarchy"
               activeGroupId={activeGroupId}
@@ -185,7 +179,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
               onRunningChange={running => setRunningField(running ? 'powerHierarchy' : null)}
               onAdopted={async candidate => {
                 await copilot.adoptCandidate(candidate)
-                await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                await reloadCurrent()
               }}
             />
             <PowerSystemDetails project={project} initialRecordId={initialPowerTarget?.table === 'powerSystems' ? initialPowerTarget.recordId : null}/>
@@ -208,7 +202,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
               field={WORLDVIEW_ORIGIN_FIELDS[2]}
               divineDesign={divineDesign}
               onDivineChange={async (next) => {
-                setDivineDesign(next)
+                setDivineDesign(current => ({ ...current, ...next }))
                 await save({ divineDesign: next })
               }}
               project={project}
@@ -220,7 +214,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
               onRunningChange={running => setRunningField(running ? 'divineDesign' : null)}
               onAdopted={async candidate => {
                 await copilot.adoptCandidate(candidate)
-                await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                await reloadCurrent()
               }}
             />
             <div className="mt-6">
@@ -241,6 +235,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
         </div>
       </div>
     </div>
+    </WorldviewReadBoundary>
   )
 }
 
@@ -262,7 +257,7 @@ function TextFieldEditor({
 }: {
   field: typeof WORLDVIEW_ORIGIN_FIELDS[number]
   value: string
-  onChange: (v: string) => void
+  onChange: (v: string) => void | Promise<void>
   project: Project
   agentField: WorldviewAgentField
   activeGroupId: number | null
@@ -317,7 +312,7 @@ function DivineFieldEditor({
 }: {
   field: typeof WORLDVIEW_ORIGIN_FIELDS[number]
   divineDesign: DivineDesign
-  onDivineChange: (next: DivineDesign) => Promise<void>
+  onDivineChange: (next: Partial<DivineDesign>) => Promise<void>
   project: Project
   activeGroupId: number | null
   copilot: ReturnType<typeof useMasterCopilot>
@@ -327,6 +322,20 @@ function DivineFieldEditor({
   onRunningChange: (running: boolean) => void
   onAdopted: (candidate: PendingMasterCandidate) => Promise<void>
 }) {
+  const [toggleSaving, setToggleSaving] = useState(false)
+  const [toggleFailure, setToggleFailure] = useState<{ message: string; retry: () => Promise<void> } | null>(null)
+  const saveDivinity = async (hasDivinity: boolean, writer = onDivineChange) => {
+    setToggleSaving(true)
+    try {
+      await writer({ hasDivinity })
+      setToggleFailure(null)
+    } catch (cause) {
+      setToggleFailure({
+        message: cause instanceof Error ? cause.message : '保存失败',
+        retry: () => saveDivinity(hasDivinity, writer),
+      })
+    } finally { setToggleSaving(false) }
+  }
   return (
     <div className="space-y-4">
       <div>
@@ -341,13 +350,17 @@ function DivineFieldEditor({
         <input
           type="checkbox"
           checked={divineDesign.hasDivinity}
-          onChange={e => {
-            onDivineChange({ ...divineDesign, hasDivinity: e.target.checked })
-          }}
+          disabled={toggleSaving}
+          onChange={e => { void saveDivinity(e.target.checked) }}
           className="accent-accent"
         />
         <span className="text-text-secondary">存在神明或宗教信仰</span>
       </label>
+
+      {toggleFailure && <div className="text-xs text-error">
+        <p role="alert">神明开关未保存：{toggleFailure.message}</p>
+        <button type="button" disabled={toggleSaving} onClick={() => { void toggleFailure.retry() }} className="underline">重试保存</button>
+      </div>}
 
       {divineDesign.hasDivinity && (
         <div className="space-y-0 divide-y divide-border/40">
@@ -356,7 +369,7 @@ function DivineFieldEditor({
             <div className="flex-1 min-w-0">
               <InlineTextarea
                 value={divineDesign.divineRank}
-                onChange={v => onDivineChange({ ...divineDesign, divineRank: v })}
+                onChange={v => onDivineChange({ divineRank: v })}
                 placeholder="例：主神 / 次神 / 半神 / 国教 / 民间信仰 ..."
               />
             </div>
@@ -366,7 +379,7 @@ function DivineFieldEditor({
             <div className="flex-1 min-w-0">
               <InlineTextarea
                 value={divineDesign.divineNames}
-                onChange={v => onDivineChange({ ...divineDesign, divineNames: v })}
+                onChange={v => onDivineChange({ divineNames: v })}
                 placeholder="例：天帝 · 创世神；关帝信仰；妈祖信仰 ..."
               />
             </div>
@@ -376,7 +389,7 @@ function DivineFieldEditor({
             <div className="flex-1 min-w-0">
               <InlineTextarea
                 value={divineDesign.divineRules}
-                onChange={v => onDivineChange({ ...divineDesign, divineRules: v })}
+                onChange={v => onDivineChange({ divineRules: v })}
                 placeholder="例：不可直接干涉凡间 / 避讳字 / 祭祀风俗 ..."
               />
             </div>

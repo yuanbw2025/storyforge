@@ -1,0 +1,58 @@
+{
+  "schema": "storyforge.shared-source-regression-refresh",
+  "version": 2,
+  "date": "2026-10-27",
+  "task": "B-LF-STAB ST01",
+  "evaluatedBaseCommit": "c0e9efd3aeef3c4d97d715b66b4d4448cbbd3374",
+  "sourcePolicy": "Actual recorded input hashes identify the evaluated working tree; report generated before commit. The prior dated receipts and raw failures stay unchanged.",
+  "reason": "Additional sparse structured-array write rejection; no changed original observations, gold or thresholds.",
+  "regeneration": {
+    "testFiles": 3,
+    "testsPassed": 110,
+    "modelCalls": 0,
+    "humanReviews": 0
+  },
+  "receipts": [
+    {
+      "name": "baseline",
+      "previousPath": "tests/acceptance/narrative-world/baseline-20261027-longform-stability-v1.json",
+      "previousSha256": "8c7b1b645986e4a5cfac2c0e41bb4b6dfa0da2ca570541aa601df61a5ae8a8b5",
+      "currentPath": "tests/acceptance/narrative-world/baseline-20261027-longform-stability-v2.json",
+      "currentSha256": "04dc9b47c6c62d77bfbaf06dc4764c87b5afca031f95a768b802919e659d7709",
+      "observationsUnchanged": true,
+      "inputHashCount": 290,
+      "changedInputs": [
+        "src/lib/types/state-card.ts",
+        "tests/acceptance/narrative-world/manifest-v1.json",
+        "tests/regression/R-NW-1A-ir-codec.test.ts",
+        "tests/regression/R-NW-1B-corpus.test.ts"
+      ]
+    },
+    {
+      "name": "ir-contract",
+      "previousPath": "tests/acceptance/narrative-world/ir-contract-20261027-longform-stability-v1.json",
+      "previousSha256": "d63133724f1b8450e1a424e9d777541c773014f92250f3c4b450a92acf64f3e2",
+      "currentPath": "tests/acceptance/narrative-world/ir-contract-20261027-longform-stability-v2.json",
+      "currentSha256": "c1c4b883b32bd95156f370ed4f680c63601cad0ca05b0d03bf0c60834cb2f5d0",
+      "observationsUnchanged": true,
+      "inputHashCount": 18,
+      "changedInputs": [
+        "src/lib/types/state-card.ts",
+        "tests/regression/R-NW-1A-ir-codec.test.ts"
+      ]
+    },
+    {
+      "name": "domain-projection",
+      "previousPath": "tests/acceptance/narrative-world/domain-projection-20261027-longform-stability-v1.json",
+      "previousSha256": "7f8b2076bba79654c139a622671dd768ed8b9bb04456255b960baa42c1edbe9d",
+      "currentPath": "tests/acceptance/narrative-world/domain-projection-20261027-longform-stability-v2.json",
+      "currentSha256": "8be0a7ad8a0a2d46a902fed26f82934edea48ea1408bd92b1e7d0f9b84c6baee",
+      "observationsUnchanged": true,
+      "inputHashCount": 28,
+      "changedInputs": [
+        "src/lib/types/state-card.ts",
+        "tests/regression/R-NW-1B-corpus.test.ts"
+      ]
+    }
+  ]
+}

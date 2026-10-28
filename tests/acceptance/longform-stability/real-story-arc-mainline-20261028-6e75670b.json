@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-story-arc-create-transform-mainline-partial-evidence",
+  "date": "2026-10-28",
+  "sourceCommit": "6e75670b6329cb0254e1d2b815bfb73d2ceacd61",
+  "status": "CREATE_AND_FOUR_TRANSFORMS_VERIFIED_EVENT_GENERATION_BLOCKED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "successfulCohorts": {
+    "modelRequests": 8,
+    "knownTotalTokens": 57825,
+    "unknownUsageRequests": 0
+  },
+  "create": {
+    "directory": "live-story-arc-2026-10-27T20-17-01-155Z",
+    "modelRequests": 4,
+    "knownTotalTokens": 20661,
+    "unknownUsageRequests": 0,
+    "requestsByAuthorRound": [
+      2,
+      2
+    ],
+    "checks": [
+      "First generated candidate rejected with unchanged canonical arcs and terminal run",
+      "Separate author-started create edited, saved, reloaded and adopted",
+      "Manual name save and registered context readback",
+      "Original Work and existing prose preserved, zero unhandled page errors"
+    ]
+  },
+  "transforms": {
+    "directory": "live-story-arc-transforms-2026-10-27T20-24-23-702Z",
+    "modelRequests": 4,
+    "knownTotalTokens": 37164,
+    "unknownUsageRequests": 0,
+    "modes": [
+      "expand",
+      "rewrite",
+      "polish",
+      "replan"
+    ],
+    "checks": [
+      "Each mode generated a reviewable candidate, left Canon unchanged before adoption, retained author candidate edit through reload, then adopted and reloaded",
+      "Original arc id and Work retained; existing prose unchanged",
+      "Each mode used one observed model request; reloads used zero"
+    ]
+  },
+  "eventGenerationFailure": {
+    "directory": "live-story-arc-events-2026-10-27T20-31-42-438Z",
+    "modelRequests": 2,
+    "knownTotalTokens": 13407,
+    "unknownUsageRequests": 0,
+    "result": "manual-repair candidate, not adopted; source unchanged",
+    "confirmedConflict": "UI requests preserving existing events plus 3-5 additional events, while the full-arc candidate parser allows at most 5 per stage. The observed model returned 6 in the selected stage.",
+    "scopeGap": "UI event generation/sort still use whole-arc expand/replan; deterministic selected-stage and exact-permutation contracts remain to be implemented and verified",
+    "automaticCallsStopped": true
+  },
+  "limits": [
+    "Positive mode slices do not complete the full discovery/fault/platform cases",
+    "All earlier failed/partial receipts remain unchanged",
+    "No literary, independent-reader, platform acceptance or release claim"
+  ]
+}

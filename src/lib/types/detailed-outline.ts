@@ -7,11 +7,8 @@
  */
 
 /** 场景节奏标签（用于 AI 写正文时判断笔墨分配） */
-export type ScenePace =
-  | 'slow'      // 慢节奏：心理/环境描写多
-  | 'medium'    // 中节奏：对话/铺垫
-  | 'fast'      // 快节奏：冲突/动作
-  | 'climax'    // 高潮：决战/反转
+export const SCENE_PACES = ['slow', 'medium', 'fast', 'climax'] as const
+export type ScenePace = typeof SCENE_PACES[number]
 
 /** 可选的写作任务，不要求每场景使用同一公式或必须发生冲突。 */
 export const DETAILED_SCENE_TASK_FIELDS = [
@@ -56,10 +53,20 @@ export function normalizeDetailedScenes(value: unknown): DetailedScene[] {
   if (!Array.isArray(value)) {
     throw new Error('细纲 scenes 必须是当前结构的数组')
   }
-  if (value.some(scene => !scene || typeof scene !== 'object' || Array.isArray(scene))) {
-    throw new Error('细纲 scenes 包含非法场景项')
+  const ids = new Set<string>()
+  for (let index = 0; index < value.length; index++) {
+    const scene = value[index]
+    if (!scene || typeof scene !== 'object' || Array.isArray(scene)) throw new Error('细纲 scenes 包含非法场景项')
+    for (const key of ['sceneId', 'title', 'summary', 'location', 'conflict', 'notes'] as const) {
+      if (typeof scene[key] !== 'string') throw new Error(`细纲场景 ${key} 必须是文本`)
+    }
+    if (!scene.sceneId.trim() || ids.has(scene.sceneId)) throw new Error('细纲场景标识为空或重复')
+    ids.add(scene.sceneId)
+    if (!Array.isArray(scene.characterIds) || Array.from(scene.characterIds).some(id => typeof id !== 'number' || !Number.isSafeInteger(id) || id < 1)) throw new Error('细纲场景 characterIds 必须是有效角色标识数组')
+    if (!SCENE_PACES.includes(scene.pace)) throw new Error('细纲场景 pace 无效')
+    if (!Number.isSafeInteger(scene.estimatedWords) || scene.estimatedWords < 0) throw new Error('细纲场景 estimatedWords 必须是非负整数字数')
+    parseDetailedSceneTaskFieldsV1(scene)
   }
-  value.forEach(scene => parseDetailedSceneTaskFieldsV1(scene))
   return value as DetailedScene[]
 }
 

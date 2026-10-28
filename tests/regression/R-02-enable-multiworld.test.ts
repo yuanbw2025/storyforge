@@ -13,6 +13,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 describe('R-02: enableMultiWorld 事务作用域完整性', () => {
   beforeEach(async () => {
@@ -78,7 +79,7 @@ describe('R-02: enableMultiWorld 事务作用域完整性', () => {
     ])
 
     const { useWorldGroupStore } = await import('../../src/stores/world-group')
-
+    await finalizeCurrentFixtureV1(projectId)
     await expect(useWorldGroupStore.getState().enableMultiWorld(projectId)).resolves.not.toThrow()
 
     const primary = await db.worldGroups

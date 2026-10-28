@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "kind": "source-aware-existing-story-arc-transform-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "18f6b8daa683a9f0ebe568bcb848660335afb813",
+    "files": {
+      "src/lib/agent/story-arc-copilot.ts": "7f67e6d1d9a52ff3d4b90fccac838ee6c76b66872db2e329c058e00fd7e1a869",
+      "tests/regression/R-STAB-story-arc-rich-transform.test.ts": "e6740d33a00f9d2ca4b8c84bc9f43a216e743cec287a12cad1aa8fd912050f51",
+      "tests/e2e/longform-story-arc-save.spec.ts": "ab2907d396e1f88c6d0f28ed65d2c005e1beb5793141a9b5bbe3ae66b677c6ce"
+    }
+  },
+  "status": "TARGETED_AND_NATIVE_RICH_STRUCTURE_PASSED_REAL_MODEL_REPLAY_NEXT",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "productBoundary": "Existing Work-owned longform storyArcs, shared Step/Node Skill, Context Gateway, candidate/adopt and lifecycle. No new context source, AI entry, field or table.",
+  "originalReproduction": {
+    "log": "story-arc-rich-transform-before.log",
+    "failed": 5,
+    "meaning": "One new-Arc cardinality restriction incorrectly applied to four existing-Arc transformations and restored eight-stage candidate; not five independent defects."
+  },
+  "sharedFoundation": {
+    "commit": "18f6b8daa683a9f0ebe568bcb848660335afb813",
+    "receipt": "tests/acceptance/longform-stability/canon-stage-identity-20261028.json",
+    "process": "Preserved future source/tests byte-for-byte outside repo while independently validating and committing the shared identity foundation, then restored with SHA-256 verification."
+  },
+  "changes": [
+    "Existing transforms inherit only the exact selected source stage allowances by stable ID; create keeps original 3-7 stages and 1-5 events",
+    "Existing stages may retain all original events with total count at most old count plus five; at most seven new stages, whose events remain 1-5",
+    "Unchanged empty, duplicate and overlength author strings and exact opaque IDs survive; newly authored model text retains existing size/type/duplicate checks",
+    "Unknown author stage fields copied from the frozen source, never accepted from model candidate; optional volume fields retain valid one-sided author values",
+    "Model parser, CreativeArtifact fragments, author revalidation, reload/restored adoption, Node gate/adoption and prompt use the same source-aware contract",
+    "Whole draft size, actual context budget, scope, identity, stale checks, formal adoption and progress lifecycle remain enforced"
+  ],
+  "intermediateEvidence": {
+    "firstAfterLog": "story-arc-rich-transform-first-after.log",
+    "cause": "One unchanged-create prompt assertion broke after incidental punctuation edit; restored original create prompt",
+    "relatedLog": "story-arc-rich-transform-related.log",
+    "causes": [
+      "One-sided endVolume projection dropped during the first implementation; fixed and readback tested",
+      "Same-titled stages exposed the independently repaired Canon foundation"
+    ],
+    "tscLog": "story-arc-rich-transform-foundation-tsc.log",
+    "tscCause": "Unused callback parameter corrected; subsequent TypeScript gate passed"
+  },
+  "regression": {
+    "log": "story-arc-rich-transform-regression-final.log",
+    "passed": 103,
+    "files": 8,
+    "checks": [
+      "All four transformations, CreativeArtifact, author revision and restored adoption",
+      "One stage/seven events, eight existing stages, duplicate titles and event arrays",
+      "Retained empty/duplicate/overlength data, opaque IDs, extra author metadata and one-sided volume fields",
+      "Excess new content, new duplicates, unknown IDs, unregistered candidate fields and stale source rejected",
+      "Existing scoped-event and storyline-progress regressions retained"
+    ]
+  },
+  "nativeBrowser": {
+    "log": "story-arc-rich-transform-native.log",
+    "passed": 11,
+    "checks": [
+      "Actual UI manually creates seven events or eight stages, requests whole-Arc polish",
+      "Canonical Arc unchanged before explicit adoption; duplicate-added candidate blocks adoption",
+      "Corrected author candidate persists, reloads and adopts via formal pipeline",
+      "All stages, events, original IDs, Work ownership and extra author fields preserved; refresh no dispatch",
+      "Existing nine author-save, rollback, same-title Gateway and stage-event paths retained"
+    ]
+  },
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "build": "PASS",
+    "targetedEslint": "PASS"
+  },
+  "fullChecks": "Full CI/E2E still on exact earlier 2f4ebb26; these do not prove current full head green.",
+  "remaining": "Exact-commit real Agnes four-operation replay and remaining B-LF-STAB procedures; no whole-case or plan completion claim."
+}

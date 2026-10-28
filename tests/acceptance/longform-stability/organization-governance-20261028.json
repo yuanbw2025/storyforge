@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "seven-domain-registered-authority-and-versioned-post-state-foundation",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "89d7d36f5bad49c16e148896c648aa576ae100e8",
+    "files": {
+      "src/lib/agent/run/chapter-organization-authority.ts": "d5407adf364a791ca94d8774fa41c38671b91b176aef184975f6123039b897e5",
+      "src/lib/agent/run/chapter-organization-durable.ts": "67dd8292b4c18a652aa2142c85e18c1783782e203c9f7fb3dbe6b406befbed48",
+      "src/lib/agent/run/chapter-post-adoption-durable.ts": "0706a97b36fb20a29b8a0bf75d8fc2a346d0bdc63b2bcdafda167ccc5c764b43",
+      "tests/regression/R-STAB-organization-governance.test.ts": "2c609320ce767da81e6c83f1afdfd722c5b20df8e9725431677c3e528f04c346",
+      "tests/regression/R-HARNESS5-chapter-organization-durable.test.ts": "9168467dd8cf3621b79b7fc32db1c819286a34724ca2be5c5e82747c5a41d25b"
+    }
+  },
+  "status": "REGISTERED_AUTHORITY_AND_VERSIONED_VERIFICATION_TARGETED_PASSED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "boundary": "Shared registered prose.organize Skill; existing tables/adoption and source semantics only. Manual and post-adoption permissions derive from one current Skill; frozen old contracts remain unchanged.",
+  "changes": [
+    "Manual source set now includes all registered sources, including storyArcs and storylineProgress",
+    "Both manual and post-adoption direct write permissions derive from Skill fields/extensions; no duplicate literal list",
+    "New manual terminal verifier V2 hashes its frozen full direct write set, including all three storyline tables",
+    "Frozen V1 verifier and six-table post-state preimage remain readable and executable; no receipt migration"
+  ],
+  "before": {
+    "log": "organization-governance-before.log",
+    "failed": 2,
+    "cause": "Manual source set and write permissions diverged from the registered seven-domain Skill"
+  },
+  "intermediateFixtures": [
+    "organization-governance-related.log: three new tests initially read the wrong workspace-creation return property; corrected to created.scope",
+    "organization-governance-related-legacy.log: receipt event only stores a hash; V1 compatibility now verifies the actual verification.started version and unchanged legacy preimage separately"
+  ],
+  "regression": {
+    "log": "organization-governance-related-exact.log",
+    "status": "PASS",
+    "passed": 40,
+    "files": 6
+  },
+  "nativeBrowser": {
+    "log": "organization-governance-native.log",
+    "passed": 3,
+    "files": 2
+  },
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "build": "PASS",
+    "targetedEslint": "PASS",
+    "docs": "PASS",
+    "roadmap": "PASS",
+    "diffCheck": "PASS"
+  },
+  "remaining": "Candidate strictness, exact model evidence/raw response persistence and the full post-task workflow remain separate next work."
+}

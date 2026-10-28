@@ -1,3 +1,5 @@
+import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
+import WorldviewReadBoundary from './WorldviewReadBoundary'
 import { useState, useEffect } from 'react'
 import { BookOpen } from 'lucide-react'
 import { useWorldviewStore } from '../../stores/worldview'
@@ -10,6 +12,8 @@ import type { Project } from '../../lib/types'
 import type { WorldviewAgentField } from '../../lib/agent/worldview-field-copilot'
 import CodexPanel from '../codex/CodexPanel'
 import CodexSearchBar from '../codex/CodexSearchBar'
+import { useCodexStore } from '../../stores/codex'
+import { codexEntryInWorld } from '../../lib/types/codex'
 
 // ── 字段定义（统一标签，兼容幻想与历史） ─────────────────────────
 
@@ -56,11 +60,21 @@ interface Props {
 }
 
 export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props) {
-  const { worldview, saveWorldview, loadAll } = useWorldviewStore()
+  const { worldview, saveWorldview } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
+  const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
+  const targetWorldGroupId = project.enableMultiWorld ? activeGroupId : (worldview?.worldGroupId ?? null)
+  const codex = useCodexStore()
+  const [legacyHistoryFocus, setLegacyHistoryFocus] = useState('humEra')
+  const legacyExists = (keys: string[]) => {
+    if (!authorScope || codex.loadedScope?.projectId !== authorScope.projectId || codex.loadedScope.worldId !== authorScope.worldId) return false
+    const ids = new Set(codex.categories.filter(category => keys.includes(category.builtInKey ?? '')).map(category => category.id))
+    return codex.entries.some(entry => ids.has(entry.categoryId) && codexEntryInWorld(entry, targetWorldGroupId))
+  }
+
   const copilot = useMasterCopilot({
     project,
-    worldGroupId: project.enableMultiWorld ? activeGroupId : null,
+    worldGroupId: targetWorldGroupId,
   })
 
   const [values, setValues] = useState<Record<string, string>>({})
@@ -68,25 +82,21 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
   const [runningField, setRunningField] = useState<WorldviewAgentField | null>(null)
 
   useEffect(() => {
-    loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
-  }, [project.id, project.enableMultiWorld, activeGroupId, loadAll])
-
-  useEffect(() => {
     if (!worldview) return
     setValues({
-      races:     worldview.races || '',
-      factions:  worldview.factionLayout || '',
-      cities:    worldview.regionDimensions || '',
-      politics: worldview.politicsOverview || '',
-      economy: worldview.economyOverview || '',
-      culture: worldview.cultureOverview || '',
-      conflicts: worldview.internalConflicts || '',
-      items:     worldview.itemDesign || '',
+      races:     worldview.races ?? '',
+      factions:  worldview.factionLayout ?? '',
+      cities:    worldview.regionDimensions ?? '',
+      politics: worldview.politicsOverview ?? '',
+      economy: worldview.economyOverview ?? '',
+      culture: worldview.cultureOverview ?? '',
+      conflicts: worldview.internalConflicts ?? '',
+      items:     worldview.itemDesign ?? '',
     })
   }, [worldview])
 
   const save = (fieldName: string, v: string) =>
-    saveWorldview({ projectId: project.id!, [fieldName]: v })
+    saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, [fieldName]: v }, authorScope)
 
   const pendingWorldviewCandidates = copilot.pendingCandidates.filter(candidate => (
     candidate.payload.skillId === 'world-origin.worldview-field'
@@ -105,6 +115,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
   }, [pendingPanelKey])
 
   return (
+    <WorldviewReadBoundary onRetry={reloadCurrent}>
     <div className="flex flex-col w-full h-full space-y-4">
       {/* 顶部 */}
       <div className="pb-4 border-b border-border/40 px-6 pt-4 shrink-0">
@@ -119,7 +130,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
         </p>
         {/* 词条搜索:跨本面板所有方面,点结果跳到对应子页 */}
         <div className="mt-3 max-w-xl">
-          <CodexSearchBar
+          <CodexSearchBar scope={authorScope} worldGroupId={targetWorldGroupId}
             categoryKeys={[
               ...new Set([
                 ...Object.values(HUMANITY_CODEX_KEYS).flat().filter(Boolean),
@@ -128,6 +139,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
             ]}
             onJump={(catKey) => {
               if (catKey === 'humEra' || catKey === 'humEvent') {
+                setLegacyHistoryFocus(catKey)
                 setActiveKey('history')
                 return
               }
@@ -177,8 +189,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
 
         {/* ── 右侧：所有字段同时渲染，hidden 控制显示 ── */}
         <div className="flex-1 min-w-0 overflow-y-auto p-6">
-          {activeKey === 'history' && (
-            <div className="max-w-3xl space-y-5">
+          <div className={activeKey === 'history' ? 'max-w-3xl space-y-5' : 'hidden'}>
               <div>
                 <h3 className="text-lg font-semibold text-text-primary">📜 历史年表</h3>
                 <p className="mt-1 text-sm text-text-muted">
@@ -193,17 +204,21 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
                 <BookOpen className="w-4 h-4" />
                 打开正式历史年表
               </button>
+              {legacyExists(['humEra', 'humEvent']) && <section aria-label="旧版历史词条" className="space-y-2">
+                <h3 className="text-sm font-semibold">旧版历史词条</h3>
+                <p className="text-xs text-text-muted">保留的旧词条可在此维护。新增历史内容请使用正式历史年表。</p>
+                <CodexPanel key={legacyHistoryFocus} project={project} fixedCategoryKeys={['humEra', 'humEvent']} initialCategoryKey={legacyHistoryFocus} embedded existingOnly />
+              </section>}
             </div>
-          )}
           {FIELDS.map(f => (
             <div key={f.key} className={activeKey === f.key ? '' : 'hidden'}>
               {/* 全貌（上）：现有字段本身就是这个方面的整体概述，带 AI 生成 */}
               <HumanityFieldEditor
                 meta={f}
-                value={values[f.key] || ''}
+                value={values[f.key] ?? ''}
                 onChange={v => {
                   setValues(prev => ({ ...prev, [f.key]: v }))
-                  save(f.field, v)
+                  return save(f.field, v)
                 }}
                 project={project}
                 activeGroupId={activeGroupId}
@@ -214,7 +229,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
                 onRunningChange={running => setRunningField(running ? f.field : null)}
                 onAdopted={async candidate => {
                   await copilot.adoptCandidate(candidate)
-                  await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                  await reloadCurrent()
                 }}
               />
               {/* 词条（下）：在全貌之下,把"本方面"细化为一个个具体条目(只显示对应那一类,可打星) */}
@@ -225,16 +240,22 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
                   <CodexPanel
                     project={project}
                     fixedCategoryKeys={HUMANITY_CODEX_KEYS[f.key]}
-                    extractionSourceText={values[f.key] || ''}
+                    extractionSourceText={values[f.key] ?? ''}
                     embedded
                   />
-                </div>
+                {f.key === 'politics' && legacyExists(['humSociety']) && <section aria-label="旧版政经文化词条" className="mt-4 space-y-2">
+                <h3 className="text-sm font-semibold">旧版政经文化词条</h3>
+                <p className="text-xs text-text-muted">保留的旧词条可在此维护。新增设定请使用上方对应分类。</p>
+                <CodexPanel project={project} fixedCategoryKeys={['humSociety']} embedded existingOnly />
+              </section>}
+              </div>
               )}
             </div>
           ))}
         </div>
       </div>
     </div>
+    </WorldviewReadBoundary>
   )
 }
 
@@ -255,7 +276,7 @@ function HumanityFieldEditor({
 }: {
   meta: FieldMeta
   value: string
-  onChange: (v: string) => void
+  onChange: (v: string) => void | Promise<void>
   project: Project
   activeGroupId: number | null
   copilot: ReturnType<typeof useMasterCopilot>

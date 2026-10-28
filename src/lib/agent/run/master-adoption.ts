@@ -27,8 +27,9 @@ import { parseOutlineCandidateDraft } from '../outline-copilot'
 import { parseProseCandidateDraft } from '../prose-copilot'
 import { parseInspirationCandidateDraft } from '../inspiration-copilot'
 import {
-  parseStoryArcCandidateDraft,
+  parseStoryArcCandidateDraftForMutationV1,
   storyArcCandidateMatchesRowV1,
+  type StoryArcCopilotSnapshot,
 } from '../story-arc-copilot'
 import {
   characterDrivenCandidateMatchesPlanV1,
@@ -461,6 +462,18 @@ export async function rejectMasterAgentCandidateV1(
             },
             expectedLastSequence: snapshot.projection.lastSequence,
           })
+      const taskStepIds = snapshot.contract.acceptance.filter(item => item.kind === 'output-present')
+        .map(item => `master:${item.id.slice(0, -'.candidate'.length)}`)
+      if (!stale && taskStepIds.length && taskStepIds.every(id => {
+        const task = snapshot.projection.steps[id]
+        return task?.status === 'succeeded' || (task?.status === 'failed' && task.confirmation === 'reject')
+      })) {
+        snapshot = await appendAgentRunEventV1({
+          scope: input.scope, runId: input.runId, type: 'run.cancelled',
+          payload: { reason: 'author-rejected-remaining-master-candidates' },
+          expectedLastSequence: snapshot.projection.lastSequence,
+        })
+      }
       await appendAgentEvent({
         projectId: input.scope.projectId,
         conversationId,
@@ -582,9 +595,10 @@ async function businessAlreadyMatches(
       return characterDrivenCandidateMatchesPlanV1(expected, plan)
     }
     if (candidate.payload.skillId === 'outline.story-arcs') {
-      const expected = parseStoryArcCandidateDraft(candidate.draft)
+      const mutation = candidate.payload.storyArcMutationRequest ?? { operation: 'create' as const }
+      const expected = parseStoryArcCandidateDraftForMutationV1(candidate.draft, candidate.payload.baseSnapshot as StoryArcCopilotSnapshot, mutation)
       const rows = await readOwnedRows<any>(input.scope, 'storyArcs', { owner: 'work' })
-      return expected.every(item => rows.some(row => storyArcCandidateMatchesRowV1(item, row)))
+      return expected.every(item => rows.some(row => (mutation.operation === 'create' || row.id === mutation.targetArcId) && storyArcCandidateMatchesRowV1(item, row)))
     }
     if (candidate.payload.skillId === 'outline.storyline-progress') {
       const expected = parseStorylineProgressCandidateDraftV1(candidate.draft)

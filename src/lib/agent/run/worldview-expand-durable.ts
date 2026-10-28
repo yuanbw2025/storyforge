@@ -468,7 +468,7 @@ export async function generateWorldviewExpandCandidateV1(input: {
           projectId: input.scope.projectId,
           configOverrides: { maxTokens: getAgentSkillV1('world-origin.worldview-expand').maxOutputTokens },
           contextOverflowPolicy: 'reject',
-        }))
+        }, undefined, undefined, { responseFormat: 'json_object' }))
   } catch (error) {
     await pauseUnsafeRun(input.scope, snapshot, 'worldview-expand-model-outcome-unknown')
     throw error

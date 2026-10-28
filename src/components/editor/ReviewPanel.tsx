@@ -28,7 +28,7 @@ import { captureWorkspaceContentRevisionV1 } from '../../lib/authoring/content-r
 import { db } from '../../lib/db/schema'
 import { createWholeChapterQualityCallV1, createQualityRevisionCallV1 } from '../../lib/prose/quality-transport'
 import { WholeQualityReportView, QualityRevisionScopeControls, QualityRevisionComparisonView } from './QualityReviewViews'
-import { runQualityRevisionV1, readLatestQualityRevisionV1, adoptQualityRevisionV1, rejectQualityRevisionV1, abandonQualityRevisionV1, type QualityRevisionViewV1 } from '../../lib/agent/run/quality-revision-durable'
+import { runQualityRevisionV1, readLatestQualityRevisionV1, readLatestUnfinishedQualityRevisionV1, adoptQualityRevisionV1, rejectQualityRevisionV1, abandonQualityRevisionV1, type QualityRevisionViewV1, type QualityRevisionRecoveryV1 } from '../../lib/agent/run/quality-revision-durable'
 
 interface Props {
   projectId: number
@@ -129,6 +129,7 @@ export default function ReviewPanel(props: Props) {
   const [extraParagraphs, setExtraParagraphs] = useState<number[]>([])
   const [protectedText, setProtectedText] = useState('')
   const [revisionView, setRevisionView] = useState<QualityRevisionViewV1 | null>(null)
+  const [revisionRecovery, setRevisionRecovery] = useState<QualityRevisionRecoveryV1 | null>(null)
   const [revisionBusy, setRevisionBusy] = useState(false)
   const [revisionError, setRevisionError] = useState('')
   const selectedReportHash = qualityReports[mode]?.report.artifactHash
@@ -139,8 +140,8 @@ export default function ReviewPanel(props: Props) {
   useEffect(() => {
     if (revisionBusy) return
     let active = true
-    void resolveScopeLike(projectId).then(scope => readLatestQualityRevisionV1({ scope, chapterId }))
-      .then(view => { if (active) setRevisionView(view) })
+    void resolveScopeLike(projectId).then(scope => Promise.all([readLatestQualityRevisionV1({ scope, chapterId }), readLatestUnfinishedQualityRevisionV1({ scope, chapterId })]))
+      .then(([view, recovery]) => { if (active) { setRevisionView(view); setRevisionRecovery(recovery) } })
       .catch(error => { if (active) setRevisionError(error instanceof Error ? error.message : '修订记录恢复失败。') })
     return () => { active = false }
   }, [projectId, chapterId, chapterContent, revisionHash, revisionBusy])
@@ -278,6 +279,20 @@ export default function ReviewPanel(props: Props) {
     finally { setRevisionBusy(false) }
   }
 
+  const endRevisionRun = async (runId: number) => {
+    if (revisionBusy) return
+    const target = qualityTarget.current
+    setRevisionBusy(true); setRevisionError('')
+    try {
+      const scope = await resolveScopeLike(projectId)
+      if (qualityTarget.current !== target) return
+      await abandonQualityRevisionV1({ scope, chapterId, runId })
+      const [view, recovery] = await Promise.all([readLatestQualityRevisionV1({ scope, chapterId }), readLatestUnfinishedQualityRevisionV1({ scope, chapterId })])
+      if (qualityTarget.current === target) { setRevisionView(view); setRevisionRecovery(recovery) }
+    } catch (error) { if (qualityTarget.current === target) setRevisionError(error instanceof Error ? error.message : '运行未能结束。') }
+    finally { setRevisionBusy(false) }
+  }
+
   return (
     <div className="bg-bg-surface border border-border rounded-xl overflow-hidden shadow-lg">
       {/* 头部 */}
@@ -399,13 +414,13 @@ export default function ReviewPanel(props: Props) {
           </div>}
         </>}
         {revisionError && <p className="mt-3 rounded bg-error/10 p-3 text-xs text-error">{revisionError}</p>}
+        {revisionRecovery && !revisionView && <div data-testid="quality-revision-incomplete-run" role="status" className="mt-3 space-y-2 rounded border border-border p-3 text-xs">
+          <p>有一轮修订尚未完成，尚无可采纳的预演。原稿保留；结束该轮不会调用模型。</p>
+          <button disabled={revisionBusy} className="rounded border border-border px-3 py-2 disabled:opacity-50" onClick={() => void endRevisionRun(revisionRecovery.runId)}>结束未完成运行</button>
+        </div>}
         {revisionView && <QualityRevisionComparisonView view={revisionView}>
           {revisionView.current && revisionView.candidate && revisionView.state === 'awaiting_confirmation' && <div className="flex gap-2"><button disabled={revisionBusy} className="rounded bg-accent px-3 py-2 text-xs text-white disabled:opacity-50" onClick={() => void decideRevision(true)}>确认采纳修订</button><button disabled={revisionBusy} className="rounded border border-border px-3 py-2 text-xs disabled:opacity-50" onClick={() => void decideRevision(false)}>放弃修订</button></div>}
-          {(['running', 'paused', 'recovery_required'].includes(revisionView.state) || revisionView.state === 'awaiting_confirmation' && Boolean(revisionView.protectionError)) && !revisionBusy && <button className="rounded border border-border px-3 py-2 text-xs" onClick={() => {
-            setRevisionBusy(true); setRevisionError('')
-            void resolveScopeLike(projectId).then(async scope => { await abandonQualityRevisionV1({ scope, chapterId, runId: revisionView.runId }); setRevisionView(await readLatestQualityRevisionV1({ scope, chapterId })) })
-              .catch(error => setRevisionError(error instanceof Error ? error.message : '运行未能结束。')).finally(() => setRevisionBusy(false))
-          }}>结束未完成运行</button>}
+          {(['running', 'paused', 'recovery_required'].includes(revisionView.state) || revisionView.state === 'awaiting_confirmation' && Boolean(revisionView.protectionError)) && !revisionBusy && <button className="rounded border border-border px-3 py-2 text-xs" onClick={() => void endRevisionRun(revisionView.runId)}>结束未完成运行</button>}
         </QualityRevisionComparisonView>}
       </div>
     </div>

@@ -16,7 +16,9 @@ const groups: Record<string, [string, string?]> = {
   '故事年表': ['故事年表'], '修炼进度': ['修炼进度'], '场景考证': ['场景考证'], '全局替换': ['查找与替换'],
 }
 export async function openLongformLeaf(page: Page, name: string): Promise<boolean> {
-  await expect(page.locator('[data-workspace-ready]')).toBeVisible()
+  // Frozen Vite acceptance serves the source module graph with network routing
+  // enabled. Retain the app/data assertions after allowing that graph to settle.
+  await expect(page.locator('[data-workspace-ready]')).toBeVisible({ timeout: 15_000 })
   if (name === '文档解析') name = '文档导入'
   const primary = page.getByRole('navigation', { name: '长篇一级导航' })
   if (await primary.count() === 0) return false

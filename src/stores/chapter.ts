@@ -26,8 +26,8 @@ interface ChapterStore {
   /**
    * 章节删除的【唯一入口】(Phase 0.7)。
    * 删 chapters + 紧耦合子表(emotionBeatCards),并更新内存。
-   * deleteChapter(单个) 和 outline.deleteNode(批量,删大纲带正文) 都必须走这里,
-   * 否则会出现"绕过级联 → emotionBeatCards 残留"的孤儿数据。
+   * 单章删除与复合大纲删除共用 cascadeDeleteChapterRecords。
+   * 大纲在自己的外层事务中调用该唯一生命周期，整棵树提交后才刷新缓存。
    */
   cascadeDeleteChapters: (ids: number[]) => Promise<void>
 }

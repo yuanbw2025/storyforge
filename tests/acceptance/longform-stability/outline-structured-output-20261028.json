@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "kind": "outline-structured-output-rejection-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "bc96b3197070ff940a8d60d7bfdaa26365b57bcd",
+    "files": {
+      "src/lib/ai/parse-outline-output.ts": "d02c063084f8711329f8fde1df1c7f4b3482966e9526bfc7b53baa6b961a99ed",
+      "src/lib/agent/run/generation-durable-trace.ts": "a1644b57cb0c45c0010c4d516ee79542f0baf1ac04b6559da86dd4c429bfdc7a",
+      "src/lib/outline/harness.ts": "4e9001cfe4dc65ee3e06d74a0536f3fc43ca21afe8c122dc583a000d2c592782",
+      "tests/regression/R-OUTLINE6-structured-output-boundary.test.ts": "b5c487d595a5ca5524b286f16db2f0df761c33552266694b86ab6961b756395f",
+      "tests/regression/R-HARNESS1-outline-durable-adapter.test.ts": "78995bc701bbdb745dbffeffa98494fdf6b2119761958e963e6bf15f9ae73ec1",
+      "tests/e2e/longform-outline-candidate-recovery.spec.ts": "44df7a7e12627761ba427f4d1c3ce244e41a523e72569e0d95836653d4011fe3"
+    }
+  },
+  "status": "ENGINEERING_REJECTION_AND_RECOVERY_VERIFIED_REAL_MAINLINE_CONTINUING",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "realOriginalFailure": {
+    "sourceCommit": "bc96b3197070ff940a8d60d7bfdaa26365b57bcd",
+    "provider": "agnes",
+    "model": "agnes-2.5-flash",
+    "requests": 2,
+    "knownTotalTokens": 4245,
+    "unknownUsageCalls": 0,
+    "rejectPhase": "PASS: persisted candidate reload, unchanged canonical and exact author_rejected terminal",
+    "adoptPhase": "FAIL: malformed fenced JSON was interpreted as Markdown; the closing code fence became the canonical summary although the run completed",
+    "evidenceDirectory": "live-longform-mainline-2026-10-27T16-24-12-151Z",
+    "originalDataPreserved": true,
+    "priorSeparateTransportTrial": {
+      "requests": 1,
+      "usage": "UNKNOWN",
+      "status": "Retained transport AbortError after finished client stream; no provider replay. Private forwarder subsequently fixed with two synthetic transport probes before the next independent sample."
+    }
+  },
+  "originalRegressions": {
+    "parser": {
+      "failed": 21,
+      "passed": 6,
+      "log": "outline-parser-before.log"
+    },
+    "nativeRetention": {
+      "failed": 1,
+      "passed": 4,
+      "log": "outline-parser-native.log",
+      "finding": "Rejected output was represented by a response hash but absent from exact run artifacts; final source records the unchanged raw response and its linked evidence event before gate failure."
+    }
+  },
+  "regression": {
+    "passed": 89,
+    "files": 8,
+    "log": "outline-parser-related-final.log"
+  },
+  "isolatedNativeBrowser": {
+    "passed": 5,
+    "log": "outline-parser-native-final.log",
+    "modelTransport": "SIMULATED; no provider calls",
+    "paths": [
+      "Candidate reload and adoption into its original row/run",
+      "Restored candidate explicit rejection",
+      "Failed rejection storage receipt retained for explicit retry",
+      "Delayed durable candidate acknowledgement hides early review",
+      "Malformed JSON: exact raw artifact and failure reason retained, zero canonical write, no review, no model replay, reload remains unchanged"
+    ]
+  },
+  "implementation": [
+    "Reuse wholeJSONContainerTextV1: one whole bare/fenced JSON array, no JSON body repair, partial array salvage or scalar coercion",
+    "Malformed structured output cannot fall back to Markdown; genuine plain Markdown headings are anchored to line starts",
+    "Narrative mentions do not split a volume/chapter; numbered chapter headings remain separate while numbered notes under named chapters remain summary text",
+    "Rejected output uses existing recordAgentRunArtifactV1 and evidence.artifact.recorded; no fabricated candidate, successful manifest or canonical write"
+  ],
+  "checks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS:130",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "build": "PASS",
+    "log": "outline-parser-gates-final.log",
+    "fullCiFinalSource": "NOT_RUN",
+    "fullE2e": "NOT_RUN",
+    "release": "NOT_RELEASED"
+  },
+  "limits": [
+    "Earlier unknown and malformed real responses remain failures; later engineering paths do not relabel them",
+    "No automatic correction of prior canonical data or historical receipts",
+    "Independent real-model volume/chapter/detail/prose paths and the full stability matrix continue"
+  ]
+}

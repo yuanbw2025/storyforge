@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "kind": "full-ci-generated-facts-failure-retained",
+  "date": "2026-10-28",
+  "sourceCommit": "45ccf3c1b958fc794e65ab9836835d8d2b55490f",
+  "status": "FAIL_RETAINED_GENERATED_FACTS_REFRESHED_FINAL_CI_PENDING",
+  "originalLog": "full-ci-45ccf3c1-CI-caffeinate.log",
+  "failedGate": "check:project-metrics",
+  "symptom": "Generated architecture facts drifted after the added source/test files. Full CI stopped before dependency audit, lint, coverage and production build; this is not a green CI run.",
+  "fix": {
+    "command": "npm run gen:project-metrics",
+    "changedFile": "docs/ARCHITECTURE.md",
+    "log": "45cc-project-metrics-refresh.log",
+    "checkProjectMetrics": "PASS",
+    "productionCodeChanged": false
+  },
+  "next": "Finish the pinned 45cc full E2E run before updating its frozen mirror, then rerun full CI on the refreshed commit. Continue real Agnes scene/prose/review paths independently.",
+  "overallPlanComplete": false,
+  "released": false
+}

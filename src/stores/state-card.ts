@@ -4,8 +4,8 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { StateCard, StateCategory, StateDiffItem, StateField } from '../lib/types'
-import { parseFields, stringifyFields } from '../lib/types/state-card'
-import { adopt } from '../lib/registry/adopt'
+import { readStateCardFields, stringifyFields } from '../lib/types/state-card'
+import { adopt, hashAdoptRecordFieldsV1 } from '../lib/registry/adopt'
 import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 const now = () => Date.now()
@@ -21,7 +21,7 @@ interface StateCardStore {
   addCard: (card: Omit<StateCard, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
 
   /** 更新一张状态卡 */
-  updateCard: (id: number, data: Partial<StateCard>) => Promise<void>
+  updateCard: (id: number, data: Partial<StateCard>, options?: { expectedFields?: unknown; scope?: WorkspaceScopeLike }) => Promise<void>
 
   /** 删除一张状态卡 */
   deleteCard: (id: number) => Promise<void>
@@ -57,6 +57,7 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
 
   addCard: async (card) => {
     try {
+      readStateCardFields(card)
       const newCard = stampNewRecord(
         await resolveScopeLike(card.projectId),
         'stateCards',
@@ -73,17 +74,28 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
     }
   },
 
-  updateCard: async (id, data) => {
-    try {
-      const current = get().cards.find(c => c.id === id) ?? await db.stateCards.get(id)
-      if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'stateCards', current, { owner: 'work' })) return
-      const patch = { ...data, updatedAt: now() }
-      await db.stateCards.update(id, patch)
-      set({ cards: get().cards.map(c => c.id === id ? { ...c, ...patch } : c) })
-    } catch (err) {
-      console.error('[StateCard] updateCard 失败:', id, err)
-      throw err
+  updateCard: async (id, data, options) => {
+    const current = await db.stateCards.get(id)
+    if (!current) throw new Error('状态卡已不存在，未保存。')
+    const scope = await resolveScopeLike(options?.scope ?? current.projectId)
+    if (!await assertRecordInScope(scope, 'stateCards', current, { owner: 'work' })) {
+      throw new Error('状态卡不属于当前作品，未保存。')
     }
+    const result = await adopt({
+      projectId: current.projectId, scope, target: 'stateCards', recordId: id,
+      mode: 'replace', data,
+      ...(options && 'expectedFields' in options ? { compareAndSet: {
+        kind: 'record-fields-value-hash' as const, fields: ['fields'],
+        expectedHash: await hashAdoptRecordFieldsV1({ fields: options.expectedFields }, ['fields']),
+      } } : {}),
+    })
+    if (!result.written.some(row => row.id === id)) {
+      const reason = result.typeErrors[0]?.got || result.skipped[0]?.reason || '状态卡未保存，输入已保留。'
+      throw new Error(reason.startsWith('CAS 失败') ? '状态字段已被另一页面修改，请重新打开后修复。当前输入已保留。' : reason)
+    }
+    const saved = await db.stateCards.get(id)
+    if (!saved) throw new Error('状态卡保存后无法回读，请重试。')
+    set({ cards: get().cards.map(card => card.id === id ? saved : card) })
   },
 
   deleteCard: async (id) => {
@@ -127,7 +139,7 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
         acc = {
           category: diff.category, entityName: diff.entityName,
           existing,
-          fields: existing ? parseFields(existing.fields) : [],
+          fields: existing ? readStateCardFields(existing) : [],
         }
         byEntity.set(key, acc)
       }
@@ -177,7 +189,7 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
     for (const [cat, catCards] of grouped) {
       parts.push(`\n[${LABELS[cat]}]`)
       for (const card of catCards) {
-        const fields = parseFields(card.fields)
+        const fields = readStateCardFields(card)
         const fieldStr = fields.map(f => `${f.key}：${f.value}`).join(' | ')
         parts.push(`- ${card.entityName} | ${fieldStr}`)
       }
@@ -217,7 +229,7 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
       }
 
       // 字段值匹配（如位置名、物品名等出现在文本中）
-      const fields = parseFields(card.fields)
+      const fields = readStateCardFields(card)
       const fieldMatch = fields.some(f =>
         f.value.length >= 2 && refLower.includes(f.value.toLowerCase())
       )
@@ -250,7 +262,7 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
     for (const [cat, catCards] of grouped) {
       parts.push(`\n[${LABELS[cat]}]`)
       for (const card of catCards) {
-        const fields = parseFields(card.fields)
+        const fields = readStateCardFields(card)
         const fieldStr = fields.map(f => `${f.key}：${f.value}`).join(' | ')
         parts.push(`- ${card.entityName} | ${fieldStr}`)
       }
@@ -265,6 +277,6 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
       c => c.category === 'character' && c.entityName === characterName
     )
     if (!card) return { fields: [], card: null }
-    return { fields: parseFields(card.fields), card }
+    return { fields: readStateCardFields(card), card }
   },
 }))

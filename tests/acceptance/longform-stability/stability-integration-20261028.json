@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "preserve-upstream-stage-recovery-and-scoped-acknowledged-authoring-during-integration",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "mainParent": "bcdf94636c6c39ba8af9f3ac6ba9f84bf15c11b3",
+    "mergedBranch": "f1ff6fd5b850af73ac8a5e4cc04b87c5a551557f",
+    "files": {
+      "src/stores/story-arc.ts": "32e6c50a2dc9612bf506838fff8d617c2a03651a58775ea63a00f63d9e5b32d0",
+      "src/lib/storyline/lifecycle.ts": "56d291f1245f0631810970d79c0af8e52b0f2649f9eaa0c4fdee55dbe826c01d",
+      "src/lib/agent/story-arc-copilot.ts": "20bdd1b542e1269393b9243b66a0a67cb3174adc4248d1332976c92428f77785",
+      "src/components/outline/StoryArcPanel.tsx": "5ed3316efcbaa9a627c66c37a6fbeb974ca9099e02b489207380de5d90604c05",
+      "src/lib/types/story-arc.ts": "69d0f5d5f6c880291800af2d768f9d9a4ae99cdecfd73d6f272398f1ac038baa",
+      "src/lib/context-gateway/canon-provider.ts": "6aee5d1cf33af1227ce630774d037d524e2c67d13cbf89636450ce1a7538a795"
+    }
+  },
+  "status": "TARGETED_INTEGRATION_PASSED_FULL_DELIVERY_PENDING",
+  "scope": "Existing longform author editing, damaged-stage read and explicit repair. No feature, table, migration, owner, AI permission or canonical field added.",
+  "changes": [
+    "Preserve scoped acknowledged field writes, failure tokens, zero-row rollback and exact original-stage compare.",
+    "Retain upstream inspectStages recovery: malformed stages remain visible and exportable, never auto-rewritten or represented as valid empty content.",
+    "Require explicit original JSON for malformed-stage repair and refuse repair after the active Work changes.",
+    "Preserve both compatible updateStages forms: historical explicit-original third argument and current scoped fourth-argument original.",
+    "Do not swallow repair write failures in a parent command wrapper.",
+    "Merged Canon provider maintenance version is v9; historical receipts from both parents are immutable."
+  ],
+  "verification": {
+    "regressions": {
+      "passed": 195,
+      "files": 8,
+      "privateLog": "integration-regression-final.log"
+    },
+    "native": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0,
+      "privateLog": "integration-story-arc-native-v2.log"
+    },
+    "originalNativeRun": {
+      "passed": 13,
+      "failed": 2,
+      "privateLog": "integration-story-arc-native.log",
+      "resolution": "Preserve both existing error-label contracts in source; no timeout, retries, gold or assertions weakened."
+    },
+    "versionedEvidence": {
+      "generationPassed": 110,
+      "readbackPassed": 110,
+      "semanticSectionsIdenticalToPreservedWorkflowV3": true,
+      "receipts": [
+        "tests/acceptance/narrative-world/baseline-20261028-longform-stability-integration-v1.json",
+        "tests/acceptance/narrative-world/ir-contract-20261028-longform-stability-integration-v1.json",
+        "tests/acceptance/narrative-world/domain-projection-20261028-longform-stability-integration-v1.json"
+      ]
+    },
+    "realModelRequests": 0
+  },
+  "limits": [
+    "Full final-commit CI/E2E require independent receipts.",
+    "No claim of installed client release, crash/OOM elimination or whole matrix acceptance."
+  ]
+}

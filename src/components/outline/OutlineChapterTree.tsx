@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, CornerDownRight, GripVertical, LayoutList, Plus, Sparkles, Trash2 } from 'lucide-react'
-import { CInput } from '../shared/CompositionInput'
-import { useDialog } from '../shared/Dialog'
+import AcknowledgedTextField from '../shared/AcknowledgedTextField'
+import { useToast } from '../shared/Toast'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import { useDragReorder, type ItemDnD } from './useDragReorder'
 import {
   OUTLINE_CHAPTER_DRAG_MIME,
@@ -19,7 +20,7 @@ interface ChapterRowProps {
   ch: { id?: number; title: string; summary: string }
   idx: number
   targeted?: boolean
-  onUpdate: (id: number, patch: Record<string, string>) => void
+  onUpdate: (id: number, patch: Record<string, string>, options?: { expected?: Record<string, string> }) => void | Promise<void>
   onDelete: (id: number) => void
   onOpen?: (id: number) => void
   onOpenDetail?: (id: number) => void
@@ -52,17 +53,6 @@ export function OutlineChapterRow({
   onChapterDragStart,
   onChapterDragEnd,
 }: ChapterRowProps) {
-  const [summaryDraft, setSummaryDraft] = useState(ch.summary || '')
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => { setSummaryDraft(ch.summary || '') }, [ch.summary])
-  useEffect(() => {
-    const textarea = textareaRef.current
-    if (textarea) {
-      textarea.style.height = 'auto'
-      textarea.style.height = `${textarea.scrollHeight}px`
-    }
-  }, [summaryDraft])
-
   const crossParentDrop = parentId != null && onMoveChapter
     ? chapterDropProps({
       targetParentId: parentId,
@@ -78,6 +68,7 @@ export function OutlineChapterRow({
 
   return (
     <div
+      data-outline-chapter-row={ch.id}
       {...initialRecordTargetAttributes(targeted, ch.id)}
       {...(baseDropProps ?? {})}
       onDragOver={(event) => {
@@ -126,19 +117,14 @@ export function OutlineChapterRow({
       )}
       <span className="text-xs text-text-muted mt-1.5 shrink-0 w-5 text-right">{idx + 1}</span>
       <div className="flex-1 min-w-0">
-        <CInput
+        <AcknowledgedTextField input label="章节标题"
           value={ch.title}
-          onChange={event => onUpdate(ch.id!, { title: event.target.value })}
+          onCommit={(value, expected) => onUpdate(ch.id!, { title: value }, { expected: { title: expected as string } })}
           className="w-full bg-transparent text-text-primary text-sm font-medium outline-none"
         />
-        <textarea
-          ref={textareaRef}
-          value={summaryDraft}
-          onChange={event => setSummaryDraft(event.target.value)}
-          onBlur={() => {
-            if (ch.id != null && summaryDraft !== (ch.summary || '')) onUpdate(ch.id, { summary: summaryDraft })
-          }}
-          rows={1}
+        <AcknowledgedTextField autoGrow label="章节摘要" rows={1}
+          value={ch.summary}
+          onCommit={(value, expected) => onUpdate(ch.id!, { summary: value }, { expected: { summary: expected as string } })}
           placeholder="章节摘要（可编辑，失焦自动保存）"
           className="w-full bg-transparent text-text-muted text-xs outline-none mt-0.5 resize-none overflow-hidden leading-relaxed"
         />
@@ -162,7 +148,7 @@ export function OutlineChapterRow({
           </button>
         )}
         {onOpenDetail && <button type="button" onClick={() => onOpenDetail(ch.id!)} className="rounded px-2 py-1 text-xs text-accent" title="编辑本章细纲">细纲</button>}
-        <button onClick={() => onDelete(ch.id!)} className="p-1 text-text-muted hover:text-error rounded">
+        <button title="删除章节" onClick={() => onDelete(ch.id!)} className="p-1 text-text-muted hover:text-error rounded">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -191,7 +177,7 @@ export function OutlineStoryBlockSection({
   block: { id?: number; title: string; summary: string }
   chapters: { id?: number; title: string; summary: string }[]
   initialTargetNodeId?: number | null
-  onUpdateNode: (id: number, patch: Record<string, string>) => void
+  onUpdateNode: (id: number, patch: Record<string, string>, options?: { expected?: Record<string, string> }) => void | Promise<void>
   onDeleteNode: (id: number) => void
   onAddChapter: () => void
   onOpenChapter?: (id: number) => void
@@ -205,7 +191,7 @@ export function OutlineStoryBlockSection({
   onChapterDragStart: (payload: ChapterDragPayload) => void
   onChapterDragEnd: () => void
 }) {
-  const dialog = useDialog()
+  const toast = useToast()
   const [expanded, setExpanded] = useState(true)
   const containsInitialTarget = block.id === initialTargetNodeId
     || chapters.some(chapter => chapter.id === initialTargetNodeId)
@@ -214,14 +200,7 @@ export function OutlineStoryBlockSection({
   }, [containsInitialTarget])
   const blockChaptersDnD = useDragReorder(chapters.map(chapter => chapter.id), onReorder)
   const handleDeleteBlock = async () => {
-    if (!block.id) return
-    const ok = await dialog.confirm({
-      title: `删除故事块「${block.title}」？`,
-      message: '其下章节也会被删除，此操作不可恢复。',
-      confirmText: '删除',
-      tone: 'danger',
-    })
-    if (ok) onDeleteNode(block.id)
+    if (block.id) onDeleteNode(block.id)
   }
   const dropToBlockEnd = block.id != null
     ? chapterDropProps({
@@ -235,6 +214,7 @@ export function OutlineStoryBlockSection({
 
   return (
     <div
+      data-outline-block-id={block.id}
       {...initialRecordTargetAttributes(block.id === initialTargetNodeId, block.id)}
       className={`border border-border rounded-lg overflow-hidden ${
         block.id === initialTargetNodeId ? INITIAL_RECORD_TARGET_CLASS : ''
@@ -245,26 +225,26 @@ export function OutlineStoryBlockSection({
         onDrop={event => { if (dropToBlockEnd) void dropToBlockEnd.onDrop(event) }}
         className="flex items-center gap-2 px-3 py-2 bg-bg-elevated"
       >
-        <button onClick={() => setExpanded(!expanded)} className="text-text-muted hover:text-text-primary">
+        <button onClick={() => { void flushPendingEditsV1().then(() => setExpanded(!expanded)).catch(cause => toast.error(cause instanceof Error ? cause.message : '故事块草稿未保存。')) }} className="text-text-muted hover:text-text-primary">
           {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
         </button>
         <LayoutList className="w-3.5 h-3.5 text-accent/60" />
-        <CInput
+        <AcknowledgedTextField input label="故事块标题"
           value={block.title}
-          onChange={event => onUpdateNode(block.id!, { title: event.target.value })}
+          onCommit={(value, expected) => onUpdateNode(block.id!, { title: value }, { expected: { title: expected as string } })}
           className="flex-1 bg-transparent text-text-primary text-sm font-medium outline-none"
         />
         <span className="text-[10px] text-text-muted">{chapters.length} 章</span>
         <button onClick={onAddChapter} className="p-1 text-text-muted hover:text-accent rounded" title="添加章节">
           <Plus className="w-3 h-3" />
         </button>
-        <button onClick={() => { void handleDeleteBlock() }} className="p-1 text-text-muted hover:text-error rounded">
+        <button title="删除故事块" onClick={() => { void handleDeleteBlock() }} className="p-1 text-text-muted hover:text-error rounded">
           <Trash2 className="w-3 h-3" />
         </button>
       </div>
-      <CInput
+      <AcknowledgedTextField input label="故事块摘要"
         value={block.summary}
-        onChange={event => onUpdateNode(block.id!, { summary: event.target.value })}
+        onCommit={(value, expected) => onUpdateNode(block.id!, { summary: value }, { expected: { summary: expected as string } })}
         placeholder="故事块描述..."
         className="w-full px-3 py-1.5 bg-bg-surface text-text-muted text-xs border-b border-border focus:outline-none"
       />

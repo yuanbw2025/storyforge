@@ -5,6 +5,7 @@
 import type { ChatMessage, WorldGroupType } from '../types'
 import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from './prompt-engine'
+import { wholeJSONContainerTextV1 } from './whole-json-container'
 
 // ── 世界建议 ────────────────────────────────────────────────────────────
 
@@ -85,9 +86,8 @@ export function readWorldSuggestPromptTemplateSnapshotV1(): ChatMessage[] {
 }
 
 export function parseWorldSuggestOutputStrictV1(output: string): SuggestedWorld[] {
-  const input = output.trim()
+  const input = wholeJSONContainerTextV1(output, '世界候选')
   if (!input) throw new Error('世界建议候选为空。')
-  if (/^```|```$/.test(input)) throw new Error('世界建议候选不得包含 Markdown 代码围栏。')
   let parsed: unknown
   try { parsed = JSON.parse(input) } catch { throw new Error('世界建议候选不是有效的严格 JSON 数组。') }
   if (!Array.isArray(parsed) || parsed.length < 2 || parsed.length > 4) {
@@ -193,9 +193,8 @@ export function readWorldExpandPromptTemplateSnapshotV1(): ChatMessage[] {
 
 /** 正式世界基础扩写路由的唯一输出解析器。 */
 export function parseWorldExpandOutputStrictV1(output: string): ExpandedWorldview {
-  const input = output.trim()
+  const input = wholeJSONContainerTextV1(output, '世界候选')
   if (!input) throw new Error('世界扩写候选为空。')
-  if (/^```|```$/.test(input)) throw new Error('世界扩写候选不得包含 Markdown 代码围栏。')
   let parsed: unknown
   try { parsed = JSON.parse(input) } catch { throw new Error('世界扩写候选不是有效的严格 JSON 对象。') }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {

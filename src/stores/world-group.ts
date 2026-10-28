@@ -1,12 +1,29 @@
 /** 当前多世界创作域 Store。 */
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
-import type { WorldGroup, WorldGroupLink } from '../lib/types'
+import type { WorldGroup, WorldGroupLink, WorkspaceScope } from '../lib/types'
 import { requireBackupBefore } from '../lib/safety/require-backup-before'
-import { assignUnscopedRecordsToPrimaryWorld, cascadeDeleteGroup } from '../lib/registry/lifecycle'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { assignUnscopedRecordsToPrimaryWorld, cascadeDeleteGroup, transactionTablesFor, worldScopedTables } from '../lib/registry/lifecycle'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { updateWorkspace } from '../lib/workspace/works'
+import { WORLD_GROUP_TYPE_LABELS } from '../lib/types/world-group'
 
 const now = () => Date.now()
+let groupReadRequest = 0
+const GROUP_AUTHOR_FIELDS = ['name', 'description', 'type', 'icon', 'color', 'entryCondition', 'exitCondition', 'plannedChapterCount', 'powerRestriction', 'takeawayRules', 'order'] as const
+type GroupAuthorPatch = Partial<Pick<WorldGroup, typeof GROUP_AUTHOR_FIELDS[number]>>
+interface GroupSaveOptions { scope?: WorkspaceScope; expected?: WorldGroup }
+const sameWorld = (a: WorkspaceScope | null, b: WorkspaceScope) => a?.projectId === b.projectId && a.worldId === b.worldId
+
+async function ensurePrimaryInDatabase(scope: WorkspaceScope): Promise<number> {
+  const primary = (await readOwnedRows<WorldGroup>(scope, 'worldGroups', { owner: 'world' })).filter(group => group.type === 'primary')
+  if (primary.length > 1) throw new Error('当前 World 有多个主世界，请先检查已有世界记录。')
+  if (primary[0]?.id) return primary[0].id
+  return db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
+    projectId: scope.projectId, name: '主世界', description: '', type: 'primary', icon: '🏠', order: 0,
+    createdAt: now(), updatedAt: now(),
+  } as WorldGroup, { owner: 'world' })) as Promise<number>
+}
 
 // 删除、重分配作用域均由 PROJECT_TABLES 派生完整生命周期。
 
@@ -15,18 +32,19 @@ interface WorldGroupStore {
   links: WorldGroupLink[]
   activeGroupId: number | null
   loading: boolean
+  loadedScope: WorkspaceScope | null
 
   // 加载
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
 
   // 世界组 CRUD
-  createGroup: (data: Omit<WorldGroup, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
-  updateGroup: (id: number, patch: Partial<WorldGroup>) => Promise<void>
+  createGroup: (data: Omit<WorldGroup, 'id' | 'createdAt' | 'updatedAt'>, scope?: WorkspaceScope) => Promise<number>
+  updateGroup: (id: number, patch: GroupAuthorPatch, options?: GroupSaveOptions) => Promise<WorldGroup>
   deleteGroup: (id: number) => Promise<void>
   reorderGroups: (scope: WorkspaceScopeLike, orderedIds: number[]) => Promise<void>
 
   // 世界间关系
-  createLink: (data: Omit<WorldGroupLink, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
+  createLink: (data: Omit<WorldGroupLink, 'id' | 'createdAt' | 'updatedAt'>, scope?: WorkspaceScope) => Promise<number>
   updateLink: (id: number, patch: Partial<Pick<WorldGroupLink,
     'fromGroupId' | 'toGroupId' | 'linkType' | 'name' | 'description' | 'bidirectional'>>) => Promise<void>
   deleteLink: (id: number) => Promise<void>
@@ -46,43 +64,62 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
   links: [],
   activeGroupId: null,
   loading: false,
+  loadedScope: null,
 
   loadAll: async (scopeInput: WorkspaceScopeLike) => {
+    const request = ++groupReadRequest
     set({ loading: true })
-    const scope = await resolveScopeLike(scopeInput)
-    const [groups, links] = await Promise.all([
-      readOwnedRows<WorldGroup>(scope, 'worldGroups', { owner: 'world' }).then(rows => rows.sort((a, b) => a.order - b.order)),
-      readOwnedRows<WorldGroupLink>(scope, 'worldGroupLinks', { owner: 'world' }),
-    ])
-    const primary = groups.find(g => g.type === 'primary')
-    set({
-      groups,
-      links,
-      activeGroupId: primary?.id ?? groups[0]?.id ?? null,
-      loading: false,
-    })
+    try {
+      const scope = await resolveScopeLike(scopeInput)
+      const [groups, links] = await Promise.all([
+        readOwnedRows<WorldGroup>(scope, 'worldGroups', { owner: 'world' }).then(rows => rows.sort((a, b) => a.order - b.order)),
+        readOwnedRows<WorldGroupLink>(scope, 'worldGroupLinks', { owner: 'world' }),
+      ])
+      if (request !== groupReadRequest) return
+      const current = get()
+      const activeGroupId = sameWorld(current.loadedScope, scope) && groups.some(group => group.id === current.activeGroupId)
+        ? current.activeGroupId : groups.find(group => group.type === 'primary')?.id ?? groups[0]?.id ?? null
+      set({ groups, links, activeGroupId, loadedScope: scope, loading: false })
+    } finally { if (request === groupReadRequest) set({ loading: false }) }
   },
 
-  createGroup: async (data) => {
-    const scope = await resolveScopeLike(data.projectId)
+  createGroup: async (data, frozenScope) => {
+    const scope = await resolveScopeLike(frozenScope ?? data.projectId)
+    if (scope.projectId !== data.projectId) throw new Error('世界创建作用域不匹配。')
     const id = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
       ...data,
       createdAt: now(),
       updatedAt: now(),
     } as WorldGroup, { owner: 'world' })) as number
     const groups = (await readOwnedRows<WorldGroup>(scope, 'worldGroups', { owner: 'world' })).sort((a, b) => a.order - b.order)
-    set({ groups })
+    if (sameWorld(get().loadedScope, scope)) set({ groups })
     return id
   },
 
-  updateGroup: async (id, patch) => {
-    const current = get().groups.find(g => g.id === id) ?? await db.worldGroups.get(id)
-    if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'worldGroups', current, { owner: 'world' })) return
-    await db.worldGroups.update(id, { ...patch, updatedAt: now() })
-    const groups = get().groups.map(g =>
-      g.id === id ? { ...g, ...patch, updatedAt: now() } : g
-    )
-    set({ groups })
+  updateGroup: async (id, patch, options) => {
+    if (Object.keys(patch).some(key => !GROUP_AUTHOR_FIELDS.includes(key as typeof GROUP_AUTHOR_FIELDS[number]))) throw new Error('世界更新包含非作者字段。')
+    const selected = options?.scope ? Promise.resolve(options.scope) : db.worldGroups.get(id).then(row => {
+      if (!row) throw new Error('该世界已删除，草稿尚未保存。')
+      return resolveScopeLike(row.projectId)
+    })
+    const scope = await selected
+    const updated = await db.transaction('rw', scopeTransactionTables(db.worldGroups), async () => {
+      await resolveScopeLike(scope)
+      const current = await db.worldGroups.get(id)
+      if (!current || !await assertRecordInScope(scope, 'worldGroups', current, { owner: 'world' })) throw new Error('世界已删除或作用域发生变化；草稿尚未保存。')
+      if (options?.expected && GROUP_AUTHOR_FIELDS.some(field => JSON.stringify(current[field]) !== JSON.stringify(options.expected![field]))) throw new Error('世界信息已被其他页面修改；草稿已保留，请核对后再保存。')
+      if (patch.name !== undefined && (typeof patch.name !== 'string' || !patch.name.trim())) throw new Error('请填写世界名称。')
+      if (patch.type !== undefined && (typeof patch.type !== 'string' || !Object.prototype.hasOwnProperty.call(WORLD_GROUP_TYPE_LABELS, patch.type) || (patch.type === 'primary') !== (current.type === 'primary'))) throw new Error('世界类型无效，或试图改变主世界身份。')
+      for (const field of GROUP_AUTHOR_FIELDS.filter(field => !['type', 'plannedChapterCount', 'order'].includes(field))) {
+        if (patch[field] !== undefined && typeof patch[field] !== 'string') throw new Error(`世界字段 ${field} 必须是文本。`)
+      }
+      for (const field of ['plannedChapterCount', 'order'] as const) if (patch[field] !== undefined && (!Number.isSafeInteger(patch[field]) || patch[field]! < 0)) throw new Error('章节数和排序必须是非负整数。')
+      const next = { ...current, ...patch, updatedAt: now() }
+      if (await db.worldGroups.update(id, { ...patch, updatedAt: next.updatedAt }) !== 1) throw new Error('该世界已删除，草稿尚未保存。')
+      return next
+    })
+    if (sameWorld(get().loadedScope, scope)) set({ groups: get().groups.map(group => group.id === id ? updated : group) })
+    return updated
   },
 
   deleteGroup: async (id) => {
@@ -129,8 +166,9 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
     set({ groups })
   },
 
-  createLink: async (data) => {
-    const scope = await resolveScopeLike(data.projectId)
+  createLink: async (data, frozenScope) => {
+    const scope = await resolveScopeLike(frozenScope ?? data.projectId)
+    if (scope.projectId !== data.projectId) throw new Error('世界关系创建作用域不匹配。')
     const [from, to] = await Promise.all([db.worldGroups.get(data.fromGroupId), db.worldGroups.get(data.toGroupId)])
     if (!from || !to || !await assertRecordInScope(scope, 'worldGroups', from, { owner: 'world' })
       || !await assertRecordInScope(scope, 'worldGroups', to, { owner: 'world' })) {
@@ -142,7 +180,7 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
       updatedAt: now(),
     } as WorldGroupLink, { owner: 'world' })) as number
     const links = await readOwnedRows<WorldGroupLink>(scope, 'worldGroupLinks', { owner: 'world' })
-    set({ links })
+    if (sameWorld(get().loadedScope, scope)) set({ links })
     return id
   },
 
@@ -177,27 +215,11 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
 
   ensurePrimaryGroup: async (scopeInput: WorkspaceScopeLike) => {
     const scope = await resolveScopeLike(scopeInput)
-    const projectId = scope.projectId
-    const id = await db.transaction('rw', db.worldGroups, async () => {
-      const existing = (await readOwnedRows<WorldGroup>(scope, 'worldGroups', { owner: 'world' }))
-        .find(g => g.type === 'primary')
-      if (existing?.id) return existing.id
-
-      return db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
-        projectId,
-        name: '主世界',
-        description: '',
-        type: 'primary',
-        icon: '🏠',
-        order: 0,
-        createdAt: now(),
-        updatedAt: now(),
-      } as WorldGroup, { owner: 'world' })) as Promise<number>
-    })
+    const id = await db.transaction('rw', db.worldGroups, () => ensurePrimaryInDatabase(scope))
 
     // 刷新
     const groups = (await readOwnedRows<WorldGroup>(scope, 'worldGroups', { owner: 'world' })).sort((a, b) => a.order - b.order)
-    set({ groups, activeGroupId: id })
+    if (sameWorld(get().loadedScope, scope)) set({ groups, activeGroupId: get().activeGroupId ?? id })
     return id
   },
 
@@ -213,12 +235,27 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
     })
     if (!proceed) return false  // 用户取消
 
-    // 1. 确保主世界组存在
-    const primaryId = await get().ensurePrimaryGroup(scope)
-
-    // 2. 从 PROJECT_TABLES 派生所有需要重分配的世界作用域记录；
-    // codexCategories 是工作区共享分类，不参与世界作用域变更。
-    await assignUnscopedRecordsToPrimaryWorld(projectId, primaryId)
+    // 整个工作区的开关只提交一次；每个 World 使用自己的主世界。
+    // 在事务确认前，不把临时主世界发布进全局缓存。
+    let primaryId: number | null = null
+    await db.transaction('rw', transactionTablesFor('assignPrimaryWorld'), async () => {
+      await resolveScopeLike(scope)
+      const works = await db.works.where('projectId').equals(projectId).toArray()
+      const worlds = new Map(works.map(work => [work.worldId, work]))
+      for (const work of worlds.values()) {
+        const ownedScope = await resolveScopeLike({ projectId, worldId: work.worldId, workId: work.id! })
+        const id = await ensurePrimaryInDatabase(ownedScope)
+        await assignUnscopedRecordsToPrimaryWorld(projectId, id)
+        if (ownedScope.worldId === scope.worldId) primaryId = id
+      }
+      for (const spec of worldScopedTables()) {
+        const field = spec.worldGroupField ?? 'worldGroupId'
+        if ((await spec.table.where('projectId').equals(projectId).toArray()).some(row => row[field] == null)) throw new Error(`有未能确认归属的 ${spec.name} 记录；已撤销本次调整，请先备份并检查数据。`)
+      }
+      await updateWorkspace(projectId, { enableMultiWorld: true })
+    })
+    const groups = (await readOwnedRows<WorldGroup>(scope, 'worldGroups', { owner: 'world' })).sort((a, b) => a.order - b.order)
+    if (sameWorld(get().loadedScope, scope)) set({ groups, activeGroupId: primaryId })
     return true
   },
 

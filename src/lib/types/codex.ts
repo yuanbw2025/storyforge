@@ -122,14 +122,44 @@ export interface CodexEntry extends RagDocumentMetadata, CodexEntryNarrativeFiel
 
 // ── 工具函数 ──────────────────────────────────────────────────
 
+function codexJSON(json: unknown, fallback: unknown): unknown {
+  if (json == null || json === '') return fallback
+  if (typeof json !== 'string') return undefined
+  try { return JSON.parse(json) } catch { return undefined }
+}
+function codexObject(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === 'object' && !Array.isArray(value) }
+function validFieldList(value: unknown): value is CodexFieldDef[] {
+  if (!Array.isArray(value)) return false
+  const keys = new Set<string>()
+  return value.every(field => {
+    if (!codexObject(field) || typeof field.key !== 'string' || !field.key.trim() || keys.has(field.key)
+      || typeof field.label !== 'string' || !field.label.trim()
+      || !['text', 'longtext', 'select', 'number', 'ref'].includes(String(field.type))
+      || (field.options !== undefined && (!Array.isArray(field.options) || !field.options.every(option => typeof option === 'string')))
+      || (field.refCategory !== undefined && typeof field.refCategory !== 'string')
+      || (field.refMulti !== undefined && typeof field.refMulti !== 'boolean')
+      || (field.required !== undefined && typeof field.required !== 'boolean')
+      || (field.placeholder !== undefined && typeof field.placeholder !== 'string')) return false
+    keys.add(field.key); return true
+  })
+}
+export function codexCategoryFormatIssueV1(category: Pick<CodexCategory, 'fieldSchema'>): string | null {
+  return validFieldList(codexJSON(category.fieldSchema, [])) ? null : '分类的专属字段格式异常'
+}
+export function codexEntryFormatIssueV1(entry: Pick<CodexEntry, 'name' | 'icon' | 'summary' | 'description' | 'fields' | 'refs' | 'tags'>): string | null {
+  if (['name', 'summary', 'description'].some(key => typeof entry[key as 'name' | 'summary' | 'description'] !== 'string')
+    || (entry.icon != null && typeof entry.icon !== 'string')) return '基础文本格式异常'
+  const fields = codexJSON(entry.fields, {})
+  if (!codexObject(fields) || !Object.values(fields).every(value => typeof value === 'string')) return '专属属性格式异常'
+  const refs = codexJSON(entry.refs, {})
+  if (!codexObject(refs) || !Object.values(refs).every(value => Array.isArray(value) && value.every(id => Number.isInteger(id) && id > 0))) return '关联词条格式异常'
+  const tags = codexJSON(entry.tags, [])
+  if (!Array.isArray(tags) || !tags.every(tag => typeof tag === 'string')) return '标签格式异常'
+  return null
+}
 export function parseFieldSchema(json: string | undefined): CodexFieldDef[] {
-  if (!json) return []
-  try {
-    const v = JSON.parse(json)
-    return Array.isArray(v) ? v : []
-  } catch {
-    return []
-  }
+  const value = codexJSON(json, [])
+  return validFieldList(value) ? value : []
 }
 
 export function stringifyFieldSchema(defs: CodexFieldDef[]): string {
@@ -137,13 +167,8 @@ export function stringifyFieldSchema(defs: CodexFieldDef[]): string {
 }
 
 export function parseEntryFields(json: string | undefined): Record<string, string> {
-  if (!json) return {}
-  try {
-    const v = JSON.parse(json)
-    return v && typeof v === 'object' ? v : {}
-  } catch {
-    return {}
-  }
+  const value = codexJSON(json, {})
+  return codexObject(value) && Object.values(value).every(item => typeof item === 'string') ? value as Record<string, string> : {}
 }
 
 export function stringifyEntryFields(fields: Record<string, string>): string {
@@ -151,13 +176,8 @@ export function stringifyEntryFields(fields: Record<string, string>): string {
 }
 
 export function parseEntryRefs(json: string | undefined): Record<string, number[]> {
-  if (!json) return {}
-  try {
-    const v = JSON.parse(json)
-    return v && typeof v === 'object' ? v : {}
-  } catch {
-    return {}
-  }
+  const value = codexJSON(json, {})
+  return codexObject(value) && Object.values(value).every(ids => Array.isArray(ids) && ids.every(id => Number.isInteger(id) && id > 0)) ? value as Record<string, number[]> : {}
 }
 
 export function stringifyEntryRefs(refs: Record<string, number[]>): string {

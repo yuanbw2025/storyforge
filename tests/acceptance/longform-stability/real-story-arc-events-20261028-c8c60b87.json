@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-stage-scoped-event-append-and-sort-partial-evidence",
+  "date": "2026-10-28",
+  "sourceCommit": "c8c60b87e5a694f4a6e8b58f979096db11836176",
+  "directory": "live-story-arc-events-2026-10-27T21-10-40-078Z",
+  "status": "REAL_APPEND_AND_SORT_EDIT_RELOAD_ADOPT_PASSED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "modelRequests": 2,
+  "knownTotalTokens": 14350,
+  "unknownUsageRequests": 0,
+  "authorFixture": "QA author added planned verification entries before generation to ensure five existing events; these entries and later candidate edits are not attributed to model literary quality",
+  "modes": [
+    {
+      "operation": "generate-events",
+      "requests": 1,
+      "checks": [
+        "Valid compact model candidate",
+        "Canonical unchanged before adoption",
+        "Author edited event candidate and durable content readback preceded reload",
+        "Reload restored exact author edit without another model request",
+        "Adoption changed only selected-stage event values",
+        "Arc id/Work/name/type/description/origin/status/intent alignment and all other stages unchanged",
+        "Sort preserves exact event text/multiplicity; existing prose unchanged"
+      ]
+    },
+    {
+      "operation": "sort-events",
+      "requests": 1,
+      "checks": [
+        "Valid compact model candidate",
+        "Canonical unchanged before adoption",
+        "Author edited event candidate and durable content readback preceded reload",
+        "Reload restored exact author edit without another model request",
+        "Adoption changed only selected-stage event values",
+        "Arc id/Work/name/type/description/origin/status/intent alignment and all other stages unchanged",
+        "Sort preserves exact event text/multiplicity; existing prose unchanged"
+      ]
+    }
+  ],
+  "pageErrors": [],
+  "originalFailureRetained": {
+    "sourceCommit": "6e75670b6329cb0254e1d2b815bfb73d2ceacd61",
+    "directory": "live-story-arc-events-2026-10-27T20-31-42-438Z",
+    "requests": 2,
+    "knownTotalTokens": 13407,
+    "result": "manual repair required due contradictory event limit; no adoption"
+  },
+  "limits": [
+    "One actual sample per operation, not reliability-rate or literary/platform acceptance proof",
+    "Original failure and pending-source implementation receipts remain immutable",
+    "Whole matrix, final full CI/E2E, native package/release work continue"
+  ]
+}

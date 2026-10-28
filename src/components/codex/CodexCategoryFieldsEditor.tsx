@@ -1,7 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
+import { registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 import { ChevronDown, ChevronUp, Plus, Settings2, Trash2, X } from 'lucide-react'
 import {
   parseFieldSchema,
+  codexCategoryFormatIssueV1,
   stringifyFieldSchema,
 } from '../../lib/types/codex'
 import type { CodexCategory, CodexFieldDef } from '../../lib/types/codex'
@@ -17,12 +20,31 @@ const FIELD_TYPES: { value: CodexFieldDef['type']; label: string }[] = [
 interface Props {
   category: CodexCategory
   onClose: () => void
-  onSave: (fieldSchema: string) => void
+  onSave: (fieldSchema: string) => void | Promise<void>
 }
 
 export default function CodexCategoryFieldsEditor({ category, onClose, onSave }: Props) {
   const [defs, setDefs] = useState<CodexFieldDef[]>(() => parseFieldSchema(category.fieldSchema))
 
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const originalIssue = codexCategoryFormatIssueV1(category)
+  const dirty = stringifyFieldSchema(defs) !== stringifyFieldSchema(parseFieldSchema(category.fieldSchema))
+  useBeforeUnload(dirty || saving || Boolean(error))
+  useEffect(() => registerPendingDraftFlusherV1(() => {
+    if (dirty || saving || error) throw new Error('专属字段尚未保存，请先保存或取消字段管理。')
+  }), [dirty, saving, error])
+  const close = () => { if (!saving) onClose() }
+  const submit = async () => {
+    if (saving || originalIssue) return
+    setSaving(true); setError('')
+    const schema = stringifyFieldSchema(defs)
+    try {
+      if (codexCategoryFormatIssueV1({ fieldSchema: schema })) throw new Error('请为每个字段填写名称，并检查字段类型和选项。')
+      await onSave(schema)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '字段保存失败，输入已保留。') }
+    finally { setSaving(false) }
+  }
   const update = (index: number, patch: Partial<CodexFieldDef>) => {
     setDefs(current => current.map((definition, itemIndex) => (
       itemIndex === index ? { ...definition, ...patch } : definition
@@ -43,18 +65,19 @@ export default function CodexCategoryFieldsEditor({ category, onClose, onSave }:
   }])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={close}>
       <div className="bg-bg-surface border border-border rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={event => event.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
             <Settings2 className="w-4 h-4 text-accent" /> 管理「{category.name}」的专属字段
           </h3>
-          <button onClick={onClose} className="p-1 text-text-muted hover:text-text-primary" aria-label="关闭字段管理">
+          <button onClick={close} className="p-1 text-text-muted hover:text-text-primary" aria-label="关闭字段管理">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {(error || originalIssue) && <div role="alert" className="p-3 text-xs text-red-400">{error || `${originalIssue}，原始定义已保留，编辑暂时关闭。`}</div>}
+        <fieldset disabled={saving || Boolean(originalIssue)} className="flex-1 overflow-y-auto p-3 space-y-2">
           {defs.length === 0 && <p className="text-xs text-text-muted text-center py-4">还没有专属字段,点下方「添加字段」。</p>}
           {defs.map((definition, index) => (
             <div key={definition.key} className="border border-border rounded-lg p-2 space-y-1.5 bg-bg-base">
@@ -101,16 +124,16 @@ export default function CodexCategoryFieldsEditor({ category, onClose, onSave }:
               )}
             </div>
           ))}
-        </div>
+        </fieldset>
 
         <div className="flex items-center justify-between px-3 py-2.5 border-t border-border">
-          <button onClick={add} className="px-2.5 py-1.5 text-xs rounded-lg border border-dashed border-border text-text-muted hover:text-accent hover:border-accent/50 inline-flex items-center gap-1">
+          <button onClick={add} disabled={saving || Boolean(originalIssue)} className="px-2.5 py-1.5 text-xs rounded-lg border border-dashed border-border text-text-muted hover:text-accent hover:border-accent/50 inline-flex items-center gap-1">
             <Plus className="w-3.5 h-3.5" /> 添加字段
           </button>
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary">取消</button>
+            <button onClick={close} className="px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary">取消</button>
             <button
-              onClick={() => onSave(stringifyFieldSchema(defs.filter(definition => definition.label.trim())))}
+              onClick={() => { void submit() }} disabled={saving || Boolean(originalIssue)}
               className="px-3 py-1.5 text-xs rounded-lg bg-accent text-white hover:bg-accent/90"
             >
               保存

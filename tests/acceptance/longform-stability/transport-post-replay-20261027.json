@@ -1,0 +1,21 @@
+{
+  "observations": [
+    {
+      "mode": "disconnect-before-headers",
+      "attempts": 2,
+      "result": {
+        "status": 200
+      },
+      "providerCalls": 0
+    },
+    {
+      "mode": "explicit-unknown-response",
+      "attempts": 1,
+      "result": {
+        "status": 503
+      },
+      "providerCalls": 0
+    }
+  ],
+  "liveModelCalls": 0
+}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import type { Character, Project, WorldGroup } from '../../lib/types'
 import {
@@ -13,6 +13,8 @@ import CharacterStatusPanel from './CharacterStatusPanel'
 import CharacterSupplementAction from './CharacterSupplementAction'
 import CharacterLifecycleAction from './CharacterLifecycleAction'
 import CharacterWorldAffiliations from './CharacterWorldAffiliations'
+import { flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 
 interface Props {
   char: Character
@@ -21,8 +23,8 @@ interface Props {
   multiWorld?: boolean
   worldGroups?: WorldGroup[]
   activeWorldGroupId?: number | null
-  onUpdateField: (field: keyof Character, value: string) => void
-  onPatch: (patch: Partial<Character>) => void
+  onUpdateField: (field: keyof Character, value: string) => void | Promise<void>
+  onPatch: (patch: Partial<Character>, expected?: Partial<Character>) => void | Promise<void>
   onReload: () => void
   onDelete: () => void
 }
@@ -40,12 +42,37 @@ export default function CharacterDetailCard({
   onDelete,
 }: Props) {
   const [expanded, setExpanded] = useState(true)
+  const [patchError, setPatchError] = useState('')
+  const [patchSaving, setPatchSaving] = useState(false)
+  const [actionError, setActionError] = useState('')
+  const pendingPatch = useRef<{ data: Partial<Character>; save: Props['onPatch'] } | null>(null)
+  const inFlight = useRef<Promise<void> | null>(null)
+  const flushPatch = useCallback((): Promise<void> => {
+    if (inFlight.current) return inFlight.current
+    const pending = pendingPatch.current
+    if (!pending) return Promise.resolve()
+    setPatchSaving(true)
+    const operation = Promise.resolve().then(() => pending.save(pending.data)).then(() => {
+      if (pendingPatch.current === pending) pendingPatch.current = null
+      setPatchError('')
+    }).catch(cause => { setPatchError(cause instanceof Error ? cause.message : '角色关联保存失败。'); throw cause })
+      .finally(() => { inFlight.current = null; setPatchSaving(false) })
+    inFlight.current = operation
+    return operation
+  }, [])
+  useEffect(() => registerPendingDraftFlusherV1(flushPatch), [flushPatch])
+  useBeforeUnload(patchSaving || Boolean(patchError))
+  const saveSelection = (data: Partial<Character>) => {
+    pendingPatch.current = { data, save: onPatch }
+    void flushPatch().catch(() => undefined)
+  }
+  const displayChar = pendingPatch.current ? { ...char, ...pendingPatch.current.data } : char
 
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-4">
         <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-3xl font-serif font-bold shrink-0 ${glyphColor}`}>
-          {char.name.charAt(0)}
+          {typeof char.name === 'string' ? char.name.charAt(0) : '?'}
         </div>
 
         <div className="flex-1 min-w-0">
@@ -60,10 +87,11 @@ export default function CharacterDetailCard({
             {multiWorld && (
               <select
                 aria-label="角色所属世界"
-                value={char.isCrossWorld ? 'cross' : (char.homeWorldGroupId ?? '')}
+                disabled={patchSaving}
+                value={displayChar.isCrossWorld ? 'cross' : (displayChar.homeWorldGroupId ?? '')}
                 onChange={event => {
                   const value = event.target.value
-                  onPatch(value === 'cross'
+                  saveSelection(value === 'cross'
                     ? { isCrossWorld: true, homeWorldGroupId: null }
                     : {
                         isCrossWorld: false,
@@ -113,7 +141,7 @@ export default function CharacterDetailCard({
             onDone={onReload}
           />
           <button
-            onClick={() => setExpanded(value => !value)}
+            onClick={() => { void flushPendingEditsV1().then(() => { setExpanded(value => !value); setActionError('') }).catch(cause => setActionError(cause instanceof Error ? cause.message : '角色草稿尚未保存。')) }}
             className="p-1.5 text-text-muted hover:text-text-primary rounded transition-colors"
             aria-label={expanded ? '收起角色详情' : '展开角色详情'}
           >
@@ -129,25 +157,34 @@ export default function CharacterDetailCard({
         </div>
       </div>
 
+      {actionError && <p role="alert" className="text-sm text-error">{actionError}</p>}
+      {patchError && <div role="alert" className="text-sm text-error">{patchError}；选择已保留。
+        <button type="button" className="ml-2 underline" onClick={() => { void flushPatch().catch(() => undefined) }}>重试保存角色关联</button>
+      </div>}
+      <fieldset disabled={patchSaving}>
       <CharacterAxesPicker
-        roleWeight={char.roleWeight}
-        moralAxis={char.moralAxis}
-        orderAxis={char.orderAxis}
+        roleWeight={displayChar.roleWeight}
+        moralAxis={displayChar.moralAxis}
+        orderAxis={displayChar.orderAxis}
         onChange={axes => {
           if (!axes.roleWeight || !axes.moralAxis || !axes.orderAxis) return
-          onPatch(axes as Pick<Character, 'roleWeight' | 'moralAxis' | 'orderAxis'>)
+          saveSelection(axes as Pick<Character, 'roleWeight' | 'moralAxis' | 'orderAxis'>)
         }}
         compact
       />
 
-      <CharacterStatusPanel projectId={project.id!} characterName={char.name} />
+      </fieldset>
 
+      <CharacterStatusPanel projectId={project.id!} characterName={typeof char.name === 'string' ? char.name : ''} />
+
+      <fieldset disabled={patchSaving}>
       <CharacterWorldAffiliations
-        character={char}
+        character={displayChar}
         projectId={project.id!}
         worldGroups={worldGroups}
-        onChange={onPatch}
+        onChange={saveSelection}
       />
+      </fieldset>
 
       {expanded && (
         <div className="space-y-4">

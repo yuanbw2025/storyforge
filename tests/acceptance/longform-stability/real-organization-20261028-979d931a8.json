@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "real-manual-seven-domain-organization-transport-failure",
+  "sourcePin": {
+    "kind": "commit",
+    "commit": "979d931a8486520db1a731f26198ecf9cf86bc57"
+  },
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "status": "PROVIDER_CONNECT_TIMEOUT_OUTCOME_UNKNOWN_RETAINED",
+  "evidenceDirectory": "live-organization-2026-10-27T23-36-51-455Z",
+  "result": {
+    "status": "failed",
+    "sourceCommit": "979d931a8486520db1a731f26198ecf9cf86bc57",
+    "phase": "manual-organization",
+    "message": "Provider failure/unknown retained without replay",
+    "modelRequests": 1,
+    "knownTotalTokens": 0,
+    "unknownUsageRequests": 1,
+    "pageErrors": []
+  },
+  "transport": {
+    "requests": 1,
+    "responseHeadersReceived": false,
+    "failureCode": "UND_ERR_CONNECT_TIMEOUT",
+    "unknownUsageRequests": 1,
+    "automaticReplay": false
+  },
+  "boundary": "Synthetic chapter only. Visible failure; no completed candidate or adoption. Preserve request and failed/paused run evidence. This is not a seven-domain functional pass; any later run must remain separately recorded."
+}

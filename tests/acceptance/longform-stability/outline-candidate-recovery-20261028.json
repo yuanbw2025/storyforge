@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "kind": "outline-candidate-hydration-and-rejection-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "cbc3f65e7a2b8c407753c590f48ede309d5d8ad2",
+    "files": {
+      "src/components/outline/useOutlineGenerationController.ts": "257efacd6fd4af3177f604019449806ba7dd6be84595f99f86b523a75390554b",
+      "src/components/outline/useOutlineBatchGeneration.ts": "fb8d3e518d67fb8a2f459fb5c2c8f65502e6ee1c86640c73126794f73b8851c6",
+      "src/components/outline/OutlinePanel.tsx": "3edbc278cb4ec317dd2156a6f1ecd34471533ee36342f9ce7da12333008ee871",
+      "src/components/outline/OutlineGenerationResultPanel.tsx": "b5b8002c90511475ae9e33a3d309efe8436940477639761b32fbef46aa176a26",
+      "src/lib/outline/candidate-lifecycle.ts": "e7db7f51483adeba8b3c4b7a2e544426ab094b1d253271dca81d3f12e294b203",
+      "tests/regression/R-OUTLINE-candidate-restore-scope.test.tsx": "c7b1609ca71c01cedf1a5fbb640ea1b8ba54329ecfab2c1ba824aec64f7e5dd6",
+      "tests/regression/R-AUDIT6-outline-batch-controller.test.tsx": "2554a0b7a9a522b3538efd75fab215ccb55c007162e952f36e4e6531ad225568",
+      "tests/e2e/longform-outline-candidate-recovery.spec.ts": "a1a1c966283f0297a9285c198e778e08e2284307864a7d6fbc4fb084094ea1f7",
+      "tests/e2e/longform-step-quality.spec.ts": "333764c804e5b33992ffc98095edb83297bf4811929b4fb4a9b8bb3b82bfe1c0",
+      "tests/e2e/longform-prose-handoff.spec.ts": "63576e2fb6dfa74dd57a53f46a000b4f6831276cd54122e685beec614629dd66",
+      "tests/e2e/longform-scene-tasks.spec.ts": "41ef8902702a6591a649cfd461ab4648b470297b46753edae586c37e5a730b56",
+      "tests/e2e/longform-memory-json.spec.ts": "b51c9053d5781755c0b06b483e14f022193069e99fed365d32b8c00246704ccf",
+      "tests/e2e/longform-post-authorization-recovery.spec.ts": "5b403e39fddd5de0bd5ca946f4f41e1b6bd5213d3c899f3f01d4e1d6d86436c3"
+    }
+  },
+  "status": "ENGINEERING_PATHS_VERIFIED_REAL_MODEL_REPLAY_CONTINUING",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "realOriginalFailure": {
+    "sourceCommit": "6ef76143e8314913fb192d5183f231596f752f60",
+    "provider": "agnes",
+    "model": "agnes-2.5-flash",
+    "calls": 1,
+    "knownTotalTokens": 2400,
+    "unknownUsageCalls": 0,
+    "canonicalChanged": false,
+    "persistedStatus": "awaiting_confirmation",
+    "symptom": "Development StrictMode reload did not restore the persisted single-volume candidate. Original request, response and IndexedDB forensic state are retained.",
+    "log": "live-mainline-6ef-first.log"
+  },
+  "originalRegressions": {
+    "strictWorkReadyAndScope": {
+      "failed": 3,
+      "log": "outline-candidate-hydration-before.log"
+    },
+    "batchStrict": {
+      "failed": 1,
+      "log": "outline-batch-hydration-before.log"
+    },
+    "rejectReceiptFailure": {
+      "failed": 1,
+      "log": "outline-reject-failure-baseline-run2.log"
+    },
+    "earlyReview": {
+      "log": "outline-hydration-native-first.log",
+      "observed": "Review was enabled while the durable run was still running; refresh could interrupt candidate persistence."
+    }
+  },
+  "regression": {
+    "passed": 59,
+    "log": "outline-hydration-final-unit.log",
+    "includes": "Single and batch controller, durable trace, recovery, owner and rejection lifecycles"
+  },
+  "isolatedNativeBrowser": {
+    "passed": 41,
+    "log": "outline-hydration-writing-final.log",
+    "modelTransport": "Simulated responses for deterministic engineering and failure paths; no provider calls in this run",
+    "paths": [
+      "Single-volume candidate reload then adopt into the same canonical row and original run, with one simulated model call",
+      "Reload then explicit rejection ends with the existing failed/author_rejected contract; no canonical write or replay",
+      "Rejection receipt quota failure keeps the candidate and waiting ledger; same close action works after explicit storage recovery",
+      "Completed response with delayed candidate write shows finalizing status and no review action until durable acknowledgement",
+      "Prose saves, IME/caret, edited draft adoption, metadata, stop, stale input, full chapter audit, selected revision and recovery"
+    ]
+  },
+  "correctionsRetained": [
+    "An initial driver assumed cancelled; actual existing outline rejection contract is failed with exact code author_rejected. The final test requires both that code and retryable=false rather than accepting arbitrary failed runs.",
+    "One overlapping harness startup was refused by the occupied port; no product/model call occurred. Rerun followed confirmed completion on a dedicated port.",
+    "Rejection failure appeared both inline and in the global toast; final driver scopes its exact error assertion to the outline panel.",
+    "Existing chapter-summary fixtures now select the explicit accessible field label; data and behavior assertions unchanged."
+  ],
+  "implementation": {
+    "hydration": "Wait for actual Work; share one in-flight recovery promise across effect replay; apply only to its current owner; use explicit scope for reads and recovery.",
+    "sessions": "Existing AI session key entity slot now includes Work; no new generation or persistence system.",
+    "acknowledgement": "Existing isFinalizing UI covers stream completion through durable candidate acknowledgement, with unload protection; unconfirmed results do not expose review.",
+    "rejection": "Only acknowledged rejection clears the candidate; persistence failure is visible and retains it for explicit retry."
+  },
+  "checks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "build": "PASS",
+    "fullCiFinalSource": "NOT_RUN",
+    "fullE2e": "NOT_RUN",
+    "release": "NOT_RELEASED"
+  },
+  "remaining": [
+    "New-source real Agnes normal-path sampling continues",
+    "Chapter/scene/prose full feature and fault matrices continue",
+    "Final full CI/E2E, available native clients and release remain separate"
+  ],
+  "privateEvidenceDirectoryId": "step-mode-stability-continuation-20261027"
+}

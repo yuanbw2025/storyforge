@@ -18,6 +18,14 @@ export interface NaturalResources {
   others: string             // 其他特产
 }
 
+/** Shared empty shapes for author leaf editing; each draft takes its own copy. */
+export const EMPTY_DIVINE_DESIGN: Readonly<DivineDesign> = Object.freeze({
+  hasDivinity: false, divineRank: '', divineNames: '', divineRules: '',
+})
+export const EMPTY_NATURAL_RESOURCES: Readonly<NaturalResources> = Object.freeze({
+  rareCreatures: '', herbs: '', minerals: '', others: '',
+})
+
 /** 世界观：世界起源、自然环境与人文环境的当前语义表。 */
 export interface Worldview extends RagDocumentMetadata {
   id?: number

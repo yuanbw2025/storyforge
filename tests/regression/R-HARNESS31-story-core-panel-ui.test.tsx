@@ -117,6 +117,17 @@ function setInputValue(element: HTMLInputElement | HTMLTextAreaElement, value: s
   element.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
+it('an empty reloaded story core cannot keep displaying the previous Work text', async () => {
+  const host = await renderPanel()
+  expect(host.textContent).toContain('旧的一句话故事')
+  const previous = mocks.worldviewStore.storyCore
+  try {
+    mocks.worldviewStore.storyCore = null
+    await act(async () => mounted.at(-1)!.root.render(createElement(StoryCorePanel, { project })))
+    expect(host.textContent).not.toContain('旧的一句话故事')
+  } finally { mocks.worldviewStore.storyCore = previous }
+})
+
 beforeEach(() => {
   mocks.copilot.pendingCandidates = []
   mocks.copilot.loading = false
@@ -162,7 +173,7 @@ describe('R-HARNESS31 · 故事核心面板统一进入主 Agent Harness', () =>
     expect(mocks.worldviewStore.saveStoryCore).toHaveBeenCalledWith({
       projectId: project.id,
       logline: '作者手写的一句话故事',
-    })
+    }, { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId })
   })
 
   it('durable 候选可编辑、拒绝和采纳，采纳后回读正式故事核心', async () => {
@@ -189,7 +200,7 @@ describe('R-HARNESS31 · 故事核心面板统一进入主 Agent Harness', () =>
     expect(mocks.copilot.rejectCandidate).toHaveBeenCalledWith(mocks.copilot.pendingCandidates[0])
     await act(async () => buttons.find(button => button.textContent?.includes('采纳'))!.click())
     expect(mocks.copilot.adoptCandidate).toHaveBeenCalledWith(mocks.copilot.pendingCandidates[0])
-    expect(mocks.worldviewStore.loadAll).toHaveBeenCalledWith(project.id, null)
+    expect(mocks.worldviewStore.loadAll).toHaveBeenCalledWith({ projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }, null)
     expect(mocks.worldviewStore.saveStoryCore).not.toHaveBeenCalledWith(expect.objectContaining({
       logline: '候选的一句话故事',
     }))

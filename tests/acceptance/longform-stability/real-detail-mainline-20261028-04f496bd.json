@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-detailed-outline-mainline-partial-evidence",
+  "date": "2026-10-28",
+  "sourceCommit": "04f496bdc691d1db69811b94e6843e23398e2005",
+  "status": "SIMPLE_SCENES_PASSED_ENHANCED_AUTHOR_REPAIR_PASSED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "modelRequests": 4,
+  "knownTotalTokens": 24199,
+  "unknownUsageRequests": 0,
+  "simpleScenes": {
+    "requests": 2,
+    "knownTotalTokens": 7930,
+    "evidenceDirectory": "live-longform-details-2026-10-27T17-45-55-444Z",
+    "checks": [
+      "Generate and reload candidate without canonical writes",
+      "Reject with failed author_rejected root",
+      "New generation, author-edit candidate notes and adopt",
+      "Manual scene title save and reload",
+      "Retain author notes in canonical detail"
+    ]
+  },
+  "enhancedScenes": {
+    "requests": 2,
+    "knownTotalTokens": 16269,
+    "evidenceDirectory": "live-longform-enhanced-2026-10-27T17-51-03-978Z",
+    "normalGenerationStatus": "REJECTION_PASSED_SECOND_RESPONSE_INVALID_REFERENCE",
+    "originalFailure": "Model modify operation omitted sceneId; strict validation blocked adoption and retained exact response",
+    "authorRepair": {
+      "evidenceDirectory": "live-longform-enhanced-repair-2026-10-27T18-07-17-053Z",
+      "requests": 0,
+      "sameOriginalRunId": true,
+      "canonicalUnchangedForInvalidEnum": true,
+      "explicitAuthorAction": "QA author selected the uniquely titled existing scene and edited its ID in the existing candidate editor; no production inference or invented identity",
+      "sameCandidateLocalRevalidation": true,
+      "stableSceneIds": true,
+      "retainedSceneNotes": true,
+      "adoptReload": "PASS",
+      "scopeLimit": "Does not establish ordinary-author repair convenience or normal-model protocol success"
+    }
+  },
+  "driverFailuresRetained": [
+    "First author-repair inspection helper wrongly assumed a stricter whole-container contract despite the existing enhanced-detail wrapper extractor",
+    "Second repair driver expected a detailed enum message instead of the existing generic revalidation message; production parser remained strict"
+  ],
+  "pageErrors": [],
+  "remaining": [
+    "Batch detail variants, remaining scene fields and failure profiles",
+    "Prose, review, post-chapter tasks and long-run variants",
+    "Final-head full CI/E2E, available client packages and release validation"
+  ]
+}

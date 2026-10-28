@@ -216,6 +216,22 @@ async function seedSixDomains() {
 describe('CTXG-3 · Canon resource provider', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
+  it('same-titled stage occurrences and their ordered events keep distinct portable Canon identities', async () => {
+    const { projectId, scope } = await seedWorkspace('同名阶段保持独立')
+    const stages = ['a-b', 'ab'].map((id, i) => ({ id, title: '返乡', description: `第${i + 1}次返乡`, keyEvents: [`第${i + 1}次核验`] }))
+    const arcId = await addScoped(scope, 'storyArcs', { name: '探路主线', type: 'main', description: '先离开再返乡', stages: JSON.stringify(stages) }, 'work')
+    const before = await db.storyArcs.get(arcId)
+    const occurrenceResources = async (selected: FrozenResourceScopeV1) => (await allDescriptors(selected)).filter(row => row.resourceKey.includes(':stage:')).map(({ resourceKey, title }) => ({ resourceKey, title }))
+    const original = await occurrenceResources(frozen(scope, null))
+    expect(original).toHaveLength(4)
+    const identity = (title: string) => title.normalize('NFKC').toLocaleLowerCase('zh-CN').replace(/[^\p{L}\p{N}]/gu, '')
+    expect(new Set(original.map(row => identity(row.title))).size).toBe(4)
+    expect(await db.storyArcs.get(arcId)).toEqual(before)
+    const exported = await exportProjectJSON(projectId)
+    const imported = await importProjectJSON(exported)
+    const copied = await resolveWorkspaceOwnership(imported)
+    expect(await occurrenceResources(frozen(copied.scope, null))).toEqual(original)
+  })
 
   it('derives provider coverage from the three registries instead of a parallel table/field list', () => {
     const source = CONTEXT_SOURCE_BY_KEY.get('ragSelection')

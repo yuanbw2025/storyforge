@@ -123,6 +123,7 @@ describe('Phase 39 · 动态故事线作者确认 UI', () => {
       newArcs: [],
     })
 
+    let allowAdoption = false
     function Harness() {
       const [pending, setPending] = useState<any[]>([])
       const copilot = useMemo(() => ({
@@ -140,6 +141,7 @@ describe('Phase 39 · 动态故事线作者确认 UI', () => {
           }])
         },
         adoptCandidate: async (candidate: any) => {
+          if (!allowAdoption) return false
           const parsed = validateCanonicalStorylineCandidateV1({
             candidate: JSON.parse(candidate.event.content),
             chapterContent: '林飞交出了青铜钥匙。',
@@ -147,6 +149,7 @@ describe('Phase 39 · 动态故事线作者确认 UI', () => {
           })
           await acceptStorylineProgressCandidate({ projectId, chapterId, candidate: parsed.progress[0] })
           setPending([])
+          return true
         },
         rejectCandidate: async () => setPending([]),
         updateCandidate: async () => undefined,
@@ -163,8 +166,9 @@ describe('Phase 39 · 动态故事线作者确认 UI', () => {
       root.render(createElement(Harness))
       await new Promise(resolve => setTimeout(resolve, 0))
     })
-    await act(async () => {
-      await vi.waitFor(() => expect(host.textContent).toContain('交钥匙'))
+    await vi.waitFor(async () => {
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+      expect(host.textContent).toContain('交钥匙')
     })
 
     const analyze = Array.from(host.querySelectorAll('button'))
@@ -173,13 +177,20 @@ describe('Phase 39 · 动态故事线作者确认 UI', () => {
       analyze.click()
       await new Promise(resolve => setTimeout(resolve, 0))
     })
-    await act(async () => {
-      await vi.waitFor(() => expect(host.textContent).toContain('钥匙已交付'))
+    await vi.waitFor(async () => {
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+      expect(host.textContent).toContain('钥匙已交付')
     })
     expect(await db.storylineProgress.count()).toBe(0)
 
     const accept = Array.from(host.querySelectorAll('button'))
       .find(button => button.textContent?.includes('采纳本次映射')) as HTMLButtonElement
+    await act(async () => { accept.click(); await new Promise(resolve => setTimeout(resolve, 0)) })
+    expect(await db.storylineProgress.count()).toBe(0)
+    expect(accept.disabled).toBe(false)
+    expect(accept.textContent).toContain('采纳本次映射')
+    expect(host.querySelector('textarea')?.disabled).toBe(false)
+    allowAdoption = true
     await act(async () => {
       accept.click()
       await new Promise(resolve => setTimeout(resolve, 0))

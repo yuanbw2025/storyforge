@@ -7,18 +7,22 @@ import { transactionTablesForReferences } from '../lib/registry/lifecycle'
  */
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
+import type { WorkspaceScope } from '../lib/types'
+import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 import { removeCodexEntryReferences } from '../lib/codex/references'
 import {
-  BUILTIN_CATEGORIES, stringifyFieldSchema,
+  BUILTIN_CATEGORIES, stringifyFieldSchema, codexCategoryFormatIssueV1, codexEntryFormatIssueV1,
   type CodexCategory, type CodexEntry, type CodexDomain, type CodexFieldDef,
 } from '../lib/types/codex'
-import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 interface CodexStore {
   categories: CodexCategory[]
   entries: CodexEntry[]
   loading: boolean
   loadedProjectId: number | null
+  loadedScope: WorkspaceScope | null
+  loadError: string | null
 
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   /** 只读加载现有分类/词条，不播种内置分类（供正文档案提示等纯读入口）。 */
@@ -27,7 +31,7 @@ interface CodexStore {
 
   // 分类
   addCategory: (c: Omit<CodexCategory, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
-  updateCategory: (id: number, patch: Partial<CodexCategory>) => Promise<void>
+  updateCategory: (id: number, patch: Partial<CodexCategory>, options?: { scope?: WorkspaceScope; expected?: CodexCategory }) => Promise<void>
   deleteCategory: (id: number) => Promise<void>   // 仅自定义可删（连带词条）
   setCategoryHidden: (id: number, hidden: boolean) => Promise<void>
 
@@ -38,7 +42,7 @@ interface CodexStore {
     & Partial<Pick<CodexEntry,
       'origin' | 'sourceEvidenceQuotes' | 'sourceContentHash' | 'producerRunId' | 'producerCandidateHash'>>
   ) => Promise<number>
-  updateEntry: (id: number, patch: Partial<CodexEntry>) => Promise<void>
+  updateEntry: (id: number, patch: Partial<CodexEntry>, options?: { scope?: WorkspaceScope; expected?: CodexEntry }) => Promise<CodexEntry>
   deleteEntry: (id: number) => Promise<void>
 
   // 查询辅助
@@ -52,15 +56,25 @@ const now = () => Date.now()
 // 防止并发调用(如 React StrictMode 开发期把 effect 跑两遍、或多个面板内嵌词条同时挂载)
 // 各自判定"内置分类缺失"而重复播种,产生每类两条的重复。
 const ensureBuiltInsInFlight = new Map<string, Promise<void>>()
-const entryUpdateQueues = new Map<number, Promise<void>>()
-
-function enqueueEntryUpdate(id: number, task: () => Promise<void>): Promise<void> {
-  const previous = entryUpdateQueues.get(id) ?? Promise.resolve()
-  const next = previous.catch(() => undefined).then(task)
-  entryUpdateQueues.set(id, next)
-  return next.finally(() => {
-    if (entryUpdateQueues.get(id) === next) entryUpdateQueues.delete(id)
-  })
+let loadSequence = 0
+const sameWorld = (a: WorkspaceScope | null, b: WorkspaceScope) => a?.projectId === b.projectId && a.worldId === b.worldId
+const AUTHOR_FIELDS = ['categoryId', 'name', 'icon', 'summary', 'description', 'fields', 'refs', 'tags', 'importance', 'cultivationSystemId', 'cultivationStageId', 'importantLocationId', 'order', 'worldGroupId'] as const
+async function loadRows(input: WorkspaceScopeLike, seed: boolean, set: (patch: Partial<CodexStore>) => void, get: () => CodexStore) {
+  const request = ++loadSequence
+  set({ loading: true, loadError: null })
+  try {
+    const scope = await (seed ? resolveScopeLike(input) : resolveReadScopeLike(input))
+    if (request !== loadSequence) return
+    if (!sameWorld(get().loadedScope, scope)) set({ categories: [], entries: [], loadedProjectId: null, loadedScope: null })
+    if (seed) await get().ensureBuiltIns(scope)
+    const [categories, entries] = await Promise.all([
+      readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' }),
+      readOwnedRows<CodexEntry>(scope, 'codexEntries', { owner: 'world' }),
+    ])
+    if (request === loadSequence) set({ categories, entries, loading: false, loadedProjectId: scope.projectId, loadedScope: scope })
+  } catch (cause) {
+    if (request === loadSequence) set({ loading: false, loadError: cause instanceof Error ? cause.message : '词条读取失败。' })
+  }
 }
 
 export const useCodexStore = create<CodexStore>((set, get) => ({
@@ -69,38 +83,10 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
   loading: false,
   loadedProjectId: null,
 
-  loadAll: async (scopeInput) => {
-    set({ loading: true })
-    try {
-      const scope = await resolveScopeLike(scopeInput)
-      const projectId = scope.projectId
-      await get().ensureBuiltIns(scope)
-      const [categories, entries] = await Promise.all([
-        readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' }),
-        readOwnedRows<CodexEntry>(scope, 'codexEntries', { owner: 'world' }),
-      ])
-      set({ categories, entries, loading: false, loadedProjectId: projectId })
-    } catch (err) {
-      console.error('[Codex] loadAll 失败:', err)
-      set({ categories: [], entries: [], loading: false, loadedProjectId: null })
-    }
-  },
-
-  loadExisting: async (scopeInput) => {
-    set({ loading: true })
-    try {
-      const scope = await resolveReadScopeLike(scopeInput)
-      const projectId = scope.projectId
-      const [categories, entries] = await Promise.all([
-        readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' }),
-        readOwnedRows<CodexEntry>(scope, 'codexEntries', { owner: 'world' }),
-      ])
-      set({ categories, entries, loading: false, loadedProjectId: projectId })
-    } catch (err) {
-      console.error('[Codex] loadExisting 失败:', err)
-      set({ categories: [], entries: [], loading: false, loadedProjectId: null })
-    }
-  },
+  loadedScope: null,
+  loadError: null,
+  loadAll: input => loadRows(input, true, set, get),
+  loadExisting: input => loadRows(input, false, set, get),
 
   ensureBuiltIns: async (scopeInput) => {
     const scope = await resolveScopeLike(scopeInput)
@@ -141,18 +127,36 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
 
   addCategory: async (c) => {
     const ts = now()
-    const row = stampNewRecord(await resolveScopeLike(c.projectId), 'codexCategories', { ...c, createdAt: ts, updatedAt: ts } as CodexCategory, { owner: 'world' }) as CodexCategory
+    const scope = await resolveScopeLike(c.projectId)
+    const row = stampNewRecord(scope, 'codexCategories', { ...c, createdAt: ts, updatedAt: ts } as CodexCategory, { owner: 'world' }) as CodexCategory
     const id = await db.codexCategories.add(row) as number
-    set({ categories: [...get().categories, { ...row, id }] })
+    if (sameWorld(get().loadedScope, scope)) set({ categories: [...get().categories, { ...row, id }] })
     return id
   },
 
-  updateCategory: async (id, patch) => {
-    const current = get().categories.find(c => c.id === id) ?? await db.codexCategories.get(id)
-    if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'codexCategories', current, { owner: 'world' })) return
-    const next = { ...patch, updatedAt: now() }
-    await db.codexCategories.update(id, next)
-    set({ categories: get().categories.map(c => c.id === id ? { ...c, ...next } : c) })
+  updateCategory: async (id, patch, options) => {
+    const cached = get().categories.find(category => category.id === id)
+    const scope = options?.scope ?? (cached ? get().loadedScope : null)
+    const currentScope = scope ?? await db.codexCategories.get(id).then(row => {
+      if (!row) throw new Error('分类已删除，修改尚未保存。')
+      return resolveScopeLike(row.projectId)
+    })
+    if (!currentScope) throw new Error('分类所属的世界不可用，修改尚未保存。')
+    const allowed = ['name', 'icon', 'parentId', 'fieldSchema', 'hidden', 'order']
+    if (Object.keys(patch).some(key => !allowed.includes(key))) throw new Error('分类更新包含非作者字段。')
+    if ('fieldSchema' in patch && (typeof patch.fieldSchema !== 'string' || codexCategoryFormatIssueV1({ fieldSchema: patch.fieldSchema }))) throw new Error('专属字段格式异常，请检查字段名称、类型及选项。')
+    {
+      const next = await db.transaction('rw', scopeTransactionTables(db.codexCategories), async () => {
+        await resolveScopeLike(currentScope)
+        const current = await db.codexCategories.get(id)
+        if (!current || !await assertRecordInScope(currentScope, 'codexCategories', current, { owner: 'world' })) throw new Error('分类已删除或不属于原来的世界；修改尚未保存。')
+        if (options?.expected && Object.keys(patch).some(key => JSON.stringify(current[key as keyof CodexCategory]) !== JSON.stringify(options.expected![key as keyof CodexCategory]))) throw new Error('分类已被其他页面修改；输入已保留，请核对后再保存。')
+        const written = { ...current, ...patch, updatedAt: now() }
+        if (await db.codexCategories.update(id, { ...patch, updatedAt: written.updatedAt }) !== 1) throw new Error('分类已删除，修改尚未保存。')
+        return written
+      })
+      if (sameWorld(get().loadedScope, currentScope)) set({ categories: get().categories.map(category => category.id === id ? next : category) })
+    }
   },
 
   deleteCategory: async (id) => {
@@ -214,24 +218,46 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
       updatedAt: ts,
     } as CodexEntry, { owner: 'world' }) as CodexEntry
     const id = await db.codexEntries.add(row) as number
-    set({ entries: [...get().entries, { ...row, id }] })
+    if (sameWorld(get().loadedScope, scope)) set({ entries: [...get().entries, { ...row, id }] })
     return id
   },
 
-  updateEntry: (id, patch) => enqueueEntryUpdate(id, async () => {
-    const existingEntry = get().entries.find(e => e.id === id) ?? await db.codexEntries.get(id)
-    if (!existingEntry) return
-    const scope = await resolveScopeLike(existingEntry.projectId)
-    const current = await db.codexEntries.get(id)
-    if (!current || !await assertRecordInScope(scope, 'codexEntries', current, { owner: 'world' })) return
-    if (patch.categoryId != null) {
-      const category = await db.codexCategories.get(patch.categoryId)
-      if (!category || !await assertRecordInScope(scope, 'codexCategories', category, { owner: 'world' })) return
-    }
-    const next = { ...patch, updatedAt: now() }
-    await db.codexEntries.update(id, next)
-    set({ entries: get().entries.map(e => e.id === id ? { ...e, ...next } : e) })
-  }),
+  updateEntry: (id, patch, options) => {
+    const cached = get().entries.find(entry => entry.id === id)
+    const loadedScope = get().loadedScope
+    const selected = options?.scope ?? (cached?.projectId === loadedScope?.projectId ? loadedScope ?? undefined : undefined)
+    const scopePromise = selected ? Promise.resolve(selected) : db.codexEntries.get(id).then(row => {
+      if (!row) throw new Error('词条已删除，输入尚未保存。')
+      return resolveScopeLike(row.projectId)
+    })
+    void scopePromise.catch(() => undefined)
+    return coordinatePendingEditV1({ key: `codex-entry:${id}`, persist: async () => {
+      if (Object.keys(patch).some(key => !AUTHOR_FIELDS.includes(key as typeof AUTHOR_FIELDS[number]))) throw new Error('词条更新包含非作者字段。')
+      const scope = await scopePromise
+      const updated = await db.transaction('rw', scopeTransactionTables(db.codexEntries, db.codexCategories, db.worldGroups), async () => {
+        await resolveScopeLike(scope)
+        const current = await db.codexEntries.get(id)
+        if (!current || !await assertRecordInScope(scope, 'codexEntries', current, { owner: 'world' })) throw new Error('词条已删除或不属于原来的 World；输入尚未保存。')
+        if (options?.expected && Object.keys(patch).some(key => JSON.stringify(current[key as keyof CodexEntry]) !== JSON.stringify(options.expected![key as keyof CodexEntry]))) throw new Error('词条已被其他页面修改；输入已保留，请核对后再保存。')
+        if (patch.categoryId != null) {
+          const category = await db.codexCategories.get(patch.categoryId)
+          if (!category || !await assertRecordInScope(scope, 'codexCategories', category, { owner: 'world' })) throw new Error('分类不属于原来的 World。')
+        }
+        if (patch.worldGroupId != null) {
+          const group = await db.worldGroups.get(patch.worldGroupId)
+          if (!group || !await assertRecordInScope(scope, 'worldGroups', group, { owner: 'world' })) throw new Error('世界分组不属于原来的 World。')
+        }
+        for (const key of ['name', 'icon', 'summary', 'description', 'fields', 'refs', 'tags'] as const) if (key in patch && typeof patch[key] !== 'string') throw new Error('词条文本字段格式异常；原文保持不变。')
+        const next = { ...current, ...patch, updatedAt: Math.max(now(), (Number.isFinite(current.updatedAt) ? current.updatedAt : 0) + 1) }
+        const issue = codexEntryFormatIssueV1(next)
+        if (issue) throw new Error(`词条格式异常：${issue}；原始数据已保留。`)
+        if (await db.codexEntries.update(id, { ...patch, updatedAt: next.updatedAt }) !== 1) throw new Error('词条已删除，输入尚未保存。')
+        return next
+      })
+      if (sameWorld(get().loadedScope, scope)) set({ entries: get().entries.map(entry => entry.id === id ? updated : entry) })
+      return updated
+    } })
+  },
 
   deleteEntry: async (id) => {
     const existingEntry = get().entries.find(item => item.id === id) ?? await db.codexEntries.get(id)

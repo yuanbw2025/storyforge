@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { adoptChapterOutlineWorkshopResult } from '../../src/lib/outline/adopt-workshop'
@@ -165,18 +165,59 @@ describe.sequential('R-HARNESS8 · 细纲生成 durable run', { timeout: 15_000 
     await db.open()
   })
 
-  afterEach(() => db.close())
+  afterEach(() => { vi.restoreAllMocks(); db.close() })
 
   it('已拒绝的步骤与已取消的运行都不再进入只读候选索引或刷新恢复', async () => {
     const rejected = await pendingCandidate('拒绝索引')
     await rejectDetailedOutlineGenerationCandidateV1({ scope: rejected.fixture.scope, runId: rejected.candidate.durable.runId, candidate: rejected.candidate })
     expect(await readPendingDetailedOutlineNodeIdsV1(rejected.fixture.scope)).toEqual(new Set())
     expect(await readLatestDetailedOutlineGenerationCandidateV1({ scope: rejected.fixture.scope, outlineNodeId: rejected.fixture.outlineNodeId })).toBeNull()
+    const terminal = await readAgentRunV1(rejected.fixture.scope, rejected.candidate.durable.runId)
+    expect(terminal.projection.state).toBe('failed')
+    expect(terminal.events.filter(event => event.type === 'run.failed').map(event => event.payload)).toEqual([{ code: 'author_rejected', retryable: false }])
+    const repeated = await rejectDetailedOutlineGenerationCandidateV1({ scope: rejected.fixture.scope, runId: rejected.candidate.durable.runId, candidate: rejected.candidate })
+    expect(repeated.events).toEqual(terminal.events)
     const cancelled = await pendingCandidate('取消索引')
     const snapshot = await readAgentRunV1(cancelled.fixture.scope, cancelled.candidate.durable.runId)
     await appendAgentRunEventV1({ scope: cancelled.fixture.scope, runId: cancelled.candidate.durable.runId, expectedLastSequence: snapshot.projection.lastSequence, type: 'run.cancelled', payload: { reason: '作者停止此运行' } })
     expect(await readPendingDetailedOutlineNodeIdsV1(cancelled.fixture.scope)).toEqual(new Set())
     expect(await readLatestDetailedOutlineGenerationCandidateV1({ scope: cancelled.fixture.scope, outlineNodeId: cancelled.fixture.outlineNodeId })).toBeNull()
+  })
+
+  it.each(['run.failed', 'memory.settlement.recorded'])('拒绝的 %s 写失败时整次决定回滚，原候选仍能恢复后明确重试', async eventType => {
+    const pending = await pendingCandidate('拒绝终态故障')
+    const before = await readAgentRunV1(pending.fixture.scope, pending.candidate.durable.runId)
+    const add = db.agentRunEvents.add.bind(db.agentRunEvents)
+    const spy = vi.spyOn(db.agentRunEvents, 'add').mockImplementation(async (...args) => {
+      if (args[0].type === eventType) throw new DOMException('拒绝终态写入故障', 'QuotaExceededError')
+      return add(...args)
+    })
+    await expect(rejectDetailedOutlineGenerationCandidateV1({ scope: pending.fixture.scope, runId: pending.candidate.durable.runId, candidate: pending.candidate })).rejects.toThrow('拒绝终态写入故障')
+    expect(await readAgentRunV1(pending.fixture.scope, pending.candidate.durable.runId)).toEqual(before)
+    expect(await readLatestDetailedOutlineGenerationCandidateV1({ scope: pending.fixture.scope, outlineNodeId: pending.fixture.outlineNodeId })).not.toBeNull()
+    spy.mockRestore()
+    const after = await rejectDetailedOutlineGenerationCandidateV1({ scope: pending.fixture.scope, runId: pending.candidate.durable.runId, candidate: pending.candidate })
+    expect(after.projection.state).toBe('failed')
+    expect(after.events.filter(event => event.type === 'confirmation.recorded')).toHaveLength(1)
+  })
+
+  it('重复并发拒绝只追加一条决定、一条终态及一条结算', async () => {
+    const pending = await pendingCandidate('并发拒绝')
+    const input = { scope: pending.fixture.scope, runId: pending.candidate.durable.runId, candidate: pending.candidate }
+    await Promise.all([rejectDetailedOutlineGenerationCandidateV1(input), rejectDetailedOutlineGenerationCandidateV1(input)])
+    const after = await readAgentRunV1(input.scope, input.runId)
+    expect(after.projection.state).toBe('failed')
+    for (const type of ['confirmation.recorded', 'run.failed', 'memory.settlement.recorded']) expect(after.events.filter(event => event.type === type)).toHaveLength(1)
+  })
+
+  it('明确再次拒绝可补齐旧的已拒绝步骤终态，不重复决定或改写既有终态', async () => {
+    const pending = await pendingCandidate('旧拒绝回执')
+    const before = await readAgentRunV1(pending.fixture.scope, pending.candidate.durable.runId)
+    await appendAgentRunEventV1({ scope: pending.fixture.scope, runId: before.run.id!, type: 'confirmation.recorded', expectedLastSequence: before.projection.lastSequence, payload: { stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1, candidateHash: pending.candidate.durable.candidateHash, decision: 'reject' } })
+    const after = await rejectDetailedOutlineGenerationCandidateV1({ scope: pending.fixture.scope, runId: before.run.id!, candidate: pending.candidate })
+    expect(after.projection.state).toBe('failed')
+    expect(after.events.filter(event => event.type === 'confirmation.recorded')).toHaveLength(1)
+    expect(after.events.slice(0, before.events.length)).toEqual(before.events)
   })
 
   it('候选先停在 durable ledger，作者确认后经 adopt 写回并签发 receipt', async () => {

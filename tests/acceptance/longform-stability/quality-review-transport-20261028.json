@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "kind": "bounded-whole-review-transport-and-node-cache-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "2f4ebb26b57ef05b054087964451d7fa3137ba67",
+    "files": {
+      "src/lib/ai/agnes-parameters.ts": "83ecad8e10624499169eaf04756961c7c6269b0cbf8af960d8a923672c3503ef",
+      "src/lib/ai/client.ts": "ca923e405176ff18953f067e2666d494ece36d38bad66d2f6428da4e92f2edeb",
+      "src/lib/agent/run/quality-review-durable.ts": "6e4cd05a75abac06f226cff4e6e6fde660e7511ffaaca7fba062ba3431358db4",
+      "src/lib/node-authoring/quality-execution.ts": "1dd1b062297d0fa7830b1de1a2b08d2fc3cec3fe3d362b8c347edbab07232213",
+      "src/lib/prose/quality-review-request-options.ts": "268d6364a636ad857b4c4798599a0580f195c18c3210c03605e1e83a6e91d17a",
+      "src/lib/prose/quality-transport.ts": "21bf88227a51651b1c56fc73d0700205f836d248a2f82e94bbb5ebee75bd7b41",
+      "src/lib/prose/request-evidence.ts": "5349e6d2e0953a820cd99d3ecb66d230fd623b9da03548ad3b261059849024a1",
+      "tests/regression/R-STAB-quality-review-transport.test.ts": "bb4b2a55f75b2060f4c15b815ba6dd738ab80bff8b73fae1e5d7f3049c972b1b",
+      "tests/regression/R-LFQ9-node-quality.test.ts": "da191c31bfbe9a6932c335a191cb50f3bbe3bd3ebcd09240c7e38cd9fc730d17",
+      "tests/e2e/longform-whole-review.spec.ts": "9ae6a0de7a08f96084e87eb8abc94f43a126e74ad1b992d568e22d0935335238"
+    }
+  },
+  "status": "TARGETED_ENGINEERING_AND_NATIVE_PASSED_REAL_MODEL_REPLAY_REQUIRED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "productBoundary": "Independent longform maintenance; existing Work-owned manuscript and read-only durable reviews shared by step and node; no new table, field, context source or AI entry.",
+  "originalFailure": {
+    "receipt": "tests/acceptance/longform-stability/real-review-modes-20261028-ddcf9275.json",
+    "mode": "readability",
+    "causeObserved": "finish_reason stop with incomplete JSON; 1373 reasoning tokens and 65 text tokens in retained original response; invalid report strictly rejected",
+    "reinterpretAsPass": false
+  },
+  "changes": [
+    "Only Agnes 2.5 Flash whole-chapter quality/style/readability explicitly disable thinking via the existing supported transport option; no saved config or prose-generation change",
+    "Actual wire settings, frozen run evidence, persisted report and Node cache use the same options",
+    "Safe evidence records only exact boolean chat_template_kwargs for the existing Agnes 2.5/3.0 supported pair; arbitrary or secret-bearing fields rejected",
+    "HTTP rejection is one dispatch, no fallback that silently removes the option; raw failures remain",
+    "Historical reports without the parameter remain readable; default options of other models unchanged"
+  ],
+  "originalReproduction": {
+    "log": "quality-review-transport-before-valid.log",
+    "failed": 4,
+    "passed": 4,
+    "fixtureSyntaxOnlyLog": "quality-review-transport-before.log"
+  },
+  "nodeCache": {
+    "beforeLog": "quality-review-node-cache-before.log",
+    "intermediateAssertionLog": "quality-review-transport-related-final.log",
+    "note": "First cache replay changed only serialized key order after the parameter fix; corrected the assertion to compare parsed reports and require exactly one actual model invocation.",
+    "verified": "Agnes report settings match Step readback; a repeated Node execution reuses the exact report with one model call"
+  },
+  "regression": {
+    "log": "quality-review-transport-related-current.log",
+    "passed": 83,
+    "files": 7
+  },
+  "nativeBrowser": {
+    "log": "quality-review-transport-native-final.log",
+    "passed": 21,
+    "files": 3,
+    "sourceNote": "Checkpoint after Node cache alignment, before pure centralization of the existing Agnes 2.5/3.0 capability predicate",
+    "checks": [
+      "Read-only whole-review modes, actual JSON request parameters, persistence and stale reports",
+      "Selected revision, recheck, adoption and format preservation across modes",
+      "Node review/revision, refusal, HTTP failures, reload without redispatch"
+    ]
+  },
+  "finalCapabilityNative": {
+    "log": "quality-review-transport-capability-native.log",
+    "passed": 1,
+    "source": "The source files pinned above",
+    "checks": "All three Agnes UI modes send enable_thinking false; durable settings match actual body; refresh does not dispatch"
+  },
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "build": "PASS",
+    "targetedEslint": "PASS"
+  },
+  "fullChecks": {
+    "sourceCommit": "2f4ebb26b57ef05b054087964451d7fa3137ba67",
+    "ci": "RUNNING_ON_OLDER_PINNED_SOURCE",
+    "e2e": "RUNNING_ON_OLDER_PINNED_SOURCE",
+    "doesNotProveCurrentHeadFullGreen": true
+  },
+  "remaining": [
+    "Exact-commit real Agnes replay of the original failed readability scenario and both other whole-review modes",
+    "Remaining B-LF-STAB operations, recovery paths, client and final full checks"
+  ]
+}

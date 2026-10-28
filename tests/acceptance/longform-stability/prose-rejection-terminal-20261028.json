@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "kind": "prose-rejection-terminal-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "04f496bdc691d1db69811b94e6843e23398e2005",
+    "files": {
+      "src/lib/agent/run/prose-generation-durable.ts": "d9582968f013164f07f21acce96ea48b536128108544ddd26e5d863f9e678459",
+      "src/components/editor/ChapterEditor.tsx": "5ba3b91f8bed4e751d2afe89539d46bc671a8321b853f29e343c2565cc9f75c4",
+      "tests/regression/R-HARNESS7-prose-generation-durable.test.ts": "dd663225f238d51f8286098138968c2626876bfbdf12e0f3effe68af48b5192d",
+      "tests/e2e/longform-prose-handoff.spec.ts": "3b40e2b1c306e6e2e2871a45b4c8d50717e5eeb7ac9193b68f1a00fe6c81dd46"
+    }
+  },
+  "status": "ATOMIC_REJECTION_AND_BROWSER_RECOVERY_VERIFIED_REAL_REPLAY_CONTINUES",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "originalRealFailure": {
+    "sourceCommit": "04f496bdc691d1db69811b94e6843e23398e2005",
+    "provider": "agnes",
+    "modelRequests": 1,
+    "knownTotalTokens": 7975,
+    "unknownUsageRequests": 0,
+    "generationDirectory": "live-longform-prose-2026-10-27T18-11-53-458Z",
+    "rejectionDirectory": "live-longform-prose-reject-2026-10-27T18-13-52-312Z",
+    "rejectionAdditionalRequests": 0,
+    "failure": "UI dismissed the real recovered candidate and recorded rejection, but root remained running",
+    "canonicalProseUnchanged": true,
+    "originalRunPreserved": true,
+    "driverBaselineCorrection": "First driver compared complete rows before the empty editor normalized empty HTML; change was only empty string to empty paragraph and updatedAt, not generated prose. Existing same candidate was resumed without another model request."
+  },
+  "originalRegression": {
+    "failed": 6,
+    "passed": 13,
+    "log": "prose-rejection-before.log"
+  },
+  "regression": {
+    "passed": 61,
+    "files": 8,
+    "log": "prose-rejection-related-final.log",
+    "checks": [
+      "Generate/continue rejection root terminates with author_rejected",
+      "Concurrent repeat has one decision, terminal and memory settlement",
+      "Terminal/settlement quota faults roll back complete decision",
+      "Stored candidate artifact retained for audit but terminal root cannot recover it as active",
+      "Explicit repeated rejection can append a missing old terminal without rewriting events",
+      "Stale candidate cancellation, adoption, semantic review, quality revision, lineage and interruption contracts"
+    ]
+  },
+  "nativeBrowser": {
+    "passed": 25,
+    "files": 4,
+    "log": "prose-rejection-native-related.log",
+    "transport": "simulated, isolated Chromium native IndexedDB",
+    "checks": [
+      "Failed rejection keeps editable candidate and exact canonical chapter/event ledger",
+      "Reload and explicit retry finishes original run without another model request",
+      "Reload after rejection does not restore an active candidate",
+      "Whole-chapter reviews, selected revision protection and acknowledged manual save regressions"
+    ]
+  },
+  "implementation": [
+    "Scope transaction includes author rejection, terminal and automatic settlement",
+    "Failed rejection returns without clearing candidate or AI output",
+    "Late rejection completion only clears the candidate instance it started with",
+    "Successful dismissal clears its error"
+  ],
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "build": "PASS",
+    "docs": "PASS",
+    "roadmap": "PASS",
+    "generatedMetrics": "PASS",
+    "diffCheck": "PASS"
+  },
+  "fullChecks": "Final-head CI and full E2E pending; frozen 45cc full E2E is a separate source run with observed failures, not green",
+  "limits": [
+    "No literary-quality or real-author acceptance claim",
+    "No main merge, deployment or release",
+    "Remaining case modes and platforms continue"
+  ]
+}

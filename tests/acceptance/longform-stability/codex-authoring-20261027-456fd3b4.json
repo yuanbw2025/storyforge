@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "kind": "longform-step-stability-codex-authoring-receipt",
+  "date": "2026-10-27",
+  "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+  "status": "MANUAL_NORMAL_AND_SELECTED_FAULTS_VERIFIED_CONTINUING",
+  "sha256": {
+    "src/components/codex/CodexEntryDetail.tsx": "207cff6a2c488be7e50ce1d9bbdd61b5883f1e1d7f60b79df23eef99ff4b7694",
+    "src/components/codex/useCodexEntryDraft.ts": "98c653e74b1f36e4549ec38ec2947d505cf2190942f5bdc1cf271cab89657751",
+    "src/components/codex/CodexPanel.tsx": "9e4ceb32569bdda04734d92fd235bfe40b19457d20f4b5247e9bdd451a20b7a8",
+    "src/components/codex/CodexCategoryFieldsEditor.tsx": "60031c9aaf374f1483d3d923311ae71a47a86d59c403bfb7403f117be81ec14e",
+    "src/components/codex/CodexSearchBar.tsx": "81a30c8a563f5d39754af18d136488cc5dc341e91cc08eaec1e417a3ac779244",
+    "src/stores/codex.ts": "eb4bf87b5074f8a575bdf0778bc43b093269390ef64ad1117811c49398d2dcd6",
+    "src/lib/types/codex.ts": "a13dbba1b05a613374451742527a5b140e754c861d196d0abcbeba667ed45ef6",
+    "src/lib/agent/run/codex-extraction-durable.ts": "b50d9618352a547dcce0651582f411be141bad18623f6d5a2d14beb102793204",
+    "src/lib/agent/run/worldview-expand-durable.ts": "8218d2fb5876e2be2bc5e7411b4c93e239449fb870fd2393cf757238f2a92346",
+    "tests/e2e/longform-codex-manual.spec.ts": "d255d3ddd5743246d33557fc6e3a746c49dec1664d09426b325fce7ddb90ea9a",
+    "tests/e2e/longform-codex-categories.spec.ts": "3b5d4b96a502ab37df948fda343f8123fc35a63cd2a9c2ddb17892145c3a2fc2",
+    "tests/regression/R-CODEX-AUTHOR-SAVE.test.ts": "6fe4edcd76710426e66103e405908675124d24cc1b6479627ced24e25aff1a7d"
+  },
+  "boundary": "Existing World-owned codex data; author drafts, original owner, semantic conflict checks and atomic local acknowledgement. No new table, migration or automatic adoption.",
+  "regression": {
+    "files": 9,
+    "passed": 104
+  },
+  "browser": {
+    "engine": "isolated Chromium",
+    "passed": 26,
+    "categoryJourneys": 18,
+    "structuredFields": 90,
+    "faultAndCompositionJourneys": 8,
+    "categoryKeys": [
+      "mineral",
+      "herb",
+      "beast",
+      "race",
+      "faction",
+      "city",
+      "artifact",
+      "natStructure",
+      "natDimension",
+      "natTerrain",
+      "natWater",
+      "natClimate",
+      "humPolitics",
+      "humEconomy",
+      "humCulture",
+      "humConflict",
+      "originPower",
+      "originDeity"
+    ],
+    "covered": [
+      "Every accessible category: base fields, importance, tags, all schema fields, valid cross-category references, clearing, reload and delete",
+      "Quota/write rejection retains draft and supports retry",
+      "Rapid structured leaves during a delayed first write preserve both values",
+      "Malformed reference JSON values cannot crash the editor or alter the raw record",
+      "Category schema saving stays open on rejection and retries the same definition",
+      "Read failure preserves the same-owner UI and makes it inert until explicit reload",
+      "Composition blocks navigation and persists the completed Chinese input",
+      "Incoming updates during composition cannot erase the typed draft or overwrite concurrent canon"
+    ]
+  },
+  "knownRemaining": [
+    "Actual extraction/enrichment for all categories; first real mineral extraction revealed whole JSON fence rejection and is retained",
+    "Legacy humEra/humEvent/humSociety data are present in storage but not accessible after search; compatibility work remains",
+    "Remaining applicable faults, final full CI/E2E, client package and release acceptance remain"
+  ],
+  "wholeCasePass": false,
+  "overallPlanCompleted": false,
+  "nativePackageEvidence": false,
+  "releaseStatus": "NOT_RELEASED"
+}

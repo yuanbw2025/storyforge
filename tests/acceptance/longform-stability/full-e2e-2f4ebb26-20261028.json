@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "kind": "exact-older-commit-full-browser-ci-result",
+  "date": "2026-10-28",
+  "sourceCommit": "2f4ebb26b57ef05b054087964451d7fa3137ba67",
+  "command": "caffeinate -i env CI=1 PLAYWRIGHT_PORT=57995 npm run ci:e2e",
+  "log": "full-e2e-2f4ebb26-CI-caffeinate.log",
+  "exitCode": 0,
+  "status": "FULL_CONFIGURED_BROWSER_RUN_PASSED_AT_OLDER_SOURCE_WITH_SKIPS",
+  "passed": 490,
+  "skipped": 166,
+  "failed": 0,
+  "flaky": 0,
+  "reportedDuration": "1.0h",
+  "isolation": "Frozen workspace server and isolated Chromium/IndexedDB; author browser data untouched.",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "limits": [
+    "Skipped tests remain skipped, not acceptance; feature/environment conditions are retained",
+    "This exact earlier source excludes subsequent bounded-review, stage-identity, rich-Arc, IME and progress changes",
+    "Full CI at the same earlier source was still running when this receipt was recorded; no current-head CI-green claim"
+  ]
+}

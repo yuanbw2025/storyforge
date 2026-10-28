@@ -28,6 +28,7 @@ const existingEntry = {
 vi.mock('../../src/stores/codex', () => ({
   useCodexStore: () => ({
     categories: [category], entries: [existingEntry], loadAll: mocks.loadAll,
+    loadedScope: { projectId: 1, worldId: 11, workId: 12 }, loading: false, loadError: null,
     addCategory: mocks.addCategory, deleteCategory: mocks.deleteCategory,
     setCategoryHidden: mocks.setCategoryHidden, updateCategory: mocks.updateCategory,
     addEntry: mocks.addEntry, updateEntry: mocks.updateEntry, deleteEntry: mocks.deleteEntry,
@@ -178,6 +179,10 @@ describe('R-HARNESS70 · Codex durable 提取 UI', () => {
       request,
     }))
     expect(host.textContent).toContain('月栖花')
+    const review = Array.from(host.querySelectorAll('details')).find(item => item.textContent?.includes('查看完整词条'))
+    expect(review).toBeTruthy()
+    expect(review!.textContent).toContain(extracted.description)
+    expect(review!.textContent).toContain(extracted.fields.habitat)
     expect(mocks.adopt).not.toHaveBeenCalled()
     await act(async () => button(host, '写入所选 1 项').click())
     expect(mocks.adopt).toHaveBeenCalledWith({ scope, runId: 70, selectedIndexes: [0] })

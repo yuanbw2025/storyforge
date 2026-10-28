@@ -420,9 +420,9 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:779`<br/>`src/lib/node-authoring/domain-execution.ts:844` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1774` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1752` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1742` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1788` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1766` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1756` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:607` |
@@ -461,7 +461,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/character-lifecycle-copilot.ts:448 · chat`
 - `src/lib/agent/character-revision-copilot.ts:727 · chat`
 - `src/lib/agent/character-supplement-copilot.ts:578 · chat`
-- `src/lib/agent/context-compression.ts:333 · chat`
+- `src/lib/agent/context-compression.ts:355 · chat`
 - `src/lib/agent/creative-rules-copilot.ts:448 · chat`
 - `src/lib/agent/inspiration-copilot.ts:345 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
@@ -469,14 +469,14 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/outline-copilot.ts:772 · chat`
 - `src/lib/agent/prose-copilot.ts:705 · chat`
 - `src/lib/agent/prose-copilot.ts:984 · chat`
-- `src/lib/agent/run/codex-extraction-durable.ts:779 · chat`
+- `src/lib/agent/run/codex-extraction-durable.ts:784 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
 - `src/lib/agent/run/short-novel-durable.ts:311 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1593 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1645 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1672 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1724 · chat`
 - `src/lib/agent/story-core-copilot.ts:557 · chat`
-- `src/lib/agent/storyline-progress-copilot.ts:366 · chat`
+- `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:903 · chat`
 - `src/lib/character-interaction/harness.ts:888 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:73 · chat`
@@ -582,4 +582,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `9f8ef6052`
+生成时间基准:commit `7d6e46ecc`

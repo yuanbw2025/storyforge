@@ -14,7 +14,7 @@ async function prepare(page: Page, automatic: boolean) {
   await page.getByRole('button', { name: '大纲与章纲', exact: true }).click()
   await page.getByRole('button', { name: '添加卷', exact: true }).click()
   await page.getByRole('button', { name: '添加章节', exact: true }).click()
-  await page.getByRole('textbox', { name: '章节摘要（可编辑，失焦自动保存）' }).fill('林舟先询问搭档意愿，得到回应后关门，停在当晚。')
+  await page.getByLabel('章节摘要', { exact: true }).fill('林舟先询问搭档意愿，得到回应后关门，停在当晚。')
   await page.getByTitle('编辑本章细纲', { exact: true }).click()
   await page.getByRole('button', { name: '添加场景', exact: true }).click()
   await page.getByPlaceholder('一句话场景概要...', { exact: true }).fill('询问、回应、关门，不展开次日。')

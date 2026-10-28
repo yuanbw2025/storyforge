@@ -8,6 +8,7 @@ import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { FIELD_BY_TARGET } from '../../src/lib/registry/field-registry'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { parseWorldExpandOutputStrictV1 } from '../../src/lib/ai/world-group-ai'
+import * as aiClient from '../../src/lib/ai/client'
 import * as worldGroupAI from '../../src/lib/ai/world-group-ai'
 import {
   abandonWorldviewExpandRunV1,
@@ -98,6 +99,16 @@ describe.sequential('R-HARNESS67 · 世界组六字段扩写 durable 候选与�
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => { vi.restoreAllMocks(); db.close() })
 
+  it('requests a single JSON object from the provider without a fallback call', async () => {
+    const fixture = await seed()
+    const request = vi.spyOn(aiClient, 'chat').mockResolvedValueOnce(response())
+    await generateWorldviewExpandCandidateV1({ scope: fixture.scope, worldGroupId: fixture.worldGroupId,
+      aiConfig: { provider: 'custom', baseUrl: 'https://provider.example/v1', model: 'isolated-test', apiKey: 'not-a-secret', maxTokens: 8192 },
+    })
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(request.mock.calls[0][5]).toEqual({ responseFormat: 'json_object' })
+  })
+
   it('Skill/Context/Field 三注册表闭合，四个登记来源进入模型且候选确认前零正式写入', async () => {
     expect(['manualText', 'worldGroups', 'storyCore', 'worldview'].map(key => CONTEXT_SOURCE_BY_KEY.has(key))).toEqual([true, true, true, true])
     expect(FIELD_BY_TARGET.get('worldviews')?.map(field => field.field)).toEqual(expect.arrayContaining([
@@ -144,8 +155,21 @@ describe.sequential('R-HARNESS67 · 世界组六字段扩写 durable 候选与�
     expect((await db.worldviews.get(fixture.siblingWorldviewId))?.worldOrigin).toBe('炎昼旧起源')
   })
 
-  it('严格协议拒绝 Markdown、额外/缺失字段、空值和过长内容', async () => {
-    expect(() => parseWorldExpandOutputStrictV1(`\`\`\`json\n${response()}\n\`\`\``)).toThrow('代码围栏')
+  it('accepts one complete JSON container and rejects prose, multiple blocks and repaired bodies', () => {
+    const raw = response()
+    expect(parseWorldExpandOutputStrictV1('```json\n' + raw + '\n```')).toEqual(JSON.parse(raw))
+    expect(parseWorldExpandOutputStrictV1('```\r\n' + raw + '\r\n```')).toEqual(JSON.parse(raw))
+    for (const wrapped of [
+      '说明\n```json\n' + raw + '\n```',
+      '```json\n' + raw + '\n```\n后记',
+      '```javascript\n' + raw + '\n```',
+      '```json\n' + raw + '\n```\n```json\n{}\n```',
+      '```json\n{"broken": true,}\n```',
+    ]) expect(() => parseWorldExpandOutputStrictV1(wrapped)).toThrow()
+  })
+
+  it('严格协议拒绝无效项数或字段、额外/缺失字段、空值和过长内容', async () => {
+
     expect(() => parseWorldExpandOutputStrictV1(response({ extra: true }))).toThrow('只能包含')
     const missing = JSON.parse(response()); delete missing.races
     expect(() => parseWorldExpandOutputStrictV1(JSON.stringify(missing))).toThrow('只能包含')

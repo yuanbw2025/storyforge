@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "kind": "manual-story-arc-author-save-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "ddcf92752e847d4f9395baad74f562dac6473730",
+    "files": {
+      "src/stores/story-arc.ts": "34369369ce278165362744d100f86075ad52b15f59d9fd0f20654769895653c0",
+      "src/components/outline/StoryArcPanel.tsx": "1cde2e1b6a7557e2c669a8b84f64ab294b3aa7523971b7268738b9c37842ee1f",
+      "src/lib/types/story-arc.ts": "f5d7aad4b057f984ef30e80bfeb7bafdb9eb38ff4910d9cd15cbc23b879d3caa",
+      "src/lib/storyline/lifecycle.ts": "af933c77b07fb0d573f4ab33d9216a77d0a74629bfcaddd96b92df3b886e7bdb",
+      "src/lib/registry/context-sources.ts": "b40da75b5041b03d85be10028cc2278a70dd3fc3b4889c7b1e905bfda6a53850",
+      "tests/regression/R-STAB-story-arc-author-save.test.ts": "e41cdcc794e0785a1a90e2270944b7d97ac3c43ab48476936aef68f0395644ba",
+      "tests/regression/R-HARNESS30-story-arc-panel-ui.test.tsx": "ce3a2153e156aa8806dd0cc07f4f46b4578ddca284d1e2269bbddf2dc01939cc",
+      "tests/e2e/longform-story-arc-save.spec.ts": "fac72979215599335d6ce3560d38cc4d2a8a7fd1d35fafde85cfd2d77e786348"
+    }
+  },
+  "status": "MANUAL_AUTHOR_SAVE_RECOVERY_VERIFIED_AI_AND_PROGRESS_CONTINUE",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "originalFailure": {
+    "sourceCommit": "ddcf92752e847d4f9395baad74f562dac6473730",
+    "directory": "manual-story-arc-2026-10-27T19-25-42-903Z",
+    "modelRequests": 0,
+    "positive": "Actual creation, scalar/stage/event edit, reload and registered-context read passed before fault injection",
+    "failure": "Quota rejection escaped as an unhandled page error; switching after failure discarded unsaved description",
+    "originalDriverFailureRetained": "Earlier v1 reselected an input by a value that it had just changed; no model request, not a production defect"
+  },
+  "regression": {
+    "before": {
+      "failed": 11,
+      "passed": 3,
+      "log": "story-arc-author-save-before.log"
+    },
+    "after": {
+      "passed": 70,
+      "files": 6,
+      "log": "story-arc-author-save-related-final.log"
+    },
+    "checks": [
+      "Frozen Work, late read/write isolation, selection isolation and field-level compare-and-swap",
+      "Deleted target, zero-row result, invalid scalar/identity and malformed stage rejection",
+      "Independent stage-field merge and atomic rollback of progress references",
+      "Registered source retains ninth arc, seventh stage, sixth event and full description tail",
+      "Empty-stage author description remains usable; corrupt stages fail visibly without rewriting raw data"
+    ]
+  },
+  "nativeBrowser": {
+    "passed": 4,
+    "log": "story-arc-native-final.log",
+    "transport": "model-free, isolated Chromium native IndexedDB",
+    "checks": [
+      "Quota failure retains draft, blocks switching/creation, explicit retry and reload",
+      "Stage text, optional turning point clear, event add/reorder/delete and failed-event retry",
+      "Zero-row stage write blocks collapse and retains draft until acknowledged retry",
+      "Corrupt stage JSON retained with export navigation available",
+      "Typing a newer event during an in-flight commit preserves that newer input",
+      "Saved stages/events enter registered storyArcs context"
+    ]
+  },
+  "firstNativeDriverFailure": {
+    "failed": 1,
+    "passed": 2,
+    "log": "story-arc-native-first.log",
+    "cause": "Stage heading is 阶段 1; original locator omitted its space",
+    "artifacts": "story-arc-native-first-artifacts"
+  },
+  "implementation": "Reuse registered storyArcs and storylineProgress ownership/lifecycle, pending-edit coordinator and acknowledged fields. No schema, new table, second AI path or historical data rewrite.",
+  "remaining": [
+    "Actual Agnes create/transform/event modes and progress/adoption/links",
+    "All applicable matrix fault variants, final full CI/E2E, native packages and release"
+  ],
+  "priorNativeBrowser": {
+    "passed": 4,
+    "log": "story-arc-native-second.log"
+  },
+  "sharedContextRegression": {
+    "log": "story-arc-shared-context-regression.log",
+    "status": "PASS",
+    "passed": 61,
+    "files": 12
+  },
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "build": "PASS",
+    "docs": "PASS",
+    "roadmap": "PASS"
+  },
+  "deliveryChecks": {
+    "fullCi": "Running separately on 2bcc67bd; not a final-source PASS",
+    "fullE2E": "Prior 45ccf3c1 full run retained 10 failures; fixes have focused evidence only, final full run remains pending"
+  }
+}

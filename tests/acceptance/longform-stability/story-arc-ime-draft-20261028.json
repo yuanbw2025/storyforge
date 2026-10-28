@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "kind": "native-ime-new-story-event-draft-guard",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "c571fa13080bffad6bcdebf5c1086f36ad2ee956",
+    "files": {
+      "src/components/outline/StoryArcPanel.tsx": "bb0010e55394d1c7ff8019d8c9ca66e9cebcd50d320ea796faf48160bd62b5e3",
+      "tests/e2e/longform-story-arc-save.spec.ts": "0bc91c3a637b982b98eebe885c4ed2c41f7cd20c7cf52d8f46110b31cb5c3e04"
+    }
+  },
+  "status": "NATIVE_COMPOSITION_CLOSE_NAVIGATION_AND_SUBMISSION_PASSED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "productBoundary": "Longform manual stage-event input; no AI call, Canon schema, context registry or lifecycle change.",
+  "originalFailure": {
+    "log": "story-arc-ime-before.log",
+    "failed": 1,
+    "proof": "Real Chromium Input.imeSetComposition filled visible Chinese text; beforeunload defaultPrevented was false because the buffered parent draft was still empty.",
+    "rawArtifactsRetained": true
+  },
+  "changes": [
+    "Capture composition state before CInput buffered onChange; retain its existing IME-safe local buffer",
+    "Before-close guard includes active composition; structural pending-draft barrier reads current input DOM/ref and refuses incomplete IME",
+    "Submission waits until composition ends and takes exact current input text; existing concurrent-next-draft protections preserved",
+    "No shared CInput behavior change or new global guard for read-only/search fields"
+  ],
+  "regression": {
+    "primaryLog": "story-arc-ime-regression.log",
+    "primaryPassed": 101,
+    "primaryFiles": 8,
+    "coordinatorLog": "story-arc-ime-pending-command-regression.log",
+    "coordinatorPassed": 5,
+    "coordinatorFiles": 1
+  },
+  "nativeBrowser": {
+    "focusedLog": "story-arc-ime-first-after.log",
+    "focusedPassed": 1,
+    "finalLog": "story-arc-ime-native-final.log",
+    "passed": 12,
+    "checks": [
+      "Native Chromium Chinese composition activates close guard before parent onChange",
+      "Structural create is refused and text remains; finish composition, submit once and reload exact event",
+      "Guard released after acknowledged submission; original existing eleven save/AI/rollback/rich-stage paths retained"
+    ]
+  },
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "build": "PASS",
+    "targetedEslint": "PASS"
+  },
+  "fullChecks": "Full CI/E2E remain on exact earlier 2f4ebb26; not final-current source evidence.",
+  "remaining": "Remaining planned module flows and client checks; native desktop Chromium does not prove physical IME behavior on every platform."
+}

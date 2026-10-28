@@ -26,6 +26,8 @@ type StoryArcNarrativeFieldsV1 = NarrativeDomainMetadataV1 & Pick<NarrativeDomai
 export interface StoryArc extends StoryArcNarrativeFieldsV1 {
   id?: number
   projectId: number
+  /** Existing Work ownership stamp; legacy absence must not be inferred. */
+  workId?: number
   /** 多世界作用域；null 表示单世界/默认主世界。 */
   worldGroupId?: number | null
   name: string            // "主线" / "感情线" / "复仇线"
@@ -97,4 +99,26 @@ export function parseStages(stagesJson: string): StoryStage[] {
 
 export function stringifyStages(stages: StoryStage[]): string {
   return JSON.stringify(stages)
+}
+
+export function validateAuthorStoryStagesV1(value: unknown): asserts value is StoryStage[] {
+  if (!Array.isArray(value)) throw new Error('故事阶段必须是完整数组，原始内容已保留。')
+  const ids = new Set<string>()
+  for (const item of Array.from(value)) {
+    if (!item || typeof item !== 'object' || Array.isArray(item) || typeof item.id !== 'string' || !item.id.trim() || ids.has(item.id)
+      || typeof item.title !== 'string' || typeof item.description !== 'string' || !Array.isArray(item.keyEvents)
+      || Array.from(item.keyEvents).some(event => typeof event !== 'string')
+      || (item.turningPoint !== undefined && typeof item.turningPoint !== 'string')
+      || [item.startVolume, item.endVolume].some(volume => volume !== undefined && (!Number.isSafeInteger(volume) || volume < 1))
+      || (item.startVolume !== undefined && item.endVolume !== undefined && item.startVolume > item.endVolume)) throw new Error('故事阶段结构异常或标识重复，原始内容已保留。')
+    ids.add(item.id)
+  }
+}
+
+export function parseAuthorStoryStagesV1(raw: unknown): StoryStage[] {
+  if (typeof raw !== 'string') throw new Error('故事阶段JSON格式异常，原始内容已保留。')
+  let value: unknown
+  try { value = JSON.parse(raw) } catch { throw new Error('故事阶段JSON损坏，原始内容已保留。') }
+  validateAuthorStoryStagesV1(value)
+  return value
 }
