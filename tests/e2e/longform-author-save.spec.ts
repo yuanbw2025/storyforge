@@ -61,26 +61,25 @@ async function editFirst(page: Page, text: string) {
   await expect(editor).not.toBeVisible()
 }
 
-test('23 scalar author fields save edits and clearing through their real UI and survive reload', async ({ page }) => {
-  test.setTimeout(360_000)
+for (const [module, label, field, table] of scalarFields) {
+test(`scalar author ${field} saves edits and clearing through its real UI and survives reload`, async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
-  const projectId = await create(page, '逐字段作者保存隔离验收')
-  for (const [module, label, field, table] of scalarFields) {
-    await test.step(`${module} / ${label}: write, reload, clear, reload`, async () => {
-      console.log(`author field ${field}`)
-      await openField(page, module, label)
-      const text = `作者手改·${field}：先建立因果，再推进冲突。\n第二行保持中文内容。`
-      await editFirst(page, text)
-      await expect.poll(async () => (await read(page, projectId, table))?.[field]).toBe(text)
-      await page.reload(); await openField(page, module, label)
-      await expect(page.locator('div.cursor-text:visible').first()).toHaveText(text)
-      await editFirst(page, '')
-      await page.reload(); await openField(page, module, label)
-      expect((await read(page, projectId, table))?.[field]).toBe('')
-    })
-  }
+  const projectId = await create(page, `逐字段作者保存隔离验收·${field}`)
+  await test.step(`${module} / ${label}: write, reload, clear, reload`, async () => {
+    console.log(`author field ${field}`)
+    await openField(page, module, label)
+    const text = `作者手改·${field}：先建立因果，再推进冲突。\n第二行保持中文内容。`
+    await editFirst(page, text)
+    await expect.poll(async () => (await read(page, projectId, table))?.[field]).toBe(text)
+    await page.reload(); await openField(page, module, label)
+    await expect(page.locator('div.cursor-text:visible').first()).toHaveText(text)
+    await editFirst(page, '')
+    await page.reload(); await openField(page, module, label)
+    expect((await read(page, projectId, table))?.[field]).toBe('')
+  })
   expect(errors).toEqual([])
 })
+}
 
 for (const [module, label, field, table] of [scalarFields[0], scalarFields[6], scalarFields[8], scalarFields[18]]) {
 test(`rejected ${field} write keeps the draft and retries without a page crash`, async ({ page }) => {
