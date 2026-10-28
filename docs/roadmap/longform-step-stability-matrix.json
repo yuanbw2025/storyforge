@@ -19343,6 +19343,16 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/real-organization-20261028-979d931a8.json",
           "summary": "手动七域实模调用遇到上游连接超时，1次结果/用量未知；错误可见、0未处理页面异常，保留原运行，不计功能通过。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-organization-20261028-89d7d36f5.json",
+          "summary": "新一轮整理1次真实调用：候选/刷新/写入闭环通过，但原始状态、年表和进度各1条被静默过滤，保留并继续修复，不计七域语义通过。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/organization-governance-20261028.json",
+          "summary": "先收口手动/章后整理的登记来源与写目标，新终态核验覆盖三张故事线表，旧V1前像和回执保留。"
         }
       ],
       "defects": [],
@@ -19600,6 +19610,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/real-storyline-progress-20261028-979d931a8.json",
           "summary": "真实Agnes定位映射：拒绝、新生成、修改落盘、刷新与采纳通过；6次调用中4次为压缩失败，另项修复。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-storyline-progress-20261028-89d7d36f5.json",
+          "summary": "新压缩预算实模：4个完整JSON/逐字锚点返回；每轮首摘要超预算后有限修复，修复摘要进入实际映射请求；拒绝与新生成/编辑/刷新/采纳通过。"
         }
       ],
       "defects": [],

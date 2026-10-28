@@ -32,6 +32,7 @@ import {
 import { PROSE_GENERATION_VERIFIER_SET_V2, PROSE_GENERATION_VERIFIER_SET_V3 } from './prose-generation-durable'
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { hashCanonicalValue } from './hash'
+import { CHAPTER_ORGANIZATION_WRITE_TARGETS_CURRENT_V1 } from './chapter-organization-authority'
 import type { AgentRunFailureActionV1, AgentRunFailureCategoryV1 } from '../../types/agent-run'
 import { verifyContextManifestIntegrityV1 } from './context-manifest'
 import {
@@ -73,17 +74,7 @@ export const CHAPTER_POST_ADOPTION_SOURCE_KEYS_V1 = Object.freeze([...new Set([
   ...resolveAgentSkillContextSourceKeysV1(CONSISTENCY_SKILL_V1),
 ])])
 
-const ORGANIZATION_WRITE_TARGETS_V1 = Object.freeze([
-  { table: 'stateCards', fields: ['category', 'entityName', 'fields', 'lastChapterId'], mode: 'author-confirmed' as const },
-  { table: 'temporalFacts', fields: [], mode: 'author-confirmed' as const, adoptionExtension: 'fact-ledger' },
-  { table: 'itemLedger', fields: ['itemName', 'action', 'quantity', 'heldByName', 'characterId', 'chapterId', 'chapterTitle', 'note'], mode: 'author-confirmed' as const },
-  { table: 'storyTimelineEvents', fields: ['title', 'storyTime', 'importance', 'description', 'chapterId', 'chapterTitle', 'order'], mode: 'author-confirmed' as const },
-  { table: 'characterRelations', fields: ['fromCharacterId', 'toCharacterId', 'relationType', 'label', 'description', 'isBidirectional'], mode: 'author-confirmed' as const },
-  { table: 'foreshadows', fields: ['status', 'plantChapterId', 'echoChapterIds', 'resolveChapterId', 'notes'], mode: 'author-confirmed' as const },
-  { table: 'storylineProgress', fields: ['arcId', 'currentStageId', 'status', 'progressNote', 'lastActiveChapterId', 'lastActiveChapterTitle', 'involvedEntities', 'evidenceQuote'], mode: 'author-confirmed' as const },
-  { table: 'storylineCrossings', fields: ['arcIdA', 'arcIdB', 'chapterId', 'chapterTitle', 'note', 'evidenceQuote'], mode: 'author-confirmed' as const },
-  { table: 'storyArcs', fields: ['name', 'type', 'description', 'stages'], mode: 'author-confirmed' as const },
-])
+const ORGANIZATION_WRITE_TARGETS_V1 = CHAPTER_ORGANIZATION_WRITE_TARGETS_CURRENT_V1
 
 const MEMORY_WRITE_TARGET_V1 = Object.freeze({
   table: 'chapters',
