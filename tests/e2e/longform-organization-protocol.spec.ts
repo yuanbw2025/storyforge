@@ -183,3 +183,61 @@ test('the actual empty-roster request example leaves unavailable target arrays e
   expect(example.stateDiffs).toEqual([]); expect(example.relations).toEqual([]); expect(example.foreshadowUpdates).toEqual([])
   expect(system).toContain('chapter-organization-v4')
 })
+test('author deselection survives closing and refreshing before selective adoption', async ({ page }) => {
+  const seed = await setup(page); let calls = 0
+  const output = { ...empty(),
+    inventoryEvents: [{ itemName: '潮汐钥匙', heldByName: '林舟', action: 'gain', quantity: 1, note: '拾起', anchorId: 'p2' }],
+    storyEvents: [{ title: '抵达云港', storyTime: '', importance: 2, description: '林舟抵达云港', anchorId: 'p1' }],
+  }
+  await page.route('https://organization.invalid/**', async route => { calls++; await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(output) }, finish_reason: 'stop' }] } }) })
+  await page.getByRole('button', { name: '整理本章', exact: true }).click()
+  const timeline = () => page.getByRole('checkbox', { name: /^抵达云港 · 重要度 2/u })
+  await expect(timeline()).toBeChecked(); await timeline().uncheck()
+  await expect(page.getByRole('button', { name: '确认写入所选（1）', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '关闭整理本章', exact: true }).click()
+  await page.getByRole('button', { name: '查看整理结果', exact: true }).click()
+  await expect(timeline()).not.toBeChecked()
+  await page.getByRole('button', { name: '关闭整理本章', exact: true }).click(); await page.reload()
+  await page.getByRole('button', { name: '查看整理结果', exact: true }).click()
+  await expect(timeline()).not.toBeChecked()
+  await page.getByRole('button', { name: '确认写入所选（1）', exact: true }).click()
+  await expect.poll(async () => (await data(page, seed.projectId)).itemLedger.length).toBe(1)
+  expect((await data(page, seed.projectId)).storyTimelineEvents).toHaveLength(0)
+  expect(calls).toBe(1)
+})
+
+test('selection save failure retains choices and only explicit retry unblocks adoption', async ({ page }) => {
+  const seed = await setup(page); let calls = 0
+  const output = { ...empty(),
+    inventoryEvents: [{ itemName: '潮汐钥匙', heldByName: '林舟', action: 'gain', quantity: 1, note: '拾起', anchorId: 'p2' }],
+    storyEvents: [{ title: '抵达云港', storyTime: '', importance: 2, description: '林舟抵达云港', anchorId: 'p1' }],
+  }
+  await page.route('https://organization.invalid/**', async route => { calls++; await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(output) }, finish_reason: 'stop' }] } }) })
+  await page.getByRole('button', { name: '整理本章', exact: true }).click()
+  const timeline = () => page.getByRole('checkbox', { name: /^抵达云港 · 重要度 2/u })
+  await expect(timeline()).toBeChecked()
+  await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const original = db.agentEvents.update.bind(db.agentEvents); let rejected = false
+    db.agentEvents.update = (...args: any[]) => {
+      if (!rejected && typeof args[1]?.payload === 'string' && args[1].payload.includes('"authorSelection"')) { rejected = true; return Promise.resolve(0) }
+      return original(...args)
+    }
+  })
+  await timeline().uncheck()
+  await expect(page.getByRole('alert').filter({ hasText: '选择仍未保存' })).toBeVisible()
+  await expect(timeline()).not.toBeChecked()
+  await expect(page.getByRole('button', { name: '关闭整理本章', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '重新整理', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '确认写入所选（1）', exact: true })).toBeDisabled()
+  expect((await data(page, seed.projectId)).itemLedger).toHaveLength(0)
+  await page.getByRole('button', { name: '重试保存选择', exact: true }).click()
+  await expect(page.getByRole('button', { name: '关闭整理本章', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: '关闭整理本章', exact: true }).click()
+  await page.getByRole('button', { name: '查看整理结果', exact: true }).click()
+  await expect(timeline()).not.toBeChecked()
+  await page.getByRole('button', { name: '确认写入所选（1）', exact: true }).click()
+  await expect.poll(async () => (await data(page, seed.projectId)).itemLedger.length).toBe(1)
+  expect((await data(page, seed.projectId)).storyTimelineEvents).toHaveLength(0)
+  expect(calls).toBe(1)
+})

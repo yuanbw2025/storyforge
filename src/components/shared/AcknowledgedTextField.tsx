@@ -97,4 +97,3 @@ export default function AcknowledgedTextField({ label, rows, value, onCommit, in
     </div>
   )
 }
-

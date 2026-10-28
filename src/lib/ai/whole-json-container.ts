@@ -8,4 +8,3 @@ export function wholeJSONContainerTextV1(output: string, label = '候选'): stri
   if (!block) throw new Error(`${label}需要完整的 JSON 内容；代码块外不能附带说明。`)
   return block[1].trim()
 }
-

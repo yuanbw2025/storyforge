@@ -176,4 +176,3 @@ test('rejecting the last generated character closes its durable run and survives
   await page.reload(); await expect(page.getByRole('button', { name: 'AI 设计角色', exact: true })).toBeEnabled()
   expect((await status()).runs[0]?.status).toBe('cancelled'); expect(calls).toBe(1)
 })
-

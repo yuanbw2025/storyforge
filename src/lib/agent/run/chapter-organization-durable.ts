@@ -37,7 +37,7 @@ export interface ChapterOrganizationDurableRunV1 {
 export async function hashChapterOrganizationCandidateV1(
   candidate: ChapterOrganizationCandidate,
 ): Promise<string> {
-  const { durable: _durable, ...withoutDurableEvidence } = candidate
+  const { durable: _durable, authorSelection: _authorSelection, ...withoutDurableEvidence } = candidate
   return hashCanonicalValue(withoutDurableEvidence)
 }
 

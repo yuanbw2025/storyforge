@@ -32,6 +32,7 @@ import { observeSeparatedProseFrameV1 } from '../../lib/prose/provider-frame-obs
 import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
 import { chapterOrganizationRequestOptionsV1, CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4 } from '../../lib/agent/chapter-organization-model'
 import { recordAgentRunArtifactV1 } from '../../lib/memory/artifact-store'
+import { saveChapterOrganizationSelectionV1 } from '../../lib/agent/chapter-organization-selection'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { db } from '../../lib/db/schema'
 import { assembleContext } from '../../lib/registry/assemble-context'
@@ -3706,6 +3707,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             current={organizationCurrent}
             busy={organizingChapter}
             error={organizationError}
+            onSelectionChange={async selection => {
+              const saved = await saveChapterOrganizationSelectionV1({ run: organizationRun, selection })
+              setOrganizationRun(current => current?.event.id === saved.event.id ? saved : current)
+              return saved
+            }}
             onApply={selection => { void handleApplyChapterOrganization(selection) }}
             onRerun={() => { void handleRunChapterOrganization(true) }}
             onClose={() => setShowOrganization(false)}

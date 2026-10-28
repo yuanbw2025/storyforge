@@ -2068,6 +2068,13 @@
       "sourcePin": "tests/acceptance/longform-stability/story-arc-stage-events-20261028.json",
       "symptom": "新增事件指令与每阶段总量上限矛盾；单阶段事件按钮沿整线变换且缺少确定性只改事件/精确排序约束。",
       "remaining": "新提交实模、完整故障和最终交付检查继续。"
+    },
+    {
+      "id": "CHAPTER-ORGANIZATION-SELECTION-LOSS-20261028",
+      "state": "LOCAL_FIX_TARGETED_NATIVE_VERIFIED",
+      "sourcePin": "tests/acceptance/longform-stability/organization-selection-20261028.json",
+      "symptom": "取消章后整理候选，关闭再打开恢复全选；原选择仅保存在组件内。",
+      "remaining": "全交付精确提交检查、跨模式和正式安装包专项继续；不据此声称全部崩溃修复。"
     }
   ],
   "evidenceSchema": {
@@ -19368,6 +19375,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/organization-empty-targets-20261028.json",
           "summary": "V4模型示例按冻结目标目录输出空分类或实际登记身份，不再用未授权示例目标；确定性拒绝仍保留。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/organization-selection-20261028.json",
+          "summary": "已复现并修复关闭/刷新后取消勾选丢失；61回归、10隔离浏览器路径通过，含0行回滚与明确重试。只计对应操作，整项仍RUNNING。"
         }
       ],
       "defects": [],
@@ -24388,6 +24400,22 @@
       "date": "2026-10-28",
       "unit": "Frozen physical-text evidence anchors for mapping model protocol v3",
       "sourcePin": "tests/acceptance/longform-stability/storyline-evidence-anchors-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Repair existing chapter-organization author selection persistence and failed-save recovery",
+      "sourcePin": "tests/acceptance/longform-stability/organization-selection-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Preserve upstream malformed-stage recovery with scoped author save acknowledgements",
+      "sourcePin": "tests/acceptance/longform-stability/stability-integration-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false
