@@ -229,7 +229,12 @@ describe('R-HARNESS30 · 故事线面板统一进入主 Agent Harness', () => {
     expect(JSON.parse(editor.value)).toEqual(repaired)
     expect(mocks.storyArcStore.arcs[0].stages).toBe(raw)
     await act(async () => button('确认保存阶段修复').click())
-    expect(mocks.storyArcStore.updateStages).toHaveBeenLastCalledWith(9, repaired, raw)
+    expect(mocks.storyArcStore.updateStages).toHaveBeenLastCalledWith(
+      9,
+      repaired,
+      { projectId: 1, worldId: 11, workId: 12 },
+      raw,
+    )
     expect(mocks.copilot.submitRequest).not.toHaveBeenCalled()
     expect(mocks.copilot.submitTargetedRequest).not.toHaveBeenCalled()
   })
