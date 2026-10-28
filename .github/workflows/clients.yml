@@ -99,6 +99,7 @@ jobs:
         shell: bash
         run: |
           node scripts/desktop/build-upgrade-fixture.mjs
+          node scripts/desktop/build-upgrade-fixture.mjs previous-client release/test-fixtures/native-upgrade-old.js "$PREVIOUS_CLIENT_VERSION"
           version=$(node -p "require('./package.json').version")
           node scripts/desktop/upgrade-smoke.mjs "previous-client/release/windows/StoryForge-$PREVIOUS_CLIENT_VERSION-windows-x64-setup.exe" "release/windows/StoryForge-$version-windows-x64-setup.exe" "$PREVIOUS_CLIENT_VERSION"
       - uses: actions/upload-artifact@v4
@@ -149,6 +150,7 @@ jobs:
       - name: Verify DMG replacement and production backup restore
         run: |
           node scripts/desktop/build-upgrade-fixture.mjs
+          node scripts/desktop/build-upgrade-fixture.mjs previous-client release/test-fixtures/native-upgrade-old.js "$PREVIOUS_CLIENT_VERSION"
           version=$(node -p "require('./package.json').version")
           node scripts/desktop/upgrade-smoke.mjs previous-client/release/windows/${{ matrix.directory }}/StoryForge.app "release/macos/StoryForge-$version-macos-${{ matrix.arch }}.dmg" "$PREVIOUS_CLIENT_VERSION"
       - uses: actions/upload-artifact@v4
