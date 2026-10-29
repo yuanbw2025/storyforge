@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
-import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { seedCurrentWorkspace, currentWorkFixtureRecordV1 } from '../helpers/current-workspace'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { createAgentRunV1, reviseAgentRunContractV1 } from '../../src/lib/agent/run/event-store'
 import { useOutlineStore } from '../../src/stores/outline'
@@ -122,6 +122,22 @@ describe('Issue179 synthetic backup lifecycle investigation',()=>{
   await useOutlineStore.getState().loadAll(f.scope);const before=await db.outlineNodes.toArray()
   await expect(useOutlineStore.getState().deleteNode(unused,f.scope)).rejects.toThrow('无法核验运行历史引用')
   expect(await db.outlineNodes.toArray()).toEqual(before)
+ })
+
+ it('does not read or block on malformed history belonging to another Work in the same workspace',async()=>{
+  const f=await seed()
+  const otherId=await db.works.add(currentWorkFixtureRecordV1({projectId:f.scope.projectId,worldId:f.scope.worldId,title:'Other Work'})) as number
+  const otherScope={...f.scope,workId:otherId}
+  const otherNode=await db.outlineNodes.add(stampNewRecord(otherScope,'outlineNodes',{worldGroupId:f.worldGroupId,parentId:null,type:'volume' as const,title:'Other Work outline',summary:'',order:1,createdAt:1,updatedAt:1},{owner:'work'})) as number
+  const otherRun=await createAgentRunV1({scope:otherScope,worldGroupId:f.worldGroupId,contract:runContract({projectId:f.scope.projectId,worldGroupId:f.worldGroupId,outlineNodeId:otherNode})})
+  await db.agentRuns.update(otherRun.run.id!,{contractJson:'invalid'})
+  const before=await db.agentRuns.get(otherRun.run.id!)
+  const unused=await db.outlineNodes.add(stampNewRecord(f.scope,'outlineNodes',{worldGroupId:f.worldGroupId,parentId:null,type:'volume' as const,title:'Unused own outline',summary:'',order:2,createdAt:1,updatedAt:1},{owner:'work'})) as number
+  await useOutlineStore.getState().loadAll(f.scope)
+  await useOutlineStore.getState().deleteNode(unused,f.scope)
+  expect(await db.outlineNodes.get(unused)).toBeUndefined()
+  expect(await db.outlineNodes.get(otherNode)).toBeDefined()
+  expect(await db.agentRuns.get(otherRun.run.id!)).toEqual(before)
  })
 
 })

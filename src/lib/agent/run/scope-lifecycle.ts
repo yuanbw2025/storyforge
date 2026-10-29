@@ -17,18 +17,23 @@ export async function assertRetainedRunScopeTargetsV1(
     const refs = (portable.retainedScopeTargets ?? [])
       .filter(ref => (targets.get(ref.table)?.length ?? 0) > 0)
     if (!refs.length) continue
-    const projects = new Set<number>()
+    const owners = new Map<number, number>()
     for (const ref of refs) {
       const source = REGISTRY_BY_NAME.get(ref.table)
       if (!source || !portable.dependencies.includes(ref.table)) throw new Error(unverifiable)
       for (const row of await source.table.bulkGet([...targets.get(ref.table)!])) {
         if (!row) continue
-        if (!Number.isSafeInteger(row.projectId)) throw new Error(unverifiable)
-        projects.add(row.projectId)
+        if (!Number.isSafeInteger(row.projectId) || !Number.isSafeInteger(row.workId)) {
+          throw new Error(unverifiable)
+        }
+        owners.set(row.workId, row.projectId)
       }
     }
-    if (!projects.size) continue
-    const runs = await spec.table.where('projectId').anyOf([...projects]).toArray()
+    if (!owners.size) continue
+    // Run scopes here are Work-owned. Do not inspect another Work's contracts
+    // merely because it shares the same LocalWorkspace shell.
+    const runs = await spec.table.where('workId').anyOf([...owners.keys()])
+      .filter(run => owners.get(run.workId) === run.projectId).toArray()
     if (!runs.length) continue
     const idSets = refs.map(ref => ({ ...ref, ids: new Set(targets.get(ref.table)) }))
     const inspected = new Set<string>()
