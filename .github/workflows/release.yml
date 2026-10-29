@@ -28,6 +28,13 @@ on:
 permissions:
   contents: read
 
+env:
+  # These are public client coordinates, never the backend secret key.
+  VITE_STORYFORGE_COMMUNITY_SHARING: ${{ vars.STORYFORGE_COMMUNITY_SHARING }}
+  VITE_STORYFORGE_COMMUNITY_API_URL: ${{ vars.STORYFORGE_COMMUNITY_API_URL }}
+  VITE_STORYFORGE_COMMUNITY_SUPABASE_URL: ${{ vars.STORYFORGE_COMMUNITY_SUPABASE_URL }}
+  VITE_STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY: ${{ vars.STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY }}
+
 concurrency:
   group: local-release-${{ github.ref }}
   cancel-in-progress: false

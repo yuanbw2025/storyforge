@@ -6,15 +6,17 @@ import { loadSelectedNovelPreview } from '../../lib/community-works/local-previe
 import CommunityShareFlow from './CommunityShareFlow'
 
 export default function NovelSharePanel({ scope, onClose }: { scope: WorkspaceScope; onClose: () => void }) {
+  const { projectId, worldId, workId } = scope
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [selected, setSelected] = useState<number[]>([])
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
   useEffect(() => {
     let active = true
+    const currentScope = { projectId, worldId, workId }
     setState('loading'); setSelected([])
     void Promise.all([
-      readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
-      readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
+      readOwnedRows<Chapter>(currentScope, 'chapters', { owner: 'work' }),
+      readOwnedRows<OutlineNode>(currentScope, 'outlineNodes', { owner: 'work' }),
     ]).then(([rows, nodes]) => {
       if (!active) return
       const owned = new Set(nodes.flatMap(node => node.id == null ? [] : [node.id]))
@@ -23,7 +25,7 @@ export default function NovelSharePanel({ scope, onClose }: { scope: WorkspaceSc
       setState('ready')
     }).catch(() => { if (active) setState('error') })
     return () => { active = false }
-  }, [scope.projectId, scope.worldId, scope.workId])
+  }, [projectId, worldId, workId])
   const ids = chapters.flatMap(chapter => chapter.id == null ? [] : [chapter.id])
   const chosen = ids.filter(id => selected.includes(id))
   return <section aria-label="选择小说公开章节" className="space-y-4 bg-bg-surface border border-border rounded-xl p-4 mt-4">

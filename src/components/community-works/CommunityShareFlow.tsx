@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import type { CommunityPublicSnapshotV1 } from '../../lib/community-works/public-snapshot'
 import { actOnMySubmission, communityAuth, communityClientConfig, readMySubmissions,
@@ -80,12 +80,12 @@ function MySubmissions({ session, revision }: { session: Session; revision: stri
   const [appealing, setAppealing] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const [message, setMessage] = useState('')
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setState('loading')
     try { setRows(await readMySubmissions(session)); setState('ready') }
     catch { setState('error') }
-  }
-  useEffect(() => { void refresh() }, [session.access_token, revision])
+  }, [session])
+  useEffect(() => { void refresh() }, [refresh, revision])
   const act = async (row: CommunitySubmissionRow, action: 'withdraw' | 'appeal') => {
     if (busy || (action === 'appeal' && !reason.trim())) return
     if (action === 'withdraw' && !await dialog.confirm({
@@ -138,11 +138,14 @@ export default function CommunityShareFlow({ selectionRevision, buildSnapshot }:
   const [receipt, setReceipt] = useState<{ submissionId: string; status: string } | null>(null)
   const [listRevision, setListRevision] = useState('')
   useEffect(() => { setSeal(null); setReceipt(null); setMessage('') }, [selectionRevision, rights])
-  const configured = communityClientConfig() !== null
+  const config = communityClientConfig()
+  const configured = config !== null
   return <div className="space-y-4 border-t border-border pt-4">
     <p className="text-xs text-text-muted">只分享这里勾选的公开内容。原项目、未选章节、原文文件、笔记、提示词和本地设置不会上传。</p>
     <label className="flex gap-2 text-xs"><input type="checkbox" checked={rights} onChange={event => setRights(event.target.checked)} />
       我确认拥有所选内容的公开发布权；拆书不会上传原文，引用和第三方内容需另行取得权利。</label>
+    {config && <a className="text-xs underline" href={`${config.apiOrigin}/community-works/policy`}
+      target="_blank" rel="noopener noreferrer">阅读社区内容与审核规则 ↗</a>}
     <button type="button" disabled={!rights || busy} onClick={() => {
       setBusy(true); setMessage(''); setSeal(null)
       void buildSnapshot().then(sealPublicSnapshotV1).then(setSeal)
