@@ -54,6 +54,8 @@ node scripts/distribution/build-android.mjs --release
 5. 安装操作先等待现有待保存编辑协调器完成写入，失败则阻断安装。Windows 由 `electron-updater` 检查与下载；禁用自动下载、退出时自动安装、预发布和降级。下载与退出安装各有原生确认窗口。GitHub 下载失败仍可使用当前安装。可通过 `CSC_LINK` / `CSC_KEY_PASSWORD` 接入 Windows 代码签名；未配置时为未签名安装器，系统可能提示未知发布者。
 6. Android 只检查固定仓库最新稳定 Release，精确匹配 APK 名称与 URL，验证 GitHub asset SHA-256、APK 包名、递增版本号和当前签名，再调用系统安装器。首次需要用户允许“安装未知应用”。下载或校验失败不得启动安装；用户取消系统安装时旧版保留。
 
+正式发行的完整 CLI 与浏览器检查分别运行在独立 runner；两者都成功后才继续便携构建，公开仍同时依赖全部目标包、客户端和正式签名 Android 覆盖升级。两个检查都记录实际检出 SHA，不以拆分或 PR 条件不适用代替正式发行验收。
+
 ## 桌面第三方声明
 
 桌面构建继续先运行 `scripts/distribution/notices.mjs` 生成当前依赖声明。`electron-builder.config.cjs` 的 `afterExtract` 钩子在平台运行时清理前，把本次实际解包的 Electron 许可、完整 Chromium 声明及 NPM 声明原字节保留到应用资源的 `third-party/`，并记录实际运行时版本、大小与 SHA-256。Mac 的文件随 `.app` 一起保留；Windows/Linux 使用同一资源合同。缺文件、空文件、符号链接或缺少当前依赖声明会中止构建，不产出一个只带部分声明的目录。此构建元数据不包含个人目录，不属于作品表或模型上下文；它不替代具体模型、媒资和发布用途的独立许可审阅。
@@ -116,9 +118,11 @@ Windows 只保存固定枚举的进程异常摘要；主进程原生硬崩溃未
 
 `npm run build:macos -- --arm64` 或 `--x64` 生成对应 DMG；应用使用同一桌面入口、固定 origin 和 `~/Library/Application Support/StoryForge`。当前采用 ad-hoc 签名，不是 Developer ID 签名或 Apple 公证。macOS 更新固定读取官方仓库最新稳定版，选择当前 CPU 的精确文件名，验证大小与 GitHub SHA-256；用户确认后再次验 hash、打开 DMG 并退出，由用户拖入“应用程序”替换，不假装完成无人值守安装。
 
-`upgrade-smoke.mjs` 在隔离目录运行既有正式版本和本次候选，旧源码 SHA 与版本由客户端工作流的 `PREVIOUS_CLIENT_REF` / `PREVIOUS_CLIENT_VERSION` 一起指定；探针必须传入旧版号并核对实际应用版本，不能沿用固定旧值。v4.0.3 从正式 v4.0.2 验证覆盖升级。Windows 实际运行两个 NSIS 安装器，Mac 从新 DMG 替换应用。生产 `createWorkspace()`、注册表派生的完整导出/导入是测试唯一作品入口；比较完整导出，验证正文、封面、OPFS 探针、非法备份零写入与恢复后重启。此证据不代替全部产品媒资/游戏存档或真人移动布局验收。
+`upgrade-smoke.mjs` 在隔离目录运行既有正式版本和本次候选，旧源码 SHA 与版本由客户端工作流的 `PREVIOUS_CLIENT_REF` / `PREVIOUS_CLIENT_VERSION` 一起指定；探针必须传入旧版号并核对实际应用版本，不能沿用固定旧值。v4.0.5 候选从正式 v4.0.4 验证覆盖升级；每次发行都必须同步两个工作流的旧版号与精确源码基线。Windows 实际运行两个 NSIS 安装器，Mac 从新 DMG 替换应用。生产 `createWorkspace()`、注册表派生的完整导出/导入是测试唯一作品入口；比较完整导出，验证正文、封面、OPFS 探针、非法备份零写入与恢复后重启。此证据不代替全部产品媒资/游戏存档或真人移动布局验收。
 
-原生升级用的测试脚本由 `build-upgrade-fixture.mjs` 单独打包，须沿用生产代码的 `?raw` 文本导入语义，准确内嵌源码而非把其当模块执行。该支持只用于测试包构建，不改生产导入导出流程、备份比较或安装替换断言；测试包编译通过仍须继续实际 Windows/Mac 升级与恢复验证。
+原生升级用的测试脚本由 `build-upgrade-fixture.mjs` 单独打包，须沿用生产代码的 `?raw` 文本导入语义，准确内嵌源码而非把其当模块执行。该支持只用于测试包构建，不改生产导入导出流程，保留完整旧数据比较和安装替换断言；测试包编译通过仍须继续实际 Windows/Mac 升级与恢复验证。
+
+旧版造数与替换前重启必须使用 `PREVIOUS_CLIENT_REF` 对应的生产代码。构建器显式接收源码目录、输出路径与期望版本，分别生成 `native-upgrade-old.js` 和 `native-upgrade.js`；每阶段核对实际应用版本与脚本来源版本。不得把新版脚本注入旧版，提前升级旧库来绕过真实迁移。新版本只通过现有只读备份转换器补齐注册表声明的新增空表和格式版本，再逐值比较完整旧数据；不忽略差异、丢行或改写旧备份。Android 测试 runner 同时携带两份脚本，正式应用不包含测试脚本。
 
 Android 正式验证用永久密钥在本机签署测试 runner；新正式 APK 与测试 runner 暂存于 Release 草稿，CI 只接收签名后的 APK，不接收密钥。升级工作流从既有正式发行下载旧 APK，从本次草稿下载实际将发布的新 APK，避免另一份同版本测试包替代正式包验收。分别安装旧 APK、执行 seed、`adb install -r` 新 APK、执行恢复和重启校验。旧版号在升级工作流的 `PREVIOUS_CLIENT_VERSION` 指定，与桌面旧版基线一致。测试 JS 只进入 androidTest 的 assets，不进入公开应用。发布前删除临时 `upgrade-test-*.apk` 附件。
 

@@ -2,6 +2,7 @@ import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { exportProjectJSON, importProjectJSON, type ProjectExportData } from '../../src/lib/export/json-export'
 import { db } from '../../src/lib/db/schema'
 import { useWorldRulesStore } from '../../src/stores/world-rules'
+import { normalizeProjectBackup } from '../../src/lib/export/backup-trust'
 
 // Injected by native tests only. Never included in the application bundle.
 const key = 'storyforge-native-upgrade-fixture'
@@ -49,7 +50,10 @@ async function verify(restore = false, externalBackup?: ProjectExportData, requi
     })}`)
   }
   requireValue(!requireRestored || (Number.isSafeInteger(stored.restoredId) && stored.restoredId > 0), 'Restored work ID missing after restart')
-  const before = structuredClone(stored.backup)
+  // Use the production, read-only legacy converter. It validates the original
+  // contract and only adds registry-declared empty tables/version metadata;
+  // every existing row, value and array order is still compared below.
+  const before = structuredClone(normalizeProjectBackup(stored.backup))
   const after = await exportProjectJSON(stored.projectId)
   before.exportedAt = 0; after.exportedAt = 0
   // JSON object key order is not part of the backup contract; array order and every value are.

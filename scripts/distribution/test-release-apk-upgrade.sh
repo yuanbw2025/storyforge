@@ -9,7 +9,12 @@ adb install release-test/upgrade-test-old.apk
 adb install release-test/upgrade-test-runner.apk
 run_phase() {
   local evidence_name="${2:-$1}"
-  adb shell am instrument -w -r -e class com.storyforge.client.ClientUpgradeTest -e phase "$1" com.storyforge.client.test/androidx.test.runner.AndroidJUnitRunner | tee "release-test/$evidence_name.txt"
+  local expected_version
+  case "$1" in
+    seed|baseline) expected_version="${PREVIOUS_CLIENT_VERSION:?Pass the previous formal client version}" ;;
+    *) expected_version=$(node -p "require('./package.json').version") ;;
+  esac
+  adb shell am instrument -w -r -e class com.storyforge.client.ClientUpgradeTest -e phase "$1" -e expectedVersion "$expected_version" com.storyforge.client.test/androidx.test.runner.AndroidJUnitRunner | tee "release-test/$evidence_name.txt"
   grep -q 'OK (1 test)' "release-test/$evidence_name.txt"
 }
 run_phase seed
