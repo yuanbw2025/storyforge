@@ -587,6 +587,10 @@
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261028-avg-pr172-main-integration-v1.json"
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261028-release405-main3b-v1.json",
+        "note": "Preserved release branch receipt during pre-audit consolidation; not evidence for the merged source."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

@@ -38,7 +38,7 @@ if (args.includes('instrument')) {
 `, { mode: 0o700 })
   const result = spawnSync('bash', [script], {
     cwd: directory,
-    env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, ANDROID_HOME: sdk, ADB_TRACE: trace, FAIL_BASELINE: failBaseline ? '1' : '0' },
+    env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, ANDROID_HOME: sdk, PREVIOUS_CLIENT_VERSION: '4.0.2', ADB_TRACE: trace, FAIL_BASELINE: failBaseline ? '1' : '0' },
     encoding: 'utf8',
   })
   return { directory, result, calls: readFileSync(trace, 'utf8').trim().split('\n').map(line => JSON.parse(line)) }
@@ -50,6 +50,7 @@ test('formal replacement follows a successful old-package restart and preserves 
     assert.equal(probe.result.status, 0, probe.result.stdout + probe.result.stderr)
     const phases = probe.calls.filter(call => call.includes('instrument'))
     assert.deepEqual(phases.map(call => call[call.indexOf('phase') + 1]), ['seed', 'baseline', 'restore', 'restart'])
+    assert.deepEqual(phases.map(call => call[call.indexOf('expectedVersion') + 1]), ['4.0.2', '4.0.2', '4.0.3', '4.0.3'])
     const baseline = probe.calls.indexOf(phases[1])
     const replacement = probe.calls.findIndex(call => call[0] === 'install' && call[1] === '-r')
     assert.ok(baseline < replacement)
