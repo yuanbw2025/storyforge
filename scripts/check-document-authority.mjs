@@ -34,6 +34,7 @@ const activeDocs = [
   'docs/HARNESS-QUALITY-STANDARD.md',
   'docs/ENGINEERING-QUALITY-STANDARD.md',
   'docs/COLLAB-WORKFLOW.md',
+  'docs/LOCAL-API-CONFIG.md',
   'docs/ROADMAP.md',
   'docs/AI-FUNCTIONS-MANUAL.generated.md',
   'docs/AI-FUNCTIONS-MANUAL.semantic.md',
