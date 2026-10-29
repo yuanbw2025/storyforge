@@ -44,6 +44,8 @@ export function projectSelectedNovelV1(input: {
   chapters: readonly Chapter[]
   ownedOutlineNodeIds: ReadonlySet<number>
   selectedChapterIds: readonly number[]
+  includeDescription?: boolean
+  includeGenres?: boolean
   publicRightsConfirmed: boolean
 }): NovelPublicSnapshotV1 {
   const { work, chapters, ownedOutlineNodeIds, selectedChapterIds } = input
@@ -63,8 +65,8 @@ export function projectSelectedNovelV1(input: {
     schemaVersion: 1,
     kind: 'novel',
     title: work.title,
-    description: work.description,
-    genres: [...work.genres],
+    description: input.includeDescription ? work.description : '',
+    genres: input.includeGenres ? [...work.genres] : [],
     chapters: selectedChapterIds.map(id => {
       const chapter = available.get(id)
       if (!chapter) throw new Error('所选章节已不存在或不属于当前作品')

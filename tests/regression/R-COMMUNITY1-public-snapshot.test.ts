@@ -34,10 +34,21 @@ describe('community publication snapshot privacy boundary', () => {
     expect(snapshot.chapters).toEqual([
       { title: '第二章', content: '结局' }, { title: '第一章', content: '开端' },
     ])
+    expect(snapshot.description).toBe('')
+    expect(snapshot.genres).toEqual([])
     const json = JSON.stringify(snapshot)
-    for (const secret of ['私人笔记', '不要公开', 'private-work-code', 'private-style', 'private-cover']) {
+    for (const secret of ['海边的故事', '悬疑', '私人笔记', '不要公开', 'private-work-code', 'private-style', 'private-cover']) {
       expect(json).not.toContain(secret)
     }
+  })
+
+  it('includes work description and genres only after their separate explicit selections', () => {
+    const base = { work, chapters, ownedOutlineNodeIds: new Set([101, 102]),
+      selectedChapterIds: [11], publicRightsConfirmed: true }
+    expect(projectSelectedNovelV1({ ...base, includeDescription: true }).description).toBe('海边的故事')
+    expect(projectSelectedNovelV1({ ...base, includeDescription: true }).genres).toEqual([])
+    expect(projectSelectedNovelV1({ ...base, includeGenres: true }).description).toBe('')
+    expect(projectSelectedNovelV1({ ...base, includeGenres: true }).genres).toEqual(['悬疑'])
   })
 
   it('rejects missing consent, a foreign outline node and unselected/missing chapter', () => {

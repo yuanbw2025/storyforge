@@ -55,6 +55,7 @@ function Account({ session, onSession }: { session: Session | null; onSession: (
 function SnapshotPreview({ snapshot }: { snapshot: CommunityPublicSnapshotV1 }) {
   if (snapshot.kind === 'novel') return <div className="space-y-2">
     <h4 className="font-semibold">{snapshot.title}</h4><p className="text-xs">{snapshot.description}</p>
+    {snapshot.genres.length > 0 && <p className="text-xs">公开流派：{snapshot.genres.join('、')}</p>}
     <p className="text-xs">共 {snapshot.chapters.length} 章；展开可逐字检查实际公开正文。</p>
     {snapshot.chapters.map((chapter, index) => <details key={index} className="border border-border rounded p-2">
       <summary>{index + 1}. {chapter.title}</summary><pre className="whitespace-pre-wrap break-words text-xs mt-3">{chapter.content}</pre>
@@ -62,7 +63,7 @@ function SnapshotPreview({ snapshot }: { snapshot: CommunityPublicSnapshotV1 }) 
   </div>
   return <div className="space-y-2">
     <h4 className="font-semibold">《{snapshot.book.title}》拆书分析</h4>
-    <p className="text-xs">作者：{snapshot.book.author || '未填写'} · 分析 v{snapshot.analysis.version} · {snapshot.analysis.depth === 'deep' ? '深层' : '浅层'}</p>
+    <p className="text-xs">作者：{snapshot.book.author || '未填写'} · 流派：{snapshot.book.genre || '未填写'} · 分析 v{snapshot.analysis.version} · {snapshot.analysis.depth === 'deep' ? '深层' : '浅层'}</p>
     {snapshot.dimensions.map((dimension, index) => <details key={dimension.key} className="border border-border rounded p-2">
       <summary>{index + 1}. {dimension.key} · {dimension.selected ? `${dimension.entries.length} 条` : '未选'}</summary>
       {dimension.entries.map((entry, position) => <div key={position} className="mt-2"><h5>{entry.label}</h5>

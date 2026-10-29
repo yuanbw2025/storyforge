@@ -10,6 +10,8 @@ import type { FictionDimension } from '../types/import-session-data'
 export async function loadSelectedNovelPreview(input: {
   scope: WorkspaceScope
   selectedChapterIds: readonly number[]
+  includeDescription?: boolean
+  includeGenres?: boolean
   publicRightsConfirmed: boolean
 }) {
   const scope = await resolveReadScopeLike(input.scope)
@@ -26,6 +28,8 @@ export async function loadSelectedNovelPreview(input: {
     chapters,
     ownedOutlineNodeIds: new Set(nodes.flatMap(node => node.id == null ? [] : [node.id])),
     selectedChapterIds: input.selectedChapterIds,
+    includeDescription: input.includeDescription,
+    includeGenres: input.includeGenres,
     publicRightsConfirmed: input.publicRightsConfirmed,
   })
 }
