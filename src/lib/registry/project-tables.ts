@@ -1231,6 +1231,10 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       contractField: 'contractJson',
       contractHashField: 'contractHash',
       dependencies: ['worldGroups', 'chapters', 'outlineNodes', 'productRuntimeSessions', 'productBuilds'],
+      retainedScopeTargets: [
+        { table: 'chapters', scopeField: 'chapterIds' },
+        { table: 'outlineNodes', scopeField: 'outlineNodeIds' },
+      ],
     },
     defaults: {
       status: 'planned',
