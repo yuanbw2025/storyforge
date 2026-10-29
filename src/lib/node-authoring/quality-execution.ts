@@ -9,6 +9,7 @@ import type { DomainExecutionInput, DomainExecutionResult } from './domain-execu
 import { readAuthoringCanonBinding } from './bindings'
 import { describeResolvedAIRequestSettingsV1, resolveRequestConfig } from '../ai/client'
 import { boundedQualityResolutionV1 } from '../prose/quality-request-budget'
+import { wholeChapterQualityRequestOptionsV1 } from '../prose/quality-review-request-options'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { freezeQualityRevisionPlanV1 } from '../prose/quality-revision'
 import { verifyContextGatewayCandidateEvidenceV1 } from '../context-gateway/attempt-evidence'
@@ -58,7 +59,8 @@ export async function executeQualityAuthoringNodeV1(input: DomainExecutionInput)
   const generationOverrides = qualityAuthoringGenerationOverridesV1(input.node, input.inputs)
   const authorRequest = qualityAuthoringRequestV1(input.node, input.inputs)
   const categories = { quality: 'review.quality', style: 'review.anti-ai', readability: 'review.readability' } as const
-  const settings = describeResolvedAIRequestSettingsV1(boundedQualityResolutionV1(resolveRequestConfig(input.aiConfig, { category: categories[mode], projectId: input.projectId, configOverrides: generationOverrides })), false, { responseFormat: 'json_object' })
+  const resolution = boundedQualityResolutionV1(resolveRequestConfig(input.aiConfig, { category: categories[mode], projectId: input.projectId, configOverrides: generationOverrides }))
+  const settings = describeResolvedAIRequestSettingsV1(resolution, false, wholeChapterQualityRequestOptionsV1(resolution.config))
   const identity = (value: typeof settings) => ({ provider: value.provider, model: value.model, parameters: value.parameters })
   const reusable = cached?.current && (cached.authorRequest ?? '') === authorRequest.trim() && await hashCanonicalValue(identity(cached.report.reviewer.settings)) === await hashCanonicalValue(identity(settings))
   const result = reusable ? cached : await runWholeChapterQualityReviewV1({ scope, chapterId: chapter.id!, outlineNodeId: chapter.outlineNodeId, worldGroupId: input.worldGroupId, mode, configOverride: input.aiConfig, generationOverrides, authorRequest, signal: input.signal, call: createWholeChapterQualityCallV1(input.projectId, mode, input.signal) })

@@ -83,30 +83,46 @@ export function useOutlineBatchGeneration({
   const [result, setResult] = useState<Map<number, ParsedChapter[]> | null>(null)
   const [candidates, setCandidates] = useState<Map<number, OutlineGenerationCandidateV1>>(new Map())
   const abortRef = useRef<AbortController | null>(null)
-  const restoredProjectRef = useRef<number | null>(null)
+  const ownerKey = project.id != null && work?.id != null ? `${project.id}:${work.worldId}:${work.id}` : ''
+  const currentOwnerRef = useRef(ownerKey)
+  currentOwnerRef.current = ownerKey
+  const resultOwnerRef = useRef<string | null>(null)
+  const restoreCallbacksRef = useRef({ onInfo, onError })
+  restoreCallbacksRef.current = { onInfo, onError }
+  const restorationRef = useRef<{ key: string; applied: boolean; promise: ReturnType<typeof restoreLatestOutlineGenerationBatchV1> } | null>(null)
 
   useEffect(() => {
-    if (project.id == null || restoredProjectRef.current === project.id) return
-    restoredProjectRef.current = project.id
+    if (!ownerKey || project.id == null || work?.id == null) return
+    let restoration = restorationRef.current
+    if (!restoration || restoration.key !== ownerKey) {
+      const scope = { projectId: project.id, worldId: work.worldId, workId: work.id }
+      restoration = { key: ownerKey, applied: false, promise: restoreLatestOutlineGenerationBatchV1(scope) }
+      restorationRef.current = restoration
+      resultOwnerRef.current = null
+      setResult(null); setCandidates(new Map()); setProgress(null); setRunning(false)
+    }
+    if (restoration.applied) return
+    const request = restoration
     let cancelled = false
-    void restoreLatestOutlineGenerationBatchV1(project.id)
-      .then(restored => {
-        if (cancelled) return
-        const projected = projectRestoredBatch(restored)
-        if (!projected) return
-        setResult(projected.chapters)
-        setCandidates(projected.candidates)
-        onInfo(`已恢复刷新前尚未确认的批量章纲候选，共 ${projected.candidates.size} 卷。`)
-      })
-      .catch(error => {
-        console.warn('[Outline Batch Harness] 批量候选恢复失败，已保持当前界面状态。', error)
-      })
+    void request.promise.then(restored => {
+      if (cancelled || request.applied || currentOwnerRef.current !== ownerKey) return
+      request.applied = true
+      const projected = projectRestoredBatch(restored)
+      if (!projected) return
+      resultOwnerRef.current = ownerKey
+      setResult(projected.chapters); setCandidates(projected.candidates)
+      restoreCallbacksRef.current.onInfo(`已恢复刷新前尚未确认的批量章纲候选，共 ${projected.candidates.size} 卷。`)
+    }).catch(error => {
+      if (cancelled || currentOwnerRef.current !== ownerKey) return
+      restoreCallbacksRef.current.onError(`批量章纲候选恢复失败：${error instanceof Error ? error.message : String(error)}。请保留作品并重新读取。`)
+    })
     return () => { cancelled = true }
-  }, [onInfo, project.id])
+  }, [ownerKey, project.id, work?.id, work?.worldId])
 
   const generate = useCallback(async () => {
     if (project.id == null || !work || volumes.length === 0) return
-    if (candidates.size > 0) {
+    if (restorationRef.current) restorationRef.current.applied = true
+    if (candidates.size > 0 && resultOwnerRef.current === ownerKey) {
       await rejectCandidates(candidates.values(), '作者启动了新的批量章纲任务，旧批量候选已失效。')
     }
     setRunning(true)
@@ -147,6 +163,8 @@ export function useOutlineBatchGeneration({
         onError(`批量生成章节失败：${first}。`)
         return
       }
+      if (currentOwnerRef.current !== ownerKey) return
+      resultOwnerRef.current = ownerKey
       setResult(generationResult.chaptersByVolume)
       setCandidates(generationResult.candidatesByVolume)
       if (generationResult.failures.length > 0) {
@@ -157,7 +175,7 @@ export function useOutlineBatchGeneration({
       onError(`批量生成章节失败：${error instanceof Error ? error.message : '未知错误'}。`)
     } finally {
       if (abortRef.current === controller) abortRef.current = null
-      setRunning(false)
+      if (currentOwnerRef.current === ownerKey) setRunning(false)
     }
   }, [
     assembleContext,
@@ -167,6 +185,7 @@ export function useOutlineBatchGeneration({
     nodes,
     onError,
     onInfo,
+    ownerKey,
     project,
     runOptions,
     volumes,
@@ -178,7 +197,7 @@ export function useOutlineBatchGeneration({
   }, [])
 
   const confirm = useCallback(async () => {
-    if (project.id == null || !result || candidates.size === 0) return
+    if (project.id == null || !result || candidates.size === 0 || resultOwnerRef.current !== ownerKey || currentOwnerRef.current !== ownerKey) return
     const errors: string[] = []
     const ordered = [...candidates.entries()].sort((left, right) => (
       (left[1].batch?.batchIndex ?? 0) - (right[1].batch?.batchIndex ?? 0)
@@ -213,7 +232,7 @@ export function useOutlineBatchGeneration({
     setCandidates(new Map())
     setProgress(null)
     if (errors.length > 0) onError(`批量写入有 ${errors.length} 卷失败：${errors.join('；')}`)
-  }, [candidates, nodes, onError, project.id, reloadOutline, result])
+  }, [candidates, nodes, onError, ownerKey, project.id, reloadOutline, result])
 
   const dismiss = useCallback(async () => {
     await rejectCandidates(candidates.values(), '作者关闭了批量章纲候选，没有写入项目。')
@@ -222,5 +241,5 @@ export function useOutlineBatchGeneration({
     setProgress(null)
   }, [candidates])
 
-  return { progress, running, result, generate, cancel, confirm, dismiss }
+  return { progress, running, result: resultOwnerRef.current === ownerKey ? result : null, generate, cancel, confirm, dismiss }
 }

@@ -24,6 +24,11 @@ export async function readLongformCompletionV1(scope: WorkspaceScope) {
   const missing = canonical.chapters.filter(row => !htmlToPlainText(chapterByOutline.get(row.outlineNode.id!)?.content ?? '').trim()).map(row => row.outlineNode.title)
   let unfinishedRuns = 0
   for (const run of runs) {
+    if (run.status === 'cancelled' && run.id != null) {
+      try { await readAgentRunV1(scope, run.id) }
+      catch { unfinishedRuns++ }
+      continue
+    }
     if (!['running', 'awaiting_confirmation', 'paused', 'recovery_required'].includes(run.status)) continue
     if (['paused', 'running'].includes(run.status) && run.id != null) {
       try {

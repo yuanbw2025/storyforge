@@ -7,6 +7,7 @@ import OutlinePreviewPanel from './OutlinePreviewPanel'
 interface Props {
   output: string
   isStreaming: boolean
+  isFinalizing?: boolean
   error: string | null
   tokenUsage?: TokenUsage | null
   moduleKey: 'outline.volume' | 'outline.chapter'
@@ -29,6 +30,7 @@ interface Props {
 export default function OutlineGenerationResultPanel({
   output,
   isStreaming,
+  isFinalizing,
   error,
   tokenUsage,
   moduleKey,
@@ -53,10 +55,11 @@ export default function OutlineGenerationResultPanel({
         <AIStreamOutput
           output={output}
           isStreaming={isStreaming}
+          isFinalizing={isFinalizing}
           error={error}
           tokenUsage={tokenUsage}
           onStop={onStop}
-          onAccept={onAccept}
+          onAccept={canAdopt ? onAccept : undefined}
           acceptMode="preview"
           onRetry={onRetry}
           onDismiss={onDismiss}

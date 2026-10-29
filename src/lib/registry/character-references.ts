@@ -2,10 +2,11 @@ import { db } from '../db/schema'
 import { remapTemporalFactCharacterRefs } from '../fact-ledger/lifecycle'
 import { remapKnowledgeCharacterRefs } from '../knowledge-ledger/lifecycle'
 import { remapCultivationProgressCharacterRefs } from '../cultivation/progress-lifecycle'
-import { parseFields, stringifyFields } from '../types/state-card'
+import { readStateCardFields, stringifyFields } from '../types/state-card'
 import { PROJECT_TABLES } from './project-tables'
 import type { ArrayRef, JsonRef } from './types'
 import { remapNarrativeDomainReferencesV1 } from '../narrative-domain/lifecycle'
+import type { Character, StateCard } from '../types'
 
 interface CharacterReferenceRemapInput {
   projectId: number
@@ -17,6 +18,14 @@ interface CharacterReferenceRemapInput {
 
 /** Remove or remap every registered reference to a character. Must run inside a rw transaction. */
 export async function applyCharacterReferenceRemap(input: CharacterReferenceRemapInput): Promise<void> {
+  const source = await db.characters.get(input.fromCharacterId)
+  const sourceWorldId = (source as (Character & { worldId?: number }) | undefined)?.worldId
+  if (!source || source.projectId !== input.projectId || typeof sourceWorldId !== 'number') throw new Error('角色引用重映射缺少原 World 归属；原数据保持不变。')
+  if (typeof source.name === 'string' && source.name !== input.fromName) throw new Error('角色名称已变化，请重新审阅合并。')
+  if (input.toCharacterId != null) {
+    const target = await db.characters.get(input.toCharacterId)
+    if (!target || target.projectId !== source.projectId || (target as Character & { worldId?: number }).worldId !== sourceWorldId || target.id === source.id) throw new Error('角色合并不能跨 World/Work，目标须属于原 World 且不能是原角色。')
+  }
   const toCharacterId = input.toCharacterId
   const toName = input.toName
   await remapNarrativeDomainReferencesV1({ table: 'characters', fromId: input.fromCharacterId, toId: toCharacterId })
@@ -38,7 +47,7 @@ export async function applyCharacterReferenceRemap(input: CharacterReferenceRema
     toCharacterId,
     toName,
   )
-  await remapCharacterStateCards(input.projectId, input.fromName, toName)
+  await remapCharacterStateCards(source, sourceWorldId, input.fromName, toName)
   await remapTemporalFactCharacterRefs({
     projectId: input.projectId,
     fromCharacterId: input.fromCharacterId,
@@ -258,38 +267,57 @@ function remapSceneCharacterIds(
 }
 
 async function remapCharacterStateCards(
-  projectId: number,
+  source: Character,
+  worldId: number,
   fromName: string,
   toName?: string,
 ): Promise<void> {
-  const rows = await db.stateCards.where('projectId').equals(projectId).toArray()
-  const fromCards = rows.filter(c => c.category === 'character' && c.entityName === fromName)
+  // State cards carry a Work owner and a name snapshot, not a character ID.
+  // Equal names retain their existing snapshot; ambiguous survivors must not
+  // lose it. A World-owned character can serve several independent Works.
+  if (toName === fromName) return
+  const workIds = new Set((await db.works.where('worldId').equals(worldId).toArray()).filter(work => work.projectId === source.projectId).map(work => work.id))
+  type ScopedCard = StateCard & { workId?: number; worldGroupId?: number | null }
+  const rows = (await db.stateCards.where('projectId').equals(source.projectId).toArray() as ScopedCard[]).filter(card => card.workId != null && workIds.has(card.workId))
+  const sameNames = (await db.characters.where('projectId').equals(source.projectId).toArray()).filter(character => (character as Character & { worldId?: number }).worldId === worldId && character.id !== source.id && character.name === fromName)
+  const fromCards = rows.filter(c => c.category === 'character' && c.entityName === fromName
+    && (source.isCrossWorld || (c.worldGroupId ?? null) === (source.homeWorldGroupId ?? null))
+    && !sameNames.some(character => character.isCrossWorld || (character.homeWorldGroupId ?? null) === (c.worldGroupId ?? null)))
   if (!fromCards.length) return
 
-  if (!toName || toName === fromName) {
+  if (!toName) {
     const ids = fromCards.map(c => c.id).filter((id): id is number => id != null)
     if (ids.length) await db.stateCards.bulkDelete(ids)
     return
   }
 
-  const primary = rows.find(c => c.category === 'character' && c.entityName === toName)
-  if (!primary?.id) {
-    const [first, ...rest] = fromCards
-    if (first.id) await db.stateCards.update(first.id, { entityName: toName, updatedAt: Date.now() })
-    const restIds = rest.map(c => c.id).filter((id): id is number => id != null)
-    if (restIds.length) await db.stateCards.bulkDelete(restIds)
-    return
-  }
-
-  const mergedFields = parseFields(primary.fields)
+  // A rename/merge must not discard unreadable fields while removing duplicate cards.
+  fromCards.forEach(readStateCardFields)
+  const groups = new Map<string, ScopedCard[]>()
   for (const card of fromCards) {
-    for (const field of parseFields(card.fields)) {
-      const existing = mergedFields.find(f => f.key === field.key)
-      if (!existing) mergedFields.push(field)
-      else if (!existing.value && field.value) existing.value = field.value
-    }
+    const key = `${card.workId}:${card.worldGroupId ?? 'default'}`
+    groups.set(key, [...(groups.get(key) ?? []), card])
   }
-  await db.stateCards.update(primary.id, { fields: stringifyFields(mergedFields), updatedAt: Date.now() })
-  const fromIds = fromCards.map(c => c.id).filter((id): id is number => id != null)
-  if (fromIds.length) await db.stateCards.bulkDelete(fromIds)
+  for (const cards of groups.values()) {
+    const primary = rows.find(c => c.category === 'character' && c.entityName === toName && c.workId === cards[0].workId && (c.worldGroupId ?? null) === (cards[0].worldGroupId ?? null))
+    if (!primary?.id) {
+      const [first, ...rest] = cards
+      if (first.id) await db.stateCards.update(first.id, { entityName: toName, updatedAt: Date.now() })
+      const restIds = rest.map(c => c.id).filter((id): id is number => id != null)
+      if (restIds.length) await db.stateCards.bulkDelete(restIds)
+      continue
+    }
+
+    const mergedFields = readStateCardFields(primary)
+    for (const card of cards) {
+      for (const field of readStateCardFields(card)) {
+        const existing = mergedFields.find(f => f.key === field.key)
+        if (!existing) mergedFields.push(field)
+        else if (!existing.value && field.value) existing.value = field.value
+      }
+    }
+    await db.stateCards.update(primary.id, { fields: stringifyFields(mergedFields), updatedAt: Date.now() })
+    const fromIds = cards.map(c => c.id).filter((id): id is number => id != null)
+    if (fromIds.length) await db.stateCards.bulkDelete(fromIds)
+  }
 }

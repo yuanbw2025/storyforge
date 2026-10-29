@@ -11,7 +11,7 @@ import type {
 } from '../types/memory-engineering'
 import type { TemporalFact } from '../types/temporal-fact'
 import { aggregateInventory, type ItemLedgerEntry } from '../types/item-ledger'
-import { parseFields, type StateCard } from '../types/state-card'
+import { readStateCardFields, type StateCard } from '../types/state-card'
 import type { KnowledgeLedgerEntry } from '../types/knowledge-ledger'
 import type { RetrievalChunk } from '../types/retrieval-chunk'
 import type { StoryTimelineEvent } from '../types/story-timeline'
@@ -187,7 +187,7 @@ export async function buildLongTermConsistencyDossierV1(input: {
     .filter(row => row.status === 'confirmed')
     .map(row => `${row.characterName}｜${row.action}｜${row.knowledgeKey}：${row.belief || row.statement}`)
   const currentStates = relevantStates.map(row => (
-    `${row.category}/${row.entityName}｜${parseFields(row.fields).map(field => `${field.key}=${field.value}`).join('；')}`
+    `${row.category}/${row.entityName}｜${readStateCardFields(row).map(field => `${field.key}=${field.value}`).join('；')}`
   ))
   const inventory = aggregateInventory(relevantItems)
     .filter(row => row.quantity !== 0)

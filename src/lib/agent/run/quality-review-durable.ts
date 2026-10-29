@@ -10,6 +10,7 @@ import { prepareProseGatewayAssemblyV1 } from '../../prose/gateway-context'
 import { buildWholeChapterQualityReviewRequestV1, parseWholeChapterQualityReviewV1, verifyWholeChapterQualityReviewV1, QUALITY_REVIEW_PROMPT_VERSION_V1, type QualityReviewArtifactV1, type QualityReviewModeV1 } from '../../prose/quality-review'
 import { proseRenderedRequestV1 } from '../../prose/request-evidence'
 import { boundedQualityResolutionV1 } from '../../prose/quality-request-budget'
+import { wholeChapterQualityRequestOptionsV1 } from '../../prose/quality-review-request-options'
 import { getAgentSkillV1, resolveAgentSkillContextSourceKeysV1 } from '../skill-registry'
 import { createAgentSkillExecutionBindingV2 } from '../execution-binding'
 import { freezeFormalAIEntryBindingV1 } from '../formal-ai-entry'
@@ -52,7 +53,7 @@ export async function runWholeChapterQualityReviewV1(input: {
   const revision = await captureWorkspaceContentRevisionV1({ scope: input.scope, worldGroupId: input.worldGroupId })
   const config = input.configOverride ?? useAIConfigStore.getState().config
   const resolution = boundedQualityResolutionV1(resolveRequestConfig(config, { category: categories[input.mode], projectId: input.scope.projectId, configOverrides: input.generationOverrides }))
-  const settings = describeResolvedAIRequestSettingsV1(resolution, false, { responseFormat: 'json_object' })
+  const settings = describeResolvedAIRequestSettingsV1(resolution, false, wholeChapterQualityRequestOptionsV1(resolution.config))
   const assembled = await prepareProseGatewayAssemblyV1({ projectId: input.scope.projectId, scope: input.scope, worldGroupId: input.worldGroupId, chapterId: input.chapterId, outlineNodeId: input.outlineNodeId, operation: 'review', qualityReview: true, authorRequest: input.authorRequest?.trim() || '评审当前完整章节，保留作者场景任务和停笔要求。', config: resolution.config, allowOutlineOnlyAgentDraft: true })
   const request = await buildWholeChapterQualityReviewRequestV1({ mode: input.mode, chapterTitle: chapter.title, chapterText, registeredContext: assembled.text, authorRequest: input.authorRequest })
   await assertWorkspaceContentRevisionFreshV1(revision, { scope: input.scope, worldGroupId: input.worldGroupId })

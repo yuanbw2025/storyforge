@@ -1,81 +1,25 @@
+import AcknowledgedTextField from '../shared/AcknowledgedTextField'
 import type { Character } from '../../lib/types'
 import { dimensionsByGroup, type CharacterDimensionKey, type CharacterDimensionSpec } from '../../lib/character/character-dimensions'
-import { CTextarea } from '../shared/CompositionInput'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 
 interface Props {
   character: Character
-  onChange: (patch: Partial<Character>) => void | Promise<void>
+  onChange: (patch: Partial<Character>, expected?: Partial<Character>) => void | Promise<void>
   /** 行内已显示、此处不重复的维度（如 NPC 行已有 简介/地点） */
   exclude?: CharacterDimensionKey[]
 }
 
 interface DimensionFieldProps {
-  dimension: CharacterDimensionSpec
-  value: string
-  onCommit: (value: string) => void | Promise<void>
+  dimension: Pick<CharacterDimensionSpec, 'label' | 'rows'>
+  value: unknown
+  onCommit: (value: string, expected: unknown) => void | Promise<void>
+  input?: boolean
+  placeholder?: string
+  className?: string
 }
 
-function CharacterDimensionField({ dimension, value, onCommit }: DimensionFieldProps) {
-  const [draft, setDraft] = useState(value)
-  const draftRef = useRef(value)
-  const dirtyRef = useRef(false)
-  const lastSentRef = useRef(value)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const onCommitRef = useRef(onCommit)
-
-  useEffect(() => {
-    onCommitRef.current = onCommit
-  }, [onCommit])
-
-  const flushDraft = useCallback((): void | Promise<void> => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    const next = draftRef.current
-    if (!dirtyRef.current || next === lastSentRef.current) return
-    lastSentRef.current = next
-    return onCommitRef.current(next)
-  }, [])
-
-  useEffect(() => registerPendingDraftFlusherV1(flushDraft), [flushDraft])
-
-  useEffect(() => {
-    const external = String(value ?? '')
-    if (dirtyRef.current && external !== draftRef.current) return
-    dirtyRef.current = false
-    lastSentRef.current = external
-    draftRef.current = external
-    setDraft(external)
-  }, [value])
-
-  useEffect(() => () => {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    const next = draftRef.current
-    if (dirtyRef.current && next !== lastSentRef.current) {
-      onCommitRef.current(next)
-    }
-  }, [])
-
-  return (
-    <CTextarea
-      value={draft}
-      onChange={e => {
-        const next = e.target.value
-        draftRef.current = next
-        dirtyRef.current = true
-        setDraft(next)
-        if (timerRef.current) clearTimeout(timerRef.current)
-        timerRef.current = setTimeout(flushDraft, 400)
-      }}
-      onBlur={flushDraft}
-      placeholder={`${dimension.label}…`}
-      rows={dimension.rows}
-      className="flex-1 px-2 py-1 bg-bg-base border border-border rounded text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-    />
-  )
+export function CharacterDraftField({ dimension, ...props }: DimensionFieldProps) {
+  return <AcknowledgedTextField {...props} label={dimension.label} rows={dimension.rows} />
 }
 
 /**
@@ -98,11 +42,11 @@ export default function CharacterDimensionFields({ character, onChange, exclude 
               {shown.map(d => (
                 <div key={d.key} className="flex gap-2">
                   <span className="w-20 flex-shrink-0 pt-1.5 text-xs text-text-muted">{d.label}</span>
-                  <CharacterDimensionField
+                  <CharacterDraftField
                     key={`${character.id ?? 'draft'}:${d.key}`}
                     dimension={d}
-                    value={String(character[d.key] ?? '')}
-                    onCommit={value => onChange({ [d.key]: value } as Partial<Character>)}
+                    value={character[d.key]}
+                    onCommit={(value, expected) => onChange({ [d.key]: value } as Partial<Character>, { [d.key]: expected } as Partial<Character>)}
                   />
                 </div>
               ))}

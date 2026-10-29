@@ -451,6 +451,8 @@ export interface FieldSpec {
   /** 仅用于界面和上下文展示的自然语言标签；不得作为写入字段名。 */
   labels?: string[]
   sanitize?: (val: unknown) => unknown
+  /** Structural validation runs before nullable handling and never rewrites author data. */
+  validate?: (val: unknown) => void
   /** 保存的意图配置可停用；仅影响语义上下文投影，不删除作者原数据。 */
   contextEnabled?: (val: unknown) => boolean
   label?: string

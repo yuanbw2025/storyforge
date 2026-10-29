@@ -2,6 +2,7 @@ import { IS_SHOWCASE } from './lib/showcase/policy'
 import { installRuntimeDiagnostics, recordRuntimeDiagnosticError } from './lib/diagnostics/runtime-errors'
 import { failureFeedbackLink } from './lib/diagnostics/failure-summary'
 import { buildFailureSummary } from './lib/diagnostics/build-failure-summary'
+import { acknowledgeBootstrapModuleLoadV1, reserveBootstrapModuleReloadV1 } from './lib/module-load-recovery'
 
 // Keep app/store imports behind the isolation boundary; static imports run too early.
 async function start() {
@@ -12,13 +13,25 @@ async function start() {
   }
   await import('./main')
 }
-void start().catch((error: unknown) => {
+void start().then(() => {
+  if (!IS_SHOWCASE) acknowledgeBootstrapModuleLoadV1(() => window.sessionStorage)
+}).catch((error: unknown) => {
   if (!IS_SHOWCASE) recordRuntimeDiagnosticError(error, 'bootstrap')
   const root = document.getElementById('root')
+  if (!IS_SHOWCASE && reserveBootstrapModuleReloadV1(error, () => window.sessionStorage)) {
+    if (root) root.textContent = '应用资源加载中断，正在重新加载一次。作品数据已保留。'
+    window.setTimeout(() => window.location.reload(), 300)
+    return
+  }
   if (root) root.textContent = IS_SHOWCASE
     ? '无法打开体验空间。请允许本站使用浏览器存储后刷新，或返回官网获取本地版。'
     : 'StoryForge 加载失败，请刷新页面。作品数据没有被清理。'
   if (root && !IS_SHOWCASE) {
+    const retry = document.createElement('button')
+    retry.type = 'button'
+    retry.textContent = '重新加载应用'
+    retry.onclick = () => window.location.reload()
+    root.append(retry)
     const button = document.createElement('button')
     button.type = 'button'
     button.textContent = '查看故障摘要并反馈'

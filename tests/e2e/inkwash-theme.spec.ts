@@ -45,7 +45,7 @@ test('switching skins preserves saved prose and portal dialogs use the selected 
   await expect(editor).toContainText(prose)
   await page.goto('./long')
   await page.getByRole('button', { name: '重命名', exact: true }).click()
-  await expect(page.getByRole('dialog')).toHaveCSS('background-color', 'rgb(250, 247, 237)')
+  await expect(page.getByRole('dialog')).toHaveCSS('background-color', 'rgba(250, 247, 237, 0.96)')
   await page.getByRole('dialog').getByRole('textbox').fill('远山来信')
   await page.getByRole('button', { name: '保存名称', exact: true }).click()
   await expect(page.getByRole('heading', { name: '远山来信', exact: true })).toBeVisible()

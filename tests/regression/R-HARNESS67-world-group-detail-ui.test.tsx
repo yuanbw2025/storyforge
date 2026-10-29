@@ -171,6 +171,17 @@ describe('R-HARNESS67 · 世界组六字段扩写 UI', () => {
     expect(host.textContent).not.toContain('六字段世界观候选尚未写入')
   })
 
+  it('shows every full candidate field for review before author adoption', async () => {
+    mocks.readPending.mockResolvedValue({ candidate, snapshot: { run: { id: 68 } } })
+    const host = await renderDetail()
+    await vi.waitFor(() => expect(host.textContent).toContain('查看全部 6 项候选'))
+    const details = Array.from(host.querySelectorAll('details')).find(item => item.textContent?.includes('查看全部 6 项候选'))!
+    expect(details.querySelectorAll('dt')).toHaveLength(6)
+    for (const value of Object.values(candidate.values)) expect(details.textContent).toContain(value)
+    expect(mocks.adopt).not.toHaveBeenCalled()
+    expect(mocks.generate).not.toHaveBeenCalled()
+  })
+
   it('未知模型结果窗口只允许放弃，不自动重试', async () => {
     mocks.readRecoverable.mockResolvedValue({
       safeToResume: false,

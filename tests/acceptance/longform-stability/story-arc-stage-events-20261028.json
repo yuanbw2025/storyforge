@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "kind": "stage-scoped-story-arc-event-append-and-permutation-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "927058fe0961c26820486e1d1a2b042a28e6d65b",
+    "files": {
+      "src/lib/agent/story-arc-stage-events.ts": "0a9c590d423a408d00cb1435c872d7339a4187cba42a29fb05fc2bace64d2ffc",
+      "src/lib/agent/story-arc-copilot.ts": "1557edc5f2644c75d27a91655c3a8a13aa01bfdac9247f1c90591b2a3b0ed4d9",
+      "src/lib/agent/run/master-adoption.ts": "fd5bb4983f27f6cd99d5e0e3b3db8ab7176a9ae9ca817c0a6cd15d3ee3c4642b",
+      "src/components/outline/StoryArcPanel.tsx": "267f6efd013078d20ed3219e2ec44c98dd26721945d2633cba357c4d380e7d1e",
+      "tests/regression/R-STAB-story-arc-stage-events.test.ts": "f69f670dc82e7fc9aed7d3faa73723d9654b529c594033795db1a7b409579e21",
+      "tests/e2e/longform-story-arc-save.spec.ts": "d4bfba3a55cbbae0814f4196dd87aa24e19da7fb6094f5fee3ae998e97dbde66"
+    }
+  },
+  "status": "COMPACT_SCOPED_EVENT_CONTRACT_AND_DURABLE_ADOPTION_VERIFIED_REAL_REPLAY_PENDING",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "originalRealFailure": {
+    "sourceCommit": "6e75670b6329cb0254e1d2b815bfb73d2ceacd61",
+    "directory": "live-story-arc-events-2026-10-27T20-31-42-438Z",
+    "modelRequests": 2,
+    "knownTotalTokens": 13407,
+    "unknownUsageRequests": 0,
+    "result": "Candidate needs manual repair and is not adopted; canonical arcs unchanged",
+    "cause": "UI required preserving existing events plus 3-5 new entries, contradicting the full-arc parser maximum of 5. Actual selected stage had 6 after model response.",
+    "otherGap": "Event buttons expressed selected-stage append/sort restrictions only as text inside broad whole-arc expand/replan."
+  },
+  "implementation": [
+    "Freeze an optional version-1 stageEvents sub-contract inside existing mutation/Run binding; reuse story-arcs Skill, Context Gateway, CreativeArtifact, adoption and receipt",
+    "Model/editable draft returns only keyEvents; materialize readonly arc/stage fields from frozen source, never infer those fields from model output",
+    "Append keeps exact existing prefix and permits 1-5 unique new entries of at most 400 characters; existing author entries do not count against that new-entry limit",
+    "Sort must preserve exact text and multiplicity, including repeated/empty existing entries; only order changes",
+    "Gate, author revision, restored adoption, runtime node adoption and durable post-state check share the same scoped contract; post-state checks the exact original arc id",
+    "Formal write updates only selected stage events through registered adoption receipts; whole-arc status/origin/intent alignment is preserved. Preserves manual one-stage shapes, unknown author extension fields, optional raw values, other stages and progress references",
+    "Invalid/stale/foreign source is rejected without hidden replay. Existing bounded one-repair policy retains original and repaired raw evidence. No schema/table/new AI entry."
+  ],
+  "regression": {
+    "passed": 109,
+    "files": 9,
+    "log": "story-arc-stage-events-related-final.log",
+    "checks": [
+      "One stage with five existing events can append; other empty/manual stages remain unchanged",
+      "Full runtime output cannot modify other arc/stage fields",
+      "Compact draft, author validation, stale/deleted/foreign source rejection",
+      "Actual durable service execution, restore/adopt and exact post-state receipt with one simulated request",
+      "Preserve missing description, opaque stage-id bytes, empty optionals and unknown author keys",
+      "Exact permutation with repeated/empty original entries; malformed version/operation/identity rejected"
+    ]
+  },
+  "nativeBrowser": {
+    "passed": 8,
+    "log": "story-arc-stage-events-native-final.log",
+    "transport": "simulated, isolated Chromium native IndexedDB",
+    "checks": [
+      "Prior six manual/atomic recovery flows retained",
+      "Actual event buttons, five-entry append, invalid author prefix rejection, edited candidate durable save/reload/adoption",
+      "Actual sort button and correct frozen before/after candidate display, reload/adopt",
+      "Malformed sort stops after two bounded simulated responses; author correction adopts after reload with zero further request"
+    ]
+  },
+  "baselineContractSuite": {
+    "log": "story-arc-stage-events-before.log",
+    "failed": 10,
+    "scope": "New versioned scope request was previously unsupported; these are not counted as ten independent production defects"
+  },
+  "fixtureFailureRetained": {
+    "log": "story-arc-stage-events-first.log",
+    "cause": "Initial new creative-chain test omitted its mandatory team-budget dependency; corrected test has explicit tracker, not a product failure"
+  },
+  "generatorCheck": {
+    "initial": "AI manual generated line locations were stale; original failure retained",
+    "repair": "Official npm run gen:ai-manual and check:ai-manual",
+    "log": "story-arc-stage-events-ai-manual-final.log"
+  },
+  "remaining": [
+    "Exact committed-source real Agnes append and sort replay",
+    "All applicable fault/other feature cases, final full CI/E2E, obtainable native packages and release"
+  ],
+  "priorNativeBrowser": {
+    "passed": 8,
+    "log": "story-arc-stage-events-native-first.log"
+  },
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "build": "PASS",
+    "docs": "PASS",
+    "roadmap": "PASS"
+  },
+  "deliveryChecks": {
+    "fullCi": "Older exact 2bcc67bd coverage still running; not a final-source PASS",
+    "fullE2E": "Original full-run failures and focused replays retained; final full run pending"
+  }
+}

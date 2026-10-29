@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261028-release405-main3b-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261029-release405-mainc5-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -522,6 +522,34 @@
         "note": "Preserved pre-repair deterministic world receipt. Full delivery subsequently exposed chat media-plan integration failures; this is not a full delivery acceptance claim."
       },
       {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-longform-stability-v1.json",
+        "workPackage": "B-LF-STAB-ST01",
+        "note": "First reviewed state-field guard checkpoint preserved before the sparse structured-array write counterexample."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-longform-stability-v2.json",
+        "workPackage": "B-LF-STAB-ST01",
+        "note": "Retained prior verified state-card and touch-toolbar checkpoint before continuing full workflow validation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-workflow-continuation-v1.json",
+        "workPackage": "longform workflow continuation v1",
+        "implementationCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+        "note": "Preserved before explicit author-selected Work metadata scope support."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-workflow-continuation-v2.json",
+        "workPackage": "Preserved before workflow/TTRPG integration",
+        "implementationCommit": "cf37af74f",
+        "note": "Original receipt remains unchanged; a new combined-source receipt must verify semantic observations independently."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-workflow-continuation-v3.json"
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-pr172-post-ttrpg-v2.json"
+      },
+      {
         "path": "tests/acceptance/narrative-world/baseline-20261025-avg-source-integration-v1.json",
         "workPackage": "AVG-exact-source-integration",
         "implementationCommit": "55d77799",
@@ -549,22 +577,28 @@
         "note": "Preserved before nullable open-TTRPG Brief dispatch repair. Frozen corpus and observed results remain unchanged; only implementation and manifest input fingerprints change."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261027-pr172-post-ttrpg-v2.json",
-        "workPackage": "NW-PR172-mainline-integration",
-        "implementationCommit": "42e4fdf1d9036b858e8f4672017f1f315fb2f698",
-        "note": "Preserved before AVG integration on the current character-chat mainline."
-      },
-      {
         "path": "tests/acceptance/narrative-world/baseline-20261028-avg-ttrpg-brief-integration-v1.json",
         "workPackage": "AVG-TTRPG-brief-integration",
         "implementationCommit": "a23496b3e8e148fd465dbc8d284aa7382b28e67d",
         "note": "Preserved before integrating PR172 mainline."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261028-avg-pr172-main-integration-v1.json",
+        "path": "tests/acceptance/narrative-world/baseline-20261028-longform-stability-integration-v1.json"
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261028-avg-pr172-main-integration-v1.json"
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261028-longform-avg-integration-v1.json",
+        "workPackage": "main-c5-longform-avg-integration",
+        "implementationCommit": "c5b51da301abd3875b26732d9657ad485ad39105",
+        "note": "Preserved current main receipt before v4.0.5 release source integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261028-release405-main3b-v1.json",
         "workPackage": "release-4.0.5-main3b-integration",
-        "implementationCommit": "3b524e1178c902f46d246b172fbe2283eff61942",
-        "note": "Preserved byte-for-byte before the v4.0.5 release metadata input remeasurement. Original corpus, observations, gaps and unsupported outcomes remain the comparison baseline."
+        "implementationCommit": "372af8bdba34f2ea3b3e3cf2020d0815d0072ce4",
+        "note": "Preserved the reviewed release-head receipt before integrating current main."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -857,7 +891,8 @@
     "tests/regression/R-NW-2E-token-digest.test.ts",
     "tests/regression/R-NW-2E-byte-sink.test.ts",
     "tests/regression/R-NW-2E-numeric-runs.test.ts",
-    "tests/regression/R-NW-2E-utf8-token-bytes.test.ts"
+    "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
+    "src/lib/types/state-card.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

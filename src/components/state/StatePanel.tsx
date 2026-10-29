@@ -9,7 +9,7 @@ import {
   ArrowRight, BookOpenCheck, Download, Edit3, MapPin, Package, Save, Shield, Sparkles, UserRound, X,
 } from 'lucide-react'
 import type { Character, Project, StateCard, StateField } from '../../lib/types'
-import { parseFields, stringifyFields, STATE_CATEGORY_LABELS } from '../../lib/types/state-card'
+import { inspectStateFields, stringifyFields, STATE_CATEGORY_LABELS } from '../../lib/types/state-card'
 import { useStateCardStore } from '../../stores/state-card'
 import { useCharacterStore } from '../../stores/character'
 import { useChapterStore } from '../../stores/chapter'
@@ -24,6 +24,7 @@ import {
   useInitialRecordTarget,
 } from '../shared/initial-record-target'
 import { useActiveWork } from '../../hooks/useActiveWork'
+import StateCardRepair from './StateCardRepair'
 
 interface Props {
   project: Project
@@ -64,6 +65,10 @@ export default function StatePanel({ project, onOpenInventory, initialStateCardI
     () => cards.filter(card => card.category === 'character'),
     [cards],
   )
+  const damagedCards = useMemo(() => cards.flatMap(card => {
+    const result = inspectStateFields(card.fields)
+    return result.ok ? [] : [{ card, error: result.error }]
+  }), [cards])
   const targetCard = cards.find(card => card.id === initialStateCardId) ?? null
   const targetCharacterExists = targetCard != null
     && targetCard.category === 'character'
@@ -110,7 +115,8 @@ export default function StatePanel({ project, onOpenInventory, initialStateCardI
         </div>
         <button
           onClick={handleExportText}
-          disabled={!characterCards.length}
+          disabled={!characterCards.length || damagedCards.length > 0}
+          title={damagedCards.length ? '请先修复状态字段；原始字段可在修复卡片中单独导出。' : '导出状态文本'}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-border bg-bg-elevated text-text-secondary disabled:opacity-40"
         >
           <Download className="w-3.5 h-3.5" /> 导出
@@ -123,11 +129,14 @@ export default function StatePanel({ project, onOpenInventory, initialStateCardI
         <Summary label="待补状态" value={Math.max(0, characters.length - characterCards.length)} />
       </div>
 
-      {targetCard && !targetCharacterExists && (
+      {damagedCards.map(({ card, error }) => <StateCardRepair key={card.id} card={card} error={error}
+        onSave={(fields, expectedFields) => updateCard(card.id!, { fields }, { expectedFields, scope: projectId })} />)}
+
+      {targetCard && !targetCharacterExists && inspectStateFields(targetCard.fields).ok && (
         <StandaloneStateTargetCard
           card={targetCard}
           chapterTitle={targetCard.lastChapterId ? chapterById.get(targetCard.lastChapterId)?.title : undefined}
-          onSave={fields => updateCard(targetCard.id!, { fields: stringifyFields(fields) })}
+          onSave={fields => updateCard(targetCard.id!, { fields: stringifyFields(fields) }, { scope: projectId })}
         />
       )}
 
@@ -143,6 +152,7 @@ export default function StatePanel({ project, onOpenInventory, initialStateCardI
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           {characters.map(character => {
             const card = characterCards.find(item => item.entityName === character.name) || null
+            if (card && !inspectStateFields(card.fields).ok) return null
             return (
               <CharacterStateCard
                 key={character.id}
@@ -158,7 +168,7 @@ export default function StatePanel({ project, onOpenInventory, initialStateCardI
                 onToggleEdit={() => setEditingCharacter(editingCharacter === character.id ? null : character.id!)}
                 onSave={async fields => {
                   if (card?.id) {
-                    await updateCard(card.id, { fields: stringifyFields(fields) })
+                    await updateCard(card.id, { fields: stringifyFields(fields) }, { scope: projectId })
                   } else {
                     await addCard({
                       projectId,
@@ -196,12 +206,15 @@ function StandaloneStateTargetCard({
   chapterTitle?: string
   onSave: (fields: StateField[]) => Promise<void>
 }) {
-  const fields = useMemo(() => parseFields(card.fields || '[]'), [card.fields])
+  const result = useMemo(() => inspectStateFields(card.fields), [card.fields])
+  const fields = useMemo(() => result.ok ? result.fields : [], [result])
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<StateField[]>(fields)
+  const [saveError, setSaveError] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (editing) setDraft(fields.length ? fields : [{ key: '当前状态', value: '' }])
+    if (editing) { setDraft(fields.length ? fields : [{ key: '当前状态', value: '' }]); setSaveError('') }
   }, [editing, fields])
 
   return (
@@ -224,13 +237,14 @@ function StandaloneStateTargetCard({
           onClick={() => setEditing(value => !value)}
           className="p-1 text-text-muted hover:text-accent"
           title="编辑状态"
+          disabled={saving}
         >
           {editing ? <X className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
         </button>
       </div>
 
       {editing ? (
-        <div className="mt-4 space-y-2">
+        <fieldset disabled={saving} className="mt-4 space-y-2">
           {draft.map((field, index) => (
             <div key={index} className="flex gap-2">
               <CInput
@@ -254,6 +268,7 @@ function StandaloneStateTargetCard({
               </button>
             </div>
           ))}
+          {saveError && <p role="alert" className="text-xs text-error">{saveError}</p>}
           <div className="flex items-center justify-between">
             <button
               type="button"
@@ -265,14 +280,16 @@ function StandaloneStateTargetCard({
             <button
               type="button"
               onClick={() => {
+                setSaving(true)
                 void onSave(draft.filter(field => field.key.trim() && field.value.trim())).then(() => setEditing(false))
+                  .catch(error => setSaveError(error instanceof Error ? error.message : '未保存，输入已保留。')).finally(() => setSaving(false))
               }}
               className="inline-flex items-center gap-1 rounded bg-accent px-2.5 py-1.5 text-xs text-white"
             >
-              <Save className="h-3.5 w-3.5" /> 保存
+              <Save className="h-3.5 w-3.5" /> {saving ? '保存中…' : '保存'}
             </button>
           </div>
-        </div>
+        </fieldset>
       ) : fields.length ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {fields.map((field, index) => (
@@ -304,11 +321,15 @@ function CharacterStateCard({
   onToggleEdit: () => void
   onSave: (fields: StateField[]) => Promise<void>
 }) {
-  const fields = useMemo(() => parseFields(card?.fields || '[]'), [card?.fields])
+  const cardFields = card ? card.fields : '[]'
+  const result = useMemo(() => inspectStateFields(cardFields), [cardFields])
+  const fields = useMemo(() => result.ok ? result.fields : [], [result])
   const [draft, setDraft] = useState<StateField[]>(fields)
+  const [saveError, setSaveError] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (editing) setDraft(fields.length ? fields : [{ key: '当前状态', value: '' }])
+    if (editing) { setDraft(fields.length ? fields : [{ key: '当前状态', value: '' }]); setSaveError('') }
   }, [editing, fields])
 
   const location = findField(fields, LOCATION_KEYS) || character.location || '未记录'
@@ -341,13 +362,13 @@ function CharacterStateCard({
           </div>
           <p className="text-xs text-text-muted mt-0.5 line-clamp-2">{character.shortDescription || '暂无角色简介'}</p>
         </div>
-        <button onClick={onToggleEdit} className="p-1 text-text-muted hover:text-accent" title="编辑状态">
+        <button onClick={onToggleEdit} disabled={saving} className="p-1 text-text-muted hover:text-accent" title="编辑状态">
           {editing ? <X className="w-4 h-4" /> : <Edit3 className="w-4 h-4" />}
         </button>
       </div>
 
       {editing ? (
-        <div className="mt-4 space-y-2">
+        <fieldset disabled={saving} className="mt-4 space-y-2">
           {draft.map((field, index) => (
             <div key={index} className="flex gap-2">
               <CInput
@@ -367,16 +388,21 @@ function CharacterStateCard({
               </button>
             </div>
           ))}
+          {saveError && <p role="alert" className="text-xs text-error">{saveError}</p>}
           <div className="flex items-center justify-between">
             <button onClick={() => setDraft(current => [...current, { key: '', value: '' }])} className="text-xs text-accent">+ 添加字段</button>
             <button
-              onClick={() => onSave(draft.filter(field => field.key.trim() && field.value.trim()))}
+              onClick={() => {
+                setSaving(true)
+                void onSave(draft.filter(field => field.key.trim() && field.value.trim()))
+                  .catch(error => setSaveError(error instanceof Error ? error.message : '未保存，输入已保留。')).finally(() => setSaving(false))
+              }}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-accent text-white text-xs"
             >
-              <Save className="w-3.5 h-3.5" /> 保存
+              <Save className="w-3.5 h-3.5" /> {saving ? '保存中…' : '保存'}
             </button>
           </div>
-        </div>
+        </fieldset>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2 mt-4">

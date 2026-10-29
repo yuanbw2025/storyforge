@@ -32,3 +32,24 @@ export function estimateChaptersPerVolume(
   const perVolumeWords = total / vols
   return Math.max(1, Math.round(perVolumeWords / perChapter))
 }
+
+/** All chapters below a volume, including nested story blocks. */
+export function getDescendantChapters(nodes: OutlineNode[], rootId: number): OutlineNode[] {
+  const byParent = new Map<number, OutlineNode[]>()
+  for (const node of nodes) if (node.parentId != null) {
+    const children = byParent.get(node.parentId) ?? []
+    children.push(node); byParent.set(node.parentId, children)
+  }
+  for (const children of byParent.values()) children.sort((a, b) => a.order - b.order || a.id! - b.id!)
+  const byId = new Map(nodes.map(node => [node.id, node]))
+  const seen = new Set<number>(), ordered: OutlineNode[] = [], pending = [rootId]
+  while (pending.length) {
+    const id = pending.pop()!
+    if (seen.has(id)) throw new Error('大纲层级形成循环，请先恢复原数据。')
+    seen.add(id)
+    const node = byId.get(id)
+    if (id !== rootId && node?.type === 'chapter') ordered.push(node)
+    pending.push(...(byParent.get(id) ?? []).map(child => child.id!).reverse())
+  }
+  return ordered
+}

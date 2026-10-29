@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "frozen-target-aware-organization-model-example-v4",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "3b4260a7c594dbcfdd38028b5612f96e1f331cf9",
+    "files": {
+      "src/lib/agent/chapter-organization-model.ts": "f6c3a5db21bc4502630178ac0dc0c8d9c52e1cd1db0bdbfc6e311fd94795802c",
+      "src/lib/agent/chapter-organization.ts": "8c1377869450612ec7c38d8b6305787510866a1bbeadc3e123529b7ce082e045",
+      "src/components/editor/ChapterEditor.tsx": "4db1b4ae97333b1df198d9290c523bc4f139498d4bb150bbbaceb198d940871b",
+      "src/lib/prose/post-adoption-runner.ts": "1619b50aebf1b31f472ed843a6a9e461a4a8cc8b3e16ca9d72ec8fb3fce3701d",
+      "src/lib/agent/skill-registry.ts": "d365537734e74c8570055240bd6eff6e7fa47cbceba27b07fbd8376677639a7c",
+      "tests/regression/R-STAB-organization-model-contract.test.ts": "4a456627b3a5cddbbbc2a4c3b818a6308e0303c5a0f0b5bfcd74400516221fc8",
+      "tests/e2e/longform-organization-protocol.spec.ts": "f73d57cc4919b10162bde0bce86f83ce180a2a7c7443608d60716f70220e7a3b"
+    }
+  },
+  "status": "FROZEN_TARGET_EXAMPLE_V4_TARGETED_NATIVE_PASSED_REAL_NEXT",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "originalFailureReceipt": "tests/acceptance/longform-stability/real-organization-20261028-3b4260a7c.json",
+  "changes": [
+    "V4 rendered example uses empty arrays for unavailable state/relation/foreshadow targets",
+    "Nonempty examples use actual registered names/foreshadow ID and a legal next status",
+    "Explicit frozen roster count and empty-target constraints; deterministic strict target and row validation retained unchanged",
+    "Raw responses, old V3 failures and historical candidate protocols remain unchanged"
+  ],
+  "before": {
+    "log": "organization-empty-targets-before.log",
+    "expectedFailures": 2,
+    "failed": 2,
+    "passed": 13
+  },
+  "regression": {
+    "log": "organization-empty-targets-related.log",
+    "status": "PASS",
+    "passed": 57,
+    "files": 8
+  },
+  "nativeBrowser": {
+    "log": "organization-empty-targets-native.log",
+    "status": "PASS",
+    "passed": 9,
+    "files": 3
+  },
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "build": "PASS",
+    "targetedEslint": "PASS",
+    "docs": "PASS",
+    "roadmap": "PASS",
+    "diffCheck": "PASS"
+  },
+  "remaining": "Exact-source Agnes V4, parked author-selection persistence repro, Node protocol alignment and other workflows; no whole-plan claim."
+}

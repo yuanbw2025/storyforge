@@ -1,5 +1,8 @@
+import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
+import WorldviewReadBoundary from './WorldviewReadBoundary'
 import { useState, useEffect } from 'react'
-import { useWorldviewStore } from '../../stores/worldview'
+import { EMPTY_NATURAL_RESOURCES } from '../../lib/types/worldview'
+import { useWorldviewStore, type WorldviewAuthorPatch } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
 import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
 import CodexPanel from '../codex/CodexPanel'
@@ -48,42 +51,36 @@ const NATURAL_CODEX_KEYS: Record<string, string[] | undefined> = {
 // ── 主面板 ─────────────────────────────────────────────────────
 
 export default function WorldviewNaturalPanel({ project }: Props) {
-  const { worldview, saveWorldview, loadAll } = useWorldviewStore()
+  const { worldview, saveWorldview } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
+  const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
+  const targetWorldGroupId = project.enableMultiWorld ? activeGroupId : (worldview?.worldGroupId ?? null)
   const copilot = useMasterCopilot({
     project,
-    worldGroupId: project.enableMultiWorld ? activeGroupId : null,
+    worldGroupId: targetWorldGroupId,
   })
 
   const [values, setValues] = useState<Record<string, string>>({})
-  const [naturalResources, setNaturalResources] = useState<NaturalResources>({
-    rareCreatures: '', herbs: '', minerals: '', others: '',
-  })
+  const [naturalResources, setNaturalResources] = useState<NaturalResources>({ ...EMPTY_NATURAL_RESOURCES })
   const [activeKey, setActiveKey] = useState<FieldKey>('worldStructure')
   const [runningField, setRunningField] = useState<WorldviewAgentField | null>(null)
 
   useEffect(() => {
-    loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
-  }, [project.id, project.enableMultiWorld, activeGroupId, loadAll])
-
-  useEffect(() => {
     if (!worldview) return
     setValues({
-      worldStructure:   worldview.worldStructure || '',
-      worldDimensions:  worldview.worldDimensions || '',
-      continentLayout:  worldview.continentLayout || '',
-      regionDimensions: worldview.regionDimensions || '',
-      mountainsRivers:  worldview.mountainsRivers || '',
-      climateByRegion:  worldview.climateByRegion || '',
-      naturalResourceOverview: worldview.naturalResourceOverview || '',
+      worldStructure:   worldview.worldStructure ?? '',
+      worldDimensions:  worldview.worldDimensions ?? '',
+      continentLayout:  worldview.continentLayout ?? '',
+      regionDimensions: worldview.regionDimensions ?? '',
+      mountainsRivers:  worldview.mountainsRivers ?? '',
+      climateByRegion:  worldview.climateByRegion ?? '',
+      naturalResourceOverview: worldview.naturalResourceOverview ?? '',
     })
-    setNaturalResources(worldview.naturalResources || {
-      rareCreatures: '', herbs: '', minerals: '', others: '',
-    })
+    setNaturalResources(worldview.naturalResources || { ...EMPTY_NATURAL_RESOURCES })
   }, [worldview])
 
-  const save = (patch: Partial<typeof worldview>) =>
-    saveWorldview({ projectId: project.id!, ...patch })
+  const save = (patch: WorldviewAuthorPatch) =>
+    saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, ...patch }, authorScope)
 
   const pendingWorldviewCandidates = copilot.pendingCandidates.filter(candidate => (
     candidate.payload.skillId === 'world-origin.worldview-field'
@@ -104,6 +101,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
   }, [pendingPanelKey])
 
   return (
+    <WorldviewReadBoundary onRetry={reloadCurrent}>
     <div className="flex flex-col w-full h-full space-y-4">
       {/* 顶部 */}
       <div className="pb-4 border-b border-border/40 px-6 pt-4 shrink-0">
@@ -117,7 +115,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
           定义世界的地理、气候与自然资源。如需声明真实与幻想的规则，请前往「⚖️ 真实与幻想」面板。
         </p>
         <div className="mt-3 max-w-xl">
-          <CodexSearchBar
+          <CodexSearchBar scope={authorScope} worldGroupId={targetWorldGroupId}
             categoryKeys={[...Object.values(NATURAL_CODEX_KEYS).flat().filter(Boolean) as string[], 'mineral', 'herb', 'beast']}
             onJump={(catKey) => {
               if (['mineral', 'herb', 'beast'].includes(catKey)) { setActiveKey('naturalResources'); return }
@@ -169,10 +167,10 @@ export default function WorldviewNaturalPanel({ project }: Props) {
             <div key={f.key} className={activeKey === f.key ? '' : 'hidden'}>
               <SimpleFieldEditor
                 field={f}
-                value={values[f.key] || ''}
+                value={values[f.key] ?? ''}
                 onChange={v => {
                   setValues(prev => ({ ...prev, [f.key]: v }))
-                  save({ [f.key]: v })
+                  return save({ [f.key]: v })
                 }}
                 project={project}
                 agentField={f.key}
@@ -184,7 +182,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
                 onRunningChange={running => setRunningField(running ? f.key : null)}
                 onAdopted={async candidate => {
                   await copilot.adoptCandidate(candidate)
-                  await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                  await reloadCurrent()
                 }}
               />
               {/* 全貌之下:本方面的专属词条(只显示对应那一类) */}
@@ -195,7 +193,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
                   <CodexPanel
                     project={project}
                     fixedCategoryKeys={NATURAL_CODEX_KEYS[f.key]}
-                    extractionSourceText={values[f.key] || ''}
+                    extractionSourceText={values[f.key] ?? ''}
                     embedded
                   />
                 </div>
@@ -206,10 +204,10 @@ export default function WorldviewNaturalPanel({ project }: Props) {
             {/* 全貌(上):自然资源整体概述,带 AI 生成,与其它方面一致 */}
             <SimpleFieldEditor
               field={{ key: 'naturalResourceOverview', emoji: '🌿', label: '自然资源', desc: '矿产 / 灵材 / 动植物等自然产出的总体分布、丰饶程度与特点' }}
-              value={values.naturalResourceOverview || ''}
+              value={values.naturalResourceOverview ?? ''}
               onChange={v => {
                 setValues(prev => ({ ...prev, naturalResourceOverview: v }))
-                save({ naturalResourceOverview: v })
+                return save({ naturalResourceOverview: v })
               }}
               project={project}
               agentField="naturalResourceOverview"
@@ -221,7 +219,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
               onRunningChange={running => setRunningField(running ? 'naturalResourceOverview' : null)}
               onAdopted={async candidate => {
                 await copilot.adoptCandidate(candidate)
-                await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                await reloadCurrent()
               }}
             />
             {/* 自然资源:矿物/草药/异兽 三类词条 */}
@@ -262,7 +260,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
                     onRunningChange={running => setRunningField(running ? 'naturalResources' : null)}
                     onAdopted={async candidate => {
                       await copilot.adoptCandidate(candidate)
-                      await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                      await reloadCurrent()
                     }}
                     buttonLabel="AI 生成分类明细"
                   />
@@ -273,6 +271,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
         </div>
       </div>
     </div>
+    </WorldviewReadBoundary>
   )
 }
 
@@ -294,7 +293,7 @@ function SimpleFieldEditor({
 }: {
   field: { key: string; emoji: string; label: string; desc: string }
   value: string
-  onChange: (v: string) => void
+  onChange: (v: string) => void | Promise<void>
   project: Project
   agentField: WorldviewAgentField
   activeGroupId: number | null
@@ -335,7 +334,7 @@ function SimpleFieldEditor({
 function NaturalResourcesEditor({ naturalResources, setNaturalResources, save }: {
   naturalResources: NaturalResources
   setNaturalResources: React.Dispatch<React.SetStateAction<NaturalResources>>
-  save: (patch: Record<string, unknown>) => void
+  save: (patch: WorldviewAuthorPatch) => Promise<void>
 }) {
   const rows: { key: keyof NaturalResources; label: string; placeholder: string }[] = [
     { key: 'rareCreatures', label: '🦅 珍禽异兽 / 牲畜', placeholder: '例：玄龟 / 火凤 / 战马 / 耕牛 ...' },
@@ -345,9 +344,8 @@ function NaturalResourcesEditor({ naturalResources, setNaturalResources, save }:
   ]
 
   const update = (key: keyof NaturalResources, v: string) => {
-    const next = { ...naturalResources, [key]: v }
-    setNaturalResources(next)
-    save({ naturalResources: next })
+    setNaturalResources(current => ({ ...current, [key]: v }))
+    return save({ naturalResources: { [key]: v } })
   }
 
   return (

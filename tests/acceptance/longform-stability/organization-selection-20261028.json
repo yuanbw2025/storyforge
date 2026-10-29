@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "existing-chapter-organization-author-selection-loss-repair",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "f1ff6fd5b850af73ac8a5e4cc04b87c5a551557f",
+    "files": {
+      "src/components/editor/ChapterEditor.tsx": "d1f0d956fc5f292620f962c1dd1d95642d6f4f349f2ff5dc9318a66a573c4c99",
+      "src/components/editor/ChapterOrganizationModal.tsx": "b7c1b4a7e0041aa646c3bdf3dc31d13722d9034529a3c46e91eb1f2caf45d88a",
+      "src/lib/agent/chapter-organization.ts": "17b6b9df7cfc6b9602a0e3f0e1074b1d25f96d79c664ba22e07436172b4b0617",
+      "src/lib/agent/chapter-organization-selection.ts": "8de107dd5b0a51e824c4a82abade2426cb5a9c0b7ab7e48d5ef8f50817271747",
+      "src/lib/agent/run/chapter-organization-durable.ts": "45bdeb9c40d77707c826a369d229bafdc53f174e5b17b429b4f08e522a4fc1ae",
+      "tests/regression/R-STAB-organization-selection.test.ts": "c43b2ec96233f6ca027b20b7171c66a177485ad7d5c066edf1c4b4e4c7bd1236",
+      "tests/regression/R-LONGFORM-organization-ui.test.tsx": "093374c2a023809a98d4a5cb3d2a7da4feea70838998e436b377275cdc8c0cdf",
+      "tests/e2e/longform-organization-protocol.spec.ts": "a47bdf4563c31789835b813f3aed24c8e04ff348e9e8d8df3caafc196cdaf784"
+    }
+  },
+  "status": "TARGETED_REGRESSION_AND_ISOLATED_NATIVE_PASSED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "productBoundary": {
+    "product": "existing independent longform, chapter organization",
+    "lifecycle": "product maintenance; no world-derived S1/S2/S3 transition",
+    "owner": "existing Work-owned agentEvents/agentConversations author UI metadata",
+    "reads": "same scoped persisted chapter and candidate; no new context source",
+    "writes": "existing author UI metadata only; registered seven-domain adoption remains explicit",
+    "tables": "existing PROJECT_TABLES agentEvents, agentConversations and chapters; no schema/migration or new AI-writable field",
+    "media": "none"
+  },
+  "originalFailure": {
+    "case": "author deselection survives closing and refreshing before selective adoption",
+    "actual": "After unchecking the timeline item, closing and reopening reset it to checked. Corrected exact-label locator reproduced this independently.",
+    "privateLog": "organization-selection-before-valid.log",
+    "status": "REPRODUCED_NATIVE_BEFORE_FIX"
+  },
+  "changes": [
+    "Persist checked index arrays on the existing candidate event instead of resetting to select-all on each mount.",
+    "Do not accept authorSelection from model output or include it in the model candidate hash. Historical hashes without this metadata remain unchanged.",
+    "Register the pending-write barrier before asynchronous scope lookup; reuse existing draft flush and exact failure-token acknowledgement.",
+    "Use scoped exact-payload comparison and a single transaction; reject older windows and roll back both updates if either writes zero rows.",
+    "Keep local desired choices and stop close/rerun/adoption while saving or on failure; only explicit retry or abandonment resumes.",
+    "Invalid stored selection stays fail-closed with empty indices and visible recovery, without automatic data rewriting."
+  ],
+  "verification": {
+    "regression": {
+      "passed": 61,
+      "files": 8,
+      "failed": 0,
+      "privateLog": "organization-selection-related-final.log"
+    },
+    "native": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "privateLog": "organization-selection-native-final.log",
+      "files": [
+        "tests/e2e/longform-organization-protocol.spec.ts",
+        "tests/e2e/longform-post-authorization-recovery.spec.ts"
+      ],
+      "coverage": [
+        "all seven domains and explicit adoption",
+        "raw invalid response remains stored",
+        "provider and request-evidence failures",
+        "refresh with post-adoption authorization",
+        "empty authorized target examples",
+        "cancel item, close/reopen, reload, adopt only selected item",
+        "zero-row save failure retains deselection, explicit retry succeeds, no extra model dispatch",
+        "two interrupted authorization recovery paths"
+      ]
+    },
+    "modelRequests": 0,
+    "syntheticModelResponsesOnly": true
+  },
+  "limits": [
+    "This repairs corresponding LF-119 operations; the whole 160-case plan is not complete.",
+    "Targeted synthetic browser checks do not prove real-model semantics, installed-client crash/OOM absence or production deployment.",
+    "No claim of full export/import lifecycle completion from metadata round-trip tests.",
+    "Full delivery CI and E2E require their own exact-commit receipts; earlier interrupted runs remain interrupted."
+  ]
+}

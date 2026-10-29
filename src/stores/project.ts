@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
-import type { Project, CreateWorkspaceInput } from '../lib/types'
+import type { Project, CreateWorkspaceInput, WorkspaceScope, Work } from '../lib/types'
 import { requireBackupBefore } from '../lib/safety/require-backup-before'
 import { cascadeDeleteProject } from '../lib/registry/lifecycle'
 import { resolveWorkspaceOwnership } from '../lib/workspace/ownership'
@@ -22,7 +22,7 @@ interface ProjectStore {
   loadProject: (id: number) => Promise<Project | undefined>
   createWorkspace: (data: CreateWorkspaceInput, options?: CreateWorkspaceOptions) => Promise<number>
   updateWorkspace: (id: number, data: WorkspacePatch) => Promise<void>
-  updateActiveWork: (id: number, data: ActiveWorkPatch) => Promise<void>
+  updateActiveWork: (id: number, data: ActiveWorkPatch, frozenScope?: WorkspaceScope) => Promise<Work>
   deleteProject: (id: number) => Promise<void>
   setCurrentProject: (id: number | null) => void
 }
@@ -64,9 +64,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     await get().loadProjects()
   },
 
-  updateActiveWork: async (id: number, data: ActiveWorkPatch) => {
-    await updateActiveWork(id, data)
+  updateActiveWork: async (id: number, data: ActiveWorkPatch, frozenScope?: WorkspaceScope) => {
+    const work = await updateActiveWork(id, data, frozenScope)
     await get().loadProjects()
+    return work
   },
 
   deleteProject: async (id: number) => {

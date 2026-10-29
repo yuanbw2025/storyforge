@@ -910,12 +910,16 @@ describe.sequential('R-HARNESS1-outline-durable-adapter · 大纲双写接入', 
 
     const snapshot = await readAgentRunV1(fixture.scope, trace.durable!.runId)
     expect(snapshot.projection.state).toBe('failed')
-    expect(snapshot.events.slice(-4).map(event => event.type)).toEqual([
+    expect(snapshot.events.slice(-5).map(event => event.type)).toEqual([
       'model.responded',
+      'evidence.artifact.recorded',
       'step.failed',
       'run.failed',
       'memory.settlement.recorded',
     ])
+    const response = await db.agentRunArtifacts.where('projectId').equals(fixture.scope.projectId).filter(row => row.artifactKind === 'raw-response').toArray()
+    expect(response.map(row => row.content)).toEqual(['无法解析的输出'])
+    expect(snapshot.events.some(event => event.type === 'candidate.persisted')).toBe(false)
   })
 
   it('durable 账本在执行前损坏时降级为 shadow，不能改变模型结果或调用数', async () => {

@@ -43,6 +43,7 @@
 .longform-app .lf-content [data-workspace-ready] > main { border-radius: 10px; }
 .longform-app .lf-content .lf-paper { border-radius: 12px; padding: 16px; margin-bottom: 12px; }
 .longform-app .lf-content .lf-paper h3 { font-size: 21px; margin-bottom: 12px; }
+.longform-app .worldview-origin-panel { max-width: none; }
 .longform-app .lf-content .lf-subtabs { gap: 6px; margin-bottom: 12px; }
 .longform-app .lf-content .lf-subtabs button { padding: 7px 12px; border-radius: 8px; }
 .longform-app .lf-agent-page { min-height: 0; border-radius: 10px; }

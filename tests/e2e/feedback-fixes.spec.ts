@@ -22,8 +22,8 @@ test('long outline scrolls during native drag and preserves cross-volume movemen
   })
   await openLongformLeaf(page, '大纲')
   await page.locator(`[data-outline-volume-id="${ids.a}"]`).getByText('第一卷', { exact: true }).click()
-  const pane = page.locator('[data-testid="outline-drag-scroll"] > div > .overflow-y-auto')
   const handle = page.locator(`[data-outline-chapter-id="${ids.chapters[0]}"]`)
+  const pane = page.getByTestId('outline-drag-scroll').locator('.overflow-y-auto').filter({ has: handle })
   await handle.scrollIntoViewIfNeeded()
   const box = (await handle.boundingBox())!
   const bounds = (await pane.boundingBox())!

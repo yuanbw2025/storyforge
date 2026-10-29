@@ -220,12 +220,12 @@ export async function updateWorkspace(projectId: number, data: WorkspacePatch): 
   await db.projects.update(projectId, { ...data, updatedAt: Date.now() })
 }
 
-/** Update metadata on the active Work; Project is never used as a mirror. */
-export async function updateActiveWork(projectId: number, data: ActiveWorkPatch): Promise<void> {
-  const ownership = await resolveWorkspaceOwnership(projectId)
-  await db.transaction('rw', scopeTransactionTables(db.chapters), async () => {
-    const work = await db.works.get(ownership.scope.workId)
-    if (!work || work.projectId !== projectId || work.worldId !== ownership.scope.worldId) {
+/** Update author-selected Work metadata; queued callers freeze scope before admission. */
+export async function updateActiveWork(projectId: number, data: ActiveWorkPatch, frozenScope?: WorkspaceScope): Promise<Work> {
+  const scope = await resolveScope({ projectId, scope: frozenScope })
+  return db.transaction('rw', scopeTransactionTables(db.chapters), async () => {
+    const work = await db.works.get(scope.workId)
+    if (!work || work.projectId !== projectId || work.worldId !== scope.worldId) {
       throw new Error('[works] 当前 World/Work 根无效')
     }
     const allowed = new Set([
@@ -246,7 +246,7 @@ export async function updateActiveWork(projectId: number, data: ActiveWorkPatch)
       assertShortNovelTargetWords(requestedTarget)
     }
     if (workPatch.status === 'completed' && kind === 'novel' && profile === 'short') {
-      const actualWordCount = await readCanonicalWorkManuscriptWordCount(ownership.scope)
+      const actualWordCount = await readCanonicalWorkManuscriptWordCount(scope)
       if (actualWordCount < SHORT_NOVEL_MIN_WORDS || actualWordCount > SHORT_NOVEL_MAX_WORDS) {
         throw new Error(
           `[works] 短篇实际正文须为 ${SHORT_NOVEL_MIN_WORDS}～${SHORT_NOVEL_MAX_WORDS} 字；当前 ${actualWordCount} 字`,
@@ -255,7 +255,9 @@ export async function updateActiveWork(projectId: number, data: ActiveWorkPatch)
       workPatch.currentWordCount = actualWordCount
     }
     const updatedAt = Date.now()
-    if (Object.keys(workPatch).length > 0) await db.works.update(work.id!, { ...workPatch, updatedAt })
+    if (!Object.keys(workPatch).length) return work
+    await db.works.update(work.id!, { ...workPatch, updatedAt })
+    return { ...work, ...workPatch, updatedAt }
   })
 }
 

@@ -11,6 +11,12 @@
 - 开放跑团补齐试用、团局恢复与旁白试听步骤；角色聊天补齐三线制作、原图确认与存档配图恢复；AVG 补齐图片、逐句配音、本地处理与原型验收。三者仍为预览，见[跑团](/features/interactive/ttrpg)、[角色聊天](/features/interactive/character-chat)、[AVG](/features/interactive/avg)，依据 [#196](https://github.com/yuanbw2025/storyforge/pull/196)、[#172](https://github.com/yuanbw2025/storyforge/pull/172)、[#219](https://github.com/yuanbw2025/storyforge/pull/219)。
 - [备份指南](/guides/backup-restore)按主干数据库 v13、备份 v17 修正，保留严格旧格式校验；当前正式版本与发行准备见[兼容说明](/updates/compatibility)。[开发记录](/updates/development-status)重新枚举全部现存分支与工作区，区分已合并链、候选发行和长篇待修复项。
 
+## 2026-10-27 · 分步骤稳定性修复开发版
+
+损坏状态字段可定位并逐项修复，原记录保留；正文候选增加独立保存与切页保存屏障，保存后可刷新再采纳。操作见[连续性与修复](/features/longform/continuity#状态字段异常时如何恢复)。本批仍在未合并的[PR #215](https://github.com/yuanbw2025/storyforge/pull/215)，验证与发行状态见[开发记录](/updates/development-status)。
+
+另修复窄屏固定工具栏遮挡候选保存，拒绝会序列化成坏字段的稀疏数组。
+
 ## 2026-10-26 · 开放世界制作与返修整合
 
 制作工作台按游戏内容、产品系统配置、媒资生产检查进度与阻塞；逐张查看并确认图片后再过发布质量门。局部返修生成子 Build，保留旧发布版和存档；玩家可从“更多 → 读取本地体验记录”查看并主动导出本地反馈。操作见[开放世界指南](/features/interactive/open-world#三线制作、图片确认与局部返修)。依据：[PR #134](https://github.com/yuanbw2025/storyforge/pull/134)。通用生产的独立模型校准与真人双结局验收仍待完成。

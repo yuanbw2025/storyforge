@@ -3,11 +3,12 @@ import { Plus, Trash2, User } from 'lucide-react'
 import { useCharacterStore } from '../../stores/character'
 import type { Project, Character } from '../../lib/types'
 import { filterCharactersByRoleWeight } from '../../lib/character/character-axes'
-import CharacterDimensionFields from './CharacterDimensionFields'
+import CharacterDimensionFields, { CharacterDraftField } from './CharacterDimensionFields'
+import CharacterReadStatus from './CharacterReadStatus'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import CharacterSupplementAction from './CharacterSupplementAction'
 import CharacterLifecycleAction from './CharacterLifecycleAction'
 import { useWorldGroupStore } from '../../stores/world-group'
-import { CInput, CTextarea } from '../shared/CompositionInput'
 
 interface Props {
   project: Project
@@ -15,11 +16,16 @@ interface Props {
 
 /** v3 §2.1 — 次要角色（小卡片网格视图） */
 export default function CharacterMinorPanel({ project }: Props) {
-  const { characters, loadAll, addCharacter, updateCharacter, deleteCharacter } = useCharacterStore()
+  const { characters, loading, loadError, loadedScope, loadAll, addCharacter, updateCharacter, deleteCharacter } = useCharacterStore()
+  const [actionError, setActionError] = useState('')
+  const guarded = async (action: () => void | Promise<unknown>) => {
+    try { await flushPendingEditsV1(); await action(); setActionError('') }
+    catch (cause) { setActionError(cause instanceof Error ? cause.message : '角色操作失败，输入已保留。') }
+  }
   const activeGroupId = useWorldGroupStore(state => state.activeGroupId)
   const [editing, setEditing] = useState<number | null>(null)
 
-  useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
+  useEffect(() => { void loadAll(project.id!) }, [project.id, project.activeWorldId, project.activeWorkId, loadAll])
 
   const list = filterCharactersByRoleWeight(characters, 'secondary')
 
@@ -37,17 +43,20 @@ export default function CharacterMinorPanel({ project }: Props) {
     setEditing(id)
   }
 
-  const update = (id: number, patch: Partial<Character>) => updateCharacter(id, patch)
+  const update = (id: number, patch: Partial<Character>, expected?: Partial<Character>) => updateCharacter(id, patch, { scope: loadedScope ?? undefined, expected })
 
   return (
-    <div className="max-w-5xl p-6">
+    <>
+    <CharacterReadStatus projectId={project.id!} />
+    {actionError && <p role="alert" className="px-6 text-sm text-error">{actionError}</p>}
+    <div inert={loading || Boolean(loadError)} className="max-w-5xl p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold text-text-primary mb-1">👥 次要角色</h2>
           <p className="text-sm text-text-muted">配角群像 — 简要卡片视图，记录关键信息即可。</p>
         </div>
         <button
-          onClick={handleAdd}
+          onClick={() => { void guarded(handleAdd) }}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white text-sm rounded hover:bg-accent-hover"
         >
           <Plus className="w-4 h-4" /> 新增
@@ -69,9 +78,10 @@ export default function CharacterMinorPanel({ project }: Props) {
                 <div className="w-8 h-8 rounded-full bg-bg-elevated flex items-center justify-center flex-shrink-0">
                   <User className="w-4 h-4 text-text-secondary" />
                 </div>
-                <CInput
+                <CharacterDraftField input
                   value={c.name}
-                  onChange={e => update(c.id!, { name: e.target.value })}
+                  onCommit={(value, expected) => update(c.id!, { name: value }, { name: expected } as Partial<Character>)}
+                  dimension={{ label: '姓名', rows: 2 }}
                   className="flex-1 px-2 py-1 bg-bg-base border border-border rounded text-sm font-medium text-text-primary focus:outline-none focus:border-accent"
                 />
                 <CharacterSupplementAction
@@ -89,25 +99,25 @@ export default function CharacterMinorPanel({ project }: Props) {
                   compact
                 />
                 <button
-                  onClick={() => deleteCharacter(c.id!)}
+                  onClick={() => { void guarded(() => deleteCharacter(c.id!)) }}
                   className="p-1 text-text-muted hover:text-error"
                   title="删除"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <CTextarea
+              <CharacterDraftField
                 value={c.shortDescription}
-                onChange={e => update(c.id!, { shortDescription: e.target.value })}
+                onCommit={(value, expected) => update(c.id!, { shortDescription: value }, { shortDescription: expected } as Partial<Character>)}
+                  dimension={{ label: '一句话简介', rows: 2 }}
                 placeholder="一句话简介..."
-                rows={2}
                 className="w-full px-2 py-1 bg-bg-base border border-border rounded text-xs text-text-primary resize-none focus:outline-none focus:border-accent"
               />
               {(editing === c.id) ? (
                 <div className="mt-2 space-y-1.5">
-                  <CharacterDimensionFields character={c} onChange={patch => update(c.id!, patch)} exclude={['shortDescription']} />
+                  <CharacterDimensionFields character={c} onChange={(patch, expected) => update(c.id!, patch, expected)} exclude={['shortDescription']} />
                   <button
-                    onClick={() => setEditing(null)}
+                    onClick={() => { void guarded(() => setEditing(null)) }}
                     className="text-xs text-accent hover:underline"
                   >
                     收起
@@ -126,5 +136,6 @@ export default function CharacterMinorPanel({ project }: Props) {
         </div>
       )}
     </div>
+    </>
   )
 }

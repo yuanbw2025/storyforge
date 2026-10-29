@@ -3,11 +3,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Save, X, ChevronDown } from 'lucide-react'
 import { useProjectStore } from '../../stores/project'
 import { useWorldGroupStore } from '../../stores/world-group'
-import type { Project } from '../../lib/types'
+import type { Project, WorkspaceScope } from '../../lib/types'
 import { GENRE_OPTIONS } from '../../lib/types'
 import { useActiveWork } from '../../hooks/useActiveWork'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
-import { coordinatePendingEditV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { coordinatePendingEditV1, flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { db } from '../../lib/db/schema'
 
 // 按 group 分组
 const GENRE_GROUPS = Array.from(
@@ -32,9 +33,17 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
     description: '',
     targetWordCount: 500_000,
   })
+  const [formOwner, setFormOwner] = useState<{ scope: WorkspaceScope; title: string } | null>(null)
+  const formOwnerRef = useRef<typeof formOwner>(null)
+  const lastSavedRef = useRef<{ scope: WorkspaceScope; fields: typeof form; updatedAt: number } | null>(null)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState('')
+  const [modeSaving, setModeSaving] = useState(false)
+  const [modeError, setModeError] = useState('')
+  const modeBusy = useRef(false)
+  const projectIdRef = useRef(project.id)
+  projectIdRef.current = project.id
   const dirtyRef = useRef(false)
   const formRef = useRef(form)
   const pendingCount = useRef(0)
@@ -48,20 +57,29 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
   const [showGenreDropdown, setShowGenreDropdown] = useState(false)
 
   useEffect(() => {
-    if (!activeWork || activeWork.id !== project.activeWorkId || dirtyRef.current) return
+    if (!project.id || !activeWork?.id || !activeWork.worldId || activeWork.id !== project.activeWorkId || dirtyRef.current) return
+    const saved = lastSavedRef.current
+    if (saved?.scope.projectId === project.id && saved.scope.workId === activeWork.id
+      && (activeWork.updatedAt ?? 0) < saved.updatedAt
+      && JSON.stringify([activeWork.title, activeWork.description, activeWork.genres, activeWork.targetWordCount])
+        !== JSON.stringify([saved.fields.title, saved.fields.description, saved.fields.genres, saved.fields.targetWordCount])) return
     const next = {
       title: activeWork.title,
       genres: [...activeWork.genres],
       description: activeWork.description,
       targetWordCount: activeWork.targetWordCount,
     }
+    const owner = { scope: { projectId: project.id, worldId: activeWork.worldId, workId: activeWork.id }, title: activeWork.title }
+    formOwnerRef.current = owner
+    setFormOwner(owner)
     formRef.current = next
     setForm(next)
-  }, [activeWork, project.activeWorkId])
+  }, [activeWork, project.activeWorkId, project.id, dirty])
 
   const handleSave = useCallback(async () => {
     if (!dirtyRef.current) return
-    if (!project.id || !activeWork || activeWork.id !== project.activeWorkId) {
+    const owner = formOwnerRef.current
+    if (!owner) {
       throw new Error('作品仍在加载，请稍后保存。')
     }
     const snapshot = formRef.current
@@ -69,15 +87,15 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
     setSaving(true)
     setError('')
     try {
-      await coordinatePendingEditV1({
-        key: `work-info:${activeWork.id}`,
-        persist: () => updateActiveWork(project.id!, snapshot),
+      const savedWork = await coordinatePendingEditV1({
+        key: `work-info:${owner.scope.workId}`,
+        persist: () => updateActiveWork(owner.scope.projectId, snapshot, owner.scope),
       })
+      lastSavedRef.current = { scope: owner.scope, fields: snapshot, updatedAt: savedWork?.updatedAt ?? Date.now() }
       if (formRef.current === snapshot) {
         dirtyRef.current = false
         setDirty(false)
       }
-      onUpdate(project)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '保存失败，请重试。')
       throw cause
@@ -85,7 +103,7 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
       pendingCount.current--
       setSaving(pendingCount.current > 0)
     }
-  }, [activeWork, onUpdate, project, updateActiveWork])
+  }, [updateActiveWork])
 
   useEffect(() => registerPendingDraftFlusherV1(handleSave), [handleSave])
   useEffect(() => {
@@ -112,13 +130,34 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
       .join(' · ') + (genres.length > 3 ? ` +${genres.length - 3}` : '')
   }
 
+  const ownerIsActive = formOwner?.scope.projectId === project.id && formOwner?.scope.workId === activeWork?.id
+
+  const toggleMultiWorld = async () => {
+    const owner = formOwnerRef.current
+    if (!owner || modeBusy.current || owner.scope.projectId !== project.id) return
+    const next = !project.enableMultiWorld
+    modeBusy.current = true; setModeSaving(true); setModeError('')
+    try {
+      await flushPendingEditsV1()
+      if (next) {
+        if (!await useWorldGroupStore.getState().enableMultiWorld(owner.scope)) return
+      } else await updateWorkspace(owner.scope.projectId, { enableMultiWorld: false })
+      if (projectIdRef.current === owner.scope.projectId) {
+        const latest = await db.projects.get(owner.scope.projectId)
+        if (latest) onUpdate(latest)
+      }
+    } catch (cause) {
+      if (projectIdRef.current === owner.scope.projectId) setModeError(cause instanceof Error ? cause.message : String(cause))
+    } finally { modeBusy.current = false; setModeSaving(false) }
+  }
+
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-bold text-text-primary">基本信息</h2>
         <button
           onClick={() => { void handleSave().catch(() => undefined) }}
-          disabled={saving || !activeWork || activeWork.id !== project.activeWorkId}
+          disabled={saving || !formOwner}
           className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors text-sm font-medium"
         >
           <Save className="w-4 h-4" />
@@ -130,7 +169,9 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
         {error ? `未保存：${error}。内容仍保留，请点击保存重试。` : saving ? '正在保存…' : dirty ? '有修改，稍后自动保存；切换步骤时会先保存。' : '修改后自动保存'}
       </p>
 
-      <fieldset disabled={!activeWork || activeWork.id !== project.activeWorkId} className="space-y-5">
+      {dirty && formOwner && !ownerIsActive && <p role="status" className="mb-3 text-xs text-warning">已保留《{formOwner.title}》的改动，将先保存到该作品，再显示当前作品的信息。</p>}
+
+      <fieldset disabled={!ownerIsActive || !activeWork || activeWork.id !== project.activeWorkId} className="space-y-5">
         <div>
           <label className="block text-sm text-text-secondary mb-1.5">作品名称</label>
           <input
@@ -242,17 +283,8 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
             <button
               aria-label="多世界模式"
               aria-pressed={project.enableMultiWorld === true}
-              onClick={async () => {
-                if (!project.id) return
-                const next = !project.enableMultiWorld
-                // 开启时：确保主世界组 + 把现有项目级数据归属到主世界组
-                if (next) {
-                  const enabled = await useWorldGroupStore.getState().enableMultiWorld(project.id)
-                  if (!enabled) return
-                }
-                await updateWorkspace(project.id, { enableMultiWorld: next })
-                onUpdate({ ...project, enableMultiWorld: next, updatedAt: Date.now() })
-              }}
+              disabled={modeSaving}
+              onClick={() => { void toggleMultiWorld() }}
               className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ml-4 ${
                 project.enableMultiWorld ? 'bg-accent' : 'bg-border'
               }`}
@@ -264,6 +296,8 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
               />
             </button>
           </div>
+          {modeSaving && <p role="status" className="mt-2 text-xs text-text-muted">正在保存多世界设置…</p>}
+          {modeError && <p role="alert" className="mt-2 text-xs text-error">多世界设置未保存：{modeError}。可以重新操作开关。</p>}
         </div>
 
         <div className="pt-4 border-t border-border">

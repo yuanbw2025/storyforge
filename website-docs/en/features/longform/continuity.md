@@ -19,6 +19,24 @@ A character's guess is not necessarily an objective fact; a secret known to the 
 | Plots and progress | Whether the chapter advances established storylines |
 | Revision and impact checks | Which future plans and records an edit affects |
 
+## Recovering malformed state fields
+
+The step-mode stability development build identifies malformed state cards in the prose editor while keeping manual editing and saving available. Related generation pauses to avoid writing with incomplete state; damaged records are not cleared or rewritten automatically. See [development status](/en/updates/development-status) for mainline and release availability.
+
+1. Choose “Repair state fields” to open “States and inventory”.
+2. Optionally export the original fields before opening the affected card.
+3. Enter each field name and text value. Explicitly remove unwanted malformed items. The original-content editor is available when the underlying format needs inspection.
+4. Save the repair. Validation or storage failure preserves the original record and current input so it can be corrected and retried.
+5. Reload to confirm persistence, then return to prose generation.
+
+If another window has changed the card, the older repair is rejected. Keep your input and reopen the card to compare the new state before proceeding. Use [backup and restore](/en/guides/backup-restore) for complete backups; a state-text export is not a full backup.
+
+## Save candidate edits before reloading
+
+A prose candidate can be saved with “Save candidate edits” before reloading or editing further. Saving updates the candidate only; changing formal prose still requires explicit adoption. Switching steps first attempts to save candidate edits; failure blocks navigation and retains the input. Before a direct reload or close, confirm that the candidate has been saved and has not yet been adopted. On narrow screens, the prose toolbar scrolls with the page so candidate save and adoption controls remain reachable.
+
+Clearing a candidate keeps its editor available for new input. A blank candidate cannot be saved or adopted. Candidate draft saving and state repair are both within the development-build validation scope.
+
 ## Revising an early chapter
 
 1. Save a version or complete backup.

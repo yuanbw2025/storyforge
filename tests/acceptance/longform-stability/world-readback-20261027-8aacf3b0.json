@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "kind": "longform-stability-partial-world-and-readback-receipt",
+  "date": "2026-10-27",
+  "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+  "status": "PARTIAL_VERIFIED_CONTINUING_FULL_MATRIX",
+  "sha256": {
+    "src/stores/world-group.ts": "3c59201ba282dac4ff8e3972282b6322fb52140089e9ee3b65813d7db0073e09",
+    "src/stores/worldview.ts": "a89d49b6fd322d42b8c3ab4799bb5068a7e56b05456437781bb4ed2ebc4b7d4b",
+    "src/lib/registry/lifecycle.ts": "89e26a381d34029abccc357e00a678d69eebe79f2b474ae33934c25bf0de10dc",
+    "src/hooks/useScopedWorldviewReadback.ts": "d21b1e8e62fc6ada52ff74932132bb72dc22b718eb5022e9cb9c10c25a60e00c",
+    "src/components/world-group/WorldGroupDetail.tsx": "c300ca9b0d721f5d04f1f039df062d3940f307688be12520db25eac1f4b636bf",
+    "src/components/worldview/WorldviewReadBoundary.tsx": "d01f0ae1e57c8585189568737fa1cab02de2630d19d8ea2c31828e13d49bce04",
+    "tests/e2e/longform-worldgroup-flow.spec.ts": "89c5b5017ee25618eb7e264362dba852d1223bb24dc3e70b462a153c99ac475f",
+    "tests/e2e/longform-setting-read-recovery.spec.ts": "0e5f908bef0e4759db7e1216eed6ed3be9c885a320e31826a9576f0dbd036883"
+  },
+  "boundary": "Existing longform World/Work data, workspace multiworld flag, author draft preservation and explicit readback recovery. No new table or automatic migration.",
+  "regression": {
+    "files": 19,
+    "passed": 222,
+    "beforeFailureFamilies": [
+      "Three atomic/multi-World failures",
+      "Two pre-blur owner failures",
+      "Four browser read failure paths",
+      "Two late adoption readback failures",
+      "Empty story readback failure",
+      "World mode disable and group quota failures"
+    ]
+  },
+  "browser": {
+    "engine": "isolated Chromium",
+    "passed": 25,
+    "includes": [
+      "23 scalar fields edit/clear/reload",
+      "Four save quota failures and structured resource/divinity leaves",
+      "Four corrupt raw fields preserved",
+      "Four settings read failures, inert edit protection and explicit retry",
+      "Six Work metadata/library paths",
+      "Mode on/off/on retains the same record",
+      "Atomic rollback on workspace flag failure",
+      "Group save quota recovery",
+      "Every visible group input, clear, return flush, A/B isolation, cancel/delete and real backup download",
+      "320px group editor controls"
+    ]
+  },
+  "gates": {
+    "architecture": "PASS",
+    "requiredTables": "PASS (129)",
+    "aiManual": "PASS",
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "build": "PASS",
+    "diffCheck": "PASS"
+  },
+  "narrativeWorld": "Existing dated v2 baseline and IR/domain receipts passed their fresh 110 tests without changing observations or input pins. No historical receipt overwritten.",
+  "wholeCasePass": false,
+  "overallPlanCompleted": false,
+  "remaining": [
+    "World suggestion and six-field expansion real-model paths",
+    "Remaining full-case faults and discovered controls",
+    "Other modules, final CI/E2E, obtainable native verification"
+  ],
+  "nativePackageEvidence": false,
+  "releaseStatus": "NOT_RELEASED"
+}

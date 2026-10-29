@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "kind": "quality-revision-before-preview-recovery-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "c9fafa174ec8e303aaf94cd5d7908fbb0a656fac",
+    "files": {
+      "src/lib/agent/run/quality-revision-durable.ts": "f251f1a3b4af1252ffc3f648904814fe058aab458af507009e137896436b27f8",
+      "src/components/editor/ReviewPanel.tsx": "466f47e74a5ca8a13644052c27f799acf9db1c13770da4e69aeb21074ffd873d",
+      "tests/regression/R-LFQ8-quality-revision-durable.test.ts": "7fdb9d1614dd2f0441258983eb1142e4cecfa27a91c9b4613c27be2209f567e9",
+      "tests/e2e/longform-selected-revision.spec.ts": "f657e8099d7c37ff4100aa2b96b46327819fbe611fa4c49cd7aeb7cb3f2738b1"
+    }
+  },
+  "status": "READ_ONLY_RECOVERY_MARKER_AND_EXPLICIT_END_VERIFIED_REAL_PREFIX_REPLAY_PENDING",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "originalControlledFailure": {
+    "sourceCommit": "2bcc67bd8dd57080eec70786db21490a18826a62",
+    "directory": "live-longform-revision-2026-10-27T18-57-21-786Z",
+    "runId": 18,
+    "state": "running",
+    "checkpoint": false,
+    "modelRequestedEvent": false,
+    "relayRequestObservedForThisRun": false,
+    "cause": "Prior private driver stopped on the previous cancelled view before the next run had published a preview; browser closure retained a real scoped prefix with no visible operation",
+    "productGap": "readLatestQualityRevision returned null without a preview, so ReviewPanel offered no end/recovery operation",
+    "canonicalUnchanged": true,
+    "scopeLimit": "Controlled browser interruption and native reproduction, not a claim about a specific user report"
+  },
+  "originalNative": {
+    "failed": 1,
+    "passed": 0,
+    "log": "revision-incomplete-native-before-valid-prefix.log",
+    "failure": "Recovery entry missing after a valid scheduled/started run prefix and reload",
+    "artifacts": "revision-incomplete-native-before-artifacts"
+  },
+  "driverErrorRetained": {
+    "log": "revision-incomplete-native-before.log",
+    "cause": "Initial fixture attempted nonexistent run.started event; not counted as a production defect"
+  },
+  "regression": {
+    "passed": 68,
+    "files": 8,
+    "log": "revision-incomplete-related-final.log",
+    "checks": [
+      "Read-only marker for the latest same-Work/chapter run without a preview",
+      "No marker for valid previews or terminal runs; no older candidate resurrection",
+      "Foreign/missing chapter isolation and immutable prior candidate/source",
+      "Cancel/settlement quota failure preserves complete run and marker",
+      "Explicit retry sends no model request; other-page execution lock prevents ending an active run"
+    ]
+  },
+  "nativeBrowser": {
+    "passed": 16,
+    "files": 2,
+    "log": "revision-incomplete-native-related.log",
+    "transport": "simulated, isolated Chromium native IndexedDB",
+    "checks": [
+      "Valid no-preview prefix survives reload with visible explicit end action",
+      "Failed end preserves marker and exact chapter/event ledger",
+      "Reload/retry cancels original run with one settlement and zero extra model calls",
+      "Selected revision, whole review, invalid/truncated responses and original-text protection regressions"
+    ]
+  },
+  "implementation": "Use the existing scoped run/checkpoint lifecycle and abandonQualityRevision authorization. The marker never invents a preview or resends; end decisions retain original evidence. No schema, table, Canon field or new AI entry.",
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "build": "PASS",
+    "docs": "PASS",
+    "roadmap": "PASS",
+    "generatedMetrics": "PASS",
+    "diffCheck": "PASS"
+  },
+  "fullChecks": "Frozen 2bcc full CI continues; latest final-head full CI/E2E pending"
+}

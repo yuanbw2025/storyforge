@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "seven-domain-anchor-protocol-strict-row-accounting-and-raw-evidence",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "426ab64516d7ac4b90f548df36e40611ef007c5e",
+    "files": {
+      "src/lib/agent/chapter-organization-model.ts": "ef1092b8756f6934d0bcceb8c0a816478ad0d78d3693896d46f50b31bc185414",
+      "src/lib/agent/chapter-organization.ts": "1e1de31f9e7a2e2e5b085e451461dc06379bd25ed52165d9b0e63ca09599a6cd",
+      "src/components/editor/ChapterEditor.tsx": "6dab5ba63635faff149bc0aae0e185c99ba68c992a546280277407dbe7514119",
+      "src/lib/prose/post-adoption-runner.ts": "d9fe0d2ac19eeaf8ca89e1e5c5c2d9ac53a38935ff9e1d50dbd68b88e426ab71",
+      "src/lib/agent/skill-registry.ts": "61afb017003910ef178ecc4ff96b0125e47b59b96de3ea474aef4f93e1d78dce",
+      "tests/regression/R-STAB-organization-model-contract.test.ts": "3c46583e29763884df05dbf0badc306f904e30faa318492a1df90dc890011bf5",
+      "tests/regression/R-LONGFORM-agent-post-adoption.test.ts": "99bec2c02674625fe467e88de6fdc2e262f69cb1581c83bc81fd2fb2a799cc27",
+      "tests/e2e/longform-organization-protocol.spec.ts": "103f0b2e9197a84bf05ae5cb57f1dd094659331eb1da90ab38fa22cadcdf6381"
+    }
+  },
+  "status": "FORMAL_MANUAL_AND_POST_PROTOCOL_TARGETED_NATIVE_PASSED_REAL_NEXT",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "originalFailureReceipt": "tests/acceptance/longform-stability/real-organization-20261028-89d7d36f5.json",
+  "productBoundary": "Existing registered prose.organize Skill, frozen chapter/target directories, existing candidate/adoption and exact run-artifact tables. No table, AI entry, formal write field or separate memory system added.",
+  "changes": [
+    "New formal manual/post-adoption requests use Skill prompt V3 and frozen physical paragraph/segment anchors; code derives literal quotes, never guesses punctuation",
+    "Strict complete classification/row accounting rejects proposed rows that existing domain parsers would otherwise silently discard; valid historical literal rows and old direct parser remain readable",
+    "Manual/post-adoption save exact rendered request/settings and raw model text before parsing or candidate creation; a failed evidence write prevents dispatch",
+    "Freeze actual route and verified JSON/model options; only the verified bounded Agnes 2.5 model disables thinking",
+    "Remove prefix/list/field crops from the target prompt; existing final model/Skill budgets still protect request size",
+    "Normalize chapter HTML once so literal author angle brackets survive evidence checks"
+  ],
+  "before": {
+    "log": "organization-model-contract-before.log",
+    "failed": 7,
+    "passed": 1,
+    "causes": [
+      "Unauthorized state, nonliteral timeline, invalid storyline and malformed rows silently became empty categories",
+      "Anchor references were not decoded; target/state prefixes were cut"
+    ]
+  },
+  "intermediate": [
+    "organization-model-native.log: three fixture failures because the synthetic in-memory API key was injected before a full navigation; corrected after navigation without persisting any secret",
+    "organization-model-related-initial.log: 49 pass/1 fixture fail; the old resume fixture used an incomplete empty object as successful model output. Replaced with a complete empty seven-domain response; kept failure/retry assertions"
+  ],
+  "regression": {
+    "log": "organization-model-related-final.log",
+    "passed": 55,
+    "files": 8
+  },
+  "nativeBrowser": {
+    "log": "organization-model-native-exact.log",
+    "status": "PASS",
+    "priorManualPathsPassed": 4,
+    "priorPostAuthorizationPathPassed": 1,
+    "passed": 8,
+    "files": 3,
+    "pageErrorsInNewFivePaths": 0
+  },
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "build": "PASS",
+    "targetedEslint": "PASS",
+    "docs": "PASS",
+    "roadmap": "PASS",
+    "diffCheck": "PASS"
+  },
+  "remaining": "Exact-source real Agnes replay; candidate-selection draft persistence, Node legacy adapter protocol alignment, remaining chapter post-tasks and the rest of the stability matrix. Current full CI/E2E are frozen at older 89d7d36f5; no final-source whole-plan claim."
+}

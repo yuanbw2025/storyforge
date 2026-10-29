@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "kind": "exact-commit-mapping-correct-bindings-but-literal-evidence-rejected",
+  "date": "2026-10-28",
+  "sourceCommit": "db775df50354bfa3a91cc694c617a14754f89934",
+  "directory": "live-storyline-progress-2026-10-27T23-08-57-468Z",
+  "status": "IDENTITIES_AND_JSON_FIXED_LITERAL_QUOTES_STILL_REJECTED_RAW_RETAINED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "modelRequests": 4,
+  "knownTotalTokens": 13350,
+  "unknownUsageRequests": 0,
+  "observed": [
+    "Main and bounded repair both used JSON-object mode and returned correct numeric Arc/stage IDs and complete fields",
+    "Main returned duplicate progress entries for the same Arc; bounded structural repair reduced them to one",
+    "Repaired progress quotation still differed from frozen body; only the new-Arc quotation was exact",
+    "Strict category-count validation rejected the whole mixed result; no partial new-Arc write",
+    "First two context-compression requests still ended length at 781 total output tokens and fell back to original context"
+  ],
+  "canonicalWrites": 0,
+  "runStatus": "paused; no fresh editable mapping candidate in bounded driver wait",
+  "evidenceSha256": {
+    "executed-runner.mjs": "8332380929a05007b526ba677d85e375c2a9e7336a1a9630d922b4ab35067ffe",
+    "live-result.json": "5dd9475a69a384b17432ca8440451091e853c9826c462595624c381fb4ec7ab5",
+    "live-requests.json": "601d18c319e0b88e782df9edd09197bec902542c8fc5f8d2e27ac39e46598aa6",
+    "response-3.txt": "3bd0ddc5c222f0304af096cb40fd43b5bfb16498b358edcdd618ccf179c96333",
+    "response-4.txt": "47030c2ad86c8810d07925773e9ab956fa1d0a151697b989bc0376bdd6870f52"
+  },
+  "next": "Versioned physical-text locator IDs resolved by code, without normalizing model quotations; new exact-source cohort required."
+}

@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "existing-bootstrap-resource-load-failure-bounded-recovery",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "cc5d7e2752cd3da239b11e6bff156e8a0986a0d0",
+    "files": {
+      "src/entry.ts": "5cbd1d8aa84fa6e8cd1cadbe7a2f4ce91f32ee48655d5f90d62c35f790a767e6",
+      "src/lib/module-load-recovery.ts": "96988de32bf2a5662e2f690de743e609561b9e627b3974e12173be2884ee81a3",
+      "src/components/shared/ErrorBoundary.tsx": "1645f0065f5ff5269322c86463682384b12bb7a6f8eb47edd7133aec8895477f",
+      "tests/regression/R-STAB-bootstrap-module-recovery.test.ts": "9c38a36c943850111ab35df828f8a0254b7e4659d23112cd06d848b008100fa9",
+      "tests/e2e/bootstrap-module-recovery.spec.ts": "a4787cb84a918f980f09e4f8873c012b1d99b73e9aff4b67096726815f2e9ab8",
+      "tests/e2e/compact-workspaces.spec.ts": "c8f7af09357a73d8eb0cb0da06e855a6fdf2f9ad3ff30d21170b072ed5336932"
+    }
+  },
+  "status": "DIRECTED_AND_ISOLATED_BROWSER_PASSED_FULL_DELIVERY_PENDING",
+  "productBoundary": "Existing common bootstrap used by longform; no table, schema, AI entry/permission, Work/World owner or media change.",
+  "originalFailure": {
+    "sourceCommit": "cc5d7e2752cd3da239b11e6bff156e8a0986a0d0",
+    "case": "compact workspace 1440px",
+    "privateArtifacts": "bootstrap-before-cc5",
+    "observed": "Terminal bootstrap fallback; exact trace console records net::ERR_NETWORK_CHANGED for context source/types/theme/CSS module requests.",
+    "independentOldSourceRun": "First cold-server 1440px case timed out at the unchanged 5s expectation, four other cases passed; that timeout alone is not counted as reproducing the network error."
+  },
+  "changes": [
+    "Reuse the existing module-resource error classifier without importing app/store code before the isolation boundary.",
+    "A persisted reservation permits one automatic pre-application reload; only a successful main import clears it.",
+    "Persistent failures, unknown errors, denied storage or unacknowledged writes fail closed to explicit retry and feedback.",
+    "Keep the application ErrorBoundary explicit save-first retry unchanged; keep showcase isolation."
+  ],
+  "verification": {
+    "regressionPassed": 17,
+    "regressionFiles": 2,
+    "nativePassed": 8,
+    "nativeFiles": 2,
+    "modelRequests": 0,
+    "seededManuscriptUnchanged": true,
+    "originalLayoutAssertionsPreserved": true,
+    "privateRegressionLog": "bootstrap-directed.log",
+    "privateNativeLog": "bootstrap-native-after.log",
+    "originalColdCIConditions": {
+      "passed": 1,
+      "failed": 0,
+      "privateLog": "bootstrap-original-cold.log",
+      "sourceTestsUnmodified": true
+    }
+  },
+  "priorFullCI": {
+    "sourceCommit": "cc5d7e2752cd3da239b11e6bff156e8a0986a0d0",
+    "status": "INTERRUPTED_FOR_REPAIR_NOT_PASSED",
+    "exitCode": 130
+  },
+  "limits": [
+    "No claim of preventing every network failure, native crash/OOM or published-client acceptance.",
+    "Final-commit full delivery and original cold-server rerun require independent results."
+  ],
+  "priorFullE2E": {
+    "sourceCommit": "cc5d7e2752cd3da239b11e6bff156e8a0986a0d0",
+    "status": "INTERRUPTED_AFTER_PRESERVED_NETWORK_FAILURE_NOT_PASSED",
+    "privateLog": "full-e2e-cc5d7e275.log"
+  }
+}

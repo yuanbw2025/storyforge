@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "exact-older-source-full-ci",
+  "sourceCommit": "2f4ebb26b57ef05b054087964451d7fa3137ba67",
+  "command": "caffeinate -i env CI=1 npm run ci",
+  "log": "full-ci-2f4ebb26-CI-caffeinate.log",
+  "exitCode": 0,
+  "status": "FULL_CI_PASSED_AT_FROZEN_OLDER_SOURCE",
+  "regression": {
+    "files": 1253,
+    "passed": 8506,
+    "skipped": 3,
+    "failed": 0,
+    "durationSeconds": 8113.72
+  },
+  "coverage": {
+    "statements": 89.82,
+    "branches": 77.09,
+    "functions": 84.04,
+    "lines": 89.82
+  },
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "limits": [
+    "This source excludes all changes after 2f4ebb26; not current-head CI.",
+    "Skipped cases remain skipped. Full earlier E2E is separately recorded; original failed attempts remain retained."
+  ]
+}

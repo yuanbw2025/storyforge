@@ -25,7 +25,7 @@ test('portal dialogs use the shared palette and browser reload never restores an
   await page.getByRole('button',{name:'重命名',exact:true}).click()
   const dialog=page.getByRole('dialog')
   await expect(dialog).toHaveCSS('background-color','rgb(250, 248, 241)')
-  await expect(dialog).toHaveCSS('border-radius','24px')
+  await expect(dialog).toHaveCSS('border-radius','12px')
   await dialog.getByRole('textbox').fill('新界面保留作品')
   await dialog.getByRole('button',{name:'保存名称',exact:true}).click()
   await expect(page.getByRole('heading',{name:'新界面保留作品',exact:true})).toBeVisible()

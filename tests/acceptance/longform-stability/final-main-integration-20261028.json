@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "delivery-only-integration-with-current-main-after-pr219",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "7d6e46ecc669fff1fa3095d8c1437982f2e5575f",
+    "mainParent": "d4f92c80c46c2d296edeab82b4b9c8373fee2897",
+    "files": {
+      "src/lib/agent/skill-registry.ts": "8ae26f97f0086a4c548238cfb39deb427bb158234dcafe539fc211ebc1193b70",
+      "src/lib/registry/context-sources.ts": "259d4ac2051aae154f5b8ba85a91a5476f418bbe4fa57eba756a45a33f1cab30",
+      "src/lib/registry/field-registry.ts": "db93f5678bc79c2f666aadfc212112c46536a5b48f307ad0683b41d68585bb12",
+      "src/lib/context-gateway/canon-provider.ts": "6aee5d1cf33af1227ce630774d037d524e2c67d13cbf89636450ce1a7538a795",
+      "tests/acceptance/narrative-world/manifest-v1.json": "0b824d462350ae53ba40b70e2a7873b88a1ac2411e681a59b1fd26db347facc2",
+      "tests/regression/R-NW-1A-ir-codec.test.ts": "6a262867ffd67e6a03939a9d5d8c910d7f7e19ce6ffa2aaea329f3dcebfe90f0",
+      "tests/regression/R-NW-1B-corpus.test.ts": "80aa70505aa087013a83a72cc6af5346524d4b6fba119f811539e1972097ae05"
+    }
+  },
+  "status": "TARGETED_AND_NATIVE_PASSED_FINAL_DELIVERY_PENDING",
+  "scope": "Integrate already-merged main changes only. Six documentation/receipt conflicts resolved; no manual runtime conflict rewrite, new feature or authority expansion. Existing registry additions from both branches preserved.",
+  "verification": {
+    "regressionsPassed": 273,
+    "regressionFiles": 18,
+    "versionedReceiptGenerationPassed": 110,
+    "oldSemanticObservationsUnchanged": true,
+    "nativeStatus": "PASSED",
+    "privateRegressionLog": "main-d4f92-regression.log",
+    "privateNativeLog": "main-d4f92-native.log",
+    "nativePassed": 33,
+    "nativeFailed": 0,
+    "nativeSkipped": 0
+  },
+  "originalReceiptsUnchanged": true,
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "remaining": "Exact final-commit full CI, browser and open-preview must succeed before merge. Interrupted earlier runs remain interrupted."
+}

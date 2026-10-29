@@ -1,0 +1,283 @@
+{
+  "schemaVersion": 1,
+  "kind": "longform-character-authoring-partial-evidence",
+  "date": "2026-10-27",
+  "sourceCommit": "1c82d99bc6ab3d8aec1b50f80e4b8faca0d58aef",
+  "status": "NORMAL_PATHS_VERIFIED_FAULT_MATRIX_CONTINUING",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "manualBrowser": {
+    "tests": 7,
+    "passed": 7,
+    "roles": 4,
+    "dimensionsPerRole": 23,
+    "dimensionSaveReloadChecks": 92,
+    "clearedFieldPerRole": [
+      "background"
+    ],
+    "source": "tests/e2e/longform-character-save.spec.ts",
+    "sourceSha256": "c27517ede3dc84ddecaf03cae986398a7b5adb205c2d1b44155ce1f3fe96c80a",
+    "logSha256": "adcdb53a038243dde8448df48dc81d72e0fad111175a1a0f55e9a6823ae50c6c",
+    "failureCoverage": [
+      "name quota retains input",
+      "dimension quota and same-value retry",
+      "failed draft blocks role selection"
+    ]
+  },
+  "relatedRegressions": {
+    "files": 10,
+    "tests": 53,
+    "passed": 53
+  },
+  "liveModel": {
+    "model": "agnes-2.5-flash",
+    "acceptedTrial": "live-character-journeys-2026-10-27T12-23-47-668Z",
+    "acceptedRequests": 9,
+    "acceptedKnownTokens": 27887,
+    "acceptedUnknownUsage": 0,
+    "allTrials": [
+      {
+        "trial": "live-character-journeys-2026-10-27T12-18-18-775Z",
+        "status": "failed",
+        "sourceCommit": "1c82d99bc6ab3d8aec1b50f80e4b8faca0d58aef",
+        "phase": "main:adopt",
+        "failure": "Adopted character field differs: relationships",
+        "requests": 2,
+        "knownTokens": 6033,
+        "unknownUsageRequests": 0,
+        "resultSha256": "36bb65ee03af9504b2fb35e67a0a5a8d5eb82cad6a15a7736cbd848179bace09"
+      },
+      {
+        "trial": "live-character-journeys-2026-10-27T12-23-47-668Z",
+        "status": "passed",
+        "sourceCommit": "1c82d99bc6ab3d8aec1b50f80e4b8faca0d58aef",
+        "phase": null,
+        "failure": null,
+        "requests": 9,
+        "knownTokens": 27887,
+        "unknownUsageRequests": 0,
+        "resultSha256": "18c896f105f922611bcfdc70a733ce13f97a21509175fb75c0a8dbaa9750c87e"
+      }
+    ],
+    "acceptedStages": [
+      {
+        "role": "main",
+        "decision": "reject",
+        "candidateEdited": true,
+        "candidateReload": true,
+        "canonicalUnchangedUntilAdoption": true,
+        "originalName": "林索",
+        "revisedName": "探路者-main-reject-作者修订"
+      },
+      {
+        "role": "main",
+        "decision": "adopt",
+        "candidateEdited": true,
+        "candidateReload": true,
+        "canonicalUnchangedUntilAdoption": true,
+        "originalName": "探路者-main-adopt",
+        "revisedName": "探路者-main-adopt-作者修订"
+      },
+      {
+        "role": "secondary",
+        "decision": "reject",
+        "candidateEdited": true,
+        "candidateReload": true,
+        "canonicalUnchangedUntilAdoption": true,
+        "originalName": "林绳",
+        "revisedName": "探路者-secondary-reject-作者修订"
+      },
+      {
+        "role": "secondary",
+        "decision": "adopt",
+        "candidateEdited": true,
+        "candidateReload": true,
+        "canonicalUnchangedUntilAdoption": true,
+        "originalName": "沈辙",
+        "revisedName": "探路者-secondary-adopt-作者修订"
+      },
+      {
+        "role": "npc",
+        "decision": "reject",
+        "candidateEdited": true,
+        "candidateReload": true,
+        "canonicalUnchangedUntilAdoption": true,
+        "originalName": "探路者-npc-reject",
+        "revisedName": "探路者-npc-reject-作者修订"
+      },
+      {
+        "role": "npc",
+        "decision": "adopt",
+        "candidateEdited": true,
+        "candidateReload": true,
+        "canonicalUnchangedUntilAdoption": true,
+        "originalName": "陈盐·探路者-npc-adopt",
+        "revisedName": "探路者-npc-adopt-作者修订"
+      },
+      {
+        "role": "extra",
+        "decision": "reject",
+        "candidateEdited": true,
+        "candidateReload": true,
+        "canonicalUnchangedUntilAdoption": true,
+        "originalName": "探路者-extra-reject",
+        "revisedName": "探路者-extra-reject-作者修订"
+      },
+      {
+        "role": "extra",
+        "decision": "adopt",
+        "candidateEdited": true,
+        "candidateReload": true,
+        "canonicalUnchangedUntilAdoption": true,
+        "originalName": "探路者-extra-adopt",
+        "revisedName": "探路者-extra-adopt-作者修订"
+      }
+    ],
+    "unhandledPageErrors": [],
+    "extraRequest": "main reject had a distinct registered structured repair message; not a transport resend"
+  },
+  "downstream": {
+    "sourceCommit": "1c82d99bc6ab3d8aec1b50f80e4b8faca0d58aef",
+    "modelRequests": 0,
+    "roles": [
+      {
+        "role": "main",
+        "characterId": 1,
+        "projectId": 1,
+        "dimensions": [
+          "shortDescription",
+          "identity",
+          "profile",
+          "appearance",
+          "location",
+          "personality",
+          "values",
+          "strengths",
+          "weaknesses",
+          "fears",
+          "motivation",
+          "goals",
+          "innerConflict",
+          "background",
+          "keyEvents",
+          "abilities",
+          "powerLevel",
+          "speechStyle",
+          "habits",
+          "signatureItem",
+          "arc",
+          "storyRole",
+          "ending"
+        ],
+        "dedicatedViewUrl": "characters-main"
+      },
+      {
+        "role": "secondary",
+        "characterId": 2,
+        "projectId": 2,
+        "dimensions": [
+          "shortDescription",
+          "identity",
+          "profile",
+          "appearance",
+          "location",
+          "personality",
+          "values",
+          "strengths",
+          "weaknesses",
+          "fears",
+          "motivation",
+          "goals",
+          "innerConflict",
+          "background",
+          "keyEvents",
+          "abilities",
+          "powerLevel",
+          "speechStyle",
+          "habits",
+          "signatureItem",
+          "arc",
+          "storyRole",
+          "ending"
+        ],
+        "dedicatedViewUrl": "characters-minor"
+      },
+      {
+        "role": "npc",
+        "characterId": 3,
+        "projectId": 3,
+        "dimensions": [
+          "shortDescription",
+          "identity",
+          "profile",
+          "appearance",
+          "location",
+          "personality",
+          "values",
+          "strengths",
+          "weaknesses",
+          "fears",
+          "motivation",
+          "goals",
+          "innerConflict",
+          "background",
+          "keyEvents",
+          "abilities",
+          "powerLevel",
+          "speechStyle",
+          "habits",
+          "signatureItem",
+          "arc",
+          "storyRole",
+          "ending"
+        ],
+        "dedicatedViewUrl": "characters-npc"
+      },
+      {
+        "role": "extra",
+        "characterId": 4,
+        "projectId": 4,
+        "dimensions": [
+          "shortDescription",
+          "identity",
+          "profile",
+          "appearance",
+          "location",
+          "personality",
+          "values",
+          "strengths",
+          "weaknesses",
+          "fears",
+          "motivation",
+          "goals",
+          "innerConflict",
+          "background",
+          "keyEvents",
+          "abilities",
+          "powerLevel",
+          "speechStyle",
+          "habits",
+          "signatureItem",
+          "arc",
+          "storyRole",
+          "ending"
+        ],
+        "dedicatedViewUrl": "characters-extra"
+      }
+    ],
+    "adoptedCompletedReceipts": 4,
+    "rejectedOpenLedgers": 4,
+    "limitation": "Four resolved author rejections retain running ledger state; not claimed as completed terminal receipts.",
+    "forensicFixtureContinuation": true,
+    "officialBackupRoundTrip": false,
+    "evidenceSha256": "abcea510b2f9f661a339e97601d4b8c4b59c4e8a3f6b22cd1457c919c28c820f"
+  },
+  "notVerified": [
+    "entire per-role fault matrix",
+    "all dimension clears",
+    "real linked resource lifecycle",
+    "native packaged clients",
+    "whole delivery CI/E2E",
+    "literary acceptance"
+  ]
+}

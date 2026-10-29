@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-prose-mainline-partial-evidence",
+  "date": "2026-10-28",
+  "sourceCommit": "3435e2257cd811908a979c03e773a16bb64ba0c1",
+  "status": "PROSE_REJECTION_EDITED_ADOPTION_AND_MANUAL_SAVE_PASSED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "attemptedRequests": 3,
+  "knownTotalTokens": 17229,
+  "unknownUsageRequests": 1,
+  "successfulCohort": {
+    "directory": "live-longform-prose-2026-10-27T18-39-22-525Z",
+    "requests": 2,
+    "knownTotalTokens": 17229,
+    "unknownUsageRequests": 0,
+    "checks": [
+      "Generate, restore and reject with terminal root",
+      "New explicit independent generation, edit and durably save candidate",
+      "Reload exact edited candidate before adoption",
+      "Adopt via existing receipt and verify formal editor/body",
+      "Default post-adoption suggestion waits for author; explicit decline cancels without a model call",
+      "Manual prose edit, save and reload",
+      "Actual prose request contains complete accepted opening hook, author scene notes and prohibition"
+    ],
+    "originalOldOrphanRunPreserved": true,
+    "pageErrors": []
+  },
+  "unknownCohort": {
+    "directory": "live-longform-prose-2026-10-27T18-33-32-912Z",
+    "requests": 1,
+    "unknownUsageRequests": 1,
+    "cause": "UND_ERR_CONNECT_TIMEOUT; zero response bytes or finish observed",
+    "application": "Retained interrupted evidence, no adoptable candidate or automatic resend",
+    "accounting": "Unknown usage retained, not relabelled zero after later success"
+  },
+  "newSampleBoundary": "Later cohort had a changed explicit sample instruction; prior unknown request was not resumed, replayed or replaced",
+  "remaining": [
+    "Review modes, quality revision and post-chapter processing",
+    "Other generation operations, batch/chunking and long-run cases",
+    "Complete failure matrix, final-head full gates and available clients"
+  ]
+}

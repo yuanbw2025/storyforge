@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "kind": "exact-commit-real-rich-arc-four-transforms-with-acknowledged-recovery",
+  "date": "2026-10-28",
+  "sourceCommit": "c571fa13080bffad6bcdebf5c1086f36ad2ee956",
+  "status": "FOUR_OPERATIONS_EDIT_ACK_RELOAD_ADOPT_AND_READBACK_PASSED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "originalCohort": {
+    "directory": "live-story-arc-transforms-2026-10-27T22-10-36-656Z",
+    "log": "real-rich-arc-transforms-c571fa130.log",
+    "modelRequests": 1,
+    "knownTotalTokens": 11679,
+    "unknownUsageRequests": 0,
+    "result": "Model polish produced a valid candidate; the driver refreshed before the author revision had a durable acknowledgement, so original text was read back. Candidate and original failure preserved."
+  },
+  "recoveryCohort": {
+    "directory": "live-story-arc-transforms-2026-10-27T22-16-27-347Z",
+    "log": "real-rich-arc-transforms-c571fa130-recovery.log",
+    "modelRequests": 3,
+    "knownTotalTokens": 39034,
+    "unknownUsageRequests": 0,
+    "process": "Restore the existing polish candidate, wait for exact agentEvent author-draft acknowledgement, reload/adopt with zero new polish requests. Then explicitly invoke expand/rewrite/replan once each."
+  },
+  "aggregate": {
+    "modelRequests": 4,
+    "knownTotalTokens": 50713,
+    "unknownUsageRequests": 0
+  },
+  "results": [
+    {
+      "operation": "polish",
+      "status": "passed-real-candidate-edit-reload-adopt",
+      "arcId": 1,
+      "modelRequests": 0,
+      "canonicalUnchangedBeforeAdoption": true,
+      "identityPreserved": true,
+      "proseUnchanged": true
+    },
+    {
+      "operation": "expand",
+      "status": "passed-real-candidate-edit-reload-adopt",
+      "arcId": 1,
+      "modelRequests": 1,
+      "canonicalUnchangedBeforeAdoption": true,
+      "identityPreserved": true,
+      "proseUnchanged": true
+    },
+    {
+      "operation": "rewrite",
+      "status": "passed-real-candidate-edit-reload-adopt",
+      "arcId": 1,
+      "modelRequests": 1,
+      "canonicalUnchangedBeforeAdoption": true,
+      "identityPreserved": true,
+      "proseUnchanged": true
+    },
+    {
+      "operation": "replan",
+      "status": "passed-real-candidate-edit-reload-adopt",
+      "arcId": 1,
+      "modelRequests": 1,
+      "canonicalUnchangedBeforeAdoption": true,
+      "identityPreserved": true,
+      "proseUnchanged": true
+    }
+  ],
+  "shapeReadback": {
+    "polish": {
+      "beforeStages": 5,
+      "afterStages": 5,
+      "beforeEventCounts": [
+        8,
+        3,
+        3,
+        4,
+        3
+      ],
+      "afterEventCounts": [
+        8,
+        3,
+        3,
+        4,
+        3
+      ],
+      "sameOrderedStageIds": true
+    },
+    "expand": {
+      "beforeStages": 5,
+      "afterStages": 5,
+      "beforeEventCounts": [
+        8,
+        3,
+        3,
+        4,
+        3
+      ],
+      "afterEventCounts": [
+        9,
+        5,
+        5,
+        6,
+        5
+      ],
+      "sameOrderedStageIds": true
+    },
+    "rewrite": {
+      "beforeStages": 5,
+      "afterStages": 5,
+      "beforeEventCounts": [
+        9,
+        5,
+        5,
+        6,
+        5
+      ],
+      "afterEventCounts": [
+        5,
+        5,
+        4,
+        5,
+        5
+      ],
+      "sameOrderedStageIds": true
+    },
+    "replan": {
+      "beforeStages": 5,
+      "afterStages": 5,
+      "beforeEventCounts": [
+        5,
+        5,
+        4,
+        5,
+        5
+      ],
+      "afterEventCounts": [
+        5,
+        5,
+        4,
+        5,
+        5
+      ],
+      "sameOrderedStageIds": true
+    }
+  },
+  "checks": [
+    "Only synthetic isolated browser data, existing frozen server at exact commit",
+    "Author draft acknowledgement before reload; candidate does not write Canon before adoption",
+    "Same Arc identity and Work ownership; all four operations preserve ordered stage identities in this sample",
+    "Polish retains eight existing events; expansion reaches nine events without new-Arc cap refusal",
+    "Explicit adoption and formal receipt; refresh produces no extra requests; prose unchanged; no page errors"
+  ],
+  "evidenceSha256": {
+    "executed-runner.mjs": "63616ae85c486705d1337f97054f5a78548938a3e99df4ceadd78129a75e1ff6",
+    "executed-forwarder.mjs": "c0c88ba76920d1a87848a6ce0ffccbf6788c48504370bae3da5c4d66c17a033d",
+    "live-result.json": "936fd8caa718621df8d8728457a9e481d3a5221fd11644a28dd5e84fafa1ded6",
+    "live-requests.json": "a13a9f1d4d580cc0a1ab69df01543fe67723f71a585c542d68bd9e3ecfaa02eb"
+  },
+  "pageErrors": [],
+  "limits": "Workflow and exact data-readback evidence; not independent literary or semantic acceptance."
+}

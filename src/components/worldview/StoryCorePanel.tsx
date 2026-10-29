@@ -1,3 +1,5 @@
+import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
+import WorldviewReadBoundary from './WorldviewReadBoundary'
 import { useState, useEffect } from 'react'
 import { Check, Loader2, Sparkles, Trash2 } from 'lucide-react'
 import { useWorldviewStore } from '../../stores/worldview'
@@ -60,8 +62,9 @@ interface Props {
 }
 
 export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
-  const { storyCore, saveStoryCore, loadAll } = useWorldviewStore()
+  const { storyCore, saveStoryCore } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
+  const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
   const copilot = useMasterCopilot({
     project,
     worldGroupId: project.enableMultiWorld ? activeGroupId : null,
@@ -73,25 +76,20 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
   useInitialRecordTarget(initialStoryCoreId, storyCore?.id === initialStoryCoreId)
 
   useEffect(() => {
-    loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
-  }, [project.id, project.enableMultiWorld, activeGroupId, loadAll])
-
-  useEffect(() => {
-    if (!storyCore) return
     setValues({
-      logline:         storyCore.logline || '',
-      concept:         storyCore.concept || '',
-      theme:           storyCore.theme || '',
-      centralConflict: storyCore.centralConflict || '',
-      plotPattern:     storyCore.plotPattern || '',
-      mainPlot:        storyCore.mainPlot || '',
-      subPlots:        storyCore.subPlots || '',
+      logline:         storyCore?.logline ?? '',
+      concept:         storyCore?.concept ?? '',
+      theme:           storyCore?.theme ?? '',
+      centralConflict: storyCore?.centralConflict ?? '',
+      plotPattern:     storyCore?.plotPattern ?? '',
+      mainPlot:        storyCore?.mainPlot ?? '',
+      subPlots:        storyCore?.subPlots ?? '',
     })
   }, [storyCore])
 
   const save = (key: string, v: string) => {
     const field = FIELDS.find(f => f.key === key)!
-    saveStoryCore({ projectId: project.id!, [field.saveKey]: v })
+    return saveStoryCore({ projectId: project.id!, [field.saveKey]: v }, authorScope)
   }
 
   const pendingStoryCoreCandidates = copilot.pendingCandidates.filter(candidate => (
@@ -107,6 +105,7 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
   }, [pendingStoryCoreField])
 
   return (
+    <WorldviewReadBoundary onRetry={reloadCurrent}>
     <div
       {...initialRecordTargetAttributes(storyCore?.id === initialStoryCoreId, storyCore?.id)}
       className={`flex flex-col md:flex-row gap-4 max-w-5xl rounded-xl ${
@@ -117,7 +116,7 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
       <div className="flex flex-wrap md:block md:w-40 shrink-0 gap-1 space-y-0.5 pt-1" aria-label="故事字段">
         {FIELDS.map(f => {
           const active = activeKey === f.key
-          const hasContent = !!values[f.key]
+          const hasContent = values[f.key] != null && values[f.key] !== ''
           const isFieldStreaming = copilot.busy && runningKey === f.key
           const hasPendingCandidate = pendingStoryCoreField === f.key
           return (
@@ -137,7 +136,7 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
                 </p>
                 {hasContent && (
                   <p className="text-[10px] text-text-muted truncate">
-                    {values[f.key].slice(0, 12)}…
+                    {typeof values[f.key] === 'string' ? `${values[f.key].slice(0, 12)}…` : '格式异常'}
                   </p>
                 )}
               </div>
@@ -163,10 +162,10 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
           <div key={f.key} className={activeKey === f.key ? '' : 'hidden'}>
             <FieldEditor
               field={f}
-              value={values[f.key] || ''}
+              value={values[f.key] ?? ''}
               onChange={v => {
                 setValues(prev => ({ ...prev, [f.key]: v }))
-                save(f.key, v)
+                return save(f.key, v)
               }}
               project={project}
               activeGroupId={activeGroupId}
@@ -179,13 +178,14 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
               onRunningChange={running => setRunningKey(running ? f.key : null)}
               onAdopted={async candidate => {
                 await copilot.adoptCandidate(candidate)
-                await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                await reloadCurrent()
               }}
             />
           </div>
         ))}
       </div>
     </div>
+    </WorldviewReadBoundary>
   )
 }
 
@@ -206,7 +206,7 @@ function FieldEditor({
 }: {
   field: FieldDef
   value: string
-  onChange: (v: string) => void
+  onChange: (v: string) => void | Promise<void>
   project: Project
   activeGroupId: number | null
   copilot: ReturnType<typeof useMasterCopilot>

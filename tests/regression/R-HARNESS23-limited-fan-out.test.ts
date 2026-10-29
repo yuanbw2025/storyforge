@@ -15,6 +15,7 @@ import type { WorkspaceScope } from '../../src/lib/types'
 import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import { currentWorldOriginDraftV1 } from '../helpers/current-worldview-field'
+import { rejectMasterAgentCandidateV1 } from '../../src/lib/agent/run/master-adoption'
 
 const inspirationResult = {
   worldview: {
@@ -146,6 +147,34 @@ describe.sequential('R-HARNESS23 · 主 Agent 有限 fan-out', { timeout: 15_000
     globalThis.localStorage?.removeItem(MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY)
     useAIConfigStore.setState({ config: originalConfig, presets: [], taskRoutes: {} })
     db.close()
+  })
+
+  it('independent candidates remain available until the final explicit rejection closes the run', async () => {
+    const fixture = await createWorkspace()
+    const conversation = await getOrCreateAgentConversation({ projectId: fixture.scope.projectId, worldGroupId: fixture.worldGroupId, scope: fixture.scope, purpose: 'master-authoring' })
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { messages?: Array<{ content?: string }> }
+      await new Promise(resolve => setTimeout(resolve, 30))
+      return new Response(JSON.stringify({ choices: [{ message: { content: modelContent(body.messages?.map(m => m.content ?? '').join('\n') ?? '') } }], usage: { prompt_tokens: 100, completion_tokens: 40, total_tokens: 140 } }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const plan = fanOutPlan()
+    const result = await runDurableMasterAgentPlanV1({ scope: fixture.scope, worldGroupId: fixture.worldGroupId, conversationId: conversation.id, plan, budget: new AgentTeamBudgetTracker('balanced') })
+    expect(result.candidates).toHaveLength(3)
+    const calls = fetchMock.mock.calls.length
+    const ref = (at: number) => ({ scope: fixture.scope, worldGroupId: fixture.worldGroupId, runId: result.runId, candidateEventId: result.candidates[at].event.id! })
+    const first = await rejectMasterAgentCandidateV1(ref(0))
+    expect(first.projection.state).not.toBe('cancelled')
+    expect(first.projection.steps[result.candidates[1].payload.runStepId!].status).toBe('awaiting_confirmation')
+    const second = await rejectMasterAgentCandidateV1(ref(1))
+    expect(second.projection.state).not.toBe('cancelled')
+    const last = await rejectMasterAgentCandidateV1(ref(2))
+    expect(last.projection.state).toBe('cancelled')
+    expect(last.events.filter(event => event.type === 'run.cancelled')).toHaveLength(1)
+    expect(last.projection.steps[result.candidates[0].payload.runStepId!].confirmation).toBe('reject')
+    expect(fetchMock).toHaveBeenCalledTimes(calls)
+    expect(await db.worldviews.count()).toBe(0)
+    expect(await db.characters.count()).toBe(0)
   })
 
   it('两路模型调用并行、账本串行；一叶失败后保留成功候选且恢复只重跑失败叶', async () => {

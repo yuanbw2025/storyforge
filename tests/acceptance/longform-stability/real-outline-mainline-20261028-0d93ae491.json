@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-agnes-volume-to-chapter-partial-evidence",
+  "date": "2026-10-28",
+  "sourceCommit": "0d93ae4915dd262a8e88e213ec4b78781080629e",
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "status": "REAL_VOLUME_AND_THREE_CHAPTER_PATHS_VERIFIED_REMAINDER_CONTINUES",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "modelRequests": 4,
+  "knownTotalTokens": 9948,
+  "unknownUsageRequests": 0,
+  "phases": [
+    {
+      "kind": "single-volume",
+      "requests": 2,
+      "knownTotalTokens": 4175,
+      "observations": [
+        {
+          "kind": "single-volume",
+          "decision": "reject",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "formalNodeCount": 1,
+          "runStatuses": [
+            "failed"
+          ]
+        },
+        {
+          "kind": "single-volume",
+          "decision": "adopt",
+          "candidateReload": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "formalNodeCount": 1,
+          "runStatuses": [
+            "failed",
+            "completed"
+          ]
+        }
+      ],
+      "evidenceDirectory": "live-longform-mainline-2026-10-27T16-39-54-547Z"
+    },
+    {
+      "kind": "three-chapters",
+      "requests": 2,
+      "knownTotalTokens": 5773,
+      "observations": [
+        {
+          "decision": "reject",
+          "restoredWithoutModelReplay": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "chapterCount": 0
+        },
+        {
+          "decision": "adopt",
+          "restoredWithoutModelReplay": true,
+          "canonicalUnchangedUntilAdoption": true,
+          "chapterCount": 3
+        }
+      ],
+      "evidenceDirectory": "live-longform-chapters-2026-10-27T17-05-37-966Z"
+    }
+  ],
+  "checks": {
+    "reviewBeforeCanonicalChange": "PASS",
+    "reloadWithoutNewModelRequest": "PASS",
+    "exactAuthorRejectionTerminal": "PASS",
+    "originalRunAdoptionAndReadback": "PASS",
+    "actualParameterThreeChapters": "PASS",
+    "adoptedVolumeSummaryPresentInBothRealChapterRequests": "PASS: full summary, no substitute fixture",
+    "manualChapterTitleSaveReload": "PASS",
+    "pageErrors": []
+  },
+  "retainedPriorFailures": [
+    {
+      "source": "6ef76143",
+      "kind": "candidate hydration failure",
+      "receipt": "outline-candidate-recovery-20261028.json"
+    },
+    {
+      "source": "bc96b319",
+      "kind": "malformed real JSON was incorrectly adopted; prior separate transport failure remains unknown",
+      "receipt": "outline-structured-output-20261028.json"
+    },
+    {
+      "source": "0d93ae4915dd262a8e88e213ec4b78781080629e",
+      "kind": "restored test browser intentionally had no stored key; initial chapter trial stopped at client configuration before any provider request",
+      "providerRequests": 0,
+      "evidenceDirectory": "live-longform-chapters-2026-10-27T16-57-29-875Z",
+      "subsequentSetup": "Explicitly entered a local dummy forwarding key in test settings and started new visible runs; original failed run retained"
+    }
+  ],
+  "privacy": "Synthetic isolated work; only local forwarder loads provider credentials. Original author browser/database untouched. No keys or private upstream in repository.",
+  "limits": [
+    "This verifies application behavior, transport and exact source handoff, not literary acceptance",
+    "Scene generation/enhancement, prose/review, batch/chunked chapter modes, long-run continuity and the remaining matrix continue",
+    "No native package, upgrade, release or deployment claim"
+  ]
+}

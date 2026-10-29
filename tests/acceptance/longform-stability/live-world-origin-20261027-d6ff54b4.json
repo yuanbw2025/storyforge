@@ -1,0 +1,88 @@
+{
+  "caseId": "LF-036",
+  "baselineCommit": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
+  "validatedCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+  "buildVersion": "4.0.4",
+  "packageSha256WhenNative": null,
+  "platformAndDevice": "macOS host, isolated headless Chromium, 1440 x 1000",
+  "fixtureId": "ST02 Agnes世界字段隔离实测",
+  "profileAndIsolation": "Fresh browser context and synthetic Work; real endpoint and credential only in local Node forwarding process; outside-loopback browser requests blocked.",
+  "evidenceType": "LIVE_AGNES_UI",
+  "stepsAndExpected": [
+    "Blank worldOrigin: create via visible expand action; canonical unchanged before adoption",
+    "Edit candidate via field UI, wait actual candidate-event persistence, reload exact value",
+    "Explicit adoption, reload, manual edit, blur save, reload",
+    "Real rewrite: outbound registered prompt contains saved manual field; reject candidate, reload keeps canonical"
+  ],
+  "observedResult": {
+    "status": "passed",
+    "modelRequests": 2,
+    "canonicalUnchangedBeforeAdoption": true,
+    "candidateEditAndReload": true,
+    "explicitAdoptionAndReload": true,
+    "manualSaveAndReload": true,
+    "downstreamPromptContainsSavedField": true,
+    "rejectLeavesCanonicalUnchanged": true,
+    "nativePackageEvidence": false,
+    "literaryAcceptance": false
+  },
+  "fieldReadbackAndProtectedHashes": {
+    "beforeAdoption": "Exact worldview JSON equality asserted",
+    "finalWorldOriginSha256": "d2d85601b4b6be14e437d7db2775510b91333b8d1ccec625f0653b5c21c82e60"
+  },
+  "contextManifestAndReceiptWhenAI": "Captured in private live-ui-evidence.json with durable runs, run events, candidate conversation events and artifacts; downstream actual request verified.",
+  "requestCountsAndAttemptsWhenAI": {
+    "provider": "agnes",
+    "model": "agnes-2.5-flash",
+    "requests": 2,
+    "attempts": [
+      {
+        "number": 1,
+        "httpStatus": 200,
+        "status": "completed",
+        "usage": {
+          "completion_tokens": 465,
+          "prompt_tokens": 2691,
+          "total_tokens": 3156,
+          "completion_tokens_details": {
+            "reasoning_tokens": 295,
+            "text_tokens": 170
+          },
+          "prompt_tokens_details": {
+            "cached_tokens": 256
+          }
+        }
+      },
+      {
+        "number": 2,
+        "httpStatus": 200,
+        "status": "completed",
+        "usage": {
+          "completion_tokens": 214,
+          "prompt_tokens": 2670,
+          "total_tokens": 2884,
+          "completion_tokens_details": {
+            "reasoning_tokens": 108,
+            "text_tokens": 106
+          },
+          "prompt_tokens_details": {
+            "cached_tokens": 256
+          }
+        }
+      }
+    ],
+    "knownTotalTokens": 6040,
+    "unknownUsageRequests": 0
+  },
+  "unhandledErrors": 0,
+  "defectAndPr": {
+    "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+    "pullRequest": null
+  },
+  "releaseStatus": "NOT_RELEASED",
+  "limitations": [
+    "Nonempty expand and polish not covered by this smoke case",
+    "Not all fault profiles, native packages, literary quality or whole-case acceptance"
+  ],
+  "priorAttempts": "One zero-request selector failure and one completed model response followed by wrong-table polling failure are retained privately. The earlier completed response has 3246 tokens from a separate post-hoc raw-response readback; it remains a failed chain."
+}

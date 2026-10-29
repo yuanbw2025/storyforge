@@ -11,6 +11,7 @@ import { getAIConfigPresetSessionApiKey, useAIConfigStore } from '../../stores/a
 import { resolveAIConfigForTask, type AITaskKind } from './task-routing'
 import { AICompletionResponseErrorV1, inspectCompletionResponseV1, requireCompletionTextV1 } from './completion-response'
 import { allowsSamplingTemperature, targetsOfficialProvider } from './provider-model-lifecycle'
+import { supportsAgnesThinkingModeV1 } from './agnes-parameters'
 
 /** 调用元信息（用于消耗统计分类） */
 export interface AICallMeta {
@@ -70,7 +71,7 @@ export function describeResolvedAIRequestSettingsV1(
   const parameters: Record<string, unknown> = {}
   if (config.provider !== 'codex') {
     const body = JSON.parse(buildRequest(config, [], stream, options).body) as Record<string, unknown>
-    for (const key of ['temperature', 'max_tokens', 'reasoning_effort', 'thinking']) {
+    for (const key of ['temperature', 'max_tokens', 'reasoning_effort', 'thinking', 'chat_template_kwargs']) {
       if (body[key] !== undefined) parameters[key] = body[key]
     }
     if (body.response_format && typeof body.response_format === 'object'
@@ -257,8 +258,7 @@ function buildRequest(
   } else {
     // Agnes documents this boolean extension for 2.5/3.0 Flash. Keep it
     // opt-in so ordinary calls and other providers retain their own defaults.
-    if (config.provider === 'agnes' && options?.thinkingMode
-      && ['agnes-2.5-flash', 'agnes-3.0-flash'].includes(config.model)) {
+    if (options?.thinkingMode && supportsAgnesThinkingModeV1(config)) {
       body.chat_template_kwargs = { enable_thinking: options.thinkingMode === 'enabled' }
     }
     if (config.temperature !== undefined && allowsSamplingTemperature(config)) body.temperature = config.temperature

@@ -17,13 +17,16 @@ import {
   appendAgentRunEventV1,
   type AgentRunSnapshotV1,
 } from './event-store'
-import { hashCanonicalValue } from './hash'
+import { canonicalStringify, hashCanonicalValue } from './hash'
+import { recordAgentRunArtifactV1 } from '../../memory/artifact-store'
 
 export interface GenerationNodeDurableTraceV1 extends GenerationNodeShadowTrace {
   readonly runId: number
   readonly stepId: string
   readonly events: readonly AnyAgentRunEventV1[]
   readonly traceErrors: readonly string[]
+  /** Retain rejected output without inventing an adoptable candidate/manifest. */
+  preserveRejectedResponse: (output: unknown) => Promise<void>
   commitCandidate: <T>(input: {
     output: unknown
     candidateHash: string
@@ -142,6 +145,19 @@ export function createGenerationNodeDurableTraceV1(input: {
         attempt: 1,
         outputHash: modelOutputHash,
       })
+    },
+    async preserveRejectedResponse(output: unknown) {
+      const recorded = await recordAgentRunArtifactV1({
+        scope: input.scope,
+        runId: snapshot.run.id!,
+        artifactKind: 'raw-response',
+        content: typeof output === 'string' ? output : canonicalStringify(output),
+        stepId: input.stepId,
+        attempt: 1,
+        expectedLastSequence: snapshot.projection.lastSequence,
+        now: now(),
+      })
+      snapshot = recorded.snapshot
     },
     async stepSucceeded(output: unknown) {
       const outputHash = modelOutputHash ?? await hashCanonicalValue(output)

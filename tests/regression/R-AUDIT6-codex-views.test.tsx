@@ -127,7 +127,7 @@ describe('AUDIT-6 / HEALTH-4 · 词条受控视图', () => {
 
     expect(host.textContent).toContain('本分类下已有同名词条')
     await act(async () => host.querySelector<HTMLButtonElement>('button[title="4 星"]')!.click())
-    expect(onChange).toHaveBeenCalledWith({ importance: 4 })
+    expect(onChange).toHaveBeenCalledWith({ importance: 4 }, expect.objectContaining({ importance: 2, worldGroupId: 7 }))
 
     const tier = host.querySelector<HTMLSelectElement>('select[aria-label="品级"]')!
     await act(async () => setControlValue(tier, '上品'))
