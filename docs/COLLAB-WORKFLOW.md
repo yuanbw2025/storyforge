@@ -108,6 +108,26 @@ PR 至少包含：
 - 移除工作树前确认 clean、提交已在目标主干、没有唯一 untracked 文件。
 - 分支删除优先 `git branch -d`；若 Git 判断未合并，先调查，不以 `-D` 跳过证据。
 
+### 8.1 测试临时目录
+
+冻结 E2E 快照、覆盖率报告与一次性验证副本统一使用 `scripts/test-temp-directory.mjs` 的生命周期。所有权记录在系统临时目录的 `storyforge-test-runs-v1/<kind>-<随机值>/owner.json`，测试数据只在其 `payload/` 子目录。Vitest 清空报告目录不会删除所有权记录。
+
+- 正常结束、子进程失败、准备阶段异常以及 SIGINT/SIGTERM 中断都进入同一清理路径，保留测试退出码；子进程使用本次独立进程组，清理不向其它测试发送信号。
+- Playwright 的 `webServer.gracefulShutdown` 给包装进程 30 秒完成清理。未配置时的默认强杀会绕过 JavaScript 清理逻辑。
+- 强杀或断电无法运行 finally。后续测试启动时只检查新工具带标记的目录：超过 24 小时，owner、子进程及进程组均已退出，且 `lsof` 确认没有打开文件，才回收；每次最多 32 个。PID 复用、权限错误、缺少 `lsof`、未知文件或旧式未标记目录一律保留。Windows 不支持此打开文件检查，孤儿目录不自动回收。
+- 启动前要求至少保留 5 GiB 可用空间；冻结快照还检查预计复制大小，并在逐项复制前复查。空间不足时明确失败，不尝试删源码、归档或用户备份来继续测试。外部进程写盘不受此工具控制。
+- 覆盖率文字摘要留在测试输出；临时 HTML/JSON 报告随本次运行回收。Playwright 的失败录像与 trace 保持现有 `test-results` 保留策略，不作为全盘自动清理对象。
+
+一次性验证命令使用：
+
+```bash
+node scripts/run-test-workspace.mjs -- node /absolute/path/to/verification.mjs
+```
+
+验证脚本从 `process.env.STORYFORGE_TEST_WORKSPACE` 取得本次临时路径；只向该路径复制所需输入和生成测试产物。命令工作目录仍为原项目，源码和 node_modules 不由包装器复制或删除。长期开发分支、人工修改、备份和需长期保留的证据不能放进该临时路径。Node 脚本也可调用 `withTestDirectory('validation', async temporary => { ... })`，子进程通过 `temporary.run()` 启动。
+
+使用当前分支的工具才会获得这些保护。不得热改或重启正在运行的旧测试；其它工作树在各自测试结束后，按正常分支流程同步此修复。回归入口为 `npm run test:temp-lifecycle`，已纳入本地 CI 和 GitHub CI。
+
 ## 9. 外部阻塞
 
 外部 provider、依赖审计、GitHub 或部署不可用时，保留本地完整验证和错误证据，明确哪些门未完成。不能把“本地部分通过”写成主干全绿，也不能因外部阻塞扩大未授权远程操作。

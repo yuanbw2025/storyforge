@@ -63,7 +63,7 @@
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "test:codex-bridge": "node --test scripts/local-codex/*.test.mjs",
-    "ci": "npm run test:codex-bridge && npm run check:required-tables && npm run check:ai-manual && npm run check:ai-entry-registry && npm run check:architecture && npm run check:text-open-world-player-paths && npm run check:text-open-world-invariants && npm run check:text-open-world-stress && npm run check:text-open-world-performance && npm run check:text-open-world-calibration && npm run check:text-open-world-human-playtest && npm run check:text-open-world-release-update && npm run check:text-open-world-lifecycle && npm run check:text-open-world-retirement && npm run check:source-reachability && npm run check:docs && npm run check:roadmap && npm run check:agent-context && npm run check:agent-freshness && npm run check:canon-coverage && npm run check:project-metrics && npm run check:dependencies && npm run lint && npx tsc --noEmit && npm run test:coverage && npm run build && npm run check:bundle-size",
+    "ci": "npm run test:temp-lifecycle && npm run test:codex-bridge && npm run check:required-tables && npm run check:ai-manual && npm run check:ai-entry-registry && npm run check:architecture && npm run check:text-open-world-player-paths && npm run check:text-open-world-invariants && npm run check:text-open-world-stress && npm run check:text-open-world-performance && npm run check:text-open-world-calibration && npm run check:text-open-world-human-playtest && npm run check:text-open-world-release-update && npm run check:text-open-world-lifecycle && npm run check:text-open-world-retirement && npm run check:source-reachability && npm run check:docs && npm run check:roadmap && npm run check:agent-context && npm run check:agent-freshness && npm run check:canon-coverage && npm run check:project-metrics && npm run check:dependencies && npm run lint && npx tsc --noEmit && npm run test:coverage && npm run build && npm run check:bundle-size",
     "ci:e2e": "PLAYWRIGHT_FROZEN_WORKSPACE=1 npm run test:e2e",
     "plugins:build-examples": "node tools/plugin-sdk/build-examples.mjs",
     "plugins:check": "node tools/plugin-sdk/cli.mjs check",
@@ -79,7 +79,8 @@
     "build:android:web": "tsc -b && npm run build:adventure-player && vite build --mode android && node scripts/distribution/prepare-android.mjs && cap sync android",
     "build:android": "npm run build:android:web && node scripts/distribution/build-android.mjs",
     "test:clients": "node --test scripts/desktop/*.test.mjs scripts/distribution/*.test.mjs && vitest run tests/regression/R-CLIENT-native-transport.test.ts tests/regression/R-CLIENT-updates.test.tsx tests/regression/R-CLIENT-save-file.test.ts tests/regression/R-CLIENT-SUPPORT1-feedback-telemetry.test.tsx tests/regression/R-CLIENT-LEGAL1-consent.test.tsx",
-    "build:macos": "npm run build:portable && node scripts/distribution/notices.mjs && electron-builder --config electron-builder.config.cjs --mac --publish never --config.directories.output=release/macos"
+    "build:macos": "npm run build:portable && node scripts/distribution/notices.mjs && electron-builder --config electron-builder.config.cjs --mac --publish never --config.directories.output=release/macos",
+    "test:temp-lifecycle": "node --test scripts/test-temp-lifecycle.test.mjs"
   },
   "dependencies": {
     "@capacitor/android": "8.5.3",

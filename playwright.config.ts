@@ -39,6 +39,8 @@ export default defineConfig({
       ? `node scripts/serve-e2e-snapshot.mjs --port ${port}`
       : `npm run dev -- --host 127.0.0.1 --port ${port}`,
     url: `http://127.0.0.1:${port}/storyforge/`,
+    // Let the snapshot owner finish cleanup; Playwright otherwise SIGKILLs it.
+    gracefulShutdown: { signal: 'SIGTERM', timeout: 30_000 },
     reuseExistingServer: false,
     timeout: 120_000,
   },

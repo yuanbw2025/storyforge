@@ -1,6 +1,6 @@
 # AGENTS.md · StoryForge 开发入口
 
-> 普通任务唯一自动加载的项目文档。先按本文建立关联闭包，再通过
+> 普通任务唯一自动入口。先建立关联闭包，再通过
 > [`docs/CONTEXT-ROUTING.md`](docs/CONTEXT-ROUTING.md) 按任务读取现行文档片段。
 > 项目方向以 [`docs/PROJECT-MASTER-CHARTER.md`](docs/PROJECT-MASTER-CHARTER.md) 为最高权威；
 > 未列入 [`docs/DOCUMENT-AUTHORITY.md`](docs/DOCUMENT-AUTHORITY.md) 的旧文档不得作为施工依据。
@@ -76,7 +76,7 @@ StoryForge 是 React + TypeScript + IndexedDB 的本地优先生产项目。用�
 
 验证按风险递增：
 
-1. 先跑改动对应的定向测试或检查器。
+1. 先跑对应定向检查；临时目录按协作 §8.1 托管。
 2. 代码提交前至少通过 `npm run check:architecture`、`npm run check:required-tables`、
    `npm run check:ai-manual`、`npx tsc --noEmit`、相关测试和 `npm run build`。
 3. 交付单元运行 `npm run ci`；外部依赖审计若受上游公告阻塞，单独报告，其余闸门仍须完成。
