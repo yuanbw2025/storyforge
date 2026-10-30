@@ -24,7 +24,7 @@ async function installOfflineBoundary(page: Page, baseURL: string | undefined) {
   const state = { calls: 0, mode: 'facts', beats: [] as unknown[], blocked: [] as string[] }
   await page.route('**/*', async route => {
     const url = new URL(route.request().url())
-    if (url.origin === origin) return route.continue()
+    if (url.origin === origin && ['GET', 'HEAD'].includes(route.request().method())) return route.continue()
     if (url.origin !== 'https://quality-round1.invalid') {
       state.blocked.push(url.origin)
       return route.abort('blockedbyclient')
@@ -43,11 +43,9 @@ async function installOfflineBoundary(page: Page, baseURL: string | undefined) {
       usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 },
     }) })
   })
-  await page.addInitScript(() => {
-    localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'openai', baseUrl: 'https://quality-round1.invalid/v1', model: 'gpt-4o', temperature: 0.2, maxTokens: 4000 }))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
-  })
+  await page.addInitScript(expectedOrigin => {
+    if (location.origin === expectedOrigin) localStorage.setItem('storyforge_guide_completed', 'e2e')
+  }, origin)
   return state
 }
 
@@ -125,6 +123,12 @@ test('round1 UI: frozen screenplay edits, excluded fact and replacement authoriz
   test.setTimeout(120_000)
   const transport = await installOfflineBoundary(page, baseURL)
   await page.goto('./script/library?create=1')
+  await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { useAIConfigStore } = await load<typeof import('../../src/stores/ai-config')>('/storyforge/src/stores/ai-config.ts')
+    useAIConfigStore.getState().setConfig({ provider: 'openai', baseUrl: 'https://quality-round1.invalid/v1', model: 'gpt-4o',
+      apiKey: 'SYNTHETIC_ROUND1_ISOLATED_TEST_KEY', temperature: 0.2, maxTokens: 4000 })
+  })
   await page.getByLabel('剧本名称', { exact: true }).fill('SFQA017 isolated browser screenplay')
   await page.getByLabel('来源方式', { exact: true }).selectOption('import')
   await page.getByLabel('导入原作内容').fill('清晨，检票员发现一张没有目的地的车票，并把它放进抽屉。抽屉仍在检票室内。')
