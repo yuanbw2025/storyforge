@@ -25,19 +25,18 @@ function parseSimpleTarget(target: string): { tableName: string; field: string }
   return match ? { tableName: match[1], field: match[2] } : null
 }
 
-async function rowsReferencingField(
+async function keysReferencingField(
   table: typeof PROJECT_TABLES[number]['table'],
   field: string,
   sourceId: number,
-): Promise<any[]> {
-  const dexieTable = table as any
-  const indexed = dexieTable.schema?.primKey?.keyPath === field
-    || dexieTable.schema?.idxByName?.[field] != null
-  if (indexed) return dexieTable.where(field).equals(sourceId).toArray()
+): Promise<number[]> {
+  const indexed = table.schema.primKey.keyPath === field
+    || table.schema.idxByName[field] != null
+  if (indexed) return table.where(field).equals(sourceId).primaryKeys()
   // PROJECT_TABLES may govern semantically important but intentionally
   // unindexed optional references. Deletion is rare and correctness is more
   // important than forcing every nullable evidence pointer into the schema.
-  return (await dexieTable.toArray()).filter((row: Record<string, unknown>) => row[field] === sourceId)
+  return table.filter(row => row[field] === sourceId).primaryKeys()
 }
 
 export async function cascadeRegisteredReferences(
@@ -57,14 +56,13 @@ export async function cascadeRegisteredReferences(
     if (!target) throw new Error(`[workspace-lifecycle] 无效引用 ${sourceTableName} -> ${ref.target}`)
     const targetSpec = REGISTRY_BY_NAME.get(target.tableName)
     if (!targetSpec) throw new Error(`[workspace-lifecycle] 引用目标未登记 ${target.tableName}`)
-    const rows = await rowsReferencingField(targetSpec.table, target.field, sourceId)
-    for (const row of rows) {
-      if (row.id == null) continue
+    const keys = await keysReferencingField(targetSpec.table, target.field, sourceId)
+    for (const key of keys) {
       if (ref.onDelete === 'setNull') {
-        await targetSpec.table.update(row.id, { [target.field]: null })
+        await targetSpec.table.update(key, { [target.field]: null })
       } else {
-        await cascadeRegisteredReferences(target.tableName, row.id, visited)
-        await targetSpec.table.delete(row.id)
+        await cascadeRegisteredReferences(target.tableName, key, visited)
+        await targetSpec.table.delete(key)
       }
     }
   }
@@ -74,28 +72,21 @@ async function deleteOwnerRows(owner: 'world' | 'work', ownerId: number): Promis
   for (const spec of PROJECT_TABLES) {
     if (!spec.table || spec.name === 'projects' || spec.name === 'worlds' || spec.name === 'works') continue
     const locator = spec.domainOwner?.locator
+    let field: string | undefined
     if (locator?.kind === 'field' && locator.owner === owner) {
-      const rows = (await spec.table.toArray()).filter(row => (row as any)[locator.field] === ownerId)
-      for (const row of rows) {
-        if (row.id == null) continue
-        await cascadeRegisteredReferences(spec.name, row.id)
-        await spec.table.delete(row.id)
-      }
+      field = locator.field
     } else if (locator?.kind === 'exclusive-fields') {
-      const field = owner === 'world' ? locator.worldField : locator.workField
-      const rows = (await spec.table.toArray()).filter(row => (row as any)[field] === ownerId)
-      for (const row of rows) {
-        if (row.id == null) continue
-        await cascadeRegisteredReferences(spec.name, row.id)
-        await spec.table.delete(row.id)
-      }
+      field = owner === 'world' ? locator.worldField : locator.workField
     } else if (locator?.kind === 'exclusive-work-instance' && owner === 'work') {
-      const rows = (await spec.table.toArray()).filter(row => (row as any)[locator.workField] === ownerId)
-      for (const row of rows) {
-        if (row.id == null) continue
-        await cascadeRegisteredReferences(spec.name, row.id)
-        await spec.table.delete(row.id)
-      }
+      field = locator.workField
+    }
+    if (field === undefined) continue
+    // Read native keys from the matching collection: a table may use a key
+    // such as analysisRunId, and an unrelated row.id is never authoritative.
+    const keys = await spec.table.filter(row => row[field] === ownerId).primaryKeys()
+    for (const key of keys) {
+      await cascadeRegisteredReferences(spec.name, key)
+      await spec.table.delete(key)
     }
   }
 }
