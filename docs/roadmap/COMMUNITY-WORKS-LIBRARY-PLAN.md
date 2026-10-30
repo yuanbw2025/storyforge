@@ -4,7 +4,7 @@
 
 ## 1. 目标、边界和开工卡
 
-作者可从 StoryForge 本地项目主动选择已完成的小说章节，或从现有“设置 → 文档解析 → 导入项目参考 → 作品分析”选择拆书分析结果，预览公开内容后投稿。审核通过的**指定版本**出现在 Vercel 站新增的“社区作品集”页面；官网增加同名入口。Git 下载的网页版本、桌面客户端和 Android 客户端使用同一投稿协议。作者选择多少章节/分析条目就展示多少，不设人为章数上限；上传字节、速率和存储资源仍需有公开、可解释的运行预算与可续传能力。
+作者可从 StoryForge 本地项目主动选择已完成的小说章节，或从现有“设置 → 文档解析 → 导入项目参考 → 作品分析”选择拆书分析结果，预览公开内容后投稿。审核通过的**指定版本**出现在 Vercel 站新增的“社区作品集”页面；官网增加同名入口。Git 下载的网页版本、桌面客户端和 Android 客户端使用同一投稿协议。作者选择多少章节/分析条目就展示多少，不设人为章数上限；单次投稿仍受 32 MiB 字节预算限制，超过预算须拆成新的投稿版本。上传失败使用同一幂等会话重新签名并整份重传，不声称具备分块续传。
 
 - **产品与生命周期**：这是公开共享和浏览能力的产品研发，不是替用户创作具体作品。共享平台只拥有投稿快照、审核记录、公开版本、评论和举报；本地 `Work`、`Chapter`、`ReferenceAnalysisRun` 与原始文件仍由原产品拥有。
 - **阶段位置**：小说、拆书分析的本地生产仍在各自原流程；本功能位于完成后显式投稿与展示，不属于世界衍生 S1/S2/S3。没有自动封装世界或回写世界引擎。图片等媒资若后来允许投稿，由共享平台私有暂存和公开派生版本分别持有。
@@ -21,7 +21,7 @@
 | `yuanbw2025/my-website` / `feat/community-works-library-20261029` | 在现有 Vercel 站**新增** `/community-works/` 独立展示页及必要 BFF，保留首页个人项目展示和其他子应用 | 不直接修改其中旧的 StoryForge subtree；不把 Vercel Functions 当大文件中转 |
 | `yuanbw2025/storyforge-platform` / `feat/community-works-link-20261029` | 现有正式官网导航和适当介绍处新增“社区作品集”外链，确保中英文、移动端和可访问性 | 不承载投稿库；不提前暴露空白或未审核站点 |
 
-**前后端选型**：界面沿用 React + TypeScript + Vite；Vercel 负责静态展示与轻量 API/BFF。投稿、身份、数据库和对象存储采用独立 Supabase 项目（PostgreSQL、Auth、Storage、Edge Functions），以可审查的 migration、RLS 策略和服务端权限层承载。共享协议由版本化 JSON Schema + TypeScript 类型定义，StoryForge 与展示端各自从同一契约版本生成或验证；不能靠两边复制而不测兼容。后台审核可先是同一 Vercel 子应用的受保护路由，权限实际在后端判定。搜索先用 PostgreSQL 全文索引与明确的中文分词方案/降级策略；不为首版引入独立搜索集群。限流、队列和异常重试通过后端作业与数据库状态控制；审核服务故障时保留待审，不默认发布。
+**前后端选型**：界面沿用 React + TypeScript + Vite；Vercel 负责静态展示与轻量 API/BFF。独立 Supabase 项目承载 PostgreSQL、Auth 和 Edge Functions；独立私有 Cloudflare R2 桶承载原稿。可审查的 migration、RLS 和服务端权限层控制元数据及公开版本。共享协议由版本化 JSON Schema + TypeScript 类型定义，StoryForge 与展示端各自从同一契约版本生成或验证；不能靠两边复制而不测兼容。后台审核可先是同一 Vercel 子应用的受保护路由，权限实际在后端判定。搜索先用 PostgreSQL 全文索引与明确的中文分词方案/降级策略；不为首版引入独立搜索集群。限流、队列和异常重试通过后端作业与数据库状态控制；审核服务故障时保留待审，不默认发布。
 
 **部署连接**：Vercel 继续从 `my-website` 的 Git 构建；根构建脚本只增加新子应用构建/复制，`vercel.json` 只增加 `/community-works` 的定向 rewrite，不更改既有 `/storyforge` 和首页路由。先用 Vercel Preview + 独立测试后端验收；生产环境变量仅存在 Vercel/Supabase 控制台。官网按钮指向经核验的生产 `/community-works/` URL，使用标准外链语义与 `rel="noopener noreferrer"`，保留回官网入口。官方仓库近期曾移除过过早的 Vercel 门户链接，因此必须在作品集真实上线并通过回读后才合入官网按钮。
 
@@ -45,7 +45,7 @@
 
 状态机：`local_preview → private_uploading → submitted → automated_screening → human_review → approved → published`；支路为 `needs_changes`、`rejected`、`withdrawn`、`taken_down`。只有后端审批角色能作 `approved → published`；新修订从私有待审重新开始，旧公开版本留到新版本批准或作者主动下架。审核记录 append-only，决定需绑定具体 revision hash，避免审核一个版本却发布另一个版本。重复提交由幂等键归并；网络结果未知先查询状态，不盲重试。
 
-API 契约草案：`POST /api/community/v1/upload-sessions`、`PUT/POST` 直传对象存储的有时效签名目标、`POST /api/community/v1/submissions`、`GET /api/community/v1/submissions/:id/status`、`GET /api/community/v1/publications`、`GET /api/community/v1/publications/:slug`、`POST /api/community/v1/reports`、`POST /api/community/v1/comments`、审核专用 `POST /api/community/v1/moderation/:caseId/decision`。大正文走私有存储的分块/可续传直传，Vercel Functions 只收小型控制请求；上传会话须受 owner、配额、类型、hash 和过期时间限制。正文读取通过公开批准后的只读投影，不能用对象路径猜到待审稿。
+API 契约草案：`POST /api/community/v1/upload-sessions`、限时签名 `PUT` 直传私有 R2 对象、`POST /api/community/v1/submissions`、`GET /api/community/v1/submissions/:id/status`、`GET /api/community/v1/publications`、`GET /api/community/v1/publications/:slug`、`POST /api/community/v1/reports`、`POST /api/community/v1/comments`、审核专用 `POST /api/community/v1/moderation/:caseId/decision`。Vercel Functions 只收小型控制请求；上传会话须受 owner、配额、类型、hash 和过期时间限制。Edge Function 从私有 R2 读取有界原文件，按完整字节核对长度和 hash 后才接受投稿；正文读取通过公开批准后的只读投影，不能用对象路径猜到待审稿。
 
 身份：匿名可读；投稿、评论、举报需要经过实际验证的身份。浏览器可用安全的 OAuth/邮件登录，桌面与 Android 使用系统浏览器授权回跳或设备码等跨端受支持流程；不得把服务角色密钥、长期 token、私有项目 ID 放入公开构建。若邮件登录服务上线配额/投递不足，先替换为可运维方案，不以开发默认 SMTP 投产。未成年人可以使用功能；不设置笼统的“未成年禁止注册/评论”。年龄相关隐私、默认可见度与地区要求要独立评估。
 
@@ -55,11 +55,11 @@ API 契约草案：`POST /api/community/v1/upload-sessions`、`PUT/POST` 直传�
 
 审核流水：文本清洗/格式校验 → 规则与模型/第三方分类器信号（只作辅助，保留版本和置信）→ 高风险隔离 → 人工逐项审阅及理由 → 批准/要求修改/拒绝/升级处理。关键词命中不是自动定罪；漏检和误报均要采样复盘。涉嫌儿童性剥削材料不得向普通审核员或公开页面二次传播，按适用法律和服务商渠道升级；具体报告义务交法律审核。版权包含原作权利声明、拆书短引文逐项检查、权利人投诉和下架通道。举报、申诉、重复侵权、封禁及误封恢复均要有 SLA、工单与审计；审核员最小权限、双人复核高风险决定、操作留痕。先定义实际值班/响应能力，达不到时暂停接收新稿，不让队列无限堆积或自动通过。
 
-安全与隐私：所有敏感操作服务端鉴权并以 RLS 双重限制；CORS 明确允许官网、Vercel 生产域和经验证预览域，本地客户端使用独立授权流而非任意 `Origin` 通配；输入和 Markdown 渲染防 XSS，CSP 和依赖/文件类型校验；上传频率、账户和存储预算、反机器人挑战、滥用封禁、恶意链接过滤；审计记录与备份加密并设置保留期，提供删除/导出与泄漏应急流程。发布/下架切换要求原子化，缓存失效与索引更新可重试、可核对。
+安全与隐私：所有敏感操作服务端鉴权并以 RLS 双重限制；CORS 明确允许官网、Vercel 生产域和经验证预览域，本地客户端使用独立授权流而非任意 `Origin` 通配；输入和 Markdown 渲染防 XSS，CSP 和依赖/文件类型校验；上传频率、账户和存储预算、反机器人挑战、滥用封禁、恶意链接过滤；审计记录与备份加密并设置保留期，提供删除/导出与泄漏应急流程。R2 限时 PUT 只约束目标对象和 Content-Type，不能单靠签名保证实际上传字节不超预算；开闸前要有全局成本上限、监控与告警、过期未定稿对象清理和异常暂停收稿流程。发布/下架切换要求原子化，缓存失效与索引更新可重试、可核对。
 
 ## 6. 用户体验与质量标准
 
-作品集首页提供“原创小说 / 拆书分析”切换、分类、语言、全文/标题搜索、排序、作者/许可标识及审核后的推荐位；不混入个人项目展示。小说详情有目录、连续阅读、阅读进度、本章/整部跳转和移动端排版；拆书详情按固定 13 维与作者点评呈现，未选维度明确为空。投稿端有范围选择、字节估算、预览、版权确认、进度、断线续传、失败恢复、审核状态、修改和撤稿。评论有登录、先审、举报、折叠和作者管理；初期可在投稿/阅读稳定后单独开闸。页面满足键盘导航、语义标题、对比度、屏幕阅读器提示、窄屏布局、错误/空/加载状态。SEO 只索引已公开且允许搜索的版本；待审/后台加 `noindex`，站点地图只含公开作品。
+作品集首页提供“原创小说 / 拆书分析”切换、分类、语言、全文/标题搜索、排序、作者/许可标识及审核后的推荐位；不混入个人项目展示。小说详情有目录、连续阅读、阅读进度、本章/整部跳转和移动端排版；拆书详情按固定 13 维与作者点评呈现，未选维度明确为空。投稿端有范围选择、字节估算、预览、版权确认、进度、断线后整份重传、失败恢复、审核状态、修改和撤稿。评论有登录、先审、举报、折叠和作者管理；初期可在投稿/阅读稳定后单独开闸。页面满足键盘导航、语义标题、对比度、屏幕阅读器提示、窄屏布局、错误/空/加载状态。SEO 只索引已公开且允许搜索的版本；待审/后台加 `noindex`，站点地图只含公开作品。
 
 以用户可观察行为验收：任意选中量的内容完整保留顺序和校验 hash；同稿网页、Electron、Android 的结果一致；完全未选不能上传；断线恢复不会重复发布；待审/拒绝稿在匿名搜索、URL、对象存储和缓存均不可读；下架后公开读取和搜索消失；普通角色和普通未成年用户不被误禁，未成年人性剥削内容无公开路径；审核员无法越权读取其他私有账户资料。不能用单元测试声称真人阅读质量或跨地区法律合规已完成。
 
@@ -69,7 +69,7 @@ API 契约草案：`POST /api/community/v1/upload-sessions`、`PUT/POST` 直传�
 |---|---|---|---|
 | 0. 基线与契约 | 固定三仓库专用分支和 owner；核对文档解析、作品分析、`Work`/`Chapter`、既有官网/Vercel；冻结 DTO、权限、政策和链接域名；完成风险清单 | 计划与契约可审查；无第二套拆书入口；外部服务/预算/合规责任明确 | 进行中：三仓库边界与现有拆书入口已核对；运营和外部项目待落地 |
 | 1. 本地只读投影 | 以纯函数生成 `novel.v1`/`bookAnalysis.v1`，只读选择器与逐字预览；权限/引用/敏感字段白名单；hash 与不可变快照 | 对选中/未选中、浅/深分析、超大内容、非法 ID、刷新/重复作正反例；隔离 IndexedDB 往返无原数据变更 | 本地代码已写：两种只读投影、默认全不选的界面、逐字预览和提交前重读哈希；远端端到端未验 |
-| 2. 共享后端 | Supabase migration、RLS、私有对象存储、直传会话、身份与幂等、状态机、审计、备份/恢复 | 越权/泄漏/重复/断线/迁移回滚测试；密钥只在服务端；真实测试环境演练 | 本地迁移与 API 已写：32 MiB 私有直传、原子配额与幂等、待审与发布事务；PGlite 正反例通过；真实项目未建 |
+| 2. 共享后端 | Supabase migration、RLS、私有 R2 对象存储、直传会话、身份与幂等、状态机、审计、备份/恢复 | 越权/泄漏/重复/断线/迁移回滚测试；密钥只在服务端；真实测试环境演练 | 本地迁移与 API 已写：32 MiB 接收上限、私有签名 PUT、原子分配与幂等、待审与发布事务；PGlite 正反例通过；真实项目未建；R2 成本/清理门未完成 |
 | 3. 审核闭环 | 文本和评论规则、分类器适配、人工审核台、举报/申诉/下架/版权流程、值班指标 | 高风险与误报反例，审核版本绑定；服务故障不发布；实际人工处理演练 | 本地审核台、评论先审、举报、撤回、申诉和下架事务已写；政策、分类器、值班与真人演练待做 |
 | 4. Vercel 作品集 | 新子应用、搜索/列表/详情/阅读器/拆书固定格式、作者页、审核状态；构建/rewrite/SEO/无障碍 | Vercel Preview 可读已批准样本，未批准不可读；旧个人项目展示与各子应用回归 | 独立子应用与阅读器、我的投稿、审核页已在 Vercel 专用分支提交；43 项定向测试、独立构建、Preview 部署检查、本地桌面/手机页面通过；Preview 的真实服务端读回与已批准样本仍待独立后端 |
 | 5. 全端投稿与交流 | 网页、桌面、Android 同协议认证/直传/恢复；小说/拆书上传入口；评论先审功能 | 三端打包后真实路径，网络中断/大稿/撤稿/修订演练；评论滥用与举报闭环 | 共用 React/TS 投稿代码已接小说和现有作品分析页，依公开配置默认隐藏；8 个社区回归文件共 24 项测试及隔离 Playwright E2E（默认关闭和显式启用）通过，小说正文、简介与流派标签独立选择且原稿不变，拆书 UI 仅预览勾选维度并需单独确认发布权；发行构建已预接公开参数，实际三端打包和服务端连通未验 |
@@ -80,8 +80,8 @@ API 契约草案：`POST /api/community/v1/upload-sessions`、`PUT/POST` 直传�
 
 ## 8. 尚需落地的外部前置与证据
 
-Supabase 生产项目、Vercel 环境变量、域名路径、邮件/ OAuth 身份、审核供应商和审核人员、存储/带宽预算、投诉与申诉邮箱、隐私/版权/地区政策及运营值班都尚未配置或验收。代码阶段可用隔离测试项目推进；生产凭据只经仓库外配置和平台控制台，不写入 Git、PR 或本文。若权利归属、审核容量或高风险处置流程无法裁决，保留证据并停在私有预览，不公开收稿。
+Supabase 生产项目、Cloudflare R2 私有桶与受限凭据、Vercel 环境变量、域名路径、邮件身份、审核供应商和审核人员、存储/请求预算、投诉与申诉邮箱、隐私/版权/地区政策及运营值班都尚未配置或验收。代码阶段可用隔离测试项目推进；生产凭据只经仓库外配置和平台控制台，不写入 Git、PR 或本文。若权利归属、审核容量或高风险处置流程无法裁决，保留证据并停在私有预览，不公开收稿。
 
 ## 9. 参考约束
 
-实施前重新核对官方最新文档：[Vercel Git 部署](https://vercel.com/docs/git)、[Vercel rewrite](https://vercel.com/docs/routing/rewrites)、[大文件绕过 Functions 的直传](https://vercel.com/docs/vercel-blob/server-upload)、[Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security)、[可续传上传](https://supabase.com/docs/guides/storage/uploads/resumable-uploads)、[上线身份服务检查](https://supabase.com/docs/guides/deployment/going-into-prod)。未成年人相关安全基线应结合[儿童性剥削风险资料](https://www.ncmec.org/theissues/csam)与目标地区规范做具体审查，不把链接当成全球通用法律结论。
+实施前重新核对官方最新文档：[Vercel Git 部署](https://vercel.com/docs/git)、[Vercel rewrite](https://vercel.com/docs/routing/rewrites)、[R2 限时签名 URL](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)、[R2 CORS](https://developers.cloudflare.com/r2/buckets/cors/)、[R2 价格](https://developers.cloudflare.com/r2/pricing/)、[Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security)、[Edge Function 依赖](https://supabase.com/docs/guides/functions/dependencies)、[上线身份服务检查](https://supabase.com/docs/guides/deployment/going-into-prod)。未成年人相关安全基线应结合[儿童性剥削风险资料](https://www.ncmec.org/theissues/csam)与目标地区规范做具体审查，不把链接当成全球通用法律结论。

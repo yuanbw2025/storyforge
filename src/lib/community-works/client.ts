@@ -1,5 +1,4 @@
 import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js'
-import * as tus from 'tus-js-client'
 import type { CommunityPublicSnapshotV1 } from './public-snapshot'
 import { assertUnchangedPublicSnapshotV1, type SealedPublicSnapshotV1 } from './snapshot-seal'
 
@@ -9,6 +8,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export interface CommunityClientConfig {
   apiOrigin: string
   storageOrigin: string
+  storageBucket: string
   supabaseUrl: string
   publishableKey: string
 }
@@ -17,16 +17,22 @@ export interface CommunityClientConfig {
 export function communityClientConfig(): CommunityClientConfig | null {
   if (import.meta.env.VITE_STORYFORGE_COMMUNITY_SHARING !== '1') return null
   const api = import.meta.env.VITE_STORYFORGE_COMMUNITY_API_URL
-  const storage = import.meta.env.VITE_STORYFORGE_COMMUNITY_SUPABASE_URL
+  const storage = import.meta.env.VITE_STORYFORGE_COMMUNITY_R2_ORIGIN
+  const bucket = import.meta.env.VITE_STORYFORGE_COMMUNITY_R2_BUCKET
+  const auth = import.meta.env.VITE_STORYFORGE_COMMUNITY_SUPABASE_URL
   const key = import.meta.env.VITE_STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY
-  if (!api || !storage || !key?.startsWith('sb_publishable_')) return null
+  if (!api || !storage || !auth || typeof bucket !== 'string' ||
+      !/^[a-z0-9][a-z0-9-]{1,62}$/.test(bucket) ||
+      !key?.startsWith('sb_publishable_')) return null
   try {
     const apiUrl = new URL(api)
     const storageUrl = new URL(storage)
-    if ([apiUrl, storageUrl].some(url => url.protocol !== 'https:' || url.username || url.password ||
+    const authUrl = new URL(auth)
+    if ([apiUrl, storageUrl, authUrl].some(url => url.protocol !== 'https:' || url.username || url.password ||
       url.pathname !== '/' || url.search || url.hash)) return null
-    return { apiOrigin: apiUrl.origin, storageOrigin: storageUrl.origin,
-      supabaseUrl: storageUrl.origin, publishableKey: key }
+    if (!/^[0-9a-f]{32}\.r2\.cloudflarestorage\.com$/.test(storageUrl.hostname)) return null
+    return { apiOrigin: apiUrl.origin, storageOrigin: storageUrl.origin, storageBucket: bucket,
+      supabaseUrl: authUrl.origin, publishableKey: key }
   } catch { return null }
 }
 
@@ -97,39 +103,33 @@ async function submissionBySession(config: CommunityClientConfig, token: string,
 }
 
 function uploadSignedSnapshot(config: CommunityClientConfig, input: {
-  endpoint: string; path: string; token: string; bytes: Uint8Array; sha256: string;
+  signedUrl: string; path: string; bytes: Uint8Array; sha256: string;
   onProgress?: (percentage: number) => void; signal?: AbortSignal
 }): Promise<void> {
-  const endpoint = new URL(input.endpoint)
-  if (endpoint.origin !== config.storageOrigin || endpoint.pathname !== '/storage/v1/upload/resumable' ||
+  const signed = new URL(input.signedUrl)
+  if (signed.origin !== config.storageOrigin || signed.pathname !== `/${config.storageBucket}/${input.path}` ||
       !/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/){2}snapshot\.json$/.test(input.path) ||
-      !/^[0-9a-f]{64}$/.test(input.sha256) || !input.token) throw new Error('私有上传目标无效')
-  const file = new File([input.bytes as BlobPart], `${input.sha256}.json`, { type: 'application/json' })
+      !/^[0-9a-f]{64}$/.test(input.sha256) ||
+      signed.searchParams.get('X-Amz-SignedHeaders')?.split(';').includes('content-type') !== true ||
+      !signed.searchParams.has('X-Amz-Signature')) throw new Error('私有上传目标无效')
   return new Promise((resolve, reject) => {
-    let stopped = false
-    const upload = new tus.Upload(file, {
-      endpoint: endpoint.toString(), chunkSize: 6 * 1024 * 1024,
-      retryDelays: [0, 3000, 10000], uploadDataDuringCreation: true,
-      removeFingerprintOnSuccess: true,
-      fingerprint: async () => `storyforge-community-v1:${input.path}:${input.sha256}:${endpoint.origin}`,
-      headers: { 'x-signature': input.token },
-      metadata: { bucketName: 'community-intake', objectName: input.path, contentType: 'application/json' },
-      onProgress: (sent, total) => input.onProgress?.(Math.round(sent / total * 100)),
-      onSuccess: () => { input.signal?.removeEventListener('abort', abort); resolve() },
-      onError: error => { input.signal?.removeEventListener('abort', abort); reject(error) },
-    })
-    const abort = () => {
-      if (stopped) return
-      stopped = true
-      void upload.abort(false).finally(() => reject(new DOMException('投稿已暂停', 'AbortError')))
+    const xhr = new XMLHttpRequest()
+    const abort = () => xhr.abort()
+    if (input.signal?.aborted) { reject(new DOMException('投稿已暂停', 'AbortError')); return }
+    xhr.open('PUT', signed.toString())
+    xhr.setRequestHeader('Content-Type', 'application/json')
+    xhr.upload.onprogress = event => {
+      if (event.lengthComputable) input.onProgress?.(Math.round(event.loaded / event.total * 100))
     }
-    if (input.signal?.aborted) return abort()
+    xhr.onload = () => {
+      input.signal?.removeEventListener('abort', abort)
+      if ([200, 201, 204].includes(xhr.status)) resolve()
+      else reject(new Error(`私有上传失败（${xhr.status}）`))
+    }
+    xhr.onerror = () => { input.signal?.removeEventListener('abort', abort); reject(new Error('私有上传连接失败')) }
+    xhr.onabort = () => { input.signal?.removeEventListener('abort', abort); reject(new DOMException('投稿已暂停', 'AbortError')) }
     input.signal?.addEventListener('abort', abort, { once: true })
-    void upload.findPreviousUploads().then(previous => {
-      if (stopped) return
-      if (previous.length) upload.resumeFromPreviousUpload(previous[0])
-      upload.start()
-    }).catch(reject)
+    xhr.send(new Blob([input.bytes as BlobPart], { type: 'application/json' }))
   })
 }
 
@@ -176,8 +176,8 @@ export async function submitSelectedSnapshot(input: {
       if (!(error instanceof CommunityRequestError && error.status === 409 && error.code === 'upload_not_complete')) throw error
     }
   }
-  const allocation = await requestJson<{ sessionId: string; signedUrl: string; token: string;
-    tusEndpoint: string; objectPath: string; sha256: string; byteLength: number }>(config,
+  const allocation = await requestJson<{ sessionId: string; signedUrl: string; uploadMethod: string;
+    contentType: string; objectPath: string; sha256: string; byteLength: number }>(config,
       '/api/community/v1/upload-sessions', input.session.access_token, {
         kind: input.seal.snapshot.kind, sha256: input.seal.sha256,
         byteLength: bytes.byteLength, idempotencyKey: pending.key,
@@ -186,15 +186,16 @@ export async function submitSelectedSnapshot(input: {
   if (!UUID.test(allocation.sessionId) || allocation.sha256 !== pending.sha256 ||
       allocation.byteLength !== bytes.byteLength ||
       allocation.objectPath !== `${userId}/${allocation.sessionId}/snapshot.json` ||
+      allocation.uploadMethod !== 'PUT' || allocation.contentType !== 'application/json' ||
       signed.origin !== config.storageOrigin ||
-      signed.pathname !== `/storage/v1/object/upload/sign/community-intake/${allocation.objectPath}` ||
-      signed.searchParams.get('token') !== allocation.token) {
+      signed.pathname !== `/${config.storageBucket}/${allocation.objectPath}` ||
+      !signed.searchParams.has('X-Amz-Signature')) {
     throw new Error('社区服务返回的上传会话不匹配。')
   }
   pending.sessionId = allocation.sessionId
   writePending(userId, pending)
-  await uploadSignedSnapshot(config, { endpoint: allocation.tusEndpoint, path: allocation.objectPath,
-    token: allocation.token, bytes, sha256: pending.sha256, onProgress: input.onProgress, signal: input.signal })
+  await uploadSignedSnapshot(config, { signedUrl: allocation.signedUrl, path: allocation.objectPath,
+    bytes, sha256: pending.sha256, onProgress: input.onProgress, signal: input.signal })
   try {
     const result = await requestJson<{ submissionId: string; status: string }>(config,
       '/api/community/v1/submissions', input.session.access_token, {

@@ -4,16 +4,6 @@ import { actOnMySubmission, communityClientConfig, readMySubmissions, submitSele
 import { sealPublicSnapshotV1 } from '../../src/lib/community-works/snapshot-seal'
 import type { NovelPublicSnapshotV1 } from '../../src/lib/community-works/public-snapshot'
 
-vi.mock('tus-js-client', () => ({
-  Upload: class {
-    options: { onProgress: (sent: number, total: number) => void; onSuccess: () => void }
-    constructor(_file: File, options: typeof this.options) { this.options = options }
-    async findPreviousUploads() { return [] }
-    start() { this.options.onProgress(100, 100); this.options.onSuccess() }
-    async abort() { /* no active upload */ }
-  },
-}))
-
 const userId = '11111111-1111-4111-8111-111111111111'
 const uploadId = '22222222-2222-4222-8222-222222222222'
 const submissionId = '33333333-3333-4333-8333-333333333333'
@@ -27,10 +17,12 @@ beforeEach(() => {
   localStorage.clear()
   vi.stubEnv('VITE_STORYFORGE_COMMUNITY_SHARING', '1')
   vi.stubEnv('VITE_STORYFORGE_COMMUNITY_API_URL', 'https://gallery.example/')
-  vi.stubEnv('VITE_STORYFORGE_COMMUNITY_SUPABASE_URL', 'https://storage.example/')
+  vi.stubEnv('VITE_STORYFORGE_COMMUNITY_SUPABASE_URL', 'https://auth.example/')
   vi.stubEnv('VITE_STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY', 'sb_publishable_test')
+  vi.stubEnv('VITE_STORYFORGE_COMMUNITY_R2_ORIGIN', `https://${'a'.repeat(32)}.r2.cloudflarestorage.com/`)
+  vi.stubEnv('VITE_STORYFORGE_COMMUNITY_R2_BUCKET', 'storyforge-intake')
 })
-afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); localStorage.clear() })
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); localStorage.clear() })
 
 describe('community upload client', () => {
   it('stays disabled unless all explicit public endpoint settings are present', () => {
@@ -50,14 +42,31 @@ describe('community upload client', () => {
 
   it('sends only a manifest through Vercel, uploads the selected bytes privately, then receives a pending receipt', async () => {
     const seal = await sealPublicSnapshotV1(snapshot)
+    const uploaded: string[] = []
+    vi.stubGlobal('XMLHttpRequest', class {
+      status = 200
+      upload = { onprogress: (_event: ProgressEvent) => {} }
+      onload = () => {}
+      onerror = () => {}
+      onabort = () => {}
+      open(method: string, url: string) {
+        expect(method).toBe('PUT')
+        expect(url).toContain(`/storyforge-intake/${userId}/${uploadId}/snapshot.json`)
+      }
+      setRequestHeader(name: string, value: string) {
+        expect([name, value]).toEqual(['Content-Type', 'application/json'])
+      }
+      send(body: Blob) { void body.text().then(text => { uploaded.push(text); this.onload() }) }
+      abort() { this.onabort() }
+    })
     const network = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = new URL(String(input))
       if (url.pathname.endsWith('/upload-sessions')) {
         expect(String(init?.body)).not.toContain('只选择这一章的正文')
         expect(JSON.parse(String(init?.body)).sha256).toBe(seal.sha256)
         return Response.json({ sessionId: uploadId,
-          signedUrl: `https://storage.example/storage/v1/object/upload/sign/community-intake/${userId}/${uploadId}/snapshot.json?token=private`,
-          token: 'private', tusEndpoint: 'https://storage.example/storage/v1/upload/resumable',
+          signedUrl: `https://${'a'.repeat(32)}.r2.cloudflarestorage.com/storyforge-intake/${userId}/${uploadId}/snapshot.json?X-Amz-SignedHeaders=content-type%3Bhost&X-Amz-Signature=private`,
+          uploadMethod: 'PUT', contentType: 'application/json',
           objectPath: `${userId}/${uploadId}/snapshot.json`, sha256: seal.sha256, byteLength: seal.byteLength }, { status: 201 })
       }
       if (url.pathname.endsWith('/submissions')) {
@@ -69,6 +78,7 @@ describe('community upload client', () => {
     const result = await submitSelectedSnapshot({ seal, currentSnapshot: async () => structuredClone(snapshot),
       session, publicPenName: '作者', license: 'all-rights-reserved' })
     expect(result).toEqual({ submissionId, status: 'submitted' })
+    expect(uploaded).toEqual([JSON.stringify(snapshot)])
     expect(network).toHaveBeenCalledTimes(2)
     expect(localStorage.length).toBe(0)
   })
