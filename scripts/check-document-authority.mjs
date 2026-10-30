@@ -88,6 +88,8 @@ const activeDocs = [
   'docs/guides/PLUGIN-DEVELOPMENT.md',
   'docs/roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md',
   'docs/roadmap/TEXT-OPEN-WORLD-WORK-PACKAGE-CARDS.md',
+  'docs/roadmap/PROJECT-QUALITY-REMEDIATION-PLAN-20261030.md',
+  'docs/roadmap/quality-remediation-tasks-20261030.json',
   'docs/roadmap/AVG-IMPLEMENTATION-PLAN.md',
   'docs/roadmap/AVG-WORK-PACKAGE-CARDS.md',
   'docs/roadmap/CAPABILITY-BASELINE.md',
