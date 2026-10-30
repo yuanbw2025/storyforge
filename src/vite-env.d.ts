@@ -8,8 +8,6 @@ interface ImportMetaEnv {
   readonly VITE_STORYFORGE_COMMUNITY_API_URL?: string
   readonly VITE_STORYFORGE_COMMUNITY_SUPABASE_URL?: string
   readonly VITE_STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY?: string
-  readonly VITE_STORYFORGE_COMMUNITY_R2_ORIGIN?: string
-  readonly VITE_STORYFORGE_COMMUNITY_R2_BUCKET?: string
   /** Experimental AVG image production; defaults off. Never put credentials in VITE variables. */
   readonly VITE_STORYFORGE_AVG_MEDIA_PRODUCTION?: '0' | '1'
   /** Same-origin, hash-verified image pack for an explicitly configured community prototype. */
