@@ -1,6 +1,6 @@
 {
   "schema": "storyforge.quality-remediation-tasks.v1",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "date": "2026-10-30",
   "authority": "L2 task scheduling; audit facts remain fixed on A, product contracts and L0/L1 prevail",
   "auditBaselineA": "c5b51da301abd3875b26732d9657ad485ad39105",
@@ -2837,9 +2837,9 @@
       "priority": "P1",
       "title": "多表合法备份往返漏重映射本地引用",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
+      "status": "author-recovery-policy-decided-awaiting-scoped-implementation",
+      "assignee": "data_lifecycle_audit",
+      "reviewer": "shared_production_audit",
       "implementationBranch": null,
       "implementationSha": null,
       "integrationSha": null,
@@ -2905,13 +2905,27 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": [],
+      "evidence": [
+        "remediation-round1-20261030/data-next037/prestudy-completion.json",
+        "remediation-round1-20261030/data-next037/author-decision-recovery-r3.json"
+      ],
       "existingWorkToCheck": {
         "pr": 233,
         "headAtSnapshot": "925323b0f7a35fce6c3f88c053802e18756c5dc8",
         "status": "open-CI-not-passed",
         "instruction": "Reuse historical RunScope protection; compare exact path claims first. This PR is not evidence that this finding is fixed."
-      }
+      },
+      "legacyRecoveryPolicy": {
+        "decisionDate": "2026-10-31",
+        "decisionSource": "direct-human-reply",
+        "restoreCertainContent": true,
+        "preserveAndVisiblyFlagUnresolvedAssociations": true,
+        "authorConfirmsAssociationsLater": true,
+        "guessAssociations": false,
+        "silentEvidenceLoss": false,
+        "policyDecidedDoesNotMeanImplementationAccepted": true
+      },
+      "implementationSequence": "Freeze and integrate SFQA-013 first; reserve shared backup/import/export/reference writer and verify a scoped format/recovery contract before implementation."
     },
     {
       "taskId": "SFQA-038",
@@ -10475,6 +10489,6 @@
     "newP1P2Findings": 0,
     "instruction": "Keep positive practices, observations and accepted low-impact maintenance distinct from confirmed defects; triage each, do not automatically count as extra findings."
   },
-  "updatedAt": "2026-10-30T15:41:18.063598+00:00",
+  "updatedAt": "2026-10-30T16:29:26.503473+00:00",
   "executionTracking": "Status in this integration branch; original audit records remain fixed on A. Integrated candidates require full validation before closure, and G1/release are separate."
 }
