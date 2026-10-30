@@ -39,8 +39,8 @@ describe('PROJECT_TABLES 当前注册表', () => {
 
     it('simple 生命周期引用统一从父表 id 指向依赖表外键', () => {
       const malformed = PROJECT_TABLES.flatMap(spec => (spec.refs ?? [])
-        .filter(ref => ref.kind === 'simple' && ref.field !== 'id')
-        .map(ref => `${spec.name}.${ref.field} -> ${ref.target}`))
+        .flatMap(ref => ref.kind === 'simple' && ref.field !== 'id'
+          ? [`${spec.name}.${ref.field} -> ${ref.target}`] : []))
       expect(malformed).toEqual([])
     })
 
@@ -173,7 +173,7 @@ describe('PROJECT_TABLES 当前注册表', () => {
     it('cascadeDeleteProject 清空所有项目级数据(含间接归属 blob)', async () => {
       const now = Date.now()
       const createdWorkspaceV1 = await seedCurrentWorkspace('P', { genres: [], targetWordCount: 0 })
-      const { projectId, worldId } = createdWorkspaceV1.scope
+      const { projectId, worldId, workId } = createdWorkspaceV1.scope
 
       await db.worldviews.add({ projectId, worldId, worldOrigin: 'x', createdAt: now, updatedAt: now } as any)
       await db.characters.add({
@@ -202,18 +202,18 @@ describe('PROJECT_TABLES 当前注册表', () => {
       await db.importLogs.add({ sessionId, level: 'info', message: 'm', timestamp: now } as any)
       await db.importFiles.put({ sessionId, filename: 'f', blob: new Blob(['x']), fileHash: 'h', createdAt: now } as any)
       const referenceId = await db.references.add({
-        projectId, title: 'R', author: '', type: 'story', note: '', url: '',
+        projectId, workId, title: 'R', author: '', type: 'story', note: '', url: '',
         createdAt: now, updatedAt: now,
       } as any) as number
       const runId = await db.referenceAnalysisRuns.add({
-        projectId, referenceId, version: 1, status: 'active', depth: 'quick',
+        projectId, workId, referenceId, version: 1, status: 'active', depth: 'quick',
         sourceFilename: 'r.txt', fileHash: 'rh', totalChars: 1,
         sourceKind: 'unknown', usageScope: 'analysis-only', rightsNote: '',
         rightsConfirmed: false, rightsDeclaredAt: now, expectedChunks: 1,
         completedChunks: 1, progress: 100, createdAt: now, updatedAt: now,
       } as any) as number
       await db.referenceAnalysisSources.put({
-        analysisRunId: runId, filename: 'r.txt', fileHash: 'rh',
+        projectId, workId, analysisRunId: runId, filename: 'r.txt', fileHash: 'rh',
         chunks: [{ index: 0, startChar: 0, endChar: 1, charCount: 1, text: 'r' }],
         createdAt: now,
       })
@@ -314,7 +314,7 @@ describe('PROJECT_TABLES 当前注册表', () => {
       const node = await db.outlineNodes.where('projectId').equals(projectId).first()
       expect(node?.worldGroupId, '大纲盖章').toBe(primaryId)
       const cat = await db.codexCategories.where('projectId').equals(projectId).first()
-      expect(cat?.worldGroupId ?? null, '内置分类保持 null 全局').toBeNull()
+      expect(cat, '内置分类保持 null 全局').toHaveProperty('worldGroupId', null)
       expect((await db.cultivationSystems.get(cultivationId))?.worldGroupId, '修炼体系盖章').toBe(primaryId)
     })
   })
