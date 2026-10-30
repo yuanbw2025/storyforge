@@ -67,9 +67,11 @@ describe('NW-2E · 低临时分配的精确 JSON 合同（不是内存性能验�
     expect(await hashNarrativeValueWithoutKeysV1(value, ['revisionHash'])).toBe(
       createHash('sha256').update('{"a":{},"z":[{"text":"桥𐀀é"},{"text":"桥𐀀é"}]}').digest('hex'))
     const clone = structuredClone(value)
-    Object.defineProperty(clone.z[0], 'text', { enumerable: true, get() { throw Error('getter invoked') } })
+    const cloneGetter = vi.fn(() => { throw Error('getter invoked') })
+    Object.defineProperty(clone.z[0], 'text', { enumerable: true, get: cloneGetter })
     for (const check of [assertNarrativeJsonV1, canonicalNarrativeJsonV1, freezeNarrativeJsonV1]) {
-      try { check(clone); throw Error('unexpected success') } catch (error) { expect(String(error)).not.toContain('getter invoked') }
+      expect(() => check(clone)).toThrow()
+      expect(cloneGetter).not.toHaveBeenCalled()
     }
     let invoked = false
     const frozenAccessor = Object.freeze(Object.defineProperty({}, 'x', { enumerable: true, get() { invoked = true; return 1 } }))
