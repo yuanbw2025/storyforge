@@ -1,6 +1,6 @@
 {
   "schema": "storyforge.quality-remediation-tasks.v1",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "date": "2026-10-30",
   "authority": "L2 task scheduling; audit facts remain fixed on A, product contracts and L0/L1 prevail",
   "auditBaselineA": "c5b51da301abd3875b26732d9657ad485ad39105",
@@ -2122,12 +2122,12 @@
       "priority": "P1",
       "title": "公开长篇原作导入保存的根级章节正文被TXT和Markdown导出静默遗漏",
       "plannedRound": "R1",
-      "status": "candidate-r2-awaiting-independent-review-and-mandatory-gates",
+      "status": "integrated-candidate-browser-passed-awaiting-full-validation",
       "assignee": "data_lifecycle_audit",
       "reviewer": "shared_production_audit",
       "implementationBranch": "fix/quality-027-root-chapter-exports-20261030",
-      "implementationSha": null,
-      "integrationSha": null,
+      "implementationSha": "2e67d315a6d4d86d54b3ae12ac03ab755d9b1601",
+      "integrationSha": "2310b24d330d53492c689b57f61cf978c252613d",
       "scopeMatrixRows": [
         "P-LONG",
         "F-OWNER",
@@ -2179,7 +2179,38 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": []
+      "evidence": [
+        "remediation-round1-20261030/data-next027/completion-r13.json",
+        "remediation-round1-20261030/review/027-review-r2.json",
+        "remediation-round1-20261030/coordination/027-integration-result.json",
+        "remediation-round1-20261030/review/browser-verification-027/root-review-r1.json",
+        "remediation-round1-20261030/browser-027/browser-r1.json"
+      ],
+      "validationCheckpoint": {
+        "originalSame41TestsOnI3": {
+          "failed": 28,
+          "normalControlsPassed": 13
+        },
+        "finalTargetedAndAdjacent": {
+          "tests": 59,
+          "passed": 59
+        },
+        "scopeConcurrencyControls": 3,
+        "independentReviewBlockers": 0,
+        "mandatorySourceGates": "passed",
+        "newTestsStrictTypes": "passed",
+        "browser": {
+          "tests": 1,
+          "passed": 1,
+          "retries": 0,
+          "skipped": 0,
+          "sourceHead": "2310b24d330d53492c689b57f61cf978c252613d",
+          "fixtureCreation": "public longform importer API; not import-wizard UI",
+          "uiAssertions": "default chapter selection, second chapter UI, actual TXT/Markdown downloads, full original bodies once/in order, all-DB unchanged during downloads"
+        },
+        "fullIntegrationCi": "pending",
+        "closed": false
+      }
     },
     {
       "taskId": "SFQA-028",
@@ -10444,6 +10475,6 @@
     "newP1P2Findings": 0,
     "instruction": "Keep positive practices, observations and accepted low-impact maintenance distinct from confirmed defects; triage each, do not automatically count as extra findings."
   },
-  "updatedAt": "2026-10-30T15:20:52.914966+00:00",
+  "updatedAt": "2026-10-30T15:41:18.063598+00:00",
   "executionTracking": "Status in this integration branch; original audit records remain fixed on A. Integrated candidates require full validation before closure, and G1/release are separate."
 }
