@@ -58,7 +58,9 @@ node scripts/distribution/build-android.mjs --release
 
 ## 桌面第三方声明
 
-桌面构建继续先运行 `scripts/distribution/notices.mjs` 生成当前依赖声明。`electron-builder.config.cjs` 的 `afterExtract` 钩子在平台运行时清理前，把本次实际解包的 Electron 许可、完整 Chromium 声明及 NPM 声明原字节保留到应用资源的 `third-party/`，并记录实际运行时版本、大小与 SHA-256。Mac 的文件随 `.app` 一起保留；Windows/Linux 使用同一资源合同。缺文件、空文件、符号链接或缺少当前依赖声明会中止构建，不产出一个只带部分声明的目录。此构建元数据不包含个人目录，不属于作品表或模型上下文；它不替代具体模型、媒资和发布用途的独立许可审阅。
+桌面构建继续先运行 `scripts/distribution/notices.mjs` 生成当前依赖声明。`electron-builder.config.cjs` 的 `afterExtract` 钩子在平台运行时清理前，把本次实际解包的 Electron 许可、完整 Chromium 声明及 NPM 声明原字节保留到应用资源的 `third-party/`，记录 builder 解析且与锁核对的运行时版本，以及声明文件大小与 SHA-256；实际进程版本由 smoke 另行验证。Mac 的文件随 `.app` 一起保留；Windows/Linux 使用同一资源合同。缺文件、空文件、符号链接或缺少当前依赖声明会中止构建，不产出一个只带部分声明的目录。此构建元数据不包含个人目录，不属于作品表或模型上下文；它不替代具体模型、媒资和发布用途的独立许可审阅。
+
+2026-10-30 的 SFQA-006 候选将 Electron 固定到 44.10.0，并针对[上游证书安全公告](https://github.com/electron/electron/security/advisories/GHSA-jr5w-w6x2-84p9)建立最低 44.9.1 的运行时门。`check:dependencies` 先执行 `check:desktop-runtime`，核对精确稳定版声明、根锁记录、实际解析条目和本机安装包版本；该门独立于 npm 的 `--omit=dev`，不把全部工具依赖风险宣布为已解决。打包钩子还要求 builder 解析版本与锁一致；客户端 smoke 及覆盖升级的新版本阶段从实际启动进程读取 Electron/Node/Chromium，再核对包内声明并输出无个人路径的 JSON 证据。旧版升级基线保留原运行时，不据此放行新候选。版本门和合成测试不代表正式安装包已替换、所有平台已运行或用户数据升级已验收，这些状态分别取证。
 
 ## 数据保持
 
