@@ -1,5 +1,10 @@
 # Troubleshooting
 
+## Interrupted resource loading at startup
+
+Before the application opens, a recognized module or stylesheet load failure may trigger at most one automatic reload. Persistent failure keeps the error and an explicit reload action instead of looping; ordinary errors do not trigger this recovery. Module failures after the app opens still use the save barrier described below and require the author to retry. Recovery neither starts model tasks nor clears work data. The safeguards in [PR #215](https://github.com/yuanbw2025/storyforge/pull/215) do not establish that all native crashes or memory issues are resolved.
+
+
 Record your version, address, product, steps, and full error text first. The checks below prioritize preserving works and candidates.
 
 | Symptom | Check first | Next step |
