@@ -25,6 +25,7 @@ import {
   readVerifiedMediaBlobV1,
 } from '../media/blob-store'
 import { requestOpenAICompatibleImagesV1 } from '../media/transport'
+import { comicMediaRemovalTransactionTablesV1, removeComicMediaRowsInTransactionV1 } from './media-lifecycle'
 import { assertMediaRightsV1 } from '../media/rights'
 
 async function requireComicRoot(scope: WorkspaceScope, requireEditable = false) {
@@ -385,24 +386,16 @@ export async function selectComicMediaAssetV1(input: { scope: WorkspaceScope; as
 }
 
 export async function removeComicMediaAssetV1(input: { scope: WorkspaceScope; assetKey: string; clearReferences?: boolean }): Promise<{ blobObjectId: number; blobDeleted: boolean }> {
-  const scope = await resolveScope({ scope: input.scope })
-  await requireComicRoot(scope, true)
-  const blobObjectId = await db.transaction('rw', db.comicMediaAssets, db.comicPanels, db.comicVisualSubjects, async () => {
-    const asset = await db.comicMediaAssets.where('[workId+stableKey]').equals([scope.workId, input.assetKey]).first()
-    if (!asset) throw new Error('[media] asset 不存在或越界')
-    const [panels, subjects, referencingAssets] = await Promise.all([
-      db.comicPanels.where('workId').equals(scope.workId).filter(panel => panel.selectedMediaAssetKey === asset.stableKey).toArray(),
-      db.comicVisualSubjects.where('workId').equals(scope.workId).filter(subject => subject.selectedMediaAssetKey === asset.stableKey).toArray(),
-      db.comicMediaAssets.where('workId').equals(scope.workId).filter(row => row.referenceAssetKeys.includes(asset.stableKey)).toArray(),
-    ])
-    if ((panels.length || subjects.length || referencingAssets.length) && !input.clearReferences) throw new Error('[media] asset 仍被选择或作为参考图使用，请显式清理引用')
-    if (panels.some(panel => panel.status === 'locked') || subjects.some(subject => subject.status === 'locked')) throw new Error('[media] asset 被锁定格或视觉条目引用，请先解锁')
-    const now = Date.now()
-    await db.comicPanels.bulkPut(panels.map(panel => { const nextRevision = panel.revision + 1; return { ...panel, selectedMediaAssetKey: null, narrativeReviewRevision: panel.narrativeReviewRevision === panel.revision ? nextRevision : panel.narrativeReviewRevision, visualReviewRevision: null, visualReviewBasis: null, visualReviewedAt: null, revision: nextRevision, updatedAt: now } }))
-    await db.comicVisualSubjects.bulkPut(subjects.map(subject => ({ ...subject, selectedMediaAssetKey: null, revision: subject.revision + 1, updatedAt: now })))
-    await db.comicMediaAssets.bulkPut(referencingAssets.map(row => ({ ...row, referenceAssetKeys: row.referenceAssetKeys.filter(key => key !== asset.stableKey), updatedAt: now })))
-    await db.comicMediaAssets.delete(asset.id!)
-    return asset.blobObjectId
+  const command = { scope: { ...input.scope }, assetKey: input.assetKey, clearReferences: input.clearReferences === true }
+  const scope = await resolveScope({ scope: command.scope })
+  const root = await requireComicRoot(scope, true)
+  const blobObjectId = await db.transaction('rw', comicMediaRemovalTransactionTablesV1(), async () => {
+    const current = await requireComicRoot(scope, true)
+    if (current.id !== root.id) throw new Error('[media] 改编根已变化，请刷新')
+    const [blob] = await removeComicMediaRowsInTransactionV1({ scope, adaptationProjectId: root.id!,
+      assetKeys: [command.assetKey], clearReferences: command.clearReferences })
+    if (blob == null) throw new Error('[media] 图片缺少可清理的 Blob 身份')
+    return blob
   })
   const remaining = await db.comicMediaAssets.where('blobObjectId').equals(blobObjectId).count()
   if (remaining) return { blobObjectId, blobDeleted: false }
