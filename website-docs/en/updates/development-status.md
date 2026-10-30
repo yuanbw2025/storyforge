@@ -1,5 +1,27 @@
 # Pending development and branch audit
 
+## October 30, 2026 · Current branches and pending delivery
+
+Reviewed from successful baseline `3b524e11` to remote main `8707bb8a`. Before editing, enumerated **12 local branches and 11 registered worktrees, including detached checkouts**. Nine heads are outside main; all committed work is reachable from origin references. Branch counts are not feature counts. Removed registrations are not recreated or treated as proof of lost content. Older dated sections retain their historical snapshots; this section records the current review.
+
+### Merged
+
+Longform saving, candidate adoption and startup recovery #215, chapter encyclopedia-reference protection #231, repository-external API discovery rules #232, and v4.0.5 preparation #228 are merged. #232 is an engineering governance contract, not a new user model service. #228 does not establish a public installer release; stable remains v4.0.4. The #215 matrix still has 72 in progress, 88 pending and zero fully accepted items out of 160; these repairs do not establish acceptance of every native crash or literary quality.
+
+### Pending and uncommitted observations
+
+| Branch / head | Scope and status | Deduplication and limits |
+| --- | --- | --- |
+| `fix/issue-179-run-backup-lifecycle-20261029` · `925323b0` | Open [PR #233](https://github.com/yuanbw2025/storyforge/pull/233): explicitly reject local outline/prose deletion while historical run contracts still reference it | Unmerged; prevents new dangling references without claiming lossless recovery of existing malformed backups. |
+| `feat/community-works-library-20261029` · `78dba682` | Draft [PR #234](https://github.com/yuanbw2025/storyforge/pull/234): author-selected novel chapters and existing book-analysis results, exact public preview and sealed sharing | Unmerged and hidden by default, with public build configuration unset. Independent gallery, authentication, private uploads, access policy and moderation still need real-service acceptance. No public community launch is claimed. |
+| `feat/quality-audit-plan-20261029` · `3a5b3722` | Draft [PR #235](https://github.com/yuanbw2025/storyforge/pull/235): fixed-baseline review, 144 staged remediation tasks and draft rules requiring novel-to-world derivation first | A plan and audit record, not 144 completed features or repairs. |
+| `fix/quality-round1-integration-20261030` · `d9522134` | Draft [PR #236](https://github.com/yuanbw2025/storyforge/pull/236): native primary keys for owner deletion, frozen screenplay author-intent recovery, desktop runtime update | Unmerged, dependent on #235. Individual 006/014/017 branches are ancestors of this integration head, not four separate deliveries. All-platform, real upgrade and full-delivery acceptance remain pending. |
+| `fix/quality-035-adoption-reference-validation-20261030`; worktree `quality-data-round1` | Three uncommitted entries covering detailed-outline authoring, adoption-reference validation and a regression file | Same committed head as #235. Observed scope only; implementation completion is not claimed. |
+| `fix/quality-005-world-source-admission-20261030` · `38cbcd5f`; worktree `quality-intent-round1` | 45 uncommitted entries covering open-world source admission, novel-to-world drafts, production/runtime paths and test materials | Committed head is an ancestor of #236. Working files are not integrated; neither 45 completed repairs nor public direct-novel sourcing is claimed. |
+
+Other local release/maintenance heads are main ancestors. Detached old-release/audit worktrees are frozen verification inputs. This task preserves working files and browser data and does not submit, push, merge or clean product development. Full paths, commits and differences stay in private maintenance evidence.
+
+
 
 
 ## October 28, 2026 · Merged chains and existing-branch review

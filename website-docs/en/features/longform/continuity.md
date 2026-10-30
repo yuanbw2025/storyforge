@@ -1,5 +1,10 @@
 # Longform: continuity, post-chapter review, and revision
 
+## Post-chapter review: save selections before confirming writes
+
+Open post-chapter review, check each candidate against the prose, and select only what should be written this time. Wait for confirmation that candidates and saved selections can recover after reload before leaving. Unsaved selections pause confirmation: retry saving the selection, or explicitly discard the unsaved selection and select again. Unchecked rows are not written. The original model response remains available for inspection; malformed output is not adopted by guessing row positions. If the source changed, inspect the current chapter and candidate; no hidden model resend occurs.
+
+
 Longform continuity combines original prose, confirmed facts, summaries, and retrieval. Models can still miss or misinterpret details, so each chapter needs author review.
 
 ## After a chapter
@@ -21,7 +26,7 @@ A character's guess is not necessarily an objective fact; a secret known to the 
 
 ## Recovering malformed state fields
 
-The step-mode stability development build identifies malformed state cards in the prose editor while keeping manual editing and saving available. Related generation pauses to avoid writing with incomplete state; damaged records are not cleared or rewritten automatically. See [development status](/en/updates/development-status) for mainline and release availability.
+The step-mode stability repair now merged into main identifies malformed state cards in the prose editor while keeping manual editing and saving available. Related generation pauses to avoid writing with incomplete state; damaged records are not cleared or rewritten automatically. See [development status](/en/updates/development-status) for mainline and release availability.
 
 1. Choose “Repair state fields” to open “States and inventory”.
 2. Optionally export the original fields before opening the affected card.
@@ -35,7 +40,7 @@ If another window has changed the card, the older repair is rejected. Keep your 
 
 A prose candidate can be saved with “Save candidate edits” before reloading or editing further. Saving updates the candidate only; changing formal prose still requires explicit adoption. Switching steps first attempts to save candidate edits; failure blocks navigation and retains the input. Before a direct reload or close, confirm that the candidate has been saved and has not yet been adopted. On narrow screens, the prose toolbar scrolls with the page so candidate save and adoption controls remain reachable.
 
-Clearing a candidate keeps its editor available for new input. A blank candidate cannot be saved or adopted. Candidate draft saving and state repair are both within the development-build validation scope.
+Clearing a candidate keeps its editor available for new input. A blank candidate cannot be saved or adopted. Candidate draft saving and state repair merged into main with [PR #215](https://github.com/yuanbw2025/storyforge/pull/215). See [version compatibility](/en/updates/compatibility) for installer availability.
 
 ## Revising an early chapter
 

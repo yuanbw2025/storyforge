@@ -1,5 +1,13 @@
 # Changelog
 
+## October 30, 2026 · Longform save acknowledgement and recovery
+
+- [PR #215](https://github.com/yuanbw2025/storyforge/pull/215) merged as `f73623b1`. Check saving indicators when editing work details, characters, settings and outlines; failed saves retain input for explicit retry. Save prose candidates before reload; formal prose still requires adoption. See [planning](/en/features/longform/planning) and [continuity](/en/features/longform/continuity).
+- Post-chapter review retains raw responses and saved selections. A selection-save failure pauses writes; unchecked rows are not written. Interrupted startup resource loading has one bounded recovery, with explicit reload for persistent failure. See [troubleshooting](/en/guides/troubleshooting).
+- [PR #231](https://github.com/yuanbw2025/storyforge/pull/231) merged as `33789191`: malformed encyclopedia names/previews no longer block chapter entry; original records remain unchanged. See the [prose guide](/en/features/longform/writing).
+- v4.0.5 preparation #228 is merged; the public stable release remains v4.0.4. See [compatibility](/en/updates/compatibility). Pending community sharing, history-bound deletion protection and first-round quality repairs are recorded in [development status](/en/updates/development-status).
+
+
 
 
 ## October 28, 2026 · Longform recovery and interactive-production instructions
