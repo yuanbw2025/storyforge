@@ -17,10 +17,10 @@ import {
   createH86BrowserRunDependenciesV1,
 } from '../../lib/evals/agent-harness/story-arc-main-path-browser'
 import { clearH86HumanReviewV1 } from '../../lib/evals/agent-harness/story-arc-human-review'
-import type { AIConfig, AIConfigPreset } from '../../lib/types'
+import type { AIConfigPreset } from '../../lib/types'
 import { APP_BUILD_ID } from '../../lib/version'
 import {
-  getAIConfigPresetSessionApiKey,
+  resolveAIConfigPresetV1,
   useAIConfigStore,
 } from '../../stores/ai-config'
 import { useDialog } from '../shared/Dialog'
@@ -33,13 +33,6 @@ function downloadJson(raw: string, filename: string): void {
   anchor.download = filename
   anchor.click()
   URL.revokeObjectURL(url)
-}
-
-function presetConfig(preset: AIConfigPreset, current: AIConfig): AIConfig {
-  const apiKey = preset.config.apiKey
-    || getAIConfigPresetSessionApiKey(preset.id)
-    || (preset.config.provider === current.provider ? current.apiKey : '')
-  return { ...preset.config, apiKey }
 }
 
 function attemptedSteps(checkpoint: H86CheckpointV1 | null): number {
@@ -101,10 +94,10 @@ export default function H86StoryArcEvalPanel() {
   const generatorPreset = presets.find(item => item.id === generatorPresetId) ?? null
   const verifierPreset = presets.find(item => item.id === verifierPresetId) ?? null
   const generatorConfig = useMemo(() => (
-    generatorPreset ? presetConfig(generatorPreset, currentConfig) : null
+    generatorPreset ? resolveAIConfigPresetV1(generatorPreset, currentConfig) : null
   ), [currentConfig, generatorPreset])
   const verifierConfig = useMemo(() => (
-    verifierPreset ? presetConfig(verifierPreset, currentConfig) : null
+    verifierPreset ? resolveAIConfigPresetV1(verifierPreset, currentConfig) : null
   ), [currentConfig, verifierPreset])
   const frozenIdentity = checkpoint
     ? `${checkpoint.generator.provider}/${checkpoint.generator.model} → ${checkpoint.verifier.provider}/${checkpoint.verifier.model}`

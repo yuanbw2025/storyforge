@@ -26,9 +26,15 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     useAIConfigStore.getState().setConfig({ apiKey: 'sk-session' })
 
     expect(useAIConfigStore.getState().rememberApiKey).toBe(false)
-    expect(sessionStorage.getItem(SESSION_KEY)).toBe('sk-session')
-    expect(JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}').apiKey).toBe('')
+    const persisted = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}')
+    expect(JSON.parse(sessionStorage.getItem(SESSION_KEY) || '{}')).toEqual({
+      version: 1, referenceId: persisted._sessionCredentialId,
+      provider: useAIConfigStore.getState().config.provider,
+      baseUrl: useAIConfigStore.getState().config.baseUrl, apiKey: 'sk-session',
+    })
+    expect(persisted.apiKey).toBe('')
     expect(localStorage.getItem(REMEMBER_KEY)).toBe('false')
+    expect((await freshStore()).getState().config.apiKey).toBe('sk-session')
   })
 
   it('显式记住本机时才把 API Key 写入 localStorage', async () => {
@@ -86,9 +92,16 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
 
     const persistedPresets = JSON.parse(localStorage.getItem('storyforge-ai-presets') || '[]')
     expect(persistedPresets.map((preset: { config: { apiKey: string } }) => preset.config.apiKey)).toEqual(['', ''])
-    expect(JSON.parse(sessionStorage.getItem(PRESET_SESSION_KEYS) || '{}')).toEqual({
-      [agnesId]: 'agnes-session-key',
-      [doubaoId]: 'doubao-session-key',
+    const sessionKeys = JSON.parse(sessionStorage.getItem(PRESET_SESSION_KEYS) || '{}')
+    expect(sessionKeys).toEqual({
+      [agnesId]: {
+        version: 1, referenceId: persistedPresets[0].sessionCredentialId,
+        provider: 'agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', apiKey: 'agnes-session-key',
+      },
+      [doubaoId]: {
+        version: 1, referenceId: persistedPresets[1].sessionCredentialId,
+        provider: 'doubao', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', apiKey: 'doubao-session-key',
+      },
     })
 
     useAIConfigStore.getState().applyPreset(agnesId)
@@ -103,7 +116,7 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     expect(reloadedStore.getState().config.apiKey).toBe('doubao-session-key')
     reloadedStore.getState().deletePreset(doubaoId)
     expect(JSON.parse(sessionStorage.getItem(PRESET_SESSION_KEYS) || '{}')).toEqual({
-      [agnesId]: 'agnes-session-key',
+      [agnesId]: sessionKeys[agnesId],
     })
   })
 

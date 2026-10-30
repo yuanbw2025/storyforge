@@ -53,6 +53,8 @@ export interface AIConfigPreset {
   id: string
   name: string
   config: AIConfig
+  /** Non-sensitive local/session save pairing, never part of a model request. */
+  sessionCredentialId?: string
 }
 
 /** 聊天消息 */

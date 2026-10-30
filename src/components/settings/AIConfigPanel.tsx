@@ -3,7 +3,7 @@ import ShowcaseNotice from '../showcase/ShowcaseNotice'
 import CodexConnectionCard from './CodexConnectionCard'
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
 import { Eye, EyeOff, CheckCircle, RotateCcw, RefreshCw } from 'lucide-react'
-import { useAIConfigStore, type TestResult } from '../../stores/ai-config'
+import { hasUnmatchedSessionCredentialV1, useAIConfigStore, type TestResult } from '../../stores/ai-config'
 import EmbeddingConfigCard from './EmbeddingConfigCard'
 import type { AIProvider } from '../../lib/types'
 import { PROVIDER_MODELS } from '../../lib/types'
@@ -245,6 +245,9 @@ function AIConfigPanelFull() {
                 {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+            {hasUnmatchedSessionCredentialV1('chat') && (
+              <p className="mt-2 text-xs text-text-secondary" role="status">临时 API Key 未能与当前配置匹配。请确认服务地址后重新填写；使用预设时，再保存修改到该预设。</p>
+            )}
             <label className="mt-2 flex items-start gap-2 text-[11px] text-text-secondary cursor-pointer">
               <input
                 type="checkbox"
@@ -270,13 +273,13 @@ function AIConfigPanelFull() {
               {['custom', 'ollama'].includes(config.provider) && (
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   <button
-                    onClick={() => setConfig({ provider: 'custom', baseUrl: 'http://localhost:1234/v1', apiKey: config.apiKey || 'lm-studio', model: 'qwen3-14b' })}
+                    onClick={() => setConfig({ provider: 'custom', baseUrl: 'http://localhost:1234/v1', model: 'qwen3-14b' })}
                     className="text-xs px-2 py-1 rounded bg-bg-elevated text-text-secondary border border-border hover:text-accent hover:border-accent/50 transition-colors"
                   >
                     LM Studio
                   </button>
                   <button
-                    onClick={() => setConfig({ provider: 'ollama', baseUrl: 'http://localhost:11434/v1', apiKey: config.apiKey || 'ollama', model: 'qwen2.5:7b' })}
+                    onClick={() => setConfig({ provider: 'ollama', baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:7b' })}
                     className="text-xs px-2 py-1 rounded bg-bg-elevated text-text-secondary border border-border hover:text-accent hover:border-accent/50 transition-colors"
                   >
                     本地 Ollama

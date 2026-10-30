@@ -6,6 +6,8 @@ import { normalizeProviderModel, PROVIDER_PRESETS } from '../lib/types'
 import { createLog, updateLog } from '../lib/ai/logger'
 import { nanoid } from '../lib/utils/id'
 import { buildOpenAIEndpoint, normalizeOpenAIBaseUrl } from '../lib/ai/openai-endpoint'
+import { sameAICredentialAuthorityV1 } from '../lib/ai/credential-identity'
+import { createSessionCredentialV1, readSessionCredentialV1, type SessionCredentialV1 } from '../lib/ai/session-credential'
 import { isProviderQuotaRejectionV1 } from '../lib/ai/provider-rejection'
 import { AICompletionResponseErrorV1, inspectCompletionResponseV1, requireCompletionTextV1 } from '../lib/ai/completion-response'
 import {
@@ -60,17 +62,20 @@ const DEFAULT_EMBEDDING: EmbeddingConfig = {
 
 /** embedding 配置加载：key 复用与聊天 key 相同的「记住」开关（不记住→sessionStorage）。 */
 function loadEmbeddingConfig(rememberApiKey: boolean): EmbeddingConfig {
-  let saved: Partial<EmbeddingConfig> = {}
+  let saved: Partial<EmbeddingConfig> & { _sessionCredentialId?: string } = {}
   try { const raw = localStorage.getItem(EMBEDDING_KEY); if (raw) saved = JSON.parse(raw) } catch { /* ignore */ }
-  const sessionKey = sessionStorage.getItem(EMBEDDING_SESSION_KEY) || ''
-  return { ...DEFAULT_EMBEDDING, ...saved, apiKey: rememberApiKey ? (saved.apiKey || '') : sessionKey }
+  const { _sessionCredentialId, ...fields } = saved
+  const owner = { ...DEFAULT_EMBEDDING, ...fields }
+  const sessionKey = readSessionCredentialV1(sessionStorage.getItem(EMBEDDING_SESSION_KEY), owner, _sessionCredentialId)
+  return { ...owner, apiKey: rememberApiKey ? (fields.apiKey || '') : sessionKey }
 }
 
 function persistEmbeddingConfig(cfg: EmbeddingConfig, rememberApiKey: boolean): void {
-  const persisted: EmbeddingConfig = rememberApiKey ? cfg : { ...cfg, apiKey: '' }
+  const referenceId = nanoid()
+  const persisted = { ...cfg, apiKey: rememberApiKey ? cfg.apiKey : '', _sessionCredentialId: referenceId }
   localStorage.setItem(EMBEDDING_KEY, JSON.stringify(persisted))
   if (rememberApiKey) sessionStorage.removeItem(EMBEDDING_SESSION_KEY)
-  else if (cfg.apiKey) sessionStorage.setItem(EMBEDDING_SESSION_KEY, cfg.apiKey)
+  else if (cfg.apiKey) sessionStorage.setItem(EMBEDDING_SESSION_KEY, JSON.stringify(createSessionCredentialV1(cfg, referenceId, cfg.apiKey)))
   else sessionStorage.removeItem(EMBEDDING_SESSION_KEY)
 }
 
@@ -99,30 +104,57 @@ function savePresets(presets: AIConfigPreset[]) {
   localStorage.setItem(PRESETS_KEY, JSON.stringify(presets))
 }
 
-function loadPresetSessionApiKeys(): Record<string, string> {
+function loadPresetSessionApiKeys(): Record<string, unknown> {
   try {
     const raw = sessionStorage.getItem(PRESET_SESSION_API_KEYS)
     if (!raw) return {}
     const parsed = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
-    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => (
-      typeof entry[0] === 'string' && typeof entry[1] === 'string' && entry[1].length > 0
-    )))
+    return Object.assign(Object.create(null) as Record<string, unknown>, parsed)
   } catch {
     return {}
   }
 }
 
-function savePresetSessionApiKey(id: string, apiKey: string): void {
+function savePresetSessionApiKey(id: string, credential: SessionCredentialV1 | null): void {
   const keys = loadPresetSessionApiKeys()
-  if (apiKey) keys[id] = apiKey
+  if (credential) Object.defineProperty(keys, id, { value: credential, enumerable: true, writable: true, configurable: true })
   else delete keys[id]
   if (Object.keys(keys).length) sessionStorage.setItem(PRESET_SESSION_API_KEYS, JSON.stringify(keys))
   else sessionStorage.removeItem(PRESET_SESSION_API_KEYS)
 }
 
 export function getAIConfigPresetSessionApiKey(id: string): string {
-  return loadPresetSessionApiKeys()[id] || ''
+  const preset = useAIConfigStore.getState().presets.find(item => item.id === id)
+  return preset ? readSessionCredentialV1(loadPresetSessionApiKeys()[id], preset.config, preset.sessionCredentialId) : ''
+}
+
+export function getAIConfigPresetApiKeyV1(preset: AIConfigPreset): string {
+  return preset.config.apiKey || readSessionCredentialV1(loadPresetSessionApiKeys()[preset.id], preset.config, preset.sessionCredentialId)
+}
+
+/** Retained but unpaired temporary keys need an explicit author re-entry. */
+export function hasUnmatchedSessionCredentialV1(kind: 'chat' | 'embedding'): boolean {
+  const state = useAIConfigStore.getState()
+  const config = kind === 'chat' ? state.config : state.embedding
+  if (state.rememberApiKey || config.apiKey) return false
+  if (sessionStorage.getItem(kind === 'chat' ? SESSION_API_KEY : EMBEDDING_SESSION_KEY)) return true
+  const preset = kind === 'chat' && state.presets.find(item => item.id === state.activePresetId)
+  return Boolean(preset && loadPresetSessionApiKeys()[preset.id] && !getAIConfigPresetApiKeyV1(preset))
+}
+
+function sameChatCredentialAuthority(left: AIConfig, right: AIConfig): boolean {
+  return sameAICredentialAuthorityV1(
+    { provider: left.provider, baseUrl: normalizeOpenAIBaseUrl(left.baseUrl).baseUrl },
+    { provider: right.provider, baseUrl: normalizeOpenAIBaseUrl(right.baseUrl).baseUrl },
+  )
+}
+
+/** Resolve one preset without changing the selected global configuration. */
+export function resolveAIConfigPresetV1(preset: AIConfigPreset, current: AIConfig): AIConfig {
+  const apiKey = getAIConfigPresetApiKeyV1(preset)
+    || (sameChatCredentialAuthority(preset.config, current) ? current.apiKey : '')
+  return normalizeConfigModel({ ...preset.config, apiKey })
 }
 
 function loadTaskRoutes(): AITaskRoutes {
@@ -233,7 +265,7 @@ function getChineseExplanation(status: number, msg: string): string {
 /** 从 localStorage 加载配置 */
 function loadInitialConfig(): { config: AIConfig; rememberApiKey: boolean } {
   if (IS_MODEL_DISABLED_BUILD) return { config: { ...DEFAULT_CONFIG }, rememberApiKey: false }
-  let savedConfig: Partial<AIConfig> = {}
+  let savedConfig: Partial<AIConfig> & { _sessionCredentialId?: string } = {}
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) savedConfig = JSON.parse(saved)
@@ -241,14 +273,17 @@ function loadInitialConfig(): { config: AIConfig; rememberApiKey: boolean } {
 
   const rememberRaw = localStorage.getItem(REMEMBER_API_KEY)
   const rememberApiKey = rememberRaw === 'true'
-  const sessionKey = sessionStorage.getItem(SESSION_API_KEY) || ''
+  const { _sessionCredentialId, ...fields } = savedConfig
+  const owner = { ...DEFAULT_CONFIG, ...fields }
+  const rawSession = sessionStorage.getItem(SESSION_API_KEY)
+  const sessionKey = readSessionCredentialV1(rawSession, owner, _sessionCredentialId)
 
   const config = normalizeConfigModel({
     ...DEFAULT_CONFIG,
-    ...savedConfig,
-    apiKey: rememberApiKey ? (savedConfig.apiKey || '') : sessionKey,
+    ...fields,
+    apiKey: rememberApiKey ? (fields.apiKey || '') : sessionKey,
   })
-  if (savedConfig.model && config.model !== savedConfig.model) {
+  if (fields.model && config.model !== fields.model && (rememberApiKey || !rawSession || sessionKey)) {
     persistConfig(config, rememberApiKey)
   }
 
@@ -265,13 +300,14 @@ function normalizeConfigModel(config: AIConfig): AIConfig {
 }
 
 function persistConfig(config: AIConfig, rememberApiKey: boolean): void {
-  const persisted: AIConfig = rememberApiKey ? config : { ...config, apiKey: '' }
+  const referenceId = nanoid()
+  const persisted = { ...config, apiKey: rememberApiKey ? config.apiKey : '', _sessionCredentialId: referenceId }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted))
   localStorage.setItem(REMEMBER_API_KEY, String(rememberApiKey))
   if (rememberApiKey) {
     sessionStorage.removeItem(SESSION_API_KEY)
   } else if (config.apiKey) {
-    sessionStorage.setItem(SESSION_API_KEY, config.apiKey)
+    sessionStorage.setItem(SESSION_API_KEY, JSON.stringify(createSessionCredentialV1(config, referenceId, config.apiKey)))
   } else {
     sessionStorage.removeItem(SESSION_API_KEY)
   }
@@ -335,14 +371,20 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
 
   setEmbeddingConfig: (partial: Partial<EmbeddingConfig>) => {
     if (IS_MODEL_DISABLED_BUILD) return
-    const next = { ...get().embedding, ...partial }
+    const previous = get().embedding
+    const next = { ...previous, ...partial }
+    const identityChanged = previous.provider !== next.provider || previous.baseUrl !== next.baseUrl
+    if (!Object.prototype.hasOwnProperty.call(partial, 'apiKey') && identityChanged && !sameAICredentialAuthorityV1(previous, next)) next.apiKey = ''
     persistEmbeddingConfig(next, get().rememberApiKey)
     set({ embedding: next })
   },
 
   setConfig: (partial: Partial<AIConfig>) => {
     if (IS_MODEL_DISABLED_BUILD) return
-    const newConfig = normalizeConfigModel({ ...get().config, ...partial })
+    const previous = get().config
+    const newConfig = normalizeConfigModel({ ...previous, ...partial })
+    const identityChanged = previous.provider !== newConfig.provider || previous.baseUrl !== newConfig.baseUrl
+    if (!Object.prototype.hasOwnProperty.call(partial, 'apiKey') && identityChanged && !sameChatCredentialAuthority(previous, newConfig)) newConfig.apiKey = ''
     persistConfig(newConfig, get().rememberApiKey)
     // 手动改动配置后，与已选预设脱钩（除非改动等于该预设）
     set({ config: newConfig, activePresetId: null })
@@ -350,22 +392,26 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
 
   setRememberApiKey: (remember: boolean) => {
     if (IS_MODEL_DISABLED_BUILD) return
-    persistConfig(get().config, remember)
-    persistEmbeddingConfig(get().embedding, remember)
+    const state = get(), config = { ...state.config }, embedding = { ...state.embedding }
+    persistConfig(config, remember)
+    persistEmbeddingConfig(embedding, remember)
     set({ rememberApiKey: remember })
   },
 
   saveAsPreset: (name: string) => {
     if (IS_MODEL_DISABLED_BUILD) return ''
+    const state = get(), config = { ...state.config }, remember = state.rememberApiKey
     const id = nanoid()
     const preset: AIConfigPreset = {
       id,
       name: name.trim() || '未命名配置',
-      config: presetConfig(get().config, get().rememberApiKey),
+      config: presetConfig(config, remember),
+      sessionCredentialId: nanoid(),
     }
-    const presets = [...get().presets, preset]
+    const presets = [...state.presets, preset]
     savePresets(presets)
-    savePresetSessionApiKey(id, get().rememberApiKey ? '' : get().config.apiKey)
+    savePresetSessionApiKey(id, remember || !config.apiKey ? null
+      : createSessionCredentialV1(config, preset.sessionCredentialId!, config.apiKey))
     set({ presets, activePresetId: id, editingPresetId: id })
     return id
   },
@@ -374,23 +420,24 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
     if (IS_MODEL_DISABLED_BUILD) return
     const preset = get().presets.find(p => p.id === id)
     if (!preset) return
-    const current = get().config
-    const apiKey = preset.config.apiKey
-      || getAIConfigPresetSessionApiKey(id)
-      || (preset.config.provider === current.provider ? current.apiKey : '')
-    const newConfig = normalizeConfigModel({ ...preset.config, apiKey })
+    const newConfig = resolveAIConfigPresetV1(preset, get().config)
     persistConfig(newConfig, get().rememberApiKey)
     set({ config: newConfig, activePresetId: id, editingPresetId: id })
   },
 
   updatePresetFromCurrent: (id: string) => {
     if (IS_MODEL_DISABLED_BUILD) return
-    const presets = get().presets.map(p => p.id === id ? {
+    const state = get(), config = { ...state.config }, remember = state.rememberApiKey
+    if (!state.presets.some(preset => preset.id === id)) return
+    const referenceId = nanoid()
+    const presets = state.presets.map(p => p.id === id ? {
       ...p,
-      config: presetConfig(get().config, get().rememberApiKey),
+      config: presetConfig(config, remember),
+      sessionCredentialId: referenceId,
     } : p)
     savePresets(presets)
-    savePresetSessionApiKey(id, get().rememberApiKey ? '' : get().config.apiKey)
+    savePresetSessionApiKey(id, remember || !config.apiKey ? null
+      : createSessionCredentialV1(config, referenceId, config.apiKey))
     set({ presets, activePresetId: id, editingPresetId: id })
   },
 
@@ -407,7 +454,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
     ) as AITaskRoutes
     savePresets(presets)
     saveTaskRoutes(taskRoutes)
-    savePresetSessionApiKey(id, '')
+    savePresetSessionApiKey(id, null)
     set({
       presets,
       taskRoutes,
@@ -450,14 +497,14 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
 
   switchProvider: (provider: AIProvider) => {
     if (IS_MODEL_DISABLED_BUILD) return
+    const state = get(), previous = { ...state.config }
     const preset = PROVIDER_PRESETS[provider] || {}
+    const owner = { ...previous, provider, ...preset }
     const newConfig = normalizeConfigModel({
-      ...get().config,
-      provider,
-      ...preset,
-      apiKey: provider === get().config.provider ? get().config.apiKey : (preset.apiKey || ''),
+      ...owner,
+      apiKey: sameChatCredentialAuthority(previous, owner) ? previous.apiKey : (preset.apiKey || ''),
     })
-    persistConfig(newConfig, get().rememberApiKey)
+    persistConfig(newConfig, state.rememberApiKey)
     set({ config: newConfig, activePresetId: null, editingPresetId: null })
   },
 
