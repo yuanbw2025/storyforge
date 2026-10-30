@@ -2,7 +2,7 @@
 
 ## 当前文档描述哪个版本
 
-本轮增量核对至 **2026-10-28，main 基线 46a90c0b**；从上次成功维护基线 `7b974fbf` 核对用户可见变化。产品状态以各自指南标记为准。
+本轮增量核对至 **2026-10-30，main 基线 8707bb8a**；从上次成功维护基线 `3b524e11` 核对用户可见变化。产品状态以各自指南标记为准。
 
 当前正式版本为 [**v4.0.4**](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.4)，于 **2026-10-23 03:17 UTC** 发布，固定源码 `d90961a2`。本次交付 [PR #185](https://github.com/yuanbw2025/storyforge/pull/185) 的大型运行合同保存与恢复修复，[发行准备 PR #190](https://github.com/yuanbw2025/storyforge/pull/190) 已合并。合同和事件快照共用 32 MiB UTF-8 有限记录预算，完整保留快照；超预算仍明确拒绝，不改变模型预算、候选采纳、权限或过期检查，也没有数据库迁移。独立发行通过完整生产/浏览器检查、全部客户端和四平台便携启动，以及从正式 v4.0.3 的覆盖升级；Android 保留旧包重启基线、新包恢复和最终重启四阶段验证。升级前仍请导出完整备份，见下方步骤。
 
@@ -24,7 +24,7 @@ v4.0.2 于 2026-10-16 正式发布，固定源码 `04de86d7`。发行页提供 W
 
 主干在世界叙事索引 v12 基础上，经 [PR #196](https://github.com/yuanbw2025/storyforge/pull/196) 进入数据库 **v13、完整备份格式 v17**，保留两种历史 v12 库的并集桥与 v14/v15/v16 备份的严格兼容入口。世界与作品原记录仍是内容来源；可重建缓存不进入完整备份。已升级数据库不要直接交给仅支持旧 schema 的程序；回退先保留兼容 v13 的环境，并用升级前备份在隔离副本核对。见[备份与恢复](/guides/backup-restore)。
 
-本轮新增的文字冒险导航 [#208](https://github.com/yuanbw2025/storyforge/pull/208)、逐章提示与主题 [#209](https://github.com/yuanbw2025/storyforge/pull/209)、模型配置 [#217](https://github.com/yuanbw2025/storyforge/pull/217)、跑团 [#196](https://github.com/yuanbw2025/storyforge/pull/196)、角色聊天 [#172](https://github.com/yuanbw2025/storyforge/pull/172)、故事线阶段恢复 [#226](https://github.com/yuanbw2025/storyforge/pull/226) 和 AVG [#219](https://github.com/yuanbw2025/storyforge/pull/219) 均已合入主干。正式下载仍为 v4.0.4；v4.0.5 的[发行准备 PR #228](https://github.com/yuanbw2025/storyforge/pull/228)尚未合并或公开，发布日期与最终包含范围待实际发行核对，不把候选输入当作已交付安装包。
+本轮新增的文字冒险导航 [#208](https://github.com/yuanbw2025/storyforge/pull/208)、逐章提示与主题 [#209](https://github.com/yuanbw2025/storyforge/pull/209)、模型配置 [#217](https://github.com/yuanbw2025/storyforge/pull/217)、跑团 [#196](https://github.com/yuanbw2025/storyforge/pull/196)、角色聊天 [#172](https://github.com/yuanbw2025/storyforge/pull/172)、故事线阶段恢复 [#226](https://github.com/yuanbw2025/storyforge/pull/226) 和 AVG [#219](https://github.com/yuanbw2025/storyforge/pull/219) 均已合入主干。正式下载仍为 v4.0.4；v4.0.5 的[发行准备 PR #228](https://github.com/yuanbw2025/storyforge/pull/228)已于 2026-10-29 合入 `ae765da8`，但截至本轮读取尚未公开 v4.0.5；发布日期和可下载附件待实际发行核对。长篇保存/采纳与加载恢复 #215、正文百科引用保护 #231 亦已合入主干，见对应指南。
 
 ## 升级前
 
