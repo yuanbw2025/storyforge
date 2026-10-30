@@ -21,9 +21,24 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261029-release405-mainc5-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261030-community-r2-main870-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261029-release405-mainc5-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved mainline v4.0.5 receipt before the community branch and R2 dependency integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261030-community-deps-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved community branch receipt before the v4.0.5 mainline merge and R2 replacement."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261028-longform-avg-integration-v1.json",
+        "workPackage": "NW-2E",
+        "note": "Preserved pre-community-dependency receipt; package, lockfile and the manifest's own receipt pointer changed in the next input fingerprint, while deterministic observations remained identical."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261013-v1.json",
         "workPackage": "NW-0B",

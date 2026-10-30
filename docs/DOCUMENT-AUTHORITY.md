@@ -74,6 +74,7 @@
 - `docs/ROADMAP.md`
 - `docs/roadmap/README.md`
 - `docs/roadmap/CHARACTER-CHAT-DEVELOPMENT-PLAN.md`：E-CHAT-01 角色聊天专项开发计划，覆盖来源投影、情境与主动叙事、导演控制、长期关系、多人、发行及商业验收，提供可勾选开发步骤与进度证据规则；计划不代表实现完成。
+- `docs/roadmap/COMMUNITY-WORKS-LIBRARY-PLAN.md`：社区作品集专项施工计划，限定文档解析拆书分析与原创小说的自愿公开快照、审核、Vercel 展示及官网入口；仍处 F 阶段后置状态，计划不代表公开服务或客户端已交付。
 - `docs/roadmap/CAPABILITY-BASELINE.md`
 - `docs/roadmap/LONGFORM-SYSTEM-FICTION-QUALITY-PLAN.md`：系统文长篇质量增量的研究、十个施工单元、进度和验收入口；复用分步骤与节点同源主链，不宣称文学或平台验收完成。
 - `docs/roadmap/LONGFORM-STEP-STABILITY-PLAN.md`：分步骤长篇逐功能生成、采纳、修改、保存、回读、故障恢复与客户端发行复测计划；配套 `docs/roadmap/longform-step-stability-matrix.json` 记录初始执行清单，不是运行时注册表或已完成验收证据。

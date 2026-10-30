@@ -37,6 +37,8 @@ import {
 } from '../../lib/reference-analysis/lifecycle'
 import { useReferenceStore } from '../../stores/reference'
 import AnalysisReportViewer from './AnalysisReportViewer'
+import { communityClientConfig } from '../../lib/community-works/client'
+import AnalysisSharePanel from '../community-works/AnalysisSharePanel'
 
 interface Props {
   reference: Reference
@@ -66,6 +68,7 @@ export default function ReferenceDeepAnalysisTab({ reference }: Props) {
   const [statusMessage, setStatusMessage] = useState('')
   const [activityLog, setActivityLog] = useState<{ level: string; msg: string }[]>([])
   const [running, setRunning] = useState(false)
+  const [showCommunityShare, setShowCommunityShare] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mountedRef = useRef(false)
   const reloadRequestRef = useRef(0)
@@ -372,6 +375,14 @@ export default function ReferenceDeepAnalysisTab({ reference }: Props) {
       {chunks.length > 0 && !isAnalyzing && selectedRun && (
         <AnalysisReportViewer reference={reference} run={selectedRun} chunks={chunks} isHistorical={isHistorical} />
       )}
+      {communityClientConfig() && !isAnalyzing && selectedRun?.id &&
+        ['ready', 'active', 'superseded'].includes(selectedRun.status) && chunks.length > 0 && <>
+          <button type="button" className="px-4 py-2 bg-accent text-white rounded-lg text-sm"
+            onClick={() => setShowCommunityShare(true)}>分享此版本到社区作品集</button>
+          {showCommunityShare && <AnalysisSharePanel key={`${reference.id}:${selectedRun.id}`}
+            reference={reference} run={selectedRun} chunks={chunks}
+            onClose={() => setShowCommunityShare(false)} />}
+        </>}
     </div>
   )
 }

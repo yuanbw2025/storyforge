@@ -87,6 +87,7 @@
     "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/ext-tasks": "0.2.2",
     "@noble/hashes": "2.4.0",
+    "@supabase/supabase-js": "^2.118.0",
     "@tiptap/core": "3.31.0",
     "@tiptap/extension-placeholder": "3.31.0",
     "@tiptap/extension-text-style": "3.31.0",
@@ -113,6 +114,7 @@
     "react-router": "^8.3.0",
     "three": "0.183.2",
     "turndown": "^7.2.0",
+    "tus-js-client": "^4.3.1",
     "yaml": "^2.4.5",
     "zustand": "^5.0.3"
   },
