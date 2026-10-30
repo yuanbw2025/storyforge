@@ -33,6 +33,51 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  release-checks:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: cli
+            script: ci
+          - id: browser
+            script: ci:e2e
+    env:
+      PLAYWRIGHT_FROZEN_WORKSPACE: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Record exact source
+        run: git rev-parse HEAD
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install browser runtime
+        if: matrix.id == 'browser'
+        run: npx playwright install --with-deps chromium
+      - name: Build production preview
+        if: matrix.id == 'browser'
+        run: npm run build
+      - name: Verify production model and embedding proxies
+        if: matrix.id == 'browser'
+        run: PLAYWRIGHT_PRODUCTION_PREVIEW=1 npx playwright test tests/e2e/settings-proxy.spec.ts tests/e2e/codex-provider.spec.ts
+      - name: Complete release checks
+        run: npm run ${{ matrix.script }}
+      - name: Preserve browser evidence
+        if: ${{ !cancelled() && matrix.id == 'browser' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-browser-${{ github.sha }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
   clients:
     permissions:
       contents: write
@@ -42,6 +87,8 @@ jobs:
       release: true
     secrets: inherit
   build:
+    needs: release-checks
+    if: ${{ !cancelled() && (github.event_name == 'pull_request' || needs.release-checks.result == 'success') }}
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -58,14 +105,6 @@ jobs:
         if: github.event_name != 'pull_request'
         run: npm run check:release-metadata -- "${RELEASE_TAG}"
       - run: npm run test:distribution
-      - name: Existing production release gates
-        if: github.event_name != 'pull_request'
-        run: npm run ci
-      - name: Existing browser release gates
-        if: github.event_name != 'pull_request'
-        run: |
-          npx playwright install --with-deps chromium
-          npm run ci:e2e
       - name: Build local portable channel
         run: |
           npm run build:portable
@@ -78,6 +117,7 @@ jobs:
 
   package:
     needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:

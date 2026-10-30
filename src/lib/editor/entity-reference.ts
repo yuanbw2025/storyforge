@@ -34,8 +34,8 @@ const KIND_PRIORITY: Record<EditorEntityKind, number> = {
   codex: 3,
 }
 
-function clip(value: string | undefined, max = 160): string {
-  const normalized = value?.trim().replace(/\s+/g, ' ') ?? ''
+function clip(value: unknown, max = 160): string {
+  const normalized = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
   return normalized.length > max ? `${normalized.slice(0, max)}...` : normalized
 }
 
@@ -103,12 +103,13 @@ export function buildEditorEntityReferences(
   const visibleCategories = input.codexCategories.filter(category => !category.hidden)
   const categoryById = new Map(visibleCategories.map(category => [category.id, category]))
   for (const entry of input.codexEntries) {
-    if (!entry.name.trim() || !codexEntryInWorld(entry, worldGroupId)) continue
+    if (typeof entry.name !== 'string' || !entry.name.trim() || !codexEntryInWorld(entry, worldGroupId)) continue
     const category = categoryById.get(entry.categoryId)
     if (!category) continue
     const fields = parseEntryFields(entry.fields)
     const details = parseFieldSchema(category.fieldSchema)
-      .filter(field => field.type !== 'ref' && fields[field.key]?.trim())
+      .filter(field => field && typeof field.key === 'string' && typeof field.label === 'string'
+        && field.type !== 'ref' && typeof fields[field.key] === 'string' && fields[field.key].trim())
       .slice(0, 3)
       .map(field => ({ label: field.label, value: clip(fields[field.key], 100) }))
     references.push({

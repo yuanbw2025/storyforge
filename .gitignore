@@ -49,3 +49,13 @@ dist-client-verification/
 # Local Python inference/test bytecode
 __pycache__/
 *.py[cod]
+
+# Local API credentials belong outside every worktree; fallback protection only
+.env
+.env.*
+!.env.example
+!.env.*.example
+/local-api/
+/.local-api/
+*.api-private.json
+*.api-credentials.json
