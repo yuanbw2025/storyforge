@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import { test, expect } from "@playwright/test";
 import { DEFAULT_AVG_SETTINGS } from "../../src/lib/avg/authoring-contract";
 test("AVG pages are open without a world; settings and confirmed conversation survive refresh", async ({
@@ -5,21 +6,12 @@ test("AVG pages are open without a world; settings and confirmed conversation su
 }, info) => {
   await page.addInitScript(() => {
     localStorage.setItem("storyforge_guide_completed", "e2e");
-    localStorage.setItem(
-      "storyforge-ai-config",
-      JSON.stringify({
-        provider: "openai",
-        baseUrl: "https://avg-test.invalid/v1",
-        model: "gpt-4o",
-        temperature: 0.2,
-        maxTokens: 8000,
-      }),
-    );
-    sessionStorage.setItem(
-      "storyforge-ai-api-key-session",
-      "isolated-test-key",
-    );
   });
+  registerBrowserFixtureAIConfigV1(page, { provider: "openai",
+    baseUrl: "https://avg-test.invalid/v1",
+    model: "gpt-4o",
+    temperature: 0.2,
+    maxTokens: 8000, apiKey: "isolated-test-key" })
   let calls = 0;
   await page.route("https://avg-test.invalid/**", async (route) => {
     calls++;
@@ -50,7 +42,7 @@ test("AVG pages are open without a world; settings and confirmed conversation su
       }),
     });
   });
-  await page.goto("./avg/narrative");
+  await gotoWithBrowserFixtureAIConfigV1(page, "./avg/narrative");
   await expect(
     page.getByRole("heading", { name: "叙事图与对白", exact: true }).first(),
   ).toBeVisible({ timeout: 30_000 });
@@ -62,7 +54,7 @@ test("AVG pages are open without a world; settings and confirmed conversation su
   await page.getByLabel("开场与核心目标").fill("寻找遗失的信");
   await page.getByRole("button", { name: "保存制作方案", exact: true }).click();
   await expect(page).toHaveURL(/avg\/vision\?project=\d+&work=\d+/);
-  await page.reload();
+  await reloadWithBrowserFixtureAIConfigV1(page);
   await expect(page.getByLabel("玩家身份／主角", { exact: true })).toHaveValue(
     "巡夜人",
   );
@@ -79,7 +71,7 @@ test("AVG pages are open without a world; settings and confirmed conversation su
   await expect(
     page.getByRole("button", { name: "确认并回填制作方案" }),
   ).toBeEnabled({ timeout: 20000 });
-  await page.reload();
+  await reloadWithBrowserFixtureAIConfigV1(page);
   await page.getByRole("button", { name: "确认并回填制作方案" }).click();
   await expect(page.getByLabel("玩家身份／主角", { exact: true })).toHaveValue(
     "灯塔档案员",
@@ -106,14 +98,14 @@ test("AVG pages are open without a world; settings and confirmed conversation su
   await expect(page.getByLabel("玩家身份 / 主角", { exact: true })).toHaveValue(
     "灯塔档案员",
   );
-  await page.reload();
+  await reloadWithBrowserFixtureAIConfigV1(page);
   await expect(page.getByLabel("玩家身份 / 主角", { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByLabel("玩家身份 / 主角", { exact: true })).toHaveValue(
     "灯塔档案员",
   );
   await page.screenshot({ path: info.outputPath("avg-confirm.png") });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("./avg/vision");
+  await gotoWithBrowserFixtureAIConfigV1(page, "./avg/vision");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -128,7 +120,7 @@ test("AVG pages are open without a world; settings and confirmed conversation su
 test("author edits persist and run as a new version without an AI request", async ({
   page,
 }, info) => {
-  await page.goto("./avg");
+  await gotoWithBrowserFixtureAIConfigV1(page, "./avg");
   const owned = await page.evaluate(async () => {
     const load = new Function("p", "return import(p)");
     return (
@@ -136,13 +128,13 @@ test("author edits persist and run as a new version without an AI request", asyn
     ).seedAvgEditorFixtureV1();
   });
   const query = `project=${owned.scope.projectId}&work=${owned.scope.workId}&production=${owned.productionId}`;
-  await page.goto(`./avg/narrative?${query}`);
+  await gotoWithBrowserFixtureAIConfigV1(page, `./avg/narrative?${query}`);
   await page
     .getByLabel("内容", { exact: true })
     .first()
     .fill("作者重新写下了这段开场。");
   await expect(page.getByRole("status")).toHaveText("编辑草稿已保存");
-  await page.reload();
+  await reloadWithBrowserFixtureAIConfigV1(page);
   await expect(page.getByLabel("内容", { exact: true }).first()).toHaveValue(
     "作者重新写下了这段开场。",
   );
@@ -166,7 +158,7 @@ test("author edits persist and run as a new version without an AI request", asyn
 });
 
 test('AVG operations contain workbench and player navigation without gating browsing',async({page},info)=>{
- await page.goto('./avg/library');
+ await gotoWithBrowserFixtureAIConfigV1(page, './avg/library');
  const primary=page.getByRole('navigation',{name:'AVG 页面导航'});
  const content=page.getByRole('navigation',{name:'AVG 内容导航'});
  await expect(primary.getByRole('button')).toHaveText(['作品库','世界引擎','制作台','发布与版本','游玩','通用设置']);
@@ -176,7 +168,7 @@ test('AVG operations contain workbench and player navigation without gating brow
  await expect(content).toContainText('S2 · 产品定向');
  await expect(content).toContainText('S3 · 产品执行');
  await content.getByRole('button',{name:'音频与演出',exact:true}).click();
- await page.reload();
+ await reloadWithBrowserFixtureAIConfigV1(page);
  await expect(content.locator('[aria-current="page"]')).toHaveText('音频与演出');
  await expect(primary.locator('[aria-current="page"]')).toHaveText('制作台');
  await page.screenshot({path:info.outputPath('avg-workbench-navigation.png')});
@@ -184,7 +176,7 @@ test('AVG operations contain workbench and player navigation without gating brow
  await expect(content).toHaveCount(0);
  await primary.getByRole('button',{name:'游玩',exact:true}).click();
  await content.getByRole('button',{name:'存档与路线',exact:true}).click();
- await page.reload();
+ await reloadWithBrowserFixtureAIConfigV1(page);
  await expect(primary.locator('[aria-current="page"]')).toHaveText('游玩');
  await expect(content.locator('[aria-current="page"]')).toHaveText('存档与路线');
  await page.screenshot({path:info.outputPath('avg-player-navigation.png')});
@@ -193,7 +185,7 @@ test('AVG operations contain workbench and player navigation without gating brow
  await primary.getByRole('button',{name:'制作台',exact:true}).click();
  await page.getByRole('button',{name:'制作目录',exact:true}).click();
  await content.getByRole('button',{name:'路线与结局目标',exact:true}).click();
- await page.reload();
+ await reloadWithBrowserFixtureAIConfigV1(page);
  await page.getByRole('button',{name:'制作目录',exact:true}).click();
  await expect(content.locator('[aria-current="page"]')).toHaveText('路线与结局目标');
  await page.screenshot({path:info.outputPath('avg-content-mobile.png')});

@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {test, expect} from '@playwright/test'
 
@@ -8,9 +9,8 @@ test('player pause survives portable branches, ignores continue and weak assent,
   let sessionId = 0, actions = 0; const calls: string[] = []
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://player-pause.invalid/v1', model: 'test'}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://player-pause.invalid/v1', model: 'test', apiKey: 'isolated-test-key' })
   const read = () => page.evaluate(async id => {const load = new Function('p', 'return import(p)'); return (await (await load('/storyforge/src/lib/character-interaction/runtime-api.ts')).readProductRuntimeState(id)).interaction}, sessionId)
   await page.route('https://player-pause.invalid/**', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
@@ -39,7 +39,7 @@ test('player pause survives portable branches, ignores continue and weak assent,
     }
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, value)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   let f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)'), helper = await load('/storyforge/tests/helpers/chat-narrative-fixture.ts'), api = await load('/storyforge/src/lib/character-interaction/runtime-api.ts'), harness = await load('/storyforge/src/lib/character-interaction/harness.ts')
     const f = await helper.seedChatNarrativeRuntimeFixture({actorThreadFollowup: true}), v = await api.readProductRuntimeStateVersion(f.sessionId)
@@ -50,7 +50,7 @@ test('player pause survives portable branches, ignores continue and weak assent,
     await harness.adoptInteractionRuntimeCandidateV1({scope: f.scope, runId: run.snapshot.run.id}); return f
   })
   sessionId = f.sessionId
-  const open = async () => {await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${sessionId}`); await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')}
+  const open = async () => {await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${sessionId}`); await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')}
   const send = async (text: string) => {await page.getByPlaceholder('对当前场景中的角色说话…').fill(text); await page.getByRole('button', {name: '发送并生成', exact: true}).click()}
   await open(); await send(stop)
   await expect(page.getByRole('article').getByText(ack, {exact: true})).toBeVisible()
@@ -77,7 +77,7 @@ test('player pause survives portable branches, ignores continue and weak assent,
   const after = await read(); expect(after.chatNarrative.situation.goals.at(-1).status).toBe('fulfilled'); expect(after.chatNarrative.situation.goals.at(-1)).not.toHaveProperty('playerPause')
   expect(after.chatNarrative.situation.goals).toHaveLength(3); expect(after.chatNarrative.situation.threads).toHaveLength(1)
   expect(calls).toEqual(['action', 'review', 'action', 'review', 'action', 'review', 'action', 'review'])
-  await page.reload(); await expect(page.getByRole('article').getByText(done, {exact: true})).toBeVisible(); expect(await read()).toEqual(after)
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByRole('article').getByText(done, {exact: true})).toBeVisible(); expect(await read()).toEqual(after)
   await page.getByRole('button', {name: '关系与记忆', exact: true}).click()
   const panel = page.getByTestId('chat-commitment-panel'); await panel.getByText('已处理的约定（1）', {exact: true}).click(); await expect(panel).toContainText('已履行')
   await page.setViewportSize({width: 390, height: 844}); await panel.scrollIntoViewIfNeeded()

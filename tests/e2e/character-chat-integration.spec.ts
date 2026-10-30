@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {openChatNarrativeTools} from './helpers/character-chat-ui'
 import { test, expect } from '@playwright/test';
@@ -9,9 +10,8 @@ for (const rejectClosure of [false, true]) test(`related goal closure is atomic 
     let calls = 0;
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
-        localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-closure.invalid/v1', model: 'test', maxTokens: 4000}));
-        sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key');
     });
+    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-closure.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-test-key' })
     await page.route('https://chat-closure.invalid/**', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++;
@@ -26,16 +26,16 @@ for (const rejectClosure of [false, true]) test(`related goal closure is atomic 
                 nextPossibilities: [], beliefUpdates: [{beliefKey: 'borrowed', text: null, evidenceFactKeys: ['found']}]};
         await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})});
     });
-    await page.goto('./chat/library');
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/library');
     const f = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({additionalGuardGoal: true});});
     const read = () => page.evaluate(async f => {const load = new Function('p', 'return import(p)'); return (await (await load('/storyforge/src/lib/character-interaction/runtime-api.ts')).readProductRuntimeState(f.sessionId)).interaction;}, f);
     const before = await read();
-    await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`);
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`);
     await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard');
     await page.getByRole('button', {name: '让角色开场', exact: true}).click();
     if (rejectClosure) {await expect(page.getByText(/行动语义审查未通过/)).toBeVisible(); await expect(page.getByText(reply, {exact: true})).toHaveCount(0);}
     else await expect(page.getByText(reply, {exact: true})).toBeVisible();
-    await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible();
+    await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible();
     const after = await read();
     if (rejectClosure) expect(after.chatNarrative.situation).toEqual(before.chatNarrative.situation);
     else {
@@ -54,7 +54,7 @@ for (const rejectClosure of [false, true]) test(`related goal closure is atomic 
         const responded = await read();
         expect(responded.chatNarrative.situation).toEqual(after.chatNarrative.situation);
         expect(responded.chatNarrative.triggers.at(-1)).toMatchObject({kind: 'player-response', status: 'complete', actionSequences: [expect.any(Number)]});
-        await page.reload(); await expect(page.getByText(followup, {exact: true})).toBeVisible();
+        await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByText(followup, {exact: true})).toBeVisible();
         expect(await read()).toEqual(responded);
     }
     expect(calls).toBe(rejectClosure ? 2 : 4);
@@ -66,9 +66,8 @@ for (const rejectReflection of [false, true]) test(`role revises its plans and h
     let calls = 0, actions = 0;
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
-        localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-reflection.invalid/v1', model: 'test', maxTokens: 4000}));
-        sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key');
     });
+    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-reflection.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-test-key' })
     await page.route('https://chat-reflection.invalid/**', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++;
@@ -91,18 +90,18 @@ for (const rejectReflection of [false, true]) test(`role revises its plans and h
         }
         await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})});
     });
-    await page.goto('./chat/library');
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/library');
     const f = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture();});
     const read = () => page.evaluate(async f => {const load = new Function('p', 'return import(p)'); return (await (await load('/storyforge/src/lib/character-interaction/runtime-api.ts')).readProductRuntimeState(f.sessionId)).interaction;}, f);
     const before = await read();
-    await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`);
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`);
     await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard');
     await page.getByPlaceholder('对当前场景中的角色说话…').fill('我不想查后门，先休息。');
     await page.getByRole('button', {name: '发送并生成', exact: true}).click();
     if (rejectReflection) {await expect(page.getByText(/行动语义审查未通过/)).toBeVisible(); await expect(page.getByText(reply, {exact: true})).toHaveCount(0);}
     else await expect(page.getByText(reply, {exact: true})).toBeVisible();
     expect(calls).toBe(2);
-    await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible();
+    await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible();
     const after = await read();
     expect(after.chatNarrative.situation.facts).toEqual(before.chatNarrative.situation.facts);
     expect(after.chatNarrative.situation.possibilities).toEqual(rejectReflection ? before.chatNarrative.situation.possibilities : [{actorKey: 'guard', text: plan, evidenceFactKeys: ['lost']}]);
@@ -125,9 +124,8 @@ for (const rejectRelationship of [false, true]) test(`dialogue relationship cons
     let calls = 0, actionCalls = 0;
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
-        localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-relationship.invalid/v1', model: 'test', maxTokens: 4000}));
-        sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key');
     });
+    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-relationship.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-test-key' })
     await page.route('https://chat-relationship.invalid/**', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++;
@@ -147,9 +145,9 @@ for (const rejectRelationship of [false, true]) test(`dialogue relationship cons
         }
         await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})});
     });
-    await page.goto('./chat/library');
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/library');
     const f = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({relationships: true});});
-    await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`);
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`);
     await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard');
     await page.getByPlaceholder('对当前场景中的角色说话…').fill(playerText);
     await page.getByRole('button', {name: '发送并生成', exact: true}).click();
@@ -158,7 +156,7 @@ for (const rejectRelationship of [false, true]) test(`dialogue relationship cons
         await expect(page.getByText(responseText, {exact: true})).toHaveCount(0);
     } else await expect(page.getByRole('region', {name: '对话记录', exact: true}).getByText(responseText, {exact: true})).toBeVisible();
     expect(calls).toBe(2);
-    await page.reload();
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await expect(page.getByTestId('chat-narrative-controls')).toBeVisible();
     const read = () => page.evaluate(async f => {const load = new Function('p', 'return import(p)'); return (await (await load('/storyforge/src/lib/character-interaction/runtime-api.ts')).readProductRuntimeState(f.sessionId)).interaction;}, f);
     const saved = await read();
@@ -191,9 +189,8 @@ for (const rejectReview of [false, true]) test(`player situation request is revi
     let calls = 0;
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
-        localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-runtime-situation.invalid/v1', model: 'test', maxTokens: 6000}));
-        sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key');
     });
+    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-runtime-situation.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
     await page.route('https://chat-runtime-situation.invalid/**', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++;
@@ -215,9 +212,9 @@ for (const rejectReview of [false, true]) test(`player situation request is revi
         }
         await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})});
     });
-    await page.goto('./chat/library');
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/library');
     const fixture = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({maxActionsPerTrigger: 3});});
-    await page.goto(`./chat/play?project=${fixture.scope.projectId}&work=${fixture.scope.workId}&session=${fixture.sessionId}`);
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${fixture.scope.projectId}&work=${fixture.scope.workId}&session=${fixture.sessionId}`);
     await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard');
     await openChatNarrativeTools(page)
     await page.getByText('提出新的情境或矛盾', {exact: true}).click();
@@ -227,7 +224,7 @@ for (const rejectReview of [false, true]) test(`player situation request is revi
     else await expect(page.getByRole('paragraph').filter({hasText: /^门外有人。我想先隔门问问/})).toBeVisible();
     await expect(page.getByRole('button', {name: '构建情境并演绎', exact: true})).toBeEnabled();
     expect(calls).toBe(rejectReview ? 2 : 4);
-    await page.reload();
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await expect(page.getByTestId('chat-narrative-controls')).toBeVisible();
     const state = await page.evaluate(async f => {const load = new Function('p', 'return import(p)'); return (await (await load('/storyforge/src/lib/character-interaction/runtime-api.ts')).readProductRuntimeState(f.sessionId)).interaction;}, fixture);
     expect(state.messages.map((m: {role: string}) => m.role)).toEqual(rejectReview ? [] : ['character']);
@@ -249,16 +246,15 @@ test('refresh resumes an unreviewed situation with one explicit review and no re
     let calls = 0;
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
-        localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-situation-resume.invalid/v1', model: 'test', maxTokens: 6000}));
-        sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key');
     });
+    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-situation-resume.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
     await page.route('https://chat-situation-resume.invalid/**', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++;
         const output = calls === 1 ? {kind: 'chat-situation', title: '敲门声', location: '驿站', timeLabel: '傍晚', newFacts: [{factKey: 'knocking', kind: 'observation', text: '门外传来敲门声。', audienceKeys: ['player', 'guard', 'artisan'], evidenceFactKeys: ['road'], seedExcerpt: '门外传来敲门声'}], newGoals: [], newThreads: [], possibilities: [{actorKey: 'guard', text: '可以隔门询问，也可以等待。', evidenceFactKeys: ['knocking']}]} : {checks: ['continuity', 'permissions', 'player-agency', 'visibility', 'meaningful-direction'].map(check => ({check, passed: true, reason: '工程夹具'}))};
         await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})});
     });
-    await page.goto('./chat/library');
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/library');
     const fixture = await page.evaluate(async () => {
         const load = new Function('p', 'return import(p)');
         const f = await (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture();
@@ -271,14 +267,14 @@ test('refresh resumes an unreviewed situation with one explicit review and no re
         return f;
     });
     expect(calls).toBe(1);
-    await page.goto(`./chat/play?project=${fixture.scope.projectId}&work=${fixture.scope.workId}&session=${fixture.sessionId}`);
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${fixture.scope.projectId}&work=${fixture.scope.workId}&session=${fixture.sessionId}`);
     await expect(page.getByRole('heading', {name: '候选等待审查', exact: true})).toBeVisible();
     await expect(page.getByRole('button', {name: '让角色继续', exact: true})).toBeDisabled();
-    await page.reload();
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await page.getByRole('button', {name: /继续审查并应用 #/}).click();
     await expect(page.getByRole('heading', {name: '候选等待审查', exact: true})).toHaveCount(0);
     expect(calls).toBe(2);
-    await page.reload();
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await page.getByText('当前已知的局面', {exact: true}).click();
     await expect(page.getByRole('listitem').filter({hasText: /^门外传来敲门声。$/})).toBeVisible();
     expect(calls).toBe(2);
@@ -289,9 +285,8 @@ test('a malformed action review never exposes the unapproved reply or coordinato
     let calls = 0;
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
-        localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-review-private.invalid/v1', model: 'test', maxTokens: 9000}));
-        sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key');
     });
+    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-review-private.invalid/v1', model: 'test', maxTokens: 9000, apiKey: 'isolated-test-key' })
     await page.route('https://chat-review-private.invalid/**', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++;
@@ -301,16 +296,16 @@ test('a malformed action review never exposes the unapproved reply or coordinato
         const output = reviewing ? '幕后：铜印就在柜台底下。这不是合法 JSON。' : chatActionResponseFixture(route, {kind: 'attempt', text: '沈禾已经答应陪同搜查。', goalKey: 'find-seal', evidenceFactKeys: ['lost'], audienceKeys: ['guard', 'player'], waitingForPlayer: true, newFacts: [], disclosures: [], threadUpdates: [], goalStatus: null});
         await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: output}, finish_reason: 'stop'}]})});
     });
-    await page.goto('./chat/library');
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/library');
     const f = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture();});
-    await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`);
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`);
     await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard');
     await page.getByRole('button', {name: '让角色开场', exact: true}).click();
     await expect(page.getByText(/审查响应格式无效/)).toBeVisible();
     await expect(page.getByText('沈禾已经答应陪同搜查。', {exact: true})).toHaveCount(0);
     expect(await page.locator('body').innerText()).not.toContain('柜台底下');
     expect(calls).toBe(2);
-    await page.reload();
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await expect(page.getByTestId('chat-narrative-controls')).toBeVisible();
     expect(calls).toBe(2);
 });
@@ -324,9 +319,8 @@ test('two browser pages cannot duplicate a narrative model call and player inter
     const requested = new Promise<void>(resolve => {requestStarted = resolve;});
     await context.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
-        localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-concurrency.invalid/v1', model: 'test', maxTokens: 4000}));
-        sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key');
     });
+    registerBrowserFixtureAIConfigV1(context, { provider: 'openai', baseUrl: 'https://chat-concurrency.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-test-key' })
     await context.route('https://chat-concurrency.invalid/**', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++; requestStarted(); await responseReady;
@@ -334,15 +328,15 @@ test('two browser pages cannot duplicate a narrative model call and player inter
         await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, action)}, finish_reason: 'stop'}]})}).catch(() => undefined);
     });
     try {
-        await page.goto('./chat/library');
+        await gotoWithBrowserFixtureAIConfigV1(page, './chat/library');
         const fixture = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture();});
         const url = `./chat/play?project=${fixture.scope.projectId}&work=${fixture.scope.workId}&session=${fixture.sessionId}`;
-        await page.goto(url);
+        await gotoWithBrowserFixtureAIConfigV1(page, url);
         await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard');
         await page.getByRole('button', {name: '让角色开场', exact: true}).click();
         await requested;
         const other = await context.newPage();
-        await other.goto(url);
+        await gotoWithBrowserFixtureAIConfigV1(other, url);
         await expect(other.getByRole('heading', {name: '上次聊天处理尚未结束', exact: true})).toBeVisible();
         await expect(other.getByRole('button', {name: '让角色继续', exact: true})).toBeDisabled();
         const concurrent = await other.evaluate(async f => {
@@ -358,7 +352,7 @@ test('two browser pages cannot duplicate a narrative model call and player inter
         expect(calls).toBe(1);
         release();
         await expect(page.getByRole('button', {name: '让角色继续', exact: true})).toBeEnabled();
-        await page.reload();
+        await reloadWithBrowserFixtureAIConfigV1(page);
         await expect(page.getByRole('paragraph').filter({hasText: /^先停一下，我要换个办法。$/})).toBeVisible();
         await expect(page.getByText('尚未提交的后门邀请', {exact: true})).toHaveCount(0);
         expect(calls).toBe(1);
@@ -371,9 +365,8 @@ test('normal narrative chat opens, accepts refusal, continues and reloads withou
     let calls = 0, actionCalls = 0;
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
-        localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-action.invalid/v1', model: 'test', temperature: .2, maxTokens: 4000}));
-        sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key');
     });
+    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-action.invalid/v1', model: 'test', temperature: .2, maxTokens: 4000, apiKey: 'isolated-test-key' })
     await page.route('https://chat-action.invalid/**', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         calls++;
@@ -391,9 +384,9 @@ test('normal narrative chat opens, accepts refusal, continues and reloads withou
             newFacts: actionCalls === 2 ? [{factKey: 'lamp', kind: 'observation', text: '门边亮了起来。', evidenceFactKeys: ['lost'], evidenceExcerpt: '门边亮了起来。'}] : [], disclosures: [], threadUpdates: [], goalStatus: null};
         await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, action)}, finish_reason: 'stop'}], usage: {prompt_tokens: 100, completion_tokens: 100, total_tokens: 200}})});
     });
-    await page.goto('./chat/library');
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/library');
     const fixture = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({maxActionsPerTrigger: 3});});
-    await page.goto(`./chat/play?project=${fixture.scope.projectId}&work=${fixture.scope.workId}&session=${fixture.sessionId}`);
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${fixture.scope.projectId}&work=${fixture.scope.workId}&session=${fixture.sessionId}`);
     await expect(page.getByTestId('chat-narrative-controls')).toBeVisible();
     expect(calls).toBe(0);
     await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard');
@@ -407,7 +400,7 @@ test('normal narrative chat opens, accepts refusal, continues and reloads withou
     await expect(page.getByRole('paragraph').filter({hasText: /^好，你先休息。我把灯移到门边。门边亮了起来。$/})).toBeVisible();
     await expect(page.getByRole('paragraph').filter({hasText: /^叶岑在桌边坐下，暂时不再催促搜查。$/})).toBeVisible();
     expect(calls).toBe(6);
-    await page.reload();
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await expect(page.getByTestId('chat-narrative-controls')).toBeVisible();
     expect(calls).toBe(6);
     await page.getByText('当前已知的局面', {exact: true}).click();
@@ -433,9 +426,8 @@ test(`v3 production offers initial situations, retains them across refresh and f
     const calls: string[] = [];
     await page.addInitScript(() => {
         localStorage.setItem('storyforge_guide_completed', 'e2e');
-        localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-situation.invalid/v1', model: 'test', temperature: .2, maxTokens: 16000}));
-        sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key');
     });
+    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-situation.invalid/v1', model: 'test', temperature: .2, maxTokens: 16000, apiKey: 'isolated-test-key' })
     await page.route('https://chat-situation.invalid/**', async route => {
             if (await fulfillChatActionChoiceFixture(route)) return
         const body = route.request().postDataJSON();
@@ -459,7 +451,7 @@ test(`v3 production offers initial situations, retains them across refresh and f
                 newFacts: [], disclosures: [], threadUpdates: [], goalStatus: null};
         await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, content)}, finish_reason: 'stop'}], usage: {prompt_tokens: 100, completion_tokens: 100, total_tokens: 200}})});
     });
-    await page.goto('./chat/library');
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/library');
     let fixture = await page.evaluate(async () => {
         const load = new Function('p', 'return import(p)');
         const f = await (await load('/storyforge/tests/helpers/chat-narrative-production-fixture.ts')).seedChatNarrativeProductionFixture();
@@ -473,13 +465,13 @@ test(`v3 production offers initial situations, retains them across refresh and f
     response.candidateOutput = fixture.candidates;
     response.actor = fixture.candidates.options[1].situation.goals[0].actorKey;
     let query = `project=${fixture.scope.projectId}&work=${fixture.scope.workId}&production=${fixture.productionId}`;
-    await page.goto(`./chat/vision?${query}`);
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/vision?${query}`);
     await expect(page.getByTestId('chat-narrative-setup')).toBeVisible();
     await page.getByLabel('玩家虚构角色的称呼', {exact: true}).fill('沈禾');
     await page.getByRole('button', {name: '保存方案', exact: true}).click();
-    await page.reload();
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await expect(page.getByLabel('玩家虚构角色的称呼', {exact: true})).toHaveValue('沈禾');
-    await page.goto(`./chat/production?${query}`);
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/production?${query}`);
     await page.getByRole('button', {name: '启用自动制作', exact: true}).click();
     await page.getByRole('button', {name: '作者授权并开始自动制作', exact: true}).click();
     await expect(page.getByTestId('chat-situation-selection')).toBeVisible({timeout: 60000});
@@ -491,7 +483,7 @@ test(`v3 production offers initial situations, retains them across refresh and f
     await expect(page.getByTestId('chat-opening-agency').first()).toContainText('仍需核实');
     await expect(page.getByTestId('chat-opening-development')).toHaveCount(2);
     await expect(page.getByTestId('chat-opening-development').first()).toContainText('这段局面如何发展');
-    await page.reload();
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await expect(page.getByRole('button', {name: '选择「旧账本」并继续', exact: true})).toBeEnabled();
     await expect(page.getByTestId('chat-opening-development')).toHaveCount(2);
     expect(calls).toEqual(['situations', 'opening-review']);
@@ -508,7 +500,7 @@ test(`v3 production offers initial situations, retains them across refresh and f
             return {...f, scope, productionId: production.id};
         }, fixture);
         query = `project=${fixture.scope.projectId}&work=${fixture.scope.workId}&production=${fixture.productionId}`;
-        await page.goto(`./chat/production?${query}`);
+        await gotoWithBrowserFixtureAIConfigV1(page, `./chat/production?${query}`);
         await expect(page.getByRole('button', {name: '选择「旧账本」并继续', exact: true})).toBeEnabled();
         expect(calls).toEqual(['situations', 'opening-review']);
     }
@@ -543,11 +535,11 @@ test(`v3 production offers initial situations, retains them across refresh and f
             return {...f, scope, productionId: production.id};
         }, fixture);
         query = `project=${fixture.scope.projectId}&work=${fixture.scope.workId}&production=${fixture.productionId}`;
-        await page.goto(`./chat/production?${query}`);
+        await gotoWithBrowserFixtureAIConfigV1(page, `./chat/production?${query}`);
         await page.getByTestId('product-production-recover-import-proof').click();
         await expect(page.getByRole('button', {name: '复验并原子发布', exact: true})).toBeEnabled();
         expect(calls).toEqual(['situations', 'opening-review', 'media']);
-        await page.reload();
+        await reloadWithBrowserFixtureAIConfigV1(page);
         await expect(page.getByTestId('product-production-recover-import-proof')).toHaveCount(0);
     }
     await page.getByRole('button', {name: '复验并原子发布', exact: true}).click();
@@ -555,7 +547,7 @@ test(`v3 production offers initial situations, retains them across refresh and f
         return (await db.productProductions.get(f.productionId)).currentProductReleaseId;}, fixture);
     await expect.poll(readRelease, {timeout: 60000}).toBeGreaterThan(0);
     const releaseId = await readRelease();
-    await page.goto(`./chat/play?${query}`);
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?${query}`);
     await page.getByRole('button', {name: '新建会话', exact: true}).click();
     await expect(page.getByText('我先自己核对旧账本，你可以安心休息。', {exact: true})).toBeVisible({timeout: 60000});
     const readPlayer = () => page.evaluate(async f => {const load = new Function('p', 'return import(p)'); const db = (await load('/storyforge/src/lib/db/schema.ts')).db;
@@ -565,13 +557,13 @@ test(`v3 production offers initial situations, retains them across refresh and f
     const before = await readPlayer();
     expect(before.releaseId).toBe(releaseId); expect(before.narrative.situation.title).toBe('旧账本'); expect(before.narrative.persona.name).toBe('你');
     expect(calls).toEqual(['situations', 'opening-review', 'media', 'action', 'review']);
-    await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible();
+    await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible();
     expect(await readPlayer()).toEqual(before);
     expect(calls).toEqual(['situations', 'opening-review', 'media', 'action', 'review']);
 });
 }
 test('a persisted narrative action resumes in the browser without another model call and keeps its consequence', async ({page}) => {
-    await page.goto('./chat/library');
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/library');
     const fixture = await page.evaluate(async () => {
         const load = new Function('p', 'return import(p)');
         const f = await (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture();
@@ -585,11 +577,11 @@ test('a persisted narrative action resumes in the browser without another model 
                 newFacts: [{factKey: 'lamp', kind: 'observation', text: '门边亮了起来。', evidenceFactKeys: ['lost'], evidenceExcerpt: '门边亮了起来。'}], disclosures: [], threadUpdates: [], goalStatus: null}))});
         return {...f, runId: result.snapshot.run.id};
     });
-    await page.goto(`./chat/play?project=${fixture.scope.projectId}&work=${fixture.scope.workId}&session=${fixture.sessionId}`);
-    await page.reload();
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${fixture.scope.projectId}&work=${fixture.scope.workId}&session=${fixture.sessionId}`);
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await page.getByRole('button', {name: `恢复 Run #${fixture.runId}`, exact: true}).click();
     await expect(page.getByRole('paragraph').filter({hasText: /^叶岑把油灯移到门边。门边亮了起来。$/})).toBeVisible();
-    await page.reload();
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await expect(page.getByRole('paragraph').filter({hasText: /^叶岑把油灯移到门边。门边亮了起来。$/})).toBeVisible();
     expect(await page.evaluate(async f => {
         const load = new Function('p', 'return import(p)');
@@ -599,9 +591,9 @@ test('a persisted narrative action resumes in the browser without another model 
 });
 test('narrative situation survives browser reload and checkpoint branch with role secrets isolated', async ({page}) => {
     test.setTimeout(120000);
-    await page.goto('./chat/library');
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/library');
     const fixture = await page.evaluate(async () => { const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture(); });
-    await page.goto(`./chat/play?project=${fixture.scope.projectId}&work=${fixture.scope.workId}&session=${fixture.sessionId}`);
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${fixture.scope.projectId}&work=${fixture.scope.workId}&session=${fixture.sessionId}`);
     await expect(page.getByPlaceholder('对当前场景中的角色说话…')).toBeVisible();
     const read = async () => page.evaluate(async f => {
         const load = new Function('p', 'return import(p)');
@@ -615,7 +607,7 @@ test('narrative situation survives browser reload and checkpoint branch with rol
     expect(initial.context).toContain('担心再次错怪人');
     expect(initial.context).not.toContain('柜台下');
     expect(initial.context).not.toContain('天黑后不宜');
-    await page.reload();
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await expect(page.getByPlaceholder('对当前场景中的角色说话…')).toBeVisible();
     expect((await read()).narrative).toEqual(initial.narrative);
     await page.getByRole('navigation', {name: '角色聊天页内目录'}).getByRole('button', {name: '会话与分支', exact: true}).click();
@@ -631,19 +623,20 @@ test('narrative situation survives browser reload and checkpoint branch with rol
 });
 test('character chat pages stay open; draft and confirmed main Agent candidate survive refresh', async ({ page }, info) => {
     test.setTimeout(120000);
-    await page.addInitScript(() => { localStorage.setItem('storyforge_guide_completed', 'e2e'); localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'openai', baseUrl: 'https://chat-test.invalid/v1', model: 'test', temperature: .2, maxTokens: 8000 })); sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key'); });
+    await page.addInitScript(() => { localStorage.setItem('storyforge_guide_completed', 'e2e');   });
+    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-test.invalid/v1', model: 'test', temperature: .2, maxTokens: 8000, apiKey: 'isolated-test-key' })
     await page.route('https://chat-test.invalid/**', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { role: 'assistant', content: chatActionResponseFixture(route, { answer: '建议让玩家成为档案员，请确认。', changes: [{field: 'playerRole', value: '档案员', reason: '按作者本次要求起草身份提议，不改动其他设置。', basis: 'proposal', evidence: []}] }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) }));
     for (const [id] of CHAT_PAGES) {
-        await page.goto(`./chat/${id}`);
+        await gotoWithBrowserFixtureAIConfigV1(page, `./chat/${id}`);
         await expect(page.getByTestId('character-chat-page')).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }
-    await page.goto('./chat/vision');
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/vision');
     await page.getByLabel('作品名称', { exact: true }).fill('聊天接入验收');
     await page.getByLabel('玩家身份', { exact: true }).fill('守灯人');
     await page.getByRole('button', { name: '保存方案', exact: true }).click();
     await expect(page).toHaveURL(/chat\/vision\?project=\d+&work=\d+/);
-    await page.reload();
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await expect(page.getByLabel('玩家身份', { exact: true })).toHaveValue('守灯人', { timeout: 15000 });
     const nav = page.getByRole('navigation', { name: '角色聊天页内目录' });
     await nav.getByRole('button', { name: '制作流程', exact: true }).click();
@@ -652,7 +645,7 @@ test('character chat pages stay open; draft and confirmed main Agent candidate s
     await page.getByLabel('角色聊天 会谈输入').fill('玩家改为档案员');
     await page.getByRole('button', { name: '发送', exact: true }).click();
     await expect(page.getByRole('button', { name: '采用勾选的修改', exact: true })).toBeEnabled({ timeout: 20000 });
-    await page.reload();
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await page.getByRole('button', { name: '采用勾选的修改', exact: true }).click();
     await expect(page.getByText('已采用所选修改；其他方案设置保持原样。', {exact: true})).toBeVisible();
     await nav.getByRole('button', { name: '互动目标', exact: true }).click();
@@ -663,17 +656,17 @@ test('character chat pages stay open; draft and confirmed main Agent candidate s
     await page.screenshot({ path: info.outputPath('chat-mobile.png') });
 });
 test('private reply stays hidden, messages persist, checkpoints and branches remain independent', async ({ page }, info) => {
-    await page.goto('./chat/library');
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/library');
     const fixture = await page.evaluate(async () => { const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/character-chat-fixture.ts')).seedChatRuntimeFixture(); });
     const query = `project=${fixture.scope.projectId}&work=${fixture.scope.workId}&session=${fixture.sessionId}`;
-    await page.goto(`./chat/play?${query}`);
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?${query}`);
     await page.getByPlaceholder('对当前场景中的角色说话…').fill('浏览器玩家消息');
     await page.getByRole('button', { name: '仅保存消息', exact: true }).click();
     // Wait for the persisted message and cleared composer before reloading.
     await expect(page.getByRole('paragraph').filter({ hasText: /^浏览器玩家消息$/ })).toBeVisible({ timeout: 15000 });
     await expect(page.getByPlaceholder('对当前场景中的角色说话…')).toHaveValue('');
     await expect(page.getByRole('button', { name: '仅保存消息', exact: true })).toBeDisabled();
-    await page.reload();
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await expect(page.getByRole('paragraph').filter({ hasText: /^浏览器玩家消息$/ })).toBeVisible({ timeout: 15000 });
     await page.evaluate(async (f) => { const load = new Function('p', 'return import(p)'); const h = await load('/storyforge/src/lib/character-interaction/harness.ts'); const s = (await load('/storyforge/src/stores/character-interaction-player.ts')).useCharacterInteractionPlayerStore; const g = await h.generateInteractionRuntimeCandidateV1({ scope: f.scope, productRuntimeSessionId: f.sessionId, participantKey: 'aria', skillId: 'character.interaction-reply', objective: '仅角色可见', replyToSequence: f.playerSequence, replyBudgetCost: 1, runAI: async () => JSON.stringify({ kind: 'character-reply', text: '角色秘密不应显示', replyToSequence: f.playerSequence, audienceKeys: ['aria'], budgetCost: 1, disclosures: [] }) }); await h.adoptInteractionRuntimeCandidateV1({ scope: f.scope, runId: g.snapshot.run.id }); await s.getState().select(f.sessionId); }, fixture);
     await expect(page.getByText('角色秘密不应显示', { exact: true })).toHaveCount(0);
@@ -690,9 +683,9 @@ test('private reply stays hidden, messages persist, checkpoints and branches rem
 });
 test('S2 role settings reach the frozen production brief through the real confirmation UI', async ({ page }, info) => {
     test.setTimeout(120000);
-    await page.goto('./chat/library');
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/library');
     await page.evaluate(async () => { const load = new Function('p', 'return import(p)'); await (await load('/storyforge/tests/helpers/current-product-world.ts')).seedCurrentProductWorld('聊天来源验收'); });
-    await page.goto('./chat/vision');
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/vision');
     await page.getByLabel('作品名称', { exact: true }).fill('角色方案到制作');
     await page.getByLabel('玩家身份', { exact: true }).fill('守灯人');
     await page.getByLabel('开场与场景目标', { exact: true }).fill('在灯塔与林舟核对失踪船队的来信');
@@ -718,7 +711,7 @@ test('S2 role settings reach the frozen production brief through the real confir
     await page.getByLabel('林舟 背景 可见范围', {exact: true}).selectOption('author-only');
     await page.getByRole('button', {name: '确认可见范围并用于新制作', exact: true}).click();
     await expect(page.getByText('已保存资料确认。更换角色或世界后需要重新检查。', {exact: true})).toBeVisible();
-    await page.reload();
+    await reloadWithBrowserFixtureAIConfigV1(page);
     await expect(page.getByText('已保存资料确认。更换角色或世界后需要重新检查。', {exact: true})).toBeVisible();
     await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click();
     await expect(page.getByLabel('林舟 背景 可见范围', {exact: true})).toHaveValue('author-only');
@@ -756,9 +749,9 @@ test('S2 role settings reach the frozen production brief through the real confir
 });
 
 test('browser history keeps unsaved settings with their own Work',async({page})=>{
- await page.goto('./chat/library')
+ await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
  const [a,b]=await page.evaluate(async()=>{const load=new Function('p','return import(p)');const {createChatDraftV1}=await load('/storyforge/src/lib/character-interaction/draft-service.ts');const {DEFAULT_CHAT_SETTINGS}=await load('/storyforge/src/lib/character-interaction/authoring-contract.ts');return Promise.all(['甲','乙'].map(async playerRole=>{const c=await createChatDraftV1(playerRole,{...DEFAULT_CHAT_SETTINGS,playerRole});return `./chat/vision?project=${c.scope.projectId}&work=${c.scope.workId}`}))})
- await page.goto(a)
+ await gotoWithBrowserFixtureAIConfigV1(page, a)
  await expect(page.getByLabel('玩家身份',{exact:true})).toHaveValue('甲')
  await page.getByLabel('玩家身份',{exact:true}).fill('甲的未保存身份')
  await page.evaluate(href=>{history.pushState(null,'',href.replace('./','/storyforge/'));dispatchEvent(new PopStateEvent('popstate'))},b)
@@ -766,7 +759,7 @@ test('browser history keeps unsaved settings with their own Work',async({page})=
  await page.goBack()
  await expect(page.getByLabel('玩家身份',{exact:true})).toHaveValue('甲的未保存身份')
  await page.getByRole('button',{name:'保存方案',exact:true}).click()
- await page.goto(b)
+ await gotoWithBrowserFixtureAIConfigV1(page, b)
  await expect(page.getByLabel('玩家身份',{exact:true})).toHaveValue('乙')
  await page.getByLabel('玩家身份',{exact:true}).fill('乙的本地修改')
  await page.evaluate(async()=>{const load=new Function('p','return import(p)');const db=(await load('/storyforge/src/lib/db/schema.ts')).db;const svc=await load('/storyforge/src/lib/character-interaction/draft-service.ts');const work=await db.works.get(Number(new URLSearchParams(location.search).get('work')));const scope={projectId:work.projectId,worldId:work.worldId,workId:work.id};const d=await svc.readChatDraftV1(scope);await svc.saveChatDraftV1(scope,d.revision,{...JSON.parse(d.settingsJson),playerRole:'乙的另一个标签页修改'})})

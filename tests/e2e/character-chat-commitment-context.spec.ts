@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {test, expect} from '@playwright/test'
 
 test('explains 18 retained promises beyond the former storage limit, retains exact historical evidence and keeps promises when dialogue is excluded', async ({page}, info) => {
@@ -5,11 +6,10 @@ test('explains 18 retained promises beyond the former storage limit, retains exa
   let calls = 0
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://promise-context.invalid/v1', model: 'test', maxTokens: 8000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://promise-context.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' })
   await page.route('https://promise-context.invalid/**', async route => {calls++; await route.abort()})
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     const fixture = await load('/storyforge/tests/helpers/chat-commitment-history-runtime.ts')
@@ -28,7 +28,7 @@ test('explains 18 retained promises beyond the former storage limit, retains exa
     const open = state.chatNarrative.situation.goals[0].commitments.find((c: {resolution: unknown}) => c.resolution === null)
     return {...f, runId: generated.snapshot.run.id, openMessageId: open.declared.messageId, openSequence: open.declared.sequence, openTerms: open.terms}
   })
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByRole('button', {name: '查看本次上下文', exact: true}).click()
   const inspector = page.getByTestId('chat-context-inspector'), selection = page.getByTestId('chat-context-selection')
   const summary = selection.locator('summary').filter({hasText: '约定历史的选入与省略'})
@@ -50,7 +50,7 @@ test('explains 18 retained promises beyond the former storage limit, retains exa
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({path: info.outputPath('promise-selection-mobile.png')})
   const history = await inspector.innerText()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', {name: '查看本次上下文', exact: true}).click()
   await summary.click()
   await more.click()

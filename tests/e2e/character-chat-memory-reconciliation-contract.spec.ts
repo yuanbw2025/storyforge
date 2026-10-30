@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {test, expect} from '@playwright/test'
 
 // Real IndexedDB/Harness lifecycle with the production binding; model outputs
@@ -5,7 +6,7 @@ import {test, expect} from '@playwright/test'
 test('persists reviewed memory reconciliation through browser reload and portable nested branches without changing facts', async ({page}) => {
   test.setTimeout(120_000)
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)'), fixture = await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')
     const api = await load('/storyforge/src/lib/character-interaction/runtime-api.ts'), harness = await load('/storyforge/src/lib/character-interaction/harness.ts')
@@ -40,7 +41,7 @@ test('persists reviewed memory reconciliation through browser reload and portabl
   expect(f.productionBinding).toBe('chat-narrative-action-review-v42')
   expect(f.expected.chatNarrative.memoryReconciliations).toHaveLength(1)
   expect(f.expected.chatNarrative.memoryReconciliations[0].sourceSequence).toBeLessThan(0)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   const after = await page.evaluate(async sessionId => {
     const load = new Function('p', 'return import(p)'), api = await load('/storyforge/src/lib/character-interaction/runtime-api.ts')
     const rules = await load('/storyforge/src/lib/character-interaction/memory-reconciliation.ts'), skills = await load('/storyforge/src/lib/agent/skill-registry.ts')
@@ -54,11 +55,10 @@ test('shows the exact delivered correction and shared evidence after adoption an
   let externalCalls = 0
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://correction.invalid/v1', model: 'test'}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://correction.invalid/v1', model: 'test', apiKey: 'isolated-test-key' })
   await page.route('https://correction.invalid/**', async route => {externalCalls++; await route.abort()})
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)'), fixture = await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')
     const api = await load('/storyforge/src/lib/character-interaction/runtime-api.ts'), harness = await load('/storyforge/src/lib/character-interaction/harness.ts')
@@ -75,7 +75,7 @@ test('shows the exact delivered correction and shared evidence after adoption an
     await harness.adoptInteractionRuntimeCandidateV1({scope: f.scope, runId: generated.snapshot.run.id})
     return f
   })
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByRole('button', {name: '查看本次上下文', exact: true}).click()
   const inspector = page.getByTestId('chat-context-inspector'), corrections = page.getByTestId('chat-context-corrections')
   await expect(corrections).toContainText('玩家只是暂借地图，没有答应帮忙。')
@@ -89,7 +89,7 @@ test('shows the exact delivered correction and shared evidence after adoption an
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({path: info.outputPath('memory-correction-mobile.png')})
   const history = await corrections.innerText()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', {name: '查看本次上下文', exact: true}).click()
   await corrections.locator('summary').click()
   expect(await corrections.innerText()).toBe(history)

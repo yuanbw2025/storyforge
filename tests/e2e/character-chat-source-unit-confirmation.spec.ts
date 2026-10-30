@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {test, expect, type Page} from '@playwright/test'
 import type {ChatSourceUnitsCandidateV1} from '../../src/lib/character-interaction/source-units'
 import type {ChatSourceUnitPermissionV1} from '../../src/lib/character-interaction/source-unit-authorization'
@@ -5,16 +6,15 @@ import type {ChatSourceUnitPermissionV1} from '../../src/lib/character-interacti
 async function openWorkbench(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-source-confirmation.invalid/v1', model: 'test', maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
-  await page.goto('./chat/library')
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-source-confirmation.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const fixture = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)'), helper = await load('/storyforge/tests/helpers/chat-source-unit-confirmation.ts')
     const f = await helper.seedChatSourceUnitConfirmationFixture(), {db} = await load('/storyforge/src/lib/db/schema.ts')
     return {scope: f.scope, candidate: f.candidate as ChatSourceUnitsCandidateV1, permissions: f.permissions as ChatSourceUnitPermissionV1[], worlds: await db.worldReleases.toArray()}
   })
-  await page.goto(`./chat/cast?project=${fixture.scope.projectId}&work=${fixture.scope.workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/cast?project=${fixture.scope.projectId}&work=${fixture.scope.workId}`)
   await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await page.getByRole('checkbox', {name: /规则条目 · seal · 历史依据 加入整理建议$/}).check()
   return fixture
@@ -54,7 +54,7 @@ test('explicit per-fact review and confirmation survive refresh, compile into v6
     const load = new Function('p', 'return import(p)'), {readChatDraftV1} = await load('/storyforge/src/lib/character-interaction/draft-service.ts')
     return (await readChatDraftV1(scope)).sourceUnitsJson
   }, f.scope)).toBeUndefined()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await expect(location.getByLabel('实际发现条件')).toHaveValue(f.permissions[0].discovery!.condition)
   await expect(save).toBeEnabled(); expect(requests).toHaveLength(2)
@@ -77,20 +77,20 @@ test('explicit per-fact review and confirmation survive refresh, compile into v6
   expect(frozen.source.version).toBe(6)
   expect(frozen.source.knowledge.filter((row: {source: {unit?: unknown}}) => row.source.unit)).toHaveLength(3)
   expect(frozen.worlds).toEqual(f.worlds)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await expect(confirm.getByTestId('chat-saved-source-units')).toBeVisible()
   expect(requests).toHaveLength(2)
-  await page.goto(`./chat/vision?project=${f.scope.projectId}&work=${f.scope.workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/vision?project=${f.scope.projectId}&work=${f.scope.workId}`)
   await expect(page.getByRole('checkbox', {name: '允许角色依据未完成事项发展新局面', exact: true})).toBeDisabled()
   await expect(page.getByLabel('每次调查最多揭示').locator('option[value="0"]')).toHaveJSProperty('disabled', true)
-  await page.goto(`./chat/cast?project=${f.scope.projectId}&work=${f.scope.workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/cast?project=${f.scope.projectId}&work=${f.scope.workId}`)
   await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await page.setViewportSize({width: 390, height: 844})
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await confirm.getByRole('button', {name: '移除此批已确认事实整理', exact: true}).click()
   await expect(confirm.getByTestId('chat-saved-source-units')).toHaveCount(0)
-  await page.goto(`./chat/vision?project=${f.scope.projectId}&work=${f.scope.workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/vision?project=${f.scope.projectId}&work=${f.scope.workId}`)
   await expect(page.getByRole('checkbox', {name: '允许角色依据未完成事项发展新局面', exact: true})).toBeEnabled()
 })
 
@@ -110,7 +110,7 @@ test('unknown permission review does not resend on refresh; a later denial canno
   const review = confirm.getByRole('button', {name: '复核事实和知情范围', exact: true})
   await review.click()
   await expect(confirm.getByText('本次请求尚未结束，结果未知时不会自动重发。可恢复已留存的回复或明确结束等待。', {exact: true})).toBeVisible()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await expect(review).toBeDisabled(); expect(calls).toBe(2)
   await confirm.getByRole('button', {name: '结束这次事实确认', exact: true}).click()

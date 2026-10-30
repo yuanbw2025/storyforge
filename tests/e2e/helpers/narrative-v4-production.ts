@@ -1,22 +1,19 @@
 import { expect, type Page } from '@playwright/test'
 import { narrativeProductionProtocolFixtureV4 } from '../../helpers/narrative-production-protocol-fixture'
+import { prepareBrowserFixtureAIConfigV1, registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './browser-ai-config'
 
 /** In-browser protocol fixture only. Every provider response is intercepted;
  * the production scheduler, Gateway, adoption and IndexedDB remain real.
  * This supplies no model, literary-quality or human acceptance evidence. */
 export async function installNarrativeProductionFixtureV4(page: Page, product: 'chat' | 'avg') {
   const calls: string[] = []
-  await page.addInitScript(() => {
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+  registerBrowserFixtureAIConfigV1(page, destination => ({
       provider: 'openai', baseUrl: 'https://nw-v4-test.invalid/v1', model: 'nw-v4-protocol-fixture',
       temperature: 0, maxTokens: 8000,
-    }))
     // The production protocol uses intercepted model responses. The player
     // path below exercises offline messages/choices and refresh recovery.
-    if (/\/(?:chat|avg)\/play$/.test(location.pathname)) {
-      sessionStorage.removeItem('storyforge-ai-api-key-session')
-    } else sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-nw-v4-fixture-key')
-  })
+    apiKey: /\/(?:chat|avg)\/play$/.test(destination.pathname) ? '' : 'isolated-nw-v4-fixture-key',
+  }))
   await page.route('https://nw-v4-test.invalid/**', async route => {
     const request = route.request().postDataJSON() as { messages?: Array<{ role: string; content: string }> }
     const system = request.messages?.find(message => message.role === 'system')?.content ?? ''
@@ -43,6 +40,9 @@ export async function publishAndOpenNarrativeProductV4(page: Page, product: 'cha
   // Keep the production identity from the authoring route and check the
   // stable player route plus the persisted release below.
   await expect(page).toHaveURL(url => url.pathname.endsWith(`/${product}/play`), { timeout: 30000 })
+  // Publication also navigates within the SPA: apply the registered keyless
+  // player input explicitly, without waiting for a new document init script.
+  await prepareBrowserFixtureAIConfigV1(page)
   const released = await page.evaluate(async productionId => {
     const load = new Function('path', 'return import(path)')
     const db = (await load('/storyforge/src/lib/db/schema.ts')).db
@@ -54,11 +54,14 @@ export async function publishAndOpenNarrativeProductV4(page: Page, product: 'cha
       scope: { projectId: production.projectId, worldId: production.worldId, workId: production.workId },
       source: { kind: 'release', productReleaseId: row.id }, title: 'NW v4 正式发布接缝',
     })
+    const config = (await load('/storyforge/src/stores/ai-config.ts')).useAIConfigStore.getState().config
     return { projectId: production.projectId, workId: production.workId, sessionId: session.id, releaseId: row.id,
+      playerHasApiKey: Boolean(config.apiKey),
       productType: verified.productType, sourceContracts: verified.sourceContracts, packageHash: verified.packageHash,
       buildPackageHash: build.packageHash, buildStatus: build.status, snapshot: JSON.parse(session.canonSnapshotJson) }
   }, productionId)
   expect(released.buildStatus).toBe('released')
+  expect(released.playerHasApiKey).toBe(false)
   expect(released.productType).toBe(product === 'chat' ? 'character-interaction' : 'avg')
   expect(released.packageHash).toBe(released.buildPackageHash)
   expect(released.sourceContracts.sourcePlan.planHash).toBe(planHash)
@@ -69,7 +72,7 @@ export async function publishAndOpenNarrativeProductV4(page: Page, product: 'cha
   expect(released.snapshot.sourceManifest).toMatchObject({ sourcePlanHash: planHash,
     inheritedSourceManifestHash: released.sourceContracts.sourceManifest.manifestHash,
     sourceKind: 'release', directWorldReads: [], readMode: 'frozen-product-package' })
-  await page.goto(`./${product}/play?project=${released.projectId}&work=${released.workId}&session=${released.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./${product}/play?project=${released.projectId}&work=${released.workId}&session=${released.sessionId}`)
   if (product === 'chat') {
     // The generic runtime constructor creates the instance; the player still
     // chooses a scene before sending a message, just as in the product UI.
@@ -98,7 +101,7 @@ export async function publishAndOpenNarrativeProductV4(page: Page, product: 'cha
     await expect.poll(async () => (await readChoiceProgress()).committed).toBe(1)
     await expect(arrival).toBeVisible()
   }
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   if (product === 'chat') {
     await expect(page.getByRole('paragraph').filter({ hasText: /^我们先商议修桥的安排。$/ })).toBeVisible()
   }

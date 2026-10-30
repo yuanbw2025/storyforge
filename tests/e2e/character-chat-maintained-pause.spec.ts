@@ -1,28 +1,25 @@
 import {expect, test, type Page} from '@playwright/test'
 import {chatActionResponseFixture} from './helpers/character-chat-choice'
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 
 const firstReply = '我先暂缓寻找铜印。它还没找回，未查明的部分也不能算作谁的过错。'
 const nextReply = '铜印还没找回。我恢复寻找，先问清能从哪份现存记录核对。'
 const privateReason = '仅供审查的维持暂停依据，不应发布为角色台词'
-const config = {provider: 'openai', baseUrl: 'https://maintained-pause.invalid/v1', model: 'turn-end-fixture', apiKey: 'isolated-test-key', maxTokens: 9000}
+const config = {provider: 'openai' as const, baseUrl: 'https://maintained-pause.invalid/v1', model: 'turn-end-fixture', apiKey: 'isolated-test-key', maxTokens: 9000}
 test.beforeEach(async ({page}) => {
-  await page.addInitScript(config => {
-    localStorage.setItem('storyforge_guide_completed', 'e2e')
-    const {apiKey, ...saved} = config
-    localStorage.setItem('storyforge-ai-config', JSON.stringify(saved))
-    sessionStorage.setItem('storyforge-ai-api-key-session', apiKey)
-  }, config)
+  registerBrowserFixtureAIConfigV1(page, config)
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
 })
 
 async function seed(page: Page, prepare = false) {
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   return page.evaluate(async prepare => {
     const load = new Function('p', 'return import(p)')
     return (await load('/storyforge/tests/helpers/chat-maintained-pause.ts')).seedChatMaintainedPauseRuntimeFixture(prepare ? 'continue' : null)
   }, prepare)
 }
 async function open(page: Page, f: Awaited<ReturnType<typeof seed>>) {
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
 }
 async function read(page: Page, f: Awaited<ReturnType<typeof seed>>) {
@@ -75,7 +72,7 @@ for (const width of [390, 1440]) test(`maintains an adopted pause silently, refr
   expect(after.terminal).toHaveLength(1)
   expect(calls).toEqual(['choice', 'result', 'review-control'])
   await expect(page.getByText('角色暂时保持原来的安排。你可以继续交谈，或提出新的情境。', {exact: true})).toBeVisible()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('region', {name: '对话记录', exact: true}).getByText(firstReply, {exact: true})).toHaveCount(1)
   await expect(page.getByText(privateReason, {exact: false})).toHaveCount(0)
   await expect(page.getByText('草稿：暂缓寻找铜印', {exact: false})).toHaveCount(0)
@@ -101,7 +98,7 @@ test('a rejected maintenance preserves the pause and failure through reload with
   const failed = (await read(page, f)).state
   expect(failed.interaction.messages).toEqual(before.state.interaction.messages)
   expect(failed.interaction.chatNarrative.situation).toEqual(before.state.interaction.chatNarrative.situation)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('region', {name: '对话记录', exact: true}).getByText(firstReply, {exact: true})).toHaveCount(1)
   await expect(page.getByRole('button', {name: '补齐未完成本轮', exact: true})).toBeDisabled()
   expect((await read(page, f)).state).toEqual(failed)
@@ -121,7 +118,7 @@ test('refresh resumes a persisted maintenance using only the missing review', as
     if (id == null) throw Error('missing turn-end run')
     return id
   }, {f, config})
-  await open(page, f); await page.reload()
+  await open(page, f); await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('button', {name: `继续本次角色行动 #${runId}`, exact: true})).toBeEnabled()
   expect(calls).toEqual(['choice', 'result'])
   await page.getByRole('button', {name: `继续本次角色行动 #${runId}`, exact: true}).click()
