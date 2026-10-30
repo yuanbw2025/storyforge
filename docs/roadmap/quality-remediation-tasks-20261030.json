@@ -1,6 +1,6 @@
 {
   "schema": "storyforge.quality-remediation-tasks.v1",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "date": "2026-10-30",
   "authority": "L2 task scheduling; audit facts remain fixed on A, product contracts and L0/L1 prevail",
   "auditBaselineA": "c5b51da301abd3875b26732d9657ad485ad39105",
@@ -810,7 +810,8 @@
       ],
       "evidence": [
         "remediation-round1-20261030/client/completion-source-candidate.json",
-        "remediation-round1-20261030/review/006-runtime-evidence-review.json"
+        "remediation-round1-20261030/review/006-runtime-evidence-review.json",
+        "remediation-round1-20261030/coordination/full-ci-integration-r2-result.json"
       ]
     },
     {
@@ -1314,7 +1315,9 @@
       ],
       "evidence": [
         "remediation-round1-20261030/data/completion.json",
-        "remediation-round1-20261030/review/014-review-v2.json"
+        "remediation-round1-20261030/review/014-review-v2.json",
+        "remediation-round1-20261030/coordination/full-ci-integration-r2-result.json",
+        "remediation-round1-20261030/browser-round1/r2-command.json"
       ],
       "existingWorkToCheck": {
         "pr": 233,
@@ -1329,12 +1332,12 @@
       "priority": "P2",
       "title": "相同内容和策略的资源共用原文能力 token 导致来源身份串位",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
-      "implementationSha": null,
-      "integrationSha": null,
+      "status": "integrated-candidate-awaiting-full-validation",
+      "assignee": "shared_production_audit",
+      "reviewer": "root",
+      "implementationBranch": "fix/quality-015-context-source-capabilities-20261030",
+      "implementationSha": "120fef63bcc26f562e91ab1b4e2076f6ea07cc3f",
+      "integrationSha": "dd1a600000df705de1f358aeafa5e63c1c951a24",
       "scopeMatrixRows": [
         "F-CTX",
         "F-RUN"
@@ -1379,7 +1382,10 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": []
+      "evidence": [
+        "remediation-round1-20261030/context015/completion.json",
+        "remediation-round1-20261030/review/015-root-review-r1.json"
+      ]
     },
     {
       "taskId": "SFQA-016",
@@ -1514,7 +1520,9 @@
       ],
       "evidence": [
         "remediation-round1-20261030/intent/completion.json",
-        "remediation-round1-20261030/review/017-review.json"
+        "remediation-round1-20261030/review/017-review.json",
+        "remediation-round1-20261030/coordination/full-ci-integration-r2-result.json",
+        "remediation-round1-20261030/browser-round1/r2-command.json"
       ]
     },
     {
@@ -2114,10 +2122,10 @@
       "priority": "P1",
       "title": "公开长篇原作导入保存的根级章节正文被TXT和Markdown导出静默遗漏",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
+      "status": "candidate-r2-awaiting-independent-review-and-mandatory-gates",
+      "assignee": "data_lifecycle_audit",
+      "reviewer": "shared_production_audit",
+      "implementationBranch": "fix/quality-027-root-chapter-exports-20261030",
       "implementationSha": null,
       "integrationSha": null,
       "scopeMatrixRows": [
@@ -2626,12 +2634,12 @@
       "priority": "P1",
       "title": "recordId与两种CAS采纳更新绕过登记外键/数组成员检查",
       "plannedRound": "R1",
-      "status": "implementation-in-progress",
+      "status": "integrated-candidate-awaiting-full-validation",
       "assignee": "data_lifecycle_audit",
       "reviewer": "shared_production_audit",
       "implementationBranch": "fix/quality-035-adoption-reference-validation-20261030",
-      "implementationSha": null,
-      "integrationSha": null,
+      "implementationSha": "f91ca4a5092f8d2459f6cbbdba1228104f3accfd",
+      "integrationSha": "dd1a600000df705de1f358aeafa5e63c1c951a24",
       "scopeMatrixRows": [
         "F-REG"
       ],
@@ -2680,7 +2688,11 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": [],
+      "evidence": [
+        "remediation-round1-20261030/data-next035/completion-r31.json",
+        "remediation-round1-20261030/review/035-review-r2.json",
+        "remediation-round1-20261030/review/035-root-delta-review-r2.json"
+      ],
       "existingWorkToCheck": {
         "pr": 233,
         "headAtSnapshot": "925323b0f7a35fce6c3f88c053802e18756c5dc8",
@@ -3956,12 +3968,12 @@
       "priority": "P2",
       "title": "两处架构隔离测试的否定arrayContaining未实现禁止集合不相交",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
-      "implementationSha": null,
-      "integrationSha": null,
+      "status": "integrated-test-guard-candidate-awaiting-full-validation",
+      "assignee": "root",
+      "reviewer": "data_lifecycle_audit",
+      "implementationBranch": "fix/quality-round1-browser-verification-20261030",
+      "implementationSha": "585d180d7acdc92bd2c823aebdd146de30bb84bd",
+      "integrationSha": "dd1a600000df705de1f358aeafa5e63c1c951a24",
       "scopeMatrixRows": [
         "F-REG",
         "F-DELIVERY"
@@ -4009,7 +4021,10 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": []
+      "evidence": [
+        "remediation-round1-20261030/test-guards054-139/review-bundle-r1.json",
+        "remediation-round1-20261030/review/054-139-review-r1.json"
+      ]
     },
     {
       "taskId": "SFQA-055",
@@ -9504,12 +9519,12 @@
       "priority": "P2",
       "title": "JSON回归测试吞掉自行抛出的失败，使验证器意外成功也通过",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
-      "implementationSha": null,
-      "integrationSha": null,
+      "status": "integrated-test-guard-candidate-awaiting-full-validation",
+      "assignee": "root",
+      "reviewer": "data_lifecycle_audit",
+      "implementationBranch": "fix/quality-round1-browser-verification-20261030",
+      "implementationSha": "585d180d7acdc92bd2c823aebdd146de30bb84bd",
+      "integrationSha": "dd1a600000df705de1f358aeafa5e63c1c951a24",
       "scopeMatrixRows": [
         "F-DELIVERY"
       ],
@@ -9554,7 +9569,10 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": []
+      "evidence": [
+        "remediation-round1-20261030/test-guards054-139/review-bundle-r1.json",
+        "remediation-round1-20261030/review/054-139-review-r1.json"
+      ]
     },
     {
       "taskId": "SFQA-140",
@@ -10426,6 +10444,6 @@
     "newP1P2Findings": 0,
     "instruction": "Keep positive practices, observations and accepted low-impact maintenance distinct from confirmed defects; triage each, do not automatically count as extra findings."
   },
-  "updatedAt": "2026-10-30T18:31:17.317838+08:00",
+  "updatedAt": "2026-10-30T15:20:52.914966+00:00",
   "executionTracking": "Status in this integration branch; original audit records remain fixed on A. Integrated candidates require full validation before closure, and G1/release are separate."
 }
