@@ -1,7 +1,7 @@
 /**
  * 章节管理面板 — 合并原"章节列表"+"细纲"+"正文"为一体
  *
- * 左侧栏：按卷分组的章节列表（从 outlineNodes 读取）
+ * 左侧栏：按卷或未分卷区段展示章节（从 outlineNodes 读取）
  * 右侧编辑区：场景细纲 + 正文编辑器
  */
 import { useState, useEffect, useMemo, useRef } from 'react'
@@ -54,7 +54,7 @@ export default function ChaptersListPanel({ project, initialNodeId, onOpenDetail
   const activeGroupId = useWorldGroupStore(state => state.activeGroupId)
   const loadCharacters = useCharacterStore(state => state.loadAll)
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(initialNodeId ?? null)
-  const [expandedVols, setExpandedVols] = useState<Set<number>>(new Set())
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [showFindReplace, setShowFindReplace] = useState(false)
   const selectionRevision = useRef(0)
   const currentProjectId = useRef(project.id)
@@ -97,37 +97,37 @@ export default function ChaptersListPanel({ project, initialNodeId, onOpenDetail
     }
   }, [initialNodeId])
 
-  // 按卷分组的章节列表（从 outlineNodes 读取）
-  const volumeGroups = useMemo(() => groupOutlineChaptersByTopLevelVolume(nodes), [nodes])
+  // 按卷或未分卷区段展示章节（从 outlineNodes 读取）
+  const chapterGroups = useMemo(() => groupOutlineChaptersByTopLevelVolume(nodes), [nodes])
   const chapterByOutline = useMemo(() => buildBestChapterByOutlineMap(chapters), [chapters])
 
-  // 自动展开包含选中章节的卷
+  // 自动展开包含选中章节的展示区段
   useEffect(() => {
     if (selectedNodeId == null) return
-    for (const grp of volumeGroups) {
+    for (const grp of chapterGroups) {
       if (grp.chapters.some(c => c.id === selectedNodeId)) {
-        setExpandedVols(prev => new Set([...prev, grp.volume.id!]))
+        setExpandedGroups(prev => new Set([...prev, grp.key]))
         break
       }
     }
-  }, [selectedNodeId, volumeGroups])
+  }, [selectedNodeId, chapterGroups])
 
   // 自动选中第一个章节
   useEffect(() => {
     if (selectedNodeId != null) return
-    for (const grp of volumeGroups) {
+    for (const grp of chapterGroups) {
       if (grp.chapters.length > 0) {
         setSelectedNodeId(grp.chapters[0].id!)
         return
       }
     }
-  }, [volumeGroups, selectedNodeId])
+  }, [chapterGroups, selectedNodeId])
 
-  const toggleVol = (volId: number) => {
-    setExpandedVols(prev => {
+  const toggleGroup = (groupKey: string) => {
+    setExpandedGroups(prev => {
       const s = new Set(prev)
-      if (s.has(volId)) s.delete(volId)
-      else s.add(volId)
+      if (s.has(groupKey)) s.delete(groupKey)
+      else s.add(groupKey)
       return s
     })
   }
@@ -135,7 +135,7 @@ export default function ChaptersListPanel({ project, initialNodeId, onOpenDetail
   // 选中章节的信息
   const selectedNode = nodes.find(n => n.id === selectedNodeId)
   useInitialRecordTarget(initialNodeId, selectedNode?.id === initialNodeId)
-  const totalChapters = volumeGroups.reduce((sum, g) => sum + g.chapters.length, 0)
+  const totalChapters = chapterGroups.reduce((sum, g) => sum + g.chapters.length, 0)
   const totalWords = chapters.reduce((sum, c) => sum + (c.wordCount || 0), 0)
 
   // ── 侧栏 ──
@@ -148,29 +148,29 @@ export default function ChaptersListPanel({ project, initialNodeId, onOpenDetail
         <p className="mt-1">新增、删除与调整章节顺序，请到「大纲与章纲」。</p>
       </div>
 
-      {/* 按卷分组的章节列表 */}
+      {/* 按卷或未分卷区段展示章节 */}
       <div className="flex-1 overflow-y-auto">
-        {volumeGroups.length === 0 ? (
+        {chapterGroups.length === 0 ? (
           <div className="text-center py-8 text-text-muted text-xs px-3">
-            还没有章节。先在「大纲」里生成卷和章节。
+            还没有章节。先在「大纲」里添加章节。
           </div>
         ) : (
-          volumeGroups.map(grp => {
-            const volExpanded = expandedVols.has(grp.volume.id!)
+          chapterGroups.map(grp => {
+            const groupExpanded = expandedGroups.has(grp.key)
             return (
-              <div key={grp.volume.id}>
+              <div key={grp.key}>
                 {/* 卷标题 */}
                 <button
-                  onClick={() => toggleVol(grp.volume.id!)}
+                  onClick={() => toggleGroup(grp.key)}
                   className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left text-xs font-medium text-text-secondary hover:bg-bg-hover border-b border-border/50"
                 >
-                  {volExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                  <span className="truncate flex-1">{grp.volume.title}</span>
+                  {groupExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                  <span className="truncate flex-1">{grp.volume?.title ?? '未分卷章节'}</span>
                   <span className="text-text-muted">{grp.chapters.length}</span>
                 </button>
 
                 {/* 章节列表 */}
-                {volExpanded && grp.chapters.map((ch, idx) => {
+                {groupExpanded && grp.chapters.map((ch, idx) => {
                   const active = selectedNodeId === ch.id
                   const chRec = ch.id != null ? chapterByOutline.get(ch.id) : undefined
                   const status = chRec?.status || 'outline'
