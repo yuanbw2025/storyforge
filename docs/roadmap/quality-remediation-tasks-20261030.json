@@ -1,6 +1,6 @@
 {
   "schema": "storyforge.quality-remediation-tasks.v1",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "date": "2026-10-30",
   "authority": "L2 task scheduling; audit facts remain fixed on A, product contracts and L0/L1 prevail",
   "auditBaselineA": "c5b51da301abd3875b26732d9657ad485ad39105",
@@ -682,7 +682,7 @@
       "priority": "P1",
       "title": "文字开放世界小说 SourcePin 路径与上位冻结世界主链约定冲突",
       "plannedRound": "R1",
-      "status": "implementation-in-progress",
+      "status": "whole-candidate-independent-review-in-progress-async-blob-delta-open",
       "assignee": "independent_ai_audit",
       "reviewer": "shared_production_audit",
       "implementationBranch": "fix/quality-005-world-source-admission-20261030",
@@ -734,7 +734,9 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": [],
+      "evidence": [
+        "remediation-round1-20261030/openworld005/full-freeze-v1/manifest.json"
+      ],
       "governanceDecision": {
         "date": "2026-10-30",
         "status": "confirmed-by-user",
@@ -1186,12 +1188,12 @@
       "priority": "P1",
       "title": "项目并发删除残留导入日志与原文 Blob",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
-      "implementationSha": null,
-      "integrationSha": null,
+      "status": "committed-and-integrated-isolated-browser-passed-awaiting-full-validation",
+      "assignee": "data_lifecycle_audit",
+      "reviewer": "shared_production_audit",
+      "implementationBranch": "fix/quality-013-import-session-lifecycle-20261030",
+      "implementationSha": "8f02481adbaf589ff9aaf0a9ec7a17b8f1c01af5",
+      "integrationSha": "98c6355193581eea43acd0119f74a47b7d51b850",
       "scopeMatrixRows": [
         "P-LONG",
         "F-OWNER",
@@ -1242,12 +1244,44 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": [],
+      "evidence": [
+        "remediation-round1-20261030/data-next013/completion-r30.json",
+        "remediation-round1-20261030/review/013-review-r3.json",
+        "remediation-round1-20261030/coordination/013-100-combined-focused-r1.json",
+        "remediation-round1-20261030/browser-013/browser-r1.json"
+      ],
       "existingWorkToCheck": {
         "pr": 233,
         "headAtSnapshot": "925323b0f7a35fce6c3f88c053802e18756c5dc8",
         "status": "open-CI-not-passed",
         "instruction": "Reuse historical RunScope protection; compare exact path claims first. This PR is not evidence that this finding is fixed."
+      },
+      "verification": {
+        "sameFinalOldSource": {
+          "failed": 35,
+          "normalPassed": 15
+        },
+        "targetedPassed": 50,
+        "targetedAndAdjacentPassed": 103,
+        "combinedWith100Passed": 74,
+        "independentReviewBlockers": 0,
+        "mandatorySourceGates": "passed on frozen core; test-only strict type fix recorded",
+        "browser": {
+          "cases": 2,
+          "passed": 2,
+          "retries": 0,
+          "skipped": 0,
+          "scope": "public native original seed; actual recovery UI/reload and delete UI with previously loaded independent-tab late public writers"
+        },
+        "notClaimed": [
+          "SFQA022 formal AI adoption",
+          "browser paid-model cancellation",
+          "full browser precollection scheduling-race coverage"
+        ],
+        "notYetProven": [
+          "final combined full CI/E2E",
+          "G1"
+        ]
       }
     },
     {
@@ -2052,12 +2086,12 @@
       "priority": "P1",
       "title": "删除漫画视觉条目会连删另一作品同名subjectKey的媒资记录",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
-      "implementationSha": null,
-      "integrationSha": null,
+      "status": "committed-and-integrated-isolated-browser-passed-awaiting-full-validation",
+      "assignee": "root",
+      "reviewer": "shared_production_audit",
+      "implementationBranch": "fix/quality-026-comic-visual-owner-deletion-20261031",
+      "implementationSha": "e55b4c71030ed2ad0ee5d88a6068a51a4369ac7e",
+      "integrationSha": "ffb2b23e3da5cd16e2f50dd2f04b7568e9c914d0",
       "scopeMatrixRows": [
         "P-COMIC",
         "F-OWNER",
@@ -2114,7 +2148,46 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": []
+      "evidence": [
+        "remediation-round1-20261030/comic026/opening-card.json",
+        "remediation-round1-20261030/comic026/source-final-freeze-r4.json",
+        "remediation-round1-20261030/comic026/old98-final-test-r4.json",
+        "remediation-round1-20261030/comic026/expanded-target-r4.json",
+        "remediation-round1-20261030/comic026/release-adjacent-r4.json",
+        "remediation-round1-20261030/review/026-review-r4.json",
+        "remediation-round1-20261030/review/026-registry-entrypoints-review-r5.json",
+        "remediation-round1-20261030/review/026-browser-initialization-review-r3.json",
+        "remediation-round1-20261030/comic026/commit-core-r6.json",
+        "remediation-round1-20261030/browser-026/commit-browser-r4.json",
+        "remediation-round1-20261030/coordination/026-integration-result-r1.json",
+        "remediation-round1-20261030/coordination/013-026-100-combined-r2.json"
+      ],
+      "verification": {
+        "sameFinalOldSource": {
+          "failed": 13,
+          "normalPassed": 6
+        },
+        "targetedPassed": 19,
+        "typesAndLint": "passed",
+        "sourceAndTestFrozen": true,
+        "notYetProven": [
+          "final combined full CI/E2E",
+          "G1",
+          "release"
+        ],
+        "mandatorySourceGates": "architecture/required/AI/sourceTSC/new-test strictTSC/lint/build/metrics/diff passed on frozen core",
+        "independentReview": "source r4 plus existing-extension registration r5 and browser initialization r3:0 blockers",
+        "browser": {
+          "passed": 2,
+          "retries": 0,
+          "skipped": 0,
+          "flaky": 0,
+          "sourceHead": "e55b4c71030ed2ad0ee5d88a6068a51a4369ac7e",
+          "scope": "actual comic references UI explicit deletion; other Work rows/Blob bytes and decoded image persist across reload; first two fixture failure runs retained"
+        },
+        "adjacentPassed": 10,
+        "combinedWith013And100Passed": 103
+      }
     },
     {
       "taskId": "SFQA-027",
@@ -2837,10 +2910,10 @@
       "priority": "P1",
       "title": "多表合法备份往返漏重映射本地引用",
       "plannedRound": "R1",
-      "status": "author-recovery-policy-decided-awaiting-scoped-implementation",
+      "status": "foundation-A1-independently-reviewed0-B-implementation-in-progress",
       "assignee": "data_lifecycle_audit",
       "reviewer": "shared_production_audit",
-      "implementationBranch": null,
+      "implementationBranch": "fix/quality-037-backup-reference-recovery-20261031",
       "implementationSha": null,
       "integrationSha": null,
       "scopeMatrixRows": [
@@ -2907,7 +2980,13 @@
       ],
       "evidence": [
         "remediation-round1-20261030/data-next037/prestudy-completion.json",
-        "remediation-round1-20261030/data-next037/author-decision-recovery-r3.json"
+        "remediation-round1-20261030/data-next037/author-decision-recovery-r3.json",
+        "remediation-round1-20261030/data-next037/implementation-design-r4.md",
+        "remediation-round1-20261030/data-next037/pr233-shared-path-readback-r5.json",
+        "remediation-round1-20261030/data-next037/root-engineering-scope-decision-r5.json",
+        "remediation-round1-20261030/data-next037/stage-a-r6/freeze-r1/review-bundle.json",
+        "remediation-round1-20261030/review/037-design-review-r1.json",
+        "remediation-round1-20261030/review/037-stage-a1-root-review-r1.json"
       ],
       "existingWorkToCheck": {
         "pr": 233,
@@ -2925,7 +3004,7 @@
         "silentEvidenceLoss": false,
         "policyDecidedDoesNotMeanImplementationAccepted": true
       },
-      "implementationSequence": "Freeze and integrate SFQA-013 first; reserve shared backup/import/export/reference writer and verify a scoped format/recovery contract before implementation."
+      "implementationSequence": "SFQA013 integrated first at98c635; one exclusive data writer implements backup-only typed references and schema14/backup18 recovery foundation (A/B). C actual pending-consumer barriers and D immutable TTRPG read binding require exact path closure before writing; full feature remains unaccepted until all applicable scopes pass."
     },
     {
       "taskId": "SFQA-038",
@@ -7034,12 +7113,12 @@
       "priority": "P1",
       "title": "高危备份第二步关闭弹窗被解释为已备份继续，实际项目删除仍执行",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
-      "implementationSha": null,
-      "integrationSha": null,
+      "status": "committed-and-integrated-isolated-browser-passed-awaiting-full-validation",
+      "assignee": "root",
+      "reviewer": "shared_production_audit",
+      "implementationBranch": "fix/quality-100-backup-dialog-consent-20261030",
+      "implementationSha": "f81927640045f412ac0a22978e3d82ea02202bf6",
+      "integrationSha": "090abb1195fec36e894f30218ae1a0f3e987320a",
       "scopeMatrixRows": [
         "F-UI"
       ],
@@ -7092,7 +7171,35 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": []
+      "evidence": [
+        "remediation-round1-20261030/safety100/commit-core-r3.json",
+        "remediation-round1-20261030/review/100-review-r3.json",
+        "remediation-round1-20261030/safety100/original-source-identical-final24-r3.json",
+        "remediation-round1-20261030/browser-100/browser-r1.json",
+        "remediation-round1-20261030/browser-013/browser-r1.json"
+      ],
+      "verification": {
+        "sameFinalOldSource": {
+          "failed": 15,
+          "normalPassed": 9
+        },
+        "targetedPassed": 24,
+        "adjacentPassed": 16,
+        "independentReviewBlockers": 0,
+        "mandatorySourceGates": "passed on frozen core",
+        "browser": {
+          "cases": 4,
+          "passed": 4,
+          "retries": 0,
+          "skipped": 0,
+          "repeatOn013Integration": "all four passed again as part of six-case browser run on98c635"
+        },
+        "notYetProven": [
+          "final combined full CI/E2E",
+          "G1",
+          "release"
+        ]
+      }
     },
     {
       "taskId": "SFQA-101",
@@ -10489,6 +10596,6 @@
     "newP1P2Findings": 0,
     "instruction": "Keep positive practices, observations and accepted low-impact maintenance distinct from confirmed defects; triage each, do not automatically count as extra findings."
   },
-  "updatedAt": "2026-10-30T16:29:26.503473+00:00",
+  "updatedAt": "2026-10-30T18:35:54.434646+00:00",
   "executionTracking": "Status in this integration branch; original audit records remain fixed on A. Integrated candidates require full validation before closure, and G1/release are separate."
 }

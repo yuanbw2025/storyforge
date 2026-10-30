@@ -369,9 +369,9 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `comic-page-plan-lifecycle` | `comicPagePlans` | `PROJECT_TABLES + FIELD_REGISTRY + closed page rhythm contract + script beat CAS` | `src/lib/comic/production.ts` | 2027-09-01 |
 | `comic-review-issue-lifecycle` | `comicReviewIssues` | `PROJECT_TABLES + FIELD_REGISTRY + page/panel/subject/asset/revision validator` | `src/lib/comic/production.ts` | 2027-09-01 |
 | `creation-release-asset-lifecycle` | `creationReleaseAssets` | `PROJECT_TABLES + immutable release manifest + content hash + registered media strong reference` | `src/lib/comic/release.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-01 |
-| `comic-panel-lifecycle` | `comicPanels` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + comic panel validator` | `src/lib/comic/service.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/comic/production.ts`<br/>`src/lib/comic/authoring.ts` | 2027-08-01 |
-| `comic-visual-subject-lifecycle` | `comicVisualSubjects` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + Work cast/source/asset stable-key validator` | `src/lib/comic/service.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/comic/production.ts` | 2027-08-01 |
-| `comic-media-asset-lifecycle` | `comicMediaAssets` | `PROJECT_TABLES + media capability registry + hash/rights/provider receipt + stable-key reference checks` | `src/lib/comic/media-service.ts`<br/>`src/lib/comic/service.ts`<br/>`src/lib/comic/production.ts` | 2027-08-01 |
+| `comic-panel-lifecycle` | `comicPanels` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + comic panel validator` | `src/lib/comic/service.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/comic/media-lifecycle.ts`<br/>`src/lib/comic/production.ts`<br/>`src/lib/comic/authoring.ts` | 2027-08-01 |
+| `comic-visual-subject-lifecycle` | `comicVisualSubjects` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + Work cast/source/asset stable-key validator` | `src/lib/comic/service.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/comic/media-lifecycle.ts`<br/>`src/lib/comic/production.ts` | 2027-08-01 |
+| `comic-media-asset-lifecycle` | `comicMediaAssets` | `PROJECT_TABLES + media capability registry + hash/rights/provider receipt + stable-key reference checks` | `src/lib/comic/media-service.ts`<br/>`src/lib/comic/media-lifecycle.ts`<br/>`src/lib/comic/service.ts`<br/>`src/lib/comic/production.ts` | 2027-08-01 |
 | `motion-drama-production-lifecycle` | `motionDramaProductions` | `PROJECT_TABLES + motion-drama state machine + adaptation source manifest CAS` | `src/lib/adaptation/source-manifest.ts`<br/>`src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/prompts.ts`<br/>`src/lib/motion-drama/prompt-pack.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-09 |
 | `motion-drama-series-bible-lifecycle` | `motionDramaSeriesBibles` | `PROJECT_TABLES + FIELD_REGISTRY + append-only bible version + adaptation CAS` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
 | `motion-drama-episode-lifecycle` | `motionDramaEpisodes` | `PROJECT_TABLES + FIELD_REGISTRY + episode contract + source manifest CAS` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
@@ -582,4 +582,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `98c635519`
+生成时间基准:commit `e28a4d76e`
