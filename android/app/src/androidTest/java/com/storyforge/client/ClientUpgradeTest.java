@@ -48,11 +48,16 @@ public class ClientUpgradeTest {
         String phase = InstrumentationRegistry.getArguments().getString("phase");
         Assume.assumeTrue(phase != null);
         assertTrue(phase.equals("seed") || phase.equals("baseline") || phase.equals("restore") || phase.equals("restart"));
+        String expectedVersion = InstrumentationRegistry.getArguments().getString("expectedVersion");
+        assertNotNull("Pass the expected installed version for this phase", expectedVersion);
+        android.content.Context target = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        assertEquals(expectedVersion, target.getPackageManager().getPackageInfo(target.getPackageName(), 0).versionName);
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             awaitTrue(scenario, "!!document.querySelector('#root main, #root button')");
             assertEquals("\"https://localhost\"", evaluate(scenario, "location.origin"));
             String fixture;
-            try (java.io.InputStream stream = InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("native-upgrade.js")) {
+            String fixtureName = phase.equals("seed") || phase.equals("baseline") ? "native-upgrade-old.js" : "native-upgrade.js";
+            try (java.io.InputStream stream = InstrumentationRegistry.getInstrumentation().getContext().getAssets().open(fixtureName)) {
                 fixture = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
             }
             evaluate(scenario, "window.__nativeFixtureParts = []; true");
@@ -60,6 +65,7 @@ public class ClientUpgradeTest {
                 evaluate(scenario, "window.__nativeFixtureParts.push(" + JSONObject.quote(fixture.substring(i, Math.min(i + 30000, fixture.length()))) + "); true");
             }
             evaluate(scenario, "(0,eval)(window.__nativeFixtureParts.join('')); window.__nativeFixtureParts = []; true");
+            assertEquals(JSONObject.quote(expectedVersion), evaluate(scenario, "window.__nativeUpgradeSource.version"));
             java.io.File backupFile = new java.io.File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(), "native-upgrade-test/backup.json");
             String operation = phase.equals("seed") ? "seed()" : "verify(false, undefined, " + phase.equals("restart") + ")";
             if (phase.equals("restore")) {

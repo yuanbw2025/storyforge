@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261030-community-deps-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261030-community-r2-main870-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261029-release405-mainc5-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved mainline v4.0.5 receipt before the community branch and R2 dependency integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261030-community-deps-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved community branch receipt before the v4.0.5 mainline merge and R2 replacement."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261028-longform-avg-integration-v1.json",
         "workPackage": "NW-2E",
@@ -592,6 +602,18 @@
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261028-avg-pr172-main-integration-v1.json"
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261028-longform-avg-integration-v1.json",
+        "workPackage": "main-c5-longform-avg-integration",
+        "implementationCommit": "c5b51da301abd3875b26732d9657ad485ad39105",
+        "note": "Preserved current main receipt before v4.0.5 release source integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261028-release405-main3b-v1.json",
+        "workPackage": "release-4.0.5-main3b-integration",
+        "implementationCommit": "372af8bdba34f2ea3b3e3cf2020d0815d0072ce4",
+        "note": "Preserved the reviewed release-head receipt before integrating current main."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
