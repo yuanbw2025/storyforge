@@ -455,7 +455,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ### 动态 category 调用
 
-- `src/lib/adventure/harness.ts:383 · chat`
+- `src/lib/adventure/harness.ts:389 · chat`
 - `src/lib/agent/character-copilot.ts:515 · chat`
 - `src/lib/agent/character-driven-copilot.ts:505 · chat`
 - `src/lib/agent/character-lifecycle-copilot.ts:448 · chat`
@@ -478,7 +478,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/story-core-copilot.ts:557 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:903 · chat`
-- `src/lib/character-interaction/harness.ts:888 · chat`
+- `src/lib/character-interaction/harness.ts:894 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:73 · chat`
 - `src/lib/character-interaction/situation-harness.ts:189 · chat`
 - `src/lib/comic/durable-production.ts:270 · chat`
@@ -487,8 +487,8 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/generation/workflow-generation-node.ts:22 · ai.start`
 - `src/lib/motion-drama/durable-production.ts:144 · chat`
 - `src/lib/node-authoring/executor.ts:444 · chat`
-- `src/lib/open-world/evolution-harness.ts:246 · chat`
-- `src/lib/open-world/harness.ts:139 · chat`
+- `src/lib/open-world/evolution-harness.ts:251 · chat`
+- `src/lib/open-world/harness.ts:143 · chat`
 - `src/lib/product-production/authoring-consultation.ts:169 · chat`
 - `src/lib/product-production/capabilities.ts:325 · chat`
 - `src/lib/screenplay/durable-production.ts:449 · chat`
@@ -582,4 +582,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `7d6e46ecc`
+生成时间基准:commit `98c635519`

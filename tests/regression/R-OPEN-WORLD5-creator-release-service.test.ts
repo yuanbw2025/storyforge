@@ -18,10 +18,10 @@ import { parseProductProductionCommandV1 } from '../../src/lib/product-productio
 
 const scope = { projectId: 1, worldId: 2, workId: 3 }
 
-function prepared() {
+function prepared(sourceKind: 'world-release' | 'novel' = 'world-release') {
   return {
     intent: {
-      schema: 'storyforge.product-production-adoption-intent', version: 1,
+      schema: 'storyforge.product-production-adoption-intent' as const, version: 1 as const,
       productionId: 10, productionKey: 'creator.release.fixture',
       expectedStateRevision: 7, buildId: 20, buildNumber: 2, controlEpoch: 3,
       briefHash: '1'.repeat(64), planHash: '2'.repeat(64), manifestHash: '3'.repeat(64),
@@ -33,7 +33,7 @@ function prepared() {
     adoptionIntentHash: '9'.repeat(64), productType: 'text-open-world' as const,
     title: '盐脊', releaseVersion: 2, mediaAssetKeys: ['map.world'],
     creatorRelease: {
-      sourceKind: 'novel' as const, sourceVersionHash: '8'.repeat(64),
+      sourceKind, sourceVersionHash: '8'.repeat(64),
       sourceBoundaryHash: 'a'.repeat(64), sourcePlanHash: 'b'.repeat(64),
       sourcePinHash: 'c'.repeat(64), sourceManifestHash: 'd'.repeat(64),
       artifactSetHash: 'e'.repeat(64), integrationReportHash: 'f'.repeat(64),
@@ -59,6 +59,14 @@ beforeEach(() => {
 })
 
 describe('TOW-G5-10 · Creator发布服务', () => {
+  it('005 历史小说发布准备态仍可检查，但不能签发新的发布授权或命令', async () => {
+    mocks.prepare.mockResolvedValueOnce(prepared('novel'))
+    const current = await prepareTextOpenWorldCreatorReleaseV1({ scope, productionId: 10, expectedBuildId: 20 })
+    expect(current.creatorRelease?.sourceKind).toBe('novel')
+    await expect(publishTextOpenWorldCreatorReleaseV1({ scope, productionId: 10, prepared: current,
+      releaseLabel: 'Historical source must not publish', acknowledgement, authorizationNonce: 'cannot-reuse-old-start' })).rejects.toThrow(/WorldRelease|派生/)
+    expect(mocks.publish).not.toHaveBeenCalled()
+  })
   it('从复验准备态生成一次性作者授权和绑定Hash的幂等发布命令', async () => {
     const current = await prepareTextOpenWorldCreatorReleaseV1({
       scope, productionId: 10, expectedBuildId: 20,

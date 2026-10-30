@@ -1,3 +1,4 @@
+import { captureTextOpenWorldTaskExecutionInputV1, assertTextOpenWorldBuildNewWorkV1 } from './source-admission'
 import type { ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
 import { db } from '../db/schema'
@@ -474,6 +475,9 @@ export function createTextOpenWorldMapInteractionCatalogExecutorV1(options: {
 } = {}): ProductProductionTaskExecutorV1 {
   const runModel = options.runModel ?? defaultModelRunner; const now = options.now ?? Date.now
   return async execution => {
+    execution = captureTextOpenWorldTaskExecutionInputV1(execution)
+    await assertTextOpenWorldBuildNewWorkV1({ scope: execution.scope, productionId: execution.productionId,
+      buildId: execution.buildId, operation: '执行新的文字开放世界制作任务' })
     if (execution.signal.aborted) throw new DOMException('Aborted', 'AbortError')
     if (execution.task.taskKey !== 'p8.catalog.map-interactions' || execution.task.skillId !== SKILL_ID || execution.task.executionMode !== 'model') fail('executor只接受P8 Map Interaction任务')
     if (canonicalProductProductionJsonV2(execution.task.outputArtifactKeys) !== canonicalProductProductionJsonV2(['text-open-world.map-interaction-catalog'])) fail('Map Interaction输出Artifact集合不精确')

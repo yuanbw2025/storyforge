@@ -1,0 +1,13 @@
+{
+  "schema": "storyforge.quality005.immutable-synthetic-fixture.v1",
+  "compressedSha256": "3d9fc73ef05f40c008d40c318125e2238ce572d41e6a00e6d882564f75834c71",
+  "decompressedSha256": "86e1a132e86c3ff5138f558d5bee2e03cc5f14fa3f3894db9136f7fea2778e56",
+  "decompressedBytes": 156190,
+  "baselineCommit": "38cbcd5fa632516763f5844bff2665c3aee0003e",
+  "actualModelCalls": 0,
+  "actualNetworkCalls": 0,
+  "humanAcceptance": false,
+  "notes": [
+    "Native old branch API result over separately hash-verified legacy-hybrid-v1; no manual Session/lineage/receipt creation"
+  ]
+}

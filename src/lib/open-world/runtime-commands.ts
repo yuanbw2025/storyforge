@@ -1,6 +1,7 @@
 /** Product-owned deterministic runtime commands: open-world. */
 import { applyProductRuntimeEvent, assertFormalRuntimeSourceUnchangedV1, hashStateJson, normalizeCommandId, parseEventPayload, parseProductRuntimeState, readSessionEvents, replayProductRuntimeEvents, stableJson, verifyFormalRuntimeSourceV1 } from "../product/runtime-core";
 import { db } from "../db/schema";
+import { assertTextOpenWorldRuntimeNewWorkV1 } from './source-admission'
 import { planOpenWorldDraw, planOpenWorldTravel, planOpenWorldQuestDecision, planOpenWorldTick, openWorldMainlineProjection } from "./runtime";
 import { planOpenWorldEvolutionTurn } from "./evolution-runtime";
 import type { ProductRuntimeEvent, ProductRuntimeCheckpoint, ProductRuntimeState, ProductRuntimeEventType, TextOpenWorldProductRuntimePackageV1 } from "../types";
@@ -128,6 +129,7 @@ export async function commitOpenWorldEvolutionTurn(input: {
         const state = parseProductRuntimeState(checkpoint.stateJson);
         return { events: commandEvents, checkpoint, state };
       }
+      assertTextOpenWorldRuntimeNewWorkV1(frozen.runtimePackage, '新增演化回合事件');
       if (session.status !== "active")
         throw new Error("[text-open-world/evolution] 只有 active 会话可以提交回合。");
       let state = replayProductRuntimeEvents(
@@ -430,6 +432,7 @@ export async function commitOpenWorldCommand(input: {
           state: parseProductRuntimeState(checkpoint.stateJson),
         };
       }
+      assertTextOpenWorldRuntimeNewWorkV1(frozen.runtimePackage, '新增开放世界互动事件');
       if (session.status !== "active")
         throw new Error("[text-open-world] 只有 active 实例可以提交命令。");
       let state = replayProductRuntimeEvents(

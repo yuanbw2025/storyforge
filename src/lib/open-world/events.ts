@@ -1,5 +1,6 @@
 import Dexie from 'dexie'
 import { db } from '../db/schema'
+import { assertTextOpenWorldRuntimeNewWorkV1 } from './source-admission'
 import { canonicalProductProductionJsonV2 } from '../product-production/hash'
 import {
   applyProductRuntimeEvent,
@@ -110,6 +111,7 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
     const projection = await replayTextOpenWorldEventProtocolV1(events, session.seed)
     const existing = projection.batches.find(batch => batch.commandId === input.commandId)
     if (existing) return priorReceipt({ commandId: input.commandId, commandSequence: commandEvent.sequence, outcomeFingerprint, events, replayed: true })
+    assertTextOpenWorldRuntimeNewWorkV1(binding.formal.runtimePackage, '新增运行结果事件')
     if (session.status !== 'active') fail('只有active Session可以提交结果批次')
     if (session.rulesetVersion !== input.ruleset.version) fail('结果批次rulesetVersion与Session不一致')
     if (projection.pendingCommandId !== input.commandId) fail('对应命令不是当前待处理命令')

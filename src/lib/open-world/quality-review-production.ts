@@ -1,3 +1,4 @@
+import { captureTextOpenWorldTaskExecutionInputV1, assertTextOpenWorldBuildNewWorkV1 } from './source-admission'
 import type { ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
 import { db } from '../db/schema'
@@ -683,6 +684,9 @@ function createReviewExecutor(kind: 'balance' | 'semantic', options: { runModel?
   const taskKey = kind === 'balance' ? 'v2.balance-review' : 'v2.semantic-review'
   const outputKey = kind === 'balance' ? 'text-open-world.balance-review' : 'text-open-world.semantic-review'
   return async execution => {
+    execution = captureTextOpenWorldTaskExecutionInputV1(execution)
+    await assertTextOpenWorldBuildNewWorkV1({ scope: execution.scope, productionId: execution.productionId,
+      buildId: execution.buildId, operation: '执行新的文字开放世界制作任务' })
     if (execution.signal.aborted) throw new DOMException('Aborted', 'AbortError')
     if (execution.task.taskKey !== taskKey || execution.task.skillId !== skillId || execution.task.executionMode !== 'model') fail(`${kind}评审执行器收到错误任务`)
     if (!same(execution.task.outputArtifactKeys, [outputKey]) || execution.task.capabilityRequirementKeys.length !== 1) fail(`${kind}评审输出或capability不精确`)

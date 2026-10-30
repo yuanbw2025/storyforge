@@ -1,0 +1,12 @@
+{
+  "schema": "storyforge.quality005.native-capture-metadata.v1",
+  "baselineCommit": "38cbcd5fa632516763f5844bff2665c3aee0003e",
+  "compressedSha256": "35a0f1581b9ae70b1a1b6eda8511c4a03be55603ee79f0b3abd75a07ba925600",
+  "decompressedSha256": "509686b04f25d3ec66b807f8dbc481da87e8e67c51d63b34c1d7db07f4bde866",
+  "decompressedBytes": 156884,
+  "actualModelCalls": 0,
+  "actualNetworkCalls": 0,
+  "humanAcceptance": false,
+  "captureSource": "legacy-attempts-baseline/tests/regression/quality005-legacy-media-clone-capture.test.ts",
+  "scope": "Exact native pre-policy novel child and clone rows; no new production permission. Original physical bytes are in exact hybrid base fixture."
+}

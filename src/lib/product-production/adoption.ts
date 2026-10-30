@@ -4,6 +4,7 @@ import { classifyAvgAuthorPrototypeBriefV1, assertAvgSoundPrototypeWriteEnabledV
 import { parseProductBuildQualityReportV1 } from './quality-contract'
 export { parseProductBuildQualityReportV1 } from './quality-contract'
 import { db } from '../db/schema'
+import { assertTextOpenWorldProductionNewWorkV1 } from '../open-world/source-admission'
 import { readProductProductionBuildWorldScopeV1 } from './world-binding'
 import type {
   ConfirmedProductBriefV1,
@@ -780,6 +781,7 @@ export async function prepareProductProductionAdoption(input: {
   scope: WorkspaceScope
   productionId: number
 }): Promise<PreparedProductProductionAdoptionV1> {
+  input = structuredClone(input)
   const scope = await resolveScope({ scope: input.scope })
   const verified = await inspectAdoption(scope, input.productionId)
   return {
@@ -969,6 +971,7 @@ async function assertPreparedAdoptionUnchangedInTransaction(
     || !brief || brief.briefHash !== verified.intent.briefHash || brief.status !== 'authorized') {
     fail('adoption intent 在提交前发生变化')
   }
+  assertTextOpenWorldProductionNewWorkV1(production, brief, '发布新产品版本')
   if (canonicalProductProductionJsonV2({ ...production, id: production.id ?? null })
       !== verified.authoritySnapshot.productionRowJson
     || canonicalProductProductionJsonV2({ ...build, id: build.id ?? null })
@@ -1025,6 +1028,7 @@ export async function publishProductProductionBuild(input: {
   label?: string
   creatorReleaseAuthorization?: TextOpenWorldCreatorReleaseAuthorizationV1
 }): Promise<ProductProductionPublishReceiptV1> {
+  input = structuredClone(input)
   const scope = await resolveScope({ scope: input.scope })
   const command = parseProductProductionCommandV1(input.command)
   if (command.type !== 'publish') fail('命令类型必须是 publish')
@@ -1038,6 +1042,9 @@ export async function publishProductProductionBuild(input: {
     if (replay.status !== 'succeeded') fail('publish command 尚未成功')
     return { ...(JSON.parse(replay.resultJson) as ProductProductionPublishReceiptV1), replayed: true }
   }
+  const currentBrief = production.currentBriefRevision == null ? null : await db.productProductionBriefs
+    .where('[productionId+revision]').equals([production.id!, production.currentBriefRevision]).first()
+  assertTextOpenWorldProductionNewWorkV1(production, currentBrief, '发布新产品版本')
   const prepared = await inspectAdoption(scope, input.productionId)
   if (command.expectedStateRevision !== prepared.intent.expectedStateRevision
     || command.buildNumber !== prepared.intent.buildNumber

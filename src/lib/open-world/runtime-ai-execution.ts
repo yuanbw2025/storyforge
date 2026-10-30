@@ -4,7 +4,8 @@ import {
 } from '../agent/execution-binding'
 import { executeFrozenFormalAIEntryV1 } from '../agent/formal-ai-entry'
 import type { AgentRunStepExecutionBindingV2 } from '../types/agent-run'
-import type { AIConfig, ChatMessage } from '../types'
+import type { AIConfig, ChatMessage, WorkspaceScope } from '../types'
+import { assertTextOpenWorldSessionNewWorkV1 } from './source-admission'
 import {
   resolveRequestConfig,
   type ChatResult,
@@ -104,9 +105,16 @@ export async function executeTextOpenWorldRuntimeAISkillV1(input: {
   messages: ChatMessage[]
   aiConfig: AIConfig
   projectId: number
+  scope: WorkspaceScope
+  productRuntimeSessionId: number
   signal?: AbortSignal
 }): Promise<string> {
+  input = { ...input, scope: structuredClone(input.scope), messages: structuredClone(input.messages), aiConfig: structuredClone(input.aiConfig) }
   if (!Number.isSafeInteger(input.projectId) || input.projectId < 1) fail('projectId 无效')
+  if (input.projectId !== input.scope.projectId) fail('projectId 与运行 scope 不一致')
+  await assertTextOpenWorldSessionNewWorkV1({
+    scope: input.scope, sessionId: input.productRuntimeSessionId, operation: '运行模型调用',
+  })
   if (!Array.isArray(input.messages) || input.messages.length === 0) fail('messages 不能为空')
   await assertAgentSkillExecutionBindingIntegrityV2(
     input.executionBinding,

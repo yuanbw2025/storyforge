@@ -9,6 +9,7 @@ import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 import type { ProductRelease } from '../../src/lib/types'
 import { verifyTextOpenWorldVNextSessionBindingV1 } from '../../src/lib/open-world/session-binding'
 import { createTextOpenWorldCreatorReleaseFixtureV1 } from '../helpers/text-open-world-creator-release'
+import { seedQuality005LegacyNovelV1 } from '../helpers/quality005-legacy-novel'
 
 async function seedPublishedCreatorWorkspace(sourceKind: 'world-release' | 'novel') {
   const fixture = await createTextOpenWorldCreatorReleaseFixtureV1(sourceKind, 1, { portableRoot: true })
@@ -53,7 +54,7 @@ describe('TOW-G5-12 · Creator工作台完整备份、验真和删除', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
-  it.each(['world-release', 'novel'] as const)(
+  it.each(['world-release'] as const)(
     '%s Creator从来源冻结、Build、正式Release到Session完整往返，随后按项目级联删除',
     async sourceKind => {
       const seeded = await seedPublishedCreatorWorkspace(sourceKind)
@@ -122,6 +123,29 @@ describe('TOW-G5-12 · Creator工作台完整备份、验真和删除', () => {
     },
     90_000,
   )
+
+  it('005 原有小说来源备份仍完整往返并允许删除自己的导入副本，原作者源和旧版本保持不变', async () => {
+    const old = await seedQuality005LegacyNovelV1()
+    const backup = await exportProjectJSON(old.scope.projectId)
+    const importedProjectId = await importProjectJSON(backup)
+    const [build, release, sessions] = await Promise.all([
+      db.productBuilds.where('projectId').equals(importedProjectId).first(),
+      db.productReleases.where('projectId').equals(importedProjectId).first(),
+      db.productRuntimeSessions.where('projectId').equals(importedProjectId).toArray(),
+    ])
+    expect(release?.manifestJson).toBe(backup.productReleases[0].manifestJson)
+    expect(build?.rootBudgetEvidenceJson).toBe(backup.productBuilds[0].rootBudgetEvidenceJson)
+    for (const session of sessions) await verifyTextOpenWorldVNextSessionBindingV1(session)
+    await cascadeDeleteProject(importedProjectId)
+    expect(await db.projects.get(importedProjectId)).toBeUndefined()
+    for (const table of [db.productProductions, db.productProductionBriefs, db.productProductionCommands,
+      db.productBuilds, db.productBuildArtifacts, db.productReleases, db.productRuntimeSessions]) {
+      expect(await table.where('projectId').equals(importedProjectId).count()).toBe(0)
+    }
+    for (const table of db.tables) for (const row of old.rows[table.name] ?? []) {
+      expect(await table.get((row as { id: number }).id)).toEqual(row)
+    }
+  }, 30_000)
 
   it('Creator备份中的SourcePin闭包或正式Release任一被篡改，都在项目写入前失败关闭', async () => {
     const seeded = await seedPublishedCreatorWorkspace('world-release')

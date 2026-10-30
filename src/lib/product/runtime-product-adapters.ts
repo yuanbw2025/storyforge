@@ -26,6 +26,7 @@ import { assertAvgSystemStateV1, previewAvgSystemEffectsV1 } from '../avg/system
 import { buildAvgSystemGraphV1 } from '../avg/system-graph'
 import { parseOpenWorldEvolutionState, applyOpenWorldEvolutionProductRuntimeEvent, openWorldEvolutionProjection, createInitialOpenWorldEvolutionState, rebaseOpenWorldEvolutionStateForBranch } from '../open-world/evolution-runtime'
 import { parseOpenWorldState, applyOpenWorldEvent, openWorldMainlineProjection, createInitialOpenWorldState, rebaseOpenWorldStateForBranch } from '../open-world/runtime'
+import { assertTextOpenWorldRuntimeNewWorkV1 } from '../open-world/source-admission'
 import {
   createInitialTextOpenWorldSessionProjectionV1,
   applyTextOpenWorldSessionEventV1,
@@ -100,6 +101,12 @@ export type ProductRuntimePackageForAdaptersV1 = AnyProductRuntimePackage
 /** Protocol selection belongs to the product composition root, not the runtime core. */
 export function productRuntimeContentReaderV1(kind: ProductRuntimeKind) {
   return kind === 'ttrpg' ? TTRPG_RUNTIME_CONTENT_READER_V1 : undefined
+}
+
+/** New-operation permission belongs to each product; historical readers and
+ * receipt replay continue to use the independent strict source verifier. */
+export function assertProductOwnedRuntimeNewWorkV1(runtimePackage: AnyProductRuntimePackage, operation: string): void {
+  if (runtimePackage.productType === 'text-open-world') assertTextOpenWorldRuntimeNewWorkV1(runtimePackage, operation)
 }
 
 export function parseProductOwnedRuntimeStateV1(

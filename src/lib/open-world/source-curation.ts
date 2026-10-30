@@ -1,4 +1,5 @@
 import type { ChatResult } from '../ai/client'
+import { captureTextOpenWorldTaskExecutionInputV1, assertTextOpenWorldBuildNewWorkV1, assertTextOpenWorldNewSourceV1 } from './source-admission'
 import { estimateTokens } from '../ai/context-budget'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { getAgentSkillV1 } from '../agent/skill-registry'
@@ -1565,6 +1566,7 @@ async function executeCuration(input: {
   executeGateway: typeof executeContextGatewayV1
   createdAt: number
 }): Promise<{ artifacts: TextOpenWorldSourceCurationArtifactsV1; usage: ProductProductionTaskUsageV1 }> {
+  assertTextOpenWorldNewSourceV1(input.bundle.pin.sourceKind, '新的来源整理模型调用')
   const task = input.execution.task
   const requirementKey = task.capabilityRequirementKeys[0]
   const binding = input.execution.capabilityBindings.find(item => item.requirementKey === requirementKey)
@@ -1715,6 +1717,9 @@ export function createTextOpenWorldSourceCurationExecutorV1(options: {
   const executeGateway = options.executeGateway ?? executeContextGatewayV1
   const now = options.now ?? Date.now
   return async execution => {
+    execution = captureTextOpenWorldTaskExecutionInputV1(execution)
+    await assertTextOpenWorldBuildNewWorkV1({ scope: execution.scope, productionId: execution.productionId,
+      buildId: execution.buildId, operation: '执行新的文字开放世界制作任务' })
     if (execution.signal.aborted) throw new DOMException('Aborted', 'AbortError')
     if (execution.task.taskKey !== 'p1.source-curation'
       || execution.task.skillId !== SKILL_ID

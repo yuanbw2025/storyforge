@@ -1,0 +1,16 @@
+{
+  "schema": "storyforge.quality005.immutable-synthetic-fixture.v1",
+  "baselineCommit": "38cbcd5fa632516763f5844bff2665c3aee0003e",
+  "compressedSha256": "f451d290a49fc9566544073b53f6d9448b727097c807f395311dcdbbafc15587",
+  "decompressedSha256": "dd9ce36b63112ba06b45690aa7f52905fcf53005b3d6c0773f45ac3dcd18d203",
+  "decompressedBytes": 1952086,
+  "originalCaptureSha256": "294375fbb05781d9afbba5a237946bd9f1fd24ada03b1487b285849f23b7f817",
+  "actualModelCalls": 0,
+  "actualNetworkCalls": 0,
+  "syntheticTransportCalls": 2,
+  "humanAcceptance": false,
+  "notes": [
+    "Lossless table-level delta encoding of exact native capture. All reconstructed original stage rowsets have explicit per-table hashes.",
+    "Native old novel hybrid and true World sources, one injected synthetic call per source. No hand-created adoption/receipt."
+  ]
+}

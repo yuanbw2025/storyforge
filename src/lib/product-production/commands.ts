@@ -1,4 +1,9 @@
 import { deriveAvgAssemblyRecoveryBaseV1 } from '../avg/assembly-recovery'
+import {
+  assertTextOpenWorldNewSourceV1,
+  assertTextOpenWorldProductionNewWorkV1,
+  textOpenWorldCommandRequiresNewSourceV1,
+} from '../open-world/source-admission'
 import { resetAvgImageRecoveryForEvolutionV1 } from '../avg/media-production-policy'
 import { avgMediaProductionEnabledV2, avgVoiceProductionEnabledV3 } from '../avg/assembly-contract'
 import { assertAvgStoredAssemblyBriefV3 } from '../avg/voice-assembly-storage'
@@ -750,6 +755,16 @@ async function productionInScope(scope: WorkspaceScope, productionId: number): P
     reject('production-not-found', 'Production 不存在或不属于当前 Work')
   }
   return production as ProductProductionRecordV1 & { id: number }
+}
+
+async function assertTextOpenWorldCommandSourceV1(
+  production: ProductProductionRecordV1,
+  command: ProductProductionCommandV1,
+): Promise<void> {
+  if (production.productType !== 'text-open-world' || !textOpenWorldCommandRequiresNewSourceV1(command)) return
+  const brief = production.currentBriefRevision == null ? null : await db.productProductionBriefs
+    .where('[productionId+revision]').equals([production.id!, production.currentBriefRevision]).first()
+  assertTextOpenWorldProductionNewWorkV1(production, brief, command.type)
 }
 
 async function currentBuild(production: ProductProductionRecordV1 & { id: number }): Promise<ProductBuildRecordV1 & { id: number }> {
@@ -3309,6 +3324,10 @@ async function executeTransaction(input: {
           && input.preparedCreatorSource?.bindingHash !== command.expectedSourceBindingHash) {
           reject('source-stale', '文字开放世界 intent 缺少当前来源复验')
         }
+        if (command.type === 'create-text-open-world-intent') {
+          assertTextOpenWorldNewSourceV1(command.sourceLocator.kind, command.type)
+          assertTextOpenWorldNewSourceV1(input.preparedCreatorSource?.binding.kind, command.type)
+        }
         const row = stampNewRecord(scope, 'productProductions', {
           projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
           productionKey: command.productionKey, productType: command.productType,
@@ -3345,6 +3364,11 @@ async function executeTransaction(input: {
     }
 
     const transactionCreatorStart = input.preparedCreatorStart ?? null
+
+    // Existing immutable receipts above remain readable. Every genuinely new
+    // command repeats source admission while its Production/Brief are locked,
+    // before a claim or any formal product mutation can be written.
+    await assertTextOpenWorldCommandSourceV1(production, command)
 
     const claim = stampNewRecord(scope, 'productProductionCommands', {
       projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId, productionId: production.id,
@@ -3495,6 +3519,13 @@ export async function executeProductProductionCommand(input: {
   preparedTtrpgOpenBrief?: TtrpgOpenBriefCommandPreparationV3 | null
   now?: number
 }): Promise<ProductProductionCommandReceiptV1> {
+  input = { ...input, scope: structuredClone(input.scope), command: structuredClone(input.command) }
+  if (input.preparedCreatorMedia) {
+    const { provider, ...data } = input.preparedCreatorMedia
+    input.preparedCreatorMedia = { ...structuredClone(data), provider: provider == null ? provider : {
+      ...provider, binding: structuredClone(provider.binding), receipt: structuredClone(provider.receipt),
+    } }
+  }
   const scope = await resolveScope({ scope: input.scope })
   const openBriefSaveCommand = isTtrpgOpenBriefSaveCommand(input.command)
     ? input.command
@@ -3581,6 +3612,11 @@ export async function executeProductProductionCommand(input: {
       notifyProductionChanged(replay)
       return replay
     }
+  }
+  if (command.type === 'create-text-open-world-intent') {
+    assertTextOpenWorldNewSourceV1(command.sourceLocator.kind, command.type)
+  } else if (command.type !== 'create-intent' && Number.isInteger(input.productionId)) {
+    await assertTextOpenWorldCommandSourceV1(await productionInScope(scope, input.productionId!), command)
   }
   if ((command.type === 'resolve-blocker' || command.type === 'resume')
     && Number.isInteger(input.productionId)) {
