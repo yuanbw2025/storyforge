@@ -1,6 +1,6 @@
 {
   "schema": "storyforge.quality-remediation-tasks.v1",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "date": "2026-10-30",
   "authority": "L2 task scheduling; audit facts remain fixed on A, product contracts and L0/L1 prevail",
   "auditBaselineA": "c5b51da301abd3875b26732d9657ad485ad39105",
@@ -682,10 +682,10 @@
       "priority": "P1",
       "title": "文字开放世界小说 SourcePin 路径与上位冻结世界主链约定冲突",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
+      "status": "implementation-in-progress",
+      "assignee": "independent_ai_audit",
+      "reviewer": "shared_production_audit",
+      "implementationBranch": "fix/quality-005-world-source-admission-20261030",
       "implementationSha": null,
       "integrationSha": null,
       "scopeMatrixRows": [
@@ -746,7 +746,8 @@
       "acceptedAcceptance": "新制作/会谈/开始/返修/媒资/发布/运行写入均执行世界准入；小说未封存零发送零正式写入；已有合法 WorldRelease 正常；旧小说来源核验/回放/导出/备份恢复保留原证据且不授新权限；显式派生、确认、封存、重新 S2 和新谱系纵切面通过。",
       "compatibilityAcceptanceSource": "remediation-plan-20261030/agents/production/compatibility-acceptance-matrix.json",
       "codeTouchpointsSource": "remediation-plan-20261030/agents/production/code-touchpoints.json",
-      "acceptanceInstructions": "Original minimumRepairFromAudit and acceptanceFromAudit are immutable A observations; use this accepted decision for construction and preserve every historical evidence scope."
+      "acceptanceInstructions": "Original minimumRepairFromAudit and acceptanceFromAudit are immutable A observations; use this accepted decision for construction and preserve every historical evidence scope.",
+      "implementationBaseSha": "38cbcd5fa632516763f5844bff2665c3aee0003e"
     },
     {
       "taskId": "SFQA-006",
@@ -754,12 +755,12 @@
       "priority": "P1",
       "title": "Electron 运行时公告被仅生产依赖审计漏掉",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
-      "implementationSha": null,
-      "integrationSha": null,
+      "status": "integrated-candidate-awaiting-full-validation-and-target-release-evidence",
+      "assignee": "root-coordinator",
+      "reviewer": "shared_production_audit",
+      "implementationBranch": "fix/quality-006-desktop-runtime-20261030",
+      "implementationSha": "d61786c862abbde615c9b27c0581807aca060c67",
+      "integrationSha": "38cbcd5fa632516763f5844bff2665c3aee0003e",
       "scopeMatrixRows": [
         "P-CLIENT",
         "F-DELIVERY"
@@ -807,7 +808,10 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": []
+      "evidence": [
+        "remediation-round1-20261030/client/completion-source-candidate.json",
+        "remediation-round1-20261030/review/006-runtime-evidence-review.json"
+      ]
     },
     {
       "taskId": "SFQA-007",
@@ -1251,12 +1255,12 @@
       "priority": "P1",
       "title": "Work/World 删除以 row.id 判断漏掉非 id 主键的参考原文",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
-      "implementationSha": null,
-      "integrationSha": null,
+      "status": "integrated-candidate-awaiting-full-validation",
+      "assignee": "data_lifecycle_audit",
+      "reviewer": "shared_production_audit",
+      "implementationBranch": "fix/quality-014-owner-primary-key-20261030",
+      "implementationSha": "66657bdcdfce7c07103970f7c49269b8e04e68f6",
+      "integrationSha": "38cbcd5fa632516763f5844bff2665c3aee0003e",
       "scopeMatrixRows": [
         "P-LONG",
         "P-WORLD",
@@ -1308,7 +1312,10 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": [],
+      "evidence": [
+        "remediation-round1-20261030/data/completion.json",
+        "remediation-round1-20261030/review/014-review-v2.json"
+      ],
       "existingWorkToCheck": {
         "pr": 233,
         "headAtSnapshot": "925323b0f7a35fce6c3f88c053802e18756c5dc8",
@@ -1447,12 +1454,12 @@
       "priority": "P1",
       "title": "剧本采纳恢复覆盖已冻结作者payload并正式写入原模型提案",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
-      "implementationSha": null,
-      "integrationSha": null,
+      "status": "integrated-candidate-awaiting-full-validation",
+      "assignee": "independent_ai_audit",
+      "reviewer": "shared_production_audit",
+      "implementationBranch": "fix/quality-017-frozen-author-intent-20261030",
+      "implementationSha": "1fd9e768c8cf83ee776e0b1280f8bcb9c3ca3a84",
+      "integrationSha": "38cbcd5fa632516763f5844bff2665c3aee0003e",
       "scopeMatrixRows": [
         "P-SCRIPT",
         "F-RUN"
@@ -1505,7 +1512,10 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": []
+      "evidence": [
+        "remediation-round1-20261030/intent/completion.json",
+        "remediation-round1-20261030/review/017-review.json"
+      ]
     },
     {
       "taskId": "SFQA-018",
@@ -2616,10 +2626,10 @@
       "priority": "P1",
       "title": "recordId与两种CAS采纳更新绕过登记外键/数组成员检查",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
+      "status": "implementation-in-progress",
+      "assignee": "data_lifecycle_audit",
+      "reviewer": "shared_production_audit",
+      "implementationBranch": "fix/quality-035-adoption-reference-validation-20261030",
       "implementationSha": null,
       "integrationSha": null,
       "scopeMatrixRows": [
@@ -2676,7 +2686,8 @@
         "headAtSnapshot": "925323b0f7a35fce6c3f88c053802e18756c5dc8",
         "status": "open-CI-not-passed",
         "instruction": "Reuse historical RunScope protection; compare exact path claims first. This PR is not evidence that this finding is fixed."
-      }
+      },
+      "implementationBaseSha": "3a5b3722e9e938add1ec9127982b54da52189a3f"
     },
     {
       "taskId": "SFQA-036",
@@ -10414,5 +10425,7 @@
     "count": 18,
     "newP1P2Findings": 0,
     "instruction": "Keep positive practices, observations and accepted low-impact maintenance distinct from confirmed defects; triage each, do not automatically count as extra findings."
-  }
+  },
+  "updatedAt": "2026-10-30T18:31:17.317838+08:00",
+  "executionTracking": "Status in this integration branch; original audit records remain fixed on A. Integrated candidates require full validation before closure, and G1/release are separate."
 }

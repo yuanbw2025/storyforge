@@ -58,8 +58,8 @@ for (const evidence of [
 ]) {
   if (!registryImport.includes(evidence)) throw new Error(`导入边界缺少完整性证据:${evidence}`)
 }
-for (const evidence of ['rowsReferencingField', 'intentionally', "deleteOwnerRows('work'"]) {
-  if (!lifecycle.includes(evidence)) throw new Error(`删除生命周期缺少非索引引用或Work owner证据:${evidence}`)
+for (const evidence of ['keysReferencingField', '.primaryKeys()', 'table.filter(', "deleteOwnerRows('work'"]) {
+  if (!lifecycle.includes(evidence)) throw new Error(`删除生命周期缺少原生主键、非索引引用或Work owner证据:${evidence}`)
 }
 
 console.log(`Text Open World G7 lifecycle OK: ${matrix.gates.length} gates, backup v${matrix.backupVersion}, explicit release migration`)
