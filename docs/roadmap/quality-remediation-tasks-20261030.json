@@ -1,6 +1,6 @@
 {
   "schema": "storyforge.quality-remediation-tasks.v1",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "date": "2026-10-30",
   "authority": "L2 task scheduling; audit facts remain fixed on A, product contracts and L0/L1 prevail",
   "auditBaselineA": "c5b51da301abd3875b26732d9657ad485ad39105",
@@ -402,10 +402,10 @@
       "priority": "P1",
       "title": "漫画与漫剧无候选的失败或未知任务不进入可见恢复入口",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
+      "status": "implementation-in-progress-native-preparation-and-task-visibility-red-green",
+      "assignee": "independent_ai_audit",
+      "reviewer": "root",
+      "implementationBranch": "fix/quality-001-016-creation-task-recovery-20261031",
       "implementationSha": null,
       "integrationSha": null,
       "scopeMatrixRows": [
@@ -455,7 +455,14 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": []
+      "evidence": [
+        "remediation-round1-20261030/creation-failures001016/opening-card-v2.json"
+      ],
+      "verification": {
+        "currentSlice": "Native6 cases first2pass4red ->6green; UI/stop control/full matrix not accepted.",
+        "fullScopeAccepted": false,
+        "closed": false
+      }
     },
     {
       "taskId": "SFQA-002",
@@ -682,12 +689,12 @@
       "priority": "P1",
       "title": "文字开放世界小说 SourcePin 路径与上位冻结世界主链约定冲突",
       "plannedRound": "R1",
-      "status": "whole-candidate-independent-review-in-progress-async-blob-delta-open",
+      "status": "committed-and-integrated-candidate-bounded-browser-passed-native-legacy-gap-and-full-validation-pending",
       "assignee": "independent_ai_audit",
       "reviewer": "shared_production_audit",
       "implementationBranch": "fix/quality-005-world-source-admission-20261030",
-      "implementationSha": null,
-      "integrationSha": null,
+      "implementationSha": "e28a4d76e80ba45e2e0c411019f4e66d033f3e8a",
+      "integrationSha": "8881f4f27b21d07c038091bdf686669561126415",
       "scopeMatrixRows": [
         "P-WORLD",
         "P-OPEN",
@@ -735,7 +742,17 @@
         "integration-sha-and-scope-G1-separately-recorded"
       ],
       "evidence": [
-        "remediation-round1-20261030/openworld005/full-freeze-v1/manifest.json"
+        "remediation-round1-20261030/openworld005/full-freeze-v1/manifest.json",
+        "remediation-round1-20261030/openworld005/handoff-postmerge-v10.json",
+        "remediation-round1-20261030/openworld005/full-freeze-v10/manifest.json",
+        "remediation-round1-20261030/openworld005/final-local-gates-v6.json",
+        "remediation-round1-20261030/openworld005/final-real-browser-v9.json",
+        "remediation-round1-20261030/review/005-full-v9/final-review-r1.json",
+        "remediation-round1-20261030/review/005-full-v9/browser-addendum-r2.json",
+        "remediation-round1-20261030/review/005-full-v9/format-addendum-v10-r3.json",
+        "remediation-round1-20261030/coordination/005-integration-ff-r10.json",
+        "remediation-round1-20261030/coordination/integrated-browser-r19.json",
+        "remediation-round1-20261030/coordination/existing-test-strict-gates-r17.json"
       ],
       "governanceDecision": {
         "date": "2026-10-30",
@@ -749,7 +766,35 @@
       "compatibilityAcceptanceSource": "remediation-plan-20261030/agents/production/compatibility-acceptance-matrix.json",
       "codeTouchpointsSource": "remediation-plan-20261030/agents/production/code-touchpoints.json",
       "acceptanceInstructions": "Original minimumRepairFromAudit and acceptanceFromAudit are immutable A observations; use this accepted decision for construction and preserve every historical evidence scope.",
-      "implementationBaseSha": "38cbcd5fa632516763f5844bff2665c3aee0003e"
+      "implementationBaseSha": "38cbcd5fa632516763f5844bff2665c3aee0003e",
+      "verification": {
+        "targetedAndAdjacent": {
+          "files": 29,
+          "passed": 370
+        },
+        "browser": {
+          "passed": 4,
+          "retries": 0,
+          "skipped": 0
+        },
+        "independentReviewBlockers": 0,
+        "uncompleted": [
+          "L05 actual native legacy CreatorEdit candidate capture not established; synthetic3 defense only",
+          "all23 acceptance not complete",
+          "final full integrated CI/E2E"
+        ],
+        "closed": false,
+        "combinedBrowserCheckpoint": {
+          "sourceSameAs": "f0401620d869d6a8109921093ed61314b42179a1",
+          "testCommit": "3b881aaafe7b295d65e9d7af700d0baf16994851",
+          "specs": 7,
+          "passed": 18,
+          "retries": 0,
+          "skipped": 0,
+          "flaky": 0,
+          "note": "Shared integrated suite includes previously counted cases; not18 new separate cases for each finding."
+        }
+      }
     },
     {
       "taskId": "SFQA-006",
@@ -1427,10 +1472,10 @@
       "priority": "P1",
       "title": "漫画/漫剧上下文准备失败把无候选任务永久留在running",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
+      "status": "implementation-in-progress-native-preparation-and-task-visibility-red-green",
+      "assignee": "independent_ai_audit",
+      "reviewer": "root",
+      "implementationBranch": "fix/quality-001-016-creation-task-recovery-20261031",
       "implementationSha": null,
       "integrationSha": null,
       "scopeMatrixRows": [
@@ -1486,7 +1531,14 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": []
+      "evidence": [
+        "remediation-round1-20261030/creation-failures001016/opening-card-v2.json"
+      ],
+      "verification": {
+        "currentSlice": "Native6 cases first2pass4red ->6green; UI/stop control/full matrix not accepted.",
+        "fullScopeAccepted": false,
+        "closed": false
+      }
     },
     {
       "taskId": "SFQA-017",
@@ -2910,7 +2962,7 @@
       "priority": "P1",
       "title": "多表合法备份往返漏重映射本地引用",
       "plannedRound": "R1",
-      "status": "foundation-A1-independently-reviewed0-B-implementation-in-progress",
+      "status": "A1-B1-unused-foundations-independently-reviewed0-B2-protocol-and-persistence-in-progress",
       "assignee": "data_lifecycle_audit",
       "reviewer": "shared_production_audit",
       "implementationBranch": "fix/quality-037-backup-reference-recovery-20261031",
@@ -2986,7 +3038,10 @@
         "remediation-round1-20261030/data-next037/root-engineering-scope-decision-r5.json",
         "remediation-round1-20261030/data-next037/stage-a-r6/freeze-r1/review-bundle.json",
         "remediation-round1-20261030/review/037-design-review-r1.json",
-        "remediation-round1-20261030/review/037-stage-a1-root-review-r1.json"
+        "remediation-round1-20261030/review/037-stage-a1-root-review-r1.json",
+        "remediation-round1-20261030/data-next037/stage-b-r8/freeze-r1/review-bundle.json",
+        "remediation-round1-20261030/review/037-stage-b1-root-review-r1.json",
+        "remediation-round1-20261030/data-next037/stage-c-interface-and-transaction-proposal-r11.json"
       ],
       "existingWorkToCheck": {
         "pr": 233,
@@ -3004,7 +3059,17 @@
         "silentEvidenceLoss": false,
         "policyDecidedDoesNotMeanImplementationAccepted": true
       },
-      "implementationSequence": "SFQA013 integrated first at98c635; one exclusive data writer implements backup-only typed references and schema14/backup18 recovery foundation (A/B). C actual pending-consumer barriers and D immutable TTRPG read binding require exact path closure before writing; full feature remains unaccepted until all applicable scopes pass."
+      "implementationSequence": "SFQA013 integrated first at98c635; one exclusive data writer implements backup-only typed references and schema14/backup18 recovery foundation (A/B). C actual pending-consumer barriers and D immutable TTRPG read binding require exact path closure before writing; full feature remains unaccepted until all applicable scopes pass.",
+      "verification": {
+        "foundationA1ReviewBlockers": 0,
+        "wireB1ReviewBlockers": 0,
+        "formalImportEnabled": false,
+        "authorConfirmationEnabled": false,
+        "CAndDEnabled": false,
+        "realManuscriptsAccessed": false,
+        "finalRoundtripAndCapacityProof": "pending",
+        "closed": false
+      }
     },
     {
       "taskId": "SFQA-038",
@@ -4021,12 +4086,12 @@
       "priority": "P1",
       "title": "节点AI预设忽略会话Key并跨Provider回退当前全局Key",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
-      "implementationSha": null,
-      "integrationSha": null,
+      "status": "committed-and-integrated-candidate-targeted-browser-passed-awaiting-full-validation",
+      "assignee": "root",
+      "reviewer": "data_lifecycle_audit",
+      "implementationBranch": "fix/quality-053-102-provider-credential-identity-20261031",
+      "implementationSha": "d5e79329b94253f53030962422955d4a04ad3cab",
+      "integrationSha": "f0401620d869d6a8109921093ed61314b42179a1",
       "scopeMatrixRows": [
         "P-NODE",
         "F-AI",
@@ -4084,7 +4149,51 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": []
+      "evidence": [
+        "remediation-round1-20261030/provider053-102/opening-card-r1.json",
+        "remediation-round1-20261030/provider053-102/freeze-r15/manifest.json",
+        "remediation-round1-20261030/provider053-102/final-local-gates-r13.json",
+        "remediation-round1-20261030/provider053-102/original-same-final70-r14.json",
+        "remediation-round1-20261030/provider053-102/browser-r14.json",
+        "remediation-round1-20261030/review/053-102-data-review-r13/053-102-review-r13.json",
+        "remediation-round1-20261030/review/053-102-browser-r14-results-addendum.json",
+        "remediation-round1-20261030/coordination/053-102-integration-merge-r15.json",
+        "remediation-round1-20261030/coordination/integrated-browser-r19.json",
+        "remediation-round1-20261030/coordination/existing-test-strict-gates-r17.json"
+      ],
+      "verification": {
+        "sharedPair": [
+          "SFQA-053",
+          "SFQA-102"
+        ],
+        "originalSameFinal70": {
+          "failed": 53,
+          "normalPassed": 17,
+          "note": "Includes new legacy confirmation/hint contracts; not53 different vulnerabilities."
+        },
+        "targeted": 70,
+        "withAdjacent": 154,
+        "browser": {
+          "passed": 3,
+          "retries": 0,
+          "skipped": 0
+        },
+        "independentReviewBlockers": 0,
+        "legacyPolicy": "Unbound temporary keys require author re-entry; remembered keys keep existing behavior.",
+        "note": "Pair shares all counts; do not add same tests twice.",
+        "finalIntegratedDeliveryValidation": "pending",
+        "closed": false,
+        "combinedBrowserCheckpoint": {
+          "sourceSameAs": "f0401620d869d6a8109921093ed61314b42179a1",
+          "testCommit": "3b881aaafe7b295d65e9d7af700d0baf16994851",
+          "specs": 7,
+          "passed": 18,
+          "retries": 0,
+          "skipped": 0,
+          "flaky": 0,
+          "note": "Shared integrated suite includes previously counted cases; not18 new separate cases for each finding."
+        }
+      }
     },
     {
       "taskId": "SFQA-054",
@@ -5801,10 +5910,10 @@
       "priority": "P1",
       "title": "安全投屏仍沿用本人玩家投影，完整角色卡暴露私密知识与安全备注",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
+      "status": "implementation-in-progress-safe-public-projection-and-conditional-child-rendering",
+      "assignee": "shared_production_audit",
+      "reviewer": "root",
+      "implementationBranch": "fix/quality-080-safe-presentation-20261031",
       "implementationSha": null,
       "integrationSha": null,
       "scopeMatrixRows": [
@@ -5856,7 +5965,15 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": []
+      "evidence": [
+        "remediation-round1-20261030/review/080-prestudy-r1/prestudy-r1.json",
+        "remediation-round1-20261030/ttrpg080/first-valid-red-r2.command.json"
+      ],
+      "verification": {
+        "scope": "Display-only public/spectator projection; retain normal player/GM access and private drafts. No authority/schema/runtime service edits.",
+        "fullScopeAccepted": false,
+        "closed": false
+      }
     },
     {
       "taskId": "SFQA-081",
@@ -7270,12 +7387,12 @@
       "priority": "P1",
       "title": "Embedding切换云端预设沿用旧provider的API Key，下一次嵌入发往新服务",
       "plannedRound": "R1",
-      "status": "pending-revalidation-on-C",
-      "assignee": null,
-      "reviewer": null,
-      "implementationBranch": null,
-      "implementationSha": null,
-      "integrationSha": null,
+      "status": "committed-and-integrated-candidate-targeted-browser-passed-awaiting-full-validation",
+      "assignee": "root",
+      "reviewer": "data_lifecycle_audit",
+      "implementationBranch": "fix/quality-053-102-provider-credential-identity-20261031",
+      "implementationSha": "d5e79329b94253f53030962422955d4a04ad3cab",
+      "integrationSha": "f0401620d869d6a8109921093ed61314b42179a1",
       "scopeMatrixRows": [
         "P-SHELL",
         "F-AI",
@@ -7330,7 +7447,51 @@
         "independent-review",
         "integration-sha-and-scope-G1-separately-recorded"
       ],
-      "evidence": []
+      "evidence": [
+        "remediation-round1-20261030/provider053-102/opening-card-r1.json",
+        "remediation-round1-20261030/provider053-102/freeze-r15/manifest.json",
+        "remediation-round1-20261030/provider053-102/final-local-gates-r13.json",
+        "remediation-round1-20261030/provider053-102/original-same-final70-r14.json",
+        "remediation-round1-20261030/provider053-102/browser-r14.json",
+        "remediation-round1-20261030/review/053-102-data-review-r13/053-102-review-r13.json",
+        "remediation-round1-20261030/review/053-102-browser-r14-results-addendum.json",
+        "remediation-round1-20261030/coordination/053-102-integration-merge-r15.json",
+        "remediation-round1-20261030/coordination/integrated-browser-r19.json",
+        "remediation-round1-20261030/coordination/existing-test-strict-gates-r17.json"
+      ],
+      "verification": {
+        "sharedPair": [
+          "SFQA-053",
+          "SFQA-102"
+        ],
+        "originalSameFinal70": {
+          "failed": 53,
+          "normalPassed": 17,
+          "note": "Includes new legacy confirmation/hint contracts; not53 different vulnerabilities."
+        },
+        "targeted": 70,
+        "withAdjacent": 154,
+        "browser": {
+          "passed": 3,
+          "retries": 0,
+          "skipped": 0
+        },
+        "independentReviewBlockers": 0,
+        "legacyPolicy": "Unbound temporary keys require author re-entry; remembered keys keep existing behavior.",
+        "note": "Pair shares all counts; do not add same tests twice.",
+        "finalIntegratedDeliveryValidation": "pending",
+        "closed": false,
+        "combinedBrowserCheckpoint": {
+          "sourceSameAs": "f0401620d869d6a8109921093ed61314b42179a1",
+          "testCommit": "3b881aaafe7b295d65e9d7af700d0baf16994851",
+          "specs": 7,
+          "passed": 18,
+          "retries": 0,
+          "skipped": 0,
+          "flaky": 0,
+          "note": "Shared integrated suite includes previously counted cases; not18 new separate cases for each finding."
+        }
+      }
     },
     {
       "taskId": "SFQA-103",
@@ -10596,6 +10757,6 @@
     "newP1P2Findings": 0,
     "instruction": "Keep positive practices, observations and accepted low-impact maintenance distinct from confirmed defects; triage each, do not automatically count as extra findings."
   },
-  "updatedAt": "2026-10-30T18:35:54.434646+00:00",
+  "updatedAt": "2026-10-31T04:55:59.701029+08:00",
   "executionTracking": "Status in this integration branch; original audit records remain fixed on A. Integrated candidates require full validation before closure, and G1/release are separate."
 }
