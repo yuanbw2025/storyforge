@@ -531,6 +531,7 @@ async function executeReadResource(
 ): Promise<AgentToolResult> {
   const session = context.contextGatewaySession
   let issued: string[] = []
+  let previouslyIssued = new Set<string>()
   try {
     exactArgs(raw, ['resourceKey', 'depth', 'maxTokens'])
     if (!session) throw new Error('Host 未提供冻结的 Context Gateway session')
@@ -552,6 +553,7 @@ async function executeReadResource(
       || read.tokenCount !== estimateTokens(read.content)) {
       throw new Error('Provider resource read 完整性校验失败')
     }
+    previouslyIssued = new Set(session.capabilities.keys())
     issued = issueContextSourceRefCapabilitiesV1(session, read.descriptor)
     const sourceRefEvidence = issued.map(capability => {
       const evidence = resolveContextSourceRefCapabilityV1(session, capability)
@@ -578,7 +580,9 @@ async function executeReadResource(
       sourceRefEvidence,
     })
   } catch (error) {
-    for (const token of issued) session?.capabilities.delete(token)
+    // Issuance through result settlement is synchronous. A failed read may
+    // withdraw its new entries, but must preserve earlier successful grants.
+    for (const token of issued) if (!previouslyIssued.has(token)) session?.capabilities.delete(token)
     return failure('read_context_resource', session, error)
   }
 }
