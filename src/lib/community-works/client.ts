@@ -44,6 +44,7 @@ export function communityAuth(): SupabaseClient | null {
 class CommunityRequestError extends Error {
   constructor(readonly status: number, readonly code: string) {
     super(code === 'intake_paused' ? '社区投稿暂未开放。'
+      : code === 'storage_capacity_paused' ? '社区存储容量接近上限，投稿暂时暂停。'
       : status === 401 ? '社区登录已过期，请重新验证邮箱。'
       : status === 413 ? '本次投稿超过服务预算。'
       : status === 429 ? '今日投稿次数已达上限，请稍后再试。'
