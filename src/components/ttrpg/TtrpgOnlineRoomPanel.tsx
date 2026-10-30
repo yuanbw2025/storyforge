@@ -85,6 +85,7 @@ export default function TtrpgOnlineRoomPanel(props: {
   transport?: HostedOnlineRoomTransportV1 | null;
   initialHandoff?: OnlineRoomJoinHandoffV1 | null;
   onInitialHandoffConsumed?: () => void;
+  publicPresentation?: boolean;
 }) {
   const transport = useMemo(
     () =>
@@ -313,6 +314,23 @@ export default function TtrpgOnlineRoomPanel(props: {
     if (!client) throw new Error("请先创建或加入在线房间。");
     setSnapshot(await client.enqueue({ kind, payload, actorKey }));
   };
+
+  if (props.publicPresentation) {
+    return (
+      <section
+        className="rounded border border-border bg-bg-base p-4"
+        data-testid="ttrpg-online-room-public-presentation"
+      >
+        <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+          <Wifi className="h-4 w-4 text-text-muted" />
+          在线房间
+        </div>
+        <p className="mt-2 text-xs leading-5 text-text-muted">
+          在线房间的个人视图和输入仅在退出投屏后显示。
+        </p>
+      </section>
+    );
+  }
 
   if (!transport) {
     return (
