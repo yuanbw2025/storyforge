@@ -216,9 +216,11 @@ describe('Text Open World G4-10 · disclosure-safe crafting and economy projecti
       targetKey: 'recipe.brine-tonic',
       available: true,
     })
-    expect(Object.keys(learned)).not.toEqual(expect.arrayContaining([
+    for (const forbidden of [
       'key', 'stationLocationKeys', 'requirementConditionKeys', 'presentationRefs', 'sourceRefs',
-    ]))
+    ]) {
+      expect(Object.keys(learned)).not.toContain(forbidden)
+    }
     expect(Object.keys(learned.ingredients[0])).toEqual([
       'title', 'requiredQuantity', 'inventoryQuantity', 'sufficient',
     ])
@@ -316,10 +318,12 @@ describe('Text Open World G4-10 · disclosure-safe crafting and economy projecti
     })
     expect(swordForPurchase.equipmentComparison?.stats.find(stat => stat.semantic === 'attack'))
       .toMatchObject({ before: 8, after: 8, delta: 0, direction: 'unchanged' })
-    expect(Object.keys(vendor)).not.toEqual(expect.arrayContaining([
+    for (const forbidden of [
       'vendor', 'actorKey', 'locationKey', 'factionKey', 'availabilityConditionKeys',
       'buyPriceMultiplierBasisPoints', 'sellPriceMultiplierBasisPoints',
-    ]))
+    ]) {
+      expect(Object.keys(vendor)).not.toContain(forbidden)
+    }
   })
 
   it('闭店、远端或死亡商人完全省略，不披露库存与价格壳', () => {
