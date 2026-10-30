@@ -28,7 +28,7 @@ interface ImportSessionStore {
   patchChunk: (sessionId: number, chunkIndex: number, partial: Partial<ChunkState>) => Promise<void>
   /** 追加日志到 DB */
   log: (sessionId: number, chunkIndex: number, level: ImportLog['level'], message: string) => Promise<void>
-  /** 删除 session + 其全部日志（用户放弃任务时） */
+  /** 原子删除 session、全部日志与原文（用户明确放弃任务时） */
   deleteSession: (sessionId: number) => Promise<void>
   /** 取 session 的日志（给 Activity Log 回放） */
   listLogs: (sessionId: number, limit?: number) => Promise<ImportLog[]>
@@ -42,6 +42,29 @@ interface ImportSessionStore {
   deleteBlob: (sessionId: number) => Promise<void>
 }
 
+
+/** A deleted Session/Project is a terminal interruption, not a retryable
+ * Blob-storage failure. Consumers must stop without recreating its records. */
+export class ImportSessionUnavailableError extends Error {
+  constructor() {
+    super('导入会话或所属项目已删除，无法继续本次导入。')
+    this.name = 'ImportSessionUnavailableError'
+  }
+}
+
+// These checks only run inside the caller's write transaction. Persisted roots,
+// rather than the current store cache or active Work, authorize this local write.
+async function requireImportProject(projectId: number): Promise<void> {
+  if (typeof projectId !== 'number' || !await db.projects.get(projectId)) {
+    throw new ImportSessionUnavailableError()
+  }
+}
+async function requireImportSession(sessionId: number): Promise<ImportSession> {
+  const session = await db.importSessions.get(sessionId)
+  if (!session) throw new ImportSessionUnavailableError()
+  await requireImportProject(session.projectId)
+  return session
+}
 
 const now = () => Date.now()
 
@@ -83,47 +106,56 @@ export const useImportSessionStore = create<ImportSessionStore>((set, get) => ({
 
   create: async (data) => {
     const row: ImportSession = { ...data, createdAt: now(), updatedAt: now() }
-    const id = (await db.importSessions.add(row)) as number
+    const id = await db.transaction('rw', db.projects, db.importSessions, async () => {
+      await requireImportProject(row.projectId)
+      return await db.importSessions.add(row) as number
+    })
     set({ current: { ...row, id } })
     return id
   },
 
   patch: async (sessionId, partial) => {
     const next = { ...partial, updatedAt: now() }
-    await db.importSessions.update(sessionId, next)
-    const cur = get().current
-    if (cur?.id === sessionId) {
-      set({ current: { ...cur, ...next } as ImportSession })
-    }
+    const updated = await db.transaction('rw', db.projects, db.importSessions, async () => {
+      const session = await requireImportSession(sessionId)
+      if (('id' in next && next.id !== sessionId)
+        || ('projectId' in next && next.projectId !== session.projectId)) {
+        throw new Error('导入会话身份和所属项目不能更改。')
+      }
+      if (!await db.importSessions.update(sessionId, next)) throw new ImportSessionUnavailableError()
+      return { ...session, ...next }
+    })
+    if (get().current?.id === sessionId) set({ current: updated })
   },
 
   patchChunk: async (sessionId, chunkIndex, partial) => {
-    const cur = await db.importSessions.get(sessionId)
-    if (!cur) return
-    const chunks = cur.chunks.map(c =>
-      c.index === chunkIndex ? { ...c, ...partial } : c,
-    )
-    await db.importSessions.update(sessionId, { chunks, updatedAt: now() })
-    const mem = get().current
-    if (mem?.id === sessionId) {
-      set({ current: { ...mem, chunks, updatedAt: now() } })
-    }
+    const updated = await db.transaction('rw', db.projects, db.importSessions, async () => {
+      const session = await requireImportSession(sessionId)
+      const chunks = session.chunks.map(c => c.index === chunkIndex ? { ...c, ...partial } : c)
+      const next = { chunks, updatedAt: now() }
+      if (!await db.importSessions.update(sessionId, next)) throw new ImportSessionUnavailableError()
+      return { ...session, ...next }
+    })
+    if (get().current?.id === sessionId) set({ current: updated })
   },
 
   log: async (sessionId, chunkIndex, level, message) => {
-    await db.importLogs.add({
-      sessionId, chunkIndex, level, message,
-      createdAt: now(),
+    await db.transaction('rw', db.projects, db.importSessions, db.importLogs, async () => {
+      await requireImportSession(sessionId)
+      await db.importLogs.add({ sessionId, chunkIndex, level, message, createdAt: now() })
     })
   },
 
   deleteSession: async (sessionId) => {
-    await db.transaction('rw', db.importSessions, db.importLogs, async () => {
-      await db.importSessions.delete(sessionId)
+    // Explicit abandonment is idempotent even when the root is already gone.
+    // These are the stores actually mutated by session CRUD; project-wide
+    // lifecycle inventory remains derived by registry/lifecycle.ts.
+    await db.transaction('rw', db.importSessions, db.importLogs, db.importFiles, async () => {
       await db.importLogs.where('sessionId').equals(sessionId).delete()
+      await db.importFiles.delete(sessionId)
+      await db.importSessions.delete(sessionId)
     })
-    const cur = get().current
-    if (cur?.id === sessionId) set({ current: null })
+    if (get().current?.id === sessionId) set({ current: null })
   },
 
   listLogs: async (sessionId, limit = 500) => {
@@ -142,7 +174,10 @@ export const useImportSessionStore = create<ImportSessionStore>((set, get) => ({
       blob,
       createdAt: now(),
     }
-    await db.importFiles.put(row)
+    await db.transaction('rw', db.projects, db.importSessions, db.importFiles, async () => {
+      await requireImportSession(sessionId)
+      await db.importFiles.put(row)
+    })
   },
 
   loadBlob: async (sessionId) => {
@@ -151,10 +186,6 @@ export const useImportSessionStore = create<ImportSessionStore>((set, get) => ({
   },
 
   deleteBlob: async (sessionId) => {
-    try {
-      await db.importFiles.delete(sessionId)
-    } catch {
-      // ignore
-    }
+    await db.importFiles.delete(sessionId)
   },
 }))

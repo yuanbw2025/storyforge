@@ -141,26 +141,25 @@ async function deleteScopedRows(table: Table, rows: Collection): Promise<void> {
 }
 
 export async function cascadeDeleteProject(projectId: number): Promise<void> {
-  // ── Step 1:事务前预收集间接归属/blob 的父键 ──
-  // (父表会在事务中被删,所以必须先把关联键拿到手)
-  const indirectKeys = new Map<string, number[]>()
-  for (const spec of projectScopedTables()) {
-    if ((spec.owner === 'direct-child' || spec.owner === 'indirect') && spec.projectResolver) {
-      indirectKeys.set(spec.name, await spec.projectResolver(projectId))
-    }
-  }
-  // blob owner 父行(用于计算 blob key)
-  const blobOwnerRows = new Map<string, any[]>()
-  for (const spec of PROJECT_TABLES) {
-    if (spec.refs?.some(r => r.kind === 'blob-owner')) {
-      blobOwnerRows.set(spec.name, await (spec.table as any).where('projectId').equals(projectId).toArray())
-    }
-  }
-  const importSessionIds = (await db.importSessions
-    .where('projectId').equals(projectId).primaryKeys()) as number[]
-
-  // ── Step 2:事务内删除 ──
   await db.transaction('rw', transactionTablesFor('deleteProject'), async () => {
+    // 同一写事务内先固定全部父键，再删任何父行；并发新导入不得漏入快照。
+    // 写入端也在相同父表锁内复验根，删除提交后的旧任务不能再建子项。
+    const indirectKeys = new Map<string, number[]>()
+    for (const spec of projectScopedTables()) {
+      if ((spec.owner === 'direct-child' || spec.owner === 'indirect') && spec.projectResolver) {
+        indirectKeys.set(spec.name, await spec.projectResolver(projectId))
+      }
+    }
+    // blob owner 父行(用于计算 blob key)
+    const blobOwnerRows = new Map<string, any[]>()
+    for (const spec of PROJECT_TABLES) {
+      if (spec.refs?.some(r => r.kind === 'blob-owner')) {
+        blobOwnerRows.set(spec.name, await (spec.table as any).where('projectId').equals(projectId).toArray())
+      }
+    }
+    const importSessionIds = (await db.importSessions
+      .where('projectId').equals(projectId).primaryKeys()) as number[]
+
     for (const spec of projectScopedTables()) {
       if (spec.name === 'projects') continue // 根表最后删
 

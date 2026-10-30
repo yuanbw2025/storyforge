@@ -21,7 +21,7 @@ import { renderPrompt } from '../ai/prompt-engine'
 import { usePromptStore } from '../../stores/prompt'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
-import { useImportSessionStore } from '../../stores/import-session'
+import { ImportSessionUnavailableError, useImportSessionStore } from '../../stores/import-session'
 import { useImportStatusStore } from '../../stores/import-status'
 import { extractJSON, IMPORT_MAX_TOKENS } from '../ai/adapters/import-adapter'
 import type { UnifiedParseResult } from '../types'
@@ -101,28 +101,28 @@ export async function runSession(args: {
 
   // 拉最新 session
   let session = await sessionStore.load(sessionId)
-  if (!session) throw new Error(`找不到导入会话 #${sessionId}`)
+  if (!session) throw new ImportSessionUnavailableError()
 
   // 重置控制
   activeController = new AbortController()
   activePauseFlag = { paused: false }
 
-  statusStore.attachSession({
-    sessionId,
-    filename: session.filename,
-    totalChunks: session.totalChunks,
-    finishedChunks: session.chunks.filter(c => c.status === 'done').length,
-    failedChunks: session.chunks.filter(c => c.status === 'failed').length,
-    phase: 'running',
-  })
-  statusStore.pushActivity('info',
-    `▶ 开始处理「${session.filename}」共 ${session.totalChunks} 块`)
-  await sessionStore.patch(sessionId, { status: 'running' })
-  await sessionStore.log(sessionId, -1, 'info',
-    `开始处理：共 ${session.totalChunks} 块，已完成 ${
-      session.chunks.filter(c => c.status === 'done').length} 块`)
-
   try {
+    statusStore.attachSession({
+      sessionId,
+      filename: session.filename,
+      totalChunks: session.totalChunks,
+      finishedChunks: session.chunks.filter(c => c.status === 'done').length,
+      failedChunks: session.chunks.filter(c => c.status === 'failed').length,
+      phase: 'running',
+    })
+    statusStore.pushActivity('info',
+      `▶ 开始处理「${session.filename}」共 ${session.totalChunks} 块`)
+    await sessionStore.patch(sessionId, { status: 'running' })
+    await sessionStore.log(sessionId, -1, 'info',
+      `开始处理：共 ${session.totalChunks} 块，已完成 ${
+        session.chunks.filter(c => c.status === 'done').length} 块`)
+
     let processedSinceMerge = 0
     // 目录在本次 session 内固定，避免每块重复查库；确认写回时仍会重新解析当前目录。
     const codexOptions = await loadCodexImportCategoryOptions(projectId)
@@ -138,7 +138,7 @@ export async function runSession(args: {
       }
 
       session = await sessionStore.load(sessionId) // 重新读一次（防外部修改）
-      if (!session) return
+      if (!session) throw new ImportSessionUnavailableError()
 
       const ok = await runChunk(session, chunk.index, projectId, codexOptions)
       if (ok) processedSinceMerge++
@@ -170,7 +170,7 @@ export async function runSession(args: {
     })
 
     const fresh = await sessionStore.load(sessionId)
-    if (!fresh) return
+    if (!fresh) throw new ImportSessionUnavailableError()
     const failedCount = fresh.chunks.filter(c => c.status === 'failed').length
     const doneCount = fresh.chunks.filter(c => c.status === 'done').length
 
@@ -205,10 +205,18 @@ export async function runSession(args: {
       statusStore.pushActivity('warn', '已中止')
       return
     }
-    await sessionStore.patch(sessionId, { status: 'failed', fatalError: msg })
     statusStore.setPhase('failed')
     statusStore.setFatalError(msg)
     statusStore.pushActivity('error', `任务异常终止：${msg}`)
+    if (!(err instanceof ImportSessionUnavailableError)) {
+      try {
+        await sessionStore.patch(sessionId, { status: 'failed', fatalError: msg })
+      } catch (saveError) {
+        const detail = saveError instanceof Error ? saveError.message : String(saveError)
+        statusStore.setFatalError(`${msg}；保存任务状态失败：${detail}`)
+        statusStore.pushActivity('error', `保存任务状态失败：${detail}`)
+      }
+    }
   } finally {
     activeController = null
   }
@@ -309,6 +317,7 @@ async function runChunk(
       return true
     } catch (err) {
       if ((err as Error).name === 'AbortError') return false
+      if (err instanceof ImportSessionUnavailableError) throw err
       const msg = err instanceof Error ? err.message : String(err)
       statusStore.pushActivity('warn',
         `块 ${chunkIndex + 1} 第 ${attemptNo} 次失败：${msg.slice(0, 80)}`, chunkIndex)
@@ -517,7 +526,7 @@ export async function retryFailedChunks(args: {
   const { sessionId, projectId } = args
   const sessionStore = useImportSessionStore.getState()
   const session = await sessionStore.load(sessionId)
-  if (!session) return
+  if (!session) throw new ImportSessionUnavailableError()
   // 把失败的重置成 pending 并清空 attempts
   const chunks: ChunkState[] = session.chunks.map(c =>
     c.status === 'failed'
