@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261030-quality-round1-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261031-quality-round1-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -605,6 +605,12 @@
         "workPackage": "release-4.0.5-mainc5-integration",
         "implementationCommit": "372af8bdba34f2ea3b3e3cf2020d0815d0072ce4",
         "note": "Preserved unchanged before quality round1. The d952 full-CI input-fingerprint failure remains in the remediation evidence; all deterministic observations match the new reviewed version."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261030-quality-round1-v1.json",
+        "workPackage": "quality-round1-pre-005-credential-integration",
+        "implementationCommit": "2310b24d330d53492c689b57f61cf978c252613d",
+        "note": "Preserved unchanged before later005/053/102 integrated candidates. Old d952 full-CI fingerprint failure remains retained separately; this is not product or model acceptance."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -697,6 +703,7 @@
     "src/lib/product-production/world-source.ts",
     "src/lib/product/exact-source-contracts.ts",
     "src/lib/product/runtime-core.ts",
+    "src/lib/product/runtime-source-authority.ts",
     "src/lib/product/runtime-source-manifest.ts",
     "src/lib/product/source-contracts.ts",
     "src/lib/product/world-requirement-adapters.ts",
@@ -717,6 +724,7 @@
     "src/lib/types/narrative-time.ts",
     "src/lib/types/product-release.ts",
     "src/lib/types/rag-library.ts",
+    "src/lib/types/state-card.ts",
     "src/lib/types/world-impact.ts",
     "src/lib/types/world-product-contracts.ts",
     "src/lib/types/world-query.ts",
@@ -862,15 +870,21 @@
     "tests/regression/R-NW-2D-recovery.test.ts",
     "tests/regression/R-NW-2E-author-quality-contract.test.ts",
     "tests/regression/R-NW-2E-author-quality-inputs.test.ts",
+    "tests/regression/R-NW-2E-byte-sink.test.ts",
     "tests/regression/R-NW-2E-canonical-root.test.ts",
     "tests/regression/R-NW-2E-deferred-projection.test.ts",
     "tests/regression/R-NW-2E-domain-allocations.test.ts",
+    "tests/regression/R-NW-2E-frozen-reference-binding.test.ts",
     "tests/regression/R-NW-2E-frozen-shapes.test.ts",
+    "tests/regression/R-NW-2E-fused-freeze-hash.test.ts",
     "tests/regression/R-NW-2E-grounded-knowledge.test.ts",
     "tests/regression/R-NW-2E-hash-backend.test.ts",
+    "tests/regression/R-NW-2E-identity-syntax.test.ts",
     "tests/regression/R-NW-2E-json-memory.test.ts",
     "tests/regression/R-NW-2E-lifecycle.test.ts",
+    "tests/regression/R-NW-2E-numeric-runs.test.ts",
     "tests/regression/R-NW-2E-packing.test.ts",
+    "tests/regression/R-NW-2E-posting-ownership.test.ts",
     "tests/regression/R-NW-2E-reader-contract.test.ts",
     "tests/regression/R-NW-2E-reader-evaluation.test.ts",
     "tests/regression/R-NW-2E-reader-judge.test.ts",
@@ -879,6 +893,8 @@
     "tests/regression/R-NW-2E-reference-index.test.ts",
     "tests/regression/R-NW-2E-scale-v2.test.ts",
     "tests/regression/R-NW-2E-scale.test.ts",
+    "tests/regression/R-NW-2E-token-digest.test.ts",
+    "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
     "tests/regression/R-NW-2E-verified-ir.test.ts",
     "tests/regression/R-NW-2E-version-dispatch.test.ts",
     "tests/regression/R-OPEN-WORLD4-player-save-store-integration.test.ts",
@@ -889,16 +905,7 @@
     "tests/regression/R-STORY1-story-intent-projection.test.ts",
     "tests/regression/R-WORLD-D-phase-d-closure.test.ts",
     "tests/setup.ts",
-    "vitest.config.ts",
-    "tests/regression/R-NW-2E-posting-ownership.test.ts",
-    "tests/regression/R-NW-2E-fused-freeze-hash.test.ts",
-    "tests/regression/R-NW-2E-identity-syntax.test.ts",
-    "tests/regression/R-NW-2E-frozen-reference-binding.test.ts",
-    "tests/regression/R-NW-2E-token-digest.test.ts",
-    "tests/regression/R-NW-2E-byte-sink.test.ts",
-    "tests/regression/R-NW-2E-numeric-runs.test.ts",
-    "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
-    "src/lib/types/state-card.ts"
+    "vitest.config.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",
