@@ -73,7 +73,7 @@
 - `docs/products/text-adventure-production/13-FIRST-FLAGSHIP-PRODUCTION-AND-SHOWCASE.md`
 - `docs/ROADMAP.md`
 - `docs/roadmap/README.md`
-- `docs/roadmap/CHARACTER-CHAT-DEVELOPMENT-PLAN.md`：E-CHAT-01 角色聊天专项开发计划，以架构修复后的分范围底座为前提，定义内容生产、回合生成、版本兼容、CC-00—CC-12 工作包、内容/工程/成本验收和失败裁决；保留旧验收边界，计划不代表实现或商业质量已通过。
+- `docs/roadmap/CHARACTER-CHAT-DEVELOPMENT-PLAN.md`：E-CHAT-01 角色聊天专项开发计划，以架构修复后的分范围底座为前提；v2.3 定义类型内容生产、回合演绎、首期必要配角、CC-00—CC-12、局部 Q-L/完整故事 Q-S、竞品参照与失败裁决；保留旧验收边界，计划不代表实现、猫箱对标或商业质量已通过。
 - `docs/roadmap/CAPABILITY-BASELINE.md`
 - `docs/roadmap/LONGFORM-SYSTEM-FICTION-QUALITY-PLAN.md`：系统文长篇质量增量的研究、十个施工单元、进度和验收入口；复用分步骤与节点同源主链，不宣称文学或平台验收完成。
 - `docs/roadmap/LONGFORM-STEP-STABILITY-PLAN.md`：分步骤长篇逐功能生成、采纳、修改、保存、回读、故障恢复与客户端发行复测计划；配套 `docs/roadmap/longform-step-stability-matrix.json` 记录初始执行清单，不是运行时注册表或已完成验收证据。
