@@ -440,7 +440,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `outline.workshop.motivation` | `src/lib/outline/workshop.ts:447` |
 | `outline.workshop.scan` | `src/lib/outline/workshop.ts:442` |
 | `outline.workshop.scenes` | `src/lib/outline/workshop.ts:461` |
-| `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:108` |
+| `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:128` |
 | `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:288` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:457` |
 | `runtime.character.chat-narrative-action` | `src/lib/character-interaction/action-choice-harness.ts:131` |
@@ -582,4 +582,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `36c24e570`
+生成时间基准:commit `fc597c48e`
