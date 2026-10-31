@@ -472,7 +472,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/run/codex-extraction-durable.ts:784 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
-- `src/lib/agent/run/short-novel-durable.ts:311 · chat`
+- `src/lib/agent/run/short-novel-durable.ts:319 · chat`
 - `src/lib/agent/story-arc-copilot.ts:1672 · chat`
 - `src/lib/agent/story-arc-copilot.ts:1724 · chat`
 - `src/lib/agent/story-core-copilot.ts:557 · chat`
@@ -481,17 +481,17 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/character-interaction/harness.ts:894 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:73 · chat`
 - `src/lib/character-interaction/situation-harness.ts:189 · chat`
-- `src/lib/comic/durable-production.ts:468 · chat`
+- `src/lib/comic/durable-production.ts:474 · chat`
 - `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:98 · chat`
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:22 · ai.start`
-- `src/lib/motion-drama/durable-production.ts:341 · chat`
+- `src/lib/motion-drama/durable-production.ts:348 · chat`
 - `src/lib/node-authoring/executor.ts:444 · chat`
 - `src/lib/open-world/evolution-harness.ts:251 · chat`
 - `src/lib/open-world/harness.ts:143 · chat`
 - `src/lib/product-production/authoring-consultation.ts:169 · chat`
 - `src/lib/product-production/capabilities.ts:325 · chat`
-- `src/lib/screenplay/durable-production.ts:449 · chat`
+- `src/lib/screenplay/durable-production.ts:471 · chat`
 - `src/lib/ttrpg/gm-actor-harness.ts:481 · chat`
 - `src/lib/ttrpg/gm-harness.ts:542 · chat`
 
@@ -582,4 +582,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `f0401620d`
+生成时间基准:commit `15d76e19b`
