@@ -108,7 +108,22 @@ for (const {width, imageFailure} of [{width: 390, imageFailure: false}, {width: 
   await page.getByRole('button', {name: '分析可玩起点', exact: true}).click()
   await page.getByRole('button', {name: '生成严格 Brief', exact: true}).click()
   await page.getByRole('button', {name: '保存 Brief revision', exact: true}).click()
-  await expect(page.getByText('Production 与 Brief revision 已保存；未授权前不会创建 Build 或调用生成能力。', {exact: true})).toBeVisible({timeout: 30_000})
+  await expect(page.getByText('r1 · 草稿', {exact: true})).toBeVisible({timeout: 30_000})
+  await expect(page.getByText('save-brief-revision', {exact: true})).toBeVisible()
+  await expect.poll(() => page.evaluate(async () => {
+    const load = new Function('p', 'return import(p)'), {db} = await load('/storyforge/src/lib/db/schema.ts')
+    const productions = await db.productProductions.toArray()
+    const production = productions[0]
+    const briefs = production ? await db.productProductionBriefs.where('productionId').equals(production.id).toArray() : []
+    const commands = production ? await db.productProductionCommands.where('productionId').equals(production.id).toArray() : []
+    return {count: productions.length, title: production?.title, productType: production?.productType,
+      revision: production?.currentBriefRevision, briefs: briefs.map((row: {revision: number; status: string}) => ({revision: row.revision, status: row.status})),
+      saved: commands.filter((row: {type: string; status: string}) => row.type === 'save-brief-revision' && row.status === 'succeeded').length,
+      builds: await db.productBuilds.count(), releases: await db.productReleases.count()}
+  })).toEqual({count: 1, title: '修钟铺的完整体验', productType: 'character-interaction', revision: 1,
+    briefs: [{revision: 1, status: 'draft'}], saved: 1, builds: 0, releases: 0})
+  expect(calls).toEqual([])
+  expect(imageCalls).toEqual([])
   await guide.getByRole('button', {name: '继续制作与检查', exact: true}).click()
   await page.getByRole('button', {name: '作者授权并开始自动制作', exact: true}).click()
   await expect(page.getByTestId('chat-situation-selection')).toBeVisible({timeout: 60_000})
