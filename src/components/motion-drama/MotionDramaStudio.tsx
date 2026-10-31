@@ -19,6 +19,10 @@ import {
   listMotionMaterialTasks,
   generateMotionDramaCandidateV1,
   readPendingMotionDramaCandidateV1,
+  readMotionDramaTaskV1,
+  stopWaitingMotionDramaTaskV1,
+  recoverMotionDramaCandidateV1,
+  type MotionDramaTaskV1,
   rejectMotionDramaProfessionalCandidateV1,
 } from '../../lib/motion-drama/durable-production'
 import {
@@ -72,8 +76,31 @@ function download(filename: string, content: string) {
 
 function safeName(value: string) { return value.replace(/[/:*?"<>|]/g, '_').trim() || '漫剧前期包' }
 
+function motionTaskStatus(task: MotionDramaTaskV1): string {
+  if (!task.verified) return '证据无法核验'
+  if (task.resuming) return '作者采纳待恢复'
+  if (!task.controlVerified || task.candidateState === 'unverified') return '证据需要核验'
+  if (task.canRecoverCandidate) return '候选已保存，状态待恢复'
+  if (task.hasUnresolvedRequest) return '原请求结果未确认'
+  if (task.status === 'running' && task.diagnostics.length) return task.requestedAttempts === 0 ? '准备中断，终态待核验' : '保存中断，终态待核验'
+  if (task.status === 'awaiting_confirmation') return task.stoppedWaiting ? '晚到候选' : '等待作者确认'
+  return ({ completed: '已完成', failed: '运行失败', cancelled: '运行已结束', paused: '运行已暂停', planned: '准备中', running: '处理中', verifying: '核验中', recovering: '恢复中', recovery_required: '需要核验' } as Record<string, string>)[task.status] ?? task.status
+}
+
 export default function MotionDramaStudio({ scope, project, page }: Props) {
-  const [snapshot, setSnapshot] = useState<MotionDramaStudioSnapshotV1 | null>(null)
+  const scopeKey = `${scope.projectId}:${scope.worldId}:${scope.workId}`
+  const taskScope = useMemo(() => ({ projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId }), [scope.projectId, scope.worldId, scope.workId])
+  const alive = useRef(true)
+  const visibleScope = useRef(scopeKey); visibleScope.current = scopeKey
+  const visibleEpisode = useRef<number | null>(null)
+  const selectionSerial = useRef(0)
+  const inspectionSerial = useRef(0)
+  const reloadSerial = useRef(0)
+  const isCurrentScope = useCallback((key: string) => alive.current && visibleScope.current === key, [])
+  useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
+  const [snapshotState, setSnapshot] = useState<MotionDramaStudioSnapshotV1 | null>(null)
+  const snapshot = snapshotState?.scope.projectId === scope.projectId && snapshotState.scope.worldId === scope.worldId && snapshotState.scope.workId === scope.workId ? snapshotState : null
+  visibleEpisode.current = snapshot?.production.currentEpisodeNumber ?? null
   const [quality, setQuality] = useState<MotionDramaQualityReportV1 | null>(null)
   const [releases, setReleases] = useState<CreationReleaseV1[]>([])
   const [overrides, setOverrides] = useState<MotionDramaPromptOverrideV1[]>([])
@@ -82,7 +109,11 @@ export default function MotionDramaStudio({ scope, project, page }: Props) {
   const viewMap:Record<string,View>={source:'source',series:'series-bible',episodes:'series-bible',assets:'asset-bible',beats:'episode-outline',script:'episode-script',shots:'shot-design',frames:'shot-design',image:'prompt-pack',video:'prompt-pack',pack:'prompt-pack',review:'quality-review',versions:'quality-review',prompts:'source'}
   const view=page?viewMap[page]??'source':localView
   const [units,setUnits]=useState<Awaited<ReturnType<typeof listActiveSourceUnits>>>([])
-  const [tasks,setTasks]=useState<Awaited<ReturnType<typeof listMotionMaterialTasks>>>([])
+  const [taskState, setTaskState] = useState<{ key: string; rows: MotionDramaTaskV1[] }>({ key: scopeKey, rows: [] })
+  const tasks = useMemo(() => taskState.key === scopeKey ? taskState.rows : [], [scopeKey, taskState])
+  const [taskBusy, setTaskBusy] = useState<number | null>(null)
+  const [activeRunId, setActiveRunId] = useState<number | null>(null)
+  const [inspection, setInspection] = useState<{ key: string; runId: number; detail?: Awaited<ReturnType<typeof readMotionDramaTaskV1>>; error?: string } | null>(null)
   const [draftStatus,setDraftStatus]=useState('')
   const [assetFilter,setAssetFilter]=useState('all')
   const [assetSearch,setAssetSearch]=useState('')
@@ -91,7 +122,8 @@ export default function MotionDramaStudio({ scope, project, page }: Props) {
   const [promptHistory,setPromptHistory]=useState<Array<{key:string;text:string}>>([])
   const [selectedHistory,setSelectedHistory]=useState('')
   const [promptKind, setPromptKind] = useState<'image' | 'video'>('image')
-  const [candidate, setCandidate] = useState<{ runId: number; stage: MotionDramaPromptStageV1; text: string; resuming?:boolean; productionRevision?:number; adaptationRevision?:number; episodeNumber?:number } | null>(null)
+  const [candidateState, setCandidate] = useState<{ scopeKey: string; runId: number; stage: MotionDramaPromptStageV1; text: string; resuming?:boolean; productionRevision?:number; adaptationRevision?:number; episodeNumber:number } | null>(null)
+  const candidate = candidateState?.scopeKey === scopeKey && candidateState.episodeNumber === snapshot?.production.currentEpisodeNumber ? candidateState : null
   const [authorInstruction, setAuthorInstruction] = useState('')
   const [busy, setBusy] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -107,14 +139,15 @@ export default function MotionDramaStudio({ scope, project, page }: Props) {
   const [packManifests, setPackManifests] = useState<Partial<Record<MotionDramaProviderTargetV1, MotionDramaPromptPackManifest>>>({})
   const [copiedShotKey, setCopiedShotKey] = useState<string | null>(null)
   const [seedanceProfileId, setSeedanceProfileId] = useState<SeedanceProviderProfileId>(SEEDANCE_PROVIDER_PROFILE_IDS[0])
-  const activeGeneration = useRef<AbortController | null>(null)
+  const activeGeneration = useRef<{ key: string; scope: WorkspaceScope; episodeNumber: number; stage: MotionDramaPromptStageV1; runId: number | null; stopped: boolean; controller: AbortController } | null>(null)
   const aiConfig = useAIConfigStore(state => state.config)
 
   const reload = useCallback(async (followPhase = false) => {
-    const studio = await loadMotionDramaStudioV1(scope)
+    const key = scopeKey; const serial = ++reloadSerial.current
+    const studio = await loadMotionDramaStudioV1(taskScope)
     const [report, releaseRows, promptRows] = await Promise.all([
-      inspectMotionDramaQualityV1({ scope, episodeNumber: studio.production.currentEpisodeNumber }),
-      listMotionDramaReleasesV1(scope), listMotionDramaPromptOverridesV1(scope),
+      inspectMotionDramaQualityV1({ scope: taskScope, episodeNumber: studio.production.currentEpisodeNumber }),
+      listMotionDramaReleasesV1(taskScope), listMotionDramaPromptOverridesV1(taskScope),
     ])
     const latestByProvider = [...studio.promptPacks]
       .filter(pack => pack.episodeNumber === studio.production.currentEpisodeNumber)
@@ -124,91 +157,190 @@ export default function MotionDramaStudio({ scope, project, page }: Props) {
       try { return [pack.provider, await verifyMotionDramaPromptPackV1(pack)] as const } catch { return null }
     }))
     const manifests = Object.fromEntries(verified.filter((value): value is NonNullable<typeof value> => value !== null)) as Partial<Record<MotionDramaProviderTargetV1, MotionDramaPromptPackManifest>>
+    const sourceRows = await listActiveSourceUnits(studio.adaptation.id!)
+    const urls: Record<string, string> = {}
+    const selected = studio.assets.flatMap(subject => studio.assetVersions.filter(version => version.stableKey === subject.selectedVersionKey && version.blobObjectId != null).map(version => [subject.stableKey, version.blobObjectId!] as const))
+    const frames = studio.shotReferences.filter(reference => reference.selected && reference.blobObjectId != null).map(reference => [reference.stableKey, reference.blobObjectId!] as const)
+    await Promise.all([...selected, ...frames].map(async ([subjectKey, blobObjectId]) => { try { urls[subjectKey] = await mediaObjectDataUrlV1({ scope: taskScope, blobObjectId }) } catch { /* broken refs remain visibly absent */ } }))
+    if (!isCurrentScope(key) || reloadSerial.current !== serial) return studio
+    visibleEpisode.current = studio.production.currentEpisodeNumber
     setPackManifests(manifests)
     if (manifests.seedance?.version === 2 && SEEDANCE_PROVIDER_PROFILE_IDS.includes(manifests.seedance.providerProfile.id as SeedanceProviderProfileId)) setSeedanceProfileId(manifests.seedance.providerProfile.id as SeedanceProviderProfileId)
-    setUnits(await listActiveSourceUnits(studio.adaptation.id!)); setTasks(await listMotionMaterialTasks(scope))
-    setSnapshot(studio); setQuality(report); setReleases(releaseRows); setOverrides(promptRows)
+    setUnits(sourceRows); setSnapshot(studio); setQuality(report); setReleases(releaseRows); setOverrides(promptRows); setPreviewUrls(urls)
     if (followPhase) {
       const phaseMap: Record<string, View> = { source: 'source', 'series-bible': 'series-bible', 'asset-bible': 'asset-bible', 'episode-outline': 'episode-outline', script: 'episode-script', storyboard: 'shot-design', 'prompt-pack': 'prompt-pack', review: 'quality-review', 'release-ready': 'quality-review', complete: 'quality-review' }
       setView(phaseMap[studio.production.phase] ?? 'source')
     }
-    const urls: Record<string, string> = {}
-    const selected = studio.assets.flatMap(subject => studio.assetVersions.filter(version => version.stableKey === subject.selectedVersionKey && version.blobObjectId != null).map(version => [subject.stableKey, version.blobObjectId!] as const))
-    const frames = studio.shotReferences.filter(reference => reference.selected && reference.blobObjectId != null).map(reference => [reference.stableKey, reference.blobObjectId!] as const)
-    await Promise.all([...selected, ...frames].map(async ([key, blobObjectId]) => { try { urls[key] = await mediaObjectDataUrlV1({ scope, blobObjectId }) } catch { /* broken refs remain visibly absent */ } }))
-    setPreviewUrls(urls)
     return studio
-  }, [scope])
+  }, [isCurrentScope, scopeKey, taskScope])
 
-  useEffect(()=>{let active=true;const sub=liveQuery(()=>loadMotionDramaStudioV1(scope)).subscribe({next:()=>{if(active)void reload().catch(c=>setError(String(c)))},error:c=>setError(String(c))});return()=>{active=false;sub.unsubscribe()}},[scope,reload])
+  const showTaskCandidate = useCallback(async (runId: number, key: string, serial: number) => {
+    const detail = await readMotionDramaTaskV1(taskScope, runId)
+    if (!detail.candidate || (!detail.task.resuming && detail.task.status !== 'awaiting_confirmation')) throw new Error('本任务当前只能查看证据，不能作为待确认候选打开。')
+    const saved = detail.task.resuming ? null : await readMotionAuthorDraft(taskScope, `candidate:${runId}`)
+    if (!isCurrentScope(key) || selectionSerial.current !== serial) return
+    if (visibleEpisode.current !== detail.candidate.episodeNumber) throw new Error(`任务属于第 ${detail.candidate.episodeNumber} 集，请先切换到该集；原候选和运行证据仍保留。`)
+    setCandidate({ scopeKey: key, runId, stage: detail.candidate.stage, resuming: detail.task.resuming,
+      episodeNumber: detail.candidate.episodeNumber, text: saved ?? JSON.stringify(detail.authorPayload ?? detail.candidate.payload, null, 2) })
+    setDraftStatus(detail.task.resuming ? '继续原已确认的作者采纳' : '')
+  }, [isCurrentScope, taskScope])
+
   useEffect(() => {
-    let cancelled = false
+    let active = true
+    const key = scopeKey; const serial = ++selectionSerial.current
+    setCandidate(null); setError(''); setBusy(false); setGenerating(false); setActiveRunId(null); setTaskBusy(null); setInspection(null)
+    setDraftStatus(''); setTaskState({ key, rows: [] }); setShowPromptLibrary(false); setShowSourceStudio(false); setReleasePreview(null)
+    const studioSubscription = liveQuery(() => loadMotionDramaStudioV1(taskScope)).subscribe({
+      next: () => { if (active && isCurrentScope(key)) void reload().catch(cause => { if (active && isCurrentScope(key)) setError(cause instanceof Error ? cause.message : '读取漫剧素材失败') }) },
+      error: cause => { if (active && isCurrentScope(key)) setError(cause instanceof Error ? cause.message : '读取漫剧素材失败') },
+    })
+    const taskSubscription = liveQuery(() => listMotionMaterialTasks(taskScope)).subscribe({
+      next: rows => { if (active && isCurrentScope(key)) setTaskState({ key, rows }) },
+      error: cause => { if (active && isCurrentScope(key)) setError(cause instanceof Error ? cause.message : '读取漫剧任务失败') },
+    })
     void reload(true).then(async () => {
-      const pending = await readPendingMotionDramaCandidateV1(scope)
-      if (!pending || cancelled) return
-      const saved=pending.resuming?null:await readMotionAuthorDraft(scope,`candidate:${pending.snapshot.run.id}`)
-      if(!cancelled)setCandidate({ runId: pending.snapshot.run.id, stage: pending.candidate.stage, resuming:pending.resuming, text:saved??JSON.stringify(pending.authorPayload??pending.candidate.payload,null,2) })
-    }).catch(cause => setError(cause instanceof Error ? cause.message : '漫剧素材初始化失败'))
-    return () => { cancelled = true; activeGeneration.current?.abort() }
-  }, [reload, scope])
+      const pending = await readPendingMotionDramaCandidateV1(taskScope)
+      if (pending && active && isCurrentScope(key) && selectionSerial.current === serial) await showTaskCandidate(pending.snapshot.run.id, key, serial)
+    }).catch(cause => { if (active && isCurrentScope(key)) setError(cause instanceof Error ? cause.message : '漫剧素材初始化失败') })
+    // Navigation only detaches this view. It cannot revoke an already sent request.
+    return () => { active = false; studioSubscription.unsubscribe(); taskSubscription.unsubscribe() }
+  }, [isCurrentScope, reload, scopeKey, showTaskCandidate, taskScope])
+  useEffect(() => {
+    const operation = activeGeneration.current
+    if (!operation || operation.key !== scopeKey || operation.runId == null || operation.stopped) return
+    if (tasks.find(task => task.id === operation.runId)?.stoppedWaiting) { operation.stopped = true; setBusy(false); setGenerating(false) }
+  }, [scopeKey, tasks])
+
+  const inspectTask = async (runId: number) => {
+    const key = scopeKey; const serial = ++inspectionSerial.current
+    try {
+      const detail = await readMotionDramaTaskV1(taskScope, runId)
+      if (isCurrentScope(key) && inspectionSerial.current === serial) setInspection({ key, runId, detail })
+    } catch (cause) {
+      if (isCurrentScope(key) && inspectionSerial.current === serial) setInspection({ key, runId, error: cause instanceof Error ? cause.message : '运行证据无法核验' })
+    }
+  }
+  const stopTaskWaiting = async (runId: number) => {
+    const key = scopeKey
+    setTaskBusy(runId)
+    try {
+      const detail = await readMotionDramaTaskV1(taskScope, runId)
+      await stopWaitingMotionDramaTaskV1(taskScope, runId, { generation: detail.task.generation, lastSequence: detail.task.lastSequence })
+      const operation = activeGeneration.current
+      if (operation?.key === key && operation.runId === runId) operation.stopped = true
+      const rows = await listMotionMaterialTasks(taskScope)
+      if (isCurrentScope(key)) {
+        if (operation?.key === key && operation.runId === runId) { setBusy(false); setGenerating(false) }
+        setTaskState({ key, rows })
+      }
+    } catch (cause) { if (isCurrentScope(key)) setError(cause instanceof Error ? cause.message : '记录停止等待失败') }
+    finally { if (isCurrentScope(key)) setTaskBusy(null) }
+  }
+  const openTaskCandidate = async (runId: number, recover = false) => {
+    const key = scopeKey; const serial = ++selectionSerial.current
+    setTaskBusy(runId)
+    try {
+      await flushPendingEditsV1()
+      if (recover) {
+        const detail = await readMotionDramaTaskV1(taskScope, runId)
+        if (!detail.candidate) throw new Error('任务没有已保存的候选，不能通过恢复重新调用模型。')
+        await recoverMotionDramaCandidateV1(taskScope, runId, { generation: detail.task.generation, lastSequence: detail.task.lastSequence, candidateHash: detail.candidate.candidateHash })
+      }
+      await showTaskCandidate(runId, key, serial)
+    } catch (cause) { if (isCurrentScope(key)) setError(cause instanceof Error ? cause.message : '打开已保存候选失败') }
+    finally { if (isCurrentScope(key)) setTaskBusy(null) }
+  }
 
   useEffect(() => {
     if (!snapshot || !showPromptLibrary) return
-    void readMotionAuthorDraft(scope,`prompt-history:${promptEditorStage}:${promptEditorScope}:${snapshot.production.currentEpisodeNumber}`).then(value=>setPromptHistory(JSON.parse(value??'[]'))).catch(c=>setError(String(c)))
-    void resolveMotionDramaPromptV1(scope, promptEditorStage, snapshot.production.currentEpisodeNumber).then(value => {
+    let active = true; const key = scopeKey
+    void readMotionAuthorDraft(taskScope,`prompt-history:${promptEditorStage}:${promptEditorScope}:${snapshot.production.currentEpisodeNumber}`).then(value=>{if(active&&isCurrentScope(key))setPromptHistory(JSON.parse(value??'[]'))}).catch(c=>{if(active&&isCurrentScope(key))setError(String(c))})
+    void resolveMotionDramaPromptV1(taskScope, promptEditorStage, snapshot.production.currentEpisodeNumber).then(value => {
+      if (!active || !isCurrentScope(key)) return
       const definition = getMotionDramaPromptDefinitionV1(promptEditorStage)
       const selected = overrides.find(row => row.stage === promptEditorStage && row.scope === promptEditorScope && row.episodeNumber === (promptEditorScope === 'episode' ? snapshot.production.currentEpisodeNumber : null))
       const workFallback = overrides.find(row => row.stage === promptEditorStage && row.scope === 'work' && row.episodeNumber === null)?.instruction
       setResolvedPrompt(value)
       setPromptEditorText(selected?.instruction ?? (promptEditorScope === 'episode' ? workFallback : null) ?? definition.instruction)
-    }).catch(cause => setError(cause instanceof Error ? cause.message : '读取提示词失败'))
-  }, [promptEditorScope, promptEditorStage, showPromptLibrary, snapshot, scope, overrides])
+    }).catch(cause => { if (active && isCurrentScope(key)) setError(cause instanceof Error ? cause.message : '读取提示词失败') })
+    return () => { active = false }
+  }, [isCurrentScope, promptEditorScope, promptEditorStage, showPromptLibrary, snapshot, scopeKey, taskScope, overrides])
 
   const act = async (operation: () => Promise<unknown>, followPhase = false) => {
     if (busy) return
+    const key = scopeKey
     setBusy(true); setError('')
-    try { await operation(); await reload(followPhase) } catch (cause) { setError(cause instanceof Error ? cause.message : '操作失败') } finally { setBusy(false) }
+    try { await operation(); if (isCurrentScope(key)) await reload(followPhase) }
+    catch (cause) { if (isCurrentScope(key)) setError(cause instanceof Error ? cause.message : '操作失败') }
+    finally { if (isCurrentScope(key)) setBusy(false) }
   }
 
   const runStage = async (stage: MotionDramaPromptStageV1) => {
-    if (!snapshot || busy || candidate) return
-    if (!isAIConfigReady(aiConfig)) { setError(getAIConfigRequiredMessage(aiConfig)); return }
+    if (!snapshot || busy || candidate || (activeGeneration.current?.key === scopeKey && !activeGeneration.current.stopped)) return
+    const config = { ...aiConfig }
+    if (!isAIConfigReady(config)) { setError(getAIConfigRequiredMessage(config)); return }
     const controller = new AbortController(); let timedOut = false
-    const timeout = window.setTimeout(() => { timedOut = true; controller.abort() }, 120_000)
-    activeGeneration.current = controller; setBusy(true); setGenerating(true); setError('')
+    const operation = { key: scopeKey, scope: { ...taskScope }, episodeNumber: snapshot.production.currentEpisodeNumber, stage, runId: null as number | null, stopped: false, controller }
+    activeGeneration.current = operation
+    selectionSerial.current += 1
+    let timeout: number | undefined
+    setBusy(true); setGenerating(true); setActiveRunId(null); setError('')
     try {
-      const result = await generateMotionDramaCandidateV1({ scope, stage, episodeNumber: snapshot.production.currentEpisodeNumber, authorInstruction, aiConfig, signal: controller.signal })
-      setCandidate({ runId: result.snapshot.run.id, stage, text: JSON.stringify(result.candidate.payload, null, 2) })
+      const currentTasks = await listMotionMaterialTasks(operation.scope)
+      if (!isCurrentScope(operation.key) || activeGeneration.current !== operation || operation.stopped || visibleEpisode.current !== operation.episodeNumber) return
+      const unknown = currentTasks.filter(task => task.hasUnresolvedRequest && task.stage === stage)
+      if (unknown.length && !await dialog.confirm({ title: '原请求结果仍未确认', message: `任务 ${unknown.map(task => `#${task.id}`).join('、')} 可能仍在供应商端处理或计费。本次将创建独立的新请求，不是恢复原请求。`, confirmText: '明确发起新请求' })) return
+      if (!isCurrentScope(operation.key) || activeGeneration.current !== operation || operation.stopped || visibleEpisode.current !== operation.episodeNumber) return
+      timeout = window.setTimeout(() => { timedOut = true; controller.abort() }, 120_000)
+      const result = await generateMotionDramaCandidateV1({ scope: operation.scope, stage, episodeNumber: operation.episodeNumber, authorInstruction, aiConfig: config, signal: controller.signal,
+        onTaskCreated: task => { operation.runId = task.runId; if (isCurrentScope(operation.key) && activeGeneration.current === operation) setActiveRunId(task.runId) },
+      })
+      if (isCurrentScope(operation.key) && activeGeneration.current === operation && !operation.stopped && visibleEpisode.current === operation.episodeNumber) {
+        setCandidate({ scopeKey: operation.key, runId: result.snapshot.run.id, stage: result.candidate.stage, episodeNumber: result.candidate.episodeNumber, text: JSON.stringify(result.candidate.payload, null, 2) })
+      }
     } catch (cause) {
-      setError(controller.signal.aborted ? timedOut ? '生成超过 120 秒，已安全停止；没有正式写入。' : '本次生成已取消；没有正式写入。' : cause instanceof Error ? cause.message : '生成失败')
-    } finally { window.clearTimeout(timeout); activeGeneration.current = null; setGenerating(false); setBusy(false) }
+      if (isCurrentScope(operation.key) && activeGeneration.current === operation && !operation.stopped && visibleEpisode.current === operation.episodeNumber) {
+        setError(timedOut ? '等待超过 120 秒。原请求可能仍在供应商端处理或计费，请查看任务证据；页面不会自动重发。' : cause instanceof Error ? cause.message : '生成失败')
+      }
+    } finally {
+      window.clearTimeout(timeout)
+      if (activeGeneration.current === operation) {
+        activeGeneration.current = null
+        if (isCurrentScope(operation.key) && !operation.stopped) { setGenerating(false); setBusy(false); setActiveRunId(null) }
+      }
+    }
   }
 
   const acceptCandidate = async () => {
-    if (!candidate||!snapshot) return
-    if(!candidate.resuming&&['episode-outline','episode-script','shot-design'].includes(candidate.stage)&&(snapshot.shots.some(row=>row.episodeNumber===snapshot.production.currentEpisodeNumber)||(candidate.stage==='episode-outline'&&snapshot.scenes.some(row=>row.episodeNumber===snapshot.production.currentEpisodeNumber)))){
+    if (!candidate||!snapshot||busy) return
+    const key = scopeKey; const selected = candidate; const capturedScope = { ...taskScope }
+    if(!selected.resuming&&['episode-outline','episode-script','shot-design'].includes(selected.stage)&&(snapshot.shots.some(row=>row.episodeNumber===selected.episodeNumber)||(selected.stage==='episode-outline'&&snapshot.scenes.some(row=>row.episodeNumber===selected.episodeNumber)))){
       if(!await dialog.confirm({title:'确认重建下游内容？',message:'本集已有下游内容。确认将重建受影响的场景、镜头、参考帧关联和工具包；将先下载完整备份，已冻结交付版本保留。',confirmText:'备份并确认'}))return
-      try{await downloadJSON(await exportProjectJSON(scope.projectId),`${snapshot.work.title}-修改前备份.json`)}catch(c){setError(String(c));return}
+      if (!isCurrentScope(key)) return
+      try{await downloadJSON(await exportProjectJSON(capturedScope.projectId),`${snapshot.work.title}-修改前备份.json`)}catch(c){if(isCurrentScope(key))setError(String(c));return}
     }
+    if (!isCurrentScope(key) || visibleEpisode.current !== selected.episodeNumber) return
     await act(async () => {
       await flushPendingEditsV1()
-      const payload=JSON.parse(candidate.text)
-      if(candidate.runId) await adoptMotionDramaProfessionalCandidateV1({scope,runId:candidate.runId,authorPayload:payload})
-      else await adoptMotionDramaCandidateV1({scope,stage:candidate.stage,payload,episodeNumber:candidate.episodeNumber!,expectedProductionRevision:candidate.productionRevision!,expectedAdaptationRevision:candidate.adaptationRevision!})
-      setCandidate(null);setAuthorInstruction('');setDraftStatus('')
+      const payload=JSON.parse(selected.text)
+      if(selected.runId) await adoptMotionDramaProfessionalCandidateV1({scope:capturedScope,runId:selected.runId,authorPayload:selected.resuming?undefined:payload})
+      else await adoptMotionDramaCandidateV1({scope:capturedScope,stage:selected.stage,payload,episodeNumber:selected.episodeNumber,expectedProductionRevision:selected.productionRevision!,expectedAdaptationRevision:selected.adaptationRevision!})
+      if (isCurrentScope(key)) { setCandidate(null);setAuthorInstruction('');setDraftStatus('') }
     },true)
   }
 
   const editCandidate=(text:string)=>{
     if(!candidate||candidate.resuming)return
+    const currentScope = scopeKey; const capturedScope = { ...taskScope }
     setCandidate({...candidate,text});setDraftStatus('正在保存草稿…')
     const key=candidate.runId?`candidate:${candidate.runId}`:`manual:${candidate.stage}:${candidate.episodeNumber}:${candidate.productionRevision}`
-    void saveMotionAuthorDraft(scope,key,text).then(()=>setDraftStatus('编辑草稿已保存')).catch(c=>{setDraftStatus('草稿保存失败');setError(String(c))})
+    void saveMotionAuthorDraft(capturedScope,key,text).then(()=>{if(isCurrentScope(currentScope))setDraftStatus('编辑草稿已保存')}).catch(c=>{if(isCurrentScope(currentScope)){setDraftStatus('草稿保存失败');setError(String(c))}})
   }
   const openManual=async(stage:MotionDramaPromptStageV1)=>{
     if(!snapshot)return
+    const currentScope = scopeKey; const serial = ++selectionSerial.current
     const key=`manual:${stage}:${snapshot.production.currentEpisodeNumber}:${snapshot.production.revision}`
-    try{const text=await readMotionAuthorDraft(scope,key)??JSON.stringify(motionStageDraft(snapshot,stage,units.map(row=>row.sourceUnitKey)),null,2);setCandidate({runId:0,stage,text,productionRevision:snapshot.production.revision,adaptationRevision:snapshot.adaptation.revision,episodeNumber:snapshot.production.currentEpisodeNumber})}catch(c){setError(String(c))}
+    try{const text=await readMotionAuthorDraft(taskScope,key)??JSON.stringify(motionStageDraft(snapshot,stage,units.map(row=>row.sourceUnitKey)),null,2);if(isCurrentScope(currentScope)&&selectionSerial.current===serial&&visibleEpisode.current===snapshot.production.currentEpisodeNumber)setCandidate({scopeKey:currentScope,runId:0,stage,text,productionRevision:snapshot.production.revision,adaptationRevision:snapshot.adaptation.revision,episodeNumber:snapshot.production.currentEpisodeNumber})}catch(c){if(isCurrentScope(currentScope))setError(String(c))}
   }
   const syncSource=async()=>{
     if(!snapshot||!await dialog.confirm({title:'同步来源并重建素材草稿？',message:'这会清空尚未交付的系列设定、物料、单集内容和工具包。先下载完整备份；已有交付版本不变。',confirmText:'备份并同步'}))return
@@ -219,7 +351,8 @@ export default function MotionDramaStudio({ scope, project, page }: Props) {
   }
   const rejectCandidate = async () => {
     if (!candidate) return
-    await act(async () => { if(candidate.resuming)throw new Error('已确认的任务请继续采纳，不能撤销已提交意图');if(candidate.runId)await rejectMotionDramaProfessionalCandidateV1(scope, candidate.runId); setCandidate(null) })
+    const key = scopeKey; const selected = candidate; const capturedScope = { ...taskScope }
+    await act(async () => { if(selected.resuming)throw new Error('已确认的任务请继续采纳，不能撤销已提交意图');if(selected.runId)await rejectMotionDramaProfessionalCandidateV1(capturedScope, selected.runId); if(isCurrentScope(key))setCandidate(null) })
   }
 
   const savePrompt = async () => {
@@ -282,9 +415,9 @@ export default function MotionDramaStudio({ scope, project, page }: Props) {
   }
 
   const currentStage = page==='image'?'image-prompts':page==='video'?'video-prompts':page==='frames'||page==='pack'||page==='versions'||page==='episodes'||page==='prompts'?null:generationStage(view,promptKind)
-  useEffect(()=>{let cancelled=false;setAuthorInstruction('');if(currentStage&&snapshot)void readMotionAuthorDraft(scope,`instruction:${currentStage}:${snapshot.production.currentEpisodeNumber}`).then(value=>{if(!cancelled)setAuthorInstruction(value??'')}).catch(c=>setError(String(c)));return()=>{cancelled=true}
+  useEffect(()=>{let cancelled=false;const key=scopeKey;setAuthorInstruction('');if(currentStage&&snapshot)void readMotionAuthorDraft(taskScope,`instruction:${currentStage}:${snapshot.production.currentEpisodeNumber}`).then(value=>{if(!cancelled&&isCurrentScope(key))setAuthorInstruction(value??'')}).catch(c=>{if(!cancelled&&isCurrentScope(key))setError(String(c))});return()=>{cancelled=true}
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[currentStage,snapshot?.production.currentEpisodeNumber,scope])
+  },[currentStage,snapshot?.production.currentEpisodeNumber,taskScope])
   const sourceWork = snapshot?.sourceWork ?? null
   const episode = snapshot?.episodes.find(row => row.episodeNumber === snapshot.production.currentEpisodeNumber)
   const scenes = snapshot?.scenes.filter(row => row.episodeNumber === snapshot.production.currentEpisodeNumber) ?? []
@@ -296,7 +429,27 @@ export default function MotionDramaStudio({ scope, project, page }: Props) {
     'source', ...(snapshot?.seriesBibleRecord ? ['series-bible' as View] : []), ...(snapshot?.assets.length ? ['asset-bible' as View] : []), ...(episode ? ['episode-outline' as View] : []), ...(scenes.length ? ['episode-script' as View] : []), ...(shots.length ? ['shot-design' as View] : []), ...(snapshot?.promptPacks.some(row => row.episodeNumber === snapshot.production.currentEpisodeNumber) ? ['prompt-pack' as View] : []), ...(quality?.ready ? ['quality-review' as View] : []),
   ]), [episode, quality?.ready, scenes.length, shots.length, snapshot])
 
-  if (!snapshot) return <div className="motion-loading">{error || '正在打开漫剧素材…'}</div>
+  const taskHistory = (tasks.length > 0 || generating) && <section className="mm-tasks" aria-label="漫剧任务记录" data-testid="motion-task-history">
+    <h4>任务记录</h4><p>重新打开页面不会自动重发请求。</p>
+    {tasks.map(task => <article key={task.id} data-testid={`motion-task-${task.id}`}>
+      <strong>#{task.id} · {task.stage ? getMotionDramaPromptDefinitionV1(task.stage).label : '岗位证据无法核验'} · {motionTaskStatus(task)}</strong>
+      {task.verified && <p>已记录请求 {task.requestedAttempts} 次 / 返回 {task.respondedAttempts} 次{task.hasUnresolvedRequest ? '；原请求结果未确认，可能仍被处理或计费。' : ''}</p>}
+      {task.stoppedWaiting && <p>已停止等待；保留原运行和晚到候选，不会自动重发或继续模型修复。</p>}
+      {task.diagnostics.map((message, index) => <p key={index}>{message.length > 600 ? `${message.slice(0, 600)}…（查看完整运行证据）` : message}</p>)}
+      <div><button onClick={() => void inspectTask(task.id)}>查看运行证据</button>
+        {task.canStopWaiting && <button disabled={taskBusy !== null || (busy && !generating)} onClick={() => void stopTaskWaiting(task.id)}>停止等待</button>}
+        {task.canRecoverCandidate && <button disabled={taskBusy !== null || busy} onClick={() => void openTaskCandidate(task.id, true)}>恢复已保存候选（不调用模型）</button>}
+        {(task.resuming || (task.candidateState === 'available' && task.status === 'awaiting_confirmation')) && <button disabled={taskBusy !== null || busy} onClick={() => void openTaskCandidate(task.id)}>{task.resuming ? '打开已确认的采纳' : task.stoppedWaiting ? '查看晚到候选' : '打开待确认候选'}</button>}
+      </div>
+    </article>)}
+    {inspection?.key === scopeKey && <details open><summary>任务 #{inspection.runId} 的只读证据</summary>
+      {inspection.error ? <p role="alert">{inspection.error}</p> : inspection.detail && <>
+        <p>{inspection.detail.task.rawResponseReferences.length ? '存在原响应引用；引用本身不代表正文已核验。' : '当前没有可核验的原响应正文。请求、返回哈希和错误记录仍保留。'}</p>
+        <pre>{JSON.stringify({ task: inspection.detail.task, events: inspection.detail.snapshot.events, candidate: inspection.detail.candidate, authorPayload: inspection.detail.authorPayload }, null, 2)}</pre>
+      </>}
+    </details>}
+  </section>
+  if (!snapshot) return <div className="motion-loading">{taskHistory}<p>{error || '正在打开漫剧素材…'}</p></div>
 
   const sourceProject: Project = { ...project, activeWorldId: snapshot.adaptation.worldId, activeWorkId: snapshot.adaptation.sourceWorkId }
   const sourceScope: WorkspaceScope = { projectId: scope.projectId, worldId: scope.worldId, workId: snapshot.adaptation.sourceWorkId! }
@@ -313,8 +466,8 @@ export default function MotionDramaStudio({ scope, project, page }: Props) {
       <main className="motion-workbench">
         <section className="motion-stage-head"><div><span>STEP {VIEWS.findIndex(item => item.id === view) + 1}</span><h3>{VIEWS.find(item => item.id === view)?.label}</h3><p>{VIEWS.find(item => item.id === view)?.note}</p></div>{currentStage && <button className="motion-primary" title={sourceReady ? undefined : '请先完成小说正文并同步来源'} onClick={() => void runStage(currentStage)} disabled={busy || Boolean(candidate) || !sourceReady}>{generating ? <Loader2 className="spin" /> : <Sparkles />}生成专业候选</button>}</section>
 
-        {generating && <div className="motion-generating"><span><Loader2 className="spin" />{getMotionDramaPromptDefinitionV1(currentStage??(promptKind==='image'?'image-prompts':'video-prompts')).profession}正在生成，最长等待 120 秒</span><button onClick={() => activeGeneration.current?.abort()}><X />取消</button></div>}
-        {tasks.length>0&&<section className="mm-tasks"><h4>待处理素材任务</h4>{tasks.map(task=><div key={task.id}><span>#{task.id} · {getMotionDramaPromptDefinitionV1(task.stage).label} · {task.resuming?'等待恢复采纳':task.status==='awaiting_confirmation'?'等待确认':task.status}</span>{task.resuming&&<button disabled={busy} onClick={()=>void act(async()=>{await adoptMotionDramaProfessionalCandidateV1({scope,runId:task.id});setCandidate(null)})}>继续采纳</button>}</div>)}</section>}
+        {generating && <div className="motion-generating"><span><Loader2 className="spin" />{activeGeneration.current?.key === scopeKey ? getMotionDramaPromptDefinitionV1(activeGeneration.current.stage).profession : '本次任务'}正在生成{activeRunId ? ` #${activeRunId}` : '，准备运行记录'}。本页最多等待 120 秒，停止等待无法撤销供应商端已派发的请求。</span>{activeRunId && <button disabled={taskBusy !== null} onClick={() => void stopTaskWaiting(activeRunId)}><X />停止等待</button>}</div>}
+        {taskHistory}
         {currentStage&&currentStage!=='quality-review'&&<div className="mm-edit-actions"><button disabled={busy||!!candidate||!sourceReady} onClick={()=>void openManual(currentStage)}>编辑本页内容</button><small>编辑草稿先保存，确认后进入正式素材；上游修改后需重新编译工具包。</small></div>}
         {page==='episodes'&&<section className="mm-episode-grid">{Array.from({length:targetSpec?.episodeCount??1},(_,i)=>{const ep=snapshot.episodes.find(row=>row.episodeNumber===i+1);return <article key={i}><h4>第 {i+1} 集 · {ep?.title??'尚未规划'}</h4><p>{ep?.logline??'选择这一集，准备节拍与单集内容。'}</p><p>{ep?.continuityOut.join('；')}</p><button onClick={()=>void act(async()=>{await setCurrentMotionDramaEpisodeV1({scope,episodeNumber:i+1,expectedRevision:snapshot.production.revision});navigate(`/motion/beats?work=${scope.workId}`)})}>打开本集</button></article>})}</section>}
         {page==='prompts'&&<section className="lf-paper"><h3>专业岗位提示词</h3><p>系列、物料、节拍、剧本、分镜、画面、运动、审查分别维护提示词；支持默认与单集覆盖。</p><button onClick={()=>setShowPromptLibrary(true)}>打开提示词设置</button></section>}
@@ -367,7 +520,7 @@ export default function MotionDramaStudio({ scope, project, page }: Props) {
 
     {!page&&<MotionDramaShowcase />}
 
-    {candidate && <div className="motion-candidate-backdrop"><aside className="motion-candidate"><header><div><span>CANDIDATE · NOT ADOPTED</span><h3>{getMotionDramaPromptDefinitionV1(candidate.stage).label}候选</h3><p>逐项检查和修改，确认后写入素材；编辑草稿会自动保存。</p></div><button disabled={candidate.resuming} onClick={() => void rejectCandidate()}><X /></button></header><div className="mm-candidate-content">{candidate.stage==='asset-bible'&&<p>物料按编号逐项更新；移出本次更新不会删除已有物料。正式删除请使用物料卡片的删除入口。</p>}<fieldset disabled={busy||candidate.resuming}>{(()=>{try{return <MotionFields removalLabel={candidate.stage==='asset-bible'?'移出本次更新':undefined} value={JSON.parse(candidate.text)} onChange={value=>editCandidate(JSON.stringify(value,null,2))}/> }catch{return <p>高级 JSON 格式无效，请修正后切回表单。</p>}})()}<details><summary>高级 JSON</summary><textarea aria-label="候选 JSON" value={candidate.text} onChange={event=>editCandidate(event.target.value)} spellCheck={false}/></details></fieldset><p role="status">{candidate.resuming?'作者意图已冻结，继续采纳不会重新调用模型':draftStatus}</p></div><footer><button onClick={() => void rejectCandidate()} disabled={busy||candidate.resuming}>关闭候选</button><button className="motion-primary" onClick={() => void acceptCandidate()} disabled={busy}><Check />{candidate.resuming?'继续采纳':'确认写入'}</button></footer></aside></div>}
+    {candidate && <div className="motion-candidate-backdrop"><aside className="motion-candidate"><header><div><span>{candidate.resuming ? 'FROZEN AUTHOR INTENT' : 'CANDIDATE · NOT ADOPTED'}</span><h3>{getMotionDramaPromptDefinitionV1(candidate.stage).label}{candidate.resuming ? ' · 已确认作者采纳待恢复' : '候选'}</h3><p>{candidate.resuming ? '保留已冻结的作者稿和原运行证据；继续只完成原采纳，不重新生成。' : '逐项检查和修改，确认后写入素材；编辑草稿会自动保存。'}</p></div><button disabled={candidate.resuming} onClick={() => void rejectCandidate()}><X /></button></header><div className="mm-candidate-content">{candidate.stage==='asset-bible'&&<p>物料按编号逐项更新；移出本次更新不会删除已有物料。正式删除请使用物料卡片的删除入口。</p>}<fieldset disabled={busy||candidate.resuming}>{(()=>{try{return <MotionFields removalLabel={candidate.stage==='asset-bible'?'移出本次更新':undefined} value={JSON.parse(candidate.text)} onChange={value=>editCandidate(JSON.stringify(value,null,2))}/> }catch{return <p>高级 JSON 格式无效，请修正后切回表单。</p>}})()}<details><summary>高级 JSON</summary><textarea aria-label="候选 JSON" value={candidate.text} onChange={event=>editCandidate(event.target.value)} spellCheck={false}/></details></fieldset><p role="status">{candidate.resuming?'作者意图已冻结，继续采纳不会重新调用模型':draftStatus}</p></div><footer><button onClick={() => void rejectCandidate()} disabled={busy||candidate.resuming}>关闭候选</button><button className="motion-primary" onClick={() => void acceptCandidate()} disabled={busy}><Check />{candidate.resuming?'继续采纳':'确认写入'}</button></footer></aside></div>}
 
     {showPromptLibrary && <div className="motion-candidate-backdrop"><aside className="motion-prompt-library"><header><div><span>PROMPT LIBRARY</span><h3>漫剧专业提示词库</h3><p>优先级：单集覆盖 ＞ 项目覆盖 ＞ 内置专业基线</p></div><button onClick={() => setShowPromptLibrary(false)}><X /></button></header><div className="motion-prompt-controls"><select value={promptEditorStage} onChange={event => setPromptEditorStage(event.target.value as MotionDramaPromptStageV1)}>{(['series-bible', 'asset-bible', 'episode-outline', 'episode-script', 'shot-design', 'image-prompts', 'video-prompts', 'quality-review'] as MotionDramaPromptStageV1[]).map(stage => <option key={stage} value={stage}>{getMotionDramaPromptDefinitionV1(stage).label} · {getMotionDramaPromptDefinitionV1(stage).profession}</option>)}</select><select value={promptEditorScope} onChange={event => setPromptEditorScope(event.target.value as 'work' | 'episode')}><option value="work">整个项目</option><option value="episode">仅第 {snapshot.production.currentEpisodeNumber} 集</option></select></div><div className="motion-prompt-meta"><span>当前生效：{resolvedPrompt?.source === 'built-in' ? '内置基线' : resolvedPrompt?.source === 'work' ? '项目覆盖' : '单集覆盖'}</span><span>用途：{getMotionDramaPromptDefinitionV1(promptEditorStage).purpose}</span></div><label>历史版本<select aria-label="提示词历史" value={selectedHistory} onChange={e=>setSelectedHistory(e.target.value)}><option value="">选择历史版本对照</option>{promptHistory.map(h=><option key={h.key} value={h.key}>{new Date(Number(h.key)).toLocaleString()}</option>)}</select></label>{selectedHistory&&<details open><summary>历史提示词</summary><pre>{promptHistory.find(h=>h.key===selectedHistory)?.text}</pre><button onClick={()=>setPromptEditorText(promptHistory.find(h=>h.key===selectedHistory)?.text??promptEditorText)}>载入历史内容（保存后生效）</button></details>}<textarea value={promptEditorText} onChange={event => setPromptEditorText(event.target.value)} spellCheck={false} /><footer><button onClick={() => void resetPrompt()} disabled={busy}><RefreshCw />恢复下一级基线</button><button className="motion-primary" onClick={() => void savePrompt()} disabled={busy || !promptEditorText.trim()}><Save />保存覆盖提示词</button></footer></aside></div>}
 
