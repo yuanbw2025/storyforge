@@ -33,9 +33,9 @@ describe('issue214 · 作者模型与提供商生命周期', () => {
     { ...saved, model: 'author-chosen-model-not-in-catalog', baseUrl: 'https://example.invalid/author-gateway/v9' },
     { ...saved, model: 'gemini-2.0-flash' },
   ])('启动恢复保留作者记录：$model', async config => {
-    const raw = JSON.stringify(config)
-    localStorage.setItem(key, raw)
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'synthetic-session-only')
+    const configured = await freshStore()
+    configured.getState().setConfig({ ...config, apiKey: 'synthetic-session-only' })
+    const raw = localStorage.getItem(key)
     const store = await freshStore()
     expect(store.getState().config).toMatchObject({ ...config, apiKey: 'synthetic-session-only' })
     expect(localStorage.getItem(key)).toBe(raw)

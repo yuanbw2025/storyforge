@@ -1,10 +1,11 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import { readFile } from 'node:fs/promises'
 import JSZip from 'jszip'
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform, createWorld } from './helpers/product-entry'
 
 async function openWorkshop(page: Page, project: string, owner = 'work') {
-  await page.goto(`./workshop/discover?project=${project}&owner=${owner}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./workshop/discover?project=${project}&owner=${owner}`)
   const preview = page.getByRole('button', { name: '开启工坊开发预览' })
   await expect(preview.or(page.getByTestId('plugin-workshop'))).toBeVisible()
   if (await preview.isVisible()) await preview.click()
@@ -33,7 +34,7 @@ test('independent plugin package persists author notes through refresh, safe sta
   await page.getByLabel('插件创作便笺').fill('第三章：让守钟人主动放下钥匙。')
   await page.getByRole('button', { name: '保存便笺', exact: true }).click()
   await expect(page.getByText('已保存到这部作品。')).toBeVisible()
-  await page.reload(); await page.getByRole('button', { name: '创作便笺', exact: true }).click()
+  await reloadWithBrowserFixtureAIConfigV1(page); await page.getByRole('button', { name: '创作便笺', exact: true }).click()
   await expect(page.getByLabel('插件创作便笺')).toHaveValue('第三章：让守钟人主动放下钥匙。')
   await page.getByRole('button', { name: '安全模式', exact: true }).click()
   await expect(page.getByText('安全模式已开启', { exact: false })).toBeVisible()
@@ -57,7 +58,7 @@ test('world timeline replaces core panel, composes calendar service and preserve
   await createWorld(page, '插件年表世界')
   const project = new URL(page.url()).searchParams.get('project')!
   await openWorkshop(page, project, 'world'); await install(page, '世界历史工作台'); await enable(page, '世界历史工作台')
-  await page.goto(`./world/history?project=${project}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./world/history?project=${project}`)
   await expect(page.getByRole('heading', { name: '世界的时间，正在展开' })).toBeVisible()
   await page.getByText('新增历史事件', { exact: true }).click()
   await page.getByLabel('事件名称').fill('灯塔建立')
@@ -67,9 +68,9 @@ test('world timeline replaces core panel, composes calendar service and preserve
   await expect(page.getByRole('heading', { name: '灯塔建立' })).toBeVisible()
   await expect(page.getByText('新纪 125 年', { exact: true })).toBeVisible()
   await page.screenshot({ path: '/tmp/storyforge-plugin-timeline.png', fullPage: true })
-  await page.goto(`./workshop/installed?project=${project}&owner=world`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./workshop/installed?project=${project}&owner=world`)
   await page.locator('.sf-workshop-card').filter({ has: page.getByRole('heading', { name: '世界历史工作台', exact: true }) }).getByRole('button', { name: '停用' }).click()
-  await page.goto(`./world/history?project=${project}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./world/history?project=${project}`)
   await expect(page.getByRole('heading', { name: '世界的时间，正在展开' })).toHaveCount(0)
   await expect(page.getByText('灯塔建立', { exact: true }).first()).toBeVisible()
 })
@@ -116,10 +117,10 @@ test('installation does not execute code and safe startup skips evaluation befor
   expect(await page.evaluate(() => Reflect.get(globalThis,'__sfFaultEvaluated'))).toBeUndefined()
   await enable(page,'故障测试插件')
   expect(await page.evaluate(() => Reflect.get(globalThis,'__sfFaultEvaluated'))).toBeUndefined()
-  await page.goto(`./workshop/workbench?project=${project}&owner=work&safe-plugins=1`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./workshop/workbench?project=${project}&owner=work&safe-plugins=1`)
   await expect(page.getByText('此作用域尚未启用工作台插件', {exact:false})).toBeVisible()
   expect(await page.evaluate(() => Reflect.get(globalThis,'__sfFaultEvaluated'))).toBeUndefined()
-  await page.goto(`./workshop/workbench?project=${project}&owner=work`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./workshop/workbench?project=${project}&owner=work`)
   await expect(page.getByRole('alert').filter({hasText:'FAULT_TEST'})).toBeVisible()
   expect(await page.evaluate(() => Reflect.get(globalThis,'__sfFaultEvaluated'))).toBe(true)
   await page.getByRole('link',{name:'已安装',exact:true}).click()
@@ -161,7 +162,7 @@ test('installed plugins work offline through the production PWA after a cold nav
   await page.evaluate(async () => { await navigator.serviceWorker.ready })
   await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller)), {timeout:45000}).toBe(true)
   await context.setOffline(true)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button',{name:'创作便笺',exact:true}).click()
   await expect(page.getByLabel('插件创作便笺')).toHaveValue('断网后继续写作')
   await page.getByLabel('插件创作便笺').fill('离线编辑也保存')
@@ -188,9 +189,8 @@ test('first-run examples create separate workspaces with real composed plugins',
 
 test('independent AI plugin keeps editable candidates and terminal history after plugin removal', async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('storyforge-ai-config',JSON.stringify({provider:'openai',baseUrl:'https://plugin-ai.invalid/v1',model:'gpt-4o',temperature:0.2,maxTokens:4000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session','isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://plugin-ai.invalid/v1', model: 'gpt-4o', temperature: 0.2, maxTokens: 4000, apiKey: 'isolated-test-key' })
   let calls = 0
   await page.route('https://plugin-ai.invalid/**',async route => {
     calls++
@@ -213,7 +213,7 @@ test('independent AI plugin keeps editable candidates and terminal history after
   await page.getByRole('button',{name:'保存候选修改',exact:true}).click()
   await expect(page.getByText('候选修改已保存，刷新后可以继续。')).toBeVisible()
   await page.getByRole('link',{name:'AI 任务历史',exact:true}).click()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button',{name:/插件 灵感卡片 AI.*等待确认/}).click()
   await page.getByRole('button',{name:'查看 JSON',exact:true}).click()
   await expect(candidate).toHaveValue(edited)
@@ -238,7 +238,7 @@ test('independent AI plugin keeps editable candidates and terminal history after
       const {deriveImportProjectJSON} = await importer('/storyforge/src/lib/export/registry-import.ts')
       return deriveImportProjectJSON(await deriveExportProjectJSON(Number(project)))
     }, project)
-    await page.goto(`./workshop/ai?project=${imported}&owner=work`)
+    await gotoWithBrowserFixtureAIConfigV1(page, `./workshop/ai?project=${imported}&owner=work`)
     await page.getByRole('button',{name:/插件 灵感卡片 AI/}).click()
     await expect(page.getByText('历史副本（只读）',{exact:false})).toBeVisible()
     await page.getByRole('button',{name:'查看 JSON',exact:true}).click()
@@ -283,7 +283,7 @@ test('MCP tool panel executes once, keeps host credentials out of parameters and
  await page.getByLabel('工具访问令牌',{exact:true}).fill('isolated-browser-token')
  await page.getByRole('button',{name:'确认执行一次工具',exact:true}).click()
  await expect(page.getByLabel('工具执行结果')).toContainText('本机工具找到了灯塔资料。')
- await page.getByRole('link',{name:'外部工具记录',exact:true}).click();await page.reload()
+ await page.getByRole('link',{name:'外部工具记录',exact:true}).click();await reloadWithBrowserFixtureAIConfigV1(page)
  await page.getByRole('button',{name:'外部工具 storyforge.tool-desk：lookup',exact:true}).click()
  await expect(page.getByLabel('工具执行结果')).toContainText('本机工具找到了灯塔资料。')
  await expect(page.getByLabel('工具访问令牌',{exact:true})).toHaveValue('');expect(calls).toBe(1)
@@ -295,10 +295,10 @@ test('two browser tabs reject stale plugin edits, keep the winning data, and dis
  await openWorkshop(page,project);await install(page,'创作便笺');await enable(page,'创作便笺')
  await page.getByRole('link',{name:'插件工作台',exact:true}).click();await page.getByRole('button',{name:'创作便笺',exact:true}).click()
  await expect(page.getByLabel('插件创作便笺')).toBeEnabled()
- const second=await context.newPage();await second.goto(page.url());await second.getByRole('button',{name:'创作便笺',exact:true}).click();await expect(second.getByLabel('插件创作便笺')).toBeEnabled()
+ const second=await context.newPage();await gotoWithBrowserFixtureAIConfigV1(second, page.url());await second.getByRole('button',{name:'创作便笺',exact:true}).click();await expect(second.getByLabel('插件创作便笺')).toBeEnabled()
  await page.getByLabel('插件创作便笺').fill('窗口一确认的内容');await page.getByRole('button',{name:'保存便笺',exact:true}).click();await expect(page.getByText('已保存到这部作品。')).toBeVisible()
  await second.getByLabel('插件创作便笺').fill('窗口二过期内容');await second.getByRole('button',{name:'保存便笺',exact:true}).click();await expect(second.getByRole('status')).toContainText(/修改|冲突|更新|过期/)
- await second.reload();await second.getByRole('button',{name:'创作便笺',exact:true}).click();await expect(second.getByLabel('插件创作便笺')).toHaveValue('窗口一确认的内容');await second.close()
+ await reloadWithBrowserFixtureAIConfigV1(second);await second.getByRole('button',{name:'创作便笺',exact:true}).click();await expect(second.getByLabel('插件创作便笺')).toHaveValue('窗口一确认的内容');await second.close()
  const zip=await JSZip.loadAsync(await readFile('public/workshop/packages/storyforge.writing-notes-1.0.0.sfplugin')),manifest=JSON.parse(await zip.file('manifest.json')!.async('string'))
  manifest.id='test.lifecycle';manifest.name='生命周期验收';manifest.views=[];manifest.permissions=[];manifest.schemas={}
  zip.file('manifest.json',JSON.stringify(manifest));zip.file('main.js',`export default()=>({activate(ctx){globalThis.__sfLiveCount=(globalThis.__sfLiveCount??0)+1;const f=()=>{globalThis.__sfEventCount=(globalThis.__sfEventCount??0)+1};addEventListener('sf-test',f);ctx.lifecycle.onDispose(()=>{globalThis.__sfLiveCount--;removeEventListener('sf-test',f)})}})`)
@@ -315,7 +315,7 @@ test('two browser tabs reject stale plugin edits, keep the winning data, and dis
 test('the same independent workbench plugin runs within all authoring products with separate Work data',async({page})=>{
  test.skip(process.env.PLAYWRIGHT_PRODUCTION_PREVIEW==='1','isolation fixture uses development module imports')
  test.setTimeout(120000)
- await page.goto('./')
+ await gotoWithBrowserFixtureAIConfigV1(page, './')
  const entries=await page.evaluate(async()=>{
   const importer=new Function('path','return import(path)') as (path:string)=>Promise<any>
   const {createWorkspace}=await importer('/storyforge/src/lib/workspace/create-workspace.ts')
@@ -333,7 +333,7 @@ test('the same independent workbench plugin runs within all authoring products w
   return rows
  })
  for(const entry of entries){
-  await page.goto(`./${entry.route}?project=${entry.project}&work=${entry.work}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./${entry.route}?project=${entry.project}&work=${entry.work}`)
   await page.getByRole('button',{name:'作品插件工作台',exact:true}).click()
   const dock=page.getByRole('complementary',{name:'当前作品插件'})
   await dock.getByRole('button',{name:'创作便笺',exact:true}).click()
@@ -341,14 +341,14 @@ test('the same independent workbench plugin runs within all authoring products w
   await dock.getByRole('button',{name:'保存便笺',exact:true}).click();await expect(dock.getByText('已保存到这部作品。')).toBeVisible()
   await dock.getByRole('button',{name:'关闭插件工作台',exact:true}).click()
  }
- await page.goto(`./ttrpg/play?project=${entries[5].project}&work=${entries[5].work}`)
+ await gotoWithBrowserFixtureAIConfigV1(page, `./ttrpg/play?project=${entries[5].project}&work=${entries[5].work}`)
  await expect(page.getByRole('button',{name:'作品插件工作台',exact:true})).toHaveCount(0)
 })
 
 test('standard plugin composition keeps prose input responsive without repeated activation or model calls',async({page})=>{
  await openWorkshop(page,'0');await page.getByRole('button',{name:'创建体验作品',exact:true}).click();await page.getByRole('button',{name:'创建并启用参考插件',exact:true}).click();await expect(page.getByText('体验内容已创建。',{exact:false})).toBeVisible()
  const project=new URL(page.url()).searchParams.get('project')!
- await page.goto(`./workspace/${project}?module=outline`)
+ await gotoWithBrowserFixtureAIConfigV1(page, `./workspace/${project}?module=outline`)
  await page.getByRole('navigation',{name:'长篇工作台二级导航'}).getByRole('button',{name:'大纲与章纲',exact:true}).click()
  await page.getByRole('button',{name:'添加卷',exact:true}).click();await page.getByRole('button',{name:'添加章节',exact:true}).click();await page.getByTitle('编辑章节',{exact:true}).click()
  const editor=page.locator('.tiptap-editor');await expect(editor).toBeVisible();await editor.fill('灯塔的光越过海雾。'.repeat(300))

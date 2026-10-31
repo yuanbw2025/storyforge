@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {test, expect} from '@playwright/test'
 import {createWriteStream, renameSync, writeFileSync} from 'node:fs'
 import {createHash} from 'node:crypto'
@@ -12,9 +13,8 @@ test(`native IndexedDB retains ${target} consequential actions, actual historica
   let externalCalls = 0
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://history-growth.invalid/v1', model: 'test', maxTokens: 8000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://history-growth.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' })
   await page.route('https://history-growth.invalid/**', async route => {externalCalls++; await route.abort()})
   await page.exposeFunction('persistNativeGrowthCheckpoint', (checkpoint: {actions: number; state: string; elapsedMs: number; calls: number}) => {
     const {state, ...progress} = checkpoint
@@ -50,7 +50,7 @@ test(`native IndexedDB retains ${target} consequential actions, actual historica
     transfers.delete(part.name)
   })
   page.on('console', message => {if (message.text().startsWith('CHAT_GROWTH ')) console.info(message.text())})
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const outcome = await page.evaluate(async target => {
     const load = new Function('p', 'return import(p)')
     const helper = await load('/storyforge/tests/helpers/chat-history-growth.ts')
@@ -148,7 +148,7 @@ test(`native IndexedDB retains ${target} consequential actions, actual historica
   expect(outcome.result.calls).toBe(target * 3 + outcome.result.checkpoints.length * 3)
   expect(outcome.result.checkpoints.every(c => c.actorRead && c.reviewRead)).toBe(true)
   expect(outcome.worldUnchanged).toBe(true); expect(externalCalls).toBe(0)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   const restored = await page.evaluate(async branches => {
     const load = new Function('p', 'return import(p)'), api = await load('/storyforge/src/lib/character-interaction/runtime-api.ts'), core = await load('/storyforge/src/lib/product/runtime-core.ts')
     return Promise.all(branches.map(async branch => ({title: branch.title, equal: await core.hashStateJson(JSON.stringify((await api.readProductRuntimeState(branch.sessionId)).interaction)) === branch.stateHash})))

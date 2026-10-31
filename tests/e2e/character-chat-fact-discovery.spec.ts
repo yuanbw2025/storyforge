@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {test, expect} from '@playwright/test'
 
@@ -5,19 +6,19 @@ test('author explicitly enables hidden-fact discovery and reviews conditions in 
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
   let networkCalls = 0
   await page.route('**/chat/completions', async route => {networkCalls++; await route.abort()})
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     const f = await (await load('/storyforge/tests/helpers/chat-narrative-production-fixture.ts')).seedChatNarrativeProductionFixture()
     return {scope: f.scope, worldReleaseId: f.confirmed.worldReleaseId}
   })
   const query = `project=${f.scope.projectId}&work=${f.scope.workId}`
-  await page.goto(`./chat/vision?${query}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/vision?${query}`)
   await expect(page.getByLabel('每次调查最多揭示', {exact: true})).toHaveValue('0')
   await page.getByLabel('每次调查最多揭示', {exact: true}).selectOption('2')
   await page.getByRole('button', {name: '保存方案', exact: true}).click()
   await expect(page.getByText('方案已保存', {exact: true})).toBeVisible()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByLabel('每次调查最多揭示', {exact: true})).toHaveValue('2')
   const productionId = await page.evaluate(async f => {
     const load = new Function('p', 'return import(p)'), db = (await load('/storyforge/src/lib/db/schema.ts')).db
@@ -42,7 +43,7 @@ test('author explicitly enables hidden-fact discovery and reviews conditions in 
     await (await load('/storyforge/src/lib/product-production/scheduler.ts')).runProductProductionUntilBlockedV1({scope: f.scope, productionId, capabilityBindings: [{requirementKey, adapterId: 'configured-text.v1', bindingHash}], executor})
     return productionId
   }, f)
-  await page.goto(`./chat/production?${query}&production=${productionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/production?${query}&production=${productionId}`)
   await expect(page.getByTestId('chat-situation-selection')).toBeVisible()
   const first = page.getByTestId('chat-situation-selection').locator('article').first()
   await first.getByText('查看完整背景与角色视角（作者可见）', {exact: true}).click()
@@ -50,7 +51,7 @@ test('author explicitly enables hidden-fact discovery and reviews conditions in 
   await expect(first.getByTestId('chat-discovery-rule')).toContainText('必要前提：工作台上的蓝色布包获准由店主自行打开查看。')
   await page.setViewportSize({width: 390, height: 844})
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1)
-  await page.goto(`./chat/vision?${query}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/vision?${query}`)
   await page.getByLabel('允许角色依据未完成事项发展新局面', {exact: true}).uncheck()
   await expect(page.getByLabel('每次调查最多揭示', {exact: true})).toBeDisabled()
   await expect(page.getByLabel('每次调查最多揭示', {exact: true})).toHaveValue('0')
@@ -65,9 +66,8 @@ for (const rejected of [false, true]) test(`a completed investigation only revea
   const investigated = '叶岑独自打开并查看获准检查的木箱内部。', truth = '铜印在柜台下的木箱里。'
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-discovery.invalid/v1', model: 'test', maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-discovery.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
   await page.route('https://chat-discovery.invalid/**', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')
@@ -98,10 +98,10 @@ for (const rejected of [false, true]) test(`a completed investigation only revea
     }
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({factDiscovery: true})})
   const read = () => page.evaluate(async f => {const load = new Function('p', 'return import(p)'); return (await (await load('/storyforge/src/lib/character-interaction/runtime-api.ts')).readProductRuntimeState(f.sessionId)).interaction}, f)
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   await page.getByRole('button', {name: '让角色开场', exact: true}).click()
   await expect(page.getByRole('article').getByText(investigated, {exact: true})).toBeVisible()
@@ -116,7 +116,7 @@ for (const rejected of [false, true]) test(`a completed investigation only revea
   expect(settled.chatNarrative.situation.facts.filter((fact: {text: string}) => fact.text === truth)).toHaveLength(1)
   expect(settled.chatNarrative.situation.facts.find((fact: {factKey: string}) => fact.factKey === 'secret').audienceKeys).toEqual(rejected ? [] : ['guard'])
   expect(settled.chatNarrative.discoveryHistory?.length ?? 0).toBe(rejected ? 0 : 1)
-  await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   expect(await read()).toEqual(settled)
   expect(calls).toHaveLength(4)
   await expect(page.getByText(truth, {exact: true})).toHaveCount(0)
@@ -131,7 +131,7 @@ for (const rejected of [false, true]) test(`a completed investigation only revea
   expect(before.chatNarrative.discoveryHistory?.length ?? 0).toBe(rejected ? 0 : 1)
   expect(calls).toHaveLength(rejected ? 4 : 6)
   expect(actionCount).toBe(rejected ? 1 : 2)
-  await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   expect(await read()).toEqual(before)
   expect(calls).toHaveLength(rejected ? 4 : 6)
   await page.setViewportSize({width: 390, height: 844})
