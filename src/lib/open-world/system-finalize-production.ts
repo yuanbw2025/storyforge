@@ -1,3 +1,4 @@
+import { captureTextOpenWorldTaskExecutionInputV1, assertTextOpenWorldBuildNewWorkV1 } from './source-admission'
 import type { ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
 import { db } from '../db/schema'
@@ -887,6 +888,9 @@ export function createTextOpenWorldSystemFinalizeExecutorV1(options: {
 } = {}): ProductProductionTaskExecutorV1 {
   const runModel = options.runModel ?? defaultRunner; const now = options.now ?? Date.now
   return async execution => {
+    execution = captureTextOpenWorldTaskExecutionInputV1(execution)
+    await assertTextOpenWorldBuildNewWorkV1({ scope: execution.scope, productionId: execution.productionId,
+      buildId: execution.buildId, operation: '执行新的文字开放世界制作任务' })
     if (execution.signal.aborted) throw new DOMException('Aborted', 'AbortError')
     if (execution.task.taskKey !== 'p10.system-finalize' || execution.task.skillId !== SKILL_ID || execution.task.executionMode !== 'model') fail('执行器收到错误任务')
     const expectedOutputs = ['text-open-world.system-configs', 'text-open-world.media-requirements', 'text-open-world.content-budget']
@@ -1254,6 +1258,9 @@ export async function validateTextOpenWorldDeterministicPreflightV1(input: {
 export function createTextOpenWorldDeterministicPreflightExecutorV1(options: { now?: () => number } = {}): ProductProductionTaskExecutorV1 {
   const now = options.now ?? Date.now
   return async execution => {
+    execution = captureTextOpenWorldTaskExecutionInputV1(execution)
+    await assertTextOpenWorldBuildNewWorkV1({ scope: execution.scope, productionId: execution.productionId,
+      buildId: execution.buildId, operation: '执行新的文字开放世界制作任务' })
     if (execution.signal.aborted) throw new DOMException('Aborted', 'AbortError')
     if (execution.task.taskKey !== 'v1.deterministic-preflight' || execution.task.executionMode !== 'deterministic' || execution.task.skillId !== null) fail('预检执行器收到错误任务')
     if (!same(execution.task.outputArtifactKeys, ['text-open-world.deterministic-preflight'])) fail('预检输出不精确')

@@ -369,9 +369,9 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `comic-page-plan-lifecycle` | `comicPagePlans` | `PROJECT_TABLES + FIELD_REGISTRY + closed page rhythm contract + script beat CAS` | `src/lib/comic/production.ts` | 2027-09-01 |
 | `comic-review-issue-lifecycle` | `comicReviewIssues` | `PROJECT_TABLES + FIELD_REGISTRY + page/panel/subject/asset/revision validator` | `src/lib/comic/production.ts` | 2027-09-01 |
 | `creation-release-asset-lifecycle` | `creationReleaseAssets` | `PROJECT_TABLES + immutable release manifest + content hash + registered media strong reference` | `src/lib/comic/release.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-01 |
-| `comic-panel-lifecycle` | `comicPanels` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + comic panel validator` | `src/lib/comic/service.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/comic/production.ts`<br/>`src/lib/comic/authoring.ts` | 2027-08-01 |
-| `comic-visual-subject-lifecycle` | `comicVisualSubjects` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + Work cast/source/asset stable-key validator` | `src/lib/comic/service.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/comic/production.ts` | 2027-08-01 |
-| `comic-media-asset-lifecycle` | `comicMediaAssets` | `PROJECT_TABLES + media capability registry + hash/rights/provider receipt + stable-key reference checks` | `src/lib/comic/media-service.ts`<br/>`src/lib/comic/service.ts`<br/>`src/lib/comic/production.ts` | 2027-08-01 |
+| `comic-panel-lifecycle` | `comicPanels` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + comic panel validator` | `src/lib/comic/service.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/comic/media-lifecycle.ts`<br/>`src/lib/comic/production.ts`<br/>`src/lib/comic/authoring.ts` | 2027-08-01 |
+| `comic-visual-subject-lifecycle` | `comicVisualSubjects` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + Work cast/source/asset stable-key validator` | `src/lib/comic/service.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/comic/media-lifecycle.ts`<br/>`src/lib/comic/production.ts` | 2027-08-01 |
+| `comic-media-asset-lifecycle` | `comicMediaAssets` | `PROJECT_TABLES + media capability registry + hash/rights/provider receipt + stable-key reference checks` | `src/lib/comic/media-service.ts`<br/>`src/lib/comic/media-lifecycle.ts`<br/>`src/lib/comic/service.ts`<br/>`src/lib/comic/production.ts` | 2027-08-01 |
 | `motion-drama-production-lifecycle` | `motionDramaProductions` | `PROJECT_TABLES + motion-drama state machine + adaptation source manifest CAS` | `src/lib/adaptation/source-manifest.ts`<br/>`src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/prompts.ts`<br/>`src/lib/motion-drama/prompt-pack.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-09 |
 | `motion-drama-series-bible-lifecycle` | `motionDramaSeriesBibles` | `PROJECT_TABLES + FIELD_REGISTRY + append-only bible version + adaptation CAS` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
 | `motion-drama-episode-lifecycle` | `motionDramaEpisodes` | `PROJECT_TABLES + FIELD_REGISTRY + episode contract + source manifest CAS` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
@@ -434,13 +434,13 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
 | `node.creation` | `src/lib/node-authoring/executor.ts:387` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:200`<br/>`src/lib/outline/generation-node.ts:61` |
-| `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:648` |
+| `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:666` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:56` |
 | `outline.workshop.collision` | `src/lib/outline/workshop.ts:452` |
 | `outline.workshop.motivation` | `src/lib/outline/workshop.ts:447` |
 | `outline.workshop.scan` | `src/lib/outline/workshop.ts:442` |
 | `outline.workshop.scenes` | `src/lib/outline/workshop.ts:461` |
-| `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:108` |
+| `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:128` |
 | `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:288` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:457` |
 | `runtime.character.chat-narrative-action` | `src/lib/character-interaction/action-choice-harness.ts:131` |
@@ -448,14 +448,14 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:134` |
 | `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:310` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
-| `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:670`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
+| `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:688`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
 | `style.learn` | `src/lib/agent/run/style-learning-durable.ts:493` |
 | `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:466` |
 | `world-group.suggest` | `src/lib/agent/run/world-suggest-durable.ts:622` |
 
 ### 动态 category 调用
 
-- `src/lib/adventure/harness.ts:383 · chat`
+- `src/lib/adventure/harness.ts:389 · chat`
 - `src/lib/agent/character-copilot.ts:515 · chat`
 - `src/lib/agent/character-driven-copilot.ts:505 · chat`
 - `src/lib/agent/character-lifecycle-copilot.ts:448 · chat`
@@ -472,26 +472,26 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/run/codex-extraction-durable.ts:784 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
-- `src/lib/agent/run/short-novel-durable.ts:311 · chat`
+- `src/lib/agent/run/short-novel-durable.ts:319 · chat`
 - `src/lib/agent/story-arc-copilot.ts:1672 · chat`
 - `src/lib/agent/story-arc-copilot.ts:1724 · chat`
 - `src/lib/agent/story-core-copilot.ts:557 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:903 · chat`
-- `src/lib/character-interaction/harness.ts:888 · chat`
+- `src/lib/character-interaction/harness.ts:894 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:73 · chat`
 - `src/lib/character-interaction/situation-harness.ts:189 · chat`
-- `src/lib/comic/durable-production.ts:270 · chat`
+- `src/lib/comic/durable-production.ts:474 · chat`
 - `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:98 · chat`
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:22 · ai.start`
-- `src/lib/motion-drama/durable-production.ts:144 · chat`
+- `src/lib/motion-drama/durable-production.ts:348 · chat`
 - `src/lib/node-authoring/executor.ts:444 · chat`
-- `src/lib/open-world/evolution-harness.ts:246 · chat`
-- `src/lib/open-world/harness.ts:139 · chat`
+- `src/lib/open-world/evolution-harness.ts:251 · chat`
+- `src/lib/open-world/harness.ts:143 · chat`
 - `src/lib/product-production/authoring-consultation.ts:169 · chat`
 - `src/lib/product-production/capabilities.ts:325 · chat`
-- `src/lib/screenplay/durable-production.ts:449 · chat`
+- `src/lib/screenplay/durable-production.ts:471 · chat`
 - `src/lib/ttrpg/gm-actor-harness.ts:481 · chat`
 - `src/lib/ttrpg/gm-harness.ts:542 · chat`
 
@@ -582,4 +582,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `7d6e46ecc`
+生成时间基准:commit `fc597c48e`

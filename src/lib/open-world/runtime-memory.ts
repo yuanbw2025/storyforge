@@ -1,3 +1,4 @@
+import { assertTextOpenWorldSessionNewWorkV1, assertTextOpenWorldRuntimeNewWorkV1 } from './source-admission'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import {
   createAgentRunCheckpointV1,
@@ -534,6 +535,7 @@ async function commitMemoryEvent(input: {
         resultingStateHash: await hashProductRuntimeStateV1(replayed), replayed: true,
       }
     }
+    assertTextOpenWorldRuntimeNewWorkV1(binding.formal.runtimePackage, '新增长期记忆事件')
     if (session.status !== 'active') fail('session-status', '只有active Session可以写入长期记忆')
     const current = replayProductRuntimeEvents(JSON.parse(session.initialStateJson), events)
     const stateHash = await hashProductRuntimeStateV1(current)
@@ -586,6 +588,8 @@ export async function generateAndCommitTextOpenWorldRuntimeMemoryV1(input: {
   signal?: AbortSignal
   onRunCreated?: (runId: number) => void | Promise<void>
 }): Promise<TextOpenWorldRuntimeMemoryPresentationV1> {
+  input = { ...input, scope: structuredClone(input.scope), ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }), dialogue: structuredClone(input.dialogue), ...(input.terminalCommandIds === undefined ? {} : { terminalCommandIds: [...input.terminalCommandIds] }) }
+  await assertTextOpenWorldSessionNewWorkV1({ scope: input.scope, sessionId: input.productRuntimeSessionId, operation: '新运行模型请求' })
   if (!input.runAI && !input.aiConfig) fail('provider', '缺少AI配置')
   const terminalCommandIds = [...new Set(input.terminalCommandIds ?? [])]
   const initialSurface = await loadSurface({
@@ -675,6 +679,7 @@ export async function generateAndCommitTextOpenWorldRuntimeMemoryV1(input: {
     const output = input.runAI
       ? await input.runAI(messages, input.signal)
       : await executeTextOpenWorldRuntimeAISkillV1({
+          scope: input.scope, productRuntimeSessionId: input.productRuntimeSessionId,
           skillId: 'prose.text-open-world-runtime-memory', executionBinding,
           messages, aiConfig: input.aiConfig!, projectId: input.scope.projectId, signal: input.signal,
         })

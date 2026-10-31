@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { PromptTemplate, PromptModuleKey } from '../lib/types/prompt'
 import { SYSTEM_PROMPT_SEEDS } from '../lib/ai/prompt-seeds'
+import { decodePromptTemplateExchange, readPromptTemplateContent } from '../lib/ai/prompt-template-exchange'
 
 interface PromptStore {
   templates: PromptTemplate[]
@@ -16,13 +17,16 @@ interface PromptStore {
   getActive(key: PromptModuleKey): PromptTemplate
 
   /** 保存（新增或更新）一个模板，并刷新 in-memory 列表。 */
-  saveTemplate(t: PromptTemplate): Promise<number>
+  saveTemplate(t: PromptTemplate, options?: { expectedModuleKey: PromptModuleKey }): Promise<number>
+
+  /** Import a fully validated batch as new, inactive user templates. */
+  importTemplates(json: string): Promise<number>
 
   /** 从已有模板克隆一份给用户编辑（scope='user'，isActive=false）。 */
   cloneTemplate(id: number, newName?: string): Promise<number>
 
   /** 把某模板设为对应 moduleKey 的激活模板（其他同 key 的取消激活）。 */
-  setActive(id: number): Promise<void>
+  setActive(id: number, options?: { expectedModuleKey: PromptModuleKey }): Promise<void>
 
   /** 删除一个模板并刷新列表（UI 层不得直接 db.delete，必须走这里）。 */
   deleteTemplate(id: number): Promise<void>
@@ -114,12 +118,45 @@ export const usePromptStore = create<PromptStore>((set, get) => ({
     throw new Error(`[prompt-store] no template found for moduleKey: ${key}`)
   },
 
-  saveTemplate: async (t: PromptTemplate): Promise<number> => {
+  saveTemplate: async (t: PromptTemplate, options): Promise<number> => {
+    const input = structuredClone(t)
+    const content = readPromptTemplateContent(input)
+    const expectedModuleKey = options?.expectedModuleKey ?? input.moduleKey
     const now = Date.now()
-    const row: PromptTemplate = { ...t, updatedAt: now, createdAt: t.createdAt || now }
-    const id = await db.promptTemplates.put(row)
+    const id = await db.transaction('rw', db.promptTemplates, async () => {
+      if (input.id === undefined) {
+        return db.promptTemplates.add({ ...input, ...content, updatedAt: now, createdAt: input.createdAt || now })
+      }
+      const current = await db.promptTemplates.get(input.id)
+      if (!current) throw new Error('模板已删除，未保存的编辑仍保留；请另存为新模板。')
+      if (current.moduleKey !== expectedModuleKey) {
+        throw new Error('模板所属模块已在其他位置改变，未保存的编辑仍保留；请重新选择模板后核对。')
+      }
+      const moved = current.moduleKey !== content.moduleKey
+      await db.promptTemplates.put({
+        ...current, ...content,
+        // Content editing cannot restore a stale activation choice. A route
+        // change needs a separate, explicit activation in the new module.
+        isActive: moved ? false : current.isActive,
+        updatedAt: now,
+      })
+      return input.id
+    })
     await get().reload()
-    return id as number
+    return id
+  },
+
+  importTemplates: async (json: string): Promise<number> => {
+    const contents = decodePromptTemplateExchange(json)
+    const now = Date.now()
+    const rows: PromptTemplate[] = contents.map(content => ({
+      ...content, scope: 'user', isActive: false, createdAt: now, updatedAt: now,
+    }))
+    await db.transaction('rw', db.promptTemplates, async () => {
+      if (rows.length) await db.promptTemplates.bulkAdd(rows)
+    })
+    await get().reload()
+    return rows.length
   },
 
   cloneTemplate: async (id: number, newName?: string): Promise<number> => {
@@ -142,13 +179,18 @@ export const usePromptStore = create<PromptStore>((set, get) => ({
     return newId as number
   },
 
-  setActive: async (id: number): Promise<void> => {
-    const target = await db.promptTemplates.get(id)
-    if (!target) throw new Error(`template ${id} not found`)
-    // 同 moduleKey 的其他模板取消激活
-    const siblings = await db.promptTemplates.where('moduleKey').equals(target.moduleKey).toArray()
+  setActive: async (id: number, options): Promise<void> => {
+    const expectedModuleKey = options?.expectedModuleKey
     const now = Date.now()
     await db.transaction('rw', db.promptTemplates, async () => {
+      const target = await db.promptTemplates.get(id)
+      if (!target) throw new Error(`template ${id} not found`)
+      if (expectedModuleKey !== undefined && target.moduleKey !== expectedModuleKey) {
+        throw new Error('模板所属模块已在其他位置改变，激活未执行；请先核对当前模块。')
+      }
+      // Resolve the actual route and siblings in the same native transaction
+      // that changes activation, including concurrent tabs and content saves.
+      const siblings = await db.promptTemplates.where('moduleKey').equals(target.moduleKey).toArray()
       for (const s of siblings) {
         if (s.id === id) {
           await db.promptTemplates.update(s.id!, { isActive: true, updatedAt: now })

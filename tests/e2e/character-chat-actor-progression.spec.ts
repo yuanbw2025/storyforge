@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {test, expect} from '@playwright/test'
 
@@ -7,9 +8,8 @@ test('one visible action settles its reviewed direction and survives import befo
   let actions = 0
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-progression.invalid/v1', model: 'test', maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-progression.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
   await page.route('https://chat-progression.invalid/**', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')
@@ -35,15 +35,15 @@ test('one visible action settles its reviewed direction and survives import befo
     }
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   let f = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({actorSituationExpansion: true})})
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   await page.getByRole('button', {name: '让角色开场', exact: true}).click()
   await expect(page.getByText('我想先独自检查后门门闩。你可以留在这里。', {exact: true})).toBeVisible()
   await expect.poll(() => calls).toEqual(['action', 'action-review', 'construction', 'situation-review'])
   await expect(page.getByRole('button', {name: '让角色继续', exact: true})).toBeEnabled()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   await expect.poll(() => calls).toEqual(['action', 'action-review', 'construction', 'situation-review'])
   f = await page.evaluate(async f => {
@@ -53,7 +53,7 @@ test('one visible action settles its reviewed direction and survives import befo
     const session = (await db.productRuntimeSessions.where('projectId').equals(projectId).toArray())[0]
     return {scope: {projectId, worldId: session.worldId, workId: session.workId}, sessionId: session.id, sceneSequence: f.sceneSequence}
   }, f)
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   await expect(page.getByRole('button', {name: /^恢复 Run/})).toHaveCount(0)
   await expect.poll(() => calls).toEqual(['action', 'action-review', 'construction', 'situation-review'])
@@ -68,7 +68,7 @@ test('one visible action settles its reviewed direction and survives import befo
   expect(before.chatNarrative.situation.facts.some((fact: {factKey: string}) => fact.factKey === 'door-fixed')).toBe(true)
   expect(before.chatNarrative.situation.seed.origin).toBe('continued-thread')
   expect(before.chatNarrative.pendingSituation).toBeUndefined()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   expect(await read()).toEqual(before)
   expect(calls).toHaveLength(6)

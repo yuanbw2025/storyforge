@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import assert from 'node:assert/strict'
+import runtimePolicy from '../distribution/desktop-runtime.cjs'
 
 const [oldPath, nextPath, previousVersion] = process.argv.slice(2)
 assert.ok(oldPath && nextPath && /^\d+\.\d+\.\d+$/.test(previousVersion ?? ''), 'Pass the old and new installer paths and the expected previous x.y.z version')
@@ -39,6 +40,9 @@ async function launch(source, expectedVersion) {
     await consent.click(); await consent.waitFor({ state: 'hidden' })
   }
   assert.equal(await app.evaluate(({ app }) => app.getVersion()), expectedVersion)
+  if (expectedVersion === currentVersion) {
+    console.log(JSON.stringify({ check: 'upgraded-desktop-runtime', ...await runtimePolicy.verifyRunningRuntime(app) }))
+  }
   await page.evaluate(source => { (0, eval)(source) }, source)
   assert.equal(await page.evaluate(() => window.__nativeUpgradeSource.version), expectedVersion)
   return page

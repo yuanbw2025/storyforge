@@ -35,22 +35,16 @@ import type {
   CreativeReliabilityEvalVariantV1,
   CreativeReliabilityHumanReviewV1,
 } from '../../lib/evals/creative-reliability/types'
-import type { AIConfig, AIConfigPreset } from '../../lib/types'
+import type { AIConfigPreset } from '../../lib/types'
 import { APP_BUILD_ID } from '../../lib/version'
 import {
-  getAIConfigPresetSessionApiKey,
+  resolveAIConfigPresetV1,
   useAIConfigStore,
 } from '../../stores/ai-config'
 import { useDialog } from '../shared/Dialog'
 
 const GENERATOR_PAIR_VERSION = 'crel-story-arc-paired-v1'
 
-function presetConfig(preset: AIConfigPreset, current: AIConfig): AIConfig {
-  const apiKey = preset.config.apiKey
-    || getAIConfigPresetSessionApiKey(preset.id)
-    || (preset.config.provider === current.provider ? current.apiKey : '')
-  return { ...preset.config, apiKey }
-}
 
 function defaultPresetId(presets: AIConfigPreset[], pattern: RegExp, exclude?: string): string {
   return presets.find(item => item.id !== exclude && pattern.test(`${item.name} ${item.config.model}`))?.id
@@ -195,10 +189,10 @@ export default function CreativeReliabilityEvalPanel() {
   const generatorPreset = presets.find(item => item.id === generatorPresetId) ?? null
   const verifierPreset = presets.find(item => item.id === verifierPresetId) ?? null
   const generatorConfig = useMemo(() => (
-    generatorPreset ? presetConfig(generatorPreset, currentConfig) : null
+    generatorPreset ? resolveAIConfigPresetV1(generatorPreset, currentConfig) : null
   ), [currentConfig, generatorPreset])
   const verifierConfig = useMemo(() => (
-    verifierPreset ? presetConfig(verifierPreset, currentConfig) : null
+    verifierPreset ? resolveAIConfigPresetV1(verifierPreset, currentConfig) : null
   ), [currentConfig, verifierPreset])
   const fixtures = getCreativeReliabilityFixturesV1(checkpoint?.split ?? split)
   const record = checkpoint?.record ?? null

@@ -39,6 +39,16 @@ const mockRuntime = vi.hoisted(() => ({
 const formalAIRuntime = vi.hoisted(() => ({
   execute: vi.fn(),
 }))
+const newWorkAdmission = vi.hoisted(() => vi.fn(async () => undefined))
+
+// This file isolates the durable edit state machine with a synthetic target
+// workspace/Plan and mocked context compiler below. Its authorization
+// precondition is a test double, not evidence for source admission. The real
+// unmocked public legacy/World source paths are tested by R-QUALITY005-*.
+vi.mock('../../src/lib/open-world/creator-derived-authority', async importOriginal => ({
+  ...await importOriginal<typeof import('../../src/lib/open-world/creator-derived-authority')>(),
+  readTextOpenWorldCreatorBuildNewWorkAuthorityV1: newWorkAdmission,
+}))
 
 vi.mock('../../src/lib/ai/client', async importOriginal => {
   const actual = await importOriginal<typeof import('../../src/lib/ai/client')>()
@@ -154,7 +164,7 @@ async function withFixtureBrowserLocks<T>(operation: () => Promise<T>): Promise<
     return await operation()
   } finally {
     if (descriptor) Object.defineProperty(navigator, 'locks', descriptor)
-    else delete (navigator as Navigator & { locks?: LockManager }).locks
+    else Reflect.deleteProperty(navigator, 'locks')
   }
 }
 
@@ -337,6 +347,19 @@ async function seedHarnessFixture(): Promise<HarnessFixture> {
     createdAt: now,
     updatedAt: now,
   } as never, { owner: 'work' })) as number
+
+  // Native claim CAS still reads a frozen source marker. This is an explicit
+  // unit precondition paired with the mocked rich authority/context, not a
+  // real WorldRelease or a bypass in production code.
+  await db.productProductionBriefs.add(stampNewRecord(scope, 'productProductionBriefs', {
+    projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+    productionId, revision: 1, status: 'authorized', briefHash: '1'.repeat(64),
+    briefKind: 'text-open-world-creator-v1', sourceKind: 'world-release',
+    briefJson: JSON.stringify({ sourceBinding: { kind: 'world-release' } }),
+    sourceBindingJson: JSON.stringify({ kind: 'world-release' }),
+    sourcePlanJson: '{}', sourcePlanHash: '', confirmedBriefJson: '{}', confirmedBriefHash: '',
+    createdAt: now, updatedAt: now, authorizedAt: now,
+  } as never, { owner: 'work' }))
 
   const producerCandidateHash = await hashProductProductionValueV2({
     fixture: 'creator-artifact-edit-harness-producer-candidate',
@@ -654,6 +677,7 @@ describe.sequential('R-OPEN-WORLD5 · Creator Artifact edit durable Harness', ()
     await db.delete()
     await db.open()
     formalAIRuntime.execute.mockReset()
+    newWorkAdmission.mockReset()
     mockRuntime.workspace = null
     mockRuntime.workspaces = []
     mockRuntime.contextJson = ''
@@ -690,6 +714,54 @@ describe.sequential('R-OPEN-WORLD5 · Creator Artifact edit durable Harness', ()
     expect(state.snapshot.events.filter(event => event.type === 'candidate.persisted')).toHaveLength(1)
     expect(state.snapshot.events.some(event => event.type.startsWith('adoption.'))).toBe(false)
     expect(await businessRows(fixture)).toEqual(before)
+  })
+
+  // Synthetic rich-context state-machine controls only. A native legacy Novel
+  // CreatorEdit candidate was not established by the separate38cb G7 capture.
+  it('005 different-patch revision checks new-work admission before another candidate or checkpoint', async () => {
+    const fixture = await seedHarnessFixture()
+    const original = await generateTextOpenWorldCreatorArtifactEditCandidateV1({
+      selection: fixture.selection, mode: 'direct', operations: [operation(fixture)],
+    })
+    newWorkAdmission.mockClear()
+    newWorkAdmission.mockRejectedValueOnce(new Error('005 new revision must use a sealed WorldRelease'))
+    const before = await readAgentRunV1(fixture.scope, original.snapshot.run.id)
+    const rows = await businessRows(fixture)
+    await expect(reviseTextOpenWorldCreatorArtifactEditCandidateV1({
+      selection: fixture.selection, runId: original.snapshot.run.id,
+      operations: [operation(fixture, '另一个尚未获准的新候选')],
+    })).rejects.toThrow('005 new revision must use a sealed WorldRelease')
+    expect(newWorkAdmission).toHaveBeenCalledTimes(1)
+    expect(newWorkAdmission).toHaveBeenCalledWith({
+      scope: fixture.scope, buildId: fixture.buildId, operation: '修订新的工件修改候选',
+    })
+    expect(await readAgentRunV1(fixture.scope, original.snapshot.run.id)).toEqual(before)
+    expect(await businessRows(fixture)).toEqual(rows)
+    expect(formalAIRuntime.execute).not.toHaveBeenCalled()
+  })
+
+  it.each(['same-patch', 'reject'] as const)('005 original-candidate %s remains maintenance without another new-work check', async action => {
+    const fixture = await seedHarnessFixture()
+    const original = await generateTextOpenWorldCreatorArtifactEditCandidateV1({
+      selection: fixture.selection, mode: 'direct', operations: [operation(fixture)],
+    })
+    newWorkAdmission.mockClear()
+    newWorkAdmission.mockRejectedValue(new Error('No new creation permission'))
+    if (action === 'same-patch') {
+      const before = await readAgentRunV1(fixture.scope, original.snapshot.run.id)
+      const repeated = await reviseTextOpenWorldCreatorArtifactEditCandidateV1({
+        selection: fixture.selection, runId: original.snapshot.run.id, operations: [operation(fixture)],
+      })
+      expect(repeated.candidate).toEqual(original.candidate)
+      expect(await readAgentRunV1(fixture.scope, original.snapshot.run.id)).toEqual(before)
+    } else {
+      const rejected = await rejectTextOpenWorldCreatorArtifactEditCandidateV1({
+        selection: fixture.selection, runId: original.snapshot.run.id,
+      })
+      expect(rejected.projection.state).toBe('cancelled')
+    }
+    expect(newWorkAdmission).not.toHaveBeenCalled()
+    expect(formalAIRuntime.execute).not.toHaveBeenCalled()
   })
 
   it.each([false, true])('字段目录展示顺序不改变候选权威，但字段内容变化仍拒绝（changed=%s）', async changed => {
@@ -784,7 +856,7 @@ describe.sequential('R-OPEN-WORLD5 · Creator Artifact edit durable Harness', ()
     expect(await readEvidence('raw-response')).toBe(modelOutput(fixture))
     const sequence = (type: string) => state.snapshot.events.find(event => event.type === type)!.sequence
     const lastSequence = (type: string) => state.snapshot.events
-      .filter(event => event.type === type).at(-1)!.sequence
+      .filter(event => event.type === type).slice(-1)[0]!.sequence
     const artifactSequence = (kind: string) => evidence.find(event => (
       event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === kind
     ))!.sequence
@@ -1368,8 +1440,10 @@ describe.sequential('R-OPEN-WORLD5 · Creator Artifact edit durable Harness', ()
       const entryId = 'text-open-world.creator-artifact.modify'
       const skill = AGENT_SKILL_BY_ID.get(skillId)!
       const entry = FORMAL_AI_ENTRY_BY_ID_V1.get(entryId)!
-      AGENT_SKILL_BY_ID.delete(skillId)
-      FORMAL_AI_ENTRY_BY_ID_V1.delete(entryId)
+      const mutableSkills = AGENT_SKILL_BY_ID as Map<string, typeof skill>
+      const mutableEntries = FORMAL_AI_ENTRY_BY_ID_V1 as Map<string, typeof entry>
+      mutableSkills.delete(skillId)
+      mutableEntries.delete(entryId)
       try {
         formalAIRuntime.execute.mockResolvedValueOnce(modelOutput(fixture))
         const resumed = await resumeTextOpenWorldCreatorArtifactEditIntakeV1({
@@ -1381,8 +1455,8 @@ describe.sequential('R-OPEN-WORLD5 · Creator Artifact edit durable Harness', ()
         expect(resumed.snapshot.run.id).toBe(runId)
         expect(formalAIRuntime.execute).toHaveBeenCalledTimes(1)
       } finally {
-        AGENT_SKILL_BY_ID.set(skillId, skill)
-        FORMAL_AI_ENTRY_BY_ID_V1.set(entryId, entry)
+        mutableSkills.set(skillId, skill)
+        mutableEntries.set(entryId, entry)
       }
     })
   })

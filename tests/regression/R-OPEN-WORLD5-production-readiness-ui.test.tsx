@@ -13,7 +13,7 @@ import type {
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 const SCOPE: WorkspaceScope = { projectId: 451, worldId: 452, workId: 453 }
 const SOURCE_VERSION_HASH = 'a'.repeat(64)
@@ -513,9 +513,12 @@ describe('TOW-G5-03 · production readiness UI', () => {
 
   it('按任务路由预设的真实凭证来源区分会话 Key，而不沿用全局记住开关误标', async () => {
     const routedSecret = 'sk-routed-session-only-secret'
-    sessionStorage.setItem('storyforge-ai-preset-api-keys-session', JSON.stringify({
-      'session-production-route': routedSecret,
-    }))
+    useAIConfigStore.getState().setRememberApiKey(false)
+    useAIConfigStore.getState().setConfig({
+      provider: 'openai', apiKey: routedSecret, baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini', temperature: 0.3, maxTokens: 16_000,
+    })
+    const presetId = useAIConfigStore.getState().saveAsPreset('仅会话开放世界生产模型')
     useAIConfigStore.setState({
       config: {
         provider: 'deepseek', apiKey: SECRET_KEY,
@@ -523,15 +526,7 @@ describe('TOW-G5-03 · production readiness UI', () => {
         temperature: 0.7, maxTokens: 0,
       },
       rememberApiKey: true,
-      presets: [{
-        id: 'session-production-route',
-        name: '仅会话开放世界生产模型',
-        config: {
-          provider: 'openai', apiKey: '', baseUrl: 'https://api.openai.com/v1',
-          model: 'gpt-4o-mini', temperature: 0.3, maxTokens: 16_000,
-        },
-      }],
-      taskRoutes: { creation: 'session-production-route' },
+      taskRoutes: { creation: presetId },
     })
     const currentSession = await session()
     await act(async () => root.render(createElement(TextOpenWorldCreatorProductionReadiness, {

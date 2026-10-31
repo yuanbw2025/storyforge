@@ -108,7 +108,7 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `4.0.5` | `package.json` |
-| TypeScript 生产源码 | 2570 个文件 / 653781 行 | `tsconfig.json` |
+| TypeScript 生产源码 | 2584 个文件 / 657787 行 | `tsconfig.json` |
 | IndexedDB schema | v13 / 130 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
 | PROJECT_TABLES | 130 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 238 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
@@ -278,7 +278,7 @@ AVG 的逐句配音与背景音乐、音效、环境声加工复用同一零供�
 
 ### 角色聊天接入
 
-`Work.kind=character-interaction` 拥有 `chatAuthoringDrafts`；统一 schema v10 接入该表；v8/v9 兼容桥保留独立聊天分支已有草稿，且保留所有既有版本。设置及会谈由注册表进行完整生命周期管理。`chat.consult.v1` / `chat.authoring` 与 AVG 共用可恢复会谈运行器，各产品独立定义设置及上下文源。会谈不开始制作，候选由作者确认后回填草稿。正式 `characterChat` Brief 配置控制角色私密知识、初始信任、场景回合及回复预算。
+`Work.kind=character-interaction` 拥有 `chatAuthoringDrafts`，设置、会谈与候选沿注册表管理。当前会谈使用 `chat.consult.v2` / `chat.consultation`：作者逐字段确认候选，讨论不启动制作。旧 v1 的冻结合同、事件及候选继续按既有账本读取和备份，旧 v1 登记不再作为当前可选 Skill。正式 `characterChat` Brief 配置控制角色私密知识、初始信任、场景回合及回复预算。
 
 玩家页对消息听众和记忆证据进行可见性过滤；作者人物快照明确区分公开/私密知识。失败和取消清理 UI 生成状态，多角色导演的结束决策由实例命令执行。当前角色聊天生成发布以纯文字内容为边界；不把未生成的画像或语音标为已完成。
 

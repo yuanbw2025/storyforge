@@ -70,6 +70,7 @@ export default function TextOpenWorldLauncher(props: {
     item.release.id == null ? [] : [[item.release.id, item] as const]
   ))), [store.releases])
   const selectedRelease = store.releases.find(item => item.release.id === catalogReleaseId) ?? null
+  const selectedHistoricalNovel = selectedRelease?.manifest?.textOpenWorldVNext?.sourceManifest.kind === 'novel-source-pin'
   const selectedSummary = selectedRelease?.release.id == null
     ? null : summaries.get(selectedRelease.release.id) ?? null
   const selectedVersions = selectedRelease
@@ -196,13 +197,13 @@ export default function TextOpenWorldLauncher(props: {
                 onSecondary={closeRelease}
               />
               : <div className="textgame-title-actions">
-                <button type="button" className="textgame-start" disabled={!selectedRelease.manifest || store.loading || store.busy}
+                <button type="button" className="textgame-start" disabled={!selectedRelease.manifest || selectedHistoricalNovel || store.loading || store.busy}
                   onClick={() => void run(() => store.start(selectedRelease.release.id!))}>
-                  <Plus />新旅程
+                  <Plus />{selectedHistoricalNovel ? '历史小说来源仅供只读' : '新旅程'}
                 </button>
                 {selectedReleaseSessions[0] && <button type="button" disabled={store.loading || store.busy}
                   onClick={() => void run(() => store.select(selectedReleaseSessions[0]!.id!))}>
-                  <Play />继续最近存档
+                  <Play />{selectedHistoricalNovel ? '查看最近存档' : '继续最近存档'}
                 </button>}
               </div>}
           </div>

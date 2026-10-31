@@ -14,7 +14,7 @@ import { getUpperProductWorldRequirementAdapterV1 } from '../../src/lib/product/
 import { freezeProductSourcePlanV1, resolveProductSourceReadBoundaryV1 } from '../../src/lib/product/source-contracts'
 import { resolveProductProductionWorldCompilationDescriptorsV2 } from '../../src/lib/product-production/world-source'
 import type { ContextResourceDescriptorV1, ResourceSearchInputV1 } from '../../src/lib/registry/types'
-import type { ProductionProductKindV1 } from '../../src/lib/types'
+import type { ProductWorldSourceSelectionV1, ProductionProductKindV1 } from '../../src/lib/types'
 
 export type NarrativeFamily = typeof corpus.families[number]
 type Query = NarrativeFamily['queries'][number]
@@ -395,9 +395,10 @@ export async function evaluateAdapterBaselines(family: NarrativeFamily) {
       operation: 'source-plan-count-only-completeness', status: sufficient ? 'pass' : 'gap',
       expected: { minimumSelectedCount: selected.length }, observed: { mandatoryCount: countOnlyBoundary.mandatoryResourceKeys.length },
       evidence: [family.queries[3]!.evidence[0]!.spanHash], issue: sufficient ? null : 'NW-G06' })
+    const selection: ProductWorldSourceSelectionV1 = { schema: 'storyforge.product-world-source-selection', version: 1, productType,
+      worldReferenceHash: fixture.reference.referenceHash, resourceKeys: selected, roleBindings: {} }
     const compilation = resolveProductProductionWorldCompilationDescriptorsV2({ descriptors: fixture.descriptors as any,
-      selection: { schema: 'storyforge.product-world-source-selection', version: 1, productType,
-        worldReferenceHash: fixture.reference.referenceHash, resourceKeys: selected, roleBindings: {} } })
+      selection })
     const compiled = fixture.logicalKeys(compilation)
     check(equalSet(compiled, expected), 'existing stronger compilation closure lost a selected resource')
     observations.push({ id: `adapter:${productType}:compilation`, family: family.id, split: family.split,

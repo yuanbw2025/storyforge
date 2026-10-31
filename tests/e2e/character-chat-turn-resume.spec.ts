@@ -1,16 +1,16 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {test, expect, type Page} from '@playwright/test'
 
 test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-resume.invalid/v1', model: 'test', maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-resume.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
 })
 
 async function seed(page: Page, mode: 'partial' | 'unknown' | 'player') {
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async mode => {
     const load = new Function('p', 'return import(p)')
     const fixture = await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')
@@ -36,7 +36,7 @@ async function seed(page: Page, mode: 'partial' | 'unknown' | 'player') {
     } catch (error) {if (mode !== 'unknown' || !(error instanceof Error) || error.message !== 'fixture response unknown') throw error}
     return f
   }, mode)
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   return f
 }
 
@@ -62,7 +62,7 @@ test('refresh keeps an unfinished turn and explicitly completes only its remaini
   await expect(page.getByTestId('chat-turn-resume')).toContainText('最多 2 次行动额度')
   await expect(page.getByRole('button', {name: '补齐未完成本轮', exact: true})).toBeEnabled()
   expect(actions).toBe(0)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByTestId('chat-turn-resume')).toContainText('叶岑')
   expect(actions).toBe(0)
   // Selection for a new turn must not change who completes the existing one.
@@ -77,7 +77,7 @@ test('refresh keeps an unfinished turn and explicitly completes only its remaini
   expect(state.chatNarrative.triggers[0].actionSequences).toHaveLength(3)
   expect(state.remainingDirectorBudget).toBe(91)
   expect(actions).toBe(2); expect(reviews).toBe(2)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText('我继续核对第 2 项。', {exact: true})).toBeVisible()
   expect(actions).toBe(2)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
@@ -93,7 +93,7 @@ test('an unknown request remains visible after refresh and cannot be resent thro
   await seed(page, 'unknown')
   await expect(page.getByTestId('chat-turn-resume')).toContainText('结果未知')
   await expect(page.getByRole('button', {name: '补齐未完成本轮', exact: true})).toBeDisabled()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByTestId('chat-turn-resume')).toContainText('原调用可能已经计费')
   await expect(page.getByRole('button', {name: '补齐未完成本轮', exact: true})).toBeDisabled()
   expect(calls).toBe(0)

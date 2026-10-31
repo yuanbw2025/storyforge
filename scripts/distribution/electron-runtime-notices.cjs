@@ -2,6 +2,7 @@
 const { readFile, writeFile, copyFile, mkdir, readdir, lstat } = require('node:fs/promises')
 const path = require('node:path')
 const { createHash } = require('node:crypto')
+const { lockedRuntimeVersion, assertRuntimeVersion } = require('./desktop-runtime.cjs')
 const digest = bytes => createHash('sha256').update(bytes).digest('hex')
 
 async function requiredNotice(file) {
@@ -28,8 +29,7 @@ async function preserveDesktopNotices(context) {
     { name: 'NPM-THIRD-PARTY-NOTICES.txt', ...await requiredNotice(path.join(packager.projectDir, 'dist', 'THIRD-PARTY-NOTICES.txt')) },
   ]
   if (!rows[2].bytes.toString('utf8').startsWith('StoryForge third-party notices.')) throw new Error('Generate current desktop dependency notices before packaging')
-  const electronVersion = packager.config.electronVersion
-  if (typeof electronVersion !== 'string' || !electronVersion) throw new Error('Resolved Electron version required for runtime notices')
+  const electronVersion = assertRuntimeVersion(packager.config.electronVersion, lockedRuntimeVersion(packager.projectDir))
   const destination = path.join(resources, 'third-party')
   await mkdir(destination, { recursive: true })
   const files = []

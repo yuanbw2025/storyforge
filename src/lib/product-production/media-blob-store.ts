@@ -1,4 +1,4 @@
-import Dexie from 'dexie'
+import Dexie, { type Table } from 'dexie'
 import { db } from '../db/schema'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import type { MediaBlobObjectRecordV1, ProductMediaBlob, WorkspaceScope } from '../types'
@@ -130,6 +130,13 @@ export async function readProductMediaBlobData(input: {
   })
 }
 
+/** In-memory authority seam for an owning service. The guard may only perform
+ * deterministic IDB reads; hashing, quota and filesystem IO stay outside it. */
+export interface MediaBlobCommitGuardV1 {
+  transactionTables: readonly Table[]
+  assertCurrentInTransaction: () => Promise<void>
+}
+
 export async function putMediaBlobObject(input: {
   scope: WorkspaceScope
   data: ArrayBuffer
@@ -138,9 +145,25 @@ export async function putMediaBlobObject(input: {
   backend?: 'auto' | 'indexeddb' | 'opfs'
   /** Only the governed SVG sanitizer may set this after producing new safe bytes. */
   sanitizedSvg?: boolean
+  commitGuard?: MediaBlobCommitGuardV1
 }): Promise<MediaBlobObjectRecordV1> {
+  const guard = input.commitGuard
+  const assertGuardCurrent = guard?.assertCurrentInTransaction
+  const guardTables = guard ? [...guard.transactionTables] : []
+  // Detach only request data. Guard/table objects keep their original opaque
+  // identities, and the original method keeps its receiver across all awaits.
+  input = { ...input, scope: structuredClone(input.scope), data: input.data.slice(0) }
+  const guardedWrite = <T>(write: () => Promise<T>): Promise<T> => guard
+    ? db.transaction('rw', [db.mediaBlobObjects, ...guardTables], async () => {
+        await assertGuardCurrent!.call(guard)
+        return write()
+      })
+    : write()
+  const assertExistingReadCurrent = () => guard
+    ? db.transaction('r', [db.mediaBlobObjects, ...guardTables], () => assertGuardCurrent!.call(guard))
+    : Promise.resolve()
   const scope = await resolveScope({ scope: input.scope })
-  const data = input.data.slice(0)
+  const data = input.data
   if (data.byteLength < 1 || data.byteLength > SINGLE_OBJECT_MAXIMUM_BYTES) {
     throw new Error('[product-production] 媒资必须在 1 byte 到 100 MiB 之间')
   }
@@ -159,6 +182,7 @@ export async function putMediaBlobObject(input: {
       throw new Error('[product-production] 相同 contentHash 的共享媒资元数据冲突')
     }
     await readVerifiedMediaBlobObjectData(existing)
+    await assertExistingReadCurrent()
     return existing
   }
 
@@ -191,9 +215,19 @@ export async function putMediaBlobObject(input: {
     updatedAt: now,
   } satisfies MediaBlobObjectRecordV1, { owner: 'work' })
   let id: number
+  let insertionConstraint = false
   try {
-    id = await db.mediaBlobObjects.add(pending) as number
+    id = await guardedWrite(async () => {
+      try { return await db.mediaBlobObjects.add(pending) as number }
+      catch (cause) {
+        insertionConstraint = cause instanceof Error && cause.name === 'ConstraintError'
+        throw cause
+      }
+    })
   } catch (cause) {
+    // A stale/owner guard failure, including a ConstraintError thrown by the
+    // guard itself, must never be converted to dedup success.
+    if (!insertionConstraint) throw cause
     const raced = await db.mediaBlobObjects
       .where('[workId+contentHash]').equals([scope.workId, contentHash]).first()
     if (!raced) throw cause
@@ -202,6 +236,7 @@ export async function putMediaBlobObject(input: {
       throw new Error('[product-production] 相同 contentHash 的共享媒资元数据冲突')
     }
     await readVerifiedMediaBlobObjectData(raced)
+    await assertExistingReadCurrent()
     return raced
   }
   if (backend === 'indexeddb') return { ...pending, id }
@@ -209,12 +244,12 @@ export async function putMediaBlobObject(input: {
   try {
     if (backend === 'opfs') await writeOpfsData(opfsPath!, data)
     const updatedAt = Date.now()
-    await db.mediaBlobObjects.update(id, {
+    await guardedWrite(() => db.mediaBlobObjects.update(id, {
       data: null,
       storageState: 'ready',
       lastVerifiedAt: updatedAt,
       updatedAt,
-    })
+    }))
     return (await db.mediaBlobObjects.get(id))!
   } catch (cause) {
     await db.mediaBlobObjects.update(id, { storageState: 'corrupt', updatedAt: Date.now() })

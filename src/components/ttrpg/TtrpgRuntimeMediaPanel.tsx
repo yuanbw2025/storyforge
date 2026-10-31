@@ -57,6 +57,7 @@ export default function TtrpgRuntimeMediaPanel(props: {
   media: MediaProjection;
   viewerKey: string;
   disabled: boolean;
+  publicPresentation?: boolean;
   onChanged: () => Promise<void>;
 }) {
   const [requests, setRequests] = useState<VisibleRequest[]>([]);
@@ -147,7 +148,7 @@ export default function TtrpgRuntimeMediaPanel(props: {
           {props.media.maximumGeneratedAssets}
         </div>
       </div>
-      <label className="mt-3 grid gap-1 text-[10px] text-text-muted">
+      {!props.publicPresentation && <label className="mt-3 grid gap-1 text-[10px] text-text-muted">
         本次补充要求（不会改写冻结角色身份与世界锚点）
         <input
           value={promptAddition}
@@ -156,8 +157,8 @@ export default function TtrpgRuntimeMediaPanel(props: {
           placeholder="例如：突出潮门关闭前的紧迫感"
           className="rounded border border-border bg-bg-surface px-3 py-2 text-xs text-text-primary"
         />
-      </label>
-      {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+      </label>}
+      {!props.publicPresentation && error && <p className="mt-2 text-xs text-danger">{error}</p>}
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {props.media.slots.map((slot) => {
           const row = slot.requestKey

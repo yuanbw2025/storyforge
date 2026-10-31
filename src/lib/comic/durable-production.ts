@@ -1,6 +1,10 @@
-import { chat } from '../ai/client'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
+import { chat, type ChatResult } from '../ai/client'
 import type {
   AdaptationBriefV1,
+  AgentRunRecord,
+  AgentEvent,
+  AgentConversation,
   AIConfig,
   ChatMessage,
   ComicImageRequestCandidateV1,
@@ -20,12 +24,16 @@ import { db } from '../db/schema'
 import { assembleContext } from '../registry/assemble-context'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { getAgentSkillV1 } from '../agent/skill-registry'
-import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
+import { beginAgentRunRecoveryV1, completeAgentRunRecoveryV1, createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
 import { createContextManifestFromAssemblyV1 } from '../agent/run/context-manifest'
 import { appendAgentRunEventV1, createAgentRunV1, readAgentRunV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
 import { hashCanonicalValue } from '../agent/run/hash'
+import { parseAgentRunEventV1 } from '../agent/run/event-schema'
+import { agentRunScopeTransactionTablesV1, appendAgentRunEventWithSettlementInTransactionV1, readVerifiedAgentRunInTransactionV1, withAgentRunMutationLockV1 } from '../agent/run/event-store'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import { readOwnedRows } from '../workspace/scope'
+import { appendAgentEvent, getOrCreateAgentConversation } from '../agent/conversations'
+import { assertExactRunArtifactBodySafeV1 } from '../memory/evidence-policy'
 import {
   adoptComicImageRequestV1,
   adoptComicPagePlansV1,
@@ -229,7 +237,193 @@ async function append(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, type:
   return appendAgentRunEventV1({ scope, runId: snapshot.run.id, type, payload, expectedLastSequence: snapshot.projection.lastSequence } as any)
 }
 
-export async function generateComicProfessionalCandidateV1(input: { scope: WorkspaceScope; adaptationProjectId: number; stage: ComicProfessionalStageV1; sourceUnitKeys?: string[]; targetPageKeys?: string[]; targetPanelKeys?: string[]; targetIssueKeys?: string[]; authorInstruction?: string; aiConfig?: AIConfig; runAI?: (messages: ChatMessage[]) => Promise<string> }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ComicProfessionalCandidateV1 }> {
+
+class TaskStoppedWaitingError extends Error {
+  constructor() { super('作者已停止等待本任务，不会再派发新的模型请求。'); this.name = 'TaskStoppedWaitingError' }
+}
+class TaskSourceChangedError extends Error {
+  constructor() { super('来源、目标或当前生产版本已变化，本次调用未派发，请检查后重新明确开始。'); this.name = 'TaskSourceChangedError' }
+}
+interface TaskWaitControlV1 {
+  version: 1
+  kind: 'comic-professional-task-control'
+  action: 'stop-waiting'
+  generation: number
+  throughSequence: number
+  stepId: string
+}
+
+function taskStage(snapshot: AgentRunSnapshotV1): ComicProfessionalStageV1 {
+  const bindings = snapshot.contract.executionBindings ?? []
+  if (bindings.length !== 1 || !bindings[0].stepId.startsWith('comic-professional:')) throw new Error('[comic-task] 运行不是唯一的本产品专业任务')
+  const stage = bindings[0].stepId.slice('comic-professional:'.length) as ComicProfessionalStageV1
+  if (!Object.prototype.hasOwnProperty.call(STAGES, stage) || bindings[0].skillId !== STAGES[stage].skillId) throw new Error('[comic-task] 任务岗位或 Skill 绑定无效')
+  return stage
+}
+
+async function taskChannelEvents(scope: WorkspaceScope): Promise<AgentEvent[]> {
+  const conversations = (await readOwnedRows<AgentConversation>(scope, 'agentConversations', { owner: 'work' })).filter(row => row.purpose === 'comic-professional-tasks')
+  const ids = new Set(conversations.map(row => row.id))
+  return (await readOwnedRows<AgentEvent>(scope, 'agentEvents', { owner: 'work' })).filter(row => ids.has(row.conversationId))
+}
+
+function taskWaitControl(snapshot: AgentRunSnapshotV1, events: readonly AgentEvent[]): { event: AgentEvent; payload: TaskWaitControlV1 } | null {
+  const stage = taskStage(snapshot)
+  const expectedStepId = `comic-professional:${stage}`
+  const controls: Array<{ event: AgentEvent; payload: TaskWaitControlV1 }> = []
+  for (const event of events) {
+    if (event.durableRunId !== snapshot.run.id || event.kind !== 'task') continue
+    let value: unknown
+    try { value = JSON.parse(event.payload) } catch { throw new Error('[comic-task] 停止等待记录损坏，不能据此自动推进') }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('[comic-task] 停止等待记录结构无效')
+    const row = value as Record<string, unknown>
+    const keys = ['version', 'kind', 'action', 'generation', 'throughSequence', 'stepId']
+    if (Object.keys(row).length !== keys.length || keys.some(key => !Object.prototype.hasOwnProperty.call(row, key))
+      || event.role !== 'user' || row.version !== 1 || row.kind !== 'comic-professional-task-control' || row.action !== 'stop-waiting'
+      || !Number.isSafeInteger(row.generation) || Number(row.generation) < 1 || Number(row.generation) > snapshot.projection.generation
+      || !Number.isSafeInteger(row.throughSequence) || Number(row.throughSequence) < 1 || Number(row.throughSequence) > snapshot.projection.lastSequence
+      || typeof row.stepId !== 'string' || !row.stepId.startsWith('comic-professional:')) throw new Error('[comic-task] 停止等待记录字段无效')
+    const prefix = snapshot.events.find(item => item.sequence === row.throughSequence)
+    if (!prefix || prefix.generation !== row.generation) throw new Error('[comic-task] 停止等待记录没有对应运行前缀')
+    if (row.generation !== snapshot.projection.generation) continue
+    if (row.stepId !== expectedStepId) throw new Error('[comic-task] 停止等待记录越过当前岗位')
+    controls.push({ event, payload: row as unknown as TaskWaitControlV1 })
+  }
+  return controls.sort((a, b) => (a.event.id ?? 0) - (b.event.id ?? 0))[0] ?? null
+}
+
+async function assertTaskHasNoFrozenAdoption(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1): Promise<void> {
+  if (snapshot.events.some(event => event.generation === snapshot.projection.generation && (
+    event.type === 'adoption.started' || event.type === 'adoption.committed'
+    || (event.type === 'confirmation.recorded' && event.payload.decision === 'adopt')
+  ))) throw new Error('[comic-task] 已冻结作者采纳意图，请继续核验采纳，不能停止并丢弃')
+  if (snapshot.projection.lastCheckpointHash) {
+    const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(scope, snapshot.run.id)
+    const payload = checkpoint?.resumePayload
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('[comic-task] 无法核验现有检查点，不能丢弃潜在作者意图')
+    const kind = (payload as { kind?: unknown }).kind
+    if (kind === 'comic-professional-intent') throw new Error('[comic-task] 已冻结作者采纳意图，请继续完成采纳')
+    if (kind !== 'comic-professional-candidate') throw new Error('[comic-task] 当前检查点类型不允许停止等待')
+  }
+}
+
+/** Product UI policy only. Does not claim remote cancellation or mutate the Run. */
+export async function stopWaitingComicProfessionalTaskV1(scope: WorkspaceScope, runId: number, expected: { generation: number; lastSequence: number }): Promise<AgentEvent> {
+  const captured = { scope: { ...scope }, runId, generation: expected.generation, lastSequence: expected.lastSequence }
+  if (!Number.isSafeInteger(captured.generation) || captured.generation < 1 || !Number.isSafeInteger(captured.lastSequence) || captured.lastSequence < 1) throw new Error('[comic-task] 停止等待缺少准确运行前缀')
+  const initial = await readAgentRunV1(captured.scope, captured.runId)
+  taskStage(initial)
+  const existing = taskWaitControl(initial, await taskChannelEvents(captured.scope))
+  if (existing?.payload.generation === captured.generation) return existing.event
+  await assertTaskHasNoFrozenAdoption(captured.scope, initial)
+  return withAgentRunMutationLockV1(captured.runId, () => db.transaction('rw', agentRunScopeTransactionTablesV1(captured.runId,
+    db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, db.agentConversations, db.agentEvents,
+  ), async () => {
+    const current = await readVerifiedAgentRunInTransactionV1(captured.scope, captured.runId)
+    const stage = taskStage(current)
+    const prior = taskWaitControl(current, await taskChannelEvents(captured.scope))
+    if (prior?.payload.generation === captured.generation) return prior.event
+    if (current.projection.generation !== captured.generation || current.projection.lastSequence !== captured.lastSequence) throw new Error('[comic-task] 任务已推进，请刷新后明确操作')
+    if (!['planned', 'running', 'paused', 'awaiting_confirmation'].includes(current.projection.state)) throw new Error('[comic-task] 任务已结束或不能停止等待')
+    await assertTaskHasNoFrozenAdoption(captured.scope, current)
+    const payload: TaskWaitControlV1 = { version: 1, kind: 'comic-professional-task-control', action: 'stop-waiting', generation: current.projection.generation, throughSequence: current.projection.lastSequence, stepId: `comic-professional:${stage}` }
+    const conversation = await getOrCreateAgentConversation({ projectId: captured.scope.projectId, scope: captured.scope, worldGroupId: null, purpose: 'comic-professional-tasks', title: '漫画专业任务记录' })
+    return appendAgentEvent({ projectId: captured.scope.projectId, scope: captured.scope, conversationId: conversation.id!, durableRunId: captured.runId, kind: 'task', role: 'user', content: '作者停止等待并禁止后续自动模型调用；无法撤销已经派发的供应商请求，原运行和晚到证据继续保留。', payload })
+  }))
+}
+
+async function authorizeComicModelRequest(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, stage: ComicProfessionalStageV1, attempt: number, contextManifestHash: string, expectedRoot: Awaited<ReturnType<typeof rootFor>>): Promise<AgentRunSnapshotV1> {
+
+  const captured = {
+    scope: { ...scope }, runId: snapshot.run.id, generation: snapshot.projection.generation,
+    lastSequence: snapshot.projection.lastSequence, contractHash: snapshot.projection.contractHash,
+    stage, stepId: `comic-professional:${stage}`, attempt, contextManifestHash,
+    rootId: expectedRoot.id!, rootRevision: expectedRoot.revision,
+    sourceVersion: expectedRoot.activeSourceManifestVersion, sourceHash: expectedRoot.activeSourceManifestHash,
+
+  }
+  const bindingHash = await hashCanonicalValue(snapshot.contract.executionBindings?.[0])
+  return withAgentRunMutationLockV1(captured.runId, () => db.transaction('rw', agentRunScopeTransactionTablesV1(captured.runId,
+    db.agentRuns, db.agentRunEvents, db.agentConversations, db.agentEvents,
+    // This is the existing inspectAdaptationFreshness read closure, not a
+    // second source resolver or a full workspace table inventory.
+    db.adaptationProjects, db.adaptationSourceUnits, db.outlineNodes, db.chapters, db.storyCores,
+
+  ), async () => {
+    const current = await readVerifiedAgentRunInTransactionV1(captured.scope, captured.runId)
+    if (current.projection.generation !== captured.generation || current.projection.lastSequence !== captured.lastSequence
+      || current.projection.contractHash !== captured.contractHash || taskStage(current) !== captured.stage) throw new Error('[comic-task] 请求授权所依据的运行前缀已变化')
+    if (taskWaitControl(current, await taskChannelEvents(captured.scope))) throw new TaskStoppedWaitingError()
+    const root = await db.adaptationProjects.get(captured.rootId)
+    if (!root || root.medium !== 'comic' || root.projectId !== captured.scope.projectId || root.worldId !== captured.scope.worldId
+      || root.workId !== captured.scope.workId || root.revision !== captured.rootRevision
+      || root.activeSourceManifestVersion !== captured.sourceVersion || root.activeSourceManifestHash !== captured.sourceHash) throw new TaskSourceChangedError()
+
+    if ((await inspectAdaptationFreshness(captured.rootId)).status !== 'unchanged') throw new TaskSourceChangedError()
+    // Authorize only the exact manifest already recorded for this step.
+    if (!current.events.some(event => event.type === 'context.assembled' && event.payload.stepId === captured.stepId && event.payload.manifestHash === captured.contextManifestHash)) throw new Error('[comic-task] 请求没有对应冻结上下文')
+    const event = parseAgentRunEventV1({ version: 1, runId: captured.runId, sequence: current.projection.lastSequence + 1,
+      generation: current.projection.generation, projectId: current.run.projectId, worldGroupId: current.run.worldGroupId ?? null,
+      contractHash: current.run.contractHash, type: 'model.requested', createdAt: Date.now(), payload: { stepId: captured.stepId, attempt: captured.attempt, bindingHash } })
+    return appendAgentRunEventWithSettlementInTransactionV1({ snapshot: current, event, scope: captured.scope, workspaceDirty: true })
+  }))
+}
+
+async function recordComicGenerationFailure(scope: WorkspaceScope, runId: number, stage: ComicProfessionalStageV1, phase: string, error: unknown, responseObserved: boolean, expected: { generation: number; contractHash: string }, responseEvidence?: { observation: unknown; persistenceFailures: readonly unknown[] }): Promise<unknown> {
+  const failures: unknown[] = [...(responseEvidence?.persistenceFailures ?? [])]
+  let message = error instanceof Error ? error.message : String(error)
+  let name = error instanceof Error ? error.name : 'Error'
+  let detailOmitted = false
+  try {
+    // Reuse the existing content-safety predicate only; this is an Agent error
+    // event, not a tool invocation or a fabricated exact model artifact.
+    assertExactRunArtifactBodySafeV1({ artifactKind: 'tool-result', body: { message } })
+  } catch {
+    message = '错误详情命中运行证据安全规则，未持久化敏感文本。'
+    detailOmitted = true
+  }
+  try { assertExactRunArtifactBodySafeV1({ artifactKind: 'tool-result', body: { name } }) }
+  catch { name = 'Error'; detailOmitted = true }
+  try {
+    await withAgentRunMutationLockV1(runId, () => db.transaction('rw', agentRunScopeTransactionTablesV1(runId,
+      db.agentRuns, db.agentRunEvents, db.agentConversations, db.agentEvents,
+    ), async () => {
+      const current = await readVerifiedAgentRunInTransactionV1(scope, runId)
+      if (taskStage(current) !== stage || current.projection.generation !== expected.generation || current.projection.contractHash !== expected.contractHash) throw new Error('[comic-task] 原任务代际或契约已变化，不能追加旧诊断')
+      const conversation = await getOrCreateAgentConversation({ projectId: scope.projectId, scope, worldGroupId: null, purpose: 'comic-professional-tasks', title: '漫画专业任务记录' })
+      await appendAgentEvent({ projectId: scope.projectId, scope, conversationId: conversation.id!, durableRunId: runId, kind: 'error', role: 'system', content: message, payload: { version: 1, kind: 'comic-professional-task-error', stage, phase, name, message, detailOmitted } })
+    }))
+  } catch (cause) { failures.push(cause) }
+  try {
+    const current = await readAgentRunV1(scope, runId)
+    if (taskStage(current) !== stage || current.projection.generation !== expected.generation || current.projection.contractHash !== expected.contractHash) throw new Error('[comic-task] 原任务代际或契约已变化，不能结束另一运行前缀')
+    if (['planned', 'running'].includes(current.projection.state)) {
+      let hasCandidate = false
+      try { hasCandidate = Boolean((await latest(scope, runId)).candidate) } catch { /* A preparation failure has no candidate; damaged evidence remains inspectable. */ }
+      const requests = current.events.filter(event => event.type === 'model.requested').length
+      const responses = current.events.filter(event => event.type === 'model.responded').length
+      if (error instanceof TaskStoppedWaitingError && requests === 0) {
+        await append(scope, current, 'run.cancelled', { reason: 'author-stopped-before-model-dispatch' })
+      } else if (hasCandidate || current.projection.lastCheckpointHash || error instanceof TaskStoppedWaitingError || error instanceof TaskSourceChangedError || (requests > responses && !responseObserved)) {
+        await append(scope, current, 'run.paused', { reason: `comic-${stage}-${hasCandidate ? 'candidate-persistence-interrupted' : current.projection.lastCheckpointHash ? 'checkpoint-verification-unavailable' : error instanceof TaskStoppedWaitingError ? 'author-stopped-waiting' : error instanceof TaskSourceChangedError ? 'source-stale' : 'model-outcome-unknown'}`, recoverable: hasCandidate })
+      } else {
+        await append(scope, current, 'run.failed', { code: `comic-${stage}-${phase}-failed`, retryable: false })
+      }
+    }
+  } catch (cause) { failures.push(cause) }
+  if (failures.length) {
+    throw Object.assign(new Error(`${message}；任务诊断或状态未能完整保存，请保留当前页面并检查存储。`), { cause: error, persistenceFailures: failures, ...(responseEvidence ? { observation: responseEvidence.observation } : {}) })
+  }
+  // Classify and persist with the original error above. Only the UI-facing
+  // wrapper is sanitized; its cause keeps the original type/status evidence.
+  return detailOmitted ? Object.assign(new Error(message), { name, cause: error }) : error
+}
+
+export async function generateComicProfessionalCandidateV1(input: { scope: WorkspaceScope; adaptationProjectId: number; stage: ComicProfessionalStageV1; sourceUnitKeys?: string[]; targetPageKeys?: string[]; targetPanelKeys?: string[]; targetIssueKeys?: string[]; authorInstruction?: string; aiConfig?: AIConfig; runAI?: (messages: ChatMessage[]) => Promise<string>; onTaskCreated?: (task: Readonly<{ runId: number; generation: number; lastSequence: number }>) => void | Promise<void> }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ComicProfessionalCandidateV1 }> {
+  const callbackReceiver = input
+  const runAI = input.runAI
+  const onTaskCreated = input.onTaskCreated
+  input = { ...input, scope: { ...input.scope }, aiConfig: input.aiConfig ? { ...input.aiConfig } : undefined, sourceUnitKeys: input.sourceUnitKeys?.slice(), targetPageKeys: input.targetPageKeys?.slice(), targetPanelKeys: input.targetPanelKeys?.slice(), targetIssueKeys: input.targetIssueKeys?.slice() }
   if (!input.aiConfig && !input.runAI) throw new Error('[comic-run] 缺少 AI 配置')
   const selected = await selectTargets(input); if ((await inspectAdaptationFreshness(selected.root.id!)).status !== 'unchanged') throw new Error('[comic-run] 来源已变化或缺失，请先同步')
   const key = [selected.root.id!, selected.root.activeSourceManifestVersion] as [number, number]
@@ -244,6 +438,11 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   requireStage(input.stage, selected.root, { facts: factRows.length, edges: edgeRows.length, decisions: decisionRows.length, beats: beatRows.length, plans: planRows.length, pages: pageCount, subjects: subjectRows.length }, { pages: selected.targetPages.length, panels: selected.targetPanels.length, issues: selected.targetIssues.length })
   const config = STAGES[input.stage]; const skill = getAgentSkillV1(config.skillId); const stepId = `comic-professional:${input.stage}`
   let snapshot = await createAgentRunV1({ scope: input.scope, worldGroupId: null, contract: runContract(input.scope, input.stage) })
+  let phase = 'preparation'
+  let responseObserved = false
+  let unavailableResponse: Awaited<ReturnType<typeof recordUnavailableCreationResponseV1>> | undefined
+  try {
+  await onTaskCreated?.call(callbackReceiver, Object.freeze({ runId: snapshot.run.id, generation: snapshot.projection.generation, lastSequence: snapshot.projection.lastSequence }))
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId }); snapshot = await append(input.scope, snapshot, 'step.started', { stepId, attempt: 1 })
   const inferredTargetPages = selected.targetPages.length ? selected.targetPages : selected.targetPanels.length ? selected.pages.filter(page => selected.targetPanels.some(panel => panel.pageId === page.id)) : ['visual-bible', 'image-request', 'visual-continuity-review', 'targeted-repair', 'page-review'].includes(input.stage) ? selected.pages : []
   const assembled = await assembleContext({ projectId: input.scope.projectId, scope: input.scope, sourceKeys: [...skill.contextSourceKeys], adaptationProjectId: selected.root.id!, adaptationSourceManifestVersion: selected.root.activeSourceManifestVersion, adaptationSourceUnitKeys: selected.sourceUnitKeys, comicPageIds: inferredTargetPages.flatMap(row => row.id == null ? [] : [row.id]), provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 48_000 })
@@ -265,15 +464,25 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   const messages: ChatMessage[] = [{ role: 'system', content: system }, { role: 'user', content: comicProfessionalInstructionV1(input.stage) }]
   const attemptedMessages: ChatMessage[][] = [messages]
   const invoke = async (attemptMessages: ChatMessage[], attempt: number): Promise<string> => {
-    snapshot = await append(input.scope, snapshot, 'model.requested', { stepId, attempt, bindingHash: await hashCanonicalValue(snapshot.contract.executionBindings?.[0]) })
+    phase = 'request'; responseObserved = false
+    const prepared = await recordCreationModelRequestV1({ scope: input.scope, snapshot, stepId, attempt,
+      contextManifestHash: activeContextManifest.manifestHash, messages: attemptMessages })
+    snapshot = prepared.snapshot
+    snapshot = await authorizeComicModelRequest(input.scope, snapshot, input.stage, attempt, activeContextManifest.manifestHash, selected.root)
+    const result: ChatResult = {}
     let output: string
-    try { output = await (input.runAI ? input.runAI(attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: `comic.${input.stage}`, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, AbortSignal.timeout(COMIC_MODEL_TIMEOUT_MS))) }
+    try { output = await (runAI ? runAI.call(callbackReceiver, attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: `comic.${input.stage}`, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, AbortSignal.timeout(COMIC_MODEL_TIMEOUT_MS), result)) }
     catch (error) {
-      await append(input.scope, snapshot, 'run.paused', { reason: `comic-${input.stage}-model-outcome-unknown`, recoverable: false })
-      if (error instanceof DOMException && error.name === 'TimeoutError') throw new Error(`[comic-run] 模型 ${COMIC_MODEL_TIMEOUT_MS / 1_000} 秒未返回；本次运行已暂停，可重试或使用作者兜底。`)
-      throw error
+      const failed = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
+      unavailableResponse = failed
+      snapshot = failed.snapshot
+      if (error instanceof DOMException && error.name === 'TimeoutError') throw Object.assign(new Error(`[comic-run] 模型 ${COMIC_MODEL_TIMEOUT_MS / 1_000} 秒未返回；请求结果未知，不会自动重发，也无法确认供应商端已取消。`), { cause: failed.error })
+      throw failed.error
     }
+    responseObserved = true; phase = 'response-persistence'
+    snapshot = await recordCreationModelResponseV1({ snapshot, request: prepared.request, raw: output, result })
     snapshot = await append(input.scope, snapshot, 'model.responded', { stepId, attempt, outputHash: await hashCanonicalValue({ raw: output }) })
+    phase = 'protocol'
     return output
   }
   const parseForRun = (output: string): ComicProfessionalPayloadV1 => {
@@ -348,12 +557,16 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
     try { payload = parseForRun(raw) }
     catch (error) { snapshot = await append(input.scope, snapshot, 'step.failed', { stepId, attempt, code: `comic-${input.stage}-protocol-failed`, retryable: false, category: 'protocol', action: 'fail' }); await append(input.scope, snapshot, 'run.failed', { code: `comic-${input.stage}-protocol-failed`, retryable: false }); throw error }
   }
+  phase = 'candidate-persistence'
   const revisionTargets = ['visual-continuity-review', 'page-review'].includes(input.stage) ? selected.panels.filter(panel => selected.targetPages.some(page => page.id === panel.pageId)) : selected.targetPanels
   const body = { version: 1 as const, kind: 'comic-professional-candidate' as const, portable: false as const, stage: input.stage, projectId: input.scope.projectId, worldId: input.scope.worldId, workId: input.scope.workId, adaptationProjectId: selected.root.id!, adaptationRevision: selected.root.revision, sourceManifestVersion: selected.root.activeSourceManifestVersion, sourceManifestHash: selected.root.activeSourceManifestHash, sourceUnitKeys: selected.sourceUnitKeys, targetPageKeys: selected.targetPages.map(row => row.stableKey), targetPanelKeys: revisionTargets.map(row => row.stableKey), targetIssueKeys: selected.targetIssues.map(row => row.stableKey), targetPanelRevisions: Object.fromEntries(revisionTargets.map(row => [row.stableKey, row.revision])), contextManifestHash: activeContextManifest.manifestHash, promptHash: await hashCanonicalValue(attemptedMessages), modelOutputHash: await hashCanonicalValue({ raw }), payload, payloadHash: await hashCanonicalValue(payload) }
   const candidate = { ...body, candidateHash: await hashCanonicalValue(body) }
   const saved = await createAgentRunCheckpointV1({ scope: input.scope, runId: snapshot.run.id, resumePayload: candidate }); snapshot = saved.snapshot
   snapshot = await append(input.scope, snapshot, 'candidate.persisted', { stepId, attempt, candidateHash: candidate.candidateHash, requiresConfirmation: true })
   return { snapshot, candidate }
+  } catch (error) {
+    throw await recordComicGenerationFailure(input.scope, snapshot.run.id, input.stage, phase, error, responseObserved, { generation: snapshot.projection.generation, contractHash: snapshot.projection.contractHash }, unavailableResponse)
+  }
 }
 
 async function parseCandidate(value: unknown): Promise<ComicProfessionalCandidateV1> {
@@ -370,6 +583,94 @@ async function latest(scope: WorkspaceScope, runId: number): Promise<{ candidate
   if (value?.kind === 'comic-professional-intent') { const candidate = await parseCandidate(value.candidate); const authorPayload = parseComicProfessionalPayloadV1(candidate.stage, value.authorPayload); if (await hashCanonicalValue(authorPayload) !== value.authorPayloadHash) throw new Error('[comic-run] 作者 payload hash 不匹配'); if (value.allowReplaceDownstream != null && typeof value.allowReplaceDownstream !== 'boolean') throw new Error('[comic-run] 替换授权格式非法'); if (typeof value.authorVisualInspectionConfirmed !== 'boolean') throw new Error('[comic-run] 作者视觉确认依据缺失'); const { intentHash: _intentHash, ...body } = value; if (await hashCanonicalValue(body) !== value.intentHash) throw new Error('[comic-run] 采纳意图 hash 不匹配'); return { candidate, intent: value as ComicProfessionalIntentV1 } }
   return { candidate: await parseCandidate(value), intent: null }
 }
+
+export interface ComicProfessionalTaskV1 {
+  id: number
+  stage: ComicProfessionalStageV1 | null
+  status: AgentRunSnapshotV1['projection']['state'] | 'unverified'
+  verified: boolean
+  generation: number
+  lastSequence: number
+  requestedAttempts: number
+  respondedAttempts: number
+  hasUnresolvedRequest: boolean
+  candidateState: 'missing' | 'available' | 'intent' | 'unchecked' | 'unverified'
+  stoppedWaiting: boolean
+  controlVerified: boolean
+  resuming: boolean
+  canStopWaiting: boolean
+  canRecoverCandidate: boolean
+  diagnostics: string[]
+  rawResponseReferences: string[]
+}
+
+interface ComicProfessionalTaskDetailV1 {
+  task: ComicProfessionalTaskV1
+  snapshot: AgentRunSnapshotV1
+  candidate?: ComicProfessionalCandidateV1
+  authorPayload?: ComicProfessionalPayloadV1
+}
+
+async function inspectTask(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, channelEvents: readonly AgentEvent[], verifyCandidate = true): Promise<ComicProfessionalTaskDetailV1> {
+  const stage = taskStage(snapshot)
+  const requests = snapshot.events.filter(event => event.type === 'model.requested').length
+  const responses = snapshot.events.filter(event => event.type === 'model.responded').length
+  const task: ComicProfessionalTaskV1 = {
+    id: snapshot.run.id, stage, status: snapshot.projection.state, verified: true,
+    generation: snapshot.projection.generation, lastSequence: snapshot.projection.lastSequence,
+    requestedAttempts: requests, respondedAttempts: responses, hasUnresolvedRequest: requests > responses,
+    candidateState: snapshot.projection.lastCheckpointHash ? 'unchecked' : 'missing', stoppedWaiting: false, controlVerified: true,
+    resuming: false, canStopWaiting: false, canRecoverCandidate: false, diagnostics: [],
+    rawResponseReferences: snapshot.events.flatMap(event => event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'raw-response' ? [event.payload.contentHash] : []),
+  }
+  try { task.stoppedWaiting = Boolean(taskWaitControl(snapshot, channelEvents)) }
+  catch (error) { task.controlVerified = false; task.diagnostics.push(error instanceof Error ? error.message : String(error)) }
+  for (const event of channelEvents) {
+    if (event.durableRunId !== snapshot.run.id || event.kind !== 'error') continue
+    try {
+      const payload = JSON.parse(event.payload) as Record<string, unknown>
+      if (payload.version === 1 && payload.kind === 'comic-professional-task-error' && payload.stage === stage && typeof payload.message === 'string') task.diagnostics.push(payload.message)
+    } catch { task.diagnostics.push('任务诊断记录损坏，原运行证据仍保留。') }
+  }
+  if (!task.diagnostics.length) {
+    const failure = [...snapshot.events].reverse().find(event => event.type === 'run.failed' || event.type === 'run.paused' || event.type === 'step.failed')
+    if (failure?.type === 'run.paused') task.diagnostics.push(failure.payload.reason)
+    else if (failure?.type === 'run.failed' || failure?.type === 'step.failed') task.diagnostics.push(failure.payload.code)
+  }
+  const detail: ComicProfessionalTaskDetailV1 = { task, snapshot }
+  const hasAdoption = snapshot.events.some(event => event.generation === snapshot.projection.generation && (
+    event.type === 'adoption.started' || event.type === 'adoption.committed' || (event.type === 'confirmation.recorded' && event.payload.decision === 'adopt')
+  ))
+  if (verifyCandidate && (snapshot.projection.lastCheckpointHash || Object.values(snapshot.projection.steps).some(step => step.candidateHash))) {
+    try {
+      const state = await latest(scope, snapshot.run.id)
+      const candidate = state.candidate
+      const current = await readAgentRunV1(scope, snapshot.run.id)
+      if (current.projection.generation !== snapshot.projection.generation || current.projection.lastSequence !== snapshot.projection.lastSequence || current.projection.contractHash !== snapshot.projection.contractHash) throw new Error('[comic-task] 运行证据已推进，请刷新后查看候选')
+      if (candidate.projectId !== scope.projectId || candidate.worldId !== scope.worldId || candidate.workId !== scope.workId || candidate.stage !== stage) throw new Error('[comic-task] 候选越过当前 Work 或岗位')
+      detail.candidate = candidate
+      if (state.intent) detail.authorPayload = state.intent.authorPayload
+      task.candidateState = state.intent ? 'intent' : 'available'
+      task.resuming = Boolean(state.intent) && ['running', 'awaiting_confirmation', 'verifying'].includes(snapshot.projection.state)
+      const step = snapshot.projection.steps[`comic-professional:${stage}`]
+      task.canRecoverCandidate = !state.intent && !step?.candidateHash && step?.status === 'running' && ['running', 'paused', 'recovering'].includes(snapshot.projection.state) && task.controlVerified
+    } catch (error) {
+      task.candidateState = 'unverified'
+      task.diagnostics.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  task.canStopWaiting = task.controlVerified && !task.stoppedWaiting && !hasAdoption && task.candidateState !== 'intent' && task.candidateState !== 'unverified'
+    && ['planned', 'running', 'paused', 'awaiting_confirmation'].includes(snapshot.projection.state)
+  return detail
+}
+
+/** Read-only inspection: never repairs events or dispatches a model. */
+export async function readComicProfessionalTaskV1(scope: WorkspaceScope, runId: number): Promise<ComicProfessionalTaskDetailV1> {
+  const capturedScope = { ...scope }
+  const snapshot = await readAgentRunV1(capturedScope, runId)
+  return inspectTask(capturedScope, snapshot, await taskChannelEvents(capturedScope))
+}
+
 async function assertFresh(scope: WorkspaceScope, candidate: ComicProfessionalCandidateV1) {
   const root = await rootFor(scope, candidate.adaptationProjectId); if (root.revision !== candidate.adaptationRevision || root.activeSourceManifestVersion !== candidate.sourceManifestVersion || root.activeSourceManifestHash !== candidate.sourceManifestHash || (await inspectAdaptationFreshness(root.id!)).status !== 'unchanged') throw new Error('[comic-run] 改编根或来源已变化，候选 stale')
   const pages = await db.comicPages.where('adaptationProjectId').equals(root.id!).toArray(); const pageIds = pages.flatMap(row => row.id == null ? [] : [row.id]); const panels = pageIds.length ? await db.comicPanels.where('pageId').anyOf(pageIds).filter(row => candidate.targetPanelKeys.includes(row.stableKey)).toArray() : []
@@ -442,34 +743,121 @@ async function formalAlreadyApplied(candidate: ComicProfessionalCandidateV1, pay
 }
 
 export async function adoptComicProfessionalCandidateV1(input: { scope: WorkspaceScope; runId: number; allowReplaceDownstream?: boolean; authorPayload?: ComicProfessionalPayloadV1; authorVisualInspectionConfirmed?: boolean; onDurableBoundary?: (boundary: 'adoption.started' | 'formal.written' | 'adoption.committed' | 'verification.accepted', snapshot: AgentRunSnapshotV1) => void | Promise<void> }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ComicProfessionalCandidateV1; receiptHash: string }> {
-  let snapshot = await readAgentRunV1(input.scope, input.runId); const state = await latest(input.scope, input.runId); const candidate = state.candidate; const stepId = `comic-professional:${candidate.stage}`; let intent = state.intent
-  if (candidate.projectId !== input.scope.projectId || candidate.worldId !== input.scope.worldId || candidate.workId !== input.scope.workId) throw new Error('[comic-run] 候选越过当前 Work')
+  const scope = { ...input.scope }; const runId = input.runId
+  let snapshot = await readAgentRunV1(scope, runId); const state = await latest(scope, runId); const candidate = state.candidate; const stepId = `comic-professional:${candidate.stage}`; let intent = state.intent
+  if (candidate.projectId !== scope.projectId || candidate.worldId !== scope.worldId || candidate.workId !== scope.workId) throw new Error('[comic-run] 候选越过当前 Work')
+  const current = await readAgentRunV1(scope, runId)
+  if (current.projection.generation !== snapshot.projection.generation || current.projection.lastSequence !== snapshot.projection.lastSequence || current.projection.contractHash !== snapshot.projection.contractHash) throw new Error('[comic-run] 运行前缀已变化，请刷新后核验原采纳')
+  if (taskStage(snapshot) !== candidate.stage || snapshot.projection.steps[stepId]?.candidateHash !== candidate.candidateHash) throw new Error('[comic-run] 原候选与当前任务岗位或步骤不一致')
   if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash) return { snapshot, candidate, receiptHash: snapshot.projection.terminalReceiptHash }
-  if (snapshot.projection.state === 'awaiting_confirmation') { await assertFresh(input.scope, candidate); if (candidate.stage === 'visual-continuity-review' && !input.authorVisualInspectionConfirmed && !intent?.authorVisualInspectionConfirmed) throw new Error('[comic-run] 请先查看目标页实际成图并明确确认视觉检查'); const authorPayload = parseComicProfessionalPayloadV1(candidate.stage, input.authorPayload ?? intent?.authorPayload ?? candidate.payload); const body = { version: 1 as const, kind: 'comic-professional-intent' as const, allowReplaceDownstream: input.allowReplaceDownstream === true || intent?.allowReplaceDownstream === true, candidate, authorPayload, authorPayloadHash: await hashCanonicalValue(authorPayload), authorVisualInspectionConfirmed: candidate.stage === 'visual-continuity-review' && (input.authorVisualInspectionConfirmed === true || intent?.authorVisualInspectionConfirmed === true) }; intent = { ...body, intentHash: await hashCanonicalValue(body) }; const saved = await createAgentRunCheckpointV1({ scope: input.scope, runId: snapshot.run.id, resumePayload: intent }); snapshot = saved.snapshot; snapshot = await append(input.scope, snapshot, 'confirmation.recorded', { stepId, candidateHash: candidate.candidateHash, decision: 'adopt' }); snapshot = await append(input.scope, snapshot, 'adoption.started', { stepId, candidateHash: candidate.candidateHash, intentHash: intent.intentHash }); await input.onDurableBoundary?.('adoption.started', snapshot) }
+  // A nonportable imported intent is evidence, never fresh write authority.
+  // This preflight does not make the existing domain/receipt crash window atomic.
+  if (!['awaiting_confirmation', 'running', 'verifying'].includes(snapshot.projection.state)) throw new Error('[comic-run] 当前运行已结束或不可执行，保留原意图仅供核验')
+  await rootFor(scope, candidate.adaptationProjectId)
+  if (snapshot.projection.state === 'awaiting_confirmation') { await assertFresh(scope, candidate); if (candidate.stage === 'visual-continuity-review' && !input.authorVisualInspectionConfirmed && !intent?.authorVisualInspectionConfirmed) throw new Error('[comic-run] 请先查看目标页实际成图并明确确认视觉检查'); const authorPayload = parseComicProfessionalPayloadV1(candidate.stage, input.authorPayload ?? intent?.authorPayload ?? candidate.payload); const body = { version: 1 as const, kind: 'comic-professional-intent' as const, allowReplaceDownstream: input.allowReplaceDownstream === true || intent?.allowReplaceDownstream === true, candidate, authorPayload, authorPayloadHash: await hashCanonicalValue(authorPayload), authorVisualInspectionConfirmed: candidate.stage === 'visual-continuity-review' && (input.authorVisualInspectionConfirmed === true || intent?.authorVisualInspectionConfirmed === true) }; intent = { ...body, intentHash: await hashCanonicalValue(body) }; const saved = await createAgentRunCheckpointV1({ scope: scope, runId: snapshot.run.id, resumePayload: intent }); snapshot = saved.snapshot; snapshot = await append(scope, snapshot, 'confirmation.recorded', { stepId, candidateHash: candidate.candidateHash, decision: 'adopt' }); snapshot = await append(scope, snapshot, 'adoption.started', { stepId, candidateHash: candidate.candidateHash, intentHash: intent.intentHash }); await input.onDurableBoundary?.('adoption.started', snapshot) }
   if (!intent) throw new Error('[comic-run] 候选不在可采纳状态')
   let adoptionHash = snapshot.projection.steps[stepId]?.adoptionHash
   if (!adoptionHash) {
     if (!await formalAlreadyApplied(candidate, intent.authorPayload)) {
-      try { await writeFormal(input.scope, intent) }
+      try { await writeFormal(scope, intent) }
       catch (error) {
-        snapshot = await readAgentRunV1(input.scope, input.runId); const step = snapshot.projection.steps[stepId]
-        if (step?.status === 'running') snapshot = await append(input.scope, snapshot, 'step.failed', { stepId, attempt: step.attempt, code: `comic-${candidate.stage}-adoption-validation-failed`, retryable: false, category: 'deterministic', action: 'fail' })
-        if (snapshot.projection.state !== 'failed') await append(input.scope, snapshot, 'run.failed', { code: `comic-${candidate.stage}-adoption-validation-failed`, retryable: false })
+        snapshot = await readAgentRunV1(scope, runId); const step = snapshot.projection.steps[stepId]
+        if (step?.status === 'running') snapshot = await append(scope, snapshot, 'step.failed', { stepId, attempt: step.attempt, code: `comic-${candidate.stage}-adoption-validation-failed`, retryable: false, category: 'deterministic', action: 'fail' })
+        if (snapshot.projection.state !== 'failed') await append(scope, snapshot, 'run.failed', { code: `comic-${candidate.stage}-adoption-validation-failed`, retryable: false })
         throw error
       }
     }
-    await input.onDurableBoundary?.('formal.written', snapshot); const stateHash = await postStateHash(candidate); adoptionHash = await hashCanonicalValue({ intentHash: intent.intentHash, stateHash }); snapshot = await append(input.scope, snapshot, 'adoption.committed', { stepId, candidateHash: candidate.candidateHash, adoptionHash }); await input.onDurableBoundary?.('adoption.committed', snapshot)
+    await input.onDurableBoundary?.('formal.written', snapshot); const stateHash = await postStateHash(candidate); adoptionHash = await hashCanonicalValue({ intentHash: intent.intentHash, stateHash }); snapshot = await append(scope, snapshot, 'adoption.committed', { stepId, candidateHash: candidate.candidateHash, adoptionHash }); await input.onDurableBoundary?.('adoption.committed', snapshot)
   }
-  const stateHash = await postStateHash(candidate); if (snapshot.projection.steps[stepId]?.status === 'running') snapshot = await append(input.scope, snapshot, 'step.succeeded', { stepId, attempt: snapshot.projection.steps[stepId].attempt, outputHash: adoptionHash }); if (snapshot.projection.state === 'running') snapshot = await append(input.scope, snapshot, 'verification.started', { verifierSetVersion: `comic-${candidate.stage}-terminal-v1` })
+  const stateHash = await postStateHash(candidate); if (snapshot.projection.steps[stepId]?.status === 'running') snapshot = await append(scope, snapshot, 'step.succeeded', { stepId, attempt: snapshot.projection.steps[stepId].attempt, outputHash: adoptionHash }); if (snapshot.projection.state === 'running') snapshot = await append(scope, snapshot, 'verification.started', { verifierSetVersion: `comic-${candidate.stage}-terminal-v1` })
   const receipt = await createVerificationReceiptV1({ version: 1, runId: snapshot.run.id, generation: snapshot.projection.generation, contractHash: snapshot.projection.contractHash, contextManifestHashes: [candidate.contextManifestHash], candidateHashes: [candidate.candidateHash], adoptionEventIds: [], postStateHash: stateHash, verifierSetVersion: `comic-${candidate.stage}-terminal-v1`, criteria: [{ id: `${stepId}.candidate`, status: 'passed', evidenceRefs: [`candidate:${candidate.candidateHash}`] }, { id: `${stepId}.author`, status: 'passed', evidenceRefs: [`intent:${intent.intentHash}`] }, { id: `${stepId}.post-state`, status: 'passed', evidenceRefs: [`post-state:${stateHash}`] }], acceptedAt: Date.now() })
-  snapshot = await append(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash }); await input.onDurableBoundary?.('verification.accepted', snapshot); return { snapshot, candidate, receiptHash: receipt.receiptHash }
+  snapshot = await append(scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash }); await input.onDurableBoundary?.('verification.accepted', snapshot); return { snapshot, candidate, receiptHash: receipt.receiptHash }
 }
 
 export async function readPendingComicProfessionalCandidateV1(scope: WorkspaceScope): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ComicProfessionalCandidateV1; recovering?: boolean; authorPayload?: ComicProfessionalPayloadV1 } | null> {
-  const rows = (await readOwnedRows<any>(scope, 'agentRuns', { owner: 'work' })).filter(row => ['awaiting_confirmation', 'running'].includes(row.status) && row.contractJson?.includes('comic-professional:')).sort((a, b) => (b.id ?? 0) - (a.id ?? 0))
-  for (const row of rows) { if (!row.id) continue; try { let snapshot = await readAgentRunV1(scope, row.id); const state = await latest(scope, row.id); if (state.intent) return { snapshot, candidate: state.candidate, recovering: true, authorPayload: state.intent.authorPayload }; const candidate = state.candidate; const stepId = `comic-professional:${candidate.stage}`; const step = snapshot.projection.steps[stepId]; if (!step?.candidateHash && step?.status === 'running') snapshot = await append(scope, snapshot, 'candidate.persisted', { stepId, attempt: step.attempt, candidateHash: candidate.candidateHash, requiresConfirmation: true }); if (snapshot.projection.state === 'awaiting_confirmation') return { snapshot, candidate } } catch { /* ignore damaged candidates */ } }
+  const capturedScope = { ...scope }
+  const tasks = (await listComicProfessionalTasksV1(capturedScope)).sort((a, b) => Number(b.resuming) - Number(a.resuming) || b.id - a.id)
+  for (const task of tasks) {
+    if (!task.verified || (!task.resuming && (!task.controlVerified || task.stoppedWaiting || task.status !== 'awaiting_confirmation'))) continue
+    try {
+      const detail = await readComicProfessionalTaskV1(capturedScope, task.id)
+      if (!detail.candidate) continue
+      // A waiting policy may not hide an already-frozen adoption intent.
+      if (detail.task.resuming) return { snapshot: detail.snapshot, candidate: detail.candidate, recovering: true, authorPayload: detail.authorPayload }
+      if (detail.task.controlVerified && !detail.task.stoppedWaiting && detail.task.status === 'awaiting_confirmation') return { snapshot: detail.snapshot, candidate: detail.candidate }
+    } catch { /* Task history separately exposes unavailable evidence. */ }
+  }
   return null
 }
+
 export async function rejectComicProfessionalCandidateV1(scope: WorkspaceScope, runId: number): Promise<void> {
   let snapshot = await readAgentRunV1(scope, runId); const state = await latest(scope, runId); if (state.intent || snapshot.projection.state !== 'awaiting_confirmation') throw new Error('[comic-run] 候选不在等待确认状态'); const stepId = `comic-professional:${state.candidate.stage}`; snapshot = await append(scope, snapshot, 'confirmation.recorded', { stepId, candidateHash: state.candidate.candidateHash, decision: 'reject' }); await append(scope, snapshot, 'run.cancelled', { reason: `author-rejected-comic-${state.candidate.stage}` })
+}
+
+/** Task history does not depend on the existence or validity of a candidate. */
+export async function listComicProfessionalTasksV1(scope: WorkspaceScope): Promise<ComicProfessionalTaskV1[]> {
+  const capturedScope = { ...scope }
+  const rows = (await readOwnedRows<AgentRunRecord>(capturedScope, 'agentRuns', { owner: 'work' })).filter(row => row.contractJson.includes('comic-professional:'))
+  const channelEvents = await taskChannelEvents(capturedScope)
+  const tasks: ComicProfessionalTaskV1[] = []
+  for (const row of rows) {
+    if (!row.id) continue
+    try {
+      const snapshot = await readAgentRunV1(capturedScope, row.id)
+      const terminal = ['completed', 'cancelled', 'failed'].includes(snapshot.projection.state)
+      tasks.push((await inspectTask(capturedScope, snapshot, channelEvents, !terminal)).task)
+    } catch (error) {
+      tasks.push({ id: row.id, stage: null, status: 'unverified', verified: false,
+        generation: row.generation, lastSequence: row.lastSequence, requestedAttempts: 0, respondedAttempts: 0,
+        hasUnresolvedRequest: false, candidateState: 'unverified', stoppedWaiting: false, controlVerified: false,
+        resuming: false, canStopWaiting: false, canRecoverCandidate: false,
+        diagnostics: [error instanceof Error ? error.message : String(error)], rawResponseReferences: [] })
+    }
+  }
+  return tasks.sort((a, b) => b.id - a.id)
+}
+
+/** Explicit, zero-model recovery of an already verified candidate checkpoint. */
+export async function recoverComicProfessionalCandidateV1(scope: WorkspaceScope, runId: number, expected: { generation: number; lastSequence: number; candidateHash: string }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ComicProfessionalCandidateV1 }> {
+  const captured = { scope: { ...scope }, runId, generation: expected.generation, lastSequence: expected.lastSequence, candidateHash: expected.candidateHash }
+  if (!/^[a-f0-9]{64}$/.test(captured.candidateHash)) throw new Error('[comic-task] 缺少准确候选 hash')
+  const verified = await readLatestVerifiedAgentRunCheckpointV1(captured.scope, captured.runId)
+  if (!verified) throw new Error('[comic-task] 没有已保存的候选，不能通过恢复重新调用模型')
+  const candidate = await parseCandidate(verified.resumePayload)
+  let snapshot = verified.snapshot
+  const stage = taskStage(snapshot)
+  const step = `comic-professional:${stage}`
+  if (candidate.projectId !== captured.scope.projectId || candidate.worldId !== captured.scope.worldId || candidate.workId !== captured.scope.workId
+    || candidate.stage !== stage || candidate.candidateHash !== captured.candidateHash || snapshot.projection.generation !== captured.generation) throw new Error('[comic-task] 恢复候选或作用域已变化')
+  if (snapshot.projection.state === 'awaiting_confirmation' && snapshot.projection.steps[step]?.candidateHash === captured.candidateHash) return { snapshot, candidate }
+  if (snapshot.projection.lastSequence !== captured.lastSequence || !['running', 'paused', 'recovering'].includes(snapshot.projection.state)) throw new Error('[comic-task] 任务已推进，请刷新恢复入口')
+  await assertTaskHasNoFrozenAdoption(captured.scope, snapshot)
+  await assertFresh(captured.scope, candidate)
+  const checkpointHash = verified.checkpoint.checkpointHash
+  if (snapshot.projection.state === 'paused' || snapshot.projection.state === 'recovering') {
+    const plan = await beginAgentRunRecoveryV1({ scope: captured.scope, runId: captured.runId, expectedLastSequence: snapshot.projection.lastSequence })
+    if (plan.checkpointHash !== checkpointHash) throw new Error('[comic-task] 恢复检查点已变化')
+    snapshot = await completeAgentRunRecoveryV1({ scope: captured.scope, runId: captured.runId, checkpointHash, expectedLastSequence: plan.snapshot.projection.lastSequence })
+  }
+  const expectedSequence = snapshot.projection.lastSequence
+  return withAgentRunMutationLockV1(captured.runId, () => db.transaction('rw', agentRunScopeTransactionTablesV1(captured.runId,
+    db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, db.agentConversations, db.agentEvents,
+    db.adaptationProjects, db.adaptationSourceUnits, db.outlineNodes, db.chapters, db.storyCores,
+    db.comicPages, db.comicPanels,
+  ), async () => {
+    const current = await readVerifiedAgentRunInTransactionV1(captured.scope, captured.runId)
+    const latestCheckpoint = await readLatestVerifiedAgentRunCheckpointV1(captured.scope, captured.runId)
+    if (taskStage(current) !== stage || current.projection.generation !== captured.generation || !latestCheckpoint || latestCheckpoint.checkpoint.checkpointHash !== checkpointHash) throw new Error('[comic-task] 恢复依据已变化')
+    taskWaitControl(current, await taskChannelEvents(captured.scope))
+    if (current.projection.state === 'awaiting_confirmation' && current.projection.steps[step]?.candidateHash === candidate.candidateHash) return { snapshot: current, candidate }
+    if (current.projection.lastSequence !== expectedSequence || current.projection.state !== 'running') throw new Error('[comic-task] 恢复运行已被其它操作推进')
+    await assertTaskHasNoFrozenAdoption(captured.scope, current)
+    await assertFresh(captured.scope, candidate)
+    const activeStep = current.projection.steps[step]
+    if (!activeStep || activeStep.status !== 'running' || activeStep.candidateHash) throw new Error('[comic-task] 岗位不是可恢复候选状态')
+    const event = parseAgentRunEventV1({ version: 1, runId: captured.runId, sequence: current.projection.lastSequence + 1,
+      generation: current.projection.generation, projectId: current.run.projectId, worldGroupId: current.run.worldGroupId ?? null,
+      contractHash: current.run.contractHash, type: 'candidate.persisted', createdAt: Date.now(), payload: { stepId: step, attempt: activeStep.attempt, candidateHash: candidate.candidateHash, requiresConfirmation: true } })
+    return { snapshot: await appendAgentRunEventWithSettlementInTransactionV1({ snapshot: current, event, scope: captured.scope, workspaceDirty: true }), candidate }
+  }))
 }

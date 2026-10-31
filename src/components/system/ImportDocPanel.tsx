@@ -6,7 +6,7 @@ import {
   applyReferenceFromSession, applyProjectFromSession,
 } from '../../lib/import/pipeline'
 import type { ReferenceAnalysisDepth } from '../../lib/types'
-import { useImportSessionStore } from '../../stores/import-session'
+import { ImportSessionUnavailableError, useImportSessionStore } from '../../stores/import-session'
 import { useImportStatusStore } from '../../stores/import-status'
 import { useOutlineStore } from '../../stores/outline'
 import { useWorldGroupStore } from '../../stores/world-group'
@@ -112,6 +112,18 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     showReport()
   }, [phase, status.sessionId])
 
+  const reportImportFailure = (action: string, error: unknown, sessionId?: number) => {
+    const message = error instanceof Error ? error.message : String(error)
+    if (error instanceof ImportSessionUnavailableError && sessionId != null) clearChunkTexts(sessionId)
+    const current = useImportStatusStore.getState()
+    if (sessionId == null || current.sessionId == null || current.sessionId === sessionId) {
+      current.setPhase('failed')
+      current.setFatalError(message)
+      current.pushActivity('error', `${action}：${message}`)
+    }
+    toast.error(`${action}：${message}`)
+  }
+
   // ── 在 Confirm Modal 里确认：创建 session 并启动 ───────────
   const handleConfirmStart = async (importTarget: ImportTarget, selectedWorldGroupId?: number | null, depth?: import('../../lib/types').ReferenceAnalysisDepth) => {
     if (!plans) return
@@ -124,82 +136,90 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     useImportStatusStore.getState().reset()
     useImportStatusStore.getState().setPhase('preparing')
 
-    const fileHash = quickHash(rawText)
-    const sessionData: Omit<ImportSession, 'id' | 'createdAt' | 'updatedAt'> = {
-      projectId: project.id!,
-      filename: filename || '未命名文档',
-      fileHash,
-      totalChars: rawText.length,
-      totalChunks: plans.length,
-      chunkSize,
-      chunks: plans.map<ChunkState>(p => ({
-        index: p.index,
-        startChar: p.startChar,
-        endChar: p.endChar,
-        charCount: p.charCount,
-        label: p.label,
-        status: 'pending',
-        attempts: 0,
-      })),
-      merged: { worldview: {}, characters: [], outline: [], codexCandidates: [] },
-      rollingContext: '',
-      importTarget,
-      analysisDepth: importTarget === 'reference' ? (depth ?? 'quick') : undefined,
-      targetWorldGroupId: importTarget === 'project' ? (selectedWorldGroupId ?? null) : null,
-      status: 'pending',
-    }
-
-    const sessionId = await useImportSessionStore.getState().create(sessionData)
-    registerChunkTexts(sessionId, plans.map(p => ({ index: p.index, text: p.text })))
-
-    // 存原文 Blob —— 优先用原始 File（保留 Word/PDF 原格式，下次恢复一致）
-    // 如果用户是粘贴文本，退化为 text/plain Blob
+    let createdSessionId: number | undefined
     try {
-      const { blob: fileBlob, filename: saveName } = sourceBlob()
-      await useImportSessionStore.getState().saveBlob(sessionId, saveName, fileBlob, fileHash)
-    } catch (err) {
-      // 存 Blob 失败不应阻塞主流程（本次内存里原文还在，依然能跑完）
-      console.warn('[import] saveBlob 失败（本次跑不受影响，但下次刷新将无法自动续跑）：', err)
-    }
-
-    // Phase 28.4: 如果检测到分卷结构，且是导入当前项目，先预写卷结构骨架
-    if (importTarget === 'project' && volumeDetect?.hasVolumes) {
-      try {
-        const olStore = useOutlineStore.getState()
-        await olStore.loadAll(project.id!)
-        const startOrder = useOutlineStore.getState().nodes
-          .filter(n => n.parentId === null).length
-
-        for (let vi = 0; vi < volumeDetect.volumes.length; vi++) {
-          const vol = volumeDetect.volumes[vi]
-          await olStore.addNode({
-            projectId: project.id!,
-            parentId: null,
-            type: 'volume',
-            worldGroupId: selectedWorldGroupId ?? null,
-            title: vol.title,
-            summary: '',
-            order: startOrder + vi,
-          })
-        }
-        useImportStatusStore.getState().pushActivity(
-          'info',
-          `📚 已创建 ${volumeDetect.volumes.length} 个卷结构骨架`,
-        )
-      } catch (err) {
-        console.warn('[import] 预写卷结构失败（不影响主流程）：', err)
+      const fileHash = quickHash(rawText)
+      const sessionData: Omit<ImportSession, 'id' | 'createdAt' | 'updatedAt'> = {
+        projectId: project.id!,
+        filename: filename || '未命名文档',
+        fileHash,
+        totalChars: rawText.length,
+        totalChunks: plans.length,
+        chunkSize,
+        chunks: plans.map<ChunkState>(p => ({
+          index: p.index,
+          startChar: p.startChar,
+          endChar: p.endChar,
+          charCount: p.charCount,
+          label: p.label,
+          status: 'pending',
+          attempts: 0,
+        })),
+        merged: { worldview: {}, characters: [], outline: [], codexCandidates: [] },
+        rollingContext: '',
+        importTarget,
+        analysisDepth: importTarget === 'reference' ? (depth ?? 'quick') : undefined,
+        targetWorldGroupId: importTarget === 'project' ? (selectedWorldGroupId ?? null) : null,
+        status: 'pending',
       }
+
+      const sessionId = await useImportSessionStore.getState().create(sessionData)
+      createdSessionId = sessionId
+      registerChunkTexts(sessionId, plans.map(p => ({ index: p.index, text: p.text })))
+
+      // 存原文 Blob —— 优先用原始 File（保留 Word/PDF 原格式，下次恢复一致）
+      // 如果用户是粘贴文本，退化为 text/plain Blob
+      try {
+        const { blob: fileBlob, filename: saveName } = sourceBlob()
+        await useImportSessionStore.getState().saveBlob(sessionId, saveName, fileBlob, fileHash)
+      } catch (err) {
+        if (err instanceof ImportSessionUnavailableError) throw err
+        toast.info('原文未能保存到本地存档；本次仍可继续，刷新后需要重新上传。')
+        // 存 Blob 失败不应阻塞主流程（本次内存里原文还在，依然能跑完）
+        console.warn('[import] saveBlob 失败（本次跑不受影响，但下次刷新将无法自动续跑）：', err)
+      }
+
+      // Phase 28.4: 如果检测到分卷结构，且是导入当前项目，先预写卷结构骨架
+      if (importTarget === 'project' && volumeDetect?.hasVolumes) {
+        try {
+          const olStore = useOutlineStore.getState()
+          await olStore.loadAll(project.id!)
+          const startOrder = useOutlineStore.getState().nodes
+            .filter(n => n.parentId === null).length
+
+          for (let vi = 0; vi < volumeDetect.volumes.length; vi++) {
+            const vol = volumeDetect.volumes[vi]
+            await olStore.addNode({
+              projectId: project.id!,
+              parentId: null,
+              type: 'volume',
+              worldGroupId: selectedWorldGroupId ?? null,
+              title: vol.title,
+              summary: '',
+              order: startOrder + vi,
+            })
+          }
+          useImportStatusStore.getState().pushActivity(
+            'info',
+            `📚 已创建 ${volumeDetect.volumes.length} 个卷结构骨架`,
+          )
+        } catch (err) {
+          console.warn('[import] 预写卷结构失败（不影响主流程）：', err)
+        }
+      }
+
+      // 刷新未完成列表（新 session 本身就是未完成态）
+      clearUnfinished()
+      autoReportShown.current = null
+      setReportSession(null)
+
+      // 启动流水线（不 await，让 UI 先渲染 StatusBar/ProgressPanel）
+      runSession({ sessionId, projectId: project.id! }).catch(err => {
+        reportImportFailure('导入已停止', err, sessionId)
+      })
+    } catch (error) {
+      reportImportFailure('无法开始导入', error, createdSessionId)
     }
-
-    // 刷新未完成列表（新 session 本身就是未完成态）
-    clearUnfinished()
-    autoReportShown.current = null
-    setReportSession(null)
-
-    // 启动流水线（不 await，让 UI 先渲染 StatusBar/ProgressPanel）
-    runSession({ sessionId, projectId: project.id! }).catch(err => {
-      console.error('[import] runSession 崩了：', err)
-    })
   }
 
   // ── 解析一次·多次落地:复用已完成会话,灌进当前项目设定库(世界观/角色/大纲),不再解析 ──
@@ -255,7 +275,11 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     }
     autoReportShown.current = null
     setReportSession(null)
-    await retryFailedChunks({ sessionId: unfinished.id, projectId: project.id! })
+    try {
+      await retryFailedChunks({ sessionId: unfinished.id, projectId: project.id! })
+    } catch (error) {
+      reportImportFailure('无法续跑', error, unfinished.id)
+    }
   }
 
   // ── 用当前上传的文件续跑（作为兜底） ─────────────────────
@@ -279,18 +303,23 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       toast.error(`重新切块得到 ${p.length} 块，与原任务的 ${unfinished.totalChunks} 块不一致，无法续跑。建议清理该任务后重新开始解析。`)
       return
     }
-    registerChunkTexts(unfinished.id, p.map(c => ({ index: c.index, text: c.text })))
-    // 同时把新上传的文件作为 Blob 覆盖存档（下次就不必再传了）
     try {
-      const { blob: fileBlob, filename: saveName } = sourceBlob()
-      await useImportSessionStore.getState().saveBlob(
-        unfinished.id, saveName, fileBlob, unfinished.fileHash,
-      )
-    } catch {/* 静默失败 */}
-    markBlobRestored()
-    autoReportShown.current = null
-    setReportSession(null)
-    await retryFailedChunks({ sessionId: unfinished.id, projectId: project.id! })
+      registerChunkTexts(unfinished.id, p.map(c => ({ index: c.index, text: c.text })))
+      // 普通持久化失败仍可用本次内存原文；父根已删必须停止。
+      try {
+        const { blob: fileBlob, filename: saveName } = sourceBlob()
+        await useImportSessionStore.getState().saveBlob(unfinished.id, saveName, fileBlob, unfinished.fileHash)
+      } catch (error) {
+        if (error instanceof ImportSessionUnavailableError) throw error
+        toast.info('原文未能保存到本地存档；本次仍可继续，刷新后需要重新上传。')
+      }
+      markBlobRestored()
+      autoReportShown.current = null
+      setReportSession(null)
+      await retryFailedChunks({ sessionId: unfinished.id, projectId: project.id! })
+    } catch (error) {
+      reportImportFailure('无法续跑', error, unfinished.id)
+    }
   }
 
   // ── Report Modal 里：重试失败块 / 关闭 / 清理 ─────────────
@@ -302,14 +331,20 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     }
     setReportSession(null)
     autoReportShown.current = null
-    await retryFailedChunks({ sessionId: reportSession.id, projectId: project.id! })
+    try {
+      await retryFailedChunks({ sessionId: reportSession.id, projectId: project.id! })
+    } catch (error) {
+      reportImportFailure('无法重试', error, reportSession.id)
+    }
   }
   const handleCloseReport = () => {
     setReportSession(null)
     // done 的会话：清内存原文 + Blob 存档释放空间
     if (reportSession?.id && reportSession.status === 'done') {
       clearChunkTexts(reportSession.id)
-      useImportSessionStore.getState().deleteBlob(reportSession.id).catch(() => {})
+      useImportSessionStore.getState().deleteBlob(reportSession.id).catch(error => {
+        toast.error(`原文存档清理失败：${error instanceof Error ? error.message : String(error)}`)
+      })
     }
   }
   const handleDiscardSession = async () => {
@@ -321,11 +356,14 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       tone: 'danger',
     })
     if (!ok) return
-    clearChunkTexts(reportSession.id)
-    await useImportSessionStore.getState().deleteBlob(reportSession.id).catch(() => {})
-    await useImportSessionStore.getState().deleteSession(reportSession.id)
-    setReportSession(null)
-    useImportStatusStore.getState().reset()
+    try {
+      await useImportSessionStore.getState().deleteSession(reportSession.id)
+      clearChunkTexts(reportSession.id)
+      setReportSession(null)
+      useImportStatusStore.getState().reset()
+    } catch (error) {
+      toast.error(`清理会话失败：${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   const handleCancelCurrent = async () => {
@@ -341,7 +379,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
   const handleResumeCurrent = () => {
     if (!status.sessionId) return
     runSession({ sessionId: status.sessionId, projectId: project.id! }).catch(err => {
-      console.error('[import] 恢复任务失败：', err)
+      reportImportFailure('无法续跑', err, status.sessionId!)
     })
   }
 
@@ -404,7 +442,9 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
   const handleRestart = () => {
     if (status.sessionId) {
       clearChunkTexts(status.sessionId)
-      useImportSessionStore.getState().deleteBlob(status.sessionId).catch(() => {})
+      useImportSessionStore.getState().deleteBlob(status.sessionId).catch(error => {
+        toast.error(`原文存档清理失败：${error instanceof Error ? error.message : String(error)}`)
+      })
     }
     useImportStatusStore.getState().reset()
     setReportSession(null)
@@ -442,10 +482,13 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
               tone: 'danger',
             })
             if (!ok) return
-            await useImportSessionStore.getState().deleteSession(unfinished.id!)
-            await useImportSessionStore.getState().deleteBlob(unfinished.id!).catch(() => {})
-            clearChunkTexts(unfinished.id!)
-            clearUnfinished()
+            try {
+              await useImportSessionStore.getState().deleteSession(unfinished.id!)
+              clearChunkTexts(unfinished.id!)
+              clearUnfinished()
+            } catch (error) {
+              toast.error(`放弃任务失败：${error instanceof Error ? error.message : String(error)}`)
+            }
           }}
         />
       )}

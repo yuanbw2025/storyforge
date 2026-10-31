@@ -1,14 +1,14 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {test, expect} from '@playwright/test'
 
 test('inspects the exact historical player-visible context after refresh without secrets or extra calls', async ({page}) => {
   let calls = 0
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-context.invalid/v1', model: 'test', maxTokens: 8000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-context.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' })
   await page.route('https://chat-context.invalid/**', async route => {calls++; await route.abort()})
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     const fixture = await load('/storyforge/tests/helpers/chat-narrative-fixture.ts'), api = await load('/storyforge/src/lib/character-interaction/runtime-api.ts')
@@ -33,7 +33,7 @@ test('inspects the exact historical player-visible context after refresh without
     await api.commitInteractionPlayerMessage({...await command(), messageId: 'future', text: '未来标记：现在再看另一边。'})
     return {...f, runId: result.snapshot.run.id}
   })
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   const read = () => page.evaluate(async f => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/src/lib/character-interaction/runtime-api.ts')).readProductRuntimeState(f.sessionId)}, f)
   const before = await read()
   await page.getByRole('button', {name: '查看本次上下文', exact: true}).click()
@@ -53,7 +53,7 @@ test('inspects the exact historical player-visible context after refresh without
   for (const hidden of ['无辜旅人', '柜台下', '可以建议查看后门', '担心再次错怪人', '排除标记', '未来标记', '私密暗号']) await expect(inspector).not.toContainText(hidden)
   expect(await read()).toEqual(before)
   expect(calls).toBe(0)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', {name: '查看本次上下文', exact: true}).click()
   await expect(inspector).toContainText('行动角色：叶岑')
   await page.getByRole('button', {name: '重新读取上下文记录', exact: true}).click()

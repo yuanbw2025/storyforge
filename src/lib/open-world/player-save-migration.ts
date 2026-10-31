@@ -1,4 +1,5 @@
 import Dexie from 'dexie'
+import { assertTextOpenWorldRuntimeNewWorkV1 } from './source-admission'
 import { db } from '../db/schema'
 import {
   hashProductRuntimeStateV1,
@@ -207,6 +208,8 @@ async function prepareMigrationV1(input: {
     verifyOwnedTextOpenWorldPlayerReleaseV1(scope, sourceReleaseRoot),
     verifyOwnedTextOpenWorldPlayerReleaseV1(scope, targetReleaseRoot),
   ])
+  assertTextOpenWorldRuntimeNewWorkV1(sourceRelease.manifest.runtimePackage, '从旧存档迁移到新会话')
+  assertTextOpenWorldRuntimeNewWorkV1(targetRelease.manifest.runtimePackage, '迁移到新发布版本')
   if (!isVNextOnlyRelease(sourceRelease) || !isVNextOnlyRelease(targetRelease)) {
     fail('旧式或混合运行包不支持跨Release迁移，请继续固定旧版本')
   }

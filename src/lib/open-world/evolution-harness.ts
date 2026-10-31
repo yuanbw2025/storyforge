@@ -15,8 +15,8 @@ import {
   assertOpenWorldEvolutionRuntimeHarnessFreshV1,
   captureOpenWorldEvolutionRuntimeHarnessBoundaryV1,
 } from '../agent/run/runtime-scope'
-import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import { db } from '../db/schema'
+import { assertTextOpenWorldSessionNewWorkV1 } from './source-admission'
 import { assembleContext } from '../registry/assemble-context'
 import { readProductRuntimeState, readProductRuntimeStateVersion } from './runtime-api'
 import type {
@@ -26,6 +26,8 @@ import type {
   WorkspaceScope,
 } from '../types'
 import { validateOpenWorldEvolutionPresentationCandidate } from './evolution-runtime'
+import { verifyFormalRuntimeSourceV1 } from '../product/runtime-core'
+import { finishOpenWorldReadOnlyAdoptionV1 } from './read-only-adoption-recovery'
 
 export const OPEN_WORLD_EVOLUTION_RUNTIME_STEP_ID_V1 = 'text-open-world:evolution-runtime-candidate' as const
 export const OPEN_WORLD_EVOLUTION_RUNTIME_VERIFIER_SET_V1 = 'text-open-world-evolution-runtime-terminal-v1' as const
@@ -184,6 +186,9 @@ export async function generateOpenWorldEvolutionRuntimeCandidateV1(input: {
   signal?: AbortSignal
   onRunCreated?: (runId: number) => void | Promise<void>
 }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: OpenWorldEvolutionRuntimeCandidateV1 }> {
+  input = { ...input, scope: structuredClone(input.scope), ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }) }
+  await assertTextOpenWorldSessionNewWorkV1({ scope: input.scope, sessionId: input.productRuntimeSessionId,
+    operation: '生成新的私域演化候选' })
   const objective = input.objective.trim()
   if (!objective || objective.length > 4_000) fail('objective 无效')
   const skill = getAgentSkillV1(input.skillId)
@@ -327,6 +332,7 @@ export async function adoptOpenWorldEvolutionRuntimeCandidateV1(input: {
   receiptHash: string
   candidate: OpenWorldEvolutionRuntimeCandidateV1
 }> {
+  input = { ...input, scope: structuredClone(input.scope) }
   const saved = await readLatestVerifiedAgentRunCheckpointV1(input.scope, input.runId, { owner: 'instance' })
   if (!saved || !isCandidate(saved.resumePayload)) fail('运行缺少可恢复候选')
   let { snapshot } = saved
@@ -334,13 +340,25 @@ export async function adoptOpenWorldEvolutionRuntimeCandidateV1(input: {
   if (candidate.runId !== input.runId || await hashCanonicalValue(candidateBody(candidate)) !== candidate.candidateHash) {
     fail('候选哈希或运行绑定不匹配')
   }
-  const adopted = snapshot.events.find(event => event.type === 'runtime.candidate.adopted')
+  const adoptionHash = await hashCanonicalValue({ candidateHash: candidate.candidateHash,
+    resultingSequence: candidate.baseSequence, resultingStateHash: candidate.stateHash, writeTargets: [] })
+  const adoptions = snapshot.events.filter(event => event.type === 'runtime.candidate.adopted'
+    && event.generation === snapshot.projection.generation)
+  if (adoptions.length && (snapshot.contract.permissions.writeTargets.length !== 0 || adoptions.some(event =>
+    event.type !== 'runtime.candidate.adopted' || event.runId !== candidate.runId || event.payload.stepId !== OPEN_WORLD_EVOLUTION_RUNTIME_STEP_ID_V1
+    || event.payload.candidateHash !== candidate.candidateHash || event.payload.adoptionHash !== adoptionHash
+    || event.payload.baseSequence !== candidate.baseSequence || event.payload.resultingSequence !== candidate.baseSequence
+    || event.payload.commandIds.length !== 0))) fail('已有只读采用证据与冻结候选不匹配')
+  const adopted = adoptions[0]
   if (adopted?.type === 'runtime.candidate.adopted' && snapshot.projection.state === 'completed') {
     return { snapshot, candidate, receiptHash: snapshot.projection.terminalReceiptHash ?? fail('已采用运行缺少终验回执') }
   }
+  if (!adopted) await assertTextOpenWorldSessionNewWorkV1({ scope: input.scope, sessionId: candidate.productRuntimeSessionId,
+    operation: '采纳新的开放世界演化表现候选' })
   try {
     await assertOpenWorldEvolutionRuntimeHarnessFreshV1({ scope: input.scope, contractScope: snapshot.contract.scope })
   } catch (error) {
+    if (adopted) throw error
     snapshot = await append(input.scope, snapshot, 'candidate.staled', {
       stepId: OPEN_WORLD_EVOLUTION_RUNTIME_STEP_ID_V1,
       candidateHash: candidate.candidateHash,
@@ -348,20 +366,16 @@ export async function adoptOpenWorldEvolutionRuntimeCandidateV1(input: {
     })
     throw Object.assign(error instanceof Error ? error : new Error('运行时候选已过期'), { snapshot })
   }
-  const [state, events, version] = await Promise.all([
+  const [state, events, version, session] = await Promise.all([
     readProductRuntimeState(candidate.productRuntimeSessionId),
-    db.productRuntimeEvents.where('sessionId').equals(candidate.productRuntimeSessionId).toArray(),
+    db.productRuntimeEvents.where('sessionId').equals(candidate.productRuntimeSessionId).sortBy('sequence'),
     readProductRuntimeStateVersion(candidate.productRuntimeSessionId),
+    db.productRuntimeSessions.get(candidate.productRuntimeSessionId),
   ])
-  if (!state.openWorldEvolution) fail('开放世界状态演化实例已失效')
+  if (!state.openWorldEvolution || !session) fail('开放世界状态演化实例已失效')
+  const frozen = await verifyFormalRuntimeSourceV1(session, ['text-open-world'])
   validateOpenWorldEvolutionPresentationCandidate({ candidate, state: state.openWorldEvolution, events })
-  const adoptionHash = await hashCanonicalValue({
-    candidateHash: candidate.candidateHash,
-    resultingSequence: version.sequence,
-    resultingStateHash: version.stateHash,
-    writeTargets: [],
-  })
-  snapshot = await appendRuntimeCandidateAdoptedV1({
+  if (!adopted) snapshot = await appendRuntimeCandidateAdoptedV1({
     scope: input.scope,
     runId: snapshot.run.id,
     expectedLastSequence: snapshot.projection.lastSequence,
@@ -374,33 +388,9 @@ export async function adoptOpenWorldEvolutionRuntimeCandidateV1(input: {
       resultingSequence: version.sequence,
     },
   })
-  snapshot = await append(input.scope, snapshot, 'step.succeeded', {
-    stepId: OPEN_WORLD_EVOLUTION_RUNTIME_STEP_ID_V1,
-    attempt: 1,
-    outputHash: adoptionHash,
-  })
-  snapshot = await append(input.scope, snapshot, 'verification.started', {
-    verifierSetVersion: OPEN_WORLD_EVOLUTION_RUNTIME_VERIFIER_SET_V1,
-  })
-  const receipt = await createVerificationReceiptV1({
-    version: 1,
-    runId: snapshot.run.id,
-    generation: snapshot.projection.generation,
-    contractHash: snapshot.run.contractHash,
-    contextManifestHashes: [candidate.contextManifestHash],
-    candidateHashes: [candidate.candidateHash],
-    adoptionEventIds: [],
-    postStateHash: version.stateHash,
-    verifierSetVersion: OPEN_WORLD_EVOLUTION_RUNTIME_VERIFIER_SET_V1,
-    criteria: [
-      { id: 'runtime.candidate', status: 'passed', evidenceRefs: [`candidate:${candidate.candidateHash}`] },
-      { id: 'runtime.freshness', status: 'passed', evidenceRefs: [`base:${candidate.baseSequence}:${candidate.stateHash}`] },
-      { id: 'runtime.read-only', status: 'passed', evidenceRefs: [`post-state:${version.stateHash}`] },
-    ],
-    acceptedAt: Date.now(),
-  })
-  snapshot = await append(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
-  return { snapshot, receiptHash: receipt.receiptHash, candidate }
+  const finished = await finishOpenWorldReadOnlyAdoptionV1({ scope: input.scope, snapshot, candidate,
+    stepId: OPEN_WORLD_EVOLUTION_RUNTIME_STEP_ID_V1, session, events, frozen, version })
+  return { ...finished, candidate }
 }
 
 export async function cancelOpenWorldEvolutionRuntimeRunV1(input: {
@@ -408,6 +398,7 @@ export async function cancelOpenWorldEvolutionRuntimeRunV1(input: {
   runId: number
   reason?: string
 }) {
+  input = { ...input, scope: structuredClone(input.scope) }
   const snapshot = await readInstanceAgentRunV1(input.scope, input.runId)
   if (['completed', 'failed', 'cancelled'].includes(snapshot.projection.state)) return snapshot
   return append(input.scope, snapshot, 'run.cancelled', {

@@ -199,7 +199,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
     if (cat.builtInKey) return
     const ok = await dialog.confirm({
       title: `删除自定义分类「${cat.name}」？`,
-      message: '其下所有世界中的词条也会被删除，此操作不可撤销。',
+      message: '当前世界中，该分类及子分类下的所有词条也会被删除（包括各世界组），此操作不可撤销。',
       confirmText: '删除',
       tone: 'danger',
     })

@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import assert from 'node:assert/strict'
+import runtimePolicy from '../distribution/desktop-runtime.cjs'
 const profile = await mkdtemp(join(tmpdir(), 'storyforge-client-smoke-'))
 const executablePath = process.argv[2]
 const launch = () => electron.launch({
@@ -12,6 +13,7 @@ const launch = () => electron.launch({
 let app
 try {
   app = await launch()
+  console.log(JSON.stringify({ check: 'actual-desktop-runtime', ...await runtimePolicy.verifyRunningRuntime(app, { packaged: !!executablePath }) }))
   let page = await app.firstWindow()
   await page.waitForSelector('#root main, #root button', { timeout: 60000 })
   assert.ok(!(await page.locator('#root').innerText()).includes('StoryForge 无法启动'))

@@ -18,6 +18,14 @@ export const AI_PROXY_ENDPOINTS: Partial<Record<AIProvider, AIProxyEndpoint>> = 
   opencode: { proxy: '/opencode-proxy/v1', direct: 'https://opencode.ai/zen/go/v1' },
 }
 
+/** The embedding picker and credential identity checks share these aliases. */
+export const EMBEDDING_PROXY_ENDPOINTS: readonly AIProxyEndpoint[] = [
+  { proxy: '/siliconflow-proxy/v1', direct: 'https://api.siliconflow.cn/v1' },
+  { proxy: '/qwen-proxy/compatible-mode/v1', direct: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
+  { proxy: '/glm-proxy/api/paas/v4', direct: 'https://open.bigmodel.cn/api/paas/v4' },
+  AI_PROXY_ENDPOINTS.openai!,
+]
+
 /** Portable builds expose the existing proxy only on a loopback origin. */
 export function hasLocalProviderProxy(): boolean {
   return import.meta.env.DEV || (import.meta.env.MODE === 'portable'

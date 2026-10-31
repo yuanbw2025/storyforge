@@ -88,6 +88,43 @@ function adoptionExtensionCount() {
   return targets.size
 }
 
+/** Read the literal fact actually bound to the exported PromptModuleKey type. */
+function readPromptModuleKeys(sourceFile) {
+  const exported = node => node.modifiers?.some(item => item.kind === ts.SyntaxKind.ExportKeyword)
+  const aliases = sourceFile.statements.filter(node => ts.isTypeAliasDeclaration(node)
+    && node.name.text === 'PromptModuleKey' && exported(node))
+  if (aliases.length !== 1) throw new Error('PromptModuleKey 必须有唯一导出声明')
+  const type = aliases[0].type
+  const inline = ts.isUnionTypeNode(type) ? [...type.types] : [type]
+  let literals
+  if (inline.every(node => ts.isLiteralTypeNode(node) && ts.isStringLiteral(node.literal))) {
+    literals = inline.map(node => node.literal)
+  } else {
+    if (!ts.isIndexedAccessTypeNode(type) || type.indexType.kind !== ts.SyntaxKind.NumberKeyword
+      || !ts.isTypeQueryNode(type.objectType) || !ts.isIdentifier(type.objectType.exprName)) {
+      throw new Error('PromptModuleKey 必须绑定字符串 union 或本文件 const 数组[number]')
+    }
+    const name = type.objectType.exprName.text
+    const bindings = sourceFile.statements.flatMap(node => ts.isVariableStatement(node) && exported(node)
+      && (node.declarationList.flags & ts.NodeFlags.Const)
+      ? [...node.declarationList.declarations].filter(item => ts.isIdentifier(item.name) && item.name.text === name)
+      : [])
+    if (bindings.length !== 1 || !bindings[0].initializer) throw new Error(`PromptModuleKey 缺少唯一 const 绑定：${name}`)
+    let value = bindings[0].initializer
+    if (ts.isAsExpression(value) && ts.isTypeReferenceNode(value.type)
+      && ts.isIdentifier(value.type.typeName) && value.type.typeName.text === 'const') value = value.expression
+    if (!ts.isArrayLiteralExpression(value) || value.elements.some(item => !ts.isStringLiteral(item))) {
+      throw new Error('PromptModuleKey const 绑定必须是纯字符串字面量数组')
+    }
+    literals = [...value.elements]
+  }
+  const keys = literals.map(node => node.text)
+  if (!keys.length || keys.some(key => !key.trim())) throw new Error('PromptModuleKey 不得为空')
+  const duplicates = keys.filter((key, index) => keys.indexOf(key) !== index)
+  if (duplicates.length) throw new Error(`PromptModuleKey 重复声明: ${[...new Set(duplicates)].join(', ')}`)
+  return keys
+}
+
 function metrics() {
   const files = tsSourceFiles()
   const sourceLines = files.reduce((total, file) => {
@@ -99,8 +136,7 @@ function metrics() {
   if (!schemaVersionMatch) throw new Error('无法从 schema.ts 读取 STORYFORGE_SCHEMA_VERSION')
   const schemaVersion = Number(schemaVersionMatch[1])
   const required = read('src/lib/db/ensure-schema.ts').match(/export const REQUIRED_TABLES = \[([\s\S]*?)\] as const/)?.[1] ?? ''
-  const promptType = read('src/lib/types/prompt.ts').match(/export type PromptModuleKey =([\s\S]*?)(?:\n\nexport|\n\/\*\*|\nexport interface)/)?.[1] ?? ''
-  const promptKeys = new Set([...promptType.matchAll(/\|\s*'([^']+)'/g)].map(match => match[1]))
+  const promptKeys = readPromptModuleKeys(ts.createSourceFile('src/lib/types/prompt.ts', read('src/lib/types/prompt.ts'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS))
   const seedFiles = fs.readdirSync(path.join(root, 'src/lib/ai'))
     .filter(name => /^prompt-seeds.*\.ts$/.test(name))
   const promptTemplates = seedFiles.reduce((total, name) =>
@@ -112,7 +148,7 @@ function metrics() {
     schemaVersion,
     requiredTables: countMatches(required, /'[^']+'/g),
     projectTables: declaredArrayLength('src/lib/registry/project-tables.ts', 'PROJECT_TABLES'),
-    promptModuleKeys: promptKeys.size,
+    promptModuleKeys: promptKeys.length,
     promptTemplates,
     contextSources: declaredArrayLength('src/lib/registry/context-sources.ts', 'CONTEXT_SOURCES'),
     adoptionTargets: declaredArrayLength('src/lib/registry/adoption-schema.ts', 'ADOPTION_SCHEMAS'),

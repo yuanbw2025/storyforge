@@ -2,8 +2,9 @@ import { saveFile } from '../platform/save-file'
 import { db } from '../db/schema'
 import type { OutlineNode, Chapter } from '../types'
 import { isHtml, htmlToPlainText } from '../utils/html'
-import { buildBestChapterByOutlineMap } from '../chapters/selectors'
-import { readOwnedRows, resolveReadScopeLike, type WorkspaceScopeLike } from '../workspace/scope'
+import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
+import { byOutlineOrderThenId, walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
+import { readOwnedRows, resolveReadScopeLike, scopeTransactionTables, type WorkspaceScopeLike } from '../workspace/scope'
 
 /** HTML → Markdown（简化规则，覆盖 TipTap StarterKit 产出的常见结构） */
 function htmlToMarkdown(html: string): string {
@@ -50,136 +51,99 @@ function htmlToMarkdown(html: string): string {
   return md.trim()
 }
 
-/** 导出为 Markdown 格式 */
-export async function exportProjectMarkdown(scopeInput: WorkspaceScopeLike): Promise<string> {
-  const scope = await resolveReadScopeLike(scopeInput)
-  const projectId = scope.projectId
-  const work = await db.works.get(scope.workId)
-  if (!work || work.projectId !== projectId || work.worldId !== scope.worldId) throw new Error('作品不存在')
+interface TextExportEntry {
+  node: OutlineNode | null
+  chapter?: Chapter
+  depth: number
+}
 
-  const [outlineNodes, chapters] = await Promise.all([
-    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
-    readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
-  ])
-
-  // 按大纲结构组织。历史项目可能存在同一大纲节点多条章节记录,这里必须择优取有正文的记录。
-  const chapterMap = buildBestChapterByOutlineMap(chapters)
-
-  // 构建树
-  const tree = buildTree(outlineNodes)
-  let md = `# ${work.title}\n\n`
-
-  for (const volume of tree) {
-    md += `## ${volume.node.title}\n\n`
-    if (volume.node.summary) {
-      md += `> ${volume.node.summary}\n\n`
-    }
-
-    for (const child of volume.children) {
-      if (child.node.type === 'arc') {
-        md += `### ${child.node.title}\n\n`
-        for (const chNode of child.children) {
-          md += renderChapterMd(chNode.node, chapterMap)
-        }
-      } else {
-        // 直接是章节
-        md += renderChapterMd(child.node, chapterMap)
-      }
+/** Both formats share one owned snapshot and canonical body selection. The
+ * structural visit below emits container headings (including empty volumes);
+ * it must consume the canonical chapter ids exactly once in their given order. */
+async function prepareTextExport(scopeInput: WorkspaceScopeLike): Promise<{ title: string; entries: TextExportEntry[] }> {
+  // Numeric resolution may share a promise started by another caller. Capture
+  // it before opening the transaction, then recheck explicit roots inside it.
+  const capturedScope = await resolveReadScopeLike(scopeInput)
+  const { work, outlineNodes, chapters } = await db.transaction('r', scopeTransactionTables(db.outlineNodes, db.chapters), async () => {
+    const scope = await resolveReadScopeLike(capturedScope)
+    const work = await db.works.get(scope.workId)
+    if (!work || work.projectId !== scope.projectId || work.worldId !== scope.worldId) throw new Error('作品不存在')
+    const [outlineNodes, chapters] = await Promise.all([
+      readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
+      readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
+    ])
+    return { work, outlineNodes, chapters }
+  })
+  const walk = walkOutlineChaptersInCanonicalOrder(outlineNodes)
+  if (walk.anomalies.some(anomaly => anomaly.kind === 'outline-cycle')) {
+    throw new Error('大纲存在循环，无法确定导出结构；原稿未修改，请先检查大纲。')
+  }
+  for (const chapter of chapters) {
+    const node = walk.nodeById.get(chapter.outlineNodeId)
+    if (node && node.type !== 'chapter') {
+      throw new Error(`正文「${chapter.title}」关联的不是章节节点，导出已停止；原稿未修改。`)
     }
   }
+  const canonical = resolveCanonicalChapterSequence(outlineNodes, chapters)
+  const chapterByOutline = new Map(canonical.sequence.flatMap(entry =>
+    entry.outlineNode ? [[entry.outlineNode.id!, entry.chapter] as const] : []))
+  const children = new Map<number | null, OutlineNode[]>()
+  for (const node of walk.nodeById.values()) {
+    const parent = node.parentId != null && walk.nodeById.has(node.parentId) ? node.parentId : null
+    const siblings = children.get(parent) ?? []
+    siblings.push(node)
+    children.set(parent, siblings)
+  }
+  for (const siblings of children.values()) siblings.sort(byOutlineOrderThenId)
 
+  const entries: TextExportEntry[] = []
+  let chapterIndex = 0
+  const visit = (node: OutlineNode, depth: number) => {
+    if (node.type === 'chapter') {
+      if (walk.chapters[chapterIndex]?.outlineNode.id !== node.id) throw new Error('章节顺序无法完整核对，导出已停止；原稿未修改。')
+      chapterIndex += 1
+    }
+    entries.push({ node, chapter: node.type === 'chapter' ? chapterByOutline.get(node.id!) : undefined, depth })
+    for (const child of children.get(node.id!) ?? []) visit(child, depth + 1)
+  }
+  for (const root of children.get(null) ?? []) visit(root, 0)
+  if (chapterIndex !== walk.chapters.length) throw new Error('存在未能导出的章节，导出已停止；原稿未修改。')
+  // The established canonical recovery sequence preserves real bodies whose
+  // outline is missing. It does not create or repair any persisted association.
+  for (const entry of canonical.sequence) if (!entry.outlineNode) entries.push({ node: null, chapter: entry.chapter, depth: 0 })
+  return { title: work.title, entries }
+}
+
+/** 导出为 Markdown 格式 */
+export async function exportProjectMarkdown(scopeInput: WorkspaceScopeLike): Promise<string> {
+  const { title, entries } = await prepareTextExport(scopeInput)
+  let md = `# ${title}\n\n`
+  for (const { node, chapter, depth } of entries) {
+    if (!node || node.type === 'chapter') {
+      const heading = '#'.repeat(Math.min(6, Math.max(4, depth + 2)))
+      md += `${heading} ${node?.title ?? chapter!.title}\n\n`
+      if (chapter?.content) md += `${htmlToMarkdown(chapter.content)}\n\n`
+      else if (node?.summary) md += `*（大纲：${node.summary}）*\n\n`
+    } else {
+      md += `${'#'.repeat(Math.min(6, depth + 2))} ${node.title}\n\n`
+      if (node.type === 'volume' && node.summary) md += `> ${node.summary}\n\n`
+    }
+  }
   return md.trim()
 }
 
 /** 导出为纯文本格式 */
 export async function exportProjectTXT(scopeInput: WorkspaceScopeLike): Promise<string> {
-  const scope = await resolveReadScopeLike(scopeInput)
-  const projectId = scope.projectId
-  const work = await db.works.get(scope.workId)
-  if (!work || work.projectId !== projectId || work.worldId !== scope.worldId) throw new Error('作品不存在')
-
-  const [outlineNodes, chapters] = await Promise.all([
-    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
-    readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
-  ])
-
-  const chapterMap = buildBestChapterByOutlineMap(chapters)
-
-  const tree = buildTree(outlineNodes)
-  let txt = `${work.title}\n${'='.repeat(work.title.length * 2)}\n\n`
-
-  for (const volume of tree) {
-    txt += `【${volume.node.title}】\n\n`
-
-    for (const child of volume.children) {
-      if (child.node.type === 'arc') {
-        txt += `  〔${child.node.title}〕\n\n`
-        for (const chNode of child.children) {
-          txt += renderChapterTxt(chNode.node, chapterMap)
-        }
-      } else {
-        txt += renderChapterTxt(child.node, chapterMap)
-      }
-    }
+  const { title, entries } = await prepareTextExport(scopeInput)
+  let txt = `${title}\n${'='.repeat(title.length * 2)}\n\n`
+  for (const { node, chapter } of entries) {
+    if (!node || node.type === 'chapter') {
+      txt += `    ${node?.title ?? chapter!.title}\n\n`
+      if (chapter?.content) txt += `${htmlToPlainText(chapter.content)}\n\n`
+    } else if (node.type === 'volume') txt += `【${node.title}】\n\n`
+    else txt += `  〔${node.title}〕\n\n`
   }
-
   return txt.trim()
-}
-
-// --- 辅助函数 ---
-
-interface TreeNode {
-  node: OutlineNode
-  children: TreeNode[]
-}
-
-function buildTree(nodes: OutlineNode[]): TreeNode[] {
-  const nodeMap = new Map<number, TreeNode>()
-  const roots: TreeNode[] = []
-
-  // 先创建所有 TreeNode
-  nodes.forEach(n => {
-    nodeMap.set(n.id!, { node: n, children: [] })
-  })
-
-  // 构建父子关系
-  nodes.forEach(n => {
-    const treeNode = nodeMap.get(n.id!)!
-    if (n.parentId && nodeMap.has(n.parentId)) {
-      nodeMap.get(n.parentId)!.children.push(treeNode)
-    } else {
-      roots.push(treeNode)
-    }
-  })
-
-  // 排序
-  const sortChildren = (items: TreeNode[]) => {
-    items.sort((a, b) => a.node.order - b.node.order)
-    items.forEach(item => sortChildren(item.children))
-  }
-  sortChildren(roots)
-
-  return roots
-}
-
-function renderChapterMd(node: OutlineNode, chapterMap: Map<number, Chapter>): string {
-  const ch = chapterMap.get(node.id!)
-  let md = `#### ${node.title}\n\n`
-  if (ch?.content) {
-    md += `${htmlToMarkdown(ch.content)}\n\n`
-  } else if (node.summary) {
-    md += `*（大纲：${node.summary}）*\n\n`
-  }
-  return md
-}
-
-function renderChapterTxt(node: OutlineNode, chapterMap: Map<number, Chapter>): string {
-  const ch = chapterMap.get(node.id!)
-  let txt = `    ${node.title}\n\n`
-  if (ch?.content) {
-    txt += `${htmlToPlainText(ch.content)}\n\n`
-  }
-  return txt
 }
 
 /** 下载文本文件 */

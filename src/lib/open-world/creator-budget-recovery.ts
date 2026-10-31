@@ -83,9 +83,10 @@ async function recoveryPlan(input: {
 export async function prepareTextOpenWorldBudgetRecoveryV1(input: {
   scope: WorkspaceScope; productionId: number; buildId: number
 }): Promise<TextOpenWorldBudgetRecoveryPreparationV1> {
+  input = structuredClone(input)
   const scope = await resolveScope({ scope: input.scope })
-  const { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } = await import('./creator-derived-authority')
-  const source = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({ scope, buildId: input.buildId })
+  const { readTextOpenWorldCreatorBuildNewWorkAuthorityV1 } = await import('./creator-derived-authority')
+  const source = await readTextOpenWorldCreatorBuildNewWorkAuthorityV1({ scope, buildId: input.buildId, operation: '规划预算续建' })
   if (source.production.id !== input.productionId || source.production.status !== 'producing'
     || source.production.currentBuildNumber !== source.build.buildNumber
     || source.production.currentBriefRevision !== source.build.briefRevision
@@ -119,7 +120,7 @@ export async function createTextOpenWorldBudgetRecoveryAuthorizationV1(input: {
     baseControlEpoch: source.build.controlEpoch, briefHash: source.build.briefHash,
     basePlanHash: source.build.planHash, prefixHash: prefix.prefixHash,
     targetBuildNumber: targetPlan.buildNumber, targetControlEpoch: targetPlan.controlEpoch,
-    targetPlanHash, reuseTaskKeys, authorizationNonce: input.authorizationNonce, authorizedAt: input.authorizedAt,
+    targetPlanHash, reuseTaskKeys: [...reuseTaskKeys], authorizationNonce: input.authorizationNonce, authorizedAt: input.authorizedAt,
   }
   return { ...body, authorizationHash: await hash(body) }
 }

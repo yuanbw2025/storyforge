@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：2.5.7 · 生效：2026-10-29
+> 版本：2.5.11 · 生效：2026-10-30
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -85,11 +85,19 @@
 - `docs/roadmap/MOTION-DRAMA-CONTENT-PRODUCTION-FLOW.md`
 - `docs/roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md`：文字开放世界完整开发清单与当前进度口径。
 - `docs/roadmap/TEXT-OPEN-WORLD-WORK-PACKAGE-CARDS.md`：文字开放世界 G1/G2 功能开工卡与风险台账。
+- `docs/roadmap/PROJECT-QUALITY-REMEDIATION-PLAN-20261030.md`：L2 本轮质量整改的分轮依赖、历史兼容、多代理认领、验证与分范围 G1；不改变上位质量门，不代表产品修复通过。
+- `docs/roadmap/quality-remediation-tasks-20261030.json`：上述方案的 144 项唯一主任务、22 组认领视图、原验收/hash 与外部验证和维护事项；任务摘要不能替代原问题全部子窗口。
 - `docs/roadmap/AVG-IMPLEMENTATION-PLAN.md`：E-AVG-01 的系统与表现优先队列、增量依赖、校准、协议升级与兼容切换；当前状态以该计划为准，专业故事生产后置。
 - `docs/roadmap/AVG-WORK-PACKAGE-CARDS.md`：AVG 每包的入口/读取/候选采用/生命周期/消费者/正反例与完成边界。
 - `docs/roadmap/COMPLETED.md`
 
 ### 2.3 机器事实与质量证据
+
+- `docs/audits/PROJECT-QUALITY-AUDIT-20261029.md`：L4 本轮全项目审查的基线、覆盖台账、阶段进度、问题和清理范围；执行中记录不代表逐行审阅已完成、已修复、G1 放行或产品验收。
+- `docs/audits/PROJECT-ARCHITECTURE-REVIEW-20261029.md`：L4 本轮 Q2 架构阶段判断、已守边界、实现偏差与结构整改；不改变 L0/L1，不代表剩余范围通过或 G1 放行。
+- `docs/audits/PROJECT-CODE-QUALITY-REVIEW-20261029.md`：L4 本轮 Q3 代码指标、实现/测试质量与清理单元；指标不代替语义覆盖，整改建议不代表产品已修复。
+
+- `docs/audits/PROJECT-QUALITY-AUDIT-PLAN-20261029.md`：L4 全项目架构与质量审查执行计划，定义 Q0～Q7、G1 首轮开发放行、任务依赖分类、已验证底座与集成、证据、指标和整改交接；不改变上位协作/质量门。计划完成不代表审查已启动、问题已修复或项目已通过验收。
 
 - `docs/audits/TTRPG-DELIVERY-20261027.md`：L4 跑团 PR #196 工程交付回执、产品边界与迁移关键问题、体验包及继续开发入口；不替代唯一施工方案或真人/发行验收。
 
@@ -204,3 +212,5 @@ AVG分支 2.5.0 复审登记 AVG 整体产品契约、四份子规格、实施�
 世界基座分支 2.5.0 复审将既有 WORLD-ENGINE.md 升级为叙事世界基座专项入口，保持文件白名单与 L0/L1 优先级不变；登记其中 IR、索引、查询、推演与 NW 施工包的目标属性。同步世界任务路由和未实施 backlog，修正当前 schema/备份口径；历史审计快照不追改。
 
 本次 2.5.0 复审随总纲 1.11.0 登记专用治理分支职责与本地 API 配置规则，统一其他分支的治理提交依据和仓库外配置发现方式。产品边界、三注册表、作者连接设置与现有调用入口保持原契约；目录初始化不构成真实 API 可用或调用获授权的证据。
+
+2.5.11 登记全项目整改方案及 144 项任务清单。按2026-10-30用户裁决，文字开放世界的小说来源须先显式派生世界草稿，经作者确认、世界封存后引用 WorldRelease；专项规范与历史决定索引同步修订，原 SourcePin/Release/存档字节及历史证据保持。规则确认、文档通过与代码实施验收分开，SFQA-005仍为未修复P1，G1与稳定底座B未建立。
