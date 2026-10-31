@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261031-quality-round1-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261031-quality-round1-v4.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -611,6 +611,18 @@
         "workPackage": "quality-round1-pre-005-credential-integration",
         "implementationCommit": "2310b24d330d53492c689b57f61cf978c252613d",
         "note": "Preserved unchanged before later005/053/102 integrated candidates. Old d952 full-CI fingerprint failure remains retained separately; this is not product or model acceptance."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261031-quality-round1-v2.json",
+        "workPackage": "quality-round1-before-047-001016-Studio-048-002-B1",
+        "implementationCommit": "d39a04fb8da9d456e37b890797b00024205cfa16",
+        "note": "Preserved unchanged. New measured receipt binds the later integrated source and missing lifecycle dependency inputs; corpus, deterministic observations and known gaps must be independently compared."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261031-quality-round1-v3.json",
+        "workPackage": "quality-round1-reviewed-candidate-before-helper-strict-fix",
+        "implementationCommit": "df27e0d919b9ecc3255976fe74988820867777bb",
+        "note": "Preserved reviewed R58 candidate exactly. Real strict ES2020 later found the existing excess property fixture; the new receipt reuses the already independently reviewed typed local-selection helper fix without changing observed behavior."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -687,6 +699,8 @@
     "src/lib/db/schema.ts",
     "src/lib/export/registry-export.ts",
     "src/lib/export/registry-import.ts",
+    "src/lib/location/hierarchy.ts",
+    "src/lib/location/lifecycle.ts",
     "src/lib/narrative-domain/codec.ts",
     "src/lib/narrative-domain/integrity.ts",
     "src/lib/narrative-domain/json.ts",
@@ -707,8 +721,14 @@
     "src/lib/product/runtime-source-manifest.ts",
     "src/lib/product/source-contracts.ts",
     "src/lib/product/world-requirement-adapters.ts",
+    "src/lib/registry/adopt.ts",
+    "src/lib/registry/adoption-schema.ts",
+    "src/lib/registry/array-references.ts",
     "src/lib/registry/fact-predicate-registry.ts",
+    "src/lib/registry/field-registry.ts",
+    "src/lib/registry/lifecycle.ts",
     "src/lib/registry/project-tables.ts",
+    "src/lib/registry/tree-relations.ts",
     "src/lib/registry/types.ts",
     "src/lib/retrieval/narrative-target-state.ts",
     "src/lib/types/narrative-blueprint.ts",
@@ -781,6 +801,8 @@
     "src/lib/world-engine/world-reference.ts",
     "src/pages/AvgPage.tsx",
     "src/pages/CharacterChatPage.tsx",
+    "src/stores/foreshadow.ts",
+    "src/stores/location.ts",
     "tests/acceptance/narrative-world/author-quality-protocol-20261016-v1.json",
     "tests/acceptance/narrative-world/impact-model-protocol-20261015-v1.json",
     "tests/acceptance/narrative-world/impact-model-protocol-20261015-v2.json",

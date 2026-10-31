@@ -43,7 +43,16 @@ describe('NW-1B · unchanged corpus with explicit fixture author annotations', (
       'src/lib/registry/adopt.ts', 'src/lib/registry/adoption-schema.ts', 'src/lib/export/registry-export.ts',
       'src/lib/export/registry-import.ts', 'src/lib/export/backup-trust.ts', 'src/lib/world-engine/semantic-registry-v3.ts',
       'src/lib/context-gateway/canon-provider.ts',
+      'src/lib/location/hierarchy.ts',
+      'src/lib/location/lifecycle.ts',
+      'src/lib/registry/array-references.ts',
+      'src/lib/registry/lifecycle.ts',
+      'src/lib/registry/tree-relations.ts',
+      'src/lib/workspace/lifecycle.ts',
+      'src/stores/foreshadow.ts',
+      'src/stores/location.ts',
       'tests/helpers/narrative-domain-fixture.ts', 'tests/regression/R-NW-1B-corpus.test.ts',
+      'tests/helpers/narrative-world-evaluation.ts',
       'tests/acceptance/narrative-world/corpus-v1.json',
     ]
     const receipt = { schema: 'storyforge.narrative-domain-evaluation', version: 1, workPackage: 'NW-1B', datasetVersion: 1,
@@ -51,6 +60,6 @@ describe('NW-1B · unchanged corpus with explicit fixture author annotations', (
       modelCalls: 0, independentHumanReviews: 0, queryProviderChanged: false,
       cases: observations, inputHashes: Object.fromEntries(paths.sort().map(file => [file, createHash('sha256').update(fs.readFileSync(file)).digest('hex')])) }
     if (process.env.NW_DOMAIN_REPORT) fs.writeFileSync(process.env.NW_DOMAIN_REPORT, JSON.stringify(receipt, null, 2) + '\n')
-    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/domain-projection-20261028-longform-avg-integration-v1.json', 'utf8')))
+    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/domain-projection-20261031-quality-round1-v3.json', 'utf8')))
   })
 })
