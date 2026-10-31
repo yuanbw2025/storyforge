@@ -11,6 +11,7 @@ import { markAndSweepAgentRunArtifactsV1 } from '../memory/artifact-retention-st
 import type { TableSpec } from './types'
 import { remapNarrativeDomainReferencesV1 } from '../narrative-domain/lifecycle'
 import { readOwnedRows } from '../workspace/scope'
+import { includeReferenceOwnerTables, registeredArrayReferencesTo } from './array-references'
 
 // ─────────────────────────────────────────────────────────────
 // 派生选择器
@@ -78,6 +79,9 @@ export function transactionTablesForReferences(sourceTableName: string): Table[]
   }
   for (const spec of PROJECT_TABLES) if (spec.refs?.some(ref =>
     ref.kind === 'narrative-source-refs-v1' && ref.targetTables.includes(sourceTableName))) names.add(spec.name)
+  const arrays = registeredArrayReferencesTo(sourceTableName)
+  for (const { holder } of arrays) names.add(holder.name)
+  if (arrays.length) includeReferenceOwnerTables(names)
   return [...names].map(name => {
     const spec = REGISTRY_BY_NAME.get(name)
     if (!spec) throw new Error(`PROJECT_TABLES 引用目标未登记: ${sourceTableName} → ${name}`)
@@ -107,6 +111,9 @@ export function transactionTablesForReferenceCascade(sourceTableName: string): T
   const sources = [...names]
   for (const spec of PROJECT_TABLES) if (spec.refs?.some(ref =>
     ref.kind === 'narrative-source-refs-v1' && sources.some(name => ref.targetTables.includes(name)))) names.add(spec.name)
+  const arrays = sources.flatMap(name => registeredArrayReferencesTo(name))
+  for (const { holder } of arrays) names.add(holder.name)
+  if (arrays.length) includeReferenceOwnerTables(names)
   return [...names].map(name => REGISTRY_BY_NAME.get(name)!.table)
 }
 
