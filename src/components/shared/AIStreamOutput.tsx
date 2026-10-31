@@ -24,7 +24,7 @@ interface AIStreamOutputProps {
   /** Some structured results require a separate review before formal adoption. */
   acceptMode?: 'adopt' | 'preview'
   /** 重试 */
-  onRetry: () => void
+  onRetry?: () => void
   /** 关闭/弃用本次结果（不写回正文）。传入则显示「关闭」按钮 */
   onDismiss?: () => void
   /** 占位提示 */
@@ -273,7 +273,7 @@ export default function AIStreamOutput({
                 className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-text-secondary disabled:opacity-50">
                 <Save className="w-3 h-3" />{savingDraft ? '保存中…' : '保存候选修改'}
               </button>}
-              {(output.length > 0 || hasOutput || error) && (
+              {onRetry && (output.length > 0 || hasOutput || error) && (
                 <button
                   disabled={accepting || savingDraft}
                   onClick={onRetry}
