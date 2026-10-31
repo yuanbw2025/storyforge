@@ -1,4 +1,5 @@
-import { chat } from '../ai/client'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
+import { chat, type ChatResult } from '../ai/client'
 import type {
   AdaptationBriefV1,
   AgentRunRecord,
@@ -368,8 +369,8 @@ async function authorizeComicModelRequest(scope: WorkspaceScope, snapshot: Agent
   }))
 }
 
-async function recordComicGenerationFailure(scope: WorkspaceScope, runId: number, stage: ComicProfessionalStageV1, phase: string, error: unknown, responseObserved: boolean, expected: { generation: number; contractHash: string }): Promise<unknown> {
-  const failures: unknown[] = []
+async function recordComicGenerationFailure(scope: WorkspaceScope, runId: number, stage: ComicProfessionalStageV1, phase: string, error: unknown, responseObserved: boolean, expected: { generation: number; contractHash: string }, responseEvidence?: { observation: unknown; persistenceFailures: readonly unknown[] }): Promise<unknown> {
+  const failures: unknown[] = [...(responseEvidence?.persistenceFailures ?? [])]
   let message = error instanceof Error ? error.message : String(error)
   let name = error instanceof Error ? error.name : 'Error'
   let detailOmitted = false
@@ -411,7 +412,7 @@ async function recordComicGenerationFailure(scope: WorkspaceScope, runId: number
     }
   } catch (cause) { failures.push(cause) }
   if (failures.length) {
-    throw Object.assign(new Error(`${message}；任务诊断或状态未能完整保存，请保留当前页面并检查存储。`), { cause: error, persistenceFailures: failures })
+    throw Object.assign(new Error(`${message}；任务诊断或状态未能完整保存，请保留当前页面并检查存储。`), { cause: error, persistenceFailures: failures, ...(responseEvidence ? { observation: responseEvidence.observation } : {}) })
   }
   // Classify and persist with the original error above. Only the UI-facing
   // wrapper is sanitized; its cause keeps the original type/status evidence.
@@ -439,6 +440,7 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   let snapshot = await createAgentRunV1({ scope: input.scope, worldGroupId: null, contract: runContract(input.scope, input.stage) })
   let phase = 'preparation'
   let responseObserved = false
+  let unavailableResponse: Awaited<ReturnType<typeof recordUnavailableCreationResponseV1>> | undefined
   try {
   await onTaskCreated?.call(callbackReceiver, Object.freeze({ runId: snapshot.run.id, generation: snapshot.projection.generation, lastSequence: snapshot.projection.lastSequence }))
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId }); snapshot = await append(input.scope, snapshot, 'step.started', { stepId, attempt: 1 })
@@ -463,14 +465,22 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   const attemptedMessages: ChatMessage[][] = [messages]
   const invoke = async (attemptMessages: ChatMessage[], attempt: number): Promise<string> => {
     phase = 'request'; responseObserved = false
+    const prepared = await recordCreationModelRequestV1({ scope: input.scope, snapshot, stepId, attempt,
+      contextManifestHash: activeContextManifest.manifestHash, messages: attemptMessages })
+    snapshot = prepared.snapshot
     snapshot = await authorizeComicModelRequest(input.scope, snapshot, input.stage, attempt, activeContextManifest.manifestHash, selected.root)
+    const result: ChatResult = {}
     let output: string
-    try { output = await (runAI ? runAI.call(callbackReceiver, attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: `comic.${input.stage}`, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, AbortSignal.timeout(COMIC_MODEL_TIMEOUT_MS))) }
+    try { output = await (runAI ? runAI.call(callbackReceiver, attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: `comic.${input.stage}`, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, AbortSignal.timeout(COMIC_MODEL_TIMEOUT_MS), result)) }
     catch (error) {
-      if (error instanceof DOMException && error.name === 'TimeoutError') throw Object.assign(new Error(`[comic-run] 模型 ${COMIC_MODEL_TIMEOUT_MS / 1_000} 秒未返回；请求结果未知，不会自动重发，也无法确认供应商端已取消。`), { cause: error })
-      throw error
+      const failed = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
+      unavailableResponse = failed
+      snapshot = failed.snapshot
+      if (error instanceof DOMException && error.name === 'TimeoutError') throw Object.assign(new Error(`[comic-run] 模型 ${COMIC_MODEL_TIMEOUT_MS / 1_000} 秒未返回；请求结果未知，不会自动重发，也无法确认供应商端已取消。`), { cause: failed.error })
+      throw failed.error
     }
     responseObserved = true; phase = 'response-persistence'
+    snapshot = await recordCreationModelResponseV1({ snapshot, request: prepared.request, raw: output, result })
     snapshot = await append(input.scope, snapshot, 'model.responded', { stepId, attempt, outputHash: await hashCanonicalValue({ raw: output }) })
     phase = 'protocol'
     return output
@@ -555,7 +565,7 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   snapshot = await append(input.scope, snapshot, 'candidate.persisted', { stepId, attempt, candidateHash: candidate.candidateHash, requiresConfirmation: true })
   return { snapshot, candidate }
   } catch (error) {
-    throw await recordComicGenerationFailure(input.scope, snapshot.run.id, input.stage, phase, error, responseObserved, { generation: snapshot.projection.generation, contractHash: snapshot.projection.contractHash })
+    throw await recordComicGenerationFailure(input.scope, snapshot.run.id, input.stage, phase, error, responseObserved, { generation: snapshot.projection.generation, contractHash: snapshot.projection.contractHash }, unavailableResponse)
   }
 }
 

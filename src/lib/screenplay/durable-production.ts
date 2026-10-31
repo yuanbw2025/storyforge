@@ -1,4 +1,5 @@
-import { chat } from '../ai/client'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
+import { chat, type ChatResult } from '../ai/client'
 import type {
   AdaptationBriefV1,
   AIConfig,
@@ -386,6 +387,10 @@ function contract(scope: WorkspaceScope, stage: ScreenplayProfessionalStageV1) {
   }
 }
 
+class ScreenplaySourceChangedError extends Error {
+  constructor() { super('[screenplay-run] 来源或目标版本已变化，本次请求未派发，请检查后重新明确开始。'); this.name = 'ScreenplaySourceChangedError' }
+}
+
 export async function generateScreenplayProfessionalCandidateV1(input: {
   scope: WorkspaceScope
   adaptationProjectId: number
@@ -398,6 +403,10 @@ export async function generateScreenplayProfessionalCandidateV1(input: {
   runAI?: (messages: ChatMessage[]) => Promise<string>
   signal?: AbortSignal
 }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ScreenplayProfessionalCandidateV1 }> {
+  const callbackReceiver = input
+  const runAI = input.runAI
+  input = { ...input, scope: { ...input.scope }, aiConfig: input.aiConfig ? { ...input.aiConfig } : undefined,
+    sourceUnitKeys: input.sourceUnitKeys?.slice(), targetSceneKeys: input.targetSceneKeys?.slice(), targetIssueKeys: input.targetIssueKeys?.slice() }
   if (!input.aiConfig && !input.runAI) throw new Error('[screenplay-run] 缺少 AI 配置')
   const selected = await selectedContext(input)
   if (selected.root.status === 'complete') throw new Error('请先重新打开剧本审校')
@@ -444,12 +453,33 @@ export async function generateScreenplayProfessionalCandidateV1(input: {
     sceneCardPlanSectionKeys: Object.fromEntries(cardRows.map(row => [row.stableKey, beatSectionByKey.get(row.beatKey) ?? ''])),
   })
   const runModel = async (attemptMessages: ChatMessage[], attempt: number) => {
+    const prepared = await recordCreationModelRequestV1({ scope: input.scope, snapshot, stepId: config.stepId, attempt,
+      contextManifestHash: contextManifest.manifestHash, messages: attemptMessages })
+    snapshot = prepared.snapshot
+    // This preflight rejects drift already visible before this request. It is
+    // not an atomic lock across the async freshness read and the send boundary.
+    const currentRoot = await db.adaptationProjects.get(selected.root.id!)
+    if (!currentRoot || currentRoot.medium !== 'screenplay' || currentRoot.projectId !== input.scope.projectId
+      || currentRoot.worldId !== input.scope.worldId || currentRoot.workId !== input.scope.workId
+      || currentRoot.revision !== selected.root.revision || currentRoot.sourceWorkId !== selected.root.sourceWorkId
+      || currentRoot.activeSourceManifestVersion !== selected.root.activeSourceManifestVersion
+      || currentRoot.activeSourceManifestHash !== selected.root.activeSourceManifestHash
+      || (await inspectAdaptationFreshness(selected.root.id!)).status !== 'unchanged') throw new ScreenplaySourceChangedError()
     snapshot = await append(input.scope, snapshot, 'model.requested', { stepId: config.stepId, attempt, bindingHash: await hashCanonicalValue(snapshot.contract.executionBindings?.[0]) })
+    const result: ChatResult = {}
     let output: string
-    try { output = await (input.runAI ? input.runAI(attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: config.category, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, input.signal)) }
-    catch (error) { snapshot = await append(input.scope, snapshot, 'run.paused', { reason: `screenplay-${input.stage}-model-outcome-unknown`, recoverable: false }); throw error }
-    if (input.signal?.aborted) throw new Error('本次生成已取消，迟到结果未采纳')
+    try { output = await (runAI ? runAI.call(callbackReceiver, attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: config.category, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, input.signal, result)) }
+    catch (error) {
+      const failed = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
+      try { snapshot = await append(input.scope, failed.snapshot, 'run.paused', { reason: `screenplay-${input.stage}-model-outcome-unknown`, recoverable: false }) }
+      catch (persistenceFailure) {
+        throw Object.assign(new Error('[screenplay-run] 请求结果未知，任务暂停证据未能完整保存。'), { cause: failed.report, persistenceFailures: [persistenceFailure] })
+      }
+      throw failed.report
+    }
+    snapshot = await recordCreationModelResponseV1({ snapshot, request: prepared.request, raw: output, result })
     snapshot = await append(input.scope, snapshot, 'model.responded', { stepId: config.stepId, attempt, outputHash: await hashCanonicalValue({ raw: output }) })
+    if (input.signal?.aborted) throw new Error('本次生成已取消，迟到结果未采纳')
     return output
   }
   let finalMessages = messages
@@ -503,8 +533,15 @@ export async function generateScreenplayProfessionalCandidateV1(input: {
   snapshot = await append(input.scope, snapshot, 'candidate.persisted', { stepId: config.stepId, attempt: finalAttempt, candidateHash: candidate.candidateHash, requiresConfirmation: true })
   return { snapshot, candidate }
   } catch (error) {
-    const current = await readAgentRunV1(input.scope, snapshot.run.id)
-    if (current.projection.state === 'running') await append(input.scope, current, input.signal?.aborted ? 'run.cancelled' : 'run.failed', input.signal?.aborted ? { reason: 'author-cancelled' } : { code: `screenplay-${input.stage}-preparation-or-persistence-failed`, retryable: false })
+    try {
+      const current = await readAgentRunV1(input.scope, snapshot.run.id)
+      if (current.projection.state === 'running') {
+        if (error instanceof ScreenplaySourceChangedError) await append(input.scope, current, 'run.paused', { reason: 'screenplay-source-stale-before-model', recoverable: false })
+        else await append(input.scope, current, input.signal?.aborted ? 'run.cancelled' : 'run.failed', input.signal?.aborted ? { reason: 'author-cancelled' } : { code: `screenplay-${input.stage}-preparation-or-persistence-failed`, retryable: false })
+      }
+    } catch (persistenceFailure) {
+      throw Object.assign(new Error('[screenplay-run] 原失败与任务状态未能完整保存，请检查原错误及存储。'), { cause: error, persistenceFailures: [persistenceFailure] })
+    }
     throw error
   }
 }
@@ -783,5 +820,12 @@ export async function closeScreenplayTaskV1(scope: WorkspaceScope, runId: number
   if (!task) throw new Error('剧本任务不存在或已结束')
   if (task.intent) throw new Error('已确认采纳的任务需要恢复采纳，不能丢弃正式写入证据')
   const snapshot = await readAgentRunV1(scope, runId)
+  const inFlight = snapshot.projection.state === 'running' && snapshot.events.some(event => (
+    event.type === 'model.requested' && event.generation === snapshot.projection.generation
+    && snapshot.projection.steps[event.payload.stepId]?.attempt === event.payload.attempt
+    && !snapshot.events.some(response => response.type === 'model.responded' && response.generation === event.generation
+      && response.payload.stepId === event.payload.stepId && response.payload.attempt === event.payload.attempt)
+  ))
+  if (inFlight) throw new Error('模型请求仍在途，不能提前结束本运行；取消或停止等待不代表供应商已取消，请保留原运行等待结果。')
   await append(scope, snapshot, 'run.cancelled', { reason: 'author-closed-screenplay-task-no-automatic-retry' })
 }
