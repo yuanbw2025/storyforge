@@ -20,7 +20,7 @@ import InspirationSingleResult from './InspirationSingleResult'
 import InspirationFusionReview from './InspirationFusionReview'
 import type { InspirationSourceKind } from '../../lib/types/inspiration-workspace'
 import { useIncrementalInspiration } from '../../hooks/useIncrementalInspiration'
-import { MAX_INSPIRATION_FRAGMENT_CHARS } from '../../lib/inspiration/workspace'
+import { MAX_INSPIRATION_FRAGMENT_CHARS, MAX_INSPIRATION_FRAGMENTS } from '../../lib/inspiration/workspace'
 import { useActiveWork } from '../../hooks/useActiveWork'
 
 interface Props {
@@ -408,6 +408,9 @@ export default function InspirationPanel({ project }: Props) {
               <Plus className="h-3.5 w-3.5" /> 加入素材库
             </button>
           </div>
+          <p className="mt-2 text-xs text-text-secondary">
+            素材库：{inspirationWorkspace.fragments.length} / {MAX_INSPIRATION_FRAGMENTS} 条。达到上限后，请先删除未被确认版本引用的片段；已有来源不会自动移除。
+          </p>
           {/* CF-5: 超长非阻断提示——不静默截断，明确告知只适合短文本 */}
           {inspiration.trim().length > 1500 && (
             <p className={`mt-1.5 text-xs ${

@@ -33,6 +33,12 @@ export function useIncrementalInspiration(
   ), [project.activeWorkId, project.activeWorldId, project.id])
   const scopeInput = workspaceScope ?? project.id!
   const scopeKey = `${project.activeWorldId ?? 'unresolved'}:${project.activeWorkId ?? 'unresolved'}`
+  const viewKey = `${project.id}:${scopeKey}:${mode}`
+  const currentView = useRef(viewKey)
+  currentView.current = viewKey
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+  const isCurrentView = (key: string) => mounted.current && currentView.current === key
   const copilot = useMasterCopilot({ project, worldGroupId: null })
   const workspace = useInspirationWorkspaceStore()
   const draftKey = `sf-inspiration-draft-v2-${project.id}-${scopeKey}`
@@ -91,6 +97,8 @@ export function useIncrementalInspiration(
       const latest = latestInspirationVersion(state.versions, mode)
       if (!latest) return
       try { applyResult(JSON.parse(latest.resultJson), mode) } catch { /* ignore invalid data */ }
+    }).catch(error => {
+      if (active) setFusionError(error instanceof Error ? error.message : '灵感素材读取失败')
     })
     return () => { active = false }
   // Store methods are stable Zustand actions; mode changes reload the matching latest version.
@@ -166,6 +174,7 @@ export function useIncrementalInspiration(
   }, [pendingCandidate?.event.content, pendingCandidate?.event.id, mode])
 
   const addCurrentFragment = async () => {
+    const operationView = viewKey
     if (inspiration.trim().length > MAX_INSPIRATION_FRAGMENT_CHARS) {
       setFusionError(`单条灵感最多 ${MAX_INSPIRATION_FRAGMENT_CHARS} 字，请拆成多个碎片`)
       return null
@@ -177,16 +186,19 @@ export function useIncrementalInspiration(
         sourceKind,
       })
       if (!fragment) return null
-      setFusionError('')
-      setSelectedFragmentIds(current => new Set(current).add(fragment.id))
+      if (isCurrentView(operationView)) {
+        setFusionError('')
+        setSelectedFragmentIds(current => new Set(current).add(fragment.id))
+      }
       return fragment
     } catch (error) {
-      setFusionError(error instanceof Error ? error.message : '灵感碎片保存失败')
+      if (isCurrentView(operationView)) setFusionError(error instanceof Error ? error.message : '灵感碎片保存失败')
       return null
     }
   }
 
   const generate = async () => {
+    const operationView = viewKey
     if (inspiration.trim().length > MAX_INSPIRATION_FRAGMENT_CHARS) {
       setFusionError(`单条灵感最多 ${MAX_INSPIRATION_FRAGMENT_CHARS} 字，请拆成多个碎片`)
       return
@@ -194,7 +206,8 @@ export function useIncrementalInspiration(
     const selectedIds = new Set(selectedFragmentIds)
     if (inspiration.trim()) {
       const fragment = await addCurrentFragment()
-      if (fragment) selectedIds.add(fragment.id)
+      if (!fragment || !isCurrentView(operationView)) return
+      selectedIds.add(fragment.id)
     }
     const state = useInspirationWorkspaceStore.getState()
     if (selectedIds.size === 0 || state.fragments.length === 0) return
@@ -253,8 +266,10 @@ export function useIncrementalInspiration(
   }
 
   const removeFragment = async (fragmentId: string) => {
+    const operationView = viewKey
     try {
       await workspace.removeFragment(scopeInput, fragmentId)
+      if (!isCurrentView(operationView)) return
       setFusionError('')
       setSelectedFragmentIds(current => {
         const next = new Set(current)
@@ -262,7 +277,7 @@ export function useIncrementalInspiration(
         return next
       })
     } catch (error) {
-      setFusionError(error instanceof Error ? error.message : '灵感碎片删除失败')
+      if (isCurrentView(operationView)) setFusionError(error instanceof Error ? error.message : '灵感碎片删除失败')
     }
   }
 
