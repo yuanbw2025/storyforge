@@ -31,7 +31,7 @@ function artifactKind(artifactKey: string): ProductBuildArtifactKindV1 {
   if (artifactKey === 'media.visual-bible') return 'visual-bible'
   if (artifactKey === 'media.audit') return 'integration-report'
   if (artifactKey === 'quality.visual-review') return 'playtest-report'
-  if (artifactKey === 'runtime.package') return 'runtime-package'
+  if (artifactKey === 'runtime.package') return 'presentation'
   return 'narrative'
 }
 
@@ -74,6 +74,8 @@ async function jsonArtifact(input: {
 
 export async function seedTextAdventureMediaRevisionWorkbenchV1(imageBase64: string) {
   const owned = await seedCurrentProductWorld('文字冒险媒资修订浏览器 E2E')
+  const releaseId = owned.release.id
+  if (typeof releaseId !== 'number') throw new Error('媒资修订夹具缺少实际封存版本 ID')
   const project = await db.projects.get(owned.scope.projectId)
   await db.projects.update(owned.scope.projectId, {
     productPlatformOptIns: {
@@ -212,7 +214,7 @@ export async function seedTextAdventureMediaRevisionWorkbenchV1(imageBase64: str
     blockingIssueCount: 0, providerReviewCompleted: true,
   }
   const baseRuntime = createTextAdventureFoundationRuntimePackageV2({
-    worldRelease: owned.release,
+    worldRelease: { ...owned.release, id: releaseId },
     sourceCatalog: {
       ...CURRENT_PRODUCT_SOURCE_CATALOG,
       worldReference: { referenceHash: 'f'.repeat(64) },
