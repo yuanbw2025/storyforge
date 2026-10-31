@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Save, Trash2, Copy, Download, CheckCircle2, Lock, Plus, X,
 } from 'lucide-react'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../../../lib/ai/prompt-engine'
 import { PREVIEW_VARS } from '../../../lib/ai/prompt-preview-vars'
+import { encodePromptTemplateExchange } from '../../../lib/ai/prompt-template-exchange'
 import type { PromptTemplate, PromptModuleKey, PromptParameter } from '../../../lib/types/prompt'
 import PromptParametersEditor from './PromptParametersEditor'
 import PromptExamplesEditor from './PromptExamplesEditor'
@@ -79,10 +80,14 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
   // 本地编辑状态（draft），只在选中模板变化时同步
   const [draft, setDraft] = useState<PromptTemplate | null>(template)
   const [dirty, setDirty] = useState(false)
+  const [baseModuleKey, setBaseModuleKey] = useState(template?.moduleKey)
+  const draftRef = useRef(draft)
+  draftRef.current = draft
 
   useEffect(() => {
     setDraft(template)
     setDirty(false)
+    setBaseModuleKey(template?.moduleKey)
   }, [template?.id]) // eslint-disable-line react-hooks/exhaustive-deps -- 只在切换模板时重建草稿，外部同模板刷新不能覆盖未保存编辑
 
   // 实时预览（draft 即使没保存也能看效果）
@@ -101,7 +106,7 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
     }
   }, [draft])
 
-  if (!template || !draft) {
+  if (!template || !draft || template.id !== draft.id) {
     return (
       <div className="h-full flex items-center justify-center text-text-muted text-sm">
         从左侧选择一个模板查看 / 编辑
@@ -109,7 +114,8 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
     )
   }
 
-  const isSystem = draft.scope === 'system'
+  const isSystem = template.scope === 'system'
+  const isActive = template.isActive
 
   /** 字段更新 helper */
   const update = (patch: Partial<PromptTemplate>) => {
@@ -118,10 +124,18 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
   }
 
   const handleSave = async () => {
-    if (!draft.id) return
-    await saveTemplate(draft)
-    setDirty(false)
-    onChanged()
+    if (!draft.id || baseModuleKey === undefined) return
+    const savedDraft = draft
+    try {
+      await saveTemplate(savedDraft, { expectedModuleKey: baseModuleKey })
+      if (draftRef.current?.id !== savedDraft.id) return
+      setBaseModuleKey(savedDraft.moduleKey)
+      if (draftRef.current === savedDraft) setDirty(false)
+      onChanged()
+      if (baseModuleKey !== savedDraft.moduleKey) toast.info('已移到新模块，尚未激活；需要时请在新模块显式设为激活。')
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : '保存失败，未保存的编辑仍保留。')
+    }
   }
 
   const handleClone = async () => {
@@ -132,9 +146,17 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
   }
 
   const handleSetActive = async () => {
-    if (!draft.id) return
-    await setActive(draft.id)
-    onChanged()
+    if (!draft.id || baseModuleKey === undefined) return
+    if (draft.moduleKey !== baseModuleKey) {
+      toast.error('请先保存模块变更，再在新模块设为激活；未保存的编辑仍保留。')
+      return
+    }
+    try {
+      await setActive(draft.id, { expectedModuleKey: baseModuleKey })
+      onChanged()
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : '激活失败，请重试。')
+    }
   }
 
   const handleDelete = async () => {
@@ -152,15 +174,19 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
   }
 
   const handleExport = () => {
-    const blob = new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${draft.name.replace(/\s+/g, '_')}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    try {
+      const blob = new Blob([encodePromptTemplateExchange([draft])], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${draft.name.replace(/\s+/g, '_')}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (cause) {
+      toast.error(`导出失败：${cause instanceof Error ? cause.message : String(cause)}`)
+    }
   }
 
   /** 变量列表的增删 */
@@ -192,7 +218,7 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
                 {draft.isDefault && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent">★ 默认</span>
                 )}
-                {draft.isActive && (
+                {isActive && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/15 text-success">激活</span>
                 )}
               </div>
@@ -205,7 +231,7 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
                   className="flex-1 px-2 py-1 bg-bg-base border border-border rounded text-base font-semibold text-text-primary focus:outline-none focus:border-accent"
                 />
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-info/15 text-info">我的</span>
-                {draft.isActive && (
+                {isActive && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/15 text-success">激活</span>
                 )}
               </div>
@@ -271,7 +297,7 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
               <Save className="w-3.5 h-3.5" /> 保存{dirty && ' *'}
             </button>
           )}
-          {!draft.isActive && (
+          {!isActive && (
             <button
               onClick={handleSetActive}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-success/10 text-success text-sm rounded hover:bg-success/20"
