@@ -821,7 +821,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'narrativeBeats[speakerCharacterId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'comicVisualSubjects[characterId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'itemLedger[characterId]', onDelete: 'setNull' },
-      { kind: 'array', field: 'appearingCharacterIds', itemTarget: 'detailedOutlines', onDelete: 'removeItem' },
     ],
     exportRemap: [
       { field: 'homeWorldGroupId', remapVia: 'worldGroups', exportAs: '_homeWorldGroupExportId' },

@@ -11,6 +11,7 @@ import { transactionTablesFor, cascadeDeleteProject } from '../registry/lifecycl
 import { resolveWorkspaceOwnership } from './ownership'
 import { markAndSweepAgentRunArtifactsV1 } from '../memory/artifact-retention-store'
 import { remapNarrativeDomainReferencesV1 } from '../narrative-domain/lifecycle'
+import { clearRegisteredArrayReferences, registeredArrayReferencesTo } from '../registry/array-references'
 
 function ownerField(spec: typeof PROJECT_TABLES[number]): { owner: 'world' | 'work'; field: string } | null {
   const locator = spec.domainOwner?.locator
@@ -49,6 +50,7 @@ export async function cascadeRegisteredReferences(
   visited.add(visitKey)
   const source = REGISTRY_BY_NAME.get(sourceTableName)
   if (!source) throw new Error(`[workspace-lifecycle] 未登记表 ${sourceTableName}`)
+  if (registeredArrayReferencesTo(sourceTableName).length) await clearRegisteredArrayReferences(sourceTableName, sourceId)
   await remapNarrativeDomainReferencesV1({ table: sourceTableName, fromId: sourceId })
   for (const ref of source.refs ?? []) {
     if (ref.kind !== 'simple' || ref.onDelete === 'keep') continue
