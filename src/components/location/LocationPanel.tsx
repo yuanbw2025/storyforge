@@ -2,12 +2,13 @@
  * Phase 25.3 — 重要地点面板
  * 树状图 / 列表双视图 + 多标签组合 + 树状父子层级
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Plus, Trash2, ChevronDown, ChevronRight, MapPin,
   GitBranch, List, Sparkles, Loader2, RotateCcw, AlertTriangle,
 } from 'lucide-react'
-import { useLocationStore } from '../../stores/location'
+import { useLocationStore, type LocationTreeNode } from '../../stores/location'
+import { locationDescendantsV1 } from '../../lib/location/hierarchy'
 import type { Project, ImportantLocation, LocationTag } from '../../lib/types'
 import { TAG_EMOJI } from '../../lib/types/location'
 import LocationTagPicker from './LocationTagPicker'
@@ -42,6 +43,10 @@ export default function LocationPanel({ project }: Props) {
   const [view, setView] = useState<'tree' | 'list'>('tree')
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
+  const viewScopeKey = `${project.id}:${project.activeWorldId}:${project.activeWorkId}`
+  const viewScopeKeyRef = useRef(viewScopeKey)
+  viewScopeKeyRef.current = viewScopeKey
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState<string | null>(null)
   const [extractRunId, setExtractRunId] = useState<number | null>(null)
@@ -93,9 +98,37 @@ export default function LocationPanel({ project }: Props) {
   }, [project.id])
 
   const tree = getTree()
+  const listRows: Array<{ location: LocationTreeNode; depth: number }> = []
+  const pendingRows = tree.map(location => ({ location, depth: 0 })).reverse()
+  while (pendingRows.length) {
+    const current = pendingRows.pop()!
+    listRows.push(current)
+    for (let i = current.location.children.length - 1; i >= 0; i--) {
+      pendingRows.push({ location: current.location.children[i], depth: current.depth + 1 })
+    }
+  }
+  const issueCount = listRows.filter(row => row.location.hierarchyIssue).length
+
+  useEffect(() => { setEditError(null) }, [viewScopeKey])
+
+  const edit = useCallback(async (operation: () => Promise<void>) => {
+    const capturedScopeKey = viewScopeKey
+    setEditError(null)
+    try { await operation() }
+    catch (error) {
+      if (viewScopeKeyRef.current === capturedScopeKey) {
+        setEditError(error instanceof Error ? error.message : '地点修改未完成，请重试。')
+      }
+    }
+  }, [viewScopeKey])
+
+  const handleUpdate = useCallback((id: number, patch: Partial<ImportantLocation>) => {
+    void edit(() => updateLocation(id, patch))
+  }, [edit, updateLocation])
 
   const handleAdd = useCallback(async (parentId: number | null = null) => {
-    const id = await addLocation({
+    await edit(async () => {
+      const id = await addLocation({
       projectId: project.id!,
       name: '新地点',
       tags: '[]',
@@ -103,19 +136,23 @@ export default function LocationPanel({ project }: Props) {
       significance: '',
       parentId,
       sortOrder: locations.length,
+      })
+      if (viewScopeKeyRef.current === viewScopeKey) setExpandedId(id)
     })
-    setExpandedId(id)
-  }, [project.id, addLocation, locations.length])
+  }, [project.id, addLocation, locations.length, edit, viewScopeKey])
 
   const handleDelete = useCallback(async (id: number) => {
-    await deleteLocation(id)
-    if (expandedId === id) setExpandedId(null)
-    setConfirmDeleteId(null)
-  }, [deleteLocation, expandedId])
+    await edit(async () => {
+      await deleteLocation(id)
+      if (viewScopeKeyRef.current !== viewScopeKey) return
+      if (expandedId === id) setExpandedId(null)
+      setConfirmDeleteId(null)
+    })
+  }, [deleteLocation, expandedId, edit, viewScopeKey])
 
   const handleUpdateTags = useCallback((id: number, tags: LocationTag[]) => {
-    updateLocation(id, { tags: JSON.stringify(tags) })
-  }, [updateLocation])
+    handleUpdate(id, { tags: JSON.stringify(tags) })
+  }, [handleUpdate])
 
   const parseTags = (tagsStr: string): LocationTag[] => {
     try { return JSON.parse(tagsStr || '[]') } catch { return [] }
@@ -232,11 +269,13 @@ export default function LocationPanel({ project }: Props) {
     }
   }
 
-  // 递归渲染列表项
-  const renderListItem = (loc: ImportantLocation, depth: number = 0) => {
+  const renderListItem = (loc: LocationTreeNode, depth: number = 0) => {
     const isExpanded = expandedId === loc.id
     const tags = parseTags(loc.tags)
-    const children = locations.filter(l => l.parentId === loc.id)
+    const children = loc.children
+    const excludedParents = isExpanded ? locationDescendantsV1(locations, loc.id!) : new Set<number>()
+    const invalidCurrentParent = isExpanded && loc.parentId != null
+      && (excludedParents.has(loc.parentId) || !locations.some(row => row.id === loc.parentId))
     const isConfirmingDelete = confirmDeleteId === loc.id
 
     return (
@@ -288,7 +327,7 @@ export default function LocationPanel({ project }: Props) {
                   <label className="block text-xs text-text-muted mb-1">名称</label>
                   <input
                     value={loc.name}
-                    onChange={e => updateLocation(loc.id!, { name: e.target.value })}
+                    onChange={e => handleUpdate(loc.id!, { name: e.target.value })}
                     className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
@@ -296,12 +335,14 @@ export default function LocationPanel({ project }: Props) {
                   <label className="block text-xs text-text-muted mb-1">上级地点</label>
                   <select
                     value={loc.parentId ?? ''}
-                    onChange={e => updateLocation(loc.id!, { parentId: e.target.value ? Number(e.target.value) : null })}
+                    aria-label={`设置${loc.name}的上级地点`}
+                    onChange={e => handleUpdate(loc.id!, { parentId: e.target.value ? Number(e.target.value) : null })}
                     className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
                   >
                     <option value="">（顶级）</option>
+                    {invalidCurrentParent && <option value={loc.parentId!} disabled>当前上级关系异常，请重新选择</option>}
                     {locations
-                      .filter(l => l.id !== loc.id)
+                      .filter(l => l.id != null && !excludedParents.has(l.id))
                       .map(l => (
                         <option key={l.id} value={l.id}>{l.name}</option>
                       ))}
@@ -323,7 +364,7 @@ export default function LocationPanel({ project }: Props) {
                 <label className="block text-xs text-text-muted mb-1">描述</label>
                 <textarea
                   value={loc.description}
-                  onChange={e => updateLocation(loc.id!, { description: e.target.value })}
+                  onChange={e => handleUpdate(loc.id!, { description: e.target.value })}
                   placeholder="地点的详细描述、外观、氛围…"
                   className="w-full h-20 p-2 bg-bg-base border border-border rounded text-sm text-text-primary resize-y focus:outline-none focus:border-accent"
                 />
@@ -334,7 +375,7 @@ export default function LocationPanel({ project }: Props) {
                 <label className="block text-xs text-text-muted mb-1">剧情重要性</label>
                 <textarea
                   value={loc.significance}
-                  onChange={e => updateLocation(loc.id!, { significance: e.target.value })}
+                  onChange={e => handleUpdate(loc.id!, { significance: e.target.value })}
                   placeholder="此地点在故事中的作用、关键事件、与角色的关联…"
                   className="w-full h-16 p-2 bg-bg-base border border-border rounded text-sm text-text-primary resize-y focus:outline-none focus:border-accent"
                 />
@@ -379,14 +420,9 @@ export default function LocationPanel({ project }: Props) {
           )}
         </div>
 
-        {/* 子地点递归渲染 */}
-        {children.map(child => renderListItem(child, depth + 1))}
       </div>
     )
   }
-
-  // 顶层地点
-  const topLevelLocations = locations.filter(l => l.parentId === null)
 
   if (loading) {
     return (
@@ -403,6 +439,10 @@ export default function LocationPanel({ project }: Props) {
       <p className="text-sm text-text-muted mb-4">
         管理故事中的重要场景地点，支持标签组合与树状层级
       </p>
+      {issueCount > 0 && <p role="status" className="mb-3 rounded border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-text-secondary">
+        有 {issueCount} 个地点的上级关系异常。原记录已保留，请在列表中选择有效上级或设为顶级；修复后再删除。
+      </p>}
+      {editError && <p role="alert" className="mb-3 text-sm text-red-400">{editError}</p>}
 
       {/* 工具栏 */}
       <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
@@ -547,7 +587,7 @@ export default function LocationPanel({ project }: Props) {
               </button>
             </div>
           ) : (
-            topLevelLocations.map(loc => renderListItem(loc))
+            listRows.map(({ location, depth }) => renderListItem(location, depth))
           )}
         </div>
       )}

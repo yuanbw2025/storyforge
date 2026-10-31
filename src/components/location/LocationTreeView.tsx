@@ -60,15 +60,21 @@ export default function LocationTreeView({ tree: treeData, onSelect }: Props) {
   // 扁平化树
   const flatNodes = useMemo(() => {
     const result: FlatNode[] = []
-    const walk = (nodes: LocationTreeNode[]) => {
-      for (const n of nodes) {
-        let tags: LocationTag[] = []
-        try { tags = JSON.parse(n.tags || '[]') } catch { /* empty */ }
-        result.push({ id: n.id!, parentId: n.parentId, name: n.name, tags })
-        if (n.children.length > 0) walk(n.children)
+    const pending = treeData.map(node => ({ node, parentId: null as number | null })).reverse()
+    const seen = new Set<number>()
+    while (pending.length) {
+      const { node, parentId } = pending.pop()!
+      if (seen.has(node.id!)) continue
+      seen.add(node.id!)
+      let tags: LocationTag[] = []
+      try { tags = JSON.parse(node.tags || '[]') } catch { /* empty */ }
+      // The forest cuts only display edges. Preserve the stored parent field
+      // for explicit repair; chart edges follow the actual acyclic traversal.
+      result.push({ id: node.id!, parentId, name: node.name, tags })
+      for (let i = node.children.length - 1; i >= 0; i--) {
+        pending.push({ node: node.children[i], parentId: node.id! })
       }
     }
-    walk(treeData)
     return result
   }, [treeData])
 

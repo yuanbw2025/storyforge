@@ -21,6 +21,7 @@ import {
   refreshSettingAssertionSourceStatus,
 } from '../fact-ledger/setting-assertions'
 import type { CanonAssertionSourceTable } from './canon-assertion-source-registry'
+import { assertRegisteredTreeParentV1, RegisteredTreeRelationError } from './tree-relations'
 
 const CANON_SOURCE_TABLES = new Set<CanonAssertionSourceTable>([
   'worldviews',
@@ -244,6 +245,7 @@ export function adoptionTransactionTablesV1(target: string, patch?: Readonly<Rec
 
 async function validateReferencePatch(
   patch: Record<string, unknown>, input: AdoptInput, adoption: CollectionAdoptionSpec, result: AdoptResult,
+  recordId: number | undefined = input.recordId,
 ): Promise<boolean> {
   for (const fk of adoption.fkChecks ?? []) {
     if (Object.prototype.hasOwnProperty.call(patch, fk.field)
@@ -254,7 +256,30 @@ async function validateReferencePatch(
   }
   if (!await applyFkChecks(patch, input.data, adoption, result, input.scope!)) return false
   await applyArrayMemberChecks(patch, adoption, result, input.scope!)
-  return true
+  return validateTreePatch(patch, input, result, recordId)
+}
+
+async function validateTreePatch(
+  patch: Record<string, unknown>, input: AdoptInput, result: AdoptResult,
+  recordId?: number, raw: Record<string, unknown> = input.data as Record<string, unknown>,
+): Promise<boolean> {
+  const spec = REGISTRY_BY_NAME.get(input.target)!
+  const field = spec.tree?.parentField
+  if (!field || !Object.prototype.hasOwnProperty.call(patch, field)) return true
+  const current = recordId == null ? undefined : await spec.table.get(recordId)
+  // Merge strategies can retain an old edge in their full patch. Unrelated
+  // text edits do not silently repair or re-authorize that historical edge.
+  if (current && !Object.prototype.hasOwnProperty.call(raw, field)
+    && Object.is(current[field] ?? null, patch[field] ?? null)) return true
+  try {
+    await assertRegisteredTreeParentV1({ spec, scope: input.scope!, recordId, parentId: patch[field] })
+    return true
+  } catch (error) {
+    if (!(error instanceof RegisteredTreeRelationError)) throw error
+    result.fkErrors.push({ field, refValue: patch[field] })
+    result.skipped.push({ reason: error.message, data: raw })
+    return false
+  }
 }
 
 async function adoptCollectionRecord(
@@ -581,7 +606,7 @@ async function adoptSingleton(
     await resolveScope(input)
     const target = await findSingleton(input, tableSpec)
     const adoption = ADOPTION_BY_TARGET.get(input.target)
-    if (adoption && !await validateReferencePatch(patch, input, adoption, result)) return
+    if (adoption && !await validateReferencePatch(patch, input, adoption, result, target?.id)) return
     if (input.mode === 'append') {
       for (const [field, val] of Object.entries(patch)) {
         const spec = fieldSpecs.find(f => f.field === field)
@@ -662,12 +687,14 @@ async function adoptCollection(
           // Null keeps its existing collection-update meaning of "not supplied".
           const patch: Record<string, unknown> = { updatedAt: Date.now() }
           for (const [k, v] of Object.entries(item)) if (v !== null) patch[k] = v
+          if (!await validateTreePatch(patch, input, result, existing.id, raw)) return
           await tableSpec.table.update(existing.id, patch as any)
           updated = { id: existing.id, fields: Object.keys(patch) }
           result.written.push(updated)
         } else if (adoption.duplicatePolicy === 'merge') {
           const patch = mergeByStrategy(existing, item, adoption.mergeStrategy ?? 'overwrite-non-empty')
           patch.updatedAt = Date.now()
+          if (!await validateTreePatch(patch, input, result, existing.id, raw)) return
           await tableSpec.table.update(existing.id, patch as any)
           updated = { id: existing.id, fields: Object.keys(patch) }
           result.written.push(updated)
@@ -675,6 +702,7 @@ async function adoptCollection(
           throw new Error(`[adopt] 重复记录 ${input.target}.${JSON.stringify(identityValue(item, adoption))}`)
         }
       } else {
+        if (!await validateTreePatch(item, input, result, undefined, raw)) return
         const id = await tableSpec.table.add(item as any) as number
         result.written.push({ id, fields: Object.keys(item) })
       }
