@@ -118,8 +118,12 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
   const isActive = template.isActive
 
   /** 字段更新 helper */
-  const update = (patch: Partial<PromptTemplate>) => {
-    setDraft({ ...draft, ...patch })
+  const update = (patch: Partial<PromptTemplate> | ((current: PromptTemplate) => Partial<PromptTemplate>)) => {
+    const editingId = draft.id
+    if (draftRef.current?.id !== editingId) return
+    setDraft(current => current && current.id === editingId
+      ? { ...current, ...(typeof patch === 'function' ? patch(current) : patch) }
+      : current)
     setDirty(true)
   }
 
@@ -370,8 +374,9 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
 
       {/* 示例 / 反例 (P15) */}
       <PromptExamplesEditor
+        key={`${template.id}:${template.scope}:${template.moduleKey}:${draft.moduleKey}`}
         template={draft}
-        onChange={(examples) => update({ examples })}
+        onChange={(editExamples) => update(current => ({ examples: editExamples(current.examples ?? {}) }))}
         readOnly={isSystem}
       />
 
