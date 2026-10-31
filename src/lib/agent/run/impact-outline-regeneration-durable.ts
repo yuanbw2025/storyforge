@@ -1,5 +1,5 @@
 import Dexie from 'dexie'
-import { chat, resolveRequestConfig } from '../../ai/client'
+import { chat, resolveRequestConfig, type ChatResult } from '../../ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../ai/config-readiness'
 import { hashChapterText } from '../../ai/chapter-memory/text-normalization'
 import { db } from '../../db/schema'
@@ -48,6 +48,11 @@ import {
 } from './impact-dependency-readiness'
 import { nextImpactGenerativeSlotRelationV1 } from './impact-generative-slot'
 import { createVerificationReceiptV1 } from './verification-receipt'
+import {
+  recordCreationModelRequestV1,
+  recordCreationModelResponseV1,
+  recordUnavailableCreationResponseV1,
+} from './creation-response-evidence'
 
 export const IMPACT_OUTLINE_REGENERATION_STEP_ID_V1 = 'impact-remediation:outline-regenerate' as const
 export const IMPACT_OUTLINE_REGENERATION_SKILL_ID_V1 = 'outline.impact-summary-regenerate' as const
@@ -585,6 +590,13 @@ export async function generateImpactOutlineRegenerationCandidateV1(input: {
     snapshot: AgentRunSnapshotV1,
   ) => void | Promise<void>
 }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ImpactOutlineRegenerationCandidateV1 }> {
+  const callbackReceiver = input
+  const runAI = input.runAI
+  const onDurableBoundary = input.onDurableBoundary
+  input = { ...input, scope: { ...input.scope }, expectedReplan: structuredClone(input.expectedReplan),
+    aiConfig: input.aiConfig ? { ...input.aiConfig } : undefined }
+  const notify = (boundary: ImpactOutlineRegenerationBoundaryV1, current: AgentRunSnapshotV1) =>
+    onDurableBoundary?.call(callbackReceiver, boundary, current)
   if (!input.runAI && !input.aiConfig) throw new Error('生成式重建缺少 AI 配置。')
   const requestMeta = {
     category: 'outline.impact-regenerate' as const,
@@ -635,35 +647,53 @@ export async function generateImpactOutlineRegenerationCandidateV1(input: {
     attempt: 1,
     manifestHash: manifest.manifestHash,
   })
+  const requestEvidence = await recordCreationModelRequestV1({
+    scope: input.scope, snapshot, stepId: IMPACT_OUTLINE_REGENERATION_STEP_ID_V1,
+    attempt: 1, contextManifestHash: manifest.manifestHash, messages: prepared.messages,
+  })
+  snapshot = requestEvidence.snapshot
   snapshot = await append(input.scope, snapshot, 'model.requested', {
     stepId: IMPACT_OUTLINE_REGENERATION_STEP_ID_V1,
     attempt: 1,
     bindingHash: await hashCanonicalValue(snapshot.contract.executionBindings?.[0]),
   })
   let raw: string
+  const resultMeta: ChatResult = {}
   try {
-    await input.onDurableBoundary?.('model.requested', snapshot)
-    raw = await (input.runAI
-      ? input.runAI(prepared.messages)
+    await notify('model.requested', snapshot)
+    raw = await (runAI
+      ? runAI.call(callbackReceiver, prepared.messages)
       : chat(prepared.messages, input.aiConfig!, {
           category: 'outline.impact-regenerate',
           projectId: input.scope.projectId,
           configOverrides: { maxTokens: getAgentSkillV1(IMPACT_OUTLINE_REGENERATION_SKILL_ID_V1).maxOutputTokens },
           contextOverflowPolicy: 'reject',
-        }))
+        }, undefined, resultMeta))
   } catch (error) {
-    await pauseUnsafeRun(input.scope, snapshot, 'impact-outline-model-outcome-unknown')
-    throw error
+    const failed = await recordUnavailableCreationResponseV1({ snapshot, request: requestEvidence.request, result: resultMeta, error })
+    try { snapshot = await pauseUnsafeRun(input.scope, failed.snapshot, 'impact-outline-model-outcome-unknown') }
+    catch (persistenceFailure) {
+      throw Object.assign(new Error('生成式重建请求结果未知，暂停证据未能完整保存。'), {
+        cause: failed.report, persistenceFailures: [persistenceFailure],
+      })
+    }
+    throw failed.report
   }
+  snapshot = await recordCreationModelResponseV1({ snapshot, request: requestEvidence.request, raw, result: resultMeta })
   snapshot = await append(input.scope, snapshot, 'model.responded', {
     stepId: IMPACT_OUTLINE_REGENERATION_STEP_ID_V1,
     attempt: 1,
     outputHash: await hashCanonicalValue({ raw }),
   })
   try {
-    await input.onDurableBoundary?.('model.responded', snapshot)
+    await notify('model.responded', snapshot)
   } catch (error) {
-    await pauseUnsafeRun(input.scope, snapshot, 'impact-outline-model-result-uncheckpointed')
+    try { snapshot = await pauseUnsafeRun(input.scope, snapshot, 'impact-outline-model-result-uncheckpointed') }
+    catch (persistenceFailure) {
+      throw Object.assign(new Error('生成式重建结果已留存，暂停证据未能完整保存。'), {
+        cause: error, persistenceFailures: [persistenceFailure],
+      })
+    }
     throw error
   }
   let result: ImpactOutlineRegenerationResultV1
@@ -721,14 +751,14 @@ export async function generateImpactOutlineRegenerationCandidateV1(input: {
     resumePayload: candidate,
   })
   snapshot = saved.snapshot
-  await input.onDurableBoundary?.('candidate.checkpoint', snapshot)
+  await notify('candidate.checkpoint', snapshot)
   snapshot = await append(input.scope, snapshot, 'candidate.persisted', {
     stepId: IMPACT_OUTLINE_REGENERATION_STEP_ID_V1,
     attempt: 1,
     candidateHash: candidate.candidateHash,
     requiresConfirmation: true,
   })
-  await input.onDurableBoundary?.('candidate.persisted', snapshot)
+  await notify('candidate.persisted', snapshot)
   return { snapshot, candidate }
 }
 
