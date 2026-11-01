@@ -45,6 +45,7 @@ import {
   recoverImportedProductProductionProofsV1,
   ProductProductionDraftRejectedErrorV1,
   type ProductProductionAuthorResolutionEvidenceV1,
+  type ProductProductionTaskArtifactV1,
   runProductProductionUntilBlockedV1,
 } from '../../src/lib/product-production/scheduler'
 import type {
@@ -52,7 +53,7 @@ import type {
   ProductBuildArtifactRecordV1,
   ProductTaskBudgetReservationV1,
 } from '../../src/lib/types/product-production'
-import type { WorkspaceScope } from '../../src/lib/types'
+import type { ProductProductionBriefV3, WorkspaceScope } from '../../src/lib/types'
 import { startProductProductionPreviewV1 } from '../../src/lib/product-production/service'
 import { verifyProductBuildPreviewManifestV1 } from '../../src/lib/product-production/preview-manifest'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
@@ -521,6 +522,7 @@ async function fixture(productionBudget: Partial<ProductProductionBriefV3['produ
     planHash, task: p0, attempt: 1,
     idempotencyKey: await hashProductProductionValueV2('p0-source-lock'),
     contextText: '', inputArtifacts: [], capabilityBindings: [],
+    authorResolution: null,
     signal: new AbortController().signal,
   })
   for (const artifact of p0Result.artifacts) {
@@ -563,6 +565,7 @@ async function fixture(productionBudget: Partial<ProductProductionBriefV3['produ
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
   for (const artifact of p1Result.artifacts) {
@@ -694,6 +697,7 @@ async function executeP2(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -802,6 +806,7 @@ async function executeRuleset(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -901,6 +906,7 @@ async function executePlayerBuild(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -1081,6 +1087,7 @@ async function executeStoryArchitecture(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -1292,6 +1299,7 @@ async function executeRegionSkeleton(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -1355,13 +1363,7 @@ function mainlineRunner(options: {
 
 async function acceptTaskArtifacts(
   input: Awaited<ReturnType<typeof regionSkeletonFixture>>,
-  artifacts: Array<{
-    artifactKey: string
-    kind: string
-    payload: unknown
-    quality: Record<string, unknown>
-    rights: Record<string, unknown>
-  }>,
+  artifacts: ProductProductionTaskArtifactV1[],
   stage: string,
 ) {
   for (const artifact of artifacts) {
@@ -1407,6 +1409,7 @@ async function mainlineFixture() {
     capabilityBindings: rulesetTask.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
   await acceptTaskArtifacts(input, rulesetResult.artifacts, 'P2-ruleset')
@@ -1431,6 +1434,7 @@ async function mainlineFixture() {
     capabilityBindings: playerTask.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
   await acceptTaskArtifacts(input, playerResult.artifacts, 'P4-player')
@@ -1476,6 +1480,7 @@ async function executeMainline(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -1637,6 +1642,7 @@ async function executeSignificantThreads(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -1886,6 +1892,7 @@ async function executeRegionNarrativePacks(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2105,6 +2112,7 @@ async function executeQuestSkeletons(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2224,6 +2232,7 @@ async function executeProgressionCatalogs(
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2338,6 +2347,7 @@ async function executeEncounterCatalog(
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2483,6 +2493,7 @@ async function executeItemRewardCatalog(
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2591,6 +2602,7 @@ async function executeCraftingEconomy(
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2692,6 +2704,7 @@ async function executeNpcRuntime(
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2766,6 +2779,7 @@ async function executeMapInteraction(
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2982,6 +2996,7 @@ async function executeQuestFinalize(
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -3253,7 +3268,7 @@ async function executePresentationProfile(input: Awaited<ReturnType<typeof scene
     idempotencyKey: await hashProductProductionValueV2('p2-presentation-profile'), contextText: assembled.text,
     inputArtifacts: [], capabilityBindings: task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
-    })), signal: new AbortController().signal,
+    })), authorResolution: null, signal: new AbortController().signal,
   })
   return { task, assembled, context, result, modelSystem }
 }
@@ -3305,7 +3320,7 @@ async function executeSystemFinalize(input: Awaited<ReturnType<typeof systemFina
     idempotencyKey: await hashProductProductionValueV2('p10-system-finalize'), contextText: input.systemFinalizeContextText,
     inputArtifacts: [], capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
-    })), signal: new AbortController().signal,
+    })), authorResolution: null, signal: new AbortController().signal,
   })
 }
 
@@ -3324,7 +3339,7 @@ async function preflightFixture(questModel?: TextOpenWorldQuestFinalizeModelRunn
     scope: input.scope, productionId: input.production.id!, buildId: input.build.id!, buildNumber: input.build.buildNumber,
     controlEpoch: input.build.controlEpoch, planHash: input.planHash, task, attempt: 1,
     idempotencyKey: await hashProductProductionValueV2('v1-preflight'), contextText: '', inputArtifacts,
-    capabilityBindings: [], signal: new AbortController().signal,
+    capabilityBindings: [], authorResolution: null, signal: new AbortController().signal,
   })
   return { ...input, task, inputArtifacts, systemResult, preflightResult: result }
 }
@@ -3399,7 +3414,7 @@ async function executeQualityReview(
     idempotencyKey: await hashProductProductionValueV2(`v2-${kind}-review`), contextText, inputArtifacts: [],
     capabilityBindings: task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
-    })), signal: new AbortController().signal,
+    })), authorResolution: null, signal: new AbortController().signal,
   })
 }
 
@@ -3584,6 +3599,7 @@ describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset'
       contextText: input.contextText,
       inputArtifacts: [],
       capabilityBindings: [{ requirementKey, bindingHash: capabilityHash, adapterId: 'configured-text.v1' }],
+      authorResolution: null,
       signal: new AbortController().signal,
       onModelOutput: async output => { rawResponses.push(output) },
     })
@@ -3700,6 +3716,7 @@ describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset'
         bindingHash: CAPABILITY_HASH,
         adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/Creator规模与调度执行Brief不一致/)
   }, 30_000)
@@ -3738,6 +3755,7 @@ describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset'
         bindingHash: CAPABILITY_HASH,
         adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/数量闭包无效|选择Hash不匹配/)
   }, 30_000)
@@ -3973,6 +3991,7 @@ describe('R-OPEN-WORLD3 · P2 GameplayRulesetSkeleton', () => {
         bindingHash: CAPABILITY_HASH,
         adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/战斗输入不精确|选择Hash不匹配/)
   }, 30_000)
@@ -4074,6 +4093,7 @@ describe('R-OPEN-WORLD3 · P4 PlayerBuild', () => {
         bindingHash: CAPABILITY_HASH,
         adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/ProtagonistAsset Hash不匹配|选择Hash不匹配/)
   }, 30_000)
@@ -4185,6 +4205,7 @@ describe('R-OPEN-WORLD3 · P3 StoryArchitecture', () => {
         bindingHash: CAPABILITY_HASH,
         adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/ProtagonistAsset Hash不匹配|选择Hash不匹配/)
   }, 30_000)
@@ -4298,6 +4319,7 @@ describe('R-OPEN-WORLD3 · P4 RegionSkeleton', () => {
         bindingHash: CAPABILITY_HASH,
         adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/StoryArc Hash不匹配|storyNeeds与StoryArc不一致|选择Hash不匹配/)
   }, 30_000)
@@ -4412,6 +4434,7 @@ describe('R-OPEN-WORLD3 · P5 MainlineThread', () => {
       capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
         requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/RegionSkeleton Hash不匹配|选择Hash不匹配/)
   }, 45_000)
@@ -4527,6 +4550,7 @@ describe('R-OPEN-WORLD3 · P6 SignificantThreads', () => {
       capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
         requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/MainlineThread Hash不匹配|选择Hash不匹配/)
   }, 60_000)
@@ -6343,7 +6367,7 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
       idempotencyKey: await hashProductProductionValueV2('p8f-author-zero-provider-budget'),
       contextText: input.questFinalizeContextText, authorDraftJson: JSON.stringify(draft),
       inputArtifacts: [], capabilityBindings: [{ requirementKey, bindingHash: capabilityHash, adapterId: 'configured-text.v1' }],
-      onModelOutput: async output => { raw.push(output) }, signal: new AbortController().signal,
+      onModelOutput: async output => { raw.push(output) }, authorResolution: null, signal: new AbortController().signal,
     }
     const result = await executor(execution)
     expect(providerCalls).toBe(0)
@@ -7410,6 +7434,7 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
         bindingHash: capabilityHash,
         adapterId: 'configured-text.v1',
       }],
+      authorResolution: null,
       signal: new AbortController().signal,
     })
 
@@ -7454,6 +7479,7 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
         bindingHash: capabilityHash,
         adapterId: 'configured-text.v1',
       }],
+      authorResolution: null,
       signal: new AbortController().signal,
     })
     expect(modelCalls).toBe(callsBeforeAuthorDraft)
@@ -8428,7 +8454,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.planHash, task, attempt: 1,
       idempotencyKey: await hashProductProductionValueV2('v3-runtime-package'),
-      contextText: '', inputArtifacts, capabilityBindings: [], signal: new AbortController().signal,
+      contextText: '', inputArtifacts, capabilityBindings: [], authorResolution: null, signal: new AbortController().signal,
     })
     const runtimePackage = parseProductRuntimePackageV1(
       result.artifacts.find(item => item.artifactKey === 'text-open-world.runtime-package')!.payload,
@@ -8914,7 +8940,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.planHash, task, attempt: 1,
       idempotencyKey: await hashProductProductionValueV2('v3-runtime-package-missing-rights'),
-      contextText: '', inputArtifacts: missingRightsInputs, capabilityBindings: [], signal: new AbortController().signal,
+      contextText: '', inputArtifacts: missingRightsInputs, capabilityBindings: [], authorResolution: null, signal: new AbortController().signal,
     })).rejects.toThrow(/rights\.origin|权利/)
 
     const tamperedInputs = structuredClone(inputArtifacts)
@@ -8928,7 +8954,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.planHash, task, attempt: 1,
       idempotencyKey: await hashProductProductionValueV2('v3-runtime-package-tampered'),
-      contextText: '', inputArtifacts: tamperedInputs, capabilityBindings: [], signal: new AbortController().signal,
+      contextText: '', inputArtifacts: tamperedInputs, capabilityBindings: [], authorResolution: null, signal: new AbortController().signal,
     })).rejects.toThrow(/自身Hash不匹配/)
     await acceptTaskArtifacts(input, result.artifacts, 'V3-runtime-package')
 
@@ -8940,7 +8966,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       planHash: input.planHash, task: qaTask, attempt: 1,
       idempotencyKey: await hashProductProductionValueV2('qa-release'), contextText: '',
       inputArtifacts: qaTask.inputArtifactKeys.map(key => qaAccepted.find(row => row.artifactKey === key)!),
-      capabilityBindings: [], signal: new AbortController().signal,
+      capabilityBindings: [], authorResolution: null, signal: new AbortController().signal,
     })
     expect(qaResult.artifacts[0]!.payload).toMatchObject({
       playable: true, releaseReady: true, mediaCoverage: 1,
@@ -8958,7 +8984,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.planHash, task: qaTask, attempt: 1,
       idempotencyKey: await hashProductProductionValueV2('qa-release-tampered-report'), contextText: '',
-      inputArtifacts: tamperedQaInputs, capabilityBindings: [], signal: new AbortController().signal,
+      inputArtifacts: tamperedQaInputs, capabilityBindings: [], authorResolution: null, signal: new AbortController().signal,
     })).rejects.toThrow(/IntegrationReport自身Hash不匹配/)
   }, 600_000)
 
