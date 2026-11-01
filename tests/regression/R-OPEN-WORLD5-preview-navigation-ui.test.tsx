@@ -2,7 +2,7 @@ import { act, createElement, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Project, WorkspaceScope } from '../../src/lib/types'
+import type { Project, TextOpenWorldCreatorSourceSelectionV1, WorldReferenceV1, WorkspaceScope } from '../../src/lib/types'
 
 const routeMocks = vi.hoisted(() => ({ recover: vi.fn() }))
 vi.mock('../../src/lib/open-world/creator-brief', async importOriginal => ({
@@ -46,9 +46,26 @@ vi.mock('../../src/lib/product/product-catalog', async importOriginal => ({
 
 import { db } from '../../src/lib/db/schema'
 import TextGameDevelopmentPage from '../../src/pages/TextGameDevelopmentPage'
+import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
+import { generateWorkspaceUid } from '../../src/lib/memory/identity'
+import { generateWorldCode, isPublicWorldCode } from '../../src/lib/workspace/identity'
+import {
+  createDefaultTextOpenWorldCreatorBriefDraftV1,
+  TEXT_OPEN_WORLD_CREATOR_BRIEF_PURPOSE_PREFIX_V1,
+  type TextOpenWorldCreatorBriefSessionV1,
+} from '../../src/lib/open-world/creator-brief'
+import {
+  createTextOpenWorldCreatorSourceLocatorV1,
+  parseTextOpenWorldCreatorSourceBindingV1,
+  textOpenWorldCreatorProductionLocatorColumnsV1,
+  textOpenWorldCreatorSourceBindingFromSelectionV1,
+  textOpenWorldCreatorSourceSummaryFromSelectionV1,
+} from '../../src/lib/open-world/creator-brief-persistence'
+import { worldReleaseUidV1 } from '../../src/lib/world-engine/releases'
+import { validatePortableWorldReferenceV1 } from '../../src/lib/world-engine/world-reference'
 import '../../src/components/text-game/TextOpenWorldCreatorWorkflow'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 async function waitForUi(assertion: () => void): Promise<void> {
   const started = Date.now()
@@ -65,24 +82,75 @@ async function waitForUi(assertion: () => void): Promise<void> {
   throw last
 }
 
+// A complete, codec-checked in-memory recovery DTO for routing only. The
+// production studio/player remain mocks; no WorldRelease, Build or runtime
+// Session is created, and this fixture does not establish S1 -> S2 delivery.
+async function recoveredWorldSession(sourceScope: WorkspaceScope, consumerScope: WorkspaceScope): Promise<TextOpenWorldCreatorBriefSessionV1> {
+  const now = Date.now()
+  const releaseHash = 'a'.repeat(64)
+  const worldCode = generateWorldCode()
+  if (!isPublicWorldCode(worldCode)) throw new Error('导航夹具必须使用正式公开世界编号')
+  const portable: Omit<WorldReferenceV1, 'referenceHash' | 'localReleaseRecordId'> = {
+    schema: 'storyforge.world-reference', version: 1, worldCode,
+    releaseUid: worldReleaseUidV1({ worldCode, version: 1, contentHash: releaseHash }),
+    releaseVersion: 1, releaseHash,
+    manifestIdentity: { schema: 'storyforge.world-release', version: 3, semanticContract: 3,
+      schemaHash: await hashCanonicalValue({ schema: 'storyforge.world-release', version: 3, semanticContract: 3 }) },
+    capabilityIdentity: { catalogHash: 'b'.repeat(64), profileHash: 'c'.repeat(64) },
+  }
+  const worldReference = await validatePortableWorldReferenceV1({
+    ...portable, localReleaseRecordId: 71, referenceHash: await hashCanonicalValue(portable),
+  })
+  const selection: TextOpenWorldCreatorSourceSelectionV1 = {
+    sourceKind: 'world-release', sourceScope, localReleaseRecordId: 71, expectedReleaseHash: releaseHash,
+    preview: {
+      schema: 'storyforge.text-open-world-creator-world-source-candidate', version: 1, sourceKind: 'world-release',
+      worldReference, label: '导航夹具 · 封存世界 v1', worldName: '导航夹具世界', workTitle: '导航夹具世界', releasedAt: now,
+      capabilities: [], resourceCounts: { totalResources: 12, totalRows: 42, byArea: [], byKind: [] },
+      requirements: [], readiness: 'ready', gaps: [],
+    },
+  }
+  const sourceBinding = parseTextOpenWorldCreatorSourceBindingV1(textOpenWorldCreatorSourceBindingFromSelectionV1(selection))
+  const sourceBindingHash = await hashCanonicalValue(sourceBinding)
+  const productInstanceKey = `text-open-world.preview-navigation.${sourceBindingHash.slice(0, 16)}`
+  return {
+    scope: consumerScope,
+    conversation: { id: 81, projectId: consumerScope.projectId, workId: consumerScope.workId, worldGroupId: null,
+      purpose: `${TEXT_OPEN_WORLD_CREATOR_BRIEF_PURPOSE_PREFIX_V1}${sourceBindingHash}:preview-navigation`,
+      title: '导航夹具会谈', status: 'active', createdAt: now, updatedAt: now },
+    production: {
+      id: 91, ...consumerScope, productionKey: productInstanceKey, productType: 'text-open-world', title: '导航夹具开放世界',
+      status: 'preview-ready', stateRevision: 1, controlEpoch: 0, currentBriefRevision: 1,
+      currentBuildNumber: 7, currentProductReleaseId: null,
+      ...textOpenWorldCreatorProductionLocatorColumnsV1(createTextOpenWorldCreatorSourceLocatorV1(selection), sourceBinding, sourceBindingHash),
+      lastErrorJson: '{}', createdAt: now, updatedAt: now,
+    },
+    productInstanceKey, selection, sourceBinding, sourceBindingHash,
+    sourceSummary: textOpenWorldCreatorSourceSummaryFromSelectionV1(selection),
+    draft: createDefaultTextOpenWorldCreatorBriefDraftV1(selection),
+    candidate: null, candidateRunId: null, confirmedBrief: null, sourceIssue: null,
+  }
+}
+
 describe('OPEN-WORLD-5 · creator preview player navigation', () => {
   let host: HTMLDivElement
   let root: ReturnType<typeof createRoot>
+  const sourceScope: WorkspaceScope = { projectId: 51, worldId: 52, workId: 53 }
   const creatorScope: WorkspaceScope = { projectId: 61, worldId: 62, workId: 69 }
 
-  beforeEach(() => {
+  beforeEach(async () => {
     host = document.createElement('div')
     document.body.append(host)
     root = createRoot(host)
-    vi.spyOn(db.projects, 'toArray').mockResolvedValue([
-      { id: 51, activeWorldId: 52, activeWorkId: 53, name: '来源小说', workspacePurpose: 'independent-work' },
-      { id: 61, activeWorldId: 62, activeWorkId: 63, name: '制作作品', workspacePurpose: 'independent-work' },
-    ] as Project[])
-    routeMocks.recover.mockResolvedValue({
-      scope: creatorScope,
-      production: { id: 91, currentBuildNumber: 7, status: 'preview-ready' },
-      selection: null,
-    })
+    const now = Date.now()
+    const projects: Project[] = [
+      { id: 51, workspaceUid: generateWorkspaceUid(), activeWorldId: 52, activeWorkId: 53,
+        name: '来源封存世界', workspacePurpose: 'world-engine', createdAt: now, updatedAt: now },
+      { id: 61, workspaceUid: generateWorkspaceUid(), activeWorldId: 62, activeWorkId: 63,
+        name: '制作作品', workspacePurpose: 'independent-work', createdAt: now, updatedAt: now },
+    ]
+    vi.spyOn(db.projects, 'toArray').mockResolvedValue(projects)
+    routeMocks.recover.mockResolvedValue(await recoveredWorldSession(sourceScope, creatorScope))
   })
 
   afterEach(async () => {

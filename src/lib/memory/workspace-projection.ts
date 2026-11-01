@@ -2,7 +2,7 @@ import { marked } from 'marked'
 import TurndownService from 'turndown'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { db } from '../db/schema'
-import { hashCanonicalValue } from '../agent/run/hash'
+import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import { adopt, hashAdoptRecordFieldsV1 } from '../registry/adopt'
@@ -10,8 +10,9 @@ import type { WorkspaceProjectionSpecV1 } from '../registry/types'
 import { countWords, htmlToPlainText } from '../utils/html'
 import { exportProjectJSON, importProjectJSON, type ProjectExportData } from '../export/json-export'
 import { assertTrustedProjectBackup } from '../export/backup-trust'
-import { cascadeDeleteProject } from '../registry/lifecycle'
-import { cascadeDeleteChapterRecords } from '../chapters/lifecycle'
+import { cascadeDeleteProject, transactionTablesFor } from '../registry/lifecycle'
+import { cascadeDeleteChapterRecords, type ChapterDeletionPreconditionsV1 } from '../chapters/lifecycle'
+import { scopeTransactionTables } from '../workspace/scope'
 import { propagateChapterEditStale } from '../consistency/impact-analysis'
 import { buildWorkspaceImpactPlanV1 } from './workspace-impact'
 import { buildMemoryArtifactIndexV1 } from './settlement'
@@ -688,6 +689,15 @@ async function createMemoryIndexProjectionDocumentV1(
 }
 
 export async function buildWorkspaceProjectionV1(projectId: number): Promise<ProjectionDocumentV1[]> {
+  return buildWorkspaceProjectionWithChapterSourcesV1(projectId)
+}
+
+type ChapterDeletionSourceV1 = ChapterDeletionPreconditionsV1['chapters'][number]
+
+async function buildWorkspaceProjectionWithChapterSourcesV1(
+  projectId: number,
+  chapterSources?: Map<number, ChapterDeletionSourceV1>,
+): Promise<ProjectionDocumentV1[]> {
   const { project, worlds, works } = await readCurrentPortableRoots(projectId)
   const workspaceUid = project.workspaceUid!
   const worldById = new Map(worlds.map(world => [world.id!, world]))
@@ -757,13 +767,19 @@ export async function buildWorkspaceProjectionV1(projectId: number): Promise<Pro
     }
   }
 
-  const chapters = await db.chapters.where('projectId').equals(projectId).toArray()
+  const rows = await db.chapters.where('projectId').equals(projectId).toArray()
+  const chapters = chapterSources ? rows.map(row => structuredClone(row)) : rows
   for (const chapter of chapters.sort((left, right) => left.order - right.order || (left.id ?? 0) - (right.id ?? 0))) {
     const workId = (chapter as Chapter & { workId?: number }).workId
     const work = workId == null ? undefined : workById.get(workId)
     if (!work) throw new Error(`[memory-workspace] Chapter ${chapter.id} 缺少 Work owner`)
     const world = worldById.get(work.worldId)
     if (!world) throw new Error(`[memory-workspace] Chapter ${chapter.id} 的 World owner 无效`)
+    chapterSources?.set(chapter.id!, {
+      id: chapter.id!, recordPreimage: canonicalStringify(chapter),
+      scope: { projectId, worldId: work.worldId, workId: work.id! },
+      worldCode: world.code, workCode: work.code!,
+    })
     documents.push(await createProjectionDocument({
       projectId, workspaceUid, tableName: 'chapters', recordId: chapter.id!,
       worldCode: world.code, workCode: work.code,
@@ -925,7 +941,15 @@ export async function buildWorkspaceSelfCheckReportV1(
   projectId: number,
   root: FileSystemDirectoryHandle,
 ): Promise<WorkspaceSelfCheckReportV1> {
-  const documents = await buildWorkspaceProjectionV1(projectId)
+  return buildWorkspaceSelfCheckWithChapterSourcesV1(projectId, root)
+}
+
+async function buildWorkspaceSelfCheckWithChapterSourcesV1(
+  projectId: number,
+  root: FileSystemDirectoryHandle,
+  chapterSources?: Map<number, ChapterDeletionSourceV1>,
+): Promise<WorkspaceSelfCheckReportV1> {
+  const documents = await buildWorkspaceProjectionWithChapterSourcesV1(projectId, chapterSources)
   const items: WorkspaceSelfCheckItemV1[] = []
   let scannedBytes = 0
   for (const document of documents) {
@@ -1424,43 +1448,90 @@ export async function confirmMissingChapterFileDeletionsV1(input: {
   root: FileSystemDirectoryHandle
   expectedPlanHash: string
 }): Promise<WorkspaceSyncReceiptV1> {
-  const report = await buildWorkspaceSelfCheckReportV1(input.projectId, input.root)
-  if (report.plan.planHash !== input.expectedPlanHash) {
+  const { projectId, root, expectedPlanHash } = input
+  const chapterSources = new Map<number, ChapterDeletionSourceV1>()
+  const report = await buildWorkspaceSelfCheckWithChapterSourcesV1(projectId, root, chapterSources)
+  if (report.plan.planHash !== expectedPlanHash) {
     throw new Error('[memory-workspace] 自检后项目或硬盘已变化，请重新检查')
   }
   const missing = report.plan.items.filter(item => item.changeKind === 'file-missing')
   if (!missing.length) throw new Error('[memory-workspace] 没有待确认的缺失文件')
-  const documents = await buildWorkspaceProjectionV1(input.projectId)
+  const documents = await buildWorkspaceProjectionV1(projectId)
   const byId = new Map(documents.map(document => [document.identity.documentId, document]))
-  const chapterDocuments = missing.map(item => byId.get(item.identity.documentId))
-  if (chapterDocuments.some(document => document?.binding.tableName !== 'chapters')) {
-    throw new Error('[memory-workspace] Workspace/World/Work、语义单例和恢复证据缺失只能恢复，不允许按文件删除根记录或语义正式记录')
-  }
+  const chapterDocuments = missing.map(item => {
+    const document = byId.get(item.identity.documentId)
+    if (!document || document.binding.tableName !== 'chapters') {
+      throw new Error('[memory-workspace] Workspace/World/Work、语义单例和恢复证据缺失只能恢复，不允许按文件删除根记录或语义正式记录')
+    }
+    if (document.canonicalHash !== item.databaseCanonicalHash) {
+      throw new Error('[memory-workspace] 确认后章节已变化，请重新检查')
+    }
+    return document
+  })
   const otherDiskRisks = report.plan.items.filter(item => (
     ['file-changed', 'conflict', 'file-extra', 'invalid'].includes(item.changeKind)
   ))
   if (otherDiskRisks.length) {
     throw new Error('[memory-workspace] 另有本地改动、冲突或损坏项，删除前必须先处理')
   }
-  const chapterIds: number[] = []
-  for (const document of chapterDocuments as ProjectionDocumentV1[]) {
-    await writeTextAt(
-      input.root,
-      `.storyforge/trash/${report.plan.planId}/${document.binding.relativePath}`,
-      document.text,
-    )
-    chapterIds.push(document.binding.recordId)
+  const changed = () => new Error('[memory-workspace] 章节、绑定或所属作品已变化，删除未执行，请重新检查')
+  // Capture only actual rows in a native read transaction. Rendering, hashing
+  // and filesystem IO stay outside the transaction.
+  const captured = await db.transaction('r', scopeTransactionTables(db.chapters, db.workspaceDocuments), async () => {
+    const project = await db.projects.get(projectId)
+    if (!project || project.workspaceUid !== report.plan.workspaceUid) throw changed()
+    return Promise.all(chapterDocuments.map(async document => {
+      const stored = await db.chapters.get(document.binding.recordId)
+      const record = stored && structuredClone(stored)
+      const workId = (record as (Chapter & { workId?: number }) | undefined)?.workId
+      if (!record || record.projectId !== projectId || typeof workId !== 'number') throw changed()
+      const work = await db.works.get(workId)
+      if (!work || work.projectId !== projectId || !work.code) throw changed()
+      const world = await db.worlds.get(work.worldId)
+      const binding = document.binding.id == null ? undefined : await db.workspaceDocuments.get(document.binding.id)
+      if (!world || world.projectId !== projectId || world.code !== document.binding.worldCode
+        || work.code !== document.binding.workCode || !binding || binding.projectId !== projectId
+        || binding.tableName !== 'chapters' || binding.recordId !== record.id
+        || binding.documentId !== document.identity.documentId || binding.workspaceUid !== project.workspaceUid) throw changed()
+      const actual = {
+        id: document.binding.recordId, recordPreimage: canonicalStringify(record),
+        scope: { projectId, worldId: work.worldId, workId }, worldCode: world.code, workCode: work.code,
+      }
+      const authorized = chapterSources.get(document.binding.recordId)
+      if (!authorized || canonicalStringify(actual) !== canonicalStringify(authorized)) throw changed()
+      return {
+        record,
+        target: authorized,
+        bindingId: binding.id!, bindingPreimage: canonicalStringify(binding), document,
+      }
+    }))
+  })
+  for (const target of captured) {
+    const semantic = normalizeWorkspaceSemanticV1('chapters', chapterSemantic(target.record)).semanticValue
+    if (await hashCanonicalValue(semantic) !== target.document.canonicalHash) throw changed()
   }
-  await cascadeDeleteChapterRecords(chapterIds)
-  const bindingIds = (chapterDocuments as ProjectionDocumentV1[])
-    .map(document => document.binding.id)
-    .filter((id): id is number => id != null)
-  if (bindingIds.length) await db.workspaceDocuments.bulkDelete(bindingIds)
+  for (const { document } of captured) {
+    const trashPath = `.storyforge/trash/${report.plan.planId}/${document.binding.relativePath}`
+    await writeTextAt(root, trashPath, document.text)
+    if (await readTextAt(root, trashPath) !== document.text) {
+      throw new Error('[memory-workspace] 回收副本写后核对失败，原章节未删除，请重新检查')
+    }
+  }
+  await db.transaction('rw', transactionTablesFor('deleteChapters'), async () => {
+    for (const target of captured) {
+      const current = await db.workspaceDocuments.get(target.bindingId)
+      if (!current || canonicalStringify(current) !== target.bindingPreimage) throw changed()
+    }
+    await cascadeDeleteChapterRecords(captured.map(target => target.target.id), {
+      projectId, workspaceUid: report.plan.workspaceUid, chapters: captured.map(target => target.target),
+    })
+    await db.workspaceDocuments.bulkDelete(captured.map(target => target.bindingId))
+  })
 
-  const afterDelete = await buildWorkspaceSelfCheckReportV1(input.projectId, input.root)
+  const afterDelete = await buildWorkspaceSelfCheckReportV1(projectId, root)
   return synchronizeProjectChangesToFolderV1({
-    projectId: input.projectId,
-    root: input.root,
+    projectId,
+    root,
     expectedPlanHash: afterDelete.plan.planHash,
     approvedRemovedDocumentIds: missing.map(item => item.identity.documentId),
   })

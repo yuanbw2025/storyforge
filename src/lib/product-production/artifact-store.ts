@@ -1,6 +1,7 @@
 import Dexie from 'dexie'
 import { verifyStoredProductBuildRootBudgetEvidenceV1 } from './root-budget-evidence-store'
 import { db } from '../db/schema'
+import { assertTextOpenWorldNewSourceV1, assertTextOpenWorldProductionNewWorkV1 } from '../open-world/source-admission'
 import { readLatestVerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
 import { readAgentRunV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
 import { canonicalStringify as canonicalAgentRunJsonV1 } from '../agent/run/hash'
@@ -3349,6 +3350,7 @@ async function acceptSealedProducerArtifactV1(
       }
       return same
     }
+    await assertTextOpenWorldArtifactNewWorkInTransactionV1(build, '验收新制作工件')
     const priorAcceptedIds = rows
       .filter(row => row.artifactKey === prepared.artifactKey
         && (row.status === 'accepted' || row.status === 'carried-forward') && row.id != null)
@@ -3420,6 +3422,7 @@ export async function acceptTextOpenWorldSourcePinBundleArtifactsV1(input: {
     inputHash: string
   }
 }): Promise<{ pinArtifact: ProductBuildArtifactRecordV1; unitArtifacts: ProductBuildArtifactRecordV1[] }> {
+  input = structuredClone(input)
   const scope = await resolveScope({ scope: input.scope })
   const sourcePin = await import('../open-world/source-pin')
   const bundle = await sourcePin.validateTextOpenWorldSourcePinBundleV1(input.bundle)
@@ -3583,6 +3586,8 @@ export async function acceptTextOpenWorldSourcePinBundleArtifactsV1(input: {
     if (activeSourceRows.length > 0) {
       throw new Error('[product-production-artifact] Build 存在无 closure marker 的历史半包 SourcePin')
     }
+    assertTextOpenWorldProductionNewWorkV1(production, brief, '验收新来源工件')
+    assertTextOpenWorldNewSourceV1(bundle.pin.sourceKind, '验收新来源工件')
     const now = Date.now()
     const inserted: ProductBuildArtifactRecordV1[] = []
     for (const prepared of preparedRows) {
@@ -4132,7 +4137,7 @@ export async function prepareTextOpenWorldProductBuildEpochCarryV1(input: {
       throw new Error('[product-production-artifact] epoch carry 必须与 Plan 转换原子提交')
     }
     return db.transaction('rw', scopeTransactionTables(
-      db.productBuilds, db.productProductionBriefs, db.productBuildArtifacts, db.mediaBlobObjects,
+      db.productProductions, db.productBuilds, db.productProductionBriefs, db.productBuildArtifacts, db.mediaBlobObjects,
       db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, db.productProductionCommands,
     ), async () => {
       for (const command of derivedCommands) {
@@ -4159,6 +4164,7 @@ export async function prepareTextOpenWorldProductBuildEpochCarryV1(input: {
         }
       }
       const carried: ProductBuildArtifactRecordV1[] = []
+      let newSourceAdmitted = false
       const now = Date.now()
       for (const source of sourceRows) {
         const current = currentRows.find(row => row.artifactKey === source.artifactKey
@@ -4204,13 +4210,20 @@ export async function prepareTextOpenWorldProductBuildEpochCarryV1(input: {
           },
           createdAt: now, updatedAt: now,
         } satisfies ProductBuildArtifactRecordV1, { owner: 'work' })
+        if (!newSourceAdmitted) {
+          await assertTextOpenWorldArtifactNewWorkInTransactionV1(currentBuild, '续建工件到新执行轮次')
+          newSourceAdmitted = true
+        }
         const id = await db.productBuildArtifacts.add(next) as number
         await db.productBuildArtifacts.update(source.id!, { status: 'invalid', updatedAt: now })
         const stored = { ...next, id }
         currentRows.push(stored)
         carried.push(stored)
       }
-      if (commitPlan) await commitPlan()
+      if (commitPlan) {
+        if (!newSourceAdmitted) await assertTextOpenWorldArtifactNewWorkInTransactionV1(currentBuild, '更新制作执行计划')
+        await commitPlan()
+      }
       const committedBuild = await db.productBuilds.get(build.id)
       if ((commitPlan || !input.pendingPlan) && (!committedBuild || committedBuild.planJson !== targetPlanJson
         || committedBuild.planHash !== targetPlanHash || committedBuild.controlEpoch !== input.toControlEpoch)) {
@@ -4455,6 +4468,7 @@ async function carryForwardTextOpenWorldProductBuildArtifactsAcrossBuildsV1(inpu
         carried.push(existing)
         continue
       }
+      assertTextOpenWorldProductionNewWorkV1(currentProduction, currentBrief, '续建工件到新 Build')
       const next = stampNewRecord(scope, 'productBuildArtifacts', {
         projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
         buildId: targetBuild.id!, artifactKey: source.artifactKey, requirementKey: source.requirementKey,
@@ -4488,6 +4502,21 @@ async function productTypeForBuildV1(buildId: number): Promise<string> {
   return production.productType
 }
 
+/** Called only inside an existing artifact write transaction, after an exact
+ * existing-row return has been ruled out. Raw responses, checkpoints and
+ * historical producer-proof readers deliberately do not use this boundary. */
+async function assertTextOpenWorldArtifactNewWorkInTransactionV1(
+  build: ProductBuildRecordV1,
+  operation: string,
+): Promise<void> {
+  const production = await db.productProductions.get(build.productionId)
+  if (!production) throw new Error('[product-production-artifact] Production 不存在')
+  if (production.productType !== 'text-open-world') return
+  const brief = await db.productProductionBriefs.where('[productionId+revision]')
+    .equals([build.productionId, build.briefRevision]).first()
+  assertTextOpenWorldProductionNewWorkV1(production, brief, operation)
+}
+
 /**
  * Product-owned sealed proof boundary. Exported as a single capability object
  * so conformance tests can exercise the exact contract without changing the
@@ -4508,6 +4537,7 @@ export const textOpenWorldProductArtifactStoreV1 = Object.freeze({
 export async function acceptProductBuildArtifact(
   input: ProductBuildArtifactAcceptanceInputV1,
 ): Promise<ProductBuildArtifactRecordV1> {
+  input = structuredClone(input)
   const productType = await productTypeForBuildV1(input.buildId)
   if (isAvgProcessedAudioArtifactKeyV1(input.artifactKey)) {
     const { avgAudioProcessingExecutionReadyV1 } = await import('../avg/audio-production-brief')
@@ -4536,6 +4566,7 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
   allowHistoricalInvalidSourceBeforeEpoch?: boolean
   pendingPlan?: { plan: ProductProductionPlanV3; planHash: string }
 }): Promise<ProductBuildArtifactRecordV1[]> {
+  input = structuredClone(input)
   return ['text-open-world','ttrpg'].includes(await productTypeForBuildV1(input.buildId))
     ? textOpenWorldProductArtifactStoreV1.carryForwardProductBuildArtifactsToEpochV1(input)
     : textAdventureArtifactStoreV1.carryForwardProductBuildArtifactsToEpochV1(input)
@@ -4558,6 +4589,7 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
     }
   }
 }): Promise<ProductBuildArtifactRecordV1[]> {
+  input = structuredClone(input)
   return ['text-open-world','ttrpg'].includes(await productTypeForBuildV1(input.targetBuildId))
     ? textOpenWorldProductArtifactStoreV1.carryForwardProductBuildArtifactsAcrossBuildsV1(input)
     : textAdventureArtifactStoreV1.carryForwardProductBuildArtifactsAcrossBuildsV1(input)

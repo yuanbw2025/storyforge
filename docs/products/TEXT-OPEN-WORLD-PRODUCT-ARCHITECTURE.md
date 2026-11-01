@@ -1,7 +1,7 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.140
-> 生效日期：2026-10-25
+> 规格版本：1.1.141
+> 生效日期：2026-10-30
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
 > 对应任务：阶段 E / `E-OPENWORLD-01`
@@ -10,6 +10,8 @@
 > 首个验收世界：[`TEXT-OPEN-WORLD-SALT-RIDGE-BRIEF.md`](./TEXT-OPEN-WORLD-SALT-RIDGE-BRIEF.md)
 > 产品历史：`TEXT-OPEN-WORLD-VISION-AND-EVOLUTION.md`
 > 上位权威：`PROJECT-MASTER-CHARTER.md`、`UPPER-PRODUCTS.md`、`DATA-GOVERNANCE.md`、`HARNESS-QUALITY-STANDARD.md`
+
+> 2026-10-30 来源裁决（SFQA-005）：小说固定版本不能直接作为本产品正式来源。小说须由作者显式派生世界草稿，经作者确认并由世界引擎封存 WorldRelease，随后在本产品完成 S2 定向/明确开始和 S3 执行；已有 WorldRelease 可直接进入 S2。原作 owner 不变，双方后续修改不自动同步。SourcePin 保留为产品内部不可变追溯交接物及历史 codec，不构成绕过 WorldRelease 的来源例外。旧小说 SourcePin/Build/Release/存档仅保留原字节核验、只读回放、导出和旧证据恢复；不得据此授权新生产、新发布、新开局或新增事件。以下旧双来源实现/测试记录只说明历史事实；本次先对齐契约，代码纠偏与重新验收仍待完成。
 
 ## 0. 文档定位
 
@@ -74,7 +76,7 @@ V3 增加精确输入集合、scope/Build/epoch/status 校验；原 schema、Has
 
 ### 1.1 产品承诺
 
-用户选择一个冻结世界版本或受治理的小说来源，设定主角和游戏目标，授权AI完成生产，最终获得一款可以直接发布和真人游玩的文字开放世界游戏。
+用户选择一个已由世界引擎封存的 WorldRelease，设定主角和游戏目标，在 S2 明确开始后授权 AI 完成 S3 生产。小说只作为上游内容：先显式派生世界草稿，经作者确认和封存得到 WorldRelease，再进入本产品定向。
 
 这款游戏至少包含：
 
@@ -188,11 +190,11 @@ V3 增加精确输入集合、scope/Build/epoch/status 校验；原 schema、Has
 - 世界事实与玩家知识分开保存；
 - AI输出正文不是事实源。
 
-来源冻结采用双入口但同一证据契约：世界观来源只读取冻结的 `WorldRelease`；小说允许在本产品内建立不可变 `SourcePin`。两者都必须保存版本、Hash、授权范围和实际读取证据，运行时不得读取仍会变化的原始来源。
+正式来源只有冻结 WorldRelease：S1 形成可验证的世界身份、版本、Hash 与能力画像，S2 冻结 WorldReference、作者确认 Brief、SourcePlan 和开始授权，S3 仅在该计划允许范围内渐进读取并留下真实 Context Manifest / SourceManifest。
 
-当前P0实现进一步明确了两类来源的差异：WorldRelease只把便携引用、作者选择和真实目录读取证据带入产品，全文读取留给后续受控Run；小说没有可复用的不可变Release，因此把选定故事核心、大纲和正文完整复制为产品私有、可分片的SourcePinUnit。两类来源共同绑定来源版本、选择边界、Brief/开始revision、nonce Hash、rights、读取permission和证据Hash；同一Build不得静默换源。SourcePin复用Build Artifact生命周期，不为来源另建平行数据库。
+小说内容须先显式派生世界草稿，作者确认后由世界引擎封存，再进入相同 S2/S3 主链。保存源 Work、revision、范围、内容 Hash 和派生血缘；原作 owner 不变，原作与世界后续编辑均不自动同步。不得把小说 SourcePin、兼容 Brief 占位坐标或产品私有复制伪装为 WorldRelease。
 
-当前P1实现继续区分“已冻结”和“模型已读”：小说只通过登记Context Source向单个模型批次交付精确选择的完整私有单元；WorldRelease只通过Context Gateway读取SourcePin已经授权的冻结资源并校验交付Hash。SourceManifest记录逐单元实读状态，SourceLedger要求每项模型结论绑定可复现的逐字证据和偏移，SourceGapReport由代码从实际读集与证据覆盖生成。三件产物都属于文字开放世界Build候选，不回写世界引擎，也不建立第二套产品数据库。
+SourcePin 继续承担产品内部不可变来源追溯与分片证据，复用既有 Build Artifact 生命周期。新生产的 Pin 必须绑定已核验 WorldRelease；旧小说 Pin/Unit、原版本 codec、Hash、授权、rights、读取证据、Ledger 引文与偏移仅按原合同作只读核验/恢复。P1 仍区分冻结与实读，所有模型事实必须绑定实际交付的资源和原文证据；本裁决不降低权限、完整性、预算、CAS 或候选采纳门。
 
 P1 的新模型草稿使用 v2 引文协议：模型只从已读单元复制逐字 `quote`，系统在该单元内唯一定位并计算 UTF-16 `start/end`，随后仍经原 SourceLedger 的来源 Hash、逐字切片与证据 Hash 复验。空白、缺失、重复歧义、未读单元和模型自行提供偏移均拒绝；不会修补或采纳已失败的旧响应。历史 v1 草稿继续按原精确偏移合同校验恢复。置信度保持 0～100 整数，实体键保持稳定键闭集格式。供应商已响应但正文为空、拒绝或其他不可重试错误，保留真实用量并停止自动尝试；不能因包装已付调用而丢失 Harness 的不可重试分类。原始响应、有限预算和候选采纳边界保持不变。
 
@@ -2359,7 +2361,7 @@ Session ID + Action Key + Recipe/Vendor Target + Item Key? + Quantity
 
 | 页面 | 内容 |
 |---|---|
-| 来源 | WorldRelease/小说、能力画像、来源选择、未读和缺口 |
+| 来源 | 冻结 WorldRelease、能力画像、精确资源选择、未读和缺口；小说仅提供“显式派生世界草稿”引导 |
 | Brief | 主角、体验、规模、边界、媒资和成本；首版标准难度只读显示 |
 | 计划 | DAG、依赖、并行组、预算、模型和完成条件 |
 | 叙事 | StoryArc、主线、重要故事线、地区、任务和场景 |
@@ -2370,11 +2372,11 @@ Session ID + Action Key + Recipe/Vendor Target + Item Key? + Quantity
 | 试玩 | 隔离Build实例、标准路径、回执和问题记录 |
 | 发布 | 版本、兼容、包Hash、终态receipt和发布说明 |
 
-来源页已经以独立的文字开放世界创作者入口落地，不再复用通用文字游戏生产表单。它同时支持两条受治理来源：一条从中立`WorldReference`目录选择精确的冻结`WorldRelease`，展示版本、完整Hash、能力、资源和预检缺口；另一条从独立小说Work选择整部、卷、章节范围或自定义章节，展示正文/大纲覆盖、规模以及与正式P0冻结完全相同算法计算的`sourceVersionHash`和`sourceBoundaryHash`。世界和小说来源各自携带明确`WorkspaceScope`，允许小说入口在没有世界工程时成立，`worldGroupId`只负责路由与重置，不能冒充数据owner。
+整改后的创作者来源页只有一种正式来源：从中立目录选择精确冻结 WorldRelease，核对版本、完整 Hash、能力、资源和缺口。小说入口只引导作者显式创建独立世界草稿，完成世界内容确认与封存后，携准确 WorldReference 返回本产品 S2；它不直接创建产品来源或触发模型。小说的整部/卷/章节选择不自动等同于世界派生范围；支持范围须由世界派生合同和真实源证据明确表达，不能静默扩大或丢弃。
 
-这个页面仍属于“确认来源”的第二阶段：目录与预览只读，不创建Production、Brief、Build、SourcePin、Ledger、GapReport、Release、Session，也不触发模型读取、计费或生产。预检缺口只是目录可见性的候选判断，不能冒充P1实际逐项读取后的GapReport。交给下一阶段的临时候选必须携带精确来源身份；正式冻结时以WorldRelease `releaseHash`或小说两枚预览Hash进行compare-and-swap，来源在确认后变化就失败关闭并要求重新确认。旧WorldRelease生产调用也必须从已授权Brief派生相同版本证据，不能只信任本地记录ID。
+来源目录与预览只读，不创建正式 Build、SourcePin、Release、Session 或费用；只读分析如调用模型，也须在登记入口留下 Context Manifest。正式开始前重新核验 WorldRelease 版本/Hash、owner、资源权限、Brief 和 SourcePlan，并在 Start 事务内 CAS。旧小说预览 Hash 只保留为历史定位/兼容证据，不再授权进入正式 Brief 生产。
 
-来源确认后的专属Brief页已经落地。进入该页时才以稳定产品实例键创建统一`ProductProduction`，并把WorldRelease或小说选区的本地locator、便携来源身份与Hash同时固化在生产根；重复点击、刷新和React StrictMode并发只能得到一条会谈及一个来源起点。作者可以编辑主角模式、玩家体验、核心目标、来源保留/推演/禁改边界、未决问题、内容规模、最低媒资和完成条件；首版有边界自由、顺序主线、多结局、关键对象保护、四操作回合战斗和标准难度等能力边界由代码只读提供，模型与作者都不能改写。
+产品自己的 S2 草稿仍可独立保存；正式 Brief 确认、开始授权和 S3 生产只能绑定上述真实 WorldRelease。重复点击、刷新、StrictMode 和跨标签仍须保持幂等与真实编辑基线，不能用最近来源或占位坐标回退。原双来源 UI 与测试属于纠偏前历史实现，尚须按新合同改造和复验。
 
 主Agent是可选理解辅助，不是生产启动器。它只能通过登记的正式入口和Skill读取作者表单、固定边界及G5-01的无正文来源摘要，每次尝试保存ContextManifest，协议错误最多修复一次；未配置Key时，作者人工填写仍会形成同一类可审计候选Run。正式确认必须同时满足四项显式确认、零未决问题、来源Hash再次复验，以及候选、ContextManifest、Run binding、步骤输出和终态receipt的一致性，随后才新增不可变`ProductProductionBrief`修订并把Production推进到`brief-ready`。首次确认时依然没有Build、SourcePin、Release或Session；只有后续专属Creator启动命令才能把Creator Brief提升为正式生产计划和来源授权，旧通用Brief命令不能旁路。
 
@@ -2388,11 +2390,11 @@ Creator Brief确认后的G5-03生产准备页复用全局AI配置、任务路由
 
 Agnes 官方连接另支持作者明确确认当前账户的本次文本调用免计费。该选择生成 `author-confirmed-account-zero` 报价，保留来源说明、核对日期、精确模型与端点绑定；它是作者的账户说明，不是全平台免费声明，也不能用于其他供应商或中转端点。远程凭证仍为必需项，调用、token、时长、存储及失败恢复保护不变；配置变化清除免计费确认。未选择这项说明的人工双零报价继续被拒绝，现有付费报价和本地零费用合同保持有效。该扩展不新增表，不改变来源、作品或媒资 owner；报价随既有 Creator Start/Brief 的注册生命周期导出导入。
 
-G5-04已经落地专属Creator生产启动。作者先选择`author-owned`、`licensed`或`public-domain`权利依据并填写说明；零写入预览把当前Creator Brief确定性投影为不含本地ID的便携Creator SourcePlan、共享scheduler兼容执行Brief和精确动态DAG，显示依赖、并行组、模型、预算、完成条件及Plan Hash。兼容Brief中的`worldReleaseId=1`是非定位占位值，真实读取只允许走专属SourcePlan与注册表治理的locator。正式开始再次核验Production state revision、Creator Brief revision/Hash、WorldRelease或小说版本与边界、当前AI任务路由/凭证来源、规范完整route、生成参数、模型绑定、报价、预算、四项确认和预览Plan Hash，并让实际模型调用复用同一份已核对resolution，避免下层二次解析发生TOCTOU。覆盖Production、Brief、Command、Build及来源存储的同一事务写入命令claim/receipt、授权Brief的Creator SourcePlan和Creator Start、不可变Plan与授权Build，再推进Production为`producing`。这个边界不调用provider；相同确定性command ID重放只读取已冻结receipt，不重建授权。Creator Brief仍是作者意图权威，`ProductProductionBriefV3`只是共享scheduler兼容投影，不能反向覆盖Creator Brief。
+G5-04以下为纠偏前工程实现记录；新生产须先增加 WorldRelease-only 准入并重新验收。作者先选择`author-owned`、`licensed`或`public-domain`权利依据并填写说明；零写入预览把当前Creator Brief确定性投影为不含本地ID的便携Creator SourcePlan、共享scheduler兼容执行Brief和精确动态DAG，显示依赖、并行组、模型、预算、完成条件及Plan Hash。兼容Brief中的`worldReleaseId=1`是非定位占位值，真实读取只允许走专属SourcePlan与注册表治理的locator。正式开始再次核验Production state revision、Creator Brief revision/Hash、真实 WorldRelease 精确版本与资源边界（旧小说版本/边界仅供存量核验）、当前AI任务路由/凭证来源、规范完整route、生成参数、模型绑定、报价、预算、四项确认和预览Plan Hash，并让实际模型调用复用同一份已核对resolution，避免下层二次解析发生TOCTOU。覆盖Production、Brief、Command、Build及来源存储的同一事务写入命令claim/receipt、授权Brief的Creator SourcePlan和Creator Start、不可变Plan与授权Build，再推进Production为`producing`。这个边界不调用provider；相同确定性command ID重放只读取已冻结receipt，不重建授权。Creator Brief仍是作者意图权威，`ProductProductionBriefV3`只是共享scheduler兼容投影，不能反向覆盖Creator Brief。
 
 启动成功后，专属工作流把精确`productionId`交给`productionOnly`工作台；不展示通用新建/最近Production回退，锁定ID不存在、被过滤或失效时停止队列并明确报错。每个任务显示依赖、lane/并行组、最大尝试、超时、当前step/attempt、尝试历史、最新durable边界、checkpoint验证状态、stale原因和预算实耗；scheduler同时以必需receipt和subject lock计算真正可运行集合。P1来源批次和P9场景分片通过登记的有界多调用协议执行，只重跑未完成分片；响应先计账再解析，作者P9聚合稿不调用模型。pause/resume先持久递增control epoch，旧执行者不能继续写入；新epoch只重绑control epoch并复用已验收Artifact，冻结DAG、预算与Creator Start字节不变。同一Build/task的paid charge与结果未知reservation跨Run/epoch累计，恢复不能重置调用、token、费用、时长或存储；durable请求标记之后、真正调用executor之前再次复核当前Production/Build，跨标签页pause/stop不会越过本地可阻止的dispatch边界。v10备份则在导入事务前验证SourcePin/Unit payload、contentHash、owner和闭包，并重映射通用SourcePlan内嵌locator。媒资费用仍由G5-08实际排产，本次Creator Start保持`mediaCostAuthorized: false`。
 
-未发布制作需要改变简报规模或上游目标时，作者先通过现有停止命令取消当前 Build，再从同一 Production 返回 Creator Brief。活动、暂停、已发布或归档状态不能借确认简报改写生产；修订草稿独立保存，刷新继续恢复，正式确认仍生成新的不可变 Brief 与完整候选回执。重新预检和明确开始后创建后继 Build，保留父 Build 编号、旧简报、原始产物及历史用量；新的 SourcePlan/Start/Plan 与启动回执绑定新简报和已取消父版本。执行授权按真实启动回执区分重新制作与局部内容/媒资修复，不能只凭 `parentBuildNumber` 推断权限，也不能复用旧简报的预检、预算或已签收内容。恢复命令推进 epoch 后，仍可只读核验旧轮次 Plan 的冻结 Start；正式执行权威继续要求 Plan 与 Build epoch 一致，由调度器原子重绑 Plan 和已签收产物后才恢复执行。未来轮次、修改后的 DAG 或预算仍拒绝。世界与小说来源均遵循原注册表导入导出和本地 ID 重映射，不新增表、AI 入口或写入权限。
+未发布制作需要改变简报规模或上游目标时，作者先通过现有停止命令取消当前 Build，再从同一 Production 返回 Creator Brief。活动、暂停、已发布或归档状态不能借确认简报改写生产；修订草稿独立保存，刷新继续恢复，正式确认仍生成新的不可变 Brief 与完整候选回执。重新预检和明确开始后创建后继 Build，保留父 Build 编号、旧简报、原始产物及历史用量；新的 SourcePlan/Start/Plan 与启动回执绑定新简报和已取消父版本。执行授权按真实启动回执区分重新制作与局部内容/媒资修复，不能只凭 `parentBuildNumber` 推断权限，也不能复用旧简报的预检、预算或已签收内容。恢复命令推进 epoch 后，仍可只读核验旧轮次 Plan 的冻结 Start；正式执行权威继续要求 Plan 与 Build epoch 一致，由调度器原子重绑 Plan 和已签收产物后才恢复执行。未来轮次、修改后的 DAG 或预算仍拒绝。WorldRelease 正式来源与旧小说只读证据均遵循原注册表导入导出和本地 ID 重映射；旧小说 Production 不得据此重新制作，须显式派生、封存并重新 S2 定向，不新增表、AI 入口或写入权限。
 
 Creator 制作因单 Build 冻结预算不足而在派发前停止时，提供独立的「预算续建」正式命令。预览必须验真当前失败 Run/root、Plan/epoch/attempt、零新增用量及完整依赖前缀，逐组复核产物、历史生产回执、物理 Blob 和全部已知/未知账本。作者确认绑定源前缀 Hash 与目标 Plan Hash；同一事务比较 Production、Brief、Build、命令链和所有读取证据后，才创建紧邻子 Build。事务内只执行已加载的原始行比较与 IndexedDB 读写；动态加载和内容 Hash 验证在事务外完成，避免原生事务提前结束。原 Build、原始响应、实际用量和未知预留均保持不变；子 Build 使用同一 Creator Brief 的原预算、任务 DAG、能力与验收门，不允许任意抬高限制。这个授权是重新开始一轮制作，不是解除旧请求的未知状态。 P1 对剩余输入/输出预留的确定性批次拒绝也可进入同一流程，但必须匹配正式错误类型与精确原因，并验证当前 attempt 的唯一零新增用量及起点之后没有模型派发、响应或候选；同一 Run 较早的付费尝试保留为历史。P0/P1 的 Creator 来源读取统一通过既有派生授权链验证，不能把预算续建、返修或媒资子 Build 的 Plan 当作首次 Start Plan；原 DAG、预算、能力与命令链仍完整验真。
 
@@ -2502,16 +2504,15 @@ G5-09是当前不可变Creator Build进入发布命令前的独立质量层，�
 
 ### 24.9 G5-10 Creator装配发布与不可变ProductRelease
 
-G5-10复用共享`productReleases`、正式媒资表和原子发布事务，但不再把Creator兼容执行Brief中的占位`worldReleaseId`当成真实来源：
+G5-10 新发布继续复用共享 productReleases、正式媒资和原子发布事务，但必须绑定真实冻结 WorldRelease，不能以兼容 Brief 占位值、小说私有 Pin 或外层 contentHash 替代来源身份。以下是待实现并复验的准入要求，不宣称代码已完成纠偏：
 
-- 发布准备从当前`release-ready` Creator Build重新读取Creator Brief、专属SourcePlan/Start、已接受SourcePin整包、P1 SourceManifest、全部当前Artifact、V3 IntegrationReport、G5-09最终质量回执、root Run与terminal v2读集。世界来源重新绑定精确本地WorldReference；小说来源只验证产品私有SourcePin整包可用，并把`ProductRelease.worldReleaseId`写为`null`；
-- Creator Release来源合同携带便携Brief、SourcePlan、Start、SourcePin索引、实际读取清单、完整Artifact receipt集合及集合Hash、装配报告、治理快照、最终质量回执和作者发布授权。小说正文继续只存在SourcePin Unit Artifact中，不复制进Release manifest；本地行ID和原始授权nonce不进入便携合同；
-- 共享Release外层的`sourceWorldRelease.contentHash`仅保留为现有运行包的来源内容Hash坐标。真正来源种类、版本、边界和血缘由Creator专属source contract与中立lineage持有，小说不会伪造WorldReference；旧共享WorldRelease Release仍使用原合同和reader；
-- 创作者面板展示下一版本、Build/RuntimePackage、SourcePin、SourceManifest、Artifact集合、装配报告、治理快照、质量回执和媒资数量。作者须分别确认来源权利、Build/质量、不可变规则和立即发布；一次性授权Hash绑定当前adoption intent、Build manifest、RuntimePackage、G5-09回执和发布名称；
-- 正式提交继续使用共享事务，对Production、Brief、Build、全部当前Artifact、全部质量回执、terminal读集和物理Blob做最终CAS；随后原子创建不可变ProductRelease、固化Release媒资、回写Build/Production并保存幂等命令回执。任一权威行、Blob、来源、问题或质量证据漂移均零发布失败关闭；同一成功命令可安全重放；
-- ProductRelease reader在创建Session或读取包时重新验证Creator合同自身Hash、来源链、消费槽、Artifact receipt、装配报告、质量、作者授权、release identity和lineage。世界与小说两种正式Release均可启动同一文字开放世界Runtime；旧Build、旧Release和既有Session不被改写。G5-11已允许作者从当前已发布Creator Build修改受治理内容、创建紧邻子Build并重新完成媒资/质量/发布链；兼容报告和玩家迁移仍以新旧不可变Release为唯一输入。
+- 发布准备重验同一 Build 的 WorldReference、Creator Brief、SourcePlan/Start、SourcePin/P1 实读、Artifact receipt、V3、terminal 读集、G5-09 和作者授权；缺少真实世界封存证据时零发布。
+- 正式提交仍对全部权威行、质量回执、来源与物理 Blob 作最终 CAS，原子生成不可变 ProductRelease、媒资绑定及幂等回执；任一漂移失败关闭。
+- 新 Release 的来源、版本、边界与 lineage 指向真实 WorldRelease。SourcePin 是内部证据；源小说仅沿世界派生血缘追溯，不重新成为产品直接来源。
+- 旧小说来源 Release 的 null worldReleaseId、SourcePin/Unit、原 source contract、包与 Hash 不改写、不补造 WorldReference；原版本 reader/codec 继续用于完整性核验、只读回放、导出和旧证据恢复。兼容读取不授权新发布、新开局、写入新事件、局部返修或媒资子 Build。
+- 需要继续制作时，作者须重新显式派生世界草稿、确认和封存，在 S2 重新选版本、确认 Brief/SourcePlan/预算并明确开始，形成独立新 Build/Release；旧 Session 与事件逐字保留，不静默迁移或改接新来源。
 
-本项没有新增表、Schema、Context Source或AI写入口，也不向WorldRelease或小说源作品回写。发布证明当前冻结内容满足既定证据门，不对文学或美术质量作永久保证。
+原双来源正式发布与开局是历史实现事实；本次不改变既存字节，也不通过删除 codec 规避纠偏。
 
 ### 24.10 G5-11 新Release、兼容报告与存档迁移
 
@@ -2529,7 +2530,7 @@ Creator备份不是对旧机器数据库主键和本地Blob定位器的直接复
 
 终态Build导入后不继承“这台机器已经验证过”的假设。所有携带的生产Artifact和Run证明先显式转为待本机复验，Creator工作台禁止Build Preview并给出可恢复状态；作者触发恢复后，确定性服务在不调用provider、不新增费用的情况下重验checkpoint、Artifact payload与物理Blob、预算账本、跨Build lineage和root terminal seal，并为当前本地ID签发新的复验尾证。只有完整闭合后，既有正式Release和Session才重新进入可用路径。Release自身保持不可变，恢复只重封本地Build证明，不重新生成、摘要或改写内容。
 
-世界与小说双来源都使用同一便携边界完成来源、Build、正式发布和Session往返。删除继续由项目级生命周期派生，并在Creator UI双重确认后级联清理Production、Build、Artifact、Release、Session、Run、Checkpoint和Blob，不删除或回写被引用的WorldRelease和小说源Work。该能力不新增表、Schema、Context Source或AI写字段。
+WorldRelease 正式链与旧小说来源历史数据均保留既有便携完整性、owner、引用重映射和删除生命周期。旧小说往返/本机复验只恢复原证据和只读状态，不授权新生产、发布或运行写入。删除产品 Work 仍只清产品私域，不删除或回写被引用的 WorldRelease、源小说 Work 和其它 owner。
 
 ---
 
@@ -2685,7 +2686,7 @@ AI只在需要语义的时刻调用：
 
 Build必须记录：
 
-- 来源WorldRelease/小说选择、Creator SourcePlan、后续SourcePin和对应Hash；
+- 真实 WorldReference / WorldRelease 版本与资源边界、Creator SourcePlan、内部 SourcePin 和对应 Hash；小说来源仅记录上游世界派生血缘，不是正式来源种类；
 - Creator Brief版本、Creator Start Hash、权利依据和用户授权；
 - 生产DAG/Plan Hash、Skill/模型绑定、报价和预算；
 - 所有被采纳Artifact及Hash；
@@ -3306,7 +3307,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 | 27 | 创作者既能直接编辑受治理内容表，也能要求Agent修改 | 两种入口都进入候选、校验、采纳和stale流程 |
 | 28 | 必须有程序地图、角色头像和场景背景；音乐音效后置 | 前三类是首版媒资门，音频有槽位和静音降级 |
 | 29 | 创作者自带模型API Key，并显示费用估算与实际用量 | 密钥不得进入Prompt、Artifact、日志或导出 |
-| 30 | 世界观引用冻结WorldRelease；小说允许产品内独立SourcePin | 两类来源都保存Hash和读取证据 |
+| 30 | 正式来源只引用冻结 WorldRelease；小说先显式派生草稿、作者确认与封存 | SourcePin 保留内部追溯及旧格式只读兼容；旧独立小说来源决定已被2026-10-30裁决替代 |
 | 31 | 旧存档默认继续绑定旧Release；明确兼容时才迁移 | 不静默升级存档 |
 | 32 | 首个验收世界使用虚构测试世界“盐脊” | 先以固定种子和可控反例证明循环 |
 | 33 | 首版完全没有友方NPC战斗协助 | 同伴、队伍和剧情援助战斗全部后置 |

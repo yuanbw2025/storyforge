@@ -1,20 +1,20 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {test, expect, type Page} from '@playwright/test'
 
 test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-progress.invalid/v1', model: 'test', maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-progress.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
 })
 async function seed(page: Page) {
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({maxActionsPerTrigger: 1})
   })
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   return f
 }
@@ -56,7 +56,7 @@ test('shows actual generation and review phases without displaying the unadopted
     checking.release()
     await expect(page.getByText(text, {exact: true})).toBeVisible()
     await expect(progress).toHaveCount(0)
-    await page.reload()
+    await reloadWithBrowserFixtureAIConfigV1(page)
     await expect(page.getByText(text, {exact: true})).toBeVisible()
     expect(calls).toBe(2)
   } finally {generation.release(); checking.release()}
@@ -78,13 +78,13 @@ for (const phase of ['choice', 'expression'] as const) test(`refresh labels the 
     await page.getByRole('button', {name: '让角色继续', exact: true}).click()
     await expect(page.getByTestId('chat-run-progress')).toContainText(stage)
     await expect.poll(() => calls).toBe(expectedCalls)
-    await page.reload()
+    await reloadWithBrowserFixtureAIConfigV1(page)
     const progress = page.getByTestId('chat-run-progress')
     await expect(progress).toContainText(`上次保存的阶段：${stage}`)
     await expect(progress).toContainText('不代表模型仍在运行')
     await expect(progress).not.toContainText('本阶段已等待')
     await expect(page.getByRole('button', {name: '补齐未完成本轮', exact: true})).toBeDisabled()
-    await page.reload()
+    await reloadWithBrowserFixtureAIConfigV1(page)
     await expect(page.getByTestId('chat-run-progress')).toContainText('上次保存的阶段')
     expect(calls).toBe(expectedCalls)
   } finally {generation.release()}
@@ -106,7 +106,7 @@ test('cancelling during review stops local progress and cannot apply the late re
     await page.getByRole('button', {name: '取消', exact: true}).click()
     await expect(page.getByTestId('chat-run-progress')).toHaveCount(0)
     checking.release()
-    await page.reload()
+    await reloadWithBrowserFixtureAIConfigV1(page)
     await expect(page.getByTestId('chat-turn-resume')).toContainText('不会重发')
     await expect(page.getByText(text, {exact: true})).toHaveCount(0)
     expect(await page.evaluate(async sessionId => {

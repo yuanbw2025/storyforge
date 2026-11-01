@@ -400,7 +400,7 @@ function locateQuote(
     if (offset < 0) break
     offsets.push(offset)
     if (offsets.length > 1) break
-    cursor = offset + Math.max(quote.length, 1)
+    cursor = offset + 1
   }
   if (!offsets.length) failSchema('evidence_not_found', path, `来源 ${source.id} 中找不到逐字引文`)
   if (offsets.length > 1) failSchema('ambiguous_evidence', path, `逐字引文在来源 ${source.id} 中出现多次`)

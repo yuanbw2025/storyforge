@@ -1,6 +1,6 @@
 import Dexie from 'dexie'
 import { db } from '../db/schema'
-import { readOwnedRows, resolveScope, scopeTransactionTables } from '../workspace/scope'
+import { readOwnedRows, resolveScope } from '../workspace/scope'
 import type { Chapter, DetailedOutline, OutlineNode, WorkspaceScope, ChatMessage } from '../types'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { executeRegisteredAIEntryV1 } from './formal-ai-entry'
@@ -14,7 +14,7 @@ import { attachAgentContextInputStateV1, evidenceFromContextResult } from './con
 import { buildNarrativeBriefV1, formatNarrativeBriefForPromptV1 } from './narrative-brief'
 import { buildDetailedOutlineCopilotPatchV1, buildDetailedOutlineSceneMergeGuidanceV1, detailedOutlinePostStateMatchesPatchV1, type DetailedOutlineCopilotOperationV1 } from './detailed-outline-copilot'
 import { hashCanonicalValue } from './run/hash'
-import { adopt } from '../registry/adopt'
+import { adopt, adoptionTransactionTablesV1 } from '../registry/adopt'
 import { assertDetailedOutlineTargetsUnwrittenFutureV1 } from '../outline/future-boundary'
 import { resolveUnwrittenChapterTargetV1 } from './prose-copilot'
 import type { OutlineGatewayAssemblyV1 } from '../outline/gateway-context'
@@ -61,7 +61,7 @@ export async function detailedOutlineAuthoringPostStateMatchesV1(scope: Workspac
 export async function adoptDetailedOutlineAuthoringV1(scope: WorkspaceScope, worldGroupId: number | null, snapshot: DetailedOutlineAuthoringSnapshotV1, raw: string): Promise<void> {
   await assertDetailedOutlineTargetsUnwrittenFutureV1({ scope, worldGroupId, outlineNodeId: snapshot.outlineNodeId })
   const patch = await detailedOutlineExpectedPatchV1(snapshot, raw)
-  await db.transaction('rw', scopeTransactionTables(db.outlineNodes, db.detailedOutlines), async () => {
+  await db.transaction('rw', adoptionTransactionTablesV1('detailedOutlines'), async () => {
     const outline = (await readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' })).find(row => row.id === snapshot.outlineNodeId)
     const detailed = (await readOwnedRows<DetailedOutline>(scope, 'detailedOutlines', { owner: 'work' })).find(row => row.outlineNodeId === snapshot.outlineNodeId) ?? null
     if (!outline || (outline.worldGroupId ?? null) !== worldGroupId

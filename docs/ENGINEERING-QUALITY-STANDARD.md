@@ -1,6 +1,6 @@
 # StoryForge 工程与发布质量标准
 
-> 版本：1.0.0 · 生效：2026-08-26 · 权威层级：L1
+> 版本：1.0.1 · 生效：2026-11-02 · 权威层级：L1
 > 本标准定义“可以进入 main”的最低条件。它可以被提高，不能被产品任务临时降低。
 
 ## 1. 质量模型
@@ -50,6 +50,10 @@
 - E2E：隔离数据库中的关键产品纵切面、刷新恢复、真实 API（需要时）与跨产品版本引用。
 
 测试必须能在干净环境重复运行；禁止依赖顺序、作者 localStorage、现有 IndexedDB 或线上不可控状态。
+
+测试类型检查按具名范围分批接入 CI。`npm run check:types:open-world-experience` 使用独立配置，直接包含开放世界 Experience 测试及交付识别 helper，并检查它们的传递依赖；它继承生产配置的严格选项，保留 ES2020 目标，只补测试环境所需的类型声明。生产 `src` 与构建中的独立 `ui-preview` 检查继续保留。这是首批范围，其余测试与关键工程脚本仍须按 SFQA-144 纳入，不能据此声称全仓类型覆盖。
+
+故意违反合同的运行时负例，可在具体故障行使用注明原因的 `@ts-expect-error`，保留原非法值、重新计算的 hash 和拒绝断言；约束被意外放宽时，未使用的指令必须使类型检查失败。禁止用文件级忽略、宽泛 `any` 或放宽生产类型掩盖错误。
 
 Node 测试环境的 fake-indexeddb 6.2.5 会在内部调度数组保留已结束事务，并在后续调度时扫描这些历史条目（[上游实现](https://github.com/dumbmatter/fakeIndexedDB/blob/master/src/lib/Database.ts)）。全局测试 setup 使用具名、锁定版本和内部结构检查的生命周期辅助器，只移除 `finished` 调度条目，保留 active/inactive/committing 及其顺序；不移除业务表、运行事件或回执，不改生产 IndexedDB，也不修改共享依赖文件。版本或内部结构改变须失败并重新审查。公开 IDB 的串行/并发、commit、abort、错误回滚、版本阻塞、删除重建和清理恢复须与未处理的新 Factory 对照验证；不能靠放宽超时或减少原测试内容处理性能失败。
 
@@ -104,6 +108,7 @@ npm run ci
 ```
 
 `npm run ci` 应覆盖 required tables、AI Manual、AI 入口、架构、源码可达、路线图、Agent 上下文/freshness、Canon 覆盖、项目指标、依赖审计、lint、TypeScript、覆盖率测试、生产构建与 bundle 门。
+其中生产类型检查后执行 `check:types:open-world-experience`；该范围失败必须中止后续交付检查，不以 Vitest 转译或运行通过代替类型检查。
 
 适用时再运行：
 

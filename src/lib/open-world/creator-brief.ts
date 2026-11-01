@@ -44,6 +44,7 @@ import type {
 } from '../types'
 import { assertRecordInScope, readOwnedRows, scopeTransactionTables } from '../workspace/scope'
 import { DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1 } from './product-config'
+import { assertTextOpenWorldNewSourceV1 } from './source-admission'
 import {
   createTextOpenWorldCreatorSourceLocatorV1,
   inspectTextOpenWorldCreatorSourceLocatorV1,
@@ -514,7 +515,9 @@ export async function startTextOpenWorldCreatorBriefSessionV1(input: {
   sessionKey: string
   createdAt?: number
 }): Promise<TextOpenWorldCreatorBriefSessionV1> {
-  const selection = await recheckSelection(structuredClone(input.selection))
+  assertTextOpenWorldNewSourceV1(input.selection.sourceKind, '创建来源会谈')
+  input = { ...input, selection: structuredClone(input.selection) }
+  const selection = await recheckSelection(input.selection)
   if (selection.preview.readiness === 'blocked') fail('source-blocked', '来源仍有阻断缺口，不能进入会谈')
   const scope = selection.sourceScope
   const binding = selectionBinding(selection)
@@ -642,6 +645,8 @@ export async function saveTextOpenWorldCreatorBriefDraftV1(input: {
   draft: TextOpenWorldCreatorBriefDraftV1
   savedAt?: number
 }): Promise<TextOpenWorldCreatorBriefSessionV1> {
+  input = structuredClone(input)
+  assertTextOpenWorldNewSourceV1(input.session.sourceBinding.kind, '保存制作简报草稿')
   await recheckSelection(requireSessionSelection(input.session))
   const draft = parseTextOpenWorldCreatorBriefDraftV1(input.draft)
   const payload: CreatorBriefDraftEventV1 = {
@@ -904,6 +909,10 @@ export async function generateTextOpenWorldCreatorBriefCandidateV1(input: {
   runAI?: RunAI
   signal?: AbortSignal
 }): Promise<TextOpenWorldCreatorBriefSessionV1> {
+  input = { ...input, session: structuredClone(input.session), draft: structuredClone(input.draft),
+    ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }),
+  }
+  assertTextOpenWorldNewSourceV1(input.session.sourceBinding.kind, '制作简报模型会谈')
   if (!input.aiConfig && !input.runAI) fail('ai-config', '缺少 AI 配置；仍可人工编辑并确认 Brief')
   const freshSelection = await recheckSelection(requireSessionSelection(input.session))
   const bindingHash = await hashCanonicalValue(selectionBinding(freshSelection))
@@ -1165,6 +1174,8 @@ export async function confirmTextOpenWorldCreatorBriefV1(input: {
   }
   confirmedAt?: number
 }): Promise<TextOpenWorldCreatorBriefSessionV1> {
+  input = structuredClone(input)
+  assertTextOpenWorldNewSourceV1(input.session.sourceBinding.kind, '确认制作简报')
   const production = await db.productProductions.get(input.session.production.id)
   if (!production || production.stateRevision !== input.session.production.stateRevision) {
     fail('production-state-conflict', '制作状态已变化，请恢复当前会谈后再确认')

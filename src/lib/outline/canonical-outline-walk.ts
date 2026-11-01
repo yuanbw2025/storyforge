@@ -23,7 +23,9 @@ export interface CanonicalOutlineWalk {
 }
 
 export interface CanonicalVolumeChapterGroup {
-  volume: OutlineNode
+  /** Presentation identity only; never a persisted outline node id. */
+  key: string
+  volume: OutlineNode | null
   chapters: OutlineNode[]
 }
 
@@ -97,36 +99,49 @@ export function walkOutlineChaptersInCanonicalOrder(outlineNodes: OutlineNode[])
 }
 
 /**
- * Group canonical chapters under their top-level volume, even when chapters
- * are nested through story blocks or arcs. Authoring UIs must support the
- * current arbitrary-depth outline tree instead of assuming two levels.
+ * Partition canonical chapters into real volume groups and consecutive
+ * unvolumed sections. Empty real volumes still separate those sections.
+ * Chapter membership/order comes from the canonical walk; parent paths only
+ * determine the presentation group and never manufacture outline records.
  */
 export function groupOutlineChaptersByTopLevelVolume(
   outlineNodes: OutlineNode[],
 ): CanonicalVolumeChapterGroup[] {
   const walk = walkOutlineChaptersInCanonicalOrder(outlineNodes)
-  const volumes = outlineNodes
-    .filter(node => node.type === 'volume' && node.parentId == null)
+  const roots = [...walk.nodeById.values()]
+    .filter(node => node.parentId == null || !walk.nodeById.has(node.parentId))
     .sort(byOutlineOrderThenId)
-  const groupByVolumeId = new Map(volumes.flatMap(volume => volume.id == null ? [] : [[volume.id, [] as OutlineNode[]]]))
+  const byRoot = new Map<number, OutlineNode[]>()
+  const assigned = new Set<number>()
 
-  for (const chapter of walk.chapters.map(item => item.outlineNode)) {
-    let parentId = chapter.parentId
-    const visited = new Set<number>()
-    while (parentId != null && !visited.has(parentId)) {
-      visited.add(parentId)
-      const parent = walk.nodeById.get(parentId)
-      if (!parent) break
-      if (parent.type === 'volume' && parent.parentId == null) {
-        groupByVolumeId.get(parent.id!)?.push(chapter)
-        break
-      }
-      parentId = parent.parentId
+  for (const { outlineNode } of walk.chapters) {
+    let root = outlineNode
+    const seen = new Set<number>()
+    while (root.parentId != null && walk.nodeById.has(root.parentId)) {
+      if (seen.has(root.id!)) break
+      seen.add(root.id!)
+      root = walk.nodeById.get(root.parentId)!
     }
+    // Cyclic components have no effective root. They retain the existing
+    // canonical fallback sequence below, without following their parents again.
+    if (root.parentId != null && walk.nodeById.has(root.parentId)) continue
+    const chapters = byRoot.get(root.id!) ?? []
+    chapters.push(outlineNode)
+    byRoot.set(root.id!, chapters)
   }
 
-  return volumes.map(volume => ({
-    volume,
-    chapters: volume.id == null ? [] : groupByVolumeId.get(volume.id) ?? [],
-  }))
+  const groups: CanonicalVolumeChapterGroup[] = []
+  const append = (chapters: OutlineNode[], volume: OutlineNode | null) => {
+    if (volume) {
+      groups.push({ key: `volume:${volume.id}`, volume, chapters })
+    } else if (chapters.length > 0) {
+      const previous = groups[groups.length - 1]
+      if (previous?.volume === null) previous.chapters.push(...chapters)
+      else groups.push({ key: `unvolumed:${chapters[0].id}`, volume: null, chapters: [...chapters] })
+    }
+    chapters.forEach(chapter => assigned.add(chapter.id!))
+  }
+  for (const root of roots) append(byRoot.get(root.id!) ?? [], root.type === 'volume' ? root : null)
+  append(walk.chapters.map(item => item.outlineNode).filter(chapter => !assigned.has(chapter.id!)), null)
+  return groups
 }

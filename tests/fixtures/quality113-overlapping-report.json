@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "artifactType": "storyforge-long-consistency-eval",
+  "benchmark": {
+    "version": "storyforge-h4-evidence-v1",
+    "taxonomyVersion": "constory-bench-19-v1",
+    "judgePromptVersion": "h4-long-consistency-judge-v7"
+  },
+  "evidenceProtocol": {
+    "normalizationVersion": "chapter-text-v1",
+    "offsetUnit": "utf-16-code-unit",
+    "endOffset": "exclusive"
+  },
+  "runId": "sfqa113-original-overlap",
+  "createdAt": "1970-01-01T00:00:00.000Z",
+  "codeRevision": "fc597c48e41d470e3f5449403b8044714b071df5",
+  "fixture": {
+    "id": "sfqa113-locatability-only",
+    "split": "development",
+    "task": "generation",
+    "inputHash": "b8cbb622a95eb8e48ab42ff2e9a03ab3b2bbdfb8e00402c54a15bf22f33164ed",
+    "labelHash": "b878a7d652fe06866be67445174b491f051839508dd67a6d676d43bad8425b16"
+  },
+  "execution": {
+    "generator": {
+      "provider": "synthetic-a",
+      "model": "generator",
+      "promptVersion": "synthetic-v1"
+    },
+    "verifier": {
+      "provider": "synthetic-b",
+      "model": "verifier",
+      "promptVersion": "h4-long-consistency-judge-v7"
+    },
+    "modelIdentitySeparated": true,
+    "generationUsage": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "durationMs": 0,
+      "costUsd": 0
+    },
+    "verifierUsage": {
+      "inputTokens": 1,
+      "outputTokens": 1,
+      "durationMs": 1,
+      "costUsd": 0
+    }
+  },
+  "sourceSetHash": "54a445ce7395701a48ab3878b28de2072648faaf27dd7cf4213600b306cea614",
+  "judgeRepair": null,
+  "judgeInputHash": "e74266c78854b747aa03b06976ec215e2c751375f585587081c106430c902fc2",
+  "judgeOutputHash": "b13e433379fb49a4f157a1fc41e738284323d94ca35a909fc90cdc8845c36076",
+  "sources": [
+    {
+      "id": "narrative:fact",
+      "kind": "narrative",
+      "contentHash": "67b15dee2c458dac4a22f33e73c7db151d5b38a09d34f6a1d72215104984795c",
+      "charLength": 3
+    },
+    {
+      "id": "narrative:later",
+      "kind": "narrative",
+      "contentHash": "b2a3c0f751eec96e3e65fd0c76ff01cf69574ee7309ea91c42769f347f9ed58c",
+      "charLength": 7
+    }
+  ],
+  "issues": [
+    {
+      "id": "tone",
+      "category": "narrative-style",
+      "subtype": "tone-inconsistency",
+      "severity": "medium",
+      "intentClassification": "ambiguous",
+      "disposition": "advisory",
+      "summary": "合成逐字定位样本；不代表文学或矛盾语义正确。",
+      "pair": {
+        "fact": {
+          "sourceId": "narrative:fact",
+          "sourceHash": "67b15dee2c458dac4a22f33e73c7db151d5b38a09d34f6a1d72215104984795c",
+          "quote": "哈哈",
+          "startOffset": 0,
+          "endOffset": 2
+        },
+        "contradiction": {
+          "sourceId": "narrative:later",
+          "sourceHash": "b2a3c0f751eec96e3e65fd0c76ff01cf69574ee7309ea91c42769f347f9ed58c",
+          "quote": "他始终没有笑。",
+          "startOffset": 0,
+          "endOffset": 7
+        }
+      }
+    }
+  ],
+  "metrics": {
+    "issueCount": 1,
+    "hardConflictCount": 0,
+    "highSeverityHardConflictCount": 0,
+    "advisoryCount": 1,
+    "intentionalCount": 0,
+    "ambiguousCount": 1
+  },
+  "traceHashes": [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ],
+  "artifactHash": "01767d03f541c7f316b3c0d0d08c0e1182be686f23dc8e9ec9bd583364feb626"
+}

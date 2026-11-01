@@ -45,6 +45,7 @@ import {
   recoverImportedProductProductionProofsV1,
   ProductProductionDraftRejectedErrorV1,
   type ProductProductionAuthorResolutionEvidenceV1,
+  type ProductProductionTaskArtifactV1,
   runProductProductionUntilBlockedV1,
 } from '../../src/lib/product-production/scheduler'
 import type {
@@ -52,7 +53,7 @@ import type {
   ProductBuildArtifactRecordV1,
   ProductTaskBudgetReservationV1,
 } from '../../src/lib/types/product-production'
-import type { WorkspaceScope } from '../../src/lib/types'
+import type { AnyAgentRunEventV1, ProductProductionBriefV3, WorkspaceScope } from '../../src/lib/types'
 import { startProductProductionPreviewV1 } from '../../src/lib/product-production/service'
 import { verifyProductBuildPreviewManifestV1 } from '../../src/lib/product-production/preview-manifest'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
@@ -521,6 +522,7 @@ async function fixture(productionBudget: Partial<ProductProductionBriefV3['produ
     planHash, task: p0, attempt: 1,
     idempotencyKey: await hashProductProductionValueV2('p0-source-lock'),
     contextText: '', inputArtifacts: [], capabilityBindings: [],
+    authorResolution: null,
     signal: new AbortController().signal,
   })
   for (const artifact of p0Result.artifacts) {
@@ -563,6 +565,7 @@ async function fixture(productionBudget: Partial<ProductProductionBriefV3['produ
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
   for (const artifact of p1Result.artifacts) {
@@ -611,6 +614,10 @@ async function fixture(productionBudget: Partial<ProductProductionBriefV3['produ
  */
 async function creatorSchedulerFixture() {
   const owned = await seedSaltRidgeWorldV1(`盐脊 G7 scheduler ${crypto.randomUUID()}`)
+  // Every case deletes the test DB; this fixture requires the fresh preset metadata.
+  if (!('release' in owned) || !('characterIds' in owned)) {
+    throw new Error('正式 Creator scheduler 测试必须新建完整世界夹具')
+  }
   const creator = await seedAuthorizedTextOpenWorldCreatorBuildV1({
     source: {
       kind: 'world-release',
@@ -694,6 +701,7 @@ async function executeP2(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -802,6 +810,7 @@ async function executeRuleset(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -901,6 +910,7 @@ async function executePlayerBuild(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -1081,6 +1091,7 @@ async function executeStoryArchitecture(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -1292,6 +1303,7 @@ async function executeRegionSkeleton(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -1355,13 +1367,7 @@ function mainlineRunner(options: {
 
 async function acceptTaskArtifacts(
   input: Awaited<ReturnType<typeof regionSkeletonFixture>>,
-  artifacts: Array<{
-    artifactKey: string
-    kind: string
-    payload: unknown
-    quality: Record<string, unknown>
-    rights: Record<string, unknown>
-  }>,
+  artifacts: ProductProductionTaskArtifactV1[],
   stage: string,
 ) {
   for (const artifact of artifacts) {
@@ -1407,6 +1413,7 @@ async function mainlineFixture() {
     capabilityBindings: rulesetTask.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
   await acceptTaskArtifacts(input, rulesetResult.artifacts, 'P2-ruleset')
@@ -1431,6 +1438,7 @@ async function mainlineFixture() {
     capabilityBindings: playerTask.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
   await acceptTaskArtifacts(input, playerResult.artifacts, 'P4-player')
@@ -1476,6 +1484,7 @@ async function executeMainline(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -1637,6 +1646,7 @@ async function executeSignificantThreads(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -1886,6 +1896,7 @@ async function executeRegionNarrativePacks(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2105,6 +2116,7 @@ async function executeQuestSkeletons(
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2224,6 +2236,7 @@ async function executeProgressionCatalogs(
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2338,6 +2351,7 @@ async function executeEncounterCatalog(
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2483,6 +2497,7 @@ async function executeItemRewardCatalog(
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2591,6 +2606,7 @@ async function executeCraftingEconomy(
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2692,6 +2708,7 @@ async function executeNpcRuntime(
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2766,6 +2783,7 @@ async function executeMapInteraction(
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -2959,8 +2977,8 @@ async function questFinalizeFixture(runNpc: TextOpenWorldNpcRuntimeModelRunnerV1
     productProductionId: input.production.id!, productBuildId: input.build.id!,
     inputBudgetTokens: task.budgetReservation.inputTokens,
   })
-  if (assembled.sourceEvidence[0]?.delivery !== 'full') {
-    throw new Error(`QuestFinalize Context不得截断:${JSON.stringify(assembled.sourceEvidence[0])};inputBudget=${assembled.inputBudget}`)
+  if (assembled.sourceEvidence?.[0]?.delivery !== 'full') {
+    throw new Error(`QuestFinalize Context不得截断:${JSON.stringify(assembled.sourceEvidence?.[0])};inputBudget=${assembled.inputBudget}`)
   }
   return {
     ...input, task, questFinalizeContextText: assembled.text,
@@ -2982,6 +3000,7 @@ async function executeQuestFinalize(
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    authorResolution: null,
     signal: new AbortController().signal,
   })
 }
@@ -3170,8 +3189,8 @@ async function sceneScriptsFixture(options: { legacyKnowledge?: boolean; legacyA
     productProductionId: input.production.id!, productBuildId: input.build.id!,
     inputBudgetTokens: task.budgetReservation.inputTokens,
   })
-  if (assembled.sourceEvidence[0]?.delivery !== 'full') {
-    throw new Error(`SceneScripts Context不得截断:${JSON.stringify(assembled.sourceEvidence[0])};inputBudget=${assembled.inputBudget}`)
+  if (assembled.sourceEvidence?.[0]?.delivery !== 'full') {
+    throw new Error(`SceneScripts Context不得截断:${JSON.stringify(assembled.sourceEvidence?.[0])};inputBudget=${assembled.inputBudget}`)
   }
   return {
     ...input, task, sceneScriptsContextText: assembled.text,
@@ -3253,7 +3272,7 @@ async function executePresentationProfile(input: Awaited<ReturnType<typeof scene
     idempotencyKey: await hashProductProductionValueV2('p2-presentation-profile'), contextText: assembled.text,
     inputArtifacts: [], capabilityBindings: task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
-    })), signal: new AbortController().signal,
+    })), authorResolution: null, signal: new AbortController().signal,
   })
   return { task, assembled, context, result, modelSystem }
 }
@@ -3305,7 +3324,7 @@ async function executeSystemFinalize(input: Awaited<ReturnType<typeof systemFina
     idempotencyKey: await hashProductProductionValueV2('p10-system-finalize'), contextText: input.systemFinalizeContextText,
     inputArtifacts: [], capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
-    })), signal: new AbortController().signal,
+    })), authorResolution: null, signal: new AbortController().signal,
   })
 }
 
@@ -3324,7 +3343,7 @@ async function preflightFixture(questModel?: TextOpenWorldQuestFinalizeModelRunn
     scope: input.scope, productionId: input.production.id!, buildId: input.build.id!, buildNumber: input.build.buildNumber,
     controlEpoch: input.build.controlEpoch, planHash: input.planHash, task, attempt: 1,
     idempotencyKey: await hashProductProductionValueV2('v1-preflight'), contextText: '', inputArtifacts,
-    capabilityBindings: [], signal: new AbortController().signal,
+    capabilityBindings: [], authorResolution: null, signal: new AbortController().signal,
   })
   return { ...input, task, inputArtifacts, systemResult, preflightResult: result }
 }
@@ -3399,8 +3418,20 @@ async function executeQualityReview(
     idempotencyKey: await hashProductProductionValueV2(`v2-${kind}-review`), contextText, inputArtifacts: [],
     capabilityBindings: task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
-    })), signal: new AbortController().signal,
+    })), authorResolution: null, signal: new AbortController().signal,
   })
+}
+
+type ActionRegistryFixture = ReturnType<typeof createTextOpenWorldActionRegistryV1>
+
+function resolveActionAvailabilityForTest(
+  registry: ActionRegistryFixture,
+  input: Parameters<ActionRegistryFixture['resolve']>[0],
+): boolean {
+  const resolved = registry.resolve(input)
+  const availability = registry.project(input.context).find(row => row.action.key === resolved.entry.action.key)
+  if (!availability) throw new Error('已解析Action缺少当前可用性投影')
+  return availability.available
 }
 
 describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset', () => {
@@ -3584,6 +3615,7 @@ describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset'
       contextText: input.contextText,
       inputArtifacts: [],
       capabilityBindings: [{ requirementKey, bindingHash: capabilityHash, adapterId: 'configured-text.v1' }],
+      authorResolution: null,
       signal: new AbortController().signal,
       onModelOutput: async output => { rawResponses.push(output) },
     })
@@ -3591,7 +3623,8 @@ describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset'
     expect(rawResponses).toHaveLength(1)
     expect(JSON.parse(rawResponses[0]!)).toMatchObject({ schema: 'storyforge.text-open-world-experience-draft' })
     expect(result.usage).toMatchObject({ modelCalls: 1, inputTokens: 41, outputTokens: 13 })
-    expect(result.artifacts.every(artifact => artifact.rights?.origin === 'configured-text-model')).toBe(true)
+    expect(result.artifacts.every(artifact => typeof artifact.rights === 'object' && artifact.rights !== null
+      && 'origin' in artifact.rights && artifact.rights.origin === 'configured-text-model')).toBe(true)
     await expect(validateTextOpenWorldExperienceArtifactsV1({
       artifacts: resultArtifacts(result), context: input.context,
     })).resolves.toEqual(resultArtifacts(result))
@@ -3700,6 +3733,7 @@ describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset'
         bindingHash: CAPABILITY_HASH,
         adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/Creator规模与调度执行Brief不一致/)
   }, 30_000)
@@ -3709,6 +3743,7 @@ describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset'
     const artifacts = resultArtifacts(await executeP2(input))
     const tampered = structuredClone(artifacts)
     tampered.gameBrief.fixedProductBoundary.interactionModes = [
+      // @ts-expect-error Reorder the frozen interaction tuple; runtime reconstruction must reject.
       'natural-language', 'fixed-choice', 'system-action',
     ]
     const { gameBriefHash: _oldHash, ...body } = tampered.gameBrief
@@ -3738,6 +3773,7 @@ describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset'
         bindingHash: CAPABILITY_HASH,
         adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/数量闭包无效|选择Hash不匹配/)
   }, 30_000)
@@ -3800,6 +3836,7 @@ describe('R-OPEN-WORLD3 · P2 GameplayRulesetSkeleton', () => {
       value => { value.effects.runtimeSupportedOperations.push('grant-item') },
       value => { value.effects.modelProposableOperations.reverse() },
       value => { value.effects.compilerOwnedOperations = value.effects.compilerOwnedOperations.filter(operation => operation !== 'rest') },
+      // @ts-expect-error Inject a forbidden legacy operation; the compatibility validator must reject.
       value => { value.effects.legacyReadOnlyOperations.push('perform-crafting') },
       value => { Object.assign(value.effects, { runtimeModelAuthority: 'free-form' }) },
     ]
@@ -3954,6 +3991,7 @@ describe('R-OPEN-WORLD3 · P2 GameplayRulesetSkeleton', () => {
 
     const forgedContext = structuredClone(input.rulesetContext)
     forgedContext.gameBrief.fixedProductBoundary.combatMode = 'turn-based'
+    // @ts-expect-error Reorder the frozen combat input tuple; the context guard must reject.
     forgedContext.gameBrief.fixedProductBoundary.combatInput = ['escape', 'fight', 'skill', 'item']
     const executor = createTextOpenWorldGameplayRulesetExecutorV1({ runModel: rulesetRunner() })
     await expect(executor({
@@ -3973,6 +4011,7 @@ describe('R-OPEN-WORLD3 · P2 GameplayRulesetSkeleton', () => {
         bindingHash: CAPABILITY_HASH,
         adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/战斗输入不精确|选择Hash不匹配/)
   }, 30_000)
@@ -4046,6 +4085,7 @@ describe('R-OPEN-WORLD3 · P4 PlayerBuild', () => {
     const artifact = (await executePlayerBuild(input)).artifacts[0]!.payload as TextOpenWorldPlayerBuildV1
     const tampered = structuredClone(artifact)
     tampered.buildCandidate.attributes.agility = 9
+    // @ts-expect-error Exceed the frozen starting-currency budget; the rehashed artifact must reject.
     tampered.buildCandidate.startingCurrency = 999
     tampered.catalogBinding.playerDefinitionReady = true as false
     const { playerBuildHash: _oldHash, ...body } = tampered
@@ -4074,6 +4114,7 @@ describe('R-OPEN-WORLD3 · P4 PlayerBuild', () => {
         bindingHash: CAPABILITY_HASH,
         adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/ProtagonistAsset Hash不匹配|选择Hash不匹配/)
   }, 30_000)
@@ -4154,7 +4195,8 @@ describe('R-OPEN-WORLD3 · P3 StoryArchitecture', () => {
     const artifacts = storyArtifacts(await executeStoryArchitecture(input))
     const tampered = structuredClone(artifacts)
     tampered.storyArc.governance.mainlinePressure = 'pressured' as 'wait-for-player'
-    tampered.endingContracts.endings[0]!.runtimeBinding.conditionKeys = ['condition.forged'] as []
+    // @ts-expect-error Populate a forbidden ending runtime slot; the rehashed artifact must reject.
+    tampered.endingContracts.endings[0]!.runtimeBinding.conditionKeys = ['condition.forged']
     const { endingContractsHash: _endingHash, ...endingBody } = tampered.endingContracts
     tampered.endingContracts.endingContractsHash = await hashProductProductionValueV2(endingBody)
     const { narrativePromisesHash: _promiseHash, ...promiseBody } = tampered.narrativePromises
@@ -4185,6 +4227,7 @@ describe('R-OPEN-WORLD3 · P3 StoryArchitecture', () => {
         bindingHash: CAPABILITY_HASH,
         adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/ProtagonistAsset Hash不匹配|选择Hash不匹配/)
   }, 30_000)
@@ -4272,7 +4315,8 @@ describe('R-OPEN-WORLD3 · P4 RegionSkeleton', () => {
     const artifact = (await executeRegionSkeleton(input)).artifacts[0]!.payload as TextOpenWorldRegionSkeletonV1
     const tampered = structuredClone(artifact)
     tampered.governance.arrivalStoryTrigger = 'arrival-can-trigger-mainline' as 'never-critical-location-only'
-    tampered.locations[0]!.contentBinding.sceneKeys = ['scene.forged'] as []
+    // @ts-expect-error Populate a forbidden region scene slot; the rehashed artifact must reject.
+    tampered.locations[0]!.contentBinding.sceneKeys = ['scene.forged']
     tampered.fastTravelPoints[1]!.unlockedByDefault = true
     const { regionSkeletonHash: _hash, ...body } = tampered
     tampered.regionSkeletonHash = await hashProductProductionValueV2(body)
@@ -4298,6 +4342,7 @@ describe('R-OPEN-WORLD3 · P4 RegionSkeleton', () => {
         bindingHash: CAPABILITY_HASH,
         adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/StoryArc Hash不匹配|storyNeeds与StoryArc不一致|选择Hash不匹配/)
   }, 30_000)
@@ -4389,7 +4434,8 @@ describe('R-OPEN-WORLD3 · P5 MainlineThread', () => {
     const tampered = structuredClone(artifact)
     tampered.governance.pressure = 'pressured' as 'wait-for-player'
     tampered.stages[1]!.previousStageKey = null
-    tampered.stages[0]!.questBinding.questKey = 'quest.main.001' as null
+    // @ts-expect-error Populate an unbound quest slot; the rehashed artifact must reject.
+    tampered.stages[0]!.questBinding.questKey = 'quest.main.001'
     const { mainlineThreadHash: _hash, ...body } = tampered
     tampered.mainlineThreadHash = await hashProductProductionValueV2(body)
     await expect(validateTextOpenWorldMainlineThreadV1({ artifact: tampered, context: input.mainlineContext }))
@@ -4412,6 +4458,7 @@ describe('R-OPEN-WORLD3 · P5 MainlineThread', () => {
       capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
         requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/RegionSkeleton Hash不匹配|选择Hash不匹配/)
   }, 45_000)
@@ -4527,6 +4574,7 @@ describe('R-OPEN-WORLD3 · P6 SignificantThreads', () => {
       capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
         requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
       })),
+      authorResolution: null,
       signal: new AbortController().signal,
     })).rejects.toThrow(/MainlineThread Hash不匹配|选择Hash不匹配/)
   }, 60_000)
@@ -4620,7 +4668,8 @@ describe('R-OPEN-WORLD3 · P7 RegionNarrativePacks', () => {
     const tampered = structuredClone(artifact)
     tampered.governance.regionalConsequencesCannotBlockMainline = false as true
     tampered.packs[0]!.tensions[0]!.mainlineMayBlock = true as false
-    tampered.packs[0]!.ordinaryQuestSeeds[0]!.binding.questKey = 'quest.forged' as null
+    // @ts-expect-error Populate an unbound regional quest slot; the rehashed artifact must reject.
+    tampered.packs[0]!.ordinaryQuestSeeds[0]!.binding.questKey = 'quest.forged'
     const { regionNarrativePacksHash: _hash, ...body } = tampered
     tampered.regionNarrativePacksHash = await hashProductProductionValueV2(body)
     await expect(validateTextOpenWorldRegionNarrativePacksV1({ artifact: tampered, context: input.regionPacksContext }))
@@ -4896,7 +4945,8 @@ describe('R-OPEN-WORLD3 · P8 ProgressionCatalogs', () => {
 
     const artifact = structuredClone((await executeProgressionCatalogs(input)).artifacts[0]!.payload as TextOpenWorldProgressionCatalogsV1)
     artifact.levels[1]!.cumulativeExperience = 101
-    artifact.skills[0]!.runtimeBinding.actionKey = 'action.forged' as null
+    // @ts-expect-error Populate an unbound skill action slot; the rehashed artifact must reject.
+    artifact.skills[0]!.runtimeBinding.actionKey = 'action.forged'
     const { progressionCatalogsHash: _hash, ...body } = artifact
     artifact.progressionCatalogsHash = await hashProductProductionValueV2(body)
     await expect(validateTextOpenWorldProgressionCatalogsV1({ artifact, context: input.progressionContext }))
@@ -5061,7 +5111,8 @@ describe('R-OPEN-WORLD3 · P8 EnemyEncounterCatalog', () => {
     const input = await encounterCatalogFixture()
     const artifact = structuredClone((await executeEncounterCatalog(input)).artifacts[0]!.payload as TextOpenWorldEnemyEncounterCatalogV1)
     artifact.enemies[0]!.attack += 999
-    artifact.encounters[0]!.runtimeBinding.rewardContractKey = 'reward.forged' as null
+    // @ts-expect-error Populate an unbound encounter reward slot; the rehashed artifact must reject.
+    artifact.encounters[0]!.runtimeBinding.rewardContractKey = 'reward.forged'
     artifact.encounters[0]!.defeatPolicy.kind = 'none' as 'retry-or-respawn'
     const { enemyEncounterCatalogHash: _hash, ...body } = artifact
     artifact.enemyEncounterCatalogHash = await hashProductProductionValueV2(body)
@@ -5355,6 +5406,7 @@ describe('R-OPEN-WORLD3 · P8 ItemRewardCatalog', () => {
     artifact.rewardContracts[0]!.grants.experience += 99
     artifact.items.find(item => item.kind === 'quest')!.droppable = true
     artifact.dropTables[0]!.sourceEnemyKey = 'enemy.forged'
+    // @ts-expect-error Inject an effect into the reserved empty slot; runtime validation must reject.
     artifact.rewardContracts[0]!.runtimeBinding.effectKeys.push('effect.forged')
     const { itemRewardCatalogHash: _hash, ...body } = artifact
     artifact.itemRewardCatalogHash = await hashProductProductionValueV2(body)
@@ -5492,7 +5544,8 @@ describe('R-OPEN-WORLD3 · P8 CraftingEconomyCatalog', () => {
     artifact.recipes[0]!.ingredients[0]!.quantity += 10
     artifact.vendors[0]!.sellPriceMultiplierBasisPoints = 20_000
     artifact.vendors[0]!.inventoryEntries[0]!.stockPolicy = 'limited'
-    artifact.recipes[0]!.runtimeBinding.craftActionKey = 'action.forged' as null
+    // @ts-expect-error Populate an unbound crafting action slot; the rehashed artifact must reject.
+    artifact.recipes[0]!.runtimeBinding.craftActionKey = 'action.forged'
     const { craftingEconomyCatalogHash: _hash, ...body } = artifact
     artifact.craftingEconomyCatalogHash = await hashProductProductionValueV2(body)
     await expect(validateTextOpenWorldCraftingEconomyCatalogV1({ artifact, context: input.craftingEconomyContext }))
@@ -5761,6 +5814,7 @@ describe('R-OPEN-WORLD3 · P8 NpcRuntimeCatalog', () => {
     protectedActor.mortalityPolicy = 'mortal'
     artifact.serviceContinuity.splice(0, 1)
     artifact.relationshipPolicy.attitude.badMaximum = -99
+    // @ts-expect-error Inject a scene into the reserved empty slot; runtime validation must reject.
     artifact.actors[0]!.runtimeBinding.dialogueSceneKeys.push('scene.forged')
     const { npcRuntimeCatalogHash: _hash, ...body } = artifact
     artifact.npcRuntimeCatalogHash = await hashProductProductionValueV2(body)
@@ -5851,7 +5905,8 @@ describe('R-OPEN-WORLD3 · P8 MapInteractionCatalog', () => {
     artifact.mapLayout.locationNodes[0]!.x += 100
     artifact.fastTravelPoints[1]!.unlockedByDefault = true
     artifact.interactions[0]!.startsQuestOnArrival = true as false
-    artifact.interactions[0]!.runtimeBinding.actionKey = 'action.forged' as null
+    // @ts-expect-error Populate an unbound map action slot; the rehashed artifact must reject.
+    artifact.interactions[0]!.runtimeBinding.actionKey = 'action.forged'
     const { mapInteractionCatalogHash: _hash, ...body } = artifact
     artifact.mapInteractionCatalogHash = await hashProductProductionValueV2(body)
     await expect(validateTextOpenWorldMapInteractionCatalogV1({ artifact, context: input.mapInteractionContext }))
@@ -5978,9 +6033,23 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
   }, 180_000)
 
   it.each(['p8.catalog.items-rewards', 'p8.catalog.crafting-economy', 'p8.catalog.npc-runtime', 'p9.scene-scripts'] as const)('%s目录作者预检失败无旧输入仍可只读当前Context，严格保留控制链和读取期间CAS', async (taskKey) => {
-    const f = taskKey === 'p8.catalog.items-rewards' ? await itemRewardCatalogFixture()
-      : taskKey === 'p8.catalog.crafting-economy' ? await craftingEconomyFixture() : taskKey === 'p9.scene-scripts' ? await sceneScriptsFixture() : await npcRuntimeFixture()
-    const context = 'sceneScriptsContext' in f ? f.sceneScriptsContext : 'npcRuntimeContext' in f ? f.npcRuntimeContext : 'craftingEconomyContext' in f ? f.craftingEconomyContext : f.itemRewardContext
+    const selected = await (async () => {
+      if (taskKey === 'p8.catalog.items-rewards') {
+        const f = await itemRewardCatalogFixture()
+        return { kind: 'items' as const, f, context: f.itemRewardContext }
+      }
+      if (taskKey === 'p8.catalog.crafting-economy') {
+        const f = await craftingEconomyFixture()
+        return { kind: 'crafting' as const, f, context: f.craftingEconomyContext }
+      }
+      if (taskKey === 'p9.scene-scripts') {
+        const f = await sceneScriptsFixture()
+        return { kind: 'scenes' as const, f, context: f.sceneScriptsContext }
+      }
+      const f = await npcRuntimeFixture()
+      return { kind: 'npcs' as const, f, context: f.npcRuntimeContext }
+    })()
+    const { kind, f, context } = selected
     const readCandidates = { 'p8.catalog.items-rewards': readTextOpenWorldItemRewardRepairCandidatesV1,
       'p8.catalog.crafting-economy': readTextOpenWorldCraftingEconomyRepairCandidatesV1,
       'p8.catalog.npc-runtime': readTextOpenWorldNpcRuntimeRepairCandidatesV1, 'p9.scene-scripts': readTextOpenWorldSceneScriptsRepairCandidatesV1 }[taskKey]
@@ -6032,10 +6101,10 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
       expect(page).toMatchObject({ contextSelectionHash: context.contextSelectionHash, section: 'contract', total: 1 })
       expect(await snapshot()).toEqual(before)
     }
-    if ('sceneScriptsContext' in f) {
+    if (kind === 'scenes') {
       const page = await readTextOpenWorldSceneScriptsRepairCandidatesV1({ ...input, section: 'scenes', page: 1 })
       expect(page.rows).toEqual([{ sceneNumber: 2, writingMaterial: await createTextOpenWorldSceneScriptsModelContextV1(
-        f.sceneScriptsContext, { kind: 'scene', sceneIndex: 1 }) }])
+        context, { kind: 'scene', sceneIndex: 1 }) }])
     } else {
       const page = taskKey === 'p8.catalog.items-rewards'
         ? await readTextOpenWorldItemRewardRepairCandidatesV1({ ...input, section: 'requirements', page: 1 })
@@ -6322,6 +6391,7 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     const receiptBody = { schema: 'storyforge.provider-binding-receipt' as const, version: 1 as const,
       ...identity, capabilityHash, boundAt: NOW }
     const receipt = { ...receiptBody, receiptHash: await hashProductProductionValueV2(receiptBody) }
+    if (!input.task.skillId) throw new Error('作者完整稿测试必须绑定正式任务 Skill')
     const response = await questFinalizeRunner()({
       projectId: input.scope.projectId, requirementKey, expectedCapabilityHash: capabilityHash,
       category: input.task.skillId, system: '', contextText: input.questFinalizeContextText,
@@ -6343,7 +6413,7 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
       idempotencyKey: await hashProductProductionValueV2('p8f-author-zero-provider-budget'),
       contextText: input.questFinalizeContextText, authorDraftJson: JSON.stringify(draft),
       inputArtifacts: [], capabilityBindings: [{ requirementKey, bindingHash: capabilityHash, adapterId: 'configured-text.v1' }],
-      onModelOutput: async output => { raw.push(output) }, signal: new AbortController().signal,
+      onModelOutput: async output => { raw.push(output) }, authorResolution: null, signal: new AbortController().signal,
     }
     const result = await executor(execution)
     expect(providerCalls).toBe(0)
@@ -6361,7 +6431,7 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
       await expect(executor({ ...execution, authorDraftJson: rejected })).rejects.toMatchObject({
         name: 'ProductProductionDraftRejectedErrorV1', usage: expect.objectContaining({ modelCalls: 0, inputTokens: 0, outputTokens: 0 }),
       })
-      expect(raw.at(-1)).toBe(rejected)
+      expect(raw[raw.length - 1]).toBe(rejected)
     }
     const tampered = JSON.stringify({ ...input.questFinalizeContext, contextSelectionHash: '0'.repeat(64) })
     const beforeTamper = raw.length
@@ -7410,6 +7480,7 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
         bindingHash: capabilityHash,
         adapterId: 'configured-text.v1',
       }],
+      authorResolution: null,
       signal: new AbortController().signal,
     })
 
@@ -7420,6 +7491,7 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
       'text-open-world.choice-contracts',
       'text-open-world.action-bindings',
     ])
+    if (!input.task.skillId) throw new Error('作者完整稿测试必须绑定正式任务 Skill')
     const authorDraft = await domainRunner({
       projectId: input.scope.projectId,
       requirementKey: input.task.capabilityRequirementKeys[0]!,
@@ -7454,6 +7526,7 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
         bindingHash: capabilityHash,
         adapterId: 'configured-text.v1',
       }],
+      authorResolution: null,
       signal: new AbortController().signal,
     })
     expect(modelCalls).toBe(callsBeforeAuthorDraft)
@@ -7602,7 +7675,7 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
         publicCatalogs: { actions?: Array<{ actionKey: string; label: string }> }
       }
       if (context.sceneDemands.length === 1) {
-        const template = JSON.parse(request.system.split('\n').at(-1)!)
+        const template = JSON.parse(request.system.split('\n').slice(-1)[0]!)
         expect(request.system).toContain('keeping schema/version')
         expect(template).toMatchObject({
           schema: 'storyforge.text-open-world-scene-scripts-draft', version: 1,
@@ -7701,6 +7774,9 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
     const input = await sceneScriptsFixture()
     const taskKey = input.task.taskKey
     const createEpoch = async (epoch: number, previous?: Awaited<ReturnType<typeof readAgentRunV1>>) => {
+      const productionId = input.production.id
+      if (!productionId) throw new Error('P9恢复夹具必须绑定实际Production')
+      input.production.controlEpoch = epoch
       input.build.controlEpoch = epoch
       const authorResolution: ProductProductionAuthorResolutionEvidenceV1 | undefined = previous ? {
         commandId: `recover-${epoch}`, blockerKey: taskKey,
@@ -7715,7 +7791,10 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
           },
         },
       }) : '{}'
-      await db.productBuilds.update(input.build.id!, { controlEpoch: epoch, failureJson })
+      await db.transaction('rw', scopeTransactionTables(db.productProductions, db.productBuilds), async () => {
+        await db.productProductions.update(productionId, { controlEpoch: epoch })
+        await db.productBuilds.update(input.build.id!, { controlEpoch: epoch, failureJson })
+      })
       const baseContract = {
         version: 1, objective: '验证P9跨epoch恢复的原始片段与计费边界',
         workflowKind: 'long-running-resumable', runtimeBindingHash: CAPABILITY_HASH,
@@ -7989,7 +8068,8 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
     })
     expect(calls).toBe(1)
     const failed = await readAgentRunV1(input.scope, taskRun.run.id)
-    const fragmentEvents = failed.events.filter(event => event.payload.stepId?.startsWith('p9.scene-scripts.fragment.'))
+    const fragmentEvents = failed.events.filter(event => 'stepId' in event.payload
+      && event.payload.stepId?.startsWith('p9.scene-scripts.fragment.'))
     expect(fragmentEvents.filter(event => event.type === 'model.requested')).toHaveLength(1)
     expect(fragmentEvents.filter(event => event.type === 'model.responded')).toHaveLength(1)
     expect(fragmentEvents.filter(event => (
@@ -8416,13 +8496,13 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     const inputArtifacts = task.inputArtifactKeys.map(key => (
       accepted.find(row => row.artifactKey === key) ?? mediaRows.get(key)!
     ))
-    expect(task.inputArtifactKeys.filter((key, index) => !inputArtifacts[index])).toEqual([])
+    expect(task.inputArtifactKeys.filter((_key, index) => !inputArtifacts[index])).toEqual([])
     const result = await createTextOpenWorldRuntimePackageExecutorV1({ now: () => NOW + 26 })({
       scope: input.scope, productionId: input.production.id!, buildId: input.build.id!,
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.planHash, task, attempt: 1,
       idempotencyKey: await hashProductProductionValueV2('v3-runtime-package'),
-      contextText: '', inputArtifacts, capabilityBindings: [], signal: new AbortController().signal,
+      contextText: '', inputArtifacts, capabilityBindings: [], authorResolution: null, signal: new AbortController().signal,
     })
     const runtimePackage = parseProductRuntimePackageV1(
       result.artifacts.find(item => item.artifactKey === 'text-open-world.runtime-package')!.payload,
@@ -8776,11 +8856,11 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       action.category === 'abandon-quest'
       && action.key === `action.abandon.${restartQuestKey}.unstarted`
     ))!
-    expect(actionRegistry.resolve({
+    expect(resolveActionAvailabilityForTest(actionRegistry, {
       actionKey: unstartedAbandonAction.key,
       targetKey: restartInstance.instanceKey,
       context: deriveTextOpenWorldContextsV1(lifecycleProjection).action,
-    }).entry.available).toBe(true)
+    })).toBe(true)
     const abandonBaseline = structuredClone(lifecycleProjection)
     const abandoned = await runLifecycleActionEvents(
       lifecycleProjection,
@@ -8805,11 +8885,11 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     expect(remoteRestartAvailability.unavailableReasons.map(reason => reason.code)).toContain('wrong-location')
 
     visitLocation(abandoned.projection, restartOfferScene.locationKey, restartOfferScene.participantKeys)
-    expect(actionRegistry.resolve({
+    expect(resolveActionAvailabilityForTest(actionRegistry, {
       actionKey: restartAction.key,
       targetKey: restartInstance.instanceKey,
       context: deriveTextOpenWorldContextsV1(abandoned.projection).action,
-    }).entry.available).toBe(true)
+    })).toBe(true)
     const restartBaseline = structuredClone(abandoned.projection)
     const restarted = await runLifecycleActionEvents(
       abandoned.projection,
@@ -8908,7 +8988,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.planHash, task, attempt: 1,
       idempotencyKey: await hashProductProductionValueV2('v3-runtime-package-missing-rights'),
-      contextText: '', inputArtifacts: missingRightsInputs, capabilityBindings: [], signal: new AbortController().signal,
+      contextText: '', inputArtifacts: missingRightsInputs, capabilityBindings: [], authorResolution: null, signal: new AbortController().signal,
     })).rejects.toThrow(/rights\.origin|权利/)
 
     const tamperedInputs = structuredClone(inputArtifacts)
@@ -8922,7 +9002,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.planHash, task, attempt: 1,
       idempotencyKey: await hashProductProductionValueV2('v3-runtime-package-tampered'),
-      contextText: '', inputArtifacts: tamperedInputs, capabilityBindings: [], signal: new AbortController().signal,
+      contextText: '', inputArtifacts: tamperedInputs, capabilityBindings: [], authorResolution: null, signal: new AbortController().signal,
     })).rejects.toThrow(/自身Hash不匹配/)
     await acceptTaskArtifacts(input, result.artifacts, 'V3-runtime-package')
 
@@ -8934,7 +9014,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       planHash: input.planHash, task: qaTask, attempt: 1,
       idempotencyKey: await hashProductProductionValueV2('qa-release'), contextText: '',
       inputArtifacts: qaTask.inputArtifactKeys.map(key => qaAccepted.find(row => row.artifactKey === key)!),
-      capabilityBindings: [], signal: new AbortController().signal,
+      capabilityBindings: [], authorResolution: null, signal: new AbortController().signal,
     })
     expect(qaResult.artifacts[0]!.payload).toMatchObject({
       playable: true, releaseReady: true, mediaCoverage: 1,
@@ -8952,7 +9032,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.planHash, task: qaTask, attempt: 1,
       idempotencyKey: await hashProductProductionValueV2('qa-release-tampered-report'), contextText: '',
-      inputArtifacts: tamperedQaInputs, capabilityBindings: [], signal: new AbortController().signal,
+      inputArtifacts: tamperedQaInputs, capabilityBindings: [], authorResolution: null, signal: new AbortController().signal,
     })).rejects.toThrow(/IntegrationReport自身Hash不匹配/)
   }, 600_000)
 
@@ -9032,6 +9112,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     expect(outputBudgets[1]).toBeLessThan(outputBudgets[0]!)
     const snapshot = await readAgentRunV1(input.scope, taskRunId)
     const responses = snapshot.events.filter(event => event.type === 'evidence.artifact.recorded'
+      && typeof event.payload.stepId === 'string'
       && event.payload.stepId.startsWith('p1.source-curation.world.source-curation.batch.')
       && event.payload.artifactKind === 'raw-response')
     expect(responses).toHaveLength(outputs.length)
@@ -9667,6 +9748,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })
     expect(saltRidgePackage.textOpenWorldVNext).toBeTruthy()
     const saltRidgeModules = parseTextOpenWorldModulesV1(saltRidgePackage.textOpenWorldVNext!)
+    if (saltRidgeModules.narrative.version !== 2) throw new Error('完整DAG正例必须生成叙事模块v2')
     expect(saltRidgeModules.actions.version).toBe(21)
     expect(saltRidgeQuests.governance.actionPathEvidenceReady).toBe(true)
     expect(levelForTextOpenWorldExperienceV1(
@@ -9836,14 +9918,14 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     const failureAction = saltRidgeModules.actions.actions.find(action => (
       action.key === `action.fail.${failedQuest.definition.key}.stage.001`
     ))!
-    expect(endingRegistry.resolve({
+    expect(resolveActionAvailabilityForTest(endingRegistry, {
       actionKey: failureAction.key,
       targetKey: failedQuest.instance.instanceKey,
       context: {
         ...deriveTextOpenWorldContextsV1(failedQuestProjection).action,
         actorKey: 'system',
       },
-    }).entry.available).toBe(true)
+    })).toBe(true)
     const failed = await applyQuestLifecycleAction(
       failedQuestProjection,
       failureAction,
@@ -9891,14 +9973,14 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     const expirationAction = saltRidgeModules.actions.actions.find(action => (
       action.key === expiredQuestRow.expirationActionKeys[1]
     ))!
-    expect(endingRegistry.resolve({
+    expect(resolveActionAvailabilityForTest(endingRegistry, {
       actionKey: expirationAction.key,
       targetKey: expiredQuest.instance.instanceKey,
       context: {
         ...deriveTextOpenWorldContextsV1(expiredQuestProjection).action,
         actorKey: 'system',
       },
-    }).entry.available).toBe(true)
+    })).toBe(true)
     await applyQuestLifecycleAction(
       expiredQuestProjection,
       expirationAction,
@@ -9933,11 +10015,11 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     if (!restartQuestProjection.state.map.revealedLocationKeys.includes(restartOfferLocation.key)) {
       restartQuestProjection.state.map.revealedLocationKeys.push(restartOfferLocation.key)
     }
-    expect(endingRegistry.resolve({
+    expect(resolveActionAvailabilityForTest(endingRegistry, {
       actionKey: restartAction.key,
       targetKey: restartQuest.instance.instanceKey,
       context: deriveTextOpenWorldContextsV1(restartQuestProjection).action,
-    }).entry.available).toBe(true)
+    })).toBe(true)
     await applyQuestLifecycleAction(
       restartQuestProjection,
       restartAction,
@@ -9965,7 +10047,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       const instance = Object.values(projection.state.quests.instancesByKey)
         .find(candidate => candidate.definitionKey === definitionKey)!
       instance.status = 'completed'
-      instance.currentStageKey = orderedStages.at(-1)!.key
+      instance.currentStageKey = orderedStages[orderedStages.length - 1]!.key
       Object.keys(instance.objectiveStatusByKey).forEach(objectiveKey => {
         instance.objectiveStatusByKey[objectiveKey] = 'completed'
       })
@@ -10036,7 +10118,6 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     expect(
       governance.summary.currentProblemArtifactCount,
       JSON.stringify({
-        diagnostics: governance.diagnostics,
         artifacts: governance.artifacts.filter(row => row.health !== 'verified').map(row => ({
           artifactKey: row.artifactKey,
           health: row.health,
@@ -10063,14 +10144,14 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     const p1RunRow = await db.agentRuns.get(originalP1Artifact!.producerRunId!)
     expect(p1RunRow?.id).toBeTruthy()
     const p1Snapshot = await readAgentRunV1(input.scope, p1RunRow!.id!)
-    const allP1BatchManifestEvents = p1Snapshot.events.filter(event => event.type === 'context.assembled'
+    const allP1BatchManifestEvents = p1Snapshot.events.filter((event): event is Extract<AnyAgentRunEventV1, { type: 'context.assembled' }> => event.type === 'context.assembled'
       && event.payload.stepId.startsWith('p1.source-curation.world.source-curation.batch.'))
     const p1BatchManifestEvents = allP1BatchManifestEvents.filter(event => (
       p1Snapshot.projection.steps[event.payload.stepId]?.status === 'succeeded'
         && p1Snapshot.projection.steps[event.payload.stepId]?.attempt === event.payload.attempt
     ))
     expect(p1BatchManifestEvents.length).toBeGreaterThan(0)
-    const failedBatchEvent = p1Snapshot.events.find(event => event.type === 'step.failed'
+    const failedBatchEvent = p1Snapshot.events.find((event): event is Extract<AnyAgentRunEventV1, { type: 'step.failed' }> => event.type === 'step.failed'
       && event.payload.stepId.startsWith('p1.source-curation.world.source-curation.batch.')
       && event.payload.attempt === 1)
     expect(failedBatchEvent).toBeTruthy()
@@ -10241,7 +10322,6 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       productionId: importedProduction!.id!,
     })
     expect(importedGovernance.summary, JSON.stringify({
-      diagnostics: importedGovernance.diagnostics,
       artifacts: importedGovernance.artifacts.slice(0, 8).map(row => ({
         artifactKey: row.artifactKey,
         health: row.health,

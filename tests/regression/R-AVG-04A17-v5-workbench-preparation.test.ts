@@ -269,7 +269,7 @@ describe('AVG V5 explicit workbench preparation, no provider or adoption authori
   })
   it.each(['candidate','refuse'] as const)('uses the actual V5 model proposal for an explicit author %s and keeps V4 strict',async mode=>{
     vi.spyOn(readiness,'avgVisualPlanningExecutionReadyV5').mockReturnValue(true)
-    useAIConfigStore.getState().setConfig({baseUrl:'https://v5-proposal.fixture.invalid/v1'})
+    useAIConfigStore.getState().setConfig({baseUrl:'https://v5-proposal.fixture.invalid/v1',apiKey:'test-only-no-external-network'})
     const s=await avgV5RegisteredProposalsFixture();await adoptAvgV5Sources(s);await cycleAvgV5Until(s,'avg.proposal.visual-bible')
     const proposal=(await avgV5Accepted(s,'avg.proposal.visual-bible'))!,build=(await db.productBuilds.get(s.buildId))!
     const selection={scope:s.scope,productionId:s.productionId,expectedBuildId:s.buildId,expectedBuildRevision:build.stateRevision,

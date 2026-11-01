@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {expect, test} from '@playwright/test'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {installChatVoiceFixture, type VoiceWindow} from './helpers/character-chat-voice'
@@ -13,9 +14,8 @@ for (const {width, imageFailure} of [{width: 390, imageFailure: false}, {width: 
   await installChatVoiceFixture(page)
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'agnes', baseUrl: 'https://chat-journey.invalid/v1', model: 'agnes-2.5-flash', maxTokens: 16000, apiKey: ''}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'agnes', baseUrl: 'https://chat-journey.invalid/v1', model: 'agnes-2.5-flash', maxTokens: 16000, apiKey: 'isolated-test-key' })
   const calls: string[] = []
   const imageCalls: string[] = []
   const providerImageHashes: string[] = []
@@ -69,7 +69,7 @@ for (const {width, imageFailure} of [{width: 390, imageFailure: false}, {width: 
     }
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}], usage: {prompt_tokens: 100, completion_tokens: 100, total_tokens: 200}})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     await (await load('/storyforge/tests/helpers/current-product-world.ts')).seedCurrentProductWorld('单角色技术预览世界')
@@ -108,12 +108,27 @@ for (const {width, imageFailure} of [{width: 390, imageFailure: false}, {width: 
   await page.getByRole('button', {name: '分析可玩起点', exact: true}).click()
   await page.getByRole('button', {name: '生成严格 Brief', exact: true}).click()
   await page.getByRole('button', {name: '保存 Brief revision', exact: true}).click()
-  await expect(page.getByText('Production 与 Brief revision 已保存；未授权前不会创建 Build 或调用生成能力。', {exact: true})).toBeVisible({timeout: 30_000})
+  await expect(page.getByText('r1 · 草稿', {exact: true})).toBeVisible({timeout: 30_000})
+  await expect(page.getByText('save-brief-revision', {exact: true})).toBeVisible()
+  await expect.poll(() => page.evaluate(async () => {
+    const load = new Function('p', 'return import(p)'), {db} = await load('/storyforge/src/lib/db/schema.ts')
+    const productions = await db.productProductions.toArray()
+    const production = productions[0]
+    const briefs = production ? await db.productProductionBriefs.where('productionId').equals(production.id).toArray() : []
+    const commands = production ? await db.productProductionCommands.where('productionId').equals(production.id).toArray() : []
+    return {count: productions.length, title: production?.title, productType: production?.productType,
+      revision: production?.currentBriefRevision, briefs: briefs.map((row: {revision: number; status: string}) => ({revision: row.revision, status: row.status})),
+      saved: commands.filter((row: {type: string; status: string}) => row.type === 'save-brief-revision' && row.status === 'succeeded').length,
+      builds: await db.productBuilds.count(), releases: await db.productReleases.count()}
+  })).toEqual({count: 1, title: '修钟铺的完整体验', productType: 'character-interaction', revision: 1,
+    briefs: [{revision: 1, status: 'draft'}], saved: 1, builds: 0, releases: 0})
+  expect(calls).toEqual([])
+  expect(imageCalls).toEqual([])
   await guide.getByRole('button', {name: '继续制作与检查', exact: true}).click()
   await page.getByRole('button', {name: '作者授权并开始自动制作', exact: true}).click()
   await expect(page.getByTestId('chat-situation-selection')).toBeVisible({timeout: 60_000})
   expect(calls).toEqual(['opening', 'opening-review'])
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', {name: '选择「旧账本」并继续', exact: true}).click()
   const media = page.getByTestId('chat-media-selection')
   if (imageFailure) {
@@ -184,7 +199,7 @@ for (const {width, imageFailure} of [{width: 390, imageFailure: false}, {width: 
   const beforeImages = imageCalls.length
   expect(imageHashes.map((image: {hash: string}) => image.hash).sort()).toEqual([...providerImageHashes].sort())
   const beforeReload = calls.length
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(messages).toContainText('我核对了旧账本，账本记载这台旧钟上次更换过发条。你可以继续看书，我来检查对应部件。')
   expect(calls).toHaveLength(beforeReload)
   expect(imageCalls).toHaveLength(beforeImages)
@@ -201,17 +216,17 @@ for (const {width, imageFailure} of [{width: 390, imageFailure: false}, {width: 
     await restored.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
     let restorationCalls = 0
     await restored.route('**/*', route => route.request().method() === 'POST' ? (restorationCalls++, route.abort()) : route.continue())
-    await restored.goto(new URL('/storyforge/chat/library', page.url()).href)
+    await gotoWithBrowserFixtureAIConfigV1(restored, new URL('/storyforge/chat/library', page.url()).href)
     const ids = await restored.evaluate(async backup => {
       const load = new Function('p', 'return import(p)'), {db} = await load('/storyforge/src/lib/db/schema.ts')
       const projectId = await (await load('/storyforge/src/lib/export/json-export.ts')).importProjectJSON(backup)
       const session = await db.productRuntimeSessions.where('projectId').equals(projectId).last()
       return {projectId, workId: session.workId, sessionId: session.id}
     }, backup)
-    await restored.goto(new URL(`/storyforge/chat/play?project=${ids.projectId}&work=${ids.workId}&session=${ids.sessionId}`, page.url()).href)
+    await gotoWithBrowserFixtureAIConfigV1(restored, new URL(`/storyforge/chat/play?project=${ids.projectId}&work=${ids.workId}&session=${ids.sessionId}`, page.url()).href)
     await expect(restored.getByRole('region', {name: '对话记录', exact: true})).toContainText('我核对了旧账本，账本记载这台旧钟上次更换过发条。你可以继续看书，我来检查对应部件。')
     await expect.poll(() => restored.getByRole('region', {name: '对话记录', exact: true}).evaluate(el => getComputedStyle(el).backgroundImage)).toContain('blob:')
-    await restored.reload()
+    await reloadWithBrowserFixtureAIConfigV1(restored)
     await expect(restored.getByLabel('发送给角色的消息', {exact: true})).toBeVisible()
     await restored.getByText('查看画面', {exact: true}).click()
     await restored.getByLabel('发送给角色的消息', {exact: true}).fill('看着图片也能继续说话。')

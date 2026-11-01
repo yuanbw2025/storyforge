@@ -1,4 +1,5 @@
 import type { ChatResult } from '../ai/client'
+import { assertTextOpenWorldBuildNewWorkV1, captureTextOpenWorldTaskExecutionInputV1 } from './source-admission'
 import { estimateTokens } from '../ai/context-budget'
 import type { ChatMessage } from '../types'
 import {
@@ -276,7 +277,14 @@ export async function executeTextOpenWorldProductionModelProtocolV1(input: {
   textCapabilityReceipt?: ProviderBindingReceiptV1
   modelTransport?: TextOpenWorldProductionModelTransportV1
 }): Promise<ProductProductionTaskExecutionResultV1> {
-  const execution = input.execution
+  input = { ...input,
+    ...(input.textCapabilityReceipt === undefined ? {} : { textCapabilityReceipt: structuredClone(input.textCapabilityReceipt) }),
+  }
+  const execution = captureTextOpenWorldTaskExecutionInputV1(input.execution)
+  await assertTextOpenWorldBuildNewWorkV1({
+    scope: execution.scope, productionId: execution.productionId, buildId: execution.buildId,
+    operation: '新的制作模型或作者修订执行',
+  })
   const skillId = input.skillId ?? execution.task.skillId
   if (execution.signal.aborted) throw new DOMException('Aborted', 'AbortError')
   assertAtomicContextJson(execution.contextText)
@@ -354,6 +362,8 @@ export async function executeTextOpenWorldProductionModelProtocolV1(input: {
       && await execution.beforeAdditionalModelRequest?.() === 'discarded-stale') {
       throw staleExecutionError()
     }
+    await assertTextOpenWorldBuildNewWorkV1({ scope: execution.scope, productionId: execution.productionId,
+      buildId: execution.buildId, operation: '发送制作模型请求' })
     calls += 1
     if (callPolicy === 'single-exact-context' && calls !== 1) {
       fail(`${execution.task.taskKey} 违反单次模型调用协议`)

@@ -1,14 +1,12 @@
 import {expect, test} from '@playwright/test'
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 
 for (const failure of ['opening', 'review-output-limit'] as const) test(failure === 'opening'
   ? 'rejected opening stays stopped after refresh and explicit repair receives its original error'
   : 'truncated opening review keeps paid evidence and explicit independent review excludes the rejected report', async ({page, browser}) => {
   test.setTimeout(120_000)
-  await page.addInitScript(() => {
-    localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', model: 'test', baseUrl: 'https://chat-repair.invalid/v1', maxTokens: 16000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
-  })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', model: 'test', baseUrl: 'https://chat-repair.invalid/v1', maxTokens: 16000, apiKey: 'isolated-test-key' })
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
   const requests: string[] = []
   let rejected = ''
   await page.route('https://chat-repair.invalid/**', async route => {
@@ -33,7 +31,7 @@ for (const failure of ['opening', 'review-output-limit'] as const) test(failure 
     if (failure === 'opening' && requests.length === 1 || limited) rejected = output
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: output}, finish_reason: limited ? 'length' : 'stop'}], usage: {prompt_tokens: 100, completion_tokens: 100, total_tokens: 200}})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)'), f = await (await load('/storyforge/tests/helpers/chat-narrative-production-fixture.ts')).seedChatNarrativeProductionFixture()
     const execute = (await load('/storyforge/src/lib/product-production/commands.ts')).executeProductProductionCommand
@@ -52,7 +50,7 @@ for (const failure of ['opening', 'review-output-limit'] as const) test(failure 
         .map((a: {artifactKey: string; payloadJson: string; contentHash: string}) => ({key: a.artifactKey, payload: a.payloadJson, hash: a.contentHash})),
       releases: await db.productReleases.count(), sessions: await db.productRuntimeSessions.count()}
   }, f)
-  await page.goto(`./chat/production?project=${f.scope.projectId}&work=${f.scope.workId}&production=${f.productionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/production?project=${f.scope.projectId}&work=${f.scope.workId}&production=${f.productionId}`)
   await page.getByRole('button', {name: '启用自动制作', exact: true}).click()
   await page.getByRole('button', {name: '作者授权并开始自动制作', exact: true}).click()
   await expect.poll(async () => (await read()).failure.code).toBe('task-draft-rejected')
@@ -61,7 +59,7 @@ for (const failure of ['opening', 'review-output-limit'] as const) test(failure 
   const before = await read()
   expect(before.raw).toContain(rejected)
   expect(before).toMatchObject({status: 'recovery-required', releases: 0, sessions: 0})
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   const retry = page.getByRole('button', {name: '重试失败任务', exact: true})
   await expect(retry).toBeVisible()
   expect(await read()).toEqual(before)
@@ -82,7 +80,7 @@ for (const failure of ['opening', 'review-output-limit'] as const) test(failure 
       }
       return route.continue()
     })
-    await restoredPage.goto('./chat/library')
+    await gotoWithBrowserFixtureAIConfigV1(restoredPage, './chat/library')
     const restored = await restoredPage.evaluate(async backup => {
       const load = new Function('p', 'return import(p)'), db = (await load('/storyforge/src/lib/db/schema.ts')).db
       const projectId = await (await load('/storyforge/src/lib/export/json-export.ts')).importProjectJSON(
@@ -90,12 +88,12 @@ for (const failure of ['opening', 'review-output-limit'] as const) test(failure 
       const production = await db.productProductions.where('projectId').equals(projectId).first()
       return {projectId, workId: production.workId, productionId: production.id}
     }, backup)
-    await restoredPage.goto(`./chat/production?project=${restored.projectId}&work=${restored.workId}&production=${restored.productionId}`)
+    await gotoWithBrowserFixtureAIConfigV1(restoredPage, `./chat/production?project=${restored.projectId}&work=${restored.workId}&production=${restored.productionId}`)
     const design = restoredPage.locator('article').filter({has: restoredPage.locator('code').filter({hasText: /^content\.design$/})})
     await expect(design).toContainText('待核对')
     await expect(design).toContainText('导入的已完成步骤待核对，尚未重新执行。')
     await expect(design).not.toContainText('执行中')
-    await restoredPage.reload()
+    await reloadWithBrowserFixtureAIConfigV1(restoredPage)
     await expect(design).toContainText('待核对')
     expect(restoredCalls).toEqual([])
   } finally {
@@ -126,11 +124,8 @@ for (const {rejectedRepair, referenceWire, invalidOption = false, privateKnownFa
   {rejectedRepair: false, referenceWire: true, privateKnownFact: true},
 ]) test(`one automatic targeted opening repair, then author choice or a durable stop (rejected=${rejectedRepair}, references=${referenceWire}, invalidOption=${invalidOption}, private=${privateKnownFact})`, async ({page}) => {
   test.setTimeout(120_000)
-  await page.addInitScript(privateKnownFact => {
-    localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: privateKnownFact ? 'agnes' : 'openai', model: 'test', baseUrl: 'https://chat-auto-repair.invalid/v1', maxTokens: 16000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
-  }, privateKnownFact)
+  registerBrowserFixtureAIConfigV1(page, { provider: privateKnownFact ? 'agnes' : 'openai', model: 'test', baseUrl: 'https://chat-auto-repair.invalid/v1', maxTokens: 16000, apiKey: 'isolated-test-key' })
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
   const requests: string[] = []
   let firstRaw = ''
   await page.route('https://chat-auto-repair.invalid/**', async route => {
@@ -189,7 +184,7 @@ for (const {rejectedRepair, referenceWire, invalidOption = false, privateKnownFa
       usage: {prompt_tokens: 100, completion_tokens: 100, total_tokens: 200},
     })})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async ({referenceWire, privateKnownFact}) => {
     const load = new Function('p', 'return import(p)')
     const f = await (await load('/storyforge/tests/helpers/chat-narrative-production-fixture.ts')).seedChatNarrativeProductionFixture({worldDiscovery: referenceWire && !privateKnownFact, privateKnownFact})
@@ -212,7 +207,7 @@ for (const {rejectedRepair, referenceWire, invalidOption = false, privateKnownFa
       world: JSON.stringify(await db.worldReleases.toArray()), releases: await db.productReleases.count(), sessions: await db.productRuntimeSessions.count(),
     }
   }, f)
-  await page.goto(`./chat/production?project=${f.scope.projectId}&work=${f.scope.workId}&production=${f.productionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/production?project=${f.scope.projectId}&work=${f.scope.workId}&production=${f.productionId}`)
   await page.getByRole('button', {name: '启用自动制作', exact: true}).click()
   await page.getByRole('button', {name: '作者授权并开始自动制作', exact: true}).click()
   if (rejectedRepair) await expect.poll(async () => (await read()).failure.code).toBe('task-draft-rejected')
@@ -233,7 +228,7 @@ for (const {rejectedRepair, referenceWire, invalidOption = false, privateKnownFa
     {attempt: 1, usageKnown: true, outcome: 'failed', usage: {modelCalls: 1}},
     {attempt: 2, usageKnown: true, outcome: rejectedRepair ? 'failed' : 'settled', usage: {modelCalls: 1}},
   ])
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   if (rejectedRepair) await expect(page.getByRole('button', {name: '重试失败任务', exact: true})).toBeVisible()
   else await expect(page.getByTestId('chat-situation-selection')).toBeVisible()
   expect(await read()).toEqual(before)
