@@ -23,6 +23,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
+import { localChatMetaCategoryPositions } from './ai-call-meta.mjs'
 import { importsNarrativeGold, physicalWorldReleaseType, validateNarrativeBaselineFiles } from './narrative-world-baseline-contract.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -172,6 +173,7 @@ function findCallRanges(src, callee) {
 for (const dir of ['src/components', 'src/hooks', 'src/lib']) {
   for (const file of walk(dir)) {
     const src = read(file)
+    let localMetaCategories
     for (const callee of ['ai.start', 'chat', 'streamChat']) {
       for (const call of findCallRanges(src, callee)) {
         const lineStart = src.lastIndexOf('\n', call.start) + 1
@@ -182,6 +184,10 @@ for (const dir of ['src/components', 'src/hooks', 'src/lib']) {
         if (AI_META_FORWARDERS.has(file) && /\bmeta\b/.test(call.text)) continue
         if (file === 'src/lib/ai/client.ts') continue
         if (!/\bcategory\s*:/.test(call.text)) {
+          if (callee === 'chat') {
+            localMetaCategories ??= localChatMetaCategoryPositions(file, src)
+            if (localMetaCategories.has(call.start)) continue
+          }
           const line = src.slice(0, call.start).split('\n').length
           violations.push(`[④AI分类] ${file}:${line}: \`${callee}(...)\` 缺少 category meta,消耗统计与 AI manual 会漏记`)
         }

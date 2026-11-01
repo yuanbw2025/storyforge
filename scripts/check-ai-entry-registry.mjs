@@ -253,6 +253,11 @@ const scannedFiles = [
   'src/lib/ai/batch-detail-runner.ts',
   // Q07/Q08: step and node review/revision share this formal provider service.
   'src/lib/prose/quality-transport.ts',
+  // The independently-integrated Node producer must obey the same literal
+  // entry/category/physical-caller gate once its module exists. A registered
+  // entry without any real call remains an error below, including a missing module.
+  ...(fs.existsSync(path.join(root, 'src/lib/node-authoring/field-producer.ts'))
+    ? ['src/lib/node-authoring/field-producer.ts'] : []),
   'src/lib/ai-town/consultation.ts',
   // CHAT-01: source suggestions remain read-only; role profiles require explicit governed adoption.
   'src/lib/character-interaction/source-review-harness.ts',
