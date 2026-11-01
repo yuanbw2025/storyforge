@@ -7701,6 +7701,9 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
     const input = await sceneScriptsFixture()
     const taskKey = input.task.taskKey
     const createEpoch = async (epoch: number, previous?: Awaited<ReturnType<typeof readAgentRunV1>>) => {
+      const productionId = input.production.id
+      if (!productionId) throw new Error('P9恢复夹具必须绑定实际Production')
+      input.production.controlEpoch = epoch
       input.build.controlEpoch = epoch
       const authorResolution: ProductProductionAuthorResolutionEvidenceV1 | undefined = previous ? {
         commandId: `recover-${epoch}`, blockerKey: taskKey,
@@ -7715,7 +7718,10 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
           },
         },
       }) : '{}'
-      await db.productBuilds.update(input.build.id!, { controlEpoch: epoch, failureJson })
+      await db.transaction('rw', scopeTransactionTables(db.productProductions, db.productBuilds), async () => {
+        await db.productProductions.update(productionId, { controlEpoch: epoch })
+        await db.productBuilds.update(input.build.id!, { controlEpoch: epoch, failureJson })
+      })
       const baseContract = {
         version: 1, objective: '验证P9跨epoch恢复的原始片段与计费边界',
         workflowKind: 'long-running-resumable', runtimeBindingHash: CAPABILITY_HASH,
