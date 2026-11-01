@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useCodexStore } from '../../src/stores/codex'
@@ -97,16 +98,26 @@ describe('Codex author persistence acknowledgement', () => {
   })
   it('keeps a late create acknowledgement out of the next workspace cache', async () => {
     const a = await fixture('A')
-    const add = db.codexEntries.add.bind(db.codexEntries)
+    const transaction = db.transaction.bind(db)
     let release!: () => void
-    vi.spyOn(db.codexEntries, 'add').mockImplementationOnce(async row => {
+    // Delay the committed transaction acknowledgement, rather than suspending
+    // an IndexedDB transaction before it has issued its final write.
+    vi.spyOn(db, 'transaction').mockImplementationOnce((...args) => transaction(...args).then(async created => {
       await new Promise<void>(resolve => { release = resolve })
-      return add(row)
-    })
+      return created
+    }))
     const pending = useCodexStore.getState().addEntry({ projectId: a.scope.projectId, categoryId: a.categoryId, name: '迟到的新词条', summary: '', description: '', fields: '{}', refs: '{}', order: 1 })
     await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    const committed = await db.codexEntries.where('projectId').equals(a.scope.projectId)
+      .filter(row => row.name === '迟到的新词条').first()
+    if (!committed?.id) throw new Error('A 的新增词条必须在确认返回前已实际提交')
+    expect(committed).toMatchObject({ projectId: a.scope.projectId, worldId: a.scope.worldId, categoryId: a.categoryId, name: '迟到的新词条' })
     const b = await fixture('B')
+    expect(useCodexStore.getState().loadedScope).toEqual(b.scope)
+    expect(useCodexStore.getState().entries.map(row => row.id)).toEqual([b.id])
+    expect(await db.codexEntries.get(committed.id)).toEqual(committed)
     release(); const id = await pending
+    expect(id).toBe(committed.id)
     expect((await db.codexEntries.get(id))!.projectId).toBe(a.scope.projectId)
     expect(useCodexStore.getState().entries.map(row => row.id)).toEqual([b.id])
   })
@@ -122,10 +133,8 @@ describe('Codex author persistence acknowledgement', () => {
     const a = await fixture('A'), b = await fixture('B')
     const get = db.projects.get.bind(db.projects)
     let release!: () => void
-    vi.spyOn(db.projects, 'get').mockImplementationOnce(async key => {
-      await new Promise<void>(resolve => { release = resolve })
-      return get(key)
-    })
+    vi.spyOn(db.projects, 'get').mockImplementationOnce(key =>
+      Dexie.Promise.resolve(new Promise<void>(resolve => { release = resolve })).then(() => get(key)))
     const old = useCodexStore.getState().loadAll(a.scope)
     await useCodexStore.getState().loadAll(b.scope)
     release(); await old
