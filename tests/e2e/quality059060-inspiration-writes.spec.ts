@@ -196,14 +196,28 @@ test('059 real two-tab stale caches retain both UI additions and reload native c
   await attachTables(info, '059-concurrent-before-native', before)
   await attachTables(info, '059-concurrent-after-native', after)
   expect((await read(page, f.foreignScope)).row).toEqual(foreign)
+  const draftKey = `sf-inspiration-draft-v2-${f.scope.projectId}-${f.scope.worldId}:${f.scope.workId}`
+  const savedInput = () => page.evaluate(key => {
+    const raw = localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as { inspiration?: string }).inspiration ?? null : null
+  }, draftKey)
+  // Saving a fragment also retains the input draft. Wait for the actual
+  // debounce write so reload checks exercise the persisted-input path.
+  await expect.poll(async () => expected.includes((await savedInput()) ?? '')).toBe(true)
   await Promise.all([page.reload(), second.reload()])
+  const restoredInput = await savedInput()
+  expect(expected).toContain(restoredInput)
+  if (restoredInput == null) throw new Error('actual retained inspiration draft missing')
   await Promise.all([openLongformLeaf(page, '灵感反推'), openLongformLeaf(second, '灵感反推')])
   for (const tab of [page, second]) {
+    await expect(input(tab)).toHaveValue(restoredInput)
     await expect.poll(async () => (await read(tab, f.scope)).cache.fragments.map(item => item.text).sort()).toEqual(expected)
     expect((await read(tab, f.scope)).fragments.map(item => item.text).sort()).toEqual(expected)
     expect((await read(tab, f.foreignScope)).row).toEqual(foreign)
     for (const original of expected) {
-      const rendered = panel(tab).getByText(original, { exact: true })
+      const checkbox = panel(tab).getByRole('checkbox', { name: `选择灵感碎片 ${original.slice(0, 20)}`, exact: true })
+      await expect(checkbox).toHaveCount(1)
+      const rendered = checkbox.locator('..').getByText(original, { exact: true })
       await expect(rendered).toHaveCount(1)
       await expect(rendered).toBeVisible()
     }
