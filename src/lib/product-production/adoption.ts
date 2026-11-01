@@ -781,7 +781,10 @@ export async function prepareProductProductionAdoption(input: {
   scope: WorkspaceScope
   productionId: number
 }): Promise<PreparedProductProductionAdoptionV1> {
-  input = structuredClone(input)
+  input = structuredClone({
+    scope: { projectId: input.scope.projectId, worldId: input.scope.worldId, workId: input.scope.workId },
+    productionId: input.productionId,
+  })
   const scope = await resolveScope({ scope: input.scope })
   const verified = await inspectAdoption(scope, input.productionId)
   return {
@@ -1028,7 +1031,13 @@ export async function publishProductProductionBuild(input: {
   label?: string
   creatorReleaseAuthorization?: TextOpenWorldCreatorReleaseAuthorizationV1
 }): Promise<ProductProductionPublishReceiptV1> {
-  input = structuredClone(input)
+  input = structuredClone({
+    scope: { projectId: input.scope.projectId, worldId: input.scope.worldId, workId: input.scope.workId },
+    productionId: input.productionId,
+    command: input.command,
+    label: input.label,
+    creatorReleaseAuthorization: input.creatorReleaseAuthorization,
+  })
   const scope = await resolveScope({ scope: input.scope })
   const command = parseProductProductionCommandV1(input.command)
   if (command.type !== 'publish') fail('命令类型必须是 publish')
