@@ -14,6 +14,7 @@ import {
   defaultAiTownSettings,
   settingsFromAiTownDraft,
   type AiTownAuthoringDraftV1,
+  type AiTownAuthoringSettingsV1,
 } from "../lib/ai-town/authoring-contract";
 import {
   createAiTownDraft,
@@ -26,7 +27,9 @@ import {
 import { consultProductProductionStartV1 } from "../lib/product-production/service";
 import { listLocalWorldReferenceChoicesV1 } from "../lib/world-engine/reference-cache";
 import { updateWorkspace } from "../lib/workspace/works";
+import { scopeTransactionTables } from "../lib/workspace/scope";
 import { exportProjectJSON, downloadJSON } from "../lib/export/json-export";
+import { saveFile } from "../lib/platform/save-file";
 import { PRODUCT_NAVIGATION } from "../components/navigation/product-navigation";
 import {
   TOWN_PAGES,
@@ -59,6 +62,59 @@ type Row = {
   draft?: AiTownAuthoringDraftV1;
   productionId?: number;
 };
+type EditingBasis = {
+  scope: WorkspaceScope;
+  draftId: number;
+  revision: number;
+  workTitle: string;
+};
+type EditingFrame = {
+  key: string;
+  basis: EditingBasis | null;
+  target: Row | null;
+  title: string;
+  settings: AiTownAuthoringSettingsV1;
+  dirty: boolean;
+  sourceDirty: boolean;
+  selection: ProductProductionSourceSelectionV1 | null;
+  suggestionKey: string;
+};
+type LoadedEditingFrame = EditingFrame & {
+  basis: EditingBasis;
+  target: Row & { draft: AiTownAuthoringDraftV1 };
+};
+const scopeKey = (scope: WorkspaceScope) =>
+  `${scope.projectId}:${scope.worldId}:${scope.workId}`;
+const editingKey = (scope: WorkspaceScope, draftId: number) =>
+  `${scopeKey(scope)}:${draftId}`;
+function emptyFrame(key: string): EditingFrame {
+  return { key, basis: null, target: null, title: "", settings: defaultAiTownSettings(),
+    dirty: false, sourceDirty: false, selection: null, suggestionKey: "" };
+}
+async function readEditingFrame(input: WorkspaceScope): Promise<LoadedEditingFrame> {
+  const scope = { ...input };
+  return db.transaction("r", scopeTransactionTables(db.aiTownAuthoringDrafts), async () => {
+    const draft = await readAiTownDraft(scope);
+    const [project, work] = await Promise.all([
+      db.projects.get(scope.projectId), db.works.get(scope.workId),
+    ]);
+    if (!project || !work || draft.id == null) throw new Error("小镇方案已不存在，请重新选择作品");
+    return {
+      key: editingKey(scope, draft.id),
+      basis: { scope, draftId: draft.id, revision: draft.revision, workTitle: work.title },
+      target: { project, work, draft }, title: work.title,
+      settings: settingsFromAiTownDraft(draft), dirty: false, sourceDirty: false,
+      selection: draft.selectionJson ? JSON.parse(draft.selectionJson) : null,
+      suggestionKey: draft.suggestionKey ?? "",
+    };
+  });
+}
+function comparisonCopy(local: EditingFrame, committed: EditingFrame | null) {
+  const copy = (frame: EditingFrame) => ({ basis: frame.basis, title: frame.title,
+    settings: frame.settings, selection: frame.selection, suggestionKey: frame.suggestionKey });
+  return { version: 1, kind: "ai-town-edit-comparison", local: copy(local),
+    committed: committed ? copy(committed) : null };
+}
 export default function AiTownPage() {
   const { pageId = "library" } = useParams(),
     [params] = useSearchParams(),
@@ -76,7 +132,7 @@ export default function AiTownPage() {
     [innerMenu, setInnerMenu] = useState(false);
   const [settings, setSettings] = useState(defaultAiTownSettings),
     [title, setTitle] = useState(""),
-    [dirty, setDirty] = useState(false),
+    [dirty, setDirtyState] = useState(false),
     [search, setSearch] = useState("");
   const [worlds, setWorlds] = useState<
     Awaited<ReturnType<typeof listLocalWorldReferenceChoicesV1>>
@@ -87,17 +143,62 @@ export default function AiTownPage() {
     [selection, setSelection] =
       useState<ProductProductionSourceSelectionV1 | null>(null),
     [suggestionKey, setSuggestionKey] = useState("");
-  const [sourceDirty,setSourceDirty]=useState(false);
+  const [sourceDirty,setSourceDirtyState]=useState(false);
+  const [sourceReload, setSourceReload] = useState(0);
+  const [basis, setBasis] = useState<EditingBasis | null>(null);
+  const [editingTarget, setEditingTarget] = useState<Row | null>(null);
+  const [formKey, setFormKey] = useState("new");
+  const [committed, setCommitted] = useState<EditingFrame | null>(null);
+  const retained = useRef(new Map<string, EditingFrame>());
+  const [, refreshRetained] = useState(0);
+  const copySequence = useRef(0);
+  const editVersion = useRef(0), sourceVersion = useRef(0);
+  const mounted = useRef(false), readGeneration = useRef(0), actionGeneration = useRef(0);
+  const busyOperation = useRef<number | null>(null);
+  const setDirty = (value: boolean) => {
+    if (value) editVersion.current++;
+    setDirtyState(value);
+  };
+  const setSourceDirty = (value: boolean) => {
+    if (value) sourceVersion.current++;
+    setSourceDirtyState(value);
+  };
   const row = rows.find(
     (r) => r.project.id === projectId && (!workId || r.work.id === workId),
   );
   const rowProjectId = row?.project.id, rowWorldId = row?.work.worldId, rowWorkId = row?.work.id;
+  const hasDraft = Boolean(row?.draft);
   const scope = useMemo<WorkspaceScope | null>(() =>
     rowProjectId != null && rowWorldId != null && rowWorkId != null
       ? { projectId: rowProjectId, worldId: rowWorldId, workId: rowWorkId }
       : null,
     [rowProjectId, rowWorldId, rowWorkId],
   );
+  const viewKey = scope && row?.draft?.id != null
+    ? editingKey(scope, row.draft.id)
+    : projectId ? `unavailable:${projectId}:${workId ?? ""}` : "new";
+  const viewKeyRef = useRef(viewKey);
+  if (viewKeyRef.current !== viewKey) {
+    viewKeyRef.current = viewKey;
+    actionGeneration.current++;
+  }
+  const frameRef = useRef<EditingFrame>(emptyFrame("new"));
+  frameRef.current = { key: formKey, basis, target: editingTarget, title, settings, dirty,
+    sourceDirty, selection, suggestionKey };
+  const applyFrame = useCallback((value: EditingFrame, preserveSource = false) => {
+    const frame = preserveSource ? { ...value,
+      sourceDirty: frameRef.current.sourceDirty, selection: frameRef.current.selection,
+      suggestionKey: frameRef.current.suggestionKey } : value;
+    frameRef.current = frame;
+    setFormKey(frame.key); setBasis(frame.basis); setEditingTarget(frame.target);
+    setTitle(frame.title); setSettings(frame.settings); setDirtyState(frame.dirty);
+    setSourceDirtyState(frame.sourceDirty); setSelection(frame.selection);
+    setSuggestionKey(frame.suggestionKey);
+  }, []);
+  const formReady = formKey === viewKey && (viewKey === "new" || basis != null);
+  const hasRetainedEdits = [...retained.current.values()].some(frame => frame.dirty || frame.sourceDirty);
+  const conflict = (dirty || sourceDirty) && basis && committed?.key === formKey && committed.basis
+    && (committed.basis.revision > basis.revision || committed.basis.workTitle !== basis.workTitle);
   const productionId =
     Number(params.get("production")) ||
     row?.draft?.productionId ||
@@ -111,6 +212,11 @@ export default function AiTownPage() {
   }, [navigate, params, pageId, productionId]);
   const sessionId = Number(params.get("session")) || null;
   const content = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const readCounter = readGeneration, actionCounter = actionGeneration;
+    mounted.current = true;
+    return () => { mounted.current = false; readCounter.current++; actionCounter.current++; };
+  }, []);
   useEffect(() => {
     content.current?.scrollTo(0, 0);
   }, [pageId]);
@@ -153,30 +259,51 @@ export default function AiTownPage() {
     return () => sub.unsubscribe();
   }, []);
   useEffect(() => {
-    if (!dirty) {
-      setSettings(
-        row?.draft ? settingsFromAiTownDraft(row.draft) : defaultAiTownSettings(),
-      );
-      setTitle(row?.work.title ?? "");
+    let active = true;
+    const generation = ++readGeneration.current;
+    if (frameRef.current.key !== viewKey) {
+      const prior = frameRef.current;
+      if (prior.dirty || prior.sourceDirty) retained.current.set(prior.key, structuredClone(prior));
+      applyFrame(retained.current.get(viewKey) ?? emptyFrame(viewKey));
+      setCommitted(null); setBusy(false); setError(""); setNotice("");
     }
-  }, [row?.work.id, row?.draft?.revision, dirty]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (scope && hasDraft) {
+      void readEditingFrame(scope).then(next => {
+        if (!active || !mounted.current || viewKeyRef.current !== viewKey
+          || readGeneration.current !== generation) return;
+        const current = frameRef.current;
+        if (current.key === viewKey && current.basis
+          && current.basis.revision > next.basis.revision) return;
+        setCommitted(next);
+        if (current.key !== viewKey || current.dirty || current.sourceDirty) return;
+        applyFrame(next, true);
+      }).catch(cause => {
+        if (active && mounted.current && viewKeyRef.current === viewKey
+          && readGeneration.current === generation) setError(cause instanceof Error ? cause.message : String(cause));
+      });
+    }
+    return () => { active = false; };
+  }, [viewKey, scope, hasDraft, row?.draft?.revision, row?.draft?.id, row?.work.title, applyFrame]);
   useEffect(() => {
+    let active = true;
     void listLocalWorldReferenceChoicesV1()
-      .then(setWorlds)
-      .catch((e) => setError(String(e)));
-  }, [pageId]);
+      .then(value => { if (active && viewKeyRef.current === viewKey) setWorlds(value); })
+      .catch(e => { if (active && viewKeyRef.current === viewKey) setError(String(e)); });
+    return () => { active = false; };
+  }, [pageId, viewKey]);
   useEffect(() => {
     let active = true;
     setSources(null);
-    setSelection(null);
+    if (!frameRef.current.sourceDirty) setSelection(null);
     if (scope && row?.draft?.worldReleaseId)
       void consultProductProductionStartV1({
         scope,
         worldReleaseId: row.draft.worldReleaseId,
       })
         .then((v) => {
-          if (!active) return;
+          if (!active || viewKeyRef.current !== viewKey) return;
           setSources(v);
+          if (frameRef.current.sourceDirty) return;
           const key =
             row.draft?.suggestionKey ??
             v.suggestions.find((s) =>
@@ -192,7 +319,7 @@ export default function AiTownPage() {
           );
         })
         .catch((e) => {
-          if (active) setError(String(e));
+          if (active && viewKeyRef.current === viewKey) setError(String(e));
         });
     return () => {
       active = false;
@@ -202,71 +329,176 @@ export default function AiTownPage() {
     row?.draft?.worldReleaseId,
     row?.draft?.selectionJson,
     row?.draft?.suggestionKey,
+    viewKey,
+    sourceReload,
   ]);
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
-      if (dirty || sourceDirty) {
+      if (dirty || sourceDirty || hasRetainedEdits) {
         e.preventDefault();
         e.returnValue = "";
       }
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty,sourceDirty]);
+  }, [dirty,sourceDirty,hasRetainedEdits]);
   const path = (id: string, target = row, extra = "") =>
-    `/town/${id}${target ? `?project=${target.project.id}&work=${target.work.id}${target === row && productionId && !extra.includes("production=") ? `&production=${productionId}` : ""}${extra}` : ""}`;
+    `/town/${id}${target ? `?project=${target.project.id}&work=${target.work.id}${target.project.id === row?.project.id && target.work.id === row?.work.id && productionId && !extra.includes("production=") ? `&production=${productionId}` : ""}${extra}` : ""}`;
   const run = async (action: () => Promise<void>) => {
-    if (busy) return;
+    if (busyOperation.current === actionGeneration.current) return;
+    const origin = viewKeyRef.current, generation = ++actionGeneration.current;
+    busyOperation.current = generation;
+    const ownsUi = () => mounted.current && viewKeyRef.current === origin
+      && actionGeneration.current === generation;
     setBusy(true);
     setError("");
     setNotice("");
     try {
       await action();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (ownsUi()) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(false);
+      if (ownsUi()) { busyOperation.current = null; setBusy(false); }
     }
+  };
+  const captureEditingFrame = (targetScope?: WorkspaceScope) => {
+    const frame = frameRef.current;
+    if (frame.key !== viewKeyRef.current || (!frame.basis && frame.key !== "new"))
+      throw new Error("作品编辑基准尚未载入，请等待当前作品读取完成");
+    if (targetScope && (!frame.basis || scopeKey(frame.basis.scope) !== scopeKey(targetScope)))
+      throw new Error("编辑基准不属于当前作品；本地输入仍保留，请重新核对作品");
+    return structuredClone(frame);
+  };
+  const currentAction = () => {
+    const key = viewKeyRef.current, generation = actionGeneration.current;
+    return () => mounted.current && viewKeyRef.current === key && actionGeneration.current === generation;
+  };
+  const rememberCommitted = async (scope: WorkspaceScope, isCurrent: () => boolean) => {
+    try {
+      const latest = await readEditingFrame(scope);
+      if (isCurrent()) setCommitted({ ...latest, key: frameRef.current.key });
+    } catch { /* Keep the original save failure and the complete local buffer. */ }
+  };
+  const acknowledgeRevision = (next: AiTownAuthoringDraftV1, captured: EditingFrame,
+    isCurrent: () => boolean, savedEdits?: number, savedSource?: number, workTitle = captured.basis?.workTitle) => {
+    if (!isCurrent()) throw new Error("操作已在原作品完成；当前页面已切换，请在原作品核对结果");
+    const current = frameRef.current;
+    if (!captured.basis || current.key !== captured.key || next.id !== captured.basis.draftId)
+      throw new Error("保存结果与本次编辑基准不一致，本地输入仍保留");
+    const nextTitle = workTitle ?? captured.basis.workTitle;
+    const updated = { ...current,
+      basis: { ...captured.basis, revision: next.revision, workTitle: nextTitle },
+      target: current.target ? { ...current.target, draft: next,
+        work: { ...current.target.work, title: nextTitle } } : null,
+      settings: savedEdits !== undefined && editVersion.current === savedEdits
+        ? settingsFromAiTownDraft(next) : current.settings,
+      title: savedEdits !== undefined && editVersion.current === savedEdits ? nextTitle : current.title,
+      selection: savedSource !== undefined && sourceVersion.current === savedSource
+        ? next.selectionJson ? JSON.parse(next.selectionJson) : null : current.selection,
+      suggestionKey: savedSource !== undefined && sourceVersion.current === savedSource
+        ? next.suggestionKey ?? "" : current.suggestionKey,
+      dirty: savedEdits !== undefined && editVersion.current === savedEdits ? false : current.dirty,
+      sourceDirty: savedSource !== undefined && sourceVersion.current === savedSource ? false : current.sourceDirty };
+    applyFrame(updated);
+    setCommitted({ ...updated, settings: settingsFromAiTownDraft(next), title: nextTitle,
+      dirty: false, sourceDirty: false,
+      selection: next.selectionJson ? JSON.parse(next.selectionJson) : null,
+      suggestionKey: next.suggestionKey ?? "" });
+    if (!updated.dirty && !updated.sourceDirty) retained.current.delete(updated.key);
   };
   const save = async () => {
     if (loading || (projectId && !row)) throw new Error("作品正在加载或已不存在，请从作品库重新选择");
-    if (row && scope && row.draft) {
-      await saveAiTownDraft(
-        scope,
-        row.draft.revision,
-        settings,
-        title || "未命名小镇",
-      );
-      setDirty(false);
-      return row;
+    const captured = captureEditingFrame(), isCurrent = currentAction();
+    const savedEdits = editVersion.current;
+    if (captured.basis && captured.target) {
+      const writtenTitle = captured.title || "未命名小镇";
+      try {
+        const next = await saveAiTownDraft(captured.basis.scope, captured.basis.revision,
+          captured.settings, writtenTitle, { expectedWorkTitle: captured.basis.workTitle });
+        acknowledgeRevision(next, captured, isCurrent, savedEdits, undefined, writtenTitle.trim());
+        return frameRef.current.target!;
+      } catch (cause) {
+        await rememberCommitted(captured.basis.scope, isCurrent);
+        throw cause;
+      }
     }
     if (row)
       throw new Error(
         "此作品已有旧制作记录，请在制作流程中继续；新配置请从作品库新建",
       );
-    const made = await createAiTownDraft(title || "未命名小镇", settings);
-    const target = { project: made.project, work: made.work };
-    setDirty(false);
+    const made = await createAiTownDraft(captured.title || "未命名小镇", captured.settings);
+    const fresh = await readEditingFrame(made.scope);
+    if (!isCurrent()) throw new Error("新作品已保存；当前页面已切换，请从作品库打开原作品");
+    const target = { project: made.project, work: made.work, draft: fresh.target.draft };
+    const initialBasis = { scope: { ...made.scope }, draftId: fresh.basis.draftId,
+      revision: 0, workTitle: made.work.title };
+    const changed = fresh.basis.revision !== 0 || fresh.title !== made.work.title;
+    applyFrame({ ...frameRef.current, basis: initialBasis, target,
+      dirty: changed || editVersion.current !== savedEdits });
+    setCommitted({ ...fresh, key: captured.key });
+    if (changed) throw new Error("新作品已在其他页面修改；本地输入仍保留，请先下载比较再决定");
     return target;
   };
-  const saveSource=async()=>{if(!sourceDirty)return;if(!scope||!row?.draft||!selection)throw new Error('请先选择世界版本');await saveAiTownSourceSelection(scope,row.draft.revision,suggestionKey,selection);setSourceDirty(false);};
+  const saveSource = async () => {
+    if (!frameRef.current.sourceDirty) return;
+    const captured = captureEditingFrame(scope ?? undefined), isCurrent = currentAction();
+    if (!captured.basis || !captured.selection) throw new Error("请先选择世界版本");
+    const savedSource = sourceVersion.current;
+    const next = await saveAiTownSourceSelection(captured.basis.scope, captured.basis.revision,
+      captured.suggestionKey, captured.selection);
+    acknowledgeRevision(next, captured, isCurrent, undefined, savedSource);
+  };
+  const downloadComparison = (input = frameRef.current) => void run(async () => {
+    const local = structuredClone(input), isCurrent = currentAction();
+    let latest: EditingFrame | null = null, unavailable = "";
+    if (local.basis) {
+      try { latest = await readEditingFrame(local.basis.scope); }
+      catch (cause) { unavailable = cause instanceof Error ? cause.message : String(cause); }
+    }
+    if (!isCurrent()) return;
+    await saveFile(new Blob([JSON.stringify({ ...comparisonCopy(local, latest),
+      committedReadError: unavailable || null }, null, 2)], { type: "application/json;charset=utf-8" }),
+      `${local.title || "AI小镇"}-未保存方案比较.json`);
+  });
+  const loadCommitted = () => void run(async () => {
+    const local = captureEditingFrame(), isCurrent = currentAction();
+    if (!local.basis) throw new Error("此方案尚无已提交版本，本地输入仍保留");
+    const latest = await readEditingFrame(local.basis.scope);
+    if (!isCurrent()) return;
+    retained.current.delete(local.key);
+    retained.current.set(`copy:${++copySequence.current}`, local);
+    const loaded = { ...latest, key: local.key };
+    applyFrame(loaded); setCommitted(loaded);
+    setSourceReload(value => value + 1);
+    setNotice("已载入已提交版本；原本地输入仍保留为内存副本，可下载后自行对照修改。尚未写入任何新方案。");
+  });
   const leave = (url: string) => void run(async () => {
+    const isCurrent = currentAction();
     await flushPendingEditsV1();
+    if (!isCurrent()) return;
     await saveSource();
-    if (dirty) await save();
+    if (!isCurrent()) return;
+    if (frameRef.current.dirty) await save();
+    if (!isCurrent()) return;
+    if ([...retained.current.values()].some(frame => frame.dirty || frame.sourceDirty))
+      throw new Error("仍有保留的未保存输入。请先下载比较并明确移除内存副本，或返回原作品处理，再离开 AI 小镇。");
     navigate(url);
   });
-  const go = (id: string) =>
+  const go = (id: string, selectedTarget?: Row) =>
     void run(async () => {
+      const isCurrent = currentAction();
       await flushPendingEditsV1();
+      if (!isCurrent()) return;
       await saveSource();
-      const target = dirty ? await save() : row;
+      if (!isCurrent()) return;
+      const target = frameRef.current.dirty ? await save() : row;
+      if (!isCurrent()) return;
       setMenu(false);
       setInnerMenu(false);
       navigate(
         path(
           id,
-          target,
+          selectedTarget ?? target,
           sessionId && TOWN_PLAY_PAGES.some((p) => p[0] === id)
             ? `&session=${sessionId}`
             : "",
@@ -288,19 +520,29 @@ export default function AiTownPage() {
   );
   const compile = () =>
     void run(async () => {
-      const target = dirty || !row ? await save() : row;
+      const isCurrent = currentAction();
+      await saveSource();
+      if (!isCurrent()) return;
+      const target = frameRef.current.dirty || !row ? await save() : row;
       const targetScope = {
         projectId: target.project.id!,
         worldId: target.work.worldId,
         workId: target.work.id!,
       };
-      const latest = await readAiTownDraft(targetScope);
-      if (!latest.worldReleaseId) {
+      const captured = captureEditingFrame(targetScope);
+      const latest = await readEditingFrame(targetScope);
+      if (!isCurrent()) return;
+      if (!captured.basis || latest.basis.revision !== captured.basis.revision
+        || latest.basis.workTitle !== captured.basis.workTitle)
+        throw new Error("方案已在其他页面修改，本地输入仍保留，请先比较再生成审查方案");
+      if (!latest.target.draft.worldReleaseId) {
         navigate(path("confirm", target));
         throw new Error("需要一个世界引擎；配置已保存，请到世界引擎页选择版本");
       }
-      const id = await prepareAiTownBrief(targetScope, latest.revision);
-      navigate(path("production", target, `&production=${id}`));
+      const prepared = await prepareAiTownBrief(targetScope, captured.basis.revision, { includeSavedDraft: true });
+      if (!isCurrent()) return;
+      acknowledgeRevision(prepared.draft, captured, isCurrent);
+      navigate(path("production", target, `&production=${prepared.productionId}`));
       setNotice("审查方案已保存，核对后明确授权才会开始制作。");
     });
   let handoffId: number | null = null,
@@ -366,14 +608,7 @@ export default function AiTownPage() {
             </button>
           ))}
           <button
-            onClick={() =>
-              void run(async () => {
-                await flushPendingEditsV1();
-                await saveSource();
-                if (dirty) await save();
-                navigate("/home/settings");
-              })
-            }
+            onClick={() => leave("/home/settings")}
           >
             通用设置
           </button>
@@ -461,6 +696,38 @@ export default function AiTownPage() {
               </p>
             )}
             {notice && <p role="status">{notice}</p>}
+            {conflict && (
+              <section className="lf-paper" data-testid="town-edit-conflict">
+                <h3>本地输入与已提交方案不同</h3>
+                <p>本地输入仍完整保留。保存只使用载入时的版本，不会自动覆盖其他页面的修改。</p>
+                <details><summary>比较本地与已提交的完整方案</summary>
+                  <h4>本地未保存方案</h4>
+                  <pre>{JSON.stringify(comparisonCopy(frameRef.current, committed).local, null, 2)}</pre>
+                  <h4>已提交方案</h4>
+                  <pre>{JSON.stringify(comparisonCopy(frameRef.current, committed).committed, null, 2)}</pre>
+                </details>
+                <button className="lf-action" disabled={busy} onClick={() => downloadComparison()}>
+                  下载本地与已提交方案比较
+                </button>
+                <button className="lf-action" disabled={busy} onClick={loadCommitted}>
+                  保留本地副本，载入已提交版本
+                </button>
+              </section>
+            )}
+            {retained.current.size > 0 && (
+              <details className="lf-paper" data-testid="town-retained-edits">
+                <summary>保留的未保存输入（{retained.current.size}）</summary>
+                {[...retained.current.entries()].map(([key, frame]) => <article key={key}>
+                  <h4>{frame.title || frame.basis?.workTitle || "未命名小镇"}</h4>
+                  <p>仅保存在当前页面内存中；请下载后再关闭页面。没有写入其他作品。</p>
+                  <button className="lf-action" disabled={busy} onClick={() => downloadComparison(frame)}>下载此本地副本与已提交方案</button>
+                  <button className="lf-action" disabled={busy} onClick={() => go("vision", frame.target ?? undefined)}>打开此作品</button>
+                  <button className="lf-action" disabled={busy} onClick={() => {
+                    retained.current.delete(key); refreshRetained(value => value + 1);
+                  }}>仅移除此内存副本</button>
+                </article>)}
+              </details>
+            )}
             {loading ? (
               <p>读取AI 小镇作品…</p>
             ) : (
@@ -472,9 +739,14 @@ export default function AiTownPage() {
                         <button
                           className="lf-action lf-action-primary"
                           onClick={() => {
-                            setDirty(false);
-                            setSettings(defaultAiTownSettings());
-                            setTitle("");
+                            const prior = frameRef.current;
+                            if (prior.dirty || prior.sourceDirty) retained.current.set(
+                              prior.key === "new" ? `copy:${++copySequence.current}` : prior.key,
+                              structuredClone(prior),
+                            );
+                            actionGeneration.current++; busyOperation.current = null;
+                            applyFrame(emptyFrame("new")); setCommitted(null);
+                            setBusy(false); setError(""); setNotice("");
                             navigate("/town/vision");
                           }}
                         >
@@ -535,7 +807,7 @@ export default function AiTownPage() {
                         保存配置不会调用模型或开始制作。未选择世界时也可以填写。
                       </p>
                       <fieldset
-                        disabled={busy || Boolean(row && !row.draft)}
+                        disabled={busy || !formReady || Boolean(row && !row.draft)}
                         className="avg-form"
                       >
                         <label>
@@ -556,7 +828,9 @@ export default function AiTownPage() {
                             className="lf-action lf-action-primary"
                             onClick={() =>
                               void run(async () => {
+                                const isCurrent = currentAction();
                                 const target = await save();
+                                if (!isCurrent()) return;
                                 navigate(path(page[0], target), {
                                   replace: true,
                                 });
@@ -634,17 +908,22 @@ export default function AiTownPage() {
                             }
                             onClick={() =>
                               void run(async () => {
+                                const isCurrent = currentAction();
                                 const target =
                                   dirty || !row ? await save() : row;
+                                if (!isCurrent()) return;
                                 const sc = {
                                   projectId: target.project.id!,
                                   workId: target.work.id!,
                                   worldId: target.work.worldId,
                                 };
-                                const d = await readAiTownDraft(sc);
-                                await selectAiTownWorld(sc, d.revision, w.id);
+                                const captured = captureEditingFrame(sc);
+                                if (!captured.basis) throw new Error("请先保存当前方案");
+                                const savedSource = sourceVersion.current;
+                                const next = await selectAiTownWorld(sc, captured.basis.revision, w.id);
+                                acknowledgeRevision(next, captured, isCurrent, undefined, savedSource);
                                 navigate(path("source", target));
-                                setSourceDirty(false);setNotice("世界版本已选择");
+                                setNotice("世界版本已选择");
                               })
                             }
                           >
@@ -738,13 +1017,9 @@ export default function AiTownPage() {
                               className="lf-action"
                               onClick={() =>
                                 void run(async () => {
-                                  await saveAiTownSourceSelection(
-                                    scope,
-                                    row.draft!.revision,
-                                    suggestionKey,
-                                    selection,
-                                  );
-                                  setSourceDirty(false);setNotice("出口范围已保存");
+                                  const isCurrent = currentAction();
+                                  await saveSource();
+                                  if (isCurrent()) setNotice("出口范围已保存");
                                 })
                               }
                             >
@@ -756,8 +1031,25 @@ export default function AiTownPage() {
                     )}
                   </>
                 ) : page[0] === "agent" ? (
-                  <><button className="lf-action" disabled={busy} onClick={()=>void run(async()=>{const target=await save();navigate(path('agent',target));setNotice('制作方案已保存');})}>保存制作方案</button>
-                  <Proposal key={row?.work.id ?? 'new'} scope={scope} draft={row?.draft} settings={settings} onSource={()=>go('source')} onConfirm={value=>void run(async()=>{if(!scope||!row?.draft)throw new Error('请先保存方案');await saveAiTownDraft(scope,row.draft.revision,value,title||row.work.title);setNotice('候选已回填，可在各配置页继续编辑');})}/></>
+                  <><button className="lf-action" disabled={busy || !formReady} onClick={()=>void run(async()=>{
+                    const isCurrent = currentAction(), target = await save();
+                    if (!isCurrent()) return;
+                    navigate(path('agent',target));setNotice('制作方案已保存');
+                  })}>保存制作方案</button>
+                  <Proposal key={row?.work.id ?? 'new'} scope={scope} draft={row?.draft} settings={settings} onSource={()=>go('source')} onConfirm={value=>void run(async()=>{
+                    const captured = captureEditingFrame(scope ?? undefined), isCurrent = currentAction();
+                    if (!captured.basis) throw new Error('请先保存方案');
+                    const savedEdits = editVersion.current, writtenTitle = captured.title || captured.basis.workTitle;
+                    try {
+                      const next = await saveAiTownDraft(captured.basis.scope, captured.basis.revision,
+                        structuredClone(value), writtenTitle, { expectedWorkTitle: captured.basis.workTitle });
+                      acknowledgeRevision(next, captured, isCurrent, savedEdits, undefined, writtenTitle.trim());
+                      setNotice('候选已回填，可在各配置页继续编辑');
+                    } catch (cause) {
+                      await rememberCommitted(captured.basis.scope, isCurrent);
+                      throw cause;
+                    }
+                  })}/></>
                 ) : ["production", "review", "release"].includes(page[0]) ? (
                   <>
                     {scope && productionId ? (
@@ -783,13 +1075,14 @@ export default function AiTownPage() {
                               className="lf-action"
                               onClick={() =>
                                 void run(async () => {
-                                  await updateWorkspace(scope.projectId, {
+                                  const isCurrent = currentAction(), project = row!.project;
+                                  await updateWorkspace(project.id!, {
                                     productPlatformOptIns: {
-                                      ...row?.project.productPlatformOptIns,
+                                      ...project.productPlatformOptIns,
                                       productProductionV3: true,
                                     },
                                   });
-                                  setNotice("已启用自动制作，仍需单独授权开始");
+                                  if (isCurrent()) setNotice("已启用自动制作，仍需单独授权开始");
                                 })
                               }
                             >
