@@ -1,4 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { db } from '../../src/lib/db/schema'
+import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
+import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
+import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
+import { assertTextOpenWorldBuildNewWorkV1 } from '../../src/lib/open-world/source-admission'
+import { seedCurrentProductWorld } from '../helpers/current-product-world'
 import {
   createTextOpenWorldRegionNarrativePacksExecutorV1,
   validateTextOpenWorldRegionNarrativePacksV1,
@@ -236,10 +242,64 @@ function bindingReceipt(requirementKey: string) {
   }
 }
 
+// Keep the original synthetic P7 codec contexts and golden Artifact bytes.
+// Only establish real WorldRelease-based admission through the same compact
+// public generic production commands used by the stage-executor domain suite;
+// this does not execute P0-P6 or prove a complete official production DAG.
+async function authorizedWorldExecution() {
+  const owned = await seedCurrentProductWorld('P7 Knowledge contract world')
+  const worldReleaseId = owned.release.id
+  if (!worldReleaseId) throw new Error('P7测试世界必须已正式封存')
+  const suggestions = await suggestProductStartingPoints({ scope: owned.scope, worldReleaseId })
+  const start = suggestions.suggestions.find(item => item.kind === 'character')
+  if (!start) throw new Error('P7测试封存世界缺少角色起点')
+  const draft = await draftProductProductionBriefV3({
+    scope: owned.scope, worldReleaseId, suggestionKey: start.suggestionKey,
+    productType: 'text-open-world', scale: 'chapter', visualLevel: 'key-scenes', audioLevel: 'none',
+    qualityProfile: 'prototype', playerRole: '扮演来信调查者澜砂', openingSituation: '从封存世界的潮门危机开始调查。',
+    coreExperience: ['地区探索'], requiredFacts: ['保持封存世界的潮汐规则'],
+    forbiddenChanges: ['不得改写来源事实'], contentBoundaries: ['不生成露骨内容'], tone: ['成长冒险'],
+  })
+  draft.scale.targetEndingCount = 2
+  const brief = parseProductProductionBriefV3(draft)
+  const setupNow = Date.now()
+  const created = await executeProductProductionCommand({ scope: owned.scope, now: setupNow, command: {
+    type: 'create-intent', commandId: `${PRODUCT_KEY}.intent`, productionKey: PRODUCT_KEY,
+    productType: 'text-open-world', worldReleaseId, userText: '核验P7 Knowledge合同兼容性',
+  } })
+  if (!created.ok || !created.productionId) throw new Error('P7测试Production创建失败')
+  const saved = await executeProductProductionCommand({ scope: owned.scope, productionId: created.productionId,
+    now: setupNow + 1, command: {
+      type: 'save-brief-revision', commandId: `${PRODUCT_KEY}.brief`, expectedStateRevision: 0,
+      parentRevision: null, brief,
+    } })
+  if (!saved.ok || typeof saved.result.briefHash !== 'string') throw new Error('P7测试Brief冻结失败')
+  const authorized = await executeProductProductionCommand({ scope: owned.scope, productionId: created.productionId,
+    now: setupNow + 2, command: {
+      type: 'authorize-start', commandId: `${PRODUCT_KEY}.start`, expectedStateRevision: 1,
+      briefRevision: 1, briefHash: saved.result.briefHash, authorizationNonce: `${PRODUCT_KEY}.author-click`,
+    } })
+  if (!authorized.ok) throw new Error('P7测试Build授权失败')
+  const production = await db.productProductions.get(created.productionId)
+  const build = await db.productBuilds.where('[productionId+buildNumber]').equals([created.productionId, 1]).first()
+  const briefRow = await db.productProductionBriefs.where('[productionId+revision]').equals([created.productionId, 1]).first()
+  if (!production?.id || !build?.id || !briefRow?.id) throw new Error('P7测试授权记录必须已实际入库')
+  if (briefRow.sourceWorldReleaseId !== worldReleaseId || briefRow.sourceWorldContentHash !== owned.release.contentHash) {
+    throw new Error('P7测试必须绑定本次真实封存世界版本')
+  }
+  await assertTextOpenWorldBuildNewWorkV1({ scope: owned.scope, productionId: production.id,
+    buildId: build.id, operation: 'P7 Knowledge测试输入核验' })
+  return { scope: owned.scope, productionId: production.id, buildId: build.id,
+    buildNumber: build.buildNumber, controlEpoch: build.controlEpoch, planHash: build.planHash }
+}
+
+beforeEach(async () => { await db.delete(); await db.open() })
+
 async function executeDraft(
   context: TextOpenWorldRegionNarrativePacksInputContextV1,
   draft: Record<string, unknown>,
 ) {
+  const admission = await authorizedWorldExecution()
   const requirementKey = 'capability.text'
   const executor = createTextOpenWorldRegionNarrativePacksExecutorV1({
     now: () => NOW,
@@ -250,12 +310,7 @@ async function executeDraft(
     }),
   })
   return executor({
-    scope: { projectId: 1, worldId: 1, workId: 1 },
-    productionId: 1,
-    buildId: 1,
-    buildNumber: 1,
-    controlEpoch: 1,
-    planHash: 'e'.repeat(64),
+    ...admission,
     task: {
       taskKey: 'p7.region-narrative-packs',
       skillId: 'text-open-world.production.region-narrative-packs.v1',
