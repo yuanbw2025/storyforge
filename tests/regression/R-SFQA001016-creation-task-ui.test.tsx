@@ -137,7 +137,7 @@ describe('SFQA-001/016 · actual independent creation task interfaces', () => {
       await waitFor(() => expect(host.querySelector(`[data-testid="${taskTestId(medium, before.run.id)}"]`)?.textContent).toContain('原请求结果未确认'))
       const task = host.querySelector(`[data-testid="${taskTestId(medium, before.run.id)}"]`)!
       await act(async () => { const stop = button(task, '停止等待'); stop.click(); stop.click() })
-      await waitFor(() => expect(task.textContent).toContain('已停止等待'))
+      await waitFor(() => expect(host.querySelector(`[data-testid="${taskTestId(medium, before.run.id)}"]`)?.textContent).toContain('已停止等待'))
       expect(await taskControls(item.scope)).toHaveLength(1)
       expect(await currentRun(item.scope)).toEqual(before)
       await remount(medium, item)
@@ -178,7 +178,7 @@ describe('SFQA-001/016 · actual independent creation task interfaces', () => {
         await waitFor(() => expect(host.querySelector(`[data-testid="${taskTestId(medium, before.run.id)}"]`)).toBeTruthy())
         const task = host.querySelector(`[data-testid="${taskTestId(medium, before.run.id)}"]`)!
         await act(async () => button(task, '停止等待').click())
-        await waitFor(() => expect(task.textContent).toContain('已停止等待'))
+        await waitFor(() => expect(host.querySelector(`[data-testid="${taskTestId(medium, before.run.id)}"]`)?.textContent).toContain('已停止等待'))
         expect(await currentRun(item.scope)).toEqual(before)
       } finally { response.resolve() }
       const generated = await result
