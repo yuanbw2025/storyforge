@@ -3,7 +3,7 @@
  */
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
-import type { StateCard, StateCategory, StateDiffItem, StateField } from '../lib/types'
+import type { StateCard, StateCategory, StateDiffItem, StateField, WorkspaceScope } from '../lib/types'
 import { readStateCardFields, stringifyFields } from '../lib/types/state-card'
 import { adopt, hashAdoptRecordFieldsV1 } from '../lib/registry/adopt'
 import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
@@ -13,12 +13,13 @@ const now = () => Date.now()
 interface StateCardStore {
   cards: StateCard[]
   loading: boolean
+  loadedScope: WorkspaceScope | null
 
   /** 加载项目的全部状态卡 */
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
 
   /** 新增一张状态卡 */
-  addCard: (card: Omit<StateCard, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
+  addCard: (card: Omit<StateCard, 'id' | 'createdAt' | 'updatedAt'>, options?: { scope?: WorkspaceScopeLike }) => Promise<number>
 
   /** 更新一张状态卡 */
   updateCard: (id: number, data: Partial<StateCard>, options?: { expectedFields?: unknown; scope?: WorkspaceScopeLike }) => Promise<void>
@@ -43,29 +44,39 @@ interface StateCardStore {
 export const useStateCardStore = create<StateCardStore>((set, get) => ({
   cards: [],
   loading: false,
+  loadedScope: null,
 
   loadAll: async (scopeInput: WorkspaceScopeLike) => {
     set({ loading: true })
     try {
-      const cards = await readOwnedRows<StateCard>(await resolveScopeLike(scopeInput), 'stateCards', { owner: 'work' })
-      set({ cards, loading: false })
+      const scope = await resolveScopeLike(scopeInput)
+      const cards = await readOwnedRows<StateCard>(scope, 'stateCards', { owner: 'work' })
+      set({ cards, loading: false, loadedScope: scope })
     } catch (err) {
       console.error('[StateCard] loadAll 失败:', err)
       set({ loading: false })
     }
   },
 
-  addCard: async (card) => {
+  addCard: async (card, options) => {
     try {
       readStateCardFields(card)
+      const scope = await resolveScopeLike(options?.scope ?? card.projectId)
+      if (scope.projectId !== card.projectId) throw new Error('状态卡与指定作品不属于同一工作区，未保存。')
       const newCard = stampNewRecord(
-        await resolveScopeLike(card.projectId),
+        scope,
         'stateCards',
         { ...card, createdAt: now(), updatedAt: now() } as StateCard,
         { owner: 'work' },
       ) as StateCard
       const id = await db.stateCards.add(newCard) as number
-      set({ cards: [...get().cards, { ...newCard, id }] })
+      set(state => {
+        const view = state.loadedScope
+        const matchingView = view != null && view.projectId === scope.projectId
+          && view.worldId === scope.worldId && view.workId === scope.workId
+        return matchingView || (view == null && options?.scope == null)
+          ? { cards: [...state.cards, { ...newCard, id }] } : state
+      })
       console.log('[StateCard] 新增:', card.entityName, id)
       return id
     } catch (err) {
@@ -162,7 +173,7 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
         })),
       })
       const refreshed = await readOwnedRows<StateCard>(scope, 'stateCards', { owner: 'work' })
-      set({ cards: refreshed })
+      set({ cards: refreshed, loadedScope: scope })
       console.log(`[StateCard] applyDiffs: ${validDiffs.length} 条角色变更已应用（实体 ${byEntity.size}，写入 ${result.written.length}）`)
     } catch (err) {
       console.error('[StateCard] applyDiffs 失败:', err)
