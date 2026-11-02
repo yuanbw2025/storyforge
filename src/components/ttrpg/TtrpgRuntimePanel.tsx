@@ -64,8 +64,9 @@ export default function TtrpgRuntimePanel(props: {
 
   useEffect(() => {
     if (store.loading || sessions.some(session => session.id === store.selectedSessionId)) return
-    void store.select(sessions[0]?.id ?? null)
-  }, [sessions, store])
+    const nextSessionId = sessions[0]?.id ?? null
+    if (store.selectedSessionId !== nextSessionId) void store.select(nextSessionId)
+  }, [sessions, store.loading, store.selectedSessionId, store.select])
 
   const remove = async () => {
     if (!selected?.id || busy) return
