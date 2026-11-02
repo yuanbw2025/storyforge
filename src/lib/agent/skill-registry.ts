@@ -3993,7 +3993,7 @@ export const AGENT_SKILLS = [
     executionMode: 'product-production', contextTaskKind: 'agent-outline', readToolNames: [],
     contextSourceKeys: ['ai-town.authoring'], optionalContextSourceKeys: [],
     inputPolicy: productProductionInputPolicy(['ai-town.authoring']), contextCompression: compressionPolicy(['ai-town.authoring']),
-    maxOutputTokens: 8000, writeTargets: [], lastVerifiedAt: '2026-09-15', regressionTests: ['R-AITOWN6-consultation'],
+    maxOutputTokens: 8000, writeTargets: [], lastVerifiedAt: '2026-10-31', regressionTests: ['R-AITOWN6-consultation'],
   },
   {
     version: 1, id: 'avg.consult.v1', agentId: 'outline', defaultForAgent: false,
@@ -4001,15 +4001,7 @@ export const AGENT_SKILLS = [
     executionMode: 'product-production', contextTaskKind: 'agent-outline', readToolNames: [],
     contextSourceKeys: ['avg.authoring'], optionalContextSourceKeys: [],
     inputPolicy: productProductionInputPolicy(['avg.authoring']), contextCompression: compressionPolicy(['avg.authoring']),
-    maxOutputTokens: 8000, writeTargets: [], lastVerifiedAt: '2026-09-15', regressionTests: ['R-AVG4-consultation'],
-  },
-  {
-    version: 1, id: 'chat.consult.v1', agentId: 'outline', defaultForAgent: false,
-    label: '角色聊天 制作方案会谈', owner: 'outline-agent', promptVersion: 'chat-consult-v2',
-    executionMode: 'product-production', contextTaskKind: 'agent-outline', readToolNames: [],
-    contextSourceKeys: ['chat.authoring'], optionalContextSourceKeys: [],
-    inputPolicy: productProductionInputPolicy(['chat.authoring']), contextCompression: compressionPolicy(['chat.authoring']),
-    maxOutputTokens: 8000, writeTargets: [], lastVerifiedAt: '2026-09-15', regressionTests: ['R-CHAT-UI-authoring'],
+    maxOutputTokens: 8000, writeTargets: [], lastVerifiedAt: '2026-10-31', regressionTests: ['R-AVG4-consultation'],
   },
   {
     version: 1, id: 'chat.consult.v2', agentId: 'outline', defaultForAgent: false,
