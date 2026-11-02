@@ -22,7 +22,7 @@ interface StateCardStore {
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
 
   /** 新增一张状态卡 */
-  addCard: (card: Omit<StateCard, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
+  addCard: (card: Omit<StateCard, 'id' | 'createdAt' | 'updatedAt'>, options?: { scope?: WorkspaceScopeLike }) => Promise<number>
 
   /** 更新一张状态卡 */
   updateCard: (id: number, data: Partial<StateCard>, options?: { expectedFields?: unknown; scope?: WorkspaceScopeLike }) => Promise<void>
@@ -63,17 +63,25 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
     }
   },
 
-  addCard: async (card) => {
+  addCard: async (card, options) => {
     try {
       readStateCardFields(card)
+      const scope = await resolveScopeLike(options?.scope ?? card.projectId)
+      if (scope.projectId !== card.projectId) throw new Error('状态卡与指定作品不属于同一工作区，未保存。')
       const newCard = stampNewRecord(
-        await resolveScopeLike(card.projectId),
+        scope,
         'stateCards',
         { ...card, createdAt: now(), updatedAt: now() } as StateCard,
         { owner: 'work' },
       ) as StateCard
       const id = await db.stateCards.add(newCard) as number
-      set({ cards: [...get().cards, { ...newCard, id }] })
+      set(state => {
+        const view = state.loadedScope
+        const matchingView = view != null && view.projectId === scope.projectId
+          && view.worldId === scope.worldId && view.workId === scope.workId
+        return matchingView || (view == null && options?.scope == null)
+          ? { cards: [...state.cards, { ...newCard, id }] } : state
+      })
       console.log('[StateCard] 新增:', card.entityName, id)
       return id
     } catch (err) {
