@@ -46,6 +46,50 @@ try {
     for (const key of ['type', 'title', 'description', 'website', 'attachments']) if (!body.includes('name="' + key + '"')) throw new Error('Missing ' + key)
     if (!body.includes('\r\n\r\n' + type + '\r\n')) throw new Error('Wrong type')
     if (type === 'feature' && (!body.includes('Workaround') || !body.includes('Extra'))) throw new Error('Missing workaround/extra')
+    await expect(page.locator('#' + type + '-title')).toHaveValue('')
+    await expect(page.locator('.feedback-file-item')).toHaveCount(0)
+  }
+  for (const locale of ['', '/en']) for (const type of ['bug', 'feature', 'documentation']) for (const succeeds of [true, false]) {
+    await page.goto(base + locale + '/feedback/' + type)
+    const description = '#' + type + (type === 'feature' ? '-problem' : '-description')
+    await page.locator('#' + type + '-title').fill('Submitted title')
+    await page.locator(description).fill('Submitted description')
+    await page.locator('#' + type + '-contact').fill('submitted@example.invalid')
+    await page.locator('.feedback-file-input').setInputFiles({ name: 'old.txt', mimeType: 'text/plain', buffer: Buffer.from('old payload') })
+    response = succeeds
+      ? { status: 200, payload: { ok: true, issueNumber: 138 } }
+      : { status: 500, payload: { ok: false, error: 'Local delayed failure' } }
+    let unlock
+    release = new Promise(resolve => { unlock = resolve })
+    const before = requests.length
+    await page.locator('.feedback-submit-button').click()
+    await expect.poll(() => requests.length).toBe(before + 1)
+    await page.locator('#' + type + '-title').fill('Unsubmitted newer title')
+    await page.locator(description).fill('Unsubmitted newer description')
+    await page.locator('.feedback-file-remove').click()
+    await page.locator('.feedback-file-input').setInputFiles([
+      { name: 'next.txt', mimeType: 'text/plain', buffer: Buffer.from('unsent next file') },
+      { name: 'old.txt', mimeType: 'text/plain', buffer: Buffer.from('new payload') },
+    ])
+    await page.locator('form').evaluate(form => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })))
+    await expect(page.locator('.feedback-submit-button')).toBeDisabled()
+    if (requests.length !== before + 1) throw new Error('Repeated request while awaiting the first response')
+    const body = requests.at(-1).postDataBuffer().toString()
+    for (const value of ['Submitted title', 'Submitted description', 'old payload']) {
+      if (!body.includes(value)) throw new Error('Submitted snapshot missing ' + value)
+    }
+    for (const value of ['Unsubmitted newer', 'next.txt', 'new payload']) {
+      if (body.includes(value)) throw new Error('Newer draft unexpectedly sent: ' + value)
+    }
+    unlock(); release = undefined
+    if (succeeds) await expect(page.locator('.feedback-notice--success')).toContainText('#138')
+    else await expect(page.locator('[role="alert"]')).toHaveText('Local delayed failure')
+    await expect(page.locator('#' + type + '-title')).toHaveValue('Unsubmitted newer title')
+    await expect(page.locator(description)).toHaveValue('Unsubmitted newer description')
+    await expect(page.locator('#' + type + '-contact')).toHaveValue(succeeds ? '' : 'submitted@example.invalid')
+    await expect(page.locator('.feedback-file-item')).toHaveCount(2)
+    await expect(page.locator('.feedback-file-meta strong')).toHaveText(['next.txt', 'old.txt'])
+    await expect(page.locator('.feedback-submit-button')).toBeEnabled()
   }
   await page.goto(base + '/en/feedback/bug')
   await page.locator('#bug-title').fill('Local mock only')
@@ -78,5 +122,5 @@ try {
   await expect(page.locator('.feedback-file-item')).toHaveCount(3)
   await expect(page.locator('[role="alert"]')).toContainText('3 attachments')
   await clear()
-  console.log('Feedback passed: both languages, all 3 types, multipart boundary/fields, duplicate-submit lock, issueNumber, 400/413/429/500/502 plain-text errors, picker/drop/paste, removal/deduplication, per-file/count/total limits. All API calls mocked locally.')
+  console.log('Feedback passed: both languages, all 3 types, multipart boundary/fields, duplicate-submit lock, issueNumber, delayed success/failure preserves newer text and added/replaced attachments, 400/413/429/500/502 plain-text errors, picker/drop/paste, removal/deduplication, per-file/count/total limits. All API calls mocked locally.')
 } finally { await browser.close() }

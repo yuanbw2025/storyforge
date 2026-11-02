@@ -288,6 +288,8 @@ async function submit(): Promise<void> {
   }
 
   submitting.value = true
+  const submittedFields = { ...fields }
+  const submittedAttachments = [...attachments.value]
   try {
     const formData = new FormData()
     const payload: Record<string, string> = {
@@ -314,7 +316,7 @@ async function submit(): Promise<void> {
     }
 
     Object.entries(payload).forEach(([key, value]) => formData.append(key, value))
-    attachments.value.forEach(({ file }) => formData.append('attachments', file, file.name))
+    submittedAttachments.forEach(({ file }) => formData.append('attachments', file, file.name))
 
     const response = await fetch('/api/feedback', { method: 'POST', body: formData })
     const result: unknown = await response.json().catch(() => null)
@@ -323,12 +325,16 @@ async function submit(): Promise<void> {
     }
 
     const number = result.issueNumber
-    importedDiagnostics.value = false
-    successMessage.value = number === undefined ? t('反馈已提交', 'Feedback submitted') : t(`反馈已提交，编号 #${number}`, `Feedback submitted, #${number}`)
-    attachments.value = []
-    Object.keys(fields).forEach((key) => {
-      fields[key as keyof FeedbackFields] = ''
-    })
+    if (fields.extra === submittedFields.extra) importedDiagnostics.value = false
+    attachments.value = attachments.value.filter(item => !submittedAttachments.includes(item))
+    for (const key of Object.keys(submittedFields) as Array<keyof FeedbackFields>) {
+      if (fields[key] === submittedFields[key]) fields[key] = ''
+    }
+    const retainedDraft = Object.values(fields).some(value => value !== '') || attachments.value.length > 0
+    const submittedMessage = number === undefined ? t('反馈已提交', 'Feedback submitted') : t(`反馈已提交，编号 #${number}`, `Feedback submitted, #${number}`)
+    successMessage.value = submittedMessage + (retainedDraft
+      ? t('。等待期间的新修改已保留，尚未提交。', '. Changes made while waiting are preserved and have not been submitted.')
+      : '')
   } catch (error) {
     errorMessage.value = error instanceof Error && error.message ? error.message : t('反馈提交失败，请稍后重试。', 'Feedback submission failed. Please try again later.')
   } finally {
