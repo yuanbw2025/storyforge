@@ -203,9 +203,10 @@ test('059 real two-tab stale caches retain both UI additions and reload native c
     expect((await read(tab, f.scope)).fragments.map(item => item.text).sort()).toEqual(expected)
     expect((await read(tab, f.foreignScope)).row).toEqual(foreign)
     for (const original of expected) {
-      const rendered = panel(tab).getByText(original, { exact: true })
+      const rendered = panel(tab).locator('p').and(panel(tab).getByText(original, { exact: true }))
       await expect(rendered).toHaveCount(1)
       await expect(rendered).toBeVisible()
+      expect(await rendered.textContent()).toBe(original)
     }
   }
   await second.close()
