@@ -3,6 +3,11 @@ import { PROJECT_TABLES } from '../registry/project-tables'
 import { db } from '../db/schema'
 import Dexie from 'dexie'
 import type { CommunityWorldLicense, WorldReleaseManifestV3 } from '../types'
+import type { WorldPackageManifest, WorldPackageUse } from '../types/world-sharing'
+import { inspectWorldPackageMetadata } from './world-package-metadata'
+export { WORLD_PACKAGE_USES } from '../types/world-sharing'
+export type { WorldPackageManifest, WorldPackageUse } from '../types/world-sharing'
+export { inspectWorldPackageMetadata } from './world-package-metadata'
 import type { WorldReleaseManifestV4 } from '../types/narrative-release'
 import type { NarrativeIndexV1 } from '../types/narrative-index'
 import { canonicalNarrativeJsonV1 } from './narrative-json'
@@ -18,33 +23,6 @@ import { compressNarrativePackV1, decompressNarrativePackV1, type CompressedNarr
 
 export const WORLD_PACKAGE_FORMAT = 'storyforge.world-package'
 export const WORLD_PACKAGE_VERSION = 5
-
-/** Current, explicit destinations for a frozen semantic world. */
-export const WORLD_PACKAGE_USES = [
-  'world-remix',
-  'ttrpg',
-  'character-interaction',
-  'ai-town',
-  'text-adventure',
-  'avg',
-  'text-open-world',
-] as const
-export type WorldPackageUse = (typeof WORLD_PACKAGE_USES)[number]
-
-export interface WorldPackageManifest {
-  packageId: string
-  sourceWorldCode: string
-  sourceWorldVersion: number
-  name: string
-  description: string
-  authorName: string
-  attribution: string
-  license: CommunityWorldLicense
-  allowedUses: Record<WorldPackageUse, boolean>
-  contentWarnings: string[]
-  publishedAt: number
-  releaseHash: string
-}
 
 interface WorldPackageEnvelope {
   format: typeof WORLD_PACKAGE_FORMAT
@@ -81,51 +59,13 @@ export interface WorldPackageTrustReport {
   warnings: string[]
 }
 
-const LICENSES = new Set<CommunityWorldLicense>([
-  'CC-BY-4.0',
-  'CC-BY-SA-4.0',
-  'CC-BY-NC-4.0',
-  'ALL-RIGHTS-RESERVED',
-])
 const WORLD_PACKAGE_MAX_BYTES = 32 * 1024 * 1024
 const WORLD_PACKAGE_KEYS = new Set(['format', 'packageVersion', 'manifest', 'release', 'integrity'])
-const WORLD_PACKAGE_MANIFEST_KEYS = new Set([
-  'packageId', 'sourceWorldCode', 'sourceWorldVersion', 'name', 'description',
-  'authorName', 'attribution', 'license', 'allowedUses', 'contentWarnings',
-  'publishedAt', 'releaseHash',
-])
 const WORLD_PACKAGE_RELEASE_KEYS_V3 = new Set(['label', 'version', 'contentHash', 'manifest'])
 const WORLD_PACKAGE_RELEASE_KEYS_V4 = new Set([...WORLD_PACKAGE_RELEASE_KEYS_V3, 'index'])
 const WORLD_PACKAGE_RELEASE_KEYS_V5 = new Set(['label', 'version', 'contentHash', 'packed'])
 const WORLD_PACKAGE_INTEGRITY_KEYS = new Set(['algorithm', 'digest'])
 
-/** v3/v4/v5 share this exact metadata contract; transport changes do not
- * change the declaration. Creation and inspection must use the same gate. */
-export function inspectWorldPackageMetadata(rawManifest: unknown, packageVersion: unknown): Pick<WorldPackageTrustReport, 'manifest' | 'errors'> {
-  const errors: string[] = []
-  if (![3, 4, 5].includes(packageVersion as number)) errors.push('不支持的世界分享包元数据版本。')
-  if (!isRecord(rawManifest)) return { manifest: null, errors: [...errors, '分享包缺少发布信息。'] }
-  const allowedUses = rawManifest.allowedUses
-  const allowedUseKeys = isRecord(allowedUses) ? Object.keys(allowedUses) : []
-  const validUses = isRecord(allowedUses)
-    && allowedUseKeys.length === WORLD_PACKAGE_USES.length
-    && WORLD_PACKAGE_USES.every(key => typeof allowedUses[key] === 'boolean')
-    && Object.values(allowedUses).some(value => value === true)
-  const unknownKeys = Object.keys(rawManifest).filter(key => !WORLD_PACKAGE_MANIFEST_KEYS.has(key))
-  if (unknownKeys.length > 0) errors.push(`世界发布信息包含未知字段：${unknownKeys.join('、')}。`)
-  if (typeof rawManifest.packageId !== 'string' || typeof rawManifest.sourceWorldCode !== 'string' || typeof rawManifest.name !== 'string' || !rawManifest.name.trim()) errors.push('发布信息缺少世界编号或名称。')
-  if (typeof rawManifest.sourceWorldVersion !== 'number' || !Number.isInteger(rawManifest.sourceWorldVersion) || rawManifest.sourceWorldVersion < 1) errors.push('世界版本无效。')
-  if (rawManifest.packageId !== `${String(rawManifest.sourceWorldCode)}@v${String(rawManifest.sourceWorldVersion)}`) errors.push('世界分享包编号与来源版本不一致。')
-  if (typeof rawManifest.description !== 'string' || rawManifest.description.length > 2_000) errors.push('世界分享说明无效，最多 2000 字。')
-  if (typeof rawManifest.authorName !== 'string' || !rawManifest.authorName.trim()) errors.push('分享包缺少作者署名。')
-  if (typeof rawManifest.attribution !== 'string' || !rawManifest.attribution.trim() || rawManifest.attribution.length > 500) errors.push('世界分享包署名说明无效，最多 500 字。')
-  if (!LICENSES.has(rawManifest.license as CommunityWorldLicense)) errors.push('分享包许可无效。')
-  if (!validUses) errors.push('分享包没有与当前产品目录完全一致的二创用途声明。')
-  if (!Array.isArray(rawManifest.contentWarnings) || rawManifest.contentWarnings.length > 12 || rawManifest.contentWarnings.some(value => typeof value !== 'string' || value.length > 200)) errors.push('内容警告格式无效，最多 12 条，每条最多 200 字。')
-  if (typeof rawManifest.publishedAt !== 'number' || !Number.isFinite(rawManifest.publishedAt) || rawManifest.publishedAt <= 0) errors.push('世界发布时间无效。')
-  if (typeof rawManifest.releaseHash !== 'string' || !/^[a-f0-9]{64}$/.test(rawManifest.releaseHash)) errors.push('分享包缺少有效发布哈希。')
-  return { manifest: errors.length ? null : rawManifest as unknown as WorldPackageManifest, errors }
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
