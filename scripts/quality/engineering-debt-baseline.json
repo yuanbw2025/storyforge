@@ -47603,21 +47603,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-CODEX-AUTHOR-SAVE.test.ts\",\"TS2345\",\"Argument of type '(row: CodexEntry) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: CodexEntry, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"69c19ee34592d49207b4796c85358275a8f90785d59a10458f6ede409102e40d\",61,14]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CODEX-AUTHOR-SAVE.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '(row: CodexEntry) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: CodexEntry, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
-        "anchor": "69c19ee34592d49207b4796c85358275a8f90785d59a10458f6ede409102e40d",
-        "line": 102,
-        "column": 61,
-        "start": 7342,
-        "length": 14
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-CODEX-provider.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 0.\",\"496bad08908c48870ffb4538c295c4eba0a6eaea5be763ca89aedaf1474c79b6\",45,6]",
       "count": 1,
       "diagnostic": {
