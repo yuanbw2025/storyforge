@@ -5,6 +5,7 @@ import { detachTemporalFactsForDeletedChapters } from '../fact-ledger/lifecycle'
 import { detachKnowledgeForDeletedChapters } from '../knowledge-ledger/lifecycle'
 import { transactionTablesFor } from '../registry/lifecycle'
 import { detachStorylineForDeletedChapters } from '../storyline/lifecycle'
+import { assertRetainedRunScopeTargetsV1 } from '../agent/run/scope-lifecycle'
 
 /**
  * Registered chapter deletion lifecycle shared by UI and MEMORY-6. References
@@ -13,6 +14,7 @@ import { detachStorylineForDeletedChapters } from '../storyline/lifecycle'
 export async function cascadeDeleteChapterRecords(ids: readonly number[]): Promise<void> {
   if (!ids.length) return
   await db.transaction('rw', transactionTablesFor('deleteChapters'), async () => {
+    await assertRetainedRunScopeTargetsV1(new Map([['chapters', ids]]))
     await detachTemporalFactsForDeletedChapters([...ids])
     await detachKnowledgeForDeletedChapters([...ids])
     await detachStorylineForDeletedChapters([...ids])
