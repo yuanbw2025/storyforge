@@ -10,6 +10,7 @@ import { isCurrentWorldCode } from '../workspace/identity'
 import { NARRATIVE_DOMAIN_FIELDS_V1, parseNarrativeDomainFieldV1 } from '../narrative-domain/codec'
 import { assertNarrativeDomainReferenceRowsV1 } from '../narrative-domain/integrity'
 import { inspectPortableTableStructure } from './portable-table-structure'
+import { inspectCommunityWorldOriginV1 } from '../world-engine/source-declaration'
 
 export const CURRENT_BACKUP_VERSION = 17
 
@@ -214,6 +215,8 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
         || !isCurrentWorldCode(row.identityKind, row.code)) {
         errors.push(`worlds[${index}] 的世界身份或稳定编号无效。`)
       }
+      const origin = inspectCommunityWorldOriginV1(row.communityOrigin)
+      errors.push(...origin.errors.map(error => `worlds[${index}].communityOrigin: ${error}`))
     })
   }
 
