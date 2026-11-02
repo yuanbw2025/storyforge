@@ -70,9 +70,10 @@ for (const {width, imageFailure} of [{width: 390, imageFailure: false}, {width: 
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}], usage: {prompt_tokens: 100, completion_tokens: 100, total_tokens: 200}})})
   })
   await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
-  await page.evaluate(async () => {
+  const frozenWorld = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
-    await (await load('/storyforge/tests/helpers/current-product-world.ts')).seedCurrentProductWorld('单角色技术预览世界')
+    const source = await (await load('/storyforge/tests/helpers/current-product-world.ts')).seedCurrentProductWorld('单角色技术预览世界')
+    return {releaseUid: source.release.releaseUid, contentHash: source.release.contentHash}
   })
   await expect(page.getByRole('button', {name: '新建单角色故事', exact: true})).toHaveCount(0)
   await page.getByLabel('启用单角色故事新流程（技术预览）', {exact: true}).check()
@@ -108,7 +109,46 @@ for (const {width, imageFailure} of [{width: 390, imageFailure: false}, {width: 
   await page.getByRole('button', {name: '分析可玩起点', exact: true}).click()
   await page.getByRole('button', {name: '生成严格 Brief', exact: true}).click()
   await page.getByRole('button', {name: '保存 Brief revision', exact: true}).click()
-  await expect(page.getByText('Production 与 Brief revision 已保存；未授权前不会创建 Build 或调用生成能力。', {exact: true})).toBeVisible({timeout: 30_000})
+  // Parent selection updates the route and may retire the save command's
+  // transient notice. The persisted owner, Brief/source hashes and receipts
+  // establish completion; authorization must still be a separate UI action.
+  await expect(page.getByText('Production 待授权 · revision 1 · epoch 0', {exact: true})).toBeVisible({timeout: 30_000})
+  await expect(page.getByText('r1 · 草稿', {exact: true})).toBeVisible()
+  await expect(page.getByRole('button', {name: '作者授权并开始自动制作', exact: true})).toBeEnabled()
+  const saved = await page.evaluate(async () => {
+    const load = new Function('p', 'return import(p)'), {db} = await load('/storyforge/src/lib/db/schema.ts')
+    const params = new URL(location.href).searchParams
+    const projectId = Number(params.get('project')), workId = Number(params.get('work')), productionId = Number(params.get('production'))
+    const work = await db.works.get(workId)
+    if (!work || work.projectId !== projectId || !productionId) throw new Error('Saved chat owner/route is missing')
+    const scope = {projectId, worldId: work.worldId, workId}
+    const details = await (await load('/storyforge/src/lib/product-production/service.ts')).readProductProductionDetailsV1(scope, productionId, ['character-interaction'])
+    const row = details.brief, brief = details.executionBrief
+    if (!row || !brief) throw new Error('Saved chat Brief is missing')
+    const sourcePlan = await (await load('/storyforge/src/lib/product-production/source-contracts.ts')).parseProductProductionSourcePlanV1(row)
+    const draft = await (await load('/storyforge/src/lib/character-interaction/draft-service.ts')).readChatDraftV1(scope)
+    const release = await db.worldReleases.get(draft.worldReleaseId)
+    if (!release) throw new Error('Selected frozen world is missing')
+    return {
+      ownerMatches: details.production.projectId === projectId && details.production.worldId === scope.worldId && details.production.workId === workId,
+      state: [details.production.status, details.production.stateRevision, details.production.controlEpoch],
+      brief: [row.revision, row.status, row.authorizedAt, row.confirmedBriefHash],
+      authorIntent: [brief.intent.playerRole, brief.intent.openingSituation],
+      source: {releaseUid: release.releaseUid, contentHash: release.contentHash},
+      sourceMatches: row.sourceWorldReleaseId === draft.worldReleaseId && brief.source.worldReleaseId === draft.worldReleaseId
+        && sourcePlan.worldReference.localReleaseRecordId === draft.worldReleaseId && sourcePlan.worldReference.releaseHash === release.contentHash
+        && row.sourceWorldContentHash === release.contentHash && brief.source.worldContentHash === release.contentHash
+        && sourcePlan.productInstanceKey === details.production.productionKey && sourcePlan.productType === 'character-interaction',
+      briefHashMatches: await (await load('/storyforge/src/lib/product-production/hash.ts')).hashProductProductionValueV2(JSON.parse(row.briefJson)) === row.briefHash,
+      noBuildOrRelease: details.build === null && details.buildHistory.length === 0 && details.production.currentBuildNumber === null && details.production.currentProductReleaseId === null,
+      commands: details.recentCommands.map((row: {type: string; status: string}) => `${row.type}:${row.status}`).sort(),
+    }
+  })
+  expect(saved).toEqual({ownerMatches: true, state: ['brief-ready', 1, 0], brief: [1, 'draft', null, ''],
+    authorIntent: ['来店里借书的旅人，没有答应帮忙修钟。', '雨天，修钟铺的一台旧钟停了。'], source: frozenWorld,
+    sourceMatches: true, briefHashMatches: true, noBuildOrRelease: true, commands: ['create-intent:succeeded', 'save-brief-revision:succeeded']})
+  expect(calls).toEqual([])
+  expect(imageCalls).toEqual([])
   await guide.getByRole('button', {name: '继续制作与检查', exact: true}).click()
   await page.getByRole('button', {name: '作者授权并开始自动制作', exact: true}).click()
   await expect(page.getByTestId('chat-situation-selection')).toBeVisible({timeout: 60_000})

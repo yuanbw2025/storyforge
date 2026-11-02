@@ -10,12 +10,18 @@ import type { WorkspaceProjectionSpecV1 } from '../registry/types'
 import { countWords, htmlToPlainText } from '../utils/html'
 import { exportProjectJSON, importProjectJSON, type ProjectExportData } from '../export/json-export'
 import { assertTrustedProjectBackup } from '../export/backup-trust'
+import { verifyPortableAgentRunProjectionV1, verifyPortableCompletedAgentRunEvidenceV1,
+  expectedNodeProducerImportRetirementReasonV1 } from '../agent/run/ledger-portability'
+import { toAgentRunProjectionBodyV1 } from '../agent/run/projection'
+import { parseAgentRunContract } from '../agent/run/contract'
 import { cascadeDeleteProject, transactionTablesFor } from '../registry/lifecycle'
 import { cascadeDeleteChapterRecords, type ChapterDeletionPreconditionsV1 } from '../chapters/lifecycle'
 import { scopeTransactionTables } from '../workspace/scope'
 import { propagateChapterEditStale } from '../consistency/impact-analysis'
 import { buildWorkspaceImpactPlanV1 } from './workspace-impact'
 import { buildMemoryArtifactIndexV1 } from './settlement'
+import { buildMemorySettlementReceiptFromFrozenLedgerV1, hashMemoryArtifactIndexV1,
+  memoryRunExportIdV1 } from './settlement-core'
 import type {
   Chapter,
   CreativeRules,
@@ -1576,6 +1582,164 @@ function parsePortableBindingsV1(raw: string, workspaceUid: string): PortableWor
   })
 }
 
+type BackupRowV1 = Record<string, unknown>
+function backupRowsV1(backup: BackupRowV1, table: string): BackupRowV1[] {
+  const rows = backup[table]
+  if (!Array.isArray(rows) || rows.some(row => !row || typeof row !== 'object' || Array.isArray(row))) {
+    throw new Error(`[memory-workspace] 恢复转换缺少有效表 ${table}`)
+  }
+  return rows as BackupRowV1[]
+}
+function assertSameRestoreValueV1(expected: unknown, actual: unknown, label: string): void {
+  if (canonicalStringify(expected) !== canonicalStringify(actual)) {
+    throw new Error(`[memory-workspace] 恢复转换出现未解释差异: ${label}`)
+  }
+}
+
+type VerifiedPortableRunV1 = Awaited<ReturnType<typeof verifyPortableAgentRunProjectionV1>>
+interface RestoredRunTransitionV1 extends VerifiedPortableRunV1 { run: BackupRowV1 }
+
+/** Read-only proof of the existing import finalizer, never a second finalizer
+ * or a permission to renew a completed receipt. Every original event stays. */
+async function verifyRestoredRunTransitionsV1(expected: BackupRowV1, actual: BackupRowV1, startedAt: number) {
+  const originals = backupRowsV1(expected, 'agentRuns'), current = backupRowsV1(actual, 'agentRuns')
+  const originalEvents = backupRowsV1(expected, 'agentRunEvents'), currentEvents = backupRowsV1(actual, 'agentRunEvents')
+  const checkpoints = backupRowsV1(expected, 'agentRunCheckpoints')
+  const byId = new Map(current.map(row => [row._exportId, row]))
+  if (byId.size !== originals.length || current.length !== originals.length) throw new Error('[memory-workspace] 恢复Run集合变化')
+  assertSameRestoreValueV1(originalEvents, currentEvents.slice(0, originalEvents.length), 'Run原事件完整前缀')
+  const changed = new Map<number, RestoredRunTransitionV1>()
+  const tails = currentEvents.slice(originalEvents.length)
+  const groupByRun = (rows: readonly BackupRowV1[]) => {
+    const groups = new Map<unknown, BackupRowV1[]>()
+    for (const row of rows) {
+      const bucket = groups.get(row._agentRunExportId)
+      if (bucket) bucket.push(row)
+      else groups.set(row._agentRunExportId, [row])
+    }
+    return groups
+  }
+  const originalStreams = groupByRun(originalEvents), currentStreams = groupByRun(currentEvents)
+  const appendedStreams = groupByRun(tails), checkpointGroups = groupByRun(checkpoints)
+  const expectedRuns: BackupRowV1[] = []
+  for (const original of originals) {
+    const run = byId.get(original._exportId)
+    if (!run) throw new Error('[memory-workspace] 恢复Run坐标缺失')
+    const originalStream = originalStreams.get(original._exportId) ?? []
+    const stream = currentStreams.get(original._exportId) ?? []
+    const before = await verifyPortableAgentRunProjectionV1(original, originalStream)
+    const after = await verifyPortableAgentRunProjectionV1(run, stream)
+    const appended = appendedStreams.get(original._exportId) ?? []
+    if (!appended.length) { assertSameRestoreValueV1(original, run, '未新增尾事件的Run'); expectedRuns.push(original); continue }
+    if (appended.length !== 1 || stream.length !== originalStream.length + 1) throw new Error('[memory-workspace] 恢复Run不是唯一安全尾事件')
+    const last = after.events[after.events.length - 1]!
+    const nodeRetirementReason = expectedNodeProducerImportRetirementReasonV1({
+      run: original, projection: before.projection, events: before.events, portable: true,
+    })
+    let type: 'verification.staled' | 'run.cancelled', payload: BackupRowV1
+    if (before.projection.state === 'completed' && before.projection.terminalReceiptHash) {
+      type = 'verification.staled'
+      payload = { previousReceiptHash: before.projection.terminalReceiptHash, reason: 'project-import-scope-rebound' }
+      await verifyPortableCompletedAgentRunEvidenceV1(run, stream)
+    } else if (nodeRetirementReason !== null) {
+      type = 'run.cancelled'; payload = { reason: nodeRetirementReason }
+    } else {
+      const nonportable = (checkpointGroups.get(original._exportId) ?? []).some(checkpoint =>
+        typeof checkpoint.resumePayloadJson === 'string' && JSON.parse(checkpoint.resumePayloadJson)?.portable === false)
+      let completedHistory = false
+      if (before.projection.state === 'running'
+        && before.events[before.events.length - 1]?.type === 'verification.staled') {
+        try { await verifyPortableCompletedAgentRunEvidenceV1(original, originalStream); completedHistory = true } catch { /* Not an imported completed prefix. */ }
+      }
+      if (!nonportable || ['failed', 'cancelled'].includes(before.projection.state) || completedHistory) {
+        throw new Error('[memory-workspace] 恢复Run没有允许取消的不可移植检查点')
+      }
+      type = 'run.cancelled'; payload = { reason: 'project-import-nonportable-checkpoint' }
+    }
+    if (!Number.isSafeInteger(last.createdAt) || last.createdAt < startedAt || last.createdAt > Date.now()
+      || typeof run.updatedAt !== 'number' || run.updatedAt < last.createdAt || run.updatedAt > Date.now()) {
+      throw new Error('[memory-workspace] 恢复Run尾事件时间不属于本次导入')
+    }
+    assertSameRestoreValueV1({ type, payloadJson: canonicalStringify(payload),
+      sequence: before.projection.lastSequence + 1, generation: before.projection.generation,
+      contractHash: original.contractHash, createdAt: last.createdAt,
+      _worldGroupExportId: original._worldGroupExportId ?? null, _agentRunExportId: original._exportId }, appended[0], 'Run唯一安全尾事件')
+    const body = toAgentRunProjectionBodyV1(after.projection)
+    const expectedRun = { ...original, status: after.projection.state, generation: after.projection.generation,
+      lastSequence: after.projection.lastSequence, projectionJson: canonicalStringify(body),
+      projectionHash: await hashCanonicalValue(body), terminalReceiptHash: after.projection.terminalReceiptHash ?? null,
+      updatedAt: run.updatedAt }
+    assertSameRestoreValueV1(expectedRun, run, 'Run物化投影/非派生字段')
+    expectedRuns.push(expectedRun)
+    changed.set(original._exportId as number, { ...after, run })
+  }
+  if (tails.length !== changed.size) throw new Error('[memory-workspace] 恢复Run出现额外事件')
+  expected.agentRuns = expectedRuns
+  expected.agentRunEvents = currentEvents
+  return changed
+}
+
+async function verifyRestoredMemoryIndexV1(input: {
+  projectId: number; root: FileSystemDirectoryHandle; report: WorkspaceSelfCheckReportV1
+  current: BackupRowV1; changedRuns: ReadonlyMap<number, RestoredRunTransitionV1>
+}): Promise<void> {
+  const item = input.report.plan.items.find(candidate => candidate.identity.documentKind === 'memory-artifact-index')
+  if (!item) throw new Error('[memory-workspace] 恢复记忆索引缺失')
+  const raw = await readTextAt(input.root, item.relativePath)
+  const original = raw == null ? null : JSON.parse(raw) as Partial<StoryforgeMemoryIndexEnvelopeV1>
+  if (!original?.index || await hashCanonicalValue(original.index) !== item.fileCanonicalHash) throw new Error('[memory-workspace] 恢复记忆索引原证据变化')
+  const expected = structuredClone({ ...original.index, runs: [...original.index.runs] })
+  for (const [coordinate, verified] of input.changedRuns) {
+    const work = backupRowsV1(input.current, 'works').find(row => row._exportId === verified.run._workOwnerExportId)
+    if (!work) {
+      if (verified.run._instanceOwnerExportId != null) continue // Existing index contains Work runs only.
+      throw new Error('[memory-workspace] 恢复记忆索引Run缺少Work')
+    }
+    const world = backupRowsV1(input.current, 'worlds').find(row => row._exportId === work._worldExportId)
+    if (!world || typeof work.code !== 'string' || typeof world.code !== 'string') throw new Error('[memory-workspace] 恢复记忆索引owner缺失')
+    const snapshot = { ...verified,
+      run: { id: coordinate + 1, contractHash: verified.run.contractHash as string, createdAt: verified.run.createdAt as number },
+      contract: parseAgentRunContract(JSON.parse(verified.run.contractJson as string)) }
+    const id = memoryRunExportIdV1(snapshot)
+    const position = expected.runs.findIndex(entry => entry.runExportId === id)
+    const previous = expected.runs[position]
+    if (!previous || expected.runs.filter(entry => entry.runExportId === id).length !== 1) throw new Error('[memory-workspace] 恢复记忆索引Run身份不唯一')
+    // Same pure settlement projection, with no new settlement event/receipt or
+    // current identity lookup. Imported stale/cancel evidence is not completion.
+    const projected = await buildMemorySettlementReceiptFromFrozenLedgerV1({ snapshot,
+      identity: { workCode: work.code, worldCode: world.code }, workspaceDirty: false, evaluatedAt: 0 })
+    assertSameRestoreValueV1(previous.artifactRefs, projected.artifactRefs, '恢复记忆索引原工件')
+    expected.runs[position] = { ...previous, contractHash: verified.run.contractHash as string,
+      state: projected.state, terminalReceiptHash: projected.terminalReceiptHash, settlementReceiptHash: null,
+      settlementSource: 'derived-current', settlementRecordedAt: null, contextManifestHashes: projected.contextManifestHashes,
+      adoptionHashes: projected.adoptionHashes, artifactRefs: projected.artifactRefs,
+      artifactIndexHash: await hashMemoryArtifactIndexV1(projected.artifactRefs) }
+  }
+  const { indexHash: _old, ...body } = expected
+  expected.indexHash = await hashCanonicalValue(body)
+  const current = await buildMemoryArtifactIndexV1(input.projectId, { projectedWorkspaceDirty: false })
+  assertSameRestoreValueV1(expected, current, '恢复记忆索引完整投影')
+  if (await hashCanonicalValue(current) !== item.databaseCanonicalHash) throw new Error('[memory-workspace] 恢复记忆索引在核验时变化')
+}
+
+/** Node links require the existing finalizer's read-only retirement on import.
+ * Prove only that ledger transition, keeping every other current-schema byte;
+ * no reference-recovery format or new database field is introduced here. */
+async function verifyNodeWorkspaceRestoreV1(input: {
+  original: BackupRowV1; current: BackupRowV1; report: WorkspaceSelfCheckReportV1
+  projectId: number; root: FileSystemDirectoryHandle; startedAt: number
+}): Promise<number> {
+  const expected = structuredClone(input.original)
+  const changedRuns = await verifyRestoredRunTransitionsV1(expected, input.current, input.startedAt)
+  assertSameRestoreValueV1(expected, input.current, '节点恢复胶囊全量内容')
+  const recoveryItem = input.report.plan.items.find(item => item.identity.documentKind === 'recovery-capsule')
+  if (!recoveryItem || await hashCanonicalValue(input.current) !== recoveryItem.databaseCanonicalHash) {
+    throw new Error('[memory-workspace] 节点恢复胶囊在核验时变化')
+  }
+  await verifyRestoredMemoryIndexV1({ ...input, changedRuns })
+  return changedRuns.size
+}
+
 async function restoredRecordIdForBindingV1(input: {
   projectId: number
   root: FileSystemDirectoryHandle
@@ -1639,6 +1803,13 @@ async function restoredRecordIdForBindingV1(input: {
 export async function restoreWorkspaceFromFolderV1(
   root: FileSystemDirectoryHandle,
 ): Promise<{ projectId: number; report: WorkspaceSelfCheckReportV1; reboundHarnessRunCount: number }> {
+  return restoreWorkspaceFromSourceV1(root, true)
+}
+
+async function restoreWorkspaceFromSourceV1(
+  root: FileSystemDirectoryHandle, commitHarnessRebindToDirectory: boolean,
+): Promise<{ projectId: number; report: WorkspaceSelfCheckReportV1; reboundHarnessRunCount: number }> {
+  const startedAt = Date.now()
   const [recoveryRaw, bindingsRaw] = await Promise.all([
     readTextAt(root, '.storyforge/recovery/project.json'),
     readTextAt(root, '.storyforge/bindings.json'),
@@ -1758,6 +1929,16 @@ export async function restoreWorkspaceFromFolderV1(
       )) && changedSectionNames.length > 0
         && changedSectionNames.every(section => ['agentRuns', 'agentRunEvents'].includes(section))
       if (importReboundOnly) {
+        const hasNodeHistory = backupRowsV1(recoveryBackup, 'agentRuns')
+          .some(row => Object.prototype.hasOwnProperty.call(row, 'nodeProducerNodeId'))
+        const verifiedNodeCount = hasNodeHistory ? await verifyNodeWorkspaceRestoreV1({
+          original: recoveryBackup, current: currentRecord, report, projectId, root, startedAt,
+        }) : null
+        // A transport package is read-only. Keep its original bytes and actual
+        // report after proving the exact existing Node retirement transition.
+        if (verifiedNodeCount !== null && !commitHarnessRebindToDirectory) {
+          return { projectId, report, reboundHarnessRunCount: verifiedNodeCount }
+        }
         // A general project import cannot trust a completed receipt whose
         // contract was rebound to new local IDs. The ledger finalizer appends
         // an explicit stale/cancel event. Workspace restore is already an
@@ -1769,7 +1950,7 @@ export async function restoreWorkspaceFromFolderV1(
           expectedPlanHash: report.plan.planHash,
         })
         const cleanReport = await buildWorkspaceSelfCheckReportV1(projectId, root)
-        const reboundHarnessRunCount = (await db.agentRunEvents.where('projectId').equals(projectId).toArray())
+        const reboundHarnessRunCount = verifiedNodeCount ?? (await db.agentRunEvents.where('projectId').equals(projectId).toArray())
           .filter(event => {
             if (event.type !== 'verification.staled' && event.type !== 'run.cancelled') return false
             try {
@@ -1984,5 +2165,5 @@ export async function importWorkspacePackageV1(
   input: unknown,
 ): Promise<{ projectId: number; report: WorkspaceSelfCheckReportV1; reboundHarnessRunCount: number }> {
   const pkg = await validateWorkspacePackageV1(input)
-  return restoreWorkspaceFromFolderV1(packageDirectoryHandleV1(pkg))
+  return restoreWorkspaceFromSourceV1(packageDirectoryHandleV1(pkg), false)
 }

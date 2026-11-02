@@ -8,6 +8,7 @@ import type {
   AgentRunEventTypeV1,
   AgentRunProjectionV1,
   AgentRunRecord,
+  AgentRunNodeProducerTupleV1,
   AnyAgentRunEventV1,
   MemorySettlementReceiptV1,
   WorkspaceScope,
@@ -32,6 +33,7 @@ import {
 } from '../../memory/settlement-core'
 import { pruneUnreferencedAgentRunArtifactsInCurrentTransactionV1 } from '../../memory/artifact-retention-store'
 import { exactArtifactOwnerTablesV1 } from '../../memory/artifact-root-registry'
+import { readAgentRunNodeProducerTupleV1, readHash } from './schema-utils'
 
 export class AgentRunStoreError extends Error {
   constructor(public readonly code: string, message: string) {
@@ -55,6 +57,12 @@ export interface VerifiedRecordedMemorySettlementV1 {
 
 export interface CreateAgentRunV1Input {
   scope: WorkspaceScope
+  /** Optional Node correlation. Preconditions are checked in the native create
+   * transaction and never added to the frozen contract or historical payloads. */
+  nodeProducer?: AgentRunNodeProducerTupleV1 & {
+    expectedNodeRunHash: string
+    expectedFlowHash: string
+  }
   /** Runtime runs are Instance-owned; omitted runs remain Work-owned. */
   productRuntimeSessionId?: number | null
   /** Optional creation precondition, checked atomically against the complete
@@ -316,6 +324,7 @@ async function readRunEvents(run: AgentRunRecord & { id: number }): Promise<AnyA
 }
 
 async function verifyContractRecord(run: AgentRunRecord & { id: number }): Promise<AgentRunContract> {
+  readAgentRunNodeProducerTupleV1(run as unknown as Record<string, unknown>)
   let raw: unknown
   try {
     raw = JSON.parse(run.contractJson)
@@ -670,6 +679,18 @@ export async function verifyRecordedMemorySettlementV1(input: {
 }
 
 export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<AgentRunSnapshotV1> {
+  const origin = input.nodeProducer
+  let nodeProducer: CreateAgentRunV1Input['nodeProducer']
+  if (origin !== undefined) {
+    const tuple = readAgentRunNodeProducerTupleV1(origin as unknown as Record<string, unknown>)
+    if (!tuple || tuple.nodeRunId == null) fail('node_producer_binding', '节点生产创建要求真实存活的 NodeRun')
+    nodeProducer = { ...tuple,
+      expectedNodeRunHash: readHash(origin.expectedNodeRunHash, 'nodeProducer.expectedNodeRunHash'),
+      expectedFlowHash: readHash(origin.expectedFlowHash, 'nodeProducer.expectedFlowHash') }
+    // Only the new opt-in path snapshots plain input. Existing callers keep
+    // their original defaults and exact contract/event bytes.
+    input = { ...input, scope: { ...input.scope }, contract: structuredClone(input.contract), nodeProducer }
+  }
   const expectedRuntimeSessionHash = input.expectedRuntimeSessionHash
   if (expectedRuntimeSessionHash !== undefined && (typeof expectedRuntimeSessionHash !== 'string'
     || !/^[a-f0-9]{64}$/.test(expectedRuntimeSessionHash) || input.productRuntimeSessionId == null)) {
@@ -683,6 +704,9 @@ export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<Ag
   const conversationId = input.conversationId ?? null
   const productRuntimeSessionId = input.productRuntimeSessionId ?? null
   const productBuildId = input.productBuildId ?? null
+  if (nodeProducer && (productRuntimeSessionId != null || productBuildId != null)) {
+    fail('node_producer_owner', '节点生产只允许原 Work owner，不得借用 Instance 或 Build')
+  }
   if (productRuntimeSessionId != null && conversationId != null) {
     fail('runtime_conversation', 'Instance-owned 运行不得绑定作者对话')
   }
@@ -703,12 +727,43 @@ export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<Ag
       db.agentConversations,
       ...(productRuntimeSessionId == null ? [] : [db.productRuntimeSessions]),
       ...(productBuildId == null ? [] : [db.productBuilds]),
+      ...(nodeProducer ? [db.nodeRuns, db.nodeFlows] : []),
       db.agentRuns,
       db.agentRunEvents,
     ),
     async () => {
       await assertContractScope(input.scope, accepted.contract, worldGroupId, productRuntimeSessionId, productBuildId)
       await assertOptionalConversationScope(input.scope, conversationId, worldGroupId)
+      if (nodeProducer) {
+        await resolveScope({ scope: input.scope })
+        if (worldGroupId != null) {
+          const group = await db.worldGroups.get(worldGroupId)
+          if (!group || !await assertRecordInScope(input.scope, 'worldGroups', group, { owner: 'world' })) {
+            fail('node_producer_world_group', '节点生产世界组不属于原 World')
+          }
+        }
+        const nodeRun = await db.nodeRuns.get(nodeProducer.nodeRunId!)
+        if (!nodeRun || nodeRun.status !== 'running'
+          || !await assertRecordInScope(input.scope, 'nodeRuns', nodeRun, { owner: 'work' })) {
+          fail('node_producer_scope', '节点运行不存在、不在执行中或不属于当前 Work')
+        }
+        const flow = await db.nodeFlows.get(nodeRun.flowId)
+        if (!flow || !await assertRecordInScope(input.scope, 'nodeFlows', flow, { owner: 'work' })
+          || !sameNullableId(flow.worldGroupId, worldGroupId)) {
+          fail('node_producer_flow', '节点图不存在或越过原 Work/世界组')
+        }
+        if (await waitForHash(nodeRun) !== nodeProducer.expectedNodeRunHash
+          || await waitForHash(flow) !== nodeProducer.expectedFlowHash) {
+          fail('node_producer_snapshot', '节点运行或图快照已变化；未创建新的 Run 或事件')
+        }
+        // A single native RW transaction serializes this predicate+insert
+        // across tabs. No unregistered index or process-local uniqueness map.
+        const duplicate = await db.agentRuns.filter(row => row.nodeRunId === nodeProducer!.nodeRunId
+          && row.nodeProducerNodeId === nodeProducer!.nodeProducerNodeId
+          && row.nodeProducerVariantIndex === nodeProducer!.nodeProducerVariantIndex
+          && row.nodeProducerAttempt === nodeProducer!.nodeProducerAttempt).first()
+        if (duplicate) fail('node_producer_duplicate', '原节点版本/attempt 已有真实 Run；只能读取原证据，不得再次创建发送')
+      }
       if (expectedRuntimeSessionHash !== undefined) {
         const session = await db.productRuntimeSessions.get(productRuntimeSessionId!)
         if (!session || await waitForHash(session) !== expectedRuntimeSessionHash) {
@@ -724,6 +779,11 @@ export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<Ag
         workId: productRuntimeSessionId == null ? input.scope.workId : null,
         productRuntimeSessionId,
         productBuildId,
+        ...(nodeProducer ? {
+          nodeRunId: nodeProducer.nodeRunId, nodeProducerNodeId: nodeProducer.nodeProducerNodeId,
+          nodeProducerVariantIndex: nodeProducer.nodeProducerVariantIndex,
+          nodeProducerAttempt: nodeProducer.nodeProducerAttempt,
+        } : {}),
         worldGroupId,
         conversationId,
         parentRunId: parent?.runId ?? null,

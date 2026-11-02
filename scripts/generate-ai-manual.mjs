@@ -23,6 +23,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execSync } from 'node:child_process'
 import ts from 'typescript'
+import { localChatMetaCategoryPositions } from './ai-call-meta.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const OUT = path.join(root, 'docs/AI-FUNCTIONS-MANUAL.generated.md')
@@ -298,6 +299,7 @@ function extractAiCalls() {
       if (ent.isDirectory()) walk(rel)
       else if (/\.(ts|tsx)$/.test(ent.name)) {
         const src = read(rel)
+        let localMetaCategories
         for (const callee of ['ai.start', 'chat', 'streamChat']) {
           for (const call of findCallRanges(src, callee)) {
             const lineStart = src.lastIndexOf('\n', call.start) + 1
@@ -316,6 +318,15 @@ function extractAiCalls() {
             if (/\bcategory\s*:/.test(call.text)) {
               dynamic.push(`${rel}:${line} · ${callee}`)
             } else {
+              // Be conservative: only prove a declared dynamic category, never
+              // infer a literal value through a metadata variable.
+              if (callee === 'chat') {
+                localMetaCategories ??= localChatMetaCategoryPositions(rel, src)
+                if (localMetaCategories.has(call.start)) {
+                  dynamic.push(`${rel}:${line} · ${callee}`)
+                  continue
+                }
+              }
               uncategorized.push(`${rel}:${line} · ${callee}`)
             }
           }

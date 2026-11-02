@@ -13,6 +13,7 @@ import {
 } from '../agent/formal-ai-entry'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
 import { createContextManifestFromAssemblyV1 } from '../agent/run/context-manifest'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
 import {
   appendAgentRunEventV1,
   createAgentRunV1,
@@ -754,7 +755,7 @@ function modelEvidence(input: {
   output: string
   provider: string
   model: string
-  startedAt: number
+  latencyMs: number
 }): TextOpenWorldCreatorBriefModelEvidenceV1 {
   const inputTokens = input.result.usage?.inputTokens
     ?? input.messages.reduce((total, message) => total + estimateTokens(message.content), 0)
@@ -766,7 +767,7 @@ function modelEvidence(input: {
     inputTokens,
     outputTokens,
     totalTokens: inputTokens + outputTokens,
-    latencyMs: Math.max(0, Date.now() - input.startedAt),
+    latencyMs: input.latencyMs,
     estimatedCostUsd: computeKnownCostUsd(input.model, inputTokens, outputTokens),
   }
 }
@@ -971,6 +972,9 @@ export async function generateTextOpenWorldCreatorBriefCandidateV1(input: {
       repairIssue,
       badOutput,
     })
+    const prepared = await recordCreationModelRequestV1({ scope: saved.scope, snapshot,
+      stepId: TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1, attempt, contextManifestHash: manifestHash, messages })
+    snapshot = prepared.snapshot
     snapshot = await appendRun(saved.scope, snapshot, 'model.requested', {
       stepId: TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1,
       attempt,
@@ -1000,19 +1004,23 @@ export async function generateTextOpenWorldCreatorBriefCandidateV1(input: {
             resolved!,
           )
     } catch (cause) {
+      const unavailable = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error: cause })
+      snapshot = unavailable.snapshot
       await appendRun(saved.scope, snapshot, 'run.paused', {
         reason: 'creator-brief-model-outcome-unknown',
         recoverable: false,
       })
-      throw cause
+      throw unavailable.report
     }
+    const latencyMs = Math.max(0, Date.now() - startedAt)
+    snapshot = await recordCreationModelResponseV1({ snapshot, request: prepared.request, raw: output, result })
     modelCalls.push(modelEvidence({
       result,
       messages,
       output,
       provider: modelIdentity.provider,
       model: modelIdentity.model,
-      startedAt,
+      latencyMs,
     }))
     snapshot = await appendRun(saved.scope, snapshot, 'model.responded', {
       stepId: TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1,

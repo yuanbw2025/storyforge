@@ -6,6 +6,7 @@ import type { AgentRunSnapshotV1 } from './event-store'
 interface CreationRequestEvidenceV1 {
   readonly scope: Readonly<WorkspaceScope>
   readonly runId: number
+  readonly productRuntimeSessionId?: number
   readonly generation: number
   readonly contractHash: string
   readonly stepId: string
@@ -29,6 +30,7 @@ function observe(outcome: ObservationV1['outcome'], result?: ChatResult): Observ
 }
 function assertPrefix(snapshot: AgentRunSnapshotV1, request: CreationRequestEvidenceV1): void {
   if (snapshot.run.id !== request.runId || snapshot.projection.generation !== request.generation
+    || (snapshot.run.productRuntimeSessionId ?? undefined) !== request.productRuntimeSessionId
     || snapshot.projection.contractHash !== request.contractHash
     || snapshot.projection.steps[request.stepId]?.attempt !== request.attempt) {
     throw new Error('模型响应证据不属于原运行、代际或当前 attempt。')
@@ -37,6 +39,7 @@ function assertPrefix(snapshot: AgentRunSnapshotV1, request: CreationRequestEvid
 function record(snapshot: AgentRunSnapshotV1, request: CreationRequestEvidenceV1, kind: 'raw-response' | 'tool-result', content: string) {
   return recordAgentRunArtifactV1({
     scope: request.scope, runId: request.runId, stepId: request.stepId, attempt: request.attempt,
+    productRuntimeSessionId: request.productRuntimeSessionId,
     artifactKind: kind, content, expectedLastSequence: snapshot.projection.lastSequence,
   })
 }
@@ -52,6 +55,7 @@ export async function recordCreationModelRequestV1(input: {
 }): Promise<{ snapshot: AgentRunSnapshotV1; request: CreationRequestEvidenceV1 }> {
   const bound = {
     scope: Object.freeze({ ...input.scope }), runId: input.snapshot.run.id,
+    ...(input.snapshot.run.productRuntimeSessionId == null ? {} : { productRuntimeSessionId: input.snapshot.run.productRuntimeSessionId }),
     generation: input.snapshot.projection.generation, contractHash: input.snapshot.projection.contractHash,
     stepId: input.stepId, attempt: input.attempt, contextManifestHash: input.contextManifestHash,
   }
@@ -61,6 +65,7 @@ export async function recordCreationModelRequestV1(input: {
     contractHash: bound.contractHash, stepId: bound.stepId, attempt: bound.attempt,
     contextManifestHash: bound.contextManifestHash, messages: input.messages })
   const saved = await recordAgentRunArtifactV1({ scope: bound.scope, runId: bound.runId,
+    productRuntimeSessionId: bound.productRuntimeSessionId,
     stepId: bound.stepId, attempt: bound.attempt, artifactKind: 'rendered-request', content,
     expectedLastSequence: input.snapshot.projection.lastSequence })
   return { snapshot: saved.snapshot, request: Object.freeze({ ...bound, artifactHash: saved.artifact.contentHash }) }

@@ -1,12 +1,12 @@
 import { renderAuthoringPromptControl } from './prompt-control'
 import { estimateTokens } from '../ai/context-budget'
-import type { NodeFlow } from '../types'
+import type { NodeFlow, WorkspaceScope } from '../types'
 import { authoringConnectionsHash, hashAuthoringText, isAuthoringCanonReceiptCurrent, readAuthoringCanonBinding } from './bindings'
 import type { AuthoringCandidateMap, AuthoringRunSnapshotMap } from './executor'
 import { downstreamAuthoringNodeIds } from './graph'
 import { parseAuthoringGraph } from './graph-codec'
 import { isQualityAuthoringReportCurrentV1, readQualityAuthoringRevisionV1 } from './quality-execution'
-import { resolveScopeLike } from '../workspace/scope'
+import { resolveReadScope } from '../workspace/scope'
 
 export type AuthoringFreshnessReason =
   | 'never-run'
@@ -48,11 +48,12 @@ function currentUpstreamHash(
 /** Compare latest run evidence with the graph and current Canon without writing either. */
 export async function inspectAuthoringGraphFreshness(input: {
   flow: NodeFlow
+  scope?: WorkspaceScope
   snapshots: AuthoringRunSnapshotMap
   candidates: AuthoringCandidateMap
 }): Promise<AuthoringFreshnessMap> {
   const graph = parseAuthoringGraph(input.flow.graphJson)
-  const scope = await resolveScopeLike(input.flow.projectId)
+  const scope = await resolveReadScope({ projectId: input.flow.projectId, scope: input.scope })
   const result: AuthoringFreshnessMap = {}
   const staleRoots = new Set<string>()
 
@@ -95,12 +96,13 @@ export async function inspectAuthoringGraphFreshness(input: {
     if (!confirmedCanon && snapshot?.sourceHash && signature?.executorVersion === 'FLOW-3B.2') {
       if (node.templateId === 'control.prompt') {
         try {
-          const current = await renderAuthoringPromptControl({ node, projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null })
+          const current = await renderAuthoringPromptControl({ node, scope, projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null })
           if (current.sourceHash !== snapshot.sourceHash) reasons.push('source-updated')
         } catch { reasons.push('source-missing') }
       } else {
         const current = await readAuthoringCanonBinding({
           node,
+          scope,
           projectId: input.flow.projectId,
           worldGroupId: input.flow.worldGroupId ?? null,
           contextBudget: typeof node.config.contextBudget === 'number' ? node.config.contextBudget : undefined,

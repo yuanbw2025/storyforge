@@ -80,7 +80,8 @@ import type { ContextGatewayExecutionV1 } from '../../context-gateway/execution'
 import { assertContextGatewayCandidateAdoptableV1 } from '../../context-gateway/execution'
 import { proseGatewayExecutionFromAssemblyV1 } from '../../prose/gateway-context'
 import { proseRenderedRequestV1 } from '../../prose/request-evidence'
-import type { AIRequestSettingsV1 } from '../../ai/client'
+import type { AIRequestSettingsV1, ChatResult } from '../../ai/client'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1 } from './creation-response-evidence'
 import { parseProseLengthObservationV1, type ProseLengthObservationV1 } from '../../prose/length-observation'
 import { recordAgentRunArtifactV1, readAgentRunArtifactExactV1 } from '../../memory/artifact-store'
 import { QUALITY_RECHECK_STEP_V1, verifyQualityRevisionEvidenceV1, type QualityRevisionEvidenceV1 } from '../../prose/quality-revision-evidence'
@@ -684,8 +685,9 @@ export async function beginProseSemanticStepV1(input: {
   contextManifest: ContextManifestV1
   executionBinding: AgentSkillExecutionBindingV1 | AgentSkillExecutionBindingV2
   requestBinding: unknown
+  messages: readonly ChatMessage[]
   reservedTokens: number
-}): Promise<AgentRunSnapshotV1> {
+}) {
   assertProseGenerationExecutionBindingsV1(input.snapshot)
   if (
     input.contextManifest.runId !== input.snapshot.run.id
@@ -705,6 +707,11 @@ export async function beginProseSemanticStepV1(input: {
     attempt: 1,
     manifestHash: input.contextManifest.manifestHash,
   })
+  const prepared = await recordCreationModelRequestV1({
+    scope: input.scope, snapshot, stepId: input.stepId, attempt: 1,
+    contextManifestHash: input.contextManifest.manifestHash, messages: input.messages,
+  })
+  snapshot = prepared.snapshot
   snapshot = await append(input.scope, snapshot, 'model.requested', {
     stepId: input.stepId,
     attempt: 1,
@@ -714,12 +721,13 @@ export async function beginProseSemanticStepV1(input: {
       contextManifestHash: input.contextManifest.manifestHash,
     }),
   })
-  return append(input.scope, snapshot, 'budget.reserved', {
+  snapshot = await append(input.scope, snapshot, 'budget.reserved', {
     stepId: input.stepId,
     modelCalls: 1,
     toolCalls: 0,
     tokens: Math.max(1, Math.floor(input.reservedTokens)),
   })
+  return { snapshot, request: prepared.request }
 }
 
 export async function recordProseSemanticModelOutputV1(input: {
@@ -727,13 +735,24 @@ export async function recordProseSemanticModelOutputV1(input: {
   snapshot: AgentRunSnapshotV1
   stepId: ProseSemanticStepIdV1
   output: string
+  request: Awaited<ReturnType<typeof beginProseSemanticStepV1>>['request']
+  result?: ChatResult
   usedTokens: number
 }): Promise<AgentRunSnapshotV1> {
   const step = input.snapshot.projection.steps[input.stepId]
   if (!step || step.status !== 'running' || step.attempt !== 1) {
     throw new Error(`正文语义步骤 ${input.stepId} 不在模型响应状态。`)
   }
-  let snapshot = await append(input.scope, input.snapshot, 'model.responded', {
+  if (input.request.stepId !== input.stepId || input.request.attempt !== 1
+    || input.request.scope.projectId !== input.scope.projectId
+    || input.request.scope.worldId !== input.scope.worldId
+    || input.request.scope.workId !== input.scope.workId) {
+    throw new Error('正文语义响应不属于原始请求的步骤或作用域。')
+  }
+  let snapshot = await recordCreationModelResponseV1({
+    snapshot: input.snapshot, request: input.request, raw: input.output, result: input.result,
+  })
+  snapshot = await append(input.scope, snapshot, 'model.responded', {
     stepId: input.stepId,
     attempt: 1,
     outputHash: await hashCanonicalValue(input.output),

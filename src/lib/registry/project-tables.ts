@@ -1221,6 +1221,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'parentRunId', remapVia: 'agentRuns', selfTree: true, exportAs: '_parentExportId' },
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
       { field: 'conversationId', remapVia: 'agentConversations', exportAs: '_conversationExportId' },
+      { field: 'nodeRunId', remapVia: 'nodeRuns', exportAs: '_nodeRunExportId', onUnmapped: 'require' },
       { field: 'productRuntimeSessionId', remapVia: 'productRuntimeSessions',
         exportAs: '_productRuntimeSessionExportId' },
       { field: 'productBuildId', remapVia: 'productBuilds', exportAs: '_productBuildExportId' },
@@ -1299,6 +1300,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.nodeRuns, name: 'nodeRuns', owner: 'project', exportable: true,
     domainOwner: WORK_DOMAIN_OWNER,
+    refs: [{ kind: 'simple', field: 'id', target: 'agentRuns[nodeRunId]', onDelete: 'setNull' }],
     exportRemap: [
       { field: 'flowId', remapVia: 'nodeFlows', exportAs: '_flowExportId', onUnmapped: 'require' },
     ],

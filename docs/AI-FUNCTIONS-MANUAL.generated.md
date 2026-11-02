@@ -411,28 +411,28 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:822` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:930` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:858` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:966` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:430` |
 | `canon.narrative.extract` | `src/lib/agent/run/narrative-annotation-durable.ts:218` |
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
-| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:779`<br/>`src/lib/node-authoring/domain-execution.ts:844` |
+| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:825`<br/>`src/lib/node-authoring/domain-execution.ts:890` |
 | `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1800` |
 | `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1778` |
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1768` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
-| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:607` |
+| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:653` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:129` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:943` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
-| `node.creation` | `src/lib/node-authoring/executor.ts:387` |
+| `node.creation` | `src/lib/node-authoring/executor.ts:395` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:200`<br/>`src/lib/outline/generation-node.ts:61` |
 | `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:666` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:56` |
@@ -455,7 +455,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ### 动态 category 调用
 
-- `src/lib/adventure/harness.ts:389 · chat`
+- `src/lib/adventure/harness.ts:396 · chat`
 - `src/lib/agent/character-copilot.ts:515 · chat`
 - `src/lib/agent/character-driven-copilot.ts:505 · chat`
 - `src/lib/agent/character-lifecycle-copilot.ts:448 · chat`
@@ -465,19 +465,19 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/creative-rules-copilot.ts:448 · chat`
 - `src/lib/agent/inspiration-copilot.ts:345 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
-- `src/lib/agent/outline-copilot.ts:522 · chat`
-- `src/lib/agent/outline-copilot.ts:772 · chat`
-- `src/lib/agent/prose-copilot.ts:705 · chat`
-- `src/lib/agent/prose-copilot.ts:984 · chat`
+- `src/lib/agent/outline-copilot.ts:521 · chat`
+- `src/lib/agent/outline-copilot.ts:771 · chat`
+- `src/lib/agent/prose-copilot.ts:704 · chat`
+- `src/lib/agent/prose-copilot.ts:983 · chat`
 - `src/lib/agent/run/codex-extraction-durable.ts:784 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
 - `src/lib/agent/run/short-novel-durable.ts:319 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1672 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1724 · chat`
-- `src/lib/agent/story-core-copilot.ts:557 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1671 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1723 · chat`
+- `src/lib/agent/story-core-copilot.ts:582 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
-- `src/lib/agent/worldview-field-copilot.ts:903 · chat`
+- `src/lib/agent/worldview-field-copilot.ts:935 · chat`
 - `src/lib/character-interaction/harness.ts:894 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:73 · chat`
 - `src/lib/character-interaction/situation-harness.ts:189 · chat`
@@ -486,21 +486,23 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:22 · ai.start`
 - `src/lib/motion-drama/durable-production.ts:348 · chat`
-- `src/lib/node-authoring/executor.ts:444 · chat`
+- `src/lib/node-authoring/executor.ts:453 · chat`
 - `src/lib/open-world/evolution-harness.ts:251 · chat`
-- `src/lib/open-world/harness.ts:143 · chat`
+- `src/lib/open-world/harness.ts:150 · chat`
 - `src/lib/product-production/authoring-consultation.ts:169 · chat`
 - `src/lib/product-production/capabilities.ts:325 · chat`
 - `src/lib/screenplay/durable-production.ts:486 · chat`
 - `src/lib/ttrpg/gm-actor-harness.ts:481 · chat`
-- `src/lib/ttrpg/gm-harness.ts:542 · chat`
+- `src/lib/ttrpg/gm-harness.ts:550 · chat`
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 66 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio 使用独立冻结音频执行器，文本入口不补默认字段。
+共 68 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio 使用独立冻结音频执行器，文本入口不补默认字段。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
+| `node.worldview.field` | `world-origin.worldview-field` | `worldview.dimension` | formal / durable-run | `node-worldview-field-candidate` | `worldviews` | `src/lib/node-authoring/field-producer.ts` |
+| `node.story-core.field` | `world-origin.story-core` | `story.core` | formal / durable-run | `node-story-core-field-candidate` | `storyCores` | `src/lib/node-authoring/field-producer.ts` |
 | `chat.source-unit-confirmation` | `chat.source-unit-confirmation.v1` | `authoring.chat-source-unit-confirmation` | formal / durable-run | `chat-source-unit-confirmation` | `chatAuthoringDrafts` | `src/lib/character-interaction/source-unit-confirmation-harness.ts` |
 | `chat.source-units` | `chat.source-units.v1` | `authoring.chat-source-units` | formal / durable-run | `chat-source-units` | 禁止 | `src/lib/character-interaction/source-units-harness.ts` |
 | `chat.source-units-review` | `chat.source-units-review.v1` | `authoring.chat-source-units-review` | formal / durable-run | `chat-source-units-review` | 禁止 | `src/lib/character-interaction/source-units-harness.ts` |
@@ -582,4 +584,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `df9fa441c`
+生成时间基准:commit `1496d2e9e`

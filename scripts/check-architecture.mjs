@@ -23,6 +23,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
+import { localChatMetaCategoryPositions } from './ai-call-meta.mjs'
 import { importsNarrativeGold, physicalWorldReleaseType, validateNarrativeBaselineFiles } from './narrative-world-baseline-contract.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -172,6 +173,7 @@ function findCallRanges(src, callee) {
 for (const dir of ['src/components', 'src/hooks', 'src/lib']) {
   for (const file of walk(dir)) {
     const src = read(file)
+    let localMetaCategories
     for (const callee of ['ai.start', 'chat', 'streamChat']) {
       for (const call of findCallRanges(src, callee)) {
         const lineStart = src.lastIndexOf('\n', call.start) + 1
@@ -182,6 +184,10 @@ for (const dir of ['src/components', 'src/hooks', 'src/lib']) {
         if (AI_META_FORWARDERS.has(file) && /\bmeta\b/.test(call.text)) continue
         if (file === 'src/lib/ai/client.ts') continue
         if (!/\bcategory\s*:/.test(call.text)) {
+          if (callee === 'chat') {
+            localMetaCategories ??= localChatMetaCategoryPositions(file, src)
+            if (localMetaCategories.has(call.start)) continue
+          }
           const line = src.slice(0, call.start).split('\n').length
           violations.push(`[④AI分类] ${file}:${line}: \`${callee}(...)\` 缺少 category meta,消耗统计与 AI manual 会漏记`)
         }
@@ -1391,15 +1397,21 @@ if (!productRuntimeInstanceSource.includes("input.productSource.kind !== 'releas
 }
 /** Follow this one approved extraction through real TS bindings. The source
  * count guard must belong to the called/exported verifier, not a comment,
- * unrelated module, shadowed local call or merely concatenated source text. */
+ * unrelated module, shadowed local call or merely concatenated source text.
+ * @param {string} coreText
+ * @param {string} authorityText
+ * @returns {boolean}
+ */
 function hasBoundFormalRuntimeSourceGuardV1(coreText, authorityText) {
   const corePath = '/runtime-boundary/runtime-core.ts'
   const authorityPath = '/runtime-boundary/runtime-source-authority.ts'
   const files = new Map([[corePath, coreText], [authorityPath, authorityText]])
   const options = { target: ts.ScriptTarget.Latest, module: ts.ModuleKind.ESNext, noLib: true, noEmit: true }
   const host = ts.createCompilerHost(options)
-  host.getSourceFile = file => files.has(file)
-    ? ts.createSourceFile(file, files.get(file), options.target, true, ts.ScriptKind.TS) : undefined
+  host.getSourceFile = file => {
+    const text = files.get(file)
+    return text === undefined ? undefined : ts.createSourceFile(file, text, options.target, true, ts.ScriptKind.TS)
+  }
   host.fileExists = file => files.has(file)
   host.readFile = file => files.get(file)
   host.resolveModuleNames = (names, containingFile) => names.map(name => (
@@ -1409,6 +1421,9 @@ function hasBoundFormalRuntimeSourceGuardV1(coreText, authorityText) {
   const program = ts.createProgram([corePath, authorityPath], options, host)
   const checker = program.getTypeChecker(), core = program.getSourceFile(corePath)
   const authority = program.getSourceFile(authorityPath)
+  if (!core || !authority) return false
+  /** @param {import('typescript').Symbol | undefined} symbol
+   * @returns {import('typescript').Symbol | undefined} */
   const unalias = symbol => symbol && (symbol.flags & ts.SymbolFlags.Alias)
     ? checker.getAliasedSymbol(symbol) : symbol
   const verifierName = 'verifyFormalRuntimeSourceV1'
@@ -1419,7 +1434,7 @@ function hasBoundFormalRuntimeSourceGuardV1(coreText, authorityText) {
   const target = unalias(exported)
   const verifier = target?.declarations?.find(node => ts.isFunctionDeclaration(node) && node.body
     && node.name?.text === verifierName && (node.getSourceFile() === core || node.getSourceFile() === authority))
-  if (!verifier) return false
+  if (!verifier || !ts.isFunctionDeclaration(verifier) || !verifier.body) return false
   if (verifier.getSourceFile() === authority) {
     const imported = core.statements.some(node => ts.isImportDeclaration(node)
       && stringValue(node.moduleSpecifier) === './runtime-source-authority' && !node.importClause?.isTypeOnly
@@ -1430,7 +1445,7 @@ function hasBoundFormalRuntimeSourceGuardV1(coreText, authorityText) {
     if (!imported) return false
   }
   let called = false
-  visit(core, node => {
+  visit(core, /** @param {import('typescript').Node} node */ node => {
     if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)
       || unalias(checker.getSymbolAtLocation(node.expression)) !== target) return
     let parent = node.parent
@@ -1451,9 +1466,11 @@ function hasBoundFormalRuntimeSourceGuardV1(coreText, authorityText) {
   if (!ts.isPropertyAccessExpression(filterAccess) || filterAccess.name.text !== 'filter'
     || !ts.isArrayLiteralExpression(filterAccess.expression) || filter.arguments.length !== 1) return false
   const elements = filterAccess.expression.elements
-  if (elements.length !== 2 || !elements.every(node => ts.isPropertyAccessExpression(node)
-    && ts.isIdentifier(node.expression) && node.expression.text === parameter.text)
-    || elements[0].name.text !== 'productReleaseId' || elements[1].name.text !== 'productBuildId') return false
+  const releaseElement = elements[0], buildElement = elements[1]
+  if (elements.length !== 2 || !releaseElement || !buildElement
+    || !ts.isPropertyAccessExpression(releaseElement) || !ts.isPropertyAccessExpression(buildElement)
+    || ![releaseElement, buildElement].every(node => ts.isIdentifier(node.expression) && node.expression.text === parameter.text)
+    || releaseElement.name.text !== 'productReleaseId' || buildElement.name.text !== 'productBuildId') return false
   const predicate = filter.arguments[0]
   if (!ts.isArrowFunction(predicate) || predicate.parameters.length !== 1
     || !ts.isIdentifier(predicate.parameters[0].name) || !ts.isBinaryExpression(predicate.body)
@@ -1463,6 +1480,8 @@ function hasBoundFormalRuntimeSourceGuardV1(coreText, authorityText) {
   return verifier.body.statements.some(node => {
     if (!ts.isIfStatement(node) || !ts.isBlock(node.thenStatement)
       || !ts.isThrowStatement(node.thenStatement.statements[0])) return false
+    /** @param {import('typescript').Node} part
+     * @returns {boolean} */
     const rejectsNonUnique = part => {
       if (ts.isParenthesizedExpression(part)) return rejectsNonUnique(part.expression)
       if (!ts.isBinaryExpression(part)) return false
@@ -1496,6 +1515,7 @@ const sourceGuardCoreSelfTestV1 = `
   export { verifyFormalRuntimeSourceV1 } from './runtime-source-authority';
   export function appendFormal(session) { return verifyFormalRuntimeSourceV1(session); }
 `
+/** @type {Array<[string, string, string, boolean]>} */
 const sourceGuardSelfTestsV1 = [
   ['valid-extracted', sourceGuardCoreSelfTestV1, sourceGuardAuthoritySelfTestV1, true],
   ['valid-inline', `${sourceGuardAuthoritySelfTestV1} export function appendFormal(s) { return verifyFormalRuntimeSourceV1(s); }`, '', true],

@@ -52,7 +52,7 @@ export async function readAuthoringReceiptRows(scope: WorkspaceScope, target: st
   return readOwnedRows<Record<string, unknown>>(scope, target)
 }
 
-function receiptRecordHash(row: Record<string, unknown>, fields: string[]): string {
+export function receiptRecordHash(row: Record<string, unknown>, fields: string[]): string {
   return hashAuthoringText(JSON.stringify(fields.map(field => [field, row[field] ?? null])))
 }
 
