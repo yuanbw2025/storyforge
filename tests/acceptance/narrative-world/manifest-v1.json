@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261102-community-deps-integrated-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved mainline receipt before re-evaluating the integrated community Auth/TUS dependency inputs; deterministic observations must remain unchanged."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261030-community-r2-main870-v1.json",
         "workPackage": "NW-0B",
