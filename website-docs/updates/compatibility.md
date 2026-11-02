@@ -3,7 +3,7 @@
 
 ## 正式 v4.0.5
 
-[**v4.0.5**](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.5) 于 **2026-10-30 13:15 UTC** 正式发布，固定源码 `ae765da81606126ce0cee79564e3f541d0906814`。包含长篇保存与加载恢复 #215、正文百科引用保护 #231，以及已合并的模型配置、逐章要求、互动产品等增量。产品预览标记继续保留。数据库为 v13、完整备份为 v17；升级前导出原环境完整 JSON，不卸载或清库。选择 Windows EXE、Mac ARM/Intel DMG、正式 Android APK 或四平台便携 ZIP；发行页共 11 项附件，另含更新元数据、blockmap 与 SHA256SUMS.txt。
+[**v4.0.5**](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.5) 于 **2026-10-30 13:15 UTC** 正式发布，标签固定源码 `4dd8a4a1c9b6ef49924520c65cff5fb652f123c5`（Release 目标字段为 `ae765da8`，两者代码树相同）。包含长篇保存与加载恢复 #215、正文百科引用保护 #231，以及已合并的模型配置、逐章要求、互动产品等增量。产品预览标记继续保留。数据库为 v13、完整备份为 v17；升级前导出原环境完整 JSON，不卸载或清库。选择 Windows EXE、Mac ARM/Intel DMG、正式 Android APK 或四平台便携 ZIP；发行页共 11 项附件，另含更新元数据、blockmap 与 SHA256SUMS.txt。
 
 11 月 2 日合入的来源能力绑定、重复引文判定与检查修复 [#246](https://github.com/yuanbw2025/storyforge/pull/246)（`501e8548`）晚于此固定源码。其余质量整改仍按[开发记录](/updates/development-status)逐项核对，不因分支检查通过视为正式发行。
 
