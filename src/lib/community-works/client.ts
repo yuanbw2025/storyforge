@@ -102,7 +102,7 @@ function uploadSignedSnapshot(config: CommunityClientConfig, input: {
   onProgress?: (percentage: number) => void; signal?: AbortSignal
 }): Promise<void> {
   const endpoint = new URL(input.endpoint)
-  if (endpoint.origin !== config.storageOrigin || endpoint.pathname !== '/storage/v1/upload/resumable' ||
+  if (endpoint.origin !== config.storageOrigin || endpoint.pathname !== '/storage/v1/upload/resumable/sign' ||
       !/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/){2}snapshot\.json$/.test(input.path) ||
       !/^[0-9a-f]{64}$/.test(input.sha256) || !input.token) throw new Error('私有上传目标无效')
   const file = new File([input.bytes as BlobPart], `${input.sha256}.json`, { type: 'application/json' })
@@ -113,7 +113,7 @@ function uploadSignedSnapshot(config: CommunityClientConfig, input: {
       retryDelays: [0, 3000, 10000], uploadDataDuringCreation: true,
       removeFingerprintOnSuccess: true,
       fingerprint: async () => `storyforge-community-v1:${input.path}:${input.sha256}:${endpoint.origin}`,
-      headers: { 'x-signature': input.token },
+      headers: { 'x-signature': input.token, apikey: config.publishableKey },
       metadata: { bucketName: 'community-intake', objectName: input.path, contentType: 'application/json' },
       onProgress: (sent, total) => input.onProgress?.(Math.round(sent / total * 100)),
       onSuccess: () => { input.signal?.removeEventListener('abort', abort); resolve() },

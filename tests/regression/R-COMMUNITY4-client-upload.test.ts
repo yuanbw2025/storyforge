@@ -6,8 +6,12 @@ import type { NovelPublicSnapshotV1 } from '../../src/lib/community-works/public
 
 vi.mock('tus-js-client', () => ({
   Upload: class {
-    options: { onProgress: (sent: number, total: number) => void; onSuccess: () => void }
-    constructor(_file: File, options: typeof this.options) { this.options = options }
+    options: { endpoint: string; headers: Record<string, string>; onProgress: (sent: number, total: number) => void; onSuccess: () => void }
+    constructor(_file: File, options: typeof this.options) {
+      expect(options.endpoint).toBe('https://storage.example/storage/v1/upload/resumable/sign')
+      expect(options.headers).toEqual({ 'x-signature': 'private', apikey: 'sb_publishable_test' })
+      this.options = options
+    }
     async findPreviousUploads() { return [] }
     start() { this.options.onProgress(100, 100); this.options.onSuccess() }
     async abort() { /* no active upload */ }
@@ -57,7 +61,7 @@ describe('community upload client', () => {
         expect(JSON.parse(String(init?.body)).sha256).toBe(seal.sha256)
         return Response.json({ sessionId: uploadId,
           signedUrl: `https://storage.example/storage/v1/object/upload/sign/community-intake/${userId}/${uploadId}/snapshot.json?token=private`,
-          token: 'private', tusEndpoint: 'https://storage.example/storage/v1/upload/resumable',
+          token: 'private', tusEndpoint: 'https://storage.example/storage/v1/upload/resumable/sign',
           objectPath: `${userId}/${uploadId}/snapshot.json`, sha256: seal.sha256, byteLength: seal.byteLength }, { status: 201 })
       }
       if (url.pathname.endsWith('/submissions')) {
