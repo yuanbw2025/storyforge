@@ -13,7 +13,7 @@ import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import type { OutlineNode } from '../../src/lib/types'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 const original = '保留开头。\n带走旧信。\n保留结尾。'
 const issue = { id: 'issue-1', issueType: 'logic' as const, severity: 'high' as const, description: '信应当留下', affectedChapters: [0], suggestion: '留下旧信' }
