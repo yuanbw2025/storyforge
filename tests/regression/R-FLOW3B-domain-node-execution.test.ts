@@ -171,7 +171,7 @@ describe('FLOW-3B · 领域节点运行和显式采纳', () => {
     expect(await db.promptTemplates.count()).toBe(0)
     prompt.config.parameterValues = { pace: '急促' }
     const changed = { ...flow, graphJson: JSON.stringify(graph) }
-    await expect(adoptAuthoringCandidate({ flow: changed, nodeId: origin.id, output: outcome.candidates.origin.output, runId: outcome.run.id })).rejects.toThrow('节点参数或写入目标已变化')
+    await expect(adoptAuthoringCandidate({ flow: changed, nodeId: origin.id, output: outcome.candidates.origin.output, runId: outcome.run.id })).rejects.toThrow('节点字段采纳未完成：执行图已变化')
     expect(await db.worldviews.where('projectId').equals(project.id!).count()).toBe(0)
   })
 
