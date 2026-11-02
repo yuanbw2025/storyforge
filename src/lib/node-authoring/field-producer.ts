@@ -160,7 +160,9 @@ export function createNodeFieldProducerV1(input: FieldProducerInput) {
     const graph = parseAuthoringGraph(nodeRun.graphSnapshotJson)
     const originalNode = graph.nodes.find(node => node.id === fixed.node.id)
     const currentGraph = parseAuthoringGraph(flow.graphJson)
-    if (!originalNode || canonicalStringify(originalNode) !== canonicalStringify(fixed.node)
+    const captured = { ...graph, nodes: graph.nodes.map(node => node.id === fixed.node.id ? fixed.node : node) }
+    if (!originalNode || canonicalStringify(executionInput(graph, fixed.node.id))
+        !== canonicalStringify(executionInput(captured, fixed.node.id))
       || canonicalStringify(executionInput(graph, fixed.node.id)) !== canonicalStringify(executionInput(currentGraph, fixed.node.id))) {
       throw new Error('节点生产的原图、节点或当前图已变化，未发送模型请求。')
     }
@@ -455,9 +457,11 @@ export async function readNodeFieldProducerPrefixV1(input: {
     || !await assertRecordInScope(scope, 'nodeRuns', expectedRun, { owner: 'work' })) return failRead()
   const original = parseAuthoringGraph(expectedRun.graphSnapshotJson)
   const originalNode = original.nodes.find(row => row.id === node.id)
+  const captured = { ...original, nodes: original.nodes.map(row => row.id === node.id ? node : row) }
   const template = AUTHORING_NODE_BY_ID.get(node.templateId)
   const world = template?.writes?.target === 'worldviews'
-  if (!originalNode || canonicalStringify(originalNode) !== canonicalStringify(node)
+  if (!originalNode || canonicalStringify(executionInput(original, node.id))
+      !== canonicalStringify(executionInput(captured, node.id))
     || !template || template.writes?.fields?.length !== 1
     || (!world && template.writes.target !== 'storyCores') || node.binding?.mode === 'live') return failRead()
   const field = template.writes.fields[0], table = world ? 'worldviews' : 'storyCores'

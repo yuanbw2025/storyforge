@@ -35,7 +35,7 @@ import type {
 } from './contracts'
 import { safeAuthoringGraphJson } from './contracts'
 import { adoptDomainCandidate, executeDomainNode, readNodeFieldCandidateCountV1 } from './domain-execution'
-import { readNodeFieldProducerPrefixV1 } from './field-producer'
+import { executionInput, readNodeFieldProducerPrefixV1 } from './field-producer'
 import { confirmNodeFieldAdoptionIntentV1, commitNodeFieldBusinessV1,
   prepareNodeFieldAdoptionCompletionV1, readNodeFieldAdoptionProofV1,
   type NodeFieldAdoptionInputV1 } from './field-adoption'
@@ -747,7 +747,9 @@ async function persistFieldNodeInputSnapshot(input: {
     const original = parseAuthoringGraph(current.graphSnapshotJson)
     const live = parseAuthoringGraph(flow.graphJson)
     const originalNode = original.nodes.find(node => node.id === fixed.node.id)
-    if (!originalNode || canonicalStringify(originalNode) !== canonicalStringify(fixed.node)
+    const captured = { ...original, nodes: original.nodes.map(node => node.id === fixed.node.id ? fixed.node : node) }
+    if (!originalNode || canonicalStringify(executionInput(original, fixed.node.id))
+        !== canonicalStringify(executionInput(captured, fixed.node.id))
       || authoringExecutionGraphHash(authoringExecutionSubgraph(original, fixed.node.id))
         !== authoringExecutionGraphHash(authoringExecutionSubgraph(live, fixed.node.id))) {
       throw new Error('节点输入快照的原图或当前执行图已变化，未开始生成。')
