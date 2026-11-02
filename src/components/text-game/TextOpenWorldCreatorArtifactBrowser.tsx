@@ -39,6 +39,7 @@ export interface TextOpenWorldCreatorArtifactBrowserProps {
   productionId: number
   refreshToken?: string | number
   focusArtifact?: { artifactKey: string; requestId: number } | null
+  readOnly?: boolean
   onRepairBuildCreated?: (result: {
     productionId: number
     baseBuildNumber: number
@@ -382,7 +383,7 @@ export function TextOpenWorldCreatorArtifactBrowser(
     }
   }, [projection, props.productionId, scope, selectedArtifact?.artifactKey,
     selectedBackingArtifact, selectedEntity?.artifactKey, selectedEntity?.identity])
-  const editGovernanceEligible = editSelection != null
+  const editGovernanceEligible = !props.readOnly && editSelection != null
     && selectedBackingArtifact?.currentEpoch === true
     && selectedBackingArtifact.health === 'verified'
     && selectedBackingArtifact.productionValidation === 'production-validated'

@@ -79,7 +79,9 @@ it('reviews exact v4 sources and retains the same projection and visibility unde
   await expect(loadProductProductionWorldSourceCatalogV2({scope, worldReleaseId: confirmed.worldReleaseId!,
     selection: {...brief.source.selection, version: 1}, sourcePlan})).rejects.toThrow('版本或产品不一致')
 
-  const changed = await saveChatDraftV1(scope, confirmed.revision, {...parseChatAuthoringSettings(JSON.parse(confirmed.settingsJson)), backgroundResourceKeys: []})
+  const confirmedSettings = parseChatAuthoringSettings(JSON.parse(confirmed.settingsJson))
+  if (confirmedSettings.version === 1) throw new Error('Background source review requires version 2 or later')
+  const changed = await saveChatDraftV1(scope, confirmed.revision, {...confirmedSettings, backgroundResourceKeys: []})
   expect(JSON.parse(changed.settingsJson).sourceReview).toBeNull()
   const nextProjection = await loadChatSourceProjectionV1(scope, changed.revision)
   expect(() => readPreparedChatSourceProjectionViewV1({draft: nextProjection, review, viewerKey: 'player'})).toThrow('重新检查')

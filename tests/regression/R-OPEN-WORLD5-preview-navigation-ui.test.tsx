@@ -2,7 +2,8 @@ import { act, createElement, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Project, WorkspaceScope } from '../../src/lib/types'
+import type { Project, TextOpenWorldCreatorSourceBindingV1, WorkspaceScope } from '../../src/lib/types'
+import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 
 const routeMocks = vi.hoisted(() => ({ recover: vi.fn() }))
 vi.mock('../../src/lib/open-world/creator-brief', async importOriginal => ({
@@ -70,17 +71,26 @@ describe('OPEN-WORLD-5 · creator preview player navigation', () => {
   let root: ReturnType<typeof createRoot>
   const creatorScope: WorkspaceScope = { projectId: 61, worldId: 62, workId: 69 }
 
-  beforeEach(() => {
+  beforeEach(async () => {
     host = document.createElement('div')
     document.body.append(host)
     root = createRoot(host)
     vi.spyOn(db.projects, 'toArray').mockResolvedValue([
-      { id: 51, activeWorldId: 52, activeWorkId: 53, name: '来源小说', workspacePurpose: 'independent-work' },
+      { id: 51, activeWorldId: 52, activeWorkId: 53, name: '来源世界', workspacePurpose: 'world-engine' },
       { id: 61, activeWorldId: 62, activeWorkId: 63, name: '制作作品', workspacePurpose: 'independent-work' },
     ] as Project[])
+    const sourceBinding: TextOpenWorldCreatorSourceBindingV1 = {
+      kind: 'world-release', worldCode: 'world.preview-navigation',
+      releaseUid: 'world-release.preview-navigation.1', releaseVersion: 1,
+      releaseHash: 'a'.repeat(64), referenceHash: 'b'.repeat(64),
+      manifestSchemaHash: 'c'.repeat(64), capabilityCatalogHash: 'd'.repeat(64),
+      capabilityProfileHash: 'e'.repeat(64),
+    }
     routeMocks.recover.mockResolvedValue({
       scope: creatorScope,
       production: { id: 91, currentBuildNumber: 7, status: 'preview-ready' },
+      sourceBinding,
+      sourceBindingHash: await hashCanonicalValue(sourceBinding),
       selection: null,
     })
   })

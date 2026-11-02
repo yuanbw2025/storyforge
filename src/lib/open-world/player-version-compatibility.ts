@@ -54,8 +54,8 @@ export interface TextOpenWorldPlayerPinnedReleaseV1 {
   label: string
   createdAt: number
   isLatestVerifiedRelease: boolean
-  /** Old saves remain executable against their immutable pinned Release. */
-  canContinueWithoutUpgrade: true
+  /** Execution admission, separate from strict historical read/replay support. */
+  canContinueWithoutUpgrade: boolean
 }
 
 export interface TextOpenWorldPlayerVersionCompatibilityProjectionV1 {
@@ -253,6 +253,7 @@ export async function projectTextOpenWorldPlayerVersionCompatibilityV1(input: {
     || right.release.id - left.release.id)
   diagnostics.sort((left, right) => (right.releaseVersion ?? -1) - (left.releaseVersion ?? -1))
 
+  const pinnedSourceExecutable = pinned.manifest.runtimePackage.textOpenWorldVNext?.sourceManifest.kind !== 'novel-source-pin'
   const releases = verified.map(({ release, manifest }) => {
     const relationToPinned = release.id === pinned.release.id
       ? 'pinned' as const
@@ -274,6 +275,8 @@ export async function projectTextOpenWorldPlayerVersionCompatibilityV1(input: {
         : declaration !== 'not-declared',
       compatibilityDeclaration: declaration,
       canMigratePinnedSession: relationToPinned === 'newer'
+        && pinnedSourceExecutable
+        && manifest.runtimePackage.textOpenWorldVNext?.sourceManifest.kind !== 'novel-source-pin'
         && session.status === 'active'
         && isVNextOnlyRelease(pinned)
         && isVNextOnlyRelease({ release, manifest })
@@ -292,7 +295,7 @@ export async function projectTextOpenWorldPlayerVersionCompatibilityV1(input: {
       label: pinned.release.label.trim(),
       createdAt: pinned.release.createdAt,
       isLatestVerifiedRelease: releases[0]?.relationToPinned === 'pinned',
-      canContinueWithoutUpgrade: true,
+      canContinueWithoutUpgrade: pinnedSourceExecutable,
     },
     releases,
     diagnostics,

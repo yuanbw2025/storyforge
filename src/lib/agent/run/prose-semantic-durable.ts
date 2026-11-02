@@ -9,13 +9,15 @@ import { getAgentSkillV1, resolveAgentSkillContextSourceKeysV1 } from '../skill-
 import {
   PROSE_SEMANTIC_REVIEW_PROMPT_VERSION_V1,
   runProseSemanticReviewCycleV1,
+  type ProseSemanticModelCallV1,
   type ProseSemanticReviewCycleResultV1,
 } from '../prose-semantic-review'
 import type { InformationBoundaryManifestV1 } from '../information-boundary'
 import { validateProseInformationBoundaryV1 } from '../information-boundary'
 import type { AgentTeamBudgetTracker } from '../team-budget'
 import { createContextManifestFromAssemblyV1 } from './context-manifest'
-import type { AgentRunSnapshotV1 } from './event-store'
+import { readAgentRunV1, type AgentRunSnapshotV1 } from './event-store'
+import { recordUnavailableCreationResponseV1 } from './creation-response-evidence'
 import { hashCanonicalValue } from './hash'
 import {
   beginProseSemanticStepV1,
@@ -47,8 +49,8 @@ export async function runDurableProseSemanticReviewV1(input: {
   reviewerProvider: string
   reviewerModel: string
   budget: AgentTeamBudgetTracker
-  review: (messages: ChatMessage[]) => Promise<string>
-  revise: (messages: ChatMessage[]) => Promise<string>
+  review: ProseSemanticModelCallV1
+  revise: ProseSemanticModelCallV1
   onStage?: (stage: ProseSemanticHarnessStageV1) => void
   onSnapshot?: (snapshot: AgentRunSnapshotV1) => void
 }): Promise<{
@@ -56,7 +58,12 @@ export async function runDurableProseSemanticReviewV1(input: {
   cycle: ProseSemanticReviewCycleResultV1
 }> {
   let snapshot = input.snapshot
+  const scope = Object.freeze({ ...input.scope })
+  const runId = snapshot.run.id
+  const generation = snapshot.projection.generation
+  const contractHash = snapshot.projection.contractHash
   let activeStep: ProseSemanticStepIdV1 | null = null
+  let activeRequest: Awaited<ReturnType<typeof beginProseSemanticStepV1>>['request'] | null = null
   const publish = () => input.onSnapshot?.(snapshot)
   const reviewerSkill = getAgentSkillV1('prose.review', 'prose')
   const revisionSkill = getAgentSkillV1('prose.revise', 'prose')
@@ -179,33 +186,48 @@ export async function runDurableProseSemanticReviewV1(input: {
         if (event.state === 'requested') {
           activeStep = phase.stepId
           input.onStage?.(phase.stage)
-          snapshot = await beginProseSemanticStepV1({
-            scope: input.scope,
+          const prepared = await beginProseSemanticStepV1({
+            scope,
             snapshot,
             stepId: phase.stepId,
             contextManifest: phase.manifest,
             executionBinding: phase.binding,
             requestBinding: {
               phase: event.phase,
-              messagesHash: await hashCanonicalValue(event.messages ?? []),
+              messagesHash: await hashCanonicalValue(event.messages),
               sourceCandidateHash: await hashCanonicalValue(input.originalText),
             },
+            messages: event.messages,
             reservedTokens: event.estimatedInputTokens + event.reservedOutputTokens,
           })
-        } else {
+          snapshot = prepared.snapshot
+          activeRequest = prepared.request
+        } else if (event.state === 'responded') {
+          if (!activeRequest) throw new Error('正文语义响应缺少原始请求证据。')
           snapshot = await recordProseSemanticModelOutputV1({
-            scope: input.scope,
+            scope,
             snapshot,
             stepId: phase.stepId,
-            output: event.output ?? '',
-            usedTokens: event.estimatedInputTokens + estimateTokens(event.output ?? ''),
+            request: activeRequest,
+            output: event.output,
+            result: event.result,
+            // This remains the pre-existing conservative policy accounting.
+            // Provider usage is separately retained only from the real result.
+            usedTokens: event.estimatedInputTokens + estimateTokens(event.output),
           })
+        } else {
+          if (!activeRequest) throw new Error('正文语义请求失败时缺少原始请求证据。')
+          const failed = await recordUnavailableCreationResponseV1({
+            snapshot, request: activeRequest, result: event.result, error: event.error,
+          })
+          snapshot = failed.snapshot
+          throw failed.report
         }
         publish()
       },
       onReviewArtifact: async artifact => {
         snapshot = await completeProseSemanticStepV1({
-          scope: input.scope,
+          scope,
           snapshot,
           stepId: artifact.round === 1
             ? PROSE_SEMANTIC_REVIEW_STEP_ID_V1
@@ -213,29 +235,43 @@ export async function runDurableProseSemanticReviewV1(input: {
           artifactHash: artifact.artifactHash,
         })
         activeStep = null
+        activeRequest = null
         publish()
       },
       onRevisionArtifact: async artifact => {
         snapshot = await completeProseSemanticStepV1({
-          scope: input.scope,
+          scope,
           snapshot,
           stepId: PROSE_SEMANTIC_REVISION_STEP_ID_V1,
           artifactHash: artifact.artifactHash,
         })
         activeStep = null
+        activeRequest = null
         publish()
       },
     })
     return { snapshot, cycle }
   } catch (error) {
     if (activeStep) {
-      snapshot = await failProseSemanticStepV1({
-        scope: input.scope,
-        snapshot,
-        stepId: activeStep,
-        code: error instanceof Error ? error.message : 'prose_semantic_review_failed',
-      })
-      publish()
+      try {
+        // A metadata/raw transaction may already have committed before a
+        // sibling evidence write failed. Use its real prefix, never retry it.
+        snapshot = await readAgentRunV1(scope, runId)
+        if (snapshot.projection.generation !== generation || snapshot.projection.contractHash !== contractHash) {
+          throw new Error('正文语义失败证据不能写入已变化的运行代际或合同。')
+        }
+        snapshot = await failProseSemanticStepV1({
+          scope,
+          snapshot,
+          stepId: activeStep,
+          code: error instanceof Error ? error.message : 'prose_semantic_review_failed',
+        })
+        publish()
+      } catch (persistenceFailure) {
+        throw Object.assign(new Error('正文语义步骤已停止，失败证据未能完整保存。'), {
+          cause: error, persistenceFailures: [persistenceFailure],
+        })
+      }
     }
     throw error
   }

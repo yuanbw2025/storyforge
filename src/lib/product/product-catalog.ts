@@ -109,7 +109,7 @@ export const PRODUCT_CATALOG_V1: readonly ProductCatalogEntryV1[] = Object.freez
   entry({ id: 'upper.ai-town', label: '后日谈 AI 小镇', family: 'upper-product', status: 'preview', charterPhase: 'E', sourcePolicy: 'world-release-required', ownsRuntime: true, ownsMedia: true, maturityNote: '冻结来源生产、发布、单机运行与私域演化纵切面可预览；长期内容量与商业化媒资仍待专项验收。' }),
   entry({ id: 'upper.text-adventure', label: '文字冒险', family: 'upper-product', status: 'preview', charterPhase: 'E', sourcePolicy: 'world-release-required', ownsRuntime: true, ownsMedia: true, maturityNote: '专业生产、媒资、发布与确定性运行纵切面可验证；真实模型内容质量、真人试玩和首个社区推荐成品仍待专项验收。' }),
   entry({ id: 'upper.avg', label: 'AVG', family: 'upper-product', status: 'preview', charterPhase: 'E', sourcePolicy: 'world-release-required', ownsRuntime: true, ownsMedia: true, maturityNote: '制作与运行基础可预览，真实视听资产和演出交付待专项验收。' }),
-  entry({ id: 'upper.text-open-world', label: '文字开放世界', family: 'upper-product', status: 'preview', charterPhase: 'E', sourcePolicy: 'world-release-or-novel', ownsRuntime: true, ownsMedia: true, maturityNote: '可从冻结世界版本或受治理小说来源生产；专属 Creator、确定性玩法、运行时 AI 与玩家端已经贯通，仍待真实模型校准和真人双结局验收。' }),
+  entry({ id: 'upper.text-open-world', label: '文字开放世界', family: 'upper-product', status: 'preview', charterPhase: 'E', sourcePolicy: 'world-release-required', ownsRuntime: true, ownsMedia: true, maturityNote: '正式生产引用封存世界版本；小说须先显式派生世界草稿、检查并封存。专属 Creator、确定性玩法、运行时 AI 与玩家端已有工程链路，仍待真实模型校准和真人双结局验收。' }),
   entry({ id: 'platform.marketplace', label: '社区市场', family: 'platform', status: 'experimental', charterPhase: 'F', sourcePolicy: 'distribution-bundle', ownsRuntime: false, ownsMedia: false, maturityNote: '平台与商业化阶段后置，默认隐藏，仅允许本地显式研究。' }),
 ])
 

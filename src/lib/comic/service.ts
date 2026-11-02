@@ -13,6 +13,7 @@ import type {
 } from '../types'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { effectiveWorkKind } from '../workspace/work-kind'
+import { comicMediaRemovalTransactionTablesV1, readComicRemovalPagesV1, removeComicMediaRowsInTransactionV1 } from './media-lifecycle'
 import {
   assertComicPageV1,
   assertComicPanelV1,
@@ -348,21 +349,43 @@ export async function saveComicVisualSubject(input: {
 }
 
 export async function deleteComicVisualSubject(input: { scope: WorkspaceScope; subjectId: number; clearReferences?: boolean }): Promise<void> {
-  const { scope, adaptation } = await requireComic(input.scope, true)
-  const blobObjectIds = await db.transaction('rw', db.comicVisualSubjects, db.comicPanels, db.comicMediaAssets, async () => {
-    const subject = await db.comicVisualSubjects.get(input.subjectId)
-    if (!subject || subject.workId !== scope.workId || subject.adaptationProjectId !== adaptation.id) throw new Error('[comic] 视觉条目不存在或越界')
+  const command = { scope: { ...input.scope }, subjectId: input.subjectId, clearReferences: input.clearReferences === true }
+  const { scope, adaptation } = await requireComic(command.scope, true)
+  const blobObjectIds = await db.transaction('rw', comicMediaRemovalTransactionTablesV1(), async () => {
+    const current = await requireComic(scope, true)
+    if (current.adaptation.id !== adaptation.id) throw new Error('[comic] 改编根已变化，请刷新')
+    const subject = await db.comicVisualSubjects.get(command.subjectId)
+    if (!subject || subject.adaptationProjectId !== adaptation.id
+      || !await assertRecordInScope(scope, 'comicVisualSubjects', subject, { owner: 'work' })) throw new Error('[comic] 视觉条目不存在或越界')
     if (subject.status === 'locked') throw new Error('[comic] 锁定视觉条目必须先解锁')
+    const pages = await readComicRemovalPagesV1(scope, adaptation.id)
     const [panels, assets] = await Promise.all([
-      db.comicPanels.where('workId').equals(scope.workId).filter(panel => panel.continuityRefs.some(ref => ref.subjectKey === subject.stableKey)).toArray(),
-      db.comicMediaAssets.where('subjectKey').equals(subject.stableKey).toArray(),
+      db.comicPanels.where('workId').equals(scope.workId).filter(panel => pages.has(panel.pageId)
+        && (panel.continuityRefs.some(ref => ref.subjectKey === subject.stableKey) || (panel.subjectStates ?? []).some(state => state.subjectKey === subject.stableKey))).toArray(),
+      db.comicMediaAssets.where('workId').equals(scope.workId).filter(asset => asset.adaptationProjectId === adaptation.id && asset.subjectKey === subject.stableKey).toArray(),
     ])
-    if ((panels.length || assets.length || subject.selectedMediaAssetKey) && !input.clearReferences) throw new Error('[comic] 视觉条目仍被格或媒体引用，请显式清理引用')
+    if ((panels.length || assets.length || subject.selectedMediaAssetKey) && !command.clearReferences) throw new Error('[comic] 视觉条目仍被格或媒体引用，请显式清理引用')
+    for (const panel of panels) {
+      const page = pages.get(panel.pageId)
+      if (!await assertRecordInScope(scope, 'comicPanels', panel, { owner: 'work' })
+        || !page || page.adaptationProjectId !== adaptation.id
+        || !await assertRecordInScope(scope, 'comicPages', page, { owner: 'work' })) throw new Error('[comic] 连续性引用越过当前漫画作用域')
+      if (panel.status === 'locked' || page.status === 'locked') throw new Error('[comic] 视觉条目被锁定页格引用，请先解锁')
+    }
+    const blobs = await removeComicMediaRowsInTransactionV1({ scope, adaptationProjectId: adaptation.id,
+      assetKeys: assets.map(asset => asset.stableKey), clearReferences: command.clearReferences })
     const now = Date.now()
-    await db.comicPanels.bulkPut(panels.map(panel => ({ ...panel, continuityRefs: panel.continuityRefs.filter(ref => ref.subjectKey !== subject.stableKey), revision: panel.revision + 1, updatedAt: now })))
-    if (assets.length) await db.comicMediaAssets.bulkDelete(assets.map(asset => asset.id!))
+    // Asset cleanup may also have cleared a selected image on these rows.
+    const currentPanels = await db.comicPanels.bulkGet(panels.map(panel => panel.id!))
+    await db.comicPanels.bulkPut(currentPanels.map(panel => {
+      if (!panel) throw new Error('[comic] 连续性引用已失效')
+      return { ...panel, continuityRefs: panel.continuityRefs.filter(ref => ref.subjectKey !== subject.stableKey),
+        subjectStates: (panel.subjectStates ?? []).filter(state => state.subjectKey !== subject.stableKey),
+        narrativeReviewRevision: null, visualReviewRevision: null, visualReviewBasis: null, visualReviewedAt: null,
+        revision: panel.revision + 1, updatedAt: now }
+    }))
     await db.comicVisualSubjects.delete(subject.id!)
-    return [...new Set(assets.map(asset => asset.blobObjectId))]
+    return blobs
   })
   for (const blobObjectId of blobObjectIds) {
     const pending = await markUnreferencedMediaBlobForDeletionV1({ scope, blobObjectId })

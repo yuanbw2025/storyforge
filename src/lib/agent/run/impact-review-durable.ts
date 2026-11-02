@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { db } from '../../db/schema'
 import type { AgentRunRecord, WorkspaceScope } from '../../types'
 import { assembleContext } from '../../registry/assemble-context'
@@ -209,7 +210,7 @@ export async function readVerifiedImpactAuthorReviewRecordV1(
   ))
   const receipt = [...snapshot.events].reverse().find(event => event.type === 'verification.accepted')
   if (!confirmation || confirmation.type !== 'confirmation.recorded' || !receipt || receipt.type !== 'verification.accepted') return null
-  const outputHash = await hashCanonicalValue(output)
+  const outputHash = await Dexie.waitFor(hashCanonicalValue(output))
   const step = snapshot.projection.steps[IMPACT_REVIEW_STEP_ID_V1]
   if (
     confirmation.payload.candidateHash !== outputHash

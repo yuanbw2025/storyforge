@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.tests.open-world-experience.json",
+  "files": ["src/vite-env.d.ts", "src/lib/platform/client-updates.ts", "tests/setup.ts"],
+  "include": ["tests/**/*.ts", "tests/**/*.tsx"],
+  "exclude": ["tests/acceptance/narrative-world/raw/nw2e-checkpoint-20261015-v7/json-wasm-probe.ts"]
+}

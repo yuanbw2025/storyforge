@@ -15,7 +15,7 @@ import { useOutlineStore } from '../../stores/outline'
 import { useStoryArcStore } from '../../stores/story-arc'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useCharacterDrivenPlanStore } from '../../stores/character-driven-plan'
-import { chat, resolveRequestConfig } from '../ai/client'
+import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import { db } from '../db/schema'
 import {
   adoptGenerationNodeOutput,
@@ -33,6 +33,7 @@ import {
   parseAgentEventPayload,
   type AgentEvent,
   type AIConfig,
+  type ChatMessage,
   type InspirationResultMode,
   type WorkspaceScope,
 } from '../types'
@@ -341,8 +342,43 @@ export interface MasterAgentExecutionTrace {
     task: MasterAgentTask,
     prepared: MasterContextGatewayPreparedV1,
   ) => Promise<void>
+  modelCallRequested?: (task: MasterAgentTask, call: { callIndex: number; messages: ChatMessage[] }) => Promise<void>
+  modelCallReturned?: (task: MasterAgentTask, call: { callIndex: number; raw: string; result: ChatResult }) => Promise<void>
+  modelCallUnavailable?: (task: MasterAgentTask, call: { callIndex: number; result: ChatResult; error: unknown }) => Promise<void>
   candidateReady?: (task: MasterAgentTask, candidate: ExecutedMasterCandidate) => Promise<void>
   taskFailed?: (task: MasterAgentTask, error: unknown) => Promise<void>
+}
+
+/** The durable hooks run at the raw boundary, before parsing or source checks.
+ * A repair may keep the first candidate after a provider error, but it must not
+ * turn a failed evidence write into a durable candidate or another paid call. */
+function observeMasterRawModelV1<T extends { output: string }>(
+  task: MasterAgentTask,
+  runRaw: (messages: ChatMessage[], result?: ChatResult) => Promise<T>,
+  trace?: MasterAgentExecutionTrace,
+) {
+  let callIndex = 0
+  let evidenceFailure: { error: unknown } | null = null
+  const observe = async (hook: () => Promise<void> | undefined) => {
+    try { await hook() } catch (error) { evidenceFailure = { error }; throw error }
+  }
+  const assertSaved = () => { if (evidenceFailure) throw evidenceFailure.error }
+  return {
+    assertSaved,
+    runRaw: async (messages: ChatMessage[]): Promise<T> => {
+      assertSaved()
+      const index = ++callIndex
+      await observe(() => trace?.modelCallRequested?.(task, { callIndex: index, messages }))
+      const result: ChatResult = {}
+      let returned: T
+      try { returned = await runRaw(messages, result) } catch (error) {
+        await observe(() => trace?.modelCallUnavailable?.(task, { callIndex: index, result, error }))
+        throw error
+      }
+      await observe(() => trace?.modelCallReturned?.(task, { callIndex: index, raw: returned.output, result }))
+      return returned
+    },
+  }
 }
 
 interface PlannerDependencies {
@@ -1083,6 +1119,7 @@ async function executeSequentialMasterAgentPlan(
     await input.executionTrace?.taskStarted?.(task)
     await input.onTask?.(task, 'running')
     try {
+      let assertModelEvidenceSaved = () => {}
       const contentRevision = await captureWorkspaceContentRevisionV1({
         scope,
         worldGroupId: input.worldGroupId,
@@ -1542,8 +1579,10 @@ async function executeSequentialMasterAgentPlan(
           const prepared = await prepareDetailedOutlineAuthoringV1({ projectId: input.projectId, scope, worldGroupId: input.worldGroupId, authorRequest: task.instruction, signal: input.signal })
           await attachMasterTaskRequestContextV1(prepared, task)
           await input.executionTrace?.contextGatewayPrepared?.(task, { execution: prepared.assembled.contextGatewayExecution, assembled: prepared.assembled, renderedRequest: prepared.prepared.messages })
+          const observed = observeMasterRawModelV1(task, prepared.runRaw, input.executionTrace)
+          assertModelEvidenceSaved = observed.assertSaved
           const startedAt = Date.now()
-          const result = await runBudgetedGenerationNode({ node: prepared.node, prepared: prepared.prepared, budget, callLabel: '场景细纲 Agent', maxOutputTokens: skill.maxOutputTokens })
+          const result = await runBudgetedGenerationNode({ node: { ...prepared.node, run: async messages => (await observed.runRaw(messages)).output }, prepared: prepared.prepared, budget, callLabel: '场景细纲 Agent', maxOutputTokens: skill.maxOutputTokens })
           const draft = result.output
           const creativeArtifact = await createDetailedOutlineCreativeArtifactV1({ raw: draft, operation: 'enhanced', narrativeBrief: prepared.narrativeBrief, qualityMode: useAIConfigStore.getState().creativeQualityMode, modelIdentity: prepared.modelIdentity, inputText: prepared.prepared.messages.map(message => message.content).join('\n'), durationMs: Date.now() - startedAt })
           candidates.push({ payload: { version: 1, taskId: task.id, agentId: task.agentId, skillId: skill.id as AgentSkillId, executionBinding, label: prepared.label, contextSources: prepared.contextSources, contextEvidence: prepared.contextEvidence, baseSnapshot: prepared.snapshot, workspaceScope: scope, dependsOnTaskIds: task.dependsOn, generator: prepared.modelIdentity, creativeArtifact, narrativeBrief: prepared.narrativeBrief }, draft, runtimeNode: prepared.node, runtimeOutput: result.output, contextGatewayRuntime: { execution: prepared.assembled.contextGatewayExecution, assembled: prepared.assembled, renderedRequest: prepared.prepared.messages, rawResponse: draft } })
@@ -1717,8 +1756,10 @@ async function executeSequentialMasterAgentPlan(
               renderedRequest: prepared.prepared.messages,
             })
           }
+          const observed = observeMasterRawModelV1(task, prepared.runRaw, input.executionTrace)
+          assertModelEvidenceSaved = observed.assertSaved
           const result = await runStoryArcCreativeReliabilityV1({
-            prepared,
+            prepared: { ...prepared, runRaw: observed.runRaw },
             budget,
             qualityMode: useAIConfigStore.getState().creativeQualityMode,
             validate: output => validateDomainCandidateCanon({
@@ -1780,8 +1821,10 @@ async function executeSequentialMasterAgentPlan(
             assembled: prepared.input.assembled,
             renderedRequest: prepared.prepared.messages,
           })
+          const observed = observeMasterRawModelV1(task, prepared.runRaw, input.executionTrace)
+          assertModelEvidenceSaved = observed.assertSaved
           const result = await runOutlineCreativeReliabilityV1({
-            prepared,
+            prepared: { ...prepared, runRaw: observed.runRaw },
             budget,
             qualityMode: useAIConfigStore.getState().creativeQualityMode,
             validate: output => validateDomainCandidateCanon({
@@ -1844,8 +1887,10 @@ async function executeSequentialMasterAgentPlan(
           assembled: prepared.input.assembled,
           renderedRequest: prepared.renderedRequest,
         })
+        const observed = observeMasterRawModelV1(task, prepared.runRaw, input.executionTrace)
+        assertModelEvidenceSaved = observed.assertSaved
         const result = await runProseCreativeReliabilityV1({
-          prepared,
+          prepared: { ...prepared, runRaw: observed.runRaw },
           budget,
           qualityMode: useAIConfigStore.getState().creativeQualityMode,
           validate: output => validateDomainCandidateCanon({
@@ -1889,6 +1934,7 @@ async function executeSequentialMasterAgentPlan(
         })
         outputs.set(task.id, draft)
       }
+      assertModelEvidenceSaved()
       const candidate = candidates[candidates.length - 1]
       candidate.payload.contentRevision = contentRevision
       await assertWorkspaceContentRevisionFreshV1(contentRevision, {
@@ -1974,15 +2020,16 @@ async function executeFanOutMasterAgentPlan(
           budget,
           completedTaskOutputs,
           completedTaskAssumptions,
-          executionTrace: input.executionTrace?.contextGatewayPrepared
+          executionTrace: input.executionTrace
             ? {
                 contextGatewayPrepared: input.executionTrace.contextGatewayPrepared,
+                modelCallRequested: input.executionTrace.modelCallRequested,
+                modelCallReturned: input.executionTrace.modelCallReturned,
+                modelCallUnavailable: input.executionTrace.modelCallUnavailable,
                 ...(input.executionTrace.taskFailed
                   ? { taskFailed: input.executionTrace.taskFailed }
                   : {}),
               }
-            : input.executionTrace?.taskFailed
-              ? { taskFailed: input.executionTrace.taskFailed }
             : undefined,
           onTask: undefined,
         }, { requiredFutureModelCalls })

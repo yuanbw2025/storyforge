@@ -143,7 +143,7 @@ async function completedTextAdventureMediaFixture() {
       await db.productBuildArtifacts.add({
         projectId: f.scope.projectId, worldId: f.scope.worldId, workId: f.scope.workId,
         buildId: build.id!, artifactKey, requirementKey: null, version: 1,
-        kind: image ? 'image' : 'narrative', mediaKind: image ? 'illustration' : null,
+        kind: image ? 'image' : 'narrative', mediaKind: image ? 'cg' : null,
         status: 'accepted', producerRunId: null, producerReceiptHash: null,
         controlEpoch: build.controlEpoch, inputHash: await hashProductProductionValueV2({ artifactKey }),
         contentHash, payloadJson,

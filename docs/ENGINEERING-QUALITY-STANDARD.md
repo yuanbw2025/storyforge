@@ -51,6 +51,14 @@
 
 测试必须能在干净环境重复运行；禁止依赖顺序、作者 localStorage、现有 IndexedDB 或线上不可控状态。
 
+`npm run check:engineering` 从 Git 当前文件集合枚举全部测试 TS/TSX（含 E2E/helper）、工程 JS 及 TS 配置，分别使用 `tsconfig.tests.json`、`tsconfig.tooling.json` 和独立 Node ESLint 配置。测试保留生产严格选项与 ES2020；Node 工具使用与 CI Node 24 匹配的 ES2022/NodeNext，并检查真实 JS 语义。每批最多160个主根，共享声明和传递依赖正常加载；实际主根必须完整且无重复，编译异常、缺文件、空范围或被 lint 忽略均失败。生产 `src` 与构建中的独立 `ui-preview` 检查继续保留；原 Experience 定向命令保留为局部诊断，不在 CI 重复运行。
+
+工程门采用逐条诊断身份及次数的基线，绝不按错误总数放行。新增的门实现及已验证零诊断的 Experience 单元不允许写入旧债基线。既有债务始终可见，不表示类型错误已修或产品缺陷已确认；新增诊断失败，已消失的债务必须从基线显式删除以防回潮。编译器、严格选项、配置及锁文件变化须复审基线。初始采集必须在实际最终组合运行：`npm run check:engineering -- --capture-baseline /绝对路径/待审基线.json --report /绝对路径/实际结果.json`；采集完成不是检查全绿，审核后才放到 `scripts/quality/engineering-debt-baseline.json`。普通 CI 只读取该基线，缺失时失败，不会自动刷新或接受新错误。`npm run test:engineering-gate` 保留真实编译器错参/未定义标识符、JS配置语义、Node lint、次数和文件覆盖反例；类型门不替代原行为/故障/覆盖率测试。
+
+历史不可变脚本和已生成浏览器分发文件只按 `scripts/quality/engineering-scope.json` 中的精确路径、原字节SHA与理由例外；无目录前缀豁免，新文件必须正常进入检查，旧文件变化须先处理其来源。YAML工作流和作品内容不是 TypeScript 工程源码，此门不宣称检查其全部运行语义。
+
+故意违反合同的运行时负例，可在具体故障行使用注明原因的 `@ts-expect-error`，保留原非法值、重新计算的 hash 和拒绝断言；约束被意外放宽时，未使用的指令必须使类型检查失败。禁止用文件级忽略、宽泛 `any` 或放宽生产类型掩盖错误。
+
 Node 测试环境的 fake-indexeddb 6.2.5 会在内部调度数组保留已结束事务，并在后续调度时扫描这些历史条目（[上游实现](https://github.com/dumbmatter/fakeIndexedDB/blob/master/src/lib/Database.ts)）。全局测试 setup 使用具名、锁定版本和内部结构检查的生命周期辅助器，只移除 `finished` 调度条目，保留 active/inactive/committing 及其顺序；不移除业务表、运行事件或回执，不改生产 IndexedDB，也不修改共享依赖文件。版本或内部结构改变须失败并重新审查。公开 IDB 的串行/并发、commit、abort、错误回滚、版本阻塞、删除重建和清理恢复须与未处理的新 Factory 对照验证；不能靠放宽超时或减少原测试内容处理性能失败。
 
 ## 5. AI 测试诚实边界

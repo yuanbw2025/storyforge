@@ -545,3 +545,7 @@ PR208/mainline integration receipt: `baseline-20261027-pr208-integration-v3.json
 continuation-v3 集成的四个文件分别覆盖 NW-0B 25 项、IR codec 73 项、领域投影 17 项与独立领域 corpus 12 项；四者共 127 项。旧长篇 222 项回归中的 NW 子集为前 115 项，不包含独立 corpus；[口径更正](../longform-stability/world-readback-20261027-8aacf3b0-clarification-v1.json)保留原记录并说明，不能把投影测试当作 corpus 回执默认回读。
 
 2026-11-02 独立质量修复 SFQA-015/054 更新来源能力令牌和禁止表测试断言；活动回执为 `baseline-20261102-quality-independent-01.json`。实际生成和默认回读各 25 项通过，290 个输入摘要核对一致；全部确定性观察、问题和统计与保留的 release405-mainc5 回执相同，原 corpus 与旧回执字节未变。模型调用、产品 E2E 和人工评阅在该回执中仍为 0；不表示世界模型质量或产品验收升级。
+
+2026-11-02 已审质量修复组合更新所有权/引用生命周期、产品恢复、凭据读取与桌面运行时。活动 NW-0B、IR、领域回执使用 `20261102-quality-ready-02`；实际生成并默认回读共 110 项，逐项核对原语义观察不变，分别核验 290/18/28 个输入摘要。旧回执、corpus 和 codec gold 字节保持。该结果为确定性工程证据，不升级模型、真人或正式客户端发行验收。
+
+2026-11-02 优先整改最终累计组合：活动 NW 回执为 `baseline-20261102-quality-priority31-final-05.json`，IR 与领域回执为同后缀的 `ir-contract`、`domain-projection`。三份均实际生成，默认回读 110 项通过；所有非输入结果与保留的前份回执相同，旧 corpus、旧回执及 144 独立工程回执字节保留。输入摘要按实际最终实现校验；不代表模型、人工或产品验收升级。

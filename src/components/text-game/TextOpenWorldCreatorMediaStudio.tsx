@@ -118,6 +118,8 @@ export default function TextOpenWorldCreatorMediaStudio(
     try {
       const stored = await importTextOpenWorldCreatorMediaBlobV1({
         scope: props.scope,
+        productionId: props.productionId,
+        buildId: props.buildId,
         data: await file.arrayBuffer(),
       })
       setImports(current => ({

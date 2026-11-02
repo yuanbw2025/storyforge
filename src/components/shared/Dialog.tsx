@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Info, X } from 'lucide-react'
 import {
   setBackupDialogAdapter,
@@ -46,19 +46,52 @@ function normalizeOptions(options: DialogOptions | string): DialogOptions {
 export function DialogProvider({ children }: { children: React.ReactNode }) {
   const [dialog, setDialog] = useState<DialogState | null>(null)
   const [inputValue, setInputValue] = useState('')
+  const currentDialog = useRef<DialogState | null>(null)
+  const mounted = useRef(true)
 
   const open = useCallback((mode: DialogMode, options: DialogOptions | string) => new Promise<boolean | string | null>((resolve) => {
+    if (!mounted.current) { resolve(null); return }
+    // Replacing a question cancels its caller; a hidden question cannot grant
+    // permission later or leave a destructive operation waiting indefinitely.
+    currentDialog.current?.resolve(null)
     const next = normalizeOptions(options)
+    const pending = { ...next, mode, resolve }
+    currentDialog.current = pending
     setInputValue(next.defaultValue ?? '')
-    setDialog({ ...next, mode, resolve })
+    setDialog(pending)
   }), [])
 
-  const close = useCallback((value: boolean | string | null) => {
-    setDialog(current => {
-      current?.resolve(value)
-      return null
-    })
+  const close = useCallback((expected: DialogState, value: boolean | string | null) => {
+    if (currentDialog.current !== expected) return
+    currentDialog.current = null
+    setDialog(current => current === expected ? null : current)
+    expected.resolve(value)
   }, [])
+
+  // Restore the live owner before child passive effects open a new question
+  // during StrictMode's cleanup/setup cycle.
+  useLayoutEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      const pending = currentDialog.current
+      currentDialog.current = null
+      pending?.resolve(null)
+      if (pending) setDialog(current => current === pending ? null : current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!dialog) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      close(dialog, dialog.mode === 'alert' ? true : null)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [dialog, close])
 
   const api = useMemo<DialogContextValue>(() => ({
     alert: async (options) => { await open('alert', options) },
@@ -85,17 +118,20 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
         if (!proceed) return 'cancel'
         if (options.projectId == null) return 'proceed-already-backed-up'
 
-        const wantBackup = await api.confirm({
+        // Keep the explicit negative button distinct from X/Escape/unmount.
+        // The public Boolean confirm API intentionally does not expose this.
+        const wantBackup = await open('confirm', {
           title: '是否立即下载备份(JSON 文件到本地)?',
-          message: '确认后会立即下载备份，然后继续；取消表示你已经备份过，直接继续。',
+          message: '立即备份成功后继续；如果已经自行备份，可选择「已备份，继续」。关闭此窗口将取消当前操作。',
           confirmText: '立即备份',
           cancelText: '已备份，继续',
         })
-        return wantBackup ? 'proceed-backup-now' : 'proceed-already-backed-up'
+        if (wantBackup === true) return 'proceed-backup-now'
+        return wantBackup === false ? 'proceed-already-backed-up' : 'cancel'
       },
       confirm: api.confirm,
     })
-  }, [api])
+  }, [api, open])
 
   const isDanger = dialog?.tone === 'danger'
   const Icon = isDanger ? AlertTriangle : Info
@@ -121,7 +157,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
               </div>
               <button
                 type="button"
-                onClick={() => close(dialog.mode === 'alert' ? true : null)}
+                onClick={() => close(dialog, dialog.mode === 'alert' ? true : null)}
                 className="rounded p-1 text-text-muted hover:bg-bg-elevated hover:text-text-primary"
                 aria-label="关闭"
               >
@@ -136,8 +172,8 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
                   value={inputValue}
                   onChange={e => setInputValue(e.target.value)}
                   onKeyDown={e => {
-                    if (e.key === 'Enter') close(inputValue)
-                    if (e.key === 'Escape') close(null)
+                    if (e.key === 'Enter') close(dialog, inputValue)
+                    if (e.key === 'Escape') close(dialog, null)
                   }}
                   placeholder={dialog.placeholder}
                   className="w-full rounded-xl border border-border bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
@@ -149,7 +185,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
               {dialog.mode !== 'alert' && (
                 <button
                   type="button"
-                  onClick={() => close(null)}
+                  onClick={() => close(dialog, dialog.mode === 'confirm' ? false : null)}
                   className="rounded-full border border-border px-5 py-2.5 text-sm text-text-secondary hover:bg-bg-elevated hover:text-text-primary"
                 >
                   {dialog.cancelText ?? '取消'}
@@ -157,7 +193,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
               )}
               <button
                 type="button"
-                onClick={() => close(dialog.mode === 'prompt' ? inputValue : true)}
+                onClick={() => close(dialog, dialog.mode === 'prompt' ? inputValue : true)}
                 className={`rounded-full px-5 py-2.5 text-sm font-medium text-white ${
                   isDanger ? 'bg-error hover:bg-error/90' : 'bg-accent hover:bg-accent-hover'
                 }`}
