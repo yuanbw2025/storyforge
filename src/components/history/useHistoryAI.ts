@@ -126,9 +126,11 @@ export function useHistoryAI(options: Options) {
   }, [resolveCurrentScope, worldGroupId])
 
   useEffect(() => {
+    // This shared object is never replaced; cleanup increments its live counters.
+    const generations = generationRef.current
     let cancelled = false
-    generationRef.current.consult++
-    generationRef.current.storm++
+    generations.consult++
+    generations.storm++
     setRecoveryError(null)
     const recovering = { ...emptyLane(), busy: true, message: '正在检查可恢复的历史候选…' }
     setLane('consult', recovering)
@@ -147,8 +149,8 @@ export function useHistoryAI(options: Options) {
       })
     return () => {
       cancelled = true
-      generationRef.current.consult++
-      generationRef.current.storm++
+      generations.consult++
+      generations.storm++
     }
   }, [recover, setLane, recoveryAttempt])
 
