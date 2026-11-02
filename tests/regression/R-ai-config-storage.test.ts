@@ -353,8 +353,9 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
 
   it('豆包推荐列表保留已登记方舟型号，列表外的作者 ID 不被替换', async () => {
     expect(PROVIDER_PRESETS.doubao?.baseUrl).toBe('https://ark.cn-beijing.volces.com/api/v3')
-    expect(PROVIDER_PRESETS.doubao?.model).toBe('doubao-1-5-pro-32k-250115')
+    expect(PROVIDER_PRESETS.doubao?.model).toBe('doubao-seed-2-0-lite-260428')
     expect(PROVIDER_MODELS.doubao?.map(model => model.value)).toEqual([
+      'doubao-seed-2-0-lite-260428',
       'doubao-1-5-pro-32k-250115',
       'deepseek-v4-flash-ga-260731',
       'deepseek-v4-pro-260425',

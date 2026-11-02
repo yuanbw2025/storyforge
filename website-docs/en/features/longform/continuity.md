@@ -1,5 +1,10 @@
 # Longform: continuity, post-chapter review, and revision
 
+
+## When a continuity report cannot locate a quote uniquely
+
+Check a report against the cited chapter prose. A quote occurring more than once, including overlapping repetitions, cannot establish a unique evidence span. Use a longer verbatim sentence containing a name, number or surrounding context; if it remains ambiguous, do not adopt that issue conclusion. [PR #246](https://github.com/yuanbw2025/storyforge/pull/246) strengthens this evidence check and binds source-reading capabilities to the original scope, policy and resource identity. It does not automatically edit prose or establish acceptance of literary quality.
+
 ## Post-chapter review: save selections before confirming writes
 
 Open post-chapter review, check each candidate against the prose, and select only what should be written this time. Wait for confirmation that candidates and saved selections can recover after reload before leaving. Unsaved selections pause confirmation: retry saving the selection, or explicitly discard the unsaved selection and select again. Unchecked rows are not written. The original model response remains available for inspection; malformed output is not adopted by guessing row positions. If the source changed, inspect the current chapter and candidate; no hidden model resend occurs.

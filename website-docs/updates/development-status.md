@@ -1,5 +1,52 @@
 # 待合并开发记录与分支核对
 
+
+## 2026-11-03 · 当前开发核对
+
+从成功基线 `a3317feb` 核对至远程 main `054d8a06`：**110 个本地分支、24 个注册工作区（含 detached）、103 个 head 尚非 main 祖先**。这些是核对数量，不是功能数。正式 v4.0.5 已发布，#246 已合入；下表其它开放 PR 均未进入 main。旧日期正文保留历史快照。
+
+| PR / 分支 / head | 观察范围与状态 |
+| --- | --- |
+| [#259](https://github.com/yuanbw2025/storyforge/pull/259) · `fix/quality-world-sharing-foundation-20261103` · `d3426692` | 世界分享来源声明基础；用途门与正式接线未完成；open |
+| [#258](https://github.com/yuanbw2025/storyforge/pull/258) · `fix/quality-mapped-recovery072-20261103` · `3ac7ef74` | 开放世界映射命令恢复；open |
+| [#257](https://github.com/yuanbw2025/storyforge/pull/257) · `fix/quality-ready24-integration-20261103` · `26ece3ba` | 编辑归属、迟到读写、来源采纳、分享与媒资边界整合；open |
+| [#256](https://github.com/yuanbw2025/storyforge/pull/256) · `fix/quality-ready17-integration-20261103` · `2cd0e6eb` | 依赖 #255 的 17 项后续整改；draft |
+| [#255](https://github.com/yuanbw2025/storyforge/pull/255) · `fix/quality-priority31-final-20261102` · `23c3be69` | 其余 27 项优先整改的集成交付；完整检查仍待终态；open |
+| [#254](https://github.com/yuanbw2025/storyforge/pull/254) · `fix/quality-036-completion-delivery-20261102` · `1496d2e9` | 正文、细纲及影响补丁原子采纳与确认恢复；open |
+| [#253](https://github.com/yuanbw2025/storyforge/pull/253) · `fix/quality144-delivery-20261102` · `cc5508f3` | 工程类型与工具检查交付；open |
+| [#252](https://github.com/yuanbw2025/storyforge/pull/252) · `fix/quality-002-036-adoption-delivery-20261102` · `df9fa441` | 生成原响应留存与 Brief 采纳恢复；open |
+| [#251](https://github.com/yuanbw2025/storyforge/pull/251) · `fix/quality-005-world-lineage-delivery-20261102` · `d17d2c42` | 开放世界封存来源与历史只读边界；open |
+| [#250](https://github.com/yuanbw2025/storyforge/pull/250) · `fix/quality-ready-delivery-20-20261102` · `44e86d4e` | 优先修复整合中的后续交付；open |
+| [#245](https://github.com/yuanbw2025/storyforge/pull/245) · `fix/ttrpg-empty-session-loop-20261102` · `1258a5c1` | 跑团空会话循环修复；draft |
+| [#244](https://github.com/yuanbw2025/storyforge/pull/244) · `fix/doubao-default-lifecycle-20261102` · `eec8ad5e` | 新建豆包默认型号与生命周期提示；open |
+| [#240](https://github.com/yuanbw2025/storyforge/pull/240) · `fix/batch-detail-confirmation-20261031` · `0b58a5c4` | 批量细纲确认、豆包与备份引用保护；open |
+| [#238](https://github.com/yuanbw2025/storyforge/pull/238) · `refactor/chat-content-development-plan-20261030` · `4d295c81` | 角色聊天完整故事质量研发方案；不是功能交付；draft |
+| [#236](https://github.com/yuanbw2025/storyforge/pull/236) · `fix/quality-round1-integration-20261030` · `5b52b35f` | 首轮质量整改历史集成链；draft |
+| [#235](https://github.com/yuanbw2025/storyforge/pull/235) · `feat/quality-audit-plan-20261029` · `3a5b3722` | 固定基线审查与分阶段整改方案；draft |
+| [#234](https://github.com/yuanbw2025/storyforge/pull/234) · `feat/community-works-library-20261029` · `72a231b5` | 作者显式选择的社区投稿与阅读；仍待最终交付；draft |
+| [#233](https://github.com/yuanbw2025/storyforge/pull/233) · `fix/issue-179-run-backup-lifecycle-20261029` · `ca120a73` | 历史 Run 引用目标删除保护；不恢复已有坏备份；open |
+
+#255 → #256 → #257 → #258 是依赖整合链，#250～#254 与 #236 含前序交付输入；祖先提交、相同 head、仅合并历史和等价补丁不重复计数。#259 是单独的部分基础，不代表公共分享用途授权或新 schema。
+
+### 未提交工作区
+
+- `ed9f` · `feat/community-works-library-20261029`：仅两项本地 Supabase CLI 元数据，不算产品功能，内容保留私有。
+- `quality-002-semantic-raw` · `fix/quality-002-longform-semantic-raw-20261102`：5 项工作/暂存条目，包含 `src/lib/agent/prose-semantic-review.ts`, `src/lib/agent/run/prose-generation-durable.ts`；只登记观察范围，不称已完成实现。
+- `quality-audit-plan` · `fix/quality-036-brief-atomic-20261102`：26 项工作/暂存条目，包含 `src/components/editor/ChapterEditor.tsx`, `src/components/editor/ChapterEditorToolbar.tsx`；只登记观察范围，不称已完成实现。
+- `quality-client-round1` · `fix/quality-048-original-counterfactual-20261031`：1 项工作/暂存条目，包含 `tests/regression/R-SFQA048-foreshadow-delete-refs.test.ts`；只登记观察范围，不称已完成实现。
+- `quality-data-round1` · `fix/quality-037-canon-read-prep-20261031`：6 项工作/暂存条目，包含 `scripts/check-architecture.mjs`, `src/lib/context-gateway/canon-provider.ts`；只登记观察范围，不称已完成实现。
+- `quality-extra-runtime9-20261102` · `fix/quality056-runtime-media-concurrency-20261103`：4 项工作/暂存条目，包含 `docs/ARCHITECTURE.md`, `src/lib/product/runtime-media-library.ts`；只登记观察范围，不称已完成实现。
+- `quality-extra-web8-20261102` · `fix/quality-ready-followups-20261103`：5 项工作/暂存条目，包含 `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/quality/engineering-debt-baseline.json`；只登记观察范围，不称已完成实现。
+- `quality-independent79-20261102` · `fix/quality050-provider-dispatch-binding-20261103`：4 项工作/暂存条目，包含 `src/lib/product-production/capabilities.ts`, `src/lib/product-production/production-executor.ts`；只登记观察范围，不称已完成实现。
+- `quality-intent-round1` · `fix/quality-002-node-producers-20261031`：20 项工作/暂存条目，包含 `docs/AI-FUNCTIONS-MANUAL.generated.md`, `docs/ARCHITECTURE.md`；只登记观察范围，不称已完成实现。
+- `quality-linked34-20261102` · `fix/quality-world-source-receipts-20261103`：15 项工作/暂存条目，包含 `docs/DATA-GOVERNANCE.md`, `src/lib/db/ensure-schema.ts`；只登记观察范围，不称已完成实现。
+- `quality-node002-delivery` · `fix/quality-002-node-delivery-20261102`：46 项工作/暂存条目，包含 `scripts/ai-call-meta.mjs`, `scripts/check-ai-entry-registry.mjs`；只登记观察范围，不称已完成实现。
+- `quality-round1-integration` · `fix/quality002-runtime-raw-evidence-20261102`：8 项工作/暂存条目，包含 `src/lib/adventure/harness.ts`, `src/lib/agent/run/creation-response-evidence.ts`；只登记观察范围，不称已完成实现。
+- `quality-studio005-20261031` · `fix/quality144-tooling-gates-20261102`：10 项工作/暂存条目，包含 `docs/ENGINEERING-QUALITY-STANDARD.md`, `package-lock.json`；只登记观察范围，不称已完成实现。
+- `quality002-master-raw` · `fix/quality002-master-raw-20261102`：7 项工作/暂存条目，包含 `src/lib/agent/detailed-outline-authoring.ts`, `src/lib/agent/orchestrator.ts`；只登记观察范围，不称已完成实现。
+
+12 个分支 head 含 origin 尚未包含的提交，其中 `fix/quality-ready-followups-20261103` 两项只有合并历史。11 个唯一未推送非合并提交中，1 个存在 origin 等价补丁，其余保留本地差异证据。037 读取帧/备份/引用链、节点生产生命周期链和 linked34 媒资/测试分支有重叠，按祖先及补丁去重，不各算独立交付。完整路径和差异保留私有。本任务不代提交、推送、合并或清理产品开发，也不运行产品测试。
+
 ## 2026-10-30 · 当前分支与待交付范围
 
 从成功基线 `3b524e11` 核对至远程 main `8707bb8a`，编辑前枚举 **12 个本地分支、11 个注册工作区（含 detached）**，9 个 head 尚非 main 祖先，全部已有提交均被 origin 引用包含。分支数量不代表独立功能数；旧目录与引用不再登记时不重建、不推断内容丢失。下方旧日期正文保留当时状态，以本节为当前核对。

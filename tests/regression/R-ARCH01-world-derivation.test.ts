@@ -84,10 +84,12 @@ describe('ARCH-01 · 长短篇显式派生世界', () => {
     expect(manifest.semanticContract).toBe(3)
     expect(manifest).not.toHaveProperty('selectedNarrativeModules')
     expect(manifest.selectedTables).toContain('worldviews')
-    expect(manifest.selectedTables).not.toEqual(expect.arrayContaining([
+    for (const forbidden of [
       'productProductions', 'productBuilds', 'productReleases', 'productMediaAssets',
       'productRuntimeSessions',
-    ]))
+    ]) {
+      expect(manifest.selectedTables).not.toContain(forbidden)
+    }
 
     await db.worldviews.update(sourceWorldviewId, { races: '源作品后来改成单一种族。', updatedAt: Date.now() + 100 })
     expect((await db.worldviews.where('projectId').equals(result.targetProjectId).first())?.races).toContain('潮民')
