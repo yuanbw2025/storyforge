@@ -3,16 +3,20 @@
  */
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
-import type { StateCard, StateCategory, StateDiffItem, StateField } from '../lib/types'
+import type { StateCard, StateCategory, StateDiffItem, StateField, Character, WorkspaceScope } from '../lib/types'
 import { readStateCardFields, stringifyFields } from '../lib/types/state-card'
 import { adopt, hashAdoptRecordFieldsV1 } from '../lib/registry/adopt'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 const now = () => Date.now()
+let loadRequest = 0
+const sameScope = (left: WorkspaceScope | null, right: WorkspaceScope) =>
+  left?.projectId === right.projectId && left.worldId === right.worldId && left.workId === right.workId
 
 interface StateCardStore {
   cards: StateCard[]
   loading: boolean
+  loadedScope: WorkspaceScope | null
 
   /** 加载项目的全部状态卡 */
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
@@ -43,15 +47,19 @@ interface StateCardStore {
 export const useStateCardStore = create<StateCardStore>((set, get) => ({
   cards: [],
   loading: false,
+  loadedScope: null,
 
   loadAll: async (scopeInput: WorkspaceScopeLike) => {
-    set({ loading: true })
+    const request = ++loadRequest
+    set({ loading: true, loadedScope: null })
     try {
-      const cards = await readOwnedRows<StateCard>(await resolveScopeLike(scopeInput), 'stateCards', { owner: 'work' })
-      set({ cards, loading: false })
+      const scope = await resolveScopeLike(scopeInput)
+      const cards = await readOwnedRows<StateCard>(scope, 'stateCards', { owner: 'work' })
+      if (request === loadRequest) set({ cards, loadedScope: scope })
     } catch (err) {
       console.error('[StateCard] loadAll 失败:', err)
-      set({ loading: false })
+    } finally {
+      if (request === loadRequest) set({ loading: false })
     }
   },
 
@@ -112,62 +120,50 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
   },
 
   applyDiffs: async (scopeInput, diffs, chapterId) => {
-    const scope = await resolveScopeLike(scopeInput)
-    const projectId = scope.projectId
-    const { cards } = get()
-    const knownCharacters = new Set(
-      (await readOwnedRows<any>(scope, 'characters', { owner: 'world' }))
-        .map(character => character.name.trim().toLocaleLowerCase()),
-    )
-    const validDiffs = diffs.filter(diff =>
-      diff.category === 'character'
-      && knownCharacters.has(diff.entityName.trim().toLocaleLowerCase()),
-    )
-
-    // 先按 (category, entityName) 聚合本批次的所有 diff，逐实体把字段合并到一起，再统一写库。
-    // 修复两个 bug：
-    //  ① 同一新实体的多条字段变更原会各建一张卡（重复卡）；
-    //  ② 同一已有实体的多条字段变更原各自从陈旧快照 parse → 互相覆盖、只剩最后一条。
-    type Acc = { category: StateCategory; entityName: string; existing: StateCard | null; fields: StateField[] }
-    const byEntity = new Map<string, Acc>()
-
-    for (const diff of validDiffs) {
-      const key = `${diff.category}\u0000${diff.entityName}`
-      let acc = byEntity.get(key)
-      if (!acc) {
-        const existing = cards.find(c => c.entityName === diff.entityName && c.category === diff.category) || null
-        acc = {
-          category: diff.category, entityName: diff.entityName,
-          existing,
-          fields: existing ? readStateCardFields(existing) : [],
-        }
-        byEntity.set(key, acc)
+    const frozenDiffs = diffs.map(diff => ({ ...diff }))
+    const scope = await resolveScopeLike(typeof scopeInput === 'number' ? scopeInput : { ...scopeInput })
+    // Read the target and apply its delta under the same owner transaction.
+    // A global display cache is never a baseline for formal adoption.
+    const refreshed = await db.transaction('rw', scopeTransactionTables(db.stateCards, db.characters, db.chapters), async () => {
+      await resolveScopeLike(scope)
+      if (chapterId != null && !await assertRecordInScope(scope, 'chapters', await db.chapters.get(chapterId), { owner: 'work' })) {
+        throw new Error('状态候选的来源章节不属于指定作品，未采纳。')
       }
-      const idx = acc.fields.findIndex(f => f.key === diff.field)
-      if (idx >= 0) acc.fields[idx].value = diff.newValue
-      else acc.fields.push({ key: diff.field, value: diff.newValue })
-    }
-
-    try {
+      const knownCharacters = new Set(
+        (await readOwnedRows<Character>(scope, 'characters', { owner: 'world' })).map(character => character.name),
+      )
+      const cards = await readOwnedRows<StateCard>(scope, 'stateCards', { owner: 'work' })
+      const byEntity = new Map<string, { entityName: string; fields: StateField[] }>()
+      for (const diff of frozenDiffs) {
+        if (diff.category !== 'character' || !knownCharacters.has(diff.entityName)) {
+          throw new Error('状态候选只能修改指定世界内已登记的角色，未采纳。')
+        }
+        let acc = byEntity.get(diff.entityName)
+        if (!acc) {
+          const existing = cards.find(card => card.entityName === diff.entityName && card.category === 'character')
+          acc = { entityName: diff.entityName, fields: existing ? readStateCardFields(existing) : [] }
+          byEntity.set(diff.entityName, acc)
+        }
+        const index = acc.fields.findIndex(field => field.key === diff.field)
+        if ((index >= 0 ? acc.fields[index].value : null) !== diff.oldValue) {
+          throw new Error(`角色“${diff.entityName}”的“${diff.field}”已变化，状态候选已过期；请重新核对。`)
+        }
+        if (index >= 0) acc.fields[index] = { key: diff.field, value: diff.newValue }
+        else acc.fields.push({ key: diff.field, value: diff.newValue })
+      }
       const result = await adopt({
-        projectId,
-        scope,
-        target: 'stateCards',
-        mode: 'add-many',
+        projectId: scope.projectId, scope, target: 'stateCards', mode: 'add-many',
         data: [...byEntity.values()].map(acc => ({
-          category: 'character',
-          entityName: acc.entityName,
-          fields: stringifyFields(acc.fields),
-          lastChapterId: chapterId ?? null,
+          category: 'character', entityName: acc.entityName,
+          fields: stringifyFields(acc.fields), lastChapterId: chapterId ?? null,
         })),
       })
-      const refreshed = await readOwnedRows<StateCard>(scope, 'stateCards', { owner: 'work' })
-      set({ cards: refreshed })
-      console.log(`[StateCard] applyDiffs: ${validDiffs.length} 条角色变更已应用（实体 ${byEntity.size}，写入 ${result.written.length}）`)
-    } catch (err) {
-      console.error('[StateCard] applyDiffs 失败:', err)
-      throw err
-    }
+      if (result.written.length !== byEntity.size || result.skipped.length || result.typeErrors.length || result.fkErrors.length || result.unknown.length) {
+        throw new Error('状态候选未完整写入，整批已回滚；请核对后重试。')
+      }
+      return readOwnedRows<StateCard>(scope, 'stateCards', { owner: 'work' })
+    })
+    if (sameScope(get().loadedScope, scope)) set({ cards: refreshed })
   },
 
   buildStateContext: () => {

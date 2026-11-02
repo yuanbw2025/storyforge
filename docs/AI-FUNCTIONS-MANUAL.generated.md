@@ -428,7 +428,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:607` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
-| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:129` |
+| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:190` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:943` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
@@ -582,4 +582,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `9b4cb04be`
+生成时间基准:commit `054d8a069`
