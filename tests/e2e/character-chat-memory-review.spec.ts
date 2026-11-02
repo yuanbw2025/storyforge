@@ -1,17 +1,17 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {test, expect} from '@playwright/test'
 
 test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-memory-review.invalid/v1', model: 'test', maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-memory-review.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
 })
 
 test('hides unchecked legacy memory text and blocks adoption, while reviewed proposals remain a player choice after reload', async ({page}, testInfo) => {
   let calls = 0
   await page.route('https://chat-memory-review.invalid/**', async route => {calls++; await route.abort()})
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     const f = await (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture()
@@ -27,7 +27,7 @@ test('hides unchecked legacy memory text and blocks adoption, while reviewed pro
     await harness.adoptInteractionRuntimeCandidateV1({scope: f.scope, runId: result.snapshot.run.id})
     return {...f, memoryId: result.candidate.memoryId}
   })
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByRole('button', {name: '关系与记忆', exact: true}).click()
   await expect(page.getByText('玩家表示想先休息。', {exact: true})).toBeVisible()
   await expect(page.locator('body')).not.toContainText('担心再次错怪人')
@@ -36,7 +36,7 @@ test('hides unchecked legacy memory text and blocks adoption, while reviewed pro
   await expect(unchecked.getByRole('button', {name: '采用', exact: true})).toBeDisabled()
   const proposal = page.locator('article').filter({has: page.getByText('玩家表示想先休息。', {exact: true})})
   await expect(proposal.getByRole('button', {name: '采用', exact: true})).toBeEnabled()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', {name: '关系与记忆', exact: true}).click()
   await expect(proposal.getByRole('button', {name: '采用', exact: true})).toBeVisible()
   await page.setViewportSize({width: 390, height: 844})
@@ -45,7 +45,7 @@ test('hides unchecked legacy memory text and blocks adoption, while reviewed pro
   await page.screenshot({path: testInfo.outputPath('memory-review-mobile.png')})
   await proposal.getByRole('button', {name: '采用', exact: true}).click()
   await expect(proposal.getByRole('button', {name: '采用', exact: true})).toHaveCount(0)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', {name: '关系与记忆', exact: true}).click()
   expect(await page.evaluate(async f => {
     const load = new Function('p', 'return import(p)')
@@ -56,7 +56,7 @@ test('hides unchecked legacy memory text and blocks adoption, while reviewed pro
 })
 
 test('review failure preserves the scene and lets the player explicitly end without another memory call', async ({page}) => {
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     const f = await (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture()
@@ -72,12 +72,12 @@ test('review failure preserves the scene and lets the player explicitly end with
       ? {checks: ['source-fidelity', 'player-visibility', 'no-private-inference'].map(check => ({check, passed: false, reason: '角色担心再次错怪人，来源不支持'}))}
       : {kind: 'memory-curator', memoryKind: 'key-memory', content: '角色担心再次错怪人。', importance: 60, sourceEventSequences: [f.sequence], evidenceExcerpt: '先休息'})}, finish_reason: 'stop'}]})})
   })
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByRole('button', {name: '结束场景', exact: true}).click()
   await expect(page.getByText(/记忆整理未完成，场景保留以供恢复/)).toBeVisible()
   await expect(page.locator('body')).not.toContainText('担心再次错怪人')
   await expect(page.getByRole('button', {name: '结束场景', exact: true})).toBeVisible()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('button', {name: '结束场景', exact: true})).toBeVisible()
   expect(calls).toBe(2)
   await page.getByRole('button', {name: '结束且跳过记忆整理', exact: true}).click()
@@ -86,7 +86,7 @@ test('review failure preserves the scene and lets the player explicitly end with
 })
 
 test('refresh exposes an unfinished memory generation for explicit cancellation without sending a replacement request', async ({page}) => {
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     const f = await (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture()
@@ -100,11 +100,11 @@ test('refresh exposes an unfinished memory generation for explicit cancellation 
   let calls = 0
   await page.route('https://chat-memory-review.invalid/**', async route => {calls++; await waiting; await route.abort()})
   try {
-    await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
     await page.getByRole('button', {name: '结束场景', exact: true}).click()
     await expect(page.getByTestId('chat-run-progress')).toContainText('等待记忆候选')
     await expect.poll(() => calls).toBe(1)
-    await page.reload()
+    await reloadWithBrowserFixtureAIConfigV1(page)
     await expect(page.getByTestId('chat-run-progress')).toContainText('上次保存的阶段：等待记忆候选')
     await page.getByRole('button', {name: /取消未完成处理 #/}).click()
     await expect(page.getByRole('button', {name: /取消未完成处理 #/})).toHaveCount(0)

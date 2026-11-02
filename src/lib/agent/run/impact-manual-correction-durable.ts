@@ -1,4 +1,6 @@
+import Dexie from 'dexie'
 import { db } from '../../db/schema'
+import { adoptionTransactionTablesV1 } from '../../registry/adopt'
 import type { WorkspaceScope } from '../../types'
 import { assembleContext } from '../../registry/assemble-context'
 import type { ImpactHandoffV2 } from '../../consistency/impact-handoff'
@@ -13,6 +15,10 @@ import {
 import { readFrozenImpactAuthorReviewsV1 } from './impact-review-durable'
 import {
   appendAgentRunEventV1,
+  appendAgentRunEventWithSettlementInTransactionV1,
+  withAgentRunMutationLockV1,
+  agentRunScopeTransactionTablesV1,
+  readVerifiedAgentRunInTransactionV1,
   createAgentRunV1,
   readAgentRunChildV1,
   readAgentRunV1,
@@ -27,6 +33,7 @@ import {
 } from './checkpoint'
 import { createContextManifestFromAssemblyV1 } from './context-manifest'
 import { createVerificationReceiptV1 } from './verification-receipt'
+import { parseAgentRunEventV1 } from './event-schema'
 import { hashCanonicalValue } from './hash'
 
 export const IMPACT_MANUAL_CORRECTION_STEP_ID_V1 = 'impact-remediation:manual-correction' as const
@@ -42,6 +49,8 @@ export interface ImpactManualCorrectionBaselineV1 {
   target: CurrentImpactHandoffTargetV2
   targetPreStateHash: string
   contextManifestHash: string
+  /** Exact saved target selected by the first completion request. */
+  completionPostStateHash?: string
 }
 
 export interface ImpactManualCorrectionStateV1 {
@@ -156,12 +165,12 @@ export async function hashImpactManualCorrectionTargetV1(input: {
   if (!record || !await assertRecordInScope(input.scope, input.target.table, record)) {
     throw new Error('人工修正目标不存在或不属于当前 World/Work。')
   }
-  return hashCanonicalValue({
+  return Dexie.waitFor(hashCanonicalValue({
     version: 1,
     table: input.target.table,
     recordId: input.target.recordId,
     state: targetStateBody(record),
-  })
+  }))
 }
 
 function isHash(value: unknown): value is string {
@@ -181,6 +190,8 @@ function parseBaseline(value: unknown): ImpactManualCorrectionBaselineV1 {
     || !row.target
     || !isHash(row.targetPreStateHash)
     || !isHash(row.contextManifestHash)
+    || (row.completionPostStateHash !== undefined
+      && (!isHash(row.completionPostStateHash) || row.completionPostStateHash === row.targetPreStateHash))
   ) throw new Error('人工修正检查点基线不完整。')
   if (
     row.plan.planHash !== row.handoff.planHash
@@ -214,7 +225,7 @@ async function assertFrozenLineage(input: {
   }
   const correctsSourceChapter = baseline.target.table === 'chapters'
     && baseline.target.recordId === baseline.handoff.sourceChapterId
-  if (!correctsSourceChapter && await hashChapterText(chapter.content ?? '') !== baseline.handoff.sourceTextHash) {
+  if (!correctsSourceChapter && await Dexie.waitFor(hashChapterText(chapter.content ?? '')) !== baseline.handoff.sourceTextHash) {
     throw new Error('人工修正期间来源正文已变化，旧完成证明不能继续。')
   }
 
@@ -379,6 +390,7 @@ export async function completeImpactManualCorrectionV1(input: {
   scope: WorkspaceScope
   handoff: ImpactHandoffV2
 }): Promise<ImpactManualCorrectionCompletionV1> {
+  input = structuredClone(input)
   const relation = await childRelation(input.handoff)
   const existing = await readExisting({ ...input, relation })
   if (!existing) throw new Error('人工修正尚未建立 pre-state，不能验证完成。')
@@ -393,8 +405,9 @@ export async function completeImpactManualCorrectionV1(input: {
       reused: true,
     }
   }
-  if (existing.snapshot.projection.state !== 'paused') {
-    throw new Error(`人工修正 Run 当前为 ${existing.snapshot.projection.state}，不能签发完成证明。`)
+  let snapshot = existing.snapshot
+  if (!['paused', 'recovering', 'running', 'verifying'].includes(snapshot.projection.state)) {
+    throw new Error(`人工修正 Run 当前为 ${snapshot.projection.state}，不能签发完成证明。`)
   }
   const targetPostStateHash = await hashImpactManualCorrectionTargetV1({
     scope: input.scope,
@@ -403,34 +416,72 @@ export async function completeImpactManualCorrectionV1(input: {
   if (targetPostStateHash === existing.baseline.targetPreStateHash) {
     throw new Error('目标正式状态没有变化；仅导航、打开或更新时间变化不能算修正完成。')
   }
+  const step = snapshot.projection.steps[IMPACT_MANUAL_CORRECTION_STEP_ID_V1]
+  // A pre-fix interrupted step already records its exact post-state. Otherwise
+  // freeze the first completion request before advancing out of paused.
+  const frozenPostStateHash = existing.baseline.completionPostStateHash
+    ?? (step?.status === 'succeeded' ? step.outputHash : undefined)
+  if (frozenPostStateHash && frozenPostStateHash !== targetPostStateHash) {
+    throw new Error('人工修正目标在完成确认后再次变化，不能用旧确认签发完成证明。')
+  }
+  if (!frozenPostStateHash) {
+    if (snapshot.projection.state !== 'paused') {
+      throw new Error('人工修正中断状态缺少冻结 post-state，不能推断原完成意图。')
+    }
+    const saved = await createAgentRunCheckpointV1({
+      scope: input.scope,
+      runId: snapshot.run.id,
+      expectedLastSequence: snapshot.projection.lastSequence,
+      resumePayload: { ...existing.baseline, completionPostStateHash: targetPostStateHash },
+    })
+    snapshot = saved.snapshot
+  }
 
-  const recovery = await beginAgentRunRecoveryV1({
-    scope: input.scope,
-    runId: existing.snapshot.run.id,
-    expectedLastSequence: existing.snapshot.projection.lastSequence,
-  })
-  let snapshot = await completeAgentRunRecoveryV1({
-    scope: input.scope,
-    runId: existing.snapshot.run.id,
-    checkpointHash: recovery.checkpointHash,
-    expectedLastSequence: recovery.snapshot.projection.lastSequence,
-  })
-  snapshot = await appendAgentRunEventV1({
-    scope: input.scope,
-    runId: snapshot.run.id,
-    type: 'step.succeeded',
-    payload: {
-      stepId: IMPACT_MANUAL_CORRECTION_STEP_ID_V1,
-      attempt: 1,
-      outputHash: targetPostStateHash,
-    },
-  })
-  snapshot = await appendAgentRunEventV1({
-    scope: input.scope,
-    runId: snapshot.run.id,
-    type: 'verification.started',
-    payload: { verifierSetVersion: IMPACT_MANUAL_CORRECTION_VERIFIER_SET_V1 },
-  })
+  if (snapshot.projection.state === 'paused' || snapshot.projection.state === 'recovering') {
+    const recovery = await beginAgentRunRecoveryV1({
+      scope: input.scope,
+      runId: snapshot.run.id,
+      expectedLastSequence: snapshot.projection.lastSequence,
+    })
+    snapshot = await completeAgentRunRecoveryV1({
+      scope: input.scope,
+      runId: snapshot.run.id,
+      checkpointHash: recovery.checkpointHash,
+      expectedLastSequence: recovery.snapshot.projection.lastSequence,
+    })
+  }
+  const completedStep = snapshot.projection.steps[IMPACT_MANUAL_CORRECTION_STEP_ID_V1]
+  if (completedStep?.status === 'succeeded') {
+    if (completedStep.outputHash !== targetPostStateHash) {
+      throw new Error('人工修正步骤的 post-state 与冻结完成意图不一致。')
+    }
+  } else {
+    snapshot = await appendAgentRunEventV1({
+      scope: input.scope,
+      runId: snapshot.run.id,
+      expectedLastSequence: snapshot.projection.lastSequence,
+      type: 'step.succeeded',
+      payload: {
+        stepId: IMPACT_MANUAL_CORRECTION_STEP_ID_V1,
+        attempt: 1,
+        outputHash: targetPostStateHash,
+      },
+    })
+  }
+  if (snapshot.projection.state !== 'verifying') {
+    snapshot = await appendAgentRunEventV1({
+      scope: input.scope,
+      runId: snapshot.run.id,
+      expectedLastSequence: snapshot.projection.lastSequence,
+      type: 'verification.started',
+      payload: { verifierSetVersion: IMPACT_MANUAL_CORRECTION_VERIFIER_SET_V1 },
+    })
+  }
+  await assertFrozenLineage({ scope: input.scope, baseline: existing.baseline, snapshot })
+  if (await hashImpactManualCorrectionTargetV1({ scope: input.scope, target: existing.baseline.target })
+    !== targetPostStateHash) {
+    throw new Error('人工修正目标在终验前再次变化，完成证明已停止。')
+  }
   const receipt = await createVerificationReceiptV1({
     version: 1,
     runId: snapshot.run.id,
@@ -474,12 +525,36 @@ export async function completeImpactManualCorrectionV1(input: {
     ],
     acceptedAt: Date.now(),
   })
-  snapshot = await appendAgentRunEventV1({
-    scope: input.scope,
-    runId: snapshot.run.id,
-    type: 'verification.accepted',
-    payload: { receiptHash: receipt.receiptHash },
-  })
+  const terminalSequence = snapshot.projection.lastSequence
+  snapshot = await withAgentRunMutationLockV1(snapshot.run.id, () => db.transaction(
+    'rw',
+    agentRunScopeTransactionTablesV1(snapshot.run.id,
+      db.agentRuns, db.agentRunEvents, db.chapters, db.outlineNodes,
+      ...adoptionTransactionTablesV1(existing.baseline.target.table, {}),
+    ),
+    async () => {
+      const current = await readVerifiedAgentRunInTransactionV1(input.scope, snapshot.run.id)
+      if (current.projection.lastSequence !== terminalSequence || current.projection.state !== 'verifying') {
+        throw new Error('人工修正终验状态已推进，请重新读取原完成确认。')
+      }
+      // Re-read after receipt hashing, under the same native write fence as the
+      // accepted event. No author write can slip between this check and signing.
+      await assertFrozenLineage({ scope: input.scope, baseline: existing.baseline, snapshot: current })
+      if (await hashImpactManualCorrectionTargetV1({ scope: input.scope, target: existing.baseline.target })
+        !== targetPostStateHash) {
+        throw new Error('人工修正目标在终验前再次变化，完成证明已停止。')
+      }
+      return appendAgentRunEventWithSettlementInTransactionV1({
+        scope: input.scope, snapshot: current,
+        event: parseAgentRunEventV1({
+          version: 1, runId: current.run.id, sequence: current.projection.lastSequence + 1,
+          generation: current.projection.generation, projectId: current.run.projectId,
+          worldGroupId: current.run.worldGroupId ?? null, contractHash: current.projection.contractHash,
+          type: 'verification.accepted', payload: { receiptHash: receipt.receiptHash }, createdAt: Date.now(),
+        }),
+      })
+    },
+  ))
   return {
     snapshot,
     receiptHash: receipt.receiptHash,

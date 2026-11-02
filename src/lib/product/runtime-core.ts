@@ -1,3 +1,6 @@
+import { captureFormalRuntimeSourceRecordsV1, assertFormalRuntimeSourceRecordsUnchangedV1,
+  verifyFormalRuntimeSourceV1, assertFormalRuntimeSourceUnchangedV1, type VerifiedFormalRuntimeSourceV1 } from './runtime-source-authority'
+export { verifyFormalRuntimeSourceV1, assertFormalRuntimeSourceUnchangedV1, type VerifiedFormalRuntimeSourceV1 } from './runtime-source-authority'
 import { bindPreparedProductRuntimeBranchLineageV1 } from './runtime-branch-lineage'
 import { normalizeProductRuntimeCheckpointPurposeV1 } from "./runtime-checkpoint-purpose";
 export { normalizeProductRuntimeCheckpointPurposeV1 } from "./runtime-checkpoint-purpose";
@@ -13,7 +16,7 @@ import { normalizeProductRuntimeCommandIdV1 } from "./runtime-command-id";
 import { assertProductRuntimeIntegerV1, isProductRuntimeJsonObjectV1, stableProductRuntimeJsonV1, type ProductRuntimeJsonObjectV1 } from "./runtime-values";
 import { parseNarrativeCondition, parseNarrativeEffects, evaluateNarrativeCondition, applyNarrativeEffects } from "../narrative/blueprint";
 import { transactionTablesForReferenceCascade } from "../registry/lifecycle";
-import { type ProductRuntimeKind, type ProductRuntimeState, type FrozenNarrativeBeat, NARRATIVE_BEAT_KINDS, type FrozenNarrativeChoice, type ProductNarrativeRuntimeNodeSnapshot, NARRATIVE_NODE_KINDS, type ProductNarrativeRuntimeState, NARRATIVE_MODULE_KINDS, type NarrativeChoiceHistoryEntry, type RuntimeAttributes, type RuntimeEntityState, RUNTIME_ENTITY_KINDS, RUNTIME_LIFECYCLE_STATUSES, type RuntimeMemory, type ProductRuntimeEvent, PRODUCT_RUNTIME_EVENT_TYPES, type ProductRuntimeSession, PRODUCT_RUNTIME_KINDS, EMPTY_PRODUCT_RUNTIME_STATE, type AnyProductRuntimePackage, type ProductRuntimeEventType, type ProductRelease, type ProductBuildRecordV1, type ProductProductionRecordV1, type ProductProductionBriefRecordV1, type ProductRuntimeCheckpoint, type ProductRuntimeCheckpointPurposeV1 } from "../types";
+import { type ProductRuntimeKind, type ProductRuntimeState, type FrozenNarrativeBeat, NARRATIVE_BEAT_KINDS, type FrozenNarrativeChoice, type ProductNarrativeRuntimeNodeSnapshot, NARRATIVE_NODE_KINDS, type ProductNarrativeRuntimeState, NARRATIVE_MODULE_KINDS, type NarrativeChoiceHistoryEntry, type RuntimeAttributes, type RuntimeEntityState, RUNTIME_ENTITY_KINDS, RUNTIME_LIFECYCLE_STATUSES, type RuntimeMemory, type ProductRuntimeEvent, PRODUCT_RUNTIME_EVENT_TYPES, type ProductRuntimeSession, PRODUCT_RUNTIME_KINDS, EMPTY_PRODUCT_RUNTIME_STATE, type AnyProductRuntimePackage, type ProductRuntimeEventType, type ProductRelease, type ProductRuntimeCheckpoint, type ProductRuntimeCheckpointPurposeV1 } from "../types";
 import { verifyProductReleaseManifest, requirePlayableProductRuntimePackage } from "../product-production/runtime-package";
 import { verifyProductRuntimeSource, verifyProductRuntimeSessionSourceV1 } from "../product-production/preview-source";
 import { productRuntimeSourceSnapshotV2,
@@ -22,6 +25,7 @@ import { assertProductRuntimeSourceSnapshotV3 } from './runtime-source-branch';
 import {
   applyProductOwnedRuntimeEventV1,
   assertProductNarrativeChoiceReadyV1,
+  assertProductOwnedRuntimeNewWorkV1,
   assertFrozenProductRuntimeStateV1,
   cloneProductRuntimeBranchExtensionsV1,
   parseProductOwnedRuntimeStateV1,
@@ -34,7 +38,6 @@ import {
   consumeProductRuntimeBranchPreparationV1,
   createProductOwnedRuntimeBranchV1,
   productRuntimeContentReaderV1,
-  type ProductRuntimePackageForAdaptersV1,
 } from "./runtime-product-adapters";
 export type JsonObject = ProductRuntimeJsonObjectV1;
 export const stableJson = stableProductRuntimeJsonV1;
@@ -1163,6 +1166,7 @@ async function prepareProductRuntimeSessionRecord(
 }
 
 const preparedProductRuntimeSessionsV1 = new WeakMap<object, string>();
+const preparedTextOpenWorldSourcesV1 = new WeakMap<object, VerifiedFormalRuntimeSourceV1['source']>();
 
 /**
  * Prepares and cryptographically verifies a Release-owned session before its
@@ -1186,6 +1190,10 @@ export async function prepareReleasedProductRuntimeSessionRecordV1(
   input: CreateReleasedProductRuntimeSessionInput,
   branchLineage?: { parentSessionId: number; parentThroughSequence: number },
 ): Promise<ProductRuntimeSession> {
+  if (input.kind === 'text-open-world') {
+    input = structuredClone(input);
+    branchLineage = branchLineage && { ...branchLineage };
+  }
   const reader = productRuntimeContentReaderV1(input.kind);
   const productRelease = reader
     ? await assertProductReleaseUnchanged(input.productReleaseId, reader)
@@ -1199,6 +1207,7 @@ export async function prepareReleasedProductRuntimeSessionRecordV1(
   }
   const manifest = await verifyProductReleaseManifest(productRelease.manifestJson, reader);
   const runtimePackage = requirePlayableProductRuntimePackage(manifest.runtimePackage);
+  assertProductOwnedRuntimeNewWorkV1(runtimePackage, '创建新游戏或运行分支');
   if (input.origin === 'branch') await consumeProductRuntimeBranchPreparationV1(input.kind, input.initialState, manifest.packageHash);
   const sourceManifest = await runtimeSourceManifestFromReleaseV1(manifest);
   assertFrozenRuntimePackageSessionV1({
@@ -1221,6 +1230,11 @@ export async function prepareReleasedProductRuntimeSessionRecordV1(
   await bindPreparedProductRuntimeBranchLineageV1(session, input.origin, branchLineage);
   await assertProductRuntimeSourceSnapshotV3({ session, manifest: sourceManifest });
   preparedProductRuntimeSessionsV1.set(session, stableJson(session));
+  if (runtimePackage.productType === 'text-open-world') {
+    preparedTextOpenWorldSourcesV1.set(session, {
+      kind: 'release', release: productRelease as ProductRelease & { id: number },
+    });
+  }
   return session;
 }
 
@@ -1229,6 +1243,12 @@ export async function preparePreviewProductRuntimeSessionRecordV1(
   input: CreatePreviewProductRuntimeSessionInput,
   branchLineage?: { parentSessionId: number; parentThroughSequence: number },
 ): Promise<ProductRuntimeSession> {
+  if (input.kind === 'text-open-world') {
+    input = structuredClone(input);
+    branchLineage = branchLineage && { ...branchLineage };
+  }
+  const source = input.kind === 'text-open-world'
+    ? await captureFormalRuntimeSourceRecordsV1({ productReleaseId: null, productBuildId: input.productBuildId }) : null;
   const verified = await verifyProductRuntimeSource({
     scope: {
       projectId: input.projectId,
@@ -1245,6 +1265,14 @@ export async function preparePreviewProductRuntimeSessionRecordV1(
   if (verified.runtimeSourceHash !== input.runtimeSourceHash) {
     throw new Error("上层产品的 Build Preview 冻结绑定无效。");
   }
+  assertProductOwnedRuntimeNewWorkV1(verified.runtimePackage, '创建新试玩或运行分支');
+  const sourceBuild = source?.kind === 'build' ? source.build : null;
+  if (verified.runtimePackage.productType === 'text-open-world'
+    && (!sourceBuild || sourceBuild.packageHash !== verified.runtimeSourceHash
+      || sourceBuild.previewHash !== input.expectedPreviewHash)) {
+    throw new Error('[product-runtime] 文字开放世界试玩来源在准备期间发生变化。');
+  }
+  if (source) await assertFormalRuntimeSourceRecordsUnchangedV1(source);
   if (input.origin === 'branch') await consumeProductRuntimeBranchPreparationV1(input.kind, input.initialState, verified.runtimeSourceHash);
   assertFrozenRuntimePackageSessionV1({
     session: input,
@@ -1266,6 +1294,7 @@ export async function preparePreviewProductRuntimeSessionRecordV1(
   await bindPreparedProductRuntimeBranchLineageV1(session, input.origin, branchLineage);
   await assertProductRuntimeSourceSnapshotV3({ session, manifest: verified.sourceManifest });
   preparedProductRuntimeSessionsV1.set(session, stableJson(session));
+  if (source) preparedTextOpenWorldSourcesV1.set(session, source);
   return session;
 }
 
@@ -1275,6 +1304,21 @@ export async function insertPreparedProductRuntimeSessionV1(
 ): Promise<ProductRuntimeSession> {
   if (session.id != null || preparedProductRuntimeSessionsV1.get(session) !== stableJson(session)) {
     throw new Error("未经验证准备的正式产品会话不得写入。");
+  }
+  const source = preparedTextOpenWorldSourcesV1.get(session);
+  if (session.kind === 'text-open-world') {
+    if (!source) throw new Error('[product-runtime] 文字开放世界缺少已验证的新来源准入。');
+    const committed = structuredClone(session);
+    return db.transaction('rw', [db.productRuntimeSessions,
+      ...(source.kind === 'release' ? [db.productReleases]
+        : [db.productBuilds, db.productProductions, db.productProductionBriefs])], async () => {
+      await assertFormalRuntimeSourceRecordsUnchangedV1(source);
+      committed.id = (await db.productRuntimeSessions.add(committed)) as number;
+      session.id = committed.id;
+      preparedProductRuntimeSessionsV1.delete(session);
+      preparedTextOpenWorldSourcesV1.delete(session);
+      return committed;
+    });
   }
   session.id = (await db.productRuntimeSessions.add(session)) as number;
   preparedProductRuntimeSessionsV1.delete(session);
@@ -1568,13 +1612,18 @@ export async function appendBuiltEvent(
     "id" | "projectId" | "worldGroupId" | "sessionId" | "sequence" | "createdAt"
   >,
 ): Promise<ProductRuntimeEvent> {
+  const previewSession = await db.productRuntimeSessions.get(sessionId);
+  const frozen = previewSession?.kind === 'text-open-world'
+    ? await verifyFormalRuntimeSourceV1(previewSession, ['text-open-world']) : null;
+  if (frozen) assertProductOwnedRuntimeNewWorkV1(frozen.runtimePackage, '新增运行事件');
   return db.transaction(
     "rw",
-    db.productRuntimeSessions,
-    db.productRuntimeEvents,
+    [db.productRuntimeSessions, db.productRuntimeEvents,
+      ...(frozen ? [db.productReleases, db.productBuilds, db.productProductions, db.productProductionBriefs] : [])],
     async () => {
       const session = await db.productRuntimeSessions.get(sessionId);
       if (!session) throw new Error("产品运行会话不存在。");
+      if (frozen && previewSession) await assertFormalRuntimeSourceUnchangedV1({ previewSession, session, frozen });
       if (session.status !== "active")
         throw new Error("只有 active 会话可以追加事件。");
       const events = await readSessionEvents(session);
@@ -1677,122 +1726,6 @@ export async function readProductRuntimeStateVersion(sessionId: number): Promise
   };
 }
 
-export type VerifiedFormalRuntimeSourceV1 = {
-  runtimePackage: ProductRuntimePackageForAdaptersV1;
-  packageHash: string;
-  source:
-    | { kind: "release"; release: ProductRelease & { id: number } }
-    | {
-        kind: "build";
-        build: ProductBuildRecordV1 & { id: number };
-        production: ProductProductionRecordV1 & { id: number };
-        brief: ProductProductionBriefRecordV1 & { id: number };
-      };
-};
-
-/**
- * Product-neutral runtime source guard shared by every upper-product command.
- * A formal instance may bind one immutable Product Release or one governed
- * Build Preview; product commands must never reopen the WorldRelease directly.
- */
-export async function verifyFormalRuntimeSourceV1(
-  session: ProductRuntimeSession,
-  allowedProductTypes: readonly AnyProductRuntimePackage["productType"][],
-): Promise<VerifiedFormalRuntimeSourceV1> {
-  const sourceCount = [session.productReleaseId, session.productBuildId]
-    .filter((value) => value != null).length;
-  if (
-    sourceCount !== 1 ||
-    session.worldId == null ||
-    session.workId == null ||
-    !session.runtimeSourceHash
-  ) {
-    throw new Error("[product-runtime] 正式实例没有唯一冻结 Product Release/Build 来源。");
-  }
-  const playable = await verifyProductRuntimeSessionSourceV1({
-    scope: {
-      projectId: session.projectId,
-      worldId: session.worldId,
-      workId: session.workId,
-    },
-    session,
-    ...productRuntimeContentReaderV1(session.kind),
-  });
-  if (
-    playable.packageHash !== session.runtimeSourceHash ||
-    !allowedProductTypes.includes(playable.runtimePackage.productType)
-  ) {
-    throw new Error("[product-runtime] 实例产品类型或冻结运行包 hash 不匹配。");
-  }
-  if (session.productReleaseId != null) {
-    const release = await db.productReleases.get(session.productReleaseId);
-    if (!release?.id) throw new Error("[product-runtime] Product Release 已不存在。");
-    return {
-      runtimePackage: playable.runtimePackage,
-      packageHash: playable.packageHash,
-      source: { kind: "release", release: release as ProductRelease & { id: number } },
-    };
-  }
-  const build = await db.productBuilds.get(session.productBuildId!);
-  if (!build?.id) throw new Error("[product-runtime] Product Build 已不存在。");
-  const [production, brief] = await Promise.all([
-    db.productProductions.get(build.productionId),
-    db.productProductionBriefs
-      .where("[productionId+revision]")
-      .equals([build.productionId, build.briefRevision])
-      .first(),
-  ]);
-  if (!production?.id || !brief?.id) {
-    throw new Error("[product-runtime] Product Build 的 Production/Brief 来源已损坏。");
-  }
-  return {
-    runtimePackage: playable.runtimePackage,
-    packageHash: playable.packageHash,
-    source: {
-      kind: "build",
-      build: build as ProductBuildRecordV1 & { id: number },
-      production: production as ProductProductionRecordV1 & { id: number },
-      brief: brief as ProductProductionBriefRecordV1 & { id: number },
-    },
-  };
-}
-
-export async function assertFormalRuntimeSourceUnchangedV1(input: {
-  previewSession: ProductRuntimeSession;
-  session: ProductRuntimeSession;
-  frozen: VerifiedFormalRuntimeSourceV1;
-}): Promise<void> {
-  const session = input.session;
-  if (
-    session.productReleaseId !== input.previewSession.productReleaseId ||
-    session.productBuildId !== input.previewSession.productBuildId ||
-    session.runtimeSourceHash !== input.frozen.packageHash ||
-    session.seed !== input.previewSession.seed
-  ) {
-    throw new Error("[product-runtime] 实例冻结运行源在命令提交期间发生变化。");
-  }
-  if (input.frozen.source.kind === "release") {
-    const release = await db.productReleases.get(input.frozen.source.release.id);
-    if (!release || stableJson(release) !== stableJson(input.frozen.source.release)) {
-      throw new Error("[product-runtime] Product Release 在命令提交期间发生变化。");
-    }
-    return;
-  }
-  const [build, production, brief] = await Promise.all([
-    db.productBuilds.get(input.frozen.source.build.id),
-    db.productProductions.get(input.frozen.source.production.id),
-    db.productProductionBriefs.get(input.frozen.source.brief.id),
-  ]);
-  if (
-    !build || !production || !brief ||
-    stableJson(build) !== stableJson(input.frozen.source.build) ||
-    stableJson(production) !== stableJson(input.frozen.source.production) ||
-    stableJson(brief) !== stableJson(input.frozen.source.brief)
-  ) {
-    throw new Error("[product-runtime] Product Build/Production/Brief 在命令提交期间发生变化。");
-  }
-}
-
 /** Hash an already verified in-memory projection without replaying its event log again. */
 export async function hashProductRuntimeStateV1(
   state: ProductRuntimeState,
@@ -1813,6 +1746,7 @@ async function commitNarrativeChoiceWithState(input: {
   baseSequence: number;
   baseStateHash: string;
 }): Promise<NarrativeChoiceCommitResultV1> {
+  input = { ...input };
   const commandId = normalizeCommandId(input.commandId);
   const choiceKey = input.choiceKey.trim();
   const baseStateHash = input.baseStateHash.trim();
@@ -1832,11 +1766,27 @@ async function commitNarrativeChoiceWithState(input: {
     parseProductRuntimeState(previewSession.initialStateJson),
     previewEvents,
   );
+  // A stored exact command is historical evidence, including when its source
+  // object is no longer locally available. Resolve new-work authority only
+  // after this strict read; never rebuild a missing Release/Build to replay it.
+  if (previewSession.kind === 'text-open-world') {
+    const prior = previewEvents.find(event => event.commandId === commandId);
+    if (prior) {
+      const payload = parseEventPayload(prior);
+      if (prior.type !== 'narrative.choice.committed' || payload.choiceKey !== choiceKey
+        || prior.baseSequence !== input.baseSequence || prior.baseStateHash !== baseStateHash) {
+        throw new Error('选择 commandId 已被不同命令使用。');
+      }
+      return { event: prior, state: previewState, appendedEvents: [] };
+    }
+  }
+  const frozen = previewSession.kind === 'text-open-world'
+    ? await verifyFormalRuntimeSourceV1(previewSession, ['text-open-world']) : null;
   const previewStateHash = await hashStateJson(JSON.stringify(previewState));
   return db.transaction(
     "rw",
-    db.productRuntimeSessions,
-    db.productRuntimeEvents,
+    [db.productRuntimeSessions, db.productRuntimeEvents,
+      ...(frozen ? [db.productReleases, db.productBuilds, db.productProductions, db.productProductionBriefs] : [])],
     async () => {
       const session = await db.productRuntimeSessions.get(input.sessionId);
       if (!session) throw new Error("产品运行会话不存在。");
@@ -1864,6 +1814,10 @@ async function commitNarrativeChoiceWithState(input: {
               await readSessionEvents(session),
             );
         return { event: prior, state: currentState, appendedEvents: [] };
+      }
+      if (frozen) {
+        assertProductOwnedRuntimeNewWorkV1(frozen.runtimePackage, '新增叙事选择事件');
+        await assertFormalRuntimeSourceUnchangedV1({ previewSession, session, frozen });
       }
       if (session.status !== "active")
         throw new Error("只有 active 会话可以提交选择。");

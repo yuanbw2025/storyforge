@@ -16,6 +16,7 @@ import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { verifiedHumanImportCarryProofsV1 } from './text-adventure-artifact-store'
 import { isTextAdventureClockCapacityRevisionV1 } from './clock-capacity-revision'
 import { db } from '../db/schema'
+import { assertTextOpenWorldBuildNewWorkV1, assertTextOpenWorldProductionNewWorkV1 } from '../open-world/source-admission'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { getAgentSkillV1 } from '../agent/skill-registry'
 import { classifyHarnessFailureV1 } from '../agent/run/harness-failure'
@@ -1549,6 +1550,25 @@ async function currentProductionBuild(scope: WorkspaceScope, productionId: numbe
   }
 }
 
+/** Called only by new scheduling writes, never by historical proof replay or
+ * paid-attempt settlement. The caller includes these existing authority rows
+ * in the same native transaction as its Build claim/plan write. */
+async function assertOpenWorldSchedulingSourceInTransactionV1(build: ProductBuildRecordV1): Promise<void> {
+  const production = await db.productProductions.get(build.productionId)
+  if (production?.productType !== 'text-open-world') return
+  const brief = await db.productProductionBriefs.where('[productionId+revision]')
+    .equals([build.productionId, build.briefRevision]).first()
+  if (!brief || brief.status !== 'authorized' || !['producing', 'preview-ready'].includes(production.status)
+    || production.projectId !== build.projectId || production.worldId !== build.worldId
+    || production.workId !== build.workId || brief.projectId !== build.projectId
+    || brief.worldId !== build.worldId || brief.workId !== build.workId
+    || brief.briefHash !== build.briefHash || production.currentBriefRevision !== build.briefRevision
+    || production.currentBuildNumber !== build.buildNumber || production.controlEpoch !== build.controlEpoch) {
+    throw new Error('[product-production-scheduler] 新调度的来源/Build 身份已变化')
+  }
+  assertTextOpenWorldProductionNewWorkV1(production, brief, '领取新制作任务')
+}
+
 export function productProductionEvolutionTaskLaneV1(
   taskKey: string,
 ): 'content' | 'product' | 'visual' | 'audio' | null {
@@ -2391,7 +2411,7 @@ async function ensurePlan(input: {
   if (currentPlan && currentPlan.controlEpoch === state.build.controlEpoch && state.build.planHash === await hashProductProductionValueV2(currentPlan)) {
     if (state.build.status === 'authorized') {
       const updatedAt = Date.now()
-      await db.transaction('rw', scopeTransactionTables(db.productBuilds), async () => {
+      await db.transaction('rw', scopeTransactionTables(db.productBuilds, db.productProductions, db.productProductionBriefs), async () => {
         const build = await db.productBuilds.get(state.build.id!)
         if (!build || build.status !== 'authorized'
           || build.controlEpoch !== state.build.controlEpoch
@@ -2399,6 +2419,7 @@ async function ensurePlan(input: {
           || build.stateRevision !== state.build.stateRevision) {
           throw new Error('[product-production-scheduler] Build 启动 CAS 已过期')
         }
+        await assertOpenWorldSchedulingSourceInTransactionV1(build)
         await db.productBuilds.update(build.id!, {
           status: 'building',
           stateRevision: build.stateRevision + 1,
@@ -2769,11 +2790,12 @@ async function ensurePlan(input: {
       }
     }
   }
-  const commitPlan = () => db.transaction('rw', scopeTransactionTables(db.productBuilds, db.productBuildArtifacts), async () => {
+  const commitPlan = () => db.transaction('rw', scopeTransactionTables(db.productBuilds, db.productBuildArtifacts, db.productProductions, db.productProductionBriefs), async () => {
     const build = await db.productBuilds.get(state.build.id!)
     if (!build || build.controlEpoch !== state.build.controlEpoch || build.stateRevision !== state.build.stateRevision) {
       throw new Error('[product-production-scheduler] Plan CAS 已过期')
     }
+    await assertOpenWorldSchedulingSourceInTransactionV1(build)
     await db.productBuildArtifacts.where('buildId').equals(build.id!).filter(row => (
       row.controlEpoch !== build.controlEpoch && (row.status === 'accepted' || row.status === 'carried-forward')
     )).modify({ status: 'invalid', updatedAt: Date.now() })
@@ -4386,11 +4408,12 @@ async function ensureRootRun(input: {
   }
 
   const claimOwner = `scheduler:${crypto.randomUUID()}`
-  await db.transaction('rw', db.productBuilds, async () => {
+  await db.transaction('rw', [db.productBuilds, db.productProductions, db.productProductionBriefs], async () => {
     const current = await db.productBuilds.get(state.build.id!)
     if (!current || current.controlEpoch !== state.build.controlEpoch || current.planHash !== state.build.planHash) {
       throw new Error('[product-production-scheduler] root claim 已过期')
     }
+    await assertOpenWorldSchedulingSourceInTransactionV1(current)
     const next = parseLedger(current.budgetLedgerJson)
     if (next.rootRunId != null) return
     if (next.rootClaim && next.rootClaim.owner !== claimOwner && next.rootClaim.expiresAt > Date.now()) {
@@ -4405,6 +4428,9 @@ async function ensureRootRun(input: {
     return { ...state, build: refreshed!, root: await readAgentRunV1(input.scope, ledger.rootRunId), ledger }
   }
   if (ledger.rootClaim?.owner !== claimOwner) throw new Error('[product-production-scheduler] root claim 丢失')
+  if (state.production.productType === 'text-open-world') await assertTextOpenWorldBuildNewWorkV1({
+    scope: input.scope, productionId: input.productionId, buildId: state.build.id!, operation: '建立制作 Root Run',
+  })
   let root = await createAgentRunV1({
     scope: input.scope, productBuildId: state.build.id!,
     contract: await rootContract(input.scope, {
@@ -4414,9 +4440,10 @@ async function ensureRootRun(input: {
   })
   root = await append(input.scope, root, 'step.scheduled', { stepId: ROOT_STEP_ID })
   root = await append(input.scope, root, 'step.started', { stepId: ROOT_STEP_ID, attempt: 1 })
-  await db.transaction('rw', db.productBuilds, async () => {
+  await db.transaction('rw', [db.productBuilds, db.productProductions, db.productProductionBriefs], async () => {
     const current = await db.productBuilds.get(state.build.id!)
     if (!current) throw new Error('[product-production-scheduler] Build 在 root 提交前消失')
+    await assertOpenWorldSchedulingSourceInTransactionV1(current)
     const next = parseLedger(current.budgetLedgerJson)
     if (next.rootRunId != null && next.rootRunId !== root.run.id) {
       throw new Error('[product-production-scheduler] 检测到并发 root Run')
@@ -4636,6 +4663,12 @@ async function ensureCarriedForwardTaskRuns(input: {
       const capabilityBindingHash = bindings.length > 0 ? await hashProductProductionValueV2(bindings) : undefined
       let snapshot: AgentRunSnapshotV1
       try {
+        if (input.plan.productType === 'text-open-world') {
+          const build = await db.productBuilds.get(input.build.id)
+          if (!build) throw new Error('[product-production-scheduler] carry Build 已不存在')
+          await assertTextOpenWorldBuildNewWorkV1({ scope: input.scope, productionId: build.productionId,
+            buildId: build.id!, operation: '建立制作 carry Run' })
+        }
         snapshot = await createAgentRunV1({
           scope: input.scope, productBuildId: input.build.id,
           contract: await taskContract({
@@ -4932,6 +4965,10 @@ async function runClaimedTaskCore(input: {
   onDurableBoundary?: (boundary: ProductProductionSchedulerBoundaryV1, snapshot: AgentRunSnapshotV1) => void | Promise<void>
 }): Promise<void> {
   let snapshot = input.snapshot
+  const sourceProduction = await db.productProductions.get(input.productionId)
+  if (sourceProduction?.productType === 'text-open-world') await assertTextOpenWorldBuildNewWorkV1({
+    scope: input.scope, productionId: input.productionId, buildId: input.build.id, operation: '开始制作 attempt',
+  })
   const previous = snapshot.projection.steps[input.task.taskKey]
   const attempt = previous?.status === 'failed' ? previous.attempt + 1 : 1
   if (!previous) snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: input.task.taskKey })
@@ -7267,6 +7304,10 @@ export async function runProductProductionSchedulerCycleV1(input: {
   signal?: AbortSignal
   onDurableBoundary?: (boundary: ProductProductionSchedulerBoundaryV1, snapshot: AgentRunSnapshotV1) => void | Promise<void>
 }): Promise<ProductProductionSchedulerProjectionV1> {
+  input = { ...input, scope: structuredClone(input.scope),
+    ...(input.suppliedPlan === undefined ? {} : { suppliedPlan: structuredClone(input.suppliedPlan) }),
+    ...(input.capabilityBindings === undefined ? {} : { capabilityBindings: structuredClone(input.capabilityBindings) }),
+  }
   const scope = await resolveScope({ scope: input.scope })
   const current = await currentProductionBuild(scope, input.productionId)
   if (current.brief.avgSoundPlanning && ['preview-ready', 'release-ready', 'released'].includes(current.build.status)) {
@@ -7282,6 +7323,7 @@ export async function runProductProductionSchedulerCycleV1(input: {
     })
     return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
   }
+  assertTextOpenWorldProductionNewWorkV1(current.production, current.briefRow, '继续制作调度')
   const state = await ensureRootRun({ scope, productionId: input.productionId, suppliedPlan: input.suppliedPlan })
   await invalidateStaleCarriedTextAdventureVisionClosureV1({
     scope,
@@ -7426,6 +7468,9 @@ export async function runProductProductionSchedulerCycleV1(input: {
   const ownedRunIds = new Set<number>()
   try {
     for (const task of selected) {
+      if (state.production.productType === 'text-open-world') await assertTextOpenWorldBuildNewWorkV1({
+        scope, productionId: input.productionId, buildId: state.build.id!, operation: '领取制作子任务',
+      })
       const existing = children.get(task.taskKey)
       if (existing) {
         claimed.push({ task, snapshot: existing })
@@ -7507,6 +7552,10 @@ export async function runProductProductionUntilBlockedV1(input: {
   maximumCycles?: number
   onDurableBoundary?: (boundary: ProductProductionSchedulerBoundaryV1, snapshot: AgentRunSnapshotV1) => void | Promise<void>
 }): Promise<ProductProductionSchedulerProjectionV1> {
+  input = { ...input, scope: structuredClone(input.scope),
+    ...(input.suppliedPlan === undefined ? {} : { suppliedPlan: structuredClone(input.suppliedPlan) }),
+    ...(input.capabilityBindings === undefined ? {} : { capabilityBindings: structuredClone(input.capabilityBindings) }),
+  }
   const maximumCycles = input.maximumCycles ?? 100
   let previousSignature = ''
   let projection!: ProductProductionSchedulerProjectionV1

@@ -20,11 +20,11 @@ export async function stampCurrentFixtureResourceUidsV1(projectId: number): Prom
         let uid = row[identity.field]
         if (typeof uid !== 'string' || !uid.trim()) {
           do uid = createPortableResourceUidV1(identity.resourceKind)
-          while (seen.has(uid))
+          while (seen.has(uid as string))
           await spec.table.update(row.id as number, { [identity.field]: uid })
         }
-        if (seen.has(uid)) throw new Error(`测试项目内 resource UID 重复: ${uid}`)
-        seen.add(uid)
+        if (seen.has(uid as string)) throw new Error(`测试项目内 resource UID 重复: ${uid}`)
+        seen.add(uid as string)
       }
     }
   })

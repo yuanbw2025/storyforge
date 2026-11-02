@@ -139,6 +139,8 @@ export interface PreparedWorldviewFieldCopilot {
 
 interface WorldviewFieldCopilotDependencies {
   runAI?: (messages: ChatMessage[]) => Promise<string>
+  /** Opt-in durable owner of the same request, before length/schema handling. */
+  runModel?: (assertCurrent: () => Promise<void>, ...request: Parameters<typeof chat>) => ReturnType<typeof chat>
   readCurrent?: () => Promise<WorldviewFieldCopilotSnapshot>
   adoptOutput?: (candidate: WorldviewFieldCopilotCandidate) => Promise<AdoptResult>
 }
@@ -650,6 +652,8 @@ async function adoptCandidate(input: {
   )
 }
 
+export { candidateIssues as worldviewFieldCandidateIssuesV1 }
+
 export async function adoptRestoredWorldviewFieldCandidate(input: {
   projectId: number
   scope?: WorkspaceScope
@@ -890,6 +894,10 @@ export function createWorldviewFieldCopilotNode(
 ): PreparedWorldviewFieldCopilot['node'] {
   const readCurrent = dependencies.readCurrent
     ?? (() => readSnapshot(input.projectId, input.worldGroupId, input.scope))
+  const expectedSerialized = input.snapshot.serialized
+  const assertCurrent = async () => {
+    if ((await readCurrent()).serialized !== expectedSerialized) throw new WorldviewFieldCopilotStaleError()
+  }
   const adoptOutput = dependencies.adoptOutput ?? (candidate => adoptCandidate({
     projectId: input.projectId,
     scope: input.scope,
@@ -900,7 +908,10 @@ export function createWorldviewFieldCopilotNode(
   }))
   const runAI = dependencies.runAI ?? (async messages => {
     const result: ChatResult = {}
-    const content = await chat(messages, input.config, {
+    const requestMessages = dependencies.runModel ? structuredClone(messages) : messages
+    const requestConfig = dependencies.runModel ? { ...input.config } : input.config
+    const signal = input.signal
+    const meta = {
       category: input.routingCategory,
       projectId: input.projectId,
       configOverrides: {
@@ -916,8 +927,18 @@ export function createWorldviewFieldCopilotNode(
           ?? WORLDVIEW_FIELD_DEFAULT_OUTPUT_TOKENS_V1,
         temperature: input.generationOverrides?.temperature ?? 0.5,
       },
-      contextOverflowPolicy: 'reject',
-    }, input.signal, result)
+      contextOverflowPolicy: 'reject' as const,
+    }
+    if (dependencies.runModel) await assertCurrent()
+    const content = await (dependencies.runModel
+      ? dependencies.runModel(assertCurrent, requestMessages, requestConfig, meta, signal, result)
+      : chat(requestMessages, requestConfig, meta, signal, result))
+    // The durable invocation has saved the complete return and actual usage.
+    // A late source edit/abort cannot make that evidence disappear.
+    if (dependencies.runModel) {
+      signal?.throwIfAborted()
+      await assertCurrent()
+    }
     if (result.finishReason === 'length') {
       throw new Error('模型达到输出上限，本次候选不完整，正式内容未改变。请缩小生成范围，或在 AI 配置中调高输出上限后重新生成。')
     }

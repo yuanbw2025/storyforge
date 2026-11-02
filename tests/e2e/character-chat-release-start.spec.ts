@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {test, expect} from '@playwright/test'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 
@@ -5,9 +6,8 @@ for (const width of [390, 1440]) for (const limit of [1, 2]) test(`release detai
   await page.setViewportSize({width, height: 844})
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', model: 'test', baseUrl: 'https://chat-entry.invalid/v1', apiKey: ''}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', model: 'test', baseUrl: 'https://chat-entry.invalid/v1', apiKey: 'isolated-test-key' })
   const calls: string[] = []
   await page.route('https://chat-entry.invalid/**', async route => {
     if (await fulfillChatActionChoiceFixture(route)) {calls.push('choice'); return}
@@ -19,12 +19,12 @@ for (const width of [390, 1440]) for (const limit of [1, 2]) test(`release detai
         newFacts: [], disclosures: [], threadUpdates: [], goalStatus: null}
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async maxActionsPerTrigger => {
     const load = new Function('p', 'return import(p)')
     return (await load('/storyforge/tests/helpers/chat-library-fixture.ts')).seedChatLibraryFixture({maxActionsPerTrigger})
   }, limit)
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByRole('button', {name: '作品与存档', exact: false}).click()
   const card = page.getByRole('article', {name: '驿站工程核验 · 版本 1', exact: true})
   await expect(card.getByText('你将扮演 沈禾', {exact: false})).toBeVisible()
@@ -56,7 +56,7 @@ for (const width of [390, 1440]) for (const limit of [1, 2]) test(`release detai
   expect(state.interaction.messages.map((m: {speakerKey: string}) => m.speakerKey)).toEqual(Array.from({length: limit}, () => 'artisan'))
   expect(state.interaction.chatNarrative.triggers[0].direction.actorKey).toBe('artisan')
   expect(state.interaction.chatNarrative.triggers[0].direction.actionLimit).toBe(limit)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('region', {name: '对话记录', exact: true}).getByText('天黑后不宜搬动倒树，我先考虑白天可行的办法。', {exact: true})).toBeVisible()
   await expect(page.getByLabel('演绎节奏', {exact: true})).toHaveValue(String(limit))
   expect(calls).toHaveLength(3 * limit)

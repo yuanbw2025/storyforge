@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
@@ -24,6 +25,15 @@ import {
 import type { WorkspaceScope } from '../../src/lib/types'
 import { assertFormalAIEntrySnapshotIntegrityV1 } from '../../src/lib/agent/formal-ai-entry'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
+
+
+function faultAdoptionEvent(type: string) {
+  const original = db.agentRunEvents.add.bind(db.agentRunEvents)
+  return vi.spyOn(db.agentRunEvents, 'add').mockImplementation((record, key) => {
+    if (record.type === type) return Dexie.Promise.reject(new Error(`036 native storage fault: ${type}`))
+    return original(record, key)
+  })
+}
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
@@ -309,4 +319,48 @@ describe.sequential('R-HARNESS8 · 细纲生成 durable run', { timeout: 15_000 
     expect(restored?.snapshot.events.filter(event => event.type === 'model.requested')).toHaveLength(1)
     expect(restored?.snapshot.events.filter(event => event.type === 'candidate.persisted')).toHaveLength(1)
   })
+  it.each(['confirmation.recorded', 'adoption.started', 'adoption.committed', 'step.succeeded',
+    'verification.started', 'verification.accepted', 'memory.settlement.recorded'])(
+    '036 原生 %s 失败时细纲及证据全回滚，原候选可恢复且完成重放不再调用 adopter', async boundary => {
+      const pending = await pendingCandidate(`036 detail ${boundary}`)
+      const adopt = vi.fn(async () => {
+        const result = await adoptChapterOutlineWorkshopResult({
+          raw: pending.candidate.output, projectId: pending.fixture.scope.projectId,
+          scope: pending.fixture.scope, outlineNodeId: pending.fixture.outlineNodeId,
+          chapterSummary: '守灯人抵达潮门。', validCharacterIds: new Set(), validForeshadowIds: new Set(),
+        })
+        if (!result.ok) throw new Error(result.reason)
+      })
+      const input = {
+        scope: pending.fixture.scope, runId: pending.candidate.durable.runId, candidate: pending.candidate,
+        output: pending.candidate.output,
+        currentSourceSummaryHash: () => hashDetailedOutlineSourceSummaryV1('守灯人抵达潮门。'),
+        currentContextManifestHash: () => currentManifestHash(pending), adopt,
+        postState: () => db.detailedOutlines.where('outlineNodeId').equals(pending.fixture.outlineNodeId).first(),
+        postStateMatches: (state: unknown) => state != null && typeof state === 'object'
+          && 'outlineNodeId' in state && state.outlineNodeId === pending.fixture.outlineNodeId,
+      }
+      const before = await db.detailedOutlines.toArray()
+      const runBefore = await readAgentRunV1(input.scope, input.runId)
+      const fault = faultAdoptionEvent(boundary)
+      await expect(commitDetailedOutlineGenerationAdoptionV1(input)).rejects.toThrow(`036 native storage fault: ${boundary}`)
+      fault.mockRestore()
+      expect(await db.detailedOutlines.toArray()).toEqual(before)
+      expect(await readAgentRunV1(input.scope, input.runId)).toEqual(runBefore)
+      const recovered = await readLatestDetailedOutlineGenerationCandidateV1({ scope: input.scope, outlineNodeId: pending.fixture.outlineNodeId })
+      if (!recovered) throw new Error('original detailed-outline candidate was not recovered')
+      expect(await hashDetailedOutlineGenerationCandidateV1(recovered.candidate)).toBe(pending.candidate.durable.candidateHash)
+      expect(recovered.candidate.output).toBe(pending.candidate.output)
+      expect(recovered.candidate.durable.runId).toBe(input.runId)
+      const done = await commitDetailedOutlineGenerationAdoptionV1(input)
+      expect(done.snapshot.projection.state).toBe('completed')
+      const calls = adopt.mock.calls.length
+      const formal = await db.detailedOutlines.toArray()
+      const replay = await commitDetailedOutlineGenerationAdoptionV1(input)
+      expect(replay.receiptHash).toBe(done.receiptHash)
+      expect(adopt).toHaveBeenCalledTimes(calls)
+      expect(await db.detailedOutlines.toArray()).toEqual(formal)
+    },
+  )
+
 })

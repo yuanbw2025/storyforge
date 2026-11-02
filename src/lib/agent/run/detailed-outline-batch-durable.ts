@@ -20,6 +20,7 @@ import {
   type AgentRunSnapshotV1,
 } from './event-store'
 import { createVerificationReceiptV1 } from './verification-receipt'
+import { beginAgentRunRecoveryV1, completeAgentRunRecoveryV1, createAgentRunCheckpointV1 } from './checkpoint'
 import { hashCanonicalValue } from './hash'
 import { createContextManifestFromAssemblyV1, createContextManifestV2FromV1 } from './context-manifest'
 import {
@@ -675,6 +676,19 @@ export async function readLatestRecoverableDetailedOutlineBatchCandidateV1(input
   return candidates.sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
 }
 
+/** Explicit author decisions may resume a paused candidate, never replay its model. */
+async function resumeBatchCandidateDecision(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1): Promise<AgentRunSnapshotV1> {
+  if (snapshot.projection.state === 'paused') {
+    const saved = await createAgentRunCheckpointV1({ scope, runId: snapshot.run.id, expectedLastSequence: snapshot.projection.lastSequence })
+    snapshot = saved.snapshot
+  }
+  if (snapshot.projection.state === 'paused' || snapshot.projection.state === 'recovering') {
+    const plan = await beginAgentRunRecoveryV1({ scope, runId: snapshot.run.id, expectedLastSequence: snapshot.projection.lastSequence })
+    return completeAgentRunRecoveryV1({ scope, runId: snapshot.run.id, checkpointHash: plan.checkpointHash, expectedLastSequence: plan.snapshot.projection.lastSequence })
+  }
+  return snapshot
+}
+
 export async function rejectDetailedOutlineBatchCandidateV1(input: {
   scope: WorkspaceScope
   runId: number
@@ -686,6 +700,7 @@ export async function rejectDetailedOutlineBatchCandidateV1(input: {
   if (!step || step.status !== 'awaiting_confirmation' || step.candidateHash !== input.candidate.durable.candidateHash) {
     throw new Error('批量细纲候选当前不等待作者确认。')
   }
+  snapshot = await resumeBatchCandidateDecision(input.scope, snapshot)
   snapshot = await append(input.scope, snapshot, 'confirmation.recorded', {
     stepId: input.candidate.stepId,
     candidateHash: input.candidate.durable.candidateHash,
@@ -716,6 +731,12 @@ export async function commitDetailedOutlineBatchCandidateV1(input: {
     || await hashDetailedOutlineBatchCandidateV1(input.candidate) !== input.candidate.durable.candidateHash) {
     throw new Error('批量细纲候选已变化或 hash 校验失败。')
   }
+  const beforeDecision = await readAgentRunV1(input.scope, input.runId)
+  const pendingStep = beforeDecision.projection.steps[input.candidate.stepId]
+  if (!pendingStep || pendingStep.status !== 'awaiting_confirmation' || pendingStep.candidateHash !== input.candidate.durable.candidateHash) {
+    throw new Error('批量细纲候选不在等待作者确认状态。')
+  }
+  await resumeBatchCandidateDecision(input.scope, beforeDecision)
   if (await input.currentSourceSummaryHash() !== input.candidate.sourceSummaryHash) {
     let stale = await readAgentRunV1(input.scope, input.runId)
     const step = stale.projection.steps[input.candidate.stepId]

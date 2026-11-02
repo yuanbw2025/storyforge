@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {test, expect} from '@playwright/test'
 import {inquiryReassurance, inquiryAnswer, inquiryQuestion, inquiryPurpose, inquiryTruth, chatInquiryReviewFixture} from '../helpers/chat-inquiry-output'
@@ -8,9 +9,8 @@ for (const {privateAnswer, splitQuestion, playerInterjection} of inquiryCases) t
   const twoUtterances = splitQuestion || playerInterjection
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-inquiry.invalid/v1', model: 'test', maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-inquiry.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
   const calls: string[] = []; let actions = 0, totalCalls = 0, sessionId = 0, proposal: ChatSituationDraftV1
   const followup = '叶岑点点头：“我记下了，接下来会核对具体物件。你可以先做自己的事。”'
   await page.route('https://chat-inquiry.invalid/**', async route => {
@@ -58,11 +58,11 @@ for (const {privateAnswer, splitQuestion, playerInterjection} of inquiryCases) t
     }
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async splitQuestion => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({inquiryResults: true, factDiscovery: true, maxActionsPerTrigger: splitQuestion ? 2 : 1})}, splitQuestion)
   sessionId = f.sessionId
   const read = () => page.evaluate(async f => {const load = new Function('p', 'return import(p)'); return (await (await load('/storyforge/src/lib/character-interaction/runtime-api.ts')).readProductRuntimeState(f.sessionId)).interaction}, f)
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   await page.getByRole('button', {name: '让角色开场', exact: true}).click()
   await expect(page.getByRole('article').getByText(inquiryQuestion, {exact: true})).toBeVisible()
@@ -90,7 +90,7 @@ for (const {privateAnswer, splitQuestion, playerInterjection} of inquiryCases) t
     evidenceFactKeys: ['lost', 'clerk-present', 'box'], actorKey: 'guard', goalKey: 'find-seal', source: 'inquiry'}]})
   expect(before.chatNarrative.situation.facts.find((f: {factKey: string}) => f.factKey === 'secret').audienceKeys).toEqual(privateAnswer ? ['guard'] : ['guard', 'player'])
   expect(before.chatNarrative.situation.facts.find((f: {factKey: string}) => f.factKey === 'purpose').audienceKeys).toEqual([])
-  await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   expect(await read()).toEqual(before); expect(calls).toHaveLength(twoUtterances ? 8 : 6); expect(totalCalls).toBe(twoUtterances ? 11 : 8)
   await expect(transcript.getByTestId('chat-inquiry-reply')).toHaveCount(privateAnswer ? 0 : 1)
   await page.setViewportSize({width: 390, height: 844})
@@ -99,13 +99,13 @@ for (const {privateAnswer, splitQuestion, playerInterjection} of inquiryCases) t
 
 test('author opts into inquiry results explicitly and removing prerequisite permission clears the opt-in', async ({page}) => {
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); const f = await (await load('/storyforge/tests/helpers/chat-narrative-production-fixture.ts')).seedChatNarrativeProductionFixture(); return {scope: f.scope}})
-  await page.goto(`./chat/vision?project=${f.scope.projectId}&work=${f.scope.workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/vision?project=${f.scope.projectId}&work=${f.scope.workId}`)
   const option = page.getByLabel('允许已在场的场景人物回应角色实际提出的问题', {exact: true})
   await expect(option).not.toBeChecked(); await option.check()
   await page.getByRole('button', {name: '保存方案', exact: true}).click()
-  await expect(page.getByText('方案已保存', {exact: true})).toBeVisible(); await page.reload()
+  await expect(page.getByText('方案已保存', {exact: true})).toBeVisible(); await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(option).toBeChecked()
   await page.getByLabel('观察到的新细节', {exact: true}).uncheck()
   await expect(option).not.toBeChecked(); await expect(option).toBeDisabled()

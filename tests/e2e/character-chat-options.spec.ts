@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {openChatNarrativeTools} from './helpers/character-chat-ui'
 import {test, expect} from '@playwright/test'
@@ -7,9 +8,8 @@ test('compares two actions, keeps the choice over refresh, and applies only the 
   const calls: string[] = []
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-options.invalid/v1', model: 'test', maxTokens: 8000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-options.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' })
   await page.route('https://chat-options.invalid/**', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')
@@ -23,9 +23,9 @@ test('compares two actions, keeps the choice over refresh, and applies only the 
         disclosures: [], threadUpdates: [], goalStatus: i === 0 ? null : 'paused', nextPossibilities: []}))}
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({maxActionsPerTrigger: 3})})
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   await openChatNarrativeTools(page)
   await page.getByRole('button', {name: '比较两种行动', exact: true}).click()
@@ -36,7 +36,7 @@ test('compares two actions, keeps the choice over refresh, and applies only the 
   expect(calls).toEqual(['options', 'review'])
   const read = () => page.evaluate(async f => {const load = new Function('p', 'return import(p)'); return (await (await load('/storyforge/src/lib/character-interaction/runtime-api.ts')).readProductRuntimeState(f.sessionId)).interaction}, f)
   expect((await read()).messages).toEqual([])
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(choices).toBeVisible()
   await expect(page.getByRole('button', {name: /^恢复 Run/})).toHaveCount(0)
   expect(calls).toHaveLength(2)
@@ -48,7 +48,7 @@ test('compares two actions, keeps the choice over refresh, and applies only the 
   expect(state.messages.map((m: {text: string}) => m.text)).toEqual([texts[1]])
   expect(state.chatNarrative.situation.facts.some((fact: {factKey: string}) => fact.factKey === 'lit-door')).toBe(false)
   expect(state.chatNarrative.situation.goals.find((goal: {goalKey: string}) => goal.goalKey === 'find-seal').status).toBe('paused')
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText(texts[1], {exact: true})).toBeVisible()
   expect(await read()).toEqual(state)
   expect(calls).toHaveLength(2)

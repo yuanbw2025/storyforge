@@ -59,7 +59,9 @@ import {
   persistAdoptedAuthoringCandidate,
   reviseAuthoringCandidate,
   recoverInterruptedAuthoringRun,
+  readAuthoringFieldAdoptionViewsV1,
   runAuthoringGraph,
+  type AuthoringFieldAdoptionViewV1,
   type AuthoringCandidateMap,
   type AuthoringRunSnapshotMap,
 } from '../../lib/node-authoring/executor'
@@ -551,6 +553,7 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
   const [snapshots, setSnapshots] = useState<AuthoringRunSnapshotMap>({})
   const [candidates, setCandidates] = useState<AuthoringCandidateMap>({})
   const [freshness, setFreshness] = useState<AuthoringFreshnessMap>({})
+  const [fieldAdoptions, setFieldAdoptions] = useState<Record<string, AuthoringFieldAdoptionViewV1>>({})
   const [connection, setConnection] = useState<{ nodeId: string; portId: string; direction: 'input' | 'output' } | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; nodeX: number; nodeY: number } | null>(null)
   const [showRuns, setShowRuns] = useState(true)
@@ -562,9 +565,12 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
   const [adopting, setAdopting] = useState(false)
   const adoptingRef = useRef(false)
   const dirtyRef = useRef(false)
-  const currentRef = useRef({ draft, graph, candidates, run, selectedFlowId })
-  currentRef.current = { draft, graph, candidates, run, selectedFlowId }
-  const pendingRevisions = useRef(new Map<string, { flow: NodeFlow; runId: number; nodeId: string; output?: string; selectedVariantIndex?: number }>())
+  const scope = activeWork?.id != null && activeWork.worldId != null
+    ? { projectId, worldId: activeWork.worldId, workId: activeWork.id } : undefined
+  const viewKey = `${projectId}:${props.project.activeWorkId}:${selectedFlowId}:${run?.id}`
+  const currentRef = useRef({ draft, graph, candidates, run, selectedFlowId, scope, viewKey })
+  currentRef.current = { draft, graph, candidates, run, selectedFlowId, scope, viewKey }
+  const pendingRevisions = useRef(new Map<string, Parameters<typeof reviseAuthoringCandidate>[0]>())
   const [revisionTick, setRevisionTick] = useState(0)
   useBeforeUnload(dirty || saving || pendingRevisions.current.size > 0)
   useEffect(() => () => { abortRef.current?.abort('paused'); abortRef.current = null }, [projectId, props.project.activeWorkId])
@@ -584,13 +590,34 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
   }, [selectedFlowId, projectId])
   useEffect(() => { const latest = runs.find(item => item.flowId === selectedFlowId) ?? null; setRun(latest); const data = runData(latest); setSnapshots(data.snapshots); setCandidates(data.candidates) }, [runs, selectedFlowId])
   useEffect(() => {
+    setFieldAdoptions(Object.fromEntries(Object.values(runData(run).candidates)
+      .filter(candidate => candidate.domain?.kind === 'worldview-field' || candidate.domain?.kind === 'story-core-field')
+      .map(candidate => [candidate.nodeId, { locked: true as const, completed: false, canContinue: false,
+        message: '正在核验原采纳状态；原版本和作者稿保留。' }])))
+    if (!draft || run?.id == null || !scope) return
+    const subscription = liveQuery(async () => readAuthoringFieldAdoptionViewsV1({ flow: draft, runId: run.id!, scope })).subscribe({
+      next: setFieldAdoptions,
+      error: cause => {
+        const message = `原采纳状态暂不能核验：${cause instanceof Error ? cause.message : String(cause)}`
+        setFieldAdoptions(Object.fromEntries(Object.values(runData(run).candidates)
+          .filter(candidate => candidate.domain?.kind === 'worldview-field' || candidate.domain?.kind === 'story-core-field')
+          .map(candidate => [candidate.nodeId, { locked: true as const, completed: false, canContinue: false, message }])))
+      },
+    })
+    return () => subscription.unsubscribe()
+  // Native Run/Node/Flow reads in liveQuery track adoption and persisted edits.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, props.project.activeWorkId, activeWork?.worldId, draft?.id, run?.id])
+  useEffect(() => {
     if (!draft || !run || !Object.keys(candidates).length) { setFreshness({}); return }
-    const subscription = liveQuery(() => inspectAuthoringGraphFreshness({ flow: { ...draft, graphJson: JSON.stringify(graph) }, snapshots, candidates })).subscribe({
+    const subscription = liveQuery(() => inspectAuthoringGraphFreshness({ flow: { ...draft, graphJson: JSON.stringify(graph) }, scope, snapshots, candidates })).subscribe({
       next: setFreshness,
       error: cause => { setFreshness({}); setSaveError(`资料状态读取失败：${cause instanceof Error ? cause.message : String(cause)}`) },
     })
     return () => subscription.unsubscribe()
-  }, [draft, graph, run, snapshots, candidates])
+  // The explicit tuple follows this view; an old view must not read a newly active Work.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, graph, run, snapshots, candidates, projectId, activeWork?.id, activeWork?.worldId])
 
   const selectedNode = selectedNodeId ? graph.nodes.find(node => node.id === selectedNodeId) ?? null : null
   const save = useCallback(async (notify = false): Promise<NodeFlow | null> => {
@@ -645,7 +672,7 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
   }, [revisionTick, flushCandidates])
   const reviseCandidate = (nodeId: string, patch: { output?: string; selectedVariantIndex?: number }) => {
     const current = currentRef.current
-    if (!current.run?.id || !current.draft || isRunning || adoptingRef.current) return
+    if (!current.run?.id || !current.draft || isRunning || adoptingRef.current || fieldAdoptions[nodeId]?.locked) return
     const candidate = current.candidates[nodeId]
     if (!candidate || candidate.status === 'adopted' || candidate.status === 'rejected') return
     const index = patch.selectedVariantIndex
@@ -655,7 +682,7 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
     setCandidates(value => ({ ...value, [nodeId]: { ...candidate, output, ...(index == null ? { status: candidate.status === 'blocked' || artifact?.status === 'blocked' || artifact?.status === 'manual-repair' ? 'blocked' : 'draft', authorEditedAfterArtifact: true } : { status: artifact?.status === 'blocked' || artifact?.status === 'manual-repair' ? 'blocked' : 'candidate', selectedVariantIndex: index, authorEditedAfterArtifact: false }) } }))
     const key = `${current.run.id}:${nodeId}`
     const previous = pendingRevisions.current.get(key)
-    pendingRevisions.current.set(key, { flow: current.draft, runId: current.run.id, nodeId, ...(patch.selectedVariantIndex == null ? previous : {}), ...patch })
+    pendingRevisions.current.set(key, { flow: current.draft, runId: current.run.id, nodeId, ...(patch.selectedVariantIndex == null ? previous : {}), ...patch, scope: current.scope })
     setRevisionTick(value => value + 1)
   }
   const switchFlow = async (id: number) => {
@@ -849,6 +876,17 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
       setIsRunning(false)
     }
   }
+  const recoverableFieldPrefix = (() => {
+    if (!run || (run.status !== 'failed' && run.status !== 'paused')) return false
+    try {
+      return parseAuthoringGraph(run.graphSnapshotJson ?? draft?.graphJson).nodes.some(node => {
+        const template = AUTHORING_NODE_BY_ID.get(node.templateId)
+        const action = template ? authoringDomainActionBindingV1(template) : null
+        return !node.disabled && node.binding?.mode !== 'live' && action?.mode === 'formal-domain-action'
+          && (action.actionId === 'worldview-field-copilot' || action.actionId === 'story-core-field-copilot')
+      })
+    } catch { return false }
+  })()
   const selectedPlan = parseAuthoringExecutionPlan(run?.executionPlanJson)
   const executionEstimate = useMemo(() => {
     try { return buildAuthoringExecutionPlan({ graph }) } catch { return null }
@@ -875,8 +913,8 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
     changeGraph(alignAuthoringNodes(graph, selectedNodeSet, axis))
   }
   const adoptCandidate = async (nodeId: string) => {
-    const candidate = candidates[nodeId]
-    if (!draft || !candidate || !run?.id || isRunning || adoptingRef.current || candidate.status === 'adopted' || candidate.status === 'rejected') return
+    const action = currentRef.current, candidate = action.candidates[nodeId]
+    if (!action.draft || !candidate || !action.run?.id || isRunning || adoptingRef.current || candidate.status === 'adopted' || candidate.status === 'rejected') return
     if (candidate.status === 'blocked' && !candidate.authorEditedAfterArtifact) {
       toast.error('这个候选仍有阻断问题；请先编辑原稿，再进行本地校验和采纳。')
       return
@@ -886,40 +924,45 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
     try {
       await flushPendingEditsV1()
       const current = currentRef.current
-      const result = await adoptAuthoringCandidate({ flow: { ...draft, graphJson: JSON.stringify(current.graph) }, runId: run.id, nodeId, output: candidate.output })
-      if (run?.id != null) {
-        const persistedRun = await persistAdoptedAuthoringCandidate({
-          flow: draft,
-          runId: run.id,
-          nodeId,
-          output: candidate.output,
-        })
-        setRun(persistedRun)
+      const latest = current.candidates[nodeId]
+      if (current.viewKey !== action.viewKey || !current.draft || !current.run?.id || !current.scope || !latest) {
+        throw new Error('保存期间已切换作品或运行，未按旧页面继续采纳。')
       }
-      setCandidates(current => ({
-        ...current,
-        [nodeId]: { ...current[nodeId], status: 'adopted' },
-      }))
-      toast.success(`已采纳：写入 ${result.written.length} 条记录。`)
+      const flow = { ...current.draft, graphJson: JSON.stringify(current.graph) }
+      const result = await adoptAuthoringCandidate({ flow, scope: current.scope,
+        runId: current.run.id, nodeId, output: latest.output })
+      if (currentRef.current.viewKey !== action.viewKey) return
+      const persistedRun = await persistAdoptedAuthoringCandidate({ flow, scope: current.scope,
+        runId: current.run.id, nodeId, output: latest.output })
+      if (currentRef.current.viewKey !== action.viewKey) return
+      setRun(persistedRun)
+      const saved = runData(persistedRun); setCandidates(saved.candidates); setSnapshots(saved.snapshots)
+      toast.success(result.recovered ? '已恢复原采纳回执，没有重复生成或写入。' : `已采纳：写入 ${result.written.length} 条记录。`)
     } catch (error) {
       toast.error(`采纳失败：${error instanceof Error ? error.message : String(error)}`)
     } finally { adoptingRef.current = false; setAdopting(false) }
   }
   const recoverRun = async () => {
-    if (!draft || !run?.id || isRunning || adoptingRef.current) return
+    const action = currentRef.current
+    if (!action.draft || !action.run?.id || isRunning || adoptingRef.current) return
     try {
-      const recovered = await recoverInterruptedAuthoringRun({ flow: draft, runId: run.id })
+      const recovered = await recoverInterruptedAuthoringRun({ flow: action.draft, runId: action.run.id, scope: action.scope })
+      if (currentRef.current.viewKey !== action.viewKey) return
       setRun(recovered)
       const data = runData(recovered); setSnapshots(data.snapshots); setCandidates(data.candidates); setShowRuns(true)
       toast.success('已恢复保存的结果；没有重新调用模型。')
     } catch (cause) { toast.error(`恢复失败：${String(cause)}`) }
   }
   const rejectCandidate = async (nodeId: string) => {
+    const action = currentRef.current
     if (!draft || !run?.id || isRunning || adoptingRef.current) return
     adoptingRef.current = true; setAdopting(true)
     try {
       await flushPendingEditsV1()
-      const updated = await reviseAuthoringCandidate({ flow: draft, runId: run.id, nodeId, reject: true })
+      const current = currentRef.current
+      if (current.viewKey !== action.viewKey || !current.draft || !current.run?.id) throw new Error('当前作品或节点运行已变化。')
+      const updated = await reviseAuthoringCandidate({ flow: current.draft, scope: current.scope, runId: current.run.id, nodeId, reject: true })
+      if (currentRef.current.viewKey !== current.viewKey) return
       setRun(updated); setCandidates(runData(updated).candidates)
       toast.success('已拒绝候选，作品内容未改变。')
     } catch (cause) { toast.error(`拒绝失败：${String(cause)}`) }
@@ -931,13 +974,17 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
 
   const selectedSnapshot = selectedNodeId ? snapshots[selectedNodeId] : undefined
   const selectedCandidate = selectedNodeId ? candidates[selectedNodeId] : undefined
+  const savedFieldReadOnly = Boolean(selectedCandidate?.creativeArtifacts?.length && !selectedCandidate.signature
+    && (selectedCandidate.domain?.kind === 'worldview-field' || selectedCandidate.domain?.kind === 'story-core-field'))
+  const selectedAdoption = selectedNodeId ? fieldAdoptions[selectedNodeId] : undefined
+  const candidateReadOnly = savedFieldReadOnly || selectedAdoption?.locked === true
   const selectedVariantIndex = selectedCandidate
     ? selectedCandidate.selectedVariantIndex
       ?? Math.max(0, selectedCandidate.variants?.findIndex(item => item === selectedCandidate.output) ?? 0)
     : 0
   const selectedArtifact = selectedCandidate?.creativeArtifacts?.[selectedVariantIndex]
   return <div data-node-pane={mobilePane} className="node-workspace flex h-[760px] min-h-[560px] max-h-[calc(100vh-180px)] flex-col overflow-hidden bg-bg-base">
-    <header className="node-workspace-header flex min-h-12 shrink-0 items-center gap-2 border-b border-border bg-bg-surface px-3"><Workflow className="h-4 w-4 text-accent" /><input aria-label="节点图名称" value={draft.name} onChange={event => { setDraft({ ...draft, name: event.target.value }); setDirty(true); dirtyRef.current = true }} className="node-flow-name w-56 rounded border border-transparent bg-transparent px-2 py-1 text-sm font-medium text-text-primary hover:border-border focus:border-accent focus:outline-none" /><span className="text-[10px] text-text-muted">{saving ? '保存中…' : dirty ? '待保存' : '已保存'}</span><div className="ml-auto flex items-center gap-2"><button type="button" onClick={() => void save(true).catch(() => undefined)} className="inline-flex items-center gap-1 rounded px-2 py-1.5 text-xs text-text-secondary hover:bg-bg-hover"><Save className="h-3.5 w-3.5" />保存</button>{isRunning ? <><button type="button" onClick={pauseRun} title="暂停运行" aria-label="暂停运行" className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-1.5 text-xs text-amber-800"><Pause className="h-3.5 w-3.5" />暂停</button><button type="button" onClick={cancelRun} title="取消运行" aria-label="取消运行" className="inline-flex items-center gap-1 rounded bg-error/10 px-2 py-1.5 text-xs text-error"><CircleStop className="h-3.5 w-3.5" />取消</button></> : run?.status === 'running' ? <button type="button" onClick={() => void recoverRun()} className="rounded bg-accent px-3 py-1.5 text-xs text-white">恢复已保存结果</button> : run?.status === 'paused' || run?.status === 'failed' ? <button type="button" onClick={() => void runGraph(undefined, 'resume')} className="inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"><RotateCcw className="h-3.5 w-3.5" />继续运行</button> : <button type="button" onClick={() => void runGraph()} className="inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"><Play className="h-3.5 w-3.5" />运行全部</button>}</div></header>
+    <header className="node-workspace-header flex min-h-12 shrink-0 items-center gap-2 border-b border-border bg-bg-surface px-3"><Workflow className="h-4 w-4 text-accent" /><input aria-label="节点图名称" value={draft.name} onChange={event => { setDraft({ ...draft, name: event.target.value }); setDirty(true); dirtyRef.current = true }} className="node-flow-name w-56 rounded border border-transparent bg-transparent px-2 py-1 text-sm font-medium text-text-primary hover:border-border focus:border-accent focus:outline-none" /><span className="text-[10px] text-text-muted">{saving ? '保存中…' : dirty ? '待保存' : '已保存'}</span><div className="ml-auto flex items-center gap-2"><button type="button" onClick={() => void save(true).catch(() => undefined)} className="inline-flex items-center gap-1 rounded px-2 py-1.5 text-xs text-text-secondary hover:bg-bg-hover"><Save className="h-3.5 w-3.5" />保存</button>{isRunning ? <><button type="button" onClick={pauseRun} title="暂停运行" aria-label="暂停运行" className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-1.5 text-xs text-amber-800"><Pause className="h-3.5 w-3.5" />暂停</button><button type="button" onClick={cancelRun} title="取消运行" aria-label="取消运行" className="inline-flex items-center gap-1 rounded bg-error/10 px-2 py-1.5 text-xs text-error"><CircleStop className="h-3.5 w-3.5" />取消</button></> : run?.status === 'running' ? <button type="button" onClick={() => void recoverRun()} className="rounded bg-accent px-3 py-1.5 text-xs text-white">恢复已保存结果</button> : run?.status === 'paused' || run?.status === 'failed' ? <>{recoverableFieldPrefix && <button type="button" onClick={() => void recoverRun()} className="rounded bg-accent px-3 py-1.5 text-xs text-white">恢复已保存结果</button>}<button type="button" onClick={() => void runGraph(undefined, 'resume')} className="inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"><RotateCcw className="h-3.5 w-3.5" />继续运行</button></> : <button type="button" onClick={() => void runGraph()} className="inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"><Play className="h-3.5 w-3.5" />运行全部</button>}</div></header>
     <section className="flex flex-wrap items-center gap-1 border-b border-border bg-bg-surface px-3 py-1.5 text-[10px] text-text-muted"><button type="button" title="选择官方模板" aria-label="选择官方模板" onClick={() => setShowTemplates(value => !value)} className="inline-flex items-center gap-1 rounded px-2 py-1 text-text-secondary hover:bg-bg-hover"><LayoutTemplate className="h-3 w-3" />模板</button><button type="button" title="自动布局" aria-label="自动布局" onClick={() => changeGraph(autoLayoutAuthoringGraph(graph))} className="inline-flex items-center gap-1 rounded px-2 py-1 text-text-secondary hover:bg-bg-hover"><LayoutDashboard className="h-3 w-3" />自动布局</button><button type="button" title="复制选区" aria-label="复制选区" onClick={copySelection} className="inline-flex items-center gap-1 rounded px-2 py-1 text-text-secondary hover:bg-bg-hover"><Copy className="h-3 w-3" />复制</button><button type="button" title="水平对齐" aria-label="水平对齐" onClick={() => alignSelection('y')} className="rounded p-1 text-text-secondary hover:bg-bg-hover"><AlignCenterHorizontal className="h-3 w-3" /></button><button type="button" title="垂直对齐" aria-label="垂直对齐" onClick={() => alignSelection('x')} className="rounded p-1 text-text-secondary hover:bg-bg-hover"><AlignCenterVertical className="h-3 w-3" /></button><button type="button" title="分组" aria-label="分组" onClick={groupSelection} className="inline-flex items-center gap-1 rounded px-2 py-1 text-text-secondary hover:bg-bg-hover"><Users className="h-3 w-3" />分组</button><div className="ml-auto flex items-center gap-1"><button type="button" aria-label="缩小画布" onClick={() => changeGraph({ ...graph, viewport: { ...graph.viewport, zoom: Math.max(0.3, Number((graph.viewport.zoom - 0.1).toFixed(1))) } })} className="rounded border border-border px-2 py-1">−</button><button type="button" aria-label="重置画布缩放" onClick={() => changeGraph({ ...graph, viewport: { ...graph.viewport, zoom: 1 } })} className="px-2">{Math.round(graph.viewport.zoom * 100)}%</button><button type="button" aria-label="放大画布" onClick={() => changeGraph({ ...graph, viewport: { ...graph.viewport, zoom: Math.min(2, Number((graph.viewport.zoom + 0.1).toFixed(1))) } })} className="rounded border border-border px-2 py-1">+</button></div><span>选中 {selectedNodeIds.length} · 节点 {graph.nodes.length} · 连线 {graph.edges.length} · 变更 {graphDiff.nodesChanged + graphDiff.nodesAdded + graphDiff.nodesRemoved + graphDiff.edgesAdded + graphDiff.edgesRemoved}</span>{showTemplates && <div className="absolute z-30 mt-32 grid w-80 gap-1 rounded border border-border bg-bg-surface p-2 shadow-xl sm:grid-cols-2">{AUTHORING_OFFICIAL_TEMPLATES.map(template => <button key={template.id} type="button" onClick={() => void applyOfficialTemplate(template.id)} className="rounded p-2 text-left hover:bg-bg-hover"><span className="block text-[10px] font-semibold text-text-primary">{template.name}</span><span className="mt-0.5 block text-[9px] text-text-muted">{template.description}</span></button>)}</div>}</section>
     {run?.status === 'running' && !isRunning && <p role="status" className="border-b border-border p-3 text-sm text-warning">上次运行中断。先恢复已保存结果，再决定是否继续；刷新不会重新调用模型。</p>}
     {saveError && <div role="alert" className="p-3 text-sm text-error">{saveError}<button type="button" onClick={() => void flushPendingEditsV1().catch(() => undefined)} className="ml-3 underline">重试保存</button></div>}
@@ -967,7 +1014,7 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
                     <select
                       aria-label="选择候选版本"
                       value={selectedVariantIndex}
-                      disabled={isRunning || adopting || selectedCandidate.status === 'adopted' || selectedCandidate.status === 'rejected'}
+                      disabled={isRunning || adopting || candidateReadOnly || selectedCandidate.status === 'adopted' || selectedCandidate.status === 'rejected'}
                       onChange={event => {
                         reviseCandidate(selectedCandidate.nodeId, { selectedVariantIndex: Number(event.target.value) })
                       }}
@@ -977,18 +1024,18 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
                     </select>
                   </label>
                 )}
-                {selectedCandidate && selectedNode?.binding?.mode !== 'live' && Boolean(AUTHORING_NODE_BY_ID.get(selectedNode?.templateId ?? '')?.writes) && <button type="button" onClick={() => void adoptCandidate(selectedNodeId!)} disabled={isRunning || adopting || selectedCandidate.status === 'adopted' || selectedCandidate.status === 'rejected' || (selectedCandidate.status === 'blocked' && !selectedCandidate.authorEditedAfterArtifact)} className="inline-flex items-center gap-1 rounded bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-45"><Check className="h-3 w-3" />{adopting ? '处理中…' : selectedCandidate.status === 'rejected' ? '已拒绝' : selectedCandidate.status === 'adopted' ? '已采纳' : selectedCandidate.status === 'blocked' && !selectedCandidate.authorEditedAfterArtifact ? '请先编辑' : selectedCandidate.authorEditedAfterArtifact ? '本地校验并采纳' : '确认采纳'}</button>}
-                {selectedCandidate && selectedNode?.binding?.mode !== 'live' && selectedCandidate.status !== 'adopted' && selectedCandidate.status !== 'rejected' && <button type="button" disabled={isRunning || adopting} onClick={() => void rejectCandidate(selectedCandidate.nodeId)} className="rounded border border-border px-3 py-1.5 text-xs">拒绝候选</button>}
+                {selectedCandidate && selectedNode?.binding?.mode !== 'live' && Boolean(AUTHORING_NODE_BY_ID.get(selectedNode?.templateId ?? '')?.writes) && <button type="button" onClick={() => void adoptCandidate(selectedNodeId!)} disabled={isRunning || adopting || savedFieldReadOnly || selectedAdoption?.canContinue === false || selectedCandidate.status === 'adopted' || selectedCandidate.status === 'rejected' || (selectedCandidate.status === 'blocked' && !selectedCandidate.authorEditedAfterArtifact)} className="inline-flex items-center gap-1 rounded bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-45"><Check className="h-3 w-3" />{adopting ? '处理中…' : selectedCandidate.status === 'rejected' ? '已拒绝' : selectedCandidate.status === 'adopted' ? '已采纳' : savedFieldReadOnly ? '只读核对' : selectedAdoption?.completed ? '恢复已完成采纳' : selectedAdoption?.locked ? '继续完成采纳' : selectedCandidate.status === 'blocked' && !selectedCandidate.authorEditedAfterArtifact ? '请先编辑' : selectedCandidate.authorEditedAfterArtifact ? '本地校验并采纳' : '确认采纳'}</button>}
+                {selectedCandidate && selectedNode?.binding?.mode !== 'live' && selectedCandidate.status !== 'adopted' && selectedCandidate.status !== 'rejected' && <button type="button" disabled={isRunning || adopting || candidateReadOnly} onClick={() => void rejectCandidate(selectedCandidate.nodeId)} className="rounded border border-border px-3 py-1.5 text-xs">拒绝候选</button>}
               </div>
             </div>
             {selectedNodeId && freshness[selectedNodeId]?.status === 'stale' && <p role="status" className="mb-2 text-sm text-warning">输入或来源已变化；旧结果保留，请核对后重新运行。</p>}
             {selectedCandidate ? <>
-              <p className="mb-2 text-xs text-text-secondary">{selectedNode?.binding?.mode === 'live' ? '当前资料的读取快照' : selectedCandidate.domain?.kind === 'quality-review' ? '阅读报告只读；在节点设置中打开问题与修订。' : selectedCandidate.domain?.kind === 'quality-revision' ? (selectedCandidate.status === 'adopted' ? '已写入作品；再次修改请生成新候选。' : selectedCandidate.status === 'rejected' ? '已拒绝；原稿保留。' : '范围修订候选只读；前后对照与复核在节点设置中。确认采纳后才写回。') : selectedCandidate.status === 'adopted' ? '已写入作品；再次修改请生成新候选。' : selectedCandidate.status === 'rejected' ? '已拒绝；保留原始证据，未写入作品。' : '候选尚未写入作品，修改会自动保存。'}</p>
+              <p className="mb-2 text-xs text-text-secondary">{selectedNode?.binding?.mode === 'live' ? '当前资料的读取快照' : selectedCandidate.domain?.kind === 'quality-review' ? '阅读报告只读；在节点设置中打开问题与修订。' : selectedCandidate.domain?.kind === 'quality-revision' ? (selectedCandidate.status === 'adopted' ? '已写入作品；再次修改请生成新候选。' : selectedCandidate.status === 'rejected' ? '已拒绝；原稿保留。' : '范围修订候选只读；前后对照与复核在节点设置中。确认采纳后才写回。') : selectedCandidate.status === 'adopted' ? '已写入作品；再次修改请生成新候选。' : selectedCandidate.status === 'rejected' ? '已拒绝；保留原始证据，未写入作品。' : selectedAdoption ? selectedAdoption.message : savedFieldReadOnly ? '已保存候选只读核对；来源是否仍有效尚未核验，未写入作品。' : '候选尚未写入作品，修改会自动保存。'}</p>
               {selectedCandidate.errors?.length ? <div role="alert" className="mb-2 text-sm text-error">{selectedCandidate.errors.join('；')}</div> : null}
-              <textarea aria-label="候选输出" value={selectedCandidate.output} readOnly={isRunning || adopting || selectedNode?.binding?.mode === 'live' || (selectedCandidate.domain?.kind === 'quality-review' || selectedCandidate.domain?.kind === 'quality-revision') || selectedCandidate.status === 'adopted' || selectedCandidate.status === 'rejected'} onChange={event => reviseCandidate(selectedCandidate.nodeId, { output: event.target.value })} className="h-48 w-full resize-y rounded border border-border bg-bg-base p-3 text-sm leading-6 text-text-primary outline-none focus:border-accent" />
+              <textarea aria-label="候选输出" value={selectedCandidate.output} readOnly={isRunning || adopting || candidateReadOnly || selectedNode?.binding?.mode === 'live' || (selectedCandidate.domain?.kind === 'quality-review' || selectedCandidate.domain?.kind === 'quality-revision') || selectedCandidate.status === 'adopted' || selectedCandidate.status === 'rejected'} onChange={event => reviseCandidate(selectedCandidate.nodeId, { output: event.target.value })} className="h-48 w-full resize-y rounded border border-border bg-bg-base p-3 text-sm leading-6 text-text-primary outline-none focus:border-accent" />
               {selectedArtifact && <>
-                <CreativeArtifactSummary artifact={selectedArtifact} />
-                {selectedCandidate.authorEditedAfterArtifact && <p className="mt-1 text-[9px] text-warning">上方证据对应模型原稿；当前内容已由作者修改，点击“本地校验并采纳”时会按正式领域合同重新验证，不会追加模型调用。</p>}
+                <CreativeArtifactSummary artifact={selectedArtifact} readOnly={candidateReadOnly} />
+                {selectedCandidate.authorEditedAfterArtifact && <p className="mt-1 text-[9px] text-warning">{candidateReadOnly ? '上方证据对应模型原稿；当前内容已由作者修改，仅供只读核对。' : '上方证据对应模型原稿；当前内容已由作者修改，点击“本地校验并采纳”时会按正式领域合同重新验证，不会追加模型调用。'}</p>}
               </>}
               {selectedCandidate.variants && selectedCandidate.variants.length > 1 && (
                 <details className="mt-2 rounded border border-border bg-bg-base">
@@ -998,9 +1045,10 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
                   </div>
                   <div className="grid max-h-52 grid-cols-2 gap-2 overflow-y-auto border-t border-border p-2">
                     {selectedCandidate.variants.map((variant, index) => (
-                      <article key={`${selectedCandidate.nodeId}:variant:${index}`} className="min-w-0 rounded border border-border/70 bg-bg-surface p-2">
+                      <article key={`${selectedCandidate.nodeId}:variant:${index}`} aria-label={candidateReadOnly ? `封存候选版本 ${index + 1}，只读` : undefined} className="min-w-0 rounded border border-border/70 bg-bg-surface p-2">
                         <p className="mb-1 text-[9px] font-semibold text-accent">版本 {index + 1}</p>
                         <pre className="max-h-36 overflow-auto whitespace-pre-wrap text-[9px] leading-4 text-text-secondary">{variant}</pre>
+                        {candidateReadOnly && selectedCandidate.creativeArtifacts?.[index] && <><p className="mt-2 text-[9px] text-text-muted">当前只读；以下为该版本的原封存产物证据。</p><CreativeArtifactSummary artifact={selectedCandidate.creativeArtifacts[index]} readOnly={candidateReadOnly} /></>}
                       </article>
                     ))}
                   </div>
