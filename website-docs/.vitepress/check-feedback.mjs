@@ -1,9 +1,10 @@
-/* global document, DataTransfer, DragEvent, ClipboardEvent, location */
+import { env } from 'node:process'
+import { log } from 'node:console'
 import { Buffer } from 'node:buffer'
 import { chromium, expect } from '@playwright/test'
 
-const browser = await chromium.launch({ ...(process.env.PLAYWRIGHT_USE_SYSTEM_CHROME === '1' ? { channel: 'chrome' } : {}) })
-const base = process.env.DOCS_PREVIEW_URL || 'http://127.0.0.1:4173'
+const browser = await chromium.launch({ ...(env.PLAYWRIGHT_USE_SYSTEM_CHROME === '1' ? { channel: 'chrome' } : {}) })
+const base = env.DOCS_PREVIEW_URL || 'http://127.0.0.1:4173'
 try {
   const page = await browser.newPage()
   /** @type {import('@playwright/test').Request[]} */
@@ -25,7 +26,7 @@ try {
     await expect(page.locator('#bug-version')).toHaveValue('v4.0.0+local')
     const extra = await page.locator('#bug-extra').inputValue()
     if (!extra.includes('storyforge-failure-summary') || extra.includes('DO-NOT-IMPORT')) throw new Error('Unsafe diagnostic handoff')
-    if (await page.evaluate(() => location.hash) !== '' || requests.length !== count) throw new Error('Handoff leaked or submitted automatically')
+    if (await page.evaluate(() => globalThis.location.hash) !== '' || requests.length !== count) throw new Error('Handoff leaked or submitted automatically')
   }
   for (const locale of ['', '/en']) for (const type of ['bug', 'feature', 'documentation']) {
     await page.goto(base + locale + '/feedback/' + type)
@@ -42,7 +43,7 @@ try {
     const before = requests.length
     await page.locator('.feedback-submit-button').click()
     await expect(page.locator('.feedback-submit-button')).toBeDisabled()
-    await page.locator('form').evaluate(form => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })))
+    await page.locator('form').evaluate(form => form.dispatchEvent(new globalThis.Event('submit', { bubbles: true, cancelable: true })))
     await expect.poll(() => requests.length).toBe(before + 1)
     unlock(); release = undefined
     await expect(page.locator('.feedback-notice--success')).toContainText('#123')
@@ -81,7 +82,7 @@ try {
       { name: 'next.txt', mimeType: 'text/plain', buffer: Buffer.from('unsent next file') },
       { name: 'old.txt', mimeType: 'text/plain', buffer: Buffer.from('new payload') },
     ])
-    await page.locator('form').evaluate(form => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })))
+    await page.locator('form').evaluate(form => form.dispatchEvent(new globalThis.Event('submit', { bubbles: true, cancelable: true })))
     await expect(page.locator('.feedback-submit-button')).toBeDisabled()
     if (requests.length !== before + 1) throw new Error('Repeated request while awaiting the first response')
     const payload = requests.at(-1)?.postDataBuffer()
@@ -116,11 +117,11 @@ try {
   /** @param {string} name
    * @param {number} mb */
   const add = async (name, mb, type = 'application/zip', paste = false) => page.evaluate(({ name, mb, type, paste }) => {
-    const dt = new DataTransfer()
-    dt.items.add(new File([new Uint8Array(Math.round(mb * 1024 * 1024))], name, { type }))
-    const dropzone = document.querySelector('.feedback-dropzone')
+    const dt = new globalThis.DataTransfer()
+    dt.items.add(new globalThis.File([new Uint8Array(Math.round(mb * 1024 * 1024))], name, { type }))
+    const dropzone = globalThis.document.querySelector('.feedback-dropzone')
     if (!dropzone) throw new Error('Feedback dropzone is missing')
-    dropzone.dispatchEvent(paste ? new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }) : new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }))
+    dropzone.dispatchEvent(paste ? new globalThis.ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }) : new globalThis.DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }))
   }, { name, mb, type, paste })
   const clear = async () => { while (await page.locator('.feedback-file-remove').count()) await page.locator('.feedback-file-remove').first().click() }
   await add('capture.png', .01, 'image/png', true)
@@ -141,5 +142,5 @@ try {
   await expect(page.locator('.feedback-file-item')).toHaveCount(3)
   await expect(page.locator('[role="alert"]')).toContainText('3 attachments')
   await clear()
-  console.log('Feedback passed: both languages, all 3 types, multipart boundary/fields, duplicate-submit lock, issueNumber, delayed success/failure preserves newer text and added/replaced attachments, 400/413/429/500/502 plain-text errors, picker/drop/paste, removal/deduplication, per-file/count/total limits. All API calls mocked locally.')
+  log('Feedback passed: both languages, all 3 types, multipart boundary/fields, duplicate-submit lock, issueNumber, delayed success/failure preserves newer text and added/replaced attachments, 400/413/429/500/502 plain-text errors, picker/drop/paste, removal/deduplication, per-file/count/total limits. All API calls mocked locally.')
 } finally { await browser.close() }
