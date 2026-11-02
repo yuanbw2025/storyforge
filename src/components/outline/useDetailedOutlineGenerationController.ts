@@ -139,6 +139,7 @@ export function useDetailedOutlineGenerationController(
     outlineNodeId: number,
     patch: Partial<DetailedOutline>,
     scope?: WorkspaceScope,
+    refresh = true,
   ) => {
     const result = await adopt({
       projectId,
@@ -147,7 +148,7 @@ export function useDetailedOutlineGenerationController(
       mode: 'add',
       data: { outlineNodeId, ...patch },
     })
-    await reloadDetailed()
+    if (refresh) await reloadDetailed()
     return result
   }, [projectId, reloadDetailed])
 
@@ -363,7 +364,7 @@ export function useDetailedOutlineGenerationController(
       output,
       currentSourceSummaryHash: () => hashDetailedOutlineSourceSummaryV1(chapterSummary),
       adopt: async () => {
-        const result = await adoptDetailedPatch(outlineNodeId, patch, scope)
+        const result = await adoptDetailedPatch(outlineNodeId, patch, scope, false)
         if (
           !result.written.length
           || result.unknown.length
@@ -375,12 +376,14 @@ export function useDetailedOutlineGenerationController(
       postState: () => db.detailedOutlines.where('outlineNodeId').equals(outlineNodeId).first(),
       postStateMatches: state => detailedOutlinePostStateMatchesPatchV1(state, outlineNodeId, patch),
     })
+    await reloadDetailed()
     setPendingCandidate(null)
     if (operation === 'scenes') ai.reset()
     else enhanceAI.reset()
     return true
   }, [
     adoptDetailedPatch,
+    reloadDetailed,
     ai,
     enhanceAI,
     chapterSummary,

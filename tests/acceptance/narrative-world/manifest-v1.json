@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261102-quality-world-rule-03.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261102-quality-036-completion-04.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -614,6 +614,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261102-quality-ready-02.json",
         "workPackage": "SFQA-priority31",
         "note": "Previous independent repairs receipt retained unchanged; deterministic observations unchanged by the WorldRelease-only source rule."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261102-quality-world-rule-03.json",
+        "workPackage": "SFQA-036-completion",
+        "note": "Previous measured receipt preserved unchanged before atomic prose/detail/impact adoption and interrupted impact completion recovery."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

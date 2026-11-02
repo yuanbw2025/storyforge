@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
@@ -29,6 +30,15 @@ import { useAIConfigStore } from '../../src/stores/ai-config'
 import { createWorkspace as createWorkspaceRoot } from '../../src/lib/workspace/create-workspace'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { normalizeProseForEditorV1, plainTextToHtml } from '../../src/lib/utils/html'
+
+
+function faultAdoptionEvent(type: string) {
+  const original = db.agentRunEvents.add.bind(db.agentRunEvents)
+  return vi.spyOn(db.agentRunEvents, 'add').mockImplementation((record, key) => {
+    if (record.type === type) return Dexie.Promise.reject(new Error(`036 native storage fault: ${type}`))
+    return original(record, key)
+  })
+}
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
@@ -467,4 +477,61 @@ describe.sequential('R-HARNESS7 · 正文生成 durable run', { timeout: 15_000 
     }
     expect(await isProseGenerationCandidateCurrentV1(candidateWithoutBoundary)).toBe(false)
   })
+  it.each(['confirmation.recorded', 'adoption.started', 'adoption.committed', 'step.succeeded',
+    'verification.started', 'verification.accepted', 'memory.settlement.recorded'])(
+    '036 原生 %s 写入失败回滚正文与全套 Run 证据，刷新后可采用原候选', async boundary => {
+      const pending = await preparePending(`036 prose ${boundary}`)
+      const input = {
+        scope: pending.fixture.scope, runId: pending.candidate.durable.runId,
+        candidate: pending.candidate, contentHtml: plainTextToHtml(pending.candidate.outputText), wordCount: 12,
+      }
+      const before = await db.chapters.get(pending.fixture.chapterId)
+      const runBefore = await readAgentRunV1(input.scope, input.runId)
+      const fault = faultAdoptionEvent(boundary)
+      await expect(commitProseGenerationAdoptionV1(input)).rejects.toThrow(`036 native storage fault: ${boundary}`)
+      fault.mockRestore()
+      expect(await db.chapters.get(pending.fixture.chapterId)).toEqual(before)
+      expect(await readAgentRunV1(input.scope, input.runId)).toEqual(runBefore)
+      expect(await readLatestProseGenerationCandidateV1({ scope: input.scope, chapterId: pending.fixture.chapterId }))
+        .toEqual(pending.candidate)
+      const transactions = new Set<unknown>()
+      const update = db.chapters.update.bind(db.chapters)
+      const events = db.agentRunEvents.add.bind(db.agentRunEvents)
+      vi.spyOn(db.chapters, 'update').mockImplementation((key, patch) => {
+        transactions.add(Dexie.currentTransaction?.idbtrans)
+        return update(key, patch)
+      })
+      vi.spyOn(db.agentRunEvents, 'add').mockImplementation((row, key) => {
+        transactions.add(Dexie.currentTransaction?.idbtrans)
+        return events(row, key)
+      })
+      const completed = await commitProseGenerationAdoptionV1(input)
+      expect(transactions.size).toBe(1)
+      expect(transactions.has(undefined)).toBe(false)
+      expect(completed.snapshot.projection.state).toBe('completed')
+      expect(completed.snapshot.events.filter(event => event.type === 'adoption.committed')).toHaveLength(1)
+      const formal = await db.chapters.get(pending.fixture.chapterId)
+      const replay = await commitProseGenerationAdoptionV1(input)
+      expect(replay.receiptHash).toBe(completed.receiptHash)
+      expect(await db.chapters.get(pending.fixture.chapterId)).toEqual(formal)
+      expect(replay.snapshot.events.filter(event => event.type === 'model.requested'))
+        .toHaveLength(runBefore.events.filter(event => event.type === 'model.requested').length)
+    },
+  )
+
+  it('036 续写成功重放不追加第二次，作者后改与另一确认载荷均拒绝', async () => {
+    const pending = await preparePending('036 continue once', 'continue')
+    const input = {
+      scope: pending.fixture.scope, runId: pending.candidate.durable.runId, candidate: pending.candidate,
+      contentHtml: `${pending.fixture.content}<p>${pending.candidate.outputText}</p>`, wordCount: 20,
+    }
+    const done = await commitProseGenerationAdoptionV1(input)
+    expect((await commitProseGenerationAdoptionV1(input)).receiptHash).toBe(done.receiptHash)
+    await expect(commitProseGenerationAdoptionV1({ ...input, contentHtml: input.contentHtml + '<p>重复追加</p>' }))
+      .rejects.toThrow('原确认载荷')
+    await db.chapters.update(pending.fixture.chapterId, { content: '<p>作者后来的正文</p>' })
+    await expect(commitProseGenerationAdoptionV1(input)).rejects.toThrow('当前正式正文')
+    expect((await db.chapters.get(pending.fixture.chapterId))?.content).toBe('<p>作者后来的正文</p>')
+  })
+
 })

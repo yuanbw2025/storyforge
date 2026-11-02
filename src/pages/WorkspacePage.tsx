@@ -127,6 +127,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
   const [impactHandoffTarget, setImpactHandoffTarget] = useState<CurrentImpactHandoffTargetV2 | null>(null)
   const [impactCorrectionStatus, setImpactCorrectionStatus] = useState<'idle' | 'pending' | 'verifying' | 'completed'>('idle')
   const [impactCorrectionError, setImpactCorrectionError] = useState<string | null>(null)
+  const [impactCorrectionRecovering, setImpactCorrectionRecovering] = useState(false)
   const navigationTail = useRef<Promise<void>>(Promise.resolve())
   const activeWorldGroupId = useWorldGroupStore(state => state.activeGroupId)
   const worldGroups = useWorldGroupStore(state => state.groups)
@@ -203,6 +204,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
     setImpactHandoff(null)
     setImpactHandoffTarget(null)
     setImpactCorrectionStatus('idle')
+    setImpactCorrectionRecovering(false)
     setImpactCorrectionError(null)
     const params = new URLSearchParams(location.search)
     const parsed = parseImpactHandoffV2(params.get('impactHandoff'))
@@ -225,6 +227,8 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
           setImpactHandoff(parsed)
           setImpactHandoffTarget(state.baseline.target)
           setImpactCorrectionStatus(state.snapshot.projection.state === 'completed' ? 'completed' : 'pending')
+          setImpactCorrectionRecovering(state.baseline.completionPostStateHash != null
+            || ['recovering', 'running', 'verifying'].includes(state.snapshot.projection.state))
         }
       })
       .catch(error => {
@@ -355,6 +359,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
     setImpactHandoff(null)
     setImpactHandoffTarget(null)
     setImpactCorrectionStatus('idle')
+    setImpactCorrectionRecovering(false)
     setImpactCorrectionError(null)
     navigate(`/workspace/${project.id}?module=${activeModule}`, { replace: true })
   }
@@ -364,6 +369,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
     setImpactHandoff(null)
     setImpactHandoffTarget(null)
     setImpactCorrectionStatus('idle')
+    setImpactCorrectionRecovering(false)
     setImpactCorrectionError(null)
     setEditorNodeId(impactHandoff.returnNodeId)
     setActiveModule('chapters-list')
@@ -379,7 +385,14 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
       await completeImpactManualCorrectionV1({ scope, handoff: impactHandoff })
       await executeImpactPostCorrectionReplanV1({ scope, handoff: impactHandoff })
       setImpactCorrectionStatus('completed')
+      setImpactCorrectionRecovering(false)
     } catch (error) {
+      // The first request may have durably frozen completion before its ack.
+      const current = await resolveScopeLike(project.id!)
+        .then(scope => beginImpactManualCorrectionV1({ scope, handoff: impactHandoff }))
+        .catch(() => null)
+      setImpactCorrectionRecovering(current?.baseline.completionPostStateHash != null
+        || (current != null && ['recovering', 'running', 'verifying'].includes(current.snapshot.projection.state)))
       setImpactCorrectionStatus('pending')
       setImpactCorrectionError(error instanceof Error ? error.message : '人工修正完成验证失败。')
     }
@@ -664,7 +677,8 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
               <span>已打开：{handoffTargetLabel ?? impactHandoff.targetModule}</span>
               <span className="text-text-muted">{impactHandoff.table}#{impactHandoff.recordId ?? '待定'} · 计划 {impactHandoff.planHash.slice(0, 12)}</span>
               <span className={impactCorrectionStatus === 'completed' ? 'text-emerald-300' : 'text-amber-200'}>
-                {impactCorrectionStatus === 'completed' ? '修正已验证并重新规划' : '等待保存后验证'}
+                {impactCorrectionStatus === 'completed' ? '修正已验证并重新规划'
+                  : impactCorrectionRecovering ? '已恢复原完成确认；等待继续终验' : '等待保存后验证'}
               </span>
               <span className="ml-auto flex items-center gap-2">
                 {impactCorrectionStatus !== 'completed' && (
@@ -674,7 +688,8 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
                     disabled={impactCorrectionStatus === 'verifying'}
                     className="rounded border border-amber-300/40 bg-amber-300/10 px-2 py-1 text-[11px] text-amber-100 hover:bg-amber-300/15 disabled:cursor-wait disabled:opacity-60"
                   >
-                    {impactCorrectionStatus === 'verifying' ? '正在验证…' : '验证已保存修正'}
+                    {impactCorrectionStatus === 'verifying' ? '正在验证…'
+                      : impactCorrectionRecovering ? '继续完成原终验' : '验证已保存修正'}
                   </button>
                 )}
                 <button

@@ -796,12 +796,12 @@ function isImpactStoryTimelineRun(row: AgentRunRecord): boolean {
 export async function readPendingImpactStoryTimelineRegenerationCandidateV1(input: {
   scope: WorkspaceScope
   sourceChapterId: number
-}): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ImpactStoryTimelineRegenerationCandidateV1 } | null> {
+}): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ImpactStoryTimelineRegenerationCandidateV1; recovering: boolean } | null> {
   const replan = await readCurrentImpactPostCorrectionReplanV1({ scope: input.scope, chapterId: input.sourceChapterId })
   if (!replan) return null
   const rows = (await readOwnedRows<AgentRunRecord>(input.scope, 'agentRuns', { owner: 'work' }))
     .filter(row => row.parentRunId === replan.snapshot.run.id
-      && ['running', 'awaiting_confirmation'].includes(row.status)
+      && ['running', 'awaiting_confirmation', 'verifying'].includes(row.status)
       && isImpactStoryTimelineRun(row))
     .sort((left, right) => (right.id ?? 0) - (left.id ?? 0))
   for (const row of rows) {
@@ -811,11 +811,22 @@ export async function readPendingImpactStoryTimelineRegenerationCandidateV1(inpu
       const state = await latestState(input.scope, row.id)
       assertCandidateScope(input.scope, snapshot, state.candidate)
       snapshot = await repairCandidateEventIfNeeded(input.scope, snapshot, state.candidate)
-      const evidence = await currentEvidence(input.scope, state.candidate)
-      if (snapshot.projection.state === 'awaiting_confirmation' && !state.intent
-        && evidence.lineageFresh && evidence.itemFresh && evidence.dependencyFresh && evidence.sourceFresh
-        && evidence.contextFresh && evidence.promptFresh && evidence.templateFresh && evidence.targetOriginalFresh) {
-        return { snapshot, candidate: state.candidate }
+      const evidence = await currentEvidence(input.scope, state.candidate, state.intent)
+      if (snapshot.projection.steps[IMPACT_STORY_TIMELINE_REGENERATION_STEP_ID_V1]?.candidateHash
+        !== state.candidate.candidateHash) continue
+      const commonFresh = evidence.lineageFresh && evidence.itemFresh && evidence.dependencyFresh
+        && evidence.sourceFresh && evidence.templateFresh
+      if (!state.intent && snapshot.projection.state === 'awaiting_confirmation'
+        && commonFresh && evidence.contextFresh && evidence.promptFresh && evidence.targetOriginalFresh) {
+        return { snapshot, candidate: state.candidate, recovering: false }
+      }
+      // The verified checkpoint already fixes the author's choice. Offer that
+      // same Run for continuation without replacing it with a fresh candidate.
+      if (state.intent && commonFresh
+        && ['awaiting_confirmation', 'running', 'verifying'].includes(snapshot.projection.state)
+        && (evidence.targetPostMatches
+          || (evidence.targetOriginalFresh && evidence.contextFresh && evidence.promptFresh))) {
+        return { snapshot, candidate: state.candidate, recovering: true }
       }
     } catch {
       // Damaged or stale candidates remain auditable but are never offered.
