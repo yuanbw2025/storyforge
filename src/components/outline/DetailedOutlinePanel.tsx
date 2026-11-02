@@ -12,7 +12,7 @@ import type { Project, DetailedOutline, DetailedScene, EmotionArc, WorkspaceScop
 import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import { db } from '../../lib/db/schema'
 import { liveQuery } from 'dexie'
-import { resolveScopeLike } from '../../lib/workspace/scope'
+import { assertRecordInScope, resolveScopeLike } from '../../lib/workspace/scope'
 import {
   hashDetailedOutlineSourceSummaryV1,
   readPendingDetailedOutlineNodeIdsV1,
@@ -80,7 +80,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [pendingNodeIds, setPendingNodeIds] = useState<ReadonlySet<number>>(new Set())
   const [pendingReadError, setPendingReadError] = useState<string | null>(null)
-  const batchDecisionRef = useRef<((decision: 'adopt' | 'reject') => void) | null>(null)
+  const batchDecisionRef = useRef<((decision: 'adopt' | 'reject' | 'pause') => void) | null>(null)
 
   useEffect(() => {
     let active = true
@@ -204,6 +204,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
   }
 
   const handleAIGenerate = async () => {
+    if (pendingBatchCandidate) { toast.info('请先采纳或放弃当前批量细纲候选，再重新生成。'); return }
     if (!currentChapter) return
     try {
       await generateScenes()
@@ -214,6 +215,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
 
   // D2: 完善细纲
   const handleEnhancedGenerate = async () => {
+    if (pendingBatchCandidate) { toast.info('请先采纳或放弃当前批量细纲候选，再重新生成。'); return }
     if (!currentChapter) return
     try {
       await generateEnhanced()
@@ -256,23 +258,24 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
         lastUsedSummary: currentChapter.summary || '',
       }
       try {
-        const scope = await resolveScopeLike(project.id!)
+        const authorScope = await resolveScopeLike(scope)
         const committed = await commitDetailedOutlineBatchCandidateV1({
-          scope,
+          scope: authorScope,
           runId: batchPending.runId,
           candidate: batchPending,
           output: text,
-          currentSourceSummaryHash: () => hashDetailedOutlineSourceSummaryV1(currentChapter.summary || ''),
+          currentSourceSummaryHash: async () => {
+            const node = await db.outlineNodes.get(batchPending.outlineNodeId)
+            if (!node || !await assertRecordInScope(authorScope, 'outlineNodes', node, { owner: 'work' })) throw new Error('批量细纲来源章节已不存在或不属于原作品。')
+            return hashDetailedOutlineSourceSummaryV1(node.summary || '')
+          },
           adopt: async () => {
-            const result = await adoptDetailedPatch(currentChapter.id!, patch, scope)
+            const result = await adoptDetailedPatch(currentChapter.id!, patch, authorScope)
             if (!result.written.length || result.typeErrors.length || result.fkErrors.length || result.skipped.length) {
               throw new Error('恢复的批量细纲候选未能经正式注册表完整写入。')
             }
           },
-          postState: async () => {
-            const row = await db.detailedOutlines.where('outlineNodeId').equals(currentChapter.id!).first()
-            return row ? { outlineNodeId: row.outlineNodeId, scenes: row.scenes, lastUsedSummary: row.lastUsedSummary ?? '' } : null
-          },
+          postState: () => db.detailedOutlines.where('outlineNodeId').equals(currentChapter.id!).first(),
         })
         const expectedIds = committed.contract.scope.outlineNodeIds ?? []
         const allSucceeded = expectedIds.every(outlineNodeId => (
@@ -280,7 +283,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
         ))
         if (allSucceeded) {
           const candidates = await readLatestDetailedOutlineBatchCandidatesV1({
-            scope,
+            scope: authorScope,
             runId: committed.run.id,
             includeSucceeded: true,
           })
@@ -288,21 +291,21 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
             db.detailedOutlines.where('outlineNodeId').equals(outlineNodeId).first()
           )))
           await verifyDetailedOutlineBatchRunV1({
-            scope,
+            scope: authorScope,
             runId: committed.run.id,
             candidates,
             postStates,
           })
         } else {
           await pauseDetailedOutlineBatchRunV1({
-            scope,
+            scope: authorScope,
             snapshot: committed,
             reason: '刷新后恢复的批量候选已采纳；其余章节将在下次批量运行中继续。',
           })
         }
         setPendingBatchCandidate(null)
         enhanceAI.reset()
-        await loadDetailed(project.id!)
+        await loadDetailed(authorScope)
         toast.success('已采纳恢复的批量细纲候选')
       } catch (error) {
         toast.error(error instanceof Error ? error.message : '批量细纲候选采纳失败，请重试。')
@@ -315,7 +318,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '细纲采纳失败，请重试。')
     }
-  }, [acceptCandidate, adoptDetailedPatch, currentChapter, enhanceAI, loadDetailed, pendingBatchCandidate, project.id, toast, validCharacterIds, validForeshadowIds])
+  }, [acceptCandidate, adoptDetailedPatch, currentChapter, enhanceAI, loadDetailed, pendingBatchCandidate, scope, toast, validCharacterIds, validForeshadowIds])
 
   const handleDismissDetailed = useCallback(async (operation: DetailedOutlineGenerationOperationV1) => {
     try {
@@ -330,9 +333,9 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
           decide('reject')
           return
         }
-        const scope = await resolveScopeLike(project.id!)
+        const authorScope = await resolveScopeLike(scope)
         await rejectDetailedOutlineBatchCandidateV1({
-          scope,
+          scope: authorScope,
           runId: batchPending.runId,
           candidate: batchPending,
         })
@@ -344,7 +347,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '拒绝细纲失败，请重试')
     }
-  }, [dismissCandidate, enhanceAI, pendingBatchCandidate, project.id, toast])
+  }, [dismissCandidate, enhanceAI, pendingBatchCandidate, scope, toast])
 
   const totalWords = currentDetailed?.scenes.reduce((s, sc) => s + (sc.estimatedWords || 0), 0) ?? 0
 
@@ -366,6 +369,16 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
   // Phase 30.1: 批量生成细纲
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null)
   const batchAbortRef = useRef<AbortController | null>(null)
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      batchAbortRef.current?.abort()
+      batchDecisionRef.current?.('pause')
+      batchDecisionRef.current = null
+    }
+  }, [])
 
   const handleBatchDetail = useCallback(async () => {
     if (batchProgress) return // 已在运行
@@ -382,6 +395,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
         existingDetails: detailedOutlines,
         scope: frozenScope,
         onCandidate: ({ chapter, candidate }) => new Promise(resolve => {
+          if (!mounted.current) { resolve('pause'); return }
           setSelectedNodeId(chapter.id!)
           clearPendingCandidate()
           setPendingBatchCandidate(candidate)
@@ -397,29 +411,28 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
             throw new Error('批量细纲候选未能经正式注册表完整写入。')
           }
         },
-        onPostState: async outlineNodeId => {
-          const row = await db.detailedOutlines.where('outlineNodeId').equals(outlineNodeId).first()
-          return row ? {
-            outlineNodeId: row.outlineNodeId,
-            scenes: row.scenes,
-            openingHook: row.openingHook ?? '',
-            endingCliffhanger: row.endingCliffhanger ?? '',
-            lastUsedSummary: row.lastUsedSummary ?? '',
-          } : null
-        },
-        onProgress: setBatchProgress,
+        onPostState: outlineNodeId => db.detailedOutlines.where('outlineNodeId').equals(outlineNodeId).first(),
+        onProgress: progress => { if (mounted.current) setBatchProgress(progress) },
         signal: ac.signal,
       })
 
-      if (!result.cancelled) {
+      if (mounted.current && !result.cancelled) {
         // 刷新列表
         await loadDetailed(scope)
       }
     } finally {
       batchAbortRef.current = null
       batchDecisionRef.current = null
+      if (mounted.current) {
+        const candidate = await readLatestRecoverableDetailedOutlineBatchCandidateV1({ scope }).catch(() => null)
+        if (mounted.current && candidate) {
+          setPendingBatchCandidate(candidate)
+          setSelectedNodeId(candidate.outlineNodeId)
+          restoreEnhanced({ output: candidate.output, operation: `batch-durable:${candidate.runId}:${candidate.outlineNodeId}` })
+        }
+      }
       // 3 秒后清除进度信息
-      setTimeout(() => setBatchProgress(null), 3000)
+      setTimeout(() => { if (mounted.current) setBatchProgress(null) }, 3000)
     }
   }, [adoptDetailedPatch, batchProgress, chapterNodes, clearPendingCandidate, detailedOutlines, loadDetailed, scope, restoreEnhanced, ready, loadError, toast])
 
@@ -428,11 +441,9 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
     const decide = batchDecisionRef.current
     if (decide) {
       batchDecisionRef.current = null
-      setPendingBatchCandidate(null)
-      enhanceAI.reset()
-      decide('reject')
+      decide('pause')
     }
-  }, [enhanceAI])
+  }, [])
 
   return (
     <div className="h-full flex flex-col md:flex-row">
@@ -554,10 +565,10 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
                   output={enhanceAI.output} isStreaming={enhanceAI.isStreaming} isFinalizing={finalizingOperation === 'enhanced' && !enhanceAI.isStreaming} error={enhanceAI.error} tokenUsage={enhanceAI.tokenUsage}
                   editable={pendingDetailedCandidate?.candidate.operation === 'enhanced'}
                   onStop={enhanceAI.stop}
-                  onAccept={pendingDetailedCandidate?.candidate.operation === 'enhanced'
+                  onAccept={(pendingBatchCandidate?.outlineNodeId === currentChapter.id || pendingDetailedCandidate?.candidate.operation === 'enhanced')
                     ? text => handleAcceptDetailed('enhanced', text)
                     : undefined}
-                  onDismiss={pendingDetailedCandidate?.candidate.operation === 'enhanced'
+                  onDismiss={(pendingBatchCandidate?.outlineNodeId === currentChapter.id || pendingDetailedCandidate?.candidate.operation === 'enhanced')
                     ? () => { void handleDismissDetailed('enhanced') }
                     : undefined}
                   onRetry={handleEnhancedGenerate}

@@ -1,4 +1,5 @@
 import { db } from '../db/schema'
+import { assertTextOpenWorldRuntimeNewWorkV1 } from './source-admission'
 import {
   applyProductRuntimeEvent,
   assertFormalRuntimeSourceUnchangedV1,
@@ -117,6 +118,7 @@ export async function commitTextOpenWorldCommandV1(value: unknown): Promise<Text
       if (payload.requestFingerprint !== requestFingerprint) fail('相同commandId的命令内容不同')
       return receiptFromEvent(existing, true)
     }
+    assertTextOpenWorldRuntimeNewWorkV1(binding.formal.runtimePackage, '新增运行命令')
     if (session.status !== 'active') fail('只有active Session可以提交命令')
 
     const current = await readProductRuntimeState(envelope.sessionId)

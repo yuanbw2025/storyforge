@@ -10,6 +10,7 @@ import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import {
   createContextManifestV3,
   parseContextManifestV3,
+  verifyContextManifestIntegrityV2,
   verifyContextManifestIntegrityV3,
 } from '../agent/run/context-manifest'
 import {
@@ -631,6 +632,7 @@ export async function readContextGatewayManifestV3ForAttemptV1(input: {
       && event.payload.artifactKind === 'context-manifest'
       && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt
   ))
+  const baseManifests: ContextManifestV2[] = []
   const matching: Array<{ manifest: ContextManifestV3; manifestArtifactHash: string }> = []
   for (const event of refs) {
     const content = await readAgentRunArtifactExactV1({
@@ -638,9 +640,22 @@ export async function readContextGatewayManifestV3ForAttemptV1(input: {
       artifactKind: 'context-manifest',
       contentHash: event.payload.contentHash,
     })
+    let body: unknown
+    try {
+      body = JSON.parse(content)
+    } catch {
+      fail('manifest-body', 'ContextManifestV3 artifact JSON/合同损坏')
+    }
+    if (body != null && typeof body === 'object' && 'version' in body && body.version === 2) {
+      if (!await verifyContextManifestIntegrityV2(body)) {
+        fail('manifest-integrity', 'ContextManifestV2 exact body 完整性校验失败')
+      }
+      baseManifests.push(body as ContextManifestV2)
+      continue
+    }
     let parsed: ContextManifestV3
     try {
-      parsed = parseContextManifestV3(JSON.parse(content))
+      parsed = parseContextManifestV3(body)
     } catch {
       fail('manifest-body', 'ContextManifestV3 artifact JSON/合同损坏')
     }
@@ -650,6 +665,16 @@ export async function readContextGatewayManifestV3ForAttemptV1(input: {
   }
   if (matching.length !== 1 || !await verifyContextManifestIntegrityV3(matching[0].manifest)) {
     fail('manifest-integrity', '无法找到唯一且完整的 ContextManifestV3 exact body')
+  }
+  const finalManifest = matching[0].manifest
+  for (const baseManifest of baseManifests) {
+    if (baseManifest.manifestHash !== finalManifest.v2ManifestHash
+      || baseManifest.runId !== finalManifest.runId
+      || baseManifest.stepId !== finalManifest.stepId
+      || baseManifest.attempt !== finalManifest.attempt
+      || canonicalStringify(baseManifest.scope) !== canonicalStringify(finalManifest.scope)) {
+      fail('manifest-base', 'ContextManifestV2 未绑定该最终 V3 的冻结 run/step/attempt/scope/hash')
+    }
   }
   return { ...matching[0], snapshot }
 }

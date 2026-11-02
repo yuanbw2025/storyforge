@@ -69,7 +69,7 @@ export async function assertTextOpenWorldDeliveryRecognitionRuntimeV1(pkg: TextO
     const definitions = action.successEffectKeys.map(key => modules.actions.effects.find(row => row.key === key)!)
     const completed = definitions.find(row => row.operation === 'complete-objective')
     const changed = definitions.filter(row => row.operation === 'transition-quest')
-    const authorization: TextOpenWorldEffectPlanV1['authorization'] = completed?.operation === 'complete-objective'
+    const authorization: TextOpenWorldEffectPlanV1['authorization'] | undefined = completed?.operation === 'complete-objective'
       ? objectives.prepare({ instanceKey: targetKey!, objectiveKey: completed.payload.objectiveKey, state: projection.state })
       : changed.length ? transitions.prepare({ instanceKey: targetKey!, state: projection.state,
         transitions: changed.map(row => ({ toStatus: row.payload.status, stageKey: row.payload.stageKey })) }) : undefined
@@ -115,7 +115,8 @@ export async function assertTextOpenWorldDeliveryRecognitionRuntimeV1(pkg: TextO
     const abandon = quests.quests.find(row => row.key === questKey)!.abandonActionKey!
     await perform(projection, abandon, `claim.abandon.${parcel.key}`)
     expect(entry(projection, pickup.key).available).toBe(false)
-    const offer = modules.narrative.scenes.find(row => row.sourceKind === 'quest-offer' && row.questKey === questKey)!
+    const offer = modules.narrative.scenes.find(row => 'sourceKind' in row && row.sourceKind === 'quest-offer'
+      && 'questKey' in row && row.questKey === questKey)!
     locate(projection, offer.locationKey)
     await perform(projection, `action.restart.${questKey}`, `claim.restart.${parcel.key}`)
     locate(projection, pickup.locationKeys[0]!)

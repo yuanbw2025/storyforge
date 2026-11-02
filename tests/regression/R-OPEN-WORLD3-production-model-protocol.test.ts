@@ -21,6 +21,14 @@ import {
   type TextOpenWorldProductionModelTransportV1,
 } from '../../src/lib/open-world/production-model-protocol'
 
+// These unit cases isolate paid-response/receipt protocol behavior. Actual
+// source admission, owning rows and legacy rejections are exercised without
+// this mock in R-QUALITY005-*; a compact synthetic task is not a real Build.
+vi.mock('../../src/lib/open-world/source-admission', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/lib/open-world/source-admission')>()
+  return { ...actual, assertTextOpenWorldBuildNewWorkV1: vi.fn(async () => undefined) }
+})
+
 const REQUIREMENT_KEY = 'text-open-world.production.text'
 const CONTEXT_TEXT = JSON.stringify({
   schema: 'storyforge.test-open-world-model-context',
@@ -97,6 +105,7 @@ function execution(input: {
     idempotencyKey: 'b'.repeat(64),
     contextText: CONTEXT_TEXT,
     inputArtifacts: [],
+    authorResolution: null,
     capabilityBindings: [{
       requirementKey: REQUIREMENT_KEY,
       adapterId: 'configured-text.v1',
@@ -120,7 +129,7 @@ function domainFactory(input: {
       projectId: request.scope.projectId,
       requirementKey: REQUIREMENT_KEY,
       expectedCapabilityHash: request.capabilityBindings[0]!.bindingHash,
-      category: input.category ?? request.task.skillId,
+      category: input.category ?? request.task.skillId!,
       system: '只输出测试 JSON。',
       contextText: request.contextText,
       maximumOutputTokens: 512,
@@ -324,7 +333,7 @@ describe('R-OPEN-WORLD3 · shared production model protocol', () => {
           projectId: request.scope.projectId,
           requirementKey: REQUIREMENT_KEY,
           expectedCapabilityHash: request.capabilityBindings[0]!.bindingHash,
-          category: request.task.skillId,
+          category: request.task.skillId!,
           system: `第${index + 1}次调用`,
           contextText: request.contextText,
           maximumOutputTokens: 256,
@@ -375,7 +384,7 @@ describe('R-OPEN-WORLD3 · shared production model protocol', () => {
           projectId: request.scope.projectId,
           requirementKey: REQUIREMENT_KEY,
           expectedCapabilityHash: request.capabilityBindings[0]!.bindingHash,
-          category: request.task.skillId,
+          category: request.task.skillId!,
           system: `第${index + 1}次调用`,
           contextText: request.contextText,
           maximumOutputTokens: 256,

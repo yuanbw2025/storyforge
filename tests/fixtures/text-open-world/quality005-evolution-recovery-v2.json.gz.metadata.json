@@ -1,0 +1,16 @@
+{
+  "schema": "storyforge.quality005.immutable-synthetic-fixture.v1",
+  "baselineCommit": "38cbcd5fa632516763f5844bff2665c3aee0003e",
+  "compressedSha256": "1348902011d673ab7c8d6e1143b74f29b0db4ac21809302e85e49e70ac4b1f60",
+  "decompressedSha256": "6be36054e978f157957fb6589e90aaabcf673ffc10c2e1bd603519891bf2e69e",
+  "decompressedBytes": 165894,
+  "originalCaptureSha256": "6b1022e7f606dd336dbdb864cdccbce38ec5189f93201e0c499b362b56125984",
+  "actualModelCalls": 0,
+  "actualNetworkCalls": 0,
+  "syntheticTransportCalls": 1,
+  "humanAcceptance": false,
+  "notes": [
+    "Lossless original table-level delta encoding with all reconstructed native stage/table hashes.",
+    "Old native candidate, adoption and receipt bytes; no hand-created authority or real provider/human quality acceptance."
+  ]
+}

@@ -1,3 +1,4 @@
+import TextOpenWorldNovelWorldDraft from './TextOpenWorldNovelWorldDraft'
 import {
   useEffect,
   useMemo,
@@ -19,17 +20,12 @@ import {
   Sparkles,
 } from 'lucide-react'
 import {
-  inspectTextOpenWorldCreatorNovelSourceV1,
   inspectTextOpenWorldCreatorWorldSourceV1,
-  listTextOpenWorldCreatorNovelSourceCatalogV1,
   listTextOpenWorldCreatorWorldSourcesV1,
 } from '../../lib/open-world/creator-source'
 import { parseProductProductionHandoffV1 } from '../../lib/product-production/handoff'
 import type {
-  AdaptationSourceSelectionV1,
   ProductProductionHandoffV1,
-  TextOpenWorldCreatorNovelSourceCatalogV1,
-  TextOpenWorldCreatorNovelSourcePreviewV1,
   TextOpenWorldCreatorSourceGapV1,
   TextOpenWorldCreatorSourceReadinessV1,
   TextOpenWorldCreatorSourceSelectionV1,
@@ -117,9 +113,6 @@ function readinessLabel(value: TextOpenWorldCreatorSourceReadinessV1): string {
   return '当前阻断'
 }
 
-function coverageLabel(value: 'full-text' | 'outline-only'): string {
-  return value === 'full-text' ? '含可用正文' : '仅故事核心与大纲'
-}
 
 function GapList(props: { gaps: TextOpenWorldCreatorSourceGapV1[] }) {
   if (!props.gaps.length) {
@@ -192,13 +185,6 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
   const [worldSources, setWorldSources] = useState<TextOpenWorldCreatorWorldSourceCandidateV1[] | null>(null)
   const [selectedWorldId, setSelectedWorldId] = useState<number | null>(null)
   const [worldPreview, setWorldPreview] = useState<TextOpenWorldCreatorWorldSourceCandidateV1 | null>(null)
-  const [novelCatalog, setNovelCatalog] = useState<TextOpenWorldCreatorNovelSourceCatalogV1 | null>(null)
-  const [novelMode, setNovelMode] = useState<AdaptationSourceSelectionV1['mode']>('entire-work')
-  const [outlineNodeId, setOutlineNodeId] = useState<number | null>(null)
-  const [rangeStartId, setRangeStartId] = useState<number | null>(null)
-  const [rangeEndId, setRangeEndId] = useState<number | null>(null)
-  const [selectedChapterIds, setSelectedChapterIds] = useState<number[]>([])
-  const [novelPreview, setNovelPreview] = useState<TextOpenWorldCreatorNovelSourcePreviewV1 | null>(null)
   const requestGeneration = useRef(0)
   const routeIntentKey = useRef(initialIntentKey)
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
@@ -214,22 +200,11 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
     setWorldPreview(null)
   }
 
-  const clearNovelState = () => {
-    setNovelCatalog(null)
-    setNovelMode('entire-work')
-    setOutlineNodeId(null)
-    setRangeStartId(null)
-    setRangeEndId(null)
-    setSelectedChapterIds([])
-    setNovelPreview(null)
-  }
-
   const activateSource = (next: CreatorSourceKindV1) => {
     if (next === sourceKind) return
     invalidateRequest()
     setError('')
     if (next === 'novel') clearWorldState()
-    else clearNovelState()
     setSourceKind(next)
   }
 
@@ -240,7 +215,6 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
     setLoading(false)
     setError('')
     clearWorldState()
-    clearNovelState()
     setSourceKind(hasInitialSource ? 'world-release' : props.initialSourceKind ?? initialKind)
   }, [hasInitialSource, initialIntentKey, initialKind, props.initialSourceKind])
 
@@ -283,15 +257,6 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
           })
           if (generation !== requestGeneration.current) return
           setWorldPreview(inspected)
-        } else {
-          clearNovelState()
-          if (!novelScope) return
-          const catalog = await listTextOpenWorldCreatorNovelSourceCatalogV1(novelScope)
-          if (generation !== requestGeneration.current) return
-          setNovelCatalog(catalog)
-          setOutlineNodeId(catalog.outlines[0]?.id ?? null)
-          setRangeStartId(catalog.range.firstChapterId)
-          setRangeEndId(catalog.range.lastChapterId)
         }
       } catch (cause) {
         if (generation !== requestGeneration.current) return
@@ -335,52 +300,6 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
     }
   }
 
-  const updateNovelSelection = (operation: () => void) => {
-    invalidateRequest()
-    setError('')
-    setNovelPreview(null)
-    operation()
-  }
-
-  const currentNovelSelection = (): AdaptationSourceSelectionV1 | null => {
-    if (novelMode === 'entire-work') return { mode: 'entire-work' }
-    if (novelMode === 'outline-subtree') {
-      return outlineNodeId == null ? null : { mode: 'outline-subtree', outlineNodeId }
-    }
-    if (novelMode === 'chapter-range') {
-      return rangeStartId == null || rangeEndId == null
-        ? null
-        : { mode: 'chapter-range', startChapterId: rangeStartId, endChapterId: rangeEndId }
-    }
-    return selectedChapterIds.length ? { mode: 'chapters', chapterIds: [...selectedChapterIds] } : null
-  }
-
-  const inspectNovel = async () => {
-    if (!novelScope) return
-    const selection = currentNovelSelection()
-    if (!selection) {
-      setError('当前小说范围还没有形成有效选择。')
-      return
-    }
-    const generation = ++requestGeneration.current
-    setNovelPreview(null)
-    setError('')
-    setLoading(true)
-    try {
-      const inspected = await inspectTextOpenWorldCreatorNovelSourceV1({
-        sourceScope: novelScope,
-        selection,
-      })
-      if (generation === requestGeneration.current) setNovelPreview(inspected)
-    } catch (cause) {
-      if (generation === requestGeneration.current) {
-        setError(safeError(cause, '小说候选核验失败，请调整选择。'))
-      }
-    } finally {
-      if (generation === requestGeneration.current) setLoading(false)
-    }
-  }
-
   const onTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
     let nextIndex = index
     if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (index + 1) % SOURCE_KINDS.length
@@ -407,15 +326,10 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
       })
       return
     }
-    const selection = currentNovelSelection()
-    if (sourceKind === 'novel' && novelScope && novelPreview && selection
-      && novelPreview.readiness !== 'blocked') {
-      props.onContinue({ sourceKind, sourceScope: novelScope, selection, preview: novelPreview })
-    }
   }
 
-  const activePreview = sourceKind === 'world-release' ? worldPreview : novelPreview
-  const canContinue = Boolean(props.onContinue && activePreview && activePreview.readiness !== 'blocked')
+  const canContinue = Boolean(props.onContinue && sourceKind === 'world-release'
+    && worldPreview && worldPreview.readiness !== 'blocked')
 
   return <main
     className="mx-auto w-full max-w-6xl space-y-5 p-4 text-text-primary md:p-6"
@@ -428,7 +342,7 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
           <span className="text-[10px] font-semibold tracking-[0.2em] text-accent">TEXT OPEN WORLD · CREATOR</span>
           <h1 className="mt-2 text-xl font-semibold">选择游戏的叙事来源</h1>
           <p className="mt-2 max-w-3xl text-xs leading-6 text-text-muted">
-            从一个不可变世界版本，或当前小说的受控范围开始。这里只核验可用内容与缺口，不会启动内容生产。
+            正式制作从已封存的世界版本开始；小说须先显式派生世界草稿、检查并封存。这里不会自动开始内容生产。
           </p>
         </div>
         <span className="rounded-full border border-border bg-bg-base px-3 py-1.5 text-[10px] text-text-muted">
@@ -459,7 +373,7 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
         onKeyDown={event => onTabKeyDown(event, index)}
       >
         {kind === 'world-release' ? <Globe2 className="h-4 w-4" aria-hidden="true" /> : <BookOpen className="h-4 w-4" aria-hidden="true" />}
-        {kind === 'world-release' ? '冻结世界版本' : '小说作品'}
+        {kind === 'world-release' ? '冻结世界版本' : '从小说派生世界'}
       </button>)}
     </div>
 
@@ -484,7 +398,7 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
       {!loading && worldSources?.length === 0 && <div className="rounded-xl border border-dashed border-border bg-bg-elevated p-8 text-center" data-testid="creator-world-empty">
         <Globe2 className="mx-auto h-8 w-8 text-text-muted" aria-hidden="true" />
         <h2 className="mt-3 text-sm font-semibold">没有可选择的冻结世界版本</h2>
-        <p className="mt-2 text-xs text-text-muted">可切换到小说来源，或先在世界引擎中封存一个完整版本。</p>
+        <p className="mt-2 text-xs text-text-muted">可先从小说派生独立世界草稿，并在世界页面检查确认、封存；已有世界也可直接封存版本。</p>
       </div>}
 
       {worldSources && worldSources.length > 0 && <div className="grid gap-3 md:grid-cols-2" role="radiogroup" aria-label="冻结世界版本">
@@ -555,121 +469,11 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
     </section>}
 
     {sourceKind === 'novel' && <section
-      id="creator-source-panel-novel"
-      role="tabpanel"
-      aria-labelledby="creator-source-tab-novel"
-      hidden={sourceKind !== 'novel'}
-      className="space-y-4"
-    >
-      {!loading && !novelCatalog && !error && <div className="rounded-xl border border-dashed border-border bg-bg-elevated p-8 text-center" data-testid="creator-novel-empty">
-        <BookOpen className="mx-auto h-8 w-8 text-text-muted" aria-hidden="true" />
-        <h2 className="mt-3 text-sm font-semibold">当前没有可用的小说 Work</h2>
-        <p className="mt-2 text-xs text-text-muted">打开一部小说作品后再进入此页面，或改用冻结世界版本。</p>
-      </div>}
-
-      {novelCatalog && <article className="space-y-5 rounded-xl border border-border bg-bg-elevated p-5" data-testid="creator-novel-catalog">
-        <header className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <small className="text-[10px] text-text-muted">小说 Work</small>
-            <h2 className="mt-1 text-base font-semibold">{novelCatalog.workTitle}</h2>
-            <p className="mt-1 text-xs text-text-muted">更新于 {formatDate(novelCatalog.sourceUpdatedAt)}</p>
-          </div>
-          <ReadinessBadge value={novelCatalog.readiness} />
-        </header>
-        <dl className="grid grid-cols-2 gap-3 text-xs md:grid-cols-4">
-          <div className="rounded-lg bg-bg-base p-3"><dt className="text-text-muted">来源覆盖</dt><dd className="mt-1 font-medium">{coverageLabel(novelCatalog.coverage)}</dd></div>
-          <div className="rounded-lg bg-bg-base p-3"><dt className="text-text-muted">章节</dt><dd className="mt-1 font-medium">{formatCount(novelCatalog.range.chapterCount)} 章</dd></div>
-          <div className="rounded-lg bg-bg-base p-3"><dt className="text-text-muted">大纲</dt><dd className="mt-1 font-medium">{formatCount(novelCatalog.range.outlineCount)} 项</dd></div>
-          <div className="rounded-lg bg-bg-base p-3"><dt className="text-text-muted">整部字数</dt><dd className="mt-1 font-medium">{formatCount(novelCatalog.totalWordCount)} 字</dd></div>
-        </dl>
-
-        <fieldset className="space-y-3">
-          <legend className="text-sm font-semibold">选择用于设计游戏的小说范围</legend>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {([
-              ['entire-work', '整部小说'],
-              ['outline-subtree', '大纲子树'],
-              ['chapter-range', '章节范围'],
-              ['chapters', '指定章节'],
-            ] as const).map(([mode, label]) => <label key={mode} className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-xs ${novelMode === mode ? 'border-accent bg-accent/5' : 'border-border bg-bg-base'}`}>
-              <input
-                type="radio"
-                name="text-open-world-novel-mode"
-                value={mode}
-                checked={novelMode === mode}
-                onChange={() => updateNovelSelection(() => setNovelMode(mode))}
-              />
-              <span>{label}</span>
-            </label>)}
-          </div>
-        </fieldset>
-
-        {novelMode === 'outline-subtree' && <label className="block text-xs text-text-muted">
-          大纲根节点
-          <select
-            className="mt-2 w-full rounded-lg border border-border bg-bg-base p-2 text-text-primary"
-            value={outlineNodeId ?? ''}
-            onChange={event => updateNovelSelection(() => setOutlineNodeId(Number(event.target.value) || null))}
-          >
-            {novelCatalog.outlines.map(outline => <option key={outline.id} value={outline.id}>{outline.title}</option>)}
-          </select>
-        </label>}
-
-        {novelMode === 'chapter-range' && <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-xs text-text-muted">起始章节<select className="mt-2 w-full rounded-lg border border-border bg-bg-base p-2 text-text-primary" value={rangeStartId ?? ''} onChange={event => updateNovelSelection(() => setRangeStartId(Number(event.target.value) || null))}>{novelCatalog.chapters.map(chapter => <option key={chapter.id} value={chapter.id}>{chapter.title}</option>)}</select></label>
-          <label className="text-xs text-text-muted">结束章节<select className="mt-2 w-full rounded-lg border border-border bg-bg-base p-2 text-text-primary" value={rangeEndId ?? ''} onChange={event => updateNovelSelection(() => setRangeEndId(Number(event.target.value) || null))}>{novelCatalog.chapters.map(chapter => <option key={chapter.id} value={chapter.id}>{chapter.title}</option>)}</select></label>
-        </div>}
-
-        {novelMode === 'chapters' && <fieldset className="rounded-lg border border-border bg-bg-base p-3">
-          <legend className="px-1 text-xs font-medium">指定章节</legend>
-          <div className="mt-2 grid max-h-56 gap-2 overflow-auto sm:grid-cols-2">
-            {novelCatalog.chapters.map(chapter => <label key={chapter.id} className="flex items-start gap-2 rounded p-2 text-xs text-text-muted hover:bg-bg-hover">
-              <input
-                className="mt-0.5"
-                type="checkbox"
-                checked={selectedChapterIds.includes(chapter.id)}
-                onChange={event => updateNovelSelection(() => setSelectedChapterIds(current => event.target.checked
-                  ? [...current, chapter.id]
-                  : current.filter(id => id !== chapter.id)))}
-              />
-              <span><strong className="block text-text-primary">{chapter.title}</strong><small>{formatCount(chapter.wordCount)} 字{chapter.hasContent ? '' : ' · 无正文'}</small></span>
-            </label>)}
-          </div>
-        </fieldset>}
-
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
-          disabled={loading || currentNovelSelection() == null}
-          onClick={() => void inspectNovel()}
-        ><FileSearch className="h-4 w-4" aria-hidden="true" />核验小说候选</button>
-
-        {!novelPreview && <GapList gaps={novelCatalog.gaps} />}
-      </article>}
-
-      {novelPreview && <article className="space-y-4 rounded-xl border border-accent/30 bg-bg-elevated p-5" data-testid="creator-novel-preview">
-        <header className="flex flex-wrap items-start justify-between gap-3">
-          <div><small className="text-[10px] text-text-muted">已核验候选快照（尚未冻结）</small><h2 className="mt-1 text-base font-semibold">{novelPreview.selection.label}</h2></div>
-          <ReadinessBadge value={novelPreview.readiness} />
-        </header>
-        <dl className="grid grid-cols-2 gap-3 text-xs md:grid-cols-4">
-          <div className="rounded-lg bg-bg-base p-3"><dt className="text-text-muted">章节</dt><dd className="mt-1 font-medium">{novelPreview.selection.selectedChapterCount} 章</dd></div>
-          <div className="rounded-lg bg-bg-base p-3"><dt className="text-text-muted">大纲</dt><dd className="mt-1 font-medium">{novelPreview.selection.selectedOutlineCount} 项</dd></div>
-          <div className="rounded-lg bg-bg-base p-3"><dt className="text-text-muted">可用正文</dt><dd className="mt-1 font-medium">{novelPreview.writtenChapterCount} 章</dd></div>
-          <div className="rounded-lg bg-bg-base p-3"><dt className="text-text-muted">候选字数</dt><dd className="mt-1 font-medium">{formatCount(novelPreview.totalWordCount)} 字</dd></div>
-          <div className="rounded-lg bg-bg-base p-3"><dt className="text-text-muted">覆盖</dt><dd className="mt-1 font-medium">{coverageLabel(novelPreview.coverage)}</dd></div>
-          <div className="rounded-lg bg-bg-base p-3"><dt className="text-text-muted">候选单元</dt><dd className="mt-1 font-medium">{formatCount(novelPreview.sourceUnitCount)} 项</dd></div>
-        </dl>
-        <div className="grid gap-3 text-xs md:grid-cols-2">
-          <div className="rounded-lg bg-bg-base p-3"><strong className="text-text-muted">候选内容 Hash</strong><code className="mt-2 block break-all text-[10px]">{novelPreview.sourceVersionHash}</code></div>
-          <div className="rounded-lg bg-bg-base p-3"><strong className="text-text-muted">选择边界 Hash</strong><code className="mt-2 block break-all text-[10px]">{novelPreview.sourceBoundaryHash}</code></div>
-        </div>
-        <GapList gaps={novelPreview.gaps} />
-      </article>}
-    </section>}
+      id="creator-source-panel-novel" role="tabpanel" aria-labelledby="creator-source-tab-novel"
+    ><TextOpenWorldNovelWorldDraft sourceScope={novelScope} /></section>}
 
     <footer className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-bg-elevated p-4">
-      <span className="flex items-center gap-2 text-xs text-text-muted"><FileText className="h-4 w-4" aria-hidden="true" />下一步：主 Agent 会谈与 Brief 确认</span>
+      <span className="flex items-center gap-2 text-xs text-text-muted"><FileText className="h-4 w-4" aria-hidden="true" />{sourceKind === 'world-release' ? '下一步：主 Agent 会谈与 Brief 确认' : '先检查并封存世界，再回到产品定向'}</span>
       <span className="flex items-center gap-3">
         {!props.onContinue && <small className="text-[10px] text-text-muted">G5-02 接口尚未接入</small>}
         <button

@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {test, expect} from '@playwright/test'
 
@@ -5,25 +6,24 @@ test('author saves an explicit thread-continuation permission and disabling expa
   let calls = 0
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
   await page.route('**/local-codex/v1/requests', async route => {if (route.request().method() === 'POST') {calls++; await route.abort()} else await route.continue()})
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const scope = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await (await load('/storyforge/tests/helpers/chat-narrative-production-fixture.ts')).seedChatNarrativeProductionFixture()).scope})
-  await page.goto(`./chat/vision?project=${scope.projectId}&work=${scope.workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/vision?project=${scope.projectId}&work=${scope.workId}`)
   const follow = page.getByLabel('完成自己的一个目标后，允许角色接续参与中的未完成事项', {exact: true}), expansion = page.getByLabel('允许角色依据未完成事项发展新局面', {exact: true})
   await expect(follow).not.toBeChecked(); await follow.check()
   await page.getByRole('button', {name: '保存方案', exact: true}).click(); await expect(page.getByText('方案已保存', {exact: true})).toBeVisible()
-  await page.reload(); await expect(follow).toBeChecked()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(follow).toBeChecked()
   await expansion.uncheck(); await expect(follow).not.toBeChecked(); await expect(follow).toBeDisabled()
   await page.getByRole('button', {name: '保存方案', exact: true}).click(); await expect(page.getByText('方案已保存', {exact: true})).toBeVisible()
-  await page.reload(); await expect(follow).not.toBeChecked(); await expect(follow).toBeDisabled(); expect(calls).toBe(0)
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(follow).not.toBeChecked(); await expect(follow).toBeDisabled(); expect(calls).toBe(0)
 })
 
 test('player continues an existing thread after personal closure through a reviewed action and portable history', async ({page}, info) => {
   const calls: string[] = []
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://thread-followup.invalid/v1', model: 'test'}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://thread-followup.invalid/v1', model: 'test', apiKey: 'isolated-test-key' })
   await page.route('https://thread-followup.invalid/**', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n'), review = prompt.includes('本次持久化行动候选')
@@ -38,7 +38,7 @@ test('player continues an existing thread after personal closure through a revie
         nextPossibilities: [{text: '判断眼前路况中自己能处理的部分。', evidenceFactKeys: ['road', 'route-viewpoint']}]}
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)'), helper = await load('/storyforge/tests/helpers/chat-narrative-fixture.ts'), api = await load('/storyforge/src/lib/character-interaction/runtime-api.ts'), harness = await load('/storyforge/src/lib/character-interaction/harness.ts')
     const f = await helper.seedChatNarrativeRuntimeFixture({actorThreadFollowup: true, onlyGuard: true}), v = await api.readProductRuntimeStateVersion(f.sessionId)
@@ -49,7 +49,7 @@ test('player continues an existing thread after personal closure through a revie
     await harness.adoptInteractionRuntimeCandidateV1({scope: f.scope, runId: generated.snapshot.run.id})
     return f
   })
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   await page.getByRole('button', {name: '让角色继续', exact: true}).click()
   await expect(page.getByRole('paragraph').filter({hasText: /^叶岑来到驿站门口察看倒树挡住山路的位置。$/})).toBeVisible()
@@ -59,7 +59,7 @@ test('player continues an existing thread after personal closure through a revie
   expect(state.chatNarrative.situation.goals[0].status).toBe('abandoned')
   expect(state.chatNarrative.situation.goals.at(-1)).toMatchObject({goalKey: 'assess-road', actorKey: 'guard', status: 'active'})
   expect(state.chatNarrative.situation.threads).toHaveLength(1); expect(state.chatNarrative.situation.threads[0].status).toBe('open')
-  await page.reload(); expect(await read()).toEqual(state); expect(calls).toHaveLength(2)
+  await reloadWithBrowserFixtureAIConfigV1(page); expect(await read()).toEqual(state); expect(calls).toHaveLength(2)
   await page.setViewportSize({width: 390, height: 844})
   await expect(page.getByRole('paragraph').filter({hasText: /^叶岑来到驿站门口察看倒树挡住山路的位置。$/})).toBeVisible()
   await page.screenshot({path: info.outputPath('thread-followup-mobile.png'), fullPage: true})

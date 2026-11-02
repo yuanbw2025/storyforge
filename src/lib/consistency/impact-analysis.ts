@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 /**
  * NS-6 · 全闭环 — 正文修改的 stale 传播 + 影响分析。
  *
@@ -234,7 +235,7 @@ export async function buildEditImpactGraphV1(
   for (const chunk of chunks.filter(row => row.sourceChapterId === chapterId)) {
     if (chunk.id == null) continue
     const id = `retrieval-chunk:${chunk.id}`
-    addNode({ id, kind: 'retrieval-chunk', table: 'retrievalChunks', recordId: chunk.id, status: chunk.sourceTextHash === await hashChapterText(source.content ?? '') ? 'current' : 'stale' })
+    addNode({ id, kind: 'retrieval-chunk', table: 'retrievalChunks', recordId: chunk.id, status: chunk.sourceTextHash === await Dexie.waitFor(hashChapterText(source.content ?? '')) ? 'current' : 'stale' })
     addEdge({ from: sourceNodeId, to: id, relation: 'derived-retrieval' })
   }
 
@@ -265,14 +266,14 @@ export async function buildEditImpactGraphV1(
   edges.sort((left, right) => `${left.from}|${left.to}|${left.relation}`.localeCompare(`${right.from}|${right.to}|${right.relation}`))
   const body = {
     version: EDIT_IMPACT_GRAPH_VERSION_V1,
-    source: { table: 'chapters' as const, recordId: chapterId, sourceTextHash: await hashChapterText(source.content ?? '') },
+    source: { table: 'chapters' as const, recordId: chapterId, sourceTextHash: await Dexie.waitFor(hashChapterText(source.content ?? '')) },
     nodes,
     edges,
     staleFactIds: [...new Set(staleFactIds)].sort((a, b) => a - b),
     downstreamChapterIds,
     sourceRecordIds: [...new Set(sourceRecordIds)].sort(),
   }
-  return { ...body, graphHash: await hashCanonicalValue(body) }
+  return { ...body, graphHash: await Dexie.waitFor(hashCanonicalValue(body)) }
 }
 
 /**

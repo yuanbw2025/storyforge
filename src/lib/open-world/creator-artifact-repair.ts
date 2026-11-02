@@ -1,4 +1,5 @@
 import { db } from '../db/schema'
+import { assertTextOpenWorldProductionNewWorkV1 } from './source-admission'
 import type {
   AgentRunArtifactRecordV1,
   AgentRunEventRecord,
@@ -249,6 +250,7 @@ export async function prepareTextOpenWorldCreatorArtifactRepairV1(input: {
   productionId: number
   buildId: number
 }): Promise<TextOpenWorldCreatorRepairPreparationV1> {
+  input = structuredClone(input)
   const scope = await resolveScope({ scope: input.scope })
   const authority = await readTextOpenWorldProductionPlanAuthorityV1({
     scope,
@@ -286,6 +288,7 @@ export async function prepareTextOpenWorldCreatorArtifactRepairV1(input: {
     fail('base Build 的 Creator Brief 不存在或未授权')
   }
   const briefRow = briefValue as ProductProductionBriefRecordV1 & { id: number }
+  assertTextOpenWorldProductionNewWorkV1(production, briefRow, '规划局部返修')
   const sourcePlan = parseProductProductionPlanV3(
     baseBuild.planJson,
     undefined,
@@ -486,6 +489,7 @@ export async function assertTextOpenWorldCreatorRepairPreparationCurrentV1(
     db.productProductionBriefs.get(prepared.briefRow.id),
   ])
   if (!production?.id || !baseBuild?.id || !briefRow?.id) fail('修复授权 CAS 基线已被删除')
+  assertTextOpenWorldProductionNewWorkV1(production, briefRow, '授权局部返修')
   const current = await captureCasWitnessV1({
     production: production as ProductProductionRecordV1 & { id: number },
     baseBuild: baseBuild as ProductBuildRecordV1 & { id: number },
@@ -500,6 +504,7 @@ export async function createTextOpenWorldCreatorRepairAuthorizationV1(input: {
   authorizationNonce: string
   authorizedAt: number
 }): Promise<TextOpenWorldCreatorRepairAuthorizationV1> {
+  input = structuredClone(input)
   const nonce = input.authorizationNonce.trim().normalize('NFC')
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(nonce)) fail('authorizationNonce 无效')
   if (!Number.isSafeInteger(input.authorizedAt) || input.authorizedAt < 1) fail('authorizedAt 无效')

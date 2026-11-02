@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "cohortSize": 160,
+  "exceptions": [
+    {
+      "path": "tests/acceptance/narrative-world/raw/nw2e-checkpoint-20261015-v6/nw2e-record-hash-probe.mjs",
+      "sha256": "7db36866fc5c4f31573d4b209b6a40679baa44e7daa188010f9a743cc1f94bea",
+      "reason": "封存的2026-10-15原始诊断脚本；保留原证据字节，不作为当前工程入口。"
+    },
+    {
+      "path": "tests/acceptance/narrative-world/raw/nw2e-checkpoint-20261015-v7/json-wasm-probe.ts",
+      "sha256": "3664127a96e01f9d2d06c9d00db756687b0a26fe6de35428a12dc6d44303a857",
+      "reason": "封存的2026-10-15原始诊断脚本；原环境单独取证，当前门只核不可变字节。"
+    },
+    {
+      "path": "tests/acceptance/narrative-world/raw/nw2e-checkpoint-20261015-v7/run.mjs",
+      "sha256": "f89b105a003f2be8145b69de11642efc78a0ce309532c9417e3610e49d2f3ff2",
+      "reason": "封存的2026-10-15原始执行记录；不为新的lint/type门改写历史脚本。"
+    },
+    {
+      "path": "public/demo-assets/last-letter/player.js",
+      "sha256": "cb5bb80c4f25cdbbd345b600add0316f0bd884686ec151c5b9820a7ed16cce0a",
+      "reason": "已导出的浏览器Demo播放器分发文件；不是Node工程源码，生成源和产品运行验证另有入口。"
+    }
+  ],
+  "zeroDebtFiles": [
+    "scripts/quality/check-engineering.mjs",
+    "scripts/quality/check-engineering.test.mjs",
+    "eslint.tooling.config.mjs",
+    "tests/regression/R-OPEN-WORLD3-experience-design.test.ts",
+    "tests/helpers/text-open-world-delivery-recognition-assertions.ts"
+  ]
+}
