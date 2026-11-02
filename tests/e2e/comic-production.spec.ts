@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import { createLongform } from './helpers/product-entry'
 import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
@@ -6,7 +7,7 @@ test('小说转漫画从独立产品入口冻结来源，经十二步正式数�
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  await page.goto('./')
+  await gotoWithBrowserFixtureAIConfigV1(page, './')
 
   await createLongform(page,'E2E 漫画来源小说')
   await page.evaluate(async () => {
@@ -33,7 +34,7 @@ test('小说转漫画从独立产品入口冻结来源，经十二步正式数�
     }, { owner: 'work' }))
   })
 
-  await page.goto('./comic/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './comic/library')
   await page.getByRole('button',{name:'新建漫画改编',exact:true}).click()
   await page.getByLabel('小说来源').selectOption({label:'E2E 漫画来源小说'})
   await page.getByLabel('漫画名称',{exact:true}).fill('E2E 旧站页漫')
@@ -103,7 +104,7 @@ test('小说转漫画从独立产品入口冻结来源，经十二步正式数�
   })
   expect(seeded).toEqual({ pageKey: 'page_1', panelKey: 'panel_1' })
 
-  await page.goto(`./comic/layout?work=${workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./comic/layout?work=${workId}`)
   await expect(page.locator('.comic-page-thumbnail')).toHaveCount(1)
   await expect(page.getByTestId('comic-showcase')).toHaveCount(0)
   const panelHitbox=page.getByRole('button',{name:/选择第 1 格/})
@@ -111,18 +112,18 @@ test('小说转漫画从独立产品入口冻结来源，经十二步正式数�
   await expect(page.getByLabel('画布缩放')).toHaveValue('85')
   await expect(page.getByLabel('这一格的定格瞬间')).toBeVisible()
   // Navigation categories load their real editors without duplicating primary actions in the sidebar.
-  await page.goto(`./comic/lettering?work=${workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./comic/lettering?work=${workId}`)
   await page.getByLabel('排字内容 1',{exact:true}).fill('黎明之前，新的对白')
   await expect.poll(()=>page.evaluate(async()=>{const m=await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))();return (await m.db.agentEvents.toArray()).some((e:any)=>e.content.includes('新的对白'))})).toBe(true)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByLabel('排字内容 1',{exact:true})).toHaveValue('黎明之前，新的对白')
   await page.getByRole('button',{name:'保存格、排字与裁切'}).click()
   await expect(page.getByText('格已保存',{exact:true})).toBeVisible()
-  await page.goto(`./comic/review?work=${workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./comic/review?work=${workId}`)
   await page.getByRole('button',{name:'展开专业流程',exact:true}).click()
   await page.getByRole('button',{name:'作者确认本页叙事无问题',exact:true}).click()
   await expect(page.getByText('可发布专业分镜版',{exact:true})).toBeVisible()
-  await page.goto(`./comic/versions?work=${workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./comic/versions?work=${workId}`)
   const publish = page.getByRole('button', { name: '发布不可变分镜版', exact: true })
   await expect(publish).toBeEnabled()
   await publish.click()
@@ -138,7 +139,7 @@ test('小说转漫画从独立产品入口冻结来源，经十二步正式数�
   expect(storyboard).toContain('林岚松手')
   expect(storyboard).toContain('黎明之前')
 
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button',{name:'查看版本 v1',exact:true}).click()
   await expect(page.getByRole('heading',{name:'版本 v1 · 分镜资料'})).toBeVisible()
   const frozenDownload=page.waitForEvent('download')
@@ -146,11 +147,11 @@ test('小说转漫画从独立产品入口冻结来源，经十二步正式数�
   const frozen=JSON.parse(await readFile((await (await frozenDownload).path())!,'utf8'))
   expect(frozen.pages[0].panels[0].lettering[0].text).toContain('新的对白')
   await page.getByRole('button',{name:'重新打开审校',exact:true}).click()
-  await page.goto(`./comic/lettering?work=${workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./comic/lettering?work=${workId}`)
   await page.getByLabel('排字内容 1',{exact:true}).fill('工作稿后来修改')
   await page.getByRole('button',{name:'保存格、排字与裁切'}).click()
   await expect(page.getByText('格已保存',{exact:true})).toBeVisible()
-  await page.goto(`./comic/versions?work=${workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./comic/versions?work=${workId}`)
   await page.getByRole('button',{name:'查看版本 v1',exact:true}).click()
   await expect(page.locator('.cp-release-history svg')).toContainText('新的对白')
   await expect(page.locator('.cp-release-history svg')).not.toContainText('工作稿后来修改')
@@ -158,7 +159,7 @@ test('小说转漫画从独立产品入口冻结来源，经十二步正式数�
 })
 
  test('漫画无作品可浏览分类，导入原作后编辑稿持久保存',async({page})=>{
-  await page.goto('./comic/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './comic/library')
   await page.getByRole('navigation',{name:'漫画页面导航'}).getByRole('button',{name:'漫画制作台',exact:true}).click()
   await page.getByRole('navigation',{name:'漫画内容分类'}).getByRole('button',{name:'页格分镜',exact:true}).click()
   await expect(page.getByRole('heading',{name:'页格分镜'}).first()).toBeVisible()
@@ -170,13 +171,13 @@ test('小说转漫画从独立产品入口冻结来源，经十二步正式数�
   await page.getByRole('button',{name:'冻结来源并创建漫画'}).click()
   await expect(page).toHaveURL(/comic\/source\?work=\d+/)
   const workId=new URL(page.url()).searchParams.get('work')!
-  await page.goto(`./comic/facts?work=${workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./comic/facts?work=${workId}`)
   await page.getByRole('button',{name:'添加原作事实',exact:true}).click()
   await page.getByLabel('第1项 原作事实',{exact:true}).fill('林岚走进车站。')
   await page.getByRole('button',{name:'确认原作事实',exact:true}).click()
   await expect(page.getByText('原作事实已确认',{exact:true})).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByLabel('第1项 原作事实',{exact:true})).toHaveValue('林岚走进车站。')
   await page.screenshot({path:test.info().outputPath('comic-facts.png'),fullPage:true})
 
@@ -185,7 +186,7 @@ test('小说转漫画从独立产品入口冻结来源，经十二步正式数�
   await page.getByLabel('第2项 原作事实',{exact:true}).fill('林岚决定留下。')
   await page.getByRole('button',{name:'确认原作事实',exact:true}).click()
   await expect.poll(()=>page.evaluate(async()=>{const {db}=await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))();return db.adaptationSourceFacts.count()})).toBe(2)
-  const go=async(id:string)=>{await page.goto(`./comic/${id}?work=${workId}`)}
+  const go=async(id:string)=>{await gotoWithBrowserFixtureAIConfigV1(page, `./comic/${id}?work=${workId}`)}
   const confirm=async(name:string)=>{await page.getByRole('button',{name,exact:true}).click();await expect(page.getByText(name.replace(/^确认/,'')+'已确认',{exact:true})).toBeVisible();await expect(page.getByRole('alert')).toHaveCount(0)}
   await go('causal');await page.getByRole('button',{name:'添加因果关系',exact:true}).click();await page.getByLabel('第1项 取舍理由').fill('到站后才做出留下的决定。');await confirm('确认因果关系')
   await go('brief');await page.getByLabel('核心主题',{exact:true}).fill('归属与选择');await page.getByLabel('主导情绪',{exact:true}).fill('温暖');await confirm('确认改编方案')
@@ -207,16 +208,15 @@ test('小说转漫画从独立产品入口冻结来源，经十二步正式数�
 test('漫画 AI 候选保留作者编辑与排除选择，刷新后明确采纳',async({page})=>{
  await page.addInitScript(()=>{
   localStorage.setItem('storyforge_guide_completed','e2e')
-  localStorage.setItem('storyforge-ai-config',JSON.stringify({provider:'openai',baseUrl:'https://comic-test.invalid/v1',model:'gpt-4o',temperature:.2,maxTokens:4000}))
-  sessionStorage.setItem('storyforge-ai-api-key-session','isolated-test-key')
  })
+ registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://comic-test.invalid/v1', model: 'gpt-4o', temperature: .2, maxTokens: 4000, apiKey: 'isolated-test-key' })
  let calls=0
  await page.route('https://comic-test.invalid/**',async route=>{
   calls++;const request=JSON.stringify(route.request().postDataJSON());const key=request.match(/asu_[A-Za-z0-9_-]{8,64}/)?.[0];expect(key).toBeTruthy()
   const facts=[{stableKey:'fact.arrival',kind:'event',statement:'林岚到达车站。',subjectKeys:[],sourceUnitKeys:[key],confidence:1},{stableKey:'fact.wait',kind:'event',statement:'她决定等待。',subjectKeys:[],sourceUnitKeys:[key],confidence:1}]
   await route.fulfill({contentType:'application/json',body:JSON.stringify({choices:[{message:{role:'assistant',content:JSON.stringify(facts)},finish_reason:'stop'}],usage:{prompt_tokens:100,completion_tokens:100,total_tokens:200}})})
  })
- await page.goto('./comic/library?create=1')
+ await gotoWithBrowserFixtureAIConfigV1(page, './comic/library?create=1')
  await page.getByLabel('漫画名称',{exact:true}).fill('候选恢复漫画')
  await page.getByLabel('来源方式',{exact:true}).selectOption('import')
  await page.getByLabel('导入原作内容').fill('林岚走进车站。她决定等待。')
@@ -230,7 +230,7 @@ test('漫画 AI 候选保留作者编辑与排除选择，刷新后明确采纳'
  await candidate.getByLabel('第1项 原作事实',{exact:true}).fill('作者核对：林岚到达旧车站。')
  await page.getByRole('navigation',{name:'漫画内容分类'}).getByRole('button',{name:'改编方案',exact:true}).click()
  await expect(page).toHaveURL(/comic\/brief\?work=\d+/)
- await page.reload()
+ await reloadWithBrowserFixtureAIConfigV1(page)
  await expect(candidate.getByLabel('第1项 原作事实',{exact:true})).toHaveValue('作者核对：林岚到达旧车站。')
  await expect(candidate.locator('.comic-candidate-items input').nth(1)).not.toBeChecked()
  expect(calls).toBe(1)

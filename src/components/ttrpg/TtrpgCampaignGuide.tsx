@@ -83,6 +83,7 @@ import {
   createTtrpgAutomaticSessionRecapsV2,
   createTtrpgViewerProjectionV1,
   type TtrpgViewerProjectionV1,
+  type TtrpgViewerRoleV1,
 } from "../../lib/ttrpg/viewer-projection";
 import { resolveRequestConfig } from "../../lib/ai/client";
 import { isAIConfigReady } from "../../lib/ai/config-readiness";
@@ -205,8 +206,8 @@ function numberAttribute(
 function TabletopBoard(props: {
   tabletop: NonNullable<TtrpgViewerProjectionV1["tabletop"]>;
   state: ProductRuntimeState;
-  mode: PlayerMode;
-  actorKey: string;
+  mode: TtrpgViewerRoleV1;
+  actorKey: string | null;
   selectedTokenKey: string;
   disabled: boolean;
   onSelect: (tokenKey: string) => void;
@@ -724,6 +725,7 @@ export default function TtrpgCampaignGuide(props: {
       ? targetKey
       : (otherTargets[0] ?? "");
   const allDiscovered = product?.discoveredClues ?? [];
+  const viewerRole: TtrpgViewerRoleV1 = theaterMode ? "spectator" : mode;
   const viewerProjection = useMemo(() => {
     if (!frozen || !product || !product.sessionZero.completed) return null;
     try {
@@ -731,8 +733,8 @@ export default function TtrpgCampaignGuide(props: {
         state: props.state,
         campaign: frozen.campaign,
         rulePack: frozen.rulePack,
-        role: mode,
-        actorKey: mode === "player" ? clueRecipientKey : null,
+        role: viewerRole,
+        actorKey: viewerRole === "player" ? clueRecipientKey : null,
         participantControllers: Object.fromEntries(
           participants.flatMap((row) =>
             row.actorKey == null ? [] : [[row.actorKey, row.controller]],
@@ -742,7 +744,8 @@ export default function TtrpgCampaignGuide(props: {
     } catch {
       return null;
     }
-  }, [clueRecipientKey, frozen, mode, participants, product, props.state]);
+  }, [clueRecipientKey, frozen, participants, product, props.state, viewerRole]);
+  const publicProjectionUnavailable = theaterMode && !viewerProjection;
   const visibleClueKeys = new Set(
     viewerProjection?.visibleClues.map((item) => item.clueKey) ?? [],
   );
@@ -1126,6 +1129,12 @@ export default function TtrpgCampaignGuide(props: {
       </header>
 
       <div className="space-y-5 p-5">
+        {publicProjectionUnavailable && (
+          <p role="status" className="text-sm text-text-muted">
+            公开投影尚未就绪。请退出投屏完成 Session Zero 或检查冻结战役。
+          </p>
+        )}
+        {!publicProjectionUnavailable && <>
         {theaterMode && (
           <section
             className="overflow-hidden rounded-xl border border-accent/40 bg-gradient-to-br from-bg-base via-bg-surface to-accent/10 p-5"
@@ -1565,14 +1574,14 @@ export default function TtrpgCampaignGuide(props: {
                 </button>
               ) : (
                 <div className="flex min-w-[260px] flex-1 flex-wrap justify-end gap-2">
-                  <input
+                  {!theaterMode && <input
                     value={safetyReason}
                     onChange={(event) => setSafetyReason(event.target.value)}
                     aria-label="安全暂停原因"
                     className="min-w-[220px] flex-1 rounded border border-border bg-bg-base px-2 py-1.5 text-xs text-text-primary"
-                  />
+                  />}
                   <button
-                    disabled={busy || !safetyReason.trim()}
+                    disabled={busy || (!theaterMode && !safetyReason.trim())}
                     onClick={() =>
                       void run(async () => {
                         const version = await readProductRuntimeStateVersion(
@@ -1588,7 +1597,9 @@ export default function TtrpgCampaignGuide(props: {
                           baseSequence: version.sequence,
                           baseStateHash: version.stateHash,
                           status: "paused",
-                          reason: safetyReason,
+                          reason: theaterMode
+                            ? "玩家在安全投屏期间请求暂停。"
+                            : safetyReason,
                           changedBy: "player",
                         });
                       })
@@ -1604,6 +1615,7 @@ export default function TtrpgCampaignGuide(props: {
           </section>
         )}
 
+        </>}
         {props.panel === "room" && frozen.onlineReleaseHash == null && <p>在线房间需要已发布战役。当前是制作预览，可先进行本地试玩。</p>}
         {(!props.panel || props.panel === "room") && frozen.onlineReleaseHash != null &&
           (product.sessionZero.completed ||
@@ -1630,9 +1642,11 @@ export default function TtrpgCampaignGuide(props: {
               )}
               initialHandoff={props.initialOnlineHandoff}
               onInitialHandoffConsumed={props.onOnlineHandoffConsumed}
+              publicPresentation={theaterMode}
             />
           )}
 
+        {!publicProjectionUnavailable && <>
         {(!props.panel || props.panel === "tabletop") && product.sessionZero.completed &&
           viewerProjection?.media &&
           runtimeMediaScope &&
@@ -1645,6 +1659,7 @@ export default function TtrpgCampaignGuide(props: {
               media={viewerProjection.media}
               viewerKey={runtimeMediaViewerKey}
               disabled={busy || theaterMode}
+              publicPresentation={theaterMode}
               onChanged={props.onChanged}
             />
           )}
@@ -1653,10 +1668,10 @@ export default function TtrpgCampaignGuide(props: {
           <TabletopBoard
             tabletop={viewerProjection.tabletop}
             state={props.state}
-            mode={mode}
-            actorKey={mode === "gm" ? "gm" : clueRecipientKey}
+            mode={viewerRole}
+            actorKey={viewerRole === "spectator" ? null : mode === "gm" ? "gm" : clueRecipientKey}
             selectedTokenKey={selectedTokenKey}
-            disabled={busy || safetyPaused || !!product.ending}
+            disabled={busy || safetyPaused || !!product.ending || theaterMode}
             onSelect={setSelectedTokenKey}
             onOperation={commitTabletop}
           />
@@ -2537,7 +2552,7 @@ export default function TtrpgCampaignGuide(props: {
                       },
                     )}
                   </div>
-                  <div className="mt-3">
+                  {!theaterMode && <div className="mt-3">
                     <span className="text-[10px] text-text-muted">
                       物品实例
                     </span>
@@ -2571,7 +2586,7 @@ export default function TtrpgCampaignGuide(props: {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </div>}
                   {selectedProgression?.history.length ? (
                     <details className="mt-3">
                       <summary className="cursor-pointer text-[10px] text-accent">
@@ -2729,7 +2744,7 @@ export default function TtrpgCampaignGuide(props: {
                   由主持人打开场景后，系统会按角色卡和 RulePack 显示可用行动。
                 </p>
               )}
-              {currentScene &&
+              {!theaterMode && currentScene &&
               selectedActor &&
               (mode === "gm" ||
                 (selectedActor.role === "player" &&
@@ -4604,7 +4619,7 @@ export default function TtrpgCampaignGuide(props: {
               )}
             </section>
 
-            <section
+            {!theaterMode && <section
               className="rounded border border-border bg-bg-base p-3"
               data-testid="ttrpg-inventory-ledger"
             >
@@ -4947,7 +4962,7 @@ export default function TtrpgCampaignGuide(props: {
                   </p>
                 )}
               </div>
-            </section>
+            </section>}
 
             <section className="rounded border border-border bg-bg-base p-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
@@ -6421,9 +6436,10 @@ export default function TtrpgCampaignGuide(props: {
             aria-live="assertive"
             className="rounded border border-danger/30 bg-danger/10 p-3 text-xs text-danger"
           >
-            {error}
+            {theaterMode ? "操作未完成。请退出投屏查看详情。" : error}
           </p>
         )}
+        </>}
       </div>
     </section>
   );

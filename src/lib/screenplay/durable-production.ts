@@ -681,22 +681,37 @@ export async function adoptScreenplayProfessionalCandidateV1(input: {
   if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash) return { snapshot, candidate, receiptHash: snapshot.projection.terminalReceiptHash }
   if (snapshot.projection.state === 'awaiting_confirmation') {
     await assertFresh(input.scope, candidate)
-    if (['beat-sheet','scene-card'].includes(candidate.stage) && !input.allowReplaceDownstream) {
-      const scenes = await db.screenplayScenes.where('adaptationProjectId').equals(candidate.adaptationProjectId).count()
-      const cards = await db.screenplaySceneCards.where('[adaptationProjectId+manifestVersion]').equals([candidate.adaptationProjectId,candidate.sourceManifestVersion]).count()
-      if(scenes || (candidate.stage==='beat-sheet' && cards))throw new Error('重做规划需要先明确确认下游替换，候选已保留')
+    // A saved intent owns the author's edits and replacement authorization,
+    // including a crash before confirmation.recorded was appended.
+    if (!intent) {
+      if (['beat-sheet','scene-card'].includes(candidate.stage) && !input.allowReplaceDownstream) {
+        const scenes = await db.screenplayScenes.where('adaptationProjectId').equals(candidate.adaptationProjectId).count()
+        const cards = await db.screenplaySceneCards.where('[adaptationProjectId+manifestVersion]').equals([candidate.adaptationProjectId,candidate.sourceManifestVersion]).count()
+        if(scenes || (candidate.stage==='beat-sheet' && cards))throw new Error('重做规划需要先明确确认下游替换，候选已保留')
+      }
+      const authorPayload = parseScreenplayProfessionalPayloadV1(candidate.stage, input.authorPayload ?? candidate.payload)
+      const body = { version: 1 as const, kind: 'screenplay-professional-intent' as const, ...(input.allowReplaceDownstream ? { allowReplaceDownstream: true } : {}), candidate, authorPayload, authorPayloadHash: await hashCanonicalValue(authorPayload) }
+      intent = { ...body, intentHash: await hashCanonicalValue(body) }
+      const saved = await createAgentRunCheckpointV1({
+        scope: input.scope, runId: snapshot.run.id, resumePayload: intent,
+        expectedLastSequence: snapshot.projection.lastSequence,
+      }); snapshot = saved.snapshot
     }
-    const authorPayload = parseScreenplayProfessionalPayloadV1(candidate.stage, input.authorPayload ?? candidate.payload)
-    const body = { version: 1 as const, kind: 'screenplay-professional-intent' as const, ...(input.allowReplaceDownstream ? { allowReplaceDownstream: true } : {}), candidate, authorPayload, authorPayloadHash: await hashCanonicalValue(authorPayload) }
-    intent = { ...body, intentHash: await hashCanonicalValue(body) }
-    const saved = await createAgentRunCheckpointV1({ scope: input.scope, runId: snapshot.run.id, resumePayload: intent }); snapshot = saved.snapshot
     snapshot = await append(input.scope, snapshot, 'confirmation.recorded', { stepId: config.stepId, candidateHash: candidate.candidateHash, decision: 'adopt' })
-    snapshot = await append(input.scope, snapshot, 'adoption.started', { stepId: config.stepId, candidateHash: candidate.candidateHash, intentHash: intent.intentHash })
-    await input.onDurableBoundary?.('adoption.started', snapshot)
   }
-  if (!intent) throw new Error('[screenplay-run] 候选不在可采纳状态')
+  if (!intent || snapshot.projection.steps[config.stepId]?.confirmation !== 'adopt') throw new Error('[screenplay-run] 候选不在可采纳状态')
+  const started = snapshot.events.filter(event => event.type === 'adoption.started'
+    && event.generation === snapshot.projection.generation
+    && event.payload.stepId === config.stepId
+    && event.payload.candidateHash === candidate.candidateHash)
+  const intentHash = intent.intentHash
+  if (started.some(event => event.type === 'adoption.started' && event.payload.intentHash != null && event.payload.intentHash !== intentHash)) throw new Error('[screenplay-run] 采纳开始事件与冻结意图不匹配')
   let adoptionHash = snapshot.projection.steps[config.stepId]?.adoptionHash
   if (!adoptionHash) {
+    if (!started.length) {
+      snapshot = await append(input.scope, snapshot, 'adoption.started', { stepId: config.stepId, candidateHash: candidate.candidateHash, intentHash: intent.intentHash })
+      await input.onDurableBoundary?.('adoption.started', snapshot)
+    }
     if (!await formalAlreadyApplied(input.scope, intent)) await writeFormal(input.scope, intent)
     await input.onDurableBoundary?.('formal.written', snapshot)
     const stateHash = await postStateHash(input.scope, candidate); adoptionHash = await hashCanonicalValue({ intentHash: intent.intentHash, stateHash })

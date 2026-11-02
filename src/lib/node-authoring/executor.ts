@@ -1,7 +1,8 @@
 import { renderAuthoringPromptControl } from './prompt-control'
 import { estimateTokens } from '../ai/context-budget'
 import { chat } from '../ai/client'
-import { useAIConfigStore } from '../../stores/ai-config'
+import { resolveAIConfigPresetV1, useAIConfigStore } from '../../stores/ai-config'
+import { isAIConfigReady } from '../ai/config-readiness'
 import {
   parseCreativeArtifactV1,
   resolveCreativeQualityPolicyV1,
@@ -145,12 +146,11 @@ export function requestedAIConfig(node: AuthoringNodeInstance, inputs: Authoring
     || stringConfig(node, 'presetId')
     || stringConfig(node, 'ai-profile')
   const preset = presetId ? state.presets.find(item => item.id === presetId) : undefined
-  if (!preset) return state.config
-  return {
-    ...state.config,
-    ...preset.config,
-    apiKey: preset.config.apiKey || state.config.apiKey,
-  }
+  if (!presetId) return { ...state.config }
+  if (!preset) throw new Error('所选 AI 配置预设不存在，请重新选择预设。')
+  const config = resolveAIConfigPresetV1(preset, state.config)
+  if (!isAIConfigReady(config)) throw new Error('所选 AI 配置预设缺少 API Key，请在设置中补齐该预设的凭据。')
+  return config
 }
 
 function inputControl(inputs: AuthoringInputEnvelope[], semantic: string): string | undefined {

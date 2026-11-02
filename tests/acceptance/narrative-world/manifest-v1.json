@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261102-quality-ready-02.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -604,6 +604,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261029-release405-mainc5-v1.json",
         "workPackage": "release-4.0.5-mainc5-integration",
         "note": "Preserved unchanged before independently delivered SFQA-015 and SFQA-054 source/test updates."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
+        "workPackage": "quality-independent-01",
+        "note": "Preserved unchanged before the independently reviewed product recovery, owner/reference, credential and desktop-runtime fixes."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

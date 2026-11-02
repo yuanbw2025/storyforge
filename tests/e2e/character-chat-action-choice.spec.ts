@@ -1,14 +1,12 @@
 import {chatActionResponseFixture} from './helpers/character-chat-choice'
 import {expect, test, type Page} from '@playwright/test'
 import Ajv from 'ajv'
+import { registerBrowserFixtureAIConfigV1, unregisterBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 
 // Exercise the actual application default in isolated browser data.
 test.beforeEach(async ({page}) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('storyforge_guide_completed', 'e2e')
-    if (!localStorage.getItem('storyforge-ai-config')) localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-choice.invalid/v1', model: 'choice-fixture', maxTokens: 9000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
-  })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-choice.invalid/v1', model: 'choice-fixture', maxTokens: 9000, apiKey: 'isolated-test-key' }, { ifAbsent: true })
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
 })
 
 const privateDraft = '选择草稿专用标记：先询问已有线索，不预定玩家回答。'
@@ -44,7 +42,7 @@ async function provider(page: Page, malformedReview = false, strictChoice = fals
 }
 
 async function seed(page: Page, phase: Phase, directorBudget = 3) {
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async ({phase, directorBudget}) => {
     const load = new Function('p', 'return import(p)')
     const fixture = await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')
@@ -79,7 +77,7 @@ async function seed(page: Page, phase: Phase, directorBudget = 3) {
     if (!interrupted || runId == null) throw Error('expected durable interruption did not occur')
     return {...f, runId}
   }, {phase, directorBudget})
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   return f
 }
@@ -110,7 +108,7 @@ for (const phase of ['choice-raw', 'choice-saved', 'expression-raw', 'candidate-
   expect(before.state.interaction.remainingDirectorBudget).toBe(3)
   await expect(page.getByTestId('chat-action-resume')).toContainText('尚未改变故事')
   await privateContentAbsent(page)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('button', {name: `继续本次角色行动 #${f.runId}`, exact: true})).toBeEnabled()
   expect(calls).toEqual(initialCalls)
   await privateContentAbsent(page)
@@ -127,7 +125,7 @@ for (const phase of ['choice-raw', 'choice-saved', 'expression-raw', 'candidate-
   expect(after.state.interaction.messages).toHaveLength(1)
   expect(after.state.interaction.remainingDirectorBudget).toBe(0)
   expect(after.events.map((event: {payloadJson: string}) => JSON.parse(event.payloadJson)).filter((payload: {actionChoiceVersion?: number}) => payload.actionChoiceVersion === 1)).toHaveLength(1)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText(reply, {exact: true})).toBeVisible()
   expect(calls).toEqual(['choice', 'expression', 'review'])
   expect((await read(page, f.sessionId)).state).toEqual(after.state)
@@ -141,7 +139,7 @@ for (const phase of ['choice-unknown', 'expression-unknown'] as const) test(`unk
   await expect(page.getByTestId('chat-action-resume')).toHaveCount(0)
   await expect(page.getByTestId('chat-turn-resume')).toContainText('结果未知')
   await expect(page.getByRole('button', {name: '补齐未完成本轮', exact: true})).toBeDisabled()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('button', {name: `取消未完成处理 #${f.runId}`, exact: true})).toBeEnabled()
   expect(calls).toEqual(initialCalls)
   await page.getByRole('button', {name: `取消未完成处理 #${f.runId}`, exact: true}).click()
@@ -155,7 +153,7 @@ test('cancelling a saved choice preserves the story without expression or review
   const calls = await provider(page), f = await seed(page, 'choice-saved'), before = await read(page, f.sessionId)
   await page.getByRole('button', {name: `取消本次行动 #${f.runId}`, exact: true}).click()
   await expect(page.getByTestId('chat-action-resume')).toHaveCount(0)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   expect(calls).toEqual(['choice'])
   expect((await read(page, f.sessionId)).state).toEqual(before.state)
@@ -164,15 +162,14 @@ test('cancelling a saved choice preserves the story without expression or review
 })
 
 for (const budget of [2, 3]) test(`fresh action respects the three-call allowance in the actual controls (${budget})`, async ({page}) => {
-  if (budget === 3) await page.addInitScript(() => localStorage.setItem('storyforge-ai-config',
-    JSON.stringify({provider: 'agnes', baseUrl: 'https://chat-choice.invalid/v1', model: 'choice-fixture', maxTokens: 9000})))
+  if (budget === 3) registerBrowserFixtureAIConfigV1(page, { provider: 'agnes', baseUrl: 'https://chat-choice.invalid/v1', model: 'choice-fixture', maxTokens: 9000, apiKey: 'isolated-test-key' })
   const calls = await provider(page, false, budget === 3), f = await seed(page, 'fresh', budget), before = await read(page, f.sessionId)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   const start = page.getByRole('button', {name: '让角色开场', exact: true})
   if (budget === 2) {
     await expect(start).toBeDisabled()
     await expect(page.getByText('当前剩余 2 次场景调用额度，开始这一步至少需要 3 次。', {exact: true})).toBeVisible()
-    await page.reload()
+    await reloadWithBrowserFixtureAIConfigV1(page)
     await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
     expect(await read(page, f.sessionId)).toEqual(before)
     expect(calls).toHaveLength(0)
@@ -194,7 +191,7 @@ test('a malformed review after continuation never displays expression, choice or
   expect(await page.locator('body').innerText()).not.toContain('铜印在柜台底下')
   expect((await read(page, f.sessionId)).state).toEqual(before.state)
   expect(calls).toEqual(['choice', 'expression', 'review'])
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   expect(calls).toEqual(['choice', 'expression', 'review'])
   await expect(page.getByText(reply, {exact: true})).toHaveCount(0)
@@ -218,15 +215,24 @@ for (const failure of ['over-budget', 'missing-usage'] as const) test(`Codex tra
         ...(failure === 'over-budget' ? {usage: {inputTokens: 500, outputTokens: 2001, totalTokens: 2501}} : {})})
       body = {id: sent.id}
     } else {
-      const id = path.split('/').at(-1)!
+      const id = path.split('/').slice(-1)[0]!
       if (!jobs.has(id) || request.method() !== 'GET') throw Error(`Unexpected fixture transport request: ${request.method()} ${path}`)
       body = jobs.get(id)
     }
     await route.fulfill({status: request.method() === 'POST' ? 202 : 200, contentType: 'application/json', body: JSON.stringify(body)})
   })
   const f = await seed(page, 'fresh')
-  await page.evaluate(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'codex', model: 'choice-fixture', maxTokens: 9000})))
-  await page.reload()
+  // This explicit provider replacement belongs to the test, not the default
+  // if-absent registration. Preserve the old omitted-field defaults and keep
+  // the local Codex bridge keyless rather than copying a cloud session key.
+  unregisterBrowserFixtureAIConfigV1(page)
+  await page.evaluate(async () => {
+    const load = new Function('p', 'return import(p)') as <T>(path: string) => Promise<T>
+    const { useAIConfigStore } = await load<typeof import('../../src/stores/ai-config')>('/storyforge/src/stores/ai-config.ts')
+    useAIConfigStore.getState().setConfig({ provider: 'codex', model: 'choice-fixture', maxTokens: 9000,
+      baseUrl: 'https://api.deepseek.com/v1', temperature: 0.7, apiKey: '' })
+  })
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText('用量说明', {exact: true})).toBeVisible()
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   await expect(page.getByRole('button', {name: '让角色开场', exact: true})).toBeEnabled()
@@ -249,7 +255,7 @@ for (const failure of ['over-budget', 'missing-usage'] as const) test(`Codex tra
   }, {projectId: f.scope.projectId, runId: after.runs[0].id})
   expect(retained).toEqual({raw: true, outputReceipt: true})
   await privateContentAbsent(page)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   expect(requests).toHaveLength(1)
   expect((await read(page, f.sessionId)).state).toEqual(after.state)
