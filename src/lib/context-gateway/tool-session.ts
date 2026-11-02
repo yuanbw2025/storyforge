@@ -1,4 +1,5 @@
-import { hashCanonicalValue } from '../agent/run/hash'
+import { sha256 } from '@noble/hashes/sha2.js'
+import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { CONTEXT_SOURCES } from '../registry/context-sources'
 import type {
   ContextAccessPolicyV1,
@@ -19,9 +20,11 @@ export interface ContextGatewayProviderBindingV1 {
 }
 
 interface SourceRefCapabilityV1 {
-  resourceKey: string
-  descriptor: ContextResourceDescriptorV1
-  sourceRef: ContextSourceRefV1
+  readonly resourceKey: string
+  readonly descriptor: ContextResourceDescriptorV1
+  readonly sourceRef: ContextSourceRefV1
+  readonly bindingCanonical: string
+  readonly sourceRefIndex: number
 }
 
 export interface ContextGatewayToolSessionV1 {
@@ -163,6 +166,15 @@ export function settleContextGatewayTokensV1(
   session.usage.retrievedTokens = next
 }
 
+/** Applied only to a detached JSON snapshot, never to a provider-owned object. */
+function freezeCapabilityEvidence<T>(value: T): T {
+  if (value && typeof value === 'object') {
+    for (const child of Object.values(value)) freezeCapabilityEvidence(child)
+    Object.freeze(value)
+  }
+  return value
+}
+
 export function issueContextSourceRefCapabilitiesV1(
   session: ContextGatewayToolSessionV1,
   descriptor: ContextResourceDescriptorV1,
@@ -170,20 +182,51 @@ export function issueContextSourceRefCapabilitiesV1(
   if (descriptor.sourceRefs.length > MAX_SOURCE_CAPABILITIES_PER_RESOURCE) {
     fail('source-ref', `单个资源 SourceRef 超过 ${MAX_SOURCE_CAPABILITIES_PER_RESOURCE} 条上限`)
   }
-  // Deterministic for replay/cache stability; authority still comes from presence in this session map.
-  const tokens = descriptor.sourceRefs.map((_sourceRef, index) => (
-    `ctxref_v1_${descriptor.contentHash}_${descriptor.policyHash}_${index}`
-  ))
-  const newTokenCount = tokens.filter(token => !session.capabilities.has(token)).length
+  const binding = session.providers.find(candidate => candidate.source.key === descriptor.sourceKey)
+  if (!binding) fail('source-ref', 'SourceRef capability 的 Provider 不在当前 session')
+  // Preserve the provider's JSON field order (including original-evidence
+  // anchors); canonicalization is for hashing/comparison, not evidence rewriting.
+  const snapshot: ContextResourceDescriptorV1 = freezeCapabilityEvidence(JSON.parse(JSON.stringify(descriptor)))
+  const bindingCanonical = canonicalStringify({
+    version: 'context-source-ref-capability-v1',
+    scope: session.scope,
+    scopeFingerprint: session.scopeFingerprint,
+    policyHash: session.policyHash,
+    provider: {
+      sourceKey: binding.source.key,
+      version: binding.provider.version,
+      providerId: binding.provider.providerId,
+      providerVersion: binding.provider.providerVersion,
+      normalizationVersion: binding.provider.normalizationVersion,
+    },
+    descriptor: snapshot,
+  })
+  // Opaque and deterministic for exact replay. Presence in this session map,
+  // rather than knowledge of a token's bytes, remains the source of authority.
+  const planned = new Map<string, SourceRefCapabilityV1>()
+  const tokens = snapshot.sourceRefs.map((sourceRef, index) => {
+    const digest = sha256(new TextEncoder().encode(canonicalStringify({ bindingCanonical, index })))
+    const token = `ctxref_v1_${Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('')}`
+    const capability = Object.freeze({ resourceKey: snapshot.resourceKey, descriptor: snapshot, sourceRef,
+      bindingCanonical, sourceRefIndex: index })
+    const previous = planned.get(token) ?? session.capabilities.get(token)
+    if (previous && canonicalStringify(previous) !== canonicalStringify(capability)) {
+      fail('source-ref', 'SourceRef capability token 与既有来源证据冲突')
+    }
+    planned.set(token, capability)
+    return token
+  })
+  const newTokenCount = [...planned.keys()].filter(token => !session.capabilities.has(token)).length
   if (session.capabilities.size + newTokenCount
     > session.policy.maxReadCalls * MAX_SOURCE_CAPABILITIES_PER_RESOURCE) {
     fail('source-ref', '当前 Gateway session 的 SourceRef capability 已达到上限')
   }
-  return descriptor.sourceRefs.map((sourceRef, index) => {
-    const token = tokens[index]
-    session.capabilities.set(token, { resourceKey: descriptor.resourceKey, descriptor, sourceRef })
-    return token
-  })
+  // All collisions and the complete batch budget are checked before mutation;
+  // an exact reissue preserves the original immutable evidence object.
+  for (const [token, capability] of planned) {
+    if (!session.capabilities.has(token)) session.capabilities.set(token, capability)
+  }
+  return tokens
 }
 
 export function resolveContextSourceRefCapabilityV1(
