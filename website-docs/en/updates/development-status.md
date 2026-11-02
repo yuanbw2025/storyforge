@@ -1,5 +1,52 @@
 # Pending development and branch audit
 
+
+## November 3, 2026 · Current development snapshot
+
+Reviewed from `a3317feb` to remote main `054d8a06`: **110 local branches, 24 registered worktrees including detached checkouts, 103 heads outside main**. These are audit counts, not feature counts. Formal v4.0.5 is published; #246 is merged. Other open PRs below are not in main. Older dated sections remain historical snapshots.
+
+| PR / branch / head | Observed scope and status |
+| --- | --- |
+| [#259](https://github.com/yuanbw2025/storyforge/pull/259) · `fix/quality-world-sharing-foundation-20261103` · `d3426692` | World-sharing origin declarations; purpose gates and formal wiring incomplete；open |
+| [#258](https://github.com/yuanbw2025/storyforge/pull/258) · `fix/quality-mapped-recovery072-20261103` · `3ac7ef74` | Mapped open-world command recovery；open |
+| [#257](https://github.com/yuanbw2025/storyforge/pull/257) · `fix/quality-ready24-integration-20261103` · `26ece3ba` | Editing ownership, delayed I/O, adoption, sharing and media integration；open |
+| [#256](https://github.com/yuanbw2025/storyforge/pull/256) · `fix/quality-ready17-integration-20261103` · `2cd0e6eb` | 17 follow-up repairs dependent on #255；draft |
+| [#255](https://github.com/yuanbw2025/storyforge/pull/255) · `fix/quality-priority31-final-20261102` · `23c3be69` | Integrated delivery of 27 remaining priority findings; full checks pending；open |
+| [#254](https://github.com/yuanbw2025/storyforge/pull/254) · `fix/quality-036-completion-delivery-20261102` · `1496d2e9` | Atomic prose, scene-outline and impact adoption/recovery；open |
+| [#253](https://github.com/yuanbw2025/storyforge/pull/253) · `fix/quality144-delivery-20261102` · `cc5508f3` | Engineering type/tooling checks；open |
+| [#252](https://github.com/yuanbw2025/storyforge/pull/252) · `fix/quality-002-036-adoption-delivery-20261102` · `df9fa441` | Raw-response preservation and Brief adoption recovery；open |
+| [#251](https://github.com/yuanbw2025/storyforge/pull/251) · `fix/quality-005-world-lineage-delivery-20261102` · `d17d2c42` | Sealed open-world sourcing and historical read-only boundaries；open |
+| [#250](https://github.com/yuanbw2025/storyforge/pull/250) · `fix/quality-ready-delivery-20-20261102` · `44e86d4e` | Follow-up delivery within the priority repair chain；open |
+| [#245](https://github.com/yuanbw2025/storyforge/pull/245) · `fix/ttrpg-empty-session-loop-20261102` · `1258a5c1` | Empty TTRPG session-loop repair；draft |
+| [#244](https://github.com/yuanbw2025/storyforge/pull/244) · `fix/doubao-default-lifecycle-20261102` · `eec8ad5e` | New Doubao default and lifecycle notices；open |
+| [#240](https://github.com/yuanbw2025/storyforge/pull/240) · `fix/batch-detail-confirmation-20261031` · `0b58a5c4` | Batch outline confirmation, Doubao and backup-reference protection；open |
+| [#238](https://github.com/yuanbw2025/storyforge/pull/238) · `refactor/chat-content-development-plan-20261030` · `4d295c81` | Character-chat story-quality development plan; not feature delivery；draft |
+| [#236](https://github.com/yuanbw2025/storyforge/pull/236) · `fix/quality-round1-integration-20261030` · `5b52b35f` | Earlier first-round quality integration；draft |
+| [#235](https://github.com/yuanbw2025/storyforge/pull/235) · `feat/quality-audit-plan-20261029` · `3a5b3722` | Fixed-baseline audit and staged remediation plan；draft |
+| [#234](https://github.com/yuanbw2025/storyforge/pull/234) · `feat/community-works-library-20261029` · `72a231b5` | Explicit author-selected community submission/reading; final delivery pending；draft |
+| [#233](https://github.com/yuanbw2025/storyforge/pull/233) · `fix/issue-179-run-backup-lifecycle-20261029` · `ca120a73` | History-bound Run target deletion guard; not recovery of existing bad backups；open |
+
+#255 → #256 → #257 → #258 is one dependency chain. #250–#254 and #236 contain earlier integration inputs; inherited commits, identical heads, merge-only history and equivalent patches are not counted again. #259 is a separate partial foundation, not public sharing permission or a new schema.
+
+### Uncommitted worktrees
+
+- `ed9f` · `feat/community-works-library-20261029`：Only two local Supabase CLI metadata files, not product features; contents stay private.
+- `quality-002-semantic-raw` · `fix/quality-002-longform-semantic-raw-20261102`：5 working/staged entries, including `src/lib/agent/prose-semantic-review.ts`, `src/lib/agent/run/prose-generation-durable.ts`; observed scope only, not completed implementation.
+- `quality-audit-plan` · `fix/quality-036-brief-atomic-20261102`：26 working/staged entries, including `src/components/editor/ChapterEditor.tsx`, `src/components/editor/ChapterEditorToolbar.tsx`; observed scope only, not completed implementation.
+- `quality-client-round1` · `fix/quality-048-original-counterfactual-20261031`：1 working/staged entries, including `tests/regression/R-SFQA048-foreshadow-delete-refs.test.ts`; observed scope only, not completed implementation.
+- `quality-data-round1` · `fix/quality-037-canon-read-prep-20261031`：6 working/staged entries, including `scripts/check-architecture.mjs`, `src/lib/context-gateway/canon-provider.ts`; observed scope only, not completed implementation.
+- `quality-extra-runtime9-20261102` · `fix/quality056-runtime-media-concurrency-20261103`：4 working/staged entries, including `docs/ARCHITECTURE.md`, `src/lib/product/runtime-media-library.ts`; observed scope only, not completed implementation.
+- `quality-extra-web8-20261102` · `fix/quality-ready-followups-20261103`：5 working/staged entries, including `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/quality/engineering-debt-baseline.json`; observed scope only, not completed implementation.
+- `quality-independent79-20261102` · `fix/quality050-provider-dispatch-binding-20261103`：4 working/staged entries, including `src/lib/product-production/capabilities.ts`, `src/lib/product-production/production-executor.ts`; observed scope only, not completed implementation.
+- `quality-intent-round1` · `fix/quality-002-node-producers-20261031`：20 working/staged entries, including `docs/AI-FUNCTIONS-MANUAL.generated.md`, `docs/ARCHITECTURE.md`; observed scope only, not completed implementation.
+- `quality-linked34-20261102` · `fix/quality-world-source-receipts-20261103`：15 working/staged entries, including `docs/DATA-GOVERNANCE.md`, `src/lib/db/ensure-schema.ts`; observed scope only, not completed implementation.
+- `quality-node002-delivery` · `fix/quality-002-node-delivery-20261102`：46 working/staged entries, including `scripts/ai-call-meta.mjs`, `scripts/check-ai-entry-registry.mjs`; observed scope only, not completed implementation.
+- `quality-round1-integration` · `fix/quality002-runtime-raw-evidence-20261102`：8 working/staged entries, including `src/lib/adventure/harness.ts`, `src/lib/agent/run/creation-response-evidence.ts`; observed scope only, not completed implementation.
+- `quality-studio005-20261031` · `fix/quality144-tooling-gates-20261102`：10 working/staged entries, including `docs/ENGINEERING-QUALITY-STANDARD.md`, `package-lock.json`; observed scope only, not completed implementation.
+- `quality002-master-raw` · `fix/quality002-master-raw-20261102`：7 working/staged entries, including `src/lib/agent/detailed-outline-authoring.ts`, `src/lib/agent/orchestrator.ts`; observed scope only, not completed implementation.
+
+Twelve branch heads contain commits absent from origin, but two commits on `fix/quality-ready-followups-20261103` are merge-only history. Across 11 unique unpushed non-merge commits, one has an equivalent origin patch; the others remain local evidence. The 037 read-frame/backup/reference chain, node-producer lifecycle chain and linked34 media/test branches overlap: preserve their ancestry and patch differences rather than treating each as independent delivery. Full paths and differences remain private. No product changes are committed, pushed, merged or cleaned by this task; no product tests are run.
+
 ## October 30, 2026 · Current branches and pending delivery
 
 Reviewed from successful baseline `3b524e11` to remote main `8707bb8a`. Before editing, enumerated **12 local branches and 11 registered worktrees, including detached checkouts**. Nine heads are outside main; all committed work is reachable from origin references. Branch counts are not feature counts. Removed registrations are not recreated or treated as proof of lost content. Older dated sections retain their historical snapshots; this section records the current review.
