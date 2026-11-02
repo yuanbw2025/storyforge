@@ -23,6 +23,8 @@ export interface HistoryAgentLaneState {
 
 interface Options {
   projectId: number
+  activeWorldId?: number | null
+  activeWorkId?: number | null
   worldGroupId: number | null
   aiConfig: AIConfig
   reloadEvents: () => Promise<unknown>
@@ -46,6 +48,8 @@ function messageOf(error: unknown): string {
 export function useHistoryAI(options: Options) {
   const {
     projectId,
+    activeWorldId,
+    activeWorkId,
     worldGroupId,
     aiConfig,
     reloadEvents,
@@ -54,26 +58,39 @@ export function useHistoryAI(options: Options) {
   } = options
   const [consult, setConsult] = useState<HistoryAgentLaneState>(emptyLane)
   const [storm, setStorm] = useState<HistoryAgentLaneState>(emptyLane)
+  const [recoveryError, setRecoveryError] = useState<string | null>(null)
+  const [recoveryAttempt, setRecoveryAttempt] = useState(0)
   const consultRef = useRef(consult)
   const stormRef = useRef(storm)
   const generationRef = useRef({ consult: 0, storm: 0 })
   const reloadEventsRef = useRef(reloadEvents)
   const reloadKeywordsRef = useRef(reloadKeywords)
   const onErrorRef = useRef(onError)
-  consultRef.current = consult
-  stormRef.current = storm
   reloadEventsRef.current = reloadEvents
   reloadKeywordsRef.current = reloadKeywords
   onErrorRef.current = onError
 
   const lane = (mode: HistoryAIMode) => mode === 'consult' ? consultRef.current : stormRef.current
   const setLane = useCallback((mode: HistoryAIMode, next: HistoryAgentLaneState | ((current: HistoryAgentLaneState) => HistoryAgentLaneState)) => {
+    const ref = mode === 'consult' ? consultRef : stormRef
+    const value = typeof next === 'function' ? next(ref.current) : next
+    // The next action can run before React renders (notably reject → retry).
+    ref.current = value
     const setter = mode === 'consult' ? setConsult : setStorm
-    setter(next)
+    setter(value)
   }, [])
 
-  const recover = useCallback(async (mode: HistoryAIMode): Promise<HistoryAgentLaneState> => {
+  const resolveCurrentScope = useCallback(async () => {
     const scope = await resolveScopeLike(projectId)
+    if ((activeWorldId != null && scope.worldId !== activeWorldId)
+      || (activeWorkId != null && scope.workId !== activeWorkId)) {
+      throw new Error('历史 Agent 的当前世界或作品已切换，请返回对应作用域后操作')
+    }
+    return scope
+  }, [projectId, activeWorldId, activeWorkId])
+
+  const recover = useCallback(async (mode: HistoryAIMode): Promise<HistoryAgentLaneState> => {
+    const scope = await resolveCurrentScope()
     const pending = await readPendingHistoryAgentCandidateV1({ scope, worldGroupId, mode })
     if (pending) {
       return {
@@ -106,32 +123,47 @@ export function useHistoryAI(options: Options) {
       }
     }
     return emptyLane()
-  }, [projectId, worldGroupId])
+  }, [resolveCurrentScope, worldGroupId])
 
   useEffect(() => {
     let cancelled = false
     generationRef.current.consult++
     generationRef.current.storm++
-    setConsult(emptyLane())
-    setStorm(emptyLane())
+    setRecoveryError(null)
+    const recovering = { ...emptyLane(), busy: true, message: '正在检查可恢复的历史候选…' }
+    setLane('consult', recovering)
+    setLane('storm', recovering)
     void Promise.all([recover('consult'), recover('storm')])
       .then(([nextConsult, nextStorm]) => {
         if (cancelled) return
-        setConsult(nextConsult)
-        setStorm(nextStorm)
+        setLane('consult', nextConsult)
+        setLane('storm', nextStorm)
       })
       .catch(error => {
-        if (!cancelled) onErrorRef.current(`历史 Agent 恢复失败：${messageOf(error)}。`)
+        if (cancelled) return
+        const message = `历史候选读取失败：${messageOf(error)}。重新检查只读取已有记录，不会调用模型。`
+        setRecoveryError(message)
+        onErrorRef.current(message)
       })
-    return () => { cancelled = true }
-  }, [recover])
+    return () => {
+      cancelled = true
+      generationRef.current.consult++
+      generationRef.current.storm++
+    }
+  }, [recover, setLane, recoveryAttempt])
+
+  const retryRecovery = useCallback(() => {
+    if (!recoveryError) return
+    setRecoveryError(null)
+    setRecoveryAttempt(attempt => attempt + 1)
+  }, [recoveryError])
 
   const runRequest = useCallback(async (
     mode: HistoryAIMode,
     request: { targetKind: 'event' | 'keyword'; targetId: number },
   ) => {
     const current = lane(mode)
-    if (current.busy || current.candidate || current.unsafeRunId != null) return
+    if (current.busy || current.candidate || current.unsafeRunId != null || current.adoptionPending) return
     const token = ++generationRef.current[mode]
     setLane(mode, {
       ...emptyLane(),
@@ -139,7 +171,8 @@ export function useHistoryAI(options: Options) {
       message: '正在从登记 Context 生成持久候选…',
     })
     try {
-      const scope = await resolveScopeLike(projectId)
+      const scope = await resolveCurrentScope()
+      if (generationRef.current[mode] !== token) return
       const generated = await generateHistoryAgentCandidateV1({
         scope,
         worldGroupId,
@@ -160,11 +193,12 @@ export function useHistoryAI(options: Options) {
     } catch (error) {
       if (generationRef.current[mode] !== token) return
       const recovered = await recover(mode).catch(() => emptyLane())
+      if (generationRef.current[mode] !== token) return
       const message = messageOf(error)
       setLane(mode, { ...recovered, busy: false, message: recovered.message ?? message })
       onErrorRef.current(`历史 Agent 生成失败：${message}。`)
     }
-  }, [aiConfig, projectId, recover, setLane, worldGroupId])
+  }, [aiConfig, resolveCurrentScope, recover, setLane, worldGroupId])
 
   const run = useCallback(async (mode: HistoryAIMode, target: HistoryAITarget) => {
     if (!target.item.id) {
@@ -177,70 +211,91 @@ export function useHistoryAI(options: Options) {
   const accept = useCallback(async (mode: HistoryAIMode) => {
     const current = lane(mode)
     if (current.busy || current.runId == null || !current.candidate) return
+    const token = ++generationRef.current[mode]
     setLane(mode, { ...current, busy: true, message: '正在确认写入并执行终验…' })
     try {
-      const scope = await resolveScopeLike(projectId)
+      const scope = await resolveCurrentScope()
+      if (generationRef.current[mode] !== token) return
       await adoptHistoryAgentCandidateV1({ scope, runId: current.runId })
+      if (generationRef.current[mode] !== token) return
       if (current.candidate.request.targetKind === 'event') await reloadEventsRef.current()
       else await reloadKeywordsRef.current()
+      if (generationRef.current[mode] !== token) return
       setLane(mode, { ...emptyLane(), message: '已写入对应结果字段并完成终验。' })
     } catch (error) {
+      if (generationRef.current[mode] !== token) return
       const recovered = await recover(mode).catch(() => current)
+      if (generationRef.current[mode] !== token) return
       const message = messageOf(error)
       setLane(mode, { ...recovered, busy: false, message })
       onErrorRef.current(`历史 Agent 确认失败：${message}。`)
     }
-  }, [projectId, recover, setLane])
+  }, [resolveCurrentScope, recover, setLane])
 
   const reject = useCallback(async (mode: HistoryAIMode) => {
     const current = lane(mode)
     if (current.busy || current.runId == null || !current.candidate || current.adoptionPending) return
+    const token = ++generationRef.current[mode]
     setLane(mode, { ...current, busy: true })
     try {
-      await rejectHistoryAgentCandidateV1({ scope: await resolveScopeLike(projectId), runId: current.runId })
+      const scope = await resolveCurrentScope()
+      if (generationRef.current[mode] !== token) return
+      await rejectHistoryAgentCandidateV1({ scope, runId: current.runId })
+      if (generationRef.current[mode] !== token) return
       setLane(mode, { ...emptyLane(), message: '候选已拒绝；正式历史条目没有变化。' })
     } catch (error) {
+      if (generationRef.current[mode] !== token) return
       const message = messageOf(error)
       setLane(mode, { ...current, busy: false, message })
       onErrorRef.current(`历史 Agent 拒绝失败：${message}。`)
     }
-  }, [projectId, setLane])
+  }, [resolveCurrentScope, setLane])
 
   const retry = useCallback(async (mode: HistoryAIMode) => {
     const current = lane(mode)
-    if (!current.candidate || current.runId == null || current.busy || current.adoptionPending) return
+    if (!current.candidate || current.runId == null || current.busy || current.adoptionPending || current.unsafeRunId != null) return
+    const token = ++generationRef.current[mode]
     const request = {
       targetKind: current.candidate.request.targetKind,
       targetId: current.candidate.request.targetId,
     }
     setLane(mode, { ...current, busy: true, message: '正在拒绝旧候选…' })
     try {
-      await rejectHistoryAgentCandidateV1({ scope: await resolveScopeLike(projectId), runId: current.runId })
+      const scope = await resolveCurrentScope()
+      if (generationRef.current[mode] !== token) return
+      await rejectHistoryAgentCandidateV1({ scope, runId: current.runId })
+      if (generationRef.current[mode] !== token) return
       setLane(mode, emptyLane())
       await runRequest(mode, request)
     } catch (error) {
+      if (generationRef.current[mode] !== token) return
       const message = messageOf(error)
       setLane(mode, { ...current, busy: false, message })
       onErrorRef.current(`历史 Agent 重试失败：${message}。`)
     }
-  }, [projectId, runRequest, setLane])
+  }, [resolveCurrentScope, runRequest, setLane])
 
   const abandonUnsafe = useCallback(async (mode: HistoryAIMode) => {
     const current = lane(mode)
     if (current.busy || current.unsafeRunId == null) return
+    const token = ++generationRef.current[mode]
     setLane(mode, { ...current, busy: true })
     try {
+      const scope = await resolveCurrentScope()
+      if (generationRef.current[mode] !== token) return
       await abandonHistoryAgentRunV1({
-        scope: await resolveScopeLike(projectId),
+        scope,
         runId: current.unsafeRunId,
       })
+      if (generationRef.current[mode] !== token) return
       setLane(mode, { ...emptyLane(), message: '已放弃结果不可判定的旧运行，可以重新生成。' })
     } catch (error) {
+      if (generationRef.current[mode] !== token) return
       const message = messageOf(error)
       setLane(mode, { ...current, busy: false, message })
       onErrorRef.current(`历史 Agent 放弃失败：${message}。`)
     }
-  }, [projectId, setLane])
+  }, [resolveCurrentScope, setLane])
 
   const activeId = (state: HistoryAgentLaneState, kind: 'event' | 'keyword') => (
     state.candidate?.request.targetKind === kind ? state.candidate.request.targetId : null
@@ -249,6 +304,8 @@ export function useHistoryAI(options: Options) {
   return {
     consult,
     storm,
+    recoveryError,
+    retryRecovery,
     consultEventId: activeId(consult, 'event'),
     stormEventId: activeId(storm, 'event'),
     consultKeywordId: activeId(consult, 'keyword'),

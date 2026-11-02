@@ -88,6 +88,8 @@ export default function HistoryPanel({ project }: Props) {
   const aiConfig = useAIConfigStore(state => state.config)
   const historyAI = useHistoryAI({
     projectId: project.id!,
+    activeWorldId: project.activeWorldId,
+    activeWorkId: project.activeWorkId,
     worldGroupId: scopeGroupId,
     aiConfig,
     reloadEvents: () => loadEvents(project.id!),
@@ -266,6 +268,15 @@ export default function HistoryPanel({ project }: Props) {
           历史总述与纪年
         </button>
       </nav>
+
+      {historyAI.recoveryError && (
+        <div role="alert" className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-xs text-text-secondary">
+          <p>{historyAI.recoveryError}</p>
+          <button type="button" onClick={historyAI.retryRecovery} className="mt-2 rounded-md border border-border px-2.5 py-1 text-[11px]">
+            重新检查历史候选
+          </button>
+        </div>
+      )}
 
       {(historyAI.consult.unsafeRunId != null || historyAI.storm.unsafeRunId != null) && (
         <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-xs text-text-secondary">
