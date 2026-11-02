@@ -33,7 +33,14 @@ const serviceMocks = vi.hoisted(() => ({
   recoverImportedProofs: vi.fn(),
   retryBlocker: vi.fn(),
   runAuthorized: vi.fn(),
+  sourceAdmission: vi.fn(),
+  readEvidence: vi.fn(),
 }))
+
+vi.mock('../../src/lib/open-world/source-admission', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/lib/open-world/source-admission')>()
+  return { ...actual, readTextOpenWorldProductionSourceKindV1: serviceMocks.sourceAdmission }
+})
 
 vi.mock('../../src/lib/open-world/creator-brief-persistence', async importOriginal => {
   const actual = await importOriginal<typeof import('../../src/lib/open-world/creator-brief-persistence')>()
@@ -62,6 +69,7 @@ vi.mock('../../src/lib/product-production/service', async importOriginal => {
     recoverImportedProductProductionProofsV1: serviceMocks.recoverImportedProofs,
     retryProductProductionBlockerV1: serviceMocks.retryBlocker,
     runAuthorizedProductProductionV1: serviceMocks.runAuthorized,
+    readProductProductionTaskEvidenceV1: serviceMocks.readEvidence,
   }
 })
 
@@ -91,7 +99,7 @@ vi.mock('../../src/lib/product-production/recovery-policy', async importOriginal
   }
 })
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true)
 
 const SCOPE = { projectId: 41, worldId: 42, workId: 43 }
 const CREATOR_BRIEF_HASH = 'brief-hash-0123456789abcdef'
@@ -318,6 +326,8 @@ describe('TOW-G5-04 · production start UI', () => {
     serviceMocks.recoverImportedProofs.mockResolvedValue(recoveredImportedProgress)
     serviceMocks.retryBlocker.mockResolvedValue(null)
     serviceMocks.runAuthorized.mockResolvedValue(recoveryProgress)
+    serviceMocks.sourceAdmission.mockResolvedValue('world-release')
+    serviceMocks.readEvidence.mockResolvedValue([{ type: 'model.responded', raw: 'historical-paid-output-kept' }])
     host = document.createElement('div')
     document.body.append(host)
     root = createRoot(host)
@@ -326,6 +336,84 @@ describe('TOW-G5-04 · production start UI', () => {
   afterEach(async () => {
     await act(async () => root.unmount())
     host.remove()
+  })
+
+  it('005 冷刷新必须先核真实来源，历史 novel 既不自动续跑也不隐藏费用与原回答证据', async () => {
+    let resolve!: (kind: 'novel') => void
+    serviceMocks.sourceAdmission.mockReturnValue(new Promise<'novel'>(done => { resolve = done }))
+    serviceMocks.readDetails.mockResolvedValue({ ...lockedDetails, build: { ...lockedDetails.build, status: 'building' } })
+    serviceMocks.readProgress.mockResolvedValue({ ...recoveryProgress, tasks: recoveryProgress.tasks.map(task => ({ ...task, runId: 301 })) })
+    await act(async () => root.render(createElement(ProductProductionStudio, {
+      scope: SCOPE, allowedProducts: ['text-open-world'], initialProductionId: 91, productionOnly: true,
+    })))
+    await waitFor(() => expect(host.querySelector('h1')?.textContent).toContain(lockedProduction.title))
+    expect(serviceMocks.runAuthorized).not.toHaveBeenCalled()
+    expect(host.textContent).toContain('正在核验当前制作')
+    await act(async () => resolve('novel'))
+    await waitFor(() => expect(host.textContent).toContain('历史来源只读核验'))
+    expect(serviceMocks.runAuthorized).not.toHaveBeenCalled()
+    expect(button(host, '继续自动制作').disabled).toBe(true)
+    expect(host.textContent).toContain('0.20')
+    await act(async () => button(host, '查看冻结证据').click())
+    await waitFor(() => expect(host.textContent).toContain('historical-paid-output-kept'))
+    expect(serviceMocks.readEvidence).toHaveBeenCalledWith({ scope: SCOPE, productionId: 91, taskKey: 'p2.experience-design' })
+  })
+
+  it('005 同一冷刷新在 World 来源完成核验后保留自动续跑', async () => {
+    let resolve!: (kind: 'world-release') => void
+    serviceMocks.sourceAdmission.mockReturnValue(new Promise<'world-release'>(done => { resolve = done }))
+    serviceMocks.readDetails.mockResolvedValueOnce({ ...lockedDetails, build: { ...lockedDetails.build, status: 'building' } })
+      .mockResolvedValue(lockedDetails)
+    await act(async () => root.render(createElement(ProductProductionStudio, {
+      scope: SCOPE, allowedProducts: ['text-open-world'], initialProductionId: 91, productionOnly: true,
+    })))
+    await waitFor(() => expect(host.querySelector('h1')?.textContent).toContain(lockedProduction.title))
+    expect(serviceMocks.runAuthorized).not.toHaveBeenCalled()
+    expect(serviceMocks.sourceAdmission).toHaveBeenCalledTimes(1)
+    await act(async () => resolve('world-release'))
+    await waitFor(() => expect(serviceMocks.runAuthorized).toHaveBeenCalledTimes(1))
+    expect(serviceMocks.runAuthorized.mock.calls[0][0]).toMatchObject({ scope: SCOPE, productionId: 91 })
+  })
+
+  it('005 来源核验失败保持关闭，不以 nullable locator 或旧状态解锁自动执行', async () => {
+    serviceMocks.sourceAdmission.mockRejectedValue(new Error('frozen source hash damaged'))
+    serviceMocks.readDetails.mockResolvedValue({ ...lockedDetails, build: { ...lockedDetails.build, status: 'building' } })
+    await act(async () => root.render(createElement(ProductProductionStudio, {
+      scope: SCOPE, allowedProducts: ['text-open-world'], initialProductionId: 91, productionOnly: true,
+    })))
+    await waitFor(() => expect(host.querySelector('h1')?.textContent).toContain(lockedProduction.title))
+    expect(serviceMocks.runAuthorized).not.toHaveBeenCalled()
+    await waitFor(() => expect(host.textContent).toContain('frozen source hash damaged'))
+    expect(button(host, '继续自动制作').disabled).toBe(true)
+  })
+
+  it('005 旧 scope 的晚到 World 结果不能解锁另一 scope 的 novel 制作', async () => {
+    const otherScope = { projectId: 51, worldId: 52, workId: 53 }
+    const otherProduction = { ...lockedProduction, ...otherScope, id: 191, title: '当前小说来源' }
+    let resolveOld!: (kind: 'world-release') => void
+    let resolveCurrent!: (kind: 'novel') => void
+    const old = new Promise<'world-release'>(done => { resolveOld = done })
+    const current = new Promise<'novel'>(done => { resolveCurrent = done })
+    serviceMocks.sourceAdmission.mockImplementation(({ productionId }) => productionId === 91 ? old : current)
+    serviceMocks.listWorkspace.mockImplementation(async scope => ({ worldReleases: [], productions: scope.projectId === SCOPE.projectId ? [lockedProduction] : [otherProduction] }))
+    serviceMocks.readDetails.mockImplementation(async (_scope, id) => ({ ...lockedDetails,
+      production: id === 91 ? lockedProduction : otherProduction,
+      build: { ...lockedDetails.build, status: 'building' } }))
+    await act(async () => root.render(createElement(ProductProductionStudio, {
+      scope: SCOPE, allowedProducts: ['text-open-world'], initialProductionId: 91, productionOnly: true,
+    })))
+    await waitFor(() => expect(host.querySelector('h1')?.textContent).toContain(lockedProduction.title))
+    expect(serviceMocks.sourceAdmission).toHaveBeenCalledWith({ scope: SCOPE, productionId: 91 })
+    await act(async () => root.render(createElement(ProductProductionStudio, {
+      scope: otherScope, allowedProducts: ['text-open-world'], initialProductionId: 191, productionOnly: true,
+    })))
+    await waitFor(() => expect(serviceMocks.sourceAdmission).toHaveBeenCalledWith({ scope: otherScope, productionId: 191 }))
+    await act(async () => resolveOld('world-release'))
+    expect(serviceMocks.runAuthorized).not.toHaveBeenCalled()
+    await act(async () => resolveCurrent('novel'))
+    await waitFor(() => expect(host.textContent).toContain('历史来源只读核验'))
+    expect(host.querySelector('h1')?.textContent).toContain(otherProduction.title)
+    expect(serviceMocks.runAuthorized).not.toHaveBeenCalled()
   })
 
   it('要求完整权利声明，零写预览展示DAG、依赖、预算、模型和唯一哈希，再调用专用授权服务', async () => {

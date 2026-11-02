@@ -1389,10 +1389,134 @@ if (!productRuntimeInstanceSource.includes("input.productSource.kind !== 'releas
   || /worldReleaseId\??:\s*number/.test(productRuntimeInstanceSource)) {
   violations.push('[㉝底层实例闸门] 正式产品必须统一拒绝 WorldRelease/草稿直启，禁止恢复 legacy 特例')
 }
-if (!productRuntimeCoreSource.includes('verifyFormalRuntimeSourceV1(')
-  || !productRuntimeCoreSource.includes('sourceCount !== 1')
+/** Follow this one approved extraction through real TS bindings. The source
+ * count guard must belong to the called/exported verifier, not a comment,
+ * unrelated module, shadowed local call or merely concatenated source text. */
+function hasBoundFormalRuntimeSourceGuardV1(coreText, authorityText) {
+  const corePath = '/runtime-boundary/runtime-core.ts'
+  const authorityPath = '/runtime-boundary/runtime-source-authority.ts'
+  const files = new Map([[corePath, coreText], [authorityPath, authorityText]])
+  const options = { target: ts.ScriptTarget.Latest, module: ts.ModuleKind.ESNext, noLib: true, noEmit: true }
+  const host = ts.createCompilerHost(options)
+  host.getSourceFile = file => files.has(file)
+    ? ts.createSourceFile(file, files.get(file), options.target, true, ts.ScriptKind.TS) : undefined
+  host.fileExists = file => files.has(file)
+  host.readFile = file => files.get(file)
+  host.resolveModuleNames = (names, containingFile) => names.map(name => (
+    containingFile === corePath && name === './runtime-source-authority'
+      ? { resolvedFileName: authorityPath, extension: ts.Extension.Ts } : undefined
+  ))
+  const program = ts.createProgram([corePath, authorityPath], options, host)
+  const checker = program.getTypeChecker(), core = program.getSourceFile(corePath)
+  const authority = program.getSourceFile(authorityPath)
+  const unalias = symbol => symbol && (symbol.flags & ts.SymbolFlags.Alias)
+    ? checker.getAliasedSymbol(symbol) : symbol
+  const verifierName = 'verifyFormalRuntimeSourceV1'
+  const coreModule = checker.getSymbolAtLocation(core)
+  if (!coreModule) return false
+  const exported = checker.getExportsOfModule(coreModule)
+    .find(symbol => symbol.name === verifierName)
+  const target = unalias(exported)
+  const verifier = target?.declarations?.find(node => ts.isFunctionDeclaration(node) && node.body
+    && node.name?.text === verifierName && (node.getSourceFile() === core || node.getSourceFile() === authority))
+  if (!verifier) return false
+  if (verifier.getSourceFile() === authority) {
+    const imported = core.statements.some(node => ts.isImportDeclaration(node)
+      && stringValue(node.moduleSpecifier) === './runtime-source-authority' && !node.importClause?.isTypeOnly
+      && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)
+      && node.importClause.namedBindings.elements.some(entry => !entry.isTypeOnly
+        && (entry.propertyName ?? entry.name).text === verifierName
+        && unalias(checker.getSymbolAtLocation(entry.name)) === target))
+    if (!imported) return false
+  }
+  let called = false
+  visit(core, node => {
+    if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)
+      || unalias(checker.getSymbolAtLocation(node.expression)) !== target) return
+    let parent = node.parent
+    while (parent && parent !== verifier) parent = parent.parent
+    if (parent !== verifier) called = true
+  })
+  if (!called) return false
+  const parameter = verifier.parameters[0]?.name
+  if (!parameter || !ts.isIdentifier(parameter)) return false
+  const counts = verifier.body.statements.filter(ts.isVariableStatement)
+    .flatMap(node => node.declarationList.flags & ts.NodeFlags.Const ? [...node.declarationList.declarations] : [])
+    .filter(node => ts.isIdentifier(node.name) && node.name.text === 'sourceCount')
+  if (counts.length !== 1) return false
+  const count = counts[0], length = count.initializer
+  if (!length || !ts.isPropertyAccessExpression(length) || length.name.text !== 'length'
+    || !ts.isCallExpression(length.expression)) return false
+  const filter = length.expression, filterAccess = filter.expression
+  if (!ts.isPropertyAccessExpression(filterAccess) || filterAccess.name.text !== 'filter'
+    || !ts.isArrayLiteralExpression(filterAccess.expression) || filter.arguments.length !== 1) return false
+  const elements = filterAccess.expression.elements
+  if (elements.length !== 2 || !elements.every(node => ts.isPropertyAccessExpression(node)
+    && ts.isIdentifier(node.expression) && node.expression.text === parameter.text)
+    || elements[0].name.text !== 'productReleaseId' || elements[1].name.text !== 'productBuildId') return false
+  const predicate = filter.arguments[0]
+  if (!ts.isArrowFunction(predicate) || predicate.parameters.length !== 1
+    || !ts.isIdentifier(predicate.parameters[0].name) || !ts.isBinaryExpression(predicate.body)
+    || !ts.isIdentifier(predicate.body.left) || predicate.body.left.text !== predicate.parameters[0].name.text
+    || predicate.body.operatorToken.kind !== ts.SyntaxKind.ExclamationEqualsToken
+    || predicate.body.right.kind !== ts.SyntaxKind.NullKeyword) return false
+  return verifier.body.statements.some(node => {
+    if (!ts.isIfStatement(node) || !ts.isBlock(node.thenStatement)
+      || !ts.isThrowStatement(node.thenStatement.statements[0])) return false
+    const rejectsNonUnique = part => {
+      if (ts.isParenthesizedExpression(part)) return rejectsNonUnique(part.expression)
+      if (!ts.isBinaryExpression(part)) return false
+      if (part.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
+        return rejectsNonUnique(part.left) || rejectsNonUnique(part.right)
+      }
+      return part.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken
+        && ts.isIdentifier(part.left) && checker.getSymbolAtLocation(part.left) === checker.getSymbolAtLocation(count.name)
+        && ts.isNumericLiteral(part.right) && part.right.text === '1'
+    }
+    return rejectsNonUnique(node.expression)
+  })
+}
+
+const productRuntimeSourceAuthoritySource = read('src/lib/product/runtime-source-authority.ts')
+if (!hasBoundFormalRuntimeSourceGuardV1(productRuntimeCoreSource, productRuntimeSourceAuthoritySource)
   || /\bcreateSession\s*:/.test(productRuntimeStoreSource)) {
   violations.push('[㉝运行核心旁路] ProductRuntime core 必须验证正式分支来源，store 不得暴露无绑定创建入口')
+}
+
+// Narrow guard self-controls. This does not replace the separate global AST
+// anti-bypass work tracked by SFQA-134.
+const sourceGuardBodySelfTestV1 = `
+  const sourceCount = [session.productReleaseId, session.productBuildId].filter(value => value != null).length;
+  if (sourceCount !== 1 || !session.runtimeSourceHash) { throw new Error('unique frozen source required'); }
+  return session;
+`
+const sourceGuardAuthoritySelfTestV1 = `export function verifyFormalRuntimeSourceV1(session) { ${sourceGuardBodySelfTestV1} }`
+const sourceGuardCoreSelfTestV1 = `
+  import { verifyFormalRuntimeSourceV1 } from './runtime-source-authority';
+  export { verifyFormalRuntimeSourceV1 } from './runtime-source-authority';
+  export function appendFormal(session) { return verifyFormalRuntimeSourceV1(session); }
+`
+const sourceGuardSelfTestsV1 = [
+  ['valid-extracted', sourceGuardCoreSelfTestV1, sourceGuardAuthoritySelfTestV1, true],
+  ['valid-inline', `${sourceGuardAuthoritySelfTestV1} export function appendFormal(s) { return verifyFormalRuntimeSourceV1(s); }`, '', true],
+  ['missing-import', sourceGuardCoreSelfTestV1.replace(/import[^;]+;/, ''), sourceGuardAuthoritySelfTestV1, false],
+  ['wrong-module', sourceGuardCoreSelfTestV1.replaceAll('./runtime-source-authority', './unrelated'), sourceGuardAuthoritySelfTestV1, false],
+  ['missing-reexport', sourceGuardCoreSelfTestV1.replace(/export \{[^;]+;/, ''), sourceGuardAuthoritySelfTestV1, false],
+  ['missing-call', sourceGuardCoreSelfTestV1.replace('return verifyFormalRuntimeSourceV1(session)', 'return session'), sourceGuardAuthoritySelfTestV1, false],
+  ['comment-call', sourceGuardCoreSelfTestV1.replace('return verifyFormalRuntimeSourceV1(session)', 'return session /* verifyFormalRuntimeSourceV1(session) */'), sourceGuardAuthoritySelfTestV1, false],
+  ['shadowed-call', sourceGuardCoreSelfTestV1.replace('appendFormal(session)', 'appendFormal(session, verifyFormalRuntimeSourceV1)'), sourceGuardAuthoritySelfTestV1, false],
+  ['missing-rejection', sourceGuardCoreSelfTestV1, sourceGuardAuthoritySelfTestV1.replace('sourceCount !== 1', 'false'), false],
+  ['non-rejecting-condition', sourceGuardCoreSelfTestV1, sourceGuardAuthoritySelfTestV1.replace('sourceCount !== 1 || !session.runtimeSourceHash', 'sourceCount !== 1 && false'), false],
+  ['unreachable-throw', sourceGuardCoreSelfTestV1, sourceGuardAuthoritySelfTestV1.replace("throw new Error('unique frozen source required')", "return session; throw new Error('unique frozen source required')"), false],
+  ['wrong-guarded-tuple', sourceGuardCoreSelfTestV1, sourceGuardAuthoritySelfTestV1.replace('session.productBuildId', 'session.unrelatedId'), false],
+  ['only-comment-and-string', `// verifyFormalRuntimeSourceV1(session); sourceCount !== 1
+const text = 'verifyFormalRuntimeSourceV1(session); sourceCount !== 1'`, sourceGuardAuthoritySelfTestV1, false],
+  ['unrelated-count-check', sourceGuardCoreSelfTestV1, `export function verifyFormalRuntimeSourceV1(session) { return session; } function unrelated(session) { ${sourceGuardBodySelfTestV1} }`, false],
+]
+for (const [name, core, authority, expected] of sourceGuardSelfTestsV1) {
+  if (hasBoundFormalRuntimeSourceGuardV1(core, authority) !== expected) {
+    violations.push(`[㉝来源守卫自测] ${name} 未能区分真实绑定与旁路`)
+  }
 }
 for (const symbol of [
   'appendProductRuntimeEvent',

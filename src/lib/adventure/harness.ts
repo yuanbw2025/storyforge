@@ -17,6 +17,7 @@ import {
 } from '../agent/run/runtime-scope'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import { db } from '../db/schema'
+import { assertTextOpenWorldSessionNewWorkV1 } from '../open-world/source-admission'
 import { verifyProductRuntimeSessionSourceV1 } from '../product-production/preview-source'
 import { assembleContext } from '../registry/assemble-context'
 import {
@@ -334,6 +335,11 @@ export async function generateAdventureRuntimeCandidateV1(input: {
   signal?: AbortSignal
   onRunCreated?: (runId: number) => void | Promise<void>
 }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: AdventureRuntimeCandidateV1 }> {
+  input = { ...input, scope: structuredClone(input.scope), ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }) }
+  if ((await db.productRuntimeSessions.get(input.productRuntimeSessionId))?.kind === 'text-open-world') {
+    await assertTextOpenWorldSessionNewWorkV1({ scope: input.scope, sessionId: input.productRuntimeSessionId,
+      operation: '新冒险兼容模型运行' })
+  }
   const objective = text(input.objective, 'objective', 4_000)
   const skill = getAgentSkillV1(input.skillId)
   const boundary = await captureAdventureRuntimeHarnessBoundaryV1({
