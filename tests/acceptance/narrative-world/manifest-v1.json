@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261103-quality-ready27-integration-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261103-quality-050-056-integration-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -634,6 +634,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261102-quality-priority31-final-05.json",
         "workPackage": "quality-priority31-final-05",
         "note": "Preserved before ready25 combined-source verification; frozen gold corpus and evaluation thresholds remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-ready27-integration-v1.json",
+        "workPackage": "SFQA-ready27-integration",
+        "note": "Preserved exact ready27 receipt before the F1 world-package and SFQA-050 dispatch-source fingerprint refresh; original observations and corpus remain unchanged."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
