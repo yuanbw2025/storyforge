@@ -145,8 +145,12 @@ export default function CommunityShareFlow({ selectionRevision, buildSnapshot }:
     <p className="text-xs text-text-muted">只分享这里勾选的公开内容。原项目、未选章节、原文文件、笔记、提示词和本地设置不会上传。</p>
     <label className="flex gap-2 text-xs"><input type="checkbox" checked={rights} onChange={event => setRights(event.target.checked)} />
       我确认拥有所选内容的公开发布权；拆书不会上传原文，引用和第三方内容需另行取得权利。</label>
-    {config && <a className="text-xs underline" href={`${config.apiOrigin}/community-works/policy`}
-      target="_blank" rel="noopener noreferrer">阅读社区内容与审核规则 ↗</a>}
+    {config && <nav aria-label="社区作品集入口" className="flex flex-wrap gap-3 text-xs">
+      <a className="underline" href={`${config.apiOrigin}/community-works/`} target="_blank" rel="noopener noreferrer">浏览社区作品集 ↗</a>
+      <a className="underline" href={`${config.apiOrigin}/community-works/library`} target="_blank" rel="noopener noreferrer">阅读空间：书架、消息与花篮 ↗</a>
+      <a className="underline" href={`${config.apiOrigin}/community-works/me`} target="_blank" rel="noopener noreferrer">管理投稿与作品更新 ↗</a>
+      <a className="underline" href={`${config.apiOrigin}/community-works/policy`} target="_blank" rel="noopener noreferrer">内容与审核规则 ↗</a>
+    </nav>}
     <button type="button" disabled={!rights || busy} onClick={() => {
       setBusy(true); setMessage(''); setSeal(null)
       void buildSnapshot().then(sealPublicSnapshotV1).then(setSeal)

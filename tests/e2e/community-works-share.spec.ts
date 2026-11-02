@@ -53,6 +53,12 @@ test('community sharing stays hidden by default and previews only author-selecte
   for (let index = 0; index < 4; index++) await expect(boxes.nth(index)).not.toBeChecked()
 
   await boxes.nth(2).check()
+  const communityOrigin = process.env.VITE_STORYFORGE_COMMUNITY_API_URL
+  if (communityOrigin && process.env.VITE_STORYFORGE_COMMUNITY_SUPABASE_URL && process.env.VITE_STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY) {
+    const navigation = panel.getByRole('navigation', { name: '社区作品集入口' })
+    await expect(navigation.getByRole('link', { name: /阅读空间/ })).toHaveAttribute('href', `${new URL(communityOrigin).origin}/community-works/library`)
+    await expect(navigation.getByRole('link', { name: /管理投稿/ })).toHaveAttribute('target', '_blank')
+  }
   await panel.getByRole('checkbox', { name: /我确认拥有所选内容/ }).check()
   await panel.getByRole('button', { name: '生成公开预览' }).click()
   const preview = page.getByLabel('投稿公开预览')
