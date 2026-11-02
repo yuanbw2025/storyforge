@@ -62,6 +62,15 @@ beforeEach(async () => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); db.close() })
 
 describe('SFQA-098/099 · actual review dialog and governed persistence', () => {
+  it('does not turn model praise in an empty report into a product quality certification', async () => {
+    const raw = '{"summary":"章纲逻辑与设定完全匹配，质量通过","issues":[]}'
+    complete.mockResolvedValue(raw)
+    await click('开始诊断')
+    expect(host.querySelector('[data-testid=chapter-review-summary]')?.textContent?.trim()).toBe('本次诊断未定位到问题，请继续核对原稿。')
+    expect(host.querySelector('pre')?.textContent).toBe(raw)
+    expect(apply).not.toHaveBeenCalled()
+  })
+
   it.each(['', 'invalid json', '{"summary":"完成","issues":null}'])('shows %j as failure; only explicit retry makes another call and retains the failed raw response', async raw => {
     complete.mockResolvedValueOnce(raw).mockResolvedValueOnce('{"summary":"本次未定位到问题","issues":[]}')
     await click('开始诊断')

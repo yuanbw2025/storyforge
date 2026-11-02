@@ -305,7 +305,9 @@ export default function ChapterReviewDialog({
               {/* Summary */}
               <div className="bg-bg-surface border border-border rounded-md px-3 py-2">
                 <div className="text-[10px] text-text-muted mb-1">诊断总结</div>
-                <div className="text-xs text-text-secondary">{diagnosis.summary}</div>
+                <div className="text-xs text-text-secondary" data-testid="chapter-review-summary">
+                  {diagnosis.issues.length ? diagnosis.summary : '本次诊断未定位到问题，请继续核对原稿。'}
+                </div>
                 {diagnosis.rawOutput !== undefined && (
                   <details className="text-xs text-text-muted mt-2">
                     <summary>查看诊断原始响应</summary>
