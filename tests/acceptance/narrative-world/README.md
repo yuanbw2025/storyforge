@@ -543,3 +543,5 @@ PR208/mainline integration receipt: `baseline-20261027-pr208-integration-v3.json
 2026-10-27 长篇后续修复与 main `301d38ef` 再次集成：双方既有回执原件保留，新增 continuation-v3 回执须独立执行并逐项核对观察；不能用输入摘要更新替代观察验证。
 
 continuation-v3 集成的四个文件分别覆盖 NW-0B 25 项、IR codec 73 项、领域投影 17 项与独立领域 corpus 12 项；四者共 127 项。旧长篇 222 项回归中的 NW 子集为前 115 项，不包含独立 corpus；[口径更正](../longform-stability/world-readback-20261027-8aacf3b0-clarification-v1.json)保留原记录并说明，不能把投影测试当作 corpus 回执默认回读。
+
+2026-11-02 独立质量修复 SFQA-015/054 更新来源能力令牌和禁止表测试断言；活动回执为 `baseline-20261102-quality-independent-01.json`。实际生成和默认回读各 25 项通过，290 个输入摘要核对一致；全部确定性观察、问题和统计与保留的 release405-mainc5 回执相同，原 corpus 与旧回执字节未变。模型调用、产品 E2E 和人工评阅在该回执中仍为 0；不表示世界模型质量或产品验收升级。

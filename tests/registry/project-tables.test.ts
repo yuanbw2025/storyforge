@@ -85,10 +85,12 @@ describe('PROJECT_TABLES 当前注册表', () => {
       expect(publishable.filter(spec => spec.worldSemantic?.area === 'relations').map(spec => spec.name))
         .toEqual(expect.arrayContaining(['characterRelations']))
       const names = publishable.map(spec => spec.name)
-      expect(names).not.toEqual(expect.arrayContaining([
+      for (const forbidden of [
         'productMediaAssets', 'productMediaBlobs', 'productBuilds', 'productReleases',
         'productRuntimeSessions', 'narrativeModules', 'narrativeNodes',
-      ]))
+      ]) {
+        expect(names).not.toContain(forbidden)
+      }
     })
   })
 
