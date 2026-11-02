@@ -787,6 +787,9 @@ export interface ContextResourceDescriptorV1 {
   /** Retrieval policy identity, independent from Canon edits. */
   policyRevision: number
   policyHash: string
+  /** false excludes automatic selection and model resource tools. Author
+   * library viewing remains separate; absent legacy descriptors stay enabled. */
+  automaticSelectionEnabled?: boolean
   scope: {
     projectId: number
     worldId?: number
