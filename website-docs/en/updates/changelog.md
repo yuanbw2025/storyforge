@@ -1,5 +1,12 @@
 # Changelog
 
+
+## November 3, 2026 · Formal release and continuity evidence
+
+- Formal v4.0.5 was published on October 30, including editing recovery, chapter instructions, model configuration and merged product updates. See [compatibility](/en/updates/compatibility) for downloads, fixed source and data formats. Export a complete backup before updating in the original data environment.
+- [PR #246](https://github.com/yuanbw2025/storyforge/pull/246) merged November 2 as `501e8548`: source reads bind frozen identities, continuity reports reject overlapping repeated quotes as unique evidence, and two regression checks are strengthened. See [continuity](/en/features/longform/continuity).
+- Further quality repairs, community sharing, empty TTRPG sessions and model-default branches remain unmerged; see [development status](/en/updates/development-status). Dependencies and equivalent patches are deduplicated rather than counted as separate features.
+
 ## October 30, 2026 · Longform save acknowledgement and recovery
 
 - [PR #215](https://github.com/yuanbw2025/storyforge/pull/215) merged as `f73623b1`. Check saving indicators when editing work details, characters, settings and outlines; failed saves retain input for explicit retry. Save prose candidates before reload; formal prose still requires adoption. See [planning](/en/features/longform/planning) and [continuity](/en/features/longform/continuity).

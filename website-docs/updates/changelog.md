@@ -1,5 +1,12 @@
 # 更新日志
 
+
+## 2026-11-03 · 正式版本与连续性证据核对
+
+- 正式 v4.0.5 已于 10 月 30 日发布，包含编辑恢复、逐章要求、模型配置及已合并产品增量。下载、固定源码与数据格式见[版本兼容](/updates/compatibility)。升级先导出完整备份，再在原数据环境覆盖安装。
+- [PR #246](https://github.com/yuanbw2025/storyforge/pull/246) 已于 11 月 2 日合入 `501e8548`：来源读取绑定冻结身份，连续性报告拒绝把重叠重复引文当作唯一证据，并加强两类回归检查。核对方式见[连续性指南](/features/longform/continuity)。
+- 质量整改、社区分享、跑团空团局和模型默认值等后续分支仍未合入，详见[开发记录](/updates/development-status)。按依赖和补丁去重，不把多个验证分支计作多套功能。
+
 ## 2026-10-30 · 长篇保存确认与异常恢复
 
 - [PR #215](https://github.com/yuanbw2025/storyforge/pull/215) 已合入 `f73623b1`。编辑作品资料、人物、设定和大纲时核对保存提示，失败保留输入并明确重试；正文候选先保存再刷新，正式正文仍需采纳。操作见[规划](/features/longform/planning)与[连续性](/features/longform/continuity)。
