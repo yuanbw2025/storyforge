@@ -55,6 +55,9 @@
 - 调用、预算、repair、stale、媒资权利和确认门；
 - provider capability 和 Release 完成门。
 
+Image/Video Prompt IR 按 `shotKey` 唯一且精确覆盖当前集全部镜头；目标与 revision 全部校验后才写入。
+切集在同一事务内读取生产根、核对 `expectedRevision` 和集数范围并更新版本；旧版本冲突由作者刷新复核，不自动重试。
+
 每次运行冻结最终模板、变量、版本和 hash，保证候选可解释、Release 可复现。
 
 ## 6. 物料与参考帧
