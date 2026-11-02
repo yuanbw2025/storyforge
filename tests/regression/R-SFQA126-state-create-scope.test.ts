@@ -92,7 +92,7 @@ it('labels the actual list published by applyDiffs before a later frozen-owner w
   const next = await createWorldWork(scope.projectId, { title: '差异操作的作品', kind: 'novel', novelProfile: 'long' })
   const current = { ...scope, workId: next.id! }
   const visible = await useStateCardStore.getState().addCard({ ...input(scope.projectId), entityName: '差异操作的原卡' }, { scope: current })
-  await useStateCardStore.getState().loadAll(scope)
+  await useStateCardStore.getState().loadAll(current)
   await useStateCardStore.getState().applyDiffs(current, [])
   expect(useStateCardStore.getState().loadedScope).toEqual(current)
   expect(useStateCardStore.getState().cards.map(row => row.id)).toEqual([visible])
@@ -133,4 +133,114 @@ it('does not recreate a removed frozen Work or write into its active sibling', a
   await expect(useStateCardStore.getState().addCard(input(scope.projectId), { scope })).rejects.toThrow('不是当前工作区的有效')
   expect(await db.stateCards.count()).toBe(0)
   expect(await db.works.get(scope.workId)).toBeUndefined()
+})
+
+it('legacy add during a real pending owner load never appends into the previous display cache', async () => {
+  const { scope } = await workspace()
+  const next = await createWorldWork(scope.projectId, { title: '正在读取的作品B', kind: 'novel', novelProfile: 'long' })
+  const current = await switchActiveWork(scope.projectId, next.id!)
+  const store = useStateCardStore.getState()
+  const aId = await store.addCard(input(scope.projectId), { scope })
+  const bId = await store.addCard({ ...input(scope.projectId), entityName: 'B已有卡片' }, { scope: current })
+  await store.loadAll(scope)
+  const beforeA = structuredClone(useStateCardStore.getState().cards)
+  expect(beforeA.map(card => card.id)).toEqual([aId])
+  const originalA = await db.stateCards.get(aId)
+  let release!: () => void, ready!: () => void
+  const held = new Promise<void>(resolve => { release = resolve })
+  const reached = new Promise<void>(resolve => { ready = resolve })
+  const originalRead = scopeApi.readOwnedRows
+  let waiting = false
+  vi.spyOn(scopeApi, 'readOwnedRows').mockImplementation(async <T>(...args: Parameters<typeof originalRead>) => {
+    const rows = await originalRead<T>(...args)
+    if (!waiting && args[1] === 'stateCards' && args[0].projectId === current.projectId
+      && args[0].worldId === current.worldId && 'workId' in args[0] && args[0].workId === current.workId) {
+      waiting = true; ready(); await held
+    }
+    return rows
+  })
+  const loadingB = store.loadAll(current)
+  let addedId = 0
+  try {
+    await reached
+    expect(useStateCardStore.getState().loading).toBe(true)
+    expect(useStateCardStore.getState().loadedScope).toBeNull()
+    addedId = await store.addCard({ ...input(scope.projectId), entityName: 'B加载期间新增的卡片' })
+    const saved = await db.stateCards.get(addedId)
+    expect(saved?.fields).toBe(fields)
+    expect(await scopeApi.assertRecordInScope(current, 'stateCards', saved, { owner: 'work' })).toBe(true)
+    expect(await db.stateCards.get(aId)).toEqual(originalA)
+    expect(useStateCardStore.getState().cards).toEqual(beforeA)
+    expect(useStateCardStore.getState().loading).toBe(true)
+    expect(useStateCardStore.getState().loadedScope).toBeNull()
+  } finally { release(); await loadingB }
+  await store.loadAll(current)
+  expect(useStateCardStore.getState().loadedScope).toEqual(current)
+  expect(useStateCardStore.getState().loading).toBe(false)
+  expect(useStateCardStore.getState().cards.map(card => card.id).sort()).toEqual([bId, addedId].sort())
+  expect(await db.stateCards.get(aId)).toEqual(originalA)
+})
+
+it('legacy add after a real owner read failure does not mix the new owner into the retained display cache', async () => {
+  const { scope } = await workspace()
+  const next = await createWorldWork(scope.projectId, { title: '读取失败的作品B', kind: 'novel', novelProfile: 'long' })
+  const current = await switchActiveWork(scope.projectId, next.id!)
+  const store = useStateCardStore.getState()
+  const aId = await store.addCard(input(scope.projectId), { scope })
+  const bId = await store.addCard({ ...input(scope.projectId), entityName: 'B原有卡片' }, { scope: current })
+  await store.loadAll(scope)
+  const beforeA = structuredClone(useStateCardStore.getState().cards)
+  expect(beforeA.map(card => card.id)).toEqual([aId])
+  const originalA = await db.stateCards.get(aId)
+  const readFailure = new Error('B真实读取完成后的受控读取失败')
+  const reported = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const originalRead = scopeApi.readOwnedRows
+  let injected = false
+  vi.spyOn(scopeApi, 'readOwnedRows').mockImplementation(async <T>(...args: Parameters<typeof originalRead>) => {
+    const rows = await originalRead<T>(...args)
+    if (!injected && args[1] === 'stateCards' && args[0].projectId === current.projectId
+      && args[0].worldId === current.worldId && 'workId' in args[0] && args[0].workId === current.workId) {
+      injected = true; throw readFailure
+    }
+    return rows
+  })
+  await store.loadAll(current)
+  expect(injected).toBe(true)
+  expect(reported).toHaveBeenCalledWith('[StateCard] loadAll 失败:', readFailure)
+  expect(useStateCardStore.getState().loading).toBe(false)
+  expect(useStateCardStore.getState().loadedScope).toBeNull()
+  const addedId = await store.addCard({ ...input(scope.projectId), entityName: 'B读取失败后新增的卡片' })
+  const saved = await db.stateCards.get(addedId)
+  expect(saved?.fields).toBe(fields)
+  expect(await scopeApi.assertRecordInScope(current, 'stateCards', saved, { owner: 'work' })).toBe(true)
+  expect(await db.stateCards.get(aId)).toEqual(originalA)
+  expect(useStateCardStore.getState().cards).toEqual(beforeA)
+  await store.loadAll(current)
+  expect(useStateCardStore.getState().loadedScope).toEqual(current)
+  expect(useStateCardStore.getState().cards.map(card => card.id).sort()).toEqual([bId, addedId].sort())
+  expect(await db.stateCards.get(aId)).toEqual(originalA)
+})
+
+it('keeps consecutive legacy creations visible for their actual owner before any view is loaded', async () => {
+  const { scope } = await workspace()
+  const store = useStateCardStore.getState()
+  const first = await store.addCard(input(scope.projectId))
+  const second = await store.addCard({ ...input(scope.projectId), entityName: '同作品第二张卡片' })
+  expect(useStateCardStore.getState().cards.map(card => card.id)).toEqual([first, second])
+  for (const id of [first, second]) expect(await scopeApi.assertRecordInScope(scope, 'stateCards', await db.stateCards.get(id), { owner: 'work' })).toBe(true)
+})
+
+it('labels the first legacy cache owner so a later active Work switch cannot mix its next creation into that list', async () => {
+  const { scope } = await workspace()
+  const next = await createWorldWork(scope.projectId, { title: '随后活动的作品B', kind: 'novel', novelProfile: 'long' })
+  const store = useStateCardStore.getState()
+  const first = await store.addCard(input(scope.projectId))
+  const beforeA = structuredClone(useStateCardStore.getState().cards)
+  expect(beforeA.map(card => card.id)).toEqual([first])
+  expect(useStateCardStore.getState().loadedScope).toEqual(scope)
+  const current = await switchActiveWork(scope.projectId, next.id!)
+  const second = await store.addCard({ ...input(scope.projectId), entityName: 'B后来的卡片' })
+  expect(await scopeApi.assertRecordInScope(current, 'stateCards', await db.stateCards.get(second), { owner: 'work' })).toBe(true)
+  expect(useStateCardStore.getState().cards).toEqual(beforeA)
+  expect(useStateCardStore.getState().loadedScope).toEqual(scope)
 })

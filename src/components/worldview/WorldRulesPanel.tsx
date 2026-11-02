@@ -154,8 +154,9 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
   }, [activeGroupId, project.enableMultiWorld, projectWorldGroups, worldTab])
 
   useEffect(() => {
+    const sequence = loadSequence
     void loadRules().catch(() => undefined)
-    return () => { loadSequence.current++ }
+    return () => { sequence.current++ }
   }, [loadRules])
 
   useEffect(() => {

@@ -79,8 +79,9 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
         const view = state.loadedScope
         const matchingView = view != null && view.projectId === scope.projectId
           && view.worldId === scope.worldId && view.workId === scope.workId
-        return matchingView || (view == null && options?.scope == null)
-          ? { cards: [...state.cards, { ...newCard, id }] } : state
+        if (matchingView) return { cards: [...state.cards, { ...newCard, id }] }
+        return view == null && !state.loading && options?.scope == null && state.cards.length === 0
+          ? { cards: [{ ...newCard, id }], loadedScope: scope } : state
       })
       console.log('[StateCard] 新增:', card.entityName, id)
       return id

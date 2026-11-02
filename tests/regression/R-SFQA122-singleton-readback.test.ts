@@ -32,8 +32,9 @@ describe('SFQA-122 · singleton read/write ownership', () => {
     const { a, b } = await fixture()
     await useGeographyStore.getState().save({ projectId: a.projectId, overview: 'A数据' }, a)
     const aReady = deferred(), aGate = deferred(), bReady = deferred(), bGate = deferred()
-    vi.spyOn(scopes, 'readOwnedRows').mockImplementation(async <T>(scope: WorkspaceScope, table: string, options?: scopes.ScopeReadOptions) => {
-      const rows = await originalRead<T>(scope, table, options)
+    vi.spyOn(scopes, 'readOwnedRows').mockImplementation(async <T>(...args: Parameters<typeof originalRead>) => {
+      const [scope, table] = args
+      const rows = await originalRead<T>(...args)
       if (table === 'geographies') {
         const [ready, gate] = scope.worldId === a.worldId ? [aReady, aGate] : [bReady, bGate]
         ready.resolve(); await gate.promise
@@ -101,8 +102,9 @@ describe('SFQA-122 · singleton read/write ownership', () => {
     await useHistoryStore.getState().loadAll(a)
     const before = useHistoryStore.getState().history
     const ready = deferred(), gate = deferred()
-    vi.spyOn(scopes, 'readOwnedRows').mockImplementation(async <T>(scope: WorkspaceScope, table: string, options?: scopes.ScopeReadOptions) => {
-      const rows = await originalRead<T>(scope, table, options)
+    vi.spyOn(scopes, 'readOwnedRows').mockImplementation(async <T>(...args: Parameters<typeof originalRead>) => {
+      const [, table] = args
+      const rows = await originalRead<T>(...args)
       if (table === 'histories') { ready.resolve(); await gate.promise }
       return rows
     })
