@@ -190,11 +190,11 @@ export default function MotionDramaStudio({ scope, project, page }: Props) {
     const key = scopeKey; const serial = ++selectionSerial.current
     setCandidate(null); setError(''); setBusy(false); setGenerating(false); setActiveRunId(null); setTaskBusy(null); setInspection(null)
     setDraftStatus(''); setTaskState({ key, rows: [] }); setShowPromptLibrary(false); setShowSourceStudio(false); setReleasePreview(null)
-    const studioSubscription = liveQuery(() => loadMotionDramaStudioV1(taskScope)).subscribe({
+    const studioSubscription = liveQuery(async () => await loadMotionDramaStudioV1(taskScope)).subscribe({
       next: () => { if (active && isCurrentScope(key)) void reload().catch(cause => { if (active && isCurrentScope(key)) setError(cause instanceof Error ? cause.message : '读取漫剧素材失败') }) },
       error: cause => { if (active && isCurrentScope(key)) setError(cause instanceof Error ? cause.message : '读取漫剧素材失败') },
     })
-    const taskSubscription = liveQuery(() => listMotionMaterialTasks(taskScope)).subscribe({
+    const taskSubscription = liveQuery(async () => await listMotionMaterialTasks(taskScope)).subscribe({
       next: rows => { if (active && isCurrentScope(key)) setTaskState({ key, rows }) },
       error: cause => { if (active && isCurrentScope(key)) setError(cause instanceof Error ? cause.message : '读取漫剧任务失败') },
     })
@@ -228,10 +228,8 @@ export default function MotionDramaStudio({ scope, project, page }: Props) {
       await stopWaitingMotionDramaTaskV1(taskScope, runId, { generation: detail.task.generation, lastSequence: detail.task.lastSequence })
       const operation = activeGeneration.current
       if (operation?.key === key && operation.runId === runId) operation.stopped = true
-      const rows = await listMotionMaterialTasks(taskScope)
       if (isCurrentScope(key)) {
         if (operation?.key === key && operation.runId === runId) { setBusy(false); setGenerating(false) }
-        setTaskState({ key, rows })
       }
     } catch (cause) { if (isCurrentScope(key)) setError(cause instanceof Error ? cause.message : '记录停止等待失败') }
     finally { if (isCurrentScope(key)) setTaskBusy(null) }

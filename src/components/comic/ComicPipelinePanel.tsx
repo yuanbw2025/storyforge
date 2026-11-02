@@ -109,7 +109,7 @@ export default function ComicPipelinePanel({ scope, adaptation, sourceUnits, pag
     setCandidate(null); setAccepted(new Set()); setAuthorVisualInspectionConfirmed(false)
     setError(''); setBusy(false); setGenerating(false); setActiveRunId(null); setTaskBusy(null); setInspection(null)
     setTaskState({ key, rows: [] })
-    const subscription = liveQuery(() => listComicProfessionalTasksV1(taskScope)).subscribe({
+    const subscription = liveQuery(async () => await listComicProfessionalTasksV1(taskScope)).subscribe({
       next: rows => { if (active && isCurrentScope(key)) setTaskState({ key, rows }) },
       error: cause => { if (active && isCurrentScope(key)) setError(cause instanceof Error ? cause.message : '读取漫画任务失败') },
     })
@@ -141,10 +141,8 @@ export default function ComicPipelinePanel({ scope, adaptation, sourceUnits, pag
       await stopWaitingComicProfessionalTaskV1(taskScope, runId, { generation: detail.task.generation, lastSequence: detail.task.lastSequence })
       const operation = activeGeneration.current
       if (operation?.key === key && operation.runId === runId) operation.stopped = true
-      const rows = await listComicProfessionalTasksV1(taskScope)
       if (isCurrentScope(key)) {
         if (operation?.key === key && operation.runId === runId) { setBusy(false); setGenerating(false) }
-        setTaskState({ key, rows })
       }
     } catch (cause) { if (isCurrentScope(key)) setError(cause instanceof Error ? cause.message : '记录停止等待失败') }
     finally { if (isCurrentScope(key)) setTaskBusy(null) }

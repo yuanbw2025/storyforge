@@ -1,4 +1,6 @@
-import { chat } from '../ai/client'
+import Dexie from 'dexie'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
+import { chat, type ChatResult } from '../ai/client'
 import type {
   AdaptationBriefV1,
   AgentRunRecord,
@@ -18,7 +20,7 @@ import type {
 import type { AdaptationCausalEdgeCandidateV1, AdaptationDecisionCandidateV1, AdaptationSourceFactCandidateV1 } from '../adaptation/analysis'
 import { adoptAdaptationCausalEdgesV1, adoptAdaptationDecisionsV1, adoptAdaptationSourceFactsV1 } from '../adaptation/analysis'
 import { assertAdaptationBriefV1 } from '../adaptation/contracts'
-import { confirmAdaptationBrief, inspectAdaptationFreshness, saveAdaptationBriefDraft } from '../adaptation/source-manifest'
+import { adaptationBriefTransactionTablesV1, confirmAdaptationBrief, inspectAdaptationFreshness, saveAdaptationBriefDraft } from '../adaptation/source-manifest'
 import { db } from '../db/schema'
 import { assembleContext } from '../registry/assemble-context'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
@@ -28,6 +30,7 @@ import { createContextManifestFromAssemblyV1 } from '../agent/run/context-manife
 import { appendAgentRunEventV1, createAgentRunV1, readAgentRunV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { parseAgentRunEventV1 } from '../agent/run/event-schema'
+import type { AgentRunEventTypeV1, AgentRunEventPayloadByTypeV1 } from '../types/agent-run'
 import { agentRunScopeTransactionTablesV1, appendAgentRunEventWithSettlementInTransactionV1, readVerifiedAgentRunInTransactionV1, withAgentRunMutationLockV1 } from '../agent/run/event-store'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import { readOwnedRows } from '../workspace/scope'
@@ -237,6 +240,17 @@ async function append(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, type:
 }
 
 
+/** Only the Brief caller owns the surrounding native transaction and Run lock. */
+function appendBriefEvent<T extends AgentRunEventTypeV1>(
+  scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, type: T, payload: AgentRunEventPayloadByTypeV1[T],
+) {
+  const event = parseAgentRunEventV1({ version: 1, runId: snapshot.run.id,
+    sequence: snapshot.projection.lastSequence + 1, generation: snapshot.projection.generation,
+    projectId: snapshot.run.projectId, worldGroupId: snapshot.run.worldGroupId ?? null,
+    contractHash: snapshot.run.contractHash, type, payload, createdAt: Date.now() })
+  return Dexie.Promise.resolve(appendAgentRunEventWithSettlementInTransactionV1({ snapshot, event, scope }))
+}
+
 class TaskStoppedWaitingError extends Error {
   constructor() { super('作者已停止等待本任务，不会再派发新的模型请求。'); this.name = 'TaskStoppedWaitingError' }
 }
@@ -368,8 +382,8 @@ async function authorizeComicModelRequest(scope: WorkspaceScope, snapshot: Agent
   }))
 }
 
-async function recordComicGenerationFailure(scope: WorkspaceScope, runId: number, stage: ComicProfessionalStageV1, phase: string, error: unknown, responseObserved: boolean, expected: { generation: number; contractHash: string }): Promise<unknown> {
-  const failures: unknown[] = []
+async function recordComicGenerationFailure(scope: WorkspaceScope, runId: number, stage: ComicProfessionalStageV1, phase: string, error: unknown, responseObserved: boolean, expected: { generation: number; contractHash: string }, responseEvidence?: { observation: unknown; persistenceFailures: readonly unknown[] }): Promise<unknown> {
+  const failures: unknown[] = [...(responseEvidence?.persistenceFailures ?? [])]
   let message = error instanceof Error ? error.message : String(error)
   let name = error instanceof Error ? error.name : 'Error'
   let detailOmitted = false
@@ -411,7 +425,7 @@ async function recordComicGenerationFailure(scope: WorkspaceScope, runId: number
     }
   } catch (cause) { failures.push(cause) }
   if (failures.length) {
-    throw Object.assign(new Error(`${message}；任务诊断或状态未能完整保存，请保留当前页面并检查存储。`), { cause: error, persistenceFailures: failures })
+    throw Object.assign(new Error(`${message}；任务诊断或状态未能完整保存，请保留当前页面并检查存储。`), { cause: error, persistenceFailures: failures, ...(responseEvidence ? { observation: responseEvidence.observation } : {}) })
   }
   // Classify and persist with the original error above. Only the UI-facing
   // wrapper is sanitized; its cause keeps the original type/status evidence.
@@ -439,6 +453,7 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   let snapshot = await createAgentRunV1({ scope: input.scope, worldGroupId: null, contract: runContract(input.scope, input.stage) })
   let phase = 'preparation'
   let responseObserved = false
+  let unavailableResponse: Awaited<ReturnType<typeof recordUnavailableCreationResponseV1>> | undefined
   try {
   await onTaskCreated?.call(callbackReceiver, Object.freeze({ runId: snapshot.run.id, generation: snapshot.projection.generation, lastSequence: snapshot.projection.lastSequence }))
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId }); snapshot = await append(input.scope, snapshot, 'step.started', { stepId, attempt: 1 })
@@ -463,14 +478,22 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   const attemptedMessages: ChatMessage[][] = [messages]
   const invoke = async (attemptMessages: ChatMessage[], attempt: number): Promise<string> => {
     phase = 'request'; responseObserved = false
+    const prepared = await recordCreationModelRequestV1({ scope: input.scope, snapshot, stepId, attempt,
+      contextManifestHash: activeContextManifest.manifestHash, messages: attemptMessages })
+    snapshot = prepared.snapshot
     snapshot = await authorizeComicModelRequest(input.scope, snapshot, input.stage, attempt, activeContextManifest.manifestHash, selected.root)
+    const result: ChatResult = {}
     let output: string
-    try { output = await (runAI ? runAI.call(callbackReceiver, attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: `comic.${input.stage}`, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, AbortSignal.timeout(COMIC_MODEL_TIMEOUT_MS))) }
+    try { output = await (runAI ? runAI.call(callbackReceiver, attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: `comic.${input.stage}`, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, AbortSignal.timeout(COMIC_MODEL_TIMEOUT_MS), result)) }
     catch (error) {
-      if (error instanceof DOMException && error.name === 'TimeoutError') throw Object.assign(new Error(`[comic-run] 模型 ${COMIC_MODEL_TIMEOUT_MS / 1_000} 秒未返回；请求结果未知，不会自动重发，也无法确认供应商端已取消。`), { cause: error })
-      throw error
+      const failed = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
+      unavailableResponse = failed
+      snapshot = failed.snapshot
+      if (error instanceof DOMException && error.name === 'TimeoutError') throw Object.assign(new Error(`[comic-run] 模型 ${COMIC_MODEL_TIMEOUT_MS / 1_000} 秒未返回；请求结果未知，不会自动重发，也无法确认供应商端已取消。`), { cause: failed.error })
+      throw failed.error
     }
     responseObserved = true; phase = 'response-persistence'
+    snapshot = await recordCreationModelResponseV1({ snapshot, request: prepared.request, raw: output, result })
     snapshot = await append(input.scope, snapshot, 'model.responded', { stepId, attempt, outputHash: await hashCanonicalValue({ raw: output }) })
     phase = 'protocol'
     return output
@@ -555,7 +578,7 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   snapshot = await append(input.scope, snapshot, 'candidate.persisted', { stepId, attempt, candidateHash: candidate.candidateHash, requiresConfirmation: true })
   return { snapshot, candidate }
   } catch (error) {
-    throw await recordComicGenerationFailure(input.scope, snapshot.run.id, input.stage, phase, error, responseObserved, { generation: snapshot.projection.generation, contractHash: snapshot.projection.contractHash })
+    throw await recordComicGenerationFailure(input.scope, snapshot.run.id, input.stage, phase, error, responseObserved, { generation: snapshot.projection.generation, contractHash: snapshot.projection.contractHash }, unavailableResponse)
   }
 }
 
@@ -569,7 +592,11 @@ async function parseCandidate(value: unknown): Promise<ComicProfessionalCandidat
 }
 async function latest(scope: WorkspaceScope, runId: number): Promise<{ candidate: ComicProfessionalCandidateV1; intent: ComicProfessionalIntentV1 | null }> {
   const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(scope, runId); if (!checkpoint) throw new Error('[comic-run] 运行缺少可验证检查点')
-  const value = checkpoint.resumePayload as any
+  return parseProfessionalCheckpointV1(checkpoint.resumePayload)
+}
+
+async function parseProfessionalCheckpointV1(payload: unknown): Promise<{ candidate: ComicProfessionalCandidateV1; intent: ComicProfessionalIntentV1 | null }> {
+  const value = payload as any
   if (value?.kind === 'comic-professional-intent') { const candidate = await parseCandidate(value.candidate); const authorPayload = parseComicProfessionalPayloadV1(candidate.stage, value.authorPayload); if (await hashCanonicalValue(authorPayload) !== value.authorPayloadHash) throw new Error('[comic-run] 作者 payload hash 不匹配'); if (value.allowReplaceDownstream != null && typeof value.allowReplaceDownstream !== 'boolean') throw new Error('[comic-run] 替换授权格式非法'); if (typeof value.authorVisualInspectionConfirmed !== 'boolean') throw new Error('[comic-run] 作者视觉确认依据缺失'); const { intentHash: _intentHash, ...body } = value; if (await hashCanonicalValue(body) !== value.intentHash) throw new Error('[comic-run] 采纳意图 hash 不匹配'); return { candidate, intent: value as ComicProfessionalIntentV1 } }
   return { candidate: await parseCandidate(value), intent: null }
 }
@@ -732,7 +759,127 @@ async function formalAlreadyApplied(candidate: ComicProfessionalCandidateV1, pay
   return rowsMatch(await db.comicReviewIssues.where('[adaptationProjectId+manifestVersion]').equals(key).toArray(), payload as any[], ['stableKey', 'category', 'severity', 'pageKey', 'panelKey', 'subjectKey', 'assetKey', 'evidence', 'problem', 'suggestion', 'sourceUnitKeys'])
 }
 
+/** Freeze authorization first; Brief content, confirmation and terminal evidence
+ * then commit together. No current-value equality can manufacture an adoption. */
+async function adoptComicBriefAtomically(
+  input: Parameters<typeof adoptComicProfessionalCandidateV1>[0], loaded: AgentRunSnapshotV1,
+  initial: Awaited<ReturnType<typeof latest>>,
+): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ComicProfessionalCandidateV1; receiptHash: string }> {
+  const candidate = initial.candidate
+  const stepId = `comic-professional:${candidate.stage}`
+  let intent = initial.intent
+  if (intent) {
+    if (input.authorPayload !== undefined
+      && await hashCanonicalValue(parseComicProfessionalPayloadV1(candidate.stage, input.authorPayload)) !== intent.authorPayloadHash) {
+      throw new Error('[comic-run] 已冻结的作者 Brief 不能由恢复输入替换')
+    }
+    if (input.allowReplaceDownstream === true && !intent.allowReplaceDownstream) {
+      throw new Error('[comic-run] 恢复不能扩大已冻结的替换授权')
+    }
+  } else {
+    if (loaded.projection.state !== 'awaiting_confirmation') throw new Error('[comic-run] Brief 不在作者确认边界')
+    await assertFresh(input.scope, candidate)
+    const authorPayload = parseComicProfessionalPayloadV1(candidate.stage, input.authorPayload ?? candidate.payload)
+    const body = { version: 1 as const, kind: 'comic-professional-intent' as const, allowReplaceDownstream: input.allowReplaceDownstream === true, authorVisualInspectionConfirmed: false,
+      candidate, authorPayload, authorPayloadHash: await hashCanonicalValue(authorPayload) }
+    intent = { ...body, intentHash: await hashCanonicalValue(body) }
+    loaded = (await createAgentRunCheckpointV1({ scope: input.scope, runId: loaded.run.id,
+      expectedLastSequence: loaded.projection.lastSequence, resumePayload: intent })).snapshot
+  }
+  const frozen = intent
+  const result = await withAgentRunMutationLockV1(input.runId, () => db.transaction('rw',
+    agentRunScopeTransactionTablesV1(input.runId, ...adaptationBriefTransactionTablesV1(),
+      db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, db.comicPages, db.comicPanels), async () => {
+      let snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
+      const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope, input.runId)
+      if (!checkpoint) throw new Error('[comic-run] Brief 缺少原检查点')
+      // Await the native reader normally; keep only pure payload hashing alive.
+      const current = await Dexie.waitFor(parseProfessionalCheckpointV1(checkpoint.resumePayload))
+      if (current.candidate.candidateHash !== candidate.candidateHash || current.intent?.intentHash !== frozen.intentHash
+        || snapshot.projection.generation !== loaded.projection.generation
+        || snapshot.projection.contractHash !== loaded.projection.contractHash) {
+        throw new Error('[comic-run] Brief 原运行、候选或冻结意图已变化')
+      }
+      if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash) {
+        return { snapshot, candidate, receiptHash: snapshot.projection.terminalReceiptHash }
+      }
+      if (!['awaiting_confirmation', 'running', 'verifying'].includes(snapshot.projection.state)
+        || snapshot.projection.lastSequence !== loaded.projection.lastSequence
+        || snapshot.projection.steps[stepId]?.candidateHash !== candidate.candidateHash) {
+        throw new Error('[comic-run] Brief 当前运行前缀不可继续采纳')
+      }
+      if (snapshot.projection.state === 'awaiting_confirmation') {
+        await assertFresh(input.scope, candidate)
+        snapshot = await appendBriefEvent(input.scope, snapshot, 'confirmation.recorded',
+          { stepId, candidateHash: candidate.candidateHash, decision: 'adopt' })
+      }
+      if (snapshot.projection.steps[stepId]?.confirmation !== 'adopt') throw new Error('[comic-run] Brief 缺少原作者确认')
+      const starts = snapshot.events.filter(event => event.type === 'adoption.started'
+        && event.generation === snapshot.projection.generation && event.payload.stepId === stepId
+        && event.payload.candidateHash === candidate.candidateHash)
+      if (starts.some(event => event.type === 'adoption.started'
+        && event.payload.intentHash != null && event.payload.intentHash !== frozen.intentHash)) {
+        throw new Error('[comic-run] Brief 开始事件与冻结意图不匹配')
+      }
+      if (!starts.length) {
+        snapshot = await appendBriefEvent(input.scope, snapshot, 'adoption.started',
+          { stepId, candidateHash: candidate.candidateHash, intentHash: frozen.intentHash })
+        await Dexie.waitFor(Promise.resolve(input.onDurableBoundary?.('adoption.started', structuredClone(snapshot))))
+      }
+      let adoptionHash = snapshot.projection.steps[stepId]?.adoptionHash
+      if (!adoptionHash) {
+        // Existing +1/+2 rows without adoption evidence remain stale: they may
+        // belong to another author. New failures roll this entire write back.
+        await writeFormal(input.scope, frozen)
+        await Dexie.waitFor(Promise.resolve(input.onDurableBoundary?.('formal.written', structuredClone(snapshot))))
+      }
+      const root = await rootFor(input.scope, candidate.adaptationProjectId)
+      if (root.revision !== candidate.adaptationRevision + 2
+        || root.activeSourceManifestVersion !== candidate.sourceManifestVersion
+        || root.activeSourceManifestHash !== candidate.sourceManifestHash
+        || root.briefSourceManifestVersion !== candidate.sourceManifestVersion
+        || (await inspectAdaptationFreshness(root.id!)).status !== 'unchanged'
+        || await Dexie.waitFor(hashCanonicalValue(root.brief)) !== frozen.authorPayloadHash) {
+        throw new Error('[comic-run] Brief 已采纳后态或来源已变化，不能补签')
+      }
+      const stateHash = await Dexie.waitFor(hashCanonicalValue(root.brief))
+      const expectedAdoption = await Dexie.waitFor(hashCanonicalValue({ intentHash: frozen.intentHash, stateHash }))
+      if (adoptionHash && adoptionHash !== expectedAdoption) throw new Error('[comic-run] Brief 后态与原采纳证据不匹配')
+      if (!adoptionHash) {
+        adoptionHash = expectedAdoption
+        snapshot = await appendBriefEvent(input.scope, snapshot, 'adoption.committed',
+          { stepId, candidateHash: candidate.candidateHash, adoptionHash })
+        await Dexie.waitFor(Promise.resolve(input.onDurableBoundary?.('adoption.committed', structuredClone(snapshot))))
+      }
+      if (snapshot.projection.steps[stepId]?.status === 'running') {
+        snapshot = await appendBriefEvent(input.scope, snapshot, 'step.succeeded',
+          { stepId, attempt: snapshot.projection.steps[stepId]?.attempt ?? 1, outputHash: adoptionHash })
+      }
+      if (snapshot.projection.state === 'running') {
+        snapshot = await appendBriefEvent(input.scope, snapshot, 'verification.started',
+          { verifierSetVersion: `comic-adaptation-brief-terminal-v1` })
+      }
+      const receipt = await Dexie.waitFor(createVerificationReceiptV1({
+        version: 1, runId: snapshot.run.id, generation: snapshot.projection.generation, contractHash: snapshot.projection.contractHash,
+        contextManifestHashes: [candidate.contextManifestHash], candidateHashes: [candidate.candidateHash], adoptionEventIds: [],
+        postStateHash: stateHash, verifierSetVersion: `comic-adaptation-brief-terminal-v1`, criteria: [
+          { id: `${stepId}.candidate`, status: 'passed', evidenceRefs: [`candidate:${candidate.candidateHash}`] },
+          { id: `${stepId}.author`, status: 'passed', evidenceRefs: [`intent:${frozen.intentHash}`] },
+          { id: `${stepId}.post-state`, status: 'passed', evidenceRefs: [`post-state:${stateHash}`] },
+        ], acceptedAt: Date.now(),
+      }))
+      snapshot = await appendBriefEvent(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
+      return { snapshot, candidate, receiptHash: receipt.receiptHash }
+    }))
+  // This callback observes a committed terminal, so a host failure here cannot
+  // leave a successful Brief hidden behind an unfinished Run.
+  await input.onDurableBoundary?.('verification.accepted', structuredClone(result.snapshot))
+  return result
+}
+
 export async function adoptComicProfessionalCandidateV1(input: { scope: WorkspaceScope; runId: number; allowReplaceDownstream?: boolean; authorPayload?: ComicProfessionalPayloadV1; authorVisualInspectionConfirmed?: boolean; onDurableBoundary?: (boundary: 'adoption.started' | 'formal.written' | 'adoption.committed' | 'verification.accepted', snapshot: AgentRunSnapshotV1) => void | Promise<void> }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ComicProfessionalCandidateV1; receiptHash: string }> {
+  input = { ...input, scope: { ...input.scope },
+    authorPayload: input.authorPayload === undefined ? undefined : structuredClone(input.authorPayload) }
   const scope = { ...input.scope }; const runId = input.runId
   let snapshot = await readAgentRunV1(scope, runId); const state = await latest(scope, runId); const candidate = state.candidate; const stepId = `comic-professional:${candidate.stage}`; let intent = state.intent
   if (candidate.projectId !== scope.projectId || candidate.worldId !== scope.worldId || candidate.workId !== scope.workId) throw new Error('[comic-run] 候选越过当前 Work')
@@ -744,6 +891,7 @@ export async function adoptComicProfessionalCandidateV1(input: { scope: Workspac
   // This preflight does not make the existing domain/receipt crash window atomic.
   if (!['awaiting_confirmation', 'running', 'verifying'].includes(snapshot.projection.state)) throw new Error('[comic-run] 当前运行已结束或不可执行，保留原意图仅供核验')
   await rootFor(scope, candidate.adaptationProjectId)
+  if (candidate.stage === 'adaptation-brief') return adoptComicBriefAtomically(input, snapshot, state)
   if (snapshot.projection.state === 'awaiting_confirmation') { await assertFresh(scope, candidate); if (candidate.stage === 'visual-continuity-review' && !input.authorVisualInspectionConfirmed && !intent?.authorVisualInspectionConfirmed) throw new Error('[comic-run] 请先查看目标页实际成图并明确确认视觉检查'); const authorPayload = parseComicProfessionalPayloadV1(candidate.stage, input.authorPayload ?? intent?.authorPayload ?? candidate.payload); const body = { version: 1 as const, kind: 'comic-professional-intent' as const, allowReplaceDownstream: input.allowReplaceDownstream === true || intent?.allowReplaceDownstream === true, candidate, authorPayload, authorPayloadHash: await hashCanonicalValue(authorPayload), authorVisualInspectionConfirmed: candidate.stage === 'visual-continuity-review' && (input.authorVisualInspectionConfirmed === true || intent?.authorVisualInspectionConfirmed === true) }; intent = { ...body, intentHash: await hashCanonicalValue(body) }; const saved = await createAgentRunCheckpointV1({ scope: scope, runId: snapshot.run.id, resumePayload: intent }); snapshot = saved.snapshot; snapshot = await append(scope, snapshot, 'confirmation.recorded', { stepId, candidateHash: candidate.candidateHash, decision: 'adopt' }); snapshot = await append(scope, snapshot, 'adoption.started', { stepId, candidateHash: candidate.candidateHash, intentHash: intent.intentHash }); await input.onDurableBoundary?.('adoption.started', snapshot) }
   if (!intent) throw new Error('[comic-run] 候选不在可采纳状态')
   let adoptionHash = snapshot.projection.steps[stepId]?.adoptionHash

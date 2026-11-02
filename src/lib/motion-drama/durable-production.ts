@@ -1,4 +1,5 @@
-import { chat } from '../ai/client'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
+import { chat, type ChatResult } from '../ai/client'
 import type { AgentRunRecord, AgentEvent, AgentConversation, AIConfig, ChatMessage, MotionDramaPromptStageV1, WorkspaceScope } from '../types'
 import { db } from '../db/schema'
 import { assembleContext } from '../registry/assemble-context'
@@ -224,8 +225,8 @@ async function authorizeMotionModelRequest(scope: WorkspaceScope, snapshot: Agen
   }))
 }
 
-async function recordMotionGenerationFailure(scope: WorkspaceScope, runId: number, stage: MotionDramaPromptStageV1, phase: string, error: unknown, responseObserved: boolean, expected: { generation: number; contractHash: string }): Promise<unknown> {
-  const failures: unknown[] = []
+async function recordMotionGenerationFailure(scope: WorkspaceScope, runId: number, stage: MotionDramaPromptStageV1, phase: string, error: unknown, responseObserved: boolean, expected: { generation: number; contractHash: string }, responseEvidence?: { observation: unknown; persistenceFailures: readonly unknown[] }): Promise<unknown> {
+  const failures: unknown[] = [...(responseEvidence?.persistenceFailures ?? [])]
   let message = error instanceof Error ? error.message : String(error)
   let name = error instanceof Error ? error.name : 'Error'
   let detailOmitted = false
@@ -266,7 +267,7 @@ async function recordMotionGenerationFailure(scope: WorkspaceScope, runId: numbe
     }
   } catch (cause) { failures.push(cause) }
   if (failures.length) {
-    throw Object.assign(new Error(`${message}；任务诊断或状态未能完整保存，请保留当前页面并检查存储。`), { cause: error, persistenceFailures: failures })
+    throw Object.assign(new Error(`${message}；任务诊断或状态未能完整保存，请保留当前页面并检查存储。`), { cause: error, persistenceFailures: failures, ...(responseEvidence ? { observation: responseEvidence.observation } : {}) })
   }
   // Classify and persist with the original error above. Only the UI-facing
   // wrapper is sanitized; its cause keeps the original type/status evidence.
@@ -326,6 +327,7 @@ export async function generateMotionDramaCandidateV1(input: { scope: WorkspaceSc
   let snapshot = await createAgentRunV1({ scope: roots.scope, worldGroupId: null, contract: contract(roots.scope, input.stage) })
   let phase = 'preparation'
   let responseObserved = false
+  let unavailableResponse: Awaited<ReturnType<typeof recordUnavailableCreationResponseV1>> | undefined
   try {
   await onTaskCreated?.call(callbackReceiver, Object.freeze({ runId: snapshot.run.id, generation: snapshot.projection.generation, lastSequence: snapshot.projection.lastSequence }))
   snapshot = await append(roots.scope, snapshot, 'step.scheduled', { stepId: step })
@@ -337,9 +339,21 @@ export async function generateMotionDramaCandidateV1(input: { scope: WorkspaceSc
   const baseMessages = messagesFor(input.stage, resolvedPrompt.definition.profession, resolvedPrompt.instruction, assembled.text, roots.adaptation.targetSpec, input.episodeNumber, input.authorInstruction ?? '')
   const runModel = async (messages: ChatMessage[], attempt: number) => {
     phase = 'request'; responseObserved = false
+    const prepared = await recordCreationModelRequestV1({ scope: roots.scope, snapshot, stepId: step, attempt,
+      contextManifestHash: contextManifest.manifestHash, messages })
+    snapshot = prepared.snapshot
     snapshot = await authorizeMotionModelRequest(roots.scope, snapshot, input.stage, attempt, contextManifest.manifestHash, roots.adaptation, roots.production)
-    const output = await (runAI ? runAI.call(callbackReceiver, messages) : chat(messages, input.aiConfig!, { category: config.category, projectId: roots.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, input.signal))
+    const result: ChatResult = {}
+    let output: string
+    try { output = await (runAI ? runAI.call(callbackReceiver, messages) : chat(messages, input.aiConfig!, { category: config.category, projectId: roots.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, input.signal, result)) }
+    catch (error) {
+      const failed = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
+      unavailableResponse = failed
+      snapshot = failed.snapshot
+      throw failed.error
+    }
     responseObserved = true; phase = 'response-persistence'
+    snapshot = await recordCreationModelResponseV1({ snapshot, request: prepared.request, raw: output, result })
     snapshot = await append(roots.scope, snapshot, 'model.responded', { stepId: step, attempt, outputHash: await hashCanonicalValue({ raw: output }) })
     phase = 'protocol'
     return output
@@ -365,7 +379,7 @@ export async function generateMotionDramaCandidateV1(input: { scope: WorkspaceSc
   snapshot = await append(roots.scope, snapshot, 'candidate.persisted', { stepId: step, attempt: finalAttempt, candidateHash: candidate.candidateHash, requiresConfirmation: true })
   return { snapshot, candidate }
   } catch (error) {
-    throw await recordMotionGenerationFailure(roots.scope, snapshot.run.id, input.stage, phase, error, responseObserved, { generation: snapshot.projection.generation, contractHash: snapshot.projection.contractHash })
+    throw await recordMotionGenerationFailure(roots.scope, snapshot.run.id, input.stage, phase, error, responseObserved, { generation: snapshot.projection.generation, contractHash: snapshot.projection.contractHash }, unavailableResponse)
   }
 }
 
