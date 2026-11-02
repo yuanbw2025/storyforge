@@ -1,5 +1,10 @@
 # Longform: outlines, scene beats, and prose
 
+## Malformed encyclopedia references and chapter entry
+
+Encyclopedia names and summaries provide read-only reference previews in prose. [PR #231](https://github.com/yuanbw2025/storyforge/pull/231) fixes malformed names or preview values blocking chapter entry: invalid names do not participate in references, non-text previews are treated as empty, and original encyclopedia records stay unchanged. Continue editing, saving and reloading the chapter to check prose persistence. If an error remains, preserve the original records and report the version, error text and steps. The source of malformed writes remains unknown; unrelated native exits are not declared resolved.
+
+
 ![Current longform outline workbench: authoring steps on the left, volume/chapter structure on the right](/assets/current/longform-outline-current.png)
 
 ## Three levels

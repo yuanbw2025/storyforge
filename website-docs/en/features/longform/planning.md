@@ -1,5 +1,12 @@
 # Longform: settings, characters, and story design
 
+## Confirming that edits were saved
+
+Fields using save acknowledgement in work details, characters, world settings and outlines retain your current input and show a saving indicator. Finish IME composition before switching away. If saving fails, keep the page and input, retry saving that field, and confirm the error clears. Inspect the newer record before resolving a concurrent-edit conflict. Malformed source fields retain their data and pause editing until recovery.
+
+Outline and detailed-outline candidates still require explicit author save or adoption. Formal fields, candidates and raw model responses remain separate. Check saving before reload and reopen the original work to confirm persistence; text appearing in an input is not proof of a completed write. See [PR #215](https://github.com/yuanbw2025/storyforge/pull/215).
+
+
 This page covers Inspiration and references, Worlds and settings, Story design, and Characters and relationships in the longform workbench.
 
 ## Start with what drives the story

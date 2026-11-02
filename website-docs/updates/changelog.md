@@ -1,5 +1,13 @@
 # 更新日志
 
+## 2026-10-30 · 长篇保存确认与异常恢复
+
+- [PR #215](https://github.com/yuanbw2025/storyforge/pull/215) 已合入 `f73623b1`。编辑作品资料、人物、设定和大纲时核对保存提示，失败保留输入并明确重试；正文候选先保存再刷新，正式正文仍需采纳。操作见[规划](/features/longform/planning)与[连续性](/features/longform/continuity)。
+- 章后整理保留原始回复与已保存勾选；勾选保存失败暂停写入，未选行不写回。启动资源中断提供一次有界恢复，持续失败由作者明确重载，见[故障排查](/guides/troubleshooting)。
+- [PR #231](https://github.com/yuanbw2025/storyforge/pull/231) 已合入 `33789191`，异常百科名称/预览不再阻断正文入口，原百科记录不改写。见[正文指南](/features/longform/writing)。
+- v4.0.5 准备 #228 已合入，当前公开稳定版仍为 v4.0.4，见[版本兼容](/updates/compatibility)。社区作品分享、历史运行引用删除保护及首轮质量修复的未合并状态见[开发记录](/updates/development-status)。
+
+
 本页按用户可感知的变化整理功能更新、修复和操作改进。版本信息见[版本与兼容说明](/updates/compatibility)。
 
 
