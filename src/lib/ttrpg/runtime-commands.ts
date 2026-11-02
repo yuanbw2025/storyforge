@@ -714,7 +714,8 @@ export async function startTtrpgOpenRunV1(
       if (!runtime?.authorization || !runtime.product.sessionZero.completed) {
         throw new Error("[ttrpg] 请先完成有效 open Session Zero 和真人批准关系。");
       }
-      const seat = assertTtrpgOpenAuthorizationCurrentV1({ authorization: runtime.authorization,
+      const authorization = runtime.authorization;
+      const seat = assertTtrpgOpenAuthorizationCurrentV1({ authorization,
         participants, viewerKey: input.viewerKey ?? "" });
       if (
         !state.ttrpg ||
@@ -724,13 +725,19 @@ export async function startTtrpgOpenRunV1(
         throw new Error("[ttrpg] open run 只能启动一次。");
       }
       const openRun = createTtrpgOpenRunStateV1(content.campaign);
-      openRun.companions = openRun.companions.filter(companion => runtime.authorization!.selectedActorKeys.includes(companion.actorKey));
+      openRun.companions = openRun.companions
+        .filter(companion => authorization.selectedActorKeys.includes(companion.actorKey))
+        .map(companion => {
+          const current = authorization.seats.find(item => item.role === "player" && item.actorKey === companion.actorKey);
+          if (!current) throw new Error("[ttrpg] 活动角色缺少已确认席位授权。");
+          return { ...companion, controller: current.controller };
+        });
       return {
         actorKey: seat.actorKey,
         targetKey: null,
         payload: {
           openRun,
-          authorizationRevision: runtime.authorization.revision,
+          authorizationRevision: authorization.revision,
           startedBySeatKey: seat.seatKey,
           viewerKey: seat.viewerKey,
         },
@@ -2711,6 +2718,9 @@ export async function advanceTtrpgCharacterV1(
           rulePack.advancement.attributeIncreaseCost;
         before = progression.level;
         after = progression.level + 1;
+        if (rulePack.attributes.some(attribute => attribute.key === "level")) {
+          entityAttributes.level = after;
+        }
       } else {
         if (progression.model !== "rank" || progression.rankKey == null)
           throw new Error("[ttrpg] 当前角色不是阶位制成长。");
@@ -5173,8 +5183,9 @@ async function resolveTtrpgRuleActionWithAuthority(
       const shouldAdvance = action.phase === "action";
       const nextIndex = (currentIndex + 1) % ttrpg.turnOrder.length;
       const nextActorKey =
-        economyTransition?.nextActorKey ??
-        (shouldAdvance ? ttrpg.turnOrder[nextIndex] : null);
+        economyTransition
+          ? economyTransition.nextActorKey
+          : shouldAdvance ? ttrpg.turnOrder[nextIndex] : null;
       const nextRound =
         economyTransition?.nextRound ??
         (shouldAdvance ? ttrpg.round + (nextIndex === 0 ? 1 : 0) : ttrpg.round);
@@ -5833,6 +5844,9 @@ export async function commitTtrpgHumanGmNarrationV1(
           candidateHash: null,
           runId: null,
           source: "human-gm",
+          modelEvidence: null,
+          modelCalls: [],
+          repairApplied: false,
           synthesisFrame: createDeterministicGmSynthesisFrameV2(receipt),
         },
       };
@@ -5961,6 +5975,9 @@ export async function commitTtrpgDeterministicFallbackV1(
           candidateHash: null,
           runId: null,
           source: "deterministic-fallback",
+          modelEvidence: null,
+          modelCalls: [],
+          repairApplied: false,
           synthesisFrame: createDeterministicGmSynthesisFrameV2(receipt),
         },
       };

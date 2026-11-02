@@ -11,6 +11,7 @@ import {
   readLatestVerifiedAgentRunCheckpointV1,
 } from "../agent/run/checkpoint";
 import { createContextManifestFromAssemblyV1 } from "../agent/run/context-manifest";
+import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from "../agent/run/creation-response-evidence";
 import {
   appendAgentRunEventV1,
   appendRuntimeCandidateAdoptedV1,
@@ -526,6 +527,11 @@ export async function generateTtrpgGmNarrationCandidateV1(input: {
       attemptPrompt: ChatMessage[],
       attempt: 1 | 2,
     ) => {
+      const prepared = await recordCreationModelRequestV1({
+        scope: input.scope, snapshot, stepId: TTRPG_GM_RUNTIME_STEP_ID_V1,
+        attempt, contextManifestHash: manifest.manifestHash, messages: attemptPrompt,
+      });
+      snapshot = prepared.snapshot;
       snapshot = await append(input.scope, snapshot, "model.requested", {
         stepId: TTRPG_GM_RUNTIME_STEP_ID_V1,
         attempt,
@@ -537,22 +543,32 @@ export async function generateTtrpgGmNarrationCandidateV1(input: {
       });
       const chatResult: ChatResult = {};
       const startedAt = Date.now();
-      const output = input.runAI
-        ? await input.runAI(attemptPrompt, input.signal)
-        : await chat(
-            attemptPrompt,
-            input.aiConfig!,
-            {
-              category: "runtime.ttrpg-gm",
-              projectId: input.scope.projectId,
-              contextOverflowPolicy: "reject",
-            },
-            input.signal,
-            chatResult,
-            undefined,
-            resolvedConfig!,
-          );
+      let output: string;
+      try {
+        output = input.runAI
+          ? await input.runAI(attemptPrompt, input.signal)
+          : await chat(
+              attemptPrompt,
+              input.aiConfig!,
+              {
+                category: "runtime.ttrpg-gm",
+                projectId: input.scope.projectId,
+                contextOverflowPolicy: "reject",
+              },
+              input.signal,
+              chatResult,
+              undefined,
+              resolvedConfig!,
+            );
+      } catch (error) {
+        const unavailable = await recordUnavailableCreationResponseV1({
+          snapshot, request: prepared.request, result: chatResult, error,
+        });
+        snapshot = unavailable.snapshot;
+        throw unavailable.report;
+      }
       const latencyMs = Math.max(0, Date.now() - startedAt);
+      snapshot = await recordCreationModelResponseV1({ snapshot, request: prepared.request, raw: output, result: chatResult });
       const estimatedInputTokens = attemptPrompt.reduce(
         (sum, message) => sum + estimateTokens(message.content),
         0,

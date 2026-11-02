@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {openChatNarrativeTools} from './helpers/character-chat-ui'
 import {test, expect, type Page} from '@playwright/test'
@@ -5,12 +6,11 @@ import {test, expect, type Page} from '@playwright/test'
 async function seed(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-direction.invalid/v1', model: 'test', maxTokens: 8000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
-  await page.goto('./chat/library')
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-direction.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' })
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({maxActionsPerTrigger: 3})})
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   return f
 }
@@ -36,7 +36,7 @@ test('defaults to two steps, remembers explicit pacing and stops for player deci
   await expect(page.getByRole('button', {name: '让角色继续', exact: true})).toBeEnabled()
   expect(actions).toBe(2); expect(calls).toBe(4)
   expect((await read()).chatNarrative.triggers[0]).toMatchObject({direction: {actorKey: 'guard', actionLimit: 2}, status: 'complete'})
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByLabel('演绎节奏', {exact: true})).toHaveValue('2')
   expect(actions).toBe(2); expect(calls).toBe(4)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
@@ -48,7 +48,7 @@ test('defaults to two steps, remembers explicit pacing and stops for player deci
   await expect(page.getByRole('button', {name: '让角色继续', exact: true})).toBeEnabled()
   expect(actions).toBe(3); expect(calls).toBe(6)
   expect((await read()).chatNarrative.triggers[1]).toMatchObject({direction: {actorKey: 'guard', actionLimit: 1}, status: 'complete'})
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByLabel('演绎节奏', {exact: true})).toHaveValue('1')
   expect(actions).toBe(3)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
@@ -101,7 +101,7 @@ for (const interrupt of ['message', 'stop'] as const) test(`${interrupt} interru
   expect(state.chatNarrative.triggers[0]).toMatchObject({direction: {actorKey: 'guard', actionLimit: 3}, status: interrupt === 'message' ? 'cancelled' : 'ready'})
   if (interrupt === 'stop') await expect(page.getByRole('button', {name: '补齐未完成本轮', exact: true})).toBeDisabled()
   expect(actions).toBe(2); expect(calls).toBe(3)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByLabel('演绎节奏', {exact: true})).toHaveValue('3')
   expect(await read()).toEqual(state)
   expect(calls).toBe(3)

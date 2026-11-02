@@ -18,6 +18,7 @@ import type { ContextResourceDescriptorV1 } from '../registry/types'
 import type { WorkspaceScope } from '../types/world-ownership'
 import type { RagAnnotationTargetSelectionV1, RagAnnotationTargetStateV1 } from '../types/rag-library'
 import { deriveNarrativeTargetStateV1 } from './narrative-target-state'
+import { isRagSelectionEnabledV1, ragSourceFieldPolicyKeysV1 } from './rag-policy'
 import {
   assertRecordInScope,
   readOwnedRows,
@@ -68,7 +69,7 @@ function recordPolicy(row: RagRow): Required<Omit<RagDocumentPolicy, 'fields'>> 
   fields: Record<string, RagFieldPolicy>
 } {
   return {
-    enabled: row.ragPolicy?.enabled !== false,
+    enabled: isRagSelectionEnabledV1(row.ragPolicy),
     weight: normalizeWeight(row.ragPolicy?.weight),
     tokenCap: normalizeTokenCap(row.ragPolicy?.tokenCap),
     priority: row.ragPolicy?.priority === 'pinned' || row.ragPolicy?.priority === 'must-read'
@@ -94,7 +95,7 @@ function effectiveFieldPolicy(row: RagRow, fieldKey: string) {
   const record = recordPolicy(row)
   const own = record.fields[fieldKey] ?? {}
   return {
-    enabled: record.enabled && own.enabled !== false,
+    enabled: isRagSelectionEnabledV1(row.ragPolicy, [fieldKey]),
     weight: normalizeWeight(own.weight ?? record.weight),
     tokenCap: normalizeTokenCap(own.tokenCap ?? record.tokenCap),
     priority: own.priority === 'pinned' || own.priority === 'must-read' ? own.priority : record.priority,
@@ -211,7 +212,7 @@ export async function buildRagLibrary(input: {
       documentEnabled: documentPolicy.enabled,
       documentWeight: documentPolicy.weight,
       documentTokenCap: documentPolicy.tokenCap,
-      enabled: policy.enabled,
+      enabled: policy.enabled && descriptor.automaticSelectionEnabled !== false,
       weight: policy.weight,
       tokenCap: policy.tokenCap,
       priority: policy.priority,
@@ -407,7 +408,9 @@ async function readRagOriginalSelectionV1(input: {
     if (descriptor.sourceRefs.length !== 1) throw new Error('抽取需要未切片的单一原文字段')
     const ref = descriptor.sourceRefs[0]
     const row = await REGISTRY_BY_NAME.get(ref.table)?.table.get(ref.recordId as number) as RagRow | undefined
-    if (!row || !effectiveFieldPolicy(row, logicalFieldKeyFromResourceKeyV1(descriptor.resourceKey)!).enabled) {
+    if (!row || descriptor.automaticSelectionEnabled === false
+      || !effectiveFieldPolicy(row, logicalFieldKeyFromResourceKeyV1(descriptor.resourceKey)!).enabled
+      || !isRagSelectionEnabledV1(row.ragPolicy, ragSourceFieldPolicyKeysV1(ref.table, ref.field, (row as RagRow & { fields?: unknown }).fields))) {
       throw new Error('选定资料字段已停用；未调用模型')
     }
     const original = await CANON_RESOURCE_PROVIDER_V1.readOriginal({ scope: frozenScope,

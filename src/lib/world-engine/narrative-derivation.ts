@@ -1,4 +1,5 @@
 import Dexie from 'dexie'
+import { verifyWorkspaceContentRevisionV1 } from '../authoring/content-revision'
 import { db } from '../db/schema'
 import type { WorkspaceScope, WorldDerivationV1, WorldRelease, WorldRevision } from '../types'
 import { nameDerivedWorldV1, type DeriveNovelToWorldInput, type DerivedNovelWorldResult } from './derivation'
@@ -67,9 +68,14 @@ function sourceState(source: Awaited<ReturnType<typeof captureIndependent>>) {
  * Compile and verify before writing; the sole registry import transaction
  * commits the complete target or nothing, including on process termination. */
 export async function deriveNarrativeNovelToWorldV4(input: DeriveNovelToWorldInput): Promise<DerivedNovelWorldResult> {
-  const request = { ...input, sourceScope: { ...input.sourceScope }, selectedTables: input.selectedTables && [...input.selectedTables] }
+  const request = { ...input, sourceScope: { ...input.sourceScope }, selectedTables: input.selectedTables && [...input.selectedTables],
+    expectedSourceRevision: input.expectedSourceRevision && structuredClone(input.expectedSourceRevision) }
   const sourceScope = await resolveScope({ scope: request.sourceScope })
   const source = await captureIndependent(sourceScope, request.selectedTables)
+  if (request.expectedSourceRevision) {
+    const expected = await verifyWorkspaceContentRevisionV1(request.expectedSourceRevision, { scope: sourceScope, worldGroupId: null })
+    if (!expected.fresh) throw Error('[derivation] 作者预览后源作品已变化，请重新检查来源再派生世界草稿')
+  }
   const sourceJson = sourceState(source), sourceContentHash = await hashNarrativeValueV1(source.transfer)
   const projection = await projectNarrativeDomainCaptureV1(source.capture, { branchKey: 'canon' })
 

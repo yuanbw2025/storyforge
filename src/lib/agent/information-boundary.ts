@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { db } from '../db/schema'
 import type { GenerationGateIssue } from '../generation/generation-node'
 import {
@@ -410,7 +411,7 @@ export async function buildChapterInformationBoundaryV1(input: {
   }
   return {
     ...body,
-    manifestHash: await hashCanonicalValue(manifestBody(provisional)),
+    manifestHash: await Dexie.waitFor(hashCanonicalValue(manifestBody(provisional))),
   }
 }
 

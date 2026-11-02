@@ -58,7 +58,7 @@ for (const evidence of [
 ]) {
   if (!registryImport.includes(evidence)) throw new Error(`导入边界缺少完整性证据:${evidence}`)
 }
-for (const evidence of ['rowsReferencingField', 'intentionally', "deleteOwnerRows('work'"]) {
+for (const evidence of ['keysReferencingField', 'return table.filter(row => row[field] === sourceId).primaryKeys()', "deleteOwnerRows('work'"]) {
   if (!lifecycle.includes(evidence)) throw new Error(`删除生命周期缺少非索引引用或Work owner证据:${evidence}`)
 }
 

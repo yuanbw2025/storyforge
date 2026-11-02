@@ -3,27 +3,25 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TextOpenWorldCreatorStudio from '../../src/components/text-game/TextOpenWorldCreatorStudio'
 import {
-  inspectTextOpenWorldCreatorNovelSourceV1,
   inspectTextOpenWorldCreatorWorldSourceV1,
-  listTextOpenWorldCreatorNovelSourceCatalogV1,
   listTextOpenWorldCreatorWorldSourcesV1,
 } from '../../src/lib/open-world/creator-source'
+import { deriveTextOpenWorldNovelWorldDraftV1, previewTextOpenWorldNovelWorldDraftV1, type TextOpenWorldNovelWorldDraftPreviewV1 } from '../../src/lib/open-world/novel-world-derivation'
 import type {
-  AdaptationSourceSelectionV1,
-  TextOpenWorldCreatorNovelSourceCatalogV1,
-  TextOpenWorldCreatorNovelSourcePreviewV1,
   TextOpenWorldCreatorWorldSourceCandidateV1,
   WorkspaceScope,
 } from '../../src/lib/types'
 
 vi.mock('../../src/lib/open-world/creator-source', () => ({
-  inspectTextOpenWorldCreatorNovelSourceV1: vi.fn(),
   inspectTextOpenWorldCreatorWorldSourceV1: vi.fn(),
-  listTextOpenWorldCreatorNovelSourceCatalogV1: vi.fn(),
   listTextOpenWorldCreatorWorldSourcesV1: vi.fn(),
 }))
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+vi.mock('../../src/lib/open-world/novel-world-derivation', () => ({
+  deriveTextOpenWorldNovelWorldDraftV1: vi.fn(), previewTextOpenWorldNovelWorldDraftV1: vi.fn(),
+}))
+
+Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true)
 
 const WORLD_HASH = 'a'.repeat(64)
 const CATALOG_HASH = 'b'.repeat(64)
@@ -31,7 +29,6 @@ const PROFILE_HASH = 'c'.repeat(64)
 const REFERENCE_HASH = 'd'.repeat(64)
 const SCHEMA_HASH = 'e'.repeat(64)
 const NOVEL_HASH = 'f'.repeat(64)
-const NOVEL_BOUNDARY_HASH = '1'.repeat(64)
 
 const worldScope: WorkspaceScope = { projectId: 11, worldId: 12, workId: 13 }
 const novelScope: WorkspaceScope = { projectId: 21, worldId: 22, workId: 23 }
@@ -127,78 +124,9 @@ function worldCandidate(
   }
 }
 
-function novelCatalog(): TextOpenWorldCreatorNovelSourceCatalogV1 {
-  return {
-    schema: 'storyforge.text-open-world-creator-novel-source-catalog',
-    version: 1,
-    sourceKind: 'novel',
-    workCode: 'novel.river',
-    workTitle: '河灯长夜',
-    sourceUpdatedAt: Date.UTC(2026, 8, 9, 9, 15),
-    coverage: 'full-text',
-    outlines: [
-      { id: 31, parentId: null, type: 'volume', title: '第一卷 · 入夜', order: 0 },
-      { id: 32, parentId: 31, type: 'chapter', title: '河岸失灯', order: 0 },
-    ],
-    chapters: [
-      { id: 41, outlineNodeId: 32, title: '第一章 河岸', order: 0, wordCount: 1600, hasContent: true },
-      { id: 42, outlineNodeId: 32, title: '第二章 旧渡', order: 1, wordCount: 1800, hasContent: true },
-      { id: 43, outlineNodeId: 32, title: '第三章 无灯', order: 2, wordCount: 0, hasContent: false },
-    ],
-    range: { firstChapterId: 41, lastChapterId: 43, outlineCount: 2, chapterCount: 3 },
-    totalWordCount: 3400,
-    readiness: 'ready-with-gaps',
-    gaps: [{
-      code: 'partial-text',
-      severity: 'recommendation',
-      title: '部分章纲没有正文',
-      detail: '仍可进入会谈，后续需要确认允许推演的范围。',
-      requirementKey: null,
-    }],
-  }
-}
-
-function novelPreview(
-  selection: AdaptationSourceSelectionV1 = { mode: 'entire-work' },
-): TextOpenWorldCreatorNovelSourcePreviewV1 {
-  const catalog = novelCatalog()
-  const selectedChapters = selection.mode === 'chapters'
-    ? catalog.chapters.filter(chapter => selection.chapterIds.includes(chapter.id))
-    : selection.mode === 'chapter-range'
-      ? catalog.chapters.filter(chapter => chapter.id >= selection.startChapterId && chapter.id <= selection.endChapterId)
-      : catalog.chapters
-  const selectedOutlines = selection.mode === 'outline-subtree' ? catalog.outlines.slice(1) : catalog.outlines
-  return {
-    schema: 'storyforge.text-open-world-novel-source-snapshot-preview',
-    version: 1,
-    sourceKind: 'novel',
-    workCode: catalog.workCode,
-    workTitle: catalog.workTitle,
-    sourceUpdatedAt: catalog.sourceUpdatedAt,
-    sourceVersionHash: NOVEL_HASH,
-    sourceBoundaryHash: NOVEL_BOUNDARY_HASH,
-    coverage: selectedChapters.some(chapter => chapter.hasContent) ? 'full-text' : 'outline-only',
-    selection: {
-      mode: selection.mode,
-      label: selection.mode === 'entire-work'
-        ? '整部小说'
-        : selection.mode === 'outline-subtree'
-          ? '大纲子树：河岸失灯'
-          : selection.mode === 'chapter-range'
-            ? '章节范围：1-2'
-            : `指定章节：${selectedChapters.length}章`,
-      selectedChapterCount: selectedChapters.length,
-      selectedOutlineCount: selectedOutlines.length,
-    },
-    outlines: selectedOutlines,
-    chapters: selectedChapters,
-    storyCoreCount: 1,
-    writtenChapterCount: selectedChapters.filter(chapter => chapter.hasContent).length,
-    totalWordCount: selectedChapters.reduce((total, chapter) => total + chapter.wordCount, 0),
-    sourceUnitCount: selectedChapters.length + selectedOutlines.length + 2,
-    readiness: 'ready-with-gaps',
-    gaps: catalog.gaps,
-  }
+function novelPreview(scope = novelScope): TextOpenWorldNovelWorldDraftPreviewV1 {
+  return { sourceScope: scope, workCode: 'novel.river', workTitle: '河灯长夜', range: 'all-confirmed-canon',
+    sourceRevision: { version: 1, entries: [], vectorHash: NOVEL_HASH }, previewHash: NOVEL_HASH }
 }
 
 function deferred<T>() {
@@ -225,19 +153,6 @@ function tab(host: ParentNode, label: string): HTMLButtonElement {
   return result
 }
 
-function radio(host: ParentNode, label: string): HTMLInputElement {
-  const result = [...host.querySelectorAll<HTMLLabelElement>('label')]
-    .find(candidate => candidate.textContent?.includes(label))
-    ?.querySelector<HTMLInputElement>('input[type="radio"]')
-  if (!result) throw new Error(`找不到单选项：${label}`)
-  return result
-}
-
-function setSelect(select: HTMLSelectElement, value: string) {
-  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(select, value)
-  select.dispatchEvent(new Event('change', { bubbles: true }))
-}
-
 async function waitFor(assertion: () => void | Promise<void>): Promise<void> {
   const started = Date.now()
   let last: unknown
@@ -258,15 +173,15 @@ describe('TOW-G5-01 · 创作者双来源 UI', () => {
   let root: ReturnType<typeof createRoot>
   const listWorld = vi.mocked(listTextOpenWorldCreatorWorldSourcesV1)
   const inspectWorld = vi.mocked(inspectTextOpenWorldCreatorWorldSourceV1)
-  const listNovel = vi.mocked(listTextOpenWorldCreatorNovelSourceCatalogV1)
-  const inspectNovel = vi.mocked(inspectTextOpenWorldCreatorNovelSourceV1)
+  const previewNovel = vi.mocked(previewTextOpenWorldNovelWorldDraftV1)
+  const deriveDraft = vi.mocked(deriveTextOpenWorldNovelWorldDraftV1)
 
   beforeEach(() => {
     vi.resetAllMocks()
     listWorld.mockResolvedValue([worldCandidate()])
     inspectWorld.mockResolvedValue(worldCandidate())
-    listNovel.mockResolvedValue(novelCatalog())
-    inspectNovel.mockImplementation(input => Promise.resolve(novelPreview(input.selection)))
+    previewNovel.mockResolvedValue(novelPreview())
+    deriveDraft.mockResolvedValue({ targetProjectId: 99 } as Awaited<ReturnType<typeof deriveTextOpenWorldNovelWorldDraftV1>>)
     host = document.createElement('div')
     document.body.append(host)
     root = createRoot(host)
@@ -287,7 +202,7 @@ describe('TOW-G5-01 · 创作者双来源 UI', () => {
     await waitFor(() => expect(host.textContent).toContain('盐脊世界 · 第三版'))
 
     expect(listWorld).toHaveBeenCalledWith(worldScope)
-    expect(listNovel).not.toHaveBeenCalled()
+    expect(previewNovel).not.toHaveBeenCalled()
     expect(host.textContent).toContain('尚未冻结、模型尚未实读、未开始计费和生产')
     expect(host.textContent).toContain(WORLD_HASH)
     expect(host.innerHTML).not.toContain('sourceManifest')
@@ -409,61 +324,66 @@ describe('TOW-G5-01 · 创作者双来源 UI', () => {
     expect(host.querySelector('[data-testid="creator-world-preview"]')).not.toBeNull()
   })
 
-  it('只用 novelScope 展示四种范围并提交不含正文的候选摘要', async () => {
+  it('005 小说入口明确全部已确认语义，作者确认后只创建独立世界草稿，不提交小说正式会谈', async () => {
     const onContinue = vi.fn()
     await act(async () => root.render(createElement(TextOpenWorldCreatorStudio, {
-      worldScope,
-      novelScope,
-      initialSourceKind: 'novel',
-      onContinue,
+      worldScope, novelScope, initialSourceKind: 'novel', onContinue,
     })))
     await waitFor(() => expect(host.textContent).toContain('河灯长夜'))
-
-    expect(listNovel).toHaveBeenCalledWith(novelScope)
+    expect(previewNovel).toHaveBeenCalledWith(novelScope)
     expect(listWorld).not.toHaveBeenCalled()
-    expect(host.textContent).toContain('3 章')
-    expect(host.textContent).toContain('2 项')
-    expect(host.textContent).toContain('3,400 字')
-    expect(radio(host, '整部小说').checked).toBe(true)
-    expect(radio(host, '大纲子树')).toBeTruthy()
-    expect(radio(host, '章节范围')).toBeTruthy()
-    expect(radio(host, '指定章节')).toBeTruthy()
+    expect(host.textContent).toContain('全部已确认语义')
+    expect(host.textContent).toContain('不提供按卷')
+    expect(host.querySelectorAll('input[type="radio"]')).toHaveLength(0)
+    expect(button(host, '派生独立世界草稿').disabled).toBe(true)
+    const acknowledge = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+    await act(async () => acknowledge.click())
+    expect(button(host, '派生独立世界草稿').disabled).toBe(false)
+    await act(async () => button(host, '派生独立世界草稿').click())
+    await waitFor(() => expect(host.textContent).toContain('独立世界草稿已创建'))
+    expect(deriveDraft).toHaveBeenCalledTimes(1)
+    expect(deriveDraft).toHaveBeenCalledWith(novelPreview())
+    expect(onContinue).not.toHaveBeenCalled()
+    expect(host.querySelector('a')?.getAttribute('href')).toBe('/world/basics?project=99')
+    expect(host.textContent).toContain('尚未封存')
+    expect(host.textContent).toContain('不会被迁移或改写')
+  })
 
-    await act(async () => radio(host, '大纲子树').click())
-    const outline = host.querySelector<HTMLSelectElement>('select')!
-    await act(async () => setSelect(outline, '32'))
-    await act(async () => button(host, '核验小说候选').click())
-    await waitFor(() => expect(host.querySelector('[data-testid="creator-novel-preview"]')).not.toBeNull())
+  it('005 取消或重新检查不会派生；源漂移失败保留预览并要求重新确认', async () => {
+    await act(async () => root.render(createElement(TextOpenWorldCreatorStudio, { novelScope })))
+    await waitFor(() => expect(host.textContent).toContain('河灯长夜'))
+    await act(async () => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click())
+    await act(async () => button(host, '取消派生').click())
+    expect(button(host, '派生独立世界草稿').disabled).toBe(true)
+    expect(deriveDraft).not.toHaveBeenCalled()
+    await act(async () => button(host, '重新检查当前来源').click())
+    expect(previewNovel).toHaveBeenCalledTimes(2)
+    deriveDraft.mockRejectedValueOnce(new Error('作者预览后源作品已变化'))
+    await act(async () => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click())
+    await act(async () => button(host, '派生独立世界草稿').click())
+    await waitFor(() => expect(host.querySelector('[role="alert"]')?.textContent).toContain('源作品已变化'))
+    expect(host.textContent).toContain('河灯长夜')
+    expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false)
+    expect(host.querySelector('a')).toBeNull()
+  })
 
-    expect(inspectNovel).toHaveBeenLastCalledWith({
-      sourceScope: novelScope,
-      selection: { mode: 'outline-subtree', outlineNodeId: 32 },
-    })
-    expect(host.textContent).toContain('候选内容 Hash')
-    expect(host.textContent).toContain(NOVEL_HASH)
-    expect(host.textContent).toContain(NOVEL_BOUNDARY_HASH)
-    expect(host.innerHTML).not.toContain('小说正文不应出现在页面')
-    expect(host.innerHTML).not.toContain('contentText')
-    expect(host.innerHTML).not.toContain('sourceManifest')
-
-    await act(async () => button(host, '继续到主 Agent 会谈').click())
-    expect(onContinue).toHaveBeenCalledWith(expect.objectContaining({
-      sourceKind: 'novel',
-      sourceScope: novelScope,
-      selection: { mode: 'outline-subtree', outlineNodeId: 32 },
-      preview: expect.objectContaining({ sourceVersionHash: NOVEL_HASH }),
-    }))
-
-    await act(async () => radio(host, '章节范围').click())
-    expect(host.querySelectorAll('select')).toHaveLength(2)
-    await act(async () => radio(host, '指定章节').click())
-    expect(host.querySelectorAll('input[type="checkbox"]')).toHaveLength(3)
-    expect(button(host, '核验小说候选').disabled).toBe(true)
-    const secondChapter = [...host.querySelectorAll<HTMLLabelElement>('label')]
-      .find(label => label.textContent?.includes('第二章 旧渡'))!
-      .querySelector<HTMLInputElement>('input[type="checkbox"]')!
-    await act(async () => secondChapter.click())
-    expect(button(host, '核验小说候选').disabled).toBe(false)
+  it('005 双击只派生一次，切换 Work 后不展示旧请求的世界链接', async () => {
+    const pending = deferred<Awaited<ReturnType<typeof deriveTextOpenWorldNovelWorldDraftV1>>>()
+    deriveDraft.mockReturnValueOnce(pending.promise)
+    const otherScope = { projectId: 81, worldId: 82, workId: 83 }
+    previewNovel.mockImplementation(async scope => ({ ...novelPreview(scope),
+      workTitle: scope.workId === otherScope.workId ? '另一部小说' : '河灯长夜' }))
+    await act(async () => root.render(createElement(TextOpenWorldCreatorStudio, { novelScope })))
+    await waitFor(() => expect(host.textContent).toContain('河灯长夜'))
+    await act(async () => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click())
+    await act(async () => { const action = button(host, '派生独立世界草稿'); action.click(); action.click() })
+    expect(deriveDraft).toHaveBeenCalledTimes(1)
+    await act(async () => root.render(createElement(TextOpenWorldCreatorStudio, { novelScope: otherScope })))
+    await waitFor(() => expect(host.textContent).toContain('另一部小说'))
+    await act(async () => pending.resolve({ targetProjectId: 99 } as Awaited<ReturnType<typeof deriveTextOpenWorldNovelWorldDraftV1>>))
+    expect(host.querySelector('a')).toBeNull()
+    expect(host.textContent).not.toContain('独立世界草稿已创建')
+    expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false)
   })
 
   it('只有小说上下文时默认进入小说来源，缺少任一上下文都有明确空态', async () => {
@@ -472,7 +392,7 @@ describe('TOW-G5-01 · 创作者双来源 UI', () => {
       novelScope,
     })))
     await waitFor(() => expect(host.textContent).toContain('河灯长夜'))
-    expect(tab(host, '小说作品').getAttribute('aria-selected')).toBe('true')
+    expect(tab(host, '从小说派生世界').getAttribute('aria-selected')).toBe('true')
 
     await act(async () => tab(host, '冻结世界版本').click())
     await waitFor(() => expect(host.querySelector('[data-testid="creator-world-empty"]')).not.toBeNull())
@@ -484,8 +404,8 @@ describe('TOW-G5-01 · 创作者双来源 UI', () => {
       initialSourceKind: 'novel',
       worldGroupId: 2,
     })))
-    await waitFor(() => expect(host.querySelector('[data-testid="creator-novel-empty"]')).not.toBeNull())
-    expect(host.textContent).toContain('当前没有可用的小说 Work')
+    await waitFor(() => expect(host.querySelector('[data-testid="creator-novel-world-draft"]')).not.toBeNull())
+    expect(host.textContent).toContain('请先打开一部独立长篇或短篇小说')
   })
 
   it('显示加载、目录空态与安全错误，并拒绝无效 handoff', async () => {
@@ -534,7 +454,7 @@ describe('TOW-G5-01 · 创作者双来源 UI', () => {
     })))
     await waitFor(() => expect(host.textContent).toContain('盐脊世界'))
     const worldTab = tab(host, '冻结世界版本')
-    const novelTab = tab(host, '小说作品')
+    const novelTab = tab(host, '从小说派生世界')
     expect(worldTab.getAttribute('aria-selected')).toBe('true')
     expect(worldTab.tabIndex).toBe(0)
     expect(novelTab.tabIndex).toBe(-1)
@@ -553,31 +473,30 @@ describe('TOW-G5-01 · 创作者双来源 UI', () => {
 
   it('快速切源和来源核验交错时丢弃旧响应，不把选择或结果串到另一来源', async () => {
     const firstWorldList = deferred<TextOpenWorldCreatorWorldSourceCandidateV1[]>()
-    const novelInspection = deferred<TextOpenWorldCreatorNovelSourcePreviewV1>()
+    const novelInspection = deferred<TextOpenWorldNovelWorldDraftPreviewV1>()
     listWorld.mockReturnValueOnce(firstWorldList.promise).mockResolvedValueOnce([worldCandidate()])
-    inspectNovel.mockReturnValueOnce(novelInspection.promise)
+    previewNovel.mockReturnValueOnce(novelInspection.promise)
 
     await act(async () => root.render(createElement(TextOpenWorldCreatorStudio, {
       worldScope,
       novelScope,
     })))
     expect(host.querySelector('[data-testid="creator-source-loading"]')).not.toBeNull()
-    await act(async () => tab(host, '小说作品').click())
-    await waitFor(() => expect(host.textContent).toContain('河灯长夜'))
+    await act(async () => tab(host, '从小说派生世界').click())
+    await waitFor(() => expect(host.textContent).toContain('正在检查已保存的小说来源'))
 
     await act(async () => firstWorldList.resolve([worldCandidate()]))
     await act(async () => { await Promise.resolve() })
-    expect(tab(host, '小说作品').getAttribute('aria-selected')).toBe('true')
+    expect(tab(host, '从小说派生世界').getAttribute('aria-selected')).toBe('true')
     expect(host.textContent).not.toContain('盐脊世界 · 第三版')
 
-    await act(async () => button(host, '核验小说候选').click())
     await act(async () => tab(host, '冻结世界版本').click())
     await waitFor(() => expect(host.textContent).toContain('盐脊世界 · 第三版'))
     await act(async () => novelInspection.resolve(novelPreview()))
     await act(async () => { await Promise.resolve() })
 
     expect(tab(host, '冻结世界版本').getAttribute('aria-selected')).toBe('true')
-    expect(host.querySelector('[data-testid="creator-novel-preview"]')).toBeNull()
+    expect(host.querySelector('[data-testid="creator-novel-world-draft"]')).toBeNull()
     expect(host.textContent).not.toContain(NOVEL_HASH)
     expect(host.querySelectorAll('[role="radio"]')).toHaveLength(1)
   })

@@ -62,13 +62,13 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
   })
   it('AST 守卫证明实际 member/alias/wrapper 调用均携带登记 entryId', () => {
     const output = execFileSync(process.execPath, ['scripts/check-ai-entry-registry.mjs'], { encoding: 'utf8' })
-    expect(output).toContain('66 bindings / 70 calls')
-    expect(output).toContain('formal 44, auxiliary 15, evaluation 6, experimental 1')
+    expect(output).toContain('68 bindings / 72 calls')
+    expect(output).toContain('formal 46, auxiliary 15, evaluation 6, experimental 1')
   })
 
   it('唯一注册表严格解析且每项连接 Skill、执行器、候选和调用方', () => {
     expect(registry.version).toBe(2)
-    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(66)
+    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(68)
     for (const retiredId of ['world.setting.lookup.qa', 'world.setting.lookup.extract']) {
       expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.some(entry => entry.entryId === retiredId)).toBe(false)
     }
@@ -118,9 +118,9 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
     expect(() => parseFormalAIEntryRegistryV1(full)).not.toThrow()
     expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.some((entry) => entry.entryId.startsWith('longform.voice'))).toBe(false)
     delete full.limitedTransports
-    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(66)
+    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(68)
     const legacy = { ...full, entries: full.entries.filter((entry: Entry) => !['ttrpg.open.local-voice', 'ttrpg.open.brief', 'ttrpg.open.situation-propose', 'ttrpg.open.public-situation-propose', 'ttrpg.open.entity-propose', 'ttrpg.open.common-oracle-interpret', 'ttrpg.open.authoring-design', 'ttrpg.open.authoring-design.full'].includes(entry.entryId)) }
-    expect(parseFormalAIEntryRegistryV1(legacy).entries).toHaveLength(58)
+    expect(parseFormalAIEntryRegistryV1(legacy).entries).toHaveLength(60)
     expect(legacy.entries.some((entry: Entry) => entry.entryId.startsWith('ttrpg.open.authoring-design'))).toBe(false)
     for (const patch of [{ adoptAllowed: true }, { adoptionTargets: ['chapters'] }, { boundary: 'durable-run' }]) {
       const invalid = JSON.parse(JSON.stringify(registry))

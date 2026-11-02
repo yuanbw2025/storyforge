@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {expect, test, type Page} from '@playwright/test'
 import {chatActionResponseFixture} from './helpers/character-chat-choice'
 
@@ -9,9 +10,8 @@ async function setup(page: Page, invalid = false, completedResponse = false) {
   const responseText = completedResponse ? preferenceReply : reply
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://choice-messages.invalid/v1', model: 'test', maxTokens: 8000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://choice-messages.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' })
   const calls: string[] = []
   let citedMessageId: string | undefined
   await page.route('https://choice-messages.invalid/**', async route => {
@@ -37,12 +37,12 @@ async function setup(page: Page, invalid = false, completedResponse = false) {
         ...(completedResponse ? {turnCompletionCheck: {passed: true, reason: '工程注入：本次偏好回应已完成，原目标和未决许可保留'}} : {})}
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async maxActionsPerTrigger => {
     const load = new Function('p', 'return import(p)')
     return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({maxActionsPerTrigger, onlyGuard: true})
   }, completedResponse ? 2 : 1)
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   const read = () => page.evaluate(async id => {
     const load = new Function('p', 'return import(p)'), api = await load('/storyforge/src/lib/character-interaction/runtime-api.ts')
@@ -64,7 +64,7 @@ for (const width of [390, 1440]) for (const completedResponse of [false, true]) 
   if (completedResponse) expect(after.state.interaction.chatNarrative.triggers.at(-1)).toMatchObject({status: 'complete', direction: {actionLimit: 2}})
   expect(calls).toEqual(['choice', 'expression', 'review'])
   expect(await page.locator('body').innerText()).not.toContain('仅供选择使用的内部说明')
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText(responseText, {exact: true})).toBeVisible()
   expect((await read()).state).toEqual(after.state)
   expect(calls).toEqual(['choice', 'expression', 'review'])
@@ -79,7 +79,7 @@ test('rejects an undelivered message before expression and preserves the failure
   const after = await read()
   expect(after.state.interaction.messages.map((message: {role: string}) => message.role)).toEqual(['player'])
   expect(after.state.interaction.chatNarrative.situation).toEqual(before.state.interaction.chatNarrative.situation)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText(playerText, {exact: true})).toBeVisible()
   expect((await read()).state).toEqual(after.state)
   expect(calls).toEqual(['choice'])

@@ -4,6 +4,8 @@ import type { NodeFlow, NodeRunRecord } from '../lib/types'
 import { parseAuthoringGraph } from '../lib/node-authoring/graph-codec'
 import { emptyAuthoringGraph, safeAuthoringGraphJson } from '../lib/node-authoring/contracts'
 import type { AuthoringNodeGraph } from '../lib/node-authoring/contracts'
+import { transactionTablesForReferenceCascade } from '../lib/registry/lifecycle'
+import { cascadeRegisteredReferences } from '../lib/workspace/lifecycle'
 import {
   assertRecordInScope,
   readOwnedRows,
@@ -94,8 +96,10 @@ export const useNodeFlowStore = create<NodeFlowStore>((set, get) => ({
     const scope = await resolveScopeLike(existingRecord.projectId)
     const flow = await db.nodeFlows.get(flowId)
     if (!flow || !await assertRecordInScope(scope, 'nodeFlows', flow, { owner: 'work' })) return
-    await db.transaction('rw', db.nodeFlows, db.nodeRuns, async () => {
-      await db.nodeRuns.where('flowId').equals(flowId).delete()
+    await db.transaction('rw', transactionTablesForReferenceCascade('nodeFlows'), async () => {
+      const current = await db.nodeFlows.get(flowId)
+      if (!current || !await assertRecordInScope(scope, 'nodeFlows', current, { owner: 'work' })) return
+      await cascadeRegisteredReferences('nodeFlows', flowId)
       await db.nodeFlows.delete(flowId)
     })
     await get().load(scope)

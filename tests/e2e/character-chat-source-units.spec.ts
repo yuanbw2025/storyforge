@@ -1,13 +1,13 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {test, expect, type Page} from '@playwright/test'
 import type {ChatSourceUnitsCandidateV1} from '../../src/lib/character-interaction/source-units'
 
 async function openWorkbench(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-source-units.invalid/v1', model: 'test', maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
-  await page.goto('./chat/library')
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-source-units.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)'), helper = await load('/storyforge/tests/helpers/chat-source-units.ts')
     const f = await helper.seedChatSourceUnitsFixture()
@@ -15,7 +15,7 @@ async function openWorkbench(page: Page) {
     return {scope: f.scope, candidate: f.candidate as ChatSourceUnitsCandidateV1, text: helper.SOURCE_UNITS_FIXTURE_TEXT,
       before: {drafts: await db.chatAuthoringDrafts.toArray(), worlds: await db.worldReleases.toArray()}}
   })
-  await page.goto(`./chat/cast?project=${f.scope.projectId}&work=${f.scope.workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/cast?project=${f.scope.projectId}&work=${f.scope.workId}`)
   await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await page.getByRole('checkbox', {name: /规则条目 · seal · 历史依据 加入整理建议$/}).check()
   return f
@@ -50,7 +50,7 @@ test('source units use two explicit calls, retain original evidence, invalidate 
   await panel.getByRole('button', {name: '独立复核当前候选', exact: true}).click()
   await expect(panel.getByRole('status')).toHaveText('当前候选已获独立复核通过，尚未确认用于制作。')
   expect(calls).toHaveLength(3)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await expect(panel.getByLabel('事实 1', {exact: true})).toHaveValue('铜印当前位于柜台下面的木箱内。')
   await expect(panel.getByRole('status')).toHaveText('当前候选已获独立复核通过，尚未确认用于制作。')
@@ -82,7 +82,7 @@ test('a manual candidate survives an unknown review, cannot silently retry, and 
   await reviewButton.click()
   await expect(panel.getByText('独立复核尚未结束。结果未知时不会自动重发；已留存的回复可恢复。', {exact: true})).toBeVisible()
   expect(calls).toBe(1)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await expect(panel.getByLabel('事实 1', {exact: true})).toHaveValue('铜印在柜台下的木箱里。')
   await expect(reviewButton).toBeDisabled(); expect(calls).toBe(1)

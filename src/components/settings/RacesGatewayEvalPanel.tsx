@@ -24,8 +24,8 @@ import {
 } from '../../lib/evals/races-gateway/runner'
 import { RACES_GATEWAY_EVAL_FIXTURES_V1 } from '../../lib/evals/races-gateway/fixtures'
 import type { RacesGatewayEvalCheckpointV1 } from '../../lib/evals/races-gateway/types'
-import { PROVIDER_MODELS, type AIConfig, type AIConfigPreset } from '../../lib/types'
-import { getAIConfigPresetSessionApiKey, useAIConfigStore } from '../../stores/ai-config'
+import { PROVIDER_MODELS, type AIConfigPreset } from '../../lib/types'
+import { resolveAIConfigPresetV1, useAIConfigStore } from '../../stores/ai-config'
 import { useDialog } from '../shared/Dialog'
 
 function rate(value: number): string {
@@ -39,13 +39,6 @@ function downloadJson(raw: string, filename: string): void {
   anchor.download = filename
   anchor.click()
   URL.revokeObjectURL(url)
-}
-
-function presetConfig(preset: AIConfigPreset, current: AIConfig): AIConfig {
-  const apiKey = preset.config.apiKey
-    || getAIConfigPresetSessionApiKey(preset.id)
-    || (preset.config.provider === current.provider ? current.apiKey : '')
-  return { ...preset.config, apiKey }
 }
 
 function defaultPresetId(presets: AIConfigPreset[], pattern: RegExp, exclude?: string): string {
@@ -97,10 +90,10 @@ export default function RacesGatewayEvalPanel() {
   const generatorPreset = presets.find(item => item.id === generatorPresetId) ?? null
   const graderPreset = presets.find(item => item.id === graderPresetId) ?? null
   const generatorConfig = useMemo(() => (
-    generatorPreset ? presetConfig(generatorPreset, currentConfig) : null
+    generatorPreset ? resolveAIConfigPresetV1(generatorPreset, currentConfig) : null
   ), [currentConfig, generatorPreset])
   const graderPresetConfig = useMemo(() => (
-    graderPreset ? presetConfig(graderPreset, currentConfig) : null
+    graderPreset ? resolveAIConfigPresetV1(graderPreset, currentConfig) : null
   ), [currentConfig, graderPreset])
   const graderOptions = useMemo(() => {
     if (!graderPresetConfig) return []

@@ -160,7 +160,7 @@ export interface PreparedStoryArcCopilot {
   label: string
   modelIdentity: { provider: string; model: string }
   contextGatewayExecution?: ContextGatewayExecutionV1
-  runRaw: (messages: ChatMessage[]) => Promise<StoryArcRawModelResultV1>
+  runRaw: (messages: ChatMessage[], result?: ChatResult) => Promise<StoryArcRawModelResultV1>
 }
 
 export interface StoryArcRawModelResultV1 {
@@ -1664,9 +1664,8 @@ export async function prepareStoryArcCopilot(
     generationOverrides: input.generationOverrides,
     signal: input.signal,
   }
-  const runRaw = async (messages: ChatMessage[]): Promise<StoryArcRawModelResultV1> => {
+  const runRaw = async (messages: ChatMessage[], result: ChatResult = {}): Promise<StoryArcRawModelResultV1> => {
     const startedAt = Date.now()
-    const result: ChatResult = {}
     const output = dependencies.runAI
       ? await dependencies.runAI(messages)
       : await chat(messages, config, {

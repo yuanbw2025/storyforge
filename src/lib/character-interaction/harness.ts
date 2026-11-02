@@ -58,6 +58,7 @@ import {
 } from '../agent/run/runtime-scope'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import { db } from '../db/schema'
+import { assertTextOpenWorldSessionNewWorkV1 } from '../open-world/source-admission'
 import { assembleContext } from '../registry/assemble-context'
 import { readAgentRunArtifactExactV1, recordAgentRunArtifactV1 } from '../memory/artifact-store'
 import {
@@ -536,6 +537,11 @@ const narrativeGenerationLocks = new Set<number>()
 /** One paid attempt for an exact runtime head. Refresh recovers the saved run;
  * a new explicit trigger authorizes another attempt after failure/cancellation. */
 export async function generateInteractionRuntimeCandidateV1(input: InteractionRuntimeGenerationInputV1): Promise<{ snapshot: AgentRunSnapshotV1; candidate: InteractionRuntimeCandidateV1 }> {
+  input = { ...input, scope: structuredClone(input.scope), ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }) }
+  if ((await db.productRuntimeSessions.get(input.productRuntimeSessionId))?.kind === 'text-open-world') {
+    await assertTextOpenWorldSessionNewWorkV1({ scope: input.scope, sessionId: input.productRuntimeSessionId,
+      operation: '新互动兼容模型运行' })
+  }
   const memoryReview = input.skillId === 'character.interaction-memory-curator'
     && (await db.productRuntimeSessions.get(input.productRuntimeSessionId))?.kind === 'character-interaction'
   if (!memoryReview && ![CHAT_ACTION_REVISION_SKILL, 'character.chat-narrative-action', 'character.chat-narrative-options', 'character.chat-situation-construction'].includes(input.skillId)) return generateRuntimeCandidate(input)
@@ -1081,6 +1087,7 @@ export async function adoptInteractionRuntimeCandidateV1(input: {
   /** Test/host crash-injection boundary; the durable event is already committed. */
   onDurableBoundary?: (eventType: string, snapshot: AgentRunSnapshotV1) => void | Promise<void>
 }): Promise<{ snapshot: AgentRunSnapshotV1; event: ProductRuntimeEvent | null; receiptHash: string }> {
+  input = { ...input, scope: structuredClone(input.scope) }
   const loaded = await readInteractionRuntimeCandidateV1(input.scope, input.runId)
   let { snapshot } = loaded
   const { candidate } = loaded
@@ -1140,6 +1147,10 @@ export async function adoptInteractionRuntimeCandidateV1(input: {
   if (!adopted && !priorCommand && snapshot.projection.state !== 'running'
     && !(options && snapshot.projection.state === 'awaiting_confirmation')) fail('候选运行已取消、暂停或失败，不能采用')
   if (!adopted && !priorCommand) {
+    if ((await db.productRuntimeSessions.get(candidate.productRuntimeSessionId))?.kind === 'text-open-world') {
+      await assertTextOpenWorldSessionNewWorkV1({ scope: input.scope, sessionId: candidate.productRuntimeSessionId,
+        operation: '采纳新的互动兼容候选' })
+    }
     try {
       await assertRuntimeHarnessFreshV1({
         scope: input.scope,

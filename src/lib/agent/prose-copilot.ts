@@ -144,7 +144,7 @@ export interface PreparedProseCopilot {
   contextGatewayExecution: ProseGatewayAssemblyV1['contextGatewayExecution']
   input: ProseCopilotInput
   modelIdentity: { provider: string; model: string }
-  runRaw: (messages: ChatMessage[]) => Promise<CreativeRawModelResultV1>
+  runRaw: (messages: ChatMessage[], result?: ChatResult) => Promise<CreativeRawModelResultV1>
 }
 
 interface ProseCopilotDependencies {
@@ -697,9 +697,8 @@ export async function prepareProseCopilot(input: {
   const requestSettings = describeResolvedAIRequestSettingsV1(frozenResolution, false)
   snapshot.requestSettings = requestSettings
   let finishReason: string | null = null
-  const runRaw = async (messages: ChatMessage[]): Promise<CreativeRawModelResultV1> => {
+  const runRaw = async (messages: ChatMessage[], result: ChatResult = {}): Promise<CreativeRawModelResultV1> => {
     const startedAt = Date.now()
-    const result: ChatResult = {}
     const output = dependencies.runAI
       ? await dependencies.runAI(messages)
       : await chat(messages, config, { ...requestMeta, category: routingCategory }, input.signal, result, undefined, frozenResolution)

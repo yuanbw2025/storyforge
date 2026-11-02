@@ -119,6 +119,14 @@ export function applyTtrpgAuthoredScenarioV1(base: TtrpgCampaignContentV1, value
     // Preserve the base point total, including at attribute caps. No model-supplied numeric fields.
     const shift = Math.min(1, strength.maximum - attributes[strength.key], attributes[weakness.key] - weakness.minimum)
     attributes[strength.key] += shift; attributes[weakness.key] -= shift
+    if (!original.characterSheet) fail('基础角色缺少已确认角色卡')
+    const progression = structuredClone(original.characterSheet.rules.progression)
+    if (rulePack.advancement.progressionModel === 'numeric-level' && Object.prototype.hasOwnProperty.call(attributes, 'level')) {
+      if (progression.model !== 'numeric-level' || !Number.isInteger(attributes.level)
+        || attributes.level < 1 || attributes.level > rulePack.advancement.maximumLevel) fail('角色等级不符合冻结规则')
+      if (original.role === 'player' && attributes.level !== progression.level) fail('角色强弱项不能改写已确认的玩家初始等级')
+      progression.level = attributes.level
+    }
     const sourceRefs = actor.seatKey == null ? [...refs] : [...original.sourceRefs]
     const template: Omit<TtrpgCharacterTemplateV1, 'characterSheet'> = { ...original, characterKey, name: actor.name, description: actor.description,
       attributes, sourceRefs, portraitAssetKey: null,
@@ -131,7 +139,7 @@ export function applyTtrpgAuthoredScenarioV1(base: TtrpgCampaignContentV1, value
     }
     return { ...template, characterSheet: createCompleteTtrpgCharacterSheetV2({ template, rulePack, authoringMode: 'ai',
       identity: { name: actor.name, appearance: actor.appearance, background: actor.background, shortTermGoal: actor.goal, desires: [actor.goal] },
-      progression: original.characterSheet!.rules.progression }) }
+      progression }) }
   })
   const sceneKeys = new Set(base.scenes.map(scene => scene.sceneKey)), actionKeys = new Set(rulePack.actions.map(action => action.key))
   campaign.characterTemplates = characters
