@@ -170,7 +170,7 @@ export default function CommunityShareFlow({ selectionRevision, buildSnapshot }:
         value={license} onChange={event => setLicense(event.target.value as typeof license)}>
         <option value="all-rights-reserved">保留所有权利</option><option value="cc-by-4.0">CC BY 4.0 署名许可</option>
       </select></label>
-      <p className="text-xs text-text-muted">提交后先进入人工审核。审核通过之前，公开页面不会显示这份内容。</p>
+      <p className="text-xs text-text-muted">提交后先进行内容审核，自动审核无法确定的内容转人工复核。审核通过之前，公开页面不会显示这份内容。</p>
       <button type="button" disabled={!configured || !session || !penName.trim() || busy} onClick={() => {
         if (!session || !seal) return
         setBusy(true); setProgress(0); setMessage('正在复核本地内容…')
