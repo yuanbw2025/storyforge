@@ -925,7 +925,7 @@ function strictOwnerShadow(spec: TableSpec, row: Record<string, any>): {
   return null
 }
 
-async function validateCurrentBackup(data: ProjectExportData): Promise<void> {
+async function validateCurrentBackup(data: Record<string, unknown>): Promise<void> {
   if (data.version !== CURRENT_BACKUP_VERSION) {
     throw new Error(`[deriveImport] 只接受当前备份版本 v${CURRENT_BACKUP_VERSION}`)
   }
@@ -1653,15 +1653,26 @@ async function restorePortableSharedMediaObject(
  * 派生导入:把 ProjectExportData 写成一个新项目,返回新项目 id。
  * 与手写 importProjectJSON 行为一致(往返完整性由 R-export-fullcoverage 锁死)。
  */
-export async function deriveImportProjectJSON(data: ProjectExportData, options: ProjectImportOptionsV1 = {}): Promise<number> {
+export async function deriveImportProjectJSON(input: unknown, options: ProjectImportOptionsV1 = {}): Promise<number> {
+  // Direct callers receive the same immutable input boundary as the facade.
+  input = structuredClone(input)
   const finalizeInTransaction = options.finalizeInTransaction
-  if (!data.project) throw new Error('无效的导出文件格式')
-  data = normalizeProjectBackup(data)
-  await validateCurrentBackup(data)
+  const normalized = normalizeProjectBackup(input)
+  if (!normalized.project) throw new Error('无效的导出文件格式')
+  await validateCurrentBackup(normalized)
+  if (PROJECT_TABLES.some(spec => spec.portableData?.kind === 'world-source-receipt')) {
+    const { assertWorldSourceReceiptRowsV1 } = await import('../world-engine/source-receipt')
+    const portable = normalized
+    await assertWorldSourceReceiptRowsV1(new Map(PROJECT_TABLES.filter(spec => spec.exportable)
+      .map(spec => [spec.name, (Array.isArray(portable[spec.name]) ? portable[spec.name] : []) as Record<string, unknown>[]])), 'portable')
+  }
   await assertNarrativeLineageRowsV1(new Map([
-    ['worlds', data.worlds as unknown as Record<string, unknown>[]],
-    ['worldDerivations', data.worldDerivations as unknown as Record<string, unknown>[]],
+    ['worlds', normalized.worlds as Record<string, unknown>[]],
+    ['worldDerivations', normalized.worldDerivations as Record<string, unknown>[]],
   ]), 'portable')
+  // Only after all current-contract, raw-wire and lineage validation does the
+  // detached normalized structure become the current import DTO.
+  const data = normalized as unknown as ProjectExportData
   const now = Date.now()
   const specs = PROJECT_TABLES.filter(s => s.exportable && s.name !== 'projects')
   const order = deriveImportOrder(specs)

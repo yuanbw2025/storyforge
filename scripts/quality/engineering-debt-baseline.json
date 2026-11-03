@@ -62903,21 +62903,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-audio-runtime.test.ts\",\"TS2345\",\"Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<{ <U>(mode: TransactionMode, tables: readonly (string | Table<any, any, any>)[], scope: (trans: Transaction & { characters: Table<Character, any, Character>; ... 128 more ...; motionDramaReviewIssues: Table<...>; }) => U | PromiseLike<...>): PromiseExtended<...>; <U>(mode: TransactionMode, table:...'.\\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.\",\"cf12f695726069a78719a2255e52041534491d7ef42d9c6472a71f26cb641ee1\",69,55]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN10-audio-runtime.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<{ <U>(mode: TransactionMode, tables: readonly (string | Table<any, any, any>)[], scope: (trans: Transaction & { characters: Table<Character, any, Character>; ... 128 more ...; motionDramaReviewIssues: Table<...>; }) => U | PromiseLike<...>): PromiseExtended<...>; <U>(mode: TransactionMode, table:...'.\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.",
-        "anchor": "cf12f695726069a78719a2255e52041534491d7ef42d9c6472a71f26cb641ee1",
-        "line": 78,
-        "column": 69,
-        "start": 7302,
-        "length": 55
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-audio-runtime.test.ts\",\"TS2550\",\"Property 'at' does not exist on type 'ProductRuntimeEvent[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.\",\"b0d40cfcfb531fe02e20850b9b7465ee6c9224f9e333ea4da048b252dc681a14\",115,2]",
       "count": 1,
       "diagnostic": {
@@ -84383,21 +84368,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN5-per-turn-settlement.test.ts\",\"TS2345\",\"Argument of type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' is not assignable to parameter of type 'ProjectExportData'.\\n  Property 'ttrpgNarrativeMemories' is missing in type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' but required in type 'ProjectExportData'.\",\"9e41cace2a24718bdc176dc218123ba58a837d4006bff4510f83513227c3d940\",47,18]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN5-per-turn-settlement.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' is not assignable to parameter of type 'ProjectExportData'.\n  Property 'ttrpgNarrativeMemories' is missing in type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' but required in type 'ProjectExportData'.",
-        "anchor": "9e41cace2a24718bdc176dc218123ba58a837d4006bff4510f83513227c3d940",
-        "line": 92,
-        "column": 47,
-        "start": 8004,
-        "length": 18
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN5-pressure-journal.test.ts\",\"TS2339\",\"Property 'autoAdvance' does not exist on type 'TtrpgOpenCampaignClockV1 | TtrpgCampaignClockV1'.\\n  Property 'autoAdvance' does not exist on type 'TtrpgCampaignClockV1'.\",\"5e6a6c7467a52429dfdfad2f0b47b07ec590cd50e2926965fefae57d0f5eb9d4\",37,11]",
       "count": 1,
       "diagnostic": {
@@ -85748,36 +85718,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN7-legacy-context.test.ts\",\"TS2345\",\"Argument of type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' is not assignable to parameter of type 'ProjectExportData'.\\n  Property 'ttrpgNarrativeMemories' is missing in type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' but required in type 'ProjectExportData'.\",\"4a62ea03d01c764e379f931d6f7cca9ab3e9ce44e6b2859606af9a5ab5c6c7a4\",47,13]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN7-legacy-context.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' is not assignable to parameter of type 'ProjectExportData'.\n  Property 'ttrpgNarrativeMemories' is missing in type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' but required in type 'ProjectExportData'.",
-        "anchor": "4a62ea03d01c764e379f931d6f7cca9ab3e9ce44e6b2859606af9a5ab5c6c7a4",
-        "line": 29,
-        "column": 47,
-        "start": 2426,
-        "length": 13
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN7-legacy-context.test.ts\",\"TS2345\",\"Argument of type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' is not assignable to parameter of type 'ProjectExportData'.\\n  Property 'ttrpgNarrativeMemories' is missing in type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' but required in type 'ProjectExportData'.\",\"9466c85555847e267535abae190517bc2ed93d676125744af5622a2ed6c4122c\",47,13]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN7-legacy-context.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' is not assignable to parameter of type 'ProjectExportData'.\n  Property 'ttrpgNarrativeMemories' is missing in type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' but required in type 'ProjectExportData'.",
-        "anchor": "9466c85555847e267535abae190517bc2ed93d676125744af5622a2ed6c4122c",
-        "line": 17,
-        "column": 47,
-        "start": 1249,
-        "length": 13
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN8-brief-adoption.test.ts\",\"TS2339\",\"Property 'knowledge' does not exist on type '{}'.\",\"9a2713b67f1bc68578c3be43c51ccdfedac7133f12f474f4e2fa359f8523e230\",34,9]",
       "count": 1,
       "diagnostic": {
@@ -86810,21 +86750,6 @@
         "column": 12,
         "start": 779,
         "length": 24
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN9-identity-knowledge.test.ts\",\"TS2345\",\"Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<{ <U>(mode: TransactionMode, tables: readonly (string | Table<any, any, any>)[], scope: (trans: Transaction & { characters: Table<Character, any, Character>; ... 128 more ...; motionDramaReviewIssues: Table<...>; }) => U | PromiseLike<...>): PromiseExtended<...>; <U>(mode: TransactionMode, table:...'.\\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.\",\"cde9ec88292dfd6f4706f7ec8d41956339b7a5b898d716acc57f5a5d4afde300\",108,55]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN9-identity-knowledge.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<{ <U>(mode: TransactionMode, tables: readonly (string | Table<any, any, any>)[], scope: (trans: Transaction & { characters: Table<Character, any, Character>; ... 128 more ...; motionDramaReviewIssues: Table<...>; }) => U | PromiseLike<...>): PromiseExtended<...>; <U>(mode: TransactionMode, table:...'.\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.",
-        "anchor": "cde9ec88292dfd6f4706f7ec8d41956339b7a5b898d716acc57f5a5d4afde300",
-        "line": 79,
-        "column": 108,
-        "start": 8006,
-        "length": 55
       }
     },
     {

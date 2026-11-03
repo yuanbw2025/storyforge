@@ -300,6 +300,13 @@ export type ExportRefRemap = {
  * JSON from silently bypassing normal exportRemap handling.
  */
 export type PortableDataSpec = {
+  /** Actual immutable world package wire plus derived P/R/D indices. */
+  kind: 'world-source-receipt'
+} | {
+  /** An explicit selected editing D; never inferred from another receipt. */
+  kind: 'world-source-receipt-binding'
+  bindingField: 'sourceReceiptBinding'
+} | {
   kind: 'agent-run-root'
   contractField: string
   contractHashField: string
