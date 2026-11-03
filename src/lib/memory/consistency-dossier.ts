@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { estimateTokens } from '../ai/context-budget'
 import { hashChapterText } from '../ai/chapter-memory/text-normalization'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
@@ -48,6 +49,10 @@ function beforeOrAt(orderOf: ReadonlyMap<number, number>, rowChapterId: unknown,
   if (typeof rowChapterId !== 'number') return true
   const rowOrder = orderOf.get(rowChapterId)
   return rowOrder != null && rowOrder <= boundaryOrder
+}
+
+function keepDossierDigestAlive<T>(pending: Promise<T>): Promise<T> {
+  return Dexie.currentTransaction?.db === db ? Dexie.waitFor(pending) : pending
 }
 
 async function sourceRef(
@@ -189,7 +194,7 @@ export async function buildLongTermConsistencyDossierV1(input: {
     const keywords = chunk.keywords.map(value => value.toLocaleLowerCase())
     if (queryTerms.length && !queryTerms.some(term => lowerText.includes(term) || keywords.some(keyword => keyword.includes(term)))) continue
     const chapter = currentChapterById.get(chunk.sourceChapterId)
-    if (!chapter || chunk.sourceTextHash !== await hashChapterText(chapter.content ?? '')) continue
+    if (!chapter || chunk.sourceTextHash !== await keepDossierDigestAlive(hashChapterText(chapter.content ?? ''))) continue
     const chunkAllowed = input.inspectSourcePolicy?.({ table: 'retrievalChunks', row: chunk, fields: ['text', 'keywords'], required: false }) !== false
     const chapterAllowed = input.inspectSourcePolicy?.({ table: 'chapters', row: chapter, fields: ['content'], required: false }) !== false
     if (!chunkAllowed || !chapterAllowed) continue
@@ -229,9 +234,9 @@ export async function buildLongTermConsistencyDossierV1(input: {
     ['storyTimelineEvents', relevantTimeline, 'accepted-evidence'],
     ['retrievalChunks', keywordChunks, 'derived-cache'],
   ]
-  const sourceRefs = (await Promise.all(sourceRows.flatMap(([table, rows, authority]) => (
+  const sourceRefs = (await keepDossierDigestAlive(Promise.all(sourceRows.flatMap(([table, rows, authority]) => (
     rows.map(row => sourceRef(table, row, authority))
-  )))).filter((ref): ref is ConsistencyDossierSourceRefV1 => ref != null)
+  ))))).filter((ref): ref is ConsistencyDossierSourceRefV1 => ref != null)
 
   const findings: ConsistencyDossierFindingV1[] = []
   for (const ref of sourceRefs.filter(row => row.status !== 'current')) {
@@ -316,7 +321,7 @@ export async function buildLongTermConsistencyDossierV1(input: {
       modelCalls: 0 as const,
     },
   }
-  return { ...base, dossierHash: await hashCanonicalValue(base) }
+  return { ...base, dossierHash: await keepDossierDigestAlive(hashCanonicalValue(base)) }
 }
 
 export function formatLongTermConsistencyDossierV1(dossier: LongTermConsistencyDossierV1): string {

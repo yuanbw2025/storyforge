@@ -1,3 +1,4 @@
+import Dexie, { type Transaction } from 'dexie'
 import { estimateTokens } from '../ai/context-budget'
 import { CHAPTER_TEXT_NORMALIZATION_VERSION, getChapterDerivedMemoryStatus, normalizeChapterText, sha256Text } from '../ai/chapter-memory/text-normalization'
 import type { Chapter } from '../types'
@@ -46,6 +47,24 @@ import {
   contextGatewayTableMutationEpochV1,
   createCachedContextResourceProviderV1,
 } from './provider-cache'
+
+// Authoritative reads may run in the caller's Dexie snapshot. Keep only the
+// pure digest leaves alive. Projection fans out in parallel, so serialize its
+// keep-alives within one transaction; concurrent waits can settle out of order.
+const canonDigestTails = new WeakMap<Transaction, Promise<unknown>>()
+
+function keepCanonDigestAlive<T>(digest: () => Promise<T>): Promise<T> {
+  const transaction = Dexie.currentTransaction
+  if (transaction?.db !== db) return digest()
+  const wait = () => Dexie.waitFor(digest())
+  const tail = canonDigestTails.get(transaction)
+  const pending = tail ? tail.then(wait, wait) : wait()
+  canonDigestTails.set(transaction, pending)
+  return pending
+}
+
+const hashCanonProjection = (value: unknown) => keepCanonDigestAlive(() => hashCanonicalValue(value))
+const hashCanonText = (text: string) => keepCanonDigestAlive(() => sha256Text(text))
 
 const PROVIDER_SOURCE_KEY = 'ragSelection'
 const PROVIDER_VERSION = 'canon-resource-provider-v11'
@@ -200,7 +219,7 @@ async function resourcePolicy(row: ResourceRow, fieldKey?: string): Promise<{
   tokenCap: number
 }> {
   const raw = row.ragPolicy ?? {}
-  const documentHash = await hashCanonicalValue({ version: 1, policy: raw })
+  const documentHash = await hashCanonProjection({ version: 1, policy: raw })
   if (row.ragPolicyHash && row.ragPolicyHash !== documentHash) {
     fail('policy-hash-mismatch', `资源 ${row.ragDocumentId ?? '?'} 的检索策略 hash 已损坏`)
   }
@@ -225,7 +244,7 @@ async function resourcePolicy(row: ResourceRow, fieldKey?: string): Promise<{
   return {
     enabled: effective.enabled,
     revision: row.ragPolicyRevision ?? 0,
-    hash: await hashCanonicalValue({ version: 1, documentHash, fieldKey, effective }),
+    hash: await hashCanonProjection({ version: 1, documentHash, fieldKey, effective }),
     priority: effective.priority,
     weight: effective.weight,
     tokenCap: effective.tokenCap,
@@ -382,7 +401,7 @@ async function sourceRef(
   exact: string,
 ): Promise<ContextSourceRefV1> {
   if (!Number.isInteger(row.id)) fail('record-id', `${spec.name} 资源缺少 numeric id`)
-  const contentHash = await sha256Text(exact)
+  const contentHash = await hashCanonText(exact)
   return {
     table: spec.name,
     recordId: row.id!,
@@ -583,7 +602,8 @@ async function chapterDerivedAuthority(row: ResourceRow, field: string): Promise
   if (!['summary', 'continuityHandoff', 'planReconciliation'].includes(field)) return 'author-canon'
   if (typeof row.content !== 'string') return 'candidate'
   const chapter = row as unknown as Chapter
-  const status = await getChapterDerivedMemoryStatus(chapter)
+  // This helper only hashes the supplied chapter text and compares its stamps.
+  const status = await keepCanonDigestAlive(() => getChapterDerivedMemoryStatus(chapter))
   if (field === 'summary') return status.summary === 'verified' ? 'derived-summary' : 'candidate'
   if (field === 'continuityHandoff') return status.handoff === 'verified' ? 'derived-summary' : 'candidate'
   const reconciliation = chapter.planReconciliation
@@ -677,7 +697,7 @@ async function projectionPolicy(input: {
     ...own,
     enabled: isRagSelectionEnabledV1(input.row.ragPolicy, fields) && snapshots.every(item => !item.required || item.enabled),
     revision: snapshots.reduce((revision, item) => Math.max(revision, item.revision), own.revision),
-    hash: await hashCanonicalValue({ version: 1, ownPolicyHash: own.hash, fields: [...fields].sort(), dependencies: snapshots }),
+    hash: await hashCanonProjection({ version: 1, ownPolicyHash: own.hash, fields: [...fields].sort(), dependencies: snapshots }),
   }
 }
 
@@ -709,7 +729,7 @@ async function makeDescriptor(input: {
       ? Math.max(latest, ref.revision)
       : String(ref.revision) > String(latest) ? ref.revision : latest
   ), 0)
-  const contentHash = await sha256Text(input.fullContent)
+  const contentHash = await hashCanonText(input.fullContent)
   return {
     descriptor: {
       version: 1,
@@ -821,7 +841,7 @@ async function nestedStoryStages(
     // A stage title can recur in the same Arc. Its portable parent+stage key
     // identifies the occurrence; a digest also preserves opaque IDs that a
     // normalized-name conflict check would otherwise collapse.
-    const stageTitle = `${rowTitle(spec, row)} · ${stage.title} · ${await sha256Text(stageKey)}`
+    const stageTitle = `${rowTitle(spec, row)} · ${stage.title} · ${await hashCanonText(stageKey)}`
     const body = canonicalStringify(stage)
     const stageResource = await makeDescriptor({
       spec,
@@ -896,7 +916,7 @@ async function nestedWrittenBoundary(
     .map(field => sourceRef(spec, row, field, exactValue(row[field]))))
   const relations = await relationsForRow(spec, row)
   const wordCount = typeof row.wordCount === 'number' ? row.wordCount : 0
-  const contentHash = await sha256Text(row.content)
+  const contentHash = await hashCanonText(row.content)
   const body = [
     '【已写正文保护边界】',
     `章节：${rowTitle(spec, row)}`,
@@ -1174,7 +1194,7 @@ async function validatedScope(scope: FrozenResourceScopeV1) {
 
 export async function canonScopeFingerprintV1(scope: FrozenResourceScopeV1): Promise<string> {
   await validatedScope(scope)
-  return hashCanonicalValue({ version: 1, scope: {
+  return hashCanonProjection({ version: 1, scope: {
     projectId: scope.projectId,
     worldId: scope.worldId,
     workId: scope.workId,
@@ -1294,7 +1314,7 @@ async function catalogPage(input: ResourceListInputV1 | ResourceSearchInputV1): 
   const catalogTables = scopeTransactionTables(...specs.map(spec => spec.table), db.retrievalChunks, db.narrativeSummaryNodes)
   const catalogTableNames = catalogTables.map(table => table.name)
   const catalogEpoch = contextGatewayTableMutationEpochV1(catalogTableNames)
-  const requestHash = await hashCanonicalValue({
+  const requestHash = await hashCanonProjection({
     version: 1, scopeFingerprint, catalogEpoch, requestedKinds, query, entityKeys, storyArcKeys, timeRange: timeRange ?? null,
   })
   const cursor = decodeCursor(input.cursor)
@@ -1462,7 +1482,7 @@ async function buildResourceRead(
     descriptor: projected.descriptor,
     depth,
     content,
-    contentHash: await sha256Text(content),
+    contentHash: await hashCanonText(content),
     tokenCount: estimateTokens(content),
     sourceRefs: projected.descriptor.sourceRefs,
   }

@@ -1,3 +1,4 @@
+import { modelDispatchWasCancelledV1, ModelDispatchGuardRejectedV1 } from '../ai/codex-transport'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import {
   adoptCharacterCopilotCandidate,
@@ -118,6 +119,7 @@ export interface DomainExecutionInput {
   signal?: AbortSignal
   /** Actual registered correlation; never used as an AgentRun identity. */
   nodeRunId?: number
+  assertResumeSourcesCurrent?: () => Promise<void>
 }
 
 async function resolveDomainScope(input: Pick<DomainExecutionInput, 'projectId' | 'scope'>): Promise<WorkspaceScope> {
@@ -223,7 +225,8 @@ async function executeWorldviewField(input: DomainExecutionInput, sourceNode: Au
   for (let index = 0; index < count; index += 1) {
     producer = createNodeFieldProducerV1({ scope, worldGroupId: input.worldGroupId, nodeRunId: input.nodeRunId,
       node: sourceNode, variantIndex: index, family: 'worldview', targetField: field,
-      assembled: prepared.input.assembled, gateway: prepared.contextGatewayExecution, targetSnapshot: prepared.snapshot })
+      assembled: prepared.input.assembled, gateway: prepared.contextGatewayExecution, targetSnapshot: prepared.snapshot,
+      assertResumeSourcesCurrent: input.assertResumeSourcesCurrent })
     try {
       const payload = await prepared.node.run(prepared.prepared.messages)
       const gate = await prepared.node.gate?.(payload)
@@ -283,7 +286,8 @@ async function executeStoryCoreField(input: DomainExecutionInput, sourceNode: Au
   for (let index = 0; index < count; index += 1) {
     producer = createNodeFieldProducerV1({ scope, worldGroupId: input.worldGroupId, nodeRunId: input.nodeRunId,
       node: sourceNode, variantIndex: index, family: 'story-core', targetField: field,
-      assembled: prepared.input.assembled, gateway: prepared.contextGatewayExecution, targetSnapshot: prepared.snapshot })
+      assembled: prepared.input.assembled, gateway: prepared.contextGatewayExecution, targetSnapshot: prepared.snapshot,
+      assertResumeSourcesCurrent: input.assertResumeSourcesCurrent })
     try {
       const payload = await prepared.node.run(prepared.prepared.messages)
       const gate = await prepared.node.gate?.(payload)
@@ -330,10 +334,12 @@ async function executeCharacterSupplement(input: DomainExecutionInput): Promise<
     configOverride: input.aiConfig,
     generationOverrides: generationOverrides(input.node, input.inputs),
     signal: input.signal,
+    beforeModelDispatch: input.assertResumeSourcesCurrent,
   })
   const binding = await domainBinding(input)
   const variants: string[] = []
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
+    if (input.assertResumeSourcesCurrent) await input.assertResumeSourcesCurrent()
     variants.push(JSON.stringify(await prepared.node.run(prepared.prepared.messages), null, 2))
   }
   return {
@@ -368,6 +374,7 @@ async function executeStoryArc(input: DomainExecutionInput): Promise<DomainExecu
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
     const result = await runStoryArcCreativeReliabilityV1({
       prepared,
+      assertBeforeModelCall: input.assertResumeSourcesCurrent,
       budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
       qualityMode: reliability.qualityMode,
     })
@@ -393,6 +400,8 @@ async function executeCharacterRelation(input: DomainExecutionInput): Promise<Do
     worldGroupId: input.worldGroupId,
     aiConfig: { ...input.aiConfig, ...generationOverrides(input.node, input.inputs) },
     authorRequest: configText(input.node, 'request'),
+    assertBeforeDispatch: input.assertResumeSourcesCurrent,
+    signal: input.assertResumeSourcesCurrent ? input.signal : undefined,
   })
   const binding = await domainBinding(input)
   const output = JSON.stringify(generated.candidate, null, 2)
@@ -476,6 +485,7 @@ async function executeCharacter(input: DomainExecutionInput): Promise<DomainExec
     configOverride: input.aiConfig,
     generationOverrides: generationOverrides(input.node, input.inputs),
     signal: input.signal,
+    beforeModelDispatch: input.assertResumeSourcesCurrent,
   })
   const binding = await readAuthoringCanonBinding({
     node: input.node,
@@ -486,6 +496,7 @@ async function executeCharacter(input: DomainExecutionInput): Promise<DomainExec
   })
   const variants: string[] = []
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
+    if (input.assertResumeSourcesCurrent) await input.assertResumeSourcesCurrent()
     const candidate = await prepared.node.run(prepared.prepared.messages)
     variants.push(JSON.stringify(candidate, null, 2))
   }
@@ -547,6 +558,7 @@ async function executeOutline(input: DomainExecutionInput): Promise<DomainExecut
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
     const result = await runOutlineCreativeReliabilityV1({
       prepared,
+      assertBeforeModelCall: input.assertResumeSourcesCurrent,
       budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
       qualityMode: reliability.qualityMode,
     })
@@ -637,13 +649,14 @@ async function executeDetail(input: DomainExecutionInput): Promise<DomainExecuti
   const variants: string[] = []
   const creativeArtifacts: CreativeArtifactV1[] = []
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
+    if (input.assertResumeSourcesCurrent) await input.assertResumeSourcesCurrent()
     const budget = new AgentTeamBudgetTracker(reliability.budgetProfile)
     const reservation = budget.reserveCall({
       label: '细纲领域 Agent',
       messages,
       maxOutputTokens: resolved.config.maxTokens > 0 ? resolved.config.maxTokens : 16_000,
     })
-    const result: ChatResult = {}
+    const result: ChatResult = input.assertResumeSourcesCurrent ? { beforeModelDispatch: input.assertResumeSourcesCurrent } : {}
     const startedAt = Date.now()
     let raw: string
     try {
@@ -655,7 +668,8 @@ async function executeDetail(input: DomainExecutionInput): Promise<DomainExecuti
       }, input.signal, result, undefined, resolved)
       budget.settleCall(reservation, raw)
     } catch (error) {
-      budget.settleFailedCall(reservation)
+      if (error instanceof ModelDispatchGuardRejectedV1 || modelDispatchWasCancelledV1(result)) budget.releaseUnsentCall(reservation)
+      else budget.settleFailedCall(reservation)
       throw error
     }
     const artifact = await createDetailedOutlineCreativeArtifactV1({
@@ -720,6 +734,7 @@ async function executeProse(input: DomainExecutionInput): Promise<DomainExecutio
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
     const result = await runProseCreativeReliabilityV1({
       prepared,
+      assertBeforeModelCall: input.assertResumeSourcesCurrent,
       budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
       qualityMode: reliability.qualityMode,
     })
@@ -822,18 +837,22 @@ async function executeChapterOrganization(input: DomainExecutionInput): Promise<
     foreshadows,
   })
   if (configText(input.node, 'request')) messages.push({ role: 'user', content: configText(input.node, 'request') })
+  if (input.assertResumeSourcesCurrent) await input.assertResumeSourcesCurrent()
   const trackerReservation = tracker.reserveCall({ label: '整理本章', messages, maxOutputTokens: 8_000 })
   let raw: string
+  const dispatchResult: ChatResult | undefined = input.assertResumeSourcesCurrent
+    ? { beforeModelDispatch: input.assertResumeSourcesCurrent } : undefined
   try {
     raw = await chat(messages, input.aiConfig, {
       category: 'chapter.continuity',
       projectId: input.projectId,
       configOverrides: generationOverrides(input.node, input.inputs),
       contextOverflowPolicy: 'reject',
-    }, input.signal)
+    }, input.signal, ...(dispatchResult ? [dispatchResult] as const : [] as const))
     tracker.settleCall(trackerReservation, raw)
   } catch (error) {
-    tracker.settleFailedCall(trackerReservation)
+    if (error instanceof ModelDispatchGuardRejectedV1 || modelDispatchWasCancelledV1(dispatchResult)) tracker.releaseUnsentCall(trackerReservation)
+    else tracker.settleFailedCall(trackerReservation)
     throw error
   }
   const sourceTextHash = await hashChapterText(chapter.content || '')
@@ -897,12 +916,14 @@ async function executeFactNode(input: DomainExecutionInput): Promise<DomainExecu
   if (!chapterText) throw new Error('目标章节没有可抽取事实的正文。')
   const messages = buildFactExtractPrompt({ chapterTitle: chapter.title, chapterContent: chapterText })
   if (configText(input.node, 'request')) messages.push({ role: 'user', content: configText(input.node, 'request') })
+  if (input.assertResumeSourcesCurrent) await input.assertResumeSourcesCurrent()
   const raw = await chat(messages, input.aiConfig, {
     category: 'chapter.continuity',
     projectId: input.projectId,
     configOverrides: generationOverrides(input.node, input.inputs),
     contextOverflowPolicy: 'reject',
-  }, input.signal)
+  }, input.signal, ...(input.assertResumeSourcesCurrent
+      ? [{ beforeModelDispatch: input.assertResumeSourcesCurrent }] as const : [] as const))
   const candidates = parseFactExtractResult({ raw, chapterContent: chapterText })
   const sourceTextHash = await hashChapterText(chapter.content || '')
   return {

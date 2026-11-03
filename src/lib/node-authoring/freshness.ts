@@ -5,6 +5,7 @@ import { authoringConnectionsHash, hashAuthoringText, isAuthoringCanonReceiptCur
 import type { AuthoringCandidateMap, AuthoringRunSnapshotMap } from './executor'
 import { downstreamAuthoringNodeIds } from './graph'
 import { parseAuthoringGraph } from './graph-codec'
+import type { AuthoringNodeInstance } from './contracts'
 import { isQualityAuthoringReportCurrentV1, readQualityAuthoringRevisionV1 } from './quality-execution'
 import { resolveReadScope } from '../workspace/scope'
 
@@ -24,6 +25,12 @@ export interface AuthoringNodeFreshness {
 }
 
 export type AuthoringFreshnessMap = Record<string, AuthoringNodeFreshness>
+
+/** The same local Canon read budget is used at execution and at verification. */
+export function authoringCanonReadBudgetV1(node: AuthoringNodeInstance): number {
+  const value = node.config.contextBudget
+  return typeof value === 'number' && Number.isFinite(value) ? value : 12_000
+}
 
 function currentUpstreamHash(
   graph: ReturnType<typeof parseAuthoringGraph>,
@@ -119,7 +126,7 @@ export async function inspectAuthoringGraphFreshness(input: {
           scope,
           projectId: input.flow.projectId,
           worldGroupId: input.flow.worldGroupId ?? null,
-          contextBudget: typeof node.config.contextBudget === 'number' ? node.config.contextBudget : undefined,
+          contextBudget: authoringCanonReadBudgetV1(node),
         })
         if (current.missing.length) reasons.push('source-missing')
         else if (current.sourceHash !== snapshot.sourceHash) reasons.push('source-updated')

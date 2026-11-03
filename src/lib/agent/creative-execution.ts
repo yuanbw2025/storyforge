@@ -1,3 +1,5 @@
+import type { ChatResult } from '../ai/client'
+import { modelDispatchWasCancelledV1, ModelDispatchGuardRejectedV1 } from '../ai/codex-transport'
 import { estimateTokens } from '../ai/context-budget'
 import { computeKnownCostUsd } from '../ai/usage-log'
 import type { GenerationGateIssue } from '../generation/generation-node'
@@ -126,9 +128,32 @@ async function applyHardValidation<TOutput>(input: {
  * repairable deterministic issues, one targeted repair. It never starts a
  * hidden third call and always preserves the first artifact if repair fails.
  */
+export const CREATIVE_REPAIR_PRE_DISPATCH_CANCELLED_V1 = 'creative-repair-pre-dispatch-cancelled'
+
+export function creativeRepairRefusalIssueV1(
+  cause: unknown, status: CreativeArtifactV1['status'], cancelled = false,
+): CreativeArtifactIssueV1 {
+  return createCreativeIssueV1({
+    code: cancelled ? CREATIVE_REPAIR_PRE_DISPATCH_CANCELLED_V1 : 'creative-repair-pre-dispatch-rejected',
+    path: '$',
+    message: cause instanceof Error ? `未发送定向修复；已保留首次产物。${cause.message}` : '未发送定向修复；已保留首次产物。',
+    disposition: status === 'blocked' ? 'blocking' : 'repairable',
+    action: 'edit',
+  })
+}
+
+/** Rejected pre-dispatch work has no call, reservation or provider evidence. */
+export async function checkCreativeRepairAdmissionV1(
+  assertBeforeModelCall: () => Promise<void>,
+  status: CreativeArtifactV1['status'],
+): Promise<CreativeArtifactIssueV1 | null> {
+  try { await assertBeforeModelCall(); return null }
+  catch (cause) { return creativeRepairRefusalIssueV1(cause, status) }
+}
+
 export async function runCreativeExecutionV1<TOutput>(input: {
   initialMessages: ChatMessage[]
-  runRaw: (messages: ChatMessage[]) => Promise<CreativeRawModelResultV1>
+  runRaw: (messages: ChatMessage[], result?: ChatResult) => Promise<CreativeRawModelResultV1>
   parse: (raw: string) => CreativeParseOutcomeV1<TOutput>
   buildRepairMessages: (raw: string, issues: readonly CreativeArtifactIssueV1[]) => ChatMessage[]
   validate?: (output: TOutput) => Promise<GenerationGateIssue[]> | GenerationGateIssue[]
@@ -138,19 +163,29 @@ export async function runCreativeExecutionV1<TOutput>(input: {
   qualityMode: CreativeQualityModeV1
   modelIdentity: { provider: string; model: string }
   canonEvidenceRefs?: string[]
+  assertBeforeModelCall?: () => Promise<void>
 }): Promise<CreativeExecutionResultV1<TOutput>> {
   const policy = resolveCreativeQualityPolicyV1(input.qualityMode)
+  const dispatchResult = (): ChatResult | undefined => input.assertBeforeModelCall
+    ? { beforeModelDispatch: input.assertBeforeModelCall } : undefined
+  const runRaw = (messages: ChatMessage[], result?: ChatResult) => result
+    ? input.runRaw(messages, result) : input.runRaw(messages)
+  // Reserving budget is synchronous. There is no other await between admission
+  // and runRaw. An early refusal avoids the reservation; a transport refusal releases it.
+  if (input.assertBeforeModelCall) await input.assertBeforeModelCall()
   const firstReservation = input.budget.reserveCall({
     label: input.callLabel,
     messages: input.initialMessages,
     maxOutputTokens: input.maxOutputTokens,
   })
   let first: CreativeRawModelResultV1
+  const firstDispatch = dispatchResult()
   try {
-    first = await input.runRaw(input.initialMessages)
+    first = await runRaw(input.initialMessages, firstDispatch)
     input.budget.settleCall(firstReservation, first.output)
   } catch (error) {
-    input.budget.settleFailedCall(firstReservation)
+    if (error instanceof ModelDispatchGuardRejectedV1 || modelDispatchWasCancelledV1(firstDispatch)) input.budget.releaseUnsentCall(firstReservation)
+    else input.budget.settleFailedCall(firstReservation)
     throw error
   }
 
@@ -168,7 +203,13 @@ export async function runCreativeExecutionV1<TOutput>(input: {
   })
   let repair: CreativeArtifactV1['repair'] = null
   const repairable = outcome.issues.some(issue => issue.suggestedAction === 'repair-once')
-  if (policy.allowAutomaticRepair && repairable) {
+  const shouldRepair = policy.allowAutomaticRepair && repairable
+  const notSent = shouldRepair && input.assertBeforeModelCall
+    ? await checkCreativeRepairAdmissionV1(input.assertBeforeModelCall, outcome.status) : null
+  if (notSent) {
+    outcome = { ...outcome, status: outcome.status === 'blocked' ? 'blocked' : 'manual-repair',
+      issues: [...outcome.issues, notSent] }
+  } else if (shouldRepair) {
     const targetIssues = outcome.issues.filter(issue => issue.suggestedAction === 'repair-once')
     const targetIssueCodes = [...new Set(targetIssues.map(issue => issue.code))]
     const messages = input.buildRepairMessages(first.output, targetIssues)
@@ -178,8 +219,10 @@ export async function runCreativeExecutionV1<TOutput>(input: {
       maxOutputTokens: input.maxOutputTokens,
     })
     let repaired: CreativeRawModelResultV1 | null = null
+    let repairRefused = false
+    const repairDispatch = dispatchResult()
     try {
-      repaired = await input.runRaw(messages)
+      repaired = await runRaw(messages, repairDispatch)
       input.budget.settleCall(reservation, repaired.output)
       calls.push(await callEvidence({
         callIndex: 2,
@@ -193,29 +236,37 @@ export async function runCreativeExecutionV1<TOutput>(input: {
         validate: input.validate,
         firstAttempt: false,
       })
-    } catch {
-      input.budget.settleFailedCall(reservation)
-      calls.push(await callEvidence({
-        callIndex: 2,
-        purpose: 'repair',
-        messages,
-        modelIdentity: input.modelIdentity,
-        failed: true,
-      }))
-      outcome = {
-        ...outcome,
-        status: outcome.status === 'blocked' ? 'blocked' : 'manual-repair',
-        issues: [...outcome.issues, createCreativeIssueV1({
-          code: 'creative-repair-provider-failed',
-          path: '$',
-          message: '唯一一次定向修复调用失败；已停止自动调用并保留首次产物。',
-          disposition: outcome.status === 'blocked' ? 'blocking' : 'repairable',
-          action: 'edit',
-          deterministic: false,
-        })],
+    } catch (error) {
+      const cancelled = modelDispatchWasCancelledV1(repairDispatch)
+      if (error instanceof ModelDispatchGuardRejectedV1 || cancelled) {
+        input.budget.releaseUnsentCall(reservation)
+        repairRefused = true
+        outcome = { ...outcome, status: outcome.status === 'blocked' ? 'blocked' : 'manual-repair',
+          issues: [...outcome.issues, creativeRepairRefusalIssueV1(error, outcome.status, cancelled)] }
+      } else {
+        input.budget.settleFailedCall(reservation)
+        calls.push(await callEvidence({
+          callIndex: 2,
+          purpose: 'repair',
+          messages,
+          modelIdentity: input.modelIdentity,
+          failed: true,
+        }))
+        outcome = {
+          ...outcome,
+          status: outcome.status === 'blocked' ? 'blocked' : 'manual-repair',
+          issues: [...outcome.issues, createCreativeIssueV1({
+            code: 'creative-repair-provider-failed',
+            path: '$',
+            message: '唯一一次定向修复调用失败；已停止自动调用并保留首次产物。',
+            disposition: outcome.status === 'blocked' ? 'blocking' : 'repairable',
+            action: 'edit',
+            deterministic: false,
+          })],
+        }
       }
     }
-    repair = {
+    if (!repairRefused) repair = {
       version: 1,
       sourceTextHash: await hashCanonicalValue(first.output),
       targetIssueCodes,
