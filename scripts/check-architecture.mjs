@@ -1877,7 +1877,7 @@ if (!productRuntimeMediaLibrarySource.includes('productRuntimeSessionId: number'
   violations.push('[㉝B运行媒资隔离] 运行中新生成的媒资必须绑定具体 ProductRuntimeSession')
 }
 if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'")
-  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 13')
+  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 14')
   || !currentSchemaSource.includes('this.version(1).stores(STORYFORGE_STORES_V1)')
   || !currentSchemaSource.includes('this.version(2).stores(STORYFORGE_STORES_V2)')
   || !currentSchemaSource.includes('this.version(3).stores(STORYFORGE_STORES_V3)')
@@ -1889,11 +1889,15 @@ if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'"
   || !currentSchemaSource.includes('this.version(10).stores(STORYFORGE_STORES_V10)')
   || !currentSchemaSource.includes('this.version(11).stores(STORYFORGE_STORES_V11)')
   || !currentSchemaSource.includes('this.version(12).stores(STORYFORGE_STORES_V12)')
+  || !currentSchemaSource.includes('this.version(13).stores(STORYFORGE_STORES_V13)')
+  || !/export const STORYFORGE_STORES_V13\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V12,?\s*\}/.test(currentSchemaSource)
+  || !/export const STORYFORGE_STORES\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V13,/.test(currentSchemaSource)
+  || !currentSchemaSource.includes("worldSourceReceipts: '++id, projectId, worldId, worldReleaseId, &[worldId+declarationHash], [worldId+packageDigest], [worldId+releaseUid]'" )
   || !currentSchemaSource.includes('this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)')
-  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 13
+  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 14
   || currentSchemaSource.includes('.upgrade(')
   || !currentSchemaSource.includes("productMediaAssets: '++id, projectId, worldId, workId, ownerKind, productType, productReleaseId, productRuntimeSessionId, &[productReleaseId+assetKey+version], &[productRuntimeSessionId+assetKey+version]")) {
-  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v13、保留 v1 至 v12 兼容桥、零数据改写 upgrade，并保留当前根/媒资隔离索引')
+  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v14、保留 v1 至 v13 兼容桥与独立 v13 形状、零数据改写 upgrade，并保留新来源回执与当前根/媒资隔离索引')
 }
 if (!deriveImportSrc.includes('ProductMedia 必须具有唯一、有效的产品所有者')
   || !deriveImportSrc.includes("asset.ownerKind === 'release'")

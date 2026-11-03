@@ -1,6 +1,7 @@
+import Dexie from 'dexie';
 import { db } from "../db/schema";
-import type { WorkspaceScope } from "../types";
-import { resolveScope, scopeTransactionTables } from "../workspace/scope";
+import type { WorkspaceScope, WorldOwnerScope, WorldRelease } from "../types";
+import { resolveScope, resolveWorldOwnerScopeLike, scopeTransactionTables } from "../workspace/scope";
 import { createWorldReferenceV1 } from "./world-reference";
 import { verifyPureWorldReleaseRecordV3, verifyWorldReleaseRecordV1 } from "./release-codec";
 import { createWorldReference } from './world-reference-v2';
@@ -12,6 +13,30 @@ function enhanced(option: NarrativeProductReferenceOption): boolean {
   if (option.narrativeProductType === undefined) return false;
   if (!['character-interaction', 'avg'].includes(option.narrativeProductType)) throw new Error('此产品尚未支持增强世界引用');
   return true;
+}
+
+/** Shared frozen-content writer. The caller owns the transaction and has
+ * already verified immutable source bytes; no editable domain records or
+ * activity pointers are created here. A source receipt is separately keyed D. */
+export async function cacheFrozenWorldReleaseInTransactionV1(
+  scopeInput: WorldOwnerScope,
+  source: Omit<WorldRelease, 'id' | 'projectId' | 'worldId' | 'revisionId'>,
+): Promise<number> {
+  if (!Dexie.currentTransaction) throw Error('冻结来源写入需要调用方事务')
+  const scope = await resolveWorldOwnerScopeLike(scopeInput)
+  const matches = (await db.worldReleases.where('worldId').equals(scope.worldId).toArray())
+    .filter(row => row.releaseUid === source.releaseUid)
+  for (const row of matches) {
+    if (row.projectId !== scope.projectId || row.manifestJson !== source.manifestJson
+      || row.contentHash !== source.contentHash || row.version !== source.version
+      || row.sourceWorldCode !== source.sourceWorldCode) throw Error('缓存世界版本损坏')
+  }
+  if (matches[0]?.id) return matches[0].id
+  const now = Date.now()
+  const revisionId = await db.worldRevisions.add({ projectId: scope.projectId, worldId: scope.worldId,
+    parentRevisionId: null, revision: source.version, label: source.label,
+    manifestJson: source.manifestJson, contentHash: source.contentHash, createdAt: now, updatedAt: now })
+  return db.worldReleases.add({ ...source, projectId: scope.projectId, worldId: scope.worldId, revisionId })
 }
 
 /** Explicit local reference import. Copies only a verified immutable release into
@@ -43,40 +68,8 @@ export async function cacheWorldReferenceForProductV1(
       throw new Error("来源世界在选择期间变化");
     if (source.contentHash !== reference.releaseHash)
       throw new Error("来源世界版本已变化");
-    const existing = (
-      await db.worldReleases.where("worldId").equals(scope.worldId).toArray()
-    ).find(
-      (row) =>
-        row.projectId === scope.projectId &&
-        row.releaseUid === reference.releaseUid,
-    );
-    if (existing?.id) {
-      if (
-        existing.manifestJson !== source.manifestJson ||
-        existing.contentHash !== source.contentHash
-      )
-        throw new Error("缓存世界版本损坏");
-      return existing.id;
-    }
-    const now = Date.now();
-    const revisionId = (await db.worldRevisions.add({
-      projectId: scope.projectId,
-      worldId: scope.worldId,
-      parentRevisionId: null,
-      revision: source.version,
-      label: source.label,
-      manifestJson: source.manifestJson,
-      contentHash: source.contentHash,
-      createdAt: now,
-      updatedAt: now,
-    })) as number;
-    const { id: _sourceId, ...frozen } = source;
-    return (await db.worldReleases.add({
-      ...frozen,
-      projectId: scope.projectId,
-      worldId: scope.worldId,
-      revisionId,
-    })) as number;
+    const { id: _sourceId, projectId: _projectId, worldId: _worldId, revisionId: _revisionId, ...frozen } = source;
+    return cacheFrozenWorldReleaseInTransactionV1(scope, frozen);
   });
 }
 
