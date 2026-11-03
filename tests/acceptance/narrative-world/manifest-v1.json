@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261103-quality-world-source-receipts-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261103-quality-pr257-regressions-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -650,6 +650,16 @@
         "path": "tests/acceptance/narrative-world/baseline-20261103-quality-world-source-receipts-v1.json",
         "workPackage": "SFQA021-F2-source-receipts-v1",
         "note": "Measured schema14/backup18 receipt checkpoint retained before call-time package and scalar owner capture repair. Its full deterministic object matches the prior receipt; its source hashes identify the actual pre-repair implementation. No corpus, observation or threshold is rewritten."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-world-source-receipts-v2.json",
+        "workPackage": "SFQA021-F2-source-receipts-v2",
+        "note": "Preserved unchanged before PR257 portable row-order recovery, legacy v3 candidate compatibility and actual regression receipt refresh. Frozen corpus, observations and thresholds remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-pr257-regressions-v1.json",
+        "workPackage": "quality-pr257-regressions-v1",
+        "note": "Preserved measured cumulative repair before correcting three current-format test files that still expected backup17 after F2 adopted backup18. Production code, corpus, observations and thresholds remain unchanged."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
