@@ -166,6 +166,8 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
     const annotations = spec.worldSemantic?.projector?.annotationFields ?? []
     rows.forEach((row, index) => {
       if (!isRecord(row)) return
+      try { spec.validateImportRow?.(row) }
+      catch (error) { errors.push(`${tableName}[${index}]: ${error instanceof Error ? error.message : String(error)}`) }
       for (const field of NARRATIVE_DOMAIN_FIELDS_V1) {
         const portable = `_${field}Portable`
         if (field in row) errors.push(`${tableName}[${index}].${field} 不允许携带本地叙事坐标。`)

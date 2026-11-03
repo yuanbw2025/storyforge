@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261103-quality271-browser-recovery-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261103-quality129-backup-field-shapes-v3.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -707,6 +707,21 @@
         "path": "tests/acceptance/narrative-world/baseline-20261030-community-deps-v1.json",
         "workPackage": "NW-0B",
         "note": "Preserved community branch receipt before the v4.0.5 mainline merge and R2 replacement."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality129-backup-field-shapes-v1.json",
+        "workPackage": "SFQA-129 preliminary measurement",
+        "note": "Actual field-shape run on 22e1 before the schema-test-only 3f8 follow-up; preserved as measured preliminary input, not final acceptance."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality271-browser-recovery-v2.json",
+        "workPackage": "SFQA-271 cumulative parent",
+        "note": "Exact measured cumulative parent retained before SFQA-129 registry field validation; original bytes unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality129-backup-field-shapes-v2.json",
+        "workPackage": "SFQA-129 intermediate measurement",
+        "note": "Actual 3f8 field-shape measurement before the fingerprinted manifest pointer/history was finalized; superseded input preserved byte-for-byte, not final acceptance."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

@@ -8,6 +8,7 @@ import { parseNarrativeDomainFieldV1 } from '../narrative-domain/codec'
 import { parseSystemFictionElementsV1 } from '../prose/system-fiction-contract'
 import { normalizeDetailedScenes } from '../types/detailed-outline'
 import { validateStateFields } from '../types/state-card'
+import { parseLocationTagsV1, readLocationTagsV1 } from '../types/location'
 
 const trimString = (val: unknown): unknown =>
   typeof val === 'string' ? val.trim() : val
@@ -652,7 +653,10 @@ export const FIELD_REGISTRY: FieldSpec[] = [
 
   // importantLocations / downstream extraction products
   text('importantLocations', 'name', ['地点名']),
-  json('importantLocations', 'tags', ['地点标签']),
+  { ...json('importantLocations', 'tags', ['地点标签']), validate: value => {
+    if (typeof value === 'string') readLocationTagsV1(value)
+    else parseLocationTagsV1(value)
+  } },
   longtext('importantLocations', 'description', ['地点描述']),
   longtext('importantLocations', 'significance', ['剧情重要性']),
   num('importantLocations', 'parentId'),

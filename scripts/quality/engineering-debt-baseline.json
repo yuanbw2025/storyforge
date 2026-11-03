@@ -48293,17 +48293,17 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-CURRENT-SCHEMA-single-baseline.test.ts\",\"TS2769\",\"No overload matches this call.\\n  Overload 1 of 4, '(key: number): PromiseExtended<Work | undefined>', gave the following error.\\n    Argument of type 'IndexableType' is not assignable to parameter of type 'number'.\\n      Type 'string' is not assignable to type 'number'.\\n  Overload 2 of 4, '(equalityCriterias: { [key: string]: any; }): PromiseExtended<Work | undefined>', gave the following error.\\n    Argument of type 'IndexableType' is not assignable to parameter of type '{ [key: string]: any; }'.\\n      Type 'string' is not assignable to type '{ [key: string]: any; }'.\",\"25f01017313023d1e6b4b0cbd044a782248cac69ad50df59b22404be933840be\",61,2]",
+      "identity": "[\"typescript\",\"tests/regression/R-CURRENT-SCHEMA-single-baseline.test.ts\",\"TS2769\",\"No overload matches this call.\\n  Overload 1 of 4, '(key: number): PromiseExtended<Work | undefined>', gave the following error.\\n    Argument of type 'IndexableType' is not assignable to parameter of type 'number'.\\n      Type 'string' is not assignable to type 'number'.\\n  Overload 2 of 4, '(equalityCriterias: { [key: string]: any; }): PromiseExtended<Work | undefined>', gave the following error.\\n    Argument of type 'IndexableType' is not assignable to parameter of type '{ [key: string]: any; }'.\\n      Type 'string' is not assignable to type '{ [key: string]: any; }'.\",\"b2efd3b0580e0203af88a2cf34363d37056a92bb195d0e439884f3add597562a\",61,2]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-CURRENT-SCHEMA-single-baseline.test.ts",
         "code": "TS2769",
         "message": "No overload matches this call.\n  Overload 1 of 4, '(key: number): PromiseExtended<Work | undefined>', gave the following error.\n    Argument of type 'IndexableType' is not assignable to parameter of type 'number'.\n      Type 'string' is not assignable to type 'number'.\n  Overload 2 of 4, '(equalityCriterias: { [key: string]: any; }): PromiseExtended<Work | undefined>', gave the following error.\n    Argument of type 'IndexableType' is not assignable to parameter of type '{ [key: string]: any; }'.\n      Type 'string' is not assignable to type '{ [key: string]: any; }'.",
-        "anchor": "25f01017313023d1e6b4b0cbd044a782248cac69ad50df59b22404be933840be",
-        "line": 244,
+        "anchor": "b2efd3b0580e0203af88a2cf34363d37056a92bb195d0e439884f3add597562a",
+        "line": 246,
         "column": 61,
-        "start": 9818,
+        "start": 9998,
         "length": 2
       }
     },

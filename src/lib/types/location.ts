@@ -29,6 +29,34 @@ export type LocationTag = TerrainTag | PlaceTag
 /** 所有标签（合并） */
 export const ALL_LOCATION_TAGS: readonly LocationTag[] = [...TERRAIN_TAGS, ...PLACE_TAGS]
 
+/** A bad persisted value remains available for explicit author repair. */
+export class LocationTagsParseError extends Error {
+  constructor(message: string) {
+    super(`tags：${message}`)
+    this.name = 'LocationTagsParseError'
+  }
+}
+
+/** Shared domain shape for model arrays and decoded storage; never rewrites it. */
+export function parseLocationTagsV1(value: unknown): LocationTag[] {
+  if (!Array.isArray(value)) throw new LocationTagsParseError('必须是地点标签数组。')
+  const allowed = new Set<string>(ALL_LOCATION_TAGS)
+  for (const tag of value) if (typeof tag !== 'string' || !allowed.has(tag)) {
+    throw new LocationTagsParseError('包含非字符串或未登记标签。')
+  }
+  if (new Set(value).size !== value.length) throw new LocationTagsParseError('标签重复。')
+  return [...value] as LocationTag[]
+}
+
+/** Stored/portable tags are an exact JSON string, including the valid empty []. */
+export function readLocationTagsV1(value: unknown): LocationTag[] {
+  if (typeof value !== 'string') throw new LocationTagsParseError('存储值必须是 JSON 字符串。')
+  let decoded: unknown
+  try { decoded = JSON.parse(value) }
+  catch { throw new LocationTagsParseError('不是有效 JSON，原值已保留。') }
+  return parseLocationTagsV1(decoded)
+}
+
 /** 标签分类信息 */
 export const TAG_CATEGORIES = [
   { label: '自然地形', tags: TERRAIN_TAGS, color: '#14b8a6' },
