@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1, evaluateCurrentProductEntryV1 } from '../../lib/product/product-catalog'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bell, Download, ExternalLink, Heart, KeyRound, Loader2, PackageCheck, RefreshCw, Search, Send, ShieldAlert, ShoppingBag, Upload, UserPlus,
@@ -107,6 +108,7 @@ export default function MarketplacePanel(props: {
     provenance: MarketplaceImportProvenanceV2
   }) => Promise<ProductRelease>
 }) {
+  const canCreate = evaluateCurrentProductEntryV1('platform.marketplace').enterable
   const [serviceUrl, setServiceUrl] = useState(props.initialServiceUrl ?? import.meta.env.VITE_STORYFORGE_PLATFORM_SERVICE_URL ?? '')
   const [accessToken, setAccessToken] = useState('')
   const [mode, setMode] = useState<'discover' | 'groups' | 'creator' | 'review' | 'safety' | 'operations'>('discover')
@@ -262,6 +264,7 @@ export default function MarketplacePanel(props: {
   }
 
   const acquire = (listing: CommercialListingV1) => run(`acquire:${listing.listingId}`, async () => {
+    assertCurrentProductEntryV1('platform.marketplace')
     if (!client) throw new Error('请先配置市场服务地址。')
     if (!accessToken.trim()) throw new Error('请输入当前账号的访问凭据。')
     const requestId = acquisitionIds.current.get(listing.listingId) ?? `acquire.${crypto.randomUUID()}`
@@ -276,6 +279,7 @@ export default function MarketplacePanel(props: {
   })
 
   const submitRelease = () => run('submit', async () => {
+    assertCurrentProductEntryV1('platform.marketplace')
     if (!client) throw new Error('请先配置市场服务地址。')
     if (!accessToken.trim()) throw new Error('请输入创作者账号访问凭据。')
     if (!props.scope || selectedReleaseId == null) throw new Error('当前 Work 没有可提交的正式 ProductRelease。')
@@ -315,6 +319,7 @@ export default function MarketplacePanel(props: {
       },
       currency: 'CNY', amountMinor, creatorShareBps: 8_000,
     }
+    assertCurrentProductEntryV1('platform.marketplace')
     const listing = revisionListingId
       ? await client.reviseListing({
           accessToken: accessToken.trim(), requestId: ids.reviseRequestId,
@@ -324,6 +329,7 @@ export default function MarketplacePanel(props: {
           accessToken: accessToken.trim(), requestId: ids.createRequestId,
           productType: selected.productType, ...listingInput,
         })
+    assertCurrentProductEntryV1('platform.marketplace')
     await client.registerRelease({
       accessToken: accessToken.trim(), requestId: ids.uploadRequestId, bundle,
       ...(candidate ? {
@@ -331,6 +337,7 @@ export default function MarketplacePanel(props: {
         textAdventureCandidate: createTextAdventureCommunitySubmissionV1(candidate),
       } : {}),
     })
+    assertCurrentProductEntryV1('platform.marketplace')
     await client.submitListing({
       accessToken: accessToken.trim(), requestId: ids.submitRequestId, listingId: listing.listingId,
     })
@@ -371,6 +378,7 @@ export default function MarketplacePanel(props: {
     setMessage('已读取服务端重新验证并冻结的文字冒险候选证据。')
   })
   const approveListing = (listingId: string) => run(`approve:${listingId}`, async () => {
+    assertCurrentProductEntryV1('platform.marketplace')
     if (!client) throw new Error('请先配置市场服务地址。')
     const listing = await client.publishListing({
       accessToken: accessToken.trim(), requestId: operationRequestId(`approve:${listingId}`), listingId,
@@ -455,7 +463,7 @@ export default function MarketplacePanel(props: {
         const followed = socialEdges.some(edge => edge.kind === 'follow-creator' && edge.targetId === listing.creatorId)
         return <article key={listing.listingId} className="rounded border border-border bg-bg-base p-4">
           <div className="flex items-start gap-3"><PackageCheck className="mt-0.5 h-5 w-5 text-accent" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold text-text-primary">{listing.title}</h3><span className="rounded bg-accent/10 px-2 py-0.5 text-[10px] text-accent">{PRODUCT_OPTIONS.find(item => item.value === listing.productType)?.label}</span><strong className="ml-auto text-xs text-text-primary">{price(listing)}</strong></div><p className="mt-2 text-xs leading-5 text-text-muted">{listing.summary}</p><p className="mt-2 break-all font-mono text-[9px] text-text-muted">Release {listing.releaseHash}</p><p className="mt-1 font-mono text-[9px] text-text-muted">Listing {listing.listingId} · Creator {listing.creatorId}</p>
-            <div className="mt-3 flex flex-wrap gap-2"><button disabled={busy != null} onClick={() => void acquire(listing)} className="rounded bg-accent px-3 py-2 text-xs text-white">{listing.amountMinor === 0 ? '领取并导入' : '创建支付订单'}</button><button disabled={busy != null} onClick={() => void run(`download:${listing.listingId}`, () => download(listing))} className="flex items-center gap-2 rounded border border-border px-3 py-2 text-xs text-text-primary"><Download className="h-4 w-4" />下载已拥有版本</button><button onClick={() => setReviewListingId(current => current === listing.listingId ? null : listing.listingId)} className="rounded border border-border px-3 py-2 text-xs text-text-primary">评价与评分</button>{checkout?.listingId === listing.listingId && <a href={checkout.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded border border-warning px-3 py-2 text-xs text-warning">前往支付<ExternalLink className="h-4 w-4" /></a>}</div>
+            <div className="mt-3 flex flex-wrap gap-2"><button disabled={busy != null || !canCreate} onClick={() => void acquire(listing)} className="rounded bg-accent px-3 py-2 text-xs text-white">{listing.amountMinor === 0 ? '领取并导入' : '创建支付订单'}</button><button disabled={busy != null} onClick={() => void run(`download:${listing.listingId}`, () => download(listing))} className="flex items-center gap-2 rounded border border-border px-3 py-2 text-xs text-text-primary"><Download className="h-4 w-4" />下载已拥有版本</button><button onClick={() => setReviewListingId(current => current === listing.listingId ? null : listing.listingId)} className="rounded border border-border px-3 py-2 text-xs text-text-primary">评价与评分</button>{checkout?.listingId === listing.listingId && <a href={checkout.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded border border-warning px-3 py-2 text-xs text-warning">前往支付<ExternalLink className="h-4 w-4" /></a>}</div>
             <div className="mt-2 flex flex-wrap gap-2"><button aria-pressed={favorite} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('favorite-listing', listing.listingId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${favorite ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><Heart className="h-3 w-3" />{favorite ? '已收藏' : '收藏'}</button><button aria-pressed={subscribed} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('subscribe-listing', listing.listingId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${subscribed ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><Bell className="h-3 w-3" />{subscribed ? '已订阅更新' : '订阅更新'}</button><button aria-pressed={followed} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('follow-creator', listing.creatorId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${followed ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><UserPlus className="h-3 w-3" />{followed ? '已关注创作者' : '关注创作者'}</button></div>
           </div></div>
         </article>
@@ -483,7 +491,7 @@ export default function MarketplacePanel(props: {
             <span className="mt-1 block">最短路线 {candidateReview.dossier.metrics.estimatedMinimumRouteMinutes.toFixed(1)} 分钟 · {candidateReview.dossier.metrics.minimumRouteDialogueTurns} 轮对白 · {candidateReview.dossier.metrics.reachableEndingCount} 个结局</span>
             <span className="mt-1 block break-all font-mono">candidate {candidateReview.candidateHash} · record {candidateReview.recordHash}</span>
           </div>}
-          <div className="mt-3 flex flex-wrap gap-2">{listing.productType === 'text-adventure' && <button disabled={busy != null} onClick={() => void loadTextAdventureReview(listing)} className="rounded border border-accent/50 px-3 py-2 text-xs text-accent">查看候选证据</button>}<button disabled={busy != null || (listing.productType === 'text-adventure' && !candidateReview)} onClick={() => void approveListing(listing.listingId)} className="rounded bg-success px-3 py-2 text-xs text-white disabled:opacity-40">审核发布</button><button disabled={busy != null || !reviewReasonCode.trim()} onClick={() => void rejectListing(listing.listingId)} className="rounded border border-warning/50 px-3 py-2 text-xs text-warning">要求修改</button></div>
+          <div className="mt-3 flex flex-wrap gap-2">{listing.productType === 'text-adventure' && <button disabled={busy != null} onClick={() => void loadTextAdventureReview(listing)} className="rounded border border-accent/50 px-3 py-2 text-xs text-accent">查看候选证据</button>}<button disabled={busy != null || !canCreate || (listing.productType === 'text-adventure' && !candidateReview)} onClick={() => void approveListing(listing.listingId)} className="rounded bg-success px-3 py-2 text-xs text-white disabled:opacity-40">审核发布</button><button disabled={busy != null || !reviewReasonCode.trim()} onClick={() => void rejectListing(listing.listingId)} className="rounded border border-warning/50 px-3 py-2 text-xs text-warning">要求修改</button></div>
         </article>
       })}{reviewQueue.length === 0 && <p className="rounded border border-dashed border-border p-6 text-center text-xs text-text-muted">加载后显示 submitted 且完整包已验证的目录项。</p>}</div>
     </section> : mode === 'safety' ? <CommunitySafetyPanel client={communityClient} accessToken={accessToken} /> : mode === 'operations' ? <CommercialOperationsPanel client={operationsClient} accessToken={accessToken} /> : <>
@@ -499,9 +507,9 @@ export default function MarketplacePanel(props: {
           : <span className="mt-1 block">将重新计算冻结内容规模并核验自动游玩、作者主路线、浏览器性能和媒资证据；通用分发包通过不等于内容达到推荐标准。</span>}
         <button disabled={busy != null || selectedReleaseId == null} onClick={() => void verifyTextAdventureCandidate()} className="mt-3 rounded border border-current px-3 py-2 text-xs disabled:opacity-40">{textAdventureCandidateReady ? '重新复验候选资格' : '复验社区候选资格'}</button>
       </div>}
-      <button disabled={busy != null || !client || selectedReleaseId == null || !creatorTitle.trim() || !creatorSummary.trim() || !textAdventureCandidateReady} onClick={() => void submitRelease()} className="mt-4 flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><Upload className="h-4 w-4" />{revisionListingId ? '上传修订版并重新提交' : '冻结、上传并提交审核'}</button>
+      <button disabled={busy != null || !canCreate || !client || selectedReleaseId == null || !creatorTitle.trim() || !creatorSummary.trim() || !textAdventureCandidateReady} onClick={() => void submitRelease()} className="mt-4 flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><Upload className="h-4 w-4" />{revisionListingId ? '上传修订版并重新提交' : '冻结、上传并提交审核'}</button>
     </section>
-    <section className="rounded-lg border border-border bg-bg-elevated p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold text-text-primary">我的远程发行状态</h3><button disabled={busy != null || !client || !accessToken.trim()} onClick={() => void loadCreatorListings()} className="ml-auto flex items-center gap-1 rounded border border-border px-3 py-2 text-xs text-text-primary disabled:opacity-40"><RefreshCw className="h-3.5 w-3.5" />同步状态</button></div><div className="mt-4 space-y-2">{creatorListings.map(listing => <article key={listing.listingId} className="flex flex-wrap items-center gap-3 rounded border border-border bg-bg-base p-3"><div className="min-w-0 flex-1"><strong className="text-xs text-text-primary">{listing.title}</strong><p className="mt-1 font-mono text-[9px] text-text-muted">{listing.listingId} · {listing.status}{listing.reviewedBy ? ` · reviewer ${listing.reviewedBy}` : ''}</p>{listing.reviewReasonCode && <p className="mt-1 text-[10px] text-warning">修改理由：{listing.reviewReasonCode}</p>}</div>{listing.status === 'changes-requested' && <button disabled={busy != null} onClick={() => beginRevision(listing)} className="rounded border border-accent/50 px-3 py-1.5 text-xs text-accent">开始修订</button>}{!['withdrawn', 'suspended'].includes(listing.status) && <button disabled={busy != null} onClick={() => void withdrawRemoteListing(listing.listingId)} className="rounded border border-warning/40 px-3 py-1.5 text-xs text-warning">撤回发行</button>}</article>)}{creatorListings.length === 0 && <p className="text-xs text-text-muted">点击同步读取当前账号的草稿、审核中、要求修改、已发布、暂停和撤回状态。</p>}</div></section>
+    <section className="rounded-lg border border-border bg-bg-elevated p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold text-text-primary">我的远程发行状态</h3><button disabled={busy != null || !client || !accessToken.trim()} onClick={() => void loadCreatorListings()} className="ml-auto flex items-center gap-1 rounded border border-border px-3 py-2 text-xs text-text-primary disabled:opacity-40"><RefreshCw className="h-3.5 w-3.5" />同步状态</button></div><div className="mt-4 space-y-2">{creatorListings.map(listing => <article key={listing.listingId} className="flex flex-wrap items-center gap-3 rounded border border-border bg-bg-base p-3"><div className="min-w-0 flex-1"><strong className="text-xs text-text-primary">{listing.title}</strong><p className="mt-1 font-mono text-[9px] text-text-muted">{listing.listingId} · {listing.status}{listing.reviewedBy ? ` · reviewer ${listing.reviewedBy}` : ''}</p>{listing.reviewReasonCode && <p className="mt-1 text-[10px] text-warning">修改理由：{listing.reviewReasonCode}</p>}</div>{listing.status === 'changes-requested' && <button disabled={busy != null || !canCreate} onClick={() => beginRevision(listing)} className="rounded border border-accent/50 px-3 py-1.5 text-xs text-accent">开始修订</button>}{!['withdrawn', 'suspended'].includes(listing.status) && <button disabled={busy != null} onClick={() => void withdrawRemoteListing(listing.listingId)} className="rounded border border-warning/40 px-3 py-1.5 text-xs text-warning">撤回发行</button>}</article>)}{creatorListings.length === 0 && <p className="text-xs text-text-muted">点击同步读取当前账号的草稿、审核中、要求修改、已发布、暂停和撤回状态。</p>}</div></section>
     </>}
 
     {message && <p className="rounded border border-success/30 bg-success/10 p-3 text-xs text-success">{message}</p>}

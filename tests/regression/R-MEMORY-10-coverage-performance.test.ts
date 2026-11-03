@@ -111,11 +111,11 @@ async function seed() {
   return { projectId, chapterId }
 }
 
-describe('MEMORY-10 · full classification and bounded incremental scan', () => {
+describe('MEMORY-10 · full classification and bounded content scan', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(async () => { db.close() })
 
-  it('skips unchanged large documents by committed file metadata and reparses only a changed file', async () => {
+  it('reads unchanged large documents once per actionable check and detects actual changes', async () => {
     const seeded = await seed()
     const disk = metadataDirectory()
     const initial = await buildWorkspaceSelfCheckReportV1(seeded.projectId, disk.handle)
@@ -130,7 +130,7 @@ describe('MEMORY-10 · full classification and bounded incremental scan', () => 
     disk.resetReads(path)
     const clean = await buildWorkspaceSelfCheckReportV1(seeded.projectId, disk.handle)
     expect(clean.plan.items.find(item => item.identity.documentId === binding!.documentId)?.changeKind).toBe('clean')
-    expect(disk.reads(path), 'metadata 未变化时不应重读大正文').toBe(0)
+    expect(disk.reads(path), '可执行核对必须读取实际正文，单轮不重复读取').toBe(1)
 
     disk.write(path, disk.read(path).replace('长正文。', '新正文。'))
     disk.resetReads(path)

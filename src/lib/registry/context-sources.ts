@@ -1,3 +1,4 @@
+import { isCanonFactV1 } from '../fact-ledger/canon-eligibility'
 /**
  * CONTEXT_SOURCES · AI 上下文读取源的唯一注册表。
  *
@@ -1913,7 +1914,7 @@ async function readCurrentFacts(projectId: number, chapterId?: number | null, wo
   if (chapterId == null) return ''
   const resolved = scope ?? await resolveScope({ projectId })
   const [facts, outlineNodes, chapters] = await Promise.all([
-    readOwnedRows<any>(resolved, 'temporalFacts', { owner: 'work' }).then(rows => rows.filter(f => f.status === 'confirmed' || f.status === 'superseded')),
+    readOwnedRows<any>(resolved, 'temporalFacts', { owner: 'work' }).then(rows => rows.filter(isCanonFactV1)),
     readOwnedRows<OutlineNode>(resolved, 'outlineNodes', { owner: 'work' }),
     readOwnedRows<Chapter>(resolved, 'chapters', { owner: 'work' }),
   ])
@@ -1930,7 +1931,7 @@ async function readCurrentFacts(projectId: number, chapterId?: number | null, wo
     if (from == null || from > currentOrder) return false   // 引用不存在的章 / 尚未生效
     if (fact.validToChapterId != null) {
       const to = orderOf.get(fact.validToChapterId)
-      if (to != null && to <= currentOrder) return false     // 已失效
+      if (to == null || to <= currentOrder) return false     // 失效或章界未知
     }
     return true
   })
