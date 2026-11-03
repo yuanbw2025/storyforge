@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261104-quality109-dice-admission-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261104-quality-canon-receipt-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261104-quality109-dice-admission-v2.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved measured quality109 receipt before renewing the domain projection receipt for the reviewed Canon provider change; all original observations, source hashes and historical bytes remain unchanged."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261104-quality109-dice-admission-v1.json",
         "workPackage": "NW-0B",
