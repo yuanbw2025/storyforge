@@ -492,7 +492,7 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     await waitFor(() => expect(host.textContent).toContain('等待主持人处理'))
     expect(community.applyToLfg).toHaveBeenCalledWith(expect.objectContaining({
       accessToken: 'token-community-player-123', postId: 'lfg.ui',
-      requestId: expect.stringMatching(/^apply:lfg\.ui\./),
+      requestId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
     }))
   })
 

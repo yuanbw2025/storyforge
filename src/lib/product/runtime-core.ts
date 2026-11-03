@@ -1601,7 +1601,7 @@ export async function readProductRuntimeState(
     : replay();
 }
 
-export async function appendBuiltEvent(
+async function appendBuiltEvent(
   sessionId: number,
   build: (input: {
     session: ProductRuntimeSession;
@@ -1652,6 +1652,15 @@ export async function appendBuiltEvent(
   );
 }
 
+const NEUTRAL_RUNTIME_EVENT_TYPES: ReadonlySet<ProductRuntimeEventType> = new Set([
+  "time.advanced",
+  "entity.upserted",
+  "entity.patched",
+  "entity.removed",
+  "memory.recorded",
+  "narrative.recorded",
+]);
+
 export async function appendProductRuntimeEvent(input: {
   sessionId: number;
   type: ProductRuntimeEventType;
@@ -1659,39 +1668,22 @@ export async function appendProductRuntimeEvent(input: {
   targetKey?: string | null;
   payload: unknown;
 }): Promise<ProductRuntimeEvent> {
-  if (input.type.startsWith("interaction.")) {
-    throw new Error("受治理的角色互动事件只能通过对应的专用命令 API 生成。");
+  const { sessionId, type, actorKey, targetKey, payload: originalPayload } = input;
+  if (!NEUTRAL_RUNTIME_EVENT_TYPES.has(type)) {
+    // Keep established diagnostics for existing callers. Only the allowlist
+    // above grants access, including when new event kinds are registered.
+    if (type.startsWith("adventure.")) {
+      throw new Error("受治理的文字冒险事件只能通过 commitAdventureAction() 生成。");
+    }
+    if (type.startsWith("text-open-world.")) {
+      throw new Error("受治理的文字开放世界vNext事件只能通过对应的专用命令API生成。");
+    }
+    throw new Error(`受治理的运行事件 ${type} 只能通过对应的专用命令 API 生成。`);
   }
-  if (input.type.startsWith("adventure.")) {
-    throw new Error(
-      "受治理的文字冒险事件只能通过 commitAdventureAction() 生成。",
-    );
-  }
-  if (input.type.startsWith("avg.reading.")) throw new Error("受治理的 AVG 播放观察只能通过专用命令 API 生成。");
-  if (input.type.startsWith("avg.audio.")) throw new Error("受治理的 AVG 一次性声音只能通过专用命令 API 生成。");
-  if (input.type.startsWith("avg.inventory.")) throw new Error("受治理的 AVG 物件事件只能通过专用命令 API 生成。");
-  if (input.type.startsWith("presentation.")) {
-    throw new Error("受治理的 AVG 演出事件只能通过对应的专用命令 API 生成。");
-  }
-  if (input.type.startsWith("open-world-evolution.")) {
-    throw new Error("受治理的复杂演化事件只能通过对应的专用回合命令生成。");
-  }
-  if (input.type.startsWith("world.")) {
-    throw new Error("受治理的开放世界事件只能通过对应的专用命令生成。");
-  }
-  if (input.type.startsWith("text-open-world.")) {
-    throw new Error("受治理的文字开放世界vNext事件只能通过对应的专用命令API生成。");
-  }
-  if (
-    input.type.startsWith("ttrpg.")
-    || (input.type.startsWith("narrative.") && input.type !== "narrative.recorded")
-  ) {
-    throw new Error("受治理的互动事件只能通过对应的专用 API 生成。");
-  }
-  return appendBuiltEvent(input.sessionId, ({ sequence }) => {
-    let payload = input.payload;
+  return appendBuiltEvent(sessionId, ({ sequence }) => {
+    let payload = originalPayload;
     if (
-      input.type === "memory.recorded" &&
+      type === "memory.recorded" &&
       isObject(payload) &&
       isObject(payload.memory)
     ) {
@@ -1704,9 +1696,9 @@ export async function appendProductRuntimeEvent(input: {
       };
     }
     return {
-      type: input.type,
-      actorKey: input.actorKey ?? null,
-      targetKey: input.targetKey ?? null,
+      type,
+      actorKey: actorKey ?? null,
+      targetKey: targetKey ?? null,
       payloadJson: JSON.stringify(payload),
     };
   });
