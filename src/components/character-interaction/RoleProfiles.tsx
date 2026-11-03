@@ -1,3 +1,4 @@
+import { evaluateCurrentProductEntryV1 } from '../../lib/product/product-catalog'
 import SourceRunFailure from './SourceRunFailure'
 import {useEffect, useRef, useState} from 'react'
 import {useAIConfigStore} from '../../stores/ai-config'
@@ -16,6 +17,7 @@ export default function RoleProfiles(props: {
   scope: WorkspaceScope; draft: ChatAuthoringDraftV1; settings: ChatAuthoringSettings
   projection: ChatSourceProjectionDraftV1; selectedKeys: string[]; disabled: boolean; onConfirmed: () => void
 }) {
+  const catalogAllowsAuthoring = evaluateCurrentProductEntryV1('upper.character-interaction').enterable
   const config = useAIConfigStore(state => state.config)
   const [view, setView] = useState<ChatRoleProfileRunViewV1 | null>(null)
   const [aiOrigin, setAIOrigin] = useState<{runId: number; candidateHash: string} | null>(null)
@@ -67,18 +69,18 @@ export default function RoleProfiles(props: {
         <strong>{label} · 已保存人物整理</strong>
         {issue && <p role="status" className="text-danger">{issue}；新制作暂不能使用这份整理。</p>}
         {profile.candidate.traits.map((trait, index) => <div key={index}><p>{CHAT_ROLE_TRAIT_LABELS[trait.kind]}：{trait.text}</p>{trait.evidence.map((evidence, i) => <blockquote className="border-l-2 border-border pl-3 text-xs" key={i}>{evidence.quote}</blockquote>)}</div>)}
-        <button type="button" className="lf-action" disabled={disabled} onClick={() => void prepare(profile.actorKey, profile.sourceFragments.map(row => row.fragmentKey), profile.candidate)}>编辑并重新确认{label}的整理</button>
-        <button type="button" className="lf-action" disabled={disabled} onClick={() => void act(async () => {await removeChatRoleProfileV1(props.scope, props.draft.revision, profile.actorKey); props.onConfirmed()})}>移除{label}的整理</button>
+        <button type="button" className="lf-action" disabled={(disabled) || !catalogAllowsAuthoring} onClick={() => void prepare(profile.actorKey, profile.sourceFragments.map(row => row.fragmentKey), profile.candidate)}>编辑并重新确认{label}的整理</button>
+        <button type="button" className="lf-action" disabled={(disabled) || !catalogAllowsAuthoring} onClick={() => void act(async () => {await removeChatRoleProfileV1(props.scope, props.draft.revision, profile.actorKey); props.onConfirmed()})}>移除{label}的整理</button>
       </article>
     })}
-    <label>整理人物<select aria-label="整理人物" disabled={disabled} value={actorKey} onChange={event => {setActorKey(event.target.value); setContext(null); setTraits([]); setAIOrigin(null)}}>
+    <label>整理人物<select aria-label="整理人物" disabled={(disabled) || !catalogAllowsAuthoring} value={actorKey} onChange={event => {setActorKey(event.target.value); setContext(null); setTraits([]); setAIOrigin(null)}}>
       <option value="">请选择角色</option>{props.projection.characters.map(row => <option key={row.resourceKey} value={row.resourceKey}>{row.label}</option>)}
     </select></label>
     <p>使用下方勾选的 {props.selectedKeys.length} 项原文；所有原文都须在该角色已保存的知情范围内。</p>
-    <button type="button" className="lf-action" disabled={disabled || !actorKey || !props.selectedKeys.length || props.selectedKeys.length > 12}
+    <button type="button" className="lf-action" disabled={(disabled || !actorKey || !props.selectedKeys.length || props.selectedKeys.length > 12) || !catalogAllowsAuthoring}
       onClick={() => void prepare(actorKey, [...props.selectedKeys])}>手工整理所选原文</button>
     {!isAIConfigReady(config) && <p>配置全局AI后可生成人物整理，仍可手工填写。</p>}
-    <button type="button" className="lf-action" disabled={disabled || unfinished || !isAIConfigReady(config) || !actorKey || !props.selectedKeys.length || props.selectedKeys.length > 12}
+    <button type="button" className="lf-action" disabled={(disabled || unfinished || !isAIConfigReady(config) || !actorKey || !props.selectedKeys.length || props.selectedKeys.length > 12) || !catalogAllowsAuthoring}
       onClick={() => void act(async () => {await generateChatRoleProfileCandidateV1({scope: props.scope, request: {actorKey, fragmentKeys: [...props.selectedKeys], draftRevision: props.draft.revision, projectionHash: props.projection.projectionHash}, config})})}>AI整理人物特征</button>
     {view && <div className="space-y-2" data-testid="chat-role-profile-candidate">
       {view.status === 'unknown' && <p role="status">这次请求结果尚未留存，刷新不会重发。结束等待后才能明确发起新请求。</p>}
@@ -90,7 +92,7 @@ export default function RoleProfiles(props: {
       {view.status === 'blocked' && !view.failure && <p role="status">本次人物整理未通过检查，未写入角色资料。可检查原始回复或手工整理。</p>}
       {view.result?.artifact.issues.map(issue => <p key={issue.code} className={issue.severity === 'error' ? 'text-danger' : 'text-text-muted'}>{issue.message}</p>)}
       {view.result && <details><summary>查看人物整理原始回复</summary><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{view.result.artifact.originalText}</pre></details>}
-      {view.status === 'ready' && view.result?.candidate && view.context && view.candidateHash && <button type="button" className="lf-action" disabled={disabled} onClick={() => {
+      {view.status === 'ready' && view.result?.candidate && view.context && view.candidateHash && <button type="button" className="lf-action" disabled={(disabled) || !catalogAllowsAuthoring} onClick={() => {
         setContext(structuredClone(view.context!)); setTraits(structuredClone(view.result!.candidate!.traits)); setActorKey(view.context!.perspective!.actorKey)
         setAIOrigin({runId: view.runId, candidateHash: view.candidateHash!}); setError('')
       }}>检查并编辑AI人物候选</button>}
@@ -103,27 +105,27 @@ export default function RoleProfiles(props: {
       <p>本次人物：{props.projection.characters.find(row => row.resourceKey === context.perspective?.actorKey)?.label}。整理不是原文事实，目标也不代表行动已经完成；保存前请核对主体、否定、条件和时态。</p>
       {traits.map((trait, index) => <fieldset key={index} className="space-y-2 rounded border border-border p-3" data-testid="chat-role-trait-editor">
         <legend>特征 {index + 1}</legend>
-        <label>类别<select aria-label={`特征 ${index + 1} 类别`} disabled={disabled} value={trait.kind} onChange={event => change(index, {kind: event.target.value as Trait['kind']})}>{Object.entries(CHAT_ROLE_TRAIT_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-        <label className="block">整理内容<textarea className="w-full" aria-label={`特征 ${index + 1} 内容`} maxLength={600} disabled={disabled} value={trait.text} onChange={event => change(index, {text: event.target.value})}/></label>
+        <label>类别<select aria-label={`特征 ${index + 1} 类别`} disabled={(disabled) || !catalogAllowsAuthoring} value={trait.kind} onChange={event => change(index, {kind: event.target.value as Trait['kind']})}>{Object.entries(CHAT_ROLE_TRAIT_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+        <label className="block">整理内容<textarea className="w-full" aria-label={`特征 ${index + 1} 内容`} maxLength={600} disabled={(disabled) || !catalogAllowsAuthoring} value={trait.text} onChange={event => change(index, {text: event.target.value})}/></label>
         {trait.evidence.map((evidence, evidenceIndex) => {
           const source = context.fragments.find(row => row.fragmentKey === evidence.fragmentKey)
           const quoteValue: unknown = source ? JSON.parse(source.valueJson) : null
           const update = (patch: Partial<Trait['evidence'][number]>) => change(index, {evidence: trait.evidence.map((row, i) => i === evidenceIndex ? {...row, ...patch} : row)})
           return <div key={evidenceIndex} className="space-y-2">
-            <label>原文依据<select aria-label={`特征 ${index + 1} 依据 ${evidenceIndex + 1} 来源`} disabled={disabled} value={evidence.fragmentKey} onChange={event => update({fragmentKey: event.target.value, quote: ''})}>
+            <label>原文依据<select aria-label={`特征 ${index + 1} 依据 ${evidenceIndex + 1} 来源`} disabled={(disabled) || !catalogAllowsAuthoring} value={evidence.fragmentKey} onChange={event => update({fragmentKey: event.target.value, quote: ''})}>
               <option value="">请选择原文</option>{context.fragments.map((row, i) => <option key={row.fragmentKey} value={row.fragmentKey}>资料 {i + 1} · {row.resourceKey === context.perspective!.actorKey ? '本人' : '背景或他人'} · {row.pointer}</option>)}
             </select></label>
             {source && <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs">{typeof quoteValue === 'string' ? quoteValue : source.valueJson}</pre>}
-            <label className="block">连续原文引用<textarea aria-label={`特征 ${index + 1} 依据 ${evidenceIndex + 1} 引用`} className="w-full" disabled={disabled} maxLength={800} value={evidence.quote} onChange={event => update({quote: event.target.value})}/></label>
-            {trait.evidence.length > 1 && <button type="button" className="lf-action" disabled={disabled} onClick={() => change(index, {evidence: trait.evidence.filter((_, i) => i !== evidenceIndex)})}>移除依据 {evidenceIndex + 1}</button>}
+            <label className="block">连续原文引用<textarea aria-label={`特征 ${index + 1} 依据 ${evidenceIndex + 1} 引用`} className="w-full" disabled={(disabled) || !catalogAllowsAuthoring} maxLength={800} value={evidence.quote} onChange={event => update({quote: event.target.value})}/></label>
+            {trait.evidence.length > 1 && <button type="button" className="lf-action" disabled={(disabled) || !catalogAllowsAuthoring} onClick={() => change(index, {evidence: trait.evidence.filter((_, i) => i !== evidenceIndex)})}>移除依据 {evidenceIndex + 1}</button>}
           </div>
         })}
-        <button type="button" className="lf-action" disabled={disabled || trait.evidence.length >= 4} onClick={() => change(index, {evidence: [...trait.evidence, {fragmentKey: '', quote: ''}]})}>增加依据</button>
-        <button type="button" className="lf-action" disabled={disabled} onClick={() => setTraits(rows => rows.filter((_, i) => i !== index))}>移除特征 {index + 1}</button>
+        <button type="button" className="lf-action" disabled={(disabled || trait.evidence.length >= 4) || !catalogAllowsAuthoring} onClick={() => change(index, {evidence: [...trait.evidence, {fragmentKey: '', quote: ''}]})}>增加依据</button>
+        <button type="button" className="lf-action" disabled={(disabled) || !catalogAllowsAuthoring} onClick={() => setTraits(rows => rows.filter((_, i) => i !== index))}>移除特征 {index + 1}</button>
       </fieldset>)}
       <p>整理正文共 {traits.reduce((sum, row) => sum + row.text.length, 0)} / 3000 字符。</p>
-      <button type="button" className="lf-action" disabled={disabled || traits.length >= 12} onClick={() => setTraits(rows => [...rows, blank()])}>增加人物特征</button>
-      <button type="button" className="lf-action lf-action-primary" disabled={disabled || !traits.length} onClick={() => void act(async () => {
+      <button type="button" className="lf-action" disabled={(disabled || traits.length >= 12) || !catalogAllowsAuthoring} onClick={() => setTraits(rows => [...rows, blank()])}>增加人物特征</button>
+      <button type="button" className="lf-action lf-action-primary" disabled={(disabled || !traits.length) || !catalogAllowsAuthoring} onClick={() => void act(async () => {
         if (aiOrigin) await adoptChatRoleProfileCandidateV1({scope: props.scope, runId: aiOrigin.runId, expectedCandidateHash: aiOrigin.candidateHash, candidate: {traits}})
         else await confirmChatRoleProfileV1(props.scope, {draftRevision: context.draftRevision, projectionHash: context.projectionHash, actorKey: context.perspective!.actorKey, fragmentKeys: context.fragments.map(row => row.fragmentKey)}, {traits})
         props.onConfirmed()
