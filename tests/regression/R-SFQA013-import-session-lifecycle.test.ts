@@ -22,7 +22,7 @@ const rowData = (projectId: number, status: ImportSession['status'] = 'pending')
   projectId, filename: 'synthetic-original.txt', fileHash, totalChars: originalText.length,
   totalChunks: 1, chunkSize: 1000,
   chunks: [{ index: 0, startChar: 0, endChar: originalText.length, charCount: originalText.length,
-    status: 'pending' as const, attempts: 0 }],
+    status: 'pending' as const, attempts: 0, sourceTextHash: fileHash }],
   merged: { worldview: { summary: '合成设定，可复用的完成结果。' } }, rollingContext: '',
   importTarget: 'project' as const, status,
 })
@@ -286,7 +286,7 @@ describe('SFQA013 failures are atomic and observable', () => {
     const projectId = await workspace('存盘失败保留原文'), id = await session(projectId, 'paused')
     const before = await familySnapshot(id)
     vi.spyOn(db.importFiles, 'put').mockRejectedValueOnce(new Error('synthetic source put failure'))
-    await expect(store().saveBlob(id, 'replacement.txt', sourceBlob(), 'replacement')).rejects.toThrow('synthetic source put failure')
+    await expect(store().saveBlob(id, 'replacement.txt', sourceBlob(), fileHash)).rejects.toThrow('synthetic source put failure')
     expect(await familySnapshot(id)).toEqual(before)
   })
 })

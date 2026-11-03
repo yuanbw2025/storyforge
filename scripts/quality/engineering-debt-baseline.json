@@ -32573,13 +32573,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/helpers/open-common-oracle-source.ts\",\"TS2345\",\"Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\\n  Types of property 'controller' are incompatible.\\n    Type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\\n      Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\",\"95fc1a899745cbd3f4a61722cb6282633f75f48f03cbd307b372bace14996a2b\",33,5]",
+      "identity": "[\"typescript\",\"tests/helpers/open-common-oracle-source.ts\",\"TS2345\",\"Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\\n  Types of property 'controller' are incompatible.\\n    Type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\\n      Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\",\"95fc1a899745cbd3f4a61722cb6282633f75f48f03cbd307b372bace14996a2b\",33,5]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/helpers/open-common-oracle-source.ts",
         "code": "TS2345",
-        "message": "Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\n  Types of property 'controller' are incompatible.\n    Type '\"open\" | \"ai\" | \"human\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.\n      Type '\"hybrid\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.",
+        "message": "Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\n  Types of property 'controller' are incompatible.\n    Type '\"open\" | \"human\" | \"ai\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.\n      Type '\"hybrid\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.",
         "anchor": "95fc1a899745cbd3f4a61722cb6282633f75f48f03cbd307b372bace14996a2b",
         "line": 28,
         "column": 33,
@@ -33263,13 +33263,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/helpers/open-intent-routing.ts\",\"TS2322\",\"Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\\n    Types of property 'controller' are incompatible.\\n      Type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\\n        Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\",\"eae6b8abc0d67e33de4b1d0833f810aeef39b92c05882f5e4282006412caa62e\",76,18]",
+      "identity": "[\"typescript\",\"tests/helpers/open-intent-routing.ts\",\"TS2322\",\"Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\\n    Types of property 'controller' are incompatible.\\n      Type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\\n        Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\",\"eae6b8abc0d67e33de4b1d0833f810aeef39b92c05882f5e4282006412caa62e\",76,18]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/helpers/open-intent-routing.ts",
         "code": "TS2322",
-        "message": "Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\n    Types of property 'controller' are incompatible.\n      Type '\"open\" | \"ai\" | \"human\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.\n        Type '\"hybrid\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.",
+        "message": "Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\n    Types of property 'controller' are incompatible.\n      Type '\"open\" | \"human\" | \"ai\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.\n        Type '\"hybrid\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.",
         "anchor": "eae6b8abc0d67e33de4b1d0833f810aeef39b92c05882f5e4282006412caa62e",
         "line": 7,
         "column": 76,
@@ -48053,13 +48053,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts\",\"TS2345\",\"Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\\\"chapter\\\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\\n  Types of property 'kinds' are incompatible.\\n    The type 'readonly [\\\"chapter\\\"]' is 'readonly' and cannot be assigned to the mutable type '(\\\"world\\\" | \\\"character\\\" | \\\"location\\\" | \\\"codex-entry\\\" | \\\"foreshadow\\\" | \\\"character-relation\\\" | \\\"story-arc\\\" | \\\"storyline-progress\\\" | \\\"chapter\\\" | \\\"reference\\\" | \\\"worldview-field\\\" | ... 6 more ... | \\\"narrative-blueprint\\\")[]'.\",\"6108da874eca93a74340081bf05c12f1d39ae014ef950bf1785fc9690b806d06\",49,11]",
+      "identity": "[\"typescript\",\"tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts\",\"TS2345\",\"Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\\\"chapter\\\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\\n  Types of property 'kinds' are incompatible.\\n    The type 'readonly [\\\"chapter\\\"]' is 'readonly' and cannot be assigned to the mutable type '(\\\"world\\\" | \\\"character\\\" | \\\"location\\\" | \\\"codex-entry\\\" | \\\"foreshadow\\\" | \\\"character-relation\\\" | \\\"story-arc\\\" | \\\"storyline-progress\\\" | \\\"chapter\\\" | \\\"workspace\\\" | \\\"fact\\\" | \\\"reference\\\" | ... 5 more ... | \\\"narrative-blueprint\\\")[]'.\",\"6108da874eca93a74340081bf05c12f1d39ae014ef950bf1785fc9690b806d06\",49,11]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\"chapter\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\n  Types of property 'kinds' are incompatible.\n    The type 'readonly [\"chapter\"]' is 'readonly' and cannot be assigned to the mutable type '(\"world\" | \"character\" | \"location\" | \"codex-entry\" | \"foreshadow\" | \"character-relation\" | \"story-arc\" | \"storyline-progress\" | \"chapter\" | \"reference\" | \"worldview-field\" | ... 6 more ... | \"narrative-blueprint\")[]'.",
+        "message": "Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\"chapter\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\n  Types of property 'kinds' are incompatible.\n    The type 'readonly [\"chapter\"]' is 'readonly' and cannot be assigned to the mutable type '(\"world\" | \"character\" | \"location\" | \"codex-entry\" | \"foreshadow\" | \"character-relation\" | \"story-arc\" | \"storyline-progress\" | \"chapter\" | \"workspace\" | \"fact\" | \"reference\" | ... 5 more ... | \"narrative-blueprint\")[]'.",
         "anchor": "6108da874eca93a74340081bf05c12f1d39ae014ef950bf1785fc9690b806d06",
         "line": 146,
         "column": 49,
@@ -48068,13 +48068,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts\",\"TS2345\",\"Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\\\"chapter\\\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\\n  Types of property 'kinds' are incompatible.\\n    The type 'readonly [\\\"chapter\\\"]' is 'readonly' and cannot be assigned to the mutable type '(\\\"world\\\" | \\\"character\\\" | \\\"location\\\" | \\\"codex-entry\\\" | \\\"foreshadow\\\" | \\\"character-relation\\\" | \\\"story-arc\\\" | \\\"storyline-progress\\\" | \\\"chapter\\\" | \\\"reference\\\" | \\\"worldview-field\\\" | ... 6 more ... | \\\"narrative-blueprint\\\")[]'.\",\"a49ff1075618d6cabff5a9955633161f7363525c8852fdd4bcc95542a6f7e7ff\",39,11]",
+      "identity": "[\"typescript\",\"tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts\",\"TS2345\",\"Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\\\"chapter\\\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\\n  Types of property 'kinds' are incompatible.\\n    The type 'readonly [\\\"chapter\\\"]' is 'readonly' and cannot be assigned to the mutable type '(\\\"world\\\" | \\\"character\\\" | \\\"location\\\" | \\\"codex-entry\\\" | \\\"foreshadow\\\" | \\\"character-relation\\\" | \\\"story-arc\\\" | \\\"storyline-progress\\\" | \\\"chapter\\\" | \\\"workspace\\\" | \\\"fact\\\" | \\\"reference\\\" | ... 5 more ... | \\\"narrative-blueprint\\\")[]'.\",\"a49ff1075618d6cabff5a9955633161f7363525c8852fdd4bcc95542a6f7e7ff\",39,11]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\"chapter\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\n  Types of property 'kinds' are incompatible.\n    The type 'readonly [\"chapter\"]' is 'readonly' and cannot be assigned to the mutable type '(\"world\" | \"character\" | \"location\" | \"codex-entry\" | \"foreshadow\" | \"character-relation\" | \"story-arc\" | \"storyline-progress\" | \"chapter\" | \"reference\" | \"worldview-field\" | ... 6 more ... | \"narrative-blueprint\")[]'.",
+        "message": "Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\"chapter\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\n  Types of property 'kinds' are incompatible.\n    The type 'readonly [\"chapter\"]' is 'readonly' and cannot be assigned to the mutable type '(\"world\" | \"character\" | \"location\" | \"codex-entry\" | \"foreshadow\" | \"character-relation\" | \"story-arc\" | \"storyline-progress\" | \"chapter\" | \"workspace\" | \"fact\" | \"reference\" | ... 5 more ... | \"narrative-blueprint\")[]'.",
         "anchor": "a49ff1075618d6cabff5a9955633161f7363525c8852fdd4bcc95542a6f7e7ff",
         "line": 148,
         "column": 39,
@@ -52853,13 +52853,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-NW-1A-ir-codec.test.ts\",\"TS2322\",\"Type '\\\"merge\\\"' is not assignable to type '\\\"replace\\\" | \\\"append\\\" | \\\"add\\\" | \\\"add-many\\\" | \\\"merge-diffs\\\"'.\",\"6b02955856f292be42c33f55408791f6acdde6bd7122bfdda5629ce9eb2300be\",112,4]",
+      "identity": "[\"typescript\",\"tests/regression/R-NW-1A-ir-codec.test.ts\",\"TS2322\",\"Type '\\\"merge\\\"' is not assignable to type '\\\"add\\\" | \\\"replace\\\" | \\\"append\\\" | \\\"add-many\\\" | \\\"merge-diffs\\\"'.\",\"6b02955856f292be42c33f55408791f6acdde6bd7122bfdda5629ce9eb2300be\",112,4]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-NW-1A-ir-codec.test.ts",
         "code": "TS2322",
-        "message": "Type '\"merge\"' is not assignable to type '\"replace\" | \"append\" | \"add\" | \"add-many\" | \"merge-diffs\"'.",
+        "message": "Type '\"merge\"' is not assignable to type '\"add\" | \"replace\" | \"append\" | \"add-many\" | \"merge-diffs\"'.",
         "anchor": "6b02955856f292be42c33f55408791f6acdde6bd7122bfdda5629ce9eb2300be",
         "line": 422,
         "column": 112,
@@ -52868,13 +52868,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-NW-1A-ir-codec.test.ts\",\"TS2322\",\"Type '\\\"merge\\\"' is not assignable to type '\\\"replace\\\" | \\\"append\\\" | \\\"add\\\" | \\\"add-many\\\" | \\\"merge-diffs\\\"'.\",\"f1d8f161bc848143c814e809f1989ac4aafa9625b4eb08cc3c14231f3665c6a1\",114,4]",
+      "identity": "[\"typescript\",\"tests/regression/R-NW-1A-ir-codec.test.ts\",\"TS2322\",\"Type '\\\"merge\\\"' is not assignable to type '\\\"add\\\" | \\\"replace\\\" | \\\"append\\\" | \\\"add-many\\\" | \\\"merge-diffs\\\"'.\",\"f1d8f161bc848143c814e809f1989ac4aafa9625b4eb08cc3c14231f3665c6a1\",114,4]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-NW-1A-ir-codec.test.ts",
         "code": "TS2322",
-        "message": "Type '\"merge\"' is not assignable to type '\"replace\" | \"append\" | \"add\" | \"add-many\" | \"merge-diffs\"'.",
+        "message": "Type '\"merge\"' is not assignable to type '\"add\" | \"replace\" | \"append\" | \"add-many\" | \"merge-diffs\"'.",
         "anchor": "f1d8f161bc848143c814e809f1989ac4aafa9625b4eb08cc3c14231f3665c6a1",
         "line": 430,
         "column": 114,
@@ -63878,13 +63878,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-fence.test.ts\",\"TS2345\",\"Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\\n  Types of property 'controller' are incompatible.\\n    Type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\\n      Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\",\"5184e9668cc07ce0008ffde9bb4f2c5245678519f9f31d36f1296ecde34532a1\",128,4]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-fence.test.ts\",\"TS2345\",\"Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\\n  Types of property 'controller' are incompatible.\\n    Type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\\n      Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\",\"5184e9668cc07ce0008ffde9bb4f2c5245678519f9f31d36f1296ecde34532a1\",128,4]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN10-public-situation-fence.test.ts",
         "code": "TS2345",
-        "message": "Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\n  Types of property 'controller' are incompatible.\n    Type '\"open\" | \"ai\" | \"human\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.\n      Type '\"hybrid\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.",
+        "message": "Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\n  Types of property 'controller' are incompatible.\n    Type '\"open\" | \"human\" | \"ai\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.\n      Type '\"hybrid\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.",
         "anchor": "5184e9668cc07ce0008ffde9bb4f2c5245678519f9f31d36f1296ecde34532a1",
         "line": 28,
         "column": 128,
@@ -67853,13 +67853,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN11-entity-runtime.test.ts\",\"TS2345\",\"Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\\n  Types of property 'controller' are incompatible.\\n    Type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\\n      Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\",\"f08e7190c5d774cd299cf67420728720d07ace844ae5d4be6498343fdea39c1d\",60,4]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN11-entity-runtime.test.ts\",\"TS2345\",\"Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\\n  Types of property 'controller' are incompatible.\\n    Type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\\n      Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\",\"f08e7190c5d774cd299cf67420728720d07ace844ae5d4be6498343fdea39c1d\",60,4]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN11-entity-runtime.test.ts",
         "code": "TS2345",
-        "message": "Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\n  Types of property 'controller' are incompatible.\n    Type '\"open\" | \"ai\" | \"human\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.\n      Type '\"hybrid\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.",
+        "message": "Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\n  Types of property 'controller' are incompatible.\n    Type '\"open\" | \"human\" | \"ai\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.\n      Type '\"hybrid\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.",
         "anchor": "f08e7190c5d774cd299cf67420728720d07ace844ae5d4be6498343fdea39c1d",
         "line": 230,
         "column": 60,
@@ -71048,13 +71048,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN13-normalization-runtime-lifecycle.test.ts\",\"TS2345\",\"Argument of type '{ characterKey: string; seatKey: string; name: string; controller: TtrpgCharacterTemplateV1[\\\"controller\\\"] | \\\"hybrid\\\"; description: string; ... 11 more ...; gmProfile: { objective: string; leverage: string; secret: string; portrayal: string; escalation: string; } | null; }' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\\n  Types of property 'controller' are incompatible.\\n    Type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\\n      Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\",\"6583acde1bd4a0bc7a00cd13256848dbe4f42f6407c461dbd84bd4101be4d7ed\",29,8]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN13-normalization-runtime-lifecycle.test.ts\",\"TS2345\",\"Argument of type '{ characterKey: string; seatKey: string; name: string; controller: TtrpgCharacterTemplateV1[\\\"controller\\\"] | \\\"hybrid\\\"; description: string; ... 11 more ...; gmProfile: { objective: string; leverage: string; secret: string; portrayal: string; escalation: string; } | null; }' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\\n  Types of property 'controller' are incompatible.\\n    Type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\\n      Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\",\"6583acde1bd4a0bc7a00cd13256848dbe4f42f6407c461dbd84bd4101be4d7ed\",29,8]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN13-normalization-runtime-lifecycle.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '{ characterKey: string; seatKey: string; name: string; controller: TtrpgCharacterTemplateV1[\"controller\"] | \"hybrid\"; description: string; ... 11 more ...; gmProfile: { objective: string; leverage: string; secret: string; portrayal: string; escalation: string; } | null; }' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\n  Types of property 'controller' are incompatible.\n    Type '\"open\" | \"ai\" | \"human\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.\n      Type '\"hybrid\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.",
+        "message": "Argument of type '{ characterKey: string; seatKey: string; name: string; controller: TtrpgCharacterTemplateV1[\"controller\"] | \"hybrid\"; description: string; ... 11 more ...; gmProfile: { objective: string; leverage: string; secret: string; portrayal: string; escalation: string; } | null; }' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\n  Types of property 'controller' are incompatible.\n    Type '\"open\" | \"human\" | \"ai\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.\n      Type '\"hybrid\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.",
         "anchor": "6583acde1bd4a0bc7a00cd13256848dbe4f42f6407c461dbd84bd4101be4d7ed",
         "line": 21,
         "column": 29,
@@ -77513,13 +77513,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN16-self-privacy.test.ts\",\"TS2322\",\"Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\",\"df8232bfe3b7594b7179d9722f103c364044d91f3586f770ac848f56783c6c57\",5,84]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN16-self-privacy.test.ts\",\"TS2322\",\"Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\",\"df8232bfe3b7594b7179d9722f103c364044d91f3586f770ac848f56783c6c57\",5,84]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN16-self-privacy.test.ts",
         "code": "TS2322",
-        "message": "Type '\"hybrid\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.",
+        "message": "Type '\"hybrid\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.",
         "anchor": "df8232bfe3b7594b7179d9722f103c364044d91f3586f770ac848f56783c6c57",
         "line": 26,
         "column": 5,
@@ -83048,13 +83048,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN4-companion-bounds.test.ts\",\"TS2322\",\"Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\\n    Types of property 'controller' are incompatible.\\n      Type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\\n        Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\",\"f752f9c3b3f5cae924b1d72c1ebfee84bd91d526445c3cadd212a8f3b1d96274\",5,18]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN4-companion-bounds.test.ts\",\"TS2322\",\"Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\\n    Types of property 'controller' are incompatible.\\n      Type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\\n        Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\",\"f752f9c3b3f5cae924b1d72c1ebfee84bd91d526445c3cadd212a8f3b1d96274\",5,18]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN4-companion-bounds.test.ts",
         "code": "TS2322",
-        "message": "Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\n    Types of property 'controller' are incompatible.\n      Type '\"open\" | \"ai\" | \"human\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.\n        Type '\"hybrid\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.",
+        "message": "Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\n    Types of property 'controller' are incompatible.\n      Type '\"open\" | \"human\" | \"ai\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.\n        Type '\"hybrid\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.",
         "anchor": "f752f9c3b3f5cae924b1d72c1ebfee84bd91d526445c3cadd212a8f3b1d96274",
         "line": 35,
         "column": 5,
@@ -83408,13 +83408,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN4-intent-confirm.test.ts\",\"TS2322\",\"Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\\n    Types of property 'controller' are incompatible.\\n      Type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\\n        Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\",\"f752f9c3b3f5cae924b1d72c1ebfee84bd91d526445c3cadd212a8f3b1d96274\",5,18]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN4-intent-confirm.test.ts\",\"TS2322\",\"Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\\n    Types of property 'controller' are incompatible.\\n      Type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\\n        Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\",\"f752f9c3b3f5cae924b1d72c1ebfee84bd91d526445c3cadd212a8f3b1d96274\",5,18]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN4-intent-confirm.test.ts",
         "code": "TS2322",
-        "message": "Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\n    Types of property 'controller' are incompatible.\n      Type '\"open\" | \"ai\" | \"human\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.\n        Type '\"hybrid\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.",
+        "message": "Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\n    Types of property 'controller' are incompatible.\n      Type '\"open\" | \"human\" | \"ai\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.\n        Type '\"hybrid\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.",
         "anchor": "f752f9c3b3f5cae924b1d72c1ebfee84bd91d526445c3cadd212a8f3b1d96274",
         "line": 36,
         "column": 5,
@@ -83423,13 +83423,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN4-intent-route.test.ts\",\"TS2322\",\"Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\\n    Types of property 'controller' are incompatible.\\n      Type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\\n        Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\",\"f752f9c3b3f5cae924b1d72c1ebfee84bd91d526445c3cadd212a8f3b1d96274\",5,18]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN4-intent-route.test.ts\",\"TS2322\",\"Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\\n    Types of property 'controller' are incompatible.\\n      Type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\\n        Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\",\"f752f9c3b3f5cae924b1d72c1ebfee84bd91d526445c3cadd212a8f3b1d96274\",5,18]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN4-intent-route.test.ts",
         "code": "TS2322",
-        "message": "Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\n    Types of property 'controller' are incompatible.\n      Type '\"open\" | \"ai\" | \"human\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.\n        Type '\"hybrid\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.",
+        "message": "Type 'TtrpgCharacterTemplateV2[]' is not assignable to type 'readonly TtrpgCharacterTemplateV1[]'.\n  Type 'TtrpgCharacterTemplateV2' is not assignable to type 'TtrpgCharacterTemplateV1'.\n    Types of property 'controller' are incompatible.\n      Type '\"open\" | \"human\" | \"ai\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.\n        Type '\"hybrid\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.",
         "anchor": "f752f9c3b3f5cae924b1d72c1ebfee84bd91d526445c3cadd212a8f3b1d96274",
         "line": 37,
         "column": 5,
@@ -86903,13 +86903,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN9-public-situation-context.test.ts\",\"TS2345\",\"Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\\n  Types of property 'controller' are incompatible.\\n    Type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\\n      Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"ai\\\" | \\\"human\\\" | \\\"gm\\\"'.\",\"4fc9cc029b2881ea8b4479ebd5df5e0d25ac44de3df945e0f48cdca739278b2b\",33,4]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN9-public-situation-context.test.ts\",\"TS2345\",\"Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\\n  Types of property 'controller' are incompatible.\\n    Type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"hybrid\\\" | \\\"gm\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\\n      Type '\\\"hybrid\\\"' is not assignable to type '\\\"open\\\" | \\\"human\\\" | \\\"ai\\\" | \\\"gm\\\"'.\",\"4fc9cc029b2881ea8b4479ebd5df5e0d25ac44de3df945e0f48cdca739278b2b\",33,4]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN9-public-situation-context.test.ts",
         "code": "TS2345",
-        "message": "Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\n  Types of property 'controller' are incompatible.\n    Type '\"open\" | \"ai\" | \"human\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.\n      Type '\"hybrid\"' is not assignable to type '\"open\" | \"ai\" | \"human\" | \"gm\"'.",
+        "message": "Argument of type 'TtrpgCharacterTemplateV2' is not assignable to parameter of type 'TtrpgCharacterTemplateV1'.\n  Types of property 'controller' are incompatible.\n    Type '\"open\" | \"human\" | \"ai\" | \"hybrid\" | \"gm\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.\n      Type '\"hybrid\"' is not assignable to type '\"open\" | \"human\" | \"ai\" | \"gm\"'.",
         "anchor": "4fc9cc029b2881ea8b4479ebd5df5e0d25ac44de3df945e0f48cdca739278b2b",
         "line": 108,
         "column": 33,

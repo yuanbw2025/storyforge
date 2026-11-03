@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 173 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 174 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -201,6 +201,7 @@
 | `workAuthoringIntent` | 作者确认的作品意图与文风 | project | L0 | 6000 |
 | `ragSelection` | 作者选择的资料字段 | manual | L0 | 100000 |
 | `manualText` | 用户指定内容 | manual | L0 | 100000 |
+| `documentImportCodexCategories` | 文档导入已登记词条类别目录 | world | L0 | 8000 |
 | `codexExtractionBaseline` | Codex 目标分类与既有词条闭集 | world | L0 | 8000 |
 | `historyAgentBaseline` | 历史 Agent 正式输入基线 | world | L0 | 12000 |
 | `referenceDerivedBaseline` | 参考分析派生 Agent 正式输入基线 | project | L0 | 36000 |
@@ -429,7 +430,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:663` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
-| `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
+| `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:576` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:190` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:958` |
@@ -461,7 +462,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/character-copilot.ts:518 · chat`
 - `src/lib/agent/character-driven-copilot.ts:505 · chat`
 - `src/lib/agent/character-lifecycle-copilot.ts:448 · chat`
-- `src/lib/agent/character-revision-copilot.ts:727 · chat`
+- `src/lib/agent/character-revision-copilot.ts:796 · chat`
 - `src/lib/agent/character-supplement-copilot.ts:581 · chat`
 - `src/lib/agent/context-compression.ts:355 · chat`
 - `src/lib/agent/creative-rules-copilot.ts:448 · chat`
@@ -499,7 +500,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 68 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio 使用独立冻结音频执行器，文本入口不补默认字段。
+共 69 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio 使用独立冻结音频执行器，文本入口不补默认字段。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
@@ -563,6 +564,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `prompt.examples.generate` | `inspiration.review` | `prompt.examples` | auxiliary / authoring-draft | `prompt-example-draft` | 禁止 | `src/components/settings/prompt/PromptExamplesEditor.tsx` |
 | `prompt.workflow.step` | `inspiration.review` | `*` | experimental / experimental | `prompt-workflow-step-draft` | 禁止 | `src/lib/generation/workflow-generation-node.ts` |
 | `style.calibration.preview` | `prose.style-learn` | `style.calibrate` | auxiliary / authoring-draft | `style-calibration-preview` | 禁止 | `src/components/style/StyleCalibrationPanel.tsx` |
+| `import.document-chunk.parse` | `inspiration.document-import-parse` | `import.parse-chunk` | formal / durable-run | `document-import-chunk-candidate` | 禁止 | `src/lib/import/document-parse-durable.ts` |
 | `text-open-world.creator-brief.consult` | `text-open-world.creator-brief-consult.v1` | `authoring.text-open-world-creator-brief` | formal / durable-run | `text-open-world-creator-brief-synthesis` | 禁止 | `src/lib/open-world/creator-brief.ts` |
 | `text-open-world.creator-artifact.modify` | `text-open-world.creator-artifact-edit.v1` | `authoring.text-open-world-creator-artifact-edit` | formal / durable-run | `text-open-world-creator-edit-patch` | 禁止 | `src/lib/open-world/creator-artifact-edit.ts` |
 | `text-open-world.runtime.intent` | `prose.text-open-world-runtime-intent` | `runtime.text-open-world.intent` | formal / product-runtime | `storyforge.text-open-world.runtime-intent-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
@@ -586,4 +588,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `cc6329d78`
+生成时间基准:commit `1d2e0b9f0`

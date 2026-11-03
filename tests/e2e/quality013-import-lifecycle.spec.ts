@@ -11,19 +11,31 @@ interface DeleteObservation { settled: boolean; error: string | null; projectId:
 type ObservedWindow = typeof globalThis & { __quality013Delete?: DeleteObservation }
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 
-async function isolated(browser: Browser, baseURL: string | undefined) {
+async function isolated(browser: Browser, baseURL: string | undefined, syntheticReply?: string) {
   if (!baseURL) throw new Error('013 requires its parent-reviewed loopback test server')
   const base = new URL(baseURL)
   if (base.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(base.hostname)) throw new Error('013 refuses author/external origins')
   const context = await browser.newContext({ baseURL, serviceWorkers: 'block' })
   const forbidden: Array<{ method: string; origin: string; pathname: string }> = []
+  const submissions: string[] = []
   await context.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url())
-    if (url.origin === base.origin && ['GET', 'HEAD'].includes(request.method())) await route.continue()
+    const synthetic = syntheticReply && url.href === 'https://quality022.invalid/v1/chat/completions'
+    const cors = { 'access-control-allow-origin': base.origin, 'access-control-allow-methods': 'POST, OPTIONS',
+      'access-control-allow-headers': request.headers()['access-control-request-headers'] ?? 'authorization, content-type' }
+    if (synthetic && request.method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: cors })
+    } else if (synthetic && request.method() === 'POST') {
+      submissions.push(request.postData() ?? '')
+      await route.fulfill({ status: 200, headers: cors, json: {
+        choices: [{ message: { role: 'assistant', content: syntheticReply }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 31, completion_tokens: 17, total_tokens: 48 },
+      } })
+    } else if (url.origin === base.origin && ['GET', 'HEAD'].includes(request.method())) await route.continue()
     else { forbidden.push({ method: request.method(), origin: url.origin, pathname: url.pathname }); await route.abort('blockedbyclient') }
   })
   await context.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
-  return { context, forbidden }
+  return { context, forbidden, submissions }
 }
 
 async function seed(page: Page, titles: string[]): Promise<FamilySeed[]> {
@@ -31,7 +43,7 @@ async function seed(page: Page, titles: string[]): Promise<FamilySeed[]> {
     const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
     const { db } = await load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts')
     const { createWorkspace } = await load<typeof import('../../src/lib/workspace/create-workspace')>('/storyforge/src/lib/workspace/create-workspace.ts')
-    const { useImportSessionStore } = await load<typeof import('../../src/stores/import-session')>('/storyforge/src/stores/import-session.ts')
+    const { hashImportChunkTextV1, useImportSessionStore } = await load<typeof import('../../src/stores/import-session')>('/storyforge/src/stores/import-session.ts')
     const { extractTextFromFile } = await load<typeof import('../../src/lib/doc-parser')>('/storyforge/src/lib/doc-parser.ts')
     const { chunkDocument, quickHash } = await load<typeof import('../../src/lib/import/chunker')>('/storyforge/src/lib/import/chunker.ts')
     const { registerChunkTexts } = await load<typeof import('../../src/lib/import/pipeline')>('/storyforge/src/lib/import/pipeline.ts')
@@ -44,9 +56,13 @@ async function seed(page: Page, titles: string[]): Promise<FamilySeed[]> {
       const parsed = await extractTextFromFile(new File([blob], 'synthetic-source.txt', { type: blob.type }))
       const plans = chunkDocument(parsed.text, { targetChars: 1000 }), fileHash = quickHash(parsed.text)
       const store = useImportSessionStore.getState()
+      const chunks = await Promise.all(plans.map(async plan => ({
+        index: plan.index, startChar: plan.startChar, endChar: plan.endChar, charCount: plan.charCount,
+        sourceTextHash: await hashImportChunkTextV1(plan.text), status: 'pending' as const, attempts: 0,
+      })))
       const sessionId = await store.create({ projectId: workspace.scope.projectId, filename: 'synthetic-source.txt', fileHash,
         totalChars: parsed.text.length, totalChunks: plans.length, chunkSize: 1000,
-        chunks: plans.map(plan => ({ index: plan.index, startChar: plan.startChar, endChar: plan.endChar, charCount: plan.charCount, status: 'pending', attempts: 0 })),
+        targetScope: workspace.scope, chunks,
         merged: {}, rollingContext: '', importTarget: 'project', status: 'paused' })
       await store.saveBlob(sessionId, 'synthetic-source.txt', blob, fileHash)
       await store.log(sessionId, -1, 'info', 'synthetic source staged; no model started')
@@ -103,11 +119,11 @@ test('013 native original staged by public API → real document-import recovery
     expect((await cachedChunks(page, source.sessionId)).available).toBe(false)
     expect(await openLongformLeaf(page, '文档解析')).toBe(true)
     await expect(page.getByText('发现未完成的解析任务', { exact: true })).toBeVisible()
-    await expect(page.getByText('已从本地存档恢复原文，可直接续跑', { exact: true })).toBeVisible()
+    await expect(page.getByText('已从本地存档恢复原文', { exact: true })).toBeVisible()
     await expect.poll(() => cachedChunks(page, source.sessionId)).toEqual({ available: true, chunks: source.chunkTexts })
     expect(await family(page, source)).toEqual(before)
     await page.reload({ waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('已从本地存档恢复原文，可直接续跑', { exact: true })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText('已从本地存档恢复原文', { exact: true })).toBeVisible({ timeout: 15_000 })
     expect(await cachedChunks(page, source.sessionId)).toEqual({ available: true, chunks: source.chunkTexts })
     expect(await family(page, source)).toEqual(before)
     expect(forbidden).toEqual([])
@@ -195,5 +211,96 @@ test('013 actual project deletion UI → independent tab retained Session refuse
       doesNotClaim: ['paid model cancellation', 'original precollection scheduler race in browser', 'UI upload or actual backup download', 'SFQA022 formal AI adoption'],
       modelCalls: 0, realAuthorProfile: false, forbidden,
     }, null, 2) })
+  } finally { await context.close() }
+})
+
+test('022 native recovery rejects an equal-count substitute Blob and a same-project foreign Work without dispatch', async ({ browser, baseURL }) => {
+  const { context, forbidden } = await isolated(browser, baseURL)
+  const page = await context.newPage()
+  try {
+    await page.goto('./')
+    const [source] = await seed(page, ['QUALITY022 原目标和原文'])
+    expect(source).toBeDefined()
+    const before = await family(page, source)
+    const proof = await page.evaluate(async ({ sessionId, projectId }) => {
+      const load = new Function('p', 'return import(p)') as <T>(path: string) => Promise<T>
+      const { db } = await load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts')
+      const works = await load<typeof import('../../src/lib/workspace/works')>('/storyforge/src/lib/workspace/works.ts')
+      const api = await load<typeof import('../../src/lib/import/pipeline')>('/storyforge/src/lib/import/pipeline.ts')
+      const sourceRow = (await db.importFiles.get(sessionId))!
+      const session = (await db.importSessions.get(sessionId))!
+      const originalScope = session.targetScope!
+      const changed = (await sourceRow.blob.text()).replace('潮水', '外域')
+      await db.importFiles.update(sessionId, { blob: new Blob([changed], { type: sourceRow.blob.type }) })
+      api.clearChunkTexts(sessionId)
+      const sibling = await works.createWorldWork(projectId, { kind: 'novel', novelProfile: 'long', title: '外作品' })
+      await works.switchActiveWork(projectId, sibling.id!)
+      const wrongOwner = await api.retryFailedChunks({ projectId, sessionId }).then(() => '', error => String(error))
+      await works.switchActiveWork(projectId, originalScope.workId)
+      return { wrongOwner, originalSessionUnchanged: JSON.stringify(await db.importSessions.get(sessionId)) === JSON.stringify(session) }
+    }, source)
+    expect(proof.wrongOwner).toContain('作品已切换')
+    expect(proof.originalSessionUnchanged).toBe(true)
+    await page.goto(`./workspace/${source.projectId}`)
+    await expect(page.locator('[data-workspace-ready=longform]')).toBeVisible({ timeout: 15_000 })
+    expect(await openLongformLeaf(page, '文档解析')).toBe(true)
+    await expect(page.getByText('发现未完成的解析任务', { exact: true })).toBeVisible()
+    await expect(page.getByText('⚠ 本地存档丢失（可能已清理浏览器数据），请在下方重新上传同一文件', { exact: true })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('button', { name: '继续处理', exact: true })).toHaveCount(0)
+    expect((await cachedChunks(page, source.sessionId)).available).toBe(false)
+    expect((await family(page, source)).session).toEqual(before.session)
+    expect(forbidden).toEqual([])
+  } finally { await context.close() }
+})
+
+
+test('022 browser restores the exact paid candidate and waits for a visible author confirmation before Canon', async ({ browser, baseURL }, testInfo) => {
+  const raw = ' \n' + JSON.stringify({ worldview: { worldOrigin: '第一次解析：港口源于潮水。' },
+    outline: [{ type: 'volume', title: '雾港档案', children: [{ type: 'chapter', title: '第一夜' }] }] }) + ' \n'
+  const { context, forbidden, submissions } = await isolated(browser, baseURL, raw)
+  const page = await context.newPage()
+  try {
+    await page.goto('./')
+    const [source] = await seed(page, ['QUALITY022 作者确认'])
+    if (!source) throw new Error('missing isolated import seed')
+    await page.goto(`./workspace/${source.projectId}`)
+    await expect(page.locator('[data-workspace-ready=longform]')).toBeVisible({ timeout: 15_000 })
+    await page.evaluate(async () => {
+      const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+      const { useAIConfigStore } = await load<typeof import('../../src/stores/ai-config')>('/storyforge/src/stores/ai-config.ts')
+      useAIConfigStore.setState({ config: { provider: 'custom', contextWindow: 131072, model: 'synthetic-import-model',
+        baseUrl: 'https://quality022.invalid/v1', apiKey: 'synthetic-test-only', temperature: 0, maxTokens: 16384 },
+        presets: [], taskRoutes: {}, rememberApiKey: false })
+    })
+    expect(await openLongformLeaf(page, '文档解析')).toBe(true)
+    await expect(page.getByText('已从本地存档恢复原文', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: '继续处理', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '审查导入候选' })
+    await expect(dialog).toBeVisible({ timeout: 15_000 })
+    expect(submissions).toHaveLength(1)
+    const canon = () => page.evaluate(async projectId => {
+      const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+      const { db } = await load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts')
+      return { worlds: (await db.worldviews.where('projectId').equals(projectId).toArray()).map(row => row.worldOrigin),
+        titles: (await db.outlineNodes.where('projectId').equals(projectId).toArray()).map(row => row.title) }
+    }, source.projectId)
+    expect(await canon()).toEqual({ worlds: [], titles: [] })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('已从本地存档恢复原文', { exact: true })).toBeVisible({ timeout: 15_000 })
+    await page.getByRole('button', { name: '查看详情', exact: true }).click()
+    await expect(dialog).toBeVisible()
+    await dialog.getByText('查看模型原答', { exact: true }).click()
+    expect(await dialog.locator('pre').textContent()).toBe(raw)
+    expect(await canon()).toEqual({ worlds: [], titles: [] })
+    expect(submissions).toHaveLength(1)
+    await dialog.getByRole('textbox', { name: '世界来源', exact: true }).fill('作者校订：两座岛之间出现港口。')
+    await dialog.getByRole('button', { name: '确认保存本块', exact: true }).click()
+    await expect.poll(canon).toEqual({ worlds: ['作者校订：两座岛之间出现港口。'], titles: ['雾港档案', '第一夜'] })
+    expect((await family(page, source)).session?.chunks[0].durableParse?.confirmation?.receipt.receiptHash).toMatch(/^[0-9a-f]{64}$/)
+    expect(submissions).toHaveLength(1)
+    expect(forbidden).toEqual([])
+    await testInfo.attach('022-author-confirmed-import', { contentType: 'application/json',
+      body: JSON.stringify({ syntheticPostCount: submissions.length, rawHash: hash(raw), sourceHash: hash(source.chunkTexts[0]),
+        fixture: 'isolated browser database; synthetic transport only', confirmedChunk: 0 }) })
   } finally { await context.close() }
 })

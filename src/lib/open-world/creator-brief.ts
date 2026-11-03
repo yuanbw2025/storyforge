@@ -1,3 +1,4 @@
+import { readAgentRunArtifactExactV1 } from '../memory/artifact-store'
 import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import { estimateTokens } from '../ai/context-budget'
 import { resolveRequestConfig, type ChatResult } from '../ai/client'
@@ -1404,4 +1405,195 @@ export async function recoverTextOpenWorldCreatorBriefCandidateV1(input: {
 export async function listTextOpenWorldCreatorBriefRunsV1(session: TextOpenWorldCreatorBriefSessionV1) {
   const rows = await db.agentRuns.where('conversationId').equals(session.conversation.id).toArray()
   return rows.filter(row => row.workId === session.scope.workId && row.projectId === session.scope.projectId)
+}
+
+export interface TextOpenWorldCreatorConsultationUsageV1 {
+  calls: Array<{
+    runId: number
+    generation: number
+    attempt: number
+    provider: string | null
+    model: string | null
+    usageSource: 'provider' | 'estimated' | null
+    inputTokens: number | null
+    outputTokens: number | null
+    latencyMs: number | null
+    estimatedCostUsd: number | null
+  }>
+  unresolvedRequests: number
+  confirmedOrigin: 'ai' | 'author' | null
+  confirmedCalls: number | null
+}
+
+type CreatorUsageEvent<T> = Extract<AgentRunSnapshotV1['events'][number], { type: T }>
+type CreatorUsageRequest = CreatorUsageEvent<'model.requested'>
+
+function creatorUsageAttemptKey(value: { generation: number; payload: { attempt: number } }): string {
+  return `${value.generation}:${value.payload.attempt}`
+}
+
+function knownCreatorUsageNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+}
+
+async function creatorUsageObservation(snapshot: AgentRunSnapshotV1, request: CreatorUsageRequest) {
+  const sameAttempt = (event: { generation: number; payload: { stepId?: string; attempt?: number } }) => (
+    event.generation === request.generation && event.payload.stepId === request.payload.stepId
+    && event.payload.attempt === request.payload.attempt
+  )
+  const requestArtifacts = snapshot.events.filter((event): event is CreatorUsageEvent<'evidence.artifact.recorded'> => event.type === 'evidence.artifact.recorded'
+    && event.payload.artifactKind === 'rendered-request' && event.sequence < request.sequence && sameAttempt(event))
+  const contexts = snapshot.events.filter((event): event is CreatorUsageEvent<'context.assembled'> => event.type === 'context.assembled'
+    && event.sequence < request.sequence && sameAttempt(event))
+  if (requestArtifacts.length !== 1 || contexts.length !== 1) return null
+  const artifacts = snapshot.events.filter((event): event is CreatorUsageEvent<'evidence.artifact.recorded'> => event.type === 'evidence.artifact.recorded'
+    && ['raw-response', 'tool-result'].includes(event.payload.artifactKind) && event.sequence > request.sequence && sameAttempt(event))
+  const observations = new Map<string, Record<string, unknown>>()
+  for (const artifact of artifacts) {
+    try {
+      const body = record(JSON.parse(await readAgentRunArtifactExactV1({
+        projectId: snapshot.run.projectId, artifactKind: artifact.payload.artifactKind, contentHash: artifact.payload.contentHash,
+      })), '会谈原始响应证据')
+      if (body.version !== (artifact.payload.artifactKind === 'raw-response'
+        ? 'creation-model-response-v1' : 'creation-model-observation-v1')
+        || body.requestArtifactHash !== requestArtifacts[0]!.payload.contentHash
+        || body.contextManifestHash !== contexts[0]!.payload.manifestHash) continue
+      const observation = record(body.observation, '会谈响应观测')
+      observations.set(canonicalStringify(observation), observation)
+    } catch { /* Unavailable exact bodies do not prove dispatch or tokens. */ }
+  }
+  if (observations.size !== 1) return null
+  const observation = [...observations.values()][0]!
+  const lifecycle = observation.requestLifecycle as { phase?: unknown } | null | undefined
+  const usage = observation.usage as { inputTokens?: unknown; outputTokens?: unknown } | null | undefined
+  return {
+    observed: observation.outcome === 'returned' || lifecycle?.phase === 'request-dispatched' || lifecycle?.phase === 'response-observed',
+    preDispatch: observation.outcome === 'unavailable' && lifecycle?.phase === 'pre-dispatch',
+    inputTokens: knownCreatorUsageNumber(usage?.inputTokens),
+    outputTokens: knownCreatorUsageNumber(usage?.outputTokens),
+  }
+}
+
+/** Read the original conversation's durable attempts independently of the
+ * draft/candidate ultimately chosen for formal confirmation. */
+export async function readTextOpenWorldCreatorConsultationUsageV1(
+  session: TextOpenWorldCreatorBriefSessionV1,
+): Promise<TextOpenWorldCreatorConsultationUsageV1> {
+  // Capture all locators before any DB work. Neither a caller switch nor a
+  // late Brief read may change the identity used for the Run query.
+  const scope = { ...session.scope }
+  const productionId = session.production.id
+  const conversationId = session.conversation.id
+  const productInstanceKey = session.productInstanceKey
+  const sourceBindingHash = session.sourceBindingHash
+  const sessionBrief = session.confirmedBrief
+    ? { revision: session.confirmedBrief.revision, briefHash: session.confirmedBrief.briefHash } : null
+
+  const production = await db.productProductions.get(productionId)
+  if (!production?.id || production.productType !== 'text-open-world'
+    || production.productionKey !== productInstanceKey
+    || production.creatorSourceBindingHash !== sourceBindingHash
+    || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
+    fail('production-missing', '会谈用量不属于当前制作')
+  }
+  const conversation = (await readAgentEvents(conversationId, scope))
+    .map(event => ({ event, payload: parseEventPayload(event) }))
+  const starts = conversation.map(item => item.payload).filter(isSessionStart)
+  if (starts.length !== 1 || starts[0]!.productInstanceKey !== production.productionKey
+    || starts[0]!.sourceBindingHash !== sourceBindingHash
+    || await hashCanonicalValue(starts[0]!.sourceBinding) !== sourceBindingHash) {
+    fail('event-corrupt', '会谈用量与当前制作的来源绑定不一致')
+  }
+  const confirmedRow = sessionBrief && await db.productProductionBriefs
+    .where('[productionId+revision]').equals([production.id, sessionBrief.revision]).first()
+  const brief = confirmedRow?.briefKind === 'text-open-world-creator-v1'
+    && confirmedRow.briefHash === sessionBrief?.briefHash
+    && await assertRecordInScope(scope, 'productProductionBriefs', confirmedRow, { owner: 'work' })
+    ? await verifyTextOpenWorldCreatorBriefV1(confirmedRow.briefJson) : null
+  if (brief && (brief.briefHash !== confirmedRow?.briefHash || brief.productInstanceKey !== production.productionKey
+    || brief.sourceBindingHash !== sourceBindingHash)) {
+    fail('brief-corrupt', '会谈用量不能关联到不一致的正式确认')
+  }
+  const confirmedRunId = brief ? confirmedRow?.candidateRunId : null
+  const usage: TextOpenWorldCreatorConsultationUsageV1 = {
+    calls: [], unresolvedRequests: 0, confirmedOrigin: brief?.candidateEvidence.origin ?? null, confirmedCalls: null,
+  }
+  const runs = (await db.agentRuns.where('conversationId').equals(conversationId).toArray())
+    .filter(row => row.workId === scope.workId && row.projectId === scope.projectId)
+  for (const run of runs) {
+    if (run.id == null) continue
+    const snapshot = await readAgentRunV1(scope, run.id)
+    if (snapshot.run.conversationId !== conversationId || !snapshot.contract.executionBindings?.some(binding => (
+      binding.stepId === TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1 && binding.skillId === TEXT_OPEN_WORLD_CREATOR_BRIEF_SKILL_ID_V1
+      && binding.formalEntry?.entryId === TEXT_OPEN_WORLD_CREATOR_BRIEF_ENTRY_ID_V1
+    ))) continue
+    const requested = snapshot.events.filter((event): event is CreatorUsageRequest => event.type === 'model.requested'
+      && event.payload.stepId === TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1)
+    const responseByAttempt = new Map<string, CreatorUsageEvent<'model.responded'>>()
+    for (const event of snapshot.events) {
+      if (event.type !== 'model.responded' || event.payload.stepId !== TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1) continue
+      const key = creatorUsageAttemptKey(event)
+      const existing = responseByAttempt.get(key)
+      if (existing && existing.payload.outputHash !== event.payload.outputHash) {
+        fail('event-corrupt', '同一会谈 attempt 的响应证据不一致')
+      }
+      if (!existing) responseByAttempt.set(key, event)
+    }
+    const responded = [...responseByAttempt.values()]
+    const candidates = conversation.flatMap(({ event, payload }) => isCandidateEvent(payload) && event.durableRunId === run.id ? [payload] : [])
+    const known = new Map<string, TextOpenWorldCreatorBriefModelEvidenceV1>()
+    for (const { candidate, sourceBindingHash: eventSourceHash } of candidates) {
+      const { candidateHash, ...body } = candidate
+      const persisted = snapshot.events.find(event => event.type === 'candidate.persisted'
+        && event.payload.stepId === TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1 && event.payload.candidateHash === candidateHash)
+      if (!persisted || eventSourceHash !== sourceBindingHash || candidate.sourceBindingHash !== eventSourceHash
+        || candidate.runBindingHash !== requiredRunBindingHash(snapshot) || await hashCanonicalValue(body) !== candidateHash) {
+        fail('event-corrupt', '会谈用量的原始候选证据不一致')
+      }
+      const answers = responded.filter(event => event.generation === persisted.generation && event.sequence < persisted.sequence)
+      if (answers.length !== candidate.modelCalls.length || candidate.contextManifestHashes.length !== answers.length) {
+        fail('event-corrupt', '会谈候选用量与已响应次数不一致')
+      }
+      for (const [index, answer] of answers.entries()) {
+        const manifest = snapshot.events.find((event): event is CreatorUsageEvent<'context.assembled'> => event.type === 'context.assembled'
+          && event.generation === answer.generation && event.payload.stepId === answer.payload.stepId
+          && event.payload.attempt === answer.payload.attempt && event.sequence < answer.sequence)
+        if (manifest?.payload.manifestHash !== candidate.contextManifestHashes[index]) {
+          fail('event-corrupt', '会谈候选用量与 attempt 上下文不一致')
+        }
+        known.set(creatorUsageAttemptKey(answer), candidate.modelCalls[index]!)
+      }
+    }
+    const seen = new Set<string>()
+    for (const request of requested) {
+      const key = creatorUsageAttemptKey(request)
+      if (seen.has(key)) continue
+      seen.add(key)
+      const metered = known.get(key)
+      const observation = !metered ? await creatorUsageObservation(snapshot, request) : null
+      if (!responseByAttempt.has(key) && !observation?.observed) {
+        if (!observation?.preDispatch) usage.unresolvedRequests += 1
+        continue
+      }
+      const inputTokens = knownCreatorUsageNumber(metered?.inputTokens) ?? observation?.inputTokens ?? null
+      const outputTokens = knownCreatorUsageNumber(metered?.outputTokens) ?? observation?.outputTokens ?? null
+      usage.calls.push({
+        runId: snapshot.run.id, generation: request.generation, attempt: request.payload.attempt,
+        provider: metered?.provider ?? null, model: metered?.model ?? null,
+        usageSource: metered?.usageSource ?? (inputTokens != null && outputTokens != null ? 'provider' : null),
+        inputTokens, outputTokens, latencyMs: knownCreatorUsageNumber(metered?.latencyMs),
+        estimatedCostUsd: typeof metered?.estimatedCostUsd === 'number'
+          && Number.isFinite(metered.estimatedCostUsd) && metered.estimatedCostUsd >= 0 ? metered.estimatedCostUsd : null,
+      })
+    }
+    if (brief && run.id === confirmedRunId && snapshot.contract.runtimeBindingHash === brief.candidateEvidence.runBindingHash) {
+      const confirmation = snapshot.events.find(event => event.type === 'confirmation.recorded'
+        && event.payload.stepId === TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1
+        && event.payload.candidateHash === brief.candidateEvidence.candidateHash)
+      if (confirmation) {
+        usage.confirmedCalls = usage.calls.filter(call => call.runId === run.id && call.generation === confirmation.generation).length
+      }
+    }
+  }
+  return usage
 }

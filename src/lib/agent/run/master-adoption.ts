@@ -1,6 +1,7 @@
+import Dexie from 'dexie'
 import { detailedOutlineAuthoringPostStateMatchesV1, type DetailedOutlineAuthoringSnapshotV1 } from '../detailed-outline-authoring'
 import { db } from '../../db/schema'
-import type { WorkspaceScope } from '../../types'
+import type { OutlineNode, WorkspaceScope } from '../../types'
 import {
   assertMasterCandidateDependenciesAdoptedV1,
   assertMasterCreativeArtifactAdoptableV1,
@@ -8,7 +9,8 @@ import {
   type ExecutedMasterCandidate,
 } from '../orchestrator'
 import { appendAgentEvent } from '../conversations'
-import { scopeTransactionTables } from '../../workspace/scope'
+import { readOwnedRows, scopeTransactionTables } from '../../workspace/scope'
+import { projectScopedTables } from '../../registry/lifecycle'
 import {
   restoreMasterAgentCandidatesV1,
   type MasterAgentDurableCandidateV1,
@@ -16,14 +18,15 @@ import {
 import { isMasterAgentRunWorkflowKindV1 } from '../workflow-catalog'
 import {
   appendAgentRunEventV1,
+  appendPrivilegedAgentRunEventInTransactionV1,
   readAgentRunV1,
   type AgentRunSnapshotV1,
 } from './event-store'
-import { hashCanonicalValue } from './hash'
-import { readOwnedRows } from '../../workspace/scope'
+import { canonicalStringify, hashCanonicalValue } from './hash'
+import { parseAgentRunEventV1 } from './event-schema'
 import { adoptGeneratedOutlineItems } from '../../outline/adopt-generation'
 import { parseCharacterCandidateDraft } from '../character-copilot'
-import { parseOutlineCandidateDraft } from '../outline-copilot'
+import { parseOutlineCandidateDraft, type OutlineCopilotSnapshot } from '../outline-copilot'
 import { parseProseCandidateDraft } from '../prose-copilot'
 import { parseInspirationCandidateDraft } from '../inspiration-copilot'
 import {
@@ -37,6 +40,7 @@ import {
 } from '../character-driven-copilot'
 import {
   characterRevisionCandidateMatchesBusinessStateV1,
+  CharacterRevisionCopilotStaleError,
   repairPartialCharacterRevisionAdoptionV1,
   type CharacterRevisionCopilotSnapshotV1,
 } from '../character-revision-copilot'
@@ -69,7 +73,11 @@ import {
 } from './checkpoint'
 import { appendMasterAgentImpactReportV1 } from './master-impact'
 import { readFreshMasterCandidateStepReceiptV1 } from './master-step-verification'
-import { assertWorkspaceContentRevisionFreshV1 } from '../../authoring/content-revision'
+import {
+  assertWorkspaceContentRevisionAfterOutlineAppendV1,
+  assertWorkspaceContentRevisionFreshV1,
+  captureWorkspaceContentRevisionV1,
+} from '../../authoring/content-revision'
 import { maybeInjectHarnessFaultV1 } from '../dev-fault-injection'
 import { assertContextGatewayCandidateAdoptableV1 } from '../../context-gateway/execution'
 import { masterCandidateWriteTargetV1 } from './master-candidate-hash'
@@ -630,23 +638,8 @@ async function businessAlreadyMatches(
       )))
       return progressMatch && crossingMatch && newArcMatch
     }
-    const items = parseOutlineCandidateDraft(candidate.draft)
-    const mode = candidate.payload.outlineMode
-    if (!mode) return false
-    const parentId = mode === 'volumes' ? null : (candidate.payload.outlineParentId ?? null)
-    const type = mode === 'volumes' ? 'volume' : 'chapter'
-    const startingOrder = (candidate.payload.baseSnapshot as { startingOrder?: unknown } | null)?.startingOrder
-    if (typeof startingOrder !== 'number' || !Number.isInteger(startingOrder) || startingOrder < 0) {
-      return false
-    }
-    const rows = await readOwnedRows<any>(input.scope, 'outlineNodes', { owner: 'work' })
-    return items.every((item, index) => rows.some(row => (
-      row.type === type
-      && (row.parentId ?? null) === parentId
-      && row.order === startingOrder + index
-      && normalized(row.title ?? '') === normalized(item.title)
-      && row.summary === item.summary
-    )))
+    const plan = await readOutlineRecoveryPlan(input, candidate)
+    return plan.missing.length === 0
   }
   const text = parseProseCandidateDraft(candidate.draft)
   const outlineNodeId = candidate.payload.proseOutlineNodeId
@@ -667,73 +660,94 @@ export async function isMasterAgentCandidateBusinessStateMatchingV1(
   return businessAlreadyMatches(input, candidate)
 }
 
+class MasterRecoveryStaleError extends Error {}
+
+async function readOutlineRecoveryPlan(input: MasterAgentCandidateAdoptionRefV1, candidate: MasterAgentDurableCandidateV1) {
+  const mode = candidate.payload.outlineMode
+  const base = candidate.payload.baseSnapshot as OutlineCopilotSnapshot
+  if (!mode || !base || !Number.isInteger(base.startingOrder) || base.startingOrder < 0
+    || typeof base.serialized !== 'string') throw new MasterRecoveryStaleError('大纲候选缺少可恢复的冻结基线，已过期。')
+  const items = parseOutlineCandidateDraft(candidate.draft)
+  const parentId = mode === 'volumes' ? null : (candidate.payload.outlineParentId ?? null)
+  const type = mode === 'volumes' ? 'volume' as const : 'chapter' as const
+  const worldGroupId = input.worldGroupId ?? null
+  const rows = (await readOwnedRows<OutlineNode>(input.scope, 'outlineNodes', { owner: 'work' }))
+    .filter(row => (row.worldGroupId ?? null) === worldGroupId)
+  const matched = new Set<number>()
+  const missing: Array<{ index: number; item: typeof items[number] }> = []
+  for (const [index, item] of items.entries()) {
+    const occupants = rows.filter(row => row.type === type && (row.parentId ?? null) === parentId
+      && row.order === base.startingOrder + index)
+    if (occupants.length === 0) {
+      missing.push({ index, item })
+      continue
+    }
+    const [row] = occupants
+    if (occupants.length !== 1 || row.id == null || row.title !== item.title || row.summary !== item.summary) {
+      throw new MasterRecoveryStaleError('大纲目标标题、摘要或顺序已变化，停止补写过期候选。')
+    }
+    matched.add(row.id)
+  }
+  return { base, rows, matched, missing, parentId, type }
+}
+
 async function repairPartialOutlineAdoption(
   input: MasterAgentCandidateAdoptionRefV1,
-  candidate: MasterAgentDurableCandidateV1,
+  resolved: ResolvedMasterCandidateV1,
 ): Promise<void> {
+  const { candidate } = resolved
   if (candidate.payload.agentId !== 'outline') return
   if (candidate.payload.skillId === 'outline.character-revision') {
     await repairPartialCharacterRevisionAdoptionV1({
       projectId: input.scope.projectId,
       scope: input.scope,
+      worldGroupId: input.worldGroupId ?? null,
       snapshot: candidate.payload.baseSnapshot as CharacterRevisionCopilotSnapshotV1,
       draft: candidate.draft,
     })
     return
   }
-    if (
-      candidate.payload.skillId === 'outline.details'
-      || candidate.payload.skillId === 'outline.story-arcs'
-      || candidate.payload.skillId === 'outline.storyline-progress'
-      || candidate.payload.skillId === 'outline.character-driven'
-    ) return
-  const mode = candidate.payload.outlineMode
-  if (!mode) throw new Error('大纲候选缺少写回模式')
-  const items = parseOutlineCandidateDraft(candidate.draft)
-  const parentId = mode === 'volumes' ? null : (candidate.payload.outlineParentId ?? null)
-  const type = mode === 'volumes' ? 'volume' as const : 'chapter' as const
-  const base = candidate.payload.baseSnapshot as { startingOrder?: number }
-  const startingOrder = typeof base.startingOrder === 'number'
-    && Number.isInteger(base.startingOrder)
-    && base.startingOrder >= 0
-    ? base.startingOrder
-    : (() => { throw new Error('大纲候选缺少可恢复的 startingOrder') })()
-  const rows = await readOwnedRows<any>(input.scope, 'outlineNodes', { owner: 'work' })
-  for (const [index, item] of items.entries()) {
-    const exact = rows.some(row => (
-      row.type === type
-      && (row.parentId ?? null) === parentId
-      && row.order === startingOrder + index
-      && normalized(row.title ?? '') === normalized(item.title)
-      && row.summary === item.summary
-    ))
-    if (exact) continue
-    const conflicting = rows.some(row => (
-      row.type === type
-      && (row.parentId ?? null) === parentId
-      && row.order === startingOrder + index
-      && normalized(row.title ?? '') !== normalized(item.title)
-    ))
-    if (conflicting) throw new Error('大纲部分采纳遇到已占用的目标顺序，已停止恢复')
+  if (!candidate.payload.outlineMode) return
+  const plan = await readOutlineRecoveryPlan(input, candidate)
+  if (plan.missing.length === 0) return
+  const withoutOwnAdditions = plan.rows.filter(row => row.id == null || !plan.matched.has(row.id))
+    .map(({ id, parentId, type, title, summary, order, worldGroupId, updatedAt }) =>
+      ({ id, parentId, type, title, summary, order, worldGroupId: worldGroupId ?? null, updatedAt }))
+    .sort((left, right) => (left.id ?? 0) - (right.id ?? 0))
+  if (canonicalStringify(withoutOwnAdditions) !== canonicalStringify(JSON.parse(plan.base.serialized))) {
+    throw new MasterRecoveryStaleError('冻结大纲来源或目标顺序已变化，停止补写过期候选。')
+  }
+  try {
+    if (candidate.payload.contentRevision) {
+      const started = resolved.snapshot.events.find(event => event.type === 'adoption.started'
+        && event.payload.stepId === resolved.stepId && event.payload.candidateHash === candidate.payload.candidateHash)
+      const ownRows = plan.rows.filter(row => row.id != null && plan.matched.has(row.id))
+      const additions = await Dexie.waitFor(Promise.all(ownRows.map(async row => {
+        if (!started || row.createdAt < started.createdAt || row.updatedAt !== row.createdAt || !row.ragDocumentId) {
+          throw new MasterRecoveryStaleError('已有大纲行缺少精确写入证据，候选已过期。')
+        }
+        return { id: row.id!, resourceUid: row.ragDocumentId, contentHash: await hashCanonicalValue(row) }
+      })))
+      await assertWorkspaceContentRevisionAfterOutlineAppendV1(candidate.payload.contentRevision, {
+        scope: input.scope, worldGroupId: input.worldGroupId ?? null, additions,
+      })
+    }
+  } catch (error) {
+    throw new MasterRecoveryStaleError(error instanceof Error ? error.message : String(error))
+  }
+  for (const { index, item } of plan.missing) {
     const result = await adoptGeneratedOutlineItems({
       projectId: input.scope.projectId,
       workspaceScope: input.scope,
       worldGroupId: input.worldGroupId,
-      parentId,
-      type,
+      parentId: plan.parentId,
+      type: plan.type,
       items: [item],
-      startingOrder: startingOrder + index,
+      startingOrder: plan.base.startingOrder + index,
     })
     if (result.writtenCount !== 1 || result.skippedReasons.length > 0) {
       throw new Error('大纲部分采纳未能补齐缺项')
     }
-    rows.push({
-      type,
-      parentId,
-      order: startingOrder + index,
-      title: item.title,
-      summary: item.summary,
-    })
   }
 }
 
@@ -781,7 +795,77 @@ export async function recoverPendingMasterAgentAdoptionsV1(
         candidateEventId: pending.event.id!,
         worldGroupId: snapshot.run.worldGroupId ?? null,
       }
-      await repairPartialOutlineAdoption(ref, pending)
+      const stepId = pending.payload.runStepId!
+      const candidateHash = pending.payload.candidateHash!
+      const intentHash = await hashCanonicalValue({
+        version: 1, kind: 'master-agent-adoption', candidateHash, taskId: pending.payload.taskId,
+      })
+      const needsOutlineRepair = pending.payload.agentId === 'outline'
+        && (pending.payload.outlineMode != null || pending.payload.skillId === 'outline.character-revision')
+      if (needsOutlineRepair) {
+        try {
+          const resolved = { snapshot, candidate: pending, stepId }
+          const revisionScope = { scope, worldGroupId: ref.worldGroupId }
+          const before = pending.payload.outlineMode && !await businessAlreadyMatches(ref, pending)
+            ? await captureWorkspaceContentRevisionV1(revisionScope) : null
+          if (before) {
+            try {
+              await assertRequiredContextGatewayFresh(ref, resolved)
+            } catch (error) {
+              throw new MasterRecoveryStaleError(error instanceof Error ? error.message : String(error))
+            }
+          }
+          const adoptionHash = await hashCanonicalValue({
+            version: 1, candidateHash,
+            evidence: { recovered: true, candidateEventId: pending.event.id },
+          })
+          await db.transaction('rw', scopeTransactionTables(...projectScopedTables().map(spec => spec.table)), async () => {
+            const [current, event] = await Promise.all([db.agentRuns.get(run.id), db.agentEvents.get(ref.candidateEventId)])
+            if (current?.lastSequence !== snapshot.projection.lastSequence || current.projectionHash !== snapshot.run.projectionHash
+              || !event || event.content !== pending.draft || event.payload !== pending.event.payload
+              || !snapshot.events.some(item => item.type === 'adoption.started'
+                && item.payload.stepId === stepId && item.payload.candidateHash === candidateHash && item.payload.intentHash === intentHash)) {
+              throw new Error('原采纳确认或恢复状态已变化。')
+            }
+            if (!await businessAlreadyMatches(ref, pending)) {
+              if (pending.payload.outlineMode) {
+                if (!before) throw new MasterRecoveryStaleError('大纲目标已变化，不能补写过期候选。')
+                try {
+                  await assertWorkspaceContentRevisionFreshV1(before, revisionScope)
+                } catch (error) {
+                  throw new MasterRecoveryStaleError(error instanceof Error ? error.message : String(error))
+                }
+              }
+              await repairPartialOutlineAdoption(ref, resolved)
+              if (!await businessAlreadyMatches(ref, pending)) throw new Error('恢复后正式大纲与原采纳意图不一致。')
+            }
+            const envelope = {
+              version: 1, runId: run.id, generation: snapshot.run.generation,
+              projectId: scope.projectId, worldGroupId: ref.worldGroupId,
+              contractHash: snapshot.run.contractHash, createdAt: Date.now(),
+            }
+            const committed = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, parseAgentRunEventV1({
+              ...envelope, sequence: snapshot.projection.lastSequence + 1, type: 'adoption.committed',
+              payload: { stepId, candidateHash, adoptionHash },
+            }))
+            await appendPrivilegedAgentRunEventInTransactionV1(committed, parseAgentRunEventV1({
+              ...envelope, sequence: committed.projection.lastSequence + 1, type: 'step.succeeded',
+              payload: { stepId, attempt: snapshot.projection.steps[stepId].attempt, outputHash: candidateHash },
+            }))
+          })
+        } catch (error) {
+          if (error instanceof MasterRecoveryStaleError || error instanceof CharacterRevisionCopilotStaleError) {
+            await appendAgentRunEventV1({
+              scope, runId: run.id, type: 'candidate.staled',
+              payload: { stepId, candidateHash, reason: error.message },
+              expectedLastSequence: snapshot.projection.lastSequence,
+            })
+          }
+          throw error
+        }
+        result.recoveredRunIds.push(run.id)
+        continue
+      }
       if (!await businessAlreadyMatches(ref, pending)) {
         await commitMasterAgentCandidateAdoptionV1(ref)
       } else {
