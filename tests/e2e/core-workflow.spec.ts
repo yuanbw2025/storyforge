@@ -3754,13 +3754,14 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
       projectId: currentProjectId,
       workId: project.activeWorkId,
       worldGroupId: sourceOutline.worldGroupId ?? null,
-      subjectType: 'location',
-      subjectId: null,
-      subjectName: '潮门',
-      predicate: 'state',
-      value: '完全开启',
+      characterId: null,
+      subjectName: '守门人',
+      predicate: 'goal',
+      factKind: 'state',
+      value: '让潮门完全开启',
       validFromChapterId: sourceChapter.id,
       validToChapterId: null,
+      sourceType: 'chapter',
       sourceChapterId: sourceChapter.id,
       sourceQuote: '潮门完全开启',
       sourceTextHash: '',
@@ -3806,8 +3807,50 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
   await page.getByRole('button', { name: '打开人工入口', exact: true }).click()
 
   await expect(page.getByRole('heading', { name: '事实库（NS-4 长期一致性）', exact: true })).toBeVisible()
-  await expect(page.getByText('潮门', { exact: true })).toBeVisible()
+  await expect(page.getByText('守门人', { exact: true })).toBeVisible()
+  // Reject the stale original explicitly. Confirming a new candidate must
+  // not silently change or re-sign the old fact's invalid source evidence.
+  await page.getByTitle('否决', { exact: true }).click()
+  await expect(page.getByRole('button', { name: '已否决（1）', exact: true })).toBeVisible()
+  await page.getByPlaceholder(/^粘贴外部编辑后的候选 JSON/).fill(JSON.stringify({
+    facts: [{
+      subjectName: '守门人',
+      predicate: 'goal',
+      value: '保持潮门只开启一半',
+      sourceQuote: '潮门只开启一半',
+      validFromChapterId: fixture.sourceChapterId,
+    }],
+  }))
+  await page.getByRole('button', { name: '导入候选 diff', exact: true }).click()
+  await expect(page.getByText('候选 diff 已导入：写入 1 条，跳过重复 0 条，跳过无效 0 条。', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '待确认候选（1）', exact: true }).click()
   await page.getByTitle('确认为权威事实（Canon）').click()
+  await expect(page.getByText('已确认为 Canon，旧区间记录已保留。', { exact: true })).toBeVisible()
+  const correctedFacts = await page.evaluate(async factId => {
+    const request = <T>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      value.onsuccess = () => resolve(value.result)
+      value.onerror = () => reject(value.error)
+    })
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const opening = indexedDB.open('storyforge-core')
+      opening.onsuccess = () => resolve(opening.result)
+      opening.onerror = () => reject(opening.error)
+    })
+    const facts = await request(database.transaction('temporalFacts').objectStore('temporalFacts').getAll()) as Array<{
+      id: number; projectId: number; workId: number; subjectName: string; predicate: string
+      status: string; value: string; sourceType: string; supersedesFactId?: number | null
+    }>
+    const original = facts.find(fact => fact.id === factId)!
+    const replacement = facts.find(fact => fact.id !== factId && fact.subjectName === '守门人'
+      && fact.predicate === 'goal' && fact.value === '保持潮门只开启一半')!
+    database.close()
+    return { original, replacement }
+  }, fixture.factId)
+  expect(correctedFacts.original).toMatchObject({ status: 'rejected', value: '让潮门完全开启' })
+  expect(correctedFacts.replacement).toMatchObject({
+    projectId, workId: correctedFacts.original.workId,
+    status: 'confirmed', value: '保持潮门只开启一半', sourceType: 'import', supersedesFactId: null,
+  })
   await page.getByRole('button', { name: '验证已保存修正', exact: true }).click()
   await expect(page.getByText('修正已验证并重新规划', { exact: true })).toBeVisible({ timeout: 20_000 })
   await page.getByRole('button', { name: '返回来源章节', exact: true }).click()

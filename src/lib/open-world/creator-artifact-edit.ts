@@ -1482,6 +1482,10 @@ async function buildCandidate(input: {
     })),
     context: input.workspace.taskContext,
     draft: applied.draft,
+    target: {
+      artifactKey: context.target.artifactKey,
+      entityIdentity: context.target.entityIdentity,
+    },
   })
   const rebuiltArtifacts = await Promise.all(rebuilt.artifacts.map(async artifact => {
     const base = input.workspace.baseArtifacts.find(row => row.artifactKey === artifact.artifactKey)

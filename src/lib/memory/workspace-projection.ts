@@ -175,15 +175,60 @@ async function fileAt(root: FileSystemDirectoryHandle, relativePath: string): Pr
   }
 }
 
-async function writeTextAt(root: FileSystemDirectoryHandle, relativePath: string, text: string): Promise<void> {
+async function boundedWorkspaceFileText(file: File, relativePath: string): Promise<{ text: string; byteLength: number }> {
+  if (Number.isFinite(file.size) && file.size > WORKSPACE_FILE_SCAN_MAX_BYTES_V1) {
+    throw new Error(`[memory-workspace] 文件超过单文件扫描上限: ${relativePath}`)
+  }
+  const text = await file.text()
+  const byteLength = new TextEncoder().encode(text).byteLength
+  if (byteLength > WORKSPACE_FILE_SCAN_MAX_BYTES_V1) {
+    throw new Error(`[memory-workspace] 文件超过单文件扫描上限: ${relativePath}`)
+  }
+  return { text, byteLength }
+}
+
+async function assertWorkspaceFilePreimage(
+  file: File | null,
+  relativePath: string,
+  expectedTextHash: string | null,
+): Promise<string | null> {
+  const text = file == null ? null : (await boundedWorkspaceFileText(file, relativePath)).text
+  if ((text == null ? null : await sha256Text(text)) !== expectedTextHash) {
+    throw new Error(`[memory-workspace] 硬盘文件已变化，拒绝覆盖，请重新检查: ${relativePath}`)
+  }
+  return text
+}
+
+async function writeTextAt(
+  root: FileSystemDirectoryHandle,
+  relativePath: string,
+  text: string,
+  expectedTextHash?: string | null,
+): Promise<void> {
   const parts = assertRelativePath(relativePath)
   const directory = await directoryAt(root, parts.slice(0, -1), true)
-  const fileHandle = await directory.getFileHandle(parts[parts.length - 1], { create: true })
+  const fileHandle = await directory.getFileHandle(parts[parts.length - 1], { create: expectedTextHash == null })
   const writable = await fileHandle.createWritable()
   try {
+    if (expectedTextHash !== undefined) {
+      // Opening a writer is asynchronous too. Check the actual target after
+      // that boundary, and discard the staged stream if an outside writer won.
+      await assertWorkspaceFilePreimage(
+        await fileHandle.getFile(), relativePath, expectedTextHash ?? await sha256Text(''),
+      )
+    }
     await writable.write(text)
-  } finally {
+    if (expectedTextHash !== undefined) {
+      // The target is unchanged until close commits the staged bytes. An edit
+      // during write must abort rather than be hidden by that final commit.
+      await assertWorkspaceFilePreimage(
+        await fileHandle.getFile(), relativePath, expectedTextHash ?? await sha256Text(''),
+      )
+    }
     await writable.close()
+  } catch (error) {
+    try { await writable.abort() } catch { /* Retain the original write/guard error. */ }
+    throw error
   }
 }
 
@@ -954,6 +999,7 @@ async function buildWorkspaceSelfCheckWithChapterSourcesV1(
   projectId: number,
   root: FileSystemDirectoryHandle,
   chapterSources?: Map<number, ChapterDeletionSourceV1>,
+  fileTextHashes?: Map<string, string | null>,
 ): Promise<WorkspaceSelfCheckReportV1> {
   const documents = await buildWorkspaceProjectionWithChapterSourcesV1(projectId, chapterSources)
   const items: WorkspaceSelfCheckItemV1[] = []
@@ -964,35 +1010,32 @@ async function buildWorkspaceSelfCheckWithChapterSourcesV1(
     let fileInvalid = false
     const issues: string[] = []
     if (file != null) {
-      const declaredBytes = Number.isFinite(file.size) ? file.size : 0
-      const declaredLastModified = Number.isFinite(file.lastModified) ? file.lastModified : 0
-      if (declaredBytes > WORKSPACE_FILE_SCAN_MAX_BYTES_V1) {
-        fileInvalid = true
-        issues.push(`[memory-workspace] 文件超过单文件扫描上限: ${document.binding.relativePath}`)
-      } else if (
-        declaredBytes > 0
-        && declaredLastModified > 0
-        && document.binding.fileByteLength === declaredBytes
-        && document.binding.fileLastModified === declaredLastModified
-        && document.binding.fileCanonicalHash != null
-      ) {
-        // MEMORY-10 incremental scan: unchanged browser metadata reuses the
-        // previously committed semantic hash. Changed files parse fully.
-        fileCanonicalHash = document.binding.fileCanonicalHash
-      } else {
-        try {
-          const text = await file.text()
-          const actualBytes = declaredBytes || new TextEncoder().encode(text).byteLength
-          scannedBytes += actualBytes
-          if (actualBytes > WORKSPACE_FILE_SCAN_MAX_BYTES_V1 || scannedBytes > WORKSPACE_SCAN_MAX_TOTAL_BYTES_V1) {
-            throw new Error(`[memory-workspace] 工作区本次扫描超过大小上限: ${document.binding.relativePath}`)
-          }
-          fileCanonicalHash = (await parseProjectionDocument(document, text)).canonicalHash
-        } catch (error) {
-          fileInvalid = true
-          issues.push((error as Error).message)
+      try {
+        // This report grants executable actions. Metadata is not content
+        // identity: external editors can preserve both size and lastModified.
+        const declaredBytes = Number.isFinite(file.size) && file.size > 0 ? file.size : 0
+        if (declaredBytes > WORKSPACE_FILE_SCAN_MAX_BYTES_V1) {
+          throw new Error(`[memory-workspace] 文件超过单文件扫描上限: ${document.binding.relativePath}`)
         }
+        if (scannedBytes >= WORKSPACE_SCAN_MAX_TOTAL_BYTES_V1
+          || declaredBytes > WORKSPACE_SCAN_MAX_TOTAL_BYTES_V1 - scannedBytes) {
+          throw new Error(`[memory-workspace] 工作区本次扫描超过大小上限: ${document.binding.relativePath}`)
+        }
+        const { text, byteLength } = await boundedWorkspaceFileText(file, document.binding.relativePath)
+        // File.size counts the original bytes (including e.g. a UTF-8 BOM),
+        // while re-encoding also catches an underestimated synthetic size.
+        scannedBytes += Math.max(declaredBytes, byteLength)
+        if (scannedBytes > WORKSPACE_SCAN_MAX_TOTAL_BYTES_V1) {
+          throw new Error(`[memory-workspace] 工作区本次扫描超过大小上限: ${document.binding.relativePath}`)
+        }
+        if (fileTextHashes) fileTextHashes.set(document.binding.relativePath, await sha256Text(text))
+        fileCanonicalHash = (await parseProjectionDocument(document, text)).canonicalHash
+      } catch (error) {
+        fileInvalid = true
+        issues.push((error as Error).message)
       }
+    } else if (fileTextHashes) {
+      fileTextHashes.set(document.binding.relativePath, null)
     }
     let changeKind = classifyWorkspaceDocumentChangeV1({
       baselineCanonicalHash: document.binding.baselineCanonicalHash,
@@ -1125,9 +1168,13 @@ export async function buildWorkspaceFileAdoptionCandidatesV1(input: {
     if (!adoptable) continue
     const document = byId.get(item.identity.documentId)
     if (!document) throw new Error(`[memory-workspace] 候选文档 ${item.identity.documentId} 已不存在`)
-    const text = await readTextAt(input.root, document.binding.relativePath)
-    if (text == null) throw new Error(`[memory-workspace] 候选文件 ${document.binding.relativePath} 已不存在`)
+    const file = await fileAt(input.root, document.binding.relativePath)
+    if (file == null) throw new Error(`[memory-workspace] 候选文件 ${document.binding.relativePath} 已不存在`)
+    const { text } = await boundedWorkspaceFileText(file, document.binding.relativePath)
     const parsed = await parseProjectionDocument(document, text)
+    if (parsed.canonicalHash !== item.fileCanonicalHash) {
+      throw new Error(`[memory-workspace] 候选文件已变化，请重新检查: ${document.binding.relativePath}`)
+    }
     const normalized = normalizeWorkspaceSemanticV1(document.binding.tableName, parsed.semanticValue)
     const patch = candidatePatchForSemanticChanges(
       document.binding.tableName,
@@ -1335,7 +1382,8 @@ export async function synchronizeProjectChangesToFolderV1(input: {
   /** Internal proof that an invalid file is a target of the pending write saga. */
   approvedRecoveryDocumentIds?: readonly string[]
 }): Promise<WorkspaceSyncReceiptV1> {
-  const currentReport = await buildWorkspaceSelfCheckReportV1(input.projectId, input.root)
+  const fileTextHashes = new Map<string, string | null>()
+  const currentReport = await buildWorkspaceSelfCheckWithChapterSourcesV1(input.projectId, input.root, undefined, fileTextHashes)
   if (currentReport.plan.planHash !== input.expectedPlanHash) {
     throw new Error('[memory-workspace] 自检后项目或硬盘已变化，请重新检查')
   }
@@ -1357,7 +1405,15 @@ export async function synchronizeProjectChangesToFolderV1(input: {
       && !approvedRecoveryDocuments.has(item.identity.documentId)) continue
     const document = byId.get(item.identity.documentId)
     if (!document) throw new Error(`[memory-workspace] 计划文档 ${item.identity.documentId} 已不存在`)
-    const previous = await readTextAt(input.root, document.binding.relativePath)
+    if (document.canonicalHash !== item.databaseCanonicalHash) {
+      throw new Error(`[memory-workspace] 计划中的项目内容已变化，请重新检查: ${document.binding.relativePath}`)
+    }
+    const path = document.binding.relativePath
+    if (!fileTextHashes.has(path)) {
+      throw new Error(`[memory-workspace] 文件未通过实际内容核对，拒绝覆盖: ${path}`)
+    }
+    const expectedTextHash = fileTextHashes.get(path)!
+    const previous = await assertWorkspaceFilePreimage(await fileAt(input.root, path), path, expectedTextHash)
     if (previous != null) {
       await writeTextAt(
         input.root,
@@ -1365,8 +1421,9 @@ export async function synchronizeProjectChangesToFolderV1(input: {
         previous,
       )
     }
-    await writeTextAt(input.root, document.binding.relativePath, document.text)
-    const readBack = await readTextAt(input.root, document.binding.relativePath)
+    await writeTextAt(input.root, path, document.text, expectedTextHash)
+    const readBackFile = await fileAt(input.root, document.binding.relativePath)
+    const readBack = readBackFile == null ? null : (await boundedWorkspaceFileText(readBackFile, document.binding.relativePath)).text
     if (readBack == null || (await parseProjectionDocument(document, readBack)).canonicalHash !== document.canonicalHash) {
       throw new Error(`[memory-workspace] 写后回读失败: ${document.binding.relativePath}`)
     }
@@ -1522,6 +1579,9 @@ export async function confirmMissingChapterFileDeletionsV1(input: {
     if (await readTextAt(root, trashPath) !== document.text) {
       throw new Error('[memory-workspace] 回收副本写后核对失败，原章节未删除，请重新检查')
     }
+  }
+  for (const { document } of captured) {
+    await assertWorkspaceFilePreimage(await fileAt(root, document.binding.relativePath), document.binding.relativePath, null)
   }
   await db.transaction('rw', transactionTablesFor('deleteChapters'), async () => {
     for (const target of captured) {
