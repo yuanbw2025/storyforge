@@ -13,7 +13,7 @@ import type { Project, ImportantLocation, LocationTag } from '../../lib/types'
 import { TAG_EMOJI } from '../../lib/types/location'
 import LocationTagPicker from './LocationTagPicker'
 import LocationTreeView from './LocationTreeView'
-import { LocationTagsParseError, readLocationTagsV1 } from '../../lib/types/location'
+import { LocationTagsParseError, readLocationRecordTagsV1, readLocationTagsV1 } from '../../lib/types/location'
 import { saveFile } from '../../lib/platform/save-file'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { resolveRequestConfig } from '../../lib/ai/client'
@@ -45,7 +45,7 @@ function LocationTagRepair({ location, issue, onRepair, onReload }: {
   location: ImportantLocation
   issue: string
   onRepair: (tags: string, expectedTags: unknown) => Promise<void>
-  onReload: () => Promise<unknown>
+  onReload: () => Promise<ImportantLocation>
 }) {
   const [original, setOriginal] = useState<unknown>(() => structuredClone(location.tags))
   const [loadedIssue, setLoadedIssue] = useState(issue)
@@ -70,8 +70,8 @@ function LocationTagRepair({ location, issue, onRepair, onReload }: {
     setError(''); setBusy(true)
     try {
       const current = await onReload()
-      setOriginal(structuredClone(current)); setDraft(rawTagText(current))
-      try { readLocationTagsV1(current); setLoadedIssue('') }
+      setOriginal(structuredClone(current.tags)); setDraft(rawTagText(current.tags))
+      try { readLocationRecordTagsV1(current); setLoadedIssue('') }
       catch (cause) {
         if (!(cause instanceof LocationTagsParseError)) throw cause
         setLoadedIssue(cause.message)
@@ -174,7 +174,7 @@ export default function LocationPanel({ project }: Props) {
   }
   const issueCount = listRows.filter(row => row.location.hierarchyIssue).length
   const damagedTags = useMemo(() => locations.flatMap(location => {
-    try { readLocationTagsV1(location.tags); return [] }
+    try { readLocationRecordTagsV1(location); return [] }
     catch (error) {
       if (!(error instanceof LocationTagsParseError)) throw error
       return [{ location, issue: error.message }]
@@ -226,8 +226,8 @@ export default function LocationPanel({ project }: Props) {
     handleUpdate(id, { tags: JSON.stringify(tags) })
   }, [handleUpdate])
 
-  const parseTags = (tagsStr: string): LocationTag[] => {
-    try { return readLocationTagsV1(tagsStr) }
+  const parseTags = (location: ImportantLocation): LocationTag[] => {
+    try { return readLocationRecordTagsV1(location) }
     catch (error) {
       if (!(error instanceof LocationTagsParseError)) throw error
       // Display-only neutral tags; the raw row and its explicit repair stay above.
@@ -348,7 +348,7 @@ export default function LocationPanel({ project }: Props) {
 
   const renderListItem = (loc: LocationTreeNode, depth: number = 0) => {
     const isExpanded = expandedId === loc.id
-    const tags = parseTags(loc.tags)
+    const tags = parseTags(loc)
     const children = loc.children
     const excludedParents = isExpanded ? locationDescendantsV1(locations, loc.id!) : new Set<number>()
     const invalidCurrentParent = isExpanded && loc.parentId != null
@@ -528,7 +528,7 @@ export default function LocationPanel({ project }: Props) {
           if (viewScopeKeyRef.current !== viewScopeKey || !current
             || !await assertRecordInScope(scope, 'importantLocations', current, { owner: 'world' })) throw new Error('地点已删除或当前世界已切换，原修复输入仍已保留。')
           if (viewScopeKeyRef.current !== viewScopeKey) throw new Error('当前世界已切换，原修复输入仍已保留。')
-          return current.tags
+          return current
         }} />)}
 
       {/* 工具栏 */}

@@ -156,6 +156,35 @@ class Boundary extends Component<{ children?: ReactNode }, { failed: boolean }> 
   componentDidCatch(error: Error) { failure = error }
   render() { return this.state.failed ? createElement('div', { role: 'alert' }, 'whole-panel-crashed') : this.props.children }
 }
+it.each(['tree', 'list'])('129 restored missing tags remain visible and absent in the real %s view', async mode => {
+  const f = await backupFixture()
+  Reflect.deleteProperty(f.backup.importantLocations[0], 'tags')
+  const wireBefore = JSON.stringify(f.backup)
+  const projectId = await importProjectJSON(f.backup)
+  const project = await db.projects.get(projectId)
+  if (!project) throw new Error('restored synthetic workspace missing')
+  const scope = await resolveWorkspaceScope(projectId)
+  await useLocationStore.getState().loadAll(scope)
+  const host = document.createElement('div'); document.body.append(host); const root = createRoot(host)
+  try {
+    await act(async () => root.render(createElement(Boundary, null, createElement(LocationPanel, { project }))))
+    const deadline = Date.now() + 3000
+    while (!failure && ![...host.querySelectorAll('button')].some(button => button.textContent?.trim() === '列表') && Date.now() < deadline) {
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 5)) })
+    }
+    if (mode === 'list' && !failure) await act(async () => { [...host.querySelectorAll('button')].find(button => button.textContent?.trim() === '列表')!.click() })
+    expect(failure).toBeNull()
+    expect(host.textContent).toContain('旧港')
+    expect(host.textContent).not.toContain('标签异常')
+    expect(host.querySelector('[aria-label="旧港标签原值"]')).toBeNull()
+    const row = await db.importantLocations.where('projectId').equals(projectId).first()
+    expect(row).toBeDefined()
+    expect(Object.prototype.hasOwnProperty.call(row, 'tags')).toBe(false)
+    expect(row?.description).toBe('原地描述')
+    expect(JSON.stringify(f.backup)).toBe(wireBefore)
+  } finally { await act(async () => root.unmount()); host.remove() }
+})
+
 it.each(['tree-null', 'list-object'])('129 actual %s view isolates damaged tags while preserving the row, raw data and valid neighbor', async mode => {
   const f = await seedCurrentWorkspace('129损坏地点界面', { purpose: 'world-engine' })
   const tags = mode === 'tree-null' ? 'null' : '{}'

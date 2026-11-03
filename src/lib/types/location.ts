@@ -57,6 +57,11 @@ export function readLocationTagsV1(value: unknown): LocationTag[] {
   return parseLocationTagsV1(decoded)
 }
 
+/** Legacy rows may omit tags. Reading that absence never fills or repairs storage. */
+export function readLocationRecordTagsV1(record: object): LocationTag[] {
+  return Object.prototype.hasOwnProperty.call(record, 'tags') ? readLocationTagsV1(Reflect.get(record, 'tags')) : []
+}
+
 /** 标签分类信息 */
 export const TAG_CATEGORIES = [
   { label: '自然地形', tags: TERRAIN_TAGS, color: '#14b8a6' },

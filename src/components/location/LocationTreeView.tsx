@@ -4,7 +4,7 @@
 import { useMemo, useRef, useEffect, useState } from 'react'
 import { stratify, tree } from 'd3-hierarchy'
 import type { LocationTreeNode } from '../../stores/location'
-import { LocationTagsParseError, readLocationTagsV1, TAG_EMOJI, type LocationTag } from '../../lib/types/location'
+import { LocationTagsParseError, readLocationRecordTagsV1, TAG_EMOJI, type LocationTag } from '../../lib/types/location'
 
 interface FlatNode {
   id: number
@@ -69,7 +69,7 @@ export default function LocationTreeView({ tree: treeData, onSelect }: Props) {
       seen.add(node.id!)
       let tags: LocationTag[] = []
       let tagIssue: string | undefined
-      try { tags = readLocationTagsV1(node.tags) }
+      try { tags = readLocationRecordTagsV1(node) }
       catch (error) {
         if (!(error instanceof LocationTagsParseError)) throw error
         tagIssue = error.message

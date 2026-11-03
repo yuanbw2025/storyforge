@@ -9,6 +9,7 @@ import { parseSystemFictionElementsV1 } from '../prose/system-fiction-contract'
 import { normalizeDetailedScenes } from '../types/detailed-outline'
 import { validateStateFields } from '../types/state-card'
 import { parseLocationTagsV1, readLocationTagsV1 } from '../types/location'
+import { assertChapterContentV1 } from '../types/outline'
 
 const trimString = (val: unknown): unknown =>
   typeof val === 'string' ? val.trim() : val
@@ -523,7 +524,7 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   num('outlineNodes', 'worldGroupId'),
 
   text('chapters', 'title', ['标题']),
-  longtext('chapters', 'content', ['正文']),
+  { ...longtext('chapters', 'content', ['正文']), validate: assertChapterContentV1 },
   longtext('chapters', 'summary', ['章节摘要']),
   object('chapters', 'continuityHandoff', ['章节交接记忆', '连续性交接']),
   object('chapters', 'planReconciliation', ['计划正文对账', '实际进展约束']),

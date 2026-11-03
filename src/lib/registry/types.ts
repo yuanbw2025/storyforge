@@ -503,6 +503,8 @@ export interface CollectionAdoptionSpec {
   duplicatePolicy: 'skip' | 'update' | 'merge' | 'error'
   /** 必填字段;缺失则跳过该条 */
   required: string[]
+  /** Defaults for a genuinely new collection row, after in-transaction identity lookup. Never an update patch. */
+  createDefaults?: Readonly<Record<string, unknown>>
   /** 自动盖章字段 */
   autoStamps: ('projectId' | 'worldId' | 'workId' | 'worldGroupId' | 'homeWorldGroupId' | 'createdAt' | 'updatedAt')[]
   /** Owner selected from the trusted WorkspaceScope, never from AI output. */

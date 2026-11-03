@@ -806,7 +806,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }] },
 
   { table: db.importantLocations, name: 'importantLocations', owner: 'project',
-    validateImportRow: row => { readLocationTagsV1(row.tags) },
+    validateImportRow: row => { if (Object.prototype.hasOwnProperty.call(row, 'tags')) readLocationTagsV1(row.tags) },
     resourceIdentity: { ...RESOURCE_IDENTITY('location', 'location', '重要地点'), narrativeEntityType: 'location' },
     worldSemantic: { version: 1, area: 'entities', resourceKind: 'location', canonPolicy: 'authoritative-table', ...NARRATIVE_PROJECTOR_V1('entity', ['name'], 'name', ['narrativeAliasesV1']) },
     domainOwner: WORLD_DOMAIN_OWNER,
@@ -885,7 +885,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     ] },
 
   { table: db.chapters, name: 'chapters', owner: 'project', exportable: true,
-    validateImportRow: row => { assertChapterContentV1(row.content) },
+    validateImportRow: row => { if (Object.prototype.hasOwnProperty.call(row, 'content')) assertChapterContentV1(row.content) },
     resourceIdentity: RESOURCE_IDENTITY('chapter', 'chapter', '章节'),
     worldSemantic: { version: 1, area: 'manuscript', resourceKind: 'chapter', canonPolicy: 'authoritative-table', ...NARRATIVE_PROJECTOR_V1('disclosure', ['content', 'outlineNodeId'], 'content', ['narrativeDisclosuresV1']) },
     domainOwner: WORK_DOMAIN_OWNER,
