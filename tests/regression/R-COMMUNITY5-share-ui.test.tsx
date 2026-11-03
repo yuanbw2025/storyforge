@@ -9,7 +9,8 @@ import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { Chapter, OutlineNode } from '../../src/lib/types/outline'
 import type { Reference, ReferenceAnalysisRun, ReferenceChunkAnalysis } from '../../src/lib/types/reference'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+const reactTestEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true
 let host: HTMLDivElement
 let root: ReturnType<typeof createRoot>
 beforeEach(async () => {
