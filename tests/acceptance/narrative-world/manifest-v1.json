@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261103-quality-pr257-regressions-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261103-quality004-product-entry-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -660,6 +660,18 @@
         "path": "tests/acceptance/narrative-world/baseline-20261103-quality-pr257-regressions-v1.json",
         "workPackage": "quality-pr257-regressions-v1",
         "note": "Preserved measured cumulative repair before correcting three current-format test files that still expected backup17 after F2 adopted backup18. Production code, corpus, observations and thresholds remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-pr257-regressions-v2.json",
+        "workPackage": "quality-pr257-regressions",
+        "implementationCommit": "4f8fd009ddd5e452b67b0abafb4a656aed90a750",
+        "note": "Preserved deterministic PR257 regression receipt before SFQA004 product admission and allocation boundary changes; original input and run remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality004-product-entry-v1.json",
+        "workPackage": "quality004-product-entry-pre-review",
+        "implementationCommit": "3806ee8f9db348962b8da7630a6f38987cec735d",
+        "note": "Actual pre-review receipt retained unchanged. Subsequent independent review found and closed three dependency-policy counterexamples; final acceptance uses v2."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -959,7 +971,9 @@
     "src/lib/world-engine/source-declaration.ts",
     "src/lib/world-engine/world-package-metadata.ts",
     "src/lib/types/world-sharing.ts",
-    "src/lib/agent/run/hash.ts"
+    "src/lib/agent/run/hash.ts",
+    "src/lib/product-platform/workspace-install.ts",
+    "src/lib/workspace/workspace-allocation.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import Dexie from 'dexie'
 import { readTextOpenWorldCreatorBuildNewWorkAuthorityV1 } from './creator-derived-authority'
 import { assertTextOpenWorldProductionNewWorkV1 } from './source-admission'
@@ -1380,6 +1381,7 @@ async function createOrReadRun(prepared: GenerationPreparedV1): Promise<{
       }
       return { snapshot: existing, prepared: effective }
     }
+    assertCurrentProductEntryV1('upper.text-open-world')
     try {
       const snapshot = await createAgentRunV1({
         scope: prepared.selection.scope,
@@ -2862,6 +2864,7 @@ async function claimCreatorEditModelRequestV1(input: {
           )
         }
       }
+      assertCurrentProductEntryV1('upper.text-open-world')
       const event = parseAgentRunEventV1({
         version: 1,
         runId: current.run.id,
@@ -3007,6 +3010,7 @@ async function resolveAgentPatch(input: {
       }
       fail('model-outcome-unknown', '模型请求已发出但没有 durable response；为避免重复计费不会自动重发')
     }
+    assertCurrentProductEntryV1('upper.text-open-world')
     const claim = await claimCreatorEditModelRequestV1({
       prepared: input.prepared,
       snapshot,
@@ -3023,6 +3027,11 @@ async function resolveAgentPatch(input: {
     const startedAt = Date.now()
     const result: ChatResult = {}
     try {
+      try { assertCurrentProductEntryV1('upper.text-open-world') }
+      catch (cause) {
+        result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }
+        throw cause
+      }
       raw = input.runAI
         ? await input.runAI(messages, input.signal)
         : await executeFrozenFormalAIEntryV1(
@@ -3374,6 +3383,7 @@ export async function resumeTextOpenWorldCreatorArtifactEditIntakeV1(
       if (requested.length > 0 && !result) {
         fail('model-outcome-unknown', '模型请求已发出但没有 durable response；不会通过 intake 恢复重发')
       }
+      if (!result) assertCurrentProductEntryV1('upper.text-open-world')
       const generationInput: TextOpenWorldCreatorArtifactEditGenerationInputV1 = intake.mode === 'direct'
         ? {
             selection: input.selection,
@@ -3441,6 +3451,9 @@ async function generateTextOpenWorldCreatorArtifactEditCandidateLockedV1(
   }
   if (!['planned', 'running'].includes(snapshot.projection.state)) {
     fail('run-state', `Creator edit Run 状态 ${snapshot.projection.state} 不可生成候选`)
+  }
+  if (!exactArtifactEvent(snapshot, 'tool-result') && eventFor(snapshot, 'model.requested').length === 0) {
+    assertCurrentProductEntryV1('upper.text-open-world')
   }
   snapshot = await ensureRunStarted(input.selection.scope, snapshot)
   await notifyBoundary(input.onDurableBoundary, 'run.started', snapshot)
@@ -3780,6 +3793,7 @@ async function reviseTextOpenWorldCreatorArtifactEditCandidateLockedV1(
     operations: input.operations,
   })
   if (sameJson(patch, state.candidate.patch)) return state
+  assertCurrentProductEntryV1('upper.text-open-world')
   await readTextOpenWorldCreatorBuildNewWorkAuthorityV1({
     scope: input.selection.scope, buildId: input.selection.buildId, operation: '修订新的工件修改候选',
   })
@@ -3814,6 +3828,7 @@ async function reviseTextOpenWorldCreatorArtifactEditCandidateLockedV1(
     terminalReceipt: null,
     verificationReceipt: null,
   }
+  assertCurrentProductEntryV1('upper.text-open-world')
   let snapshot = (await createAgentRunCheckpointV1({
     scope: input.selection.scope,
     runId: state.snapshot.run.id,
@@ -4223,6 +4238,7 @@ async function persistIntentClaimV1(input: {
           )
         }
       }
+      if (input.checkpoint) assertCurrentProductEntryV1('upper.text-open-world')
       const checkpointed = input.checkpoint
         ? await createAgentRunCheckpointInTransactionV1({
             snapshot: current,
@@ -4301,6 +4317,7 @@ async function confirmTextOpenWorldCreatorArtifactEditIntentLockedV1(
   await assertCandidateBaseFresh(scope, restored.candidate)
 
   if (restored.checkpoint.phase === 'candidate') {
+    assertCurrentProductEntryV1('upper.text-open-world')
     await readTextOpenWorldCreatorBuildNewWorkAuthorityV1({
       scope, buildId: input.selection.buildId, operation: '确认新工件修改意图',
     })

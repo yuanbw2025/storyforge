@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import {
   verifyProductDistributionBundleV2,
   type ProductDistributionBundleV2,
@@ -295,6 +296,7 @@ export class CommercialHttpClientV1 {
     amountMinor: number
     creatorShareBps: number
   }): Promise<CommercialListingV1> {
+    assertCurrentProductEntryV1('platform.marketplace')
     const { accessToken, ...body } = input
     return parseListing(await this.post('/v1/commercial/listings', body, accessToken))
   }
@@ -316,6 +318,7 @@ export class CommercialHttpClientV1 {
     requestId: string
     listingId: string
   }): Promise<CommercialListingV1> {
+    assertCurrentProductEntryV1('platform.marketplace')
     const { accessToken, ...body } = input
     return parseListing(await this.post('/v1/commercial/listings/publish', {
       ...body, rightsConfirmed: true,
@@ -342,6 +345,7 @@ export class CommercialHttpClientV1 {
     amountMinor: number
     creatorShareBps: number
   }): Promise<CommercialListingV1> {
+    assertCurrentProductEntryV1('platform.marketplace')
     const { accessToken, ...body } = input
     return parseListing(await this.post('/v1/commercial/listings/revise', body, accessToken))
   }
@@ -351,6 +355,7 @@ export class CommercialHttpClientV1 {
     requestId: string
     listingId: string
   }): Promise<CommercialListingV1> {
+    assertCurrentProductEntryV1('platform.marketplace')
     const { accessToken, ...body } = input
     return parseListing(await this.post('/v1/commercial/listings/submit', {
       ...body, rightsConfirmed: true,
@@ -376,6 +381,7 @@ export class CommercialHttpClientV1 {
     entitlement: CommercialEntitlementV1 | null
     checkout: CommercialCheckoutSessionV1 | null
   }> {
+    assertCurrentProductEntryV1('platform.marketplace')
     const { accessToken, ...body } = input
     const row = record(await this.post('/v1/commercial/acquisitions', body, accessToken), 'acquisition')
     exact(row, ['order', 'entitlement', 'checkout'], 'acquisition')
@@ -395,11 +401,14 @@ export class CommercialHttpClientV1 {
     listingId?: string
     textAdventureCandidate?: TextAdventureCommunitySubmissionV1
   }): Promise<CommercialReleaseRegistrationReceiptV1> {
+    assertCurrentProductEntryV1('platform.marketplace')
+    input = structuredClone(input)
     const bundle = await verifyProductDistributionBundleV2(input.bundle)
     const hasCandidate = input.listingId != null || input.textAdventureCandidate != null
     if ((input.listingId == null) !== (input.textAdventureCandidate == null)) {
       fail('protocol', '文字冒险候选上传必须同时携带 listingId 与候选证据')
     }
+    assertCurrentProductEntryV1('platform.marketplace')
     const row = record(await this.post('/v1/commercial/releases/register', {
       requestId: input.requestId, bundle,
       ...(hasCandidate ? {

@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1, evaluateCurrentProductEntryV1 } from '../lib/product/product-catalog'
 import { saveTtrpgOpenPreviewEnabledV1, useTtrpgOpenPreviewEnabledV1 } from '../lib/ttrpg/open-preview-preferences'
 import BrandIcon from '../components/shared/BrandIcon'
 import { useDialog } from '../components/shared/Dialog';
@@ -75,6 +76,8 @@ type Row = {
 const sameScope = (a: WorkspaceScope | null, b: WorkspaceScope | null) => Boolean(a && b &&
   a.projectId === b.projectId && a.worldId === b.worldId && a.workId === b.workId);
 export default function TtrpgPage() {
+  const catalogEntry = evaluateCurrentProductEntryV1('upper.ttrpg')
+  const canAuthor = catalogEntry.enterable
   const dialog = useDialog();
   const { pageId = "library" } = useParams(),
     [params] = useSearchParams(),
@@ -294,6 +297,8 @@ export default function TtrpgPage() {
     }
   };
   const save = async (flush = true) => {
+    assertCurrentProductEntryV1('upper.ttrpg')
+
     if (flush) await flushPendingEditsV1();
     if (!row && readCreatedRouteHandoff()) throw new Error('刚保存的作品正在载入，请稍后继续；已保留原作品');
     if (loading || (projectId && !row)) throw new Error("作品正在加载或已不存在，请从作品库重新选择");
@@ -584,6 +589,7 @@ export default function TtrpgPage() {
             </aside>
           )}
           <main className="lf-content" ref={content}>
+      {!canAuthor && <p role="status" className="lf-paper">当前产品尚未开放创作；已保存作品、原始内容和发行版本仍可查看。</p>}
 
             {error && (
               <p className="avg-alert" role="alert">
@@ -613,7 +619,7 @@ export default function TtrpgPage() {
                   await downloadTextFile(JSON.stringify({ productType: 'ttrpg', purpose: 'unsaved-authoring-comparison',
                     scope: editBasis?.scope, baseRevision: editBasis?.revision, title, settings }, null, 2), '跑团-未保存修改.json', 'application/json');
                 })}>下载本窗口修改副本</button>
-                <button className="lf-action" disabled={busy || !scope || !row?.draft} onClick={() => void run(async () => {
+                <button className="lf-action" disabled={(busy || !scope || !row?.draft) || !canAuthor} onClick={() => void run(async () => {
                   await flushPendingEditsV1();
                   if (!await dialog.confirm({ title: '载入最新方案？',
                     message: '这会替换本窗口未保存的修改。请先下载修改副本，再对照最新方案继续编辑。',
@@ -639,7 +645,7 @@ export default function TtrpgPage() {
                       <div className="avg-actions">
                         <button
                           className="lf-action lf-action-primary"
-                          disabled={busy || draftConflict}
+                          disabled={(busy || draftConflict) || !canAuthor}
                           onClick={() => {
                             createdRouteHandoff.current = null;
                             setDirty(false);
@@ -651,7 +657,7 @@ export default function TtrpgPage() {
                         >
                           新建战役
                         </button>
-                        {openPreview && <button className="lf-action" disabled={busy || draftConflict} onClick={() => {
+                        {openPreview && <button className="lf-action" disabled={(busy || draftConflict) || !canAuthor} onClick={() => {
                           createdRouteHandoff.current = null;
                           setDirty(false); setEditBasis(null); setSettings(defaultTtrpgSettingsV2('open')); setTitle(''); navigate('/ttrpg/vision?format=open');
                         }}>新建开放跑团（预览）</button>}
@@ -717,12 +723,12 @@ export default function TtrpgPage() {
                         保存配置不会调用模型或开始制作。未选择世界时也可以填写。
                       </p>
                       <fieldset
-                        disabled={busy || loading || Boolean(projectId && !row) || Boolean(readCreatedRouteHandoff() && !row) || Boolean(row && !row.draft)}
+                        disabled={(busy || loading || Boolean(projectId && !row) || Boolean(readCreatedRouteHandoff() && !row) || Boolean(row && !row.draft)) || !canAuthor}
                         className="avg-form"
                       >
                         <label>
                           战役名称
-                          <input
+                          <input disabled={!canAuthor}
                             aria-label="战役名称"
                             value={title}
                             maxLength={200}
@@ -736,7 +742,7 @@ export default function TtrpgPage() {
                           <>
                             <label>
                               开场与核心目标
-                              <textarea
+                              <textarea disabled={!canAuthor}
                                 value={settings.openingSituation}
                                 onChange={(e) => {
                                   setSettings((s) => ({
@@ -749,7 +755,7 @@ export default function TtrpgPage() {
                             </label>
                             <label>
                               玩家身份
-                              <input
+                              <input disabled={!canAuthor}
                                 value={settings.playerRole}
                                 onChange={(e) => {
                                   setSettings((s) => ({
@@ -800,7 +806,7 @@ export default function TtrpgPage() {
                         {step === 7 && (
                           <label>
                             制作质量
-                            <select
+                            <select disabled={!canAuthor}
                               value={settings.qualityProfile}
                               onChange={(e) => {
                                 setSettings((s) => ({
@@ -825,7 +831,7 @@ export default function TtrpgPage() {
                           发布后先在原制作流程建立新版本，再明确保存本次修改的阶段条件。新条件随新版本发布生效，已有存档保留原条件。
                         </p>}
                         <div className="avg-actions">
-                          <button
+                          <button disabled={!canAuthor}
                             className="lf-action lf-action-primary"
                             onClick={() =>
                               void run(async () => {
@@ -840,19 +846,19 @@ export default function TtrpgPage() {
                             保存制作方案
                           </button>
                           {step === 8 ? (
-                            <button className="lf-action" onClick={compile}>
+                            <button disabled={!canAuthor} className="lf-action" onClick={compile}>
                               生成或更新审查方案
                             </button>
                           ) : null}
                           {step === 8 && settings.runFormat === 'open' && productionId && (
-                            <button className="lf-action" onClick={compileStagePolicyRevision}>
+                            <button disabled={!canAuthor} className="lf-action" onClick={compileStagePolicyRevision}>
                               为待开始的新版本更新阶段条件
                             </button>
                           )}
-                          {step === 8 && settings.runFormat === 'open' && productionId && <button className="lf-action" onClick={compileCompatibleOpeningRevision}>为待开始的新版本保存兼容开局</button>}
+                          {step === 8 && settings.runFormat === 'open' && productionId && <button disabled={!canAuthor} className="lf-action" onClick={compileCompatibleOpeningRevision}>为待开始的新版本保存兼容开局</button>}
                           {step === 8 && settings.runFormat === 'open' && productionId && <div>
                             <p>完整方案可更新规则、角色安排和其他制作设置，仍使用原冻结世界与读取范围。原发布和存档保留；新版本须另行开始，不能据此宣称旧存档可兼容续团。</p>
-                            <button className="lf-action" onClick={compileAuthoringRevision}>为待开始的新版本更新完整方案</button>
+                            <button disabled={!canAuthor} className="lf-action" onClick={compileAuthoringRevision}>为待开始的新版本更新完整方案</button>
                           </div>}
                         </div>
                       </fieldset>
@@ -914,9 +920,9 @@ export default function TtrpgPage() {
                           <button
                             className="lf-action"
                             disabled={
-                              busy ||
+                              (busy ||
                               Boolean(row && !row.draft) ||
-                              Boolean(handoffError)
+                              Boolean(handoffError)) || !canAuthor
                             }
                             onClick={() =>
                               void run(async () => {
@@ -955,7 +961,7 @@ export default function TtrpgPage() {
                             <h3>选择本战役读取的资源</h3>
                             <label>
                               建议起点
-                              <select
+                              <select disabled={!canAuthor}
                                 value={suggestionKey}
                                 onChange={(e) => {
                                   setSuggestionKey(e.target.value);
@@ -992,14 +998,14 @@ export default function TtrpgPage() {
                                 ["storyArcResourceKeys", "storyArcs", "故事线"],
                               ] as const
                             ).map(([key, field, label]) => (
-                              <fieldset key={key}>
+                              <fieldset disabled={!canAuthor} key={key}>
                                 <legend>{label}</legend>
                                 {sources.sourceOptions[field].map((o) => (
                                   <label
                                     className="ttrpg-check"
                                     key={o.resourceKey}
                                   >
-                                    <input
+                                    <input disabled={!canAuthor}
                                       type="checkbox"
                                       checked={selection[key].includes(
                                         o.resourceKey,
@@ -1020,7 +1026,7 @@ export default function TtrpgPage() {
                                 ))}
                               </fieldset>
                             ))}
-                            <button
+                            <button disabled={!canAuthor}
                               className="lf-action"
                               onClick={() =>
                                 void run(async () => {
@@ -1057,7 +1063,7 @@ export default function TtrpgPage() {
                       >
                         填写创作指令
                       </button>
-                      <button className="lf-action" onClick={compile}>
+                      <button disabled={!canAuthor} className="lf-action" onClick={compile}>
                         准备审查方案
                       </button>
                     </section>
@@ -1084,7 +1090,7 @@ export default function TtrpgPage() {
                           </button>
                           {!row?.project.productPlatformOptIns
                             ?.productProductionV3 && (
-                            <button
+                            <button disabled={!canAuthor}
                               className="lf-action"
                               onClick={() =>
                                 void run(async () => {
