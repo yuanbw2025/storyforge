@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261103-quality029-fountain-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261103-quality271-browser-recovery-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality029-fountain-v2.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved prior receipt before merging community mainline with audit fixes and browser recovery."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261013-v1.json",
         "workPackage": "NW-0B",
@@ -682,6 +687,21 @@
         "path": "tests/acceptance/narrative-world/baseline-20261103-quality029-fountain-v1.json",
         "workPackage": "quality029-fountain-pre-pointer",
         "note": "Preserved first actual029 measurement taken before updating the fingerprinted manifest pointer. Its25 cases passed but default comparison correctly rejected the subsequent manifest fingerprint change; deterministic observations were unchanged. Finalv2 measures the already-final pointer and history."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-community-launch-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved prior receipt before merging community mainline with audit fixes and browser recovery."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261030-community-r2-main870-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved community branch receipt before integrating the 2026-11-02 source identity and evidence validation mainline fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261030-community-deps-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved community branch receipt before the v4.0.5 mainline merge and R2 replacement."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

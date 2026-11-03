@@ -4,6 +4,10 @@
 
 NW-0B 交付时只完成评测基础设施，没有模型调用、浏览器产品 E2E、真人验收或规模性能验收。后续各卡证据分别记录在下文，不回填为 NW-0B 的成绩。
 
+**2026-10-30 社区 R2 与 v4.0.5 主干整合复核**：将社区分支的旧上传依赖替换为 R2 签名直传，并普通整合主干 `8707bb8a1` 后，使用官方基线入口生成[当前确定性回执](./baseline-20261030-community-r2-main870-v1.json)；25 项检查通过。与主干及社区旧回执相比，`summary`、`observations`、`issues` 逐项相同，输入指纹和运行元数据更新。双方历史回执继续保留；这只记录工程输入，不改变世界引擎产品验收结论。
+
+**2026-10-30 社区依赖输入复核**：社区作品集分支新增 Supabase 与分片上传依赖，导致 NW-0B 输入指纹中的 `package.json`、`package-lock.json` 变化；新回执指针也改变清单自身的指纹。重新运行 25 项确定性评测并逐项比较，新[回执](./baseline-20261030-community-deps-v1.json)的观察、缺口和判定与上一版完全一致；旧回执保留。此处只更新输入来源记录，不增加世界引擎能力或产品验收结论。
+
 **2026-10-27 状态字段写入反例补验**：补齐稀疏数组写入拒绝后，再次实际运行三组110项测试，生成[基线v2](./baseline-20261027-longform-stability-v2.json)、[IR契约v2](./ir-contract-20261027-longform-stability-v2.json)和[投影契约v2](./domain-projection-20261027-longform-stability-v2.json)。[v2对照](./shared-source-refresh-20261027-longform-stability-v2.json)确认观察与v1一致，v1及更早回执均保留。完整交付检查另行核对。
 
 **2026-10-27 长篇稳定性修复的共享依赖回归**：完整 CI 中 5648 项测试通过、3 项跳过，三组末尾比较仍因来源指纹变化失败。保留历史回执和原失败后，实际重新运行三组 110 项测试，生成[新确定性基线](./baseline-20261027-longform-stability-v1.json)、[新 IR 契约](./ir-contract-20261027-longform-stability-v1.json)与[新领域投影契约](./domain-projection-20261027-longform-stability-v1.json)。[逐项对照记录](./shared-source-refresh-20261027-longform-stability-v1.json)确认原观察、gold 和历史文件不变，补充绑定新状态字段校验器。此更新只用于工程回归；完整 CI 继续复验，不新增世界引擎模型、性能或人工验收结论。

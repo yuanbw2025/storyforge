@@ -92,6 +92,7 @@ for (const target of ['proof', 'receipt'] as const) {
     expect(partial.runs[2].state).toBe('running')
     await page.reload()
     await expect(page.getByText('批量生成完成：2 章', { exact: true })).toBeVisible()
+    expect(await batchState(page)).toEqual(partial)
     expect(calls()).toBe(3)
     await page.getByRole('button', { name: '全部写入', exact: true }).click()
     await expect(page.getByText('批量生成完成：2 章', { exact: true })).toHaveCount(0)

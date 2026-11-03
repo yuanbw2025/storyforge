@@ -117,6 +117,7 @@ AVG 以 [整体产品契约](../products/AVG.md)为唯一施工入口，[实施�
 | F-COMMERCIAL-01 | LATER | 计费、授权、运营与商业化 | 产品价值、成本、合规、服务可靠性和支持流程均有证据 |
 
 现有市场、在线房间、托管和商业代码在此阶段前只能 capability-gated/experimental，不得成为主路径依赖。
+社区作品集的隔离设计与施工步骤见 [专项计划](./COMMUNITY-WORKS-LIBRARY-PLAN.md)；该计划不改变上述进入条件或当前状态。
 
 ## 开工规则
 

@@ -1147,8 +1147,9 @@ export async function recoverPendingOutlineGenerationAdoptionsV1(
       if (candidate.batch && candidate.contentRevision) {
         const frozen = await adoptionIntentForSnapshot(scope, snapshot, candidate)
         if (!frozen) throw new Error('批次恢复缺少原确认计划')
-        await adoptOutlineGenerationCandidateV1({ candidate, intent: frozen.intent })
-        result.recoveredRunIds.push(candidate.runId)
+        // The batch controller restores the original confirmed plans and owns
+        // their explicit retry. A second writer here races that controller's
+        // Canon check and can invalidate an otherwise unchanged batch.
         continue
       }
       if (step.status === 'succeeded' && step.adoptionHash) {
