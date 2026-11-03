@@ -96,7 +96,7 @@ async function seedSixDomains() {
     worldGroupId: primaryGroupId, overview: '三百年前海面第一次倒悬。', eraSystem: '潮历', events: '[]',
   }, 'world')
   await addScoped(scope, 'importantLocations', {
-    name: '废弃王城', description: '被盐壳包裹的旧都', significance: '镜门入口', tags: ['王城'], parentId: null,
+    name: '废弃王城', description: '被盐壳包裹的旧都', significance: '镜门入口', tags: JSON.stringify(['城市']), parentId: null,
   }, 'world')
   const categoryId = await addScoped(scope, 'codexCategories', {
     name: '族群', description: '', order: 0, parentId: null,

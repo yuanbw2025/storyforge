@@ -82,7 +82,7 @@ import {
   textAdventureQualityReviewBatchTaskKeysV1,
   textAdventureQualityReviewScopeFromTaskKeyV1,
 } from './plan'
-import { createProductBuildPreviewManifestV1 } from './preview-manifest'
+import { createProductBuildPreviewManifestV1, verifyRestoredProductBuildPreviewManifestV1 } from './preview-manifest'
 import { createProductBuildRootTerminalReceiptV1 } from './receipts'
 import { verifyImportedPublishedRootOriginV1 } from './published-root-origin'
 import { readMediaBlobObjectData } from './media-blob-store'
@@ -6237,7 +6237,9 @@ async function compileTerminalBuild(input: {
     buildManifestHash: manifestHash, mediaBindings, fallbackSummary,
   }
   const preview = runtimePackage.version === 1
-    ? await createProductBuildPreviewManifestV1({ ...previewInput, runtimePackage }, { ttrpgProtocol: 2 })
+    ? input.restoreImportedProofs
+      ? await verifyRestoredProductBuildPreviewManifestV1(build.previewManifestJson, { ...previewInput, runtimePackage }, { ttrpgProtocol: 2 })
+      : await createProductBuildPreviewManifestV1({ ...previewInput, runtimePackage }, { ttrpgProtocol: 2 })
     : await createProductBuildPreviewManifestV2({ ...previewInput, runtimePackage })
   if (input.restoreImportedProofs && (manifestHash !== build.manifestHash
     || packageHash !== build.packageHash || preview.previewHash !== build.previewHash

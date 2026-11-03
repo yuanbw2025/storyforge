@@ -25,6 +25,7 @@ import { TTRPG_COMPATIBLE_OPENING_AUTHORED_TASKS_V1 } from '../ttrpg/open-compat
 import { produceTtrpgCompatibleOpeningArtifactV1 } from '../ttrpg/open-compatible-opening-production';
 
 import { parseTextAdventureQuestScriptArtifact, textAdventureQuestRecipientsV3 } from '../adventure/quest-settlement'
+import { assertAdventureRuntimeDiceSupportV1 } from '../adventure/runtime'
 import { createAvgAssemblyExecutorV1 } from '../avg/assembly-executor'
 import { parseProductionModelJsonObjectV1 } from './model-json-object'
 import { avgVisualPlanningExecutionReadyV4 } from '../avg/visual-planning-brief'
@@ -10420,6 +10421,7 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
     runtimePackage.definition.enabledCapabilities.push('presentation')
   } else if (assets.length > 0) fail('当前产品 adapter 不能把媒资接入 RuntimePackage')
   const parsed = parseProductRuntimePackageV1(runtimePackage)
+  if (parsed.productType === 'text-adventure' && parsed.adventure) assertAdventureRuntimeDiceSupportV1(parsed.adventure)
   const ttrpgArtifacts: ProductProductionTaskArtifactV1[] = parsed.ttrpg ? [
     {
       artifactKey: 'ttrpg.rule-pack', kind: 'rule-pack', payload: parsed.ttrpg.rulePack.content,
