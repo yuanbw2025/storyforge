@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { NativeHttp } from '../../src/lib/platform/android-fetch'
 import { createDesktopFetch } from '../../src/lib/platform/desktop-fetch'
 
 function fixture() {
-  const native = { open: vi.fn(async () => ({ status: 200, headers: { 'content-type': 'application/json' } })),
+  const native = { open: vi.fn<NativeHttp['open']>(async () => ({ status: 200, headers: { 'content-type': 'application/json' } })),
     read: vi.fn(async () => ({ done: true })), cancel: vi.fn(async () => {}) }
   const browser = vi.fn(async () => new Response('browser'))
   return { native, browser, fetch: createDesktopFetch(native, browser, 'http://localhost:17831') }

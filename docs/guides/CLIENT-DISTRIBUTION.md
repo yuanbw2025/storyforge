@@ -135,3 +135,12 @@ Android 正式验证用永久密钥在本机签署测试 runner；新正式 APK 
 ## 模块加载失败的明确恢复
 
 React 页面模块或预加载样式失败时，错误页的“重试”先等待既有编辑保存屏障成功，再由用户这一次操作重新加载页面，避免只重置错误边界而反复显示缓存的加载失败。保存失败时保留错误页并阻止重新加载；持续资源故障仍显示失败，不后台循环重试，不清空浏览器数据、不切换 origin。普通渲染/业务错误继续走原有边界重置，不自动刷新。此恢复不等于已确认首次加载失败的网络、构建或缓存根因。
+
+
+## 社区作品集的公开构建配置
+
+正常 Git 运行、便携构建、桌面及 Android 构建共用 `src/lib/community-works/public-deployment.json` 的正式公开连接信息，无需私有密钥或另建账号系统。本地创作仍可离线使用；仅在作者主动投稿或参与社区互动时验证邮箱。社区页面为 <https://yuanbw.vercel.app/community-works/>。
+
+需要禁用入口时设置 `VITE_STORYFORGE_COMMUNITY_SHARING=0`。连接独立测试或自建服务时，必须同时设置开关为 `1`，并完整设置 `VITE_STORYFORGE_COMMUNITY_API_URL`、`VITE_STORYFORGE_COMMUNITY_SUPABASE_URL` 和 `VITE_STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY`；缺项或不安全 URL 会拒绝连接，不混用正式与测试环境。publishable key 是公开客户端标识；数据库服务端 secret key、审核模型密钥和管理授权凭据不得写入这些变量。
+
+本次交付范围为源码主干和官网社区入口；各平台正式客户端由维护者随后依照本文现有流程打包、验证并发行。
