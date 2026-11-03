@@ -1,3 +1,4 @@
+import type { WorldSourceReceiptBindingV1 } from './world-source-receipt'
 import type { WorldCapabilityArea } from '../registry/types'
 
 export interface WorldRevision {
@@ -46,6 +47,8 @@ export interface WorldDerivationV1 {
   sourceContentHash: string
   /** Versioned, hash-bound narrative identity mapping. Historical rows omit it. */
   narrativeLineageJson?: string
+  /** Explicit selected D; written once with the receipt and origin snapshot. */
+  sourceReceiptBinding?: WorldSourceReceiptBindingV1
   targetRevisionId: number | null
   targetReleaseId: number | null
   createdAt: number

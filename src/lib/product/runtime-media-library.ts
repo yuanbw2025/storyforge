@@ -226,12 +226,21 @@ function sameRuntimeMediaRequestMetadataV1(asset: ProductMediaAsset,
   return Object.entries(expected).every(([key, value]) => asset[key as keyof ProductMediaAsset] === value)
 }
 
+function runtimeMediaDuplicateV1(assets: readonly ProductMediaAsset[], contentHash: string,
+  forceLatest: boolean | undefined, latest: number): ProductMediaAsset | undefined {
+  // Preserve the original default reuse of a historical version. An explicit
+  // latest request instead prefers the actual latest matching version.
+  return (forceLatest ? assets.find(row => row.version === latest && row.contentHash === contentHash) : undefined)
+    ?? assets.find(row => row.contentHash === contentHash)
+}
+
 /** An existing version is evidence, not permission to import another one.
  * Verify its original owner/binding/bytes without reopening a missing Release;
  * the final native read transaction cannot create or repair any record. */
 async function readExactRuntimeMediaDuplicateV1(input: {
   scope: WorkspaceScope; session: ProductRuntimeSession; asset: ProductMediaAsset; data: ArrayBuffer
   evidence: ReturnType<typeof mediaEvidence>; readExact: ExactArtifactReader | undefined
+  forceLatest?: boolean
 }): Promise<ProductMediaAsset> {
   const { scope, session, asset, data, evidence, readExact } = input
   const bindings = await db.productMediaBlobs.where('mediaAssetId').equals(asset.id!).toArray()
@@ -254,9 +263,13 @@ async function readExactRuntimeMediaDuplicateV1(input: {
       db.productRuntimeSessions.get(session.id!), db.productMediaAssets.get(asset.id!),
       db.productMediaBlobs.where('mediaAssetId').equals(asset.id!).toArray(), db.mediaBlobObjects.get(object.id!),
     ])
+    const currentVersions = input.forceLatest ? await db.productMediaAssets
+      .where('productRuntimeSessionId').equals(session.id!)
+      .filter(row => row.ownerKind === 'runtime' && row.assetKey === asset.assetKey).toArray() : []
     if (!owner || stable(owner) !== stable(session) || !current || stable(current) !== stable(asset)
       || currentBindings.length !== 1 || !sameMediaBindingV1(currentBindings[0], binding)
-      || !currentObject || stable(currentObject) !== stable(object) || !sameMediaBytesV1(currentObject.data, object.data)) {
+      || !currentObject || stable(currentObject) !== stable(object) || !sameMediaBytesV1(currentObject.data, object.data)
+      || (input.forceLatest && asset.version !== Math.max(0, ...currentVersions.map(row => row.version)))) {
       throw new Error('[product-runtime-media] 原媒资或拥有者在只读复用期间已变化')
     }
     if (evidence) assertDuplicateEvidence(current, evidence)
@@ -292,11 +305,12 @@ async function importCapturedRuntimeMedia(input: Parameters<typeof importProduct
   const existing = await db.productMediaAssets
     .where('productRuntimeSessionId').equals(input.productRuntimeSessionId)
     .filter(row => row.ownerKind === 'runtime' && row.assetKey === stableKey).toArray()
-  const duplicate = existing.find(row => row.contentHash === contentHash)
   const latestVersion = Math.max(0, ...existing.map(row => row.version))
+  const duplicate = runtimeMediaDuplicateV1(existing, contentHash, input.forceLatest, latestVersion)
   if (session.kind === 'text-open-world' && duplicate && (!input.forceLatest || duplicate.version === latestVersion)
     && sameRuntimeMediaRequestMetadataV1(duplicate, input, contentHash, data.byteLength)) {
-    return readExactRuntimeMediaDuplicateV1({ scope, session, asset: duplicate, data, evidence, readExact })
+    return readExactRuntimeMediaDuplicateV1({ scope, session, asset: duplicate, data, evidence, readExact,
+      forceLatest: input.forceLatest })
   }
   // A missing source may be tolerated only by the exact read above. Every
   // genuinely new import/version/metadata choice still verifies real authority.
@@ -312,18 +326,41 @@ async function importCapturedRuntimeMedia(input: Parameters<typeof importProduct
       await runtimeAuthority.assertFormalRuntimeSourceUnchangedV1({ previewSession: session, session: current, frozen })
     }
   }
+  const bindingTables = scopeTransactionTables(db.productRuntimeSessions, db.productMediaAssets,
+    db.productMediaBlobs, db.mediaBlobObjects, ...sourceTables, ...(evidence ? [db.agentRunArtifacts] : []))
+  const currentVersionState = async (expectedDuplicate?: ProductMediaAsset) => {
+    await resolveScope({ scope })
+    const currentSession = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
+    if (!currentSession || currentSession.workId !== scope.workId || currentSession.worldId !== scope.worldId
+      || currentSession.projectId !== scope.projectId || currentSession.status === 'archived'
+      || currentSession.kind !== session.kind) {
+      throw new Error('[product-runtime-media] 运行实例在媒资绑定前失效')
+    }
+    if (frozen) await assertCurrentSource()
+    if (expectedDuplicate) {
+      const current = await db.productMediaAssets.get(expectedDuplicate.id!)
+      if (!current || stable(current) !== stable(expectedDuplicate)) {
+        throw new Error('[product-runtime-media] 原媒资或拥有者在复用期间已变化')
+      }
+    }
+    const currentAssets = await db.productMediaAssets.where('productRuntimeSessionId').equals(currentSession.id!)
+      .filter(row => row.ownerKind === 'runtime' && row.assetKey === stableKey).toArray()
+    const latest = Math.max(0, ...currentAssets.map(row => row.version))
+    const matched = runtimeMediaDuplicateV1(currentAssets, contentHash, input.forceLatest, latest)
+    const reusable = matched && (!input.forceLatest || matched.version === latest) ? matched : undefined
+    if (reusable) {
+      if (reusable.projectId !== scope.projectId || reusable.worldId !== scope.worldId || reusable.workId !== scope.workId
+        || reusable.productType !== currentSession.kind || reusable.productReleaseId !== null) {
+        throw new Error('[product-runtime-media] 并发媒资的原拥有者不一致')
+      }
+      if (evidence) assertDuplicateEvidence(reusable, evidence)
+    }
+    await assertEvidenceAvailable(scope.projectId, evidence, readExact)
+    return { currentSession, latest, reusable }
+  }
   if (duplicate && (!input.forceLatest || duplicate.version === latestVersion)) {
-    if (!evidence && !frozen) return duplicate
-    return db.transaction('rw',scopeTransactionTables(db.productRuntimeSessions,db.productMediaAssets,db.agentRunArtifacts,...sourceTables),async()=>{
-      const current = await db.productMediaAssets.get(duplicate.id!),owner = await db.productRuntimeSessions.get(session.id!)
-      if (!current || stable(current) !== stable(duplicate) || !owner || owner.status === 'archived'
-        || owner.projectId !== scope.projectId || owner.worldId !== scope.worldId || owner.workId !== scope.workId || owner.kind !== session.kind
-        || current.projectId !== scope.projectId || current.worldId !== scope.worldId || current.workId !== scope.workId
-        || current.productType !== session.kind || current.productReleaseId !== null || current.productRuntimeSessionId !== session.id) throw new Error('[product-runtime-media] 原媒资或拥有者在复用期间已变化')
-      if (frozen) await assertCurrentSource()
-      if (evidence) assertDuplicateEvidence(current,evidence)
-      await assertEvidenceAvailable(scope.projectId,evidence,readExact);return current
-    })
+    const current = await db.transaction('rw', bindingTables, async () => (await currentVersionState(duplicate)).reusable)
+    if (current) return current
   }
   await assertEvidenceAvailable(scope.projectId,evidence,readExact)
 
@@ -338,35 +375,14 @@ async function importCapturedRuntimeMedia(input: Parameters<typeof importProduct
       assertCurrentInTransaction: assertCurrentSource,
     } } : {}),
   })
-  const version = latestVersion + 1
   const now = Date.now()
-  return db.transaction('rw', scopeTransactionTables(
-    db.productRuntimeSessions, db.productMediaAssets, db.productMediaBlobs, db.mediaBlobObjects, ...sourceTables, ...(evidence ? [db.agentRunArtifacts] : []),
-  ), async () => {
-    const currentSession = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
-    if (!currentSession || currentSession.workId !== scope.workId || currentSession.worldId !== scope.worldId
-      || currentSession.projectId !== scope.projectId || currentSession.status === 'archived'
-      || currentSession.kind !== session.kind) {
-      throw new Error('[product-runtime-media] 运行实例在媒资绑定前失效')
-    }
-    if (frozen) await assertCurrentSource()
+  return db.transaction('rw', bindingTables, async () => {
+    const { currentSession, latest, reusable } = await currentVersionState()
     const currentBlobObject = await db.mediaBlobObjects.get(blobObject.id!)
     if (!currentBlobObject || currentBlobObject.workId !== scope.workId || currentBlobObject.storageState !== 'ready') {
       throw new Error('[product-runtime-media] 内容寻址对象在绑定前丢失或不可用')
     }
-    let currentVersion = version
-    if (evidence) {
-      await assertEvidenceAvailable(scope.projectId,evidence,readExact)
-      const currentAssets = await db.productMediaAssets.where('productRuntimeSessionId').equals(session.id!)
-        .filter(row => row.ownerKind === 'runtime' && row.assetKey === stableKey).toArray()
-      const currentDuplicate = currentAssets.find(row => row.contentHash === contentHash),latest = Math.max(0,...currentAssets.map(row => row.version))
-      if (currentDuplicate && (!input.forceLatest || currentDuplicate.version === latest)) {
-        if (currentDuplicate.projectId !== scope.projectId || currentDuplicate.worldId !== scope.worldId || currentDuplicate.workId !== scope.workId
-          || currentDuplicate.productType !== session.kind || currentDuplicate.productReleaseId !== null) throw new Error('[product-runtime-media] 并发媒资的原拥有者不一致')
-        assertDuplicateEvidence(currentDuplicate,evidence);return currentDuplicate
-      }
-      currentVersion = latest + 1
-    }
+    if (reusable) return reusable
     const row = stampNewRecord(scope, 'productMediaAssets', {
       projectId: scope.projectId,
       worldId: scope.worldId,
@@ -376,7 +392,7 @@ async function importCapturedRuntimeMedia(input: Parameters<typeof importProduct
       productReleaseId: null,
       productRuntimeSessionId: currentSession.id!,
       assetKey: stableKey,
-      version: currentVersion,
+      version: latest + 1,
       kind: input.kind,
       name: input.name.trim(),
       mimeType: input.blob.type.toLowerCase() || 'application/octet-stream',

@@ -352,10 +352,10 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `story-arc-dynamic-lifecycle` | `storyArcs` | `PROJECT_TABLES refs + PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/storyline/lifecycle.ts`<br/>`src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts`<br/>`src/lib/agent/run/narrative-annotation-durable.ts` | 2027-01-01 |
 | `cultivation-codex-reference-lifecycle` | `codexEntries` | `PROJECT_TABLES refs + cultivation DAG validator + PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/codex/references.ts`<br/>`src/lib/cultivation/lifecycle.ts`<br/>`src/lib/location/lifecycle.ts`<br/>`src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts`<br/>`src/lib/agent/run/narrative-annotation-durable.ts` | 2027-01-01 |
 | `cultivation-progress-lifecycle` | `cultivationProgress` | `ADOPTION_SCHEMAS + PROJECT_TABLES + cultivation DAG validator + canonical chapter sequence` | `src/lib/cultivation/progress.ts`<br/>`src/lib/cultivation/progress-lifecycle.ts` | 2027-01-01 |
-| `workspace-root-lifecycle` | `projects` | `PROJECT_TABLES + workspace purpose + import trust + world lifecycle` | `src/lib/export/registry-import.ts`<br/>`src/lib/memory/workspace-projection.ts`<br/>`src/lib/world-engine/world-package.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/promotion.ts`<br/>`src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
-| `world-root-lifecycle` | `worlds` | `PROJECT_TABLES refs + world package trust + world release lifecycle` | `src/lib/world-engine/world-package.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/promotion.ts`<br/>`src/lib/world-engine/draft.ts`<br/>`src/lib/world-engine/narrative-derivation.ts` | 2027-08-01 |
-| `work-root-lifecycle` | `works` | `PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle` | `src/lib/memory/workspace-projection.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/release.ts` | 2027-08-01 |
-| `adaptation-root-lifecycle` | `adaptationProjects` | `PROJECT_TABLES + ADOPTION_SCHEMAS + adaptation state machine + source manifest CAS` | `src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts`<br/>`src/lib/adaptation/analysis.ts`<br/>`src/lib/screenplay/production.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/production.ts`<br/>`src/lib/comic/release.ts`<br/>`src/lib/comic/authoring.ts`<br/>`src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-08-01 |
+| `workspace-root-lifecycle` | `projects` | `PROJECT_TABLES + workspace purpose + import trust + world lifecycle` | `src/lib/export/registry-import.ts`<br/>`src/lib/memory/workspace-projection.ts`<br/>`src/lib/world-engine/world-package.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/workspace/workspace-allocation.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/promotion.ts`<br/>`src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
+| `world-root-lifecycle` | `worlds` | `PROJECT_TABLES refs + world package trust + world release lifecycle` | `src/lib/world-engine/world-package.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/workspace/workspace-allocation.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/promotion.ts`<br/>`src/lib/world-engine/draft.ts`<br/>`src/lib/world-engine/narrative-derivation.ts` | 2027-08-01 |
+| `work-root-lifecycle` | `works` | `PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle` | `src/lib/memory/workspace-projection.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/workspace/workspace-allocation.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/release.ts` | 2027-08-01 |
+| `adaptation-root-lifecycle` | `adaptationProjects` | `PROJECT_TABLES + ADOPTION_SCHEMAS + adaptation state machine + source manifest CAS` | `src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts`<br/>`src/lib/adaptation/analysis.ts`<br/>`src/lib/screenplay/production.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/production.ts`<br/>`src/lib/comic/release.ts`<br/>`src/lib/comic/authoring.ts`<br/>`src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/release.ts`<br/>`src/lib/comic/service.ts` | 2027-08-01 |
 | `adaptation-source-manifest-lifecycle` | `adaptationSourceUnits` | `PROJECT_TABLES + immutable source manifest policy + canonical chapter sequence` | `src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
 | `adaptation-source-fact-lifecycle` | `adaptationSourceFacts` | `PROJECT_TABLES + FIELD_REGISTRY + closed source-fact contract + adaptation manifest CAS` | `src/lib/adaptation/analysis.ts` | 2027-09-01 |
 | `adaptation-causal-edge-lifecycle` | `adaptationCausalEdges` | `PROJECT_TABLES + FIELD_REGISTRY + closed causal-edge contract + same-manifest fact graph validator` | `src/lib/adaptation/analysis.ts` | 2027-09-01 |
@@ -385,10 +385,10 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `motion-drama-shot-reference-lifecycle` | `motionDramaShotReferences` | `PROJECT_TABLES + shared media blob + rights + one selected reference per shot role` | `src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-09 |
 | `motion-drama-prompt-override-lifecycle` | `motionDramaPromptOverrides` | `PROJECT_TABLES + work/episode override precedence + registered stage keys` | `src/lib/motion-drama/prompts.ts` | 2027-09-09 |
 | `media-blob-object-lifecycle` | `mediaBlobObjects` | `PROJECT_TABLES portable binary + PRODUCT_PRODUCTION_MEDIA_OBJECT_POLICY + SHA-256/MIME/dimension checks + lease/reference-aware GC` | `src/lib/media/blob-store.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/product-production/media-blob-store.ts`<br/>`src/lib/product-production/artifact-store.ts` | 2027-08-21 |
-| `short-novel-outline-skeleton-lifecycle` | `outlineNodes` | `PROJECT_TABLES tree refs + WorkspaceScope + SHORT_NOVEL_WORKFLOW_OVERRIDES` | `src/lib/workspace/create-workspace.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts` | 2027-08-01 |
-| `short-novel-production-lifecycle` | `shortNovelProductions` | `SHORT_NOVEL_PRODUCTION_V1 + PROJECT_TABLES + FIELD_REGISTRY + durable Harness` | `src/lib/workspace/create-workspace.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts` | 2027-09-06 |
+| `short-novel-outline-skeleton-lifecycle` | `outlineNodes` | `PROJECT_TABLES tree refs + WorkspaceScope + SHORT_NOVEL_WORKFLOW_OVERRIDES` | `src/lib/workspace/workspace-allocation.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts` | 2027-08-01 |
+| `short-novel-production-lifecycle` | `shortNovelProductions` | `SHORT_NOVEL_PRODUCTION_V1 + PROJECT_TABLES + FIELD_REGISTRY + durable Harness` | `src/lib/workspace/workspace-allocation.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts` | 2027-09-06 |
 | `independent-creation-release-lifecycle` | `creationReleases` | `SHORT_NOVEL_RELEASE_V1 + SCREENPLAY_RELEASE_V1 + COMIC_RELEASE_V1 + MOTION_DRAMA_RELEASE_V1 + PROJECT_TABLES + completion gates + immutable hash` | `src/lib/short-novel/service.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/release.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-06 |
-| `chapter-delete-lifecycle` | `chapters` | `PROJECT_TABLES refs + WorkspaceScope + chapter deletion impact policy + SHORT_NOVEL_PRODUCTION_V1 + durable Harness + PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/chapters/lifecycle.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts`<br/>`src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts`<br/>`src/lib/agent/run/narrative-annotation-durable.ts` | 2027-08-01 |
+| `chapter-delete-lifecycle` | `chapters` | `PROJECT_TABLES refs + WorkspaceScope + chapter deletion impact policy + SHORT_NOVEL_PRODUCTION_V1 + durable Harness + PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/chapters/lifecycle.ts`<br/>`src/lib/workspace/workspace-allocation.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts`<br/>`src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts`<br/>`src/lib/agent/run/narrative-annotation-durable.ts` | 2027-08-01 |
 | `chapter-emotion-delete-lifecycle` | `emotionBeatCards` | `PROJECT_TABLES chapter refs` | `src/lib/chapters/lifecycle.ts` | 2027-08-01 |
 | `product-production-roots` | `productProductions` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PRODUCT_PRODUCTION_ARTIFACT_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/artifact-store.ts`<br/>`src/lib/product-production/media-blob-store.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-production/scheduler.ts`<br/>`src/lib/avg/author-artifacts.ts` | 2027-08-21 |
 | `product-production-briefs` | `productProductionBriefs` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/adoption.ts` | 2027-08-21 |
@@ -414,7 +414,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `agent.orchestrator` | `src/lib/agent/orchestrator.ts:858` |
 | `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:966` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
-| `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:430` |
+| `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:435` |
 | `canon.narrative.extract` | `src/lib/agent/run/narrative-annotation-durable.ts:218` |
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
@@ -428,11 +428,11 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:653` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
-| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:129` |
+| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:190` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
-| `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:943` |
+| `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:958` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
-| `node.creation` | `src/lib/node-authoring/executor.ts:395` |
+| `node.creation` | `src/lib/node-authoring/executor.ts:408` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:200`<br/>`src/lib/outline/generation-node.ts:61` |
 | `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:666` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:56` |
@@ -448,7 +448,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:134` |
 | `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:310` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
-| `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:688`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
+| `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:688`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:773` |
 | `style.learn` | `src/lib/agent/run/style-learning-durable.ts:493` |
 | `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:466` |
 | `world-group.suggest` | `src/lib/agent/run/world-suggest-durable.ts:622` |
@@ -486,11 +486,11 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:22 · ai.start`
 - `src/lib/motion-drama/durable-production.ts:348 · chat`
-- `src/lib/node-authoring/executor.ts:453 · chat`
+- `src/lib/node-authoring/executor.ts:468 · chat`
 - `src/lib/open-world/evolution-harness.ts:251 · chat`
 - `src/lib/open-world/harness.ts:150 · chat`
-- `src/lib/product-production/authoring-consultation.ts:169 · chat`
-- `src/lib/product-production/capabilities.ts:325 · chat`
+- `src/lib/product-production/authoring-consultation.ts:175 · chat`
+- `src/lib/product-production/capabilities.ts:330 · chat`
 - `src/lib/screenplay/durable-production.ts:486 · chat`
 - `src/lib/ttrpg/gm-actor-harness.ts:481 · chat`
 - `src/lib/ttrpg/gm-harness.ts:550 · chat`
@@ -584,4 +584,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `2a013e719`
+生成时间基准:commit `3806ee8f9`

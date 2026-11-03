@@ -71,7 +71,7 @@ export interface BatchDetailOptions {
   onCandidate: (input: {
     chapter: OutlineNode
     candidate: DetailedOutlineBatchCandidateV1
-  }) => Promise<'adopt' | 'reject'>
+  }) => Promise<'adopt' | 'reject' | 'pause'>
   /** 采纳后读取正式表，用于父任务终态验证。 */
   onPostState: (outlineNodeId: number) => Promise<unknown>
   onRunCreated?: (runId: number) => void
@@ -286,6 +286,10 @@ export async function batchGenerateDetails(
           failures,
         })
         const decision = await onCandidate({ chapter: ch, candidate })
+        if (decision === 'pause' || signal?.aborted) {
+          await pauseDetailedOutlineBatchRunV1({ scope, snapshot, reason: '批量细纲已暂停；当前候选保留，等待作者明确采纳或放弃。' })
+          return { generated, skipped: chapters.length - todo.length, failed, cancelled: true, elapsed: Date.now() - start, runIds }
+        }
         if (decision === 'reject') {
           snapshot = await rejectDetailedOutlineBatchCandidateV1({
             scope,

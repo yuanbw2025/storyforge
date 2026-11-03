@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261102-quality-priority31-final-05.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261103-quality029-fountain-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -629,6 +629,59 @@
         "path": "tests/acceptance/narrative-world/baseline-20261102-quality-engineering-144.json",
         "workPackage": "quality-engineering-144",
         "note": "Preserved exact reviewed engineering branch receipt while integrating the corrected cumulative source tree."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261102-quality-priority31-final-05.json",
+        "workPackage": "quality-priority31-final-05",
+        "note": "Preserved before ready25 combined-source verification; frozen gold corpus and evaluation thresholds remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-ready27-integration-v1.json",
+        "workPackage": "SFQA-ready27-integration",
+        "note": "Preserved exact ready27 receipt before the F1 world-package and SFQA-050 dispatch-source fingerprint refresh; original observations and corpus remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-050-056-integration-v1.json",
+        "workPackage": "SFQA-050-056-integration",
+        "implementationCommit": "b1af4deac69c43da2fb054348009c87b46c32188",
+        "note": "Preserved exact cumulative F1/050/056 receipt before schema14/backup18 immutable world-source wire receipts. Original observations, corpus and thresholds remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-world-source-receipts-v1.json",
+        "workPackage": "SFQA021-F2-source-receipts-v1",
+        "note": "Measured schema14/backup18 receipt checkpoint retained before call-time package and scalar owner capture repair. Its full deterministic object matches the prior receipt; its source hashes identify the actual pre-repair implementation. No corpus, observation or threshold is rewritten."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-world-source-receipts-v2.json",
+        "workPackage": "SFQA021-F2-source-receipts-v2",
+        "note": "Preserved unchanged before PR257 portable row-order recovery, legacy v3 candidate compatibility and actual regression receipt refresh. Frozen corpus, observations and thresholds remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-pr257-regressions-v1.json",
+        "workPackage": "quality-pr257-regressions-v1",
+        "note": "Preserved measured cumulative repair before correcting three current-format test files that still expected backup17 after F2 adopted backup18. Production code, corpus, observations and thresholds remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-pr257-regressions-v2.json",
+        "workPackage": "quality-pr257-regressions",
+        "implementationCommit": "4f8fd009ddd5e452b67b0abafb4a656aed90a750",
+        "note": "Preserved deterministic PR257 regression receipt before SFQA004 product admission and allocation boundary changes; original input and run remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality004-product-entry-v1.json",
+        "workPackage": "quality004-product-entry-pre-review",
+        "implementationCommit": "3806ee8f9db348962b8da7630a6f38987cec735d",
+        "note": "Actual pre-review receipt retained unchanged. Subsequent independent review found and closed three dependency-policy counterexamples; final acceptance uses v2."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality004-product-entry-v2.json",
+        "workPackage": "quality004-product-entry-v2",
+        "note": "Preserved measured product-entry and neutral workspace extraction receipt. This successor only records the exact Fountain test-only development dependency pins; corpus, observations and thresholds remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality029-fountain-v1.json",
+        "workPackage": "quality029-fountain-pre-pointer",
+        "note": "Preserved first actual029 measurement taken before updating the fingerprinted manifest pointer. Its25 cases passed but default comparison correctly rejected the subsequent manifest fingerprint change; deterministic observations were unchanged. Finalv2 measures the already-final pointer and history."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -922,7 +975,15 @@
     "tests/regression/R-NW-2E-byte-sink.test.ts",
     "tests/regression/R-NW-2E-numeric-runs.test.ts",
     "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
-    "src/lib/types/state-card.ts"
+    "src/lib/types/state-card.ts",
+    "src/lib/world-engine/source-receipt.ts",
+    "src/lib/world-engine/source-receipt-contract.ts",
+    "src/lib/world-engine/source-declaration.ts",
+    "src/lib/world-engine/world-package-metadata.ts",
+    "src/lib/types/world-sharing.ts",
+    "src/lib/agent/run/hash.ts",
+    "src/lib/product-platform/workspace-install.ts",
+    "src/lib/workspace/workspace-allocation.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

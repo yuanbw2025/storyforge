@@ -291,7 +291,18 @@ export async function reviseNarrativeAnnotationCandidateV1(input: { scope: Works
   if (!loaded.candidate || loaded.candidate.candidateHash !== input.expectedCandidateHash || loaded.snapshot.projection.state !== 'awaiting_confirmation' || loaded.state.intent) fail('候选已改变或不再可编辑')
   const prepared = await prepareNarrativeCandidateV1({ scope: input.scope, selection: loaded.state.selection,
     includeTargetState: loaded.state.promptVersion === PROMPT_VERSION })
-  if (prepared.baselineHash !== loaded.state.baselineHash) fail('候选来源已变化，不能沿用旧审核')
+  // v3 stored the descriptor policy recipe used at capture time. Canon now
+  // binds source identities into that recipe. Keep the original sealed baseline;
+  // only its derived field policy hashes may differ after current owner/source,
+  // author policy and original-byte checks have succeeded. v4 stays exact.
+  const legacyPolicyBaseline = loaded.state.promptVersion === 'narrative-annotation-extract-v3'
+    ? { ...prepared.baseline, originalFields: prepared.baseline.originalFields.map((field, index) => ({
+      ...field, policyHash: loaded.state.baseline.originalFields[index]?.policyHash,
+    })) } : null
+  if (prepared.baselineHash !== loaded.state.baselineHash
+    && (!legacyPolicyBaseline || canonicalNarrativeJsonV1(legacyPolicyBaseline) !== canonicalNarrativeJsonV1(loaded.state.baseline))) {
+    fail('候选来源已变化，不能沿用旧审核')
+  }
   const compiled = await compileNarrativeAnnotationProposalV1({ ...prepared, raw: input.draft, allowedSubKeys: loaded.candidate.subKeys })
   const { candidateHash: _previousHash, ...previous } = loaded.candidate
   const candidate = await candidateWithHash({ ...previous, revision: loaded.candidate.revision + 1,
