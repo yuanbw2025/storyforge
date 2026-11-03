@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { createVitest } from 'vitest/node'
 // Vitest 2's native blob format uses flatted, pinned by the same lock/version.
 import { parse as parseBlob } from 'flatted'
@@ -178,6 +178,17 @@ function newOutput(output) {
   fs.mkdirSync(output, { recursive: true })
 }
 
+/** @param {string} root @param {string} privateDir */
+export function writeCollectorConfig(root, privateDir) {
+  const configFile = path.join(privateDir, 'collector.config.mjs')
+  // A filesystem specifier is bundled by Vite, which injects file-scope
+  // variables at the original TS file. A file: URL is externalized and lets
+  // Node load the TS as native ESM, where the original __dirname is absent.
+  fs.writeFileSync(configFile, 'import base from ' + JSON.stringify(path.join(root, 'vitest.config.ts')) + ';\n'
+    + 'export default { ...base, test: { ...base.test, coverage: { ...base.test.coverage, thresholds: undefined } } };\n')
+  return configFile
+}
+
 /** The derived config defers thresholds ONLY while producing a collection artifact.
  * The merge entry point below always loads the original config.
  * @param {string} root @param {string} shard @param {string} manifest @param {string} output */
@@ -192,9 +203,7 @@ export async function collectShard(root, shard, manifest, output) {
   newOutput(output)
   // OS-private reports remain outside Vitest's shared coverage cleanup tree.
   const privateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'storyforge-coverage-shard-'))
-  const configFile = path.join(privateDir, 'collector.config.mjs')
-  fs.writeFileSync(configFile, 'import base from ' + JSON.stringify(pathToFileURL(path.join(root, 'vitest.config.ts')).href) + ';\n'
-    + 'export default { ...base, test: { ...base.test, coverage: { ...base.test.coverage, thresholds: undefined } } };\n')
+  const configFile = writeCollectorConfig(root, privateDir)
   runVitest(root, [
     'run', '--config=' + configFile, '--coverage', '--shard=' + shard,
     '--reporter=default', '--reporter=json', '--reporter=blob',

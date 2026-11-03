@@ -2,11 +2,13 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
+import os from 'node:os'
+import { createVitest } from 'vitest/node'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { stringify } from 'flatted'
 import { parse as parseYaml } from 'yaml'
-import { collectShard, createPlan, exactFiles, mergeShards, sha256, validateCollected, verifyReceipts } from './coverage-shards.mjs'
+import { collectShard, createPlan, exactFiles, mergeShards, sha256, validateCollected, verifyReceipts, writeCollectorConfig } from './coverage-shards.mjs'
 import { requireCIResults, staticCommands } from './run-ci-static.mjs'
 
 /** @typedef {import('./coverage-shards.mjs').Plan} Plan */
@@ -234,4 +236,87 @@ test('a real failed test cannot publish a collected receipt', async t => {
     await assert.rejects(collectShard(root, shard.index + '/4', manifest, output), /Vitest failed/)
     assert.equal(fs.existsSync(path.join(output, 'receipt.json')), false)
   } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+/** Load configuration only: no collection, execution, build or coverage instrumentation.
+ * @param {string} root @param {string} config */
+async function resolvedConfig(root, config) {
+  const ctx = await createVitest('test', { root, config, watch: false })
+  try {
+    const testConfig = JSON.parse(JSON.stringify(ctx.config))
+    // The wrapper filename and Vitest's per-instance random UUID are runtime
+    // metadata. Normalize only the comparison copy, never the live settings.
+    delete testConfig.config
+    assert.match(testConfig.api.token, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    testConfig.api.token = '<generated-api-token>'
+    return { test: testConfig, resolve: JSON.parse(JSON.stringify(ctx.server.config.resolve)) }
+  } finally { await ctx.close() }
+}
+
+test('collector config preserves the actual original TypeScript configuration and directory', async () => {
+  const source = path.join(repository, 'vitest.config.ts')
+  const originalBytes = fs.readFileSync(source)
+  const direct = await resolvedConfig(repository, source)
+  assert.ok(direct.test.coverage.thresholds)
+  assert.equal(direct.resolve.alias.find((/** @type {{find: string}} */ alias) => alias.find === '@').replacement, path.join(repository, 'src'))
+  const privateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-collector-config-control-'))
+  try {
+    const derived = await resolvedConfig(repository, writeCollectorConfig(repository, privateDir))
+    const expected = structuredClone(direct)
+    delete expected.test.coverage.thresholds
+    assert.deepEqual(derived, expected, 'only collection threshold deferral may differ')
+    assert.deepEqual(fs.readFileSync(source), originalBytes)
+  } finally { fs.rmSync(privateDir, { recursive: true, force: true }) }
+})
+
+test('collector config handles TS helpers and relative aliases and preserves configuration failures', async t => {
+  const originalSha = process.env.GITHUB_SHA
+  delete process.env.GITHUB_SHA
+  t.after(() => { if (originalSha === undefined) delete process.env.GITHUB_SHA; else process.env.GITHUB_SHA = originalSha })
+  for (const scenario of /** @type {const} */ (['pass', 'directory'])) {
+    await t.test(scenario, async () => {
+      const root = fixture(scenario)
+      try {
+        const original = fs.readFileSync(path.join(root, 'vitest.config.ts'), 'utf8').replace(/^export default /, 'const base = ')
+        fs.writeFileSync(path.join(root, 'config-helper.ts'), 'export function configure<T>(config: T): T { return config }\n')
+        fs.writeFileSync(path.join(root, 'vitest.config.ts'), "import path from 'node:path';\nimport { configure } from './config-helper.ts';\n"
+          + original + "const originalDirectory: string = __dirname;\nexport default configure({ ...base, resolve: { alias: { '@': path.resolve(originalDirectory, './src') } } });\n")
+        for (const name of ['a', 'b', 'c', 'd']) {
+          const file = path.join(root, 'tests/' + name + '.test.js')
+          fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('../src/logic.js', '@/logic.js'))
+        }
+        execFileSync('git', ['add', '.'], { cwd: root })
+        execFileSync('git', ['-c', 'user.name=CI fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'Original-directory TS config control'], { cwd: root })
+        const manifest = path.join(root, '.reports/plan.json')
+        const plan = await createPlan(root, 2)
+        fs.mkdirSync(path.dirname(manifest), { recursive: true })
+        fs.writeFileSync(manifest, JSON.stringify(plan))
+        const artifacts = path.join(root, '.reports/shards')
+        for (let index = 1; index <= 2; index++) {
+          await collectShard(root, index + '/2', manifest, path.join(artifacts, 'shard-' + index))
+        }
+        assert.equal([...fs.readFileSync(path.join(root, '.reports/executions'), 'utf8')].sort().join(''), 'abcd')
+        const output = path.join(root, '.reports/merged')
+        if (scenario === 'pass') {
+          await mergeShards(root, manifest, artifacts, output)
+          assert.equal(JSON.parse(fs.readFileSync(path.join(output, 'coverage/coverage-summary.json'), 'utf8')).total.functions.pct, 100)
+        } else {
+          await assert.rejects(mergeShards(root, manifest, artifacts, output), /Vitest failed/)
+          assert.equal(fs.existsSync(path.join(output, 'receipt.json')), false)
+        }
+        assert.equal([...fs.readFileSync(path.join(root, '.reports/executions'), 'utf8')].sort().join(''), 'abcd', 'merge cannot rerun tests')
+      } finally { fs.rmSync(root, { recursive: true, force: true }) }
+    })
+  }
+  await t.test('invalid TS is rejected by the same Vite loader', async () => {
+    const root = fixture('pass')
+    const privateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-invalid-config-control-'))
+    try {
+      fs.writeFileSync(path.join(root, 'vitest.config.ts'), 'export const broken: = 1;\n')
+      await assert.rejects(resolvedConfig(root, writeCollectorConfig(root, privateDir)), /Unexpected.*=/)
+    } finally {
+      fs.rmSync(privateDir, { recursive: true, force: true })
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
 })
