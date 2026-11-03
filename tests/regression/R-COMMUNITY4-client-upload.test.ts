@@ -37,9 +37,29 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); localStorage.clear() })
 
 describe('community upload client', () => {
-  it('stays disabled unless all explicit public endpoint settings are present', () => {
+  it('supports a complete alternate deployment and an explicit local disable', () => {
     expect(communityClientConfig()?.apiOrigin).toBe('https://gallery.example')
     vi.stubEnv('VITE_STORYFORGE_COMMUNITY_SHARING', '0')
+    expect(communityClientConfig()).toBeNull()
+  })
+
+  it('uses the official public deployment for an ordinary source or packaged build', () => {
+    for (const name of ['SHARING', 'API_URL', 'SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY']) {
+      vi.stubEnv(`VITE_STORYFORGE_COMMUNITY_${name}`, '')
+    }
+    const config = communityClientConfig()
+    expect(config?.apiOrigin).toBe('https://yuanbw.vercel.app')
+    expect(config?.publishableKey).toMatch(/^sb_publishable_/)
+    expect(config?.supabaseUrl).toBe(config?.storageOrigin)
+  })
+
+  it('rejects incomplete or insecure overrides instead of mixing environments', () => {
+    vi.stubEnv('VITE_STORYFORGE_COMMUNITY_SUPABASE_URL', '')
+    expect(communityClientConfig()).toBeNull()
+    vi.stubEnv('VITE_STORYFORGE_COMMUNITY_SUPABASE_URL', 'http://storage.example')
+    expect(communityClientConfig()).toBeNull()
+    vi.stubEnv('VITE_STORYFORGE_COMMUNITY_SUPABASE_URL', 'https://storage.example')
+    vi.stubEnv('VITE_STORYFORGE_COMMUNITY_SHARING', '')
     expect(communityClientConfig()).toBeNull()
   })
 

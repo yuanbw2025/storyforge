@@ -4,6 +4,7 @@ import { usePromptStore } from '../../../stores/prompt'
 import type { PromptTemplate } from '../../../lib/types/prompt'
 import type { Project } from '../../../lib/types'
 import { GENRE_PACKS } from '../../../lib/ai/prompt-seeds-genre-packs'
+import { encodePromptTemplateExchange } from '../../../lib/ai/prompt-template-exchange'
 import PromptTemplateList from './PromptTemplateList'
 import PromptTemplateEditor from './PromptTemplateEditor'
 import PromptWorkflowsPanel from './PromptWorkflowsPanel'
@@ -20,6 +21,7 @@ export default function PromptManagerPanel({ project }: Props = {}) {
   const toast = useToast()
   const templates = usePromptStore(s => s.templates)
   const saveTemplate = usePromptStore(s => s.saveTemplate)
+  const importTemplates = usePromptStore(s => s.importTemplates)
   const setActive = usePromptStore(s => s.setActive)
   const reload = usePromptStore(s => s.reload)
 
@@ -94,8 +96,12 @@ export default function PromptManagerPanel({ project }: Props = {}) {
 
   /** 导出全部模板为 JSON */
   const handleExportAll = () => {
-    const blob = new Blob([JSON.stringify(templates, null, 2)], { type: 'application/json' })
-    triggerDownload(blob, `storyforge-prompts-${new Date().toISOString().slice(0, 10)}.json`)
+    try {
+      const blob = new Blob([encodePromptTemplateExchange(templates)], { type: 'application/json' })
+      triggerDownload(blob, `storyforge-prompts-${new Date().toISOString().slice(0, 10)}.json`)
+    } catch (cause) {
+      toast.error(`导出失败：${cause instanceof Error ? cause.message : String(cause)}`)
+    }
   }
 
   /** 导入 JSON 文件 */
@@ -106,25 +112,7 @@ export default function PromptManagerPanel({ project }: Props = {}) {
     if (!file) return
     try {
       const text = await file.text()
-      const data = JSON.parse(text)
-      const items: unknown[] = Array.isArray(data) ? data : [data]
-      let count = 0
-      const now = Date.now()
-      for (const raw of items) {
-        const validated = validateTemplate(raw)
-        if (validated) {
-          // 强制 scope='user'，避免覆盖系统模板
-          await saveTemplate({
-            ...validated,
-            scope: 'user',
-            isActive: false,
-            createdAt: now,
-            updatedAt: now,
-          })
-          count++
-        }
-      }
-      await reload()
+      const count = await importTemplates(text)
       toast.success(`成功导入 ${count} 条模板`)
     } catch (err) {
       toast.error(`导入失败：${err instanceof Error ? err.message : String(err)}`)
@@ -318,27 +306,6 @@ function PromptTemplatesView({
       </div>
     </div>
   )
-}
-
-/** 校验导入 JSON 的字段，返回干净对象或 null */
-function validateTemplate(raw: unknown): Omit<PromptTemplate, 'id' | 'createdAt' | 'updatedAt'> | null {
-  if (typeof raw !== 'object' || raw === null) return null
-  const r = raw as Record<string, unknown>
-  if (typeof r.moduleKey !== 'string') return null
-  if (typeof r.systemPrompt !== 'string') return null
-  if (typeof r.userPromptTemplate !== 'string') return null
-  return {
-    scope: 'user',
-    moduleKey: r.moduleKey as PromptTemplate['moduleKey'],
-    promptType: typeof r.promptType === 'string' ? r.promptType : 'generate',
-    name: typeof r.name === 'string' ? r.name : '导入的模板',
-    description: typeof r.description === 'string' ? r.description : '',
-    systemPrompt: r.systemPrompt,
-    userPromptTemplate: r.userPromptTemplate,
-    variables: Array.isArray(r.variables) ? r.variables.filter(v => typeof v === 'string') as string[] : [],
-    modelOverride: typeof r.modelOverride === 'object' && r.modelOverride !== null ? r.modelOverride as PromptTemplate['modelOverride'] : undefined,
-    isActive: false,
-  }
 }
 
 function triggerDownload(blob: Blob, filename: string) {

@@ -1,4 +1,5 @@
 import { db } from '../db/schema'
+import { assertTextOpenWorldNewSourceV1, assertTextOpenWorldProductionNewWorkV1 } from './source-admission'
 import { assertTextOpenWorldCreatorBriefLifecycleV1 } from './creator-brief-lifecycle'
 import type {
   AIConfig,
@@ -193,6 +194,7 @@ export async function createTextOpenWorldCreatorProductionSourcePlanV1(input: {
   sourceLocator: TextOpenWorldCreatorSourceLocatorV1
   createdAt: number
 }): Promise<TextOpenWorldCreatorProductionSourcePlanV1> {
+  input = structuredClone(input)
   const scope = await resolveScope({ scope: input.scope })
   const brief = await verifyTextOpenWorldCreatorBriefV1(input.brief)
   const inspected = await inspectTextOpenWorldCreatorSourceLocatorV1({ scope, locator: input.sourceLocator })
@@ -346,6 +348,7 @@ export async function createTextOpenWorldCreatorExecutionBriefV1(input: {
   sourcePlan: TextOpenWorldCreatorProductionSourcePlanV1
   productionBudget: TextOpenWorldCreatorProductionPreflightV1['estimate']
 }): Promise<ProductProductionBriefV3> {
+  input = structuredClone(input)
   const brief = await verifyTextOpenWorldCreatorBriefV1(input.brief)
   const sourcePlan = await parseTextOpenWorldCreatorProductionSourcePlanV1(input.sourcePlan, brief)
   const selectionKey = planSelectionKey(sourcePlan.sourceBindingHash)
@@ -598,6 +601,8 @@ export async function createTextOpenWorldCreatorStartPreparationV1(input: {
   authorizationNonce: string
   authorizedAt?: number
 }): Promise<TextOpenWorldCreatorStartPreparationV1> {
+  input = structuredClone(input)
+  assertTextOpenWorldNewSourceV1(input.sourceLocator.kind, '准备正式制作')
   const scope = await resolveScope({ scope: input.scope })
   const production = await db.productProductions.get(input.productionId)
   if (!production?.id
@@ -616,6 +621,8 @@ export async function createTextOpenWorldCreatorStartPreparationV1(input: {
     fail('当前 Creator Brief 已变化或不可授权')
   }
   const brief = await verifyTextOpenWorldCreatorBriefV1(briefRow.briefJson)
+  assertTextOpenWorldProductionNewWorkV1(production, briefRow, '准备正式制作')
+  assertTextOpenWorldNewSourceV1(brief.sourceBinding.kind, '准备正式制作')
   if (brief.revision !== briefRow.revision || brief.briefHash !== briefRow.briefHash
     || brief.productInstanceKey !== production.productionKey) fail('Creator Brief 行与内容不一致')
   const verifiedConfirmation = await verifyTextOpenWorldCreatorProductionPreflightConfirmationV1({

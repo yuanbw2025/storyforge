@@ -67,7 +67,8 @@ export default function TextOpenWorldPlayer(props: {
     onSessionSelected(store.selectedSessionId)
   }, [loadedRequest, requestKey, store, props.scope, props.worldGroupId, props.initialSessionId, onSessionSelected])
 
-  if (store.loading && (store.selectedSession != null || props.initialSessionId != null)) {
+  if ((store.selectedSession != null || props.initialSessionId != null)
+    && (store.loading || loadedRequest !== requestKey || !ownsSelection(store, props.scope, props.worldGroupId))) {
     return <div
       className="avg-title-screen open-world-launcher open-world-player-boundary"
       data-testid="text-open-world-runtime-loading"
@@ -86,6 +87,19 @@ export default function TextOpenWorldPlayer(props: {
     return <TextOpenWorldLauncher scope={props.scope} worldGroupId={props.worldGroupId} />
   }
   if (store.runtimeState.textOpenWorld && store.selectedManifest?.textOpenWorldVNext) {
+    if (store.selectedManifest.textOpenWorldVNext.sourceManifest.kind === 'novel-source-pin') {
+      return <div className="open-world-launcher p-5" data-testid="text-open-world-legacy-novel-readonly">
+        <main className="mx-auto max-w-5xl space-y-4 rounded-xl border border-border bg-bg-elevated p-5">
+          <h2 className="text-lg font-semibold">历史小说来源 · 只读存档</h2>
+          <p className="text-sm leading-6">此旅程保留原 SourcePin、不可变发布、存档和事件前缀，可核验与回放。当前不再推进互动、调用模型或创建分支。继续制作须先显式派生世界草稿，检查并封存 WorldRelease，再重新完成产品定向。</p>
+          <p className="text-xs text-text-muted">存档：{store.selectedSession.title} · 已核验事件 {store.runtimeState.lastSequence} 条 · 检查点 {store.checkpoints.length} 个</p>
+          <div className="flex gap-3"><button type="button" onClick={() => void store.select(store.selectedSessionId)} className="rounded border border-border px-3 py-2 text-xs">重新核对原存档</button><button type="button" onClick={() => void store.select(null)} className="rounded border border-border px-3 py-2 text-xs">返回游戏库</button></div>
+          <details open><summary className="cursor-pointer text-sm">已核验的事件前缀</summary><pre className="mt-3 max-h-[60vh] overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(store.events, null, 2)}</pre></details>
+          <details><summary className="cursor-pointer text-sm">原存档检查点</summary><pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(store.checkpoints, null, 2)}</pre></details>
+          {store.error && <p role="alert" className="text-xs text-danger">{store.error}</p>}
+        </main>
+      </div>
+    }
     return <TextOpenWorldPlayerErrorBoundary
       resetKey={`${store.selectedSession.id}:vnext:${store.runtimeState.lastSequence}`}
       onRecover={() => void store.select(store.selectedSessionId)}

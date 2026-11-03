@@ -2,6 +2,7 @@ import { createClient, type Session, type SupabaseClient } from '@supabase/supab
 import * as tus from 'tus-js-client'
 import type { CommunityPublicSnapshotV1 } from './public-snapshot'
 import { assertUnchangedPublicSnapshotV1, type SealedPublicSnapshotV1 } from './snapshot-seal'
+import publicDeployment from './public-deployment.json'
 
 const MAX_BYTES = 32 * 1024 * 1024
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -15,10 +16,18 @@ export interface CommunityClientConfig {
 
 /** No service-role key or private project settings may enter a client bundle. */
 export function communityClientConfig(): CommunityClientConfig | null {
-  if (import.meta.env.VITE_STORYFORGE_COMMUNITY_SHARING !== '1') return null
-  const api = import.meta.env.VITE_STORYFORGE_COMMUNITY_API_URL
-  const storage = import.meta.env.VITE_STORYFORGE_COMMUNITY_SUPABASE_URL
-  const key = import.meta.env.VITE_STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY
+  const flag = import.meta.env.VITE_STORYFORGE_COMMUNITY_SHARING
+  if (flag && flag !== '1') return null
+  const overrides = [import.meta.env.VITE_STORYFORGE_COMMUNITY_API_URL,
+    import.meta.env.VITE_STORYFORGE_COMMUNITY_SUPABASE_URL,
+    import.meta.env.VITE_STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY]
+  // An alternate deployment must replace the whole tuple; never mix production
+  // identity with a preview server. Normal source and packaged builds share the
+  // checked-in public connection information and require no private build key.
+  const custom = overrides.some(Boolean)
+  if (custom && (flag !== '1' || !overrides.every(Boolean))) return null
+  const [api, storage, key] = custom ? overrides : [publicDeployment.apiOrigin,
+    publicDeployment.supabaseUrl, publicDeployment.publishableKey]
   if (!api || !storage || !key?.startsWith('sb_publishable_')) return null
   try {
     const apiUrl = new URL(api)

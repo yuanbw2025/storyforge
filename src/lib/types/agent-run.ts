@@ -530,6 +530,15 @@ export interface AgentHarnessBenchmarkArtifactV1 {
   artifactHash: string
 }
 
+/** Operational Node slot, never an execution authority or part of old signed JSON.
+ * A null nodeRunId retains detached history; absent fields preserve legacy Runs. */
+export interface AgentRunNodeProducerTupleV1 {
+  nodeRunId: number | null
+  nodeProducerNodeId: string
+  nodeProducerVariantIndex: number
+  nodeProducerAttempt: 1
+}
+
 export interface AgentRunRecord {
   id?: number
   projectId: number
@@ -538,6 +547,10 @@ export interface AgentRunRecord {
   productRuntimeSessionId?: number | null
   /** PRODUCTPROD-1 build owner; build runs remain Work-owned and never use this as a second owner. */
   productBuildId?: number | null
+  nodeRunId?: number | null
+  nodeProducerNodeId?: string
+  nodeProducerVariantIndex?: number
+  nodeProducerAttempt?: 1
   worldGroupId?: number | null
   conversationId?: number | null
   /** Materialized child index; mirrors the contract's current parent relation. */

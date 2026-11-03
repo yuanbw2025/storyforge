@@ -58,7 +58,9 @@ node scripts/distribution/build-android.mjs --release
 
 ## 桌面第三方声明
 
-桌面构建继续先运行 `scripts/distribution/notices.mjs` 生成当前依赖声明。`electron-builder.config.cjs` 的 `afterExtract` 钩子在平台运行时清理前，把本次实际解包的 Electron 许可、完整 Chromium 声明及 NPM 声明原字节保留到应用资源的 `third-party/`，并记录实际运行时版本、大小与 SHA-256。Mac 的文件随 `.app` 一起保留；Windows/Linux 使用同一资源合同。缺文件、空文件、符号链接或缺少当前依赖声明会中止构建，不产出一个只带部分声明的目录。此构建元数据不包含个人目录，不属于作品表或模型上下文；它不替代具体模型、媒资和发布用途的独立许可审阅。
+桌面构建继续先运行 `scripts/distribution/notices.mjs` 生成当前依赖声明。`electron-builder.config.cjs` 的 `afterExtract` 钩子在平台运行时清理前，把本次实际解包的 Electron 许可、完整 Chromium 声明及 NPM 声明原字节保留到应用资源的 `third-party/`，记录 builder 解析且与锁核对的运行时版本，以及声明文件大小与 SHA-256；实际进程版本由 smoke 另行验证。Mac 的文件随 `.app` 一起保留；Windows/Linux 使用同一资源合同。缺文件、空文件、符号链接或缺少当前依赖声明会中止构建，不产出一个只带部分声明的目录。此构建元数据不包含个人目录，不属于作品表或模型上下文；它不替代具体模型、媒资和发布用途的独立许可审阅。
+
+2026-10-30 的 SFQA-006 候选将 Electron 固定到 44.10.0，并针对[上游证书安全公告](https://github.com/electron/electron/security/advisories/GHSA-jr5w-w6x2-84p9)建立最低 44.9.1 的运行时门。`check:dependencies` 先执行 `check:desktop-runtime`，核对精确稳定版声明、根锁记录、实际解析条目和本机安装包版本；该门独立于 npm 的 `--omit=dev`，不把全部工具依赖风险宣布为已解决。打包钩子还要求 builder 解析版本与锁一致；客户端 smoke 及覆盖升级的新版本阶段从实际启动进程读取 Electron/Node/Chromium，再核对包内声明并输出无个人路径的 JSON 证据。旧版升级基线保留原运行时，不据此放行新候选。版本门和合成测试不代表正式安装包已替换、所有平台已运行或用户数据升级已验收，这些状态分别取证。
 
 ## 数据保持
 
@@ -131,3 +133,12 @@ Android 正式验证用永久密钥在本机签署测试 runner；新正式 APK 
 ## 模块加载失败的明确恢复
 
 React 页面模块或预加载样式失败时，错误页的“重试”先等待既有编辑保存屏障成功，再由用户这一次操作重新加载页面，避免只重置错误边界而反复显示缓存的加载失败。保存失败时保留错误页并阻止重新加载；持续资源故障仍显示失败，不后台循环重试，不清空浏览器数据、不切换 origin。普通渲染/业务错误继续走原有边界重置，不自动刷新。此恢复不等于已确认首次加载失败的网络、构建或缓存根因。
+
+
+## 社区作品集的公开构建配置
+
+正常 Git 运行、便携构建、桌面及 Android 构建共用 `src/lib/community-works/public-deployment.json` 的正式公开连接信息，无需私有密钥或另建账号系统。本地创作仍可离线使用；仅在作者主动投稿或参与社区互动时验证邮箱。社区页面为 <https://yuanbw.vercel.app/community-works/>。
+
+需要禁用入口时设置 `VITE_STORYFORGE_COMMUNITY_SHARING=0`。连接独立测试或自建服务时，必须同时设置开关为 `1`，并完整设置 `VITE_STORYFORGE_COMMUNITY_API_URL`、`VITE_STORYFORGE_COMMUNITY_SUPABASE_URL` 和 `VITE_STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY`；缺项或不安全 URL 会拒绝连接，不混用正式与测试环境。publishable key 是公开客户端标识；数据库服务端 secret key、审核模型密钥和管理授权凭据不得写入这些变量。
+
+本次交付范围为源码主干和官网社区入口；各平台正式客户端由维护者随后依照本文现有流程打包、验证并发行。

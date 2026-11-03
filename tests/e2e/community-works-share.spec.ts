@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+const publicDeployment = JSON.parse(readFileSync(new URL('../../src/lib/community-works/public-deployment.json', import.meta.url), 'utf8')) as { apiOrigin: string }
 
-test('community sharing stays hidden by default and previews only author-selected novel data when enabled', async ({ page }) => {
+test('community sharing can be explicitly disabled and otherwise previews only author-selected novel data', async ({ page }) => {
   const pageErrors: string[] = []
   page.on('pageerror', error => pageErrors.push(error.message))
   await page.route('**/*', route => {
@@ -15,7 +17,7 @@ test('community sharing stays hidden by default and previews only author-selecte
   await page.getByRole('button', { name: '创建并进入工作台', exact: true }).click()
   await page.locator('[data-workspace-ready=longform]').waitFor()
 
-  const sharingEnabled = process.env.VITE_STORYFORGE_COMMUNITY_SHARING === '1'
+  const sharingEnabled = !process.env.VITE_STORYFORGE_COMMUNITY_SHARING || process.env.VITE_STORYFORGE_COMMUNITY_SHARING === '1'
   if (!sharingEnabled) {
     await expect(page.getByRole('button', { name: '分享至社区作品集' })).toHaveCount(0)
     expect(pageErrors).toEqual([])
@@ -53,8 +55,8 @@ test('community sharing stays hidden by default and previews only author-selecte
   for (let index = 0; index < 4; index++) await expect(boxes.nth(index)).not.toBeChecked()
 
   await boxes.nth(2).check()
-  const communityOrigin = process.env.VITE_STORYFORGE_COMMUNITY_API_URL
-  if (communityOrigin && process.env.VITE_STORYFORGE_COMMUNITY_SUPABASE_URL && process.env.VITE_STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY) {
+  const communityOrigin = process.env.VITE_STORYFORGE_COMMUNITY_API_URL || publicDeployment.apiOrigin
+  if (communityOrigin) {
     const navigation = panel.getByRole('navigation', { name: '社区作品集入口' })
     await expect(navigation.getByRole('link', { name: /阅读空间/ })).toHaveAttribute('href', `${new URL(communityOrigin).origin}/community-works/library`)
     await expect(navigation.getByRole('link', { name: /管理投稿/ })).toHaveAttribute('target', '_blank')

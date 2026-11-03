@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture} from './helpers/character-chat-choice'
 import {expect, test, type Page} from '@playwright/test'
 
@@ -6,9 +7,8 @@ import {expect, test, type Page} from '@playwright/test'
 test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://control-handoff.invalid/v1', model: 'control-fixture', maxTokens: 9000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://control-handoff.invalid/v1', model: 'control-fixture', maxTokens: 9000, apiKey: 'isolated-test-key' })
 
 })
 
@@ -18,7 +18,7 @@ const choice = {directions: [{id: 'wait', action: '等待玩家决定是否允�
   unconfirmedConditions: ['尚未回答'], kind: 'wait'}], selectedId: 'wait', decisionSummary: privateReason}
 
 async function seed(page: Page) {
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   return page.evaluate(async text => {
     const load = new Function('p', 'return import(p)')
     const fixture = await load('/storyforge/tests/helpers/chat-narrative-fixture.ts'), api = await load('/storyforge/src/lib/character-interaction/runtime-api.ts')
@@ -66,7 +66,7 @@ async function provider(page: Page, handoff: {version: number; source: {messageI
 }
 
 async function open(page: Page, f: Awaited<ReturnType<typeof seed>>) {
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
 }
 async function read(page: Page, sessionId: number) {
@@ -96,7 +96,7 @@ for (const width of [390, 1440]) test(`reviewed handoff adds no bubble and survi
   expect(after.state.interaction.remainingDirectorBudget).toBe(before.state.interaction.remainingDirectorBudget - 3)
   expect(after.terminal).toHaveLength(1)
   expect(calls).toEqual(['choice', 'result', 'review'])
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByTestId('chat-narrative-controls')).toContainText('角色正在等你的回应')
   expect((await read(page, f.sessionId)).state).toEqual(after.state)
   expect(calls).toEqual(['choice', 'result', 'review'])
@@ -121,7 +121,7 @@ test('sending a non-decision acknowledgement retains the player message without 
     actionSequences: [], controlHandoff: {version: 4, sourceMessageId: 'permission'}})
   expect(after.terminal).toHaveLength(1)
   expect(calls).toEqual(['choice', 'result', 'review'])
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByTestId('chat-narrative-controls')).toContainText('角色正在等你的回应')
   await expect(page.getByText(permission, {exact: true})).toHaveCount(1)
   await expect(page.getByText('嗯，我在听。', {exact: true})).toHaveCount(1)
@@ -147,7 +147,7 @@ test('refresh resumes a saved control result through review without repeating se
     return runId
   }, f)
   await open(page, f)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('button', {name: `继续本次角色行动 #${runId}`, exact: true})).toBeEnabled()
   expect(calls).toEqual(['choice', 'result'])
   await page.getByRole('button', {name: `继续本次角色行动 #${runId}`, exact: true}).click()

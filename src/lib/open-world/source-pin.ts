@@ -1033,8 +1033,10 @@ export async function freezeTextOpenWorldWorldReleaseSourceV1(input: {
   return validateTextOpenWorldSourcePinBundleV1({ pin, units })
 }
 
-/** Copy the selected novel text into product-private immutable unit Artifacts.
- * Mutable source rows are deliberately absent from the resulting pin. */
+/** Legacy V1 snapshot encoder retained for strict format/evidence compatibility.
+ * These bytes do not authorize new production, publication or runtime writes;
+ * formal P0 execution admits only a verified WorldRelease source. Mutable
+ * source rows are deliberately absent from the resulting pin. */
 export async function freezeTextOpenWorldNovelSourceV1(input: {
   targetScope: WorkspaceScope
   sourceScope: WorkspaceScope

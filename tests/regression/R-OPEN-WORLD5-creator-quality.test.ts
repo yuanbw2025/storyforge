@@ -149,7 +149,7 @@ async function fixture(input: { advisories?: boolean } = {}): Promise<FixtureV1>
   for (const kind of ['balance', 'semantic'] as const) {
     const payload = await reviewPayload(kind, input.advisories ?? true)
     const payloadJson = canonicalProductProductionJsonV2(payload)
-    const artifactKey = `text-open-world.${kind}-review`
+    const artifactKey = `text-open-world.${kind}-review` as const
     const row: ProductBuildArtifactRecordV1 = {
       projectId: world.scope.projectId, worldId: world.scope.worldId, workId: world.scope.workId,
       buildId: build.id!, artifactKey, requirementKey: null, version: 1, kind: artifactKey,
@@ -969,16 +969,16 @@ describe('W6 versioned visual review gate', () => {
     const blob = await putMediaBlobObject({ scope: seeded.scope, mimeType: 'image/png', backend: 'indexeddb',
       data: new Uint8Array([137, 80, 78, 71, 1, 2, 3]).buffer })
     const actorKeys = Array.from({ length: imageCount }, (_, index) => index === 0 ? 'actor.guide' : `actor.guide-${index + 1}`)
-    const inputs = [
-      { artifactKey: 'text-open-world.integration-report', payload: { version: 2 } },
-      { artifactKey: 'text-open-world.media-requirements', payload: { slots: actorKeys.map(subjectKey => ({ subjectKind: 'actor', subjectKey, kind: 'character-portrait' })), coverage: { requiredActorKeys: actorKeys } } },
-      ...actorKeys.map((_, index) => ({ artifactKey: `text-open-world.media.visual.${String(index + 1).padStart(3, '0')}`, payload: {} })),
+    const inputs: Array<{ artifactKey: string; kind: ProductBuildArtifactRecordV1['kind']; payload: unknown }> = [
+      { artifactKey: 'text-open-world.integration-report', kind: 'text-open-world.integration-report', payload: { version: 2 } },
+      { artifactKey: 'text-open-world.media-requirements', kind: 'text-open-world.media-requirements', payload: { slots: actorKeys.map(subjectKey => ({ subjectKind: 'actor', subjectKey, kind: 'character-portrait' })), coverage: { requiredActorKeys: actorKeys } } },
+      ...actorKeys.map((_, index) => ({ artifactKey: `text-open-world.media.visual.${String(index + 1).padStart(3, '0')}`, kind: 'image' as const, payload: {} })),
     ]
     for (const item of inputs) {
       const { id: _id, ...base } = template
       const media = item.artifactKey.includes('.visual.')
       const actorKey = actorKeys[Number(item.artifactKey.split('.').at(-1)) - 1]
-      await db.productBuildArtifacts.add({ ...base, artifactKey: item.artifactKey, kind: item.artifactKey,
+      await db.productBuildArtifacts.add({ ...base, artifactKey: item.artifactKey, kind: item.kind,
         contentHash: media ? blob.contentHash : await hashProductProductionValueV2(item.payload),
         payloadJson: JSON.stringify(item.payload), blobObjectId: media ? blob.id! : null,
         mimeType: media ? 'image/png' : null, byteSize: media ? blob.byteSize : 1,

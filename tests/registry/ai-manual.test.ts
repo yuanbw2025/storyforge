@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { SYSTEM_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds'
 import { NOVEL_CONTENT_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds-novel'
 import { CONTEXT_SOURCES } from '../../src/lib/registry/context-sources'
+import { PROMPT_MODULE_KEYS } from '../../src/lib/types/prompt'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -24,10 +25,9 @@ describe('Phase 3.1 · AI 说明书自动生成', () => {
     }).not.toThrow()
   })
 
-  it('generated.md 含全部 moduleKey(动态校验,FB-5 后 36 个)', () => {
-    const promptSrc = fs.readFileSync(path.join(root, 'src/lib/types/prompt.ts'), 'utf8')
-    const block = promptSrc.match(/export type PromptModuleKey =([\s\S]*?)(?:\n\nexport|\n\/\*\*|\nexport interface)/)
-    const keys = [...(block?.[1] ?? '').matchAll(/\|\s*'([a-zA-Z0-9._-]+)'/g)].map(m => m[1])
+  it('generated.md 含全部运行时 moduleKey', () => {
+    const keys = PROMPT_MODULE_KEYS
+    expect(keys.length).toBeGreaterThan(0)
     const manual = fs.readFileSync(path.join(root, 'docs/AI-FUNCTIONS-MANUAL.generated.md'), 'utf8')
     for (const k of keys) {
       expect(manual, `说明书应含 moduleKey ${k}`).toContain(`\`${k}\``)
@@ -35,9 +35,8 @@ describe('Phase 3.1 · AI 说明书自动生成', () => {
   })
 
   it('moduleKey 唯一，说明书独立匹配运行时模板元数据与数字预算', () => {
-    const promptSrc = fs.readFileSync(path.join(root, 'src/lib/types/prompt.ts'), 'utf8')
-    const block = promptSrc.match(/export type PromptModuleKey =([\s\S]*?)(?:\n\nexport|\n\/\*\*|\nexport interface)/)
-    const keys = [...(block?.[1] ?? '').matchAll(/\|\s*'([a-zA-Z0-9._-]+)'/g)].map(m => m[1])
+    const keys = PROMPT_MODULE_KEYS
+    expect(keys.length).toBeGreaterThan(0)
     expect(new Set(keys).size).toBe(keys.length)
 
     const allSeeds = [...SYSTEM_PROMPT_SEEDS, ...NOVEL_CONTENT_PROMPT_SEEDS]
@@ -56,10 +55,8 @@ describe('Phase 3.1 · AI 说明书自动生成', () => {
     const semanticPath = path.join(root, 'docs/AI-FUNCTIONS-MANUAL.semantic.md')
     if (!fs.existsSync(semanticPath)) return // 语义注解可选
 
-    const promptSrc = fs.readFileSync(path.join(root, 'src/lib/types/prompt.ts'), 'utf8')
-    const validKeys = new Set(
-      [...promptSrc.matchAll(/\|\s*'([a-zA-Z0-9._-]+)'/g)].map(m => m[1]),
-    )
+    const validKeys = new Set<string>(PROMPT_MODULE_KEYS)
+    expect(validKeys.size).toBeGreaterThan(0)
 
     const semantic = fs.readFileSync(semanticPath, 'utf8')
     // 语义注解里用 `moduleKey: xxx.yyy` 标注引用

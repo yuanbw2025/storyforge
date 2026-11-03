@@ -1,3 +1,4 @@
+import { assertTextOpenWorldSessionNewWorkV1 } from './source-admission'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
 import {
@@ -463,6 +464,8 @@ export async function generateTextOpenWorldRuntimeIntentV1(input: {
   signal?: AbortSignal
   onRunCreated?: (runId: number) => void | Promise<void>
 }): Promise<TextOpenWorldRuntimeIntentResolutionV1> {
+  input = { ...input, scope: structuredClone(input.scope), ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }) }
+  await assertTextOpenWorldSessionNewWorkV1({ scope: input.scope, sessionId: input.productRuntimeSessionId, operation: '新运行模型请求' })
   const utterance = input.utterance.normalize('NFC').trim()
   if (!utterance || utterance.length > 1_000) fail('input', '玩家输入必须为1到1000字符')
   if (!STABLE_KEY.test(input.selectedSceneKey)) fail('scene', 'selectedSceneKey无效')
@@ -538,6 +541,7 @@ export async function generateTextOpenWorldRuntimeIntentV1(input: {
     const output = input.runAI
       ? await input.runAI(messages, input.signal)
       : await executeTextOpenWorldRuntimeAISkillV1({
+          scope: input.scope, productRuntimeSessionId: input.productRuntimeSessionId,
           skillId: 'prose.text-open-world-runtime-intent',
           executionBinding,
           messages,

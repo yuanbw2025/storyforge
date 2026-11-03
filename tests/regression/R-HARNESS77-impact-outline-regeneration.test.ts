@@ -394,6 +394,14 @@ describe.sequential('R-HARNESS77 · H57 生成式下游章纲摘要重建', { ti
         scope: fixture.scope, runId: generated.snapshot.run.id,
         onDurableBoundary: reached => { if (reached === boundary) throw new Error(`interrupt:${boundary}`) },
       })).rejects.toThrow(`interrupt:${boundary}`)
+      if (boundary !== 'verification.accepted') {
+        const pending = await readPendingImpactOutlineRegenerationCandidateV1({
+          scope: fixture.scope, sourceChapterId: fixture.sourceChapterId,
+        })
+        expect(pending?.snapshot.run.id).toBe(generated.snapshot.run.id)
+        expect(pending?.candidate).toEqual(generated.candidate)
+        expect(pending?.recovering).toBe(true)
+      }
     }
     const completed = await adoptImpactOutlineRegenerationCandidateV1({
       scope: fixture.scope, runId: generated.snapshot.run.id,

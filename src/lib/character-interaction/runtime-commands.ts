@@ -11,7 +11,8 @@ import {assertChatTurnCompletionBindingV1} from './turn-completion';
 import {chatInquiryEvidenceVersionForContractV1, parseChatInquiryEvidenceVersionV1} from './inquiry-evidence';
 import type {ChatControlHandoffV1, ChatControlHandoffReviewV1} from './control-handoff-contract';
 import type { ProductRuntimeCommandEnvelopeV1 } from "../product/runtime-command-id";
-import { JsonObject, applyProductRuntimeEvent, hashStateJson, normalizeCommandId, parseEventPayload, parseProductRuntimeState, readSessionEvents, replayProductRuntimeEvents, stableJson, updateProductRuntimeSessionHeadV1 } from "../product/runtime-core";
+import { JsonObject, applyProductRuntimeEvent, assertFormalRuntimeSourceUnchangedV1, hashStateJson, normalizeCommandId, parseEventPayload, parseProductRuntimeState, readSessionEvents, replayProductRuntimeEvents, stableJson, updateProductRuntimeSessionHeadV1, verifyFormalRuntimeSourceV1 } from "../product/runtime-core";
+import { assertTextOpenWorldRuntimeNewWorkV1 } from '../open-world/source-admission';
 import type { ProductRuntimeEventType, ProductRuntimeEvent, InteractionMemoryKind } from "../types";
 import type { ChatNarrativeActionV1, ChatNarrativeActionReviewV1, ChatNarrativeTriggerV1, ChatSituationDraftV1, ChatSituationReviewV1 } from "../types/chat-narrative";
 
@@ -41,6 +42,7 @@ async function appendInteractionCommand(
     composerDraft?: ChatComposerSendBindingV1;
   },
 ): Promise<ProductRuntimeEvent> {
+  input = structuredClone(input)
   const commandId = normalizeCommandId(input.commandId);
   const baseStateHash = input.baseStateHash.trim();
   if (!Number.isInteger(input.baseSequence) || input.baseSequence < 0) {
@@ -55,6 +57,23 @@ async function appendInteractionCommand(
     && (input.payload.action as unknown as ChatNarrativeActionV1)?.turnCompletion != null && input.payload.actionChoiceVersion !== 1) {
     throw new Error('本轮结束必须绑定实际选择、表达与独立审查运行。');
   }
+  // A retained OW command is its original immutable evidence, including when
+  // the old Release is no longer present. This branch grants no new command.
+  if (previewSession.kind === 'text-open-world' && !input.composerDraft) {
+    const prior = previewEvents.find(event => event.commandId === commandId);
+    if (prior) {
+      const payload = { ...input.payload, commandId, baseSequence: input.baseSequence, baseStateHash };
+      if (prior.type !== input.type || prior.baseSequence !== input.baseSequence || prior.baseStateHash !== baseStateHash
+        || stableJson(parseEventPayload(prior)) !== stableJson(payload)) {
+        throw new Error('互动命令 commandId 已被不同命令使用。');
+      }
+      return prior;
+    }
+  }
+  const frozenOpenWorld = previewSession.kind === 'text-open-world'
+    ? await verifyFormalRuntimeSourceV1(previewSession, ['text-open-world']) : null;
+  const sourceTables = frozenOpenWorld ? [db.productReleases, db.productBuilds,
+    db.productProductions, db.productProductionBriefs] : [];
   if (input.type === 'interaction.narrative.control-handoff.committed' && !previewEvents.some(event => event.commandId === commandId)) {
     if (!input.harnessRun) throw new Error('交还控制必须绑定原已审查运行。');
     const {assertChatActionChoiceCommitEvidenceV1} = await import('./action-choice-evidence');
@@ -110,8 +129,8 @@ async function appendInteractionCommand(
   }
   return db.transaction(
     "rw",
-    input.composerDraft ? scopeTransactionTables(db.productRuntimeSessions, db.productRuntimeEvents, db.agentRuns)
-      : [db.productRuntimeSessions, db.productRuntimeEvents, db.agentRuns],
+    input.composerDraft ? scopeTransactionTables(db.productRuntimeSessions, db.productRuntimeEvents, db.agentRuns, ...sourceTables)
+      : [db.productRuntimeSessions, db.productRuntimeEvents, db.agentRuns, ...sourceTables],
     async () => {
       const session = await db.productRuntimeSessions.get(input.sessionId);
       if (!session) throw new Error("角色互动会话不存在。");
@@ -145,6 +164,15 @@ async function appendInteractionCommand(
           throw new Error("互动命令 commandId 已被不同命令使用。");
         }
         return prior;
+      }
+      if (frozenOpenWorld) {
+        if (session.kind !== previewSession.kind || session.projectId !== previewSession.projectId
+          || session.worldId !== previewSession.worldId || session.workId !== previewSession.workId
+          || session.initialStateJson !== previewSession.initialStateJson) {
+          throw new Error('开放世界互动实例在命令提交前发生变化。');
+        }
+        assertTextOpenWorldRuntimeNewWorkV1(frozenOpenWorld.runtimePackage, '新增互动兼容事件');
+        await assertFormalRuntimeSourceUnchangedV1({ previewSession, session, frozen: frozenOpenWorld });
       }
       let consumedDraft: ChatComposerDraftV1 | undefined;
       if (input.composerDraft) {
