@@ -83,6 +83,7 @@ import type {
   NarrativeNode,
   OutlineNode,
   PowerSystem,
+  ProductRuntimeSession,
   Worldview,
 } from '../types'
 import {
@@ -684,9 +685,42 @@ async function readMotionDramaProductionContext(input: AssembleContextInput): Pr
   ].filter(Boolean).join('\n\n')
 }
 
-async function readProductRuntimeStateForContext(sessionId: number) {
-  const { readProductRuntimeState } = await import('../product/runtime-api')
-  return readProductRuntimeState(sessionId)
+/** Check the caller's Work before any runtime source or event payload is opened. */
+export async function assertRuntimeContextOwner(input: AssembleContextInput) {
+  const { projectId, productRuntimeSessionId, scope: requestedScope } = input
+  if (productRuntimeSessionId == null || !Number.isSafeInteger(productRuntimeSessionId) || productRuntimeSessionId < 1) {
+    throw new Error('[runtime-context] 运行实例标识无效')
+  }
+  const scope = await resolveScope({ projectId, scope: requestedScope && { ...requestedScope } })
+  const session = await db.productRuntimeSessions.get(productRuntimeSessionId)
+  if (!session || session.projectId !== scope.projectId || session.worldId !== scope.worldId || session.workId !== scope.workId) {
+    throw new Error('[runtime-context] 运行实例不属于当前 Project/World/Work')
+  }
+  return { scope, session }
+}
+
+async function readBoundRuntimeContextSession(
+  input: AssembleContextInput,
+  kinds?: readonly ProductRuntimeSession['kind'][],
+) {
+  if (input.productRuntimeSessionId == null) return null
+  const worldGroupId = input.worldGroupId
+  const binding = await assertRuntimeContextOwner(input)
+  const matchesView = (session: ProductRuntimeSession) =>
+    (!kinds || kinds.includes(session.kind))
+    && (worldGroupId === undefined || (session.worldGroupId ?? null) === (worldGroupId ?? null))
+  if (!matchesView(binding.session)) return null
+  // Legacy Canon snapshots use their existing verified snapshot path below.
+  const { session, scope } = binding
+  if (!session.runtimeSourceHash && session.productReleaseId == null && session.productBuildId == null) return binding
+  const { assertInstanceBinding } = await import('../product/runtime-instances')
+  const verified = await assertInstanceBinding(session.id!, scope)
+  return matchesView(verified) ? { session: verified, scope } : null
+}
+
+async function readProductRuntimeStateForContext(session: ProductRuntimeSession) {
+  const { readVerifiedProductRuntimeHeadV1 } = await import('../product/runtime-core')
+  return (await readVerifiedProductRuntimeHeadV1(session)).state
 }
 
 async function readActiveNarrativeBlueprint(input: AssembleContextInput): Promise<string> {
@@ -720,10 +754,9 @@ async function readActiveNarrativeBlueprint(input: AssembleContextInput): Promis
 }
 
 async function readProductRuntimeContext(input: AssembleContextInput): Promise<string> {
-  if (input.productRuntimeSessionId == null) return ''
-  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
-  if (!session || session.projectId !== input.projectId) return ''
-  if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
+  const bound = await readBoundRuntimeContextSession(input)
+  if (!bound) return ''
+  const { session, scope } = bound
   let sourceLabel: string
   let sourceWorldGroupId: number | null
   let sourceHash: string
@@ -731,7 +764,7 @@ async function readProductRuntimeContext(input: AssembleContextInput): Promise<s
   if (session.runtimeSourceHash) {
     if (session.worldId == null || session.workId == null) throw new Error('正式产品实例缺少 Workspace 绑定。')
     const playable = await verifyPlayableRuntimeSession({
-      scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+      scope,
       session,
     })
     if (playable.runtimeSourceHash !== session.runtimeSourceHash) throw new Error('RuntimePackage 校验失败。')
@@ -752,7 +785,7 @@ async function readProductRuntimeContext(input: AssembleContextInput): Promise<s
       `- ${source.sourceKey}｜${source.kind}｜${source.name}${source.summary ? `｜${source.summary}` : ''}`
     ))
   }
-  const state = await readProductRuntimeStateForContext(session.id!)
+  const state = await readProductRuntimeStateForContext(session)
   const entityLines = Object.values(state.entities).slice(0, 120).map(entity => {
     const attributes = Object.entries(entity.attributes)
       .slice(0, 16)
@@ -823,8 +856,10 @@ async function readChatMemoryReviewContext(input: AssembleContextInput): Promise
 
 async function readChatSituationCandidateContext(input: AssembleContextInput): Promise<string> {
   if (!input.scope || input.productRuntimeSessionId == null || input.chatSituationCandidateRunId == null) return ''
+  const bound = await readBoundRuntimeContextSession(input, ['character-interaction'])
+  if (!bound) return ''
   const {readLatestVerifiedAgentRunCheckpointV1} = await import('../agent/run/checkpoint')
-  const saved = await readLatestVerifiedAgentRunCheckpointV1(input.scope, input.chatSituationCandidateRunId, {owner: 'instance'})
+  const saved = await readLatestVerifiedAgentRunCheckpointV1(bound.scope, input.chatSituationCandidateRunId, {owner: 'instance'})
   if (!saved || saved.snapshot.run.productRuntimeSessionId !== input.productRuntimeSessionId) return ''
   const candidate = saved.resumePayload as {kind?: string; draft?: unknown}
   if (candidate?.kind !== 'chat-situation-candidate') return ''
@@ -834,8 +869,10 @@ async function readChatSituationCandidateContext(input: AssembleContextInput): P
 
 async function readChatActionCandidateValue(input: AssembleContextInput) {
   if (!input.scope || input.productRuntimeSessionId == null || input.chatActionCandidateRunId == null) return null
+  const bound = await readBoundRuntimeContextSession(input, ['character-interaction'])
+  if (!bound) return null
   const {readLatestVerifiedAgentRunCheckpointV1} = await import('../agent/run/checkpoint')
-  const saved = await readLatestVerifiedAgentRunCheckpointV1(input.scope, input.chatActionCandidateRunId, {owner: 'instance'})
+  const saved = await readLatestVerifiedAgentRunCheckpointV1(bound.scope, input.chatActionCandidateRunId, {owner: 'instance'})
   if (!saved || saved.snapshot.run.productRuntimeSessionId !== input.productRuntimeSessionId) return null
   const candidate = saved.resumePayload as {kind?: string; participantKey?: string; action?: unknown; options?: unknown; handoff?: unknown}
   if (!candidate?.participantKey) return null
@@ -849,9 +886,9 @@ async function readChatActionCandidateValue(input: AssembleContextInput) {
     const {assertChatControlHandoffBindingsV1} = await import('../character-interaction/control-handoff-wire')
     const {readChatActionChoiceEvidenceV1} = await import('../character-interaction/action-choice-evidence')
     assertChatControlHandoffBindingsV1(saved.snapshot.contract, parseChatControlHandoffV1(candidate.handoff))
-    const {choice} = await readChatActionChoiceEvidenceV1({scope: input.scope, snapshot: saved.snapshot, participantKey: candidate.participantKey})
+    const {choice} = await readChatActionChoiceEvidenceV1({scope: bound.scope, snapshot: saved.snapshot, participantKey: candidate.participantKey})
     const handoff = parseChatControlHandoffV1(candidate.handoff)
-    const state = await readProductRuntimeStateForContext(input.productRuntimeSessionId)
+    const state = await readProductRuntimeStateForContext(bound.session)
     if (!state.interaction) return null
     return {snapshot: saved.snapshot, value: {actorKey: candidate.participantKey, handoff, actionChoice: choice,
       basisMessages: readChatControlHandoffBasisV1(state.interaction, candidate.participantKey, handoff)}}
@@ -881,13 +918,13 @@ async function readChatActionCandidateContext(input: AssembleContextInput): Prom
 
 async function readChatSituationRuntimeProjection(input: AssembleContextInput) {
   if (input.productRuntimeSessionId == null || !input.scope) return {text: ''}
-  const {assertInstanceBinding} = await import('../product/runtime-instances')
-  const session = await assertInstanceBinding(input.productRuntimeSessionId, input.scope)
-  if (session.kind !== 'character-interaction' || session.projectId !== input.projectId) return {text: ''}
-  if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return {text: ''}
-  const playable = await verifyPlayableRuntimeSession({scope: input.scope, session})
+  const bound = await readBoundRuntimeContextSession(input, ['character-interaction'])
+  if (!bound) return {text: ''}
+  const { session, scope } = bound
+  input = { ...input, scope }
+  const playable = await verifyPlayableRuntimeSession({scope, session})
   if (playable.runtimePackage.productType !== 'character-interaction' || !playable.runtimePackage.interaction?.chatNarrative) return {text: ''}
-  const state = await readProductRuntimeStateForContext(session.id!)
+  const state = await readProductRuntimeStateForContext(session)
   if (!state.interaction) return {text: ''}
   const {projectChatCoordinatorContextV1} = await import('../character-interaction/coordinator-selection')
   const project = (candidate: Parameters<typeof projectChatCoordinatorContextV1>[1]) => projectChatCoordinatorContextV1(state.interaction!, candidate)
@@ -903,13 +940,13 @@ async function readChatSituationRuntimeProjection(input: AssembleContextInput) {
     const {chatInquiryEvidenceVersionForContractV1} = await import('../character-interaction/inquiry-evidence')
     if (input.chatSituationConstructionRunId != null) {
       const {readInstanceAgentRunV1} = await import('../agent/run/event-store')
-      const producer = await readInstanceAgentRunV1(input.scope, input.chatSituationConstructionRunId)
+      const producer = await readInstanceAgentRunV1(scope, input.chatSituationConstructionRunId)
       if (producer.run.productRuntimeSessionId !== session.id || producer.projection.state !== 'running'
         || !producer.contract.executionBindings?.some(b => b.stepId === 'interaction:runtime-candidate' && b.skillId === 'character.chat-situation-construction')) {
         throw new Error('情境证据读取缺少当前实例的生成合同')
       }
       const {assertRuntimeHarnessFreshV1} = await import('../agent/run/runtime-scope')
-      await assertRuntimeHarnessFreshV1({scope: input.scope, contractScope: producer.contract.scope, participantKey: 'player', view: 'chat-situation'})
+      await assertRuntimeHarnessFreshV1({scope, contractScope: producer.contract.scope, participantKey: 'player', view: 'chat-situation'})
       audienceVersion = chatCoordinatorAudienceVersionV1(producer.contract)
       discoveryEvidence = usesChatDiscoveryEvidenceContextV1(producer)
       inquiryEvidence = chatInquiryEvidenceVersionForContractV1(producer.contract)
@@ -917,7 +954,7 @@ async function readChatSituationRuntimeProjection(input: AssembleContextInput) {
     let retrievalVersion: import('../character-interaction/context-selection').ChatRetrievalVersion = 'chat-relevance-v9'
     if (input.chatSituationCandidateRunId != null) {
       const {readLatestVerifiedAgentRunCheckpointV1} = await import('../agent/run/checkpoint')
-      const producer = await readLatestVerifiedAgentRunCheckpointV1(input.scope, input.chatSituationCandidateRunId, {owner: 'instance'})
+      const producer = await readLatestVerifiedAgentRunCheckpointV1(scope, input.chatSituationCandidateRunId, {owner: 'instance'})
       if (!producer || producer.snapshot.run.productRuntimeSessionId !== input.productRuntimeSessionId) return {text: ''}
       retrievalVersion = await readChatCandidateRetrievalVersion(producer.snapshot, input.projectId, 'chatSituationRuntime')
       audienceVersion = chatCoordinatorAudienceVersionV1(producer.snapshot.contract)
@@ -944,25 +981,24 @@ export async function readChatCoordinatorSelectionEvidenceV1(input: AssembleCont
   return projection.selection
 }
 
-async function readInteractionRuntimeContext(input: AssembleContextInput): Promise<string> {
-  if (input.productRuntimeSessionId == null) return ''
+async function readInteractionRuntimeContext(input: AssembleContextInput, townOnly = false): Promise<string> {
   const participantKey = input.interactionParticipantKey?.trim()
   if (!participantKey) return ''
-  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
-  if (!session || session.projectId !== input.projectId
-    || !['character-interaction', 'ai-town', 'text-adventure', 'text-open-world'].includes(session.kind)) return ''
-  if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
+  const bound = await readBoundRuntimeContextSession(input,
+    townOnly ? ['ai-town'] : ['character-interaction', 'ai-town', 'text-adventure', 'text-open-world'])
+  if (!bound) return ''
+  const { session, scope } = bound
   if (session.worldId == null || session.workId == null || !session.runtimeSourceHash) {
     throw new Error('正式角色互动实例缺少产品运行源。')
   }
   const playable = await verifyPlayableRuntimeSession({
-    scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+    scope,
     session,
   })
   if (playable.runtimeSourceHash !== session.runtimeSourceHash) {
     throw new Error('角色互动 RuntimePackage 校验失败。')
   }
-  const state = await readProductRuntimeStateForContext(session.id!)
+  const state = await readProductRuntimeStateForContext(session)
   if (!state.interaction) return ''
   const profile = state.interaction.profiles.find(item => item.participantKey === participantKey)
   if (!profile) return ''
@@ -971,7 +1007,7 @@ async function readInteractionRuntimeContext(input: AssembleContextInput): Promi
   if (input.chatActionContextRunId != null) {
     if (!input.scope || session.kind !== 'character-interaction') throw new Error('角色对话标识读取缺少实例作用域')
     const {readInstanceAgentRunV1} = await import('../agent/run/event-store')
-    const producer = await readInstanceAgentRunV1(input.scope, input.chatActionContextRunId)
+    const producer = await readInstanceAgentRunV1(scope, input.chatActionContextRunId)
     const {chatActionContextVersionsV1, usesChatActionBoundContextV1} = await import('../character-interaction/context-selection')
     const binding = producer.contract.executionBindings?.find(b => b.stepId === 'interaction:runtime-candidate')
     if (producer.run.productRuntimeSessionId !== session.id || producer.projection.state !== 'running'
@@ -979,7 +1015,7 @@ async function readInteractionRuntimeContext(input: AssembleContextInput): Promi
       throw new Error('角色对话标识读取缺少当前实例的生成合同')
     }
     const {assertRuntimeHarnessFreshV1} = await import('../agent/run/runtime-scope')
-    await assertRuntimeHarnessFreshV1({scope: input.scope, contractScope: producer.contract.scope, participantKey})
+    await assertRuntimeHarnessFreshV1({scope, contractScope: producer.contract.scope, participantKey})
     retrievalVersion = chatActionContextVersionsV1(binding.promptVersion).retrievalVersion
   }
   const view = buildInteractionContextWindow(state.interaction, participantKey, {
@@ -1014,10 +1050,7 @@ async function readInteractionRuntimeContext(input: AssembleContextInput): Promi
 }
 
 async function readAiTownRuntimeContext(input: AssembleContextInput): Promise<string> {
-  if (input.productRuntimeSessionId == null) return ''
-  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
-  if (!session || session.projectId !== input.projectId || session.kind !== 'ai-town') return ''
-  const context = await readInteractionRuntimeContext(input)
+  const context = await readInteractionRuntimeContext(input, true)
   return context ? [
     '【后日谈 AI 小镇专属运行上下文】以下内容来自冻结 ProductRelease 与当前小镇事件投影；原世界在运行期只读。',
     context,
@@ -1025,19 +1058,18 @@ async function readAiTownRuntimeContext(input: AssembleContextInput): Promise<st
 }
 
 async function readAiTownDirectorRuntimeContext(input: AssembleContextInput): Promise<string> {
-  if (input.productRuntimeSessionId == null) return ''
-  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
-  if (!session || session.projectId !== input.projectId || session.kind !== 'ai-town'
-    || (session.productReleaseId == null && session.productBuildId == null)) return ''
-  if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
+  const bound = await readBoundRuntimeContextSession(input, ['ai-town'])
+  if (!bound) return ''
+  const { session, scope } = bound
+  if (session.productReleaseId == null && session.productBuildId == null) return ''
   if (session.worldId == null || session.workId == null) throw new Error('正式 AI 小镇实例缺少工作区作用域。')
   const [playable, runtimeModule, state] = await Promise.all([
     verifyPlayableRuntimeSession({
-      scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+      scope,
       session,
     }),
     import('../ai-town/runtime'),
-    readProductRuntimeStateForContext(session.id!),
+    readProductRuntimeStateForContext(session),
   ])
   if (playable.runtimePackage.productType !== 'ai-town' || !playable.runtimePackage.town
     || playable.runtimeSourceHash !== session.runtimeSourceHash || !state.town) {
@@ -1077,16 +1109,14 @@ async function readAiTownDirectorRuntimeContext(input: AssembleContextInput): Pr
 }
 
 async function readAdventureRuntimeContext(input: AssembleContextInput): Promise<string> {
-  if (input.productRuntimeSessionId == null) return ''
-  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
-  if (!session || session.projectId !== input.projectId
-    || (session.kind !== 'text-adventure' && session.kind !== 'text-open-world')
-    || (session.productReleaseId == null && session.productBuildId == null)) return ''
-  if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
+  const bound = await readBoundRuntimeContextSession(input, ['text-adventure', 'text-open-world'])
+  if (!bound) return ''
+  const { session, scope } = bound
+  if (session.productReleaseId == null && session.productBuildId == null) return ''
   if (session.worldId == null || session.workId == null) throw new Error('正式文字冒险实例缺少工作区作用域。')
   const [playable, { adventureNarrativeActionContext, availableAdventureActions }] = await Promise.all([
     verifyPlayableRuntimeSession({
-      scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+      scope,
       session,
     }),
     import('../adventure/runtime'),
@@ -1100,7 +1130,7 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
     throw new Error('文字冒险 RuntimePackage 校验失败。')
   }
   const adventure = runtimePackage.adventure
-  const state = await readProductRuntimeStateForContext(session.id!)
+  const state = await readProductRuntimeStateForContext(session)
   if (!state.adventure) return ''
   const location = adventure.locations.find(item => item.key === state.adventure!.currentLocationKey)
   if (!location) throw new Error('文字冒险当前位置不在冻结发布中。')
@@ -1141,16 +1171,14 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
 }
 
 async function readTextOpenWorldEvolutionRuntimeContext(input: AssembleContextInput): Promise<string> {
-  if (input.productRuntimeSessionId == null) return ''
-  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
-  if (!session || session.projectId !== input.projectId
-    || session.kind !== 'text-open-world'
-    || (session.productReleaseId == null && session.productBuildId == null)) return ''
-  if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
+  const bound = await readBoundRuntimeContextSession(input, ['text-open-world'])
+  if (!bound) return ''
+  const { session, scope } = bound
+  if (session.productReleaseId == null && session.productBuildId == null) return ''
   if (session.worldId == null || session.workId == null) throw new Error('文字开放世界内部状态演化实例缺少工作区作用域。')
   const [playable, runtimeModule] = await Promise.all([
     verifyPlayableRuntimeSession({
-      scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+      scope,
       session,
     }),
     import('../open-world/evolution-runtime'),
@@ -1162,7 +1190,7 @@ async function readTextOpenWorldEvolutionRuntimeContext(input: AssembleContextIn
     || !runtimePackage.openWorldEvolution || playable.runtimeSourceHash !== session.runtimeSourceHash) {
     throw new Error('文字开放世界内部状态演化 RuntimePackage 校验失败。')
   }
-  const state = await readProductRuntimeStateForContext(session.id!)
+  const state = await readProductRuntimeStateForContext(session)
   if (!state.openWorldEvolution) return ''
   const openWorldEvolution = state.openWorldEvolution
   const actions = runtimeModule.availableOpenWorldEvolutionActions(runtimePackage.openWorldEvolution, openWorldEvolution)
@@ -1188,14 +1216,13 @@ async function readTextOpenWorldEvolutionRuntimeContext(input: AssembleContextIn
 }
 
 async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise<string> {
-  if (input.productRuntimeSessionId == null) return ''
-  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
-  if (!session || session.projectId !== input.projectId || session.kind !== 'text-open-world'
-    || (session.productReleaseId == null && session.productBuildId == null)) return ''
-  if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
+  const bound = await readBoundRuntimeContextSession(input, ['text-open-world'])
+  if (!bound) return ''
+  const { session, scope } = bound
+  if (session.productReleaseId == null && session.productBuildId == null) return ''
   if (session.worldId == null || session.workId == null) throw new Error('正式开放世界实例缺少工作区作用域。')
   const playable = await verifyPlayableRuntimeSession({
-    scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+    scope,
     session,
   })
   const manifest = playable.runtimePackage
@@ -1203,7 +1230,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     || playable.runtimeSourceHash !== session.runtimeSourceHash) {
     throw new Error('开放世界 RuntimePackage 校验失败。')
   }
-  const state = await readProductRuntimeStateForContext(session.id!)
+  const state = await readProductRuntimeStateForContext(session)
   if (manifest.textOpenWorldVNext) {
     const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule, mapModule, mapViewModule, travelModule, weatherModule, actorsModule, directorContextModule] = await Promise.all([
       import('../open-world/session-projection'),
