@@ -21,6 +21,7 @@ import {
 import type {
   ProductRuntimeEvent,
   ProductRuntimeSession,
+  ProductRuntimeState,
   TtrpgMediaManifestV1,
   TtrpgRuntimeAssetRequestRecordV1,
   TtrpgSessionParticipantRecordV2,
@@ -44,6 +45,8 @@ import {
   parseTtrpgVisualBibleV1,
 } from "./media-contract";
 import { parseRulePackV1 } from "./rule-pack";
+import { createTtrpgViewerProjectionV1 } from "./viewer-projection";
+import { readTtrpgSessionParticipantsV2 } from "./participants";
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const REQUEST_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,149}$/;
@@ -81,14 +84,16 @@ interface RuntimeMediaContextV1 {
   visualBible: TtrpgVisualBibleV1;
   manifest: TtrpgMediaManifestV1;
   runtimeSourceHash: string;
+  campaign: ReturnType<typeof parseTtrpgCampaignContentV1>;
+  rulePack: ReturnType<typeof parseRulePackV1>;
 }
 
-async function loadContext(sessionId: number): Promise<RuntimeMediaContextV1> {
+async function loadContext(sessionId: number, activeOnly = true): Promise<RuntimeMediaContextV1> {
   const session = await db.productRuntimeSessions.get(sessionId);
   if (
     !session ||
     session.kind !== "ttrpg" ||
-    session.status !== "active" ||
+    (activeOnly && session.status !== "active") ||
     session.id == null ||
     session.worldId == null ||
     session.workId == null ||
@@ -144,7 +149,22 @@ async function loadContext(sessionId: number): Promise<RuntimeMediaContextV1> {
     visualBible: parseTtrpgVisualBibleV1(campaign.visualBible),
     manifest: parseTtrpgMediaManifestV1(campaign.mediaManifest),
     runtimeSourceHash: verified.runtimeSourceHash,
+    campaign,
+    rulePack,
   };
+}
+
+function visibleSlotKeys(
+  context: RuntimeMediaContextV1,
+  participant: TtrpgSessionParticipantRecordV2,
+  state: ProductRuntimeState,
+): Set<string> {
+  if (participant.assignmentState === "left" || participant.controller === "vacant") return new Set();
+  const projection = createTtrpgViewerProjectionV1({
+    state, campaign: context.campaign, rulePack: context.rulePack,
+    role: participant.role, actorKey: participant.actorKey,
+  });
+  return new Set(projection.media?.slots.map(slot => slot.slotKey) ?? []);
 }
 
 function canSeeAudience(input: {
@@ -309,6 +329,9 @@ export async function enqueueTtrpgRuntimeAssetRequestV1(input: {
     slot,
     participants,
   });
+  if (!visibleSlotKeys(context, participant, (await stateAndEvents(context.session)).state).has(slotKey)) {
+    fail("媒资槽当前对 viewer 不可见");
+  }
   const styleBibleHash = await hashProductProductionValueV2(context.visualBible);
   const promptAddition = boundedText(
     input.promptAddition,
@@ -408,6 +431,17 @@ export async function enqueueTtrpgRuntimeAssetRequestV1(input: {
         currentParticipant.revision !== participant.revision
       )
         fail("viewer 权限在请求期间发生变化");
+      const { state } = await stateAndEvents(session);
+      const product = state.ttrpg?.product;
+      if (
+        !product?.sessionZero.completed ||
+        product.safety.status !== "active" ||
+        !product.media
+      )
+        fail("运行时媒资需要已开团且安全状态正常");
+      if (!visibleSlotKeys(context, currentParticipant, state).has(slotKey)) {
+        fail("媒资槽当前对 viewer 不可见");
+      }
       const existing = await db.ttrpgRuntimeAssetRequests
         .where("[sessionId+requestKey]")
         .equals([input.sessionId, requestKey])
@@ -422,14 +456,6 @@ export async function enqueueTtrpgRuntimeAssetRequestV1(input: {
         }
         return existing;
       }
-      const { state } = await stateAndEvents(session);
-      const product = state.ttrpg?.product;
-      if (
-        !product?.sessionZero.completed ||
-        product.safety.status !== "active" ||
-        !product.media
-      )
-        fail("运行时媒资需要已开团且安全状态正常");
       const jobs = await db.ttrpgRuntimeAssetRequests
         .where("sessionId")
         .equals(input.sessionId)
@@ -1096,24 +1122,32 @@ export async function readVisibleTtrpgRuntimeMediaRequestsV1(input: {
   >
 > {
   const viewerKey = key(input.viewerKey, "viewerKey");
-  const participants = await db.ttrpgSessionParticipants
-    .where("sessionId")
-    .equals(input.sessionId)
-    .toArray();
-  const participant = participants.find((row) => row.viewerKey === viewerKey);
-  if (!participant) fail("viewer 不属于该 TTRPG Instance");
-  const rows = await db.ttrpgRuntimeAssetRequests
-    .where("sessionId")
-    .equals(input.sessionId)
-    .sortBy("createdAt");
-  return rows
-    .filter((row) =>
-      canSeeAudience({
+  const context = await loadContext(input.sessionId, false);
+  return db.transaction("r", scopeTransactionTables(
+    db.productRuntimeSessions, db.productRuntimeEvents,
+    db.ttrpgSessionParticipants, db.ttrpgRuntimeAssetRequests,
+  ), async () => {
+    await resolveScope({ scope: context.scope });
+    const session = await db.productRuntimeSessions.get(input.sessionId);
+    if (!session || session.runtimeSourceHash !== context.runtimeSourceHash ||
+      session.productBuildId !== context.session.productBuildId || session.productReleaseId !== context.session.productReleaseId ||
+      session.projectId !== context.scope.projectId || session.worldId !== context.scope.worldId || session.workId !== context.scope.workId) fail("Instance 在读取期间发生变化");
+    const participants = await readTtrpgSessionParticipantsV2(input.sessionId);
+    const participant = participants.find(row => row.viewerKey === viewerKey);
+    if (!participant) fail("viewer 不属于该 TTRPG Instance");
+    const visible = visibleSlotKeys(context, participant, (await stateAndEvents(session)).state);
+    const rows = await db.ttrpgRuntimeAssetRequests.where("sessionId").equals(input.sessionId).sortBy("createdAt");
+    return rows.filter(row => {
+      const slot = context.manifest.slots.find(item => item.slotKey === row.slotKey);
+      return slot && visible.has(slot.slotKey) && row.projectId === context.scope.projectId &&
+        row.worldId === context.scope.worldId && row.workId === context.scope.workId &&
+        row.kind === slot.kind && row.targetRef === slot.targetRef && row.audience === slot.audience &&
+        row.fallbackText === slot.fallbackText && row.altText === slot.altText && canSeeAudience({
         participant,
         audience: row.audience,
         targetRef: row.targetRef,
-      }),
-    )
+      });
+    })
     .map((row) => {
       const {
         prompt: _prompt,
@@ -1125,6 +1159,7 @@ export async function readVisibleTtrpgRuntimeMediaRequestsV1(input: {
       } = row;
       return visible;
     });
+  });
 }
 
 export async function readTtrpgRuntimeMediaBlobV1(input: {
@@ -1151,6 +1186,8 @@ export async function readTtrpgRuntimeMediaBlobV1(input: {
   const asset = await db.productMediaAssets.get(input.mediaAssetId);
   if (
     !asset ||
+    asset.ownerKind !== "runtime" || asset.productType !== "ttrpg" ||
+    asset.productRuntimeSessionId !== input.sessionId || asset.productReleaseId !== null ||
     !(await assertRecordInScope(scope, "productMediaAssets", asset, {
       owner: "work",
     })) ||

@@ -228,6 +228,7 @@ describe('R-TTRPGOPEN9 P7 context trigger and protected budget', () => {
     expect(result.text).toContain('active-situations-content')
     expect(result.text).not.toContain('flavor-content')
     expect(result.receipt.totalTokens).toBeLessThanOrEqual(65)
+    expect(parseTtrpgContextBudgetReceiptV1(result.receipt)).toEqual(result.receipt)
   })
 
   it('is independent of input order and rejects an unregistered source key', () => {
@@ -304,12 +305,56 @@ describe('R-TTRPGOPEN9 P7 context trigger and protected budget', () => {
     })).toThrow(/枚举无效/)
     expect(() => parseTtrpgContextBudgetReceiptV1({
       tiers: [
-        { tierKey: 'known-facts', demotable: true, includedTokens: 0, demoted: true, demoteReason: 'budget-overflow:fixed-order' },
         { tierKey: 'flavor', demotable: true, includedTokens: 0, demoted: true, demoteReason: 'budget-overflow:fixed-order' },
+        { tierKey: 'known-facts', demotable: true, includedTokens: 0, demoted: true, demoteReason: 'budget-overflow:fixed-order' },
       ],
       totalTokens: 0,
       budgetTokens: 10,
       overflowHandled: true,
     })).toThrow(/固定降级顺序/)
+  })
+
+  it.each([
+    { budget: 41, demoted: [] },
+    { budget: 40, demoted: ['flavor'] },
+    { budget: 38, demoted: ['dynamic-injection', 'flavor'] },
+    { budget: 20, demoted: ['active-situations', 'known-facts', 'recent-events', 'memory-summary', 'dynamic-injection', 'flavor'] },
+  ])('round-trips canonical receipts after token demotion at budget $budget', ({ budget, demoted }) => {
+    const blocks = [
+      { tierKey: 'rules', tokens: 10 }, { tierKey: 'authority-state', tokens: 10 },
+      { tierKey: 'active-situations', tokens: 6 }, { tierKey: 'known-facts', tokens: 5 },
+      { tierKey: 'recent-events', tokens: 4 }, { tierKey: 'memory-summary', tokens: 3 },
+      { tierKey: 'dynamic-injection', tokens: 2 }, { tierKey: 'flavor', tokens: 1 },
+    ] as const
+    const result = assembleTtrpgContextWithBudgetV1({ budgetTokens: budget,
+      blocks: blocks.map(block => ({ ...block, sourceKey: triggerSource, content: block.tierKey })) })
+    expect(result.receipt.tiers.filter(tier => tier.demoted).map(tier => tier.tierKey)).toEqual(demoted)
+    expect(parseTtrpgContextBudgetReceiptV1(JSON.stringify(result.receipt))).toEqual(result.receipt)
+    expect(result.segments.map(block => block.tierKey)).toEqual(blocks.map(block => block.tierKey).filter(tier => !demoted.includes(tier)))
+    expect(result.receipt.totalTokens).toBeLessThanOrEqual(budget)
+    expect(result.receipt.tiers.slice(0, 2).every(tier => !tier.demotable && !tier.demoted)).toBe(true)
+  })
+
+  it.each([8, 7, 6, 2])('round-trips the same public assembler resource-count budget at $budget resources', budget => {
+    const tiers = ['rules', 'authority-state', 'active-situations', 'known-facts', 'recent-events', 'memory-summary', 'dynamic-injection', 'flavor'] as const
+    const blocks = tiers.map(tierKey => ({ tierKey, sourceKey: triggerSource, content: tierKey, tokens: 1 }))
+    const result = assembleTtrpgContextWithBudgetV1({ blocks, budgetTokens: budget })
+    expect(parseTtrpgContextBudgetReceiptV1(result.receipt)).toEqual(result.receipt)
+    expect(result.segments).toHaveLength(budget)
+    expect(result.segments.map(block => block.tierKey)).toEqual(tiers.slice(0, budget))
+    expect(result.receipt.totalTokens).toBe(budget)
+  })
+
+  it('retains required optional tiers and rejects protected overflow even after multiple safe demotions', () => {
+    const blocks = [
+      { tierKey: 'rules', tokens: 10 }, { tierKey: 'authority-state', tokens: 10 },
+      { tierKey: 'known-facts', tokens: 5, required: true },
+      { tierKey: 'dynamic-injection', tokens: 2 }, { tierKey: 'flavor', tokens: 1 },
+    ] as const
+    const input = blocks.map(block => ({ ...block, sourceKey: triggerSource, content: block.tierKey }))
+    const result = assembleTtrpgContextWithBudgetV1({ blocks: input, budgetTokens: 25 })
+    expect(parseTtrpgContextBudgetReceiptV1(result.receipt)).toEqual(result.receipt)
+    expect(result.receipt.tiers.find(tier => tier.tierKey === 'known-facts')).toMatchObject({ demoted: false, demotable: false, includedTokens: 5 })
+    expect(() => assembleTtrpgContextWithBudgetV1({ blocks: input, budgetTokens: 24 })).toThrow(TtrpgContextBudgetErrorV1)
   })
 })

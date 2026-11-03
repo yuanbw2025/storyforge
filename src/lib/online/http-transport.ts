@@ -696,9 +696,8 @@ export class HttpOnlineRoomTransportV1 implements HostedOnlineRoomTransportV1 {
         once: true,
       });
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    let response: FetchLikeResponseV1;
     try {
-      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+      const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -707,10 +706,45 @@ export class HttpOnlineRoomTransportV1 implements HostedOnlineRoomTransportV1 {
         body: JSON.stringify(body),
         signal: controller.signal,
       });
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (error) {
+        // A native fetch body is still cancellable after its headers arrive.
+        // Preserve timeout/caller-abort classification in the outer catch.
+        if (controller.signal.aborted) throw error;
+        fail(
+          "invalid_response",
+          "在线房间服务返回了非 JSON 响应",
+          response.status >= 500,
+          response.status,
+        );
+      }
+      if (!response.ok) {
+        const error = record(payload, "error response");
+        const code =
+          typeof error.code === "string" && error.code
+            ? error.code
+            : `http_${response.status}`;
+        const message =
+          typeof error.message === "string" && error.message
+            ? error.message
+            : "在线房间请求失败";
+        fail(
+          code,
+          message,
+          response.status === 408 ||
+            response.status === 429 ||
+            response.status >= 500,
+          response.status,
+        );
+      }
+      return payload;
     } catch (error) {
       if (externalSignal?.aborted)
         fail("request_aborted", "在线房间请求已取消", true);
       if (controller.signal.aborted) fail("timeout", "在线房间请求超时", true);
+      if (error instanceof OnlineRoomTransportErrorV1) throw error;
       fail(
         "transport_unavailable",
         error instanceof Error ? error.message : "在线房间服务不可达",
@@ -720,37 +754,6 @@ export class HttpOnlineRoomTransportV1 implements HostedOnlineRoomTransportV1 {
       clearTimeout(timeout);
       externalSignal?.removeEventListener("abort", abortFromCaller);
     }
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch {
-      fail(
-        "invalid_response",
-        "在线房间服务返回了非 JSON 响应",
-        response.status >= 500,
-        response.status,
-      );
-    }
-    if (!response.ok) {
-      const error = record(payload, "error response");
-      const code =
-        typeof error.code === "string" && error.code
-          ? error.code
-          : `http_${response.status}`;
-      const message =
-        typeof error.message === "string" && error.message
-          ? error.message
-          : "在线房间请求失败";
-      fail(
-        code,
-        message,
-        response.status === 408 ||
-          response.status === 429 ||
-          response.status >= 500,
-        response.status,
-      );
-    }
-    return payload;
   }
 }
 
