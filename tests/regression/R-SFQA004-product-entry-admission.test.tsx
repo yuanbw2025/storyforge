@@ -58,7 +58,6 @@ import { createAvgAuthoringPresetV1 } from '../../src/lib/avg/authoring-presets'
 import { legacyPackage as avgEditorPackage } from '../helpers/avg-carrier-fixture'
 import { seedAvgAuthorArtifacts, stageAuthorFixture } from '../helpers/avg-author-artifact-fixture'
 
-import { readTextOpenWorldArtifactGovernanceV1 } from '../../src/lib/open-world/creator-artifact-governance'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { prepareTextOpenWorldCreatorArtifactEditV1, createTextOpenWorldCreatorDirectEditOperationsV1, generateTextOpenWorldCreatorArtifactEditCandidateV1,
   confirmTextOpenWorldCreatorArtifactEditIntentV1, reviseTextOpenWorldCreatorArtifactEditCandidateV1, readLatestTextOpenWorldCreatorArtifactEditStateV1,
@@ -66,6 +65,10 @@ import { prepareTextOpenWorldCreatorArtifactEditV1, createTextOpenWorldCreatorDi
 
 
 Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true)
+
+// V8 coverage exercises the real 14.5 MB governed import/recovery fixture.
+// This CI integration execution ceiling is not a product performance target.
+const CREATOR_EDIT_INTEGRATION_TIMEOUT_MS = process.env.CI === 'true' ? 120_000 : 30_000
 
 describe('SFQA004 · real authoring and production boundaries', () => {
   let previous: Pick<ReturnType<typeof useAIConfigStore.getState>, 'config' | 'presets' | 'taskRoutes'>
@@ -662,10 +665,11 @@ describe('SFQA004 · real authoring and production boundaries', () => {
   })
 
   async function creatorEditFixture() {
-    const f = await seedSfqa105GovernedBuild()
-    const governance = await readTextOpenWorldArtifactGovernanceV1({ scope: f.scope, productionId: f.productionId })
+    // Keep the real import, proof recovery and verified governance. SFQA004
+    // does not assert the separate SFQA105 whole-parent comparison digests.
+    const f = await seedSfqa105GovernedBuild({ includeComparisonHashes: false })
     const selection = { scope: f.scope, productionId: f.productionId, buildId: f.buildId,
-      expectedSnapshotHash: governance.snapshotHash, artifactKey: SFQA105_ARTIFACT_KEY, entityIdentity: f.entityIdentity }
+      expectedSnapshotHash: f.governanceSnapshotHash, artifactKey: SFQA105_ARTIFACT_KEY, entityIdentity: f.entityIdentity }
     const context = await prepareTextOpenWorldCreatorArtifactEditV1(selection)
     const field = context.editableFields.find(row => row.jsonPointer.endsWith('/biography'))!
     const operations = await createTextOpenWorldCreatorDirectEditOperationsV1({ context, values: { [field.fieldId]: '004 author explicitly changes only this biography.' } })
@@ -685,7 +689,7 @@ describe('SFQA004 · real authoring and production boundaries', () => {
     expect(await db.agentRuns.toArray()).toEqual(before)
     expect(runAI).not.toHaveBeenCalled()
     expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+  }, CREATOR_EDIT_INTEGRATION_TIMEOUT_MS)
 
   it('Creator edit keeps an original candidate and no-change revision in production', async () => {
     sfqa004ChannelV1('local-development')
@@ -700,7 +704,7 @@ describe('SFQA004 · real authoring and production boundaries', () => {
     expect((await generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })).candidate.candidateHash).toBe(candidate.candidate.candidateHash)
     expect((await reviseTextOpenWorldCreatorArtifactEditCandidateV1({ ...confirm, operations: f.operations })).candidate.candidateHash).toBe(candidate.candidate.candidateHash)
     expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+  }, CREATOR_EDIT_INTEGRATION_TIMEOUT_MS)
 
   it('Creator edit rejects a new revision or first intent for a historical candidate in production', async () => {
     sfqa004ChannelV1('local-development')
@@ -712,7 +716,7 @@ describe('SFQA004 · real authoring and production boundaries', () => {
     await expect(reviseTextOpenWorldCreatorArtifactEditCandidateV1({ ...confirm, operations: revised })).rejects.toThrow('product-catalog')
     await expect(confirmTextOpenWorldCreatorArtifactEditIntentV1(confirm)).rejects.toThrow('product-catalog')
     expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+  }, CREATOR_EDIT_INTEGRATION_TIMEOUT_MS)
 
   it('Creator edit replays an already committed terminal receipt under production maturity', async () => {
     sfqa004ChannelV1('local-development')
@@ -723,7 +727,7 @@ describe('SFQA004 · real authoring and production boundaries', () => {
     sfqa004ChannelV1('production')
     expect((await confirmTextOpenWorldCreatorArtifactEditIntentV1(confirm)).snapshot.projection.terminalReceiptHash).toBe(accepted.snapshot.projection.terminalReceiptHash)
     expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+  }, CREATOR_EDIT_INTEGRATION_TIMEOUT_MS)
 
   it('Creator edit checks after model.requested and settles a known pre-dispatch failure without unknown outcome', async () => {
     sfqa004ChannelV1('local-development')
@@ -742,7 +746,7 @@ describe('SFQA004 · real authoring and production boundaries', () => {
     expect(failure).toMatchObject({ phase: 'pre-dispatch', responseStatus: null, failureCode: 'creator-edit-model-not-dispatched', retryable: false, usage: null })
     expect(runAI).not.toHaveBeenCalled()
     expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+  }, CREATOR_EDIT_INTEGRATION_TIMEOUT_MS)
 
   it('Creator edit restores an already retained paid result after maturity changes with zero redispatch', async () => {
     sfqa004ChannelV1('local-development')
@@ -763,7 +767,7 @@ describe('SFQA004 · real authoring and production boundaries', () => {
     expect(await readAgentRunArtifactExactV1({ projectId: f.scope.projectId, artifactKind: 'raw-response', contentHash: raw.payload.contentHash })).toBe(f.raw)
     expect(runAI).toHaveBeenCalledOnce()
     expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+  }, CREATOR_EDIT_INTEGRATION_TIMEOUT_MS)
 
   it('Creator edit resumes a previously frozen intent and terminal verification in production', async () => {
     sfqa004ChannelV1('local-development')
@@ -775,7 +779,7 @@ describe('SFQA004 · real authoring and production boundaries', () => {
     } })).rejects.toMatchObject({ name: 'CreatorEditDurableBoundaryInterruptionV1', cause: { message: '004 frozen intent interruption' } })
     expect((await confirmTextOpenWorldCreatorArtifactEditIntentV1(confirm)).snapshot.projection.state).toBe('completed')
     expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+  }, CREATOR_EDIT_INTEGRATION_TIMEOUT_MS)
 
   it('Creator edit explicit pre-request intake resume denies new execution while cancel stays available', async () => {
     sfqa004ChannelV1('local-development')
@@ -790,7 +794,7 @@ describe('SFQA004 · real authoring and production boundaries', () => {
     expect((await cancelTextOpenWorldCreatorArtifactEditIntakeV1({ selection: f.selection, runId })).projection.state).toBe('cancelled')
     expect(runAI).not.toHaveBeenCalled()
     expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+  }, CREATOR_EDIT_INTEGRATION_TIMEOUT_MS)
 
   async function waitForRenderedPage(assertion: () => void) {
     const deadline = Date.now() + 4000

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { AlertTriangle, Loader2, RefreshCw, Scale, Send, ShieldAlert } from 'lucide-react'
 import type { CommunityReportV1, CommunityReportViewV1 } from '../../lib/community/authority'
 import type { CommunityHttpClientV1, CommunityHttpErrorV1 } from '../../lib/community/http-client'
+import { createCommunityRequestIntentsV1 } from '../../lib/community/request-intent'
 
 type SafetyClientV1 = Pick<CommunityHttpClientV1, 'createReport' | 'myReports' | 'createAppeal' | 'myAppeals'>
 
@@ -25,15 +26,9 @@ export default function CommunitySafetyPanel(props: {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const requestIds = useRef(new Map<string, string>())
+  const requestIntents = useRef(createCommunityRequestIntentsV1())
 
-  const requestId = (key: string) => {
-    const prior = requestIds.current.get(key)
-    if (prior) return prior
-    const next = `${key}.${crypto.randomUUID()}`
-    requestIds.current.set(key, next)
-    return next
-  }
+
   const token = () => {
     if (!props.accessToken.trim()) throw new Error('请输入当前账号的访问凭据。')
     return props.accessToken.trim()
@@ -50,23 +45,26 @@ export default function CommunitySafetyPanel(props: {
     setReports(nextReports)
   })
   const submitReport = () => run(async () => {
-    if (!props.client) throw new Error('请先配置社区服务地址。')
-    const fingerprint = `${subjectType}:${subjectId.trim()}:${category}:${details.trim()}`
-    await props.client.createReport({
-      accessToken: token(), requestId: requestId(`report:${fingerprint}`), subjectType,
-      subjectId: subjectId.trim(), category, details: details.trim(),
-    })
+    const client = props.client
+    if (!client) throw new Error('请先配置社区服务地址。')
+    const accessToken = token()
+    const bodyInput = { subjectType, subjectId: subjectId.trim(), category, details: details.trim() }
+    await requestIntents.current.send('safety.report', bodyInput, ({ requestId }) => client.createReport({
+      accessToken, requestId, ...bodyInput,
+    }))
     setMessage('举报已进入治理队列；自由正文只对举报者和治理人员可见。')
-    setReports(await props.client.myReports(props.accessToken.trim()))
+    setReports(await client.myReports(accessToken))
   })
   const submitAppeal = () => run(async () => {
-    if (!props.client) throw new Error('请先配置社区服务地址。')
-    await props.client.createAppeal({
-      accessToken: token(), requestId: requestId(`appeal:${appealReportId}:${appealStatement.trim()}`),
-      reportId: appealReportId, statement: appealStatement.trim(),
-    })
+    const client = props.client
+    if (!client) throw new Error('请先配置社区服务地址。')
+    const accessToken = token()
+    const bodyInput = { reportId: appealReportId, statement: appealStatement.trim() }
+    await requestIntents.current.send('safety.appeal', bodyInput, ({ requestId }) => client.createAppeal({
+      accessToken, requestId, ...bodyInput,
+    }))
     setMessage('申诉已提交到独立复核队列。')
-    setReports(await props.client.myReports(props.accessToken.trim()))
+    setReports(await client.myReports(accessToken))
   })
 
   return <div className="space-y-4" data-testid="community-safety-center">

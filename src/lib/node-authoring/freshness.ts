@@ -93,7 +93,21 @@ export async function inspectAuthoringGraphFreshness(input: {
       : !signature || signature.upstreamHash !== currentUpstreamHash(graph, node.id, input.candidates)) {
       reasons.push('connections-updated')
     }
-    if (!confirmedCanon && snapshot?.sourceHash && signature?.executorVersion === 'FLOW-3B.2') {
+    if (!confirmedCanon && (node.templateId === 'continuity.fact' || node.templateId === 'chapter.organize')) {
+      try {
+        const domain = candidate.domain
+        const canonicalContext = snapshot?.sourceEvidence?.canonicalContext
+        if (signature?.executorVersion !== 'FLOW-3B.2' || !snapshot?.sourceHash || !canonicalContext
+          || !domain || (node.templateId === 'continuity.fact' ? domain.kind !== 'facts' : domain.kind !== 'chapter-organization')
+          || !('chapterId' in domain)) throw new Error('缺少原节点来源指纹证据。')
+        const current = await readAuthoringCanonBinding({
+          node, scope, projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null,
+          chapterId: domain.chapterId, canonicalContext,
+        })
+        if (current.missing.length) reasons.push('source-missing')
+        else if (current.sourceHash !== snapshot.sourceHash) reasons.push('source-updated')
+      } catch { reasons.push('source-missing') }
+    } else if (!confirmedCanon && snapshot?.sourceHash && signature?.executorVersion === 'FLOW-3B.2') {
       if (node.templateId === 'control.prompt') {
         try {
           const current = await renderAuthoringPromptControl({ node, scope, projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null })

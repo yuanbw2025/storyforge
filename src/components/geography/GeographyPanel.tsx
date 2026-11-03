@@ -196,7 +196,7 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
       .replace(/^```(?:svg|xml)?\n?/i, '')
       .replace(/\n?```$/i, '')
       .trim()
-    // 安全清洗：AI 输出的 SVG 直接 dangerouslySetInnerHTML 渲染，须剔除脚本/事件防 XSS
+    // 保留既有净化边界；预览以独立图片显示，SVG 样式留在图片内。
     setSvgContent(sanitizeSvg(svg))
   }
 
@@ -335,10 +335,7 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
             <div className="text-error text-sm p-3 bg-error/10 rounded-lg">{ai.error}</div>
           )}
           {svgContent && (
-            <div
-              className="rounded-lg overflow-hidden border border-border bg-bg-base"
-              dangerouslySetInnerHTML={{ __html: svgContent }}
-            />
+            <GeographySvgPreview svg={svgContent} />
           )}
 
           {/* 图像生成 Prompt */}
@@ -456,4 +453,50 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
       </fieldset>
     </div>
   )
+}
+
+
+type SvgPreviewUrl = { source: string; url: string; attempt: number; dispose: () => void }
+
+/** The component owns only its temporary image URL, never stored SVG/media. */
+function GeographySvgPreview({ svg }: { svg: string }) {
+  const [preview, setPreview] = useState<SvgPreviewUrl | null>(null)
+  const owned = useRef<SvgPreviewUrl | null>(null)
+  const [failedSource, setFailedSource] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    try {
+      const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
+      let disposed = false
+      const current: SvgPreviewUrl = { source: svg, url, attempt, dispose: () => {
+        if (!disposed) { disposed = true; URL.revokeObjectURL(url) }
+      } }
+      owned.current = current
+      setPreview(current)
+      setFailedSource(null)
+      return () => {
+        if (owned.current === current) owned.current = null
+        current.dispose()
+      }
+    } catch {
+      owned.current = null
+      setPreview(null)
+      setFailedSource(svg)
+    }
+  }, [svg, attempt])
+  const currentUrl = preview?.source === svg && preview.attempt === attempt ? preview.url : undefined
+  const handleImageError = () => {
+    if (!preview || owned.current !== preview || preview.source !== svg || preview.attempt !== attempt) return
+    owned.current = null
+    preview.dispose()
+    setPreview(null)
+    setFailedSource(svg)
+  }
+  return <div className="rounded-lg overflow-hidden border border-border bg-bg-base">
+    {currentUrl ? <img key={`${attempt}:${currentUrl}`} src={currentUrl} onError={handleImageError} alt="地理概念地图" className="block h-auto w-full" />
+      : failedSource === svg && <div role="alert" className="p-3 text-sm text-text-secondary">
+        地图预览暂不可用，原图已保留。
+        <button type="button" className="ml-3 underline" onClick={() => setAttempt(value => value + 1)}>重试预览</button>
+      </div>}
+  </div>
 }

@@ -57,6 +57,8 @@
 
 工作区、页面或存档切换后，旧读取的结果、错误和媒资 resolver 不得覆盖当前页面。作品库逐份核验存档通关摘要，避免同时重放全部存档；损坏存档仍保留既有错误与恢复入口。本路径不新增 AI 读写、表或迁移，继续由 Work 拥有制作、媒资、Build/Release 和运行数据，只读引用冻结世界版本。
 
+自由输入与结果叙述的异步请求同时绑定工作区、存档和本次页面请求。切换或离开页面只解除显示绑定，原运行的响应与候选继续保存在原 Harness 中，返回原存档后可显式恢复，不自动重发模型请求。迟到的结果、错误或结束回调不得覆盖后续请求；候选采用、取消及恢复须核对当前存档，确定性行动和原有过期校验继续生效。
+
 - 契约：`src/lib/types/adventure.ts`、`src/lib/types/adventure-v2.ts`
 - 内容校验与确定性规则：`src/lib/adventure/runtime.ts`
 - 正式生产 Brief、Artifact 与编译：`src/lib/adventure/production-brief.ts`、`src/lib/adventure/production-artifacts.ts`、`src/lib/adventure/production-compiler.ts`

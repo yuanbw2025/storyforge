@@ -11048,21 +11048,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7005\",\"Variable 'out' implicitly has an 'any[]' type.\",\"c542066d0ae2b62c73d3f34c1e87c916dfa75c74f91267f432f15c7052e3fe9c\",10,3]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/generate-ai-manual.mjs",
-        "code": "TS7005",
-        "message": "Variable 'out' implicitly has an 'any[]' type.",
-        "anchor": "c542066d0ae2b62c73d3f34c1e87c916dfa75c74f91267f432f15c7052e3fe9c",
-        "line": 165,
-        "column": 10,
-        "start": 6655,
-        "length": 3
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7005\",\"Variable 'seeds' implicitly has an 'any[]' type.\",\"fe5f46092485bffbfa8d159f76f1c6a3ca1f41b2586e25b77748fa9001fca20e\",10,5]",
       "count": 1,
       "diagnostic": {
@@ -11258,21 +11243,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"0aa7ee17bfcb15e592b87902ce6c2c440810409a47d93542bc19f63263469495\",22,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/generate-ai-manual.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "0aa7ee17bfcb15e592b87902ce6c2c440810409a47d93542bc19f63263469495",
-        "line": 73,
-        "column": 22,
-        "start": 2414,
-        "length": 4
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"2031e203207231ba9307c2e8d1224e9311f740e8dbbe8ff1a4e005d52f955388\",22,4]",
       "count": 1,
       "diagnostic": {
@@ -11334,7 +11304,7 @@
     },
     {
       "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"875fa36f030ac32730330297d8e042f3b34ce90cfbf96d60c9519c7042b63d44\",21,4]",
-      "count": 6,
+      "count": 5,
       "diagnostic": {
         "kind": "typescript",
         "file": "scripts/generate-ai-manual.mjs",
@@ -11513,21 +11483,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'sourceFile' implicitly has an 'any' type.\",\"0aa7ee17bfcb15e592b87902ce6c2c440810409a47d93542bc19f63263469495\",28,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/generate-ai-manual.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'sourceFile' implicitly has an 'any' type.",
-        "anchor": "0aa7ee17bfcb15e592b87902ce6c2c440810409a47d93542bc19f63263469495",
-        "line": 73,
-        "column": 28,
-        "start": 2420,
-        "length": 10
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'sourceFile' implicitly has an 'any' type.\",\"b45c40c05ce843b4ed2731ed6382a2aa7daad8f4fcf1026f4d4857c74c2078ca\",31,10]",
       "count": 1,
       "diagnostic": {
@@ -11615,21 +11570,6 @@
         "column": 7,
         "start": 6856,
         "length": 8
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7034\",\"Variable 'out' implicitly has type 'any[]' in some locations where its type cannot be determined.\",\"6d67a14cb7dabd88896a15deaa615970b1c6a547b6351e595f4bc8a4f84ad0fb\",9,3]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/generate-ai-manual.mjs",
-        "code": "TS7034",
-        "message": "Variable 'out' implicitly has type 'any[]' in some locations where its type cannot be determined.",
-        "anchor": "6d67a14cb7dabd88896a15deaa615970b1c6a547b6351e595f4bc8a4f84ad0fb",
-        "line": 150,
-        "column": 9,
-        "start": 5984,
-        "length": 3
       }
     },
     {

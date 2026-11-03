@@ -206,7 +206,7 @@ export async function readSfqa105GovernedCapture(): Promise<GovernedCapture> {
   return fixture
 }
 
-export async function seedSfqa105GovernedBuild() {
+export async function seedSfqa105GovernedBuild(options: { includeComparisonHashes?: boolean } = {}) {
   const fixture = await readSfqa105GovernedCapture()
   if (!fixture.governed || !fixture.native) throw new Error('SFQA105 governed fixture metadata is missing')
   const projectId = await importProjectJSON(structuredClone(fixture.governed))
@@ -232,8 +232,14 @@ export async function seedSfqa105GovernedBuild() {
   }
   return {
     ...fixture.native, scope, productionId: production.id, buildId: build.id, buildNumber: build.buildNumber,
-    buildHash: await hashProductProductionValueV2(build),
-    artifactsHash: await hashProductProductionValueV2(await db.productBuildArtifacts.where('buildId').equals(build.id).toArray()),
+    // This snapshot was actually verified above after imported proof recovery.
+    // Consumers preparing an edit still perform their own current-state checks.
+    governanceSnapshotHash: governance.snapshotHash,
+    // SFQA105 uses these comparison-only digests for parent immutability;
+    // admission-only consumers do not use them. Never cache DB state between cases.
+    buildHash: options.includeComparisonHashes === false ? null : await hashProductProductionValueV2(build),
+    artifactsHash: options.includeComparisonHashes === false ? null
+      : await hashProductProductionValueV2(await db.productBuildArtifacts.where('buildId').equals(build.id).toArray()),
     catalog,
     modelResponses: await db.agentRunEvents.where('projectId').equals(projectId).filter(row => row.type === 'model.responded').count(),
   }

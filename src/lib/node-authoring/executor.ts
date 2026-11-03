@@ -23,6 +23,7 @@ import {
   captureAuthoringCanonReceipt,
   readAuthoringReceiptRows,
   assertAuthoringCanonReceipt,
+  type AuthoringSourceEvidenceV1,
 } from './bindings'
 import { authoringExecutionSubgraph, validateAuthoringGraph, topologicalAuthoringOrder } from './graph'
 import { parseAuthoringGraph } from './graph-codec'
@@ -54,12 +55,7 @@ export interface AuthoringRunSnapshot {
   totalTokens: number
   sourceKeys?: string[]
   sourceHash?: string
-  sourceEvidence?: {
-    included: string[]
-    omitted: string[]
-    trimmed: string[]
-    missing: string[]
-  }
+  sourceEvidence?: AuthoringSourceEvidenceV1
 }
 
 export type AuthoringRunSnapshotMap = Record<string, AuthoringRunSnapshot>
