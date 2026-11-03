@@ -28,6 +28,7 @@ afterEach(() => db.close())
 it.each([false, true])('carries author-confirmed units through real production commands, source manifests, selection, Release, new session and portable restore (references=%s)', async referenceWire => {
   // Scripted semantic decisions test the production boundary, not real-model quality.
   const f = await seedChatSourceUnitConfirmationFixture(), worlds = await db.worldReleases.toArray()
+  if (f.settings.version !== 3) throw new Error('Source-unit production fixture requires narrative settings version 3')
   const draft = await saveChatDraftV1(f.scope, f.draft.revision, {...f.settings, narrative: {...f.settings.narrative,
     permissions: {...f.settings.narrative.permissions, allowInquiryResults: true}}})
   const request = {...f.request, source: {...f.request.source, draftRevision: draft.revision}}

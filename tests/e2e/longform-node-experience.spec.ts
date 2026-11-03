@@ -459,7 +459,7 @@ test('selected prompt version and parameters reach the formal model request with
   await page.getByRole('combobox', { name: '描写节奏' }).selectOption('急促')
   await page.locator('[data-authoring-node-template="world.origin"]').click()
   await page.getByRole('button', { name: '确认采纳', exact: true }).click()
-  await expect(page.getByText(/节点参数或写入目标已变化/)).toBeVisible()
+  await expect(page.getByText('采纳失败：节点字段采纳未完成：执行图已变化；保留原稿和原始证据，不重新调用模型。', { exact: true })).toBeVisible()
   const preserved = await page.evaluate(async id => {
     const importer = new Function('p', 'return import(p)') as (p: string) => Promise<any>
     const { db } = await importer('/storyforge/src/lib/db/schema.ts')
@@ -468,6 +468,7 @@ test('selected prompt version and parameters reach the formal model request with
   expect(preserved.template.isActive).toBe(false)
   expect(preserved.template.userPromptTemplate).toBe('保留潮汐标记。')
   expect(preserved.count).toBe(0)
+  expect(requests).toHaveLength(1)
 })
 
 test('blank canvas opens searchable creation, keyboard cancels, and incompatible drops create no edge', async ({ page }) => {

@@ -1,5 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import Dexie from 'dexie'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import type { WorkspaceScope } from '../../src/lib/types'
 import {
   adoptImpactPatchCandidateV1,
@@ -8,6 +10,15 @@ import {
   rejectImpactPatchCandidateV1,
 } from '../../src/lib/agent/run/impact-patch-durable'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
+
+
+function faultAdoptionEvent(type: string) {
+  const original = db.agentRunEvents.add.bind(db.agentRunEvents)
+  return vi.spyOn(db.agentRunEvents, 'add').mockImplementation((record, key) => {
+    if (record.type === type) return Dexie.Promise.reject(new Error(`036 native storage fault: ${type}`))
+    return original(record, key)
+  })
+}
 
 async function seed(): Promise<{
   scope: WorkspaceScope
@@ -33,7 +44,7 @@ describe.sequential('R-HARNESS44 · 影响 patch 候选与作者确认写回', (
     await db.open()
   })
 
-  afterEach(() => db.close())
+  afterEach(() => { vi.restoreAllMocks(); db.close() })
 
   it('候选只进入 Agent 事件流，确认后才经 adopt 写入大纲摘要并签发回执', async () => {
     const fixture = await seed()
@@ -118,4 +129,44 @@ describe.sequential('R-HARNESS44 · 影响 patch 候选与作者确认写回', (
     })).toBeNull()
     expect((await db.outlineNodes.get(fixture.downstreamOutlineId))?.summary).toBe('等待后续安排')
   })
+  it.each(['confirmation.recorded', 'adoption.started', 'adoption.committed', 'step.succeeded',
+    'verification.started', 'verification.accepted', 'memory.settlement.recorded'])(
+    '036 原生 %s 失败时 patch 与事件全回滚，原候选恢复后只写一次', async boundary => {
+      const fixture = await seed()
+      const created = await createImpactPatchCandidateV1({
+        scope: fixture.scope, worldGroupId: fixture.worldGroupId, sourceChapterId: fixture.sourceChapterId,
+        proposal: { target: 'outlineNodes', recordId: fixture.downstreamOutlineId,
+          fields: { summary: '036 原确认摘要' }, reason: '原确认恢复', evidenceRefs: [] },
+      })
+      const input = { scope: fixture.scope, candidate: created.candidate }
+      const before = await db.outlineNodes.get(fixture.downstreamOutlineId)
+      const runBefore = await readAgentRunV1(fixture.scope, created.snapshot.run.id)
+      const fault = faultAdoptionEvent(boundary)
+      await expect(adoptImpactPatchCandidateV1(input)).rejects.toThrow(`036 native storage fault: ${boundary}`)
+      fault.mockRestore()
+      expect(await db.outlineNodes.get(fixture.downstreamOutlineId)).toEqual(before)
+      expect(await readAgentRunV1(fixture.scope, created.snapshot.run.id)).toEqual(runBefore)
+      expect(await readLatestImpactPatchCandidateV1({ scope: fixture.scope, sourceChapterId: fixture.sourceChapterId }))
+        .toEqual(created.candidate)
+      const done = await adoptImpactPatchCandidateV1(input)
+      expect(done.snapshot.projection.state).toBe('completed')
+      const formal = await db.outlineNodes.get(fixture.downstreamOutlineId)
+      expect((await adoptImpactPatchCandidateV1(input)).receiptHash).toBe(done.receiptHash)
+      expect(await db.outlineNodes.get(fixture.downstreamOutlineId)).toEqual(formal)
+    },
+  )
+
+  it('036 目标摘要被作者改动后不得凭未变的影响图覆盖，也不得补造旧目标基线', async () => {
+    const fixture = await seed()
+    const created = await createImpactPatchCandidateV1({
+      scope: fixture.scope, worldGroupId: fixture.worldGroupId, sourceChapterId: fixture.sourceChapterId,
+      proposal: { target: 'outlineNodes', recordId: fixture.downstreamOutlineId,
+        fields: { summary: '旧确认摘要' }, reason: '防止覆盖', evidenceRefs: [] },
+    })
+    await db.outlineNodes.update(fixture.downstreamOutlineId, { summary: '作者在生成后保存的新摘要' })
+    await expect(adoptImpactPatchCandidateV1({ scope: fixture.scope, candidate: created.candidate }))
+      .rejects.toThrow('正式数据已变化')
+    expect((await db.outlineNodes.get(fixture.downstreamOutlineId))?.summary).toBe('作者在生成后保存的新摘要')
+  })
+
 })

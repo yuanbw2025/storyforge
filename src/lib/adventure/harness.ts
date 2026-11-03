@@ -1,8 +1,9 @@
-import { chat } from '../ai/client'
+import { chat, type ChatResult } from '../ai/client'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { getAgentSkillV1, type AgentSkillId } from '../agent/skill-registry'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
 import { createContextManifestFromAssemblyV1 } from '../agent/run/context-manifest'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
 import {
   appendAgentRunEventV1,
   appendRuntimeCandidateAdoptedV1,
@@ -17,6 +18,7 @@ import {
 } from '../agent/run/runtime-scope'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import { db } from '../db/schema'
+import { assertTextOpenWorldSessionNewWorkV1 } from '../open-world/source-admission'
 import { verifyProductRuntimeSessionSourceV1 } from '../product-production/preview-source'
 import { assembleContext } from '../registry/assemble-context'
 import {
@@ -334,6 +336,11 @@ export async function generateAdventureRuntimeCandidateV1(input: {
   signal?: AbortSignal
   onRunCreated?: (runId: number) => void | Promise<void>
 }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: AdventureRuntimeCandidateV1 }> {
+  input = { ...input, scope: structuredClone(input.scope), ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }) }
+  if ((await db.productRuntimeSessions.get(input.productRuntimeSessionId))?.kind === 'text-open-world') {
+    await assertTextOpenWorldSessionNewWorkV1({ scope: input.scope, sessionId: input.productRuntimeSessionId,
+      operation: '新冒险兼容模型运行' })
+  }
   const objective = text(input.objective, 'objective', 4_000)
   const skill = getAgentSkillV1(input.skillId)
   const boundary = await captureAdventureRuntimeHarnessBoundaryV1({
@@ -374,16 +381,28 @@ export async function generateAdventureRuntimeCandidateV1(input: {
       stepId: ADVENTURE_RUNTIME_STEP_ID_V1, attempt: 1, manifestHash: manifest.manifestHash,
     })
     const prompt = messages(input.skillId, objective, assembled.text)
+    const prepared = await recordCreationModelRequestV1({ scope: input.scope, snapshot,
+      stepId: ADVENTURE_RUNTIME_STEP_ID_V1, attempt: 1, contextManifestHash: manifest.manifestHash, messages: prompt })
+    snapshot = prepared.snapshot
     snapshot = await append(input.scope, snapshot, 'model.requested', {
       stepId: ADVENTURE_RUNTIME_STEP_ID_V1, attempt: 1,
       bindingHash: await hashCanonicalValue({ runtimeBindingHash, manifestHash: manifest.manifestHash, messages: prompt }),
     })
-    const output = input.runAI
-      ? await input.runAI(prompt, input.signal)
-      : await chat(prompt, input.aiConfig!, {
-          category: `runtime.${input.skillId}`, projectId: input.scope.projectId,
-          contextOverflowPolicy: 'reject',
-        }, input.signal)
+    const result: ChatResult = {}
+    let output: string
+    try {
+      output = input.runAI
+        ? await input.runAI(prompt, input.signal)
+        : await chat(prompt, input.aiConfig!, {
+            category: `runtime.${input.skillId}`, projectId: input.scope.projectId,
+            contextOverflowPolicy: 'reject',
+          }, input.signal, result)
+    } catch (error) {
+      const unavailable = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
+      snapshot = unavailable.snapshot
+      throw unavailable.report
+    }
+    snapshot = await recordCreationModelResponseV1({ snapshot, request: prepared.request, raw: output, result })
     snapshot = await append(input.scope, snapshot, 'model.responded', {
       stepId: ADVENTURE_RUNTIME_STEP_ID_V1, attempt: 1, outputHash: await hashCanonicalValue(output),
     })

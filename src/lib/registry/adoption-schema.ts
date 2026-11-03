@@ -801,7 +801,7 @@ const ADOPTION_EXTENSION_REGISTRATIONS: readonly AdoptionExtensionSpec[] = [
   {
     id: 'comic-panel-lifecycle',
     target: 'comicPanels',
-    entrypoints: ['src/lib/comic/service.ts', 'src/lib/comic/media-service.ts', 'src/lib/comic/production.ts', 'src/lib/comic/authoring.ts'],
+    entrypoints: ['src/lib/comic/service.ts', 'src/lib/comic/media-service.ts', 'src/lib/comic/media-lifecycle.ts', 'src/lib/comic/production.ts', 'src/lib/comic/authoring.ts'],
     policyRegistry: 'PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + comic panel validator',
     reason: '漫画格包含几何、连续性、排字和稳定媒资选择；普通字段采纳不能绕过父页布局与媒资一致性校验。',
     reviewAfter: '2027-08-01',
@@ -809,7 +809,7 @@ const ADOPTION_EXTENSION_REGISTRATIONS: readonly AdoptionExtensionSpec[] = [
   {
     id: 'comic-visual-subject-lifecycle',
     target: 'comicVisualSubjects',
-    entrypoints: ['src/lib/comic/service.ts', 'src/lib/comic/media-service.ts', 'src/lib/comic/production.ts'],
+    entrypoints: ['src/lib/comic/service.ts', 'src/lib/comic/media-service.ts', 'src/lib/comic/media-lifecycle.ts', 'src/lib/comic/production.ts'],
     policyRegistry: 'PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + Work cast/source/asset stable-key validator',
     reason: '视觉条目删除与修改必须处理格连续性引用、所选设定图和角色绑定，不能由组件直接删表。',
     reviewAfter: '2027-08-01',
@@ -817,7 +817,7 @@ const ADOPTION_EXTENSION_REGISTRATIONS: readonly AdoptionExtensionSpec[] = [
   {
     id: 'comic-media-asset-lifecycle',
     target: 'comicMediaAssets',
-    entrypoints: ['src/lib/comic/media-service.ts', 'src/lib/comic/service.ts', 'src/lib/comic/production.ts'],
+    entrypoints: ['src/lib/comic/media-service.ts', 'src/lib/comic/media-lifecycle.ts', 'src/lib/comic/service.ts', 'src/lib/comic/production.ts'],
     policyRegistry: 'PROJECT_TABLES + media capability registry + hash/rights/provider receipt + stable-key reference checks',
     reason: '媒体候选不是普通文本字段；上传和 provider 结果必须先校验二进制、rights、owner 与请求证据，再原子提交并由作者另行选片；作者确认重做规划时，在同一事务清理旧页格媒资引用，提交后仅回收没有 Release 强引用的 Blob。',
     reviewAfter: '2027-08-01',

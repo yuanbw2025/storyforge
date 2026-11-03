@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {test, expect} from '@playwright/test'
 
@@ -5,19 +6,19 @@ test('author explicitly controls new player followups and the persisted permissi
   let calls = 0
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
   await page.route('**/local-codex/v1/requests', async route => {if (route.request().method() === 'POST') {calls++; await route.abort()} else await route.continue()})
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const scope = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await (await load('/storyforge/tests/helpers/chat-narrative-production-fixture.ts')).seedChatNarrativeProductionFixture()).scope})
-  await page.goto(`./chat/vision?project=${scope.projectId}&work=${scope.workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/vision?project=${scope.projectId}&work=${scope.workId}`)
   const expansion = page.getByLabel('允许角色依据未完成事项发展新局面', {exact: true}), followup = page.getByLabel('一件事结束后，允许角色承接我明确提出的新事项', {exact: true})
   await expect(followup).toBeChecked()
   await expansion.uncheck(); await expect(followup).not.toBeChecked(); await expect(followup).toBeDisabled()
   await page.getByRole('button', {name: '保存方案', exact: true}).click()
   await expect(page.getByText('方案已保存', {exact: true})).toBeVisible()
-  await page.reload(); await expect(expansion).not.toBeChecked(); await expect(followup).not.toBeChecked()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(expansion).not.toBeChecked(); await expect(followup).not.toBeChecked()
   await expansion.check(); await expect(followup).not.toBeChecked(); await followup.check()
   await page.getByRole('button', {name: '保存方案', exact: true}).click()
   await expect(page.getByText('方案已保存', {exact: true})).toBeVisible()
-  await page.reload(); await expect(followup).toBeChecked()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(followup).toBeChecked()
   expect(calls).toBe(0)
 })
 
@@ -27,9 +28,8 @@ for (const [continuous, ownGoal] of [[false, false], [true, false], [false, true
   const calls: string[] = []
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-followup.invalid/v1', model: 'test', maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-followup.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
   await page.route('https://chat-followup.invalid/**', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')
@@ -65,10 +65,10 @@ for (const [continuous, ownGoal] of [[false, false], [true, false], [false, true
     }
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   f = await page.evaluate(async continuous => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-player-followup.ts')).seedClosedChatFollowupFixtureV1({maxActionsPerTrigger: continuous ? 3 : 1})}, continuous)
   const open = async () => {
-    await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
     await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   }
   const read = () => page.evaluate(async f => {const load = new Function('p', 'return import(p)'); return (await (await load('/storyforge/src/lib/character-interaction/runtime-api.ts')).readProductRuntimeState(f.sessionId)).interaction}, f)
@@ -90,7 +90,7 @@ for (const [continuous, ownGoal] of [[false, false], [true, false], [false, true
   expect(settled.chatNarrative.situation.goals[0].status).toBe('abandoned')
   expect(settled.chatNarrative.situation.goals.find((g: {goalKey: string}) => g.goalKey === 'check-entry').status).toBe('active')
   expect(settled.chatNarrative.situation.facts.filter((fact: {factKey: string}) => fact.factKey === 'entry-result')).toHaveLength(ownGoal ? 1 : 0)
-  await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   expect(await read()).toEqual(settled); expect(calls).toHaveLength(4)
   f = await page.evaluate(async f => {
     const load = new Function('p', 'return import(p)'), backup = await load('/storyforge/src/lib/export/json-export.ts'), {db} = await load('/storyforge/src/lib/db/schema.ts')
@@ -120,7 +120,7 @@ for (const [continuous, ownGoal] of [[false, false], [true, false], [false, true
   expect(expression.eventSequence).toBe(final.chatNarrative.situation.goals.find((g: {goalKey: string}) => g.goalKey === 'check-entry').updatedSequence)
   expect(final.chatNarrative.situation.goals[0].status).toBe('abandoned')
   expect(final.chatNarrative.pendingSituation).toBeUndefined()
-  await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   expect(await read()).toEqual(final); expect(calls).toHaveLength(ownGoal ? 6 : 10)
   await page.setViewportSize({width: 390, height: 844})
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1)

@@ -47,7 +47,10 @@ export async function avgImageResponseEvidenceV1(response: MediaTransportRespons
     binaryBodyHash: response.body === null ? null : await crypto.subtle.digest('SHA-256', response.body).then(value =>
       Array.from(new Uint8Array(value), byte => byte.toString(16).padStart(2, '0')).join('')),
     binaryBodyBase64: response.body !== null && response.body.byteLength <= 32 * 1024 * 1024 ? base64(response.body) : null }
-  const text = canonicalProductProductionJsonV2(body)
+  // Keep the existing strict JSON validation, but raw response evidence must
+  // not use the NFC-normalized serialization used by semantic production hashes.
+  canonicalProductProductionJsonV2(body)
+  const text = JSON.stringify(body)
   let omitted: 'policy' | 'size' | null = null
   try {
     assertExactRunArtifactBodySafeV1({ artifactKind: 'raw-response', body })
@@ -59,10 +62,11 @@ export async function avgImageResponseEvidenceV1(response: MediaTransportRespons
       }
     }
   } catch { omitted = 'policy' }
-  const byteSize = new TextEncoder().encode(text).byteLength
+  const bytes = new TextEncoder().encode(text)
+  const byteSize = bytes.byteLength
   if (byteSize > MAXIMUM_RESPONSE_EVIDENCE_BYTES) omitted = 'size'
   return omitted ? canonicalProductProductionJsonV2({ schema: 'storyforge.avg.image-provider-response-omitted', version: 1,
-    responseHash: await hashProductProductionValueV2(body), byteSize, reason: omitted, status: response.status }) : text
+    responseHash: await sha256MediaData(bytes.buffer), byteSize, reason: omitted, status: response.status }) : text
 }
 
 /** Called only inside the shared media-provider task/Harness. It receives an

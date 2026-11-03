@@ -1,7 +1,7 @@
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
+import type { ProductProductionWorldSourceCatalogV2 } from '../../src/lib/product-production/world-source'
 import type {
   AdventureContentV2,
-  ProductProductionWorldSourceCatalogV2,
   ProductRuntimePackageV1,
   WorldRelease,
 } from '../../src/lib/types'
