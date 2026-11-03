@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261104-quality028032021-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261104-quality081082083120137-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261104-quality028032021-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved measured quality028032021 receipt before reviewed runtime-media lifecycle and judge continuation changes; original observations, source hashes and historical bytes remain unchanged."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261104-quality-canon-receipt-v1.json",
         "workPackage": "NW-0B",
@@ -1053,7 +1058,9 @@
     "src/lib/types/world-sharing.ts",
     "src/lib/agent/run/hash.ts",
     "src/lib/product-platform/workspace-install.ts",
-    "src/lib/workspace/workspace-allocation.ts"
+    "src/lib/workspace/workspace-allocation.ts",
+    "src/lib/product/runtime-new-branch-projection.ts",
+    "scripts/narrative-reader-judge-continuation.mjs"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

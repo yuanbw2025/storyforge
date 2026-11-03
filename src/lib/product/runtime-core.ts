@@ -1,3 +1,4 @@
+import { createNewBranchProjectionAuthorityV1 } from './runtime-new-branch-projection'
 import { captureFormalRuntimeSourceRecordsV1, assertFormalRuntimeSourceRecordsUnchangedV1,
   verifyFormalRuntimeSourceV1, assertFormalRuntimeSourceUnchangedV1, type VerifiedFormalRuntimeSourceV1 } from './runtime-source-authority'
 export { verifyFormalRuntimeSourceV1, assertFormalRuntimeSourceUnchangedV1, type VerifiedFormalRuntimeSourceV1 } from './runtime-source-authority'
@@ -1299,6 +1300,10 @@ export async function preparePreviewProductRuntimeSessionRecordV1(
   return session;
 }
 
+const newBranchProjectionAuthorityV1 = createNewBranchProjectionAuthorityV1({
+  parseState: parseProductRuntimeState, hashStateJson, readLatestSequence: readLatestSessionEventSequenceV1,
+});
+
 /** Commit-only half of the formal session boundary. */
 export async function insertPreparedProductRuntimeSessionV1(
   session: ProductRuntimeSession,
@@ -1323,7 +1328,20 @@ export async function insertPreparedProductRuntimeSessionV1(
   }
   session.id = (await db.productRuntimeSessions.add(session)) as number;
   preparedProductRuntimeSessionsV1.delete(session);
+  newBranchProjectionAuthorityV1.recordNewInsert(session);
   return session;
+}
+
+/** Product adapters may finish a new branch's verified projection only in its
+ * original creation transaction, after the child and parent cut are bound. */
+export async function finalizeInsertedRuntimeBranchProjectionV1(input: {
+  parent: ProductRuntimeSession; child: ProductRuntimeSession; throughSequence: number; state: ProductRuntimeState;
+}): Promise<Pick<ProductRuntimeSession, 'initialStateJson' | 'runtimeHeadStateJson' | 'runtimeHeadStateHash'>> {
+  const { id, projection } = await newBranchProjectionAuthorityV1.consume(input);
+  if (await db.productRuntimeSessions.update(id, projection) !== 1) {
+    throw new Error('[runtime-branch] 新实例已不存在');
+  }
+  return projection;
 }
 
 export function assertFrozenRuntimePackageSessionV1(input: {
@@ -2280,6 +2298,7 @@ async function branchProductRuntimeSessionInternal(
   const tables = [...new Set([
     ...runtimeInstanceTablesV1(),
     ...transactionTablesForReferenceCascade('productRuntimeSessions'),
+    ...(parent.kind === 'ttrpg' ? transactionTablesForReferenceCascade('mediaBlobObjects') : []),
     ...(source.kind === 'release' ? [db.productReleases]
       : [db.productBuilds, db.productProductions, db.productProductionBriefs]),
   ])];
