@@ -428,9 +428,9 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:653` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
-| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:129` |
+| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:190` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
-| `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:943` |
+| `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:958` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
 | `node.creation` | `src/lib/node-authoring/executor.ts:395` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:200`<br/>`src/lib/outline/generation-node.ts:61` |
@@ -448,7 +448,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:134` |
 | `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:310` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
-| `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:688`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
+| `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:688`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:773` |
 | `style.learn` | `src/lib/agent/run/style-learning-durable.ts:493` |
 | `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:466` |
 | `world-group.suggest` | `src/lib/agent/run/world-suggest-durable.ts:622` |
@@ -584,4 +584,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `9a25b12d6`
+生成时间基准:commit `7bd362230`
