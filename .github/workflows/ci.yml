@@ -15,55 +15,149 @@ permissions:
 
 jobs:
   checks:
-    name: Full checks / ${{ matrix.id }}
+    name: Static, engineering and build
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - id: cli
-            script: ci
-          - id: browser
-            script: ci:e2e
     env:
       PLAYWRIGHT_FROZEN_WORKSPACE: "1"
     steps:
       - uses: actions/checkout@v7
-
       - name: Record exact source
         run: git rev-parse HEAD
-
-      - name: Setup Node
-        uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
+      - run: npm ci
+      - name: Verify CI orchestration failure controls
+        run: node --test --test-concurrency=1 scripts/quality/coverage-shards.test.mjs
+      - name: Original CI gates except the separately required complete coverage gate
+        run: node scripts/quality/run-ci-static.mjs
 
-      - name: Install dependencies
-        run: npm ci
+  coverage-plan:
+    name: Exact coverage manifest
+    runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_FROZEN_WORKSPACE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Discover every test without executing it
+        run: node scripts/quality/coverage-shards.mjs plan 4 test-results/coverage-plan.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-plan-${{ github.sha }}-${{ github.run_attempt }}
+          path: test-results/coverage-plan.json
+          if-no-files-found: error
+          retention-days: 14
 
+  coverage-shards:
+    name: Coverage collection / ${{ matrix.shard }} of 4
+    needs: coverage-plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      PLAYWRIGHT_FROZEN_WORKSPACE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-plan-${{ github.sha }}-${{ github.run_attempt }}
+          path: test-results/coverage-plan
+      # Each runner has one isolated fork at a time. A collector is not a
+      # coverage pass: only the required native merge checks the original
+      # global and per-directory thresholds over all real coverage maps.
+      - name: Collect exact shard once
+        run: node scripts/run-isolated-coverage.mjs --shard ${{ matrix.shard }}/4 --manifest test-results/coverage-plan/coverage-plan.json --output test-results/coverage-shards/shard-${{ matrix.shard }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-shard-${{ matrix.shard }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: test-results/coverage-shards/shard-${{ matrix.shard }}
+          if-no-files-found: error
+          retention-days: 14
+
+  coverage-merge:
+    name: Complete coverage and original thresholds
+    if: ${{ always() }}
+    needs: [coverage-plan, coverage-shards]
+    runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_FROZEN_WORKSPACE: "1"
+    steps:
+      - name: Require every collector to finish successfully
+        env:
+          PLAN_RESULT: ${{ needs.coverage-plan.result }}
+          SHARDS_RESULT: ${{ needs.coverage-shards.result }}
+        run: |
+          test "$PLAN_RESULT" = success
+          test "$SHARDS_RESULT" = success
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-plan-${{ github.sha }}-${{ github.run_attempt }}
+          path: test-results/coverage-plan
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-shard-*-${{ github.sha }}-${{ github.run_attempt }}
+          path: test-results/coverage-download
+      - name: Preserve each shard namespace
+        run: |
+          mkdir test-results/coverage-shards
+          for index in 1 2 3 4; do
+            mv "test-results/coverage-download/coverage-shard-$index-${{ github.sha }}-${{ github.run_attempt }}" "test-results/coverage-shards/shard-$index"
+          done
+          test -z "$(ls -A test-results/coverage-download)"
+      - name: Verify complete evidence and merge real coverage with the original config
+        run: node scripts/quality/coverage-shards.mjs merge test-results/coverage-plan/coverage-plan.json test-results/coverage-shards test-results/coverage-complete
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-complete-${{ github.sha }}-${{ github.run_attempt }}
+          path: test-results/coverage-complete
+          if-no-files-found: error
+          retention-days: 14
+
+  browser:
+    name: Full checks / browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      PLAYWRIGHT_FROZEN_WORKSPACE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Record exact source
+        run: git rev-parse HEAD
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
       - name: Install Playwright Chromium
-        if: matrix.id == 'browser'
         run: npx playwright install --with-deps chromium
-
-      # The browser runner has its own filesystem. Production-preview tests
-      # require a build here instead of relying on the CLI runner's dist/.
       - name: 构建生产预览
-        if: matrix.id == 'browser'
         run: npm run build
-
       - name: 生产版模型与嵌入代理设置
-        if: matrix.id == 'browser'
         run: PLAYWRIGHT_PRODUCTION_PREVIEW=1 npx playwright test tests/e2e/settings-proxy.spec.ts tests/e2e/codex-provider.spec.ts
-
-      # Each complete command runs once, in an independent runner. The final
-      # verify job requires both results; neither subset can make the PR green.
-      - name: 完整交付检查
-        run: npm run ${{ matrix.script }}
-
+      - name: 完整浏览器交付检查
+        run: npm run ci:e2e
       - name: Preserve browser evidence
-        if: ${{ !cancelled() && matrix.id == 'browser' }}
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: ci-browser-${{ github.sha }}
@@ -240,15 +334,13 @@ jobs:
 
   verify:
     if: ${{ always() }}
-    needs: [checks, avg-media-experimental]
+    needs: [checks, coverage-plan, coverage-shards, coverage-merge, browser, avg-media-experimental]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require every full check to succeed
+      - uses: actions/checkout@v7
+      - name: Require every complete gate to succeed
         env:
-          CHECKS_RESULT: ${{ needs.checks.result }}
-          AVG_RESULT: ${{ needs.avg-media-experimental.result }}
-          EXPECTED_AVG_RESULT: ${{ github.event_name == 'pull_request' && 'success' || 'skipped' }}
-        run: |
-          test "$CHECKS_RESULT" = success
-          test "$AVG_RESULT" = "$EXPECTED_AVG_RESULT"
+          CI_NEEDS: ${{ toJSON(needs) }}
+          CI_EVENT: ${{ github.event_name }}
+        run: node scripts/quality/run-ci-static.mjs verify
