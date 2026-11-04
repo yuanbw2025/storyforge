@@ -454,11 +454,20 @@ function CharacterBindingSelector(props: {
   )
 }
 
+function hasAuthoringAdoptionBoundary(
+  template: AuthoringNodeTemplate,
+  action: ReturnType<typeof authoringDomainActionBindingV1>,
+): boolean {
+  return action == null ? Boolean(template.writes)
+    : action.mode === 'formal-domain-action' && action.adoptionBoundary !== 'read-only-report'
+}
+
 function NodeInspector(props: { readOnly?: boolean; node: AuthoringNodeInstance | null; graph: AuthoringNodeGraph; projectId: number; worldGroupId: number | null; onChange: (graph: AuthoringNodeGraph) => void; onRemove: () => void; onRun: (nodeId: string) => void; qualityInputs: AuthoringInputEnvelope[]; qualityReady: boolean }) {
   const presets = useAIConfigStore(state => state.presets)
   if (!props.node) return <aside className="flex w-80 shrink-0 items-center justify-center border-l border-border bg-bg-surface p-6 text-center text-xs text-text-muted">选择节点后编辑参数、上下文来源和端口。</aside>
   const node = props.node
   const template = AUTHORING_NODE_BY_ID.get(node.templateId)!
+  const action = authoringDomainActionBindingV1(template)
   const updateNode = (patch: Partial<AuthoringNodeInstance>) => props.onChange({ ...props.graph, nodes: props.graph.nodes.map(item => item.id === node.id ? { ...item, ...patch } : item) })
   const updateConfig = (key: string, value: unknown) => updateNode({ config: { ...node.config, [key]: value } })
   const sourceKeys = Array.isArray(node.config.sourceKeys) ? node.config.sourceKeys.filter((item): item is string => typeof item === 'string') : []
@@ -470,7 +479,7 @@ function NodeInspector(props: { readOnly?: boolean; node: AuthoringNodeInstance 
       <div className="mb-4 flex items-start justify-between gap-2"><div><p className="text-[10px] font-semibold tracking-wide text-accent">{template.category}</p><h3 className="mt-1 text-sm font-semibold text-text-primary">{template.label}</h3></div><div className="flex items-center gap-1"><button type="button" title="收藏节点" aria-label="收藏节点" onClick={() => updateNode({ favorite: !node.favorite })} className={`rounded p-1 ${node.favorite ? 'text-amber-600' : 'text-text-muted'} hover:bg-amber-100`}><Star className="h-3.5 w-3.5" fill={node.favorite ? 'currentColor' : 'none'} /></button><button type="button" title="运行到此节点" aria-label="运行到此节点" onClick={() => props.onRun(node.id)} className="rounded p-1 text-accent hover:bg-accent/10"><Play className="h-3.5 w-3.5" /></button><button type="button" disabled={props.readOnly} title="删除节点" onClick={props.onRemove} className="rounded p-1 text-text-muted hover:bg-error/10 hover:text-error"><Trash2 className="h-3.5 w-3.5" /></button></div></div>
       <label className="mb-4 block"><span className="mb-1 block text-[10px] text-text-secondary">节点名称</span><input value={node.title} onChange={event => updateNode({ title: event.target.value })} className="w-full rounded border border-border bg-bg-base px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent" /></label>
       <p className="mb-3 text-sm leading-6 text-text-muted">{template.description}</p>
-      <p className="mb-3 rounded border border-border p-2 text-xs leading-5 text-text-secondary">{node.binding?.mode === 'live' ? '读取同一作品的已保存资料；此节点只读。' : authoringDomainActionBindingV1(template)?.mode === 'experimental-draft' ? '实验草稿：可以讨论和组合，不能直接采纳为正式作品。' : template.writes ? '生成同一作品的正式候选；作者确认采纳后才写入。' : '提供输入或处理材料，不直接写入正式作品。'}</p>
+      <p className="mb-3 rounded border border-border p-2 text-xs leading-5 text-text-secondary">{node.binding?.mode === 'live' ? '读取同一作品的已保存资料；此节点只读。' : action?.mode === 'experimental-draft' ? '实验草稿：可以讨论和组合，不能直接采纳为正式作品。' : hasAuthoringAdoptionBoundary(template, action) ? '生成同一作品的正式候选；作者确认采纳后才写入。' : '提供输入或处理材料，不直接写入正式作品。'}</p>
       {template.writes?.target === 'characters' && template.writes.fields?.length === 1 && <CharacterBindingSelector node={node} projectId={props.projectId} worldGroupId={props.worldGroupId} fieldKey={template.writes.fields[0]} onChange={binding => updateNode({ binding })} />}
       {template.id === 'source.project-context' && <section className="mb-4 rounded border border-border bg-bg-base p-2">
         <div className="mb-2 grid grid-cols-2 rounded border border-border bg-bg-surface p-0.5 text-[10px]">
@@ -1000,6 +1009,12 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
   const selectedCandidate = selectedNodeId ? candidates[selectedNodeId] : undefined
   const savedFieldReadOnly = Boolean(selectedCandidate?.creativeArtifacts?.length && !selectedCandidate.signature
     && (selectedCandidate.domain?.kind === 'worldview-field' || selectedCandidate.domain?.kind === 'story-core-field'))
+  const selectedTemplate = selectedNode && AUTHORING_NODE_BY_ID.get(selectedNode.templateId)
+  const selectedAction = selectedTemplate ? authoringDomainActionBindingV1(selectedTemplate) : null
+  const showCandidateAdoption = Boolean(selectedNode && selectedCandidate && selectedTemplate
+    && selectedNode.binding?.mode !== 'live' && selectedCandidate.domain?.kind !== 'quality-review'
+    && hasAuthoringAdoptionBoundary(selectedTemplate, selectedAction)
+    && (selectedAction == null || selectedCandidate.domain && (selectedCandidate.signature || savedFieldReadOnly)))
   const selectedAdoption = selectedNodeId ? fieldAdoptions[selectedNodeId] : undefined
   const candidateReadOnly = !canAuthor || savedFieldReadOnly || selectedAdoption?.locked === true
   const selectedVariantIndex = selectedCandidate
@@ -1049,7 +1064,7 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
                     </select>
                   </label>
                 )}
-                {selectedCandidate && selectedNode?.binding?.mode !== 'live' && Boolean(AUTHORING_NODE_BY_ID.get(selectedNode?.templateId ?? '')?.writes) && <button type="button" onClick={() => void adoptCandidate(selectedNodeId!)} disabled={(!canAuthor && !selectedAdoption?.completed) || isRunning || adopting || savedFieldReadOnly || selectedAdoption?.canContinue === false || selectedCandidate.status === 'adopted' || selectedCandidate.status === 'rejected' || (selectedCandidate.status === 'blocked' && !selectedCandidate.authorEditedAfterArtifact)} className="inline-flex items-center gap-1 rounded bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-45"><Check className="h-3 w-3" />{adopting ? '处理中…' : selectedCandidate.status === 'rejected' ? '已拒绝' : selectedCandidate.status === 'adopted' ? '已采纳' : savedFieldReadOnly ? '只读核对' : selectedAdoption?.completed ? '恢复已完成采纳' : selectedAdoption?.locked ? '继续完成采纳' : selectedCandidate.status === 'blocked' && !selectedCandidate.authorEditedAfterArtifact ? '请先编辑' : selectedCandidate.authorEditedAfterArtifact ? '本地校验并采纳' : '确认采纳'}</button>}
+                {selectedCandidate && showCandidateAdoption && <button type="button" onClick={() => void adoptCandidate(selectedNodeId!)} disabled={(!canAuthor && !selectedAdoption?.completed) || isRunning || adopting || savedFieldReadOnly || selectedAdoption?.canContinue === false || selectedCandidate.status === 'adopted' || selectedCandidate.status === 'rejected' || (selectedCandidate.status === 'blocked' && !selectedCandidate.authorEditedAfterArtifact)} className="inline-flex items-center gap-1 rounded bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-45"><Check className="h-3 w-3" />{adopting ? '处理中…' : selectedCandidate.status === 'rejected' ? '已拒绝' : selectedCandidate.status === 'adopted' ? '已采纳' : savedFieldReadOnly ? '只读核对' : selectedAdoption?.completed ? '恢复已完成采纳' : selectedAdoption?.locked ? '继续完成采纳' : selectedCandidate.status === 'blocked' && !selectedCandidate.authorEditedAfterArtifact ? '请先编辑' : selectedCandidate.authorEditedAfterArtifact ? '本地校验并采纳' : '确认采纳'}</button>}
                 {selectedCandidate && selectedNode?.binding?.mode !== 'live' && selectedCandidate.status !== 'adopted' && selectedCandidate.status !== 'rejected' && <button type="button" disabled={isRunning || adopting || candidateReadOnly} onClick={() => void rejectCandidate(selectedCandidate.nodeId)} className="rounded border border-border px-3 py-1.5 text-xs">拒绝候选</button>}
               </div>
             </div>

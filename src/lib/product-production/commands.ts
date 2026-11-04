@@ -1,3 +1,4 @@
+import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from '../open-world/creator-ending-count'
 import { deriveAvgAssemblyRecoveryBaseV1 } from '../avg/assembly-recovery'
 import { assertCurrentProductEntryV1, productCatalogIdForProductionV1 } from '../product/product-catalog'
 import {
@@ -3732,6 +3733,9 @@ export async function executeProductProductionCommand(input: {
       }
       const production = await productionInScope(scope, input.productionId!)
       preparedCreatorBrief = await verifyTextOpenWorldCreatorBriefV1(command.brief)
+      if (!isTextOpenWorldCreatorEndingCountV1(preparedCreatorBrief.draft.scale.endings)) {
+        throw new Error('[product-production] ' + TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+      }
       if (production.productType !== 'text-open-world'
         || preparedCreatorBrief.productInstanceKey !== production.productionKey
         || preparedCreatorBrief.sourceBindingHash !== inspected.bindingHash

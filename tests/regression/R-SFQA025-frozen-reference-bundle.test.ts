@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportMotionMaterialBundle } from '../../src/lib/motion-drama/delivery'
 import { createMotionDramaReferenceReleaseFixtureV1, motionReferencePngBytesV1, motionReferenceWavBytesV1 } from '../helpers/motion-drama-reference-release'
+import { installRasterDecoderForVitestV1 } from '../helpers/raster-decoder-vitest'
+
+installRasterDecoderForVitestV1()
 
 async function expectBundleRejected(f: Awaited<ReturnType<typeof createMotionDramaReferenceReleaseFixtureV1>>) {
   expect(await exportMotionMaterialBundle(f.scope, f.release.id).then(() => false, () => true)).toBe(true)

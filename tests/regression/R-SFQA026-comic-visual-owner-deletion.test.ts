@@ -9,6 +9,9 @@ import { createComicPage, deleteComicVisualSubject, saveComicVisualSubject, upda
 import { commitUploadedComicAssetV1, removeComicMediaAssetV1, selectComicMediaAssetV1 } from '../../src/lib/comic/media-service'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import * as blobStore from '../../src/lib/media/blob-store'
+import { installRasterDecoderForVitestV1 } from '../helpers/raster-decoder-vitest'
+
+installRasterDecoderForVitestV1()
 
 // Complete CRC-checked RGBA PNGs, not undecodable header-only image fixtures.
 const PIXELS = ['iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQMar4DwAC2gG+nphhRgAAAABJRU5ErkJggg==', 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGPYYlTxHwAFWgJeNUWBEgAAAABJRU5ErkJggg==']

@@ -1,3 +1,4 @@
+import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from './creator-ending-count'
 import { db } from '../db/schema'
 import { assertTextOpenWorldNewSourceV1, assertTextOpenWorldProductionNewWorkV1 } from './source-admission'
 import { assertTextOpenWorldCreatorBriefLifecycleV1 } from './creator-brief-lifecycle'
@@ -353,6 +354,9 @@ export async function createTextOpenWorldCreatorExecutionBriefV1(input: {
 }): Promise<ProductProductionBriefV3> {
   input = structuredClone(input)
   const brief = await verifyTextOpenWorldCreatorBriefV1(input.brief)
+  if (!isTextOpenWorldCreatorEndingCountV1(brief.draft.scale.endings)) {
+    fail(TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+  }
   const sourcePlan = await parseTextOpenWorldCreatorProductionSourcePlanV1(input.sourcePlan, brief)
   const actorKey = brief.draft.protagonistSourceResourceKey
   if (brief.draft.protagonistMode === 'source-character' &&
@@ -640,6 +644,9 @@ export async function createTextOpenWorldCreatorStartPreparationV1(input: {
     fail('当前 Creator Brief 已变化或不可授权')
   }
   const brief = await verifyTextOpenWorldCreatorBriefV1(briefRow.briefJson)
+  if (!isTextOpenWorldCreatorEndingCountV1(brief.draft.scale.endings)) {
+    fail(TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+  }
   assertTextOpenWorldProductionNewWorkV1(production, briefRow, '准备正式制作')
   assertTextOpenWorldNewSourceV1(brief.sourceBinding.kind, '准备正式制作')
   if (brief.revision !== briefRow.revision || brief.briefHash !== briefRow.briefHash

@@ -93,7 +93,7 @@ function manualChunkFor(moduleId: string): string | undefined {
   if (/\/src\/lib\/character-interaction\/(?:action-output-contract|action-choice-contract|narrative-action-prompt|inquiry-prompt|narrative-replanning|action-instructions|visual-design)\.ts$/.test(id)) {
     return 'character-chat-passive-contracts'
   }
-  if (/\/src\/lib\/(?:ai-town\/contracts|avg\/settings-v2|ttrpg\/authoring-settings|character-interaction\/opening-reference-prompt|product-production\/(?:task-evidence|browser-performance|media-quality-policy|first-interactive-resources))\.ts$/.test(id)) {
+  if (/\/src\/lib\/(?:ai-town\/contracts|avg\/settings-v2|ttrpg\/authoring-settings|character-interaction\/(?:opening-reference-prompt|opening-development)|product-production\/(?:task-evidence|browser-performance|media-quality-policy|first-interactive-resources))\.ts$/.test(id)) {
     return 'product-production-evidence-policies'
   }
   if (/\/src\/lib\/ttrpg\/(?:production-compiler|scenario-authoring|continuity-state)\.ts$/.test(id)) return 'ttrpg-production-compilers'
@@ -116,7 +116,7 @@ function manualChunkFor(moduleId: string): string | undefined {
   // These passive product parsers have no dependency back into the shared
   // contract/proof cycle. Split that leaf group without changing its logic
   // or moving the mutually dependent store/adoption modules across chunks.
-  if (/\/src\/lib\/(?:ttrpg\/(?:production-brief|campaign-proposal)|avg\/(?:artifact-contract|sound-production-plan)|open-world\/creator-media-contract)\.ts$/.test(id)) {
+  if (/\/src\/lib\/(?:ttrpg\/(?:production-brief|campaign-proposal)|avg\/(?:artifact-contract|sound-production-plan)|open-world\/creator-(?:media-contract|ending-count))\.ts$/.test(id)) {
     return 'product-production-plans'
   }
   // All groups retain the standard scriptChunk size budget. AI/context and

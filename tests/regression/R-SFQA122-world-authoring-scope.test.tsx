@@ -16,7 +16,7 @@ import { ToastProvider } from '../../src/components/shared/Toast'
 
 const ai = vi.hoisted(() => ({ start: vi.fn(async () => '') }))
 vi.mock('../../src/hooks/useAIStream', () => ({ useAIStream: () => ({ ...ai, isStreaming: false, output: '', error: null, tokenUsage: null }) }))
-vi.mock('../../src/components/agent/useMasterCopilot', () => ({ useMasterCopilot: () => ({ pendingCandidates: [], loading: false, busy: false }) }))
+vi.mock('../../src/components/agent/useMasterCopilot', () => ({ useMasterCopilot: () => ({ pendingCandidates: [], loading: false, busy: false, readVisibleCandidateDraft: () => undefined }) }))
 vi.mock('../../src/components/codex/CodexPanel', () => ({ default: () => null }))
 vi.mock('../../src/components/codex/CodexSearchBar', () => ({ default: () => null }))
 vi.mock('../../src/components/geography/LocationTreeMap', () => ({ default: () => null }))

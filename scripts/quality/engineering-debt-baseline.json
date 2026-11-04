@@ -37433,13 +37433,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-04A12-v5-portable-images.test.ts\",\"TS2339\",\"Property 'responseEvidenceHash' does not exist on type '{ schema: \\\"storyforge.avg.visual-image-producer-proof\\\"; version: 4; buildNumber: number; briefHash: string; planHash: string; controlEpoch: number; taskKey: string; artifactKey: string; ... 6 more ...; proofHash: string; } | AvgRetainedRawProofV1 | (Omit<...> & { ...; }) | (Omit<...> & { ...; })'.\\n  Property 'responseEvidenceHash' does not exist on type 'AvgRetainedRawProofV1'.\",\"ecdf0411d399321a35a3baf590fc8cf078e3c3cea8c8ce915ae79664d48e2f21\",157,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-AVG-04A12-v5-portable-images.test.ts\",\"TS2339\",\"Property 'responseEvidenceHash' does not exist on type 'AvgRetainedRawProofV1 | { schema: \\\"storyforge.avg.visual-image-producer-proof\\\"; version: 4; buildNumber: number; briefHash: string; planHash: string; controlEpoch: number; ... 8 more ...; proofHash: string; } | (Omit<...> & { ...; }) | (Omit<...> & { ...; })'.\\n  Property 'responseEvidenceHash' does not exist on type 'AvgRetainedRawProofV1'.\",\"ecdf0411d399321a35a3baf590fc8cf078e3c3cea8c8ce915ae79664d48e2f21\",157,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-AVG-04A12-v5-portable-images.test.ts",
         "code": "TS2339",
-        "message": "Property 'responseEvidenceHash' does not exist on type '{ schema: \"storyforge.avg.visual-image-producer-proof\"; version: 4; buildNumber: number; briefHash: string; planHash: string; controlEpoch: number; taskKey: string; artifactKey: string; ... 6 more ...; proofHash: string; } | AvgRetainedRawProofV1 | (Omit<...> & { ...; }) | (Omit<...> & { ...; })'.\n  Property 'responseEvidenceHash' does not exist on type 'AvgRetainedRawProofV1'.",
+        "message": "Property 'responseEvidenceHash' does not exist on type 'AvgRetainedRawProofV1 | { schema: \"storyforge.avg.visual-image-producer-proof\"; version: 4; buildNumber: number; briefHash: string; planHash: string; controlEpoch: number; ... 8 more ...; proofHash: string; } | (Omit<...> & { ...; }) | (Omit<...> & { ...; })'.\n  Property 'responseEvidenceHash' does not exist on type 'AvgRetainedRawProofV1'.",
         "anchor": "ecdf0411d399321a35a3baf590fc8cf078e3c3cea8c8ce915ae79664d48e2f21",
         "line": 151,
         "column": 157,
@@ -38303,13 +38303,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-visual-planning-harness.test.ts\",\"TS2339\",\"Property 'processing' does not exist on type 'AvgGeneratedReferenceSourceV2 | AvgGeneratedReferenceSourceV1 | AvgGeneratedReferenceSourceV3 | ... 5 more ... | AvgGeneratedReferenceSourceV9'.\\n  Property 'processing' does not exist on type 'AvgGeneratedReferenceSourceV7'.\",\"51693bfe9ef95aa4ce55fdbfa6f77a36f93c84fc5d639dae3a6da3c33e0ef572\",104,10]",
+      "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-visual-planning-harness.test.ts\",\"TS2339\",\"Property 'processing' does not exist on type 'AvgGeneratedReferenceSourceV1 | AvgGeneratedReferenceSourceV2 | AvgGeneratedReferenceSourceV3 | ... 5 more ... | AvgGeneratedReferenceSourceV9'.\\n  Property 'processing' does not exist on type 'AvgGeneratedReferenceSourceV7'.\",\"51693bfe9ef95aa4ce55fdbfa6f77a36f93c84fc5d639dae3a6da3c33e0ef572\",104,10]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-AVG-04A5-visual-planning-harness.test.ts",
         "code": "TS2339",
-        "message": "Property 'processing' does not exist on type 'AvgGeneratedReferenceSourceV2 | AvgGeneratedReferenceSourceV1 | AvgGeneratedReferenceSourceV3 | ... 5 more ... | AvgGeneratedReferenceSourceV9'.\n  Property 'processing' does not exist on type 'AvgGeneratedReferenceSourceV7'.",
+        "message": "Property 'processing' does not exist on type 'AvgGeneratedReferenceSourceV1 | AvgGeneratedReferenceSourceV2 | AvgGeneratedReferenceSourceV3 | ... 5 more ... | AvgGeneratedReferenceSourceV9'.\n  Property 'processing' does not exist on type 'AvgGeneratedReferenceSourceV7'.",
         "anchor": "51693bfe9ef95aa4ce55fdbfa6f77a36f93c84fc5d639dae3a6da3c33e0ef572",
         "line": 1506,
         "column": 104,
@@ -47405,21 +47405,6 @@
         "column": 12,
         "start": 361,
         "length": 24
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-COMIC1-complete-workflow.test.ts\",\"TS18047\",\"'importedBlob.data' is possibly 'null'.\",\"b2c4a5fdc08c76ff164338e0f1585691c662d7776c7889a4c84b6ce704feb559\",12,18]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-COMIC1-complete-workflow.test.ts",
-        "code": "TS18047",
-        "message": "'importedBlob.data' is possibly 'null'.",
-        "anchor": "b2c4a5fdc08c76ff164338e0f1585691c662d7776c7889a4c84b6ce704feb559",
-        "line": 236,
-        "column": 12,
-        "start": 19105,
-        "length": 18
       }
     },
     {
@@ -58898,13 +58883,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1F-production-executor.test.ts\",\"TS2367\",\"This comparison appears to be unintentional because the types '\\\"media.requirements\\\" | \\\"content.story-bible\\\" | \\\"content.cast-bible\\\" | \\\"content.adventure-architecture\\\" | \\\"content.narrative-arc-plan\\\" | \\\"content.ending-route-plan\\\" | \\\"content.main-quest-plan\\\" | ... 12 more ... | \\\"qa.playtest-strategy\\\"' and '\\\"content.adventure-quality-review.act-1\\\"' have no overlap.\",\"653950a761dbb5991f5d2d1058803e77ab97188fce2891922968b418839c04d5\",81,52]",
+      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1F-production-executor.test.ts\",\"TS2367\",\"This comparison appears to be unintentional because the types '\\\"content.source-sufficiency\\\" | \\\"content.story-bible\\\" | \\\"content.cast-bible\\\" | \\\"content.adventure-architecture\\\" | \\\"content.design\\\" | \\\"content.product-module\\\" | \\\"content.narrative-arc-scenes\\\" | ... 12 more ... | \\\"content.adventure-quality-review.structure\\\"' and '\\\"content.adventure-quality-review.act-1\\\"' have no overlap.\",\"653950a761dbb5991f5d2d1058803e77ab97188fce2891922968b418839c04d5\",81,52]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-PRODUCTPROD1F-production-executor.test.ts",
         "code": "TS2367",
-        "message": "This comparison appears to be unintentional because the types '\"media.requirements\" | \"content.story-bible\" | \"content.cast-bible\" | \"content.adventure-architecture\" | \"content.narrative-arc-plan\" | \"content.ending-route-plan\" | \"content.main-quest-plan\" | ... 12 more ... | \"qa.playtest-strategy\"' and '\"content.adventure-quality-review.act-1\"' have no overlap.",
+        "message": "This comparison appears to be unintentional because the types '\"content.source-sufficiency\" | \"content.story-bible\" | \"content.cast-bible\" | \"content.adventure-architecture\" | \"content.design\" | \"content.product-module\" | \"content.narrative-arc-scenes\" | ... 12 more ... | \"content.adventure-quality-review.structure\"' and '\"content.adventure-quality-review.act-1\"' have no overlap.",
         "anchor": "653950a761dbb5991f5d2d1058803e77ab97188fce2891922968b418839c04d5",
         "line": 8412,
         "column": 81,
@@ -58913,13 +58898,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1F-production-executor.test.ts\",\"TS2367\",\"This comparison appears to be unintentional because the types '\\\"media.requirements\\\" | \\\"content.story-bible\\\" | \\\"content.cast-bible\\\" | \\\"content.adventure-architecture\\\" | \\\"content.narrative-arc-plan\\\" | \\\"content.ending-route-plan\\\" | \\\"content.main-quest-plan\\\" | ... 12 more ... | \\\"qa.playtest-strategy\\\"' and '\\\"content.adventure-quality-review.act-2\\\"' have no overlap.\",\"1d24477c0c2462039b92759e16cba5bcf5b4158566d8a31718b5a5eae125df8b\",82,52]",
+      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1F-production-executor.test.ts\",\"TS2367\",\"This comparison appears to be unintentional because the types '\\\"content.source-sufficiency\\\" | \\\"content.story-bible\\\" | \\\"content.cast-bible\\\" | \\\"content.adventure-architecture\\\" | \\\"content.design\\\" | \\\"content.product-module\\\" | \\\"content.narrative-arc-scenes\\\" | ... 12 more ... | \\\"content.adventure-quality-review.structure\\\"' and '\\\"content.adventure-quality-review.act-2\\\"' have no overlap.\",\"1d24477c0c2462039b92759e16cba5bcf5b4158566d8a31718b5a5eae125df8b\",82,52]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-PRODUCTPROD1F-production-executor.test.ts",
         "code": "TS2367",
-        "message": "This comparison appears to be unintentional because the types '\"media.requirements\" | \"content.story-bible\" | \"content.cast-bible\" | \"content.adventure-architecture\" | \"content.narrative-arc-plan\" | \"content.ending-route-plan\" | \"content.main-quest-plan\" | ... 12 more ... | \"qa.playtest-strategy\"' and '\"content.adventure-quality-review.act-2\"' have no overlap.",
+        "message": "This comparison appears to be unintentional because the types '\"content.source-sufficiency\" | \"content.story-bible\" | \"content.cast-bible\" | \"content.adventure-architecture\" | \"content.design\" | \"content.product-module\" | \"content.narrative-arc-scenes\" | ... 12 more ... | \"content.adventure-quality-review.structure\"' and '\"content.adventure-quality-review.act-2\"' have no overlap.",
         "anchor": "1d24477c0c2462039b92759e16cba5bcf5b4158566d8a31718b5a5eae125df8b",
         "line": 8398,
         "column": 82,
@@ -60518,13 +60503,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPG3E-production-brief.test.ts\",\"TS2322\",\"Type '\\\"opening\\\"' is not assignable to type '\\\"ending\\\" | \\\"scene\\\" | \\\"choice\\\" | \\\"entry\\\"'.\",\"9b24e27276558a0535cd4cd0613dc966fb43c83dc3a34a862aba8f7ceaf1b418\",11,4]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPG3E-production-brief.test.ts\",\"TS2322\",\"Type '\\\"opening\\\"' is not assignable to type '\\\"ending\\\" | \\\"scene\\\" | \\\"entry\\\" | \\\"choice\\\"'.\",\"9b24e27276558a0535cd4cd0613dc966fb43c83dc3a34a862aba8f7ceaf1b418\",11,4]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPG3E-production-brief.test.ts",
         "code": "TS2322",
-        "message": "Type '\"opening\"' is not assignable to type '\"ending\" | \"scene\" | \"choice\" | \"entry\"'.",
+        "message": "Type '\"opening\"' is not assignable to type '\"ending\" | \"scene\" | \"entry\" | \"choice\"'.",
         "anchor": "9b24e27276558a0535cd4cd0613dc966fb43c83dc3a34a862aba8f7ceaf1b418",
         "line": 300,
         "column": 11,

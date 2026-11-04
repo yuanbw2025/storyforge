@@ -80,7 +80,7 @@ describe('Phase 3.1 · AI 说明书自动生成', () => {
 
   it('来源表独立等于全部实际运行时 keys、元数据和常量预算', () => {
     const manual = fs.readFileSync(path.join(root, 'docs/AI-FUNCTIONS-MANUAL.generated.md'), 'utf8')
-    expect(CONTEXT_SOURCES).toHaveLength(173)
+    expect(CONTEXT_SOURCES).toHaveLength(174)
     expect(CONTEXT_SOURCES.find(source => source.key === 'chatSituationRuntime')?.budgetTokens).toBe(12_000)
     expect(CONTEXT_SOURCES.find(source => source.key === 'interactionRuntime')?.budgetTokens).toBe(8000)
     assertContextManualMatchesRuntime(manual)

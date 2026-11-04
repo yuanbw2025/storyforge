@@ -398,7 +398,9 @@ export default function ReviewPanel(props: Props) {
         )}
 
         {activeTab === 'consistency' && consistencyResult && !consistencyRunning && (
-          <ConsistencyResultView result={consistencyResult} />
+          <ConsistencyResultView result={consistencyResult} legacyEvidence={Boolean(
+            consistencyMeta && consistencyMeta.mode !== 'background' && !consistencyMeta.context.citationIndexHash
+          )} />
         )}
 
         {activeTab !== 'consistency' && qualityResult && !qualityRunning && <>
@@ -427,20 +429,21 @@ export default function ReviewPanel(props: Props) {
   )
 }
 
-function ConsistencyResultView({ result }: { result: ConsistencyAuditResult }) {
+function ConsistencyResultView({ result, legacyEvidence }: { result: ConsistencyAuditResult; legacyEvidence: boolean }) {
   if (!result.findings.length) {
     return <p className="text-sm text-text-muted">本次未发现可定位的一致性问题，仍需核对关键事实和结算。</p>
   }
   return (
     <div className="space-y-3">
-      {result.findings.map((finding, index) => (
-        <div key={index} className="p-3 bg-bg-base rounded-lg border border-border">
+      {result.findings.map((finding, index) => {
+        const severity = legacyEvidence && finding.evidence.some(evidence => !evidence.position) ? 'unknown' : finding.severity
+        return <div key={index} className="p-3 bg-bg-base rounded-lg border border-border">
           <div className="flex items-center gap-2 text-xs">
             <span className={
-              finding.severity === 'hard' ? 'text-error'
-                : finding.severity === 'risk' ? 'text-warning' : 'text-text-muted'
+              severity === 'hard' ? 'text-error'
+                : severity === 'risk' ? 'text-warning' : 'text-text-muted'
             }>
-              {finding.severity === 'hard' ? '硬冲突' : finding.severity === 'risk' ? '软风险' : '信息不足'}
+              {severity === 'hard' ? '硬冲突' : severity === 'risk' ? '软风险' : '信息不足'}
             </span>
             <span className="text-text-muted">{finding.category}</span>
           </div>
@@ -449,12 +452,17 @@ function ConsistencyResultView({ result }: { result: ConsistencyAuditResult }) {
           <p className="mt-1 text-[11px] text-text-muted border-l-2 border-border pl-2">正文：“{finding.quote}”</p>
           {finding.evidence.map((evidence, evidenceIndex) => (
             <p key={evidenceIndex} className="mt-1 text-[11px] text-accent/80">
-              证据 {evidence.sourceType}#{evidence.sourceId}：“{evidence.quote}”
+              {evidence.position ? (
+                <>证据 {evidence.sourceType}#{evidence.sourceId}
+                  {' · '}{evidence.anchorId ?? `字符 ${evidence.position.start + 1}–${evidence.position.end}`}
+                  {' · '}<span title={evidence.position.versionHash}>版本 {evidence.position.versionHash.slice(0, 12)}</span>
+                </>
+              ) : '未核验来源位置的引文'}：“{evidence.quote}”
             </p>
           ))}
           {finding.suggestion && <p className="mt-1 text-xs text-accent">建议：{finding.suggestion}</p>}
         </div>
-      ))}
+      })}
     </div>
   )
 }
