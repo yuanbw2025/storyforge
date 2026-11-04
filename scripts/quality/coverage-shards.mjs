@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createVitest } from 'vitest/node'
-// Vitest 2's native blob format uses flatted, pinned by the same lock/version.
+// Vitest 4's native blob uses flatted and carries the graph for native V8 remapping.
 import { parse as parseBlob } from 'flatted'
 
 /** @typedef {{source: string, tree: string, root: string, node: string, vitest: string, provider: string, lock: string, config: string, package: string, run: string, attempt: string}} Identity */
@@ -82,7 +82,7 @@ export async function createPlan(root, count) {
     root, config: path.join(root, 'vitest.config.ts'), watch: false,
   })
   try {
-    const specs = await ctx.globTestSpecs()
+    const specs = await ctx.globTestSpecifications()
     const files = specs.map(spec => ({
       path: relativeFile(root, spec.moduleId),
       sha256: sha256(fs.readFileSync(spec.moduleId)),
@@ -96,6 +96,7 @@ export async function createPlan(root, count) {
     const shards = []
     for (let index = 1; index <= count; index++) {
       ctx.config.shard = { index, count }
+      /** @type {typeof specs} */
       const selected = await sequencer.shard(specs)
       shards.push({ index, files: selected.map(spec => relativeFile(root, spec.moduleId)).sort() })
     }
@@ -115,8 +116,16 @@ export async function verifyPlan(plan, root) {
 /** @param {string} source @returns {Blob} */
 export function decodeBlob(source) {
   const value = parseBlob(source)
-  if (!Array.isArray(value) || value.length !== 5) throw new Error('Invalid native Vitest blob')
-  const [version, files, errors, , coverage] = value
+  if (!Array.isArray(value) || value.length !== 6) throw new Error('Invalid native Vitest 4 blob')
+  const [version, files, errors, coverage, executionTime, environmentModules] = value
+  if (typeof executionTime !== 'number' || !Number.isFinite(executionTime) || executionTime < 0
+    || !environmentModules || typeof environmentModules !== 'object' || Array.isArray(environmentModules)
+    || Object.keys(environmentModules).length === 0
+    || Object.values(environmentModules).some(project => !project || typeof project !== 'object'
+      || !Array.isArray(project.external) || !project.environments || typeof project.environments !== 'object'
+      || Array.isArray(project.environments))) {
+    throw new Error('Missing native Vitest 4 module graph or execution time')
+  }
   if (typeof version !== 'string' || !Array.isArray(files) || !Array.isArray(errors)
     || !coverage || typeof coverage !== 'object' || Object.keys(coverage).length === 0) {
     throw new Error('Missing complete test results or real coverage maps')
@@ -209,8 +218,7 @@ export async function collectShard(root, shard, manifest, output) {
     '--reporter=default', '--reporter=json', '--reporter=blob',
     '--outputFile.json=' + path.join(privateDir, 'test-results.json'),
     '--outputFile.blob=' + path.join(privateDir, 'blob.json'),
-    '--pool=forks', '--poolOptions.forks.isolate=true', '--poolOptions.forks.singleFork=false',
-    '--maxWorkers=1', '--minWorkers=1',
+    '--pool=forks', '--isolate', '--maxWorkers=1',
     '--coverage.reporter=json-summary', '--coverage.reportsDirectory=' + path.join(privateDir, 'coverage'),
   ])
   equal(sourceIdentity(root), plan.identity, 'Source changed during shard execution')
@@ -230,6 +238,39 @@ export async function collectShard(root, shard, manifest, output) {
     version: 1, phase: 'collected-only', index, count, plan: sha256(encode(plan)), identity: plan.identity, files, hashes,
   })
   console.info('[coverage] shard ' + shard + ' collected; global and directory thresholds NOT YET VERIFIED')
+}
+
+/**
+ * The final provider summary must contain every explicitly included source.
+ * A native percentage check alone can silently accept an empty threshold glob.
+ * @param {Record<string, Record<string, {total: number}>>} summary
+ * @param {string} root
+ * @param {{include?: string[], thresholds?: Record<string, unknown>}} options
+ */
+export function assertExplicitCoverageScopes(summary, root, options) {
+  if (!summary.total) throw new Error('Merged coverage summary is missing')
+  const explicitFiles = (options.include ?? []).filter(pattern => !/[*?{}[\]]/.test(pattern))
+  if (!explicitFiles.length) return
+
+  const files = new Map(Object.entries(summary).filter(([file]) => file !== 'total')
+    .map(([file, metrics]) => [relativeFile(root, file), metrics]))
+  for (const file of explicitFiles) {
+    if (!((files.get(file)?.statements?.total ?? 0) > 0)) throw new Error('Missing executable coverage: ' + file)
+  }
+
+  const assigned = new Set()
+  for (const scope of Object.keys(options.thresholds ?? {}).filter(key => key.includes('/'))) {
+    const required = explicitFiles.filter(file => path.posix.matchesGlob(file, scope))
+    if (!required.length) continue
+    for (const metric of ['lines', 'functions', 'statements', 'branches']) {
+      const count = required.reduce((total, file) => total + (files.get(file)?.[metric]?.total ?? 0), 0)
+      if (!(count > 0)) throw new Error('Empty ' + metric + ' coverage denominator: ' + scope)
+    }
+    required.forEach(file => assigned.add(file))
+  }
+  for (const file of explicitFiles) {
+    if (!assigned.has(file)) throw new Error('Explicit coverage has no scope threshold: ' + file)
+  }
 }
 
 /** @param {string} root @param {string} manifest @param {string} artifacts @param {string} output */
@@ -270,7 +311,8 @@ export async function mergeShards(root, manifest, artifacts, output) {
   if (report.success !== true || !(report.numTotalTests > 0)
     || report.numFailedTests !== 0 || report.numFailedTestSuites !== 0) throw new Error('Merged tests did not pass')
   exactFiles(report.testResults.map(file => relativeFile(root, file.name)), plan.files.map(file => file.path), 'Merged test results')
-  if (!readJSON(path.join(reports, 'coverage-summary.json')).total) throw new Error('Merged coverage summary is missing')
+  assertExplicitCoverageScopes(readJSON(path.join(reports, 'coverage-summary.json')), root,
+    /** @type {{include?: string[], thresholds?: Record<string, unknown>}} */ (plan.coverage))
   fs.cpSync(reports, path.join(output, 'coverage'), { recursive: true, errorOnExist: true })
   fs.copyFileSync(results, path.join(output, 'test-results.json'), fs.constants.COPYFILE_EXCL)
   writeNewJSON(path.join(output, 'receipt.json'), {

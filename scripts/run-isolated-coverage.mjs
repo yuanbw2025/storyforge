@@ -47,11 +47,9 @@ const result = spawnSync(process.execPath, [
   '--pool=forks',
   // Instrumented production replays and the measured million-character gate
   // must not compete with another file on a shared CI runner. Each file still
-  // gets a fresh child process: one worker is not the reused singleFork mode.
-  '--poolOptions.forks.isolate=true',
-  '--poolOptions.forks.singleFork=false',
+  // remains isolated even with one worker.
+  '--isolate',
   `--maxWorkers=${workers}`,
-  `--minWorkers=${workers}`,
   `--coverage.reportsDirectory=${reportsDirectory}`,
 ], {
   cwd: process.cwd(),

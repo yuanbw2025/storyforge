@@ -4,11 +4,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { createVitest } from 'vitest/node'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { stringify } from 'flatted'
 import { parse as parseYaml } from 'yaml'
-import { collectShard, createPlan, exactFiles, mergeShards, sha256, validateCollected, verifyReceipts, writeCollectorConfig } from './coverage-shards.mjs'
+import { assertExplicitCoverageScopes, collectShard, createPlan, exactFiles, mergeShards, sha256, validateCollected, verifyReceipts, writeCollectorConfig } from './coverage-shards.mjs'
 import { requireCIResults, staticCommands } from './run-ci-static.mjs'
 
 /** @typedef {import('./coverage-shards.mjs').Plan} Plan */
@@ -17,7 +17,7 @@ const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 /** @type {Plan} */
 const plan = {
   version: 1,
-  identity: { source: 'source', tree: 'tree', root: '/fixture', node: 'node', vitest: '2.1.9', provider: '2.1.9',
+  identity: { source: 'source', tree: 'tree', root: '/fixture', node: 'node', vitest: '4.1.12', provider: '4.1.12',
     lock: 'lock', config: 'config', package: 'package', run: 'run', attempt: 'attempt' },
   coverage: { thresholds: { lines: 100 } }, testTimeout: 20000,
   files: ['a', 'b', 'c', 'd'].map(name => ({ path: 'tests/' + name + '.test.ts', sha256: name })),
@@ -28,6 +28,35 @@ const receipts = () => plan.shards.map(shard => ({
   version: 1, phase: 'collected-only', index: shard.index, count: 4,
   plan: sha256(JSON.stringify(plan)), identity: { ...plan.identity }, files: [...shard.files], hashes: {},
 }))
+
+test('explicit coverage scopes reject missing executable sources and empty branch maps', () => {
+  const root = path.join(repository, 'synthetic coverage checkout')
+  const include = ['src/run/checkpoint.ts', 'src/run/event-store.ts']
+  const scope = '{' + include.join(',') + '}'
+  const threshold = { lines: 50, functions: 40, statements: 50, branches: 50 }
+  const options = { include: ['src/legacy/**/*.ts', ...include], thresholds: { [scope]: threshold } }
+  const names = include.map(file => path.join(root, file))
+  const counts = {
+    lines: { total: 2, covered: 0 },
+    functions: { total: 1, covered: 0 },
+    statements: { total: 3, covered: 0 },
+    branches: { total: 1, covered: 0 },
+  }
+  const summary = { total: counts, [names[0]]: counts, [names[1]]: counts }
+  // Shape verification is independent from the native percentage checks.
+  assert.doesNotThrow(() => assertExplicitCoverageScopes(summary, root, options))
+  assert.throws(() => assertExplicitCoverageScopes({ total: counts, [names[0]]: counts }, root, options),
+    /Missing executable coverage: src\/run\/event-store\.ts/)
+  const emptyStatements = { ...counts, statements: { total: 0, covered: 0 } }
+  assert.throws(() => assertExplicitCoverageScopes({ ...summary, [names[1]]: emptyStatements }, root, options),
+    /Missing executable coverage: src\/run\/event-store\.ts/)
+  const emptyBranches = { ...counts, branches: { total: 0, covered: 0 } }
+  assert.throws(() => assertExplicitCoverageScopes(
+    { total: counts, [names[0]]: emptyBranches, [names[1]]: emptyBranches }, root, options),
+    /Empty branches coverage denominator/)
+  assert.throws(() => assertExplicitCoverageScopes(summary, root, { ...options, thresholds: { 'src/other/*.ts': threshold } }),
+    /Explicit coverage has no scope threshold/)
+})
 
 test('receipt gate requires every unique index and exact test manifest once', () => {
   assert.doesNotThrow(() => verifyReceipts(plan, receipts()))
@@ -63,7 +92,8 @@ test('native blob and JSON must both contain the exact files and successful resu
   const file = '/fixture/tests/a.test.ts'
   const coverageFile = '/fixture/src/logic.ts'
   const coverage = { [coverageFile]: { path: coverageFile, s: {}, f: {}, b: {}, statementMap: {}, fnMap: {}, branchMap: {} } }
-  const blob = stringify(['2.1.9', [{ filepath: file }], [], [], coverage])
+  const environmentModules = { '': { environments: {}, external: [] } }
+  const blob = stringify(['4.1.12', [{ filepath: file }], [], coverage, 0, environmentModules])
   const report = { success: true, numTotalTests: 1, numFailedTests: 0, numFailedTestSuites: 0,
     testResults: [{ name: file, status: 'passed' }] }
   assert.deepEqual(validateCollected(plan, 1, blob, report), plan.shards[0].files)
@@ -75,12 +105,16 @@ test('native blob and JSON must both contain the exact files and successful resu
     assert.throws(() => validateCollected(plan, 1, blob, { ...report, ...change }), /successful|files/)
   }
   for (const bad of [
-    stringify(['2.0.0', [{ filepath: file }], [], [], coverage]),
-    stringify(['2.1.9', [{ filepath: file }], [{ message: 'unhandled' }], [], coverage]),
-    stringify(['2.1.9', [{ filepath: file }, { filepath: file }], [], [], coverage]),
-    stringify(['2.1.9', [{ filepath: file }], [], [], {}]),
-    stringify(['2.1.9', [{ filepath: file }], [], [], { total: { lines: { pct: 100 } } }]),
-    stringify(['2.1.9', [{ filepath: '/other/tests/a.test.ts' }], [], [], coverage]),
+    stringify(['2.1.9', [{ filepath: file }], [], [], coverage]),
+    stringify(['4.1.11', [{ filepath: file }], [], coverage, 0, environmentModules]),
+    stringify(['4.1.12', [{ filepath: file }], [{ message: 'unhandled' }], coverage, 0, environmentModules]),
+    stringify(['4.1.12', [{ filepath: file }, { filepath: file }], [], coverage, 0, environmentModules]),
+    stringify(['4.1.12', [{ filepath: file }], [], {}, 0, environmentModules]),
+    stringify(['4.1.12', [{ filepath: file }], [], { total: { lines: { pct: 100 } } }, 0, environmentModules]),
+    stringify(['4.1.12', [{ filepath: '/other/tests/a.test.ts' }], [], coverage, 0, environmentModules]),
+    stringify(['4.1.12', [{ filepath: file }], [], coverage, -1, environmentModules]),
+    stringify(['4.1.12', [{ filepath: file }], [], coverage, 0, {}]),
+    stringify(['4.1.12', [{ filepath: file }], [], coverage, 0, { '': { environments: {}, external: null } }]),
   ]) {
     assert.throws(() => validateCollected(plan, 1, bad, report))
   }
@@ -134,7 +168,15 @@ test('workflow requires the collector, full native merge, static/build and full 
   assert.ok(jobs.checks.steps.some((/** @type {{run?: string}} */ step) => step.run === 'node scripts/quality/run-ci-static.mjs'))
 })
 
-/** @param {'pass'|'global'|'directory'} scenario */
+const legacyIncludes = [
+  'src/lib/registry/**/*.ts', 'src/lib/db/**/*.ts', 'src/lib/export/**/*.ts',
+  'src/lib/import/**/*.ts', 'src/lib/ai/adapters/**/*.ts', 'src/lib/ai/*.ts',
+]
+const legacyScope = '{' + legacyIncludes.join(',') + '}'
+const legacyFloors = { lines: 58, functions: 50, statements: 58, branches: 60 }
+const addedCoverageSource = 'src/lib/product-production/covered.ts'
+
+/** @param {'pass'|'global'|'directory'|'legacy-scope'} scenario */
 function fixture(scenario) {
   const parent = path.join(repository, 'test-results')
   fs.mkdirSync(parent, { recursive: true })
@@ -146,19 +188,36 @@ function fixture(scenario) {
   write('.gitignore', '.reports/\nnode_modules/\n')
   write('package.json', '{"type":"module"}\n')
   fs.copyFileSync(path.join(repository, 'package-lock.json'), path.join(root, 'package-lock.json'))
-  const thresholds = scenario === 'directory'
-    ? { lines: 75, functions: 75, statements: 75, branches: 75, 'src/strict/*.js': { lines: 100, functions: 100 } }
-    : { lines: 100, functions: 100, statements: 100, branches: 100 }
+  const legacyControl = scenario === 'legacy-scope'
+  const thresholds = legacyControl
+    ? { ...legacyFloors, [legacyScope]: legacyFloors,
+        [addedCoverageSource]: { lines: 50, functions: 40, statements: 50, branches: 50 } }
+    : scenario === 'directory'
+      ? { lines: 75, functions: 75, statements: 75, branches: 75, 'src/strict/*.js': { lines: 100, functions: 100 } }
+      : { lines: 100, functions: 100, statements: 100, branches: 100 }
+  const include = legacyControl ? [...legacyIncludes, addedCoverageSource] : ['src/**/*.js']
+  const logic = legacyControl ? 'src/lib/registry/logic.ts' : 'src/logic.js'
   write('vitest.config.ts', 'export default ' + JSON.stringify({
     test: { environment: 'node', globals: true, include: ['tests/*.test.js'],
-      coverage: { provider: 'v8', include: ['src/**/*.js'], reporter: ['json-summary'], thresholds } },
+      coverage: { provider: 'v8', include, reporter: ['json-summary'], thresholds } },
   }) + ';\n')
-  write('src/logic.js', ['a', 'b', 'c', 'd'].map((name, i) => 'export function ' + name + '() { return ' + i + ' }\n').join(''))
-  if (scenario !== 'pass') write(scenario === 'directory' ? 'src/strict/missed.js' : 'src/missed.js', 'export function missed() { return 0 }\n')
+  write(logic, ['a', 'b', 'c', 'd'].map((name, i) => 'export function ' + name + '() { return ' + i + ' }\n').join(''))
+  if (legacyControl) {
+    const functions = (/** @type {number} */ count) => Array.from({ length: count }, (_, i) =>
+      'export function branch' + i + '(flag) {\n  if (flag) return 1\n  return 0\n}\n').join('')
+    write('src/lib/export/missed.ts', functions(12))
+    write(addedCoverageSource, functions(32))
+  } else if (scenario !== 'pass') {
+    write(scenario === 'directory' ? 'src/strict/missed.js' : 'src/missed.js', 'export function missed() { return 0 }\n')
+  }
   for (const [i, name] of ['a', 'b', 'c', 'd'].entries()) {
+    const exerciseNewScope = legacyControl && i === 0
     write('tests/' + name + '.test.js', "import { appendFileSync, mkdirSync } from 'node:fs';\n"
-      + "import { " + name + " } from '../src/logic.js';\n"
-      + "test('" + name + "', () => { mkdirSync('.reports', {recursive:true}); appendFileSync('.reports/executions', '" + name + "'); expect(" + name + "()).toBe(" + i + "); });\n")
+      + "import { " + name + " } from '../" + logic + "';\n"
+      + (exerciseNewScope ? "import * as added from '../" + addedCoverageSource + "';\n" : '')
+      + "test('" + name + "', () => { mkdirSync('.reports', {recursive:true}); appendFileSync('.reports/executions', '" + name + "'); expect(" + name + "()).toBe(" + i + ");"
+      + (exerciseNewScope ? ' for (const branch of Object.values(added)) { expect(branch(true)).toBe(1); expect(branch(false)).toBe(0); }' : '')
+      + ' });\n')
   }
   const git = (/** @type {string[]} */ args) => execFileSync('git', args, { cwd: root, stdio: 'pipe' })
   git(['init', '-q'])
@@ -167,12 +226,51 @@ function fixture(scenario) {
   return root
 }
 
+/** @param {string} root @param {string} manifest @param {string} artifacts @param {string} output */
+function assertLegacyCoverageCannotBeDiluted(root, manifest, artifacts, output) {
+  // The wrapper never copies failed native reports to the delivery directory.
+  // Capture the provider's real summary in this disposable fixture instead.
+  const temporary = path.join(root, '.reports/merge-temp')
+  fs.mkdirSync(temporary)
+  const result = spawnSync(process.execPath, [path.join(repository, 'scripts/quality/coverage-shards.mjs'),
+    'merge', manifest, artifacts, output], {
+    cwd: root, encoding: 'utf8',
+    env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
+  })
+  assert.ifError(result.error)
+  const log = result.stdout + result.stderr
+  assert.equal(result.status, 1, log)
+  assert.ok(log.includes('does not meet "' + legacyScope + '" threshold'), log)
+  assert.doesNotMatch(log, /does not meet global threshold/)
+  assert.equal(fs.existsSync(path.join(output, 'receipt.json')), false)
+  const reports = fs.readdirSync(temporary).filter(name => name.startsWith('storyforge-coverage-merge-'))
+  assert.equal(reports.length, 1)
+  /** @type {Record<string, Record<string, {covered: number, total: number}>>} */
+  const summary = JSON.parse(fs.readFileSync(path.join(temporary, reports[0], 'coverage/coverage-summary.json'), 'utf8'))
+  const rows = Object.entries(summary).filter(([file]) => file !== 'total')
+    .map(([file, counts]) => ({ file: path.relative(root, file).split(path.sep).join('/'), counts }))
+  const oldRows = rows.filter(({ file }) => path.posix.matchesGlob(file, legacyScope))
+  assert.deepEqual(oldRows.map(({ file }) => file).sort(), ['src/lib/export/missed.ts', 'src/lib/registry/logic.ts'])
+  const newRow = rows.find(({ file }) => file === addedCoverageSource)
+  assert.ok(newRow, 'added coverage source missing from the native report')
+  for (const [metric, floor] of Object.entries(legacyFloors)) {
+    const expanded = summary.total[metric]
+    const oldTotal = oldRows.reduce((sum, { counts }) => sum + counts[metric].total, 0)
+    const oldCovered = oldRows.reduce((sum, { counts }) => sum + counts[metric].covered, 0)
+    /** @type {{covered: number, total: number}} */
+    const added = newRow.counts[metric]
+    assert.ok(added.total > 0 && added.covered === added.total, 'new scope must be fully covered: ' + metric)
+    assert.ok(expanded.total > 0 && expanded.covered * 100 >= expanded.total * floor, 'expanded gate should pass: ' + metric)
+    assert.ok(oldTotal > 0 && oldCovered * 100 < oldTotal * floor, 'independent legacy gate should fail: ' + metric)
+  }
+}
+
 test('real four-shard Vitest collects each original test once, merges maps and enforces global and directory thresholds', async t => {
   const originalSha = process.env.GITHUB_SHA
   // These are independent, disposable fixture repositories, not the PR checkout.
   delete process.env.GITHUB_SHA
   t.after(() => { if (originalSha === undefined) delete process.env.GITHUB_SHA; else process.env.GITHUB_SHA = originalSha })
-  for (const scenario of /** @type {const} */ (['pass', 'global', 'directory'])) {
+  for (const scenario of /** @type {const} */ (['pass', 'global', 'directory', 'legacy-scope'])) {
     await t.test(scenario, async () => {
       const root = fixture(scenario)
       try {
@@ -206,6 +304,8 @@ test('real four-shard Vitest collects each original test once, merges maps and e
           await assert.rejects(mergeShards(root, manifest, artifacts, path.join(root, '.reports/corrupt')), /Corrupt/)
           fs.appendFileSync(path.join(root, 'src/logic.js'), '// uncommitted\n')
           await assert.rejects(mergeShards(root, manifest, artifacts, path.join(root, '.reports/drift')), /unchanged committed/)
+        } else if (scenario === 'legacy-scope') {
+          assertLegacyCoverageCannotBeDiluted(root, manifest, artifacts, output)
         } else {
           await assert.rejects(mergeShards(root, manifest, artifacts, output), /Vitest failed/)
           assert.equal(fs.existsSync(path.join(output, 'receipt.json')), false, 'failed thresholds cannot publish success')
@@ -244,12 +344,17 @@ async function resolvedConfig(root, config) {
   const ctx = await createVitest('test', { root, config, watch: false })
   try {
     const testConfig = JSON.parse(JSON.stringify(ctx.config))
-    // The wrapper filename and Vitest's per-instance random UUID are runtime
-    // metadata. Normalize only the comparison copy, never the live settings.
+    // Vitest adds the active config path to its coverage exclusions. Verify
+    // that exact entry and compare every other exclusion and resolved setting.
+    const configPath = config.replaceAll(path.sep, '/')
+    const excludes = /** @type {string[]} */ (testConfig.coverage.exclude)
+    assert.equal(excludes.filter(entry => entry === configPath).length, 1)
+    testConfig.coverage.exclude = excludes.map(entry => entry === configPath ? '<resolved-config-path>' : entry)
+    // Normalize only the comparison copy, never the live settings.
     delete testConfig.config
     assert.match(testConfig.api.token, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
     testConfig.api.token = '<generated-api-token>'
-    return { test: testConfig, resolve: JSON.parse(JSON.stringify(ctx.server.config.resolve)) }
+    return { test: testConfig, resolve: JSON.parse(JSON.stringify(ctx.vite.config.resolve)) }
   } finally { await ctx.close() }
 }
 
@@ -258,6 +363,8 @@ test('collector config preserves the actual original TypeScript configuration an
   const originalBytes = fs.readFileSync(source)
   const direct = await resolvedConfig(repository, source)
   assert.ok(direct.test.coverage.thresholds)
+  assert.deepEqual(direct.test.coverage.include.slice(0, legacyIncludes.length), legacyIncludes)
+  assert.deepEqual(direct.test.coverage.thresholds[legacyScope], legacyFloors)
   assert.equal(direct.resolve.alias.find((/** @type {{find: string}} */ alias) => alias.find === '@').replacement, path.join(repository, 'src'))
   const privateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-collector-config-control-'))
   try {
