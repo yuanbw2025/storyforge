@@ -7,11 +7,57 @@ test(`${revisionPage}: restored published backup creates a new revision and pres
     const importer = new Function('p','return import(p)') as (p: string) => Promise<any>
     const helper = await importer('/storyforge/tests/helpers/open-ttrpg-production-browser.ts'),service = await importer('/storyforge/src/lib/product-production/service.ts')
     const { db } = await importer('/storyforge/src/lib/db/schema.ts'),instances = await importer('/storyforge/src/lib/product/runtime-instances.ts')
-    const f = await helper.seedOpenBrowserProductionV1()
+    const { createFreshOpenDraftFixtureV1 } = await importer('/storyforge/tests/helpers/open-ttrpg-fresh-authoring.ts')
+    const { selectTtrpgWorld, prepareTtrpgBrief } = await importer('/storyforge/src/lib/ttrpg/authoring-service.ts')
+    const { executeProductProductionCommand } = await importer('/storyforge/src/lib/product-production/commands.ts')
+    const { createWorldPackage } = await importer('/storyforge/src/lib/world-engine/world-package.ts')
+    const { installWorldSourcePackageV1 } = await importer('/storyforge/src/lib/world-engine/source-receipt.ts')
+    const { readWorldSourcePurposeDeclarationV1 } = await importer('/storyforge/src/lib/world-engine/source-purpose.ts')
+    const { scope, draft } = await createFreshOpenDraftFixtureV1(2, true)
+    const proof = draft.sourcePurpose
+    if (proof?.origin.kind !== 'local-author') throw new Error('Missing original authored world')
+    const { authorWorld } = proof.origin
+    const author = await db.projects.where('workspaceUid').equals(authorWorld.workspaceUid).first()
+    if (!author?.id) throw new Error('Missing original author workspace')
+    const world = await db.worlds.where('projectId').equals(author.id)
+      .filter((row: { code: string }) => row.code === authorWorld.worldCode).first()
+    if (!world?.id) throw new Error('Missing original author world')
+    const release = await db.worldReleases.where('worldId').equals(world.id)
+      .filter((row: { releaseUid: string; contentHash: string }) =>
+        row.releaseUid === proof.selectedRelease.releaseUid && row.contentHash === proof.selectedRelease.releaseHash).first()
+    if (!release?.id) throw new Error('Missing exact original release')
+
+    // The restored context imports only the consumer backup. Select a real
+    // installed declaration so the new revision can prove this use there.
+    const packet = await createWorldPackage(release.id, {
+      authorName: '跑团恢复用例原作者',
+      license: 'CC-BY-4.0',
+      allowedUses: { 'world-remix': false, ttrpg: true, 'character-interaction': false,
+        'ai-town': false, 'text-adventure': false, avg: false, 'text-open-world': false },
+    })
+    const installed = await installWorldSourcePackageV1(scope, packet)
+    const selected = await selectTtrpgWorld(scope, draft.revision, installed.worldReleaseId, installed.declarationHash)
+    const selectedOrigin = selected.sourcePurpose?.origin
+    if (selectedOrigin?.kind !== 'declared' || selectedOrigin.relation !== 'installed'
+      || readWorldSourcePurposeDeclarationV1(selectedOrigin).declarationHash !== installed.declarationHash) {
+      throw new Error('The consumer did not select the exact installed declaration')
+    }
+
+    const productionId = await prepareTtrpgBrief(scope, selected.revision)
+    const production = await db.productProductions.get(productionId)
+    const brief = await db.productProductionBriefs.where('[productionId+revision]')
+      .equals([productionId, production.currentBriefRevision]).first()
+    const started = await executeProductProductionCommand({ scope, productionId, command: {
+      type: 'authorize-start', commandId: 'browser.open.start', expectedStateRevision: production.stateRevision,
+      briefRevision: brief.revision, briefHash: brief.briefHash, authorizationNonce: 'author.browser.open.confirmed',
+    } })
+    if (!started.ok) throw new Error(JSON.stringify(started))
+    const f = { scope, productionId }
     await helper.runOpenBrowserProductionV1(f);await helper.runOpenBrowserProductionV1(f,true);await helper.runOpenBrowserProductionV1(f,true)
     const published = await service.publishProductProductionV1(f)
     await instances.createProductRuntimeInstanceFromSource({ scope: f.scope,source: { kind: 'release',productReleaseId: published.receipt.productReleaseId },title: '原版存档',seed: 'native.restored.original' })
     return { productionKey: (await db.productProductions.get(f.productionId)).productionKey,
+      declarationHash: installed.declarationHash,
       backup: await (await importer('/storyforge/src/lib/export/json-export.ts')).exportProjectJSON(f.scope.projectId) }
   })
   const isolated = await browser.newContext()
@@ -26,6 +72,11 @@ test(`${revisionPage}: restored published backup creates a new revision and pres
       try { projectId = await (await importer('/storyforge/src/lib/export/json-export.ts')).importProjectJSON(source.backup) }
       catch (error: any) { throw new Error(`Published backup import: ${error?.name}: ${error?.message}`) }
       const production = (await db.productProductions.where('projectId').equals(projectId).toArray()).find((p: any) => p.productionKey === source.productionKey)
+      const { readWorldSourceReceiptV1 } = await importer('/storyforge/src/lib/world-engine/source-receipt.ts')
+      const receipt = await readWorldSourceReceiptV1(
+        { projectId, worldId: production.worldId }, source.declarationHash,
+      )
+      if (receipt.captured.declaration.allowedUses.ttrpg !== true) throw new Error('Restored declaration does not allow TTRPG')
       const build = await db.productBuilds.where('[productionId+buildNumber]').equals([production.id,1]).first()
       const release = await db.productReleases.get(production.currentProductReleaseId),session = await db.productRuntimeSessions.where('productReleaseId').equals(release.id).first()
       return { scope: { projectId,worldId: production.worldId,workId: production.workId },productionId: production.id,build,release,sessionId: session.id,

@@ -170,8 +170,10 @@ it('037 preflight and restored Work note preserve exact legacy values while vali
   const [, source, , ...lines] = report.content.split('\n')
   expect(source).toMatch(/来源 v18 .*SHA-256：[a-f0-9]{64}/)
   const entries = lines.map(line => JSON.parse(line))
+  expect(state.foreshadow.ragDocumentId).toMatch(/^res:v1:foreshadow:/)
+  expect(state.foreshadow.ragDocumentId).toBe(plant.ragDocumentId)
   expect(entries).toEqual(expect.arrayContaining([
-    expect.objectContaining({ 字段: 'plantChapterId', 原值: f.first, 恢复时新库位置: `foreshadows#${state.foreshadow.id}` }),
+    expect.objectContaining({ 字段: 'plantChapterId', 原值: f.first, 资源UID: state.foreshadow.ragDocumentId, 恢复时新库位置: `foreshadows#${state.foreshadow.id}` }),
     expect.objectContaining({ 字段: 'echoChapterIds', 原值: plant.echoChapterIds }),
     expect.objectContaining({ 字段: 'revisionPairs[0].sourceChapterId', 原值: f.first, 样本ID: sample.id }),
     expect.objectContaining({ 字段: '_chapterExportId', 原值: affectedNote._chapterExportId }),

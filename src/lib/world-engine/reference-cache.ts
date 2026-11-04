@@ -1,3 +1,4 @@
+import type { UpperProductKindV1 } from '../types/product-identity';
 import Dexie from 'dexie';
 import { db } from "../db/schema";
 import type { WorkspaceScope, WorldOwnerScope, WorldRelease } from "../types";
@@ -8,6 +9,8 @@ import { createWorldReference } from './world-reference-v2';
 
 interface NarrativeProductReferenceOption {
   narrativeProductType?: 'character-interaction' | 'avg';
+  purpose?: UpperProductKindV1;
+  scope?: WorldOwnerScope;
 }
 function enhanced(option: NarrativeProductReferenceOption): boolean {
   if (option.narrativeProductType === undefined) return false;
@@ -73,10 +76,38 @@ export async function cacheWorldReferenceForProductV1(
   });
 }
 
+export async function selectWorldReferenceForProductPurposeV1(
+  scopeInput: WorkspaceScope,
+  releaseId: number,
+  purpose: UpperProductKindV1,
+  selection: NarrativeProductReferenceOption & { sourceDeclarationHash?: string } = {},
+) {
+  const scope = await resolveScope({ scope: scopeInput })
+  const original = await db.worldReleases.get(releaseId)
+  if (!original) throw new Error('所选原始世界版本不存在。')
+  await (enhanced(selection) ? createWorldReference : createWorldReferenceV1)(releaseId)
+  const { freezeWorldSourcePurposeV1, readWorldSourcePurposeDeclarationV1, revalidateWorldSourcePurposeV1 } = await import('./source-purpose')
+  const proof = await freezeWorldSourcePurposeV1({ worldReleaseId: releaseId, expectedProjectId: original.projectId,
+    expectedWorldId: original.worldId, purpose, sourceDeclarationHash: selection.sourceDeclarationHash })
+  let localId: number
+  if (proof.origin.kind === 'declared' && proof.origin.relation === 'installed') {
+    const { copyWorldSourceReceiptV1 } = await import('./source-receipt')
+    const copied = await copyWorldSourceReceiptV1(scope, { projectId: original.projectId, worldId: original.worldId },
+      readWorldSourcePurposeDeclarationV1(proof.origin).declarationHash)
+    localId = copied.worldReleaseId
+  } else {
+    localId = await cacheWorldReferenceForProductV1(scope, releaseId, selection)
+  }
+  await revalidateWorldSourcePurposeV1({ worldReleaseId: localId, expectedProjectId: scope.projectId,
+    expectedWorldId: scope.worldId, purpose, proof })
+  return { localId, sourcePurpose: proof }
+}
+
 /** A local library picker; no mutable world content is exposed to the product. */
 export async function listLocalWorldReferenceChoicesV1(option: NarrativeProductReferenceOption = {}) {
   const supportsNarrative = enhanced(option);
-  const releases = await db.worldReleases.toArray();
+  const scope = option.scope && await resolveWorldOwnerScopeLike(option.scope)
+  const releases = scope ? await db.worldReleases.where('worldId').equals(scope.worldId).toArray() : await db.worldReleases.toArray();
   const seen = new Set<string>();
   const choices: {
     id: number;
@@ -85,19 +116,42 @@ export async function listLocalWorldReferenceChoicesV1(option: NarrativeProductR
     version: number;
     hash: string;
     narrative: boolean;
+    choiceKey?: string;
+    sourceDeclarationHash?: string;
+    attribution?: string;
+    authorName?: string;
+    license?: string;
+    contentWarnings?: string[];
+    purposeAllowed?: boolean;
   }[] = [];
+  const receiptsByWorld = new Map<number, Awaited<ReturnType<typeof import('./source-receipt').listWorldSourceReceiptsV1>>>()
   for (const release of releases) {
-    if (!release.id || seen.has(release.releaseUid)) continue;
+    if ((scope && release.projectId !== scope.projectId) || !release.id || (!option.purpose && seen.has(release.releaseUid))) continue;
     try {
       const ref = await (supportsNarrative ? createWorldReference : createWorldReferenceV1)(release.id);
-      choices.push({
-        id: release.id,
-        label: release.label,
-        worldCode: ref.worldCode,
-        version: ref.releaseVersion,
-        hash: ref.releaseHash,
-        narrative: ref.version === 2,
-      });
+      const choice = { id: release.id, label: release.label, worldCode: ref.worldCode,
+        version: ref.releaseVersion, hash: ref.releaseHash, narrative: ref.version === 2 }
+      if (option.purpose) {
+        let receipts = receiptsByWorld.get(release.worldId)
+        if (!receipts) {
+          const { listWorldSourceReceiptsV1 } = await import('./source-receipt')
+          receipts = await listWorldSourceReceiptsV1({ projectId: release.projectId, worldId: release.worldId })
+          receiptsByWorld.set(release.worldId, receipts)
+        }
+        const exact = receipts.filter(row => row.worldReleaseId === release.id && row.releaseUid === release.releaseUid)
+        for (const row of exact) choices.push({ ...choice, choiceKey: `${release.id}:${row.declarationHash}`,
+          sourceDeclarationHash: row.declarationHash, attribution: row.declaration.attribution,
+          authorName: row.declaration.authorName, license: row.declaration.license,
+          contentWarnings: [...row.declaration.contentWarnings], purposeAllowed: row.declaration.allowedUses[option.purpose] })
+        const { freezeWorldSourcePurposeV1, readWorldSourcePurposeDeclarationV1 } = await import('./source-purpose')
+        const native = await freezeWorldSourcePurposeV1({ worldReleaseId: release.id, expectedProjectId: release.projectId,
+          expectedWorldId: release.worldId, purpose: option.purpose }).catch(() => null)
+        const declaration = native?.origin.kind === 'declared' ? readWorldSourcePurposeDeclarationV1(native.origin) : undefined
+        if (native) choices.push({ ...choice, choiceKey: `${release.id}:owned`, purposeAllowed: true,
+          ...(declaration ? { attribution: declaration.attribution, authorName: declaration.authorName,
+            license: declaration.license, contentWarnings: [...declaration.contentWarnings] } : {}) })
+        if (!native && !exact.length) choices.push({ ...choice, choiceKey: `${release.id}:unknown`, purposeAllowed: false })
+      } else choices.push(choice);
       seen.add(ref.releaseUid);
     } catch {
       /* Invalid releases cannot be selected; source world UI owns their diagnostics. */

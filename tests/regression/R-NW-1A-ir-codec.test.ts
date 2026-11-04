@@ -442,6 +442,8 @@ describe('NW-1A · NW-0B corpus evidence and current database lifecycle', () => 
       'src/lib/registry/types.ts', 'src/lib/registry/project-tables.ts', 'src/lib/registry/field-registry.ts', 'src/lib/types/state-card.ts',
       'tests/helpers/narrative-ir-fixture.ts', 'tests/helpers/narrative-world-evaluation.ts',
       'tests/regression/R-NW-1A-ir-codec.test.ts', 'tests/acceptance/narrative-world/ir-codec-golden-v1.json',
+      'src/lib/utils/legacy-id-array.ts',
+      'src/lib/export/registry-export.ts',
       'tests/acceptance/narrative-world/corpus-v1.json']
     const receipt = { schema: 'storyforge.narrative-ir-contract-evaluation', version: 1, workPackage: 'NW-1A', datasetVersion: 1,
       evidenceLevel: 'deterministic-contract-and-isolated-database; not-semantic-extraction-or-provider-improvement',
@@ -449,6 +451,6 @@ describe('NW-1A · NW-0B corpus evidence and current database lifecycle', () => 
       cases: corpusResults.sort((a, b) => a.family.localeCompare(b.family, 'en')),
       inputHashes: Object.fromEntries(paths.sort().map(file => [file, createHash('sha256').update(fs.readFileSync(file)).digest('hex')])) }
     if (process.env.NW_IR_REPORT) fs.writeFileSync(process.env.NW_IR_REPORT, JSON.stringify(receipt, null, 2) + '\n')
-    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/ir-contract-20261104-quality030037038042057077097-v2.json', 'utf8')))
+    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/ir-contract-20261104-quality009010011021044133134-v1.json', 'utf8')))
   })
 })

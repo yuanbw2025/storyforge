@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { useOutlineStore } from '../../src/stores/outline'
+import { captureWorkspaceContentRevisionV1 } from '../../src/lib/authoring/content-revision'
 import { sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { fingerprintSettingSource } from '../../src/lib/fact-ledger/setting-assertions'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { hashConsistencyAgentCandidateV1, isConsistencyAgentCandidateV1, readLatestConsistencyAgentRun } from '../../src/lib/agent/consistency-agent'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from '../../src/lib/agent/run/checkpoint'
-import {
-  runDurableConsistencyAuditV1,
-} from '../../src/lib/agent/run/consistency-audit-durable'
+import { refreshDurableConsistencyAuditFreshnessV1, runDurableConsistencyAuditV1 } from '../../src/lib/agent/run/consistency-audit-durable'
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
 import { resolveScopeLike, stampNewRecord } from '../../src/lib/workspace/scope'
@@ -187,6 +187,64 @@ describe('077 · 一致性引文必须属于声明的原来源', () => {
     expect(result.snapshot.projection.terminalReceiptHash).toMatch(/^[a-f0-9]{64}$/)
   })
 
+
+  it.each([true, false])('移动继承组别的章纲后，一致性报告过期并保留原已付证据（multi=%s）', async enableMultiWorld => {
+    const f = await seedConsistencyProject()
+    const { scope } = f
+    const groupId = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
+      projectId: scope.projectId, name: '主世界', description: '', type: 'primary' as const, order: 0, createdAt: now, updatedAt: now,
+    }, { owner: 'world' })) as number
+    await db.projects.update(scope.projectId, { enableMultiWorld })
+    const target = (await db.outlineNodes.get(f.targetOutlineId))!
+    const volumeId = target.parentId!
+    await db.outlineNodes.update(volumeId, { worldGroupId: groupId })
+    const blocks = []
+    for (const title of ['原故事块', '目标故事块']) {
+      blocks.push(await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
+        projectId: scope.projectId, parentId: volumeId, type: 'storyBlock' as const, title, summary: '',
+        order: blocks.length, createdAt: now, updatedAt: now,
+      }, { owner: 'work' })) as number)
+    }
+    await db.outlineNodes.update(f.targetOutlineId, { parentId: blocks[0], order: 0 })
+    const body = await db.chapters.get(f.targetChapterId)
+    const before = await db.outlineNodes.toArray()
+    expect(before.find(row => row.id === f.targetOutlineId)?.worldGroupId).toBeUndefined()
+    const worldGroupId = enableMultiWorld ? groupId : null
+    const source = { scope, worldGroupId }
+    const prior = await captureWorkspaceContentRevisionV1(source)
+    let calls = 0
+    const raw = modelReport({ sourceType: 'chapter', sourceId: 0, anchorId: 'p1' })
+    const audit = await runDurableConsistencyAuditV1(runInput(f, async messages => {
+      calls++
+      expect(messages.map(message => message.content).join('\n')).toContain('第二章 重逢')
+      return raw
+    }, { worldGroupId }))
+    expect(audit.snapshot.projection.state).toBe('completed')
+    expect(audit.candidate.context.contentRevisionHash).toBe(prior.vectorHash)
+    const originalArtifacts = await db.agentRunArtifacts.toArray()
+    const originalCheckpoints = await db.agentRunCheckpoints.toArray()
+    expect(JSON.parse(originalArtifacts.find(row => row.artifactKind === 'raw-response')!.content!).raw).toBe(raw)
+
+    const outline = useOutlineStore.getState()
+    await outline.loadAll(scope)
+    await outline.moveNodeToParent(f.targetOutlineId, blocks[1], 0, scope)
+    const after = await db.outlineNodes.toArray()
+    expect(after.filter((row, index) => JSON.stringify(row) !== JSON.stringify(before[index])).map(row => row.id))
+      .toEqual([f.targetOutlineId])
+    expect(after.find(row => row.id === f.targetOutlineId)).toMatchObject({ parentId: blocks[1], order: 0 })
+    expect(await db.chapters.get(f.targetChapterId)).toEqual(body)
+    const freshness = await refreshDurableConsistencyAuditFreshnessV1({ scope, candidate: audit.candidate })
+    expect(freshness.current).toBe(false)
+    expect(freshness.snapshot?.events[freshness.snapshot.events.length - 1]?.type).toBe('verification.staled')
+    const current = await captureWorkspaceContentRevisionV1(source)
+    expect(current.entries.filter((entry, index) => entry.contentHash !== prior.entries[index].contentHash).map(entry => entry.table))
+      .toEqual(['outlineNodes'])
+    expect(current.entries.find(entry => entry.table === 'outlineNodes')?.rowCount)
+      .toBe(prior.entries.find(entry => entry.table === 'outlineNodes')?.rowCount)
+    expect(calls).toBe(1)
+    expect(await db.agentRunArtifacts.toArray()).toEqual(originalArtifacts)
+    expect(await db.agentRunCheckpoints.toArray()).toEqual(originalCheckpoints)
+  })
 
   it('freezes real Canon and observation identities, exact request ranges and versions across reload', async () => {
     const f = await seedConsistencyProject()

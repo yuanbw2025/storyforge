@@ -12,7 +12,7 @@ import {
   scopeTransactionTables,
   stampNewRecord,
 } from "../workspace/scope";
-import { cacheWorldReferenceForProductV1 } from "../world-engine/reference-cache";
+import { selectWorldReferenceForProductPurposeV1 } from "../world-engine/reference-cache";
 import {
   DEFAULT_AVG_SETTINGS,
   parseAvgAuthoringSettingsV1,
@@ -115,12 +115,13 @@ export async function selectAvgWorldV1(
   scope: WorkspaceScope,
   revision: number,
   releaseId: number,
+  sourceDeclarationHash?: string,
 ) {
   assertCurrentProductEntryV1('upper.avg')
   const current = await readAvgDraftV1(scope);
   if (current.revision !== revision)
     throw new Error("AVG 方案已变化，请刷新后重新选择世界");
-  const localId = await cacheWorldReferenceForProductV1(scope, releaseId, { narrativeProductType: 'avg' });
+  const { localId, sourcePurpose } = await selectWorldReferenceForProductPurposeV1(scope, releaseId, 'avg', { narrativeProductType: 'avg', sourceDeclarationHash });
   return db.transaction(
     "rw",
     scopeTransactionTables(db.avgAuthoringDrafts),
@@ -131,6 +132,7 @@ export async function selectAvgWorldV1(
       const next = {
         ...row,
         worldReleaseId: localId,
+        sourcePurpose,
         revision: revision + 1,
         updatedAt: Date.now(),
       };

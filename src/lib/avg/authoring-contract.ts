@@ -86,6 +86,7 @@ export interface AvgAuthoringDraftV1 {
   settingsJson: string;
   /** A world-owned immutable local cache; no mutable world canon is copied. */
   worldReleaseId: number | null;
+  sourcePurpose?: import('../world-engine/source-purpose').WorldSourcePurposeProofV1;
   productionId: number | null;
   editorJson?: string;
   editorPreviewHash?: string;

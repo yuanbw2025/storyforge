@@ -39,3 +39,50 @@ test('home lists persisted tasks and opens the correct outline; invalid task sta
 test('home rejects an invalid backup without creating or replacing local works',async({page})=>{
  await fixture(page);await page.goto('./home/data');await page.getByLabel('导入 JSON 备份',{exact:true}).setInputFiles({name:'invalid.json',mimeType:'application/json',buffer:Buffer.from('{"projects":[]}')});await expect(page.getByRole('alert')).toBeVisible();await expect(page.getByRole('dialog')).toHaveCount(0);await page.goto('./home/library');await expect(page.getByRole('heading',{name:'潮水来信',exact:true})).toBeVisible();await expect(page.locator('.home-work-card')).toHaveCount(1)
 })
+
+test('home results retain the published Work owner across reload and a blocked navigation', async ({ page }) => {
+  await page.goto('./home/results')
+  const result = await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { createMotionDramaReferenceReleaseFixtureV1 } = await load<typeof import('../helpers/motion-drama-reference-release')>('/storyforge/tests/helpers/motion-drama-reference-release.ts')
+    const { createWorldWork, switchActiveWork } = await load<typeof import('../../src/lib/workspace/works')>('/storyforge/src/lib/workspace/works.ts')
+    const { scope, release, targetWork } = await createMotionDramaReferenceReleaseFixtureV1({ promptOnly: true })
+    const other = await createWorldWork(scope.projectId, { title: '另一个活动作品', kind: 'novel', novelProfile: 'long' })
+    if (other.id == null) throw new Error('缺少同项目对照作品')
+    await switchActiveWork(scope.projectId, other.id)
+    return { scope, release, title: targetWork.title, otherWorkId: other.id }
+  })
+  await page.reload()
+  const card = page.locator('article').filter({
+    has: page.getByRole('heading', { name: `${result.title} · v${result.release.version}`, exact: true }),
+  })
+  await expect(card.getByText(result.release.label, { exact: true })).toBeVisible()
+  await expect(page.getByText('另一个活动作品', { exact: true })).toHaveCount(0)
+  const open = card.getByRole('button', { name: '进入作品版本页', exact: true })
+  await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { coordinatePendingEditV1 } = await load<typeof import('../../src/lib/authoring/pending-edit-coordinator')>('/storyforge/src/lib/authoring/pending-edit-coordinator.ts')
+    await coordinatePendingEditV1({
+      key: 'home-results-navigation-test',
+      persist: async () => { throw new Error('隔离测试：待保存草稿失败') },
+    }).catch(() => undefined)
+  })
+  await open.click()
+  await expect(page.getByRole('alert')).toContainText('待保存草稿失败')
+  await expect(page).toHaveURL(/\/home\/results$/)
+  const readStored = () => page.evaluate(async ({ scope, release }) => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { db } = await load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts')
+    return { activeWorkId: (await db.projects.get(scope.projectId))?.activeWorkId, release: await db.creationReleases.get(release.id) }
+  }, result)
+  expect(await readStored()).toEqual({ activeWorkId: result.otherWorkId, release: result.release })
+  await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { coordinatePendingEditV1 } = await load<typeof import('../../src/lib/authoring/pending-edit-coordinator')>('/storyforge/src/lib/authoring/pending-edit-coordinator.ts')
+    await coordinatePendingEditV1({ key: 'home-results-navigation-test', persist: async () => undefined })
+  })
+  await open.click()
+  await expect(page).toHaveURL(url => url.pathname.endsWith('/motion/versions') && url.search === `?work=${result.scope.workId}`)
+  await expect(page.getByTestId('motion-drama-studio')).toBeVisible()
+  expect(await readStored()).toEqual({ activeWorkId: result.scope.workId, release: result.release })
+})

@@ -108,7 +108,8 @@ async function fixture(title = '005 first-save AVG') {
   const created = await createAvgDraftV1(title, settings)
   const draft = await selectAvgWorldV1(created.scope, 0, world.release.id!)
   if (draft.worldReleaseId == null) throw Error('Public AVG world selection returned no frozen release')
-  return { scope: created.scope, settings, releaseId: draft.worldReleaseId, title }
+  return { scope: created.scope, settings, releaseId: draft.worldReleaseId, sourcePurpose: draft.sourcePurpose,
+    originalReleaseId: world.release.id!, title }
 }
 
 async function existingProduction(f: Awaited<ReturnType<typeof fixture>>, title: string) {
@@ -128,7 +129,7 @@ async function mountDirect(f: Awaited<ReturnType<typeof fixture>>, options: { pr
     root.render(createElement(ProductProductionStudio, {
       scope: f.scope, allowedProducts: [product], initialProduct: product,
       initialProductionId: options.productionId, view: 'confirm', authorOptIn: true,
-      avgSetup: product === 'avg' ? { settings: f.settings, title: f.title, worldReleaseId: f.releaseId } : undefined,
+      avgSetup: product === 'avg' ? { settings: f.settings, title: f.title, worldReleaseId: f.releaseId, sourcePurpose: f.sourcePurpose } : undefined,
     }))
   })
   if (holdCreateResult && createdProductionId != null) await settleObservedCallsWithoutHeldCreation()
@@ -399,6 +400,62 @@ describe('005 shared Studio first-save projection', () => {
     expect(fetch).not.toHaveBeenCalled()
   }, 20_000)
 
+  it('021 keeps a second declaration for the same release selected when the first Brief save returns', async () => {
+    const f = await fixture()
+    const { createWorldPackage } = await import('../../src/lib/world-engine/world-package')
+    const { installWorldSourcePackageV1 } = await import('../../src/lib/world-engine/source-receipt')
+    const allowedUses = { 'world-remix': false, ttrpg: false, 'character-interaction': false, 'ai-town': false,
+      'text-adventure': false, avg: true, 'text-open-world': false }
+    const exact = await installWorldSourcePackageV1(f.scope, await createWorldPackage(f.originalReleaseId, {
+      authorName: '005 同版本作者', attribution: '另一份同版本声明', license: 'CC-BY-4.0', contentWarnings: [], allowedUses,
+    }))
+    expect(exact.worldReleaseId).toBe(f.releaseId)
+    await mountDirect(f)
+    await prepareAndHoldSave(false)
+    const select = host.querySelector<HTMLSelectElement>('select[aria-label="冻结 WorldRelease"]')!
+    const selectedKey = `${exact.worldReleaseId}:${exact.declarationHash}`
+    await waitFor(() => expect([...select.options].some(option => option.value === selectedKey && !option.disabled)).toBe(true))
+    await act(async () => {
+      select.value = selectedKey
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await releaseAndReadOriginalBrief()
+    expect(select.value).toBe(selectedKey)
+    expect(host.textContent).not.toContain('r1 · 草稿')
+    expect((await db.productProductionBriefs.toArray())[0]?.sourceWorldReleaseId).toBe(f.releaseId)
+    expect(fetch).not.toHaveBeenCalled()
+  }, 20_000)
+
+  it('021 can return to the already authorized cross-workspace source after picking another version', async () => {
+    const f = await fixture()
+    const other = await seedCurrentProductWorld('021 another explicitly selectable source')
+    const { createWorldPackage } = await import('../../src/lib/world-engine/world-package')
+    const { installWorldSourcePackageV1 } = await import('../../src/lib/world-engine/source-receipt')
+    const otherD = await installWorldSourcePackageV1(f.scope, await createWorldPackage(other.release.id!, {
+      authorName: '021 第二个世界作者', attribution: '第二个世界声明', license: 'CC-BY-4.0', contentWarnings: [],
+      allowedUses: { 'world-remix': false, ttrpg: false, 'character-interaction': false, 'ai-town': false,
+        'text-adventure': false, avg: true, 'text-open-world': false },
+    }))
+    expect(otherD.worldReleaseId).not.toBe(f.releaseId)
+    await mountDirect(f)
+    const select = host.querySelector<HTMLSelectElement>('select[aria-label="冻结 WorldRelease"]')!
+    const secondKey = `${otherD.worldReleaseId}:${otherD.declarationHash}`
+    await waitFor(() => expect([...select.options].some(option => option.value === secondKey && !option.disabled)).toBe(true))
+    for (const key of [secondKey, String(f.releaseId)]) {
+      await act(async () => {
+        select.value = key
+        select.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      expect(select.value).toBe(key)
+    }
+    await prepareAndHoldSave(false)
+    await releaseAndReadOriginalBrief()
+    const row = (await db.productProductionBriefs.toArray())[0]
+    expect(row.sourceWorldReleaseId).toBe(f.releaseId)
+    expect(JSON.parse(row.briefJson).source.sourcePurpose).toEqual(f.sourcePurpose)
+    expect(fetch).not.toHaveBeenCalled()
+  }, 20_000)
+
   it('does not apply the old save after the parent changes its frozen source in the same Work', async () => {
     const f = await fixture()
     const nextWorld = await seedCurrentProductWorld('005 parent subsequent source')
@@ -483,7 +540,7 @@ describe('005 shared Studio first-save projection', () => {
     holdNextProgressResult = true
     await act(async () => root.render(createElement(ProductProductionStudio, {
       scope: f.scope, initialProductionId: productionId, initialProduct: 'avg', allowedProducts: ['avg'],
-      avgSetup: { settings: f.settings, title: f.title, worldReleaseId: f.releaseId },
+      avgSetup: { settings: f.settings, title: f.title, worldReleaseId: f.releaseId, sourcePurpose: f.sourcePurpose },
     })))
     await waitFor(() => {
       expect(progressResultHeld).toBe(true)

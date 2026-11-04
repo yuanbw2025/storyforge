@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261104-quality030037038042057077097-v3.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261104-quality009010011021044133134-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261104-quality030037038042057077097-v3.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved measured quality030037038042057077097 v3 receipt before reviewed shared-source, frozen-world-contract and authoring recovery corrections; all original observations, input hashes and historical bytes remain unchanged."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261104-quality030037038042057077097-v2.json",
         "workPackage": "NW-0B",
@@ -1090,7 +1095,18 @@
     "tests/regression/R-STORY1-story-intent-projection.test.ts",
     "tests/regression/R-WORLD-D-phase-d-closure.test.ts",
     "tests/setup.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "src/lib/world-engine/source-purpose.ts",
+    "src/lib/utils/legacy-id-array.ts",
+    "src/lib/product-production/read-details.ts",
+    "src/lib/product-production/original-response-author-source.ts",
+    "src/lib/product-production/original-response-booking.ts",
+    "src/lib/product-production/recovery-policy.ts",
+    "src/lib/adventure/production-artifacts-v2.ts",
+    "src/lib/product-production/plan.ts",
+    "src/lib/product-production/task-budget-totals.ts",
+    "src/lib/narrative-domain/semantic-export-references.ts",
+    "src/lib/world-engine/narrative-derivation-portability.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

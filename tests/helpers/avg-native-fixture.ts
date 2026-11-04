@@ -13,7 +13,8 @@ import { legacyPackage } from './avg-carrier-fixture'
 import { fixture as carrierFixture } from './avg-carrier-fixture'
 import { createAvgDraftV1 } from '../../src/lib/avg/draft-service'
 import { createProductReleaseManifestV2, productReleaseIdentityHashV2 } from '../../src/lib/product-production/runtime-package'
-import { createProductReleaseLineageV1, productReleaseUidV1 } from '../../src/lib/product/source-contracts'
+import { productReleaseUidV1 } from '../../src/lib/product/source-contracts'
+import { createHistoricalFixtureReleaseLineageV1 } from './product-release-v1'
 import type { AvgPresentationCue, FrozenRuntimeMediaAssetV2 } from '../../src/lib/types'
 import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
 import { acceptProductBuildArtifact } from '../../src/lib/product-production/artifact-store'
@@ -84,7 +85,7 @@ export async function seedAvgNativeRelease() {
     sourceWorldRelease: f.release.sourceWorldRelease, runtimePackage, packageHash: await hashProductProductionValueV2(runtimePackage), productionProvenance, sourceContracts }
   const releaseHash = await productReleaseIdentityHashV2(body)
   const { sourcePlan, confirmedBrief, sourceManifest } = sourceContracts
-  const lineage = await createProductReleaseLineageV1({ productType: 'avg', productInstanceKey: sourcePlan.productInstanceKey,
+  const lineage = await createHistoricalFixtureReleaseLineageV1({ productType: 'avg', productInstanceKey: sourcePlan.productInstanceKey,
     releaseUid: productReleaseUidV1({ productType: 'avg', productInstanceKey: sourcePlan.productInstanceKey, releaseVersion: 1, releaseHash }),
     releaseVersion: 1, releaseHash, parentRelease: null, worldReference: sourcePlan.worldReference, sourcePlan, confirmedBrief, sourceManifest,
     build: f.release.lineage.build, quality: f.release.lineage.quality, compatibility: f.release.lineage.compatibility, createdAt: f.release.lineage.createdAt })

@@ -7,6 +7,7 @@ import {
 import Dexie from 'dexie'
 import { db } from '../db/schema'
 import { useAIConfigStore } from '../../stores/ai-config'
+import { useCodexStore } from '../../stores/codex'
 import { usePromptStore } from '../../stores/prompt'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
 import { resolveRequestConfig, type ChatResult } from '../ai/client'
@@ -135,6 +136,9 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
     configOverrides: { maxTokens: skill.maxOutputTokens } }
   const resolved = resolveRequestConfig(config, metadata)
   if (!isAIConfigReady(resolved.config)) fail(getAIConfigRequiredMessage(resolved.config))
+  // A fresh World may reach document import before opening Codex. Initialize its
+  // built-in definitions through the store before the registered read-only source.
+  if (session.importTarget === 'project') await useCodexStore.getState().ensureBuiltIns(scope)
   const worldGroupId = session.targetWorldGroupId ?? null
   const sourceKeys = session.importTarget === 'project' ? ['manualText', CATEGORIES] : ['manualText']
   const assembled = await assembleContext({ scope, projectId: input.projectId, worldGroupId, sourceKeys,

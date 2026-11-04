@@ -2813,6 +2813,10 @@ async function ensurePlan(input: {
       }
     }
   }
+  const resumesCompletedProduction = state.production.status === 'preview-ready'
+    && ['preview-ready', 'release-ready'].includes(state.build.status)
+    && currentPlan != null && currentPlan.controlEpoch < plan.controlEpoch
+    && parsedObject(state.build.failureJson).code === 'user-resumed'
   const outgoing = await db.productBuilds.get(state.build.id!)
   if (!outgoing) throw new Error('[product-production-scheduler] Plan 提交前 Build 不存在')
   const claimAccounting = await prepareStoppedClaimAccountingV1(input.scope, outgoing)
@@ -2822,6 +2826,19 @@ async function ensurePlan(input: {
       || build.planHash !== outgoing.planHash || build.budgetLedgerJson !== outgoing.budgetLedgerJson
       || !await stoppedClaimWitnessesCurrentV1(claimAccounting.witnesses)) {
       throw new Error('[product-production-scheduler] Plan CAS 已过期')
+    }
+    const resumedProduction = resumesCompletedProduction
+      ? await db.productProductions.get(input.productionId) : null
+    if (resumesCompletedProduction && (!resumedProduction
+      || resumedProduction.status !== state.production.status
+      || resumedProduction.stateRevision !== state.production.stateRevision
+      || resumedProduction.controlEpoch !== build.controlEpoch
+      || resumedProduction.currentBuildNumber !== build.buildNumber
+      || resumedProduction.currentBriefRevision !== build.briefRevision
+      || resumedProduction.projectId !== build.projectId
+      || resumedProduction.worldId !== build.worldId
+      || resumedProduction.workId !== build.workId)) {
+      throw new Error('[product-production-scheduler] 恢复 Production CAS 已过期')
     }
     await assertOpenWorldSchedulingSourceInTransactionV1(build)
     await db.productBuildArtifacts.where('buildId').equals(build.id!).filter(row => (
@@ -2835,6 +2852,13 @@ async function ensurePlan(input: {
       budgetLedgerJson: canonicalProductProductionJsonV2(emptyLedger(claimAccounting.ledger.attempts)),
       stateRevision: build.stateRevision + 1, startedAt: build.startedAt ?? Date.now(), updatedAt: Date.now(),
     })
+    if (resumedProduction) {
+      // Rebinding a legitimately resumed sealed Build starts a new local
+      // verification epoch. Keep Production and Build active atomically.
+      await db.productProductions.update(resumedProduction.id!, {
+        status: 'producing', stateRevision: resumedProduction.stateRevision + 1, updatedAt: Date.now(),
+      })
+    }
   })
   if (commitEpochCarry) await commitEpochCarry(commitPlan)
   else await commitPlan()

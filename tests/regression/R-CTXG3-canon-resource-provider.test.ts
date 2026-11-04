@@ -114,6 +114,7 @@ async function seedSixDomains() {
   const arcIds: number[] = []
   for (let index = 0; index < 3; index++) {
     arcIds.push(await addScoped(scope, 'storyArcs', {
+      worldGroupId: primaryGroupId,
       name: index === 2 ? '最后创建的镜海支线' : `故事线 ${index + 1}`,
       type: index === 0 ? 'main' : 'sub',
       description: `第 ${index + 1} 条故事线`,

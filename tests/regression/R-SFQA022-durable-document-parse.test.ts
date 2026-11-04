@@ -8,7 +8,6 @@ import {
 import { confirmDocumentImportChunkV1 } from '../../src/lib/import/document-parse-adoption'
 import { quickHash } from '../../src/lib/import/chunker'
 import { hashImportChunkTextV1, useImportSessionStore } from '../../src/stores/import-session'
-import { useCodexStore } from '../../src/stores/codex'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { Character } from '../../src/lib/types'
@@ -282,12 +281,10 @@ it('022 F3 public import records review evidence without writing and reloads wit
   expect(post).toHaveBeenCalledTimes(1)
 })
 
-it('022 F3 verifies the scoped catalog for project Codex candidates and does not give it to reference parsing', async () => {
+it('022 F3 initializes the scoped Codex catalog on first project import and leaves reference parsing isolated', async () => {
   const projectImport = await fixture()
-  await useCodexStore.getState().ensureBuiltIns(projectImport.scope)
-  const category = (await db.codexCategories.toArray()).find(row => row.builtInKey)!
-  expect(category.builtInKey).toBeTruthy()
-  const categoryRef = 'builtin:' + category.builtInKey
+  expect(await db.codexCategories.count()).toBe(0)
+  const categoryRef = 'builtin:city'
   const rawResult = JSON.stringify({ codexCandidates: [
     { categoryRef, name: '雾港守望者', evidenceQuote: '雾港守望者', description: '原文有据' },
     { categoryRef, name: '模型自造', evidenceQuote: '正文无此凭据' },
@@ -297,14 +294,20 @@ it('022 F3 verifies the scoped catalog for project Codex candidates and does not
   await runSession(projectImport.input)
   const projectEvidence = await readPendingDocumentImportV1(projectImport.input)
   expect(projectEvidence?.candidate?.result.codexCandidates?.map(item => item.name)).toEqual(['雾港守望者'])
+  expect(post).toHaveBeenCalledTimes(1)
   expect(String(post.mock.calls[0][1]?.body)).toContain(categoryRef)
+  expect(await db.codexCategories.where('builtInKey').equals('city').toArray()).toMatchObject([{
+    projectId: projectImport.scope.projectId, worldId: projectImport.scope.worldId,
+  }])
   expect(await db.codexEntries.count()).toBe(0)
 
-  const ref = await fixture('reference', 'quick', projectImport)
+  const ref = await fixture('reference', 'quick')
   await runSession(ref.input)
   const referenceEvidence = await readPendingDocumentImportV1(ref.input)
   expect(referenceEvidence?.candidate?.result.codexCandidates).toEqual([])
+  expect(post).toHaveBeenCalledTimes(2)
   expect(String(post.mock.calls[1][1]?.body)).not.toContain(categoryRef)
+  expect(await db.codexCategories.where('projectId').equals(ref.scope.projectId).count()).toBe(0)
 })
 
 it('022 F3 atomically publishes the reviewed reference, then runs deep analysis on the exact original bytes once', async () => {

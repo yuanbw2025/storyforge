@@ -3,6 +3,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
+import {
+  createStaticBindingResolver, staticCallArguments, staticPropertyKey, staticTransportKind, unwrapStaticExpression,
+} from './static-guard-bindings.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const registryPath = 'src/lib/agent/ai-entry-registry.json'
@@ -41,12 +44,9 @@ function walk(dir, acc = []) {
   return acc
 }
 
-function propertyName(node) {
-  if (ts.isIdentifier(node) || ts.isStringLiteral(node)) return node.text
-  return null
-}
-
+/** @param {ts.Node | undefined} node @returns {string[]} */
 function literalStrings(node) {
+  node = unwrapStaticExpression(node)
   if (!node) return []
   if (ts.isStringLiteralLike(node)) return [node.text]
   if (ts.isConditionalExpression(node)) {
@@ -55,103 +55,65 @@ function literalStrings(node) {
   return []
 }
 
+/** @param {ts.Node | undefined} node @param {string} name */
 function objectProperty(node, name) {
+  node = unwrapStaticExpression(node)
   if (!node || !ts.isObjectLiteralExpression(node)) return undefined
   const property = node.properties.find(item => (
-    ts.isPropertyAssignment(item) && propertyName(item.name) === name
+    ts.isPropertyAssignment(item) && staticPropertyKey(item.name) === name
   ))
-  return property?.initializer
+  return /** @type {ts.PropertyAssignment | undefined} */ (property)?.initializer
 }
 
 function lineOf(ast, node) {
   return ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1
 }
 
+/** @param {string} source */
 export function analyzeAIEntrySource(source, file = 'entry.tsx') {
-  const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : file.endsWith('.mjs') ? ts.ScriptKind.JS : ts.ScriptKind.TS
   const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind)
-  const hookFactories = new Set(['useAIStream'])
-  const hookVariables = new Set()
-  const startAliases = new Set()
-  const rawIdentifiers = new Set(['chat', 'streamChat'])
-  const rawNamespaces = new Set()
-  const registeredExecutors = new Set(['executeRegisteredAIEntryV1'])
-  const frozenExecutors = new Set(['executeFrozenFormalAIEntryV1'])
-  const audioExecutors = new Set(['executeFrozenFormalAudioEntryV1'])
-  const formalNamespaces = new Set()
-  const streamExecutors = new Set(['streamRegisteredAIEntryV1'])
-  const voiceGuards = new Set(['assertVoiceTransport'])
+  const bindings = createStaticBindingResolver(ast)
+  const formalModule = 'src/lib/agent/formal-ai-entry'
+  /** @type {Array<{ entryId: string, file: string }>} */
   const transports = []
+  /** @type {Array<{ entryId: string, file: string, line: number, categories: string[] }>} */
   const calls = []
+  /** @type {string[]} */
   const violations = []
-  const typedAIStartFile = source.includes('UseAIStreamReturn') || source.includes('useAIStream')
 
-  for (const statement of ast.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue
-    const moduleName = statement.moduleSpecifier.text
-    const clause = statement.importClause
-    if (!clause?.namedBindings) continue
-    if (moduleName.endsWith('/contract') && ts.isNamedImports(clause.namedBindings)) {
-      for (const specifier of clause.namedBindings.elements) {
-        if ((specifier.propertyName?.text ?? specifier.name.text) === 'assertVoiceTransport') voiceGuards.add(specifier.name.text)
-      }
+  /**
+   * @param {import('./static-guard-bindings.mjs').StaticOrigin} origin
+   * @param {import('./static-guard-bindings.mjs').StaticSegment[]} segments
+   */
+  function classify(origin, segments) {
+    const transport = staticTransportKind(bindings, origin, segments)
+    if (transport) return transport === 'hook-start' ? transport : 'raw'
+    if (origin.kind === 'local') {
+      return file.startsWith('scripts/ttrpg-local-tts/') && origin.name === 'assertVoiceTransport'
+        && segments.length === 0 ? 'limited-voice' : null
     }
-    if (moduleName.endsWith('/useAIStream') || moduleName.endsWith('hooks/useAIStream')) {
-      if (ts.isNamedImports(clause.namedBindings)) {
-        for (const specifier of clause.namedBindings.elements) {
-          if ((specifier.propertyName?.text ?? specifier.name.text) === 'useAIStream') hookFactories.add(specifier.name.text)
-        }
-      }
+    if (origin.kind !== 'import' || segments.length !== 1) return null
+    const member = segments[0].key
+    if (origin.module === formalModule) {
+      if (member === 'executeRegisteredAIEntryV1') return 'registered'
+      if (member === 'executeFrozenFormalAIEntryV1') return 'frozen'
+      if (member === 'executeFrozenFormalAudioEntryV1') return 'frozen-audio'
+      if (member === 'streamRegisteredAIEntryV1' && file !== 'src/hooks/useAIStream.ts') return 'hook-start'
     }
-    if (moduleName.endsWith('/ai/client') || moduleName.endsWith('lib/ai/client')) {
-      if (ts.isNamespaceImport(clause.namedBindings)) rawNamespaces.add(clause.namedBindings.name.text)
-      if (ts.isNamedImports(clause.namedBindings)) {
-        for (const specifier of clause.namedBindings.elements) {
-          const imported = specifier.propertyName?.text ?? specifier.name.text
-          if (imported === 'chat' || imported === 'streamChat') rawIdentifiers.add(specifier.name.text)
-        }
-      }
+    if (member === 'assertVoiceTransport' && ['src/lib/longform-voice/contract', 'src/lib/agent/limited-ai-transport'].includes(origin.module)) {
+      return 'limited-voice'
     }
-    if (moduleName.endsWith('/agent/formal-ai-entry')
-      || moduleName.endsWith('lib/agent/formal-ai-entry')) {
-      if (ts.isNamespaceImport(clause.namedBindings)) formalNamespaces.add(clause.namedBindings.name.text)
-      if (ts.isNamedImports(clause.namedBindings)) {
-        for (const specifier of clause.namedBindings.elements) {
-          const imported = specifier.propertyName?.text ?? specifier.name.text
-          if (imported === 'executeRegisteredAIEntryV1') registeredExecutors.add(specifier.name.text)
-          if (imported === 'executeFrozenFormalAIEntryV1') frozenExecutors.add(specifier.name.text)
-          if (imported === 'executeFrozenFormalAudioEntryV1') audioExecutors.add(specifier.name.text)
-          if (imported === 'streamRegisteredAIEntryV1') streamExecutors.add(specifier.name.text)
-        }
-      }
-    }
+    return null
   }
 
-  function audioExecutor(expression) {
-    if (ts.isIdentifier(expression)) return audioExecutors.has(expression.text)
-    const owner = (ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) && expression.expression
-    if (!owner || !ts.isIdentifier(owner) || !formalNamespaces.has(owner.text)) return false
-    const member = ts.isPropertyAccessExpression(expression) ? propertyName(expression.name) : propertyName(expression.argumentExpression)
-    return member === 'executeFrozenFormalAudioEntryV1'
-  }
-  function collectBindings(node) {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && audioExecutor(node.initializer)) audioExecutors.add(node.name.text)
-    if (ts.isVariableDeclaration(node) && node.initializer && ts.isCallExpression(node.initializer)
-      && ts.isIdentifier(node.initializer.expression) && hookFactories.has(node.initializer.expression.text)) {
-      if (ts.isIdentifier(node.name)) hookVariables.add(node.name.text)
-      if (ts.isObjectBindingPattern(node.name)) {
-        for (const element of node.name.elements) {
-          if (propertyName(element.propertyName ?? element.name) === 'start' && ts.isIdentifier(element.name)) {
-            startAliases.add(element.name.text)
-          }
-        }
-      }
-    }
-    ts.forEachChild(node, collectBindings)
-  }
-  collectBindings(ast)
-
-  function registerGovernedCall(node, entryNode, metaNode, callerNode) {
+  /**
+   * @param {ts.CallExpression} node
+   * @param {ts.Node | undefined} entryNode
+   * @param {ts.Node | undefined} metaNode
+   * @param {ts.Node | undefined} [callerNode]
+   */
+  function registerGovernedCall(node, entryNode, metaNode, callerNode, callerRequired = false) {
     const entryIds = literalStrings(entryNode)
     const categoryNode = objectProperty(metaNode, 'category')
     const categories = literalStrings(categoryNode)
@@ -164,7 +126,7 @@ export function analyzeAIEntrySource(source, file = 'entry.tsx') {
       violations.push(`${file}:${lineOf(ast, node)} 正式 AI 调用缺少可机验 category`)
       return
     }
-    if (callerNode) {
+    if (callerRequired) {
       const callers = literalStrings(callerNode)
       if (callers.length !== 1 || callers[0] !== file) {
         violations.push(`${file}:${lineOf(ast, node)} 冻结正式 AI 调用必须用等于真实文件路径的单一 caller 字面量`)
@@ -174,43 +136,39 @@ export function analyzeAIEntrySource(source, file = 'entry.tsx') {
     calls.push({ file, line: lineOf(ast, node), entryId: entryIds[0], categories })
   }
 
+  /** @param {ts.Node} node */
   function visit(node) {
     if (ts.isCallExpression(node)) {
-      const expression = node.expression
-      if (ts.isIdentifier(expression) && voiceGuards.has(expression.text)) {
-        const ids = literalStrings(node.arguments[0])
-        const callers = literalStrings(node.arguments[1])
-        if (ids.length !== 1 || callers.length !== 1 || callers[0] !== file) {
-          violations.push(`${file}:${lineOf(ast, node)} 有限语音入口必须绑定字面量 entryId 和真实 caller`)
-        } else transports.push({ entryId: ids[0], file })
-      }
-      if (ts.isIdentifier(expression) && registeredExecutors.has(expression.text)) {
-        registerGovernedCall(node, node.arguments[0], node.arguments[3])
-      } else if (ts.isIdentifier(expression) && frozenExecutors.has(expression.text)) {
-        registerGovernedCall(node, node.arguments[0], node.arguments[6], node.arguments[3])
-      } else if (audioExecutor(expression)) {
-        registerGovernedCall(node, node.arguments[0], node.arguments[5], node.arguments[3])
-      } else if (ts.isIdentifier(expression) && streamExecutors.has(expression.text)
-        && file !== 'src/hooks/useAIStream.ts') {
-        registerGovernedCall(node, objectProperty(node.arguments[2], 'formalEntryId'), node.arguments[2])
-      } else if (ts.isIdentifier(expression) && startAliases.has(expression.text)) {
-        registerGovernedCall(node, objectProperty(node.arguments[2], 'formalEntryId'), node.arguments[2])
-      } else if (ts.isPropertyAccessExpression(expression) && propertyName(expression.name) === 'start') {
-        const owner = ts.isIdentifier(expression.expression) ? expression.expression.text : ''
-        if (hookVariables.has(owner) || typedAIStartFile) {
-          registerGovernedCall(node, objectProperty(node.arguments[2], 'formalEntryId'), node.arguments[2])
-        }
-      }
-
-      if (ts.isIdentifier(expression) && rawIdentifiers.has(expression.text)) {
-        violations.push(`${file}:${lineOf(ast, node)} 禁止绕过集中执行器调用 ${expression.text}()`)
-      }
-      if (ts.isPropertyAccessExpression(expression)) {
-        const owner = ts.isIdentifier(expression.expression) ? expression.expression.text : ''
-        const member = propertyName(expression.name)
-        if ((rawNamespaces.has(owner) && (member === 'chat' || member === 'streamChat'))
-          || ((member === 'chat' || member === 'streamChat') && file.startsWith('src/components/'))) {
-          violations.push(`${file}:${lineOf(ast, node)} 禁止 member/namespace 模型直连 ${owner}.${member}()`)
+      const detected = new Set()
+      for (const origin of bindings.resolve(node.expression)) {
+        const { segments, args } = staticCallArguments(origin, node)
+        const role = classify(origin, segments)
+        if (!role) continue
+        // Conditional aliases can resolve to the same executor with different
+        // bound authority arguments. Coalesce identical proof inputs, not roles.
+        const proof = role === 'registered' ? [args[0], args[3]]
+          : role === 'frozen' ? [args[0], args[3], args[6]]
+          : role === 'frozen-audio' ? [args[0], args[3], args[5]]
+          : role === 'limited-voice' ? [args[0], args[1]]
+          : role === 'hook-start' ? [args[2]] : []
+        const key = JSON.stringify([role, ...proof.map(value => value?.getText(ast) ?? null)])
+        if (detected.has(key)) continue
+        detected.add(key)
+        if (role === 'raw') {
+          const ambiguity = origin.uncertainMutable ? '（可变别名仍可能指向此入口）' : ''
+          violations.push(`${file}:${lineOf(ast, node)} 禁止 member/namespace 或别名绕过集中执行器调用 ${node.expression.getText(ast)}()${ambiguity}`)
+        } else if (role === 'limited-voice') {
+          const ids = literalStrings(args[0])
+          const callers = literalStrings(args[1])
+          if (ids.length !== 1 || callers.length !== 1 || callers[0] !== file) {
+            violations.push(`${file}:${lineOf(ast, node)} 有限语音入口必须绑定字面量 entryId 和真实 caller`)
+          } else transports.push({ entryId: ids[0], file })
+        } else if (role === 'registered') {
+          registerGovernedCall(node, args[0], args[3])
+        } else if (role === 'frozen' || role === 'frozen-audio') {
+          registerGovernedCall(node, args[0], args[role === 'frozen' ? 6 : 5], args[3], true)
+        } else {
+          registerGovernedCall(node, objectProperty(args[2], 'formalEntryId'), args[2])
         }
       }
     }
@@ -269,6 +227,7 @@ const scannedFiles = [
   // hook; keep its literal entry/category binding under the same machine gate.
   // Import candidate transport is governed even though its owner is not a UI component.
   'src/lib/import/document-parse-durable.ts',
+  'src/lib/reference-analysis/pipeline.ts',
   'src/lib/open-world/creator-brief.ts',
   // G5-06 Creator Artifact Agent edits are a formal durable service; direct
   // edits share its candidate pipeline but never cross this AI entry.
@@ -395,6 +354,129 @@ const audioMemberAliasSelfTest = analyzeAIEntrySource(
   'src/lib/AudioMember.ts',
 )
 if (audioMemberAliasSelfTest.calls.length !== 1 || audioMemberAliasSelfTest.violations.length) failures.push('守卫自测失败：未识别 namespace member 音频 alias')
+
+const equivalentEntrySelfTest = analyzeAIEntrySource(`
+  import * as hooks from '../hooks/useAIStream'
+  import * as transport from '../lib/ai/client'
+  import { chat as rawChat } from '../lib/ai/client'
+  import * as formal from '../lib/agent/formal-ai-entry'
+  const client = transport
+  client['chat']([], {})
+  const { ['streamChat']: stream } = client
+  const indirect = stream
+  indirect([], {})
+  const rawAlias = rawChat
+  rawAlias([], {})
+  const { start: begin } = hooks['useAIStream']()
+  begin([], undefined, { category: 'x' })
+  const running = hooks.useAIStream()
+  const sender = running['start'].bind(running)
+  sender([], undefined, { category: 'x' })
+  const { ['executeRegisteredAIEntryV1']: admitted } = formal
+  admitted('fixture.allowed', [], {}, { ['category']: 'x' })
+  const partiallyBound = admitted.bind(formal, 'fixture.bound')
+  partiallyBound([], {}, { category: 'x' })
+  const runFrozen = formal['executeFrozenFormalAIEntryV1']
+  runFrozen.call(formal, 'fixture.frozen', snapshot, skill, 'forged.ts', [], {}, { category: 'x' })
+  const { streamRegisteredAIEntryV1: readStream } = formal
+  readStream.apply(formal, [[], {}, { formalEntryId: 'fixture.stream', category: 'x' }])
+`, 'src/components/EquivalentEntry.tsx')
+if (equivalentEntrySelfTest.violations.filter(item => item.includes('集中执行器')).length !== 3
+  || equivalentEntrySelfTest.violations.filter(item => item.includes('entryId')).length !== 2
+  || equivalentEntrySelfTest.violations.filter(item => item.includes('caller 字面量')).length !== 1
+  || equivalentEntrySelfTest.calls.map(call => call.entryId).join(',') !== 'fixture.allowed,fixture.bound,fixture.stream') {
+  failures.push('守卫自测失败：等价导入/namespace/局部 alias/literal/解构调用识别失效')
+}
+const lexicalEntrySelfTest = analyzeAIEntrySource(`
+  import { useAIStream as create, type UseAIStreamReturn as OwnedStream } from '../hooks/useAIStream'
+  import { chat as raw } from '../lib/ai/client'
+  type Alias = Pick<OwnedStream, 'start'>
+  function allowed(input: { transport: Alias }) {
+    const { transport } = input
+    transport['start']([], undefined, { formalEntryId: 'fixture.typed', category: 'x' })
+  }
+  function unrelated(create, raw) {
+    const harmless = create()
+    harmless.start()
+    raw()
+  }
+  const client = { chat() {}, streamChat() {}, start() {} }
+  client.chat(); client['streamChat'](); client.start()
+  // raw() is a comment, not an invocation.
+  const text = "client.chat(); raw()"
+  const chosen = 'start'; create()[chosen]([], {}, {})
+`, 'src/components/LexicalEntry.tsx')
+if (lexicalEntrySelfTest.violations.length || lexicalEntrySelfTest.calls.map(call => call.entryId).join(',') !== 'fixture.typed') {
+  failures.push('守卫自测失败：作用域遮蔽、无关同名属性或登记类型入口被误判')
+}
+
+const alternateAuthoritySelfTest = analyzeAIEntrySource(`
+  import { executeFrozenFormalAIEntryV1 as run } from '../lib/agent/formal-ai-entry'
+  import { useAIStream as make } from '../hooks/useAIStream'
+  const send = flag
+    ? run.bind(null, 'fixture.authorized', snapshot, skill, 'src/components/BranchAuthority.tsx')
+    : run.bind(null, 'fixture.authorized', snapshot, skill, 'forged.ts')
+  send([], {}, { category: 'x' })
+  function actual(ai: ReturnType<typeof make>) { ai.start([], undefined, {}) }
+  function unrelated(make: () => { start: () => void }) {
+    function innocent(ai: ReturnType<typeof make>) { ai.start() }
+    innocent(make())
+  }
+`, 'src/components/BranchAuthority.tsx')
+if (alternateAuthoritySelfTest.calls.map(call => call.entryId).join(',') !== 'fixture.authorized'
+  || alternateAuthoritySelfTest.violations.length !== 2
+  || !alternateAuthoritySelfTest.violations.some(item => item.includes('caller 字面量'))
+  || !alternateAuthoritySelfTest.violations.some(item => item.includes('entryId'))) {
+  failures.push('守卫自测失败：条件绑定权威或真实 Hook ReturnType 被漏检')
+}
+
+const mutableAliasSelfTest = analyzeAIEntrySource(`
+  import { chat as raw } from '../lib/ai/client'
+  function harmless() {}
+  let local = raw
+  local = harmless
+  local([], {})
+  let toRaw = harmless
+  toRaw = raw
+  toRaw([], {})
+  let branch = harmless
+  if (flag) branch = raw
+  branch([], {})
+  let opaque = raw
+  opaque = resolveCallable()
+  opaque([], {})
+  function shadow(raw: () => void) {
+    let alias = raw
+    alias()
+  }
+`, 'src/components/MutableEntry.tsx')
+if (mutableAliasSelfTest.violations.length !== 3
+  || !mutableAliasSelfTest.violations.some(item => item.includes('toRaw()'))
+  || !mutableAliasSelfTest.violations.some(item => item.includes('可变别名仍可能'))) {
+  failures.push('守卫自测失败：可变别名顺序赋值或保守分支被误判')
+}
+
+const reassignmentBoundarySelfTest = analyzeAIEntrySource(`
+  import { chat } from '../lib/ai/client'
+  const local = () => {}
+  let rebound = local
+  rebound = chat
+  rebound = rebound.bind(null)
+  rebound([], {})
+  let safe = chat
+  safe = local
+  safe = safe.bind(null)
+  safe()
+  let nextIteration = local
+  for (const item of [0, 1]) { nextIteration([], {}); nextIteration = chat }
+  let resetEveryIteration = chat
+  for (const item of [0, 1]) { resetEveryIteration = local; resetEveryIteration(); resetEveryIteration = chat }
+`, 'src/components/ReassignmentBoundary.tsx')
+if (reassignmentBoundarySelfTest.violations.length !== 2
+  || !reassignmentBoundarySelfTest.violations.some(item => item.includes('rebound()'))
+  || !reassignmentBoundarySelfTest.violations.some(item => item.includes('nextIteration()'))) {
+  failures.push('守卫自测失败：自绑定前值或循环再次进入的别名判断失效')
+}
 
 if (failures.length) {
   console.error('[ai-entry-registry] ❌ 正式 AI 入口机器绑定未闭合:\n')

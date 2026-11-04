@@ -188,9 +188,14 @@ interface GovernedCapture {
   }
 }
 
-export async function readSfqa105GovernedCapture(): Promise<GovernedCapture> {
-  const data: { governedCapture?: { encoding: string; entry: string; rawBytes: number; sha256: string; data: string } } = JSON.parse(JSON.stringify(captured))
-  const envelope = data.governedCapture
+type GovernedCaptureEnvelope = { encoding: string; entry: string; rawBytes: number; sha256: string; data: string }
+
+export async function readSfqa105GovernedCapture(
+  version: 'historical' | 'current' = 'historical',
+): Promise<GovernedCapture> {
+  const data: { governedCapture?: GovernedCaptureEnvelope; currentGovernedCapture?: GovernedCaptureEnvelope } =
+    JSON.parse(JSON.stringify(captured))
+  const envelope = version === 'current' ? data.currentGovernedCapture : data.governedCapture
   if (!envelope || envelope.encoding !== 'zip-base64') throw new Error('SFQA105 governed fixture envelope is missing')
   const archive = await JSZip.loadAsync(envelope.data, { base64: true, checkCRC32: true })
   const file = archive.file(envelope.entry)
@@ -207,7 +212,7 @@ export async function readSfqa105GovernedCapture(): Promise<GovernedCapture> {
 }
 
 export async function seedSfqa105GovernedBuild(options: { includeComparisonHashes?: boolean } = {}) {
-  const fixture = await readSfqa105GovernedCapture()
+  const fixture = await readSfqa105GovernedCapture('current')
   if (!fixture.governed || !fixture.native) throw new Error('SFQA105 governed fixture metadata is missing')
   const projectId = await importProjectJSON(structuredClone(fixture.governed))
   const production = await db.productProductions.where('projectId').equals(projectId)

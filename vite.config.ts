@@ -26,7 +26,7 @@ const TTRPG_REPLAY_CHUNK_MODULES = {
   state: [
     'campaign', 'campaign-v2', 'character-sheet',
     'content-version', 'director-model', 'effect-plan',
-    'effect-runtime', 'frozen-facts', 'frozen-content-cache', 'item-ledger', 'media-contract',
+    'effect-runtime', 'frozen-facts', 'frozen-content-cache', 'item-ledger', 'media-contract', 'runtime-media-attempt-accounting',
     'open-authorization', 'open-chaos', 'open-content-authoring', 'open-content-common',
     'open-content-predicates', 'open-content-references', 'open-content-situations', 'open-content-templates',
     'open-contract', 'open-contract-parse', 'context-trigger-contract', 'open-context-policy', 'open-model-purpose-contract', 'open-memory-contract', 'open-memory-receipt', 'open-model-memory-contract', 'open-brief-contract', 'open-memory-event-digest', 'open-memory-prefix-proof', 'open-private-choice-contract', 'open-coordination',
@@ -116,7 +116,7 @@ function manualChunkFor(moduleId: string): string | undefined {
   // These passive product parsers have no dependency back into the shared
   // contract/proof cycle. Split that leaf group without changing its logic
   // or moving the mutually dependent store/adoption modules across chunks.
-  if (/\/src\/lib\/(?:ttrpg\/(?:production-brief|campaign-proposal)|avg\/(?:artifact-contract|sound-production-plan)|open-world\/creator-(?:media-contract|ending-count))\.ts$/.test(id)) {
+  if (/\/src\/lib\/(?:ttrpg\/(?:production-brief|campaign-proposal)|avg\/(?:artifact-contract|sound-production-(?:plan|policy))|open-world\/creator-(?:media-contract|ending-count))\.ts$/.test(id)) {
     return 'product-production-plans'
   }
   // All groups retain the standard scriptChunk size budget. AI/context and

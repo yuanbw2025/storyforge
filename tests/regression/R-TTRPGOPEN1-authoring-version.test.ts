@@ -310,6 +310,34 @@ describe("Settings V2 版本与闭集", () => {
 });
 
 describe("open Brief V3 冻結合同", () => {
+  it("021 preserves an exact purpose proof while historical plans without it remain byte-stable", async () => {
+    const { input, content } = await openBriefFixture();
+    const proof = content.sourcePlan.sourcePurpose;
+    if (!proof) throw new Error("Expected real frozen source purpose");
+    expect(proof.purpose).toBe("ttrpg");
+    expect(proof.selectedRelease.releaseHash).toBe(content.worldReference.releaseHash);
+    expect(content.sourcePlan.sourcePurpose).toEqual(input.sourcePlan.sourcePurpose);
+
+    const damaged = structuredClone(input);
+    damaged.sourcePlan.sourcePurpose = { ...proof, evidenceHash: "0".repeat(64) };
+    await expect(createTtrpgProductionBriefContentV3(damaged)).rejects.toThrow("来源用途证据 hash 无效");
+    const explicitUndefined = structuredClone(input);
+    explicitUndefined.sourcePlan.sourcePurpose = undefined;
+    await expect(createTtrpgProductionBriefContentV3(explicitUndefined)).rejects.toThrow("来源用途");
+
+    const historicalPlan = structuredClone(input.sourcePlan);
+    delete historicalPlan.sourcePurpose;
+    const { planHash: _previousHash, ...body } = historicalPlan;
+    const { localReleaseRecordId: _locator, ...portableReference } = body.worldReference;
+    historicalPlan.planHash = await hashProductProductionValueV2({ ...body, worldReference: portableReference });
+    const originalBytes = JSON.stringify(historicalPlan);
+    const historical = await createTtrpgProductionBriefContentV3({ ...input, sourcePlan: historicalPlan });
+    expect(Object.prototype.hasOwnProperty.call(historical.sourcePlan, "sourcePurpose")).toBe(false);
+    expect(JSON.stringify(historical.sourcePlan)).toBe(originalBytes);
+    expect(historical.sourcePlan.planHash).toBe(historicalPlan.planHash);
+    expect(await db.productBuilds.count()).toBe(0);
+  });
+
   it("freezes cloned settings, revision, raw V2 canonical hash, world and existing start confirmation", async () => {
     const fixture = await openBriefFixture();
     const { input, content, brief } = fixture;

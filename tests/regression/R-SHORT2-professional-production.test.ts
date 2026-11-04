@@ -109,10 +109,10 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
 
-  // This integration journey produces six stages, publishes twice and round-trips
-  // three backups. Keep its bound separate from the 5s unit-test default so
+  // This integration journey produces six stages, publishes twice and exercises
+  // both valid and invalid backups. Keep its bound separate from the 5s unit-test default so
   // coverage instrumentation and concurrent CI do not abort valid transactions.
-  it('六个阶段使用独立 Skill、闭集 schema 与作者确认写回', async () => {
+  it('六个阶段使用独立 Skill、闭集 schema 与作者确认写回；导入前验证冻结发布 hash', async () => {
     const ids = ['short.intent-brief', 'short.story-design', 'short.scene-plan', 'short.chapter-draft', 'short.continuity-review', 'short.targeted-rewrite']
     expect(ids.map(id => getAgentSkillV1(id).executionMode)).toEqual([
       'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-chapter-draft', 'short-continuity-review', 'short-targeted-rewrite',
@@ -170,6 +170,22 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
     const backup = await exportProjectJSON(created.scope.projectId)
     expect(backup.shortNovelProductions).toHaveLength(1)
     expect(backup.creationReleases).toHaveLength(2)
+
+    const invalidReleaseHash = structuredClone(backup)
+    const damagedRelease = invalidReleaseHash.creationReleases[0]
+    const originalHash = damagedRelease.contentHash
+    damagedRelease.contentHash = (originalHash.startsWith('0') ? '1' : '0') + originalHash.slice(1)
+    const countRows = () => Promise.all([
+      db.projects.count(),
+      db.shortNovelProductions.count(),
+      db.creationReleases.count(),
+    ])
+    const before = await countRows()
+    await expect(importProjectJSON(invalidReleaseHash)).rejects.toMatchObject({
+      message: '[deriveImport] v12 CreationRelease 校验失败：[creation-release] manifest 身份或 hash 校验失败',
+    })
+    expect(await countRows()).toEqual(before)
+
     const importedProjectId = await importProjectJSON(structuredClone(backup))
     const importedReleases = await db.creationReleases.where('projectId').equals(importedProjectId).sortBy('version')
     const importedRelease = importedReleases[0]
@@ -288,26 +304,6 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
     expect((await ensureShortNovelProductionV1(second.scope)).brief).toBeNull()
   })
 
-  it('导入前验证冻结发布 hash，损坏备份不会产生半个项目', async () => {
-    const created = await seedCurrentWorkspace('损坏发布样例', { targetWordCount: 5_000, novelProfile: 'short' })
-    const backup = await exportProjectJSON(created.scope.projectId)
-    backup.creationReleases.push({
-      _exportId: 0,
-      _worldExportId: 0,
-      _workExportId: 0,
-      _parentExportId: null,
-      productKind: 'short-novel',
-      version: 1,
-      label: '伪造发布',
-      sourceRevision: 1,
-      manifestJson: JSON.stringify({ schema: 'storyforge.short-novel-release', version: 1, productKind: 'short-novel', work: { code: backup.works[0].code } }),
-      contentHash: '0'.repeat(64),
-      createdAt: 1,
-    })
-    const before = await db.projects.count()
-    await expect(importProjectJSON(backup)).rejects.toThrow('manifest 身份或 hash 校验失败')
-    expect(await db.projects.count()).toBe(before)
-  })
   it('错误模型目标会终结运行，作者可关闭待处理候选且不能绕过候选确认', async () => {
     const {scope}=await seedCurrentWorkspace('失败恢复',{targetWordCount:5000,novelProfile:'short'})
     await expect(generateShortNovelCandidateV1({scope,artifactKind:'brief',runAI:async()=>JSON.stringify({...brief,chapterCount:4})})).rejects.toThrow('骨架一致')

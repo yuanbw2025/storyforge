@@ -158,7 +158,7 @@ export default function AvgPage() {
     }
   }, [row?.work.id, row?.draft?.revision, dirty]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    void listLocalWorldReferenceChoicesV1(narrativePreview ? { narrativeProductType: 'avg' } : {})
+    void listLocalWorldReferenceChoicesV1({ purpose: 'avg', ...(narrativePreview ? { narrativeProductType: 'avg' as const } : {}) })
       .then(setWorlds)
       .catch((e) => setError(String(e)));
   }, [pageId, row?.draft?.worldReleaseId, narrativePreview]);
@@ -254,7 +254,7 @@ export default function AvgPage() {
               row.draft.settingsJson,
             ) as AvgAuthoringSettingsV1,
             title: row.work.title,
-            worldReleaseId: row.draft.worldReleaseId,
+            worldReleaseId: row.draft.worldReleaseId, sourcePurpose: row.draft.sourcePurpose,
           }
         : undefined,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -647,7 +647,7 @@ export default function AvgPage() {
                         <p>已从世界引擎带入选择，请确认对应版本后继续。</p>
                       )}
                       {worlds.map((w) => (
-                        <article className="avg-source" key={w.id}>
+                        <article className="avg-source" key={w.choiceKey ?? w.id}>
                           <div>
                             <h4>
                               {w.label}
@@ -658,11 +658,11 @@ export default function AvgPage() {
                             <p>
                               {w.worldCode} · v{w.version}
                               {w.narrative ? ' · 叙事世界接入（实验性）' : ''}
-                            </p>
+                            </p>{w.authorName && <p className="text-xs">{w.authorName} · {w.license}</p>}{w.attribution && <p className="text-xs">{w.attribution}</p>}{w.contentWarnings?.map((warning, index) => <p key={index} className="text-xs">{warning}</p>)}{w.purposeAllowed === false && <p className="text-xs">此来源未允许本产品使用</p>}
                           </div>
                           <button
                             className="lf-action"
-                            disabled={(busy || Boolean(row && !row.draft)) || !canAuthor}
+                            disabled={w.purposeAllowed === false || (busy || Boolean(row && !row.draft)) || !canAuthor}
                             onClick={() =>
                               void run(async () => {
                                 let target = row;
@@ -698,7 +698,7 @@ export default function AvgPage() {
                                 await selectAvgWorldV1(
                                   targetScope,
                                   draft.revision,
-                                  w.id,
+                                  w.id, w.sourceDeclarationHash,
                                 );
                                 navigate(path("source", target));
                                 setNotice(

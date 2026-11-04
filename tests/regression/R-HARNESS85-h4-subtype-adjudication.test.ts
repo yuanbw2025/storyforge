@@ -7,6 +7,8 @@ import {
   clearH4SubtypeAdjudicationBrowserCheckpointV1,
   deriveH4SubtypeAdjudicatedIssuesV1,
   loadH4SubtypeAdjudicationBrowserStateV1,
+  parseH4LongConsistencyRunCheckpointV1,
+  parseH4SubtypeAdjudicationCheckpointV1,
   persistH4SubtypeAdjudicationBrowserCheckpointV1,
   runH4LongConsistencyVerifierV1,
   runH4SubtypeAdjudicationV1,
@@ -111,6 +113,33 @@ async function resignCheckpoint(
 }
 
 describe('R-HARNESS85 · verified evidence pair subtype adjudication', () => {
+  it('SFQA009 preserves both original H4 checkpoint hashes and run usage/budget errors', async () => {
+    const base = await createBase([CLEAN_FIXTURE.id])
+    const call = vi.fn(async () => {
+      throw new Error('clean fixture must not send a model request')
+    })
+    const adjudication = await runH4SubtypeAdjudicationV1({
+      runId: 'h85-shared-codec', codeRevision: 'sfqa009', baseCheckpoint: base,
+      adjudicator: adjudicatorBinding(), call, now: () => 0,
+    })
+    expect(call).not.toHaveBeenCalled()
+    expect(base.checkpointHash).toBe('7e8d5c34be62a6ff845f2eabd1fcf14018a3a70aa761805e4abefc7eef9bbd1b')
+    expect(adjudication.checkpointHash).toBe('d7249573e92eadba3d78697a0a2b1cb11694478df6c365aab1a2a64d6d8571b7')
+    expect(parseH4LongConsistencyRunCheckpointV1(base)).toEqual(base)
+    expect(parseH4SubtypeAdjudicationCheckpointV1(adjudication)).toEqual(adjudication)
+    const checkErrors = (
+      checkpoint: H4LongConsistencyRunCheckpointV1 | H4SubtypeAdjudicationCheckpointV1,
+      parse: (value: unknown) => unknown,
+    ) => {
+      expect(() => parse({ ...checkpoint, usage: { ...checkpoint.usage, unmeteredModelCalls: 99 } }))
+        .toThrow('checkpoint.usage: metered + unmetered 必须等于 modelCalls')
+      expect(() => parse({ ...checkpoint, budget: { ...checkpoint.budget, maxCostUsd: 0 } }))
+        .toThrow('checkpoint.budget: 时长与成本预算必须大于 0')
+    }
+    checkErrors(base, parseH4LongConsistencyRunCheckpointV1)
+    checkErrors(adjudication, parseH4SubtypeAdjudicationCheckpointV1)
+  })
+
   it('shows only deterministic candidate ids and verified quote pairs, never stage-one labels or summaries', async () => {
     const base = await createBase([CONFLICT_FIXTURE.id])
     const sourceCase = base.completed[0]

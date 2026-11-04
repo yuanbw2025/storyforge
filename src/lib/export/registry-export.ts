@@ -1,3 +1,4 @@
+import { parseLegacyIdArray } from '../utils/legacy-id-array'
 import { BACKUP_REFERENCE_REVIEW_TITLE, CURRENT_BACKUP_VERSION, referenceReviewScopeMatchesV1 } from './backup-trust'
 /**
  * 注册表派生的项目导出引擎(AUDIT-1)
@@ -17,11 +18,12 @@ import type { TableSpec } from '../registry/types'
 import type { ProjectExportData } from './json-export'
 import { redactAuthoringSecrets } from '../node-authoring/contracts'
 import { resolveWorkspaceOwnership } from '../workspace/ownership'
-import { portableizeAgentRunLedgerExportV1 } from '../agent/run/ledger-portability'
+import { excludePrivateReferenceExecutionFromBackupV1, portableizeAgentRunLedgerExportV1 } from '../agent/run/ledger-portability'
 import { assertAgentRunArtifactRecordIntegrityV1 } from '../memory/artifact-record'
 import { readVerifiedMediaBlobObjectData } from '../product-production/media-blob-store'
 import { remapNarrativeDomainFieldV1 } from '../narrative-domain/references'
 import { assertNarrativeDomainReferenceRowsV1 } from '../narrative-domain/integrity'
+import { narrativeSemanticExportReferencesV1 } from '../narrative-domain/semantic-export-references'
 import { assertNarrativeLineageRowsV1 } from '../world-engine/narrative-lineage-lifecycle'
 import { mapNarrativeDomainReferencesV1 } from '../narrative-domain/codec'
 import { narrativeDomainReferenceTargetV1 } from '../narrative-domain/references'
@@ -89,7 +91,8 @@ export function deriveRegisteredSemanticRowsV1(input: {
     return value
   }
   for (const [table, rows] of ordered) {
-    const spec = REGISTRY_BY_NAME.get(table)!
+    const registered = REGISTRY_BY_NAME.get(table)!
+    const spec = { ...registered, ...narrativeSemanticExportReferencesV1(registered) }
     records[table] = rows.map((row, index) => {
       for (const ref of spec.exportRemap ?? []) {
         const id = row[ref.field]
@@ -192,7 +195,8 @@ function makeLocalReferenceExportReview(
       return i
     },
     preserve(path, value, reason) {
-      entries.push(JSON.stringify({ 来源表: spec.name, 原行序号: sourceKey, 便携行键: sourceKey, 资源UID: row.resourceUid,
+      entries.push(JSON.stringify({ 来源表: spec.name, 原行序号: sourceKey, 便携行键: sourceKey,
+        资源UID: spec.resourceIdentity ? row[spec.resourceIdentity.field] : undefined,
         字段: path, 原值: value, 原因: reason }))
     },
   }
@@ -250,7 +254,7 @@ function toExportRow(
       obj[rr.field] = remapWorldPortalTargets(obj[rr.field], (targetId: number) => map?.get(targetId))
     } else if (rr.kind === 'id-array') {
       const map = idMaps.get(rr.remapVia)
-      const raw = parseIdArray(obj[rr.field])
+      const raw = parseLegacyIdArray(obj[rr.field])
       const mapped = raw.map(id => review && rr.reviewLocal ? review.resolve(rr.reviewLocal, rr.remapVia, id) : map?.get(id))
       if (review && rr.reviewLocal && obj[rr.field] != null) {
         const original = readReferenceArray(obj[rr.field])
@@ -474,17 +478,6 @@ function parseObjectArray(value: unknown): Array<Record<string, unknown>> {
     : []
 }
 
-function parseIdArray(value: unknown): number[] {
-  if (Array.isArray(value)) return value.filter((id): id is number => typeof id === 'number')
-  if (typeof value !== 'string') return []
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed.filter((id): id is number => typeof id === 'number') : []
-  } catch {
-    return []
-  }
-}
-
 /** 派生当前架构的完整、严格便携备份。 */
 export async function deriveExportProjectJSON(projectId: number): Promise<ProjectExportData> {
   return deriveStrictExportProjectJSON(projectId)
@@ -511,8 +504,10 @@ async function captureProjectExportInTransaction(
     spec,
     rows: await queryRows(spec, projectId),
   })))
-  for (const { spec, rows } of capturedRows) {
-    rowsByTable.set(spec.name, rows)
+  for (const { spec, rows } of capturedRows) rowsByTable.set(spec.name, rows)
+  excludePrivateReferenceExecutionFromBackupV1(rowsByTable, specs)
+  for (const spec of specs) {
+    const rows = rowsByTable.get(spec.name)!
     const idMap = new Map<number, number>()
     rows.forEach((r, i) => { if (r.id != null) idMap.set(r.id, i) })
     idMaps.set(spec.name, idMap)
@@ -681,7 +676,9 @@ export async function deriveStrictExportProjectSnapshot(
     // a release source snapshot, or a new wire field.
     if (!snapshot.data.notes.some(note => note.content === content)) snapshot.data.notes.push({
       _workOwnerExportId: workExportId, _chapterExportId: null, content, color: 'yellow', pinned: true,
-      createdAt: snapshot.data.exportedAt, updatedAt: snapshot.data.exportedAt,
+      // This detached report inherits the captured Workspace revision time.
+      // The transport clock must not change recovery-capsule/self-check hashes.
+      createdAt: snapshot.data.project.updatedAt, updatedAt: snapshot.data.project.updatedAt,
     } as ProjectExportData['notes'][number])
   }
   return snapshot

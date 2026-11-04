@@ -1,7 +1,8 @@
 /**
  * 地点树状图可视化（D3 + SVG）
  */
-import { useMemo, useRef, useEffect, useState } from 'react'
+import { useMemo, useRef } from 'react'
+import { useLocationTreeSize } from '../../hooks/useLocationTreeSize'
 import { stratify, tree } from 'd3-hierarchy'
 import type { LocationTreeNode } from '../../stores/location'
 import { LocationTagsParseError, readLocationRecordTagsV1, TAG_EMOJI, type LocationTag } from '../../lib/types/location'
@@ -46,17 +47,7 @@ interface Props {
 
 export default function LocationTreeView({ tree: treeData, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [svgSize, setSvgSize] = useState({ width: 700, height: 400 })
-
-  useEffect(() => {
-    if (!containerRef.current) return
-    const ro = new ResizeObserver(entries => {
-      const w = entries[0]?.contentRect.width
-      if (w) setSvgSize({ width: Math.floor(w), height: Math.max(350, Math.floor(w * 0.55)) })
-    })
-    ro.observe(containerRef.current)
-    return () => ro.disconnect()
-  }, [])
+  const svgSize = useLocationTreeSize(containerRef)
 
   // 扁平化树
   const flatNodes = useMemo(() => {

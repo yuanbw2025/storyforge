@@ -11,14 +11,17 @@ import type {
   AgentRunNodeProducerTupleV1,
   AnyAgentRunEventV1,
   MemorySettlementReceiptV1,
+  OutlineNode,
   WorkspaceScope,
 } from '../../types'
 import {
   assertRecordInScope,
+  readOwnedRows,
   resolveScope,
   scopeTransactionTables,
   stampNewRecord,
 } from '../../workspace/scope'
+import { resolveCanonicalOutlineAncestry } from '../../outline/canonical-outline-walk'
 import { acceptAgentRunContract } from './contract'
 import { parseAgentRunEventV1 } from './event-schema'
 import { canonicalStringify, hashCanonicalValue } from './hash'
@@ -202,17 +205,47 @@ async function assertContractScope(
 
   if (expectedWorldGroupId != null) {
     const group = await db.worldGroups.get(expectedWorldGroupId)
-    if (!group || group.projectId !== scope.projectId) {
-      fail('world_scope', 'RunContract 引用了不属于当前工作区的世界组')
+    if (!group || !await assertRecordInScope(scope, 'worldGroups', group, { owner: 'world' })) {
+      fail('world_scope', 'RunContract 引用了不属于当前 World 的世界组')
     }
   }
 
+  const hasOutlines = (contract.scope.outlineNodeIds?.length ?? 0) > 0
+    || (contract.scope.chapterIds?.length ?? 0) > 0
+  const outlineById = new Map((hasOutlines
+    ? await Dexie.Promise.resolve(readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }))
+    : []).flatMap(node => node.id == null ? [] : [[node.id, node] as const]))
+  // Closing multi-world hides grouping without clearing stored groups. Honor
+  // null-scoped editor runs, while explicit group contracts retain their scope.
+  const useUngroupedRunScope = hasOutlines && expectedWorldGroupId === null
+    && (await db.projects.get(scope.projectId))?.enableMultiWorld !== true
+  const resolvedGroups = new Map<number, number | null>()
+  const checkedGroups = new Set(expectedWorldGroupId == null ? [] : [expectedWorldGroupId])
+  const outlineWorldGroup = async (outlineNodeId: number): Promise<number | null> => {
+    if (resolvedGroups.has(outlineNodeId)) return resolvedGroups.get(outlineNodeId)!
+    let ancestry: ReturnType<typeof resolveCanonicalOutlineAncestry>
+    try { ancestry = resolveCanonicalOutlineAncestry(outlineNodeId, outlineById) } catch {
+      fail('outline_ancestry', `大纲节点 ${outlineNodeId} 的父链缺失、循环或越过当前 Work`)
+    }
+    for (const ancestor of ancestry.path) {
+      const groupId = ancestor.worldGroupId
+      if (groupId == null || checkedGroups.has(groupId)) continue
+      const group = await db.worldGroups.get(groupId)
+      if (!group || !await assertRecordInScope(scope, 'worldGroups', group, { owner: 'world' })) {
+        fail('outline_ancestor_world_scope', `大纲节点 ${outlineNodeId} 的父链世界组越过当前 World`)
+      }
+      checkedGroups.add(groupId)
+    }
+    const effectiveGroupId = useUngroupedRunScope ? null : ancestry.worldGroupId
+    resolvedGroups.set(outlineNodeId, effectiveGroupId)
+    return effectiveGroupId
+  }
+
   for (const outlineNodeId of contract.scope.outlineNodeIds ?? []) {
-    const node = await db.outlineNodes.get(outlineNodeId)
-    if (!node || !await assertRecordInScope(scope, 'outlineNodes', node, { owner: 'work' })) {
+    if (!outlineById.has(outlineNodeId)) {
       fail('outline_scope', `RunContract 引用了越界大纲节点 ${outlineNodeId}`)
     }
-    if (!sameNullableId(node.worldGroupId, expectedWorldGroupId)) {
+    if (!sameNullableId(await outlineWorldGroup(outlineNodeId), expectedWorldGroupId)) {
       fail('outline_world_scope', `大纲节点 ${outlineNodeId} 不属于 RunContract 世界组`)
     }
   }
@@ -222,11 +255,10 @@ async function assertContractScope(
     if (!chapter || !await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) {
       fail('chapter_scope', `RunContract 引用了越界章节 ${chapterId}`)
     }
-    const node = await db.outlineNodes.get(chapter.outlineNodeId)
-    if (!node || !await assertRecordInScope(scope, 'outlineNodes', node, { owner: 'work' })) {
+    if (!outlineById.has(chapter.outlineNodeId)) {
       fail('chapter_outline_scope', `章节 ${chapterId} 的大纲节点越界或不存在`)
     }
-    if (!sameNullableId(node.worldGroupId, expectedWorldGroupId)) {
+    if (!sameNullableId(await outlineWorldGroup(chapter.outlineNodeId), expectedWorldGroupId)) {
       fail('chapter_world_scope', `章节 ${chapterId} 不属于 RunContract 世界组`)
     }
   }

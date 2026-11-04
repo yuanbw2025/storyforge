@@ -110,9 +110,10 @@ export function reviewPortableLocalReferencesV1(backup: Record<string, unknown>,
       const holder = owner(spec, row)
       const rowKey = spec.exportIdField && isKey(row._exportId) ? row._exportId : rowIndex
       const patch: Record<string, unknown> = {}
+      const resourceUid = spec.resourceIdentity ? row[spec.resourceIdentity.field] : undefined
       const report = (path: string, value: unknown, reason: string, sampleId?: unknown) => {
         issues.push({ table: spec.name, rowIndex, rowKey,
-          ...(typeof row.resourceUid === 'string' ? { resourceUid: row.resourceUid } : {}),
+          ...(typeof resourceUid === 'string' ? { resourceUid } : {}),
           path, value, reason, ...(sampleId == null ? {} : { sampleId }) })
       }
       for (const ref of scalars) {

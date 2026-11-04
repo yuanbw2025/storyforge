@@ -11,6 +11,7 @@ import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import {
   createContextManifestV3,
   parseContextManifestV3,
+  sortArtifactRefsV3,
   verifyContextManifestIntegrityV2,
   verifyContextManifestIntegrityV3,
 } from '../agent/run/context-manifest'
@@ -134,19 +135,6 @@ async function assertSelectorIntegrity(selector: ContextSelectorResultV1): Promi
   }
   const { selectorHash, ...body } = selector
   if (await hashCanonicalValue(body) !== selectorHash) fail('selector-hash', 'Context Selector Result hash 不匹配')
-}
-
-function normalizeArtifactRefs(refs: readonly ContextManifestArtifactRefV3[]): ContextManifestArtifactRefV3[] {
-  return [...refs].sort((left, right) => (
-    left.role.localeCompare(right.role)
-      || (left.sourceKey ?? '').localeCompare(right.sourceKey ?? '')
-      || (left.resourceKey ?? '').localeCompare(right.resourceKey ?? '')
-      || (left.sourceContentHash ?? '').localeCompare(right.sourceContentHash ?? '')
-      || (left.sourceRefsHash ?? '').localeCompare(right.sourceRefsHash ?? '')
-      || (left.toolName ?? '').localeCompare(right.toolName ?? '')
-      || (left.callIndex ?? -1) - (right.callIndex ?? -1)
-      || left.contentHash.localeCompare(right.contentHash)
-  ))
 }
 
 function toArtifactRef(
@@ -288,7 +276,7 @@ export async function recordContextGatewayPreflightEvidenceV1(input: {
     contextPacket: input.contextPacket,
     contextPacketArtifactHash: packet.artifact.contentHash,
     promptHash: request.artifact.contentHash,
-    artifacts: normalizeArtifactRefs(artifacts),
+    artifacts: sortArtifactRefsV3(artifacts),
   }
   return { evidence: { ...body, preflightHash: await hashCanonicalValue(body) }, snapshot }
 }
@@ -576,7 +564,7 @@ export async function finalizeContextGatewayAttemptEvidenceV1(input: {
     content: exactPayload(input.rawResponse),
   })
   snapshot = response.snapshot
-  const artifacts = normalizeArtifactRefs([
+  const artifacts = sortArtifactRefsV3([
     ...input.preflight.artifacts,
     toArtifactRef(response.artifact, { role: 'raw-response' }),
   ])

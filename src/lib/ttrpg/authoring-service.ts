@@ -11,7 +11,7 @@ import {
   stampNewRecord,
 } from "../workspace/scope";
 import { updateWorkTitle } from "../workspace/works";
-import { cacheWorldReferenceForProductV1 } from "../world-engine/reference-cache";
+import { selectWorldReferenceForProductPurposeV1 } from "../world-engine/reference-cache";
 import type { ProductProductionBriefRecordV1, WorkspaceScope } from "../types";
 import { createWorldReferenceV1 } from "../world-engine/world-reference";
 import {
@@ -150,11 +150,12 @@ export async function selectTtrpgWorld(
   scope: WorkspaceScope,
   revision: number,
   releaseId: number,
+  sourceDeclarationHash?: string,
 ) {
   assertCurrentProductEntryV1('upper.ttrpg')
   const row = await readTtrpgDraft(scope);
   if (row.revision !== revision) throw new Error("方案已变化，请重新选择");
-  const localId = await cacheWorldReferenceForProductV1(scope, releaseId);
+  const { localId, sourcePurpose } = await selectWorldReferenceForProductPurposeV1(scope, releaseId, 'ttrpg', { sourceDeclarationHash });
   return db.transaction(
     "rw",
     scopeTransactionTables(db.ttrpgAuthoringDrafts),
@@ -165,6 +166,7 @@ export async function selectTtrpgWorld(
       const next = {
         ...latest,
         worldReleaseId: localId,
+        sourcePurpose,
         selectionJson: null,
         suggestionKey: null,
         preparedRevision: null,
@@ -275,7 +277,7 @@ export async function prepareTtrpgBrief(
     : sources.selectionDefaults[suggestion.suggestionKey];
   const work = await db.works.get(scope.workId);
   if (!work) throw new Error("作品不存在");
-  const brief = await compileProductProductionBriefV3({
+  const compiled = await compileProductProductionBriefV3({
     scope,
     worldReleaseId: row.worldReleaseId,
     suggestionKey: suggestion.suggestionKey,
@@ -296,6 +298,7 @@ export async function prepareTtrpgBrief(
     }),
     sourceSelection: selection,
   });
+  const brief = row.sourcePurpose ? { ...compiled, source: { ...compiled.source, sourcePurpose: row.sourcePurpose } } : compiled
   if ((await readTtrpgDraft(scope)).revision !== revision)
     throw new Error("编译期间方案已变化，请重新生成");
   let id = row.productionId;
@@ -401,10 +404,11 @@ export async function prepareTtrpgOpenProductionBriefV3(input: {
     ?? suggestions.suggestions.find(item => item.recommendedProductTypes.includes('ttrpg'))
   if (!suggestion) throw new Error('open 世界没有可用起点')
   const selection = draft.selectionJson ? JSON.parse(draft.selectionJson) : suggestions.selectionDefaults[suggestion.suggestionKey]
-  const common = await draftTtrpgOpenProductionCommonBriefV3({ scope, worldReleaseId: draft.worldReleaseId,
+  const compiledCommon = await draftTtrpgOpenProductionCommonBriefV3({ scope, worldReleaseId: draft.worldReleaseId,
     suggestionKey: suggestion.suggestionKey, qualityProfile: settings.qualityProfile, scale: 'campaign',
     visualLevel: settings.wizard.maximumGeneratedAssets > 0 ? 'key-scenes' : 'none', audioLevel: 'none',
     playerRole: settings.playerRole, openingSituation: settings.openingSituation, sourceSelection: selection })
+  const common = draft.sourcePurpose ? { ...compiledCommon, source: { ...compiledCommon.source, sourcePurpose: draft.sourcePurpose } } : compiledCommon
   const reuse = prior && (!priorBuilds.length || releaseRevision) && prior.productType === 'ttrpg' && prior.worldId === scope.worldId
     && priorBrief?.sourceWorldReleaseId === draft.worldReleaseId
   const commandId = input.commandId ?? crypto.randomUUID()

@@ -130,6 +130,7 @@ export default function AuthorProposal({
       const result = await generateTtrpgCampaignProposalCandidateV2({
         scope,
         worldReleaseId: brief.source.worldReleaseId,
+        sourcePurpose: brief.source.sourcePurpose,
         objective: t.naturalLanguageInstruction,
         seed: {
           title: t.campaign.title,

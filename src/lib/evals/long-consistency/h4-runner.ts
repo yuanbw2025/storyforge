@@ -1,3 +1,4 @@
+import type { ChatResult } from '../../ai/client'
 import type { ChatMessage } from '../../types'
 import { hasProviderUsageEvidenceV1, normalizeLongConsistencyCallUsageV1, parseLongConsistencyModelUsageV1, PROVIDER_USAGE_POLICY_V1 } from './model-usage'
 import { canonicalStringify, hashCanonicalValue } from '../../agent/run/hash'
@@ -48,6 +49,30 @@ import type { EvalSplit } from './types'
 export const H4_LONG_CONSISTENCY_RUNNER_VERSION_V1 = 'h4-verifier-runner-v1'
 export const H4_LONG_CONSISTENCY_CHECKPOINT_TYPE_V1 = 'storyforge-h4-verifier-checkpoint'
 
+export type EvalTransportOutcomeV1 = 'unknown' | 'rejected' | 'retryable' | 'not-sent'
+
+export class EvalTransportErrorV1 extends Error {
+  constructor(readonly outcome: EvalTransportOutcomeV1, readonly status: number | null, cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause))
+    this.name = 'EvalTransportError'
+  }
+}
+
+/** Only an observed throttle is safe to resend automatically. A disconnected
+ * or server-failed request may already have reached the provider. */
+export function classifyEvalTransportErrorV1(cause: unknown, result: ChatResult): EvalTransportErrorV1 {
+  const lifecycle = result.requestLifecycle
+  const status = lifecycle?.responseStatus ?? null
+  if (lifecycle?.phase === 'pre-dispatch') return new EvalTransportErrorV1('not-sent', status, cause)
+  if (lifecycle?.phase === 'response-observed' && status === 429) {
+    return new EvalTransportErrorV1('retryable', status, cause)
+  }
+  if (lifecycle?.phase === 'response-observed' && status != null && status >= 400 && status < 500 && status !== 408) {
+    return new EvalTransportErrorV1('rejected', status, cause)
+  }
+  return new EvalTransportErrorV1('unknown', status, cause)
+}
+
 export type H4LongConsistencyRunStatusV1 = 'running' | 'completed' | 'failed' | 'budget-exhausted'
 
 export interface H4LongConsistencyRunBudgetV1 {
@@ -81,6 +106,14 @@ export interface H4LongConsistencyRunFailureV1 {
   code: string
   message: string
   usage: LongConsistencyModelUsageV1 | null
+  rawJudgeOutput?: string
+}
+
+interface H4PendingAttemptV1 {
+  fixtureId: string
+  attempt: number
+  traceHash: string
+  response?: { rawJudgeOutput: string; usage: LongConsistencyModelUsageV1 }
 }
 
 export interface H4LongConsistencyRunCheckpointV1 {
@@ -105,9 +138,17 @@ export interface H4LongConsistencyRunCheckpointV1 {
   attempts: Array<{ fixtureId: string; count: number }>
   completed: H4LongConsistencyCompletedCaseV1[]
   failures: H4LongConsistencyRunFailureV1[]
+  pendingAttempt?: H4PendingAttemptV1
   usage: H4LongConsistencyRunUsageV1
   usagePolicy?: typeof PROVIDER_USAGE_POLICY_V1
   checkpointHash: string
+}
+
+export class H4CheckpointWriteErrorV1 extends Error {
+  constructor(readonly checkpoint: H4LongConsistencyRunCheckpointV1) {
+    super('H4 证据保存失败。请继续保存已观测结果，系统不会重新发送这次请求。')
+    this.name = 'H4CheckpointWriteError'
+  }
 }
 
 export interface H4LongConsistencyVerifierCallInputV1 {
@@ -200,7 +241,7 @@ function parseModelBinding(value: unknown, path: string): LongConsistencyModelBi
   }
 }
 
-function parseBudget(value: unknown, path: string): H4LongConsistencyRunBudgetV1 {
+export function parseH4LongConsistencyRunBudgetV1(value: unknown, path: string): H4LongConsistencyRunBudgetV1 {
   const record = readRecord(value, path)
   const keys = ['maxModelCalls', 'maxInputTokens', 'maxOutputTokens', 'maxDurationMs', 'maxCostUsd'] as const
   assertExactKeys(record, keys, keys, path)
@@ -217,7 +258,7 @@ function parseBudget(value: unknown, path: string): H4LongConsistencyRunBudgetV1
   return budget
 }
 
-function parseUsage(value: unknown, path: string): H4LongConsistencyRunUsageV1 {
+export function parseH4LongConsistencyRunUsageV1(value: unknown, path: string): H4LongConsistencyRunUsageV1 {
   const record = readRecord(value, path)
   const keys = [
     'modelCalls',
@@ -248,14 +289,38 @@ function parseFailure(value: unknown, path: string): H4LongConsistencyRunFailure
   if (value === null) return null
   const record = readRecord(value, path)
   const keys = ['fixtureId', 'attempt', 'code', 'message', 'usage'] as const
-  assertExactKeys(record, keys, keys, path)
+  assertExactKeys(record, [...keys, 'rawJudgeOutput'], keys, path)
   return {
     fixtureId: readString(record.fixtureId, `${path}.fixtureId`, { max: 160 }),
     attempt: readInteger(record.attempt, `${path}.attempt`, { min: 1 }),
     code: readString(record.code, `${path}.code`, { max: 120 }),
     message: readString(record.message, `${path}.message`, { max: 500 }),
     usage: record.usage === null ? null : parseLongConsistencyModelUsageV1(record.usage, `${path}.usage`),
+    ...(Object.prototype.hasOwnProperty.call(record, 'rawJudgeOutput')
+      ? { rawJudgeOutput: rawString(record.rawJudgeOutput, `${path}.rawJudgeOutput`, 500_000) } : {}),
   }
+}
+
+function parsePendingAttempt(value: unknown): H4PendingAttemptV1 {
+  const path = 'checkpoint.pendingAttempt'
+  const record = readRecord(value, path)
+  const keys = ['fixtureId', 'attempt', 'traceHash'] as const
+  assertExactKeys(record, [...keys, 'response'], keys, path)
+  const pending: H4PendingAttemptV1 = {
+    fixtureId: readString(record.fixtureId, `${path}.fixtureId`, { max: 160 }),
+    attempt: readInteger(record.attempt, `${path}.attempt`, { min: 1 }),
+    traceHash: readHash(record.traceHash, `${path}.traceHash`),
+  }
+  if (Object.prototype.hasOwnProperty.call(record, 'response')) {
+    const response = readRecord(record.response, `${path}.response`)
+    const responseKeys = ['rawJudgeOutput', 'usage'] as const
+    assertExactKeys(response, responseKeys, responseKeys, `${path}.response`)
+    pending.response = {
+      rawJudgeOutput: rawString(response.rawJudgeOutput, `${path}.response.rawJudgeOutput`, 500_000),
+      usage: parseLongConsistencyModelUsageV1(response.usage, `${path}.response.usage`),
+    }
+  }
+  return pending
 }
 
 function parseCompletedCase(value: unknown, path: string): H4LongConsistencyCompletedCaseV1 {
@@ -294,7 +359,7 @@ export function parseH4LongConsistencyRunCheckpointV1(value: unknown): H4LongCon
     'usage',
     'checkpointHash',
   ] as const
-  assertExactKeys(record, [...keys, 'usagePolicy'], keys, 'checkpoint')
+  assertExactKeys(record, [...keys, 'usagePolicy', 'pendingAttempt'], keys, 'checkpoint')
   const usagePolicy = Object.prototype.hasOwnProperty.call(record, 'usagePolicy')
     ? readEnum(record.usagePolicy, [PROVIDER_USAGE_POLICY_V1], 'checkpoint.usagePolicy')
     : undefined
@@ -341,6 +406,8 @@ export function parseH4LongConsistencyRunCheckpointV1(value: unknown): H4LongCon
   return {
     schemaVersion: 1,
     ...(usagePolicy === undefined ? {} : { usagePolicy }),
+    ...(Object.prototype.hasOwnProperty.call(record, 'pendingAttempt')
+      ? { pendingAttempt: parsePendingAttempt(record.pendingAttempt) } : {}),
     checkpointType: H4_LONG_CONSISTENCY_CHECKPOINT_TYPE_V1,
     runnerVersion: H4_LONG_CONSISTENCY_RUNNER_VERSION_V1,
     fixtureVersion: H4_LONG_CONSISTENCY_FIXTURE_VERSION_V1,
@@ -359,13 +426,13 @@ export function parseH4LongConsistencyRunCheckpointV1(value: unknown): H4LongCon
       'checkpoint.maxAttemptsPerFixture',
       { min: 1 },
     ),
-    budget: parseBudget(record.budget, 'checkpoint.budget'),
+    budget: parseH4LongConsistencyRunBudgetV1(record.budget, 'checkpoint.budget'),
     fixtureIds,
     fixtureSetHash: readHash(record.fixtureSetHash, 'checkpoint.fixtureSetHash'),
     attempts,
     completed,
     failures,
-    usage: parseUsage(record.usage, 'checkpoint.usage'),
+    usage: parseH4LongConsistencyRunUsageV1(record.usage, 'checkpoint.usage'),
     checkpointHash: readHash(record.checkpointHash, 'checkpoint.checkpointHash'),
   }
 }
@@ -471,6 +538,7 @@ function failureFrom(
   fixtureId: string,
   attempt: number,
   usage: LongConsistencyModelUsageV1 | null,
+  rawJudgeOutput?: string,
 ): H4LongConsistencyRunFailureV1 {
   const candidate = error && typeof error === 'object'
     ? error as { code?: unknown; message?: unknown; status?: unknown }
@@ -482,15 +550,31 @@ function failureFrom(
     && status !== 409
     && status !== 425
     && status !== 429
-  const code = nonRetryableProviderError
-    ? 'verifier_error_non_retryable'
-    : typeof candidate?.code === 'string' && candidate.code.trim()
+  const outcome = error instanceof EvalTransportErrorV1 ? error.outcome : undefined
+  const code = outcome === 'unknown' || error instanceof TypeError
+    ? 'verifier_outcome_unknown'
+    : outcome === 'not-sent'
+      ? 'verifier_not_sent'
+      : nonRetryableProviderError || outcome === 'rejected'
+        ? 'verifier_error_non_retryable'
+        : typeof candidate?.code === 'string' && candidate.code.trim()
       ? candidate.code.trim().slice(0, 120)
       : 'verifier_error'
   const message = typeof candidate?.message === 'string' && candidate.message.trim()
     ? candidate.message.trim().slice(0, 500)
     : String(error).slice(0, 500) || 'unknown verifier error'
-  return { fixtureId, attempt, code, message, usage }
+  return { fixtureId, attempt, code, message, usage, ...(rawJudgeOutput === undefined ? {} : { rawJudgeOutput }) }
+}
+
+function isTerminalTransportFailure(code: string): boolean {
+  return code === 'verifier_error_non_retryable' || code === 'verifier_outcome_unknown' || code === 'verifier_not_sent'
+}
+
+async function traceFor(checkpoint: H4LongConsistencyRunCheckpointV1, fixtureId: string, attempt: number) {
+  return hashCanonicalValue({
+    runnerVersion: H4_LONG_CONSISTENCY_RUNNER_VERSION_V1, runId: checkpoint.runId, fixtureId, attempt,
+    verifier: checkpoint.execution.verifier,
+  })
 }
 
 async function assertCheckpointAgainstCatalog(checkpoint: H4LongConsistencyRunCheckpointV1): Promise<void> {
@@ -601,6 +685,14 @@ async function assertCheckpointAgainstCatalog(checkpoint: H4LongConsistencyRunCh
     throw new Error('H4 checkpoint 已完成全部 fixture 却仍标记 running')
   }
   const currentAttempt = checkpoint.attempts[checkpoint.completed.length]?.count ?? 0
+  if (checkpoint.pendingAttempt) {
+    const pending = checkpoint.pendingAttempt
+    if (checkpoint.status !== 'running' || pending.fixtureId !== fixtures[checkpoint.completed.length]?.id ||
+      pending.attempt !== currentAttempt + 1 || pending.attempt > maxAttempts ||
+      pending.traceHash !== await traceFor(checkpoint, pending.fixtureId, pending.attempt)) {
+      throw new Error('H4 未结请求证据与当前 fixture / attempt 不匹配')
+    }
+  }
   if (checkpoint.status === 'running' && currentAttempt >= maxAttempts) {
     throw new Error('H4 checkpoint running 已耗尽当前 fixture 尝试')
   }
@@ -613,7 +705,7 @@ async function assertCheckpointAgainstCatalog(checkpoint: H4LongConsistencyRunCh
       checkpoint.completed.length === fixtures.length
       || (
         currentAttempt !== maxAttempts
-        && checkpoint.failures[checkpoint.failures.length - 1]?.code !== 'verifier_error_non_retryable'
+        && !isTerminalTransportFailure(checkpoint.failures[checkpoint.failures.length - 1]?.code ?? '')
         && !repeatedRepairWouldBeIdentical(
           checkpoint.failures,
           fixtures[checkpoint.completed.length]?.id ?? '',
@@ -666,7 +758,7 @@ function resolvedBudget(
   maxAttemptsPerFixture: number,
   override: Partial<H4LongConsistencyRunBudgetV1> | undefined,
 ): H4LongConsistencyRunBudgetV1 {
-  return parseBudget({
+  return parseH4LongConsistencyRunBudgetV1({
     maxModelCalls: override?.maxModelCalls ?? fixtureCount * maxAttemptsPerFixture,
     maxInputTokens: override?.maxInputTokens ?? 2_000_000,
     maxOutputTokens: override?.maxOutputTokens ?? 200_000,
@@ -731,9 +823,10 @@ async function updateCheckpoint(
   input: RunH4LongConsistencyVerifierInputV1,
   patch: Partial<Omit<H4LongConsistencyRunCheckpointV1, 'checkpointHash' | 'schemaVersion'>>,
 ): Promise<H4LongConsistencyRunCheckpointV1> {
+  const body = { ...checkpointBody(checkpoint), ...patch }
+  if (body.pendingAttempt === undefined) delete body.pendingAttempt
   const next = await signCheckpoint({
-    ...checkpointBody(checkpoint),
-    ...patch,
+    ...body,
     usagePolicy: PROVIDER_USAGE_POLICY_V1,
     usage: patch.usage ?? aggregateUsage(checkpoint, true),
     updatedAt: new Date(input.now?.() ?? Date.now()).toISOString(),
@@ -766,6 +859,15 @@ async function resumeCheckpoint(input: RunH4LongConsistencyVerifierInputV1) {
     if (!sameValue(resumedBudget, checkpoint.budget)) throw new Error('H4 resume budget 与 checkpoint 不一致')
   }
   return checkpoint
+}
+
+async function persistInFlightAttempt(
+  input: RunH4LongConsistencyVerifierInputV1,
+  checkpoint: H4LongConsistencyRunCheckpointV1,
+  recoverable = checkpoint,
+) {
+  try { await input.onCheckpoint?.(structuredClone(checkpoint)) }
+  catch { throw new H4CheckpointWriteErrorV1(recoverable) }
 }
 
 export async function runH4LongConsistencyVerifierV1(
@@ -807,13 +909,11 @@ export async function runH4LongConsistencyVerifierV1(
       let rawJudgeOutput = ''
       let failedAttemptUsage: LongConsistencyModelUsageV1 | null = null
       try {
-        const traceHash = await hashCanonicalValue({
-          runnerVersion: H4_LONG_CONSISTENCY_RUNNER_VERSION_V1,
-          runId: checkpoint.runId,
-          fixtureId: fixture.id,
-          attempt,
-          verifier: checkpoint.execution.verifier,
-        })
+        const traceHash = await traceFor(checkpoint, fixture.id, attempt)
+        const pending = checkpoint.pendingAttempt
+        if (pending && !pending.response) {
+          throw new EvalTransportErrorV1('unknown', null, '原请求结果未知；没有再次发送。')
+        }
         artifact = await runLongConsistencySemanticAuditV1({
           runId: `${checkpoint.runId}:${fixture.id}`,
           createdAt: new Date(input.now?.() ?? Date.now()).toISOString(),
@@ -826,31 +926,39 @@ export async function runH4LongConsistencyVerifierV1(
           traceHashes: [traceHash],
           ...(judgeRepair !== undefined ? { judgeRepair } : {}),
           call: async messages => {
+            if (pending?.response) {
+              rawJudgeOutput = pending.response.rawJudgeOutput
+              failedAttemptUsage = pending.response.usage
+              return { output: rawJudgeOutput, usage: failedAttemptUsage }
+            }
+            const prepared = { fixtureId: fixture.id, attempt, traceHash }
+            const preflight = await updateCheckpoint(checkpoint, input, { pendingAttempt: prepared })
+            await persistInFlightAttempt(input, preflight, checkpoint)
+            checkpoint = preflight
             const startedAt = performance.now()
             const response = await input.call({
-              fixture: {
-                id: fixture.id,
-                split: fixture.split,
-                task: fixture.task,
-              },
-              messages: structuredClone(messages),
-              verifier: checkpoint.execution.verifier,
-              attempt,
-              traceHash,
+              fixture: { id: fixture.id, split: fixture.split, task: fixture.task },
+              messages: structuredClone(messages), verifier: checkpoint.execution.verifier, attempt, traceHash,
             })
             rawJudgeOutput = response.output
             failedAttemptUsage = normalizeLongConsistencyCallUsageV1({
               usage: response.usage, messages, output: response.output,
               durationMs: Math.round(performance.now() - startedAt),
             })
+            checkpoint = await updateCheckpoint(checkpoint, input, {
+              pendingAttempt: { ...prepared, response: { rawJudgeOutput, usage: failedAttemptUsage } },
+            })
+            await persistInFlightAttempt(input, checkpoint)
             return { ...response, usage: failedAttemptUsage }
           },
         })
       } catch (error) {
-        const failure = failureFrom(error, fixture.id, attempt, failedAttemptUsage)
+        if (error instanceof H4CheckpointWriteErrorV1) throw error
+        const failure = failureFrom(error, fixture.id, attempt, failedAttemptUsage,
+          failedAttemptUsage == null || input.onCheckpoint == null ? undefined : rawJudgeOutput)
         const failures = [...checkpoint.failures, failure]
         const usage = aggregateUsage({ attempts, completed: checkpoint.completed, failures }, true)
-        const terminal = failure.code === 'verifier_error_non_retryable'
+        const terminal = isTerminalTransportFailure(failure.code)
           || attempt >= checkpoint.maxAttemptsPerFixture
           || (
             supportsJudgeRepair(checkpoint.execution.verifier.promptVersion)
@@ -860,6 +968,7 @@ export async function runH4LongConsistencyVerifierV1(
           attempts,
           usage,
           failures,
+          pendingAttempt: undefined,
           status: terminal ? 'failed' : 'running',
         })
         await input.onCheckpoint?.(structuredClone(checkpoint))
@@ -878,6 +987,7 @@ export async function runH4LongConsistencyVerifierV1(
         attempts,
         completed,
         usage,
+        pendingAttempt: undefined,
         status: budgetOvershot(usage, checkpoint.budget)
           ? 'budget-exhausted'
           : allCompleted ? 'completed' : 'running',

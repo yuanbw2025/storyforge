@@ -1,3 +1,4 @@
+import type { WorldSourcePurposeProofV1 } from '../world-engine/source-purpose'
 import type {
   ProductProductionTaskExecutionModeV1,
   ProductProductionTaskLaneV1,
@@ -130,6 +131,13 @@ export interface TextOpenWorldCreatorWorldCapabilityV1 {
 
 /** A verified, immutable world candidate available before product creation. */
 export interface TextOpenWorldCreatorWorldSourceCandidateV1 {
+  sourceChoiceKey?: string
+  sourcePurpose?: WorldSourcePurposeProofV1
+  purposeAllowed?: boolean
+  sourceAttribution?: string
+  sourceAuthorName?: string
+  sourceLicense?: string
+  sourceWarnings?: string[]
   schema: 'storyforge.text-open-world-creator-world-source-candidate'
   version: 1
   sourceKind: 'world-release'
@@ -243,6 +251,7 @@ export type TextOpenWorldCreatorSourceLocatorV1 =
       kind: 'world-release'
       localReleaseRecordId: number
       expectedReleaseHash: string
+      sourcePurpose?: WorldSourcePurposeProofV1
     }
   | {
       kind: 'novel'
@@ -265,6 +274,7 @@ export type TextOpenWorldCreatorSourceBindingV1 =
       manifestSchemaHash: string
       capabilityCatalogHash: string
       capabilityProfileHash: string
+      sourcePurpose?: WorldSourcePurposeProofV1
     }
   | {
       kind: 'novel'

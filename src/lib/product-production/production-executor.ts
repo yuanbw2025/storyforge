@@ -118,6 +118,7 @@ import {
   type TextAdventureSystemsArtifactV1,
 } from '../adventure/production-artifacts'
 import {
+  projectTextAdventureNarrativeDesignModelResultV1,
   parseTextAdventureProductionSupervisionArtifactV1,
   parseTextAdventureCastBibleArtifactV1,
   parseTextAdventureNarrativeArcScenesArtifactV1,
@@ -205,6 +206,21 @@ const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const COLOR = /^#[0-9a-fA-F]{6}$/
 
 type JsonRecord = Record<string, unknown>
+
+function indexTextAdventureNestedKeys(
+  rows: JsonRecord[],
+  listKey: 'options' | 'alternatives',
+): Record<string, string[]> {
+  return Object.fromEntries(rows.flatMap(row => {
+    const entries = row[listKey]
+    return typeof row.key === 'string'
+      ? [[row.key, (Array.isArray(entries) ? entries : []).flatMap((entry: unknown) => (
+          entry && typeof entry === 'object' && !Array.isArray(entry)
+            && typeof (entry as JsonRecord).key === 'string'
+            ? [(entry as JsonRecord).key as string] : []
+        ))]] : []
+  }))
+}
 
 /**
  * A Plan reservation is the billable receipt ceiling and can therefore include
@@ -5924,14 +5940,7 @@ function textAdventureQualityReferenceEvidenceV1(
         typeof decision.key === 'string' && typeof decision.sceneKey === 'string'
           ? [[decision.key, decision.sceneKey]] : []
       ))),
-      decisionOptionKeysByKey: Object.fromEntries(decisionRows.flatMap(decision => (
-        typeof decision.key === 'string'
-          ? [[decision.key, (Array.isArray(decision.options) ? decision.options : []).flatMap(option => (
-              option && typeof option === 'object' && !Array.isArray(option)
-                && typeof (option as JsonRecord).key === 'string'
-                ? [(option as JsonRecord).key as string] : []
-            ))]] : []
-      ))),
+      decisionOptionKeysByKey: indexTextAdventureNestedKeys(decisionRows, 'options'),
       optionKeys: decisionRows.flatMap(decision => (
         Array.isArray(decision.options) ? decision.options : []
       )).flatMap(option => (
@@ -5956,15 +5965,7 @@ function textAdventureQualityReferenceEvidenceV1(
           && typeof objective.sceneKeys[0] === 'string'
           ? [[objective.key, objective.sceneKeys[0]]] : []
       ))),
-      objectiveAlternativeKeysByKey: Object.fromEntries(objectiveRows.flatMap(objective => (
-        typeof objective.key === 'string'
-          ? [[objective.key, (Array.isArray(objective.alternatives) ? objective.alternatives : [])
-              .flatMap(alternative => (
-                alternative && typeof alternative === 'object' && !Array.isArray(alternative)
-                  && typeof (alternative as JsonRecord).key === 'string'
-                  ? [(alternative as JsonRecord).key as string] : []
-              ))]] : []
-      ))),
+      objectiveAlternativeKeysByKey: indexTextAdventureNestedKeys(objectiveRows, 'alternatives'),
       alternativeKeys: objectiveRows.flatMap(objective => (
         Array.isArray(objective.alternatives) ? objective.alternatives : []
       )).flatMap(alternative => (
@@ -7284,71 +7285,16 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     if (!options.brief.textAdventure) fail('文字冒险架构任务缺少专用 Brief')
     payload = parseTextAdventureArchitectureArtifactV1(raw, options.brief.textAdventure); kind = 'product-design'
     quality = { fourLevelSpaceVerified: true }
-  } else if (input.task.taskKey === 'content.narrative-arc-scenes') {
-    const storyBible = parseTextAdventureStoryBibleArtifactV1(
-      artifactPayload(input, 'content.story-bible'), options.brief,
-    )
-    const cast = parseTextAdventureCastBibleArtifactV1({
-      value: artifactPayload(input, 'content.cast-bible'),
-      brief: options.brief,
-      allowedResourceKeys: options.brief.source.selection.resourceKeys,
-    })
-    const arcScenes = parseTextAdventureNarrativeArcScenesArtifactV1({
-      value: raw, brief: options.brief, cast, storyBible,
+  } else if (input.task.taskKey === 'content.narrative-arc-scenes'
+    || input.task.taskKey === 'content.narrative-decision-plan'
+    || input.task.taskKey === 'content.ending-route-plan') {
+    const design = projectTextAdventureNarrativeDesignModelResultV1({
+      taskKey: input.task.taskKey, raw, brief: options.brief,
+      readArtifact: artifactKey => artifactPayload(input, artifactKey),
       locationTitles: textAdventureLocationTitles,
     })
-    payload = arcScenes
-    kind = 'product-design'; quality = {
-      narrativeArcScenesVerified: true,
-      sceneCardCount: arcScenes.acts.flatMap(act => act.sceneCards).length,
-      endingCount: arcScenes.endings.length,
-    }
-  } else if (input.task.taskKey === 'content.narrative-decision-plan') {
-    const storyBible = parseTextAdventureStoryBibleArtifactV1(
-      artifactPayload(input, 'content.story-bible'), options.brief,
-    )
-    const cast = parseTextAdventureCastBibleArtifactV1({
-      value: artifactPayload(input, 'content.cast-bible'),
-      brief: options.brief,
-      allowedResourceKeys: options.brief.source.selection.resourceKeys,
-    })
-    const decisionPlan = parseTextAdventureNarrativeDecisionPlanArtifactV1({
-      value: raw, brief: options.brief, cast, storyBible,
-    })
-    payload = decisionPlan
-    kind = 'product-design'; quality = {
-      narrativeDecisionPlanVerified: true,
-      meaningfulDecisionCount: decisionPlan.decisions.length,
-    }
-  } else if (input.task.taskKey === 'content.ending-route-plan') {
-    const storyBible = parseTextAdventureStoryBibleArtifactV1(
-      artifactPayload(input, 'content.story-bible'), options.brief,
-    )
-    const cast = parseTextAdventureCastBibleArtifactV1({
-      value: artifactPayload(input, 'content.cast-bible'),
-      brief: options.brief,
-      allowedResourceKeys: options.brief.source.selection.resourceKeys,
-    })
-    const arcPlan = parseTextAdventureNarrativeArcPlanArtifactV1({
-      value: artifactPayload(input, 'content.narrative-arc-plan'),
-      brief: options.brief,
-      cast,
-      storyBible,
-      locationTitles: textAdventureLocationTitles,
-    })
-    const endingRoutePlan = parseTextAdventureEndingRoutePlanArtifactV1({
-      value: raw,
-      arcPlan,
-      storyBible,
-    })
-    payload = endingRoutePlan
-    kind = 'product-design'; quality = {
-      endingRoutePlanVerified: true,
-      routeCount: endingRoutePlan.routes.length,
-      referencedEffectCount: new Set(
-        endingRoutePlan.routes.flatMap(route => route.requiredEffectKeys),
-      ).size,
-    }
+    payload = design.payload
+    kind = 'product-design'; quality = design.quality
   } else if (input.task.taskKey === 'content.main-quest-plan') {
     const cast = parseTextAdventureCastBibleArtifactV1({
       value: artifactPayload(input, 'content.cast-bible'),
@@ -7760,14 +7706,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
         typeof decision.key === 'string' && typeof decision.sceneKey === 'string'
           ? [[decision.key, decision.sceneKey]] : []
       ))),
-      decisionOptionKeysByKey: Object.fromEntries(decisionRows.flatMap(decision => (
-        typeof decision.key === 'string'
-          ? [[decision.key, (Array.isArray(decision.options) ? decision.options : []).flatMap(option => (
-              option && typeof option === 'object' && !Array.isArray(option)
-                && typeof (option as JsonRecord).key === 'string'
-                ? [(option as JsonRecord).key as string] : []
-            ))]] : []
-      ))),
+      decisionOptionKeysByKey: indexTextAdventureNestedKeys(decisionRows, 'options'),
       optionKeys: decisionRows.flatMap(decision => (
         Array.isArray(decision.options) ? decision.options : []
       )).flatMap(option => (
@@ -7792,15 +7731,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
           && typeof objective.sceneKeys[0] === 'string'
           ? [[objective.key, objective.sceneKeys[0]]] : []
       ))),
-      objectiveAlternativeKeysByKey: Object.fromEntries(objectiveRows.flatMap(objective => (
-        typeof objective.key === 'string'
-          ? [[objective.key, (Array.isArray(objective.alternatives) ? objective.alternatives : [])
-              .flatMap(alternative => (
-                alternative && typeof alternative === 'object' && !Array.isArray(alternative)
-                  && typeof (alternative as JsonRecord).key === 'string'
-                  ? [(alternative as JsonRecord).key as string] : []
-              ))]] : []
-      ))),
+      objectiveAlternativeKeysByKey: indexTextAdventureNestedKeys(objectiveRows, 'alternatives'),
       alternativeKeys: objectiveRows.flatMap(objective => (
         Array.isArray(objective.alternatives) ? objective.alternatives : []
       )).flatMap(alternative => (

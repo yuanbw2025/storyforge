@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 174 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 175 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -204,6 +204,7 @@
 | `documentImportCodexCategories` | 文档导入已登记词条类别目录 | world | L0 | 8000 |
 | `codexExtractionBaseline` | Codex 目标分类与既有词条闭集 | world | L0 | 8000 |
 | `historyAgentBaseline` | 历史 Agent 正式输入基线 | world | L0 | 12000 |
+| `referenceAnalysisPrivateChunk` | 已确认的本机参考分析原文块 | project | L0 | 40000 |
 | `referenceDerivedBaseline` | 参考分析派生 Agent 正式输入基线 | project | L0 | 36000 |
 | `styleLearningBaseline` | 文风学习正式输入基线 | project | L0 | 28000 |
 | `priorOutlineCandidate` | 同批次上一卷章纲候选 | runtime | L1 | 2400 |
@@ -417,15 +418,15 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `agent.orchestrator` | `src/lib/agent/orchestrator.ts:858` |
 | `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:966` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
-| `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:435` |
+| `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:438` |
 | `canon.narrative.extract` | `src/lib/agent/run/narrative-annotation-durable.ts:218` |
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:846`<br/>`src/lib/node-authoring/domain-execution.ts:920` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1880` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1858` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1848` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1881` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1859` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1849` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:663` |
@@ -475,12 +476,12 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/run/codex-extraction-durable.ts:784 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
-- `src/lib/agent/run/short-novel-durable.ts:319 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1697 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1749 · chat`
-- `src/lib/agent/story-core-copilot.ts:582 · chat`
+- `src/lib/agent/run/short-novel-durable.ts:195 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1659 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1711 · chat`
+- `src/lib/agent/story-core-copilot.ts:579 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
-- `src/lib/agent/worldview-field-copilot.ts:935 · chat`
+- `src/lib/agent/worldview-field-copilot.ts:932 · chat`
 - `src/lib/character-interaction/harness.ts:894 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:73 · chat`
 - `src/lib/character-interaction/situation-harness.ts:189 · chat`
@@ -500,7 +501,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 69 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio 使用独立冻结音频执行器，文本入口不补默认字段。
+共 70 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio 使用独立冻结音频执行器，文本入口不补默认字段。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
@@ -529,6 +530,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `ai-town.authoring.consult` | `ai-town.consult.v1` | `authoring.ai-town-consult` | auxiliary / durable-run | `ai-town-settings-preview` | 禁止 | `src/lib/ai-town/consultation.ts` |
 | `prose.chapter.generate` | `prose.generate` | `chapter.content` | formal / durable-run | `chapter-draft` | `chapters` | `src/lib/generation/chapter-generation-node.ts` |
 | `prose.chapter.continue` | `prose.continue` | `chapter.continue` | formal / durable-run | `chapter-continuation-draft` | `chapters` | `src/lib/generation/chapter-generation-node.ts` |
+| `reference.analysis.private-chunk` | `inspiration.reference-analysis-private-chunk` | `reference.analysis` | auxiliary / authoring-draft | `private-reference-chunk-report` | 禁止 | `src/lib/reference-analysis/pipeline.ts` |
 | `prose.selection.polish` | `prose.selection-edit` | `chapter.polish` | auxiliary / authoring-draft | `selection-polish-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
 | `prose.selection.expand` | `prose.selection-edit` | `chapter.expand` | auxiliary / authoring-draft | `selection-expand-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
 | `prose.selection.deai` | `prose.selection-edit` | `chapter.deai` | auxiliary / authoring-draft | `selection-rewrite-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
@@ -588,4 +590,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `870c94983`
+生成时间基准:commit `972f1d65f`

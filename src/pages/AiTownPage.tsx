@@ -289,7 +289,7 @@ export default function AiTownPage() {
   }, [viewKey, scope, hasDraft, row?.draft?.revision, row?.draft?.id, row?.work.title, applyFrame]);
   useEffect(() => {
     let active = true;
-    void listLocalWorldReferenceChoicesV1()
+    void listLocalWorldReferenceChoicesV1({ purpose: 'ai-town' })
       .then(value => { if (active && viewKeyRef.current === viewKey) setWorlds(value); })
       .catch(e => { if (active && viewKeyRef.current === viewKey) setError(String(e)); });
     return () => { active = false; };
@@ -896,7 +896,7 @@ export default function AiTownPage() {
                       </Link>
                       {handoffError && <p role="alert">{handoffError}</p>}
                       {worlds.map((w) => (
-                        <article className="avg-source" key={w.id}>
+                        <article className="avg-source" key={w.choiceKey ?? w.id}>
                           <div>
                             <h4>
                               {w.label}
@@ -904,11 +904,11 @@ export default function AiTownPage() {
                             </h4>
                             <p>
                               {w.worldCode} · v{w.version}
-                            </p>
+                            </p>{w.authorName && <p className="text-xs">{w.authorName} · {w.license}</p>}{w.attribution && <p className="text-xs">{w.attribution}</p>}{w.contentWarnings?.map((warning, index) => <p key={index} className="text-xs">{warning}</p>)}{w.purposeAllowed === false && <p className="text-xs">此来源未允许本产品使用</p>}
                           </div>
                           <button
                             className="lf-action"
-                            disabled={
+                            disabled={w.purposeAllowed === false ||
                               (busy ||
                               Boolean(row && !row.draft) ||
                               Boolean(handoffError)) || !canAuthor
@@ -927,7 +927,7 @@ export default function AiTownPage() {
                                 const captured = captureEditingFrame(sc);
                                 if (!captured.basis) throw new Error("请先保存当前方案");
                                 const savedSource = sourceVersion.current;
-                                const next = await selectAiTownWorld(sc, captured.basis.revision, w.id);
+                                const next = await selectAiTownWorld(sc, captured.basis.revision, w.id, w.sourceDeclarationHash);
                                 acknowledgeRevision(next, captured, isCurrent, undefined, savedSource);
                                 navigate(path("source", target));
                                 setNotice("世界版本已选择");
