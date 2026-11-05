@@ -2,6 +2,7 @@ import { CURRENT_BACKUP_VERSION } from '../../src/lib/export/backup-trust'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import {
   confirmAdaptationBrief,
   confirmAdaptationPlan,
@@ -137,7 +138,7 @@ describe('COMIC-1/2 · complete comic production workflow', () => {
     await db.workCharacterBindings.add({ projectId: item.scope.projectId, workId: item.scope.workId, characterId, role: 'protagonist', createdAt: now, updatedAt: now })
     const hero = await saveComicVisualSubject({ scope: item.scope, draft: { stableKey: 'hero', kind: 'character', characterId, locationRefKey: null, label: '林岚', design: { ...EMPTY_DESIGN, description: '短发、深色风衣' }, sourceUnitIds: [item.unit.id!], status: 'reviewed' } })
     expect(hero.characterId).toBe(characterId)
-    await db.geographies.add({ projectId: item.scope.projectId, overview: '', locations: JSON.stringify([{ id: 'old-station', name: '旧车站', type: 'building', description: '', significance: '', parentId: null, order: 0 }]), createdAt: now, updatedAt: now })
+    await db.geographies.add(stampNewRecord(item.scope, 'geographies', { projectId: item.scope.projectId, overview: '', locations: JSON.stringify([{ id: 'old-station', name: '旧车站', type: 'building', description: '', significance: '', parentId: null, order: 0 }]), createdAt: now, updatedAt: now }, { owner: 'world' }))
     const location = await saveComicVisualSubject({ scope: item.scope, draft: { stableKey: 'station', kind: 'location', characterId: null, locationRefKey: 'old-station', label: '旧车站', design: { ...EMPTY_DESIGN, description: '废弃候车室' }, sourceUnitIds: [item.unit.id!], status: 'reviewed' } })
     expect(location.locationRefKey).toBe('old-station')
     await expect(saveComicVisualSubject({ scope: item.scope, draft: { stableKey: 'missing-place', kind: 'location', characterId: null, locationRefKey: 'missing', label: '不存在', design: EMPTY_DESIGN, sourceUnitIds: [item.unit.id!] } })).rejects.toThrow('不可解析')

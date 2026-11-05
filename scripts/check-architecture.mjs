@@ -1877,7 +1877,7 @@ if (!productRuntimeMediaLibrarySource.includes('productRuntimeSessionId: number'
   violations.push('[㉝B运行媒资隔离] 运行中新生成的媒资必须绑定具体 ProductRuntimeSession')
 }
 if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'")
-  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 13')
+  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 14')
   || !currentSchemaSource.includes('this.version(1).stores(STORYFORGE_STORES_V1)')
   || !currentSchemaSource.includes('this.version(2).stores(STORYFORGE_STORES_V2)')
   || !currentSchemaSource.includes('this.version(3).stores(STORYFORGE_STORES_V3)')
@@ -1889,11 +1889,15 @@ if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'"
   || !currentSchemaSource.includes('this.version(10).stores(STORYFORGE_STORES_V10)')
   || !currentSchemaSource.includes('this.version(11).stores(STORYFORGE_STORES_V11)')
   || !currentSchemaSource.includes('this.version(12).stores(STORYFORGE_STORES_V12)')
+  || !currentSchemaSource.includes('this.version(13).stores(STORYFORGE_STORES_V13)')
+  || !/export const STORYFORGE_STORES_V13\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V12,?\s*\}/.test(currentSchemaSource)
+  || !/export const STORYFORGE_STORES\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V13,/.test(currentSchemaSource)
+  || !currentSchemaSource.includes("worldSourceReceipts: '++id, projectId, worldId, worldReleaseId, &[worldId+declarationHash], [worldId+packageDigest], [worldId+releaseUid]'" )
   || !currentSchemaSource.includes('this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)')
-  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 13
+  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 14
   || currentSchemaSource.includes('.upgrade(')
   || !currentSchemaSource.includes("productMediaAssets: '++id, projectId, worldId, workId, ownerKind, productType, productReleaseId, productRuntimeSessionId, &[productReleaseId+assetKey+version], &[productRuntimeSessionId+assetKey+version]")) {
-  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v13、保留 v1 至 v12 兼容桥、零数据改写 upgrade，并保留当前根/媒资隔离索引')
+  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v14、保留 v1 至 v13 兼容桥与独立 v13 形状、零数据改写 upgrade，并保留新来源回执与当前根/媒资隔离索引')
 }
 if (!deriveImportSrc.includes('ProductMedia 必须具有唯一、有效的产品所有者')
   || !deriveImportSrc.includes("asset.ownerKind === 'release'")
@@ -2078,12 +2082,136 @@ for (const file of walk('src/lib/world-engine')) {
   }
 }
 
-for (const file of walk('src/lib/workspace')) {
-  const source = read(file)
-  if (/\.\.\/(?:world-engine|product|product-production|product-platform|simulation|text-game|ttrpg|character-interaction|adventure|avg|open-world)\//.test(source)) {
-    violations.push(`[㉝C共享 Workspace 纯度] ${file}: 中立 Workspace/Work/Scope 层不得反向依赖世界引擎或具体产品`)
+/** @param {string} file @param {string} source @returns {string[]} */
+function workspaceDependencyViolationsV1(file, source) {
+  const workspace = file.startsWith('src/lib/workspace/')
+  if (!workspace && !source.includes('workspace-allocation')) return []
+  const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  /** @type {string[]} */
+  const found = []
+  const facade = file === 'src/lib/workspace/create-workspace.ts'
+  const installer = file === 'src/lib/product-platform/workspace-install.ts'
+  const allocator = file === 'src/lib/workspace/workspace-allocation.ts'
+  let workspaceSource = source
+  // The shared catalog is a neutral admission policy. This exact value import
+  // does not grant Workspace access to any concrete product service.
+  if (facade || file === 'src/lib/workspace/works.ts') {
+    for (const statement of [...ast.statements].reverse()) {
+      if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
+        && statement.moduleSpecifier.text === '../product/product-catalog') {
+        workspaceSource = workspaceSource.slice(0, statement.getStart(ast)) + workspaceSource.slice(statement.end)
+      }
+    }
   }
+  if (workspace && /\.\.\/(?:world-engine|product|product-production|product-platform|simulation|text-game|ttrpg|character-interaction|adventure|avg|open-world)\//.test(workspaceSource)) {
+    found.push(`[㉝C共享 Workspace 纯度] ${file}: 中立 Workspace/Work/Scope 层不得反向依赖世界引擎或具体产品`)
+  }
+  /** @type {Map<string, import('typescript').FunctionDeclaration[]>} */
+  const bindings = new Map()
+  for (const statement of ast.statements) {
+    if (allocator && (ts.isExportDeclaration(statement) || ts.isExportAssignment(statement))) {
+      found.push(`[㉝C内部 Workspace 分配] ${file}: 禁止内部分配模块的公开别名或 re-export`)
+    }
+    if (allocator && ts.canHaveModifiers(statement)
+      && ts.getModifiers(statement)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) {
+      if (!ts.isFunctionDeclaration(statement) || !statement.name
+        || !['allocateWorkspace', 'workspaceCreationTransactionTablesV1'].includes(statement.name.text)
+        || ts.getModifiers(statement)?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)) {
+        found.push(`[㉝C内部 Workspace 分配] ${file}: 内部分配模块只导出两个已登记函数，不得增加公开别名或 re-export`)
+      }
+    }
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)
+      || !/(?:^|\/)workspace-allocation(?:\.(?:[cm]?js|tsx?))?$/.test(statement.moduleSpecifier.text)) continue
+    const expected = facade ? './workspace-allocation' : installer ? '../workspace/workspace-allocation' : null
+    const named = statement.importClause?.namedBindings
+    if (statement.moduleSpecifier.text !== expected || statement.importClause?.name || statement.importClause?.isTypeOnly
+      || !named || !ts.isNamedImports(named)) {
+      found.push(`[㉝C内部 Workspace 分配] ${file}: 仅正式创建与固定验证安装模块可按精确路径直接导入内部分配函数`)
+      continue
+    }
+    for (const element of named.elements) {
+      const imported = (element.propertyName ?? element.name).text
+      const callers = imported === 'allocateWorkspace'
+        ? facade ? ['createWorkspace'] : ['createWorkspaceForProductDistributionV1', 'createWorkspaceForAdventureWebPackageV1']
+        : facade && imported === 'workspaceCreationTransactionTablesV1' ? ['workspaceCreationTransactionTablesV1'] : []
+      if (element.isTypeOnly || !callers.length) {
+        found.push(`[㉝C内部 Workspace 分配] ${file}: 禁止增加未登记的内部分配导入`)
+      } else {
+        /** @type {import('typescript').FunctionDeclaration[]} */
+        const owners = []
+        for (const caller of callers) {
+          /** @type {import('typescript').FunctionDeclaration[]} */
+          const matching = []
+          for (const candidate of ast.statements) {
+            if (ts.isFunctionDeclaration(candidate) && candidate.name?.text === caller && candidate.body
+              && ts.getModifiers(candidate)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) matching.push(candidate)
+          }
+          const [uniqueOwner] = matching
+          if (matching.length === 1 && uniqueOwner) owners.push(uniqueOwner)
+        }
+        bindings.set(element.name.text, owners)
+      }
+    }
+  }
+  /** @type {Map<string, import('typescript').Expression[]>} */
+  const pathBindings = new Map()
+  /** @param {import('typescript').Node} node */
+  function collectPaths(node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      // A later local declaration must not erase a possible module target.
+      // Reject ambiguous indirect loads if any candidate reaches the allocator.
+      const candidates = pathBindings.get(node.name.text) ?? []
+      candidates.push(node.initializer)
+      pathBindings.set(node.name.text, candidates)
+    }
+    ts.forEachChild(node, collectPaths)
+  }
+  collectPaths(ast)
+  /** @param {import('typescript').Node} node @param {Set<string>} [seen] @returns {boolean} */
+  function refersToAllocator(node, seen = new Set()) {
+    if (ts.isStringLiteralLike(node)) return /(?:^|\/)workspace-allocation(?:\.(?:[cm]?js|tsx?))?$/.test(node.text)
+    if (ts.isTemplateExpression(node) && node.head.text.includes('workspace-allocation')) return true
+    if (ts.isIdentifier(node)) {
+      const boundPaths = pathBindings.get(node.text)
+      if (boundPaths) {
+        if (seen.has(node.text)) return false
+        const visited = new Set(seen)
+        visited.add(node.text)
+        return boundPaths.some(boundPath => refersToAllocator(boundPath, new Set(visited)))
+      }
+    }
+    let matched = false
+    ts.forEachChild(node, child => { if (refersToAllocator(child, seen)) { matched = true; return true } })
+    return matched
+  }
+  /** @param {import('typescript').Node} node */
+  function visit(node) {
+    // Registry writer paths are metadata, not module edges. Inspect actual
+    // exports/load expressions, including aliases, instead of banning strings.
+    if ((ts.isExportDeclaration(node) && node.moduleSpecifier && refersToAllocator(node.moduleSpecifier))
+      || (ts.isExternalModuleReference(node) && node.expression && refersToAllocator(node.expression))
+      || (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword
+        || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))
+        && node.arguments.some(argument => refersToAllocator(argument)))) {
+      found.push(`[㉝C内部 Workspace 分配] ${file}: 禁止 re-export、动态加载或间接路径暴露内部分配模块`)
+    }
+    if (ts.isIdentifier(node) && bindings.has(node.text) && !ts.isImportSpecifier(node.parent)) {
+      /** @type {import('typescript').Node | undefined} */
+      let owner = node.parent
+      while (owner && !ts.isFunctionLike(owner)) owner = owner.parent
+      const caller = owner && ts.isFunctionDeclaration(owner) ? owner : null
+      if (!ts.isCallExpression(node.parent) || node.parent.expression !== node
+        || !caller || !bindings.get(node.text)?.includes(caller)) {
+        found.push(`[㉝C内部 Workspace 分配] ${file}: 内部分配绑定只能由已登记函数直接调用，不得公开、转交或另建绕过入口`)
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(ast)
+  return [...new Set(found)]
 }
+
+for (const file of walk('src')) violations.push(...workspaceDependencyViolationsV1(file, read(file)))
 
 const retiredTableTokens = [
   'gameDefinitions', 'adventureModules', 'avgMediaAssets', 'avgMediaBlobs',
