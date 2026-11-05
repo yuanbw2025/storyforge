@@ -4,13 +4,14 @@
 import { useMemo, useRef, useEffect, useState } from 'react'
 import { stratify, tree } from 'd3-hierarchy'
 import type { LocationTreeNode } from '../../stores/location'
-import { TAG_EMOJI, type LocationTag } from '../../lib/types/location'
+import { LocationTagsParseError, readLocationRecordTagsV1, TAG_EMOJI, type LocationTag } from '../../lib/types/location'
 
 interface FlatNode {
   id: number
   parentId: number | null
   name: string
   tags: LocationTag[]
+  tagIssue?: string
 }
 
 /** 根据第一个标签选颜色 */
@@ -67,10 +68,15 @@ export default function LocationTreeView({ tree: treeData, onSelect }: Props) {
       if (seen.has(node.id!)) continue
       seen.add(node.id!)
       let tags: LocationTag[] = []
-      try { tags = JSON.parse(node.tags || '[]') } catch { /* empty */ }
+      let tagIssue: string | undefined
+      try { tags = readLocationRecordTagsV1(node) }
+      catch (error) {
+        if (!(error instanceof LocationTagsParseError)) throw error
+        tagIssue = error.message
+      }
       // The forest cuts only display edges. Preserve the stored parent field
       // for explicit repair; chart edges follow the actual acyclic traversal.
-      result.push({ id: node.id!, parentId, name: node.name, tags })
+      result.push({ id: node.id!, parentId, name: node.name, tags, ...(tagIssue ? { tagIssue } : {}) })
       for (let i = node.children.length - 1; i >= 0; i--) {
         pending.push({ node: node.children[i], parentId: node.id! })
       }
@@ -158,9 +164,10 @@ export default function LocationTreeView({ tree: treeData, onSelect }: Props) {
                 style={{ cursor: onSelect ? 'pointer' : 'default' }}
                 onClick={() => onSelect?.(d.id)}
               >
+                <title>{d.name}{d.tagIssue ? `：标签异常，${d.tagIssue} 原值已保留。` : ''}</title>
                 <circle r={16} fill={color} fillOpacity={0.2} stroke={color} strokeWidth={1.5} />
                 <text y={1} textAnchor="middle" dominantBaseline="middle" fontSize={14} fill={color}>
-                  {emoji}
+                  {d.tagIssue ? '⚠' : emoji}
                 </text>
                 <text y={28} textAnchor="middle" fontSize={11}
                   fill="rgba(255,255,255,0.75)" fontFamily="PingFang SC, Microsoft YaHei, sans-serif">

@@ -2,6 +2,7 @@ import type { OutlineReviewTarget } from '../../lib/outline/review-adoption'
 import { useState } from 'react'
 import { X, Loader2, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronUp, Check, RotateCw, Sparkles, Wand2, ArrowRight, Trash2, Plus, RefreshCw, MessageSquare } from 'lucide-react'
 import type { ChapterReviewIssue, ChapterReviewResult, RewriteResult, ChangeItem } from '../../lib/outline/chapter-reviewer'
+import { applySelectedChapterReviewChanges, ChapterReviewError } from '../../lib/outline/chapter-reviewer'
 
 interface Props {
   open: boolean
@@ -32,6 +33,12 @@ type AcceptedChanges = Record<string, Set<string>> // issueId -> Set of changeId
 type EditMode = Record<string, boolean> // issueId -> 是否开启编辑建议模式
 type CustomSuggestions = Record<string, string> // issueId -> 用户编辑的建议
 
+function rewritePreview(rewrite: RewriteResult | undefined, accepted: ReadonlySet<string>) {
+  if (!rewrite) return { text: '', error: '' }
+  try { return { text: applySelectedChapterReviewChanges(rewrite, accepted), error: '' } }
+  catch (cause) { return { text: '', error: cause instanceof Error ? cause.message : String(cause) } }
+}
+
 export default function ChapterReviewDialog({
   open,
   onClose,
@@ -41,6 +48,7 @@ export default function ChapterReviewDialog({
   onRewrite,
 }: Props) {
   const [applyError, setApplyError] = useState('')
+  const [failures, setFailures] = useState<Array<{ message: string; rawOutput?: string }>>([])
   const [applying, setApplying] = useState(false)
   const [diagnosing, setDiagnosing] = useState(false)
   const [rewriting, setRewriting] = useState<string | null>(null)
@@ -55,6 +63,13 @@ export default function ChapterReviewDialog({
   const [customSuggestions, setCustomSuggestions] = useState<CustomSuggestions>({})
 
   if (!open) return null
+
+  const recordFailure = (cause: unknown) => {
+    setFailures(previous => [...previous, {
+      message: cause instanceof Error ? cause.message : String(cause),
+      rawOutput: cause instanceof ChapterReviewError ? cause.rawOutput : undefined,
+    }])
+  }
 
   const handleDiagnose = async () => {
     setDiagnosing(true)
@@ -74,7 +89,7 @@ export default function ChapterReviewDialog({
         .map(i => i.id)
       setExpandedIssues(new Set(highIssues))
     } catch (error) {
-      console.error('[ChapterReview] 诊断失败:', error)
+      recordFailure(error)
     } finally {
       setDiagnosing(false)
     }
@@ -85,16 +100,7 @@ export default function ChapterReviewDialog({
     try {
       // 使用自定义建议，如果没有则使用原始建议
       const customSuggestion = customSuggestions[issue.id] || issue.suggestion
-      console.log('[ChapterReview] 开始重写:', {
-        issueId: issue.id,
-        originalSuggestion: issue.suggestion,
-        customSuggestion
-      })
       const result = await onRewrite(issue, customSuggestion)
-      console.log('[ChapterReview] 重写结果:', {
-        changesCount: result.changes.length,
-        summary: result.summary
-      })
       setRewrites(prev => ({ ...prev, [issue.id]: result }))
       // 关闭编辑模式，显示结果
       setEditMode(prev => ({ ...prev, [issue.id]: false }))
@@ -106,7 +112,7 @@ export default function ChapterReviewDialog({
         }))
       }
     } catch (error) {
-      console.error('[ChapterReview] 改写失败:', error)
+      recordFailure(error)
     } finally {
       setRewriting(null)
     }
@@ -158,22 +164,11 @@ export default function ChapterReviewDialog({
     const accepted = acceptedChanges[issue.id] || new Set()
     if (!rewrite || accepted.size === 0) return
 
-    // Build final summary by applying only accepted changes
-    let finalSummary = rewrite.originalSummary
-    const orderedChanges = rewrite.changes
-      .filter(c => accepted.has(c.id))
-      .reverse() // Apply changes from end to start to preserve positions
-
-    for (const change of orderedChanges) {
-      if (change.before && finalSummary.includes(change.before)) {
-        finalSummary = finalSummary.replace(change.before, change.after)
-      }
-    }
-
     if (issue.affectedChapters.length > 0) {
       if (applying) return
       setApplying(true); setApplyError('')
       try {
+        const finalSummary = applySelectedChapterReviewChanges(rewrite, accepted)
         await onApplyRewrite(issue.affectedChapters[0], finalSummary, rewrite.target)
         setAppliedChapters(prev => new Set([...prev, issue.affectedChapters[0]]))
       } catch (cause) { setApplyError(cause instanceof Error ? cause.message : String(cause)) }
@@ -202,18 +197,7 @@ export default function ChapterReviewDialog({
 
   // 重新生成（重改）
   const regenerateRewrite = (issue: ChapterReviewIssue) => {
-    // 清除之前的改写结果，重新生成
-    setRewrites(prev => {
-      const next = { ...prev }
-      delete next[issue.id]
-      return next
-    })
-    setAcceptedChanges(prev => {
-      const next = { ...prev }
-      delete next[issue.id]
-      return next
-    })
-    // 重新调用改写（会使用当前的自定义建议）
+    // Retain the previous candidate and selection until a replacement succeeds.
     void handleRewriteIssue(issue)
   }
 
@@ -226,7 +210,7 @@ export default function ChapterReviewDialog({
   const isIssueApplied = (issue: ChapterReviewIssue) =>
     issue.affectedChapters.some(idx => appliedChapters.has(idx))
 
-  const sortedIssues = diagnosis?.issues.sort((a, b) => {
+  const sortedIssues = diagnosis?.issues.slice().sort((a, b) => {
     const severityOrder = { high: 0, medium: 1, low: 2 }
     return severityOrder[a.severity] - severityOrder[b.severity]
   }) || []
@@ -304,12 +288,32 @@ export default function ChapterReviewDialog({
           )}
 
           {applyError && <p role="alert" className="text-error p-3">{applyError}</p>}
+          {failures.map((failure, index) => (
+            <div key={index} role="alert" className="text-error text-xs border border-error/30 rounded p-3 mb-3">
+              <p>第 {index + 1} 次失败：{failure.message}</p>
+              <p>可明确重新诊断或重改；本次没有保存章纲修改。</p>
+              {failure.rawOutput !== undefined && (
+                <details className="mt-2">
+                  <summary>查看本次原始响应</summary>
+                  <pre className="whitespace-pre-wrap break-words">{failure.rawOutput || '（空响应）'}</pre>
+                </details>
+              )}
+            </div>
+          ))}
           {diagnosis && !diagnosing && (
             <div className="space-y-4">
               {/* Summary */}
               <div className="bg-bg-surface border border-border rounded-md px-3 py-2">
                 <div className="text-[10px] text-text-muted mb-1">诊断总结</div>
-                <div className="text-xs text-text-secondary">{diagnosis.summary}</div>
+                <div className="text-xs text-text-secondary" data-testid="chapter-review-summary">
+                  {diagnosis.issues.length ? diagnosis.summary : '本次诊断未定位到问题，请继续核对原稿。'}
+                </div>
+                {diagnosis.rawOutput !== undefined && (
+                  <details className="text-xs text-text-muted mt-2">
+                    <summary>查看诊断原始响应</summary>
+                    <pre className="whitespace-pre-wrap break-words">{diagnosis.rawOutput}</pre>
+                  </details>
+                )}
               </div>
 
               {/* Stats */}
@@ -339,9 +343,8 @@ export default function ChapterReviewDialog({
 
               {/* Issue list */}
               {sortedIssues.length === 0 ? (
-                <div className="text-center py-8 text-success text-sm">
-                  <Check className="w-6 h-6 mx-auto mb-2" />
-                  未发现问题，章纲逻辑与设定匹配良好
+                <div className="text-center py-8 text-text-muted text-sm">
+                  本次诊断未定位到问题，请继续核对原稿。
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -353,6 +356,7 @@ export default function ChapterReviewDialog({
                     const rewrite = rewrites[issue.id]
                     const isRewriting = rewriting === issue.id
                     const accepted = acceptedChanges[issue.id] || new Set()
+                    const preview = rewritePreview(rewrite, accepted)
                     const applied = isIssueApplied(issue)
 
                     return (
@@ -496,6 +500,10 @@ export default function ChapterReviewDialog({
                                 <div className="text-[10px] text-accent bg-accent/10 px-2 py-1 rounded">
                                   {rewrite.summary}
                                 </div>
+                                <details className="text-xs text-text-muted">
+                                  <summary>查看改写原始响应</summary>
+                                  <pre className="whitespace-pre-wrap break-words">{rewrite.rawOutput}</pre>
+                                </details>
 
                                 {/* Changes list */}
                                 {rewrite.changes.length > 0 ? (
@@ -536,7 +544,7 @@ export default function ChapterReviewDialog({
                                   </div>
                                 ) : (
                                   <div className="text-[10px] text-text-muted bg-bg-surface p-2 rounded border border-border text-center">
-                                    AI 认为此问题无需修改，或建议通过情节解释解决
+                                    本次没有生成修改补丁，原稿保留。
                                   </div>
                                 )}
 
@@ -544,20 +552,8 @@ export default function ChapterReviewDialog({
                                 {getAcceptedCount(issue.id) > 0 && (
                                   <div className="bg-bg-surface border border-border rounded p-2">
                                     <div className="text-[10px] text-text-muted mb-1">应用后预览</div>
-                                    <div className="text-xs text-text-secondary">
-                                      {rewrite.originalSummary.split('\n').map((line, idx) => {
-                                        const acceptedChangesList = rewrite.changes.filter(c => accepted.has(c.id))
-                                        let processedLine = line
-                                        for (const change of acceptedChangesList) {
-                                          if (change.before && processedLine.includes(change.before)) {
-                                            processedLine = processedLine.replace(
-                                              change.before,
-                                              `【${change.after}】`
-                                            )
-                                          }
-                                        }
-                                        return <div key={idx}>{processedLine}</div>
-                                      })}
+                                    <div className="text-xs text-text-secondary whitespace-pre-wrap" data-testid="chapter-review-preview">
+                                      {preview.error ? <p role="alert" className="text-error">{preview.error}</p> : preview.text}
                                     </div>
                                   </div>
                                 )}
@@ -566,7 +562,7 @@ export default function ChapterReviewDialog({
                                 <div className="flex gap-2 pt-1 flex-wrap">
                                   <button
                                     onClick={() => { void applyIssueChanges(issue) }}
-                                    disabled={applying || getAcceptedCount(issue.id) === 0}
+                                    disabled={applying || rewriting === issue.id || getAcceptedCount(issue.id) === 0 || Boolean(preview.error)}
                                     className="flex items-center gap-1 px-3 py-1.5 text-xs bg-success text-white rounded hover:bg-success/80 disabled:opacity-50"
                                   >
                                     <Check className="w-3 h-3" />
@@ -660,10 +656,17 @@ function ChangeDiffItem({
 }) {
   return (
     <div
+      role="checkbox"
+      aria-checked={accepted}
+      aria-label={`第 ${index} 处修改`}
+      tabIndex={0}
       className={`border rounded p-2 transition-all cursor-pointer ${
         accepted ? 'border-accent/30 bg-accent/5' : 'border-border bg-bg-base opacity-60'
       }`}
       onClick={onToggle}
+      onKeyDown={event => {
+        if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); onToggle() }
+      }}
     >
       <div className="flex items-start gap-2">
         <div className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
