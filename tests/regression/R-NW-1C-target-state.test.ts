@@ -77,6 +77,49 @@ describe('NW-1C · 既有子记录的目标状态交接', () => {
     expect(row.narrativeDevelopmentsV1![0].state).toBe('open')
   })
 
+  async function restoredLegacy() {
+    const legacy = JSON.parse(readFileSync(legacyPath, 'utf8'))
+    const projectId = await deriveImportProjectJSON(legacy.project)
+    const work = (await db.works.where('projectId').equals(projectId).toArray())[0]
+    const run = (await db.agentRuns.where('projectId').equals(projectId).toArray())[0]
+    if (!work?.id || !run?.id) throw new Error('Missing actual restored legacy owner/run')
+    const scope = { projectId, workId: work.id, worldId: work.worldId }
+    const loaded = await readNarrativeAnnotationRunV1(scope, run.id)
+    const row = (await db.foreshadows.where('projectId').equals(projectId).toArray())
+      .find(item => item.ragDocumentId === loaded.state.selection.sourceUid)
+    if (!row?.id || !loaded.candidate?.proposal) throw new Error('Missing actual legacy target/candidate')
+    return { scope, runId: run.id, loaded, row }
+  }
+
+  it.each(['original', 'author-policy', 'annotations'] as const)('旧 v3 policy recipe 兼容仍拒绝真实 %s 变化', async mutation => {
+    const f = await restoredLegacy()
+    const proposal = structuredClone(f.loaded.candidate!.proposal!)
+    if (mutation === 'original') await db.foreshadows.update(f.row.id!, { description: f.row.description + '作者的后来修改' })
+    else if (mutation === 'author-policy') await db.foreshadows.update(f.row.id!, {
+      ragPolicy: { ...f.row.ragPolicy, enabled: true, weight: f.row.ragPolicy?.weight === 2 ? 3 : 2 },
+    })
+    else await db.foreshadows.update(f.row.id!, { narrativeDevelopmentsV1: [
+      { ...f.row.narrativeDevelopmentsV1![0], statement: '作者后来重新安排了计划' },
+    ] })
+    const changed = await db.foreshadows.get(f.row.id!)
+    expect((await readNarrativeAnnotationRunV1(f.scope, f.runId)).staleReason).not.toBeNull()
+    await expect(reviseNarrativeAnnotationCandidateV1({ scope: f.scope, runId: f.runId,
+      expectedCandidateHash: f.loaded.candidate!.candidateHash, draft: JSON.stringify(proposal) })).rejects.toThrow()
+    await expect(adoptNarrativeAnnotationCandidateV1({ scope: f.scope, runId: f.runId,
+      candidateHash: f.loaded.candidate!.candidateHash })).rejects.toThrow()
+    expect(await db.foreshadows.get(f.row.id!)).toEqual(changed)
+  })
+
+  it('旧 v3 policy recipe 兼容不能跨真实 owner 使用原候选', async () => {
+    const f = await restoredLegacy(), foreign = await seedConfirmedNarrativeDomainV1()
+    const original = await db.foreshadows.get(f.row.id!), events = await db.agentRunEvents.count()
+    expect(foreign.scope.projectId).not.toBe(f.scope.projectId)
+    await expect(reviseNarrativeAnnotationCandidateV1({ scope: foreign.scope, runId: f.runId,
+      expectedCandidateHash: f.loaded.candidate!.candidateHash, draft: JSON.stringify(f.loaded.candidate!.proposal) })).rejects.toThrow()
+    expect(await db.foreshadows.get(f.row.id!)).toEqual(original)
+    expect(await db.agentRunEvents.count()).toBe(events)
+  })
+
   it('登记源提供唯一目标的既有注释，原文与注释分开，FK 只保留便携身份', async () => {
     const { fixture, row, selection } = await setup(true)
     const prepared = await prepareNarrativeCandidateV1({ scope: fixture.scope, selection })

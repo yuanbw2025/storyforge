@@ -2,7 +2,7 @@
  * Phase 25.3 — 重要地点面板
  * 树状图 / 列表双视图 + 多标签组合 + 树状父子层级
  */
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Plus, Trash2, ChevronDown, ChevronRight, MapPin,
   GitBranch, List, Sparkles, Loader2, RotateCcw, AlertTriangle,
@@ -13,12 +13,15 @@ import type { Project, ImportantLocation, LocationTag } from '../../lib/types'
 import { TAG_EMOJI } from '../../lib/types/location'
 import LocationTagPicker from './LocationTagPicker'
 import LocationTreeView from './LocationTreeView'
+import { LocationTagsParseError, readLocationTagsV1 } from '../../lib/types/location'
+import { saveFile } from '../../lib/platform/save-file'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { resolveRequestConfig } from '../../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import type { ExtractedLocation } from '../../lib/ai/adapters/structured-extract-adapter'
 import ExtractionReviewPanel from '../shared/ExtractionReviewPanel'
-import { resolveScopeLike } from '../../lib/workspace/scope'
+import { assertRecordInScope, resolveScopeLike } from '../../lib/workspace/scope'
+import { db } from '../../lib/db/schema'
 import {
   abandonLocationExtractionV1,
   adoptLocationExtractionCandidateV1,
@@ -30,6 +33,68 @@ import {
 
 interface Props {
   project: Project
+}
+
+function rawTagText(value: unknown): string {
+  if (typeof value === 'string') return value
+  try { return JSON.stringify(value) ?? String(value) }
+  catch { return String(value) }
+}
+
+function LocationTagRepair({ location, issue, onRepair, onReload }: {
+  location: ImportantLocation
+  issue: string
+  onRepair: (tags: string, expectedTags: unknown) => Promise<void>
+  onReload: () => Promise<unknown>
+}) {
+  const [original, setOriginal] = useState<unknown>(() => structuredClone(location.tags))
+  const [loadedIssue, setLoadedIssue] = useState(issue)
+  const [draft, setDraft] = useState(() => rawTagText(location.tags))
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const repair = async () => {
+    setError(''); setBusy(true)
+    try { readLocationTagsV1(draft); await onRepair(draft, original) }
+    catch (cause) { setError(cause instanceof Error ? cause.message : '标签修复未保存，输入已保留。') }
+    finally { setBusy(false) }
+  }
+  const exportOriginal = async () => {
+    setError('')
+    try {
+      await saveFile(new Blob([JSON.stringify({ locationId: location.id, field: 'tags',
+        storedType: typeof original, value: original }, null, 2)], { type: 'application/json' }),
+      `storyforge-location-${location.id}-tags-original.json`)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '原值导出失败，记录仍已保留。') }
+  }
+  const reloadOriginal = async () => {
+    setError(''); setBusy(true)
+    try {
+      const current = await onReload()
+      setOriginal(structuredClone(current)); setDraft(rawTagText(current))
+      try { readLocationTagsV1(current); setLoadedIssue('') }
+      catch (cause) {
+        if (!(cause instanceof LocationTagsParseError)) throw cause
+        setLoadedIssue(cause.message)
+      }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '原值重读失败，修复输入已保留。') }
+    finally { setBusy(false) }
+  }
+  return <div role="alert" className="mb-3 space-y-2 rounded border border-warning/50 bg-bg-surface p-3 text-sm">
+    <p>{location.name}（#{location.id}）{loadedIssue ? `标签异常：${loadedIssue}` : '载入的标签已符合结构，请确认后保存。'} 原记录与正文已保留。</p>
+    <label className="block text-xs">载入时原值
+      <textarea aria-label={`${location.name}标签原值`} readOnly value={rawTagText(original)} className="mt-1 w-full rounded border border-border bg-bg-base p-2" />
+    </label>
+    <label className="block text-xs">修复标签（JSON 数组，例如 ["港口"] 或 []）
+      <textarea aria-label={`修复${location.name}标签`} value={draft} disabled={busy}
+        onChange={event => setDraft(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-base p-2" />
+    </label>
+    {error && <p className="text-warning">{error}</p>}
+    <div className="flex gap-3 text-xs">
+      <button type="button" disabled={busy} onClick={() => { void repair() }}>{busy ? '正在保存修复…' : '保存标签修复'}</button>
+      <button type="button" disabled={busy} onClick={() => { void exportOriginal() }}>导出标签原值</button>
+      <button type="button" disabled={busy} onClick={() => { void reloadOriginal() }}>重新载入当前原值</button>
+    </div>
+  </div>
 }
 
 export default function LocationPanel({ project }: Props) {
@@ -108,6 +173,13 @@ export default function LocationPanel({ project }: Props) {
     }
   }
   const issueCount = listRows.filter(row => row.location.hierarchyIssue).length
+  const damagedTags = useMemo(() => locations.flatMap(location => {
+    try { readLocationTagsV1(location.tags); return [] }
+    catch (error) {
+      if (!(error instanceof LocationTagsParseError)) throw error
+      return [{ location, issue: error.message }]
+    }
+  }), [locations])
 
   useEffect(() => { setEditError(null) }, [viewScopeKey])
 
@@ -155,7 +227,12 @@ export default function LocationPanel({ project }: Props) {
   }, [handleUpdate])
 
   const parseTags = (tagsStr: string): LocationTag[] => {
-    try { return JSON.parse(tagsStr || '[]') } catch { return [] }
+    try { return readLocationTagsV1(tagsStr) }
+    catch (error) {
+      if (!(error instanceof LocationTagsParseError)) throw error
+      // Display-only neutral tags; the raw row and its explicit repair stay above.
+      return []
+    }
   }
 
   const handleExtractLocations = async () => {
@@ -353,10 +430,10 @@ export default function LocationPanel({ project }: Props) {
               {/* 标签 */}
               <div>
                 <label className="block text-xs text-text-muted mb-1">地点标签（可多选组合）</label>
-                <LocationTagPicker
+                {damagedTags.some(row => row.location.id === loc.id) ? <p className="text-xs text-warning">标签原值异常，请使用页面上方的修复输入。</p> : <LocationTagPicker
                   selected={tags}
                   onChange={newTags => handleUpdateTags(loc.id!, newTags)}
-                />
+                />}
               </div>
 
               {/* 描述 */}
@@ -443,6 +520,16 @@ export default function LocationPanel({ project }: Props) {
         有 {issueCount} 个地点的上级关系异常。原记录已保留，请在列表中选择有效上级或设为顶级；修复后再删除。
       </p>}
       {editError && <p role="alert" className="mb-3 text-sm text-red-400">{editError}</p>}
+      {damagedTags.map(({ location, issue }) => <LocationTagRepair key={`${viewScopeKey}:${location.id}`}
+        location={location} issue={issue} onRepair={(tags, expectedTags) => updateLocation(location.id!, { tags }, { expectedTags })}
+        onReload={async () => {
+          const scope = await resolveScopeLike(project.id!)
+          const current = await db.importantLocations.get(location.id!)
+          if (viewScopeKeyRef.current !== viewScopeKey || !current
+            || !await assertRecordInScope(scope, 'importantLocations', current, { owner: 'world' })) throw new Error('地点已删除或当前世界已切换，原修复输入仍已保留。')
+          if (viewScopeKeyRef.current !== viewScopeKey) throw new Error('当前世界已切换，原修复输入仍已保留。')
+          return current.tags
+        }} />)}
 
       {/* 工具栏 */}
       <div className="mb-4 flex items-center justify-between flex-wrap gap-2">

@@ -8,6 +8,7 @@ import { currentWorkFixtureRecordV1 } from '../helpers/current-workspace'
 const mocks = vi.hoisted(() => ({
   runBatch: vi.fn(),
   adoptCandidate: vi.fn(),
+  beginBatch: vi.fn(),
   restoreBatch: vi.fn(),
   rejectCandidate: vi.fn(),
 }))
@@ -19,6 +20,7 @@ vi.mock('../../src/lib/ai/batch-outline-runner', () => ({
 vi.mock('../../src/lib/outline/harness', () => ({
   restoreLatestOutlineGenerationBatchV1: mocks.restoreBatch,
   adoptOutlineGenerationCandidateV1: mocks.adoptCandidate,
+  beginOutlineGenerationBatchAdoptionV1: mocks.beginBatch,
   rejectOutlineGenerationCandidateV1: mocks.rejectCandidate,
 }))
 
@@ -132,6 +134,7 @@ function options(patch: Partial<Parameters<typeof useOutlineBatchGeneration>[0]>
 beforeEach(() => {
   mocks.runBatch.mockReset()
   mocks.adoptCandidate.mockReset()
+  mocks.beginBatch.mockReset(); mocks.beginBatch.mockResolvedValue(undefined)
   mocks.restoreBatch.mockReset()
   mocks.rejectCandidate.mockReset()
   mocks.restoreBatch.mockResolvedValue(null)

@@ -48,6 +48,7 @@ export type ContextSelectionReasonCodeV1 = typeof CONTEXT_SELECTION_REASON_CODES
 
 export type ContextSelectionOmissionReasonV1 =
   | 'policy-forbidden'
+  | 'author-disabled'
   | 'scope-conflict'
   | 'candidate-not-explicit'
   | 'budget-exhausted'
@@ -458,7 +459,8 @@ export async function selectContextResourcesV1(input: ContextSelectorInputV1): P
         sourceKey: descriptor.sourceKey,
         kind: descriptor.kind,
         estimatedTokens: descriptor.tokenEstimate.index ?? 0,
-        reasonCode: descriptor.authority === 'candidate' ? 'candidate-not-explicit' : 'policy-forbidden',
+        reasonCode: descriptor.automaticSelectionEnabled === false ? 'author-disabled'
+          : descriptor.authority === 'candidate' ? 'candidate-not-explicit' : 'policy-forbidden',
       })
       continue
     }

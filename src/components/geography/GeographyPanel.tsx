@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight, MapPin, GitBranch, List, Sparkles, Image, Copy, Check, Loader2 } from 'lucide-react'
 import { useGeographyStore } from '../../stores/project-singletons'
 import { useWorldGroupStore } from '../../stores/world-group'
@@ -11,6 +11,9 @@ import { nanoid } from '../../lib/utils/id'
 import { sanitizeSvg } from '../../lib/utils/sanitize-svg'
 import LocationTreeMap from './LocationTreeMap'
 import { useActiveWork } from '../../hooks/useActiveWork'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
+import { registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
+import ScopedWorldAuthoringBoundary, { worldAuthorViewKey } from '../world-group/ScopedWorldAuthoringBoundary'
 
 const LOCATION_TYPES: { value: LocationType; label: string }[] = [
   { value: 'continent', label: '大陆' },
@@ -42,11 +45,34 @@ interface Props {
 }
 
 export default function GeographyPanel({ project }: Props) {
-  const activeWork = useActiveWork(project)
-  const { geography, loadAll, save } = useGeographyStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
+  return <ScopedWorldAuthoringBoundary project={project} activeGroupId={activeGroupId}>
+    {view => <ScopedGeographyPanel {...view} />}
+  </ScopedWorldAuthoringBoundary>
+}
+
+function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupId: number | null }) {
+  const activeWork = useActiveWork(project)
+  const { geography, loadAll, save, loadedScope, loading, loadError } = useGeographyStore()
+  const scope = useMemo(() => ({ projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! }), [project.id, project.activeWorldId, project.activeWorkId])
+  const groupId = project.enableMultiWorld ? activeGroupId : null
+  const readReady = !loading && !loadError && loadedScope?.projectId === scope.projectId
+    && loadedScope.worldId === scope.worldId && loadedScope.workId === scope.workId
+    && useGeographyStore.getState().activeWorldGroupId === groupId
   const [overview, setOverview] = useState('')
   const [locations, setLocations] = useState<Location[]>([])
+  const draft = useRef({ overview: '', locations: [] as Location[] })
+  const draftReady = useRef(false)
+  const draftGroupId = useRef(groupId)
+  const dirtyFields = useRef(new Set<'overview' | 'locations'>())
+  const [dirty, setDirty] = useState(false)
+  const pendingSave = useRef<Promise<void> | null>(null)
+  const [saveError, setSaveError] = useState('')
+  const [readError, setReadError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+  useBeforeUnload(dirty || saving)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [view, setView] = useState<'list' | 'map' | 'aimap'>('map')
   const [svgContent, setSvgContent] = useState<string>('')
@@ -55,23 +81,60 @@ export default function GeographyPanel({ project }: Props) {
   const ai = useAIStream(createAISessionKey(
     project.id!,
     'geography.concept-map',
-    project.enableMultiWorld ? activeGroupId ?? 'global' : 'project',
+    worldAuthorViewKey({ project, activeGroupId }),
   ))
 
   useEffect(() => {
-    loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
-  }, [project.id, project.enableMultiWorld, activeGroupId, loadAll])
+    void loadAll(scope, groupId).catch(() => undefined)
+  }, [scope, groupId, loadAll])
 
   useEffect(() => {
-    if (geography) {
-      setOverview(geography.overview || '')
-      try {
-        setLocations(JSON.parse(geography.locations || '[]'))
-      } catch {
-        setLocations([])
+    if (!readReady) return
+    try {
+      const nextOverview = geography ? geography.overview : ''
+      const nextLocations: unknown = geography ? JSON.parse(geography.locations) : []
+      if (typeof nextOverview !== 'string' || !Array.isArray(nextLocations)
+        || nextLocations.some(value => !value || typeof value !== 'object' || typeof value.id !== 'string' || typeof value.name !== 'string')) {
+        throw new Error('地理字段格式异常')
       }
+      if (!dirtyFields.current.has('overview')) { draft.current.overview = nextOverview; setOverview(nextOverview) }
+      if (!dirtyFields.current.has('locations')) { draft.current.locations = nextLocations; setLocations(nextLocations) }
+      draftGroupId.current = geography?.worldGroupId ?? groupId
+      draftReady.current = true
+      setReadError('')
+    } catch {
+      draftReady.current = false
+      setReadError('地理内容无法读取，原数据已保留。请先导出备份并恢复异常字段。')
     }
-  }, [geography])
+  }, [geography, readReady, groupId])
+
+  const persistDraft = useCallback(async function persist(): Promise<void> {
+    if (pendingSave.current) { await pendingSave.current; return persist() }
+    if (!dirtyFields.current.size) return
+    if (!draftReady.current) throw new Error('地理读取未完成，输入已保留')
+    const before = { ...draft.current }
+    const fields = [...dirtyFields.current]
+    setSaving(true)
+    const operation = save({
+      projectId: scope.projectId, worldGroupId: draftGroupId.current,
+      ...(fields.includes('overview') ? { overview: before.overview } : {}),
+      ...(fields.includes('locations') ? { locations: JSON.stringify(before.locations) } : {}),
+    }, scope)
+    pendingSave.current = operation
+    try {
+      await operation
+      for (const field of fields) if (draft.current[field] === before[field]) dirtyFields.current.delete(field)
+      setDirty(dirtyFields.current.size > 0)
+      setSaveError('')
+    } catch (cause) {
+      setSaveError(cause instanceof Error ? cause.message : '保存失败，输入已保留')
+      throw cause
+    } finally { pendingSave.current = null; setSaving(false) }
+  }, [scope, save])
+  const persistRef = useRef(persistDraft)
+  persistRef.current = persistDraft
+  useEffect(() => registerPendingDraftFlusherV1(() => persistRef.current()), [])
+  useEffect(() => () => { void persistRef.current().catch(() => undefined) }, [])
 
   useEffect(() => {
     if (ai.isStreaming || !ai.output || svgContent) return
@@ -85,19 +148,17 @@ export default function GeographyPanel({ project }: Props) {
     }
   }, [ai.isStreaming, ai.output, svgContent])
 
-  const saveLocations = useCallback(async (newLocations: Location[]) => {
+  const saveLocations = (newLocations: Location[]) => {
+    if (!readReady || readError) return
+    draft.current.locations = newLocations
+    dirtyFields.current.add('locations')
+    setDirty(true)
     setLocations(newLocations)
-    await save({
-      projectId: project.id!,
-      locations: JSON.stringify(newLocations),
-    })
-  }, [project.id, save])
-
-  const handleSaveOverview = async () => {
-    await save({ projectId: project.id!, overview })
+    void persistDraft().catch(() => undefined)
   }
 
   const handleAddLocation = () => {
+    if (!readReady || readError) return
     const newLoc: Location = {
       id: nanoid(),
       name: '新地点',
@@ -129,6 +190,7 @@ export default function GeographyPanel({ project }: Props) {
     const result = await ai.start(messages, undefined, {
       formalEntryId: 'world.map.concept', category: 'geography.concept-map', projectId: project.id!,
     })
+    if (!mounted.current) return
     // 提取 SVG 代码（去掉可能的 markdown code block）
     const svg = result
       .replace(/^```(?:svg|xml)?\n?/i, '')
@@ -157,13 +219,29 @@ export default function GeographyPanel({ project }: Props) {
         {project.enableMultiWorld && <WorldGroupSwitcher />}
       </div>
 
+      {(loadError || readError) && <div role="alert" className="mb-3 text-sm text-error">
+        {loadError || readError}
+        <button type="button" className="ml-3 underline" onClick={() => { void loadAll(scope, groupId).catch(() => undefined) }}>重新读取地理</button>
+      </div>}
+      {saveError && <div role="alert" className="mb-3 text-sm text-error">
+        未保存：{saveError} 输入已保留。
+        <button type="button" className="ml-3 underline" onClick={() => { void persistDraft().catch(() => undefined) }}>重试保存</button>
+      </div>}
+      {saving && <p role="status" className="text-xs text-text-muted">正在保存…</p>}
+      <fieldset disabled={!readReady || !!readError} inert={!readReady || !!readError} className="contents" aria-label="地理读取保护">
+
       {/* 总述 */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-text-secondary mb-1">地理总述</label>
         <textarea
           value={overview}
-          onChange={e => setOverview(e.target.value)}
-          onBlur={handleSaveOverview}
+          onChange={e => {
+            draft.current.overview = e.target.value
+            dirtyFields.current.add('overview')
+            setDirty(true)
+            setOverview(e.target.value)
+          }}
+          onBlur={() => { void persistDraft().catch(() => undefined) }}
           placeholder="描述这个世界的整体地理面貌、大陆分布、气候特征等..."
           className="w-full h-32 p-3 bg-bg-surface border border-border rounded-lg text-text-primary text-sm resize-y focus:outline-none focus:border-accent"
         />
@@ -375,6 +453,7 @@ export default function GeographyPanel({ project }: Props) {
           })
         )}
       </div>
+      </fieldset>
     </div>
   )
 }

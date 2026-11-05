@@ -1,3 +1,4 @@
+import {assertCurrentProductEntryV1} from '../product/product-catalog'
 import {db} from '../db/schema'
 import {adopt} from '../registry/adopt'
 import {canonicalStringify} from '../agent/run/hash'
@@ -51,6 +52,7 @@ async function write(scope: WorkspaceScope, expected: ChatAuthoringDraftV1, set:
     const current = await readChatDraftV1(scope)
     if (current.revision !== expected.revision || current.roleProfilesJson !== expected.roleProfilesJson
       || current.settingsJson !== expected.settingsJson || current.worldReleaseId !== expected.worldReleaseId) throw new Error('方案已变化，本次人物整理没有写入')
+    assertCurrentProductEntryV1('upper.character-interaction')
     const result = await adopt({projectId: scope.projectId, scope, target: 'chatAuthoringDrafts', recordId: current.id!, mode: 'replace', data: {roleProfilesJson: canonicalStringify(set)}})
     if (result.written.length !== 1 || result.skipped.length || result.unknown.length || result.typeErrors.length) throw new Error('人物整理采纳未完整完成')
     // Revision is system lifecycle state, never a model-writable field.
