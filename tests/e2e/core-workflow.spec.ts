@@ -2244,18 +2244,10 @@ test('主 Agent 为明确章纲生成正文，拒绝零写入并把可见修订�
 })
 
 test('外部文档词条先形成带证据候选，作者确认后才进入 Codex', async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({
-      provider: 'ollama',
-      apiKey: '',
-      model: 'codex-import-e2e',
-      baseUrl: 'http://localhost:1234/v1',
-      temperature: 0,
-      maxTokens: 0,
-      contextWindow: 100000,
-    }))
-  })
+  let posts = 0
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    expect(route.request().method()).toBe('POST')
+    posts++
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -2286,6 +2278,14 @@ test('外部文档词条先形成带证据候选，作者确认后才进入 Code
   })
   await openCleanHome(page)
   await createProject(page, 'E2E 词条导入审查')
+  await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { useAIConfigStore } = await load<typeof import('../../src/stores/ai-config')>('/storyforge/src/stores/ai-config.ts')
+    useAIConfigStore.getState().setConfig({
+      provider: 'ollama', apiKey: '', model: 'codex-import-e2e', baseUrl: 'http://localhost:1234/v1',
+      temperature: 0, contextWindow: 100000,
+    })
+  })
 
   await openWorkspaceLeaf(page, '文档解析')
   await page.getByPlaceholder(/把文档内容粘贴在这里/).fill(
@@ -2294,7 +2294,12 @@ test('外部文档词条先形成带证据候选，作者确认后才进入 Code
   await page.getByRole('button', { name: '开始解析', exact: true }).click()
   await page.getByRole('button', { name: /导入当前项目（1 块）/ }).click()
 
-  await expect(page.getByRole('heading', { name: '✓ 全部解析完成' })).toBeVisible()
+  const chunkReview = page.getByRole('dialog', { name: '审查导入候选' })
+  await expect(chunkReview.getByRole('heading', { name: '审查第 1 块' })).toBeVisible()
+  await expect(chunkReview.getByText('另有 1 条词条候选，完成文档导入后可单独审查。')).toBeVisible()
+  expect(posts).toBe(1)
+  await chunkReview.getByRole('button', { name: '确认保存本块' }).click()
+  await expect(page.getByRole('heading', { name: '✓ 全部导入完成' })).toBeVisible()
   await expect(page.getByText('1 条 Codex 候选等待作者审查')).toBeVisible()
   await page.getByRole('button', { name: '审查并选择', exact: true }).click()
   await expect(page.getByText('逐字证据：')).toBeVisible()
@@ -2307,6 +2312,7 @@ test('外部文档词条先形成带证据候选，作者确认后才进入 Code
   await openWorkspaceLeaf(page, '人文环境')
   await page.getByRole('button', { name: /城池重镇/ }).click()
   await expect(page.getByText('新临渊城', { exact: true })).toBeVisible()
+  expect(posts).toBe(1)
 })
 
 test('真实章节入口可打开五阶段工坊并预览首节点最终提示词', async ({ page }) => {
@@ -3754,13 +3760,14 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
       projectId: currentProjectId,
       workId: project.activeWorkId,
       worldGroupId: sourceOutline.worldGroupId ?? null,
-      subjectType: 'location',
-      subjectId: null,
-      subjectName: '潮门',
-      predicate: 'state',
-      value: '完全开启',
+      characterId: null,
+      subjectName: '守门人',
+      predicate: 'goal',
+      factKind: 'state',
+      value: '让潮门完全开启',
       validFromChapterId: sourceChapter.id,
       validToChapterId: null,
+      sourceType: 'chapter',
       sourceChapterId: sourceChapter.id,
       sourceQuote: '潮门完全开启',
       sourceTextHash: '',
@@ -3806,8 +3813,50 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
   await page.getByRole('button', { name: '打开人工入口', exact: true }).click()
 
   await expect(page.getByRole('heading', { name: '事实库（NS-4 长期一致性）', exact: true })).toBeVisible()
-  await expect(page.getByText('潮门', { exact: true })).toBeVisible()
+  await expect(page.getByText('守门人', { exact: true })).toBeVisible()
+  // Reject the stale original explicitly. Confirming a new candidate must
+  // not silently change or re-sign the old fact's invalid source evidence.
+  await page.getByTitle('否决', { exact: true }).click()
+  await expect(page.getByRole('button', { name: '已否决（1）', exact: true })).toBeVisible()
+  await page.getByPlaceholder(/^粘贴外部编辑后的候选 JSON/).fill(JSON.stringify({
+    facts: [{
+      subjectName: '守门人',
+      predicate: 'goal',
+      value: '保持潮门只开启一半',
+      sourceQuote: '潮门只开启一半',
+      validFromChapterId: fixture.sourceChapterId,
+    }],
+  }))
+  await page.getByRole('button', { name: '导入候选 diff', exact: true }).click()
+  await expect(page.getByText('候选 diff 已导入：写入 1 条，跳过重复 0 条，跳过无效 0 条。', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '待确认候选（1）', exact: true }).click()
   await page.getByTitle('确认为权威事实（Canon）').click()
+  await expect(page.getByText('已确认为 Canon，旧区间记录已保留。', { exact: true })).toBeVisible()
+  const correctedFacts = await page.evaluate(async factId => {
+    const request = <T>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      value.onsuccess = () => resolve(value.result)
+      value.onerror = () => reject(value.error)
+    })
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const opening = indexedDB.open('storyforge-core')
+      opening.onsuccess = () => resolve(opening.result)
+      opening.onerror = () => reject(opening.error)
+    })
+    const facts = await request(database.transaction('temporalFacts').objectStore('temporalFacts').getAll()) as Array<{
+      id: number; projectId: number; workId: number; subjectName: string; predicate: string
+      status: string; value: string; sourceType: string; supersedesFactId?: number | null
+    }>
+    const original = facts.find(fact => fact.id === factId)!
+    const replacement = facts.find(fact => fact.id !== factId && fact.subjectName === '守门人'
+      && fact.predicate === 'goal' && fact.value === '保持潮门只开启一半')!
+    database.close()
+    return { original, replacement }
+  }, fixture.factId)
+  expect(correctedFacts.original).toMatchObject({ status: 'rejected', value: '让潮门完全开启' })
+  expect(correctedFacts.replacement).toMatchObject({
+    projectId, workId: correctedFacts.original.workId,
+    status: 'confirmed', value: '保持潮门只开启一半', sourceType: 'import', supersedesFactId: null,
+  })
   await page.getByRole('button', { name: '验证已保存修正', exact: true }).click()
   await expect(page.getByText('修正已验证并重新规划', { exact: true })).toBeVisible({ timeout: 20_000 })
   await page.getByRole('button', { name: '返回来源章节', exact: true }).click()

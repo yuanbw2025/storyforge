@@ -4,7 +4,7 @@
  * R-04：导入原子性与外键反例。
  *
  * 期望:
- *   FK remap 缺失时在事务内抛错,整个导入回滚,不留下项目或子表残留。
+ *   必需外键缺失时在写入前拒绝，不留下项目或子表记录。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
@@ -22,7 +22,7 @@ describe('R-04: importProjectJSON 原子性 + FK fail-fast', () => {
     db.close()
   })
 
-  it('章节引用缺失的大纲节点时,导入抛错且整体回滚', async () => {
+  it('章节引用缺失的大纲节点时，预检拒绝且零写入', async () => {
     const now = Date.now()
     const projectId = await seedCurrentProject({ name: '坏导入', createdAt: now, updatedAt: now })
     const outlineNodeId = await db.outlineNodes.add({
@@ -54,9 +54,14 @@ describe('R-04: importProjectJSON 原子性 + FK fail-fast', () => {
     await db.delete()
     await db.open()
 
-    await expect(importProjectJSON(brokenExport)).rejects.toThrow('chapters.outlineNodeId')
+    await expect(importProjectJSON(brokenExport)).rejects.toMatchObject({
+      message: '备份预检失败：chapters[0]._outlineExportId=0 没有对应的 outlineNodes 记录。',
+    })
 
     expect(await db.projects.count()).toBe(0)
+    expect(await db.worlds.count()).toBe(0)
+    expect(await db.works.count()).toBe(0)
+    expect(await db.outlineNodes.count()).toBe(0)
     expect(await db.chapters.count()).toBe(0)
   })
 })

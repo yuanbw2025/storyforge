@@ -61,7 +61,7 @@ import {
   inspectTextOpenWorldRuntimeHeadV1,
 } from './checkpoints'
 import { readTextOpenWorldArtifactGovernanceV1 } from './creator-artifact-governance'
-import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
+import { assertTextOpenWorldCreatorDraftForNewWorkV1, readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
 import {
   assertTextOpenWorldCalibrationLineageUnchangedV1,
   readTextOpenWorldCalibrationLineageV1,
@@ -353,7 +353,7 @@ function plausibleRealProviderIdentity(provider: string, model: string): boolean
   return !/(fixture|mock|simulat|fake|test-provider|test-model)/i.test(`${provider}/${model}`)
 }
 
-async function calibrationReadiness(authority: BuildAuthorityV1): Promise<{
+async function calibrationReadiness(authority: BuildAuthorityV1, requiresNewReview = false): Promise<{
   readiness: TextOpenWorldCreatorCalibrationReadinessV1
   graderConfig: ReturnType<typeof resolveRequestConfig>['config']
   graderResolution: ReturnType<typeof resolveRequestConfig>
@@ -362,6 +362,7 @@ async function calibrationReadiness(authority: BuildAuthorityV1): Promise<{
   const derived = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
     scope: authority.scope, buildId: authority.build.id,
   })
+  if (requiresNewReview) assertTextOpenWorldCreatorDraftForNewWorkV1(derived.contracts.creatorBrief.draft)
   const generator = derived.contracts.start.preflight.providerBinding
   const aiState = useAIConfigStore.getState()
   const resolved = resolveRequestConfig(aiState.config, {
@@ -740,6 +741,18 @@ async function latestCalibrationReceipt(
   })
 }
 
+async function hashTextOpenWorldCreatorEventStreamV1(events: readonly ProductRuntimeEvent[]): Promise<string> {
+  return hashProductProductionValueV2(await Promise.all(events.map(async event => ({
+    sequence: event.sequence,
+    type: event.type,
+    actorKeyHash: event.actorKey ? await hashProductProductionValueV2(event.actorKey) : null,
+    targetKeyHash: event.targetKey ? await hashProductProductionValueV2(event.targetKey) : null,
+    commandIdHash: event.commandId ? await hashProductProductionValueV2(event.commandId) : null,
+    payloadHash: await hashProductProductionValueV2(JSON.parse(event.payloadJson)),
+    createdAt: event.createdAt,
+  }))))
+}
+
 function parseCommandActionKey(event: ProductRuntimeEvent): string | null {
   if (event.type !== 'text-open-world.command.committed') return null
   try {
@@ -832,15 +845,7 @@ async function createSessionWitness(input: {
   }
   // Replace the temporary redacted placeholders with deterministic hashes. No
   // command id or player/world prose enters the portable graybox receipt.
-  const eventStreamHash = await hashProductProductionValueV2(await Promise.all(events.map(async event => ({
-    sequence: event.sequence,
-    type: event.type,
-    actorKeyHash: event.actorKey ? await hashProductProductionValueV2(event.actorKey) : null,
-    targetKeyHash: event.targetKey ? await hashProductProductionValueV2(event.targetKey) : null,
-    commandIdHash: event.commandId ? await hashProductProductionValueV2(event.commandId) : null,
-    payloadHash: await hashProductProductionValueV2(JSON.parse(event.payloadJson)),
-    createdAt: event.createdAt,
-  }))))
+  const eventStreamHash = await hashTextOpenWorldCreatorEventStreamV1(events)
   portable.eventStreamHash = eventStreamHash
   const witnessWithoutKey = portable
   const sessionWitnessKey = `session.${(await hashProductProductionValueV2(witnessWithoutKey)).slice(0, 24)}`
@@ -1183,15 +1188,7 @@ async function captureReleaseSaveV1(input: {
   const stateHash = throughSequence === allEvents.length
     ? (await readVerifiedProductRuntimeHeadV1(session)).stateHash
     : await replayTextOpenWorldMigrationSourceStateHashV1({ session, events, throughSequence })
-  const eventStreamHash = await hashProductProductionValueV2(await Promise.all(events.map(async event => ({
-    sequence: event.sequence,
-    type: event.type,
-    actorKeyHash: event.actorKey ? await hashProductProductionValueV2(event.actorKey) : null,
-    targetKeyHash: event.targetKey ? await hashProductProductionValueV2(event.targetKey) : null,
-    commandIdHash: event.commandId ? await hashProductProductionValueV2(event.commandId) : null,
-    payloadHash: await hashProductProductionValueV2(JSON.parse(event.payloadJson)),
-    createdAt: event.createdAt,
-  }))))
+  const eventStreamHash = await hashTextOpenWorldCreatorEventStreamV1(events)
   const portable = {
     releaseUid: release.manifest.lineage.releaseUid,
     releaseHash: release.manifest.releaseIdentityHash,
@@ -1796,7 +1793,7 @@ export async function recordTextOpenWorldCreatorCalibrationV1(input: {
     scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId,
   })
   assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
-  const state = await calibrationReadiness(authority)
+  const state = await calibrationReadiness(authority, !input.reuseReceiptHash)
   if (!input.reuseReceiptHash && !state.readiness.ready) fail(state.readiness.issue ?? '独立校准尚未就绪')
   const { mainline, significant, regions, quests, director, scenes, contentBudget, semanticReview } = calibrationArtifacts(authority)
   const context: TextOpenWorldCreatorCalibrationReviewContextV1 = buildTextOpenWorldCreatorCalibrationContextV1({

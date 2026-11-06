@@ -34,6 +34,7 @@ export interface TtrpgAuthoringDraftV1 {
   settingsJson: string;
   savedRulePackId: number | null;
   worldReleaseId: number | null;
+  sourcePurpose?: import('../world-engine/source-purpose').WorldSourcePurposeProofV1;
   productionId: number | null;
   selectionJson: string | null;
   suggestionKey: string | null;

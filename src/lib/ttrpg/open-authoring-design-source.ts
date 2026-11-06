@@ -73,10 +73,11 @@ async function prepare(input: { scope: WorkspaceScope; revision: number }, origi
   const rule = await readTtrpgRulePackVersionedV1({ scope, rulePackId: draft.savedRulePackId })
   if (rule.rulePack.version !== 2) fail('设计不能把旧格式规则当作开放规则')
   const worldReference = await createWorldReferenceV1(draft.worldReleaseId)
-  const common = await draftTtrpgOpenProductionCommonBriefV3({ scope, worldReleaseId: draft.worldReleaseId,
+  const compiled = await draftTtrpgOpenProductionCommonBriefV3({ scope, worldReleaseId: draft.worldReleaseId,
     suggestionKey: draft.suggestionKey, sourceSelection: JSON.parse(draft.selectionJson),
     qualityProfile: settings.qualityProfile, scale: 'campaign', playerRole: settings.playerRole,
     openingSituation: settings.openingSituation, visualLevel: settings.wizard.maximumGeneratedAssets > 0 ? 'key-scenes' : 'none', audioLevel: 'none' })
+  const common = draft.sourcePurpose ? { ...compiled, source: { ...compiled.source, sourcePurpose: draft.sourcePurpose } } : compiled
   const settingsHash = await hashProductProductionValueV2(settings), selectionHash = await hashProductProductionValueV2(JSON.parse(draft.selectionJson))
   const draftRecordHash = await hashProductProductionValueV2(draft), ruleRecordHash = await hashProductProductionValueV2(rule.record)
   const instance = await hashProductProductionValueV2({ scope, draftId: draft.id, revision: draft.revision,

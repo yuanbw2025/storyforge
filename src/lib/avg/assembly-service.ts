@@ -1,3 +1,4 @@
+import { revalidateWorldSourcePurposeV1 } from '../world-engine/source-purpose'
 import { avgSoundProductionTemplates } from './sound-production-brief'
 import { db } from '../db/schema'
 import type { WorkspaceScope } from '../types'
@@ -796,6 +797,8 @@ export async function prepareAvgAssemblyBriefV1(input: { scope: WorkspaceScope; 
     for(const r of workspace.mediaBatch.requirements)await validateAvgGeneratedReferencesV1(input.scope,r.references,r.family)
   }
   if (!draft.worldReleaseId) throw new Error('[avg] 请先在产品定向选择冻结世界版本')
+  await revalidateWorldSourcePurposeV1({ worldReleaseId: draft.worldReleaseId,
+    expectedProjectId: input.scope.projectId, expectedWorldId: input.scope.worldId, purpose: 'avg', proof: draft.sourcePurpose })
   const work = await db.works.get(input.scope.workId)
   if (!work || work.kind !== 'avg' || !await assertRecordInScope(input.scope,'works',work,{owner:'work'})) throw new Error('[avg] 当前作品不是 AVG')
   const mediaCapability: ProviderCapabilityRequirementV1 | null = workspace.mediaBatch ? {
@@ -978,7 +981,7 @@ export async function prepareAvgAssemblyBriefV1(input: { scope: WorkspaceScope; 
   let brief = parseProductProductionBriefV3({ ...sourceBrief,
     // A portable Brief retains its original hash/host IDs. A new explicit
     // child uses the registry-remapped host locator to the same frozen hash.
-    source:{...sourceBrief.source,worldReleaseId:draft.worldReleaseId},
+    source:{...sourceBrief.source,worldReleaseId:draft.worldReleaseId, ...(draft.sourcePurpose ? { sourcePurpose: draft.sourcePurpose } : {})},
     scale:{...sourceBrief.scale,scope:'scene',targetWordCount:workspace.scripts.flatMap(script=>script.lines).reduce((sum,line)=>sum+line.text.length,0),
       targetEndingCount:workspace.systemPlan.scenes.filter(scene=>scene.kind==='ending').length},
     media:{visualLevel:assets.some(asset=>asset.mimeType.startsWith('image/'))||workspace.mediaBatch?'key-scenes':'none',audioLevel:voice||assets.some(asset=>asset.mimeType.startsWith('audio/'))?'full':'none',

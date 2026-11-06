@@ -1,3 +1,4 @@
+import type { WorldSourcePurposeProofV1 } from '../world-engine/source-purpose'
 import {chatVisualMediaProfileV1} from '../character-interaction/visual-intent'
 import { parseChatAuthoringSettings, type ChatAuthoringSettings } from '../character-interaction/authoring-contract'
 import { readPreparedChatSourceProjectionViewV1 } from '../character-interaction/source-projection'
@@ -326,6 +327,7 @@ export async function suggestProductStartingPoints(input: {
 export interface ProductProductionBriefDraftInputV3 {
   scope: WorkspaceScope
   worldReleaseId: number
+  sourcePurpose?: WorldSourcePurposeProofV1
   suggestionKey: string
   productType: ProductionProductKindV1
   qualityProfile?: ProductProductionBriefV3['qualityProfile']
@@ -363,6 +365,18 @@ async function draftProductProductionBriefValueV3(
   input: ProductProductionBriefDraftInputV3, openMode: boolean,
 ): Promise<ProductProductionBriefV3> {
   const scope = await resolveScope({ scope: input.scope })
+  // Only the author's existing product-specific selection can supply D
+  // implicitly here. A library/catalog lookup never chooses a declaration.
+  let sourcePurpose = input.sourcePurpose
+  if (!sourcePurpose && input.productType === 'avg') {
+    const { readAvgDraftV1 } = await import('../avg/draft-service')
+    const selected = await readAvgDraftV1(scope).catch(() => undefined)
+    if (selected?.worldReleaseId === input.worldReleaseId) sourcePurpose = selected.sourcePurpose
+  } else if (!sourcePurpose && input.productType === 'character-interaction') {
+    const { readChatDraftV1 } = await import('../character-interaction/draft-service')
+    const selected = await readChatDraftV1(scope).catch(() => undefined)
+    if (selected?.worldReleaseId === input.worldReleaseId) sourcePurpose = selected.sourcePurpose
+  }
   const suggestions = await suggestProductStartingPoints({ scope, worldReleaseId: input.worldReleaseId, productType: input.productType })
   const selected = suggestions.suggestions.find(item => item.suggestionKey === input.suggestionKey)
   if (!selected) throw new Error('[product-production] 起点建议不属于当前冻结 WorldRelease')
@@ -625,6 +639,7 @@ async function draftProductProductionBriefValueV3(
     ...(characterChatSourceUnits ? {characterChatSourceUnits} : {}),
     source: {
       worldReleaseId: input.worldReleaseId, worldContentHash: source.release.contentHash, selection,
+      ...(sourcePurpose ? { sourcePurpose } : {}),
       startingPoint: {
         kind: selected.kind, title: selected.title, summary: selected.rationale,
         sourceRefs: selected.sourceRefs, protagonistRefs: selected.protagonistRefs,

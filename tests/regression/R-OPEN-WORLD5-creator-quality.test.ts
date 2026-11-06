@@ -1,3 +1,7 @@
+import { readFileSync } from 'node:fs'
+import { gunzipSync } from 'node:zlib'
+import { importProjectJSON } from '../../src/lib/export/json-export'
+import { useAIConfigStore } from '../../src/stores/ai-config'
 import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
@@ -133,15 +137,29 @@ async function reviewPayload(kind: 'balance' | 'semantic', advisory: boolean) {
   return { ...body, [hashKey]: await hashProductProductionValueV2(body) }
 }
 
-async function fixture(input: { advisories?: boolean } = {}): Promise<FixtureV1> {
-  const world = await seedCurrentProductWorld(`G5-09 quality ${crypto.randomUUID()}`)
-  const creator = await seedAuthorizedTextOpenWorldCreatorBuildV1({
-    source: {
-      kind: 'world-release', scope: world.scope,
-      localReleaseRecordId: world.release.id!, expectedReleaseHash: world.release.contentHash,
-    },
-    sessionKey: `g5-09-quality-${crypto.randomUUID()}`,
-  })
+async function fixture(input: { advisories?: boolean; legacySourceMode?: boolean } = {}): Promise<FixtureV1> {
+  let scope: FixtureV1['scope']
+  let creator: { productionId: number; buildId: number; productionKey: string }
+  if (input.legacySourceMode) {
+    const archive = JSON.parse(gunzipSync(readFileSync(
+      'tests/fixtures/text-open-world/quality096-legacy-authorized-source-mode-v1.json.gz',
+    )).toString('utf8'))
+    const projectId = await importProjectJSON(archive)
+    const production = (await db.productProductions.where('projectId').equals(projectId).first())!
+    const build = (await db.productBuilds.where('productionId').equals(production.id!).first())!
+    scope = { projectId, worldId: production.worldId, workId: production.workId }
+    creator = { productionId: production.id!, buildId: build.id!, productionKey: production.productionKey }
+  } else {
+    const world = await seedCurrentProductWorld(`G5-09 quality ${crypto.randomUUID()}`)
+    scope = world.scope
+    creator = await seedAuthorizedTextOpenWorldCreatorBuildV1({
+      source: {
+        kind: 'world-release', scope, localReleaseRecordId: world.release.id!,
+        expectedReleaseHash: world.release.contentHash,
+      },
+      sessionKey: `g5-09-quality-${crypto.randomUUID()}`,
+    })
+  }
   const build = (await db.productBuilds.get(creator.buildId))!
   const production = (await db.productProductions.get(creator.productionId))!
   const now = Date.now()
@@ -151,7 +169,7 @@ async function fixture(input: { advisories?: boolean } = {}): Promise<FixtureV1>
     const payloadJson = canonicalProductProductionJsonV2(payload)
     const artifactKey = `text-open-world.${kind}-review` as const
     const row: ProductBuildArtifactRecordV1 = {
-      projectId: world.scope.projectId, worldId: world.scope.worldId, workId: world.scope.workId,
+      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
       buildId: build.id!, artifactKey, requirementKey: null, version: 1, kind: artifactKey,
       mediaKind: null, status: 'accepted', producerRunId: 100 + artifacts.length,
       producerReceiptHash: await hashProductProductionValueV2({ artifactKey, receipt: true }),
@@ -173,7 +191,7 @@ async function fixture(input: { advisories?: boolean } = {}): Promise<FixtureV1>
     const payload = { schema: `storyforge.fixture.${artifactKey}`, version: 1, artifactKey }
     const payloadJson = canonicalProductProductionJsonV2(payload)
     const row: ProductBuildArtifactRecordV1 = {
-      projectId: world.scope.projectId, worldId: world.scope.worldId, workId: world.scope.workId,
+      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
       buildId: build.id!, artifactKey, requirementKey: null, version: 1, kind: artifactKey,
       mediaKind: null, status: 'accepted', producerRunId: 200 + artifacts.length,
       producerReceiptHash: await hashProductProductionValueV2({ artifactKey, receipt: true }),
@@ -220,7 +238,7 @@ async function fixture(input: { advisories?: boolean } = {}): Promise<FixtureV1>
   })
   governance.artifactKeys = artifacts.map(row => row.artifactKey)
   return {
-    scope: world.scope, productionId: production.id!, buildId: build.id!,
+    scope, productionId: production.id!, buildId: build.id!,
     buildBinding: {
       productionKey: production.productionKey, buildNumber: build.buildNumber,
       packageHash, previewHash, manifestHash, qualityReportHash, rootTerminalReceiptHash,
@@ -385,8 +403,8 @@ async function insertCalibrationReceipt(input: FixtureV1, options: {
 
 /** Receipt integration only. Narrative projection and independently tested
  * physical lineage verifiers are adapters here, never real-model evidence. */
-async function calibrationRecheckFixture(score = 90) {
-  const seeded = await fixture({ advisories: false })
+async function calibrationRecheckFixture(score = 90, legacySourceMode = false) {
+  const seeded = await fixture({ advisories: false, legacySourceMode })
   const context = {
     schema: 'storyforge.text-open-world-creator-calibration-review-input', version: 1,
     buildPackageHash: seeded.buildBinding.packageHash,
@@ -522,6 +540,34 @@ afterAll(async () => {
 })
 
 describe('TOW-G5-09 · Creator质量、灰盒和问题回执', () => {
+  it('096 does not POST a new paid calibration for a former source-mode Start without an exact actor', async () => {
+    // Reuse the file's controlled quality projection/lineage fixture. The
+    // archived Creator authority, public calibration service and POST are real.
+    const prepared = await calibrationRecheckFixture(90, true)
+    const before = await db.productQualityGateReceipts.toArray()
+    const original = useAIConfigStore.getState()
+    useAIConfigStore.setState({ config: { provider: 'deepseek', model: 'deepseek-v4-pro',
+      baseUrl: 'https://api.deepseek.com/v1', apiKey: 'isolated-calibration-no-real-key',
+      temperature: 0, maxTokens: 2400 }, rememberApiKey: false, presets: [], taskRoutes: {} })
+    const post = vi.fn(async () => { throw new TypeError('isolated calibration transport intercepted') })
+    vi.stubGlobal('fetch', post)
+    try {
+      const result = await Promise.allSettled([recordTextOpenWorldCreatorCalibrationV1({
+        scope: prepared.seeded.scope, productionId: prepared.seeded.productionId, buildId: prepared.seeded.buildId,
+      })])
+      expect(post).not.toHaveBeenCalled()
+      expect(result[0]).toMatchObject({ status: 'rejected', reason: expect.objectContaining({ message: expect.stringMatching(/明确.*主角/) }) })
+      expect(await db.productQualityGateReceipts.toArray()).toEqual(before)
+      const reused = await recordTextOpenWorldCreatorCalibrationV1({
+        scope: prepared.seeded.scope, productionId: prepared.seeded.productionId, buildId: prepared.seeded.buildId,
+        reuseReceiptHash: prepared.receiptHash,
+      }, { now: () => prepared.previous.evaluatedAt + 1 })
+      expect(reused.evidence.independentReview).toEqual(prepared.previous.independentReview)
+      expect(await db.productQualityGateReceipts.get(prepared.previousRow.id!)).toEqual(prepared.previousRow)
+      expect(post).not.toHaveBeenCalled()
+    } finally { vi.unstubAllGlobals(); useAIConfigStore.setState(original) }
+  })
+
   it.each([90, 64])('复核沿用原%s分和失败回执，生成v2账本结论且零新增评审调用', async score => {
     const prepared = await calibrationRecheckFixture(score)
     // Import may relocate local Run IDs. The source verifier above represents
@@ -657,7 +703,7 @@ describe('TOW-G5-09 · Creator质量、灰盒和问题回执', () => {
 
   it('只从当前Build的可重放事件、状态头和检查点生成完整灰盒凭据', async () => {
     const seeded = await fixture({ advisories: false })
-    const now = Date.now()
+    const now = 1_787_700_000_000
     const initialState = {
       version: 1, clock: 0, entities: {}, memories: [], narratives: [],
       ttrpg: null, interaction: null, narrative: null, adventure: null,
@@ -731,7 +777,7 @@ describe('TOW-G5-09 · Creator质量、灰盒和问题回执', () => {
       [...TEXT_OPEN_WORLD_CREATOR_GRAYBOX_COVERAGE_KEYS_V1].sort(),
     )
     expect(receipt.evidence.sessions[0]).not.toHaveProperty('sessionId')
-    expect(receipt.evidence.sessions[0]?.eventStreamHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(receipt.evidence.sessions[0]?.eventStreamHash).toBe('465b64788fa7c7c771eb107d287a7e85e790b0a248a4a7d991aef1c3f6aa1147')
     const workspace = await readTextOpenWorldCreatorQualityWorkspaceV1({
       scope: seeded.scope, productionId: seeded.productionId, expectedBuildId: seeded.buildId,
     })

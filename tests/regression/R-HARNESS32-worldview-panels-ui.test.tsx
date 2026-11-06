@@ -1,8 +1,9 @@
 import StoryCorePanel from '../../src/components/worldview/StoryCorePanel'
-import { act, createElement } from 'react'
+import { act, createElement, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Project } from '../../src/lib/types'
+import type { VisibleMasterCandidateDraftV1 } from '../../src/components/agent/useMasterCopilot'
 
 const mocks = vi.hoisted(() => ({
   activeGroupId: null as number | null,
@@ -13,11 +14,15 @@ const mocks = vi.hoisted(() => ({
     error: null as string | null,
     submitRequest: vi.fn(async () => undefined),
     submitTargetedRequest: vi.fn(async () => undefined),
-    updateCandidate: vi.fn(async () => undefined),
+    updateCandidate: vi.fn(async (_id: number, _content: string, _visible?: { rawValue: string; error?: string }) => undefined),
     rejectCandidate: vi.fn(async () => undefined),
     adoptCandidate: vi.fn(async () => undefined),
   },
   worldviewStore: {
+    loadedScope: { projectId: 1, worldId: 11, workId: 12 },
+    activeWorldGroupId: null,
+    loading: false,
+    loadError: null,
     worldview: {
       id: 7,
       projectId: 1,
@@ -52,8 +57,38 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 
+function useWorldviewCopilotMock({ project, worldGroupId }: { project: Project; worldGroupId: number | null }) {
+  const [drafts, setDrafts] = useState(new Map<string, VisibleMasterCandidateDraftV1>())
+  const draftKey = (eventId: number) =>
+    JSON.stringify([project.id, project.activeWorldId, project.activeWorkId, worldGroupId, eventId])
+  const discardVisibleCandidateDraft = async (eventId: number) => {
+    setDrafts(current => {
+      const next = new Map(current)
+      next.delete(draftKey(eventId))
+      return next
+    })
+  }
+  return {
+    ...mocks.copilot,
+    readVisibleCandidateDraft: (eventId?: number) => eventId == null ? undefined : drafts.get(draftKey(eventId)),
+    discardVisibleCandidateDraft,
+    updateCandidate: async (eventId: number, content: string, visible?: { rawValue: string; error?: string }) => {
+      const original = mocks.copilot.pendingCandidates.find(item =>
+        item.event.id === eventId && item.event.projectId === project.id)
+      if (visible) setDrafts(current => new Map(current).set(draftKey(eventId), {
+        ...visible, status: visible.error ? 'blocked' : 'saving',
+      }))
+      await mocks.copilot.updateCandidate(eventId, content, visible)
+      if (!visible?.error && original) {
+        original.event.content = content
+        await discardVisibleCandidateDraft(eventId)
+      }
+    },
+  }
+}
+
 vi.mock('../../src/components/agent/useMasterCopilot', () => ({
-  useMasterCopilot: () => mocks.copilot,
+  useMasterCopilot: useWorldviewCopilotMock,
 }))
 
 vi.mock('../../src/stores/worldview', () => ({
@@ -255,13 +290,23 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
     const editor = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="神明与信仰候选内容"]')!
     const revisedValue = { ...divineValue, divineRules: '神谕必须由两名无血缘见证者共同记录。' }
     const revised = JSON.stringify(revisedValue, null, 2)
+    let finishSave!: () => void
+    mocks.copilot.updateCandidate.mockImplementationOnce(() => new Promise(resolve => {
+      finishSave = () => resolve(undefined)
+    }))
     await act(async () => setInputValue(editor, revised))
     expect(mocks.copilot.updateCandidate).toHaveBeenCalledWith(51, JSON.stringify({
       field: 'divineDesign',
       value: revisedValue,
-    }, null, 2))
+    }, null, 2), { rawValue: revised })
 
     const buttons = Array.from(host.querySelectorAll('button'))
+    const adopt = buttons.find(button => button.textContent?.includes('采纳'))!
+    expect(editor.value).toBe(revised)
+    expect(adopt.disabled).toBe(true)
+    expect(mocks.copilot.adoptCandidate).not.toHaveBeenCalled()
+    await act(async () => finishSave())
+    expect(adopt.disabled).toBe(false)
     await act(async () => buttons.find(button => button.textContent?.includes('拒绝'))!.click())
     expect(mocks.copilot.rejectCandidate).toHaveBeenCalledWith(mocks.copilot.pendingCandidates[0])
     await act(async () => buttons.find(button => button.textContent?.includes('采纳'))!.click())
@@ -316,12 +361,14 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
       ...naturalResources,
       others: '贝壳纸是城邦间的契约载体，烧毁后会留下不可伪造的潮纹。',
     }
-    await act(async () => setInputValue(editor, JSON.stringify(revisedValue, null, 2)))
+    const revised = JSON.stringify(revisedValue, null, 2)
+    await act(async () => setInputValue(editor, revised))
 
     expect(mocks.copilot.updateCandidate).toHaveBeenCalledWith(51, JSON.stringify({
       field: 'naturalResources',
       value: revisedValue,
-    }, null, 2))
+    }, null, 2), { rawValue: revised })
+    expect(editor.value).toBe(revised)
   })
 })
 

@@ -1,3 +1,4 @@
+import { parseWorldSourcePurposeProofV1 } from '../world-engine/source-purpose'
 import { parseAvgAssemblyBrief, AVG_ASSEMBLY_GATE_IDS_V1 } from '../avg/assembly-contract'
 import { assertAvgVisualProductionPolicyV2 } from '../avg/media-production-policy'
 import { parseAvgStoredAssemblyBriefV3 } from '../avg/voice-assembly-storage'
@@ -29,6 +30,7 @@ import type {
   ProductProductionFallbackPolicyV1,
   ProductProductionMediaProfileV1,
   ProductProductionScaleV1,
+  ProductTaskBudgetReservationV1,
   ProductEvolutionAffectedLaneV1,
   ProductEvolutionBaseV1,
   ProductEvolutionImpactV1,
@@ -48,6 +50,32 @@ import {
 } from '../open-world/creator-brief-persistence'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
+
+/** One frozen task accounting policy for dispatch, producer proof and recovery.
+ * This delta never enlarges the author-approved aggregate Build budget. Keep
+ * measured usage unchanged in candidates, receipts and the lifetime ledger. */
+export function productProductionTaskUsageBudgetViolationsV1(
+  usage: Omit<ProductTaskBudgetReservationV1, 'maximumCostUsd'> & { costUsd: number | null },
+  reservation: ProductTaskBudgetReservationV1,
+): string[] {
+  const integerFields = ['modelCalls', 'inputTokens', 'outputTokens', 'mediaCalls', 'durationMs', 'storageBytes'] as const
+  if (integerFields.some(field => !Number.isSafeInteger(usage[field]) || usage[field] < 0)
+    || usage.costUsd != null && (!Number.isFinite(usage.costUsd) || usage.costUsd < 0)) return ['usage-invalid']
+  // Compatible providers may bill hidden reasoning/framing beyond maxTokens.
+  // Tiny/non-model reservations remain exact; normal model tasks allow 2%/128.
+  const outputDelta = reservation.outputTokens >= 1_000 && usage.modelCalls > 0
+    ? Math.min(128, Math.ceil(reservation.outputTokens * .02)) : 0
+  return [
+    ['modelCalls', usage.modelCalls, reservation.modelCalls],
+    ['inputTokens', usage.inputTokens, reservation.inputTokens],
+    ['outputTokens', usage.outputTokens, reservation.outputTokens + outputDelta],
+    ['mediaCalls', usage.mediaCalls, reservation.mediaCalls],
+    ['durationMs', usage.durationMs, reservation.durationMs],
+    ['storageBytes', usage.storageBytes, reservation.storageBytes],
+    ...(reservation.maximumCostUsd == null ? [] : [['costUsd', usage.costUsd ?? 0, reservation.maximumCostUsd] as const]),
+  ].filter(([, actual, maximum]) => actual > maximum)
+    .map(([field, actual, maximum]) => `${field}=${actual}/${maximum}`)
+}
 
 function fail(message: string): never {
   throw new Error(`[product-production-contract] ${message}`)
@@ -306,7 +334,9 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
   ], 'brief')
   if (row.schema !== 'storyforge.product-production-brief' || row.version !== 3) fail('brief schema/version 无效')
   const source = record(row.source, 'source')
-  exactKeys(source, ['worldReleaseId', 'worldContentHash', 'selection', 'startingPoint'], 'source')
+  const hasSourcePurpose = Object.prototype.hasOwnProperty.call(source, 'sourcePurpose')
+  exactKeys(source, ['worldReleaseId', 'worldContentHash', 'selection', 'startingPoint',
+    ...(hasSourcePurpose ? ['sourcePurpose'] : [])], 'source')
   if (!isSha256Hash(source.worldContentHash)) fail('source.worldContentHash 无效')
   const selection = parseProductWorldSourceSelection(source.selection)
 
@@ -316,6 +346,9 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     'requiredFacts', 'forbiddenChanges', 'contentBoundaries', 'tone',
   ], 'intent')
   const productType = enumValue(intent.productType, PRODUCTION_PRODUCT_KINDS_V1, 'intent.productType')
+  const sourcePurpose = hasSourcePurpose ? parseWorldSourcePurposeProofV1(source.sourcePurpose) : undefined
+  if (sourcePurpose && (sourcePurpose.purpose !== productType ||
+    sourcePurpose.selectedRelease.releaseHash !== source.worldContentHash)) fail('sourcePurpose 与产品或版本不一致')
   if (productType !== selection.productType) fail('intent.productType 与 selection 不一致')
   if (!Array.isArray(row.capabilityRequirements) || row.capabilityRequirements.length > 100) fail('capabilityRequirements 必须是有界数组')
   const capabilityRequirements = row.capabilityRequirements.map(parseCapability)
@@ -348,6 +381,7 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     source: {
       worldReleaseId: positiveId(source.worldReleaseId, 'source.worldReleaseId'),
       worldContentHash: source.worldContentHash,
+      ...(sourcePurpose ? { sourcePurpose } : {}),
       selection,
       startingPoint: parseStartingPoint(source.startingPoint),
     },

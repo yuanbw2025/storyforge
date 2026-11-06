@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON } from '../../src/lib/export/json-export'
@@ -171,7 +171,9 @@ async function seedRepresentativeLongform() {
 
   const firstVolume = (await db.outlineNodes.where('projectId').equals(projectId).toArray())
     .find(node => node.type === 'volume' && (node as typeof node & { workId?: number }).workId === first.scope.workId)
-  if (!firstVolume?.id) throw new Error('代表性 fixture 缺少第一卷')
+  if (!firstVolume?.id || firstVolume.worldGroupId == null) throw new Error('代表性 fixture 缺少带世界组的第一卷')
+  const firstWorldGroup = await db.worldGroups.get(firstVolume.worldGroupId)
+  expect(firstWorldGroup).toMatchObject({ id: firstVolume.worldGroupId, projectId, worldId: first.scope.worldId })
   const chapters: Array<{ id: number; outlineNodeId: number; title: string }> = []
   for (let index = 2; index <= 42; index += 1) {
     const title = `第${index}章 潮汐刻度${index}`
@@ -309,6 +311,7 @@ async function seedRepresentativeLongform() {
     firstStoryId: firstStory.id,
     firstRulesId: firstRules.id,
     firstVolumeId: firstVolume.id,
+    firstWorldGroupId: firstVolume.worldGroupId,
     target: chapters[9],
     externallyEdited: chapters[11],
     interrupted: chapters[13],
@@ -354,7 +357,19 @@ describe('MEMORY-CLOSE-3 · 隔离长篇、多 World/Work、恢复与继续创�
 
     // Binding and self-check are read-only until the author confirms the first baseline write.
     const initialWrites = disk.writeOrder.length
+    const originalNotes = await db.notes.where('projectId').equals(seeded.projectId).toArray()
     const initial = await buildWorkspaceSelfCheckReportV1(seeded.projectId, disk.handle)
+    const laterReadTime = Date.now() + 60_000
+    const readClock = vi.spyOn(Date, 'now').mockReturnValue(laterReadTime)
+    try {
+      const repeated = await buildWorkspaceSelfCheckReportV1(seeded.projectId, disk.handle)
+      expect(repeated.plan.items.find(item => item.relativePath === '.storyforge/recovery/project.json')?.databaseCanonicalHash)
+        .toBe(initial.plan.items.find(item => item.relativePath === '.storyforge/recovery/project.json')?.databaseCanonicalHash)
+      expect(repeated.plan.planHash).toBe(initial.plan.planHash)
+      expect(await db.notes.where('projectId').equals(seeded.projectId).toArray()).toEqual(originalNotes)
+    } finally {
+      readClock.mockRestore()
+    }
     expect(initial.zeroModelCalls).toBe(true)
     expect(disk.writeOrder).toHaveLength(initialWrites)
     expect(initial.summary.projectChanged).toBeGreaterThan(40)
@@ -363,8 +378,8 @@ describe('MEMORY-CLOSE-3 · 隔离长篇、多 World/Work、恢复与继续创�
       root: disk.handle,
       expectedPlanHash: initial.plan.planHash,
     })
-    expect((await buildWorkspaceSelfCheckReportV1(seeded.projectId, disk.handle)).plan.items
-      .every(item => item.changeKind === 'clean')).toBe(true)
+    const clean = await buildWorkspaceSelfCheckReportV1(seeded.projectId, disk.handle)
+    expect(clean.plan.items.every(item => item.changeKind === 'clean')).toBe(true)
 
     const bindings = await db.workspaceDocuments.where('projectId').equals(seeded.projectId).toArray()
     const targetBinding = bindings.find(binding => binding.tableName === 'chapters' && binding.recordId === seeded.target.id)!
@@ -386,7 +401,15 @@ describe('MEMORY-CLOSE-3 · 隔离长篇、多 World/Work、恢复与继续创�
       mainPlot: '林舟追索潮汐档案、识别伪史并修复主世界',
       updatedAt: now + 100,
     })
+    const writesBeforeStaleSync = disk.writeOrder.length
+    await expect(synchronizeProjectChangesToFolderV1({
+      projectId: seeded.projectId,
+      root: disk.handle,
+      expectedPlanHash: clean.plan.planHash,
+    })).rejects.toThrow('自检后项目或硬盘已变化')
+    expect(disk.writeOrder).toHaveLength(writesBeforeStaleSync)
     const internal = await buildWorkspaceSelfCheckReportV1(seeded.projectId, disk.handle)
+    expect(internal.plan.planHash).not.toBe(clean.plan.planHash)
     expect(internal.plan.items.find(item => item.identity.documentId === targetBinding.documentId)?.changeKind)
       .toBe('project-changed')
     expect(internal.plan.items.find(item => item.identity.documentId === storyBinding.documentId)?.changeKind)
@@ -494,7 +517,7 @@ describe('MEMORY-CLOSE-3 · 隔离长篇、多 World/Work、恢复与继续创�
       scope: seeded.firstScope,
       chapterId: seeded.target.id,
       chapterTitle: targetBeforeAudit.title,
-      worldGroupId: null,
+      worldGroupId: seeded.firstWorldGroupId,
       outlineNodeId: seeded.target.outlineNodeId,
       chapterContent: targetBeforeAudit.content,
       mode: 'deep',
@@ -647,7 +670,7 @@ describe('MEMORY-CLOSE-3 · 隔离长篇、多 World/Work、恢复与继续创�
       scope: seeded.firstScope,
       chapterId: seeded.target.id,
       chapterTitle: chapter.title,
-      worldGroupId: null,
+      worldGroupId: seeded.firstWorldGroupId,
       outlineNodeId: seeded.target.outlineNodeId,
       chapterContent: chapter.content,
       mode: 'fast',
@@ -701,5 +724,46 @@ describe('MEMORY-CLOSE-3 · 隔离长篇、多 World/Work、恢复与继续创�
     ))).toBe(true)
     const index = JSON.parse(disk.read('.storyforge/runs/memory-index.json')).index
     expect(index.runs[0]).toMatchObject({ state: 'incomplete', settlementSource: 'derived-current' })
+  }, 60_000)
+
+  it('完整往返保留多根大纲和后建父节点的便携坐标及全部引用', async () => {
+    const seeded = await seedRepresentativeLongform()
+    const disk = memoryDirectory('StoryForgeForwardParentRestore')
+    const lateVolume = {
+      projectId: seeded.projectId,
+      workId: seeded.firstScope.workId,
+      parentId: null,
+      type: 'volume' as const,
+      title: '后建卷：保留原便携坐标',
+      summary: '已有章节可以移动到后来创建的同作品卷。',
+      order: 99,
+      createdAt: now + 600,
+      updatedAt: now + 600,
+    }
+    const lateVolumeId = await db.outlineNodes.add(lateVolume)
+    await db.outlineNodes.update(seeded.target.outlineNodeId, { parentId: lateVolumeId })
+    await stampCurrentFixtureResourceUidsV1(seeded.projectId)
+    const baseline = await buildWorkspaceSelfCheckReportV1(seeded.projectId, disk.handle)
+    await synchronizeProjectChangesToFolderV1({ projectId: seeded.projectId, root: disk.handle,
+      expectedPlanHash: baseline.plan.planHash })
+    const original = await exportProjectJSON(seeded.projectId)
+    const child = original.outlineNodes.find(row => row.title === seeded.target.title)!
+    const parent = original.outlineNodes.find(row => row.title === lateVolume.title)!
+    expect(child._exportId).toBeLessThan(parent._exportId)
+    expect(child._parentExportId).toBe(parent._exportId)
+    const expectedHash = await portableHash(seeded.projectId)
+    const expectedCounts = await criticalCounts(seeded.projectId)
+
+    await db.delete()
+    await db.open()
+    const restored = await restoreWorkspaceFromFolderV1(disk.handle)
+    expect(restored.report.plan.items.every(item => item.changeKind === 'clean')).toBe(true)
+    expect(await criticalCounts(restored.projectId)).toEqual(expectedCounts)
+    expect(await portableHash(restored.projectId)).toBe(expectedHash)
+    const roundTrip = await exportProjectJSON(restored.projectId)
+    expect(roundTrip.outlineNodes).toEqual(original.outlineNodes)
+    expect(roundTrip.chapters).toEqual(original.chapters)
+    expect(roundTrip.detailedOutlines).toEqual(original.detailedOutlines)
+    expect(roundTrip.narrativeNodes).toEqual(original.narrativeNodes)
   }, 60_000)
 })

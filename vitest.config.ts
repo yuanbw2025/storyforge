@@ -1,13 +1,55 @@
 import { defineConfig } from 'vitest/config'
 import path from 'path'
 
+const originalCoverageIncludes = [
+  'src/lib/registry/**/*.ts',
+  'src/lib/db/**/*.ts',
+  'src/lib/export/**/*.ts',
+  'src/lib/import/**/*.ts',
+  'src/lib/ai/adapters/**/*.ts',
+  'src/lib/ai/*.ts',
+]
+
+const originalGlobalThresholds = { lines: 58, functions: 50, statements: 58, branches: 60 }
+// Initial risk-scope floors set before measurement, matching the existing AI floor.
+const riskScopeThresholds = { lines: 50, functions: 40, statements: 50, branches: 50 }
+const coverageScope = (files: readonly string[]) => `{${files.join(',')}}`
+const riskScopes = [
+  [ // Harness: identity, durable events, recovery and receipts.
+    'src/lib/agent/run/contract.ts',
+    'src/lib/agent/run/checkpoint.ts',
+    'src/lib/agent/run/context-manifest.ts',
+    'src/lib/agent/run/event-schema.ts',
+    'src/lib/agent/run/event-store.ts',
+    'src/lib/agent/run/projection.ts',
+    'src/lib/agent/run/verification-receipt.ts',
+    'src/lib/agent/run/creation-response-evidence.ts',
+  ],
+  [ // Production: author commands, budget/epoch, settlement and recovery.
+    'src/lib/product-production/artifact-store.ts',
+    'src/lib/product-production/commands.ts',
+    'src/lib/product-production/plan.ts',
+    'src/lib/product-production/recovery-policy.ts',
+    'src/lib/product-production/scheduler.ts',
+    'src/lib/product-production/task-evidence.ts',
+  ],
+  [ // Runtime: owner/source authority, event head, branches and media.
+    'src/lib/product/runtime-core.ts',
+    'src/lib/product/runtime-instances.ts',
+    'src/lib/product/runtime-branch-lineage.ts',
+    'src/lib/product/runtime-source-authority.ts',
+    'src/lib/product/runtime-source-manifest.ts',
+    'src/lib/product/runtime-media-library.ts',
+  ],
+]
+
 /**
  * Vitest 配置
  *
  * - 环境:happy-dom(纯前端项目,需要 DOM API)
  * - IndexedDB:由 tests/setup.ts 加载 fake-indexeddb
  * - 别名:与 vite.config.ts 一致(@ 指向 src)
- * - 覆盖率:v8,目标 60%(关键模块 80%)
+ * - 覆盖率:v8,按既有核心层和明确的高风险入口分域校验
  */
 export default defineConfig({
   test: {
@@ -23,7 +65,6 @@ export default defineConfig({
     // simulations, IndexedDB lifecycles, long replays and UI cases. Capping
     // file workers prevents timer starvation and non-reproducible timeouts on
     // high-core developer machines without weakening individual test limits.
-    minWorkers: 1,
     maxWorkers: 4,
     include: [
       'tests/**/*.test.ts',
@@ -34,17 +75,9 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],
-      // 覆盖率聚焦【核心业务逻辑层】:数据/注册表/AI 解析与装配。
-      // 排除 UI 层(components/pages/hooks)与纯视觉(world-map 渲染)——
-      // 纯前端 UI 单测成本极高、价值低,业界惯例是对核心逻辑设高门槛、UI 用 E2E 另测。
-      include: [
-        'src/lib/registry/**/*.ts',
-        'src/lib/db/**/*.ts',
-        'src/lib/export/**/*.ts',
-        'src/lib/import/**/*.ts',
-        'src/lib/ai/adapters/**/*.ts',
-        'src/lib/ai/*.ts',
-      ],
+      // New scopes list executable entry files only. Prompts, declaration-only
+      // modules and UI are outside this increment.
+      include: [...originalCoverageIncludes, ...riskScopes.flat()],
       exclude: [
         'src/**/*.test.{ts,tsx}',
         'src/lib/world-map/**',      // 纯视觉地图渲染算法
@@ -56,10 +89,11 @@ export default defineConfig({
       ],
       thresholds: {
         // 静态 Prompt 数据已排除；门槛约束真实 parser/runner/import/registry 运行时代码。
-        lines: 58,
-        functions: 50,
-        statements: 58,
-        branches: 60,
+        ...originalGlobalThresholds,
+        // Vitest's global map includes all added files. Also keep the original
+        // denominator independently gated so new coverage cannot mask old drift.
+        [coverageScope(originalCoverageIncludes)]: originalGlobalThresholds,
+        ...Object.fromEntries(riskScopes.map(files => [coverageScope(files), riskScopeThresholds])),
         // 注册表是地基(单一事实源),要求更高
         'src/lib/registry/**/*.ts': {
           lines: 75,

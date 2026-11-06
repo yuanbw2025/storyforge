@@ -5,6 +5,7 @@ import { retiredHomeDestination } from './components/navigation/retired-routes'
 import ProductExtensionEntry from './components/extensions/ProductExtensionEntry'
 import ResumeTracker from './components/home/ResumeTracker'
 
+const AutoBackupStatusNotice = lazy(() => import('./components/system/AutoBackupStatusNotice'))
 const WorkshopPage = lazy(() => import('./pages/WorkshopPage'))
 const AiTownPage = lazy(() => import('./pages/AiTownPage'))
 const TtrpgPage = lazy(() => import('./pages/TtrpgPage'))
@@ -44,6 +45,7 @@ export default function App() {
     <>
     <ResumeTracker/>
     <ProductExtensionEntry/>
+    <Suspense fallback={null}><AutoBackupStatusNotice/></Suspense>
     <Routes>
       <Route path="/workshop/:pageId?" element={<Suspense fallback={<RouteFallback/>}><WorkshopPage/></Suspense>}/>
       <Route path="/community/:pageId?" element={<Suspense fallback={<RouteFallback/>}><CommunityPage/></Suspense>}/>

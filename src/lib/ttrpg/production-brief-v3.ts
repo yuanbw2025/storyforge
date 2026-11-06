@@ -6,6 +6,7 @@ import {
   validateProductSourcePlanV1,
 } from "../product/source-contracts";
 import { validatePortableWorldReferenceV1 } from "../world-engine/world-reference";
+import { validateWorldSourcePurposeProofV1 } from "../world-engine/source-purpose";
 import { parseTtrpgAuthoringSettingsV2, type TtrpgAuthoringSettingsV2 } from "./authoring-contract-v2";
 import type { RulePackV2 } from "./open-contract";
 import { parseRulePackV2 } from "./rule-pack-v2";
@@ -98,6 +99,7 @@ export function parseTtrpgProductionBriefContentShapeV3(input: unknown): TtrpgPr
     "schema", "version", "productType", "productInstanceKey", "worldReference", "adapter",
     "requirements", "initialResourceKeys", "permission", "gatewayPolicy", "gatewayPolicyHash",
     "missingStrategy", "consultationContextManifests", "readiness", "createdAt", "planHash",
+    ...(row.sourcePlan && typeof row.sourcePlan === "object" && Object.prototype.hasOwnProperty.call(row.sourcePlan, "sourcePurpose") ? ["sourcePurpose"] : []),
   ], "SourcePlan");
   parseWorldReferenceShape(planRow.worldReference);
   const sourcePlan = planRow as unknown as ProductSourcePlanV1;
@@ -110,6 +112,8 @@ export function parseTtrpgProductionBriefContentShapeV3(input: unknown): TtrpgPr
   if (worldReference.referenceHash !== sourcePlan.worldReference.referenceHash ||
     worldReference.localReleaseRecordId !== sourcePlan.worldReference.localReleaseRecordId)
     fail("WorldReference 与 SourcePlan 不一致");
+  if (Object.prototype.hasOwnProperty.call(sourcePlan, "sourcePurpose"))
+    validateWorldSourcePurposeProofV1(sourcePlan.sourcePurpose, sourcePlan.worldReference, "ttrpg");
   return {
     schema: "storyforge.ttrpg-production-brief",
     version: 3,

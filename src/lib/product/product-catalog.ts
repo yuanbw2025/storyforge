@@ -5,6 +5,9 @@
  * Product-specific feature acceptance remains in each product contract; a page
  * or route existing in the bundle never upgrades its maturity automatically.
  */
+import type { ProductionProductKindV1 } from '../types/product-identity'
+import type { NovelWorkflowProfile, WorkKind } from '../types/world-ownership'
+
 export const PRODUCT_RELEASE_STATUSES_V1 = [
   'experimental',
   'internal',
@@ -216,7 +219,7 @@ export function evaluateProductSurfaceV1(input: {
 export function currentProductCatalogChannelV1(): ProductCatalogChannelV1 {
   if (typeof window === 'undefined') return 'test'
   const hostname = window.location.hostname.toLocaleLowerCase('en-US')
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
     ? 'local-development'
     : 'production'
 }
@@ -225,6 +228,75 @@ export function currentExperimentalProductOptInV1(): boolean {
   if (typeof window === 'undefined') return false
   try { return window.localStorage.getItem('storyforge:experimental-products') === 'enabled' }
   catch { return false }
+}
+
+export function evaluateCurrentProductEntryV1(productId: StoryForgeProductIdV1): ProductEntryDecisionV1 {
+  return evaluateProductEntryV1({
+    productId,
+    channel: currentProductCatalogChannelV1(),
+    experimentalOptIn: currentExperimentalProductOptInV1(),
+  })
+}
+
+/** A catalog admission never replaces owner, source, author or budget checks. */
+export function assertCurrentProductEntryV1(productId: StoryForgeProductIdV1): ProductEntryDecisionV1 {
+  const decision = evaluateCurrentProductEntryV1(productId)
+  if (!decision.enterable) throw new Error(`[product-catalog] ${productId}：${decision.blockers.join('；')}`)
+  return decision
+}
+
+/** Explicit identities only; a stored owner is not a maturity permission. */
+export function productCatalogIdForWorkV1(work: {
+  kind: WorkKind
+  novelProfile: NovelWorkflowProfile | null
+}): StoryForgeProductIdV1 {
+  switch (work.kind) {
+    case 'novel':
+      if (work.novelProfile === 'long') return 'independent.longform'
+      if (work.novelProfile === 'short') return 'independent.shortform'
+      break
+    case 'screenplay': return 'independent.screenplay'
+    case 'comic': return 'independent.comic'
+    case 'motion-drama': return 'independent.motion-drama'
+    case 'avg': return 'upper.avg'
+    case 'ttrpg': return 'upper.ttrpg'
+    case 'ai-town': return 'upper.ai-town'
+    case 'character-interaction': return 'upper.character-interaction'
+  }
+  throw new Error(`[product-catalog] 未登记的作品分类：${work.kind}/${work.novelProfile}`)
+}
+
+export function productCatalogIdForProductionV1(kind: ProductionProductKindV1): StoryForgeProductIdV1 {
+  switch (kind) {
+    case 'ttrpg': return 'upper.ttrpg'
+    case 'character-interaction': return 'upper.character-interaction'
+    case 'ai-town': return 'upper.ai-town'
+    case 'text-adventure': return 'upper.text-adventure'
+    case 'avg': return 'upper.avg'
+    case 'text-open-world': return 'upper.text-open-world'
+  }
+  throw new Error(`[product-catalog] 未登记的生产产品：${String(kind)}`)
+}
+
+/** Navigation names are UI identities, never implicit catalog aliases. */
+export function productCatalogIdForNavigationV1(id: string): StoryForgeProductIdV1 | null {
+  switch (id) {
+    case 'home': return null
+    case 'world': return 'world-engine'
+    case 'long': return 'independent.longform'
+    case 'short': return 'independent.shortform'
+    case 'script': return 'independent.screenplay'
+    case 'comic': return 'independent.comic'
+    case 'motion': return 'independent.motion-drama'
+    case 'ttrpg': return 'upper.ttrpg'
+    case 'chat': return 'upper.character-interaction'
+    case 'town': return 'upper.ai-town'
+    case 'adventure': return 'upper.text-adventure'
+    case 'avg': return 'upper.avg'
+    case 'openworld': return 'upper.text-open-world'
+    case 'community': return 'platform.marketplace'
+  }
+  throw new Error(`[product-catalog] 未登记的导航产品：${id}`)
 }
 
 function validateProductCatalogV1(): void {

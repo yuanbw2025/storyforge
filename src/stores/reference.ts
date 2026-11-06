@@ -1,24 +1,57 @@
 import { create } from 'zustand'
+import Dexie, { type Transaction } from 'dexie'
 import { db } from '../lib/db/schema'
-import type { Reference, CreateReferenceInput, ReferenceChunkAnalysis } from '../lib/types'
+import type { Reference, CreateReferenceInput, ReferenceChunkAnalysis, WorkspaceScope, ImportSession } from '../lib/types'
 import {
   deleteReferenceWithAnalysis,
   getReferenceAnalysisRunChunks,
 } from '../lib/reference-analysis/lifecycle'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { assertRecordInScope, readOwnedRows, resolveScope, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
 interface ReferenceStore {
   references: Reference[]
   loading: boolean
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
-  addReference: (data: CreateReferenceInput) => Promise<number>
+  addReference: (data: CreateReferenceInput, scope?: WorkspaceScope) => Promise<number>
   updateReference: (id: number, data: Partial<Reference>) => Promise<void>
   deleteReference: (id: number) => Promise<void>
 
   // ── 深度分析相关 ──
   /** 获取某个参考的所有分块分析 */
   getChunkAnalyses: (refId: number, runId?: number) => Promise<ReferenceChunkAnalysis[]>
+}
+
+export function referenceCreationTablesV1() {
+  return scopeTransactionTables(db.references)
+}
+
+function stampNewReference(data: CreateReferenceInput, scope: WorkspaceScope) {
+  const now = Date.now()
+  return stampNewRecord(scope, 'references', { ...data, createdAt: now, updatedAt: now } as Reference, { owner: 'work' }) as Reference
+}
+
+/** Used when the author confirmation must commit its new reference and receipt atomically. */
+export async function addReferenceInTransactionV1(data: CreateReferenceInput, input: { scope: WorkspaceScope; transaction: Transaction }) {
+  const { scope, transaction } = input
+  if (transaction.db !== db || transaction.mode !== 'readwrite' || !transaction.active ||
+    Dexie.currentTransaction !== transaction || referenceCreationTablesV1().some(table => !transaction.storeNames.includes(table.name)))
+    throw new Error('缺少原项目参考写入事务。')
+  const owner = await Dexie.waitFor(resolveScope({ projectId: data.projectId, scope }))
+  return transaction.table<Reference, number>(db.references.name).add(stampNewReference(data, owner))
+}
+
+export function importedReferenceDataV1(session: ImportSession & { id: number }, depth: 'quick' | 'deep'): CreateReferenceInput {
+  return {
+    projectId: session.projectId, title: session.filename.replace(/\.[^.]+$/, ''), author: '', type: 'story',
+    note: `从「${session.filename}」导入 · ${session.totalChars.toLocaleString()} 字`, url: '', fileHash: session.fileHash,
+    importSessionId: session.id, analysisDepth: depth, importedData: {
+      worldview: session.merged.worldview, geography: session.merged.geography, history: session.merged.history,
+      characters: session.merged.characters, outline: session.merged.outline,
+      writingTechniques: session.merged.writingTechniques, codexCandidates: session.merged.codexCandidates,
+      sourceFilename: session.filename, importedAt: Date.now(),
+    },
+  }
 }
 
 export const useReferenceStore = create<ReferenceStore>((set, get) => ({
@@ -31,11 +64,11 @@ export const useReferenceStore = create<ReferenceStore>((set, get) => ({
     set({ references, loading: false })
   },
 
-  addReference: async (data: CreateReferenceInput) => {
-    const now = Date.now()
-    const stamped = stampNewRecord(await resolveScopeLike(data.projectId), 'references', { ...data, createdAt: now, updatedAt: now } as Reference, { owner: 'work' }) as Reference
-    const id = await db.references.add(stamped)
-    await get().loadAll(data.projectId)
+  addReference: async (data: CreateReferenceInput, explicitScope?: WorkspaceScope) => {
+    const scope = await resolveScope({ projectId: data.projectId,
+      ...(explicitScope ? { scope: structuredClone(explicitScope) } : {}) })
+    const id = await db.references.add(stampNewReference(data, scope))
+    await get().loadAll(explicitScope ? scope : data.projectId)
     return id as number
   },
 

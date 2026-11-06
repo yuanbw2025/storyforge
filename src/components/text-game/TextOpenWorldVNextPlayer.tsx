@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Bell } from 'lucide-react'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { parseTextOpenWorldModulesV1 } from '../../lib/open-world/modules'
@@ -71,8 +71,9 @@ import TextOpenWorldScenePanel, {
   type TextOpenWorldSceneTutorialAvailabilityV1,
 } from './TextOpenWorldScenePanel'
 import TextOpenWorldSaveSettingsPanel from './TextOpenWorldSaveSettingsPanel'
-import TextOpenWorldWorldRecordPanel from './TextOpenWorldWorldRecordPanel'
 import TextOpenWorldExperienceFeedback from './TextOpenWorldExperienceFeedback'
+
+const TextOpenWorldWorldRecordPanel = lazy(() => import('./TextOpenWorldWorldRecordPanel'))
 
 const QUEST_STATUS_LABELS = {
   revealed: '可接取',
@@ -828,10 +829,25 @@ export default function TextOpenWorldVNextPlayer() {
     memoryAbortController.current?.abort()
     const controller = new AbortController()
     memoryAbortController.current = controller
+    const requestScope = structuredClone(liveStore.scope)
+    const requestWorldGroupId = liveStore.worldGroupId ?? null
+    const isCurrentMemoryRequest = () => {
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      return memoryAbortController.current === controller && !controller.signal.aborted
+        // select(B) keeps A's row until B has loaded. Do not start a fresh
+        // select(A) while that newer selection owns the store's load revision.
+        && !current.loading && currentSessionId === liveSessionId
+        && current.scope?.projectId === requestScope.projectId
+        && current.scope.worldId === requestScope.worldId
+        && current.scope.workId === requestScope.workId
+        && (current.worldGroupId ?? null) === requestWorldGroupId
+    }
     try {
       const { generateAndCommitTextOpenWorldRuntimeMemoryV1 } = await import('../../lib/open-world/runtime-memory')
+      if (!isCurrentMemoryRequest()) throw new Error('记忆请求的存档已切换，未发起新的模型调用。')
       const result = await generateAndCommitTextOpenWorldRuntimeMemoryV1({
-        scope: liveStore.scope,
+        scope: requestScope,
         productRuntimeSessionId: liveSessionId,
         selectedSceneKey: request.selectedSceneKey,
         actorKey: request.actorKey,
@@ -844,11 +860,14 @@ export default function TextOpenWorldVNextPlayer() {
         aiConfig,
         signal: controller.signal,
       })
-      await useTextOpenWorldPlayerStore.getState().select(liveSessionId)
+      // A's committed event/raw/receipt remain owned by A. Only its still
+      // current caller may refresh the selection; never undo that commit.
+      if (isCurrentMemoryRequest()) await useTextOpenWorldPlayerStore.getState().select(liveSessionId)
       return result
     } finally {
+      const refreshCurrent = isCurrentMemoryRequest()
       if (memoryAbortController.current === controller) memoryAbortController.current = null
-      void refreshRuntimeAIObservability()
+      if (refreshCurrent) void refreshRuntimeAIObservability()
     }
   }
 
@@ -1112,11 +1131,13 @@ export default function TextOpenWorldVNextPlayer() {
         if (action) executeProjectedAction(action, itemKey)
       }}
     />
-    {worldRecordProjection ? <TextOpenWorldWorldRecordPanel
-      sessionKey={sessionKey}
-      projection={worldRecordProjection}
-      onFocusLocation={focusQuestLocation}
-    /> : <article
+    {worldRecordProjection ? <Suspense fallback={<p role="status">正在读取世界记录…</p>}>
+      <TextOpenWorldWorldRecordPanel
+        sessionKey={sessionKey}
+        projection={worldRecordProjection}
+        onFocusLocation={focusQuestLocation}
+      />
+    </Suspense> : <article
       className="rounded border border-border bg-bg-surface p-4 text-xs text-text-muted"
       role="status"
       data-testid="text-open-world-world-record-synchronizing"

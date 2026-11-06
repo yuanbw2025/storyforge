@@ -1,3 +1,4 @@
+import { cleanupOwnedEvalWorkspacesV1, withEvalWorkspaceRunLeaseV1, type EvalWorkspaceRunLeaseV1 } from '../workspace-ownership'
 import { hashCanonicalValue } from '../../agent/run/hash'
 import type { CreativeReliabilityFixtureV1 } from './fixtures'
 import {
@@ -50,6 +51,8 @@ export interface CreativeReliabilityEvalCheckpointV1 {
 
 export interface CreativeReliabilityEvalRunDependenciesV1 {
   generate: (input: {
+    evalRunId?: string
+    evalRunLease?: EvalWorkspaceRunLeaseV1
     fixture: CreativeReliabilityFixtureV1
     variant: CreativeReliabilityEvalVariantV1
     identity: CreativeReliabilityEvalIdentityV1
@@ -187,6 +190,10 @@ export async function runCreativeReliabilityEvalV1(input: {
   resumeFrom?: CreativeReliabilityEvalCheckpointV1
   onCheckpoint?: (checkpoint: CreativeReliabilityEvalCheckpointV1) => Promise<void> | void
 }): Promise<CreativeReliabilityEvalCheckpointV1> {
+  return withEvalWorkspaceRunLeaseV1({ suite: 'creative-reliability', runId: input.resumeFrom?.runId ?? input.runId }, lease => runCreativeReliabilityWithLeaseV1(input, lease))
+}
+
+async function runCreativeReliabilityWithLeaseV1(input: Parameters<typeof runCreativeReliabilityEvalV1>[0], lease: EvalWorkspaceRunLeaseV1): Promise<CreativeReliabilityEvalCheckpointV1> {
   if (!input.fixtures.length) throw new Error('CREL 评测集不能为空')
   if (input.fixtures.some(fixture => fixture.split !== input.fixtures[0].split)) {
     throw new Error('CREL 单次运行不得混合 development 与 held-out')
@@ -250,6 +257,8 @@ export async function runCreativeReliabilityEvalV1(input: {
       if (!state.generations[variant]) {
         try {
           state.generations[variant] = await input.dependencies.generate({
+            evalRunId: checkpoint.runId,
+            evalRunLease: lease,
             fixture,
             variant,
             identity: input.generator,
@@ -310,8 +319,17 @@ export function loadCreativeReliabilityEvalCheckpointV1(): CreativeReliabilityEv
   return raw ? JSON.parse(raw) as CreativeReliabilityEvalCheckpointV1 : null
 }
 
-export function clearCreativeReliabilityEvalCheckpointV1(): void {
-  localStorage.removeItem(CREATIVE_RELIABILITY_CHECKPOINT_STORAGE_KEY_V1)
+export async function clearCreativeReliabilityEvalCheckpointV1(runId: string): Promise<void> {
+  await withEvalWorkspaceRunLeaseV1({ suite: 'creative-reliability', runId }, async lease => {
+    const raw = localStorage.getItem(CREATIVE_RELIABILITY_CHECKPOINT_STORAGE_KEY_V1)
+    const current = raw == null ? null : JSON.parse(raw) as CreativeReliabilityEvalCheckpointV1
+    if (raw != null && current?.runId !== runId) throw new Error('CREL checkpoint 已切换到其他运行；原记录保留，请重新载入。')
+    await cleanupOwnedEvalWorkspacesV1({ suite: 'creative-reliability', runId, lease })
+    if (localStorage.getItem(CREATIVE_RELIABILITY_CHECKPOINT_STORAGE_KEY_V1) !== raw) {
+      throw new Error('CREL checkpoint 已更新；原记录保留，请重新载入。')
+    }
+    localStorage.removeItem(CREATIVE_RELIABILITY_CHECKPOINT_STORAGE_KEY_V1)
+  })
 }
 
 export function loadCreativeReliabilityEvalCheckpointArchivesV1(): CreativeReliabilityEvalCheckpointV1[] {

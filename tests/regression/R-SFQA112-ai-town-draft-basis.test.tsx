@@ -540,18 +540,20 @@ it('threads actual own World, SourceSelection and Brief revisions through later 
     const nativePrepare = townService.prepareAiTownBrief
     let changedDuringPrepare = false, nativePrepareSettled = false
     let observationFailure: unknown
-    const observer = vi.spyOn(townService, 'prepareAiTownBrief').mockImplementation((...args) => {
+    const observer = vi.spyOn(townService, 'prepareAiTownBrief').mockImplementation(async (...args) => {
       const original = nativePrepare(...args)
-      // Observe the real original promise; do not replace its result or DB work.
-      // This same-owner source checkbox is genuinely enabled while prepare runs.
+      // Keep the real work and result. Hold only its UI acknowledgement until
+      // the real source view is ready and the author has made the dirty edit.
+      void original.catch(() => {})
       try {
-        void router.navigate('/town/source?project=' + owner.scope.projectId + '&work=' + owner.scope.workId, { flushSync: true })
-        const input = sourceCheckbox()
-        flushSync(() => { input.click() })
-        changedDuringPrepare = true
+        await router.navigate('/town/source?project=' + owner.scope.projectId + '&work=' + owner.scope.workId, { flushSync: true })
+        await vi.waitFor(() => {
+          const input = sourceCheckbox()
+          flushSync(() => { input.click() })
+          changedDuringPrepare = true
+        }, { timeout: 5000 })
       } catch (cause) { observationFailure = cause }
-      void original.then(() => { nativePrepareSettled = true }, () => { nativePrepareSettled = true })
-      return original
+      try { return await original } finally { nativePrepareSettled = true }
     })
     restorePrepare = () => observer.mockRestore()
     await click('生成或更新审查方案')
@@ -652,18 +654,18 @@ it.each(['current', 'stale'] as const)('uses the actual Consultation confirmatio
 
 it('keeps a legitimate existing no-draft Production read-only without inventing a draft or rewriting it', async () => {
   const { createWorkspace } = await import('../../src/lib/workspace/create-workspace')
-  const { cacheWorldReferenceForProductV1 } = await import('../../src/lib/world-engine/reference-cache')
+  const { selectWorldReferenceForProductPurposeV1 } = await import('../../src/lib/world-engine/reference-cache')
   const { seedCurrentProductWorld } = await import('../helpers/current-product-world')
   const { consultProductProductionStartV1, compileProductProductionBriefV3, createProductProductionWithBriefV1 } = await import('../../src/lib/product-production/service')
   const source = await seedCurrentProductWorld('112 no-draft frozen source', { minimumCharacters: 4 })
   const owner = await createWorkspace({ name: '112 no-draft existing owner', genres: [], status: 'drafting',
     description: '', targetWordCount: 10000 }, { kind: 'ai-town' })
-  const localReleaseId = await cacheWorldReferenceForProductV1(owner.scope, source.release.id!)
+  const { localId: localReleaseId, sourcePurpose } = await selectWorldReferenceForProductPurposeV1(owner.scope, source.release.id!, 'ai-town')
   const catalog = await consultProductProductionStartV1({ scope: owner.scope, worldReleaseId: localReleaseId, productType: 'ai-town' })
   const suggestion = catalog.suggestions.find(value => value.recommendedProductTypes.includes('ai-town')) ?? catalog.suggestions[0]
   if (!suggestion) throw new Error('The real no-draft Production fixture has no catalog starting point')
   const settings = defaultAiTownSettings(); settings.town.residentTarget = 4
-  const brief = await compileProductProductionBriefV3({ scope: owner.scope, worldReleaseId: localReleaseId,
+  const brief = await compileProductProductionBriefV3({ scope: owner.scope, worldReleaseId: localReleaseId, sourcePurpose,
     suggestionKey: suggestion.suggestionKey, productType: 'ai-town', qualityProfile: 'prototype', scale: 'short-arc',
     visualLevel: 'none', audioLevel: 'none', playerRole: settings.town.playerName,
     openingSituation: '112 no-draft existing life', aiTown: { ...settings.town, townTitle: owner.work.title },

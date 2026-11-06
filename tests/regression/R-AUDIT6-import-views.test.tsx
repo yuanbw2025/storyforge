@@ -5,6 +5,7 @@ import { ImportDocIntro, ImportReusableSessionBanner } from '../../src/component
 import { ImportPipelineControls } from '../../src/components/system/import/ImportRuntimeView'
 import CodexImportReviewModal from '../../src/components/system/import/CodexImportReviewModal'
 import useImportDocumentPreparation from '../../src/components/system/import/useImportDocumentPreparation'
+import { createVerificationReceiptV1 } from '../../src/lib/agent/run/verification-receipt'
 import type { ImportSession } from '../../src/lib/types/import-session'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -64,30 +65,75 @@ describe('AUDIT-6 · 文档导入视图', () => {
     expect(host.textContent).toContain('支持的文件格式与大小上限')
   })
 
-  it('复用会话的四个操作只向父级转发', async () => {
+  it('复用会话按目标和原文可用性向父级转发已允许的操作', async () => {
     const onApplyProject = vi.fn()
     const onApplyReference = vi.fn()
+    const onShowReport = vi.fn()
     const onIgnore = vi.fn()
-    const host = await mount(createElement(ImportReusableSessionBanner, {
-      session,
+    const hash = 'a'.repeat(64)
+    const receipt = await createVerificationReceiptV1({
+      version: 1, runId: 1, generation: 1, contractHash: hash,
+      contextManifestHashes: [hash], candidateHashes: [hash], adoptionEventIds: [1],
+      postStateHash: hash, verifierSetVersion: 'audit6-view-fixture-v1',
+      criteria: [{ id: 'view-fixture', status: 'passed', evidenceRefs: ['synthetic-view-fixture'] }],
+      acceptedAt: 1,
+    })
+    const confirmed: ImportSession = {
+      ...session,
+      totalChunks: 1,
+      chunks: [{
+        index: 0, startChar: 0, endChar: session.totalChars, charCount: session.totalChars,
+        status: 'done', attempts: 1,
+        durableParse: { claimKey: 'audit6-view-fixture', runId: 1, confirmation: { editedHash: hash, receipt } },
+      }],
+    }
+    const props = {
       applying: false,
-      originalTextAvailable: false,
       onApplyProject,
       onApplyReference,
+      onShowReport,
       onIgnore,
+    }
+    const withoutOriginal = await mount(createElement(ImportReusableSessionBanner, {
+      ...props, session: confirmed, originalTextAvailable: false,
     }))
+    const buttons = withoutOriginal.querySelectorAll('button')
+    expect(Array.from(buttons, button => button.textContent?.trim())).toEqual([
+      '查看导入记录', '保存为项目参考 · 浅层', '忽略',
+    ])
+    for (const button of buttons) await act(async () => button.click())
+    expect(onShowReport).toHaveBeenCalledOnce()
+    expect(onApplyProject).not.toHaveBeenCalled()
+    expect(onApplyReference).toHaveBeenCalledOnce()
+    expect(onApplyReference).toHaveBeenCalledWith('quick')
+    expect(onIgnore).toHaveBeenCalledOnce()
+    expect(withoutOriginal.textContent).toContain('深层分析需要恢复原文件')
 
-    const buttons = host.querySelectorAll('button')
-    expect(buttons).toHaveLength(4)
-    await act(async () => buttons[0].click())
-    await act(async () => buttons[1].click())
-    await act(async () => buttons[2].click())
-    await act(async () => buttons[3].click())
-    expect(onApplyProject).toHaveBeenCalledOnce()
+    onApplyReference.mockClear()
+    const withOriginal = await mount(createElement(ImportReusableSessionBanner, {
+      ...props, session: confirmed, originalTextAvailable: true,
+    }))
+    const available = withOriginal.querySelectorAll('button')
+    expect(Array.from(available, button => button.textContent?.trim())).toEqual([
+      '查看导入记录', '保存为项目参考 · 浅层', '保存为项目参考 · 深层', '忽略',
+    ])
+    await act(async () => available[1].click())
+    await act(async () => available[2].click())
+    expect(onApplyProject).not.toHaveBeenCalled()
+    expect(onApplyReference).toHaveBeenCalledTimes(2)
     expect(onApplyReference).toHaveBeenNthCalledWith(1, 'quick')
     expect(onApplyReference).toHaveBeenNthCalledWith(2, 'deep')
-    expect(onIgnore).toHaveBeenCalledOnce()
-    expect(host.textContent).toContain('原文已不在内存')
+
+    const reference = await mount(createElement(ImportReusableSessionBanner, {
+      ...props, session: { ...confirmed, importTarget: 'reference' }, originalTextAvailable: true,
+    }))
+    const referenceButtons = reference.querySelectorAll('button')
+    expect(Array.from(referenceButtons, button => button.textContent?.trim())).toEqual([
+      '查看导入记录', '采用到当前项目设定库', '忽略',
+    ])
+    await act(async () => referenceButtons[1].click())
+    expect(onApplyProject).toHaveBeenCalledOnce()
+    expect(onApplyReference).toHaveBeenCalledTimes(2)
   })
 
   it('词条候选审查允许取消、改名和改分类，确认时只交回选中项', async () => {

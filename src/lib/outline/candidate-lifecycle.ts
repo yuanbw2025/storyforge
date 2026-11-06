@@ -1,4 +1,5 @@
 import { parseChapterOutlineOutput } from '../ai/parse-outline-output'
+import Dexie from 'dexie'
 import {
   appendAgentRunEventV1,
   createVerificationReceiptV1,
@@ -29,6 +30,10 @@ import {
 import type { OutlineNode } from '../types'
 import {
   assertWorkspaceContentRevisionFreshV1,
+  assertOutlineBatchContentRevisionFreshV1,
+  contentRevisionTableSpecsV1,
+  proveOutlineBatchAppendV1,
+  OUTLINE_BATCH_APPEND_PAYLOAD_TYPE_V1,
   parseWorkspaceContentRevisionV1,
   verifyWorkspaceContentRevisionV1,
   type WorkspaceContentRevisionVectorV1,
@@ -148,6 +153,7 @@ export interface RestoredOutlineGenerationBatchV1 {
   batchGroupId: string
   batchTotal: number
   candidates: OutlineGenerationCandidateV1[]
+  adoptionIntents?: Map<number, OutlineGenerationAdoptionIntentV1>
 }
 
 export async function persistOutlineGenerationCandidateV1(input: {
@@ -367,7 +373,9 @@ async function resolveOutlineCandidate(input: OutlineGenerationCandidateV1): Pro
     || payload.runId !== input.runId
     || payload.stepId !== input.stepId
     || payload.candidateHash !== input.candidateHash
-    || await hashCanonicalValue(event.content) !== input.candidateHash
+    || await Dexie.waitFor(hashCanonicalValue(event.content)) !== input.candidateHash
+    || await Dexie.waitFor(hashCanonicalValue(payload.batch ?? null)) !== await Dexie.waitFor(hashCanonicalValue(input.batch ?? null))
+    || await Dexie.waitFor(hashCanonicalValue(payload.contentRevision ?? null)) !== await Dexie.waitFor(hashCanonicalValue(input.contentRevision ?? null))
   ) throw new Error('大纲候选正文或来源证据已损坏')
   if (payload.chunked && !(await candidateForSnapshot(scope, snapshot))) throw new Error('精细章纲的原始响应或前序证据已损坏')
   return { scope, snapshot }
@@ -446,29 +454,34 @@ export async function restoreLatestOutlineGenerationBatchV1(
 ): Promise<RestoredOutlineGenerationBatchV1 | null> {
   const scope = await resolveScopeLike(scopeInput)
   const runs = (await readOwnedRows<AgentRunRecord>(scope, 'agentRuns', { owner: 'work' }))
-    .filter(run => run.id != null && run.status === 'awaiting_confirmation' && run.conversationId != null)
+    .filter(run => run.id != null && ['awaiting_confirmation', 'running', 'verifying'].includes(run.status) && run.conversationId != null)
     .sort((left, right) => right.updatedAt - left.updatedAt)
   const groups = new Map<string, {
     batchTotal: number
     latestUpdatedAt: number
     candidatesByIndex: Map<number, OutlineGenerationCandidateV1>
+    adoptionIntents: Map<number, OutlineGenerationAdoptionIntentV1>
   }>()
   for (const run of runs) {
     try {
       const snapshot = await readAgentRunV1(scope, run.id!)
-      if (snapshot.projection.state !== 'awaiting_confirmation') continue
       const candidate = await candidateForSnapshot(scope, snapshot)
       const batch = candidate?.batch
       if (!candidate || !batch) continue
+      const step = snapshot.projection.steps[candidate.stepId]
+      const frozen = step?.confirmation === 'adopt' ? await adoptionIntentForSnapshot(scope, snapshot, candidate) : null
+      if (snapshot.projection.state !== 'awaiting_confirmation' && !frozen) continue
       const group = groups.get(batch.batchGroupId) ?? {
         batchTotal: batch.batchTotal,
         latestUpdatedAt: run.updatedAt,
         candidatesByIndex: new Map<number, OutlineGenerationCandidateV1>(),
+        adoptionIntents: new Map<number, OutlineGenerationAdoptionIntentV1>(),
       }
       if (group.batchTotal !== batch.batchTotal) continue
       group.latestUpdatedAt = Math.max(group.latestUpdatedAt, run.updatedAt)
       if (!group.candidatesByIndex.has(batch.batchIndex)) {
         group.candidatesByIndex.set(batch.batchIndex, candidate)
+        if (frozen) group.adoptionIntents.set(candidate.runId, frozen.intent)
       }
       groups.set(batch.batchGroupId, group)
     } catch {
@@ -481,6 +494,7 @@ export async function restoreLatestOutlineGenerationBatchV1(
   return {
     batchGroupId: latest[0],
     batchTotal: latest[1].batchTotal,
+    ...(latest[1].adoptionIntents.size ? { adoptionIntents: latest[1].adoptionIntents } : {}),
     candidates: [...latest[1].candidatesByIndex.entries()]
       .sort((left, right) => left[0] - right[0])
       .map(([, candidate]) => candidate),
@@ -499,7 +513,7 @@ export async function beginOutlineGenerationAdoptionV1(
   if (parsedIntent && !adoptionIntentMatchesCandidate(candidate, parsedIntent)) {
     throw new Error('大纲采纳计划与候选生成目标不匹配')
   }
-  const intentHash = parsedIntent == null ? undefined : await hashCanonicalValue(parsedIntent)
+  const intentHash = parsedIntent == null ? undefined : await Dexie.waitFor(hashCanonicalValue(parsedIntent))
   const adoptionStarted = snapshot.events.find(event => (
     event.type === 'adoption.started'
     && event.payload.stepId === candidate.stepId
@@ -581,6 +595,39 @@ export async function beginOutlineGenerationAdoptionV1(
   )
 }
 
+async function recordOutlineGenerationAdoptionV1(
+  candidate: OutlineGenerationCandidateV1,
+  adoptionEvidence: unknown,
+): Promise<void> {
+  const resolved = await resolveOutlineCandidate(candidate)
+  const frozen = await adoptionIntentForSnapshot(resolved.scope, resolved.snapshot, candidate)
+  let evidence = adoptionEvidence
+  let appendProof = false
+  if (candidate.batch && candidate.contentRevision && frozen?.intent.kind === 'chapters') {
+    const postState = await readOutlineAdoptionPostState(candidate, resolved.scope, frozen.intent)
+    if (!Array.isArray(postState)) throw new Error('批次追加没有完整业务目标')
+    const targetIds = postState.map(row => {
+      if (typeof row?.id !== 'number') throw new Error('批次追加业务目标缺少实际ID')
+      return row.id
+    })
+    evidence = await proveOutlineBatchAppendV1({ scope: resolved.scope,
+      worldGroupId: candidate.worldGroupId, runId: candidate.runId,
+      intent: frozen.intent, targetIds, adoptionEvidence })
+    appendProof = true
+  }
+  const adoptionHash = await Dexie.waitFor(hashCanonicalValue({ candidateHash: candidate.candidateHash, evidence }))
+  await db.transaction('rw', scopeTransactionTables(db.agentRuns, db.agentRunEvents, ...(appendProof ? [db.agentConversations, db.agentEvents] : [])), async () => {
+    if (appendProof) await appendAgentEvent({ projectId: candidate.projectId, scope: resolved.scope,
+      conversationId: candidate.conversationId, durableRunId: candidate.runId, kind: 'plan',
+      content: '已核验本批新增行及完整来源；后续卷仍检查原始冻结内容。',
+      payload: { version: 1, type: OUTLINE_BATCH_APPEND_PAYLOAD_TYPE_V1, evidence } })
+    await appendAgentRunEventV1({ scope: resolved.scope, runId: candidate.runId, type: 'adoption.committed',
+      payload: { stepId: candidate.stepId, candidateHash: candidate.candidateHash, adoptionHash } })
+    await appendAgentRunEventV1({ scope: resolved.scope, runId: candidate.runId, type: 'step.succeeded',
+      payload: { stepId: candidate.stepId, attempt: 1, outputHash: candidate.candidateHash } })
+  })
+}
+
 export async function commitOutlineGenerationAdoptionV1(
   candidate: OutlineGenerationCandidateV1,
   adoptionEvidence: unknown,
@@ -604,36 +651,7 @@ export async function commitOutlineGenerationAdoptionV1(
   if (!step || step.status !== 'running' || step.confirmation !== 'adopt') {
     throw new Error('大纲候选尚未进入可提交采纳状态')
   }
-  const adoptionHash = await hashCanonicalValue({
-    candidateHash: candidate.candidateHash,
-    evidence: adoptionEvidence,
-  })
-  await db.transaction(
-    'rw',
-    scopeTransactionTables(db.agentRuns, db.agentRunEvents),
-    async () => {
-      await appendAgentRunEventV1({
-        scope: resolved.scope,
-        runId: candidate.runId,
-        type: 'adoption.committed',
-        payload: {
-          stepId: candidate.stepId,
-          candidateHash: candidate.candidateHash,
-          adoptionHash,
-        },
-      })
-      await appendAgentRunEventV1({
-        scope: resolved.scope,
-        runId: candidate.runId,
-        type: 'step.succeeded',
-        payload: {
-          stepId: candidate.stepId,
-          attempt: 1,
-          outputHash: candidate.candidateHash,
-        },
-      })
-    },
-  )
+  await recordOutlineGenerationAdoptionV1(candidate, adoptionEvidence)
   await options.faultInjector?.('after-adoption-event')
   resolved = await resolveOutlineCandidate(candidate)
   const frozen = await adoptionIntentForSnapshot(resolved.scope, resolved.snapshot, candidate)
@@ -664,7 +682,7 @@ async function adoptionIntentForSnapshot(
       || payload.runId !== candidate.runId
       || payload.candidateHash !== candidate.candidateHash
       || payload.intentHash !== started.payload.intentHash
-      || await hashCanonicalValue(payload.intent) !== payload.intentHash
+      || await Dexie.waitFor(hashCanonicalValue(payload.intent)) !== payload.intentHash
       || !adoptionIntentMatchesCandidate(candidate, payload.intent)
     ) continue
     return { intent: payload.intent, intentHash: payload.intentHash }
@@ -820,6 +838,44 @@ async function assertOutlineAdoptionRecoveryState(
 }
 
 /** Single formal adoption command: freeze intent → CAS → idempotent write → receipt. */
+async function assertOutlineCandidateContentFresh(candidate: OutlineGenerationCandidateV1, scope: WorkspaceScope) {
+  if (!candidate.contentRevision) return
+  if (candidate.batch) await assertOutlineBatchContentRevisionFreshV1(candidate.contentRevision, {
+    scope, worldGroupId: candidate.worldGroupId, runId: candidate.runId,
+  })
+  else await assertWorkspaceContentRevisionFreshV1(candidate.contentRevision, { scope, worldGroupId: candidate.worldGroupId })
+}
+
+/** The author's one batch confirmation freezes every per-volume intent in one
+ * transaction before any formal row is written. Existing run plans own it. */
+export async function beginOutlineGenerationBatchAdoptionV1(entries: ReadonlyArray<{
+  candidate: OutlineGenerationCandidateV1; intent: OutlineGenerationAdoptionIntentV1
+}>): Promise<void> {
+  if (!entries.length) throw new Error('批量确认没有候选')
+  const first = entries[0].candidate
+  if (!first.batch) throw new Error('批量确认缺少原始批次')
+  const ids = new Set(entries.map(item => item.candidate.runId))
+  const indices = new Set(entries.map(item => item.candidate.batch?.batchIndex))
+  if (ids.size !== entries.length || indices.size !== entries.length || entries.some(item =>
+    item.candidate.projectId !== first.projectId || !item.candidate.batch || item.candidate.batch.batchGroupId !== first.batch?.batchGroupId
+    || item.candidate.batch.batchTotal !== first.batch?.batchTotal || item.intent.kind !== 'chapters')) {
+    throw new Error('批量确认候选混入其它批次或重复卷')
+  }
+  await db.transaction('rw', scopeTransactionTables(...contentRevisionTableSpecsV1().map(spec => spec.table),
+    db.agentConversations, db.agentEvents, db.agentRuns, db.agentRunEvents), async () => {
+    for (const { candidate, intent } of entries) {
+      const resolved = await resolveOutlineCandidate(candidate)
+      const frozen = await adoptionIntentForSnapshot(resolved.scope, resolved.snapshot, candidate)
+      if (frozen) {
+        if (await Dexie.waitFor(hashCanonicalValue(frozen.intent)) !== await Dexie.waitFor(hashCanonicalValue(intent))) throw new Error('本卷已确认，必须沿原采纳计划恢复')
+        continue
+      }
+      await assertOutlineCandidateContentFresh(candidate, resolved.scope)
+      await beginOutlineGenerationAdoptionV1(candidate, intent)
+    }
+  })
+}
+
 export async function adoptOutlineGenerationCandidateV1(input: {
   candidate: OutlineGenerationCandidateV1
   intent: OutlineGenerationAdoptionIntentV1
@@ -831,12 +887,17 @@ export async function adoptOutlineGenerationCandidateV1(input: {
   }
   await inject('before-confirmation')
   const resolved = await resolveOutlineCandidate(input.candidate)
+  const existing = resolved.snapshot.projection.steps[input.candidate.stepId]
+  if (input.candidate.batch && existing?.adoptionHash && existing.status === 'succeeded') {
+    const frozen = await adoptionIntentForSnapshot(resolved.scope, resolved.snapshot, input.candidate)
+    if (!frozen) throw new Error('待恢复采纳缺少原确认计划')
+    await assertOutlineCandidateContentFresh(input.candidate, resolved.scope)
+    const receipt = await verifyOutlineGenerationAdoptionV1(input.candidate, frozen.intent)
+    return { evidence: { recovered: true }, ...receipt }
+  }
   if (input.candidate.contentRevision) {
     try {
-      await assertWorkspaceContentRevisionFreshV1(input.candidate.contentRevision, {
-        scope: resolved.scope,
-        worldGroupId: input.candidate.worldGroupId,
-      })
+      await assertOutlineCandidateContentFresh(input.candidate, resolved.scope)
     } catch (error) {
       await staleOutlineGenerationCandidateV1(
         input.candidate,
@@ -856,6 +917,29 @@ export async function adoptOutlineGenerationCandidateV1(input: {
   await inject('after-intent')
   const { scope } = resolved
   await inject('before-cas')
+  if (input.candidate.batch && input.candidate.contentRevision && input.intent.kind === 'chapters') {
+    // Canon reads, exact additions and their adoption evidence commit together.
+    // A failed row/proof write rolls back this volume; receipt retry never
+    // replays an already evidenced formal write.
+    const evidence = await db.transaction('rw', scopeTransactionTables(
+      ...contentRevisionTableSpecsV1().map(spec => spec.table), db.agentConversations,
+      db.agentEvents, db.agentRuns, db.agentRunEvents,
+    ), async () => {
+      await assertOutlineCandidateContentFresh(input.candidate, scope)
+      await assertOutlineAdoptionPreWriteCas(scope, input.intent)
+      await inject('after-cas')
+      const written = await executeOutlineAdoptionIntent(input.candidate, scope, input.intent,
+        input.faultInjector && !import.meta.env.PROD ? input.faultInjector : undefined)
+      await recordOutlineGenerationAdoptionV1(input.candidate, written)
+      return written
+    })
+    await inject('after-business-write')
+    await inject('after-adoption-event')
+    await inject('verification-in-progress')
+    const receipt = await verifyOutlineGenerationAdoptionV1(input.candidate, input.intent)
+    await inject('after-terminal-receipt')
+    return { evidence, ...receipt }
+  }
   await assertOutlineAdoptionPreWriteCas(scope, input.intent)
   await inject('after-cas')
   const evidence = await executeOutlineAdoptionIntent(
@@ -953,6 +1037,7 @@ export async function verifyOutlineGenerationAdoptionV1(
   if (!step || step.status !== 'succeeded' || !step.adoptionHash) {
     throw new Error('大纲运行尚未完成采纳，不能签发终态凭证')
   }
+  let recordingReceipt = false
   try {
     const postStateHash = await hashCanonicalValue(
       await readOutlineAdoptionPostState(candidate, resolved.scope, intent),
@@ -963,6 +1048,7 @@ export async function verifyOutlineGenerationAdoptionV1(
       .filter(Boolean)
     if (contextManifestHashes.length === 0) throw new Error('大纲运行缺少 Context Manifest 证据')
     if (snapshot.projection.state === 'running') {
+      recordingReceipt = true
       snapshot = await appendAgentRunEventV1({
         scope: resolved.scope,
         runId: candidate.runId,
@@ -970,6 +1056,7 @@ export async function verifyOutlineGenerationAdoptionV1(
         payload: { verifierSetVersion: OUTLINE_GENERATION_TERMINAL_VERIFIER_V1 },
         expectedLastSequence: snapshot.projection.lastSequence,
       })
+      recordingReceipt = false
     }
     if (snapshot.projection.state !== 'verifying') {
       throw new Error(`大纲运行状态 ${snapshot.projection.state} 不能签发终态凭证`)
@@ -996,6 +1083,7 @@ export async function verifyOutlineGenerationAdoptionV1(
       ],
       acceptedAt: Date.now(),
     })
+    recordingReceipt = true
     await appendAgentRunEventV1({
       scope: resolved.scope,
       runId: candidate.runId,
@@ -1003,8 +1091,13 @@ export async function verifyOutlineGenerationAdoptionV1(
       payload: { receiptHash: receipt.receiptHash },
       expectedLastSequence: snapshot.projection.lastSequence,
     })
+    recordingReceipt = false
     return { receiptHash: receipt.receiptHash, postStateHash }
   } catch (error) {
+    // The volume and its exact adoption evidence already committed together.
+    // An event-storage failure is not a failed content verification. Keep the
+    // batch run recoverable so an explicit retry only records its receipt.
+    if (candidate.batch && candidate.contentRevision && recordingReceipt) throw error
     const current = await readAgentRunV1(resolved.scope, candidate.runId)
     let rejected = current
     if (rejected.projection.state === 'running') {
@@ -1051,6 +1144,14 @@ export async function recoverPendingOutlineGenerationAdoptionsV1(
       if (!step?.candidateHash) continue
       const candidate = await candidateForSnapshot(scope, snapshot)
       if (!candidate) throw new Error('已确认运行缺少可校验的持久化候选')
+      if (candidate.batch && candidate.contentRevision) {
+        const frozen = await adoptionIntentForSnapshot(scope, snapshot, candidate)
+        if (!frozen) throw new Error('批次恢复缺少原确认计划')
+        // The batch controller restores the original confirmed plans and owns
+        // their explicit retry. A second writer here races that controller's
+        // Canon check and can invalidate an otherwise unchanged batch.
+        continue
+      }
       if (step.status === 'succeeded' && step.adoptionHash) {
         const frozen = await adoptionIntentForSnapshot(scope, snapshot, candidate)
         if (!frozen) throw new Error('已采纳运行缺少哈希匹配的采纳计划')

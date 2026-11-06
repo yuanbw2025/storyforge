@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
 import { Eye, EyeOff, CheckCircle, RotateCcw, RefreshCw } from 'lucide-react'
 import { hasUnmatchedSessionCredentialV1, useAIConfigStore, type TestResult } from '../../stores/ai-config'
 import EmbeddingConfigCard from './EmbeddingConfigCard'
-import type { AIProvider } from '../../lib/types'
+import type { AIConfig, AIProvider } from '../../lib/types'
 import { PROVIDER_MODELS } from '../../lib/types'
 import { allowsSamplingTemperature, getModelRetirement } from '../../lib/ai/provider-model-lifecycle'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
@@ -47,6 +47,21 @@ export default function AIConfigPanel() {
   return IS_SHOWCASE ? <ShowcaseNotice /> : <AIConfigPanelFull />
 }
 
+interface ModelListOwner {
+  provider: AIProvider
+  baseUrl: string
+  /** Private component memory only, never a rendered or persisted identity. */
+  apiKey: string
+}
+interface ModelListRequest extends ModelListOwner { generation: number }
+
+function modelListOwner(config: AIConfig): ModelListOwner {
+  return { provider: config.provider, baseUrl: normalizeOpenAIBaseUrl(config.baseUrl).baseUrl, apiKey: config.apiKey }
+}
+function sameModelListOwner(left: ModelListOwner, right: ModelListOwner): boolean {
+  return left.provider === right.provider && left.baseUrl === right.baseUrl && left.apiKey === right.apiKey
+}
+
 function AIConfigPanelFull() {
   const { config, setConfig, switchProvider, testConnection,
     rememberApiKey, setRememberApiKey,
@@ -67,6 +82,12 @@ function AIConfigPanelFull() {
   const [refreshingModels, setRefreshingModels] = useState(false)
   const [modelListError, setModelListError] = useState('')
   const submittedContextWindowRef = useRef(config.contextWindow)
+  const modelListSession = useRef<{ active: boolean; generation: number; resultOwner: ModelListRequest | null }>({
+    active: true, generation: 0, resultOwner: null,
+  }).current
+  const shownModelListOwner = modelListSession.resultOwner
+  const visibleModels = shownModelListOwner && sameModelListOwner(shownModelListOwner, modelListOwner(config))
+    ? fetchedModels : []
 
   const handleSavePreset = () => {
     if (!presetName.trim()) return
@@ -105,22 +126,31 @@ function AIConfigPanelFull() {
   }
 
   const handleRefreshModels = async () => {
+    if (!modelListSession.active) return
+    const current = useAIConfigStore.getState().config
+    const request: ModelListRequest = { ...modelListOwner(current), generation: ++modelListSession.generation }
+    const isCurrent = () => modelListSession.active && modelListSession.generation === request.generation
+      && sameModelListOwner(request, modelListOwner(useAIConfigStore.getState().config))
     setRefreshingModels(true)
     setModelListError('')
     try {
-      const normalized = normalizeOpenAIBaseUrl(config.baseUrl)
+      const normalized = normalizeOpenAIBaseUrl(current.baseUrl)
       if (normalized.changed) setConfig({ baseUrl: normalized.baseUrl })
       const models = await fetchOpenAIModels({
-        baseUrl: normalized.baseUrl,
-        apiKey: config.apiKey,
+        baseUrl: request.baseUrl,
+        apiKey: request.apiKey,
       })
+      if (!isCurrent()) return
+      modelListSession.resultOwner = request
       setFetchedModels(models)
       if (models.length === 0) setModelListError('服务返回了空模型列表；仍可手动填写模型名')
     } catch (error) {
+      if (!isCurrent()) return
+      modelListSession.resultOwner = null
       setFetchedModels([])
       setModelListError(error instanceof Error ? error.message : '刷新模型列表失败')
     } finally {
-      setRefreshingModels(false)
+      if (isCurrent()) setRefreshingModels(false)
     }
   }
 
@@ -161,9 +191,26 @@ function AIConfigPanelFull() {
   }, [config.provider])
 
   useEffect(() => {
-    setFetchedModels([])
-    setModelListError('')
-  }, [config.baseUrl, config.provider])
+    modelListSession.active = true
+    let owner = modelListOwner(useAIConfigStore.getState().config)
+    // Observe every owner change, including A -> B -> A in one React batch.
+    const unsubscribe = useAIConfigStore.subscribe(state => {
+      const next = modelListOwner(state.config)
+      if (sameModelListOwner(owner, next)) return
+      owner = next
+      modelListSession.generation += 1
+      modelListSession.resultOwner = null
+      setFetchedModels([])
+      setModelListError('')
+      setRefreshingModels(false)
+    })
+    return () => {
+      modelListSession.active = false
+      modelListSession.generation += 1
+      modelListSession.resultOwner = null
+      unsubscribe()
+    }
+  }, [modelListSession])
 
   return (
     <div className="w-full min-w-0">
@@ -337,15 +384,22 @@ function AIConfigPanelFull() {
                   </button>
                 )}
               </div>
-              {['custom', 'ollama', 'nvidia', 'deepseek', 'gemini', 'agnes'].includes(config.provider) && fetchedModels.length > 0 && (
+              {['custom', 'ollama', 'nvidia', 'deepseek', 'gemini', 'agnes'].includes(config.provider) && visibleModels.length > 0 && (
                 <select
-                  value={fetchedModels.includes(config.model) ? config.model : ''}
-                  onChange={(e) => { if (e.target.value) setConfig({ model: e.target.value }) }}
+                  value={visibleModels.includes(config.model) ? config.model : ''}
+                  onChange={(e) => {
+                    const model = e.target.value
+                    if (model && visibleModels.includes(model) && shownModelListOwner
+                      && modelListSession.active && modelListSession.resultOwner === shownModelListOwner
+                      && sameModelListOwner(shownModelListOwner, modelListOwner(useAIConfigStore.getState().config))) {
+                      setConfig({ model })
+                    }
+                  }}
                   aria-label="服务返回的模型列表"
                   className="mb-1.5 w-full rounded-lg border border-border bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
                 >
-                  <option value="">选择服务返回的模型（{fetchedModels.length}）</option>
-                  {fetchedModels.map(model => <option key={model} value={model} disabled={!!getModelRetirement({ ...config, model })}>{model}</option>)}
+                  <option value="">选择服务返回的模型（{visibleModels.length}）</option>
+                  {visibleModels.map(model => <option key={model} value={model} disabled={!!getModelRetirement({ ...config, model })}>{model}</option>)}
                 </select>
               )}
               {PROVIDER_MODELS[config.provider] ? (

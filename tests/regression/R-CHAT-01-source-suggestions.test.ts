@@ -5,7 +5,9 @@ import {readChatSourceReviewContextV1} from '../../src/lib/character-interaction
 import {parseChatSourceSuggestionsV1} from '../../src/lib/character-interaction/source-review-suggestions'
 import {generateChatSourceReviewSuggestionsV1, readLatestChatSourceReviewRunV1, readChatSourceReviewRunV1, recoverChatSourceReviewRunV1, cancelChatSourceReviewRunV1, type ChatSourceReviewBoundaryV1} from '../../src/lib/character-interaction/source-review-harness'
 import {readAgentRunV1} from '../../src/lib/agent/run/event-store'
-import {saveChatDraftV1, createChatDraftV2} from '../../src/lib/character-interaction/draft-service'
+import {saveChatDraftV1, createChatDraftV2, confirmChatSourceReviewV1, loadChatSourceProjectionV1, selectChatWorldV1} from '../../src/lib/character-interaction/draft-service'
+import {createWorldPackage} from '../../src/lib/world-engine/world-package'
+import {installWorldSourcePackageV1} from '../../src/lib/world-engine/source-receipt'
 import {exportProjectJSON, importProjectJSON} from '../../src/lib/export/json-export'
 
 beforeEach(async () => {db.close(); await db.delete(); await db.open()})
@@ -41,6 +43,59 @@ it('generates a grounded CreativeArtifact with one registered read-only run and 
   expect(run.events.filter(row => row.type === 'model.requested')).toHaveLength(1)
   expect(run.events.filter(row => row.type === 'verification.accepted')).toHaveLength(1)
   expect(await readLatestChatSourceReviewRunV1(f.scope)).toEqual(view)
+})
+
+async function installDeclaredChatSource(f: Awaited<ReturnType<typeof fixture>>) {
+  return installWorldSourcePackageV1(f.scope, await createWorldPackage(f.world.release.id!, {
+    authorName: '021 合成作者', attribution: '原署名', license: 'CC-BY-4.0', contentWarnings: ['原警告'],
+    allowedUses: { 'world-remix': false, ttrpg: false, 'character-interaction': true, 'ai-town': false,
+      'text-adventure': false, avg: false, 'text-open-world': false },
+  }))
+}
+
+it('021 preserves valid legacy native settings when reselecting that same release, but clears them on a different D', async () => {
+  const f = await fixture()
+  const confirmed = await confirmChatSourceReviewV1(f.scope, f.draft.revision, f.review)
+  await db.chatAuthoringDrafts.where('id').equals(confirmed.id!).modify(row => { delete row.sourcePurpose })
+  const reselected = await selectChatWorldV1(f.scope, confirmed.revision, f.world.release.id!)
+  expect(reselected.worldReleaseId).toBe(confirmed.worldReleaseId)
+  expect(JSON.parse(reselected.settingsJson)).toEqual(JSON.parse(confirmed.settingsJson))
+  expect(reselected.sourcePurpose?.origin.kind).toBe('local-author')
+
+  const declared = await installDeclaredChatSource(f)
+  const changed = await selectChatWorldV1(f.scope, reselected.revision, declared.worldReleaseId, declared.declarationHash)
+  expect(changed.worldReleaseId).toBe(confirmed.worldReleaseId)
+  expect(JSON.parse(changed.settingsJson)).toMatchObject({ characters: [], backgroundResourceKeys: [], sourceReview: null })
+  expect(changed.sourcePurpose?.origin.kind).toBe('declared')
+})
+
+it('021 registered chat source suggestions require authority before any new Run or request', async () => {
+  const f = await fixture()
+  const runAI = vi.fn(async () => JSON.stringify(f.output))
+  const network = vi.fn(async () => { throw Error('unexpected external request') })
+  vi.stubGlobal('fetch', network)
+  try {
+    await db.chatAuthoringDrafts.where('id').equals(f.draft.id!).modify(row => { delete row.sourcePurpose })
+    const before = await db.agentRuns.count()
+    await expect(generateChatSourceReviewSuggestionsV1({scope: f.scope, request: f.request, runAI}))
+      .rejects.toThrow(/明确选择|unknown/)
+    expect(await db.agentRuns.count()).toBe(before)
+    expect(runAI).not.toHaveBeenCalled()
+    expect(network).not.toHaveBeenCalled()
+
+    const declared = await installDeclaredChatSource(f)
+    const selected = await selectChatWorldV1(f.scope, f.draft.revision, declared.worldReleaseId, declared.declarationHash)
+    const saved = await saveChatDraftV1(f.scope, selected.revision, f.settings)
+    const projection = await loadChatSourceProjectionV1(f.scope, saved.revision)
+    expect(projection.projectionHash).toBe(f.projection.projectionHash)
+    const view = await generateChatSourceReviewSuggestionsV1({scope: f.scope,
+      request: {...f.request, draftRevision: saved.revision}, runAI})
+    expect(view.status).toBe('ready')
+    expect(runAI).toHaveBeenCalledTimes(1)
+    expect(network).not.toHaveBeenCalled()
+    await db.worldSourceReceipts.where('[worldId+declarationHash]').equals([f.scope.worldId, declared.declarationHash]).delete()
+    expect(await readChatSourceReviewRunV1(f.scope, view.runId)).toEqual(view)
+  } finally {vi.unstubAllGlobals()}
 })
 
 it('rejects invented quotations, foreign or missing fragments, duplicate suggestions and permission payloads', async () => {

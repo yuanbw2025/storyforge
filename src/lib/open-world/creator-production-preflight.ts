@@ -1,3 +1,4 @@
+import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from './creator-ending-count'
 import type {
   AIConfig,
   AIProvider,
@@ -609,6 +610,9 @@ export async function createTextOpenWorldCreatorProductionPreflightV1(input: {
   pricing: TextOpenWorldCreatorPricingSelectionV1
 }): Promise<TextOpenWorldCreatorProductionPreflightV1> {
   const brief = await verifyTextOpenWorldCreatorBriefV1(input.brief)
+  if (!isTextOpenWorldCreatorEndingCountV1(brief.draft.scale.endings)) {
+    throw new Error('[text-open-world-preflight] ' + TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+  }
   const current = await currentProviderBinding(input)
   const blockers: string[] = [...current.blockers]
   const warnings: string[] = []

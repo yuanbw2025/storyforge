@@ -212,18 +212,28 @@ describe('TOW-G4-12A · checkpoint purpose and portable lineage contract', () =>
       expect(await verifyProductRuntimeCheckpoint(item.id!)).toBe(true)
     }
 
-    const projectCount = await db.projects.count()
+    const countRows = () => Promise.all([
+      db.projects.count(),
+      db.productRuntimeSessions.count(),
+      db.productRuntimeEvents.count(),
+      db.productRuntimeCheckpoints.count(),
+    ])
+    const before = await countRows()
     const expectRejected = async (
       mutate: (copy: any) => void,
-      message: string,
+      expected: string | { message: string },
     ) => {
       const copy = structuredClone(backup) as any
       mutate(copy)
-      await expect(importProjectJSON(copy)).rejects.toThrow(message)
-      expect(await db.projects.count()).toBe(projectCount)
+      const rejection = expect(importProjectJSON(copy)).rejects
+      if (typeof expected === 'string') await rejection.toThrow(expected)
+      else await rejection.toMatchObject(expected)
+      expect(await countRows()).toEqual(before)
     }
     const autosaveIndex = backup.productRuntimeCheckpoints.findIndex(item => item.purpose === 'autosave')
     const childIndex = backup.productRuntimeSessions.findIndex(item => item.title === '检查点分支')
+    expect(autosaveIndex).toBeGreaterThanOrEqual(0)
+    expect(childIndex).toBeGreaterThanOrEqual(0)
     await expectRejected(copy => {
       copy.productRuntimeCheckpoints[autosaveIndex].purpose = 'quick-save'
     }, 'purpose')
@@ -238,7 +248,9 @@ describe('TOW-G4-12A · checkpoint purpose and portable lineage contract', () =>
     }, 'Hash 不匹配')
     await expectRejected(copy => {
       copy.productRuntimeCheckpoints[autosaveIndex]._productRuntimeSessionExportId = 99_999
-    }, 'lineage')
+    }, {
+      message: `备份预检失败：productRuntimeCheckpoints[${autosaveIndex}]._productRuntimeSessionExportId=99999 没有对应的 productRuntimeSessions 记录。`,
+    })
     await expectRejected(copy => {
       copy.productRuntimeSessions[childIndex].parentThroughSequence = null
     }, 'lineage')

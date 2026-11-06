@@ -1,3 +1,5 @@
+import { readAgentRunArtifactExactV1 } from '../memory/artifact-store'
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import { estimateTokens } from '../ai/context-budget'
 import { resolveRequestConfig, type ChatResult } from '../ai/client'
 import { computeKnownCostUsd } from '../ai/usage-log'
@@ -45,10 +47,13 @@ import type {
 } from '../types'
 import { assertRecordInScope, readOwnedRows, scopeTransactionTables } from '../workspace/scope'
 import { DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1 } from './product-config'
+import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from './creator-ending-count'
 import { assertTextOpenWorldNewSourceV1 } from './source-admission'
+import { assertTextOpenWorldCreatorProtagonistSelectionV1 } from './creator-source'
 import {
   createTextOpenWorldCreatorSourceLocatorV1,
   inspectTextOpenWorldCreatorSourceLocatorV1,
+  readTextOpenWorldCreatorProtagonistSourceKeyV1,
   TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1,
   TEXT_OPEN_WORLD_CREATOR_BRIEF_VERIFIER_V1,
   TEXT_OPEN_WORLD_CREATOR_PRODUCT_BOUNDARY_V1,
@@ -202,8 +207,10 @@ function rangeValue(value: unknown, label: string, minimum: number, maximum: num
 
 export function parseTextOpenWorldCreatorBriefDraftV1(value: unknown): TextOpenWorldCreatorBriefDraftV1 {
   const root = record(value, 'creatorBriefDraft')
+  const protagonistSourceResourceKey = readTextOpenWorldCreatorProtagonistSourceKeyV1(root)
   exact(root, [
     'schema', 'version', 'gameTitle', 'playerRole', 'playerFantasy', 'protagonistMode',
+    ...(protagonistSourceResourceKey === undefined ? [] : ['protagonistSourceResourceKey']),
     'protagonistDirective', 'coreGoal', 'primaryConflict', 'openingSituation',
     'experiencePillars', 'toneKeywords', 'mustKeep', 'allowedInferences', 'forbiddenChanges',
     'contentRating', 'contentBoundaries', 'authorNotes', 'unresolvedQuestions',
@@ -245,6 +252,7 @@ export function parseTextOpenWorldCreatorBriefDraftV1(value: unknown): TextOpenW
     playerRole: textValue(root.playerRole, 'playerRole', 2_000),
     playerFantasy: textValue(root.playerFantasy, 'playerFantasy', 2_000),
     protagonistMode,
+    ...(protagonistSourceResourceKey === undefined ? {} : { protagonistSourceResourceKey }),
     protagonistDirective: textValue(root.protagonistDirective, 'protagonistDirective', 2_000),
     coreGoal: textValue(root.coreGoal, 'coreGoal', 2_000),
     primaryConflict: textValue(root.primaryConflict, 'primaryConflict', 2_000),
@@ -352,6 +360,7 @@ async function recheckSelection(selection: TextOpenWorldCreatorSourceSelectionV1
   const inspected = await inspectTextOpenWorldCreatorSourceLocatorV1({
     scope: selection.sourceScope,
     locator: createTextOpenWorldCreatorSourceLocatorV1(selection),
+    requirePurpose: true,
   })
   if (inspected.bindingHash !== await hashCanonicalValue(selectionBinding(selection))) {
     fail('source-stale', '来源版本、边界或能力身份已变化，请重新选择来源')
@@ -516,6 +525,7 @@ export async function startTextOpenWorldCreatorBriefSessionV1(input: {
   sessionKey: string
   createdAt?: number
 }): Promise<TextOpenWorldCreatorBriefSessionV1> {
+  assertCurrentProductEntryV1('upper.text-open-world')
   assertTextOpenWorldNewSourceV1(input.selection.sourceKind, '创建来源会谈')
   input = { ...input, selection: structuredClone(input.selection) }
   const selection = await recheckSelection(input.selection)
@@ -541,6 +551,7 @@ export async function startTextOpenWorldCreatorBriefSessionV1(input: {
   })
   if (!intent.ok) fail(intent.errorCode ?? 'production-intent', String(intent.result.message ?? '无法创建 ProductProduction'))
   const purpose = `${TEXT_OPEN_WORLD_CREATOR_BRIEF_PURPOSE_PREFIX_V1}${bindingHash}:${key}`
+  assertCurrentProductEntryV1('upper.text-open-world')
   const conversation = await getOrCreateAgentConversation({
     projectId: scope.projectId,
     worldGroupId: null,
@@ -564,6 +575,7 @@ export async function startTextOpenWorldCreatorBriefSessionV1(input: {
         }
         return
       }
+      assertCurrentProductEntryV1('upper.text-open-world')
       const initialDraft = createDefaultTextOpenWorldCreatorBriefDraftV1(selection)
       const payload: CreatorBriefSessionStartEventV1 = {
         schema: 'storyforge.text-open-world-creator-brief-session-start',
@@ -647,9 +659,13 @@ export async function saveTextOpenWorldCreatorBriefDraftV1(input: {
   savedAt?: number
 }): Promise<TextOpenWorldCreatorBriefSessionV1> {
   input = structuredClone(input)
+  assertCurrentProductEntryV1('upper.text-open-world')
   assertTextOpenWorldNewSourceV1(input.session.sourceBinding.kind, '保存制作简报草稿')
   await recheckSelection(requireSessionSelection(input.session))
   const draft = parseTextOpenWorldCreatorBriefDraftV1(input.draft)
+  if (!isTextOpenWorldCreatorEndingCountV1(draft.scale.endings)) {
+    fail('ending-count', TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+  }
   const payload: CreatorBriefDraftEventV1 = {
     schema: 'storyforge.text-open-world-creator-brief-draft-event',
     version: 1,
@@ -658,6 +674,7 @@ export async function saveTextOpenWorldCreatorBriefDraftV1(input: {
     draftHash: await hashCanonicalValue(draft),
     savedAt: input.savedAt ?? Date.now(),
   }
+  assertCurrentProductEntryV1('upper.text-open-world')
   await appendAgentEvent({
     projectId: input.session.scope.projectId,
     conversationId: input.session.conversation.id,
@@ -913,6 +930,7 @@ export async function generateTextOpenWorldCreatorBriefCandidateV1(input: {
   input = { ...input, session: structuredClone(input.session), draft: structuredClone(input.draft),
     ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }),
   }
+  assertCurrentProductEntryV1('upper.text-open-world')
   assertTextOpenWorldNewSourceV1(input.session.sourceBinding.kind, '制作简报模型会谈')
   if (!input.aiConfig && !input.runAI) fail('ai-config', '缺少 AI 配置；仍可人工编辑并确认 Brief')
   const freshSelection = await recheckSelection(requireSessionSelection(input.session))
@@ -934,8 +952,10 @@ export async function generateTextOpenWorldCreatorBriefCandidateV1(input: {
     },
     scope: saved.scope,
   })
+  const sourceBinding = { ...saved.sourceBinding }
+  if (sourceBinding.kind === 'world-release') delete sourceBinding.sourcePurpose
   const manualContext = canonicalStringify({
-    sourceBinding: saved.sourceBinding,
+    sourceBinding,
     sourceSummary: saved.sourceSummary,
     authorDraft: draft,
     productBoundary: TEXT_OPEN_WORLD_CREATOR_PRODUCT_BOUNDARY_V1,
@@ -962,6 +982,7 @@ export async function generateTextOpenWorldCreatorBriefCandidateV1(input: {
   const contextManifestHashes: string[] = []
   const modelCalls: TextOpenWorldCreatorBriefModelEvidenceV1[] = []
   const invoke = async (attempt: 1 | 2, repairIssue?: string, badOutput?: string) => {
+    assertCurrentProductEntryV1('upper.text-open-world')
     const manifestHash = await run.manifestForAttempt(attempt)
     snapshot = await readAgentRunV1(saved.scope, snapshot.run.id)
     contextManifestHashes.push(manifestHash)
@@ -986,6 +1007,20 @@ export async function generateTextOpenWorldCreatorBriefCandidateV1(input: {
     const result: ChatResult = {}
     const startedAt = Date.now()
     let output: string
+    try { assertCurrentProductEntryV1('upper.text-open-world') }
+    catch (cause) {
+      result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }
+      result.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+      const unavailable = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error: cause })
+      snapshot = await appendRun(saved.scope, unavailable.snapshot, 'step.failed', {
+        stepId: TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1, attempt,
+        code: 'product-catalog-denied-before-dispatch', retryable: false, category: 'deterministic', action: 'fail',
+      })
+      snapshot = await appendRun(saved.scope, snapshot, 'run.failed', {
+        code: 'product-catalog-denied-before-dispatch', retryable: false,
+      })
+      throw unavailable.report
+    }
     try {
       output = input.runAI
         ? await input.runAI(messages, input.signal)
@@ -1183,6 +1218,7 @@ export async function confirmTextOpenWorldCreatorBriefV1(input: {
   confirmedAt?: number
 }): Promise<TextOpenWorldCreatorBriefSessionV1> {
   input = structuredClone(input)
+  assertCurrentProductEntryV1('upper.text-open-world')
   assertTextOpenWorldNewSourceV1(input.session.sourceBinding.kind, '确认制作简报')
   const production = await db.productProductions.get(input.session.production.id)
   if (!production || production.stateRevision !== input.session.production.stateRevision) {
@@ -1190,6 +1226,9 @@ export async function confirmTextOpenWorldCreatorBriefV1(input: {
   }
   await assertTextOpenWorldCreatorBriefLifecycleV1({ scope: input.session.scope, production, phase: 'revise' })
   const draft = parseTextOpenWorldCreatorBriefDraftV1(input.draft)
+  if (!isTextOpenWorldCreatorEndingCountV1(draft.scale.endings)) {
+    fail('ending-count', TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+  }
   if (draft.unresolvedQuestions.length) fail('unresolved', '仍有未决问题；请回答、删除或转为明确接受的假设')
   if (!input.acknowledgements.sourceIdentityReviewed
     || !input.acknowledgements.productBoundaryReviewed
@@ -1201,6 +1240,9 @@ export async function confirmTextOpenWorldCreatorBriefV1(input: {
   if (await hashCanonicalValue(selectionBinding(selection)) !== input.session.sourceBindingHash) {
     fail('source-stale', '来源已变化，请重新选择并重新会谈')
   }
+  await assertTextOpenWorldCreatorProtagonistSelectionV1({ selection, mode: draft.protagonistMode,
+    resourceKey: draft.protagonistSourceResourceKey })
+  assertCurrentProductEntryV1('upper.text-open-world')
   let snapshot: AgentRunSnapshotV1
   let previousCandidateHash: string
   let contextManifestHashes: string[]
@@ -1373,4 +1415,195 @@ export async function recoverTextOpenWorldCreatorBriefCandidateV1(input: {
 export async function listTextOpenWorldCreatorBriefRunsV1(session: TextOpenWorldCreatorBriefSessionV1) {
   const rows = await db.agentRuns.where('conversationId').equals(session.conversation.id).toArray()
   return rows.filter(row => row.workId === session.scope.workId && row.projectId === session.scope.projectId)
+}
+
+export interface TextOpenWorldCreatorConsultationUsageV1 {
+  calls: Array<{
+    runId: number
+    generation: number
+    attempt: number
+    provider: string | null
+    model: string | null
+    usageSource: 'provider' | 'estimated' | null
+    inputTokens: number | null
+    outputTokens: number | null
+    latencyMs: number | null
+    estimatedCostUsd: number | null
+  }>
+  unresolvedRequests: number
+  confirmedOrigin: 'ai' | 'author' | null
+  confirmedCalls: number | null
+}
+
+type CreatorUsageEvent<T> = Extract<AgentRunSnapshotV1['events'][number], { type: T }>
+type CreatorUsageRequest = CreatorUsageEvent<'model.requested'>
+
+function creatorUsageAttemptKey(value: { generation: number; payload: { attempt: number } }): string {
+  return `${value.generation}:${value.payload.attempt}`
+}
+
+function knownCreatorUsageNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+}
+
+async function creatorUsageObservation(snapshot: AgentRunSnapshotV1, request: CreatorUsageRequest) {
+  const sameAttempt = (event: { generation: number; payload: { stepId?: string; attempt?: number } }) => (
+    event.generation === request.generation && event.payload.stepId === request.payload.stepId
+    && event.payload.attempt === request.payload.attempt
+  )
+  const requestArtifacts = snapshot.events.filter((event): event is CreatorUsageEvent<'evidence.artifact.recorded'> => event.type === 'evidence.artifact.recorded'
+    && event.payload.artifactKind === 'rendered-request' && event.sequence < request.sequence && sameAttempt(event))
+  const contexts = snapshot.events.filter((event): event is CreatorUsageEvent<'context.assembled'> => event.type === 'context.assembled'
+    && event.sequence < request.sequence && sameAttempt(event))
+  if (requestArtifacts.length !== 1 || contexts.length !== 1) return null
+  const artifacts = snapshot.events.filter((event): event is CreatorUsageEvent<'evidence.artifact.recorded'> => event.type === 'evidence.artifact.recorded'
+    && ['raw-response', 'tool-result'].includes(event.payload.artifactKind) && event.sequence > request.sequence && sameAttempt(event))
+  const observations = new Map<string, Record<string, unknown>>()
+  for (const artifact of artifacts) {
+    try {
+      const body = record(JSON.parse(await readAgentRunArtifactExactV1({
+        projectId: snapshot.run.projectId, artifactKind: artifact.payload.artifactKind, contentHash: artifact.payload.contentHash,
+      })), '会谈原始响应证据')
+      if (body.version !== (artifact.payload.artifactKind === 'raw-response'
+        ? 'creation-model-response-v1' : 'creation-model-observation-v1')
+        || body.requestArtifactHash !== requestArtifacts[0]!.payload.contentHash
+        || body.contextManifestHash !== contexts[0]!.payload.manifestHash) continue
+      const observation = record(body.observation, '会谈响应观测')
+      observations.set(canonicalStringify(observation), observation)
+    } catch { /* Unavailable exact bodies do not prove dispatch or tokens. */ }
+  }
+  if (observations.size !== 1) return null
+  const observation = [...observations.values()][0]!
+  const lifecycle = observation.requestLifecycle as { phase?: unknown } | null | undefined
+  const usage = observation.usage as { inputTokens?: unknown; outputTokens?: unknown } | null | undefined
+  return {
+    observed: observation.outcome === 'returned' || lifecycle?.phase === 'request-dispatched' || lifecycle?.phase === 'response-observed',
+    preDispatch: observation.outcome === 'unavailable' && lifecycle?.phase === 'pre-dispatch',
+    inputTokens: knownCreatorUsageNumber(usage?.inputTokens),
+    outputTokens: knownCreatorUsageNumber(usage?.outputTokens),
+  }
+}
+
+/** Read the original conversation's durable attempts independently of the
+ * draft/candidate ultimately chosen for formal confirmation. */
+export async function readTextOpenWorldCreatorConsultationUsageV1(
+  session: TextOpenWorldCreatorBriefSessionV1,
+): Promise<TextOpenWorldCreatorConsultationUsageV1> {
+  // Capture all locators before any DB work. Neither a caller switch nor a
+  // late Brief read may change the identity used for the Run query.
+  const scope = { ...session.scope }
+  const productionId = session.production.id
+  const conversationId = session.conversation.id
+  const productInstanceKey = session.productInstanceKey
+  const sourceBindingHash = session.sourceBindingHash
+  const sessionBrief = session.confirmedBrief
+    ? { revision: session.confirmedBrief.revision, briefHash: session.confirmedBrief.briefHash } : null
+
+  const production = await db.productProductions.get(productionId)
+  if (!production?.id || production.productType !== 'text-open-world'
+    || production.productionKey !== productInstanceKey
+    || production.creatorSourceBindingHash !== sourceBindingHash
+    || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
+    fail('production-missing', '会谈用量不属于当前制作')
+  }
+  const conversation = (await readAgentEvents(conversationId, scope))
+    .map(event => ({ event, payload: parseEventPayload(event) }))
+  const starts = conversation.map(item => item.payload).filter(isSessionStart)
+  if (starts.length !== 1 || starts[0]!.productInstanceKey !== production.productionKey
+    || starts[0]!.sourceBindingHash !== sourceBindingHash
+    || await hashCanonicalValue(starts[0]!.sourceBinding) !== sourceBindingHash) {
+    fail('event-corrupt', '会谈用量与当前制作的来源绑定不一致')
+  }
+  const confirmedRow = sessionBrief && await db.productProductionBriefs
+    .where('[productionId+revision]').equals([production.id, sessionBrief.revision]).first()
+  const brief = confirmedRow?.briefKind === 'text-open-world-creator-v1'
+    && confirmedRow.briefHash === sessionBrief?.briefHash
+    && await assertRecordInScope(scope, 'productProductionBriefs', confirmedRow, { owner: 'work' })
+    ? await verifyTextOpenWorldCreatorBriefV1(confirmedRow.briefJson) : null
+  if (brief && (brief.briefHash !== confirmedRow?.briefHash || brief.productInstanceKey !== production.productionKey
+    || brief.sourceBindingHash !== sourceBindingHash)) {
+    fail('brief-corrupt', '会谈用量不能关联到不一致的正式确认')
+  }
+  const confirmedRunId = brief ? confirmedRow?.candidateRunId : null
+  const usage: TextOpenWorldCreatorConsultationUsageV1 = {
+    calls: [], unresolvedRequests: 0, confirmedOrigin: brief?.candidateEvidence.origin ?? null, confirmedCalls: null,
+  }
+  const runs = (await db.agentRuns.where('conversationId').equals(conversationId).toArray())
+    .filter(row => row.workId === scope.workId && row.projectId === scope.projectId)
+  for (const run of runs) {
+    if (run.id == null) continue
+    const snapshot = await readAgentRunV1(scope, run.id)
+    if (snapshot.run.conversationId !== conversationId || !snapshot.contract.executionBindings?.some(binding => (
+      binding.stepId === TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1 && binding.skillId === TEXT_OPEN_WORLD_CREATOR_BRIEF_SKILL_ID_V1
+      && binding.formalEntry?.entryId === TEXT_OPEN_WORLD_CREATOR_BRIEF_ENTRY_ID_V1
+    ))) continue
+    const requested = snapshot.events.filter((event): event is CreatorUsageRequest => event.type === 'model.requested'
+      && event.payload.stepId === TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1)
+    const responseByAttempt = new Map<string, CreatorUsageEvent<'model.responded'>>()
+    for (const event of snapshot.events) {
+      if (event.type !== 'model.responded' || event.payload.stepId !== TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1) continue
+      const key = creatorUsageAttemptKey(event)
+      const existing = responseByAttempt.get(key)
+      if (existing && existing.payload.outputHash !== event.payload.outputHash) {
+        fail('event-corrupt', '同一会谈 attempt 的响应证据不一致')
+      }
+      if (!existing) responseByAttempt.set(key, event)
+    }
+    const responded = [...responseByAttempt.values()]
+    const candidates = conversation.flatMap(({ event, payload }) => isCandidateEvent(payload) && event.durableRunId === run.id ? [payload] : [])
+    const known = new Map<string, TextOpenWorldCreatorBriefModelEvidenceV1>()
+    for (const { candidate, sourceBindingHash: eventSourceHash } of candidates) {
+      const { candidateHash, ...body } = candidate
+      const persisted = snapshot.events.find(event => event.type === 'candidate.persisted'
+        && event.payload.stepId === TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1 && event.payload.candidateHash === candidateHash)
+      if (!persisted || eventSourceHash !== sourceBindingHash || candidate.sourceBindingHash !== eventSourceHash
+        || candidate.runBindingHash !== requiredRunBindingHash(snapshot) || await hashCanonicalValue(body) !== candidateHash) {
+        fail('event-corrupt', '会谈用量的原始候选证据不一致')
+      }
+      const answers = responded.filter(event => event.generation === persisted.generation && event.sequence < persisted.sequence)
+      if (answers.length !== candidate.modelCalls.length || candidate.contextManifestHashes.length !== answers.length) {
+        fail('event-corrupt', '会谈候选用量与已响应次数不一致')
+      }
+      for (const [index, answer] of answers.entries()) {
+        const manifest = snapshot.events.find((event): event is CreatorUsageEvent<'context.assembled'> => event.type === 'context.assembled'
+          && event.generation === answer.generation && event.payload.stepId === answer.payload.stepId
+          && event.payload.attempt === answer.payload.attempt && event.sequence < answer.sequence)
+        if (manifest?.payload.manifestHash !== candidate.contextManifestHashes[index]) {
+          fail('event-corrupt', '会谈候选用量与 attempt 上下文不一致')
+        }
+        known.set(creatorUsageAttemptKey(answer), candidate.modelCalls[index]!)
+      }
+    }
+    const seen = new Set<string>()
+    for (const request of requested) {
+      const key = creatorUsageAttemptKey(request)
+      if (seen.has(key)) continue
+      seen.add(key)
+      const metered = known.get(key)
+      const observation = !metered ? await creatorUsageObservation(snapshot, request) : null
+      if (!responseByAttempt.has(key) && !observation?.observed) {
+        if (!observation?.preDispatch) usage.unresolvedRequests += 1
+        continue
+      }
+      const inputTokens = knownCreatorUsageNumber(metered?.inputTokens) ?? observation?.inputTokens ?? null
+      const outputTokens = knownCreatorUsageNumber(metered?.outputTokens) ?? observation?.outputTokens ?? null
+      usage.calls.push({
+        runId: snapshot.run.id, generation: request.generation, attempt: request.payload.attempt,
+        provider: metered?.provider ?? null, model: metered?.model ?? null,
+        usageSource: metered?.usageSource ?? (inputTokens != null && outputTokens != null ? 'provider' : null),
+        inputTokens, outputTokens, latencyMs: knownCreatorUsageNumber(metered?.latencyMs),
+        estimatedCostUsd: typeof metered?.estimatedCostUsd === 'number'
+          && Number.isFinite(metered.estimatedCostUsd) && metered.estimatedCostUsd >= 0 ? metered.estimatedCostUsd : null,
+      })
+    }
+    if (brief && run.id === confirmedRunId && snapshot.contract.runtimeBindingHash === brief.candidateEvidence.runBindingHash) {
+      const confirmation = snapshot.events.find(event => event.type === 'confirmation.recorded'
+        && event.payload.stepId === TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1
+        && event.payload.candidateHash === brief.candidateEvidence.candidateHash)
+      if (confirmation) {
+        usage.confirmedCalls = usage.calls.filter(call => call.runId === run.id && call.generation === confirmation.generation).length
+      }
+    }
+  }
+  return usage
 }
