@@ -1,16 +1,13 @@
 /**
  * AI 分块导入会话（ImportSession）
  *
- * 2026-05-11 新增 — Phase 18 大文档分块流水线。
- *
- * 一部超大文档（几十万字～千万字）一次性塞给 AI 必然被 maxTokens 截断；
- * 这里把文档按章节/段落切成若干 chunk，串行让 AI 解析，每块即时写 DB，
- * 服务繁忙至多尝试 3 次，其他失败停止并保留手动重试，可暂停/恢复/断点续跑，每 10 块做一次 AI 跨块角色合并。
- *
- * 这张表存「任务本身」—— 文档哈希、chunk 列表、累计解析结果、状态；
- * 解析出来的具体数据照常写入 worldviews / characters / outlineNodes 表。
+ * 分块原文与归属在作者开始解析前冻结。付费原答和候选留在原 Work
+ * 的 Agent Run；作者确认后正式写入并提交分块收据。
+ * 本表保存本地任务、恢复进度与最终报告，不拥有已采纳的作品内容。
  */
 
+import type { VerificationReceiptV1 } from './agent-run'
+import type { WorkspaceScope } from './world-ownership'
 import type { UnifiedParseResult } from './import-session-data'
 
 /** 导入目标 */
@@ -39,6 +36,14 @@ export interface ChunkState {
   startChar: number
   endChar: number
   charCount: number
+  /** 当前创建入口冻结的确切解析文本摘要；旧档缺失不能自动续跑。 */
+  sourceTextHash?: string
+  /** Local link to the only candidate Run for this frozen source attempt. */
+  durableParse?: {
+    claimKey: string
+    runId: number | null
+    confirmation?: { editedHash: string; receipt: VerificationReceiptV1 }
+  }
   /** 章节/段落标题（如识别到的"第X章"）— 仅展示用 */
   label?: string
   status: ChunkStatus
@@ -61,9 +66,11 @@ export interface ChunkState {
 export interface ImportSession {
   id?: number
   projectId: number
+  /** 新任务创建时确认的落点；旧记录仍可读取，但缺失时不得执行。 */
+  targetScope?: WorkspaceScope
   /** 上传文件名 */
   filename: string
-  /** 文件 SHA256（8 位前缀用作 id 显示） */
+  /** 原文件的快速匹配标识；正式续跑另用逐块 SHA-256 核对原文。 */
   fileHash: string
   /** 原文总字数 */
   totalChars: number
@@ -75,7 +82,7 @@ export interface ImportSession {
   chunks: ChunkState[]
   /** 累计合并后的解析结果（给用户看 + 恢复时做上下文） */
   merged: UnifiedParseResult
-  /** 滚动上下文（~1500 字已识别角色 + 关键词），AI 续跑时塞回 prompt */
+  /** 历史任务兼容字段；新解析不将其送入模型。 */
   rollingContext: string
   /** 导入目标：写入当前项目 还是 项目参考 */
   importTarget: ImportTarget
@@ -83,6 +90,10 @@ export interface ImportSession {
   analysisDepth?: import('./reference').ReferenceAnalysisDepth
   /** 多世界项目导入当前项目时的目标世界；null = 单世界/默认归属 */
   targetWorldGroupId?: number | null
+  /** Original atomically published reference; downstream analysis has its own lifecycle. */
+  publishedReferenceId?: number
+  /** Local claim for starting the published reference analysis from this import. */
+  referenceAnalysisStartedAt?: number
   /** 整体状态 */
   status: ImportSessionStatus
   /** 失败时的终结错误信息 */

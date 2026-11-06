@@ -116,6 +116,7 @@ export interface ChatAuthoringDraftV1 {
     /** Optional source interpretations, requiring independent review and explicit author confirmation. */
     sourceUnitsJson?: string;
     worldReleaseId: number | null;
+  sourcePurpose?: import('../world-engine/source-purpose').WorldSourcePurposeProofV1;
     productionId: number | null;
     conversationJson: string;
     createdAt: number;

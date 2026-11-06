@@ -14,10 +14,11 @@ import {
   readLatestVerifiedAgentRunCheckpointV1,
   verifyAgentRunCheckpointV1,
 } from '../../src/lib/agent/run/checkpoint'
-import type { WorkspaceScope } from '../../src/lib/types'
-import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import type { Chapter, WorkspaceScope } from '../../src/lib/types'
+import { addCurrentWorldFixtureV1, currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
 import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { updateWorkspace } from '../../src/lib/workspace/works'
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
@@ -94,6 +95,30 @@ function contract(input: {
   }
 }
 
+async function createInheritedChapter(label: string) {
+  const fixture = await createWorkspace(label)
+  await db.projects.update(fixture.scope.projectId, { enableMultiWorld: true })
+  const now = Date.now()
+  const fields = { projectId: fixture.scope.projectId, workId: fixture.scope.workId,
+    summary: '', order: 0, createdAt: now, updatedAt: now }
+  const blockId = await db.outlineNodes.add({ ...fields, parentId: fixture.outlineNodeId, type: 'storyBlock', title: '故事块' }) as number
+  const chapterOutlineId = await db.outlineNodes.add({ ...fields, parentId: blockId, type: 'chapter', title: '继承世界组的章纲' }) as number
+  const chapterRow = { projectId: fixture.scope.projectId, workId: fixture.scope.workId,
+    outlineNodeId: chapterOutlineId, title: '继承世界组的章节', content: '', wordCount: 0,
+    status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } satisfies Chapter & Pick<WorkspaceScope, 'workId'>
+  const chapterId = await db.chapters.add(chapterRow) as number
+  await stampCurrentFixtureResourceUidsV1(fixture.scope.projectId)
+  return { ...fixture, blockId, chapterOutlineId, chapterId }
+}
+
+type InheritedChapterFixture = Awaited<ReturnType<typeof createInheritedChapter>>
+function inheritedContractInput(fixture: InheritedChapterFixture, target: 'outline' | 'chapter', worldGroupId: number | null = fixture.worldGroupId) {
+  return { scope: fixture.scope, worldGroupId,
+    contract: { ...contract({ projectId: fixture.scope.projectId, worldGroupId: fixture.worldGroupId, outlineNodeId: fixture.chapterOutlineId }),
+      scope: { projectId: fixture.scope.projectId, worldGroupId,
+        ...(target === 'outline' ? { outlineNodeIds: [fixture.chapterOutlineId] } : { chapterIds: [fixture.chapterId] }) } } }
+}
+
 async function createRunningStep(label: string) {
   const fixture = await createWorkspace(label)
   let snapshot = await createAgentRunV1({
@@ -153,6 +178,102 @@ describe('R-HARNESS1-event-store-resume · durable run ledger', () => {
   })
 
   afterEach(() => db.close())
+
+  it.each(['outline', 'chapter'] as const)('祖链世界组：%s 创建接受继承、最近显式覆盖和无组，不改作者叶字段', async target => {
+    const fixture = await createInheritedChapter('合法祖链')
+    const before = await db.outlineNodes.where('projectId').equals(fixture.scope.projectId).toArray()
+    const created = await createAgentRunV1(inheritedContractInput(fixture, target))
+    expect(created.contract.scope.worldGroupId).toBe(fixture.worldGroupId)
+    expect(await db.outlineNodes.where('projectId').equals(fixture.scope.projectId).toArray()).toEqual(before)
+    expect(await db.outlineNodes.get(fixture.chapterOutlineId)).not.toHaveProperty('worldGroupId')
+
+    const group = (await db.worldGroups.get(fixture.worldGroupId))!
+    const otherGroupId = await db.worldGroups.add({ ...group, id: undefined, ragDocumentId: undefined, name: '另一组' }) as number
+    await db.outlineNodes.update(fixture.outlineNodeId, { worldGroupId: otherGroupId })
+    await db.outlineNodes.update(fixture.blockId, { worldGroupId: fixture.worldGroupId })
+    expect((await createAgentRunV1(inheritedContractInput(fixture, target))).contract.scope.worldGroupId).toBe(fixture.worldGroupId)
+    await db.outlineNodes.update(fixture.outlineNodeId, { worldGroupId: null })
+    await db.outlineNodes.update(fixture.blockId, { worldGroupId: null })
+    expect((await createAgentRunV1(inheritedContractInput(fixture, target, null))).contract.scope.worldGroupId).toBeNull()
+  })
+
+  it.each(['outline', 'chapter'] as const)('祖链世界组：关闭多世界的 %s 入口使用有效空组，显式非空合同仍须准确匹配', async target => {
+    const fixture = await createInheritedChapter('关闭分组保留数据')
+    const before = await db.outlineNodes.where('projectId').equals(fixture.scope.projectId).toArray()
+    await updateWorkspace(fixture.scope.projectId, { enableMultiWorld: false })
+    expect(await db.outlineNodes.where('projectId').equals(fixture.scope.projectId).toArray()).toEqual(before)
+    expect(await db.outlineNodes.get(fixture.outlineNodeId)).toMatchObject({ worldGroupId: fixture.worldGroupId })
+    expect(await db.outlineNodes.get(fixture.chapterOutlineId)).not.toHaveProperty('worldGroupId')
+    const ungrouped = await createAgentRunV1(inheritedContractInput(fixture, target, null))
+    expect(ungrouped.contract.scope.worldGroupId).toBeNull()
+    const explicit = await createAgentRunV1(inheritedContractInput(fixture, target))
+    expect(explicit.contract.scope.worldGroupId).toBe(fixture.worldGroupId)
+    const group = (await db.worldGroups.get(fixture.worldGroupId))!
+    const otherGroupId = await db.worldGroups.add({ ...group, id: undefined, ragDocumentId: undefined, name: '另一组' }) as number
+    const beforeRuns = await db.agentRuns.toArray(), beforeEvents = await db.agentRunEvents.toArray()
+    const code = target === 'outline' ? 'outline_world_scope' : 'chapter_world_scope'
+    await expect(createAgentRunV1(inheritedContractInput(fixture, target, otherGroupId))).rejects.toMatchObject({ code })
+    await updateWorkspace(fixture.scope.projectId, { enableMultiWorld: true })
+    await expect(createAgentRunV1(inheritedContractInput(fixture, target, null))).rejects.toMatchObject({ code })
+    expect(await db.agentRuns.toArray()).toEqual(beforeRuns)
+    expect(await db.agentRunEvents.toArray()).toEqual(beforeEvents)
+    expect((await readAgentRunV1(fixture.scope, explicit.run.id)).run.contractJson).toBe(explicit.run.contractJson)
+    expect((await readAgentRunV1(fixture.scope, ungrouped.run.id)).run.contractJson).toBe(ungrouped.run.contractJson)
+  })
+
+  it.each(['outline', 'chapter'] as const)('祖链世界组：%s 拒绝错组创建及父卷改组后的合同修订，保留冻结合同与历史读取', async target => {
+    const fixture = await createInheritedChapter('冻结世界组')
+    const input = inheritedContractInput(fixture, target)
+    const created = await createAgentRunV1(input)
+    const group = (await db.worldGroups.get(fixture.worldGroupId))!
+    const otherGroupId = await db.worldGroups.add({ ...group, id: undefined, ragDocumentId: undefined, name: '另一组' }) as number
+    const beforeRun = await db.agentRuns.get(created.run.id)
+    const beforeEvents = await db.agentRunEvents.toArray()
+    const code = target === 'outline' ? 'outline_world_scope' : 'chapter_world_scope'
+    await expect(createAgentRunV1(inheritedContractInput(fixture, target, otherGroupId))).rejects.toMatchObject({ code })
+    await db.outlineNodes.update(fixture.outlineNodeId, { worldGroupId: otherGroupId })
+    await expect(reviseAgentRunContractV1({ scope: fixture.scope, runId: created.run.id, contract: input.contract,
+      expectedLastSequence: created.projection.lastSequence })).rejects.toMatchObject({ code })
+    expect(await db.agentRuns.toArray()).toEqual([beforeRun])
+    expect(await db.agentRunEvents.toArray()).toEqual(beforeEvents)
+    expect((await readAgentRunV1(fixture.scope, created.run.id)).run.contractJson).toBe(created.run.contractJson)
+  })
+
+  it.each((['outline', 'chapter'] as const).flatMap(target =>
+    (['foreign-work', 'missing-parent', 'cycle'] as const).map(damage => ({ target, damage }))))(
+    '祖链世界组：$target 拒绝 $damage 即使叶有正确显式组，运行零写入', async ({ target, damage }) => {
+      const fixture = await createInheritedChapter('损坏祖链')
+      await db.outlineNodes.update(fixture.chapterOutlineId, { worldGroupId: fixture.worldGroupId })
+      if (damage === 'foreign-work') {
+        const otherWorkId = await db.works.add(currentWorkFixtureRecordV1({ projectId: fixture.scope.projectId,
+          worldId: fixture.scope.worldId, title: '另一作品' })) as number
+        await db.outlineNodes.update(fixture.outlineNodeId, { workId: otherWorkId })
+      } else if (damage === 'missing-parent') {
+        await db.outlineNodes.update(fixture.outlineNodeId, { parentId: 999999 })
+      } else {
+        await db.outlineNodes.update(fixture.outlineNodeId, { parentId: fixture.chapterOutlineId })
+      }
+      const before = await db.outlineNodes.toArray()
+      await expect(createAgentRunV1(inheritedContractInput(fixture, target))).rejects.toMatchObject({ code: 'outline_ancestry' })
+      expect(await db.agentRuns.count()).toBe(0)
+      expect(await db.agentRunEvents.count()).toBe(0)
+      expect(await db.outlineNodes.toArray()).toEqual(before)
+    })
+
+  it.each([true, false])('祖链世界组：multiWorld=%s 同项目另一 World 的组不能通过叶覆盖或创建参数借用', async multiWorld => {
+    const fixture = await createInheritedChapter('跨 World 组')
+    await updateWorkspace(fixture.scope.projectId, { enableMultiWorld: multiWorld })
+    const otherWorld = await addCurrentWorldFixtureV1({ projectId: fixture.scope.projectId, name: '另一 World' })
+    const group = (await db.worldGroups.get(fixture.worldGroupId))!
+    const foreignGroupId = await db.worldGroups.add({ ...group, id: undefined, ragDocumentId: undefined,
+      worldId: otherWorld.id!, name: '另一 World 的组' }) as number
+    await db.outlineNodes.update(fixture.outlineNodeId, { worldGroupId: foreignGroupId })
+    await db.outlineNodes.update(fixture.chapterOutlineId, { worldGroupId: fixture.worldGroupId })
+    await expect(createAgentRunV1(inheritedContractInput(fixture, 'chapter', multiWorld ? fixture.worldGroupId : null))).rejects.toMatchObject({ code: 'outline_ancestor_world_scope' })
+    await expect(createAgentRunV1(inheritedContractInput(fixture, 'outline', foreignGroupId))).rejects.toMatchObject({ code: 'world_scope' })
+    expect(await db.agentRuns.count()).toBe(0)
+    expect(await db.agentRunEvents.count()).toBe(0)
+  })
 
   it('persists, revises and reloads a valid contract above the former event snapshot ceiling', async () => {
     const fixture = await createWorkspace('大契约事件快照')

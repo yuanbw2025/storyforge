@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import { db } from "../db/schema";
 import {
   createWorkspace,
@@ -10,7 +11,7 @@ import {
   stampNewRecord,
 } from "../workspace/scope";
 import { updateWorkTitle } from "../workspace/works";
-import { cacheWorldReferenceForProductV1 } from "../world-engine/reference-cache";
+import { selectWorldReferenceForProductPurposeV1 } from "../world-engine/reference-cache";
 import type { WorkspaceScope } from "../types";
 import {
   defaultAiTownSettings,
@@ -89,6 +90,7 @@ export async function saveAiTownDraft(
   title: string,
   options?: { expectedWorkTitle: string },
 ) {
+  assertCurrentProductEntryV1('upper.ai-town')
   const capturedScope = { ...scope };
   const expectedWorkTitle = options?.expectedWorkTitle;
   if (options && typeof expectedWorkTitle !== "string")
@@ -115,6 +117,7 @@ export async function saveAiTownDraft(
         preparedRevision: null,
         updatedAt: Date.now(),
       };
+      assertCurrentProductEntryV1('upper.ai-town')
       await db.aiTownAuthoringDrafts.put(next);
       await updateWorkTitle(capturedScope, title);
       return next;
@@ -125,10 +128,12 @@ export async function selectAiTownWorld(
   scope: WorkspaceScope,
   revision: number,
   releaseId: number,
+  sourceDeclarationHash?: string,
 ) {
+  assertCurrentProductEntryV1('upper.ai-town')
   const row = await readAiTownDraft(scope);
   if (row.revision !== revision) throw new Error("方案已变化，请重新选择");
-  const localId = await cacheWorldReferenceForProductV1(scope, releaseId);
+  const { localId, sourcePurpose } = await selectWorldReferenceForProductPurposeV1(scope, releaseId, 'ai-town', { sourceDeclarationHash });
   return db.transaction(
     "rw",
     scopeTransactionTables(db.aiTownAuthoringDrafts),
@@ -139,12 +144,14 @@ export async function selectAiTownWorld(
       const next = {
         ...latest,
         worldReleaseId: localId,
+        sourcePurpose,
         selectionJson: null,
         suggestionKey: null,
         preparedRevision: null,
         revision: revision + 1,
         updatedAt: Date.now(),
       };
+      assertCurrentProductEntryV1('upper.ai-town')
       await db.aiTownAuthoringDrafts.put(next);
       return next;
     },
@@ -157,6 +164,7 @@ export async function saveAiTownSourceSelection(
   suggestionKey: string,
   selection: import("../types").ProductProductionSourceSelectionV1,
 ) {
+  assertCurrentProductEntryV1('upper.ai-town')
   const row = await readAiTownDraft(scope);
   if (!row.worldReleaseId) throw new Error("请选择世界版本");
   const { consultProductProductionStartV1 } = await import(
@@ -200,6 +208,7 @@ export async function saveAiTownSourceSelection(
         revision: revision + 1,
         updatedAt: Date.now(),
       };
+      assertCurrentProductEntryV1('upper.ai-town')
       await db.aiTownAuthoringDrafts.put(next);
       return next;
     },
@@ -247,7 +256,7 @@ export async function prepareAiTownBrief(
     : sources.selectionDefaults[suggestion.suggestionKey];
   const work = await db.works.get(scope.workId);
   if (!work) throw new Error("作品不存在");
-  const brief = await compileProductProductionBriefV3({
+  const compiled = await compileProductProductionBriefV3({
     scope,
     worldReleaseId: row.worldReleaseId,
     suggestionKey: suggestion.suggestionKey,
@@ -261,6 +270,7 @@ export async function prepareAiTownBrief(
     aiTown: {...settings.town, townTitle:work.title},
     sourceSelection: selection,
   });
+  const brief = row.sourcePurpose ? { ...compiled, source: { ...compiled.source, sourcePurpose: row.sourcePurpose } } : compiled
   if ((await readAiTownDraft(scope)).revision !== revision)
     throw new Error("编译期间方案已变化，请重新生成");
   let id = row.productionId;

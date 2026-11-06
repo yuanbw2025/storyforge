@@ -20,12 +20,51 @@ import type {
 } from '../../src/lib/types'
 import {
   createConfirmedProductBriefV1,
-  createProductReleaseLineageV1,
+  type createProductReleaseLineageV1,
   productReleaseUidV1,
 } from '../../src/lib/product/source-contracts'
 import { worldReleaseUidV1 } from '../../src/lib/world-engine/releases'
 
 const CREATED_AT = 1_700_000_000_000
+
+type HistoricalFixtureLineageInput = Omit<
+  Parameters<typeof createProductReleaseLineageV1>[0], 'createdAt'
+> & { createdAt: number }
+
+/** Serialize an already-frozen fixture for offline import and runtime readers.
+ * Each caller validates the assembled Release through the production manifest
+ * reader. A new publication must go through the live-source production gate.
+ */
+export async function createHistoricalFixtureReleaseLineageV1(
+  input: HistoricalFixtureLineageInput,
+): Promise<ProductReleaseLineageV1> {
+  if (input.worldReference.localReleaseRecordId !== 0
+    || input.sourcePlan.worldReference.localReleaseRecordId !== 0) {
+    throw new Error('Historical Release fixture requires portable WorldReference locators')
+  }
+  if (!input.quality.passed) throw new Error('Historical Release fixture requires accepted quality')
+  const base: Omit<ProductReleaseLineageV1, 'lineageHash'> = {
+    schema: 'storyforge.product-release-lineage', version: 1,
+    productType: input.productType,
+    productInstanceKey: input.productInstanceKey,
+    releaseUid: input.releaseUid,
+    releaseVersion: input.releaseVersion,
+    releaseHash: input.releaseHash,
+    parentRelease: input.parentRelease,
+    worldReferenceHash: input.worldReference.referenceHash,
+    sourcePlanHash: input.sourcePlan.planHash,
+    sourceManifestHash: input.sourceManifest.manifestHash,
+    confirmedBriefHash: input.confirmedBrief.confirmationHash,
+    build: { ...input.build },
+    quality: { passed: true, receiptHashes: [...new Set(input.quality.receiptHashes)].sort() },
+    compatibility: {
+      ...input.compatibility,
+      evidenceHashes: [...new Set(input.compatibility.evidenceHashes)].sort(),
+    },
+    createdAt: input.createdAt,
+  }
+  return { ...base, lineageHash: await hashCanonicalValue(base) }
+}
 
 /**
  * Strict protocol fixture. It creates all five release contracts rather than
@@ -205,7 +244,7 @@ export async function createFixtureProductReleaseManifestV1(
     releaseVersion,
     releaseHash: releaseIdentityHash,
   })
-  const lineage = await createProductReleaseLineageV1({
+  const lineage = await createHistoricalFixtureReleaseLineageV1({
     productType: runtimePackage.productType,
     productInstanceKey: productionKey,
     releaseUid,

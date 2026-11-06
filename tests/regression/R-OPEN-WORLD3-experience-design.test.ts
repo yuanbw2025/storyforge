@@ -259,7 +259,7 @@ import {
   createTextOpenWorldSourceLockExecutorV1,
 } from '../../src/lib/open-world/production-executor'
 import { readTextOpenWorldCreatorExecutionBriefV1 } from '../../src/lib/open-world/creator-production-start'
-import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import { loadCurrentProductWorldSourceCatalogV1, seedCurrentProductWorld } from '../helpers/current-product-world'
 import { seedSaltRidgeWorldV1 } from '../helpers/salt-ridge-world'
 import { seedAuthorizedTextOpenWorldCreatorBuildV1 } from '../helpers/text-open-world-creator-build'
 import {
@@ -618,6 +618,10 @@ async function creatorSchedulerFixture() {
   if (!('release' in owned) || !('characterIds' in owned)) {
     throw new Error('正式 Creator scheduler 测试必须新建完整世界夹具')
   }
+  const source = await loadCurrentProductWorldSourceCatalogV1({ scope: owned.scope,
+    worldReleaseId: owned.release.id!, productType: 'text-open-world' })
+  const protagonist = source.characters.find(row => row.name === '旅人澜砂')
+  if (!protagonist) throw new Error('盐脊封存世界缺少作者指定的主角')
   const creator = await seedAuthorizedTextOpenWorldCreatorBuildV1({
     source: {
       kind: 'world-release',
@@ -637,6 +641,7 @@ async function creatorSchedulerFixture() {
       playerRole: '扮演收到失踪测潮师来信、能够往返两地调查的旅人澜砂。',
       playerFantasy: '从陌生来客成长为能决定盐脊港与沉钟盆地共同未来的行动者。',
       protagonistMode: 'source-character',
+      protagonistSourceResourceKey: protagonist.resourceKey,
       protagonistDirective: '选择来源角色旅人澜砂；不得让主角取代迟砾、苒秋、陆衡、苏弦、乌迟或白口的叙事职责。',
       coreGoal: '查明潮脉衰竭，并在不牺牲盐脊港或沉钟盆地居民生存的前提下恢复可持续供水。',
       primaryConflict: '盐脊港主张集中修复旧引潮机，沉钟盆地担心这会再次抽干支井，而白口正在利用双方的不信任。',

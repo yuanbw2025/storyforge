@@ -77,7 +77,7 @@ async function prepare(page: Page) {
     const load = new Function('path', 'return import(path)') as (path: string) => Promise<unknown>
     const { db } = await load('/storyforge/src/lib/db/schema.ts') as typeof import('../../src/lib/db/schema')
     const { useProjectStore } = await load('/storyforge/src/stores/project.ts') as typeof import('../../src/stores/project')
-    const { resolveScopeLike, stampNewRecord } = await load('/storyforge/src/lib/workspace/scope.ts') as typeof import('../../src/lib/workspace/scope')
+    const { readOwnedRows, resolveScopeLike, stampNewRecord } = await load('/storyforge/src/lib/workspace/scope.ts') as typeof import('../../src/lib/workspace/scope')
     const { useOutlineStore } = await load('/storyforge/src/stores/outline.ts') as typeof import('../../src/stores/outline')
     const { useChapterStore } = await load('/storyforge/src/stores/chapter.ts') as typeof import('../../src/stores/chapter')
     const { createWorkspace } = await load('/storyforge/src/lib/workspace/create-workspace.ts') as typeof import('../../src/lib/workspace/create-workspace')
@@ -99,8 +99,15 @@ async function prepare(page: Page) {
     const other = await createWorkspace({
       name: '另一个作者作品', genres: ['fantasy'], status: 'drafting', description: '', targetWordCount: 1000,
     }, { kind: 'novel', novelProfile: 'long', importedNovelText: '另一作品的完整正文，e\u0301🌙。' })
+    const otherChapters = await readOwnedRows<typeof chapter>(other.scope, 'chapters', { owner: 'work' })
+    const otherChapterId = otherChapters[0]?.id
+    if (otherChapters.length !== 1 || otherChapterId == null) throw new Error('另一作品必须有真实章节')
+    const otherNoteId = await db.notes.add(stampNewRecord(other.scope, 'notes', {
+      projectId: other.scope.projectId, chapterId: otherChapterId, content: '另一作品的完整关联便签',
+      color: 'blue' as const, pinned: true, createdAt: 1, updatedAt: 1,
+    }, { owner: 'work' })) as number
     await seedCurrentProductWorld('独立且冻结的历史世界')
-    return { projectId, chapterId: chapter.id!, nodeId, noteId, otherProjectId: other.scope.projectId }
+    return { projectId, chapterId: chapter.id!, nodeId, noteId, otherProjectId: other.scope.projectId, otherChapterId, otherNoteId }
   })
   await openLongformLeaf(page, '数据管理')
   await expect(page.getByRole('heading', { name: '数据管理', exact: true })).toBeVisible()
@@ -142,13 +149,27 @@ async function trashCopies(page: Page) {
 
 test('actual missing-file delete keeps exact OPFS trash and other authored scopes', async ({ page }, info) => {
   const f = await prepare(page), before = await read(page)
+  const attachedNote = before.notes.find(row => row.id === f.noteId)
+  if (!attachedNote) throw new Error('缺失章节必须有同作品关联便签')
+  expect(attachedNote).toMatchObject({ projectId: f.projectId, chapterId: f.chapterId })
+  expect(f.otherProjectId).not.toBe(f.projectId)
+  expect(f.otherChapterId).not.toBe(f.chapterId)
+  expect(before.chapters).toContainEqual(expect.objectContaining({ id: f.otherChapterId, projectId: f.otherProjectId }))
+  expect(before.notes.find(row => row.id === f.otherNoteId))
+    .toMatchObject({ projectId: f.otherProjectId, chapterId: f.otherChapterId })
   expect(before.releases.length).toBeGreaterThan(0)
   await page.getByRole('button', { name: '确认删除缺失章节', exact: true }).click()
   await expect(page.getByText('缺失章节已移入工作区回收历史，并完成引用核对', { exact: true })).toBeVisible({ timeout: 15_000 })
   const after = await read(page)
   expect(after.chapters).toEqual(before.chapters.filter(row => row.id !== f.chapterId))
   expect(after.bindings.some(row => row.id === f.binding.id)).toBe(false)
-  expect(after.notes).toEqual(before.notes)
+  const detachedNote = after.notes.find(row => row.id === f.noteId)
+  if (!detachedNote) throw new Error('章节删除必须保留原便签')
+  expect(detachedNote.updatedAt).toBeGreaterThan(attachedNote.updatedAt)
+  // Only the deleted chapter's own nullable link and update timestamp may change.
+  expect(after.notes).toEqual(before.notes.map(row => row.id === f.noteId
+    ? { ...row, chapterId: null, updatedAt: detachedNote.updatedAt }
+    : row))
   expect(after.works).toEqual(before.works); expect(after.worlds).toEqual(before.worlds)
   expect(after.outlines).toEqual(before.outlines)
   expect(after.releases).toEqual(before.releases); expect(after.revisions).toEqual(before.revisions)
@@ -157,6 +178,10 @@ test('actual missing-file delete keeps exact OPFS trash and other authored scope
   expect(Object.values(copies)).toEqual([f.markdown])
   const recovery = JSON.parse(await readFile(page, '.storyforge/recovery/project.json'))
   expect(recovery.backup.chapters).toEqual([])
+  expect(recovery.backup.notes).toEqual([expect.objectContaining({
+    _chapterExportId: null, content: attachedNote.content, color: attachedNote.color, pinned: attachedNote.pinned,
+  })])
+  expect(recovery.backup.notes[0]).not.toHaveProperty('chapterId')
   await page.getByRole('button', { name: '检查记忆与本地文件', exact: true }).click()
   await expect(page.getByText('项目与本地文件已经一致', { exact: true })).toBeVisible()
   expect(await trashCopies(page)).toEqual(copies)

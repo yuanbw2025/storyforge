@@ -29,6 +29,29 @@ export interface CanonicalVolumeChapterGroup {
   chapters: OutlineNode[]
 }
 
+/** Strict counterpart to the display walk: resolve the nearest explicit group,
+ * but verify the complete parent path before returning. Callers supply only
+ * nodes owned by one Work, so a foreign or missing parent fails closed. */
+export function resolveCanonicalOutlineAncestry(
+  outlineNodeId: number,
+  nodeById: ReadonlyMap<number, OutlineNode>,
+): { path: OutlineNode[]; worldGroupId: number | null } {
+  const path: OutlineNode[] = []
+  const seen = new Set<number>()
+  let cursor: number | null = outlineNodeId
+  let worldGroupId: number | null = null
+  while (cursor != null) {
+    if (seen.has(cursor)) throw new Error('大纲父节点形成循环。')
+    seen.add(cursor)
+    const node = nodeById.get(cursor)
+    if (!node || node.id !== cursor) throw new Error('大纲父节点已删除或越过当前作品。')
+    path.push(node)
+    worldGroupId ??= node.worldGroupId ?? null
+    cursor = node.parentId
+  }
+  return { path, worldGroupId }
+}
+
 export function byOutlineOrderThenId(a: OutlineNode, b: OutlineNode): number {
   return a.order - b.order || (a.id ?? Number.MAX_SAFE_INTEGER) - (b.id ?? Number.MAX_SAFE_INTEGER)
 }

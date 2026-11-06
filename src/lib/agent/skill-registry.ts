@@ -86,6 +86,8 @@ export type AgentSkillExecutionModeV1 =
   | 'history-storm'
   | 'reference-summary'
   | 'reference-characters'
+  | 'document-import-parse'
+  | 'reference-analysis-private-chunk'
   | 'reverse'
   | 'auto'
   | 'story-arcs'
@@ -2079,6 +2081,60 @@ export const AGENT_SKILLS = [
     ],
     lastVerifiedAt: '2026-09-29',
     regressionTests: ['R-HARNESS74-reference-derived-durable'],
+  },
+  {
+    version: 1,
+    id: 'inspiration.reference-analysis-private-chunk',
+    agentId: 'inspiration',
+    defaultForAgent: false,
+    label: '本机参考分析分块',
+    owner: 'inspiration-agent',
+    promptVersion: 'reference-analysis-private-v1',
+    executionMode: 'reference-analysis-private-chunk',
+    contextTaskKind: 'agent-inspiration',
+    readToolNames: [],
+    contextSourceKeys: ['referenceAnalysisPrivateChunk'],
+    optionalContextSourceKeys: [],
+    inputPolicy: {
+      sourceKeys: ['referenceAnalysisPrivateChunk'],
+      states: {
+        empty: { handling: 'require-upstream', instruction: '必须选择并确认本机原文。' },
+        partial: { handling: 'require-upstream', instruction: '分块缺失或跨作品时停止。' },
+        complete: { handling: 'grounded-transform', instruction: '只分析已确认原文，等待作者激活。' },
+      },
+    },
+    contextCompression: compressionPolicy(['referenceAnalysisPrivateChunk']),
+    maxOutputTokens: 8_192,
+    writeTargets: [],
+    lastVerifiedAt: '2026-11-04',
+    regressionTests: ['R-SFQA044-reference-attempt-recovery'],
+  },
+  {
+    version: 1,
+    id: 'inspiration.document-import-parse',
+    agentId: 'inspiration',
+    defaultForAgent: false,
+    label: '文档导入分块候选',
+    owner: 'inspiration-agent',
+    promptVersion: 'document-import-parse-v2',
+    executionMode: 'document-import-parse',
+    contextTaskKind: 'agent-inspiration',
+    readToolNames: [],
+    contextSourceKeys: ['manualText'],
+    optionalContextSourceKeys: ['documentImportCodexCategories'],
+    inputPolicy: {
+      sourceKeys: ['manualText'],
+      states: {
+        empty: { handling: 'require-upstream', instruction: '必须有已确认原文件的精确分块。' },
+        partial: { handling: 'require-upstream', instruction: '原文不完整时停止，不推测或继续。' },
+        complete: { handling: 'grounded-transform', instruction: '仅从当前分块提取可编辑候选。' },
+      },
+    },
+    contextCompression: compressionPolicy(['manualText', 'documentImportCodexCategories']),
+    maxOutputTokens: 16_384,
+    writeTargets: [],
+    lastVerifiedAt: '2026-11-04',
+    regressionTests: ['R-SFQA022-durable-document-parse'],
   },
   {
     version: 1,
@@ -6099,7 +6155,7 @@ export function validateAgentSkillDefinitionsV1(
   const executionModesByAgent: Record<RegisteredAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
     'world-origin': new Set(['worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'narrative-annotation-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
-    inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
+    inspiration: new Set(['reference-summary', 'reference-characters', 'document-import-parse', 'reference-analysis-private-chunk', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-source-analysis', 'adaptation-causal-graph', 'screenplay-adaptation-brief', 'screenplay-decision-pass', 'screenplay-beat-sheet', 'screenplay-scene-card', 'screenplay-grounding-review', 'screenplay-dramaturgy-review', 'comic-adaptation-brief', 'comic-decision-pass', 'comic-script-adaptation', 'comic-page-rhythm', 'comic-panel-plan', 'comic-visual-bible', 'comic-image-request', 'comic-visual-continuity-review', 'comic-targeted-repair', 'comic-page-review', 'motion-drama-series-bible', 'motion-drama-asset-bible', 'motion-drama-episode-outline', 'motion-drama-shot-design', 'motion-drama-image-prompts', 'motion-drama-video-prompts', 'motion-drama-quality-review', 'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-continuity-review', 'character-interaction-production', 'product-production']),
     prose: new Set(['extension-generate', 'auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'quality-revise', 'organize', 'memory', 'consistency', 'scene-director', 'ai-town-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'text-open-world-runtime-intent', 'text-open-world-runtime-dialogue', 'text-open-world-runtime-expression', 'text-open-world-runtime-quest-packaging', 'text-open-world-runtime-direction', 'text-open-world-runtime-memory', 'screenplay-scene-draft', 'screenplay-targeted-rewrite', 'motion-drama-episode-script', 'short-chapter-draft', 'short-targeted-rewrite', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent', 'ttrpg-open-intent', 'ttrpg-open-oracle-interpret', 'ttrpg-open-common-oracle-interpret', 'ttrpg-open-fact-normalize', 'ttrpg-open-companion', 'ttrpg-open-kp', 'ttrpg-open-local-voice', 'ttrpg-open-brief', 'ttrpg-open-situation-propose', 'ttrpg-open-public-situation-propose', 'ttrpg-open-entity-propose']),
     'text-adventure-showrunner': productProductionModes,

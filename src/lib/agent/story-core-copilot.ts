@@ -1,3 +1,4 @@
+import { resolveFieldGenerationRequestModeV1 } from './field-generation-request-mode'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import type { FieldGenerationMode } from '../ai/field-generation-context'
@@ -208,11 +209,7 @@ export function resolveStoryCoreFieldV1(request: string): StoryCoreField {
 }
 
 export function resolveStoryCoreModeV1(request: string): FieldGenerationMode {
-  const explicit = /生成模式\s*=\s*(expand|rewrite|polish)\b/i.exec(request)?.[1]?.toLowerCase()
-  if (explicit === 'rewrite' || explicit === 'polish' || explicit === 'expand') return explicit
-  if (/重写|重做|推倒重来/.test(request)) return 'rewrite'
-  if (/润色|优化表达/.test(request)) return 'polish'
-  return 'expand'
+  return resolveFieldGenerationRequestModeV1(request)
 }
 
 export function parseStoryCoreCandidateDraft(draft: string): StoryCoreCopilotCandidate {

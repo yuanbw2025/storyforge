@@ -1,3 +1,5 @@
+import { parseLegacyIdArray } from '../utils/legacy-id-array'
+import Dexie, { type Table } from 'dexie'
 import { db } from '../db/schema'
 import { adopt } from '../registry/adopt'
 import type {
@@ -18,6 +20,7 @@ import {
   readOwnedRows,
   resolveReadScopeLike,
   resolveScopeLike,
+  scopeTransactionTables,
   stampNewRecord,
 } from '../workspace/scope'
 
@@ -87,24 +90,36 @@ async function pruneOneDisposableRun(referenceId: number, scope: WorkspaceScope)
   if (runs.length < REFERENCE_ANALYSIS_RUN_POLICY.maxRunsPerReference) return true
   const disposable = runs
     .filter(run => run.status === 'failed' || run.status === 'cancelled' || run.status === 'superseded')
-    .sort((a, b) => a.updatedAt - b.updatedAt)[0]
-  if (!disposable?.id) return false
-  await discardReferenceAnalysisRun(disposable.id)
-  return true
+    .sort((a, b) => a.updatedAt - b.updatedAt)
+  for (const row of disposable) {
+    if (!row.id) continue
+    // A prepared or observed Harness attempt is never disposable by age.
+    if ((await localSourceTable().get(row.id))?.durableChunkRunsV1?.length) continue
+    await discardReferenceAnalysisRun(row.id)
+    return true
+  }
+  return false
+}
+
+export interface ReferenceAnalysisFirstStartGuardV1 {
+  /** Tables needed to validate and record the original author's first-start claim. */
+  transactionTables: readonly Table[]
+  claimInTransaction: () => Promise<void>
 }
 
 export async function createReferenceAnalysisRun(
   input: CreateReferenceAnalysisRunInput,
+  firstStart?: ReferenceAnalysisFirstStartGuardV1,
 ): Promise<ReferenceAnalysisRun> {
   const { ref, scope } = await requireReference(input.referenceId)
   if (!input.sourceFilename.trim()) throw new Error('来源文件名不能为空')
   if (!input.fileHash.trim()) throw new Error('来源文件哈希不能为空')
   if (input.totalChars <= 0 || input.expectedChunks <= 0) throw new Error('来源文本或分块计划为空')
-  if (!await pruneOneDisposableRun(ref.id!, scope)) {
+  if (!firstStart && !await pruneOneDisposableRun(ref.id!, scope)) {
     throw new Error(`每份参考最多保留 ${REFERENCE_ANALYSIS_RUN_POLICY.maxRunsPerReference} 个版本，请先删除未使用版本`)
   }
 
-  const existing = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
+  const existing = firstStart ? [] : (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
     .filter(run => run.referenceId === ref.id)
   const version = Math.max(0, ...existing.map(run => run.version)) + 1
   const now = Date.now()
@@ -131,10 +146,16 @@ export async function createReferenceAnalysisRun(
 
   const runId = await db.transaction(
     'rw',
-    db.referenceAnalysisRuns,
-    db.referenceAnalysisSources,
+    [...new Set([db.referenceAnalysisRuns, db.referenceAnalysisSources, ...(firstStart?.transactionTables ?? [])])],
     async () => {
-      const id = await db.referenceAnalysisRuns.add(row) as number
+      const transaction = Dexie.currentTransaction!
+      if (firstStart) {
+        if (await db.referenceAnalysisRuns.where('referenceId').equals(ref.id!).count() !== 0)
+          throw new Error('原参考已有分析版本，请在项目参考查看。')
+        await Dexie.Promise.resolve(firstStart.claimInTransaction())
+      }
+      const runs = firstStart ? transaction.table<ReferenceAnalysisRun, number>(db.referenceAnalysisRuns.name) : db.referenceAnalysisRuns
+      const id = await runs.add(row) as number
       if (input.sourceText != null || input.sourceChunks?.length) {
         const chunks = input.sourceChunks?.length
           ? input.sourceChunks
@@ -151,9 +172,13 @@ export async function createReferenceAnalysisRun(
           filename: row.sourceFilename,
           fileHash: row.fileHash,
           chunks,
+          ...(input.depth === 'deep' && (input.rightsConfirmed || firstStart) ? {
+            referencePrivateExecutionV1: input.rightsConfirmed ? 'rights-confirmed' as const : 'import-analysis-only' as const,
+          } : {}),
           createdAt: now,
         }, { owner: 'work' }) as ReferenceAnalysisSource
-        await db.referenceAnalysisSources.put(source)
+        const sources = firstStart ? transaction.table<ReferenceAnalysisSource, number>(db.referenceAnalysisSources.name) : db.referenceAnalysisSources
+        await sources.put(source)
       }
       return id
     },
@@ -214,6 +239,67 @@ export async function readReferenceAnalysisChunks(runId: number): Promise<ChunkP
     : undefined
 }
 
+export interface ReferenceChunkRunLinkV1 {
+  chunkIndex: number
+  ordinal: number
+  claimKey: string
+  agentRunId: number | null
+}
+
+type LocalReferenceSource = ReferenceAnalysisSource & {
+  referencePrivateExecutionV1?: 'rights-confirmed' | 'import-analysis-only'
+  durableChunkRunsV1?: ReferenceChunkRunLinkV1[]
+}
+
+function localSourceTable() {
+  return db.table<LocalReferenceSource, number>(db.referenceAnalysisSources.name)
+}
+
+/** Only the physical Harness link lives on the existing private source.
+ * Attempt state, exact response and usage remain in the Harness event ledger. */
+export async function readReferenceChunkAuthorityV1(scope: WorkspaceScope, runId: number, chunkIndex: number) {
+  const { run, ref, scope: actual } = await requireRun(runId)
+  if (scope.projectId !== actual.projectId || scope.worldId !== actual.worldId || scope.workId !== actual.workId)
+    throw new Error('参考分析不属于当前作品。')
+  const source = await localSourceTable().get(runId)
+  const chunk = source?.chunks.find(row => row.index === chunkIndex)
+  if (!source || source.fileHash !== run.fileHash || !chunk
+    || !await assertRecordInScope(actual, 'referenceAnalysisSources', source, { owner: 'work' }))
+    throw new Error('参考分析原文已变化、丢失或切换作品。')
+  const confirmed = source.referencePrivateExecutionV1 === 'rights-confirmed' && run.rightsConfirmed
+  const importedAnalysisOnly = source.referencePrivateExecutionV1 === 'import-analysis-only' &&
+    ref.importSessionId != null && run.sourceKind === 'unknown' && run.usageScope === 'analysis-only'
+  if (!confirmed && !importedAnalysisOnly)
+    throw new Error('旧版本没有可核实的请求授权，不能续发。请核对后新建分析版本。')
+  const latest = [...(source.durableChunkRunsV1 ?? [])].reverse().find(row => row.chunkIndex === chunkIndex)
+  return { run, ref, scope: actual, source, chunk, latest }
+}
+
+export async function writeReferenceChunkRunLinkV1(
+  scope: WorkspaceScope, runId: number, chunk: ChunkPlan,
+  expected: ReferenceChunkRunLinkV1 | undefined, next: ReferenceChunkRunLinkV1,
+): Promise<void> {
+  const sources = localSourceTable()
+  await db.transaction('rw', scopeTransactionTables(db.referenceAnalysisRuns, db.references, sources), async () => {
+    const current = await readReferenceChunkAuthorityV1(scope, runId, chunk.index)
+    const latest = current.latest
+    if (current.chunk.text !== chunk.text || current.chunk.startChar !== chunk.startChar ||
+      current.chunk.endChar !== chunk.endChar || current.run.status !== 'analyzing' ||
+      latest?.claimKey !== expected?.claimKey || latest?.agentRunId !== expected?.agentRunId || next.chunkIndex !== chunk.index)
+      throw new Error('参考分析来源或请求状态已变化，未重复发送。')
+    const links = [...(current.source.durableChunkRunsV1 ?? [])]
+    if (next.agentRunId === null) {
+      if (next.ordinal !== (latest?.ordinal ?? 0) + 1) throw new Error('参考分析尝试顺序不符。')
+      links.push(next)
+    } else {
+      if (!latest || latest.agentRunId !== null || latest.claimKey !== next.claimKey || latest.ordinal !== next.ordinal)
+        throw new Error('参考分析 Harness 与原请求凭据不匹配。')
+      links[links.findIndex(row => row.claimKey === latest.claimKey)] = next
+    }
+    if (await sources.update(runId, { durableChunkRunsV1: links }) !== 1) throw new Error('参考分析原文已删除。')
+  })
+}
+
 export async function patchReferenceAnalysisRun(
   runId: number,
   changes: Partial<ReferenceAnalysisRun>,
@@ -259,7 +345,7 @@ export async function completeReferenceAnalysisRun(
   }
 
   const active = await getActiveReferenceAnalysisRun(run.referenceId)
-  if (!active) {
+  if (!active && run.depth === 'quick') {
     await patchReferenceAnalysisRun(runId, {
       status: 'ready',
       completedChunks,
@@ -360,7 +446,7 @@ export async function deleteReferenceWithAnalysis(referenceId: number): Promise<
       const rules = await readOwnedRows<any>(scope, 'creativeRules', { owner: 'work' })
       for (const rule of rules) {
         if (!rule.id) continue
-        const ids = parseIdArray(rule.citedReferenceIds)
+        const ids = parseLegacyIdArray(rule.citedReferenceIds)
         if (!ids.includes(referenceId)) continue
         await db.creativeRules.update(rule.id, {
           citedReferenceIds: JSON.stringify(ids.filter(id => id !== referenceId)),
@@ -389,17 +475,6 @@ async function patchReferenceActiveProjection(referenceId: number, changes: Part
     data: changes as Record<string, unknown>,
   })
   if (!result.written.length) throw new Error('参考资料激活投影写回失败')
-}
-
-function parseIdArray(value: unknown): number[] {
-  if (Array.isArray(value)) return value.filter((id): id is number => typeof id === 'number')
-  if (typeof value !== 'string') return []
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed.filter((id): id is number => typeof id === 'number') : []
-  } catch {
-    return []
-  }
 }
 
 export interface ReferenceAnalysisDiff {

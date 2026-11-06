@@ -1,4 +1,5 @@
-import { useMemo, useRef, useEffect, useState } from 'react'
+import { useMemo, useRef } from 'react'
+import { useLocationTreeSize } from '../../hooks/useLocationTreeSize'
 import { stratify, tree, type HierarchyPointNode } from 'd3-hierarchy'
 import type { Location } from '../../lib/types'
 
@@ -24,17 +25,7 @@ interface Props {
 export default function LocationTreeMap({ locations }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [svgSize, setSvgSize] = useState({ width: 700, height: 400 })
-
-  useEffect(() => {
-    if (!containerRef.current) return
-    const ro = new ResizeObserver(entries => {
-      const w = entries[0]?.contentRect.width
-      if (w) setSvgSize({ width: Math.floor(w), height: Math.max(350, Math.floor(w * 0.55)) })
-    })
-    ro.observe(containerRef.current)
-    return () => ro.disconnect()
-  }, [])
+  const svgSize = useLocationTreeSize(containerRef)
 
   const treeLayout = useMemo(() => {
     if (locations.length === 0) return null

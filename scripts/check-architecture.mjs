@@ -23,7 +23,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
-import { localChatMetaCategoryPositions } from './ai-call-meta.mjs'
+import { localConstChatMetaHasCategory } from './ai-call-meta.mjs'
+import {
+  createStaticBindingResolver, staticCallArguments, staticLiteralMember, staticPropertyKey,
+  staticTransportKind, unwrapStaticExpression,
+} from './static-guard-bindings.mjs'
 import { importsNarrativeGold, physicalWorldReleaseType, validateNarrativeBaselineFiles } from './narrative-world-baseline-contract.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -99,15 +103,11 @@ for (const file of walk('src/stores')) {
 
 // ── ② components/hooks 直接写库 ──
 const UI_DIRS = ['src/components', 'src/hooks', 'src/pages']
+const writeMethods = new Set(['add', 'update', 'put', 'delete', 'bulkDelete', 'bulkPut', 'clear'])
 for (const dir of UI_DIRS) {
   for (const file of walk(dir)) {
-    const src = read(file)
-    for (const m of src.matchAll(/\bdb\.\w+\.(add|update|put|delete|bulkDelete|bulkPut)\(/g)) {
-      // 行级:取该匹配所在行,排除注释
-      const lineStart = src.lastIndexOf('\n', m.index) + 1
-      const line = src.slice(lineStart, src.indexOf('\n', m.index))
-      if (line.trim().startsWith('//') || line.trim().startsWith('*')) continue
-      violations.push(`[②直接写库] ${file}: \`${m[0]}\` —— UI 层不得直接写库,应走 adopt() 或 store action`)
+    for (const { target, method, line } of findDbWrites(parseSource(file))) {
+      violations.push(`[②直接写库] ${file}:${line}: db.${target}.${method}(...) —— UI 层不得直接写库,应走 adopt() 或 store action`)
     }
   }
 }
@@ -132,68 +132,79 @@ for (const dir of UI_DIRS) {
 const AI_META_FORWARDERS = new Set([
   'src/hooks/useAIStream.ts',
   'src/lib/agent/formal-ai-entry.ts',
-  'src/lib/import/chat-with-abort.ts',
   'src/lib/reference-analysis/pipeline.ts',
 ])
 
-function findCallRanges(src, callee) {
-  const ranges = []
-  const re = new RegExp(`\\b${callee.replace('.', '\\.')}\\s*\\(`, 'g')
-  let m
-  while ((m = re.exec(src))) {
-    const prefix = src.slice(Math.max(0, m.index - 24), m.index)
-    if (/\bfunction\s*$/.test(prefix) || /\bexport\s+async\s+function\s*$/.test(prefix)) continue
-    let depth = 0
-    let quote = null
-    let escaped = false
-    for (let i = m.index + callee.length; i < src.length; i++) {
-      const ch = src[i]
-      if (quote) {
-        if (escaped) escaped = false
-        else if (ch === '\\') escaped = true
-        else if (ch === quote) quote = null
-        continue
-      }
-      if (ch === '"' || ch === "'" || ch === '`') {
-        quote = ch
-      } else if (ch === '(') {
-        depth++
-      } else if (ch === ')') {
-        depth--
-        if (depth === 0) {
-          ranges.push({ start: m.index, end: i + 1, text: src.slice(m.index, i + 1) })
-          break
-        }
-      }
+/** @param {ts.SourceFile} ast @param {string} file */
+function findUncategorizedTransportCalls(ast, file) {
+  // Keep the existing physical forwarding exemptions. The binder recognizes
+  // the actual hook/client import before applying any category policy.
+  if (file === 'src/lib/agent/formal-ai-entry.ts' || file === 'src/lib/ai/client.ts') return []
+  if (!ast.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
+    && /(?:^|\/)(?:client|useAIStream)(?:\.[cm]?[jt]sx?)?$/.test(node.moduleSpecifier.text))) return []
+  const bindings = createStaticBindingResolver(ast)
+  /** @type {Array<{ name: string, line: number }>} */
+  const findings = []
+  visit(ast, /** @param {ts.Node} node */ node => {
+    if (!ts.isCallExpression(node)) return
+    const reported = new Set()
+    for (const origin of bindings.resolve(node.expression)) {
+      const { segments, args } = staticCallArguments(origin, node)
+      const role = staticTransportKind(bindings, origin, segments)
+      if (!role || reported.has(role)) continue
+      if (AI_META_FORWARDERS.has(file) && /\bmeta\b/.test(node.getText(ast))) continue
+      const meta = args[role === 'streamChat' ? 4 : 2]
+      const value = unwrapStaticExpression(meta)
+      if (value && ts.isObjectLiteralExpression(value) && value.properties.some(property => (
+        (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property))
+        && staticPropertyKey(property.name) === 'category'
+      ))) continue
+      if (role === 'chat' && localConstChatMetaHasCategory(node, meta, bindings.declaration)) continue
+      reported.add(role)
+      findings.push({
+        name: role === 'hook-start' ? 'ai.start' : role,
+        line: ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1,
+      })
     }
-  }
-  return ranges
+  })
+  return findings
 }
 
 for (const dir of ['src/components', 'src/hooks', 'src/lib']) {
   for (const file of walk(dir)) {
-    const src = read(file)
-    let localMetaCategories
-    for (const callee of ['ai.start', 'chat', 'streamChat']) {
-      for (const call of findCallRanges(src, callee)) {
-        const lineStart = src.lastIndexOf('\n', call.start) + 1
-        const lineEnd = src.indexOf('\n', call.start)
-        const lineText = src.slice(lineStart, lineEnd < 0 ? src.length : lineEnd).trim()
-        if (lineText.startsWith('//') || lineText.startsWith('*')) continue
-        if (file === 'src/lib/agent/formal-ai-entry.ts') continue
-        if (AI_META_FORWARDERS.has(file) && /\bmeta\b/.test(call.text)) continue
-        if (file === 'src/lib/ai/client.ts') continue
-        if (!/\bcategory\s*:/.test(call.text)) {
-          if (callee === 'chat') {
-            localMetaCategories ??= localChatMetaCategoryPositions(file, src)
-            if (localMetaCategories.has(call.start)) continue
-          }
-          const line = src.slice(0, call.start).split('\n').length
-          violations.push(`[④AI分类] ${file}:${line}: \`${callee}(...)\` 缺少 category meta,消耗统计与 AI manual 会漏记`)
-        }
-      }
+    for (const { name, line } of findUncategorizedTransportCalls(parseSource(file), file)) {
+      violations.push(`[④AI分类] ${file}:${line}: \`${name}(...)\` 缺少 category meta,消耗统计与 AI manual 会漏记`)
     }
   }
+}
+
+const categoryBindingSelfTest = ts.createSourceFile('src/lib/category-binding-test.ts', `
+  import { chat as request } from './ai/client'
+  import * as api from './ai/client'
+  import { useAIStream as hook } from '../hooks/useAIStream'
+  request([{ content: 'category: misleading string' }], {}, {})
+  const { ['chat']: send } = api
+  send([], {})
+  const stream = api['streamChat']
+  stream([], {}, undefined, undefined, {})
+  const { start: launch } = hook()
+  launch([], {}, {})
+  const outsideMeta = { category: 'x' }
+  function governed() {
+    const meta = { category: 'x' }
+    send([], {}, meta)
+    send([], {}, { ['category']: 'x' })
+    stream([], {}, undefined, undefined, { category: 'x' })
+    launch([], {}, { category: 'x' })
+  }
+  function unrelated(request) { request([], {}); const client = { chat() {} }; client.chat() }
+  // request([], {}) is not a call; neither is the string below.
+  const text = "chat([], {})"
+  function uncategorized() { send([], {}, outsideMeta) }
+`, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+if (findUncategorizedTransportCalls(categoryBindingSelfTest, categoryBindingSelfTest.fileName)
+  .map(item => item.name).join(',') !== 'chat,chat,streamChat,ai.start,chat') {
+  violations.push('[④守卫自测] category 与本地 const meta 的绑定规则失效')
 }
 
 // ── ⑤ exportable 表必须接入 JSON 导出/导入 ──
@@ -294,29 +305,30 @@ visit(adoptionAst, node => {
   }
 })
 
-const writeMethods = new Set(['add', 'update', 'put', 'delete', 'bulkDelete', 'bulkPut', 'clear'])
-function dbTableFromExpression(node) {
-  if (ts.isPropertyAccessExpression(node)) {
-    if (ts.isIdentifier(node.expression) && node.expression.text === 'db') return node.name.text
-    return dbTableFromExpression(node.expression)
-  }
-  if (ts.isCallExpression(node)) return dbTableFromExpression(node.expression)
-  return null
-}
-
+/** @param {ts.SourceFile} sourceFile */
 function findDbWrites(sourceFile) {
+  if (!sourceFile.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
+    && /(?:^|\/)schema(?:\.[cm]?[jt]sx?)?$/.test(node.moduleSpecifier.text))) return []
+  const { resolve } = createStaticBindingResolver(sourceFile)
+  /** @type {Array<{ target: string, method: string, line: number }>} */
   const writes = []
-  visit(sourceFile, node => {
-    if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return
-    const method = node.expression.name.text
-    if (!writeMethods.has(method)) return
-    const target = dbTableFromExpression(node.expression.expression)
-    if (!target) return
-    writes.push({
-      target,
-      method,
-      line: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
-    })
+  visit(sourceFile, /** @param {ts.Node} node */ node => {
+    if (!ts.isCallExpression(node)) return
+    const seen = new Set()
+    for (const origin of resolve(node.expression)) {
+      if (origin.kind !== 'import' || origin.module !== 'src/lib/db/schema' || origin.segments[0]?.key !== 'db') continue
+      const access = origin.segments
+      const terminal = access[access.length - 1]?.key
+      const methodIndex = access.length - (terminal === 'call' || terminal === 'apply' ? 2 : 1)
+      const method = access[methodIndex]?.key
+      if (methodIndex < 2 || !method || !writeMethods.has(method)) continue
+      const target = access[1]?.key === 'table'
+        ? staticLiteralMember(access[2]?.args?.[0])
+        : access[1]?.key
+      if (!target || seen.has(target)) continue
+      seen.add(target)
+      writes.push({ target, method, line: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1 })
+    }
   })
   return writes
 }
@@ -367,8 +379,8 @@ for (const dir of ['src/components', 'src/hooks', 'src/pages', 'src/lib']) {
 
 // 守卫自测：防止 AST 扫描器自身退化后与被检查代码一起“假绿”。
 const selfTestSource = ts.createSourceFile(
-  'architecture-self-test.ts',
-  "await db.references.update(1, {}); await db.referenceChunkAnalysis.where('referenceId').equals(1).delete(); buildCodexContext(1, null)",
+  'src/lib/architecture-self-test.ts',
+  "import { db } from './db/schema'; await db.references.update(1, {}); await db.referenceChunkAnalysis.where('referenceId').equals(1).delete(); buildCodexContext(1, null)",
   ts.ScriptTarget.Latest,
   true,
   ts.ScriptKind.TS,
@@ -376,6 +388,26 @@ const selfTestSource = ts.createSourceFile(
 const selfTestWrites = findDbWrites(selfTestSource).map(write => `${write.target}.${write.method}`)
 if (!selfTestWrites.includes('references.update') || !selfTestWrites.includes('referenceChunkAnalysis.delete')) {
   violations.push('[⑧守卫自测] lib 写回 AST 扫描器未识别基准违规')
+}
+const dbAliasSelfTest = ts.createSourceFile('src/lib/architecture-alias-test.ts', `
+  import { db as imported } from './db/schema'
+  import * as schema from './db/schema'
+  const store = imported
+  const { references: refs } = store
+  refs['update'](1, {})
+  const { ['put']: put } = schema.db['references']
+  put.call(refs, {})
+  schema['db'].table('references')['delete'](1)
+  const clear = refs.clear.bind(refs)
+  clear()
+  function shadow(store, refs) { store.references.put({}); refs['update'](1, {}) }
+  function unrelated() { const db = { references: { update() {} } }; db.references.update(1, {}) }
+  // db.references.delete(1) is a comment, not a write.
+  const dynamic = 'references'; store[dynamic].delete(1)
+`, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+const aliasDbWrites = findDbWrites(dbAliasSelfTest).map(write => `${write.target}.${write.method}`)
+if (aliasDbWrites.join(',') !== 'references.update,references.put,references.delete,references.clear') {
+  violations.push('[⑧守卫自测] alias/namespace/literal/解构与作用域回归：' + aliasDbWrites.join(','))
 }
 if (!findLegacyContextCalls(selfTestSource).some(call => call.name === 'buildCodexContext')) {
   violations.push('[⑨守卫自测] context builder AST 扫描器未识别基准违规')
@@ -1877,7 +1909,7 @@ if (!productRuntimeMediaLibrarySource.includes('productRuntimeSessionId: number'
   violations.push('[㉝B运行媒资隔离] 运行中新生成的媒资必须绑定具体 ProductRuntimeSession')
 }
 if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'")
-  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 13')
+  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 14')
   || !currentSchemaSource.includes('this.version(1).stores(STORYFORGE_STORES_V1)')
   || !currentSchemaSource.includes('this.version(2).stores(STORYFORGE_STORES_V2)')
   || !currentSchemaSource.includes('this.version(3).stores(STORYFORGE_STORES_V3)')
@@ -1889,11 +1921,15 @@ if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'"
   || !currentSchemaSource.includes('this.version(10).stores(STORYFORGE_STORES_V10)')
   || !currentSchemaSource.includes('this.version(11).stores(STORYFORGE_STORES_V11)')
   || !currentSchemaSource.includes('this.version(12).stores(STORYFORGE_STORES_V12)')
+  || !currentSchemaSource.includes('this.version(13).stores(STORYFORGE_STORES_V13)')
+  || !/export const STORYFORGE_STORES_V13\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V12,?\s*\}/.test(currentSchemaSource)
+  || !/export const STORYFORGE_STORES\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V13,/.test(currentSchemaSource)
+  || !currentSchemaSource.includes("worldSourceReceipts: '++id, projectId, worldId, worldReleaseId, &[worldId+declarationHash], [worldId+packageDigest], [worldId+releaseUid]'" )
   || !currentSchemaSource.includes('this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)')
-  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 13
+  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 14
   || currentSchemaSource.includes('.upgrade(')
   || !currentSchemaSource.includes("productMediaAssets: '++id, projectId, worldId, workId, ownerKind, productType, productReleaseId, productRuntimeSessionId, &[productReleaseId+assetKey+version], &[productRuntimeSessionId+assetKey+version]")) {
-  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v13、保留 v1 至 v12 兼容桥、零数据改写 upgrade，并保留当前根/媒资隔离索引')
+  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v14、保留 v1 至 v13 兼容桥与独立 v13 形状、零数据改写 upgrade，并保留新来源回执与当前根/媒资隔离索引')
 }
 if (!deriveImportSrc.includes('ProductMedia 必须具有唯一、有效的产品所有者')
   || !deriveImportSrc.includes("asset.ownerKind === 'release'")
@@ -2078,12 +2114,136 @@ for (const file of walk('src/lib/world-engine')) {
   }
 }
 
-for (const file of walk('src/lib/workspace')) {
-  const source = read(file)
-  if (/\.\.\/(?:world-engine|product|product-production|product-platform|simulation|text-game|ttrpg|character-interaction|adventure|avg|open-world)\//.test(source)) {
-    violations.push(`[㉝C共享 Workspace 纯度] ${file}: 中立 Workspace/Work/Scope 层不得反向依赖世界引擎或具体产品`)
+/** @param {string} file @param {string} source @returns {string[]} */
+function workspaceDependencyViolationsV1(file, source) {
+  const workspace = file.startsWith('src/lib/workspace/')
+  if (!workspace && !source.includes('workspace-allocation')) return []
+  const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  /** @type {string[]} */
+  const found = []
+  const facade = file === 'src/lib/workspace/create-workspace.ts'
+  const installer = file === 'src/lib/product-platform/workspace-install.ts'
+  const allocator = file === 'src/lib/workspace/workspace-allocation.ts'
+  let workspaceSource = source
+  // The shared catalog is a neutral admission policy. This exact value import
+  // does not grant Workspace access to any concrete product service.
+  if (facade || file === 'src/lib/workspace/works.ts') {
+    for (const statement of [...ast.statements].reverse()) {
+      if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
+        && statement.moduleSpecifier.text === '../product/product-catalog') {
+        workspaceSource = workspaceSource.slice(0, statement.getStart(ast)) + workspaceSource.slice(statement.end)
+      }
+    }
   }
+  if (workspace && /\.\.\/(?:world-engine|product|product-production|product-platform|simulation|text-game|ttrpg|character-interaction|adventure|avg|open-world)\//.test(workspaceSource)) {
+    found.push(`[㉝C共享 Workspace 纯度] ${file}: 中立 Workspace/Work/Scope 层不得反向依赖世界引擎或具体产品`)
+  }
+  /** @type {Map<string, import('typescript').FunctionDeclaration[]>} */
+  const bindings = new Map()
+  for (const statement of ast.statements) {
+    if (allocator && (ts.isExportDeclaration(statement) || ts.isExportAssignment(statement))) {
+      found.push(`[㉝C内部 Workspace 分配] ${file}: 禁止内部分配模块的公开别名或 re-export`)
+    }
+    if (allocator && ts.canHaveModifiers(statement)
+      && ts.getModifiers(statement)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) {
+      if (!ts.isFunctionDeclaration(statement) || !statement.name
+        || !['allocateWorkspace', 'workspaceCreationTransactionTablesV1'].includes(statement.name.text)
+        || ts.getModifiers(statement)?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)) {
+        found.push(`[㉝C内部 Workspace 分配] ${file}: 内部分配模块只导出两个已登记函数，不得增加公开别名或 re-export`)
+      }
+    }
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)
+      || !/(?:^|\/)workspace-allocation(?:\.(?:[cm]?js|tsx?))?$/.test(statement.moduleSpecifier.text)) continue
+    const expected = facade ? './workspace-allocation' : installer ? '../workspace/workspace-allocation' : null
+    const named = statement.importClause?.namedBindings
+    if (statement.moduleSpecifier.text !== expected || statement.importClause?.name || statement.importClause?.isTypeOnly
+      || !named || !ts.isNamedImports(named)) {
+      found.push(`[㉝C内部 Workspace 分配] ${file}: 仅正式创建与固定验证安装模块可按精确路径直接导入内部分配函数`)
+      continue
+    }
+    for (const element of named.elements) {
+      const imported = (element.propertyName ?? element.name).text
+      const callers = imported === 'allocateWorkspace'
+        ? facade ? ['createWorkspace'] : ['createWorkspaceForProductDistributionV1', 'createWorkspaceForAdventureWebPackageV1']
+        : facade && imported === 'workspaceCreationTransactionTablesV1' ? ['workspaceCreationTransactionTablesV1'] : []
+      if (element.isTypeOnly || !callers.length) {
+        found.push(`[㉝C内部 Workspace 分配] ${file}: 禁止增加未登记的内部分配导入`)
+      } else {
+        /** @type {import('typescript').FunctionDeclaration[]} */
+        const owners = []
+        for (const caller of callers) {
+          /** @type {import('typescript').FunctionDeclaration[]} */
+          const matching = []
+          for (const candidate of ast.statements) {
+            if (ts.isFunctionDeclaration(candidate) && candidate.name?.text === caller && candidate.body
+              && ts.getModifiers(candidate)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) matching.push(candidate)
+          }
+          const [uniqueOwner] = matching
+          if (matching.length === 1 && uniqueOwner) owners.push(uniqueOwner)
+        }
+        bindings.set(element.name.text, owners)
+      }
+    }
+  }
+  /** @type {Map<string, import('typescript').Expression[]>} */
+  const pathBindings = new Map()
+  /** @param {import('typescript').Node} node */
+  function collectPaths(node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      // A later local declaration must not erase a possible module target.
+      // Reject ambiguous indirect loads if any candidate reaches the allocator.
+      const candidates = pathBindings.get(node.name.text) ?? []
+      candidates.push(node.initializer)
+      pathBindings.set(node.name.text, candidates)
+    }
+    ts.forEachChild(node, collectPaths)
+  }
+  collectPaths(ast)
+  /** @param {import('typescript').Node} node @param {Set<string>} [seen] @returns {boolean} */
+  function refersToAllocator(node, seen = new Set()) {
+    if (ts.isStringLiteralLike(node)) return /(?:^|\/)workspace-allocation(?:\.(?:[cm]?js|tsx?))?$/.test(node.text)
+    if (ts.isTemplateExpression(node) && node.head.text.includes('workspace-allocation')) return true
+    if (ts.isIdentifier(node)) {
+      const boundPaths = pathBindings.get(node.text)
+      if (boundPaths) {
+        if (seen.has(node.text)) return false
+        const visited = new Set(seen)
+        visited.add(node.text)
+        return boundPaths.some(boundPath => refersToAllocator(boundPath, new Set(visited)))
+      }
+    }
+    let matched = false
+    ts.forEachChild(node, child => { if (refersToAllocator(child, seen)) { matched = true; return true } })
+    return matched
+  }
+  /** @param {import('typescript').Node} node */
+  function visit(node) {
+    // Registry writer paths are metadata, not module edges. Inspect actual
+    // exports/load expressions, including aliases, instead of banning strings.
+    if ((ts.isExportDeclaration(node) && node.moduleSpecifier && refersToAllocator(node.moduleSpecifier))
+      || (ts.isExternalModuleReference(node) && node.expression && refersToAllocator(node.expression))
+      || (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword
+        || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))
+        && node.arguments.some(argument => refersToAllocator(argument)))) {
+      found.push(`[㉝C内部 Workspace 分配] ${file}: 禁止 re-export、动态加载或间接路径暴露内部分配模块`)
+    }
+    if (ts.isIdentifier(node) && bindings.has(node.text) && !ts.isImportSpecifier(node.parent)) {
+      /** @type {import('typescript').Node | undefined} */
+      let owner = node.parent
+      while (owner && !ts.isFunctionLike(owner)) owner = owner.parent
+      const caller = owner && ts.isFunctionDeclaration(owner) ? owner : null
+      if (!ts.isCallExpression(node.parent) || node.parent.expression !== node
+        || !caller || !bindings.get(node.text)?.includes(caller)) {
+        found.push(`[㉝C内部 Workspace 分配] ${file}: 内部分配绑定只能由已登记函数直接调用，不得公开、转交或另建绕过入口`)
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(ast)
+  return [...new Set(found)]
 }
+
+for (const file of walk('src')) violations.push(...workspaceDependencyViolationsV1(file, read(file)))
 
 const retiredTableTokens = [
   'gameDefinitions', 'adventureModules', 'avgMediaAssets', 'avgMediaBlobs',

@@ -135,11 +135,15 @@ describe('R-OPEN-WORLD5 · 创作者双来源目录与只读预检', () => {
     expect(serialized).not.toContain('selectedTables')
     expect(serialized).not.toContain('"records"')
 
+    expect(candidate).toMatchObject({ purposeAllowed: true, sourceChoiceKey: `${owned.release.id}:owned`,
+      sourcePurpose: { purpose: 'text-open-world', origin: { kind: 'local-author' } } })
     await expect(inspectTextOpenWorldCreatorWorldSourceV1({
       scope: owned.scope,
       localReleaseRecordId: owned.release.id!,
       expectedReleaseHash: owned.release.contentHash,
-    })).resolves.toEqual(candidate)
+      sourcePurpose: candidate.sourcePurpose,
+    })).resolves.toMatchObject({ worldReference: candidate.worldReference, requirements: candidate.requirements,
+      sourcePurpose: candidate.sourcePurpose })
     await expect(inspectTextOpenWorldCreatorWorldSourceV1({
       scope: owned.scope,
       localReleaseRecordId: owned.release.id!,

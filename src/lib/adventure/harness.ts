@@ -511,11 +511,14 @@ async function readCandidate(scope: WorkspaceScope, runId: number) {
 export async function adoptAdventureRuntimeCandidateV1(input: {
   scope: WorkspaceScope
   runId: number
+  expectedProductRuntimeSessionId?: number
   onDurableBoundary?: (eventType: string, snapshot: AgentRunSnapshotV1) => void | Promise<void>
 }): Promise<{ snapshot: AgentRunSnapshotV1; event: ProductRuntimeEvent | null; receiptHash: string; candidate: AdventureRuntimeCandidateV1 }> {
   const loaded = await readCandidate(input.scope, input.runId)
   let { snapshot } = loaded
   const { candidate } = loaded
+  if (input.expectedProductRuntimeSessionId != null
+    && candidate.productRuntimeSessionId !== input.expectedProductRuntimeSessionId) fail('候选不属于当前存档')
   const intentBinding = candidate.kind === 'adventure-intent-candidate'
     ? await resolveIntentRuntimeBindingV1(candidate)
     : null
@@ -603,9 +606,12 @@ export async function adoptAdventureRuntimeCandidateV1(input: {
 export async function cancelAdventureRuntimeRunV1(input: {
   scope: WorkspaceScope
   runId: number
+  expectedProductRuntimeSessionId?: number
   reason?: string
 }) {
   const snapshot = await readInstanceAgentRunV1(input.scope, input.runId)
+  if (input.expectedProductRuntimeSessionId != null
+    && snapshot.run.productRuntimeSessionId !== input.expectedProductRuntimeSessionId) fail('运行不属于当前存档')
   if (['completed', 'failed', 'cancelled'].includes(snapshot.projection.state)) return snapshot
   return append(input.scope, snapshot, 'run.cancelled', {
     reason: input.reason?.trim().slice(0, 1_000) || 'runtime-generation-cancelled',

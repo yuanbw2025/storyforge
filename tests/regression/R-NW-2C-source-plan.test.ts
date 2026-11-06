@@ -1,3 +1,8 @@
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
+import { createWorldPackage } from '../../src/lib/world-engine/world-package'
+import { installWorldSourcePackageV1 } from '../../src/lib/world-engine/source-receipt'
+import { selectWorldReferenceForProductPurposeV1 } from '../../src/lib/world-engine/reference-cache'
+import { readWorldSourcePurposeDeclarationV1, type WorldSourcePurposeProofV1 } from '../../src/lib/world-engine/source-purpose'
 import { narrativeProductionProtocolFixtureV4 } from '../helpers/narrative-production-protocol-fixture'
 import { runProductProductionUntilBlockedV1 } from '../../src/lib/product-production/scheduler'
 import { publishProductProductionV1 } from '../../src/lib/product-production/service'
@@ -88,15 +93,16 @@ async function persistRead(scope: WorkspaceScope, execution: ContextGatewayExecu
   return { runId: run.run.id, stepId: 'read', attempt: 1, manifestHash: finalized.manifest.manifestHash }
 }
 
-async function fixture(productType: 'character-interaction' | 'avg', owned?: Pick<Awaited<ReturnType<typeof seedCurrentProductWorld>>, 'scope' | 'release'>, characterCount?: number) {
+async function fixture(productType: 'character-interaction' | 'avg', owned?: Pick<Awaited<ReturnType<typeof seedCurrentProductWorld>>, 'scope' | 'release'> & { sourcePurpose?: WorldSourcePurposeProofV1 }, characterCount?: number) {
   const world = owned ?? await seedCurrentProductWorld('NW-2C 精确来源', { minimumCharacters: 4 })
   const source = await loadProductProductionConsultationSourceV2({ scope: world.scope, worldReleaseId: world.release.id!, productType })
   const suggestions = await suggestProductStartingPoints({ scope: world.scope, worldReleaseId: world.release.id!, productType })
   const selection = { ...source.selectionCatalog,
     characterResourceKeys: source.selectionCatalog.characterResourceKeys.slice(0, characterCount ?? (productType === 'avg' ? 3 : 2)) }
-  const brief = await draftProductProductionBriefV3({ scope: world.scope, worldReleaseId: world.release.id!,
+  const drafted = await draftProductProductionBriefV3({ scope: world.scope, worldReleaseId: world.release.id!,
     suggestionKey: suggestions.suggestions[0].suggestionKey, productType, qualityProfile: 'prototype', scale: 'scene',
     visualLevel: 'none', audioLevel: 'none', sourceSelection: selection, playerRole: '扮演调查员，与选入人物交谈' })
+  const brief = owned?.sourcePurpose ? { ...drafted, source: { ...drafted.source, sourcePurpose: owned.sourcePurpose } } : drafted
   const productionKey = `nw2c-${productType}-${crypto.randomUUID()}`
   const created = await executeProductProductionCommand({ scope: world.scope,
     command: { type: 'create-intent', commandId: `${productionKey}.intent`, productionKey,
@@ -172,7 +178,7 @@ async function releaseFor(f: Awaited<ReturnType<typeof fixture>>, sourceManifest
     packageHash: await hashProductProductionValueV2(runtimePackage), productionProvenance, sourceContracts })
   const lineage = await createProductReleaseLineageV1({ productType: runtimePackage.productType, productInstanceKey: f.productionKey,
     releaseUid: productReleaseUidV1({ productType: runtimePackage.productType, productInstanceKey: f.productionKey, releaseVersion: 1, releaseHash }),
-    releaseVersion: 1, releaseHash, parentRelease: null, worldReference: sourcePlan.worldReference, ...sourceContracts,
+    releaseVersion: 1, releaseHash, parentRelease: null, worldReference: f.sourcePlan.worldReference, ...sourceContracts,
     build: { buildUid: `fixture-${f.productionKey}`, buildHash: productionProvenance.buildManifestHash },
     quality: { passed: true, receiptHashes: [productionProvenance.rootTerminalReceiptHash] },
     compatibility: { status: 'initial', protocolVersion: 1, evidenceHashes: [] } })
@@ -182,6 +188,40 @@ async function releaseFor(f: Awaited<ReturnType<typeof fixture>>, sourceManifest
 describe('NW-2C · exact SourcePlan / actual evidence / two product compiler seams', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => { db.close(); vi.useRealTimers() })
+
+  it('021: exact allowed D reaches real save, Start, Gateway and Release contract; sibling D never substitutes', async () => {
+    const owner = await seedCurrentProductWorld('021 release author', { minimumCharacters: 4 })
+    const { scope } = await createWorkspace({ name: '021 release consumer', description: '', genres: ['other'],
+      status: 'drafting', targetWordCount: 0 }, { purpose: 'independent-work', kind: 'avg' })
+    const options = { authorName: '合成作者', attribution: ' 原署名 é ', license: 'CC-BY-4.0' as const,
+      contentWarnings: [' 原提示 '], allowedUses: { 'world-remix': false, ttrpg: false, 'character-interaction': false,
+        'ai-town': true, 'text-adventure': false, avg: true, 'text-open-world': false } }
+    const allowed = await installWorldSourcePackageV1(owner.scope, await createWorldPackage(owner.release.id!, options))
+    const denied = await installWorldSourcePackageV1(owner.scope, await createWorldPackage(owner.release.id!, {
+      ...options, allowedUses: { ...options.allowedUses, avg: false },
+    }))
+    const args = { narrativeProductType: 'avg' as const }
+    const before = await Promise.all([db.worldReleases.count(), db.worldSourceReceipts.count(), db.productBuilds.count(), db.agentRuns.count()])
+    await expect(selectWorldReferenceForProductPurposeV1(scope, denied.worldReleaseId, 'avg',
+      { ...args, sourceDeclarationHash: denied.declarationHash })).rejects.toThrow(/不允许/)
+    expect(await Promise.all([db.worldReleases.count(), db.worldSourceReceipts.count(), db.productBuilds.count(), db.agentRuns.count()])).toEqual(before)
+
+    const selected = await selectWorldReferenceForProductPurposeV1(scope, allowed.worldReleaseId, 'avg',
+      { ...args, sourceDeclarationHash: allowed.declarationHash })
+    const f = await fixture('avg', { scope, release: (await db.worldReleases.get(selected.localId))!, sourcePurpose: selected.sourcePurpose })
+    const { manifest } = await readAll(f)
+    const release = await releaseFor(f, manifest)
+    const contracts = release.sourceContracts
+    if (!contracts || !('confirmedBrief' in contracts) || contracts.sourcePlan.sourcePurpose?.origin.kind !== 'declared')
+      throw new Error('Release lost exact D')
+    expect(readWorldSourcePurposeDeclarationV1(contracts.sourcePlan.sourcePurpose.origin)).toMatchObject({
+      declarationHash: allowed.declarationHash, attribution: options.attribution, contentWarnings: options.contentWarnings,
+    })
+    const localReceipt = await db.worldSourceReceipts.where('[worldId+declarationHash]').equals([scope.worldId, allowed.declarationHash]).first()
+    await db.worldSourceReceipts.delete(localReceipt!.id!)
+    await expect(releaseFor(f, manifest)).rejects.toThrow(/receipt 缺失/)
+    await expect(verifyProductReleaseManifestV1(release)).resolves.toMatchObject({ releaseIdentityHash: release.releaseIdentityHash })
+  }, 30_000)
 
   it('同一世界通过聊天与 AVG 的正式保存/开始、实际读取及发布合同得到不同来源清单', async () => {
     const chat = await fixture('character-interaction'), avg = await fixture('avg', chat)
@@ -452,7 +492,7 @@ describe('NW-2C · exact SourcePlan / actual evidence / two product compiler sea
       productionProvenance,sourceContracts})
     const lineage=await createProductReleaseLineageV1({productType:'avg',productInstanceKey:f.productionKey,
       releaseUid:productReleaseUidV1({productType:'avg',productInstanceKey:f.productionKey,releaseVersion:1,releaseHash}),
-      releaseVersion:1,releaseHash,parentRelease:null,worldReference:sourcePlan.worldReference,...sourceContracts,
+      releaseVersion:1,releaseHash,parentRelease:null,worldReference:f.sourcePlan.worldReference,...sourceContracts,
       build:{buildUid:`fixture-${f.productionKey}`,buildHash:productionProvenance.buildManifestHash},
       quality:{passed:true,receiptHashes:[productionProvenance.rootTerminalReceiptHash]},
       compatibility:{status:'initial',protocolVersion:2,evidenceHashes:[]}})
@@ -525,9 +565,32 @@ describe('NW-2C v4 durable scheduler and atomic publication', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => { db.close(); vi.restoreAllMocks() })
 
-  it.each(['character-interaction', 'avg'] as const)('%s publishes from real task receipts and preserves the frozen world', async productType => {
+  it.each([['character-interaction', 'native'], ['avg', 'native'], ['avg', 'declared']] as const)(
+    '%s publishes %s from real task receipts and preserves the frozen world', async (productType, sourceKind) => {
     const world = await seedNarrativeRelationReleaseV4({ explicitEntityEvidence: true })
-    const f = await fixture(productType, world, productType === 'avg' ? 1 : 2)
+    let target: Pick<typeof world, 'scope' | 'release'> & { sourcePurpose?: WorldSourcePurposeProofV1 } = world
+    let declarationHash: string | undefined
+    if (sourceKind === 'declared') {
+      const { scope } = await createWorkspace({ name: '021 actual publication consumer', description: '', genres: ['other'],
+        status: 'drafting', targetWordCount: 0 }, { purpose: 'independent-work', kind: 'avg' })
+      const uses = { 'world-remix': false, ttrpg: false, 'character-interaction': false, 'ai-town': true,
+        'text-adventure': false, avg: true, 'text-open-world': false }
+      const common = { authorName: '021 publisher fixture', attribution: ' 原署名 é ', license: 'CC-BY-4.0' as const,
+        contentWarnings: [' 原提示 '], allowedUses: uses }
+      const permitted = await installWorldSourcePackageV1(world.scope, await createWorldPackage(world.release.id!, common))
+      const denied = await installWorldSourcePackageV1(world.scope, await createWorldPackage(world.release.id!, {
+        ...common, allowedUses: { ...uses, avg: false },
+      }))
+      expect(permitted.worldReleaseId).toBe(denied.worldReleaseId)
+      declarationHash = permitted.declarationHash
+      const selected = await selectWorldReferenceForProductPurposeV1(scope, permitted.worldReleaseId, 'avg',
+        { narrativeProductType: 'avg', sourceDeclarationHash: declarationHash })
+      target = { scope, release: (await db.worldReleases.get(selected.localId))!, sourcePurpose: selected.sourcePurpose }
+      await installWorldSourcePackageV1(scope, await createWorldPackage(world.release.id!, {
+        ...common, allowedUses: { ...uses, avg: false },
+      }))
+    }
+    const f = await fixture(productType, target, productType === 'avg' ? 1 : 2)
     const releaseBefore = await db.worldReleases.get(world.release.id!)
     const sourcePlanBefore = f.row.sourcePlanJson
     const requirement = f.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
@@ -551,10 +614,26 @@ describe('NW-2C v4 durable scheduler and atomic publication', () => {
     const build = (await db.productBuilds.get(projection.buildId))!
     expect(projection, JSON.stringify({ projection, failure: build.failureJson })).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
     expect(calls.sort()).toEqual(['content.design', 'content.narrative', 'content.product-module', 'media.requirements'].sort())
+    if (declarationHash) {
+      const exact = await db.worldSourceReceipts.where('[worldId+declarationHash]').equals([f.scope.worldId, declarationHash]).first()
+      const before = await Promise.all([db.productProductionCommands.count(), db.productReleases.count(), db.agentRuns.count()])
+      await db.worldSourceReceipts.delete(exact!.id!)
+      await expect(publishProductProductionV1({ scope: f.scope, productionId: f.productionId })).rejects.toThrow(/receipt 缺失/)
+      expect(await Promise.all([db.productProductionCommands.count(), db.productReleases.count(), db.agentRuns.count()])).toEqual(before)
+      await db.worldSourceReceipts.put(exact!)
+    }
     const published = await publishProductProductionV1({ scope: f.scope, productionId: f.productionId })
     const releaseRow = (await db.productReleases.get(published.receipt.productReleaseId))!
     const released = await verifyProductReleaseManifestV1(releaseRow.manifestJson)
     expect(released.sourceContracts!.sourcePlan.planHash).toBe(f.sourcePlan.planHash)
+    if (declarationHash) {
+      const contracts = released.sourceContracts
+      if (!('confirmedBrief' in contracts) || contracts.sourcePlan.sourcePurpose?.origin.kind !== 'declared')
+        throw new Error('Actual Release lost exact D')
+      expect(readWorldSourcePurposeDeclarationV1(contracts.sourcePlan.sourcePurpose.origin)).toMatchObject({
+        declarationHash, attribution: ' 原署名 é ', contentWarnings: [' 原提示 '],
+      })
+    }
     expect(released.sourceContracts!.sourceManifest.runContextManifests.length).toBeGreaterThan(0)
     expect(released.sourceContracts!.sourceManifest.resources.map(item => item.resourceKey).sort()).toEqual(f.sourcePlan.exact.requiredResourceKeys)
     expect((await db.productBuilds.get(build.id!))!.status).toBe('released')

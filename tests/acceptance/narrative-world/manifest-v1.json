@@ -21,33 +21,88 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261103-community-launch-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261104-quality007008-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
+        "path": "tests/acceptance/narrative-world/baseline-20261104-quality009010011021044133134-v1.json",
         "workPackage": "NW-0B",
-        "note": "Preserved mainline receipt before re-evaluating the integrated community Auth/TUS dependency inputs; deterministic observations must remain unchanged."
+        "note": "Preserved measured quality009010011021044133134 receipt before the reviewed development toolchain and coverage configuration change; all original observations, input hashes and historical bytes remain unchanged."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261030-community-r2-main870-v1.json",
+        "path": "tests/acceptance/narrative-world/baseline-20261104-quality030037038042057077097-v3.json",
         "workPackage": "NW-0B",
-        "note": "Preserved community branch receipt before integrating the 2026-11-02 source identity and evidence validation mainline fixes."
+        "note": "Preserved measured quality030037038042057077097 v3 receipt before reviewed shared-source, frozen-world-contract and authoring recovery corrections; all original observations, input hashes and historical bytes remain unchanged."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261029-release405-mainc5-v1.json",
+        "path": "tests/acceptance/narrative-world/baseline-20261104-quality030037038042057077097-v2.json",
         "workPackage": "NW-0B",
-        "note": "Preserved mainline v4.0.5 receipt before the community branch and R2 dependency integration."
+        "note": "Preserved measured v2 receipt before removing only the new extracted module trailing separator blank line required by git diff --check; all observations and historical bytes remain unchanged."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261030-community-deps-v1.json",
+        "path": "tests/acceptance/narrative-world/baseline-20261104-quality030037038042057077097-v1.json",
         "workPackage": "NW-0B",
-        "note": "Preserved community branch receipt before the v4.0.5 mainline merge and R2 replacement."
+        "note": "Preserved measured quality030037038042057077097 v1 receipt before moving the unchanged runtime export validator behind the completed read transaction; all observations and historical bytes remain unchanged."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261028-longform-avg-integration-v1.json",
-        "workPackage": "NW-2E",
-        "note": "Preserved pre-community-dependency receipt; package, lockfile and the manifest's own receipt pointer changed in the next input fingerprint, while deterministic observations remained identical."
+        "path": "tests/acceptance/narrative-world/baseline-20261104-quality022064065089018058-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved measured quality022064065089018058 receipt before reviewed portable-reference, raster-admission and Creator ending-count changes; all original observations, input hashes and historical bytes remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261104-quality051096084135132-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved measured quality051096084135132 receipt before reviewed source-plan conditional admission and import registry changes; original observations, source hashes and historical bytes remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261104-quality081082083120137-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved measured quality081082083120137 receipt before reviewed node-resume snapshot integrity and Canon digest transaction changes; all original observations, source hashes and historical bytes remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261104-quality028032021-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved measured quality028032021 receipt before reviewed runtime-media lifecycle and judge continuation changes; original observations, source hashes and historical bytes remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261104-quality-canon-receipt-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved measured Canon receipt before the reviewed neutral runtime event admission and readonly world source library changes; original observations, source hashes and historical bytes remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261104-quality109-dice-admission-v2.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved measured quality109 receipt before renewing the domain projection receipt for the reviewed Canon provider change; all original observations, source hashes and historical bytes remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261104-quality109-dice-admission-v1.json",
+        "workPackage": "NW-0B",
+        "note": "First actual quality109 capture preserved. Subsequent default readback rejected manifest-pointer input drift; its observations are retained but this is not the current accepted input receipt."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-shared-compatibility-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved measured shared compatibility receipt before strict new text-adventure dice admission; all original source hashes, observations and historical bytes remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality031-runtime-branch-atomic-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved measured quality031 receipt before the reviewed shared backup compatibility and node candidate transaction corrections; original source hashes and historical bytes retained."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality129-backup-field-shapes-v3.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved measured quality129 receipt before the generic runtime branch atomicity correction; its original source hashes remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality271-browser-recovery-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved before correcting remaining current-schema migration fixture expectations to schema14 and worldSourceReceipts."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality029-fountain-v2.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved prior receipt before merging community mainline with audit fixes and browser recovery."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261013-v1.json",
@@ -654,6 +709,89 @@
         "path": "tests/acceptance/narrative-world/baseline-20261102-quality-engineering-144.json",
         "workPackage": "quality-engineering-144",
         "note": "Preserved exact reviewed engineering branch receipt while integrating the corrected cumulative source tree."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261102-quality-priority31-final-05.json",
+        "workPackage": "quality-priority31-final-05",
+        "note": "Preserved before ready25 combined-source verification; frozen gold corpus and evaluation thresholds remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-ready27-integration-v1.json",
+        "workPackage": "SFQA-ready27-integration",
+        "note": "Preserved exact ready27 receipt before the F1 world-package and SFQA-050 dispatch-source fingerprint refresh; original observations and corpus remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-050-056-integration-v1.json",
+        "workPackage": "SFQA-050-056-integration",
+        "implementationCommit": "b1af4deac69c43da2fb054348009c87b46c32188",
+        "note": "Preserved exact cumulative F1/050/056 receipt before schema14/backup18 immutable world-source wire receipts. Original observations, corpus and thresholds remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-world-source-receipts-v1.json",
+        "workPackage": "SFQA021-F2-source-receipts-v1",
+        "note": "Measured schema14/backup18 receipt checkpoint retained before call-time package and scalar owner capture repair. Its full deterministic object matches the prior receipt; its source hashes identify the actual pre-repair implementation. No corpus, observation or threshold is rewritten."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-world-source-receipts-v2.json",
+        "workPackage": "SFQA021-F2-source-receipts-v2",
+        "note": "Preserved unchanged before PR257 portable row-order recovery, legacy v3 candidate compatibility and actual regression receipt refresh. Frozen corpus, observations and thresholds remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-pr257-regressions-v1.json",
+        "workPackage": "quality-pr257-regressions-v1",
+        "note": "Preserved measured cumulative repair before correcting three current-format test files that still expected backup17 after F2 adopted backup18. Production code, corpus, observations and thresholds remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality-pr257-regressions-v2.json",
+        "workPackage": "quality-pr257-regressions",
+        "implementationCommit": "4f8fd009ddd5e452b67b0abafb4a656aed90a750",
+        "note": "Preserved deterministic PR257 regression receipt before SFQA004 product admission and allocation boundary changes; original input and run remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality004-product-entry-v1.json",
+        "workPackage": "quality004-product-entry-pre-review",
+        "implementationCommit": "3806ee8f9db348962b8da7630a6f38987cec735d",
+        "note": "Actual pre-review receipt retained unchanged. Subsequent independent review found and closed three dependency-policy counterexamples; final acceptance uses v2."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality004-product-entry-v2.json",
+        "workPackage": "quality004-product-entry-v2",
+        "note": "Preserved measured product-entry and neutral workspace extraction receipt. This successor only records the exact Fountain test-only development dependency pins; corpus, observations and thresholds remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality029-fountain-v1.json",
+        "workPackage": "quality029-fountain-pre-pointer",
+        "note": "Preserved first actual029 measurement taken before updating the fingerprinted manifest pointer. Its25 cases passed but default comparison correctly rejected the subsequent manifest fingerprint change; deterministic observations were unchanged. Finalv2 measures the already-final pointer and history."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-community-launch-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved prior receipt before merging community mainline with audit fixes and browser recovery."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261030-community-r2-main870-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved community branch receipt before integrating the 2026-11-02 source identity and evidence validation mainline fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261030-community-deps-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved community branch receipt before the v4.0.5 mainline merge and R2 replacement."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality129-backup-field-shapes-v1.json",
+        "workPackage": "SFQA-129 preliminary measurement",
+        "note": "Actual field-shape run on 22e1 before the schema-test-only 3f8 follow-up; preserved as measured preliminary input, not final acceptance."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality271-browser-recovery-v2.json",
+        "workPackage": "SFQA-271 cumulative parent",
+        "note": "Exact measured cumulative parent retained before SFQA-129 registry field validation; original bytes unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality129-backup-field-shapes-v2.json",
+        "workPackage": "SFQA-129 intermediate measurement",
+        "note": "Actual 3f8 field-shape measurement before the fingerprinted manifest pointer/history was finalized; superseded input preserved byte-for-byte, not final acceptance."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -685,6 +823,7 @@
     "scripts/narrative-reader-contract.mjs",
     "scripts/narrative-reader-contract.test.mjs",
     "scripts/narrative-reader-judge-content.test.mjs",
+    "scripts/narrative-reader-judge-continuation.mjs",
     "scripts/narrative-reader-judge-contract.mjs",
     "scripts/narrative-reader-judge-contract.test.mjs",
     "scripts/narrative-reader-judge-coverage.mjs",
@@ -707,6 +846,7 @@
     "src/components/world-engine/NarrativeCompilationPanel.tsx",
     "src/lib/agent/context-gateway-tools.ts",
     "src/lib/agent/execution-binding.ts",
+    "src/lib/agent/run/hash.ts",
     "src/lib/agent/world-query-tool-schema.ts",
     "src/lib/ai/chapter-memory/canonical-chapter-sequence.ts",
     "src/lib/ai/chapter-memory/text-normalization.ts",
@@ -729,7 +869,10 @@
     "src/lib/context-gateway/world-release-query-provider.ts",
     "src/lib/db/schema.ts",
     "src/lib/export/registry-export.ts",
+    "src/lib/export/runtime-export-integrity.ts",
     "src/lib/export/registry-import.ts",
+    "src/lib/media/blob-store.ts",
+    "src/lib/media/raster-image.ts",
     "src/lib/narrative-domain/codec.ts",
     "src/lib/narrative-domain/integrity.ts",
     "src/lib/narrative-domain/json.ts",
@@ -737,7 +880,9 @@
     "src/lib/narrative-domain/references.ts",
     "src/lib/narrative-domain/sha256.ts",
     "src/lib/narrative-domain/visibility.ts",
+    "src/lib/open-world/creator-ending-count.ts",
     "src/lib/open-world/player-save-migration.ts",
+    "src/lib/product-platform/workspace-install.ts",
     "src/lib/product-production/commands.ts",
     "src/lib/product-production/preview-source.ts",
     "src/lib/product-production/production-executor.ts",
@@ -746,6 +891,7 @@
     "src/lib/product-production/world-source.ts",
     "src/lib/product/exact-source-contracts.ts",
     "src/lib/product/runtime-core.ts",
+    "src/lib/product/runtime-new-branch-projection.ts",
     "src/lib/product/runtime-source-manifest.ts",
     "src/lib/product/source-contracts.ts",
     "src/lib/product/world-requirement-adapters.ts",
@@ -766,13 +912,16 @@
     "src/lib/types/narrative-time.ts",
     "src/lib/types/product-release.ts",
     "src/lib/types/rag-library.ts",
+    "src/lib/types/state-card.ts",
     "src/lib/types/world-impact.ts",
     "src/lib/types/world-product-contracts.ts",
     "src/lib/types/world-query.ts",
+    "src/lib/types/world-sharing.ts",
     "src/lib/workspace/create-workspace.ts",
     "src/lib/workspace/lifecycle.ts",
     "src/lib/workspace/scope.ts",
     "src/lib/workspace/works.ts",
+    "src/lib/workspace/workspace-allocation.ts",
     "src/lib/world-engine/aphelion-preset.ts",
     "src/lib/world-engine/authored-preset.ts",
     "src/lib/world-engine/derivation.ts",
@@ -814,9 +963,13 @@
     "src/lib/world-engine/semantic-registry-v3.ts",
     "src/lib/world-engine/semantic-registry-v4.ts",
     "src/lib/world-engine/semantic-snapshot.ts",
+    "src/lib/world-engine/source-declaration.ts",
+    "src/lib/world-engine/source-receipt-contract.ts",
+    "src/lib/world-engine/source-receipt.ts",
     "src/lib/world-engine/tidemark-echo-preset.ts",
     "src/lib/world-engine/tidemark-preset.ts",
     "src/lib/world-engine/world-identity.ts",
+    "src/lib/world-engine/world-package-metadata.ts",
     "src/lib/world-engine/world-package.ts",
     "src/lib/world-engine/world-reference-v2.ts",
     "src/lib/world-engine/world-reference.ts",
@@ -862,6 +1015,7 @@
     "tests/helpers/narrative-scale-fixture.ts",
     "tests/helpers/narrative-scale-v2-fixture.ts",
     "tests/helpers/narrative-world-evaluation.ts",
+    "tests/helpers/raster-decoder-vitest.ts",
     "tests/regression/R-AGENT1-read-tool-registry.test.ts",
     "tests/regression/R-CTXG1-contract-provider-version.test.ts",
     "tests/regression/R-CTXG7-gateway-execution.test.ts",
@@ -911,15 +1065,21 @@
     "tests/regression/R-NW-2D-recovery.test.ts",
     "tests/regression/R-NW-2E-author-quality-contract.test.ts",
     "tests/regression/R-NW-2E-author-quality-inputs.test.ts",
+    "tests/regression/R-NW-2E-byte-sink.test.ts",
     "tests/regression/R-NW-2E-canonical-root.test.ts",
     "tests/regression/R-NW-2E-deferred-projection.test.ts",
     "tests/regression/R-NW-2E-domain-allocations.test.ts",
+    "tests/regression/R-NW-2E-frozen-reference-binding.test.ts",
     "tests/regression/R-NW-2E-frozen-shapes.test.ts",
+    "tests/regression/R-NW-2E-fused-freeze-hash.test.ts",
     "tests/regression/R-NW-2E-grounded-knowledge.test.ts",
     "tests/regression/R-NW-2E-hash-backend.test.ts",
+    "tests/regression/R-NW-2E-identity-syntax.test.ts",
     "tests/regression/R-NW-2E-json-memory.test.ts",
     "tests/regression/R-NW-2E-lifecycle.test.ts",
+    "tests/regression/R-NW-2E-numeric-runs.test.ts",
     "tests/regression/R-NW-2E-packing.test.ts",
+    "tests/regression/R-NW-2E-posting-ownership.test.ts",
     "tests/regression/R-NW-2E-reader-contract.test.ts",
     "tests/regression/R-NW-2E-reader-evaluation.test.ts",
     "tests/regression/R-NW-2E-reader-judge.test.ts",
@@ -928,6 +1088,8 @@
     "tests/regression/R-NW-2E-reference-index.test.ts",
     "tests/regression/R-NW-2E-scale-v2.test.ts",
     "tests/regression/R-NW-2E-scale.test.ts",
+    "tests/regression/R-NW-2E-token-digest.test.ts",
+    "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
     "tests/regression/R-NW-2E-verified-ir.test.ts",
     "tests/regression/R-NW-2E-version-dispatch.test.ts",
     "tests/regression/R-OPEN-WORLD4-player-save-store-integration.test.ts",
@@ -939,15 +1101,17 @@
     "tests/regression/R-WORLD-D-phase-d-closure.test.ts",
     "tests/setup.ts",
     "vitest.config.ts",
-    "tests/regression/R-NW-2E-posting-ownership.test.ts",
-    "tests/regression/R-NW-2E-fused-freeze-hash.test.ts",
-    "tests/regression/R-NW-2E-identity-syntax.test.ts",
-    "tests/regression/R-NW-2E-frozen-reference-binding.test.ts",
-    "tests/regression/R-NW-2E-token-digest.test.ts",
-    "tests/regression/R-NW-2E-byte-sink.test.ts",
-    "tests/regression/R-NW-2E-numeric-runs.test.ts",
-    "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
-    "src/lib/types/state-card.ts"
+    "src/lib/world-engine/source-purpose.ts",
+    "src/lib/utils/legacy-id-array.ts",
+    "src/lib/product-production/read-details.ts",
+    "src/lib/product-production/original-response-author-source.ts",
+    "src/lib/product-production/original-response-booking.ts",
+    "src/lib/product-production/recovery-policy.ts",
+    "src/lib/adventure/production-artifacts-v2.ts",
+    "src/lib/product-production/plan.ts",
+    "src/lib/product-production/task-budget-totals.ts",
+    "src/lib/narrative-domain/semantic-export-references.ts",
+    "src/lib/world-engine/narrative-derivation-portability.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

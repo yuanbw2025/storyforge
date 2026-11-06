@@ -20,7 +20,7 @@ describe('OPEN-WORLD-5 · creator product entry wiring', () => {
   })
 
   it('uses the dedicated creator workflow instead of the generic producer for open-world production', () => {
-    expect(developmentPage).toContain("? openWorld\n            ? <TextOpenWorldCreatorWorkflow")
+    expect(developmentPage).toContain("? openWorld && decision.enterable\n            ? <TextOpenWorldCreatorWorkflow")
     expect(developmentPage).toContain(': productionDecision.enabled')
     expect(developmentPage).toContain('<ProductProductionStudio')
     expect(developmentPage).toContain('initialSource={handoff}')

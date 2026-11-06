@@ -1,4 +1,7 @@
+import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from '../open-world/creator-ending-count'
+import { assertWorldSourcePurposeCasV1, prepareWorldSourcePurposeCasV1, worldSourcePurposeTransactionTablesV1, type WorldSourcePurposeCasWitnessV1 } from '../world-engine/source-purpose'
 import { deriveAvgAssemblyRecoveryBaseV1 } from '../avg/assembly-recovery'
+import { assertCurrentProductEntryV1, productCatalogIdForProductionV1 } from '../product/product-catalog'
 import {
   assertTextOpenWorldNewSourceV1,
   assertTextOpenWorldProductionNewWorkV1,
@@ -86,7 +89,7 @@ import {
   verifyTextAdventureHumanVisualReviewReceiptV1,
 } from './quality-receipts'
 import { isTextAdventureReadableGlyphViolationV1 } from './text-adventure-quality'
-import { inspectProductProductionBuildRecoveryPolicyV1, isRepairRetryableFailedProductBuildV1 } from './recovery-policy'
+import { buildResumedFailureEvidenceV1, inspectProductProductionBuildRecoveryPolicyV1, isRepairRetryableFailedProductBuildV1 } from './recovery-policy'
 import { validateProductProductionRecoveryDirectiveV1 } from './context'
 import { readAgentRunV1 } from '../agent/run/event-store'
 import { preparePausedProductTaskFailureV1, reconcilePausedProductTaskFailureV1, type PreparedPausedProductTaskFailureV1 } from './failed-run-reconciliation'
@@ -2168,50 +2171,10 @@ async function applyCommand(input: {
       controlEpoch,
       stateRevision: build.stateRevision + 1,
       budgetLedgerJson,
-      failureJson: openWorldContentRevision ? safeJson({
-        code: 'author-revised-content', commandId: command.commandId, revisionCommand: command,
-        blockerKey: openWorldContentRevision.taskKey,
-        revisionSource: { planHash: openWorldContentRevision.expectedPlanHash,
-          controlEpoch: openWorldContentRevision.expectedControlEpoch, artifacts: openWorldContentRevision.expectedArtifacts },
-        resolution: { action: 'author-edit', note: openWorldContentRevision.note, authorDraftJson: openWorldContentRevision.authorDraftJson },
-        resumedFromControlEpoch: build.controlEpoch, pauseReceipt: pausedFailure, pausedReservationAccountings, resolvedAt: now,
-      }) : revision ? safeJson({
-        code: 'author-revised-content', commandId: command.commandId, revisionCommand: command,
-        blockerKey: revision.artifactKey,
-        revisionSource: {
-          artifactKey: revision.artifactKey,
-          version: revision.expectedArtifactVersion,
-          contentHash: revision.expectedArtifactHash,
-        },
-        ...(ttrpgContentRevision ? { revisionSourceProofHash: input.preparedTtrpgContentRevision!.sourceProofHash } : {}),
-        resolution: { action: 'author-edit', note: revision.note, authorDraftJson: revision.authorDraftJson },
-        resumedFromControlEpoch: build.controlEpoch,
-        pauseReceipt: pausedFailure, pausedReservationAccountings, resolvedAt: now,
-      }) : restored === 'recovery-required' && typeof previousFailure.taskKey === 'string' ? safeJson({
-        // Resuming a failed Build restores its blocker; it does not authorize
-        // another provider call. Keep the original Run/epoch/attempt unchanged.
-        // Recovery validates every intervening pause/resume receipt separately.
-        ...previousFailure,
-        resumedFromControlEpoch: build.controlEpoch,
-        pausedReservationAccountings,
-      }) : pausedReservationAccountings.length ? safeJson({
-        code: 'user-pause-resolved',
-        previousFailureCode: 'pause-provider-result-unknown',
-        resumedFromControlEpoch: build.controlEpoch,
-        pauseReceipt: pausedFailure,
-        ...(Object.keys(previousFailure).length > 0 ? { previousFailure } : {}),
-        pausedReservationAccountings,
-        resolvedAt: now,
-      }) : safeJson({
-        code: 'user-resumed', resumedFromControlEpoch: build.controlEpoch,
-        pauseReceipt: {
-          code: pausedFailure.code === 'user-paused' ? 'user-paused' : 'unknown-pause-receipt',
-          ...(typeof pausedFailure.reason === 'string' ? { reason: pausedFailure.reason.slice(0, 500) } : {}),
-          ...(Number.isSafeInteger(pausedFailure.pausedFromControlEpoch)
-            ? { pausedFromControlEpoch: pausedFailure.pausedFromControlEpoch } : {}),
-        },
-        ...(Object.keys(previousFailure).length > 0 ? { previousFailure } : {}),
-      }),
+      failureJson: safeJson(buildResumedFailureEvidenceV1({
+        command, restored, resumedFromControlEpoch: build.controlEpoch, pausedFailure, previousFailure,
+        pausedReservationAccountings, preparedTtrpgContentRevision: input.preparedTtrpgContentRevision, now,
+      })),
       updatedAt: now,
     })
     const productionStatus = restored === 'preview-ready' || restored === 'release-ready' ? 'preview-ready' as const : 'producing' as const
@@ -3246,6 +3209,19 @@ async function applyCommand(input: {
   return { production, result: { briefRevision: revision, briefHash, base: command.base } }
 }
 
+/** Historical receipts and zero-call maintenance retain their own proof gates. */
+function assertProductProductionCommandEntryV1(
+  productType: ProductProductionRecordV1['productType'],
+  command: ProductProductionCommandV1,
+): void {
+  switch (command.type) {
+    case 'pause': case 'stop': case 'archive': case 'restore': case 'request-preview':
+    case 'book-local-no-dispatch': case 'book-original-response': return
+    case 'resolve-blocker': if (command.resolution.action === 'cancel') return
+  }
+  assertCurrentProductEntryV1(productCatalogIdForProductionV1(productType))
+}
+
 async function executeTransaction(input: {
   preparedChatConsultationWitness?: string
   preparedLocalNoDispatchBooking?: Awaited<ReturnType<typeof prepareProductProductionLocalNoDispatchBookingV1>> | null
@@ -3279,6 +3255,7 @@ async function executeTransaction(input: {
     terminalReceiptHash: string
   } | null
   preparedCreatorStart?: TextOpenWorldCreatorStartPreparationV1 | null
+  preparedSourcePurposeWitness?: WorldSourcePurposeCasWitnessV1 | null
   preparedCreatorRepair?: TextOpenWorldCreatorRepairPreparationV1 | null
   preparedCreatorBudgetRecovery?: TextOpenWorldBudgetRecoveryPreparationV1 | null
   preparedCreatorBudgetRecoveryAuthorization?: TextOpenWorldBudgetRecoveryAuthorizationV1 | null
@@ -3303,6 +3280,7 @@ async function executeTransaction(input: {
     ...(command.type === 'save-brief-revision' && command.brief?.avgAssembly?.version === 3
       || command.type === 'authorize-start' && input.preparedSourcePlan?.productType === 'avg' ? [db.avgDraftMedia] : []),
     db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, db.agentRunArtifacts,
+    ...(input.preparedSourcePurposeWitness ? worldSourcePurposeTransactionTablesV1() : []),
     ...(command.type === 'authorize-text-open-world-creator-start'
       // Creator source adapters expose only opaque transaction capabilities;
       // the command layer never learns physical WorldRelease/novel table names.
@@ -3317,6 +3295,7 @@ async function executeTransaction(input: {
         if (!await assertRecordInScope(scope, 'productProductions', existing, { owner: 'work' })) reject('production-state-conflict', 'productionKey 跨 Work 冲突')
         production = existing as ProductProductionRecordV1 & { id: number }
       } else {
+        assertProductProductionCommandEntryV1(command.productType, command)
         if (command.type === 'create-intent' && !input.preparedWorldReferenceHash) {
           reject('source-stale', 'create-intent 缺少经中立边界验证的 WorldReference')
         }
@@ -3368,7 +3347,9 @@ async function executeTransaction(input: {
     // Existing immutable receipts above remain readable. Every genuinely new
     // command repeats source admission while its Production/Brief are locked,
     // before a claim or any formal product mutation can be written.
+    assertProductProductionCommandEntryV1(production.productType, command)
     await assertTextOpenWorldCommandSourceV1(production, command)
+    if (input.preparedSourcePurposeWitness) await assertWorldSourcePurposeCasV1(input.preparedSourcePurposeWitness)
 
     const claim = stampNewRecord(scope, 'productProductionCommands', {
       projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId, productionId: production.id,
@@ -3394,6 +3375,7 @@ async function executeTransaction(input: {
           await assertTextOpenWorldCreatorProductionSourceCurrentV1({
             scope,
             sourceLocator: command.sourceLocator,
+            worldSourcePurposeCasWitness: transactionCreatorStart.worldSourcePurposeCasWitness,
             novelSourceCasWitness: transactionCreatorStart.novelSourceCasWitness,
           })
         } catch {
@@ -3585,7 +3567,7 @@ export async function executeProductProductionCommand(input: {
       return replay
     }
   }
-  if (command.type === 'create-text-open-world-intent') {
+  if (command.type === 'create-intent' || command.type === 'create-text-open-world-intent') {
     const production = await db.productProductions
       .where('[workId+productionKey]').equals([scope.workId, command.productionKey]).first()
     const existing = production?.id == null ? null : await db.productProductionCommands
@@ -3613,6 +3595,11 @@ export async function executeProductProductionCommand(input: {
       return replay
     }
   }
+  if (command.type === 'create-intent' || command.type === 'create-text-open-world-intent') {
+    assertProductProductionCommandEntryV1(command.productType, command)
+  } else if (Number.isInteger(input.productionId)) {
+    assertProductProductionCommandEntryV1((await productionInScope(scope, input.productionId!)).productType, command)
+  }
   if (command.type === 'create-text-open-world-intent') {
     assertTextOpenWorldNewSourceV1(command.sourceLocator.kind, command.type)
   } else if (command.type !== 'create-intent' && Number.isInteger(input.productionId)) {
@@ -3628,6 +3615,7 @@ export async function executeProductProductionCommand(input: {
     ? await hashProductProductionValueV2(command.brief)
     : null
   let preparedSourcePlan: ProductSourcePlan | null = null
+  let preparedSourcePurposeWitness: WorldSourcePurposeCasWitnessV1 | null = null
   let preparedChatConsultationWitness: string | undefined
   let preparedConfirmedBrief: ConfirmedProductBriefV1 | null = null
   let preparedCreatorSource: {
@@ -3694,6 +3682,7 @@ export async function executeProductProductionCommand(input: {
     const inspected = await inspectTextOpenWorldCreatorSourceLocatorV1({
       scope,
       locator: command.sourceLocator,
+      requirePurpose: true,
     })
     if (command.type === 'create-text-open-world-intent') {
       if (inspected.bindingHash !== command.expectedSourceBindingHash) {
@@ -3711,6 +3700,9 @@ export async function executeProductProductionCommand(input: {
       }
       const production = await productionInScope(scope, input.productionId!)
       preparedCreatorBrief = await verifyTextOpenWorldCreatorBriefV1(command.brief)
+      if (!isTextOpenWorldCreatorEndingCountV1(preparedCreatorBrief.draft.scale.endings)) {
+        throw new Error('[product-production] ' + TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+      }
       if (production.productType !== 'text-open-world'
         || preparedCreatorBrief.productInstanceKey !== production.productionKey
         || preparedCreatorBrief.sourceBindingHash !== inspected.bindingHash
@@ -3841,6 +3833,11 @@ export async function executeProductProductionCommand(input: {
         sourcePlan: preparedSourcePlan,
         confirmedBrief: preparedConfirmedBrief,
         authorStartRevision: command.expectedStateRevision,
+      })
+      preparedSourcePurposeWitness = await prepareWorldSourcePurposeCasV1({
+        worldReleaseId: preparedSourcePlan.worldReference.localReleaseRecordId,
+        expectedProjectId: scope.projectId, expectedWorldId: scope.worldId,
+        purpose: preparedSourcePlan.productType, proof: preparedSourcePlan.sourcePurpose,
       })
     }
   } else if (command.type === 'authorize-text-open-world-creator-budget-recovery') {
@@ -3992,6 +3989,7 @@ export async function executeProductProductionCommand(input: {
     payloadHash,
     preparedBriefHash,
     preparedSourcePlan,
+    preparedSourcePurposeWitness,
     preparedConfirmedBrief,
     preparedTtrpgOpenBrief: input.preparedTtrpgOpenBrief,
     preparedCreatorSource,

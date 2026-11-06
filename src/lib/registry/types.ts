@@ -170,6 +170,19 @@ export interface ArrayRef {
   field: string       // 数组字段名(或 JSON 数组字符串字段名)
   itemTarget: string  // 数组元素指向哪张表
   onDelete: 'removeItem' | 'setNullItem' | 'keep'
+  /** Optional object field inside a JSON array; clear only this locator. */
+  itemField?: string
+  scope?: 'same-owner-or-parent-world'
+}
+
+/** Nullable holder field cleared only after source and holder owners agree. */
+export interface ScopedScalarRef {
+  kind: 'scoped-scalar'
+  field: string
+  sourceTable: string
+  onDelete: 'setNull'
+  scope?: 'same-owner-or-parent-world'
+  when?: { field: string; equals: string }
 }
 
 /** 间接归属(本表没有 projectId,通过另一张表的字段间接挂项目) */
@@ -204,7 +217,7 @@ export interface NarrativeSourceRefSpecV1 {
   onDelete: 'tombstone'
 }
 
-export type RefSpec = SimpleRef | JsonRef | ArrayRef | IndirectRef | BlobOwnerRef | NarrativeSourceRefSpecV1
+export type RefSpec = SimpleRef | JsonRef | ArrayRef | ScopedScalarRef | IndirectRef | BlobOwnerRef | NarrativeSourceRefSpecV1
 
 /** 导出时的 ID 重映射声明 */
 export interface ExportRemapField {
@@ -224,10 +237,18 @@ export interface ExportRemapField {
   /**
    * 该外键找不到映射时:
    * - 'drop'    丢弃整行(孤儿,如 characterRelations 端点角色已删)
-   * - 'require' 导入时抛错并整体回滚(必填外键完整性保护,如 chapters.outlineNodeId)
+   * - 'require' 非空但无映射时拒绝导入；是否允许缺失或 null 由 requiredOnImport 决定
    * - 'null' / 省略  置空(可空外键 / worldGroupId / 树 parentId)
    */
   onUnmapped?: 'drop' | 'require' | 'null'
+  /** A portable row must carry this non-null coordinate before any import write. */
+  requiredOnImport?: true
+  /** A chapter-local coordinate may resolve only inside the same Work. */
+  sameWorkOnImport?: true
+  /** Scope and review policy for a nullable locator introduced to portability. */
+  reviewLocal?: 'chapter' | 'world-group' | 'same-owner'
+  /** Only this actual producer type owns this locator. */
+  when?: { field: string; equals: string }
   /**
    * Optional cyclic pointer patched after every table is imported. Use only
    * to break an intentional parent/current-child cycle; ordinary refs still
@@ -257,6 +278,7 @@ export type ExportRefRemap = {
   storage?: 'array' | 'json-string'
   /** Fail closed when any non-null local/portable id has no mapping. */
   onUnmapped?: 'require' | 'drop'
+  reviewLocal?: 'chapter'
 } | {
   field: string
   remapVia: string
@@ -270,6 +292,7 @@ export type ExportRefRemap = {
   exportAs: string
   itemField: string
   storage?: 'array' | 'json-string'
+  reviewLocal?: 'chapter'
 } | {
   /** JSON object paths containing one local foreign key each. */
   field: string
@@ -300,6 +323,13 @@ export type ExportRefRemap = {
  * JSON from silently bypassing normal exportRemap handling.
  */
 export type PortableDataSpec = {
+  /** Actual immutable world package wire plus derived P/R/D indices. */
+  kind: 'world-source-receipt'
+} | {
+  /** An explicit selected editing D; never inferred from another receipt. */
+  kind: 'world-source-receipt-binding'
+  bindingField: 'sourceReceiptBinding'
+} | {
   kind: 'agent-run-root'
   contractField: string
   contractHashField: string
@@ -496,6 +526,8 @@ export interface CollectionAdoptionSpec {
   duplicatePolicy: 'skip' | 'update' | 'merge' | 'error'
   /** 必填字段;缺失则跳过该条 */
   required: string[]
+  /** Defaults for a genuinely new collection row, after in-transaction identity lookup. Never an update patch. */
+  createDefaults?: Readonly<Record<string, unknown>>
   /** 自动盖章字段 */
   autoStamps: ('projectId' | 'worldId' | 'workId' | 'worldGroupId' | 'homeWorldGroupId' | 'createdAt' | 'updatedAt')[]
   /** Owner selected from the trusted WorkspaceScope, never from AI output. */
@@ -613,7 +645,15 @@ export type ContextSourceTransformer = (
   input: ContextSourceTransformInput,
 ) => Promise<ContextSourceTransformResult | undefined>
 
+/** Exact row ranges in the registered audit reader's original rendered text. */
+export interface ConsistencyAuditSourceReadV1 {
+  key: 'canonAssertions' | 'itemLedger'
+  content: string
+  rows: Array<{ id: number; start: number; end: number }>
+}
+
 export interface AssembleContextInput {
+  captureConsistencyAuditSource?: (source: ConsistencyAuditSourceReadV1) => void
   extensionSnapshot?: import('../extensions/types').ExtensionRegistrySnapshot
   projectId: number
   /** Explicit logical read boundary; callers should always provide current WorkspaceScope. */
@@ -629,6 +669,7 @@ export interface AssembleContextInput {
   /** HARNESS-74: trusted version target for reference summary/character derivation. */
   referenceDerivedMode?: 'summary' | 'characters'
   referenceAnalysisRunId?: number
+  referenceAnalysisChunkIndex?: number
   /** HARNESS-76: trusted chapter selection for the registered style-learning baseline. */
   styleLearningChapterIds?: number[]
   /** HARNESS-79: trusted existing story-timeline event for single-record impact remediation. */
@@ -653,6 +694,8 @@ export interface AssembleContextInput {
   extraStateIds?: number[]
   /** 手动输入/当前字段内容，供“内容反推结构化设定”类动作走注册表。 */
   manualSourceText?: string
+  /** SFQA-022: session selector for the already-frozen project-import category catalog. */
+  documentImportSessionId?: number
   /** HARNESS-11: 同一批量章纲任务中，上一卷尚未采纳的结构化候选。 */
   priorOutlineCandidateText?: string
   /** C2 反向哺喂：以某角色为主体，召回剧情里关于 TA 的事实/正文证据（characterFacts/characterPassages 源用）。 */
@@ -787,6 +830,9 @@ export interface ContextResourceDescriptorV1 {
   /** Retrieval policy identity, independent from Canon edits. */
   policyRevision: number
   policyHash: string
+  /** false excludes automatic selection and model resource tools. Author
+   * library viewing remains separate; absent legacy descriptors stay enabled. */
+  automaticSelectionEnabled?: boolean
   scope: {
     projectId: number
     worldId?: number

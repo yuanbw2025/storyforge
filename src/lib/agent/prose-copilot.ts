@@ -869,11 +869,13 @@ export async function runProseCreativeReliabilityV1(input: {
   prepared: PreparedProseCopilot
   budget: AgentTeamBudgetTracker
   qualityMode: CreativeQualityModeV1
+  assertBeforeModelCall?: () => Promise<void>
   validate?: (output: string) => Promise<GenerationGateIssue[]> | GenerationGateIssue[]
 }): Promise<CreativeExecutionResultV1<string>> {
   return runCreativeExecutionV1({
     initialMessages: input.prepared.prepared.messages,
     runRaw: input.prepared.runRaw,
+    assertBeforeModelCall: input.assertBeforeModelCall,
     parse: raw => parseProseCreativeOutcomeV1(raw, input.prepared),
     buildRepairMessages: buildProseRepairMessagesV1,
     validate: input.validate,
