@@ -1,4 +1,5 @@
 import Dexie from 'dexie'
+import {assertCurrentProductEntryV1} from '../product/product-catalog'
 import {db} from '../db/schema'
 import {scopeTransactionTables} from '../workspace/scope'
 import type {WorkspaceScope, ProductProductionBriefV3, ContextManifestPointerV1} from '../types'
@@ -140,6 +141,7 @@ export async function adoptChatConsultationV2(input: {scope: WorkspaceScope; run
       await verify(scope, loaded.snapshot, payload)
       return readChatConsultationV2(scope, runId)
     }
+    assertCurrentProductEntryV1('upper.character-interaction')
     if (loaded.snapshot.projection.state !== 'awaiting_confirmation') throw new Error('本次方案不在等待作者确认状态')
     const prepared = await prepareChatPlanWriteV2(scope, payload.request, payload.result.candidate, fields)
     if (await hash(prepared.context) !== await hash(payload.context)) throw new Error('方案或来源已变化，请重新讨论')
@@ -150,6 +152,7 @@ export async function adoptChatConsultationV2(input: {scope: WorkspaceScope; run
     await db.transaction('rw', scopeTransactionTables(db.chatAuthoringDrafts, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints), async () => {
       let snapshot = await readAgentRunV1(scope, runId)
       if (snapshot.projection.lastSequence !== loaded.snapshot.projection.lastSequence || snapshot.projection.state !== 'awaiting_confirmation') throw new Error('方案任务已变化，本次没有写入')
+      assertCurrentProductEntryV1('upper.character-interaction')
       snapshot = await harness.append(scope, snapshot, 'candidate.revised', {stepId: STEP, attempt: 1, previousCandidateHash: expectedCandidateHash, candidateHash})
       snapshot = await harness.append(scope, snapshot, 'confirmation.recorded', {stepId: STEP, candidateHash, decision: 'adopt'})
       snapshot = await harness.append(scope, snapshot, 'adoption.started', {stepId: STEP, candidateHash, intentHash: adoptionHash})

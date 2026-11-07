@@ -1,4 +1,5 @@
 import Dexie from 'dexie'
+import { assertCurrentProductEntryV1, productCatalogIdForWorkV1 } from '../product/product-catalog'
 import { renderAuthoringPromptControl } from './prompt-control'
 import { estimateTokens } from '../ai/context-budget'
 import { chat } from '../ai/client'
@@ -22,6 +23,7 @@ import {
   captureAuthoringCanonReceipt,
   readAuthoringReceiptRows,
   assertAuthoringCanonReceipt,
+  type AuthoringSourceEvidenceV1,
 } from './bindings'
 import { authoringExecutionSubgraph, validateAuthoringGraph, topologicalAuthoringOrder } from './graph'
 import { parseAuthoringGraph } from './graph-codec'
@@ -53,12 +55,7 @@ export interface AuthoringRunSnapshot {
   totalTokens: number
   sourceKeys?: string[]
   sourceHash?: string
-  sourceEvidence?: {
-    included: string[]
-    omitted: string[]
-    trimmed: string[]
-    missing: string[]
-  }
+  sourceEvidence?: AuthoringSourceEvidenceV1
 }
 
 export type AuthoringRunSnapshotMap = Record<string, AuthoringRunSnapshot>
@@ -309,6 +306,17 @@ function parseRunMaps(run: NodeRunRecord): {
   }
 }
 
+/** The shared engine serves released longform as well as other Work owners.
+ * Node UI maturity is checked at its own creation/interaction entry. */
+async function assertAuthoringWorkProductEntryV1(scope: Awaited<ReturnType<typeof resolveReadScope>>): Promise<void> {
+  if (!Number.isInteger(scope.workId)) throw new Error('[product-catalog] 节点执行缺少确定的 Work owner')
+  const work = await db.works.get(scope.workId!)
+  if (!work || work.id !== scope.workId || work.projectId !== scope.projectId || work.worldId !== scope.worldId) {
+    throw new Error('[product-catalog] 节点执行的 Work owner 不存在或跨作用域')
+  }
+  assertCurrentProductEntryV1(productCatalogIdForWorkV1(work))
+}
+
 async function executeNode(input: {
   node: AuthoringNodeInstance
   inputs: AuthoringInputEnvelope[]
@@ -327,6 +335,7 @@ async function executeNode(input: {
   domain?: AuthoringCandidateDomain
   creativeArtifacts?: AuthoringCandidate['creativeArtifacts']
 }> {
+  await assertAuthoringWorkProductEntryV1(input.scope)
   const template = AUTHORING_NODE_BY_ID.get(input.node.templateId)
   if (!template) throw new Error(`节点模板不存在：${input.node.templateId}`)
   const { node, inputs } = input
@@ -411,6 +420,7 @@ async function executeNode(input: {
   if (template.capability === 'generate-field' || template.capability === 'generate-collection') {
     const actionBinding = authoringDomainActionBindingV1(template)
     const aiState = useAIConfigStore.getState()
+    await assertAuthoringWorkProductEntryV1(input.scope)
     const domain = await executeDomainNode({
       node,
       inputs,
@@ -450,6 +460,7 @@ async function executeNode(input: {
     const generationCount = Math.min(8, Math.max(1, Math.round(controlNumber(inputs, 'control.count', numberConfig(node, 'candidateCount', 1)))))
     const variants: string[] = []
     for (let index = 0; index < generationCount; index += 1) {
+      await assertAuthoringWorkProductEntryV1(input.scope)
       const result = await chat([
         {
           role: 'system',
@@ -541,7 +552,9 @@ async function adoptIdleAuthoringCandidate(input: Parameters<typeof adoptAuthori
     const choice: NodeFieldAdoptionInputV1 = { scope, flow: input.flow, runId: run.id,
       nodeId: node.id, selectedVariantIndex: candidate.selectedVariantIndex ?? 0, draft: input.output }
     const existing = await readNodeFieldAdoptionProofV1(choice)
+    if (existing.state !== 'committed') await assertAuthoringWorkProductEntryV1(scope)
     if (existing.state === 'unconfirmed') await confirmNodeFieldAdoptionIntentV1(choice)
+    if (existing.state !== 'committed') await assertAuthoringWorkProductEntryV1(scope)
     const business = await commitNodeFieldBusinessV1(choice)
     const terminal = await prepareNodeFieldAdoptionCompletionV1(choice)
     await withAgentRunMutationLockV1(terminal.runId, () => db.transaction('rw', terminal.tables, async () => {
@@ -560,6 +573,7 @@ async function adoptIdleAuthoringCandidate(input: Parameters<typeof adoptAuthori
     return { ...(business.result ?? { written: [], unknown: [], typeErrors: [], fkErrors: [], skipped: [] }),
       recovered: !business.writtenNow }
   }
+  await assertAuthoringWorkProductEntryV1(scope)
   let expectedSignature: AuthoringRunSignature | undefined
   let latestDomain: AuthoringCandidate['domain']
   let selectedRunId: number | undefined
@@ -605,6 +619,7 @@ async function adoptIdleAuthoringCandidate(input: Parameters<typeof adoptAuthori
     return result
   }
   if (latestDomain) {
+    await assertAuthoringWorkProductEntryV1(scope)
     const adopted = await adoptDomainCandidate({
       node,
       domain: latestDomain,
@@ -634,6 +649,7 @@ async function adoptIdleAuthoringCandidate(input: Parameters<typeof adoptAuthori
     if (write.target === 'characters' && recordId == null) {
       throw new Error('角色维度节点需要先绑定一个目标角色，避免把内容写入错误角色。')
     }
+    await assertAuthoringWorkProductEntryV1(scope)
     return confirm(await adopt({
       projectId: input.flow.projectId,
       scope,
@@ -654,6 +670,7 @@ async function adoptIdleAuthoringCandidate(input: Parameters<typeof adoptAuthori
     throw new Error('集合节点的候选必须是合法 JSON；请先编辑为 JSON 后再采纳。')
   }
   if (!data.length) throw new Error('候选没有可采纳的记录。')
+  await assertAuthoringWorkProductEntryV1(scope)
   return confirm(await adopt({
     projectId: input.flow.projectId,
     scope,
@@ -1035,7 +1052,7 @@ async function reviseIdleAuthoringCandidate(input: Parameters<typeof reviseAutho
     await rejectQualityAuthoringRevisionV1({ projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null, node, domain: frozen.domain })
   }
   return db.transaction('rw', fieldRead ? scopeTransactionTables(db.nodeRuns, db.nodeFlows,
-    db.agentRuns, db.agentRunEvents, db.agentRunArtifacts, db.agentRunCheckpoints) : [db.nodeRuns], async () => {
+    db.agentRuns, db.agentRunEvents, db.agentRunArtifacts, db.agentRunCheckpoints) : scopeTransactionTables(db.nodeRuns), async () => {
     if (fieldRead) await fieldRead.assertCurrent()
     const run = await db.nodeRuns.get(input.runId)
     if (!run || run.flowId !== input.flow.id || !await assertRecordInScope(scope, 'nodeRuns', run, { owner: 'work' })) throw new Error('候选运行不存在或不属于当前作品。')
@@ -1057,6 +1074,7 @@ async function reviseIdleAuthoringCandidate(input: Parameters<typeof reviseAutho
       candidates[input.nodeId] = { ...candidate, output: input.output, status: candidateNeedsAuthorRepair(candidate) ? 'blocked' : 'draft', authorEditedAfterArtifact: true }
     }
     const updated = { ...run, nodeResultsJson: JSON.stringify(candidates), updatedAt: Date.now() }
+    await assertAuthoringWorkProductEntryV1(scope)
     await db.nodeRuns.put(updated)
     return updated
   })
@@ -1161,6 +1179,7 @@ async function runOwnedAuthoringGraph(input: Parameters<typeof runAuthoringGraph
   let ordered = topologicalAuthoringOrder(graph, targetNodeId)
   if (input.runNodeIds) ordered = ordered.filter(node => input.runNodeIds?.has(node.id))
   if (!ordered.length) throw new Error('本次执行计划没有需要运行的节点。')
+  await assertAuthoringWorkProductEntryV1(scope)
   const now = Date.now()
   let plan = buildAuthoringExecutionPlan({
     graph,

@@ -1,4 +1,5 @@
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import { estimateTokens } from '../ai/context-budget'
 import { computeKnownCostUsd } from '../ai/usage-log'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
@@ -272,6 +273,7 @@ export async function generateTtrpgCampaignProposalCandidateV2(input: {
   regenerateSections?: TtrpgCampaignProposalSectionV2[]
   signal?: AbortSignal
 }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: TtrpgCampaignProposalCandidateV2; design: TtrpgCampaignDesignV2 }> {
+  assertCurrentProductEntryV1('upper.ttrpg')
   const objective = input.objective.trim()
   if (!objective || objective.length > 8_000) fail('作者目标为空或过长')
   if (!input.aiConfig && !input.runAI) fail('缺少 AI 配置')
@@ -398,6 +400,7 @@ export async function generateTtrpgCampaignProposalCandidateV2(input: {
       } : null,
     })
     const call = async (messages: ChatMessage[], attempt: 1 | 2) => {
+      assertCurrentProductEntryV1('upper.ttrpg')
       const manifestV1 = await createContextManifestFromAssemblyV1({
         runId: snapshot.run.id, stepId: TTRPG_CAMPAIGN_PROPOSAL_STEP_ID_V2, attempt,
         projectId: input.scope.projectId, worldGroupId: null,
@@ -421,12 +424,14 @@ export async function generateTtrpgCampaignProposalCandidateV2(input: {
         expectedLastSequence: snapshot.projection.lastSequence,
       })
       snapshot = recorded.snapshot
+      assertCurrentProductEntryV1('upper.ttrpg')
       snapshot = await append(input.scope, snapshot, 'model.requested', {
         stepId: TTRPG_CAMPAIGN_PROPOSAL_STEP_ID_V2, attempt,
         bindingHash: await hashCanonicalValue({ runtimeBindingHash, promptHash: recorded.evidence.promptHash }),
       })
       const result: ChatResult = {}
       const startedAt = Date.now()
+      assertCurrentProductEntryV1('upper.ttrpg')
       const output = input.runAI ? await input.runAI(messages, input.signal) : await chat(
         messages, input.aiConfig!, {
           category: 'authoring.ttrpg-campaign', projectId: input.scope.projectId, contextOverflowPolicy: 'reject',
