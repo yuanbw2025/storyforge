@@ -82,9 +82,9 @@ describe('SFQA-015 · source capabilities preserve immutable source identity', (
     const f = await fixture()
     expect(new Set(f.fields.map(item => item.resourceKey)).size).toBe(3)
     expect(new Set(f.fields.map(item => item.contentHash)).size).toBe(1)
-    // Canon's field policy is allowed to differ between appearance/background;
-    // the two different records' appearance fields share both hashes.
-    expect(f.fields[0].policyHash).toBe(f.fields[1].policyHash)
+    // Canon's effective policy also binds its exact dependency identities.
+    // Equal text on distinct records must not erase that policy distinction.
+    expect(f.fields[0].policyHash).not.toBe(f.fields[1].policyHash)
     const tokens: string[] = []
     for (const descriptor of f.fields) {
       const read = await f.read(descriptor.resourceKey)
@@ -101,6 +101,34 @@ describe('SFQA-015 · source capabilities preserve immutable source identity', (
       expect(original.ok, original.error).toBe(true)
       expect(JSON.parse(original.content)).toMatchObject({ resourceKey: f.fields[index].resourceKey, content: TEXT })
     }
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('keeps a real equal-content/equal-policy collision from rebinding an earlier revision capability', async () => {
+    const f = await fixture()
+    const firstRead = await f.read(f.fields[0].resourceKey)
+    expect(firstRead.ok, firstRead.error).toBe(true)
+    const firstToken = JSON.parse(firstRead.content).sourceRefCapabilities[0] as string
+    const first = resolveContextSourceRefCapabilityV1(f.session, firstToken)
+    const original = canonicalStringify(first)
+    await db.characters.update(f.ids[0], { updatedAt: NOW + 1 })
+    const secondRead = await f.read(f.fields[0].resourceKey)
+    expect(secondRead.ok, secondRead.error).toBe(true)
+    const secondToken = JSON.parse(secondRead.content).sourceRefCapabilities[0] as string
+    const second = resolveContextSourceRefCapabilityV1(f.session, secondToken)
+    expect(second.descriptor.contentHash).toBe(first.descriptor.contentHash)
+    expect(second.descriptor.policyHash).toBe(first.descriptor.policyHash)
+    expect(second.sourceRef).toEqual({ ...first.sourceRef, revision: NOW + 1 })
+    expect(secondToken).not.toBe(firstToken)
+    expect(resolveContextSourceRefCapabilityV1(f.session, firstToken)).toBe(first)
+    expect(canonicalStringify(first)).toBe(original)
+    const stale = await executeAgentTool('read_original_evidence', f.context(), { sourceRef: firstToken, maxTokens: 1000 })
+    expect(stale.ok).toBe(false)
+    expect(stale.error).toContain('当前版本')
+    const current = await executeAgentTool('read_original_evidence', f.context(), { sourceRef: secondToken, maxTokens: 1000 })
+    expect(current.ok, current.error).toBe(true)
+    expect(JSON.parse(current.content)).toMatchObject({ resourceKey: f.fields[0].resourceKey, content: TEXT })
+    expect(canonicalStringify(first)).toBe(original)
     expect(fetch).not.toHaveBeenCalled()
   })
 

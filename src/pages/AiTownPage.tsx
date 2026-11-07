@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1, evaluateCurrentProductEntryV1 } from '../lib/product/product-catalog'
 import BrandIcon from '../components/shared/BrandIcon'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
@@ -116,6 +117,8 @@ function comparisonCopy(local: EditingFrame, committed: EditingFrame | null) {
     committed: committed ? copy(committed) : null };
 }
 export default function AiTownPage() {
+  const catalogEntry = evaluateCurrentProductEntryV1('upper.ai-town')
+  const canAuthor = catalogEntry.enterable
   const { pageId = "library" } = useParams(),
     [params] = useSearchParams(),
     navigate = useNavigate();
@@ -407,6 +410,8 @@ export default function AiTownPage() {
     if (!updated.dirty && !updated.sourceDirty) retained.current.delete(updated.key);
   };
   const save = async () => {
+    assertCurrentProductEntryV1('upper.ai-town')
+
     if (loading || (projectId && !row)) throw new Error("作品正在加载或已不存在，请从作品库重新选择");
     const captured = captureEditingFrame(), isCurrent = currentAction();
     const savedEdits = editVersion.current;
@@ -441,6 +446,7 @@ export default function AiTownPage() {
   };
   const saveSource = async () => {
     if (!frameRef.current.sourceDirty) return;
+    assertCurrentProductEntryV1('upper.ai-town')
     const captured = captureEditingFrame(scope ?? undefined), isCurrent = currentAction();
     if (!captured.basis || !captured.selection) throw new Error("请先选择世界版本");
     const savedSource = sourceVersion.current;
@@ -689,6 +695,7 @@ export default function AiTownPage() {
             </aside>
           )}
           <main className="lf-content" ref={content}>
+      {!canAuthor && <p role="status" className="lf-paper">当前产品尚未开放创作；已保存作品、原始内容和发行版本仍可查看。</p>}
 
             {error && (
               <p className="avg-alert" role="alert">
@@ -736,7 +743,7 @@ export default function AiTownPage() {
                   <>
                     <section className="lf-paper">
                       <div className="avg-actions">
-                        <button
+                        <button disabled={!canAuthor}
                           className="lf-action lf-action-primary"
                           onClick={() => {
                             const prior = frameRef.current;
@@ -807,12 +814,12 @@ export default function AiTownPage() {
                         保存配置不会调用模型或开始制作。未选择世界时也可以填写。
                       </p>
                       <fieldset
-                        disabled={busy || !formReady || Boolean(row && !row.draft)}
+                        disabled={(busy || !formReady || Boolean(row && !row.draft)) || !canAuthor}
                         className="avg-form"
                       >
                         <label>
                           小镇名称
-                          <input
+                          <input disabled={!canAuthor}
                             aria-label="小镇名称"
                             value={title}
                             maxLength={200}
@@ -824,7 +831,7 @@ export default function AiTownPage() {
                         </label>
                         <AuthorSettings settings={settings} page={page[0]} onChange={s=>{setSettings(s);setDirty(true)}}/>
                         <div className="avg-actions">
-                          <button
+                          <button disabled={!canAuthor}
                             className="lf-action lf-action-primary"
                             onClick={() =>
                               void run(async () => {
@@ -841,7 +848,7 @@ export default function AiTownPage() {
                             保存制作方案
                           </button>
                           {step === 4 ? (
-                            <button className="lf-action" onClick={compile}>
+                            <button disabled={!canAuthor} className="lf-action" onClick={compile}>
                               生成或更新审查方案
                             </button>
                           ) : null}
@@ -902,9 +909,9 @@ export default function AiTownPage() {
                           <button
                             className="lf-action"
                             disabled={
-                              busy ||
+                              (busy ||
                               Boolean(row && !row.draft) ||
-                              Boolean(handoffError)
+                              Boolean(handoffError)) || !canAuthor
                             }
                             onClick={() =>
                               void run(async () => {
@@ -948,7 +955,7 @@ export default function AiTownPage() {
                             <h3>选择本小镇读取的资源</h3>
                             <label>
                               建议起点
-                              <select
+                              <select disabled={!canAuthor}
                                 value={suggestionKey}
                                 onChange={(e) => {
                                   setSuggestionKey(e.target.value);setSourceDirty(true);
@@ -985,14 +992,14 @@ export default function AiTownPage() {
                                 ["storyArcResourceKeys", "storyArcs", "故事线"],
                               ] as const
                             ).map(([key, field, label]) => (
-                              <fieldset key={key}>
+                              <fieldset disabled={!canAuthor} key={key}>
                                 <legend>{label}</legend>
                                 {sources.sourceOptions[field].map((o) => (
                                   <label
                                     className="town-check"
                                     key={o.resourceKey}
                                   >
-                                    <input
+                                    <input disabled={!canAuthor}
                                       type="checkbox"
                                       checked={selection[key].includes(
                                         o.resourceKey,
@@ -1013,7 +1020,7 @@ export default function AiTownPage() {
                                 ))}
                               </fieldset>
                             ))}
-                            <button
+                            <button disabled={!canAuthor}
                               className="lf-action"
                               onClick={() =>
                                 void run(async () => {
@@ -1031,7 +1038,7 @@ export default function AiTownPage() {
                     )}
                   </>
                 ) : page[0] === "agent" ? (
-                  <><button className="lf-action" disabled={busy || !formReady} onClick={()=>void run(async()=>{
+                  <><button className="lf-action" disabled={(busy || !formReady) || !canAuthor} onClick={()=>void run(async()=>{
                     const isCurrent = currentAction(), target = await save();
                     if (!isCurrent()) return;
                     navigate(path('agent',target));setNotice('制作方案已保存');
@@ -1071,7 +1078,7 @@ export default function AiTownPage() {
                           </button>
                           {!row?.project.productPlatformOptIns
                             ?.productProductionV3 && (
-                            <button
+                            <button disabled={!canAuthor}
                               className="lf-action"
                               onClick={() =>
                                 void run(async () => {

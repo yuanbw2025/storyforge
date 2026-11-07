@@ -18,6 +18,10 @@ const mocks = vi.hoisted(() => ({
     adoptCandidate: vi.fn(async () => undefined),
   },
   worldviewStore: {
+    loadedScope: { projectId: 1, worldId: 11, workId: 12 },
+    activeWorldGroupId: null,
+    loading: false,
+    loadError: null,
     worldview: {
       id: 7,
       projectId: 1,

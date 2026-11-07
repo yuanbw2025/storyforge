@@ -10,7 +10,7 @@ import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY } from '../../src/lib/agent/workflow-catalog'
-import type { MasterAgentPlan } from '../../src/lib/agent/orchestrator'
+import { executeMasterAgentPlan, type MasterAgentPlan } from '../../src/lib/agent/orchestrator'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
@@ -159,7 +159,40 @@ describe.sequential('R-HARNESS23 · 主 Agent 有限 fan-out', { timeout: 15_000
     })
     vi.stubGlobal('fetch', fetchMock)
     const plan = fanOutPlan()
-    const result = await runDurableMasterAgentPlanV1({ scope: fixture.scope, worldGroupId: fixture.worldGroupId, conversationId: conversation.id, plan, budget: new AgentTeamBudgetTracker('balanced') })
+    const observed: { runId: number | null; firstExecuteErrors: unknown[]; tasks: unknown[]; boundaries: unknown[] } = {
+      runId: null, firstExecuteErrors: [], tasks: [], boundaries: [],
+    }
+    const errorDetails = (error: unknown): unknown => error instanceof Error ? {
+      name: error.name, message: error.message, stack: error.stack ?? null,
+      cause: 'cause' in error && error.cause instanceof Error
+        ? { name: error.cause.name, message: error.cause.message, stack: error.cause.stack ?? null } : null,
+    } : { type: typeof error, text: String(error) }
+    const result = await runDurableMasterAgentPlanV1({ scope: fixture.scope, worldGroupId: fixture.worldGroupId, conversationId: conversation.id, plan, budget: new AgentTeamBudgetTracker('balanced'),
+      onTask(task, status, error) { observed.tasks.push({ taskId: task.id, status, error: error ?? null }) },
+      onDurableBoundary(boundary) { observed.runId = boundary.runId; observed.boundaries.push({ ...boundary }) },
+    }, { execute(input) {
+      return executeMasterAgentPlan(input).catch((error: unknown) => {
+        if (!observed.firstExecuteErrors.length) observed.firstExecuteErrors.push(error)
+        throw error
+      })
+    } }).catch(async (error: unknown) => {
+      // Print the original cause before any failure-only diagnostic DB await.
+      console.error('[HARNESS23:first-failure]', JSON.stringify({
+        fixture: 'synthetic limited fan-out first case', runId: observed.runId,
+        firstExecuteError: observed.firstExecuteErrors.length ? errorDetails(observed.firstExecuteErrors[0]) : null,
+        outerError: errorDetails(error), tasks: observed.tasks, boundaries: observed.boundaries,
+      }, null, 2))
+      if (observed.runId != null) {
+        try {
+          const stepFailed = await db.agentRunEvents.where('runId').equals(observed.runId)
+            .filter(event => event.type === 'step.failed').sortBy('sequence')
+          console.error('[HARNESS23:raw-step.failed]', JSON.stringify({ runId: observed.runId, stepFailed }, null, 2))
+        } catch (readError) {
+          console.error('[HARNESS23:diagnostic-read-failed]', JSON.stringify({ runId: observed.runId, error: errorDetails(readError) }, null, 2))
+        }
+      }
+      throw error
+    })
     expect(result.candidates).toHaveLength(3)
     const calls = fetchMock.mock.calls.length
     const ref = (at: number) => ({ scope: fixture.scope, worldGroupId: fixture.worldGroupId, runId: result.runId, candidateEventId: result.candidates[at].event.id! })
