@@ -95,10 +95,17 @@ export interface ChapterPlanReconciliation {
   generatedAt: number
   // 用户的对账操作记录
   actions?: Record<string, { action: string; indices: number[] }>
+  /** Immutable item keys within this report, with the plan hash after our own writes. */
+  outlineSync?: { appliedItemKeys: string[]; planSourceHash: string }
 }
 
 /** 章节 */
 type ChapterNarrativeFieldsV1 = NarrativeDomainMetadataV1 & Pick<NarrativeDomainFieldsV1, 'narrativeDisclosuresV1'>
+
+/** Validate manuscript storage without trimming text or touching optional legacy fields. */
+export function assertChapterContentV1(value: unknown): asserts value is string {
+  if (typeof value !== 'string') throw new Error('content 必须是正文字符串，空正文请使用空字符串。')
+}
 
 export interface Chapter extends RagDocumentMetadata, ChapterNarrativeFieldsV1 {
   id?: number

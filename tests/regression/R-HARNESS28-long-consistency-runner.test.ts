@@ -64,7 +64,10 @@ function judgeOutput(fixtureId: string, options: { escalateIntent?: boolean; cle
 function successfulCall(options: { escalateIntent?: boolean; cleanFalsePositive?: boolean } = {}) {
   return async ({ fixture }: H4LongConsistencyVerifierCallInputV1) => ({
     output: judgeOutput(fixture.id, options),
-    usage: { inputTokens: 1_000, outputTokens: 100, durationMs: 25, costUsd: 0.01 },
+    usage: {
+      inputTokens: 1_000, outputTokens: 100, durationMs: 25, costUsd: 0.01,
+      provenance: { input: 'provider' as const, output: 'provider' as const, providerTotalTokens: 1100, cost: 'fallback-estimate' as const },
+    },
   })
 }
 
@@ -170,7 +173,10 @@ describe('R-HARNESS28 · H4 verifier runner, recovery and sealed scoring', { tim
     const failures: H4LongConsistencyRunCheckpointV1[] = []
     const call = vi.fn(async (input: Parameters<ReturnType<typeof successfulCall>>[0]) => (
       call.mock.calls.length === 1
-        ? { output: 'not-json', usage: { inputTokens: 10, outputTokens: 1, durationMs: 2, costUsd: 0 } }
+        ? { output: 'not-json', usage: {
+            inputTokens: 10, outputTokens: 1, durationMs: 2, costUsd: 0,
+            provenance: { input: 'provider' as const, output: 'provider' as const, providerTotalTokens: 11, cost: 'missing' as const },
+          } }
         : successfulCall()(input)
     ))
     const checkpoint = await runH4LongConsistencyVerifierV1(runnerInput({

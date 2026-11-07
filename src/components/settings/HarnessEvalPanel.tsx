@@ -3,8 +3,6 @@ import { ClipboardCopy, Download, FileJson, LoaderCircle, Play, RotateCcw, Shiel
 import { type ChatResult } from '../../lib/ai/client'
 import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
-import { estimateTokens } from '../../lib/ai/context-budget'
-import { computeCostUsd } from '../../lib/ai/usage-log'
 import {
   evaluateContextCompressionNonInferiorityV1,
   H17_CONTEXT_COMPRESSION_RESULTS_STORAGE_KEY,
@@ -36,6 +34,7 @@ import {
   type H4SubtypeAdjudicationCheckpointV1,
   type H4SubtypeAdjudicationSealedScoreV1,
 } from '../../lib/evals/long-consistency'
+import { measureLongConsistencyProviderUsageV1, PROVIDER_USAGE_POLICY_V1 } from '../../lib/evals/long-consistency/model-usage'
 import { getFixtures } from '../../lib/evals/long-consistency/fixtures'
 import type { EvalSplit } from '../../lib/evals/long-consistency/types'
 import type { AIConfig, ChatMessage } from '../../lib/types'
@@ -155,7 +154,7 @@ async function callH4Verifier(
   const timeout = setTimeout(() => controller.abort(), 180_000)
   const startedAt = performance.now()
   try {
-    const result: ChatResult = {}
+    const result: ChatResult = { captureProviderTokenUsage: true }
     const output = await executeRegisteredAIEntryV1(
       'eval.long-consistency.verifier',
       input.messages,
@@ -167,18 +166,10 @@ async function callH4Verifier(
         ? { responseFormat: 'json_object' }
         : undefined,
     )
-    const inputTokens = result.usage?.inputTokens
-      ?? input.messages.reduce((sum, message) => sum + estimateTokens(message.content), 0)
-    const outputTokens = result.usage?.outputTokens ?? estimateTokens(output)
-    return {
-      output,
-      usage: {
-        inputTokens,
-        outputTokens,
-        durationMs: Math.round(performance.now() - startedAt),
-        costUsd: computeCostUsd(config.model, inputTokens, outputTokens),
-      },
-    }
+    return { output, usage: measureLongConsistencyProviderUsageV1({
+      tokens: result.providerTokenUsage, config, messages: input.messages,
+      output, durationMs: Math.round(performance.now() - startedAt),
+    }) }
   } finally {
     clearTimeout(timeout)
   }
@@ -195,7 +186,7 @@ async function callH4SubtypeAdjudicator(
   const timeout = setTimeout(() => controller.abort(), 180_000)
   const startedAt = performance.now()
   try {
-    const result: ChatResult = {}
+    const result: ChatResult = { captureProviderTokenUsage: true }
     const output = await executeRegisteredAIEntryV1(
       'eval.long-consistency.adjudicator',
       input.messages,
@@ -205,18 +196,10 @@ async function callH4SubtypeAdjudicator(
       result,
       { responseFormat: 'json_object' },
     )
-    const inputTokens = result.usage?.inputTokens
-      ?? input.messages.reduce((sum, message) => sum + estimateTokens(message.content), 0)
-    const outputTokens = result.usage?.outputTokens ?? estimateTokens(output)
-    return {
-      output,
-      usage: {
-        inputTokens,
-        outputTokens,
-        durationMs: Math.round(performance.now() - startedAt),
-        costUsd: computeCostUsd(config.model, inputTokens, outputTokens),
-      },
-    }
+    return { output, usage: measureLongConsistencyProviderUsageV1({
+      tokens: result.providerTokenUsage, config, messages: input.messages,
+      output, durationMs: Math.round(performance.now() - startedAt),
+    }) }
   } finally {
     clearTimeout(timeout)
   }
@@ -585,8 +568,10 @@ export default function HarnessEvalPanel() {
         })
       : null
   ), [fullCompressionRecord, semanticCompressionRecord])
-  const adjudicationDevelopmentPassed = adjudicationSplits.development.score?.gate.passed === true
-  const developmentPassed = splits.development.score?.gate.passed === true || adjudicationDevelopmentPassed
+  const adjudicationDevelopmentPassed = adjudicationSplits.development.score?.usagePolicy === PROVIDER_USAGE_POLICY_V1
+    && adjudicationSplits.development.score.gate.passed
+  const developmentPassed = (splits.development.score?.usagePolicy === PROVIDER_USAGE_POLICY_V1
+    && splits.development.score.gate.passed) || adjudicationDevelopmentPassed
   const busy = runningSplit != null || runningAdjudicationSplit != null || compressionRunning
 
   const renderSplit = (split: EvalSplit, label: string) => {
@@ -714,10 +699,14 @@ export default function HarnessEvalPanel() {
             <span>高严重度精确率 {formatRate(score.highSeverityHard.precision.estimate)}</span>
             <span>高严重度召回率 {formatRate(score.highSeverityHard.recall.estimate)}</span>
             <span>证据回查 {formatRate(score.evidence.verificationRate.estimate)}</span>
-            <span className={score.gate.passed ? 'text-success' : 'text-error'}>
-              {score.gate.passed ? '门禁 PASS' : `门禁 FAIL · ${score.gate.failures.join(', ')}`}
+            <span className={score.usagePolicy !== PROVIDER_USAGE_POLICY_V1 ? 'text-text-muted' : score.gate.passed ? 'text-success' : 'text-error'}>
+              {score.usagePolicy !== PROVIDER_USAGE_POLICY_V1 ? '历史评分 · 无法验证实测用量'
+                : score.gate.passed ? '门禁 PASS' : `门禁 FAIL · ${score.gate.failures.join(', ')}`}
             </span>
             <span>验证调用 {score.usage.modelCalls}</span>
+            {score.usagePolicy === PROVIDER_USAGE_POLICY_V1 && (
+              <span>实测 {score.usage.meteredModelCalls} · 缺完整实测 {score.usage.unmeteredModelCalls}</span>
+            )}
             <span>验证输入 {score.usage.inputTokens} tokens</span>
             <span>验证输出 {score.usage.outputTokens} tokens</span>
             <span>验证估算成本 ${score.usage.costUsd.toFixed(4)}</span>
@@ -844,11 +833,15 @@ export default function HarnessEvalPanel() {
             <span>高严重度精确率 {formatRate(score.highSeverityHard.precision.estimate)}</span>
             <span>高严重度召回率 {formatRate(score.highSeverityHard.recall.estimate)}</span>
             <span>证据回查 {formatRate(score.evidence.verificationRate.estimate)}</span>
-            <span className={score.gate.passed ? 'text-success' : 'text-error'}>
-              {score.gate.passed ? '门禁 PASS' : `门禁 FAIL · ${score.gate.failures.join(', ')}`}
+            <span className={score.usagePolicy !== PROVIDER_USAGE_POLICY_V1 ? 'text-text-muted' : score.gate.passed ? 'text-success' : 'text-error'}>
+              {score.usagePolicy !== PROVIDER_USAGE_POLICY_V1 ? '历史评分 · 无法验证实测用量'
+                : score.gate.passed ? '门禁 PASS' : `门禁 FAIL · ${score.gate.failures.join(', ')}`}
             </span>
             <span>发现调用 {score.usage.discovery.modelCalls}</span>
             <span>判类调用 {score.usage.adjudication.modelCalls}</span>
+            {score.usagePolicy === PROVIDER_USAGE_POLICY_V1 && (
+              <span>实测 {score.usage.total.meteredModelCalls} · 缺完整实测 {score.usage.total.unmeteredModelCalls}</span>
+            )}
             <span>总输入 {score.usage.total.inputTokens} tokens</span>
             <span>总输出 {score.usage.total.outputTokens} tokens</span>
             <span>总估算成本 ${score.usage.total.costUsd.toFixed(4)}</span>

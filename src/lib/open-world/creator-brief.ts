@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import { estimateTokens } from '../ai/context-budget'
 import { resolveRequestConfig, type ChatResult } from '../ai/client'
 import { computeKnownCostUsd } from '../ai/usage-log'
@@ -46,9 +47,11 @@ import type {
 import { assertRecordInScope, readOwnedRows, scopeTransactionTables } from '../workspace/scope'
 import { DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1 } from './product-config'
 import { assertTextOpenWorldNewSourceV1 } from './source-admission'
+import { assertTextOpenWorldCreatorProtagonistSelectionV1 } from './creator-source'
 import {
   createTextOpenWorldCreatorSourceLocatorV1,
   inspectTextOpenWorldCreatorSourceLocatorV1,
+  readTextOpenWorldCreatorProtagonistSourceKeyV1,
   TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1,
   TEXT_OPEN_WORLD_CREATOR_BRIEF_VERIFIER_V1,
   TEXT_OPEN_WORLD_CREATOR_PRODUCT_BOUNDARY_V1,
@@ -202,8 +205,10 @@ function rangeValue(value: unknown, label: string, minimum: number, maximum: num
 
 export function parseTextOpenWorldCreatorBriefDraftV1(value: unknown): TextOpenWorldCreatorBriefDraftV1 {
   const root = record(value, 'creatorBriefDraft')
+  const protagonistSourceResourceKey = readTextOpenWorldCreatorProtagonistSourceKeyV1(root)
   exact(root, [
     'schema', 'version', 'gameTitle', 'playerRole', 'playerFantasy', 'protagonistMode',
+    ...(protagonistSourceResourceKey === undefined ? [] : ['protagonistSourceResourceKey']),
     'protagonistDirective', 'coreGoal', 'primaryConflict', 'openingSituation',
     'experiencePillars', 'toneKeywords', 'mustKeep', 'allowedInferences', 'forbiddenChanges',
     'contentRating', 'contentBoundaries', 'authorNotes', 'unresolvedQuestions',
@@ -245,6 +250,7 @@ export function parseTextOpenWorldCreatorBriefDraftV1(value: unknown): TextOpenW
     playerRole: textValue(root.playerRole, 'playerRole', 2_000),
     playerFantasy: textValue(root.playerFantasy, 'playerFantasy', 2_000),
     protagonistMode,
+    ...(protagonistSourceResourceKey === undefined ? {} : { protagonistSourceResourceKey }),
     protagonistDirective: textValue(root.protagonistDirective, 'protagonistDirective', 2_000),
     coreGoal: textValue(root.coreGoal, 'coreGoal', 2_000),
     primaryConflict: textValue(root.primaryConflict, 'primaryConflict', 2_000),
@@ -516,6 +522,7 @@ export async function startTextOpenWorldCreatorBriefSessionV1(input: {
   sessionKey: string
   createdAt?: number
 }): Promise<TextOpenWorldCreatorBriefSessionV1> {
+  assertCurrentProductEntryV1('upper.text-open-world')
   assertTextOpenWorldNewSourceV1(input.selection.sourceKind, '创建来源会谈')
   input = { ...input, selection: structuredClone(input.selection) }
   const selection = await recheckSelection(input.selection)
@@ -541,6 +548,7 @@ export async function startTextOpenWorldCreatorBriefSessionV1(input: {
   })
   if (!intent.ok) fail(intent.errorCode ?? 'production-intent', String(intent.result.message ?? '无法创建 ProductProduction'))
   const purpose = `${TEXT_OPEN_WORLD_CREATOR_BRIEF_PURPOSE_PREFIX_V1}${bindingHash}:${key}`
+  assertCurrentProductEntryV1('upper.text-open-world')
   const conversation = await getOrCreateAgentConversation({
     projectId: scope.projectId,
     worldGroupId: null,
@@ -564,6 +572,7 @@ export async function startTextOpenWorldCreatorBriefSessionV1(input: {
         }
         return
       }
+      assertCurrentProductEntryV1('upper.text-open-world')
       const initialDraft = createDefaultTextOpenWorldCreatorBriefDraftV1(selection)
       const payload: CreatorBriefSessionStartEventV1 = {
         schema: 'storyforge.text-open-world-creator-brief-session-start',
@@ -647,6 +656,7 @@ export async function saveTextOpenWorldCreatorBriefDraftV1(input: {
   savedAt?: number
 }): Promise<TextOpenWorldCreatorBriefSessionV1> {
   input = structuredClone(input)
+  assertCurrentProductEntryV1('upper.text-open-world')
   assertTextOpenWorldNewSourceV1(input.session.sourceBinding.kind, '保存制作简报草稿')
   await recheckSelection(requireSessionSelection(input.session))
   const draft = parseTextOpenWorldCreatorBriefDraftV1(input.draft)
@@ -658,6 +668,7 @@ export async function saveTextOpenWorldCreatorBriefDraftV1(input: {
     draftHash: await hashCanonicalValue(draft),
     savedAt: input.savedAt ?? Date.now(),
   }
+  assertCurrentProductEntryV1('upper.text-open-world')
   await appendAgentEvent({
     projectId: input.session.scope.projectId,
     conversationId: input.session.conversation.id,
@@ -913,6 +924,7 @@ export async function generateTextOpenWorldCreatorBriefCandidateV1(input: {
   input = { ...input, session: structuredClone(input.session), draft: structuredClone(input.draft),
     ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }),
   }
+  assertCurrentProductEntryV1('upper.text-open-world')
   assertTextOpenWorldNewSourceV1(input.session.sourceBinding.kind, '制作简报模型会谈')
   if (!input.aiConfig && !input.runAI) fail('ai-config', '缺少 AI 配置；仍可人工编辑并确认 Brief')
   const freshSelection = await recheckSelection(requireSessionSelection(input.session))
@@ -962,6 +974,7 @@ export async function generateTextOpenWorldCreatorBriefCandidateV1(input: {
   const contextManifestHashes: string[] = []
   const modelCalls: TextOpenWorldCreatorBriefModelEvidenceV1[] = []
   const invoke = async (attempt: 1 | 2, repairIssue?: string, badOutput?: string) => {
+    assertCurrentProductEntryV1('upper.text-open-world')
     const manifestHash = await run.manifestForAttempt(attempt)
     snapshot = await readAgentRunV1(saved.scope, snapshot.run.id)
     contextManifestHashes.push(manifestHash)
@@ -986,6 +999,20 @@ export async function generateTextOpenWorldCreatorBriefCandidateV1(input: {
     const result: ChatResult = {}
     const startedAt = Date.now()
     let output: string
+    try { assertCurrentProductEntryV1('upper.text-open-world') }
+    catch (cause) {
+      result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }
+      result.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+      const unavailable = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error: cause })
+      snapshot = await appendRun(saved.scope, unavailable.snapshot, 'step.failed', {
+        stepId: TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1, attempt,
+        code: 'product-catalog-denied-before-dispatch', retryable: false, category: 'deterministic', action: 'fail',
+      })
+      snapshot = await appendRun(saved.scope, snapshot, 'run.failed', {
+        code: 'product-catalog-denied-before-dispatch', retryable: false,
+      })
+      throw unavailable.report
+    }
     try {
       output = input.runAI
         ? await input.runAI(messages, input.signal)
@@ -1183,6 +1210,7 @@ export async function confirmTextOpenWorldCreatorBriefV1(input: {
   confirmedAt?: number
 }): Promise<TextOpenWorldCreatorBriefSessionV1> {
   input = structuredClone(input)
+  assertCurrentProductEntryV1('upper.text-open-world')
   assertTextOpenWorldNewSourceV1(input.session.sourceBinding.kind, '确认制作简报')
   const production = await db.productProductions.get(input.session.production.id)
   if (!production || production.stateRevision !== input.session.production.stateRevision) {
@@ -1201,6 +1229,9 @@ export async function confirmTextOpenWorldCreatorBriefV1(input: {
   if (await hashCanonicalValue(selectionBinding(selection)) !== input.session.sourceBindingHash) {
     fail('source-stale', '来源已变化，请重新选择并重新会谈')
   }
+  await assertTextOpenWorldCreatorProtagonistSelectionV1({ selection, mode: draft.protagonistMode,
+    resourceKey: draft.protagonistSourceResourceKey })
+  assertCurrentProductEntryV1('upper.text-open-world')
   let snapshot: AgentRunSnapshotV1
   let previousCandidateHash: string
   let contextManifestHashes: string[]

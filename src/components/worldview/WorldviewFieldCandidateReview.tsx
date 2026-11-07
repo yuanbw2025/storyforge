@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type UIEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CompositionEvent, type FormEvent, type UIEvent } from 'react'
 import { CTextarea } from '../shared/CompositionInput'
-import type { PendingMasterCandidate } from '../agent/useMasterCopilot'
+import type { PendingMasterCandidate, VisibleMasterCandidateDraftV1 } from '../agent/useMasterCopilot'
 import {
   parseWorldviewFieldCandidateDraft,
   type WorldviewFieldCopilotCandidate,
@@ -24,36 +24,70 @@ function baselineValue(candidate: PendingMasterCandidate, field: string): unknow
   return snapshot?.values?.[field] ?? ''
 }
 
-function serializeWithValue(candidate: WorldviewFieldCopilotCandidate, value: string): string {
+function serializeWithValue(candidate: WorldviewFieldCopilotCandidate, value: unknown): string {
   return JSON.stringify({ ...candidate, value }, null, 2)
 }
 
 export default function WorldviewFieldCandidateReview({
   candidate,
   busy,
+  visibleDraft,
   onUpdate,
+  onInvalidEdit,
 }: {
   candidate: PendingMasterCandidate
   busy: boolean
-  onUpdate: (content: string) => void
+  visibleDraft?: VisibleMasterCandidateDraftV1
+  onUpdate: (content: string, rawValue: string) => void
+  onInvalidEdit?: (rawValue: string, error: string) => void
 }) {
   const parsed = useMemo(() => {
     try { return parseWorldviewFieldCandidateDraft(candidate.event.content) }
     catch { return null }
   }, [candidate.event.content])
-  const [draftValue, setDraftValue] = useState(() => (
-    typeof parsed?.value === 'string' ? parsed.value : JSON.stringify(parsed?.value ?? {}, null, 2)
-  ))
+  const savedValue = typeof parsed?.value === 'string' ? parsed.value : JSON.stringify(parsed?.value ?? {}, null, 2)
+  const [localValue, setLocalValue] = useState(savedValue)
+  const draftValue = visibleDraft?.rawValue ?? (onInvalidEdit ? savedValue : localValue)
   const [showChangesOnly, setShowChangesOnly] = useState(false)
   const [syncScroll, setSyncScroll] = useState(true)
   const leftRef = useRef<HTMLTextAreaElement | null>(null)
   const rightRef = useRef<HTMLTextAreaElement | null>(null)
   const syncing = useRef(false)
+  const composing = useRef(false)
 
   useEffect(() => {
-    if (!parsed) return
-    setDraftValue(typeof parsed.value === 'string' ? parsed.value : JSON.stringify(parsed.value, null, 2))
-  }, [candidate.event.id, candidate.event.content, parsed])
+    setLocalValue(savedValue)
+  }, [candidate.event.id, savedValue])
+
+  const edit = (raw: string) => {
+    setLocalValue(raw)
+    let content: string
+    try {
+      const value = parsed && typeof parsed.value !== 'string' ? JSON.parse(raw) : raw
+      content = parsed ? serializeWithValue(parsed, value) : raw
+      const validated = parseWorldviewFieldCandidateDraft(content)
+      const field = parsed?.field ?? candidate.payload.worldviewField
+      if (field && validated.field !== field) throw new Error('不能修改候选对应的世界字段。')
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : String(cause)
+      onInvalidEdit?.(raw, cause instanceof SyntaxError ? `对象 JSON 无效：${detail}` : detail)
+      return
+    }
+    onUpdate(content, raw)
+  }
+
+  const compositionError = '正在组合输入，请先完成输入或放弃本次修改。'
+  const editEvents = {
+    onCompositionStartCapture: (event: CompositionEvent<HTMLTextAreaElement>) => {
+      composing.current = true
+      onInvalidEdit?.(event.currentTarget.value, compositionError)
+    },
+    onCompositionEndCapture: () => { composing.current = false },
+    onInputCapture: (event: FormEvent<HTMLTextAreaElement>) => {
+      if (composing.current) onInvalidEdit?.(event.currentTarget.value, compositionError)
+    },
+    onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => edit(event.target.value),
+  }
 
   if (!parsed) {
     return (
@@ -61,9 +95,10 @@ export default function WorldviewFieldCandidateReview({
         <p className="text-xs text-error">历史候选无法解析为字段 artifact；请修复结构后再采纳。</p>
         <CTextarea
           aria-label={`${candidate.payload.label}候选原始内容`}
-          value={candidate.event.content}
+          value={visibleDraft?.rawValue ?? candidate.event.content}
           disabled={busy}
-          onChange={event => onUpdate(event.target.value)}
+          aria-invalid={visibleDraft?.status === 'blocked'}
+          {...editEvents}
           className="min-h-48 w-full resize-y font-mono text-xs leading-5"
         />
       </div>
@@ -78,14 +113,8 @@ export default function WorldviewFieldCandidateReview({
           aria-label={`${candidate.payload.label}候选内容`}
           value={draftValue}
           disabled={busy}
-          onChange={event => {
-            setDraftValue(event.target.value)
-            try {
-              onUpdate(JSON.stringify({ ...parsed, value: JSON.parse(event.target.value) }, null, 2))
-            } catch {
-              // Keep the local value editable; invalid object JSON is not persisted as a candidate.
-            }
-          }}
+          aria-invalid={visibleDraft?.status === 'blocked'}
+          {...editEvents}
           className="min-h-48 w-full resize-y font-mono text-xs leading-5"
         />
       </div>
@@ -117,12 +146,8 @@ export default function WorldviewFieldCandidateReview({
       value={draftValue}
       disabled={busy}
       onScroll={event => sync('right', event)}
-      onChange={event => {
-        setDraftValue(event.target.value)
-        if (event.target.value.trim().length >= 2) {
-          onUpdate(serializeWithValue(parsed, event.target.value))
-        }
-      }}
+      aria-invalid={visibleDraft?.status === 'blocked'}
+      {...editEvents}
       className="min-h-56 w-full resize-y text-xs leading-5"
     />
   )

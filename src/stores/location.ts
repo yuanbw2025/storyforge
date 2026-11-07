@@ -4,6 +4,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { ImportantLocation } from '../lib/types'
+import { readLocationTagsV1 } from '../lib/types/location'
 import { clearImportantLocationReferences } from '../lib/location/lifecycle'
 import { transactionTablesForReferences } from '../lib/registry/lifecycle'
 import { REGISTRY_BY_NAME } from '../lib/registry/project-tables'
@@ -19,7 +20,7 @@ interface LocationStore {
 
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   addLocation: (data: Omit<ImportantLocation, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
-  updateLocation: (id: number, patch: Partial<ImportantLocation>) => Promise<void>
+  updateLocation: (id: number, patch: Partial<ImportantLocation>, options?: { expectedTags: unknown }) => Promise<void>
   deleteLocation: (id: number) => Promise<void>
   /** 移动地点到新父节点 */
   moveLocation: (id: number, newParentId: number | null) => Promise<void>
@@ -40,6 +41,7 @@ export const useLocationStore = create<LocationStore>((set, get) => ({
 
   addLocation: async (data) => {
     const capturedData = { ...data }
+    readLocationTagsV1(capturedData.tags)
     const now = Date.now()
     const scope = await resolveScopeLike(capturedData.projectId)
     const newRow = await db.transaction('rw', scopeTransactionTables(db.importantLocations), async () => {
@@ -56,16 +58,25 @@ export const useLocationStore = create<LocationStore>((set, get) => ({
     return newRow.id
   },
 
-  updateLocation: async (id, patch) => {
+  updateLocation: async (id, patch, options) => {
     const capturedPatch = { ...patch }
+    if (Object.prototype.hasOwnProperty.call(capturedPatch, 'tags')) readLocationTagsV1(capturedPatch.tags)
+    const expectedTags = options ? JSON.stringify(options.expectedTags) : undefined
     const now = Date.now()
     const existing = await db.importantLocations.get(id)
-    if (!existing) return
+    if (!existing) {
+      if (options) throw new Error('地点已删除，原标签修复输入已保留。')
+      return
+    }
     const scope = await resolveScopeLike(existing.projectId)
     const nextRow = await db.transaction('rw', scopeTransactionTables(db.importantLocations), async () => {
       await resolveScopeLike(scope)
       const current = await db.importantLocations.get(id)
-      if (!current || !await assertRecordInScope(scope, 'importantLocations', current, { owner: 'world' })) return null
+      if (!current || !await assertRecordInScope(scope, 'importantLocations', current, { owner: 'world' })) {
+        if (options) throw new Error('地点已删除或归属改变，原标签修复输入已保留。')
+        return null
+      }
+      if (options && JSON.stringify(current.tags) !== expectedTags) throw new Error('地点标签已被其它页面修改，修复输入已保留，请重新核对。')
       const next = { ...current, ...capturedPatch, updatedAt: now }
       if ((capturedPatch.id != null && capturedPatch.id !== id)
         || !await assertRecordInScope(scope, 'importantLocations', next, { owner: 'world' })) {

@@ -702,6 +702,9 @@ async function adoptCollection(
           throw new Error(`[adopt] 重复记录 ${input.target}.${JSON.stringify(identityValue(item, adoption))}`)
         }
       } else {
+        // A partial candidate must not turn creation defaults into an overwrite
+        // of an existing row's tags or manuscript.
+        item = { ...adoption.createDefaults, ...item }
         if (!await validateTreePatch(item, input, result, undefined, raw)) return
         const id = await tableSpec.table.add(item as any) as number
         result.written.push({ id, fields: Object.keys(item) })

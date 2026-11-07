@@ -103,6 +103,7 @@ export interface CharacterCopilotInput {
   promptExecutionEvidence?: PromptExecutionEvidenceV1
   routingCategory?: string
   signal?: AbortSignal
+  beforeModelDispatch?: () => Promise<void>
 }
 
 export interface PreparedCharacterCopilot {
@@ -346,6 +347,7 @@ export async function prepareCharacterCopilot(input: {
   promptExecution?: PromptExecutionOptionsV1
   contextCompressionRuntime?: AgentContextCompressionRuntimeV1
   signal?: AbortSignal
+  beforeModelDispatch?: () => Promise<void>
 }): Promise<PreparedCharacterCopilot> {
   const project = await db.projects.get(input.projectId)
   if (!project) throw new Error('项目不存在。')
@@ -425,6 +427,7 @@ export async function prepareCharacterCopilot(input: {
     generationOverrides: input.generationOverrides,
     routingCategory,
     signal: input.signal,
+    beforeModelDispatch: input.beforeModelDispatch,
   }
   if (input.promptExecution) {
     const rendered = await renderFrozenPromptExecutionV1({
@@ -522,7 +525,8 @@ export function createCharacterCopilotNode(
         : {}),
     },
     contextOverflowPolicy: 'reject',
-  }, input.signal))
+  }, input.signal, ...(input.beforeModelDispatch
+    ? [{ beforeModelDispatch: input.beforeModelDispatch }] as const : [] as const)))
 
   return {
     id: `agent.chat-copilot.character:${input.projectId}:${input.worldGroupId ?? 'global'}:${input.snapshot.serialized.length}`,
