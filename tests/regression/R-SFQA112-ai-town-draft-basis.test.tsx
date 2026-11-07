@@ -540,18 +540,20 @@ it('threads actual own World, SourceSelection and Brief revisions through later 
     const nativePrepare = townService.prepareAiTownBrief
     let changedDuringPrepare = false, nativePrepareSettled = false
     let observationFailure: unknown
-    const observer = vi.spyOn(townService, 'prepareAiTownBrief').mockImplementation((...args) => {
+    const observer = vi.spyOn(townService, 'prepareAiTownBrief').mockImplementation(async (...args) => {
       const original = nativePrepare(...args)
-      // Observe the real original promise; do not replace its result or DB work.
-      // This same-owner source checkbox is genuinely enabled while prepare runs.
+      // Keep the real work and result. Hold only its UI acknowledgement until
+      // the real source view is ready and the author has made the dirty edit.
+      void original.catch(() => {})
       try {
-        void router.navigate('/town/source?project=' + owner.scope.projectId + '&work=' + owner.scope.workId, { flushSync: true })
-        const input = sourceCheckbox()
-        flushSync(() => { input.click() })
-        changedDuringPrepare = true
+        await router.navigate('/town/source?project=' + owner.scope.projectId + '&work=' + owner.scope.workId, { flushSync: true })
+        await vi.waitFor(() => {
+          const input = sourceCheckbox()
+          flushSync(() => { input.click() })
+          changedDuringPrepare = true
+        }, { timeout: 5000 })
       } catch (cause) { observationFailure = cause }
-      void original.then(() => { nativePrepareSettled = true }, () => { nativePrepareSettled = true })
-      return original
+      try { return await original } finally { nativePrepareSettled = true }
     })
     restorePrepare = () => observer.mockRestore()
     await click('生成或更新审查方案')

@@ -1,4 +1,6 @@
 import { nanoid } from 'nanoid'
+import Dexie from 'dexie'
+import { canonicalStringify } from '../agent/run/hash'
 import { inspectAdaptationFreshness } from '../adaptation/source-manifest'
 import { db } from '../db/schema'
 import { finalizePendingMediaBlobDeletionV1, markUnreferencedMediaBlobForDeletionV1 } from '../media/blob-store'
@@ -10,8 +12,9 @@ import type {
   ComicVisualSubjectDesignV1,
   Location,
   WorkspaceScope,
+  WorkCharacterBinding,
 } from '../types'
-import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
+import { assertRecordInScope, readOwnedRows, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { effectiveWorkKind } from '../workspace/work-kind'
 import { comicMediaRemovalTransactionTablesV1, readComicRemovalPagesV1, removeComicMediaRowsInTransactionV1 } from './media-lifecycle'
 import {
@@ -317,20 +320,52 @@ export async function listComicVisualSubjects(scopeInput: WorkspaceScope): Promi
   return (await db.comicVisualSubjects.where('adaptationProjectId').equals(adaptation.id).toArray()).filter(row => row.workId === scope.workId && row.projectId === scope.projectId)
 }
 
+/** Display labels do not change the subject's visual evidence. */
+export function comicVisualSubjectReviewSignatureV1(subject: ComicVisualSubject): string {
+  return canonicalStringify({ stableKey: subject.stableKey, kind: subject.kind,
+    characterId: subject.characterId, locationRefKey: subject.locationRefKey, design: subject.design,
+    sourceUnitIds: subject.sourceUnitIds, sourceReviewManifestVersion: subject.sourceReviewManifestVersion,
+    selectedMediaAssetKey: subject.selectedMediaAssetKey, reviewed: subject.status !== 'draft' })
+}
+
+/** Called by both author editing and professional adoption in their root-CAS transaction. */
+export async function invalidateComicVisualReviewsInTransactionV1(input: {
+  scope: WorkspaceScope; adaptationProjectId: number; changedSubjectKeys: ReadonlySet<string>; allPanels?: boolean
+}): Promise<void> {
+  if (Dexie.currentTransaction?.db !== db || Dexie.currentTransaction.mode !== 'readwrite') throw new Error('[comic] 视觉审查失效必须在同一写事务内执行')
+  if (!input.allPanels && !input.changedSubjectKeys.size) return
+  const pages = await readComicRemovalPagesV1(input.scope, input.adaptationProjectId)
+  const panels = pages.size ? await db.comicPanels.where('pageId').anyOf([...pages.keys()]).filter(panel => input.allPanels === true
+    || [...panel.continuityRefs, ...(panel.subjectStates ?? [])].some(ref => input.changedSubjectKeys.has(ref.subjectKey))).toArray() : []
+  for (const panel of panels) {
+    if (!await assertRecordInScope(input.scope, 'comicPanels', panel, { owner: 'work' })) throw new Error('[comic] 视觉审查引用越过当前作品作用域')
+    if (panel.status === 'locked' || pages.get(panel.pageId)?.status === 'locked') throw new Error('[comic] 视觉条目被锁定页格引用，请先解锁')
+  }
+  const updatedAt = Date.now()
+  await db.comicPanels.bulkPut(panels.map(panel => ({ ...panel,
+    visualReviewRevision: null, visualReviewBasis: null, visualReviewedAt: null, updatedAt })))
+}
+
 export async function saveComicVisualSubject(input: {
   scope: WorkspaceScope
   subjectId?: number
   expectedRevision?: number
   draft: Pick<ComicVisualSubject, 'stableKey' | 'kind' | 'characterId' | 'locationRefKey' | 'label' | 'sourceUnitIds'> & { design: ComicVisualSubjectDesignV1; status?: ComicVisualSubject['status'] }
 }): Promise<ComicVisualSubject> {
+  input = structuredClone(input)
   const { scope, adaptation } = await requireComic(input.scope, true)
   if ((await inspectAdaptationFreshness(adaptation.id)).status !== 'unchanged' && input.subjectId == null) throw new Error('[comic] 来源 stale 时不能新增视觉条目')
-  const deps = await dependencies(adaptation)
-  return db.transaction('rw', scopeTransactionTables(db.comicVisualSubjects, db.workCharacterBindings, db.adaptationSourceUnits, db.characters), async () => {
+  return db.transaction('rw', scopeTransactionTables(db.adaptationProjects, db.comicVisualSubjects, db.comicPages, db.comicPanels,
+    db.comicMediaAssets, db.workCharacterBindings, db.adaptationSourceUnits, db.characters, db.geographies), async () => {
+    const currentRoot = await db.adaptationProjects.get(adaptation.id)
+    if (!currentRoot || currentRoot.revision !== adaptation.revision || currentRoot.status === 'complete'
+      || currentRoot.activeSourceManifestVersion !== adaptation.activeSourceManifestVersion
+      || currentRoot.activeSourceManifestHash !== adaptation.activeSourceManifestHash) throw new Error('[comic] 改编根或来源已变化，请刷新')
     const previous = input.subjectId == null ? null : await db.comicVisualSubjects.get(input.subjectId)
-    if (input.subjectId != null && (!previous || previous.workId !== scope.workId || previous.adaptationProjectId !== adaptation.id)) throw new Error('[comic] 视觉条目不存在或越界')
+    if (input.subjectId != null && (!previous || previous.adaptationProjectId !== adaptation.id
+      || !await assertRecordInScope(scope, 'comicVisualSubjects', previous, { owner: 'work' }))) throw new Error('[comic] 视觉条目不存在或越界')
     if (previous && previous.revision !== input.expectedRevision) throw new Error('[comic] 视觉条目已变化，请刷新')
-    if (previous?.status === 'locked' && input.draft.status !== 'reviewed') throw new Error('[comic] 锁定视觉条目必须先解锁')
+    if (previous && previous.stableKey !== input.draft.stableKey) throw new Error('[comic] 已有视觉主体的稳定 key 不可修改；显示名称可编辑')
     const now = Date.now()
     const subject: ComicVisualSubject = stampNewRecord(scope, 'comicVisualSubjects', {
       ...(previous ?? {}), projectId: scope.projectId, workId: scope.workId, adaptationProjectId: adaptation.id,
@@ -340,10 +375,49 @@ export async function saveComicVisualSubject(input: {
       status: input.draft.status ?? previous?.status ?? 'draft', revision: (previous?.revision ?? 0) + 1,
       createdAt: previous?.createdAt ?? now, updatedAt: now,
     }, { owner: 'work' })
-    assertComicVisualSubjectV1({ subject, adaptation, sourceUnitIds: deps.sourceUnitIds, bindings: deps.bindings, locationRefKeys: deps.locationRefKeys })
+    const visualChanged = !previous || comicVisualSubjectReviewSignatureV1(previous) !== comicVisualSubjectReviewSignatureV1(subject)
+    if (previous?.status === 'locked' && (subject.status !== 'reviewed' || visualChanged || subject.label !== previous.label)) throw new Error('[comic] 锁定视觉条目必须先单独解锁，再编辑设定')
+    const deps = await dependencies(adaptation)
+    const [characters, workBindings] = await Promise.all([
+      readOwnedRows(scope, 'characters', { owner: 'world' }),
+      readOwnedRows<WorkCharacterBinding>(scope, 'workCharacterBindings', { owner: 'work' }),
+    ])
+    deps.bindings = workBindings.filter(binding => characters.some(character => character.id === binding.characterId))
+    const locationRefKeys = new Set<string>()
+    if (subject.locationRefKey || previous?.locationRefKey) {
+      const geographies = await readOwnedRows<{ locations: string }>(scope, 'geographies', { owner: 'world' })
+      for (const geography of geographies) {
+        let locations: unknown
+        try { locations = JSON.parse(geography.locations) }
+        catch { throw new Error('[comic] 地点来源无法解析') }
+        if (!Array.isArray(locations)) throw new Error('[comic] 地点来源不是有效列表')
+        for (const location of locations) if (location && typeof location === 'object' && 'id' in location
+          && typeof location.id === 'string') locationRefKeys.add(location.id)
+      }
+    }
+    // Check the persisted references before a draft can clear them or change kind.
+    // A reference already cleared by the governed deletion lifecycle stays nullable.
+    if (previous?.characterId != null && !deps.bindings.some(binding => binding.characterId === previous.characterId)) throw new Error('[comic] 已有角色绑定已失效或越过目标 Work/World')
+    if (previous?.locationRefKey && !locationRefKeys.has(previous.locationRefKey)) throw new Error('[comic] 已有地点绑定已失效或越过目标 World')
+    const allowMissingExternalRef = previous != null && previous.kind === subject.kind && (subject.kind === 'character'
+      ? previous.characterId == null && subject.characterId == null
+      : subject.kind === 'location' && !previous.locationRefKey && !subject.locationRefKey)
+    assertComicVisualSubjectV1({ subject, adaptation, sourceUnitIds: deps.sourceUnitIds, bindings: deps.bindings,
+      locationRefKeys, allowMissingExternalRef })
+    if (subject.selectedMediaAssetKey) {
+      const asset = await db.comicMediaAssets.where('[workId+stableKey]').equals([scope.workId, subject.selectedMediaAssetKey]).first()
+      const role = { character: 'character-sheet', location: 'location-sheet', prop: 'prop-sheet', style: 'style-reference' }[subject.kind]
+      if (!asset || asset.adaptationProjectId !== adaptation.id || asset.subjectKey !== subject.stableKey || asset.role !== role
+        || asset.disposition !== 'available' || !await assertRecordInScope(scope, 'comicMediaAssets', asset, { owner: 'work' })) throw new Error('[comic] 已选参考图已失效或不属于当前主体类型')
+    }
     const duplicate = await db.comicVisualSubjects.where('[workId+stableKey]').equals([scope.workId, subject.stableKey]).first()
     if (duplicate && duplicate.id !== previous?.id) throw new Error('[comic] 视觉条目 stableKey 重复')
     const id = await db.comicVisualSubjects.put(subject) as number
+    await invalidateComicVisualReviewsInTransactionV1({ scope, adaptationProjectId: adaptation.id,
+      changedSubjectKeys: new Set(visualChanged ? [subject.stableKey] : []) })
+    // Every author save changes the draft generation, including label-only saves,
+    // so a review or release begun before this transaction cannot acknowledge it.
+    await db.adaptationProjects.update(adaptation.id, { revision: adaptation.revision + 1, updatedAt: now })
     return { ...subject, id: previous?.id ?? id }
   })
 }

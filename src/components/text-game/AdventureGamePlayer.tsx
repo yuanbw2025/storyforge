@@ -222,6 +222,7 @@ export default function AdventureGamePlayer(props: {
   const mediaVerificationKeys = useRef(new Set<string>())
   const progressiveMedia = useRef(createProductProgressiveMediaRequestLedgerV1()).current
   const playerMounted = useRef(true)
+  const playerOperation = useRef(0)
 
   useEffect(() => {
     playerMounted.current = true
@@ -230,14 +231,17 @@ export default function AdventureGamePlayer(props: {
 
   useEffect(() => {
     let active = true
+    playerOperation.current += 1
     // Resolve the library before the explicit route session; never briefly open
     // whichever unrelated session happened to be selected in a previous page.
     void store.load(props.scope, props.worldGroupId, true).then(async () => {
       if (active && props.initialSessionId != null) await store.select(props.initialSessionId)
     })
-    return () => { active = false; store.cancelPendingLoad() }
+    return () => { active = false; playerOperation.current += 1; store.cancelPendingLoad() }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.scope.projectId, props.scope.worldId, props.scope.workId, props.worldGroupId, props.initialSessionId])
+
+  useEffect(() => { playerOperation.current += 1; setLocalError('') }, [store.selectedSessionId])
 
   const selected = store.sessions.find(item => item.id === store.selectedSessionId) ?? null
   const selectedRelease = selected?.productReleaseId != null
@@ -502,8 +506,24 @@ export default function AdventureGamePlayer(props: {
   }, [activeNarrativeUnit, narrativePlayback])
 
   const run = async (action: () => Promise<unknown>) => {
+    const operation = ++playerOperation.current
+    const sessionId = store.selectedSessionId
+    let viewChanged = false
+    // React may batch a failed navigation back to the same selected session.
+    // Observe its synchronous store transition, not just the final render.
+    const unsubscribe = useAdventureGamePlayerStore.subscribe(state => {
+      if (state.loading) viewChanged = true
+    })
+    const current = () => {
+      const active = useAdventureGamePlayerStore.getState()
+      return !viewChanged && playerMounted.current && operation === playerOperation.current && !active.loading
+        && active.selectedSessionId === sessionId && active.scope?.projectId === props.scope.projectId
+        && active.scope?.worldId === props.scope.worldId && active.scope?.workId === props.scope.workId
+    }
     setLocalError('')
-    try { await action() } catch (reason) { setLocalError(reason instanceof Error ? reason.message : String(reason)) }
+    try { await action(); return current() }
+    catch (reason) { if (current()) setLocalError(reason instanceof Error ? reason.message : String(reason)); return false }
+    finally { unsubscribe() }
   }
 
   const systemResponse = (command: AdventureSystemCommand): string => {
@@ -703,7 +723,7 @@ export default function AdventureGamePlayer(props: {
           })}
           {consoleResponse && <article className="adventure-console-entry adventure-console-response"><header className="adventure-player-command"><span>&gt;</span><strong>{consoleResponse.command}</strong><small>你 · 指令</small></header><div className="adventure-console-prose"><p className="adventure-system-response">{consoleResponse.text}</p></div></article>}
           {generating && <article className="adventure-console-system"><Loader2 /><p>主 Agent 正在理解你的行动……</p><button onClick={() => void store.cancelGeneration()}><Square />取消</button></article>}
-          {store.pendingIntent && <article className="adventure-console-intent"><small>请确认行动</small><strong>{presentationText(manifest.adventure.actions.find(item => item.key === store.pendingIntent?.actionKey)?.label) || store.pendingIntent.actionKey}</strong><p>{presentationText(store.pendingIntent.rationale)}</p><div><button onClick={() => void run(async () => { await store.adoptPendingIntent(); setConsoleResponse(null) })}><Check />执行</button><button onClick={() => void run(() => store.rejectPendingIntent())}>取消</button></div></article>}
+          {store.pendingIntent && !store.loading && store.pendingIntent.productRuntimeSessionId === store.selectedSessionId && <article className="adventure-console-intent"><small>请确认行动</small><strong>{presentationText(manifest.adventure.actions.find(item => item.key === store.pendingIntent?.actionKey)?.label) || store.pendingIntent.actionKey}</strong><p>{presentationText(store.pendingIntent.rationale)}</p><div><button onClick={() => void run(() => store.adoptPendingIntent()).then(current => { if (current) setConsoleResponse(null) })}><Check />执行</button><button onClick={() => void run(() => store.rejectPendingIntent())}>取消</button></div></article>}
           {!!store.recoverableRunIds.length && <details className="adventure-console-recovery"><summary>恢复未完成的主 Agent 行动</summary><p>候选已经保存在统一 Harness 中，可以从原检查点继续，不会重复调用模型。</p>{store.recoverableRunIds.map(runId => <button key={runId} disabled={store.busy || generating} onClick={() => void run(() => store.resumeRun(runId))}>恢复行动 #{runId}</button>)}</details>}
         </section>
 

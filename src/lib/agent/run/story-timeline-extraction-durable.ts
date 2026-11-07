@@ -1,3 +1,8 @@
+import Dexie from 'dexie'
+import { db } from '../../db/schema'
+import { ADOPTION_BY_TARGET } from '../../registry/adoption-schema'
+import { REGISTRY_BY_NAME } from '../../registry/project-tables'
+import { parseAgentRunEventV1 } from './event-schema'
 import { chat } from '../../ai/client'
 import {
   buildStoryTimelinePrompt,
@@ -9,11 +14,14 @@ import { splitExtractionText, uniqueBy } from '../../ai/structured-extraction'
 import type { AIConfig, Chapter, ChatMessage, WorkspaceScope } from '../../types'
 import { assembleContext } from '../../registry/assemble-context'
 import { replaceAdoptedCollection } from '../../registry/adopt'
-import { readOwnedRows } from '../../workspace/scope'
+import { readOwnedRows, scopeTransactionTables } from '../../workspace/scope'
 import { getAgentSkillV1 } from '../skill-registry'
 import { createAgentSkillExecutionBindingV1 } from '../execution-binding'
 import {
   appendAgentRunEventV1,
+  appendAgentRunEventWithSettlementInTransactionV1,
+  readVerifiedAgentRunInTransactionV1,
+  withAgentRunMutationLockV1,
   createAgentRunV1,
   readAgentRunV1,
   staleAgentRunVerificationV1,
@@ -22,12 +30,19 @@ import {
 import { createContextManifestFromAssemblyV1 } from './context-manifest'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from './checkpoint'
 import { createVerificationReceiptV1 } from './verification-receipt'
-import { hashCanonicalValue } from './hash'
+import { hashCanonicalValue as hashValue } from './hash'
 
 export const STORY_TIMELINE_EXTRACTION_STEP_ID_V1 = 'prose:story-timeline-extraction' as const
 export const STORY_TIMELINE_EXTRACTION_VERIFIER_SET_V1 = 'story-timeline-extraction-terminal-v1' as const
 const MAX_MODEL_CALLS = 64
 const MAX_CANDIDATES = 500
+
+/** Registered-context verification can run under the adoption lock. Only the
+ * pure digest needs keep-alive; database reads are never wrapped in waitFor. */
+function hashCanonicalValue(value: unknown): Promise<string> {
+  const pending = hashValue(value)
+  return Dexie.currentTransaction ? Dexie.waitFor(pending) : pending
+}
 
 type RunAI = (messages: ChatMessage[], callIndex: number) => Promise<string>
 
@@ -878,6 +893,7 @@ export async function readRecoverableStoryTimelineExtractionV1(input: {
   for (const row of rows) {
     if (!row.id) continue
     const snapshot = await readAgentRunV1(input.scope, row.id)
+    if (snapshot.projection.steps[STORY_TIMELINE_EXTRACTION_STEP_ID_V1]?.status === 'stale') continue
     try {
       const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope, row.id)
       if (!checkpoint) throw new Error('缺少故事年表提取检查点。')
@@ -1020,6 +1036,52 @@ async function saveAdoptionProgress(
   return { snapshot: saved.snapshot, progress }
 }
 
+class ExtractionEvidenceStaleError extends Error {}
+
+function adoptionTransactionTables() {
+  const related = (ADOPTION_BY_TARGET.get('storyTimelineEvents')?.fkChecks ?? []).flatMap(check => {
+    const spec = REGISTRY_BY_NAME.get(check.target)
+    return spec ? [spec.table] : []
+  })
+  return scopeTransactionTables(db.storyTimelineEvents, db.chapters, ...related)
+}
+
+/** Verify the frozen registered inputs and target baseline under one write
+ * lock. Own collection changes are checked separately by the caller. */
+async function withFreshSources<T>(
+  scope: WorkspaceScope,
+  plan: StoryTimelineExtractionPlanV1,
+  apply: (recheck: () => Promise<void>) => Promise<T>,
+  extraTables: Parameters<typeof scopeTransactionTables> = [],
+): Promise<T> {
+  return db.transaction('rw', [...adoptionTransactionTables(), ...extraTables], async () => {
+    const verify = async () => {
+      try { await Dexie.Promise.resolve(verifyCurrentPlan(scope, plan, { requireTimelineBaseline: false })) } catch {
+        throw new ExtractionEvidenceStaleError('提取来源已变化。')
+      }
+    }
+    await verify()
+    return await Dexie.Promise.resolve(apply(verify))
+  })
+}
+
+async function stopStaleAdoption(
+  scope: WorkspaceScope,
+  snapshot: AgentRunSnapshotV1,
+  candidate: StoryTimelineExtractionCandidateV1,
+  progress: StoryTimelineExtractionAdoptionProgressV1,
+  error: unknown,
+): Promise<never> {
+  if (!(error instanceof ExtractionEvidenceStaleError)) throw error
+  const current = stableTimeline(await readOwnedRows<Record<string, unknown>>(scope, 'storyTimelineEvents', { owner: 'work' }))
+  const retained = progress.formalChapters.filter(formal => sameValue(formalRowsFromStable(current, formal.chapterId), formal.rows)).length
+  await append(scope, snapshot, 'candidate.staled', {
+    stepId: STORY_TIMELINE_EXTRACTION_STEP_ID_V1, candidateHash: candidate.candidateHash,
+    reason: 'timeline-extraction-adoption-evidence-stale',
+  })
+  throw new Error(`${error.message}已保留 ${retained}/${progress.formalChapters.length} 章当前采纳结果与作者改动；剩余采纳已停止，请刷新查看结果后重新提取。`)
+}
+
 export async function adoptStoryTimelineExtractionCandidateV1(input: {
   scope: WorkspaceScope
   runId: number
@@ -1037,6 +1099,7 @@ export async function adoptStoryTimelineExtractionCandidateV1(input: {
   let adoption = state.adoption
   if (adoption && !sameValue(adoption.selectedIndexes, indexes)) throw new Error('故事年表采纳选择与冻结意图不一致。')
   const step = snapshot.projection.steps[STORY_TIMELINE_EXTRACTION_STEP_ID_V1]
+  if (step?.status === 'stale') throw new Error('故事年表旧候选已失效，请刷新后重新提取。')
   if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash && adoption) {
     let upstreamFresh = true
     try { await verifyCurrentPlan(input.scope, candidate.plan, { requireTimelineBaseline: false }) } catch { upstreamFresh = false }
@@ -1098,31 +1161,33 @@ export async function adoptStoryTimelineExtractionCandidateV1(input: {
   } else if (step?.confirmation !== 'adopt' || !adoption) {
     throw new Error('故事年表候选不在可恢复采纳状态。')
   }
-  try { await verifyCurrentPlan(input.scope, candidate.plan, { requireTimelineBaseline: false }) } catch (error) {
-    await pauseUnsafeRun(input.scope, snapshot, 'story-timeline-extraction-upstream-stale-during-adoption')
-    throw error
-  }
   while (adoption.nextChapterIndex < adoption.formalChapters.length) {
     const chapterIndex = adoption.nextChapterIndex
     const formal = adoption.formalChapters[chapterIndex]
-    const inspected = await inspectAdoptionState({ scope: input.scope, progress: adoption })
-    if (!inspected.fresh) {
-      await pauseUnsafeRun(input.scope, snapshot, 'story-timeline-extraction-formal-state-diverged')
-      throw new Error(`故事年表正式状态与冻结进度不一致：${inspected.reason ?? 'unknown'}。`)
-    }
-    if (!inspected.nextAlreadyApplied) {
-      const result = await replaceAdoptedCollection({
-        projectId: input.scope.projectId,
-        workspaceScope: input.scope,
-        target: 'storyTimelineEvents',
-        scope: { chapterId: formal.chapterId },
-        data: formal.rows.map(row => ({ ...row })),
+    const progress = adoption
+    try {
+      await withFreshSources(input.scope, candidate.plan, async () => {
+        const inspected = await inspectAdoptionState({ scope: input.scope, progress })
+        if (!inspected.fresh) {
+          throw new ExtractionEvidenceStaleError(`故事年表正式状态与冻结进度不一致：${inspected.reason ?? 'unknown'}。`)
+        }
+        if (!inspected.nextAlreadyApplied) {
+          const result = await replaceAdoptedCollection({
+            projectId: input.scope.projectId,
+            workspaceScope: input.scope,
+            target: 'storyTimelineEvents',
+            scope: { chapterId: formal.chapterId },
+            data: formal.rows.map(row => ({ ...row })),
+          })
+          if (result.written.length !== formal.rows.length) throw new Error('故事年表章节替换未完整写入。')
+        }
+        const current = stableTimeline(await readOwnedRows<any>(input.scope, 'storyTimelineEvents', { owner: 'work' }))
+        if (!sameValue(formalRowsFromStable(current, formal.chapterId), formal.rows)) {
+          throw new ExtractionEvidenceStaleError('故事年表章节替换后与冻结意图不一致。')
+        }
       })
-      if (result.written.length !== formal.rows.length) throw new Error('故事年表章节替换未完整写入。')
-    }
-    const current = stableTimeline(await readOwnedRows<any>(input.scope, 'storyTimelineEvents', { owner: 'work' }))
-    if (!sameValue(formalRowsFromStable(current, formal.chapterId), formal.rows)) {
-      throw new Error('故事年表章节替换后与冻结意图不一致。')
+    } catch (error) {
+      return stopStaleAdoption(input.scope, snapshot, candidate, progress, error)
     }
     await input.onDurableBoundary?.('formal.chapter', snapshot, chapterIndex)
     const body = {
@@ -1140,10 +1205,16 @@ export async function adoptStoryTimelineExtractionCandidateV1(input: {
     snapshot = saved.snapshot
     adoption = saved.progress
   }
-  const terminal = await allFormalState({ scope: input.scope, progress: adoption })
-  if (!terminal.fresh) {
-    await pauseUnsafeRun(input.scope, snapshot, 'story-timeline-extraction-formal-state-changed-before-terminal')
-    throw new Error('故事年表正式状态在终验前发生变化。')
+  const finalProgress = adoption
+  let terminal: Awaited<ReturnType<typeof allFormalState>>
+  try {
+    terminal = await withFreshSources(input.scope, candidate.plan, async () => {
+      const formal = await allFormalState({ scope: input.scope, progress: finalProgress })
+      if (!formal.fresh) throw new ExtractionEvidenceStaleError('故事年表正式状态在终验前已变化。')
+      return formal
+    })
+  } catch (error) {
+    return stopStaleAdoption(input.scope, snapshot, candidate, finalProgress, error)
   }
   let adoptionHash = snapshot.projection.steps[STORY_TIMELINE_EXTRACTION_STEP_ID_V1]?.adoptionHash
   if (!adoptionHash) {
@@ -1168,26 +1239,45 @@ export async function adoptStoryTimelineExtractionCandidateV1(input: {
     await input.onDurableBoundary?.('verification.started', snapshot)
   }
   const postStateHash = await hashCanonicalValue(terminal.rows)
-  const receipt = await createVerificationReceiptV1({
-    version: 1,
-    runId: snapshot.run.id,
-    generation: snapshot.projection.generation,
-    contractHash: snapshot.projection.contractHash,
-    contextManifestHashes: [...new Set(candidate.plan.chunks.map(chunk => chunk.contextManifestHash))],
-    candidateHashes: [candidate.candidateHash],
-    adoptionEventIds: [],
-    postStateHash,
-    verifierSetVersion: STORY_TIMELINE_EXTRACTION_VERIFIER_SET_V1,
-    criteria: [
-      { id: 'story-timeline.candidate', status: 'passed', evidenceRefs: [`candidate:${candidate.candidateHash}`] },
-      { id: 'story-timeline.author', status: 'passed', evidenceRefs: [`intent:${adoption.intentHash}`] },
-      { id: 'story-timeline.post-state', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },
-    ],
-    acceptedAt: Date.now(),
-  })
-  snapshot = await append(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
+  let accepted: { snapshot: AgentRunSnapshotV1; receiptHash: string }
+  try {
+    accepted = await withAgentRunMutationLockV1(snapshot.run.id, () => withFreshSources(input.scope, candidate.plan, async recheck => {
+      const fresh = await Dexie.Promise.resolve(readVerifiedAgentRunInTransactionV1(input.scope, snapshot.run.id))
+      if (fresh.projection.lastSequence !== snapshot.projection.lastSequence) throw new Error('故事年表运行已被其它执行者推进，请刷新后重试。')
+      const formal = await allFormalState({ scope: input.scope, progress: finalProgress })
+      if (!formal.fresh || !sameValue(formal.rows, terminal.rows)) throw new ExtractionEvidenceStaleError('故事年表正式状态在签发回执前已变化。')
+      const receipt = await Dexie.waitFor(createVerificationReceiptV1({
+        version: 1,
+        runId: snapshot.run.id,
+        generation: snapshot.projection.generation,
+        contractHash: snapshot.projection.contractHash,
+        contextManifestHashes: [...new Set(candidate.plan.chunks.map(chunk => chunk.contextManifestHash))],
+        candidateHashes: [candidate.candidateHash],
+        adoptionEventIds: [],
+        postStateHash,
+        verifierSetVersion: STORY_TIMELINE_EXTRACTION_VERIFIER_SET_V1,
+        criteria: [
+          { id: 'story-timeline.candidate', status: 'passed', evidenceRefs: [`candidate:${candidate.candidateHash}`] },
+          { id: 'story-timeline.author', status: 'passed', evidenceRefs: [`intent:${finalProgress.intentHash}`] },
+          { id: 'story-timeline.post-state', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },
+        ],
+        acceptedAt: Date.now(),
+      }))
+      await recheck()
+      const event = parseAgentRunEventV1({
+        version: 1, runId: fresh.run.id, sequence: fresh.projection.lastSequence + 1,
+        generation: fresh.projection.generation, projectId: fresh.run.projectId,
+        worldGroupId: fresh.run.worldGroupId ?? null, contractHash: fresh.run.contractHash,
+        type: 'verification.accepted', payload: { receiptHash: receipt.receiptHash }, createdAt: Date.now(),
+      })
+      return { snapshot: await Dexie.Promise.resolve(appendAgentRunEventWithSettlementInTransactionV1({ scope: input.scope, snapshot: fresh, event })), receiptHash: receipt.receiptHash }
+    }, [db.agentRuns, db.agentRunEvents]))
+  } catch (error) {
+    return stopStaleAdoption(input.scope, snapshot, candidate, finalProgress, error)
+  }
+  snapshot = accepted.snapshot
   await input.onDurableBoundary?.('verification.accepted', snapshot)
-  return { snapshot, receiptHash: receipt.receiptHash, written: indexes.length }
+  return { snapshot, receiptHash: accepted.receiptHash, written: indexes.length }
 }
 
 export async function abandonStoryTimelineExtractionV1(input: {

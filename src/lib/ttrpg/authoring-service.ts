@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import { db } from "../db/schema";
 import {
   createWorkspace,
@@ -104,6 +105,7 @@ export async function saveTtrpgDraft(
   settings: TtrpgAuthoringSettings,
   title: string,
 ) {
+  assertCurrentProductEntryV1('upper.ttrpg')
   if (!title.trim() || title.length > 200)
     throw new Error("请填写 1～200 字的战役名称");
   if (!Number.isSafeInteger(revision) || revision < 0 || revision >= Number.MAX_SAFE_INTEGER)
@@ -137,6 +139,7 @@ export async function saveTtrpgDraft(
         preparedRevision: null,
         updatedAt: Date.now(),
       };
+      assertCurrentProductEntryV1('upper.ttrpg')
       await db.ttrpgAuthoringDrafts.put(next);
       await updateWorkTitle(scope, title);
       return next;
@@ -148,6 +151,7 @@ export async function selectTtrpgWorld(
   revision: number,
   releaseId: number,
 ) {
+  assertCurrentProductEntryV1('upper.ttrpg')
   const row = await readTtrpgDraft(scope);
   if (row.revision !== revision) throw new Error("方案已变化，请重新选择");
   const localId = await cacheWorldReferenceForProductV1(scope, releaseId);
@@ -167,6 +171,7 @@ export async function selectTtrpgWorld(
         revision: revision + 1,
         updatedAt: Date.now(),
       };
+      assertCurrentProductEntryV1('upper.ttrpg')
       await db.ttrpgAuthoringDrafts.put(next);
       return next;
     },
@@ -179,6 +184,7 @@ export async function saveTtrpgSourceSelection(
   suggestionKey: string,
   selection: import("../types").ProductProductionSourceSelectionV1,
 ) {
+  assertCurrentProductEntryV1('upper.ttrpg')
   const row = await readTtrpgDraft(scope);
   if (!row.worldReleaseId) throw new Error("请选择世界版本");
   const { consultProductProductionStartV1 } = await import(
@@ -222,6 +228,7 @@ export async function saveTtrpgSourceSelection(
         revision: revision + 1,
         updatedAt: Date.now(),
       };
+      assertCurrentProductEntryV1('upper.ttrpg')
       await db.ttrpgAuthoringDrafts.put(next);
       return next;
     },

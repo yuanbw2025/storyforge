@@ -1,4 +1,5 @@
 import { deriveAvgAssemblyRecoveryBaseV1 } from '../avg/assembly-recovery'
+import { assertCurrentProductEntryV1, productCatalogIdForProductionV1 } from '../product/product-catalog'
 import {
   assertTextOpenWorldNewSourceV1,
   assertTextOpenWorldProductionNewWorkV1,
@@ -3246,6 +3247,19 @@ async function applyCommand(input: {
   return { production, result: { briefRevision: revision, briefHash, base: command.base } }
 }
 
+/** Historical receipts and zero-call maintenance retain their own proof gates. */
+function assertProductProductionCommandEntryV1(
+  productType: ProductProductionRecordV1['productType'],
+  command: ProductProductionCommandV1,
+): void {
+  switch (command.type) {
+    case 'pause': case 'stop': case 'archive': case 'restore': case 'request-preview':
+    case 'book-local-no-dispatch': case 'book-original-response': return
+    case 'resolve-blocker': if (command.resolution.action === 'cancel') return
+  }
+  assertCurrentProductEntryV1(productCatalogIdForProductionV1(productType))
+}
+
 async function executeTransaction(input: {
   preparedChatConsultationWitness?: string
   preparedLocalNoDispatchBooking?: Awaited<ReturnType<typeof prepareProductProductionLocalNoDispatchBookingV1>> | null
@@ -3317,6 +3331,7 @@ async function executeTransaction(input: {
         if (!await assertRecordInScope(scope, 'productProductions', existing, { owner: 'work' })) reject('production-state-conflict', 'productionKey 跨 Work 冲突')
         production = existing as ProductProductionRecordV1 & { id: number }
       } else {
+        assertProductProductionCommandEntryV1(command.productType, command)
         if (command.type === 'create-intent' && !input.preparedWorldReferenceHash) {
           reject('source-stale', 'create-intent 缺少经中立边界验证的 WorldReference')
         }
@@ -3368,6 +3383,7 @@ async function executeTransaction(input: {
     // Existing immutable receipts above remain readable. Every genuinely new
     // command repeats source admission while its Production/Brief are locked,
     // before a claim or any formal product mutation can be written.
+    assertProductProductionCommandEntryV1(production.productType, command)
     await assertTextOpenWorldCommandSourceV1(production, command)
 
     const claim = stampNewRecord(scope, 'productProductionCommands', {
@@ -3585,7 +3601,7 @@ export async function executeProductProductionCommand(input: {
       return replay
     }
   }
-  if (command.type === 'create-text-open-world-intent') {
+  if (command.type === 'create-intent' || command.type === 'create-text-open-world-intent') {
     const production = await db.productProductions
       .where('[workId+productionKey]').equals([scope.workId, command.productionKey]).first()
     const existing = production?.id == null ? null : await db.productProductionCommands
@@ -3612,6 +3628,11 @@ export async function executeProductProductionCommand(input: {
       notifyProductionChanged(replay)
       return replay
     }
+  }
+  if (command.type === 'create-intent' || command.type === 'create-text-open-world-intent') {
+    assertProductProductionCommandEntryV1(command.productType, command)
+  } else if (Number.isInteger(input.productionId)) {
+    assertProductProductionCommandEntryV1((await productionInScope(scope, input.productionId!)).productType, command)
   }
   if (command.type === 'create-text-open-world-intent') {
     assertTextOpenWorldNewSourceV1(command.sourceLocator.kind, command.type)
