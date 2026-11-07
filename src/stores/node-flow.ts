@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { assertCurrentProductEntryV1 } from '../lib/product/product-catalog'
 import { db } from '../lib/db/schema'
 import type { NodeFlow, NodeRunRecord } from '../lib/types'
 import { parseAuthoringGraph } from '../lib/node-authoring/graph-codec'
@@ -52,6 +53,8 @@ export const useNodeFlowStore = create<NodeFlowStore>((set, get) => ({
   },
 
   createFlow: async (projectId, worldGroupId, options) => {
+    assertCurrentProductEntryV1('authoring.nodes')
+    options = options == null ? options : structuredClone(options)
     const scope = await resolveScopeLike(projectId)
     const now = Date.now()
     const row = stampNewRecord(scope, 'nodeFlows', {
@@ -63,12 +66,15 @@ export const useNodeFlowStore = create<NodeFlowStore>((set, get) => ({
       createdAt: now,
       updatedAt: now,
     } as NodeFlow, { owner: 'work' }) as NodeFlow
+    assertCurrentProductEntryV1('authoring.nodes')
     const id = await db.nodeFlows.add(row) as number
     await get().load(scope)
     return id
   },
 
   saveFlow: async flow => {
+    assertCurrentProductEntryV1('authoring.nodes')
+    flow = structuredClone(flow)
     // 草稿阶段允许缺少连线、必需输入或暂时存在循环；运行前会进行完整图校验。
     // 这里只验证 JSON 外壳，避免作者尚未完成的节点图无法被持久化。
     parseAuthoringGraph(flow.graphJson)
@@ -85,6 +91,7 @@ export const useNodeFlowStore = create<NodeFlowStore>((set, get) => ({
       graphJson: safeAuthoringGraphJson(flow.graphJson),
       updatedAt: now,
     }, { owner: 'work' })
+    assertCurrentProductEntryV1('authoring.nodes')
     const id = await db.nodeFlows.put(row) as number
     if (get().projectId === scope.projectId && get().workId === scope.workId) await get().load(scope)
     return id

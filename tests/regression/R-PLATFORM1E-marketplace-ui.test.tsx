@@ -129,7 +129,10 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
   let root: ReturnType<typeof createRoot>
 
   beforeEach(async () => {
-    localStorage.clear(); await db.delete(); await db.open()
+    localStorage.clear()
+    window.location.href = 'http://localhost:4178/storyforge/'
+    localStorage.setItem('storyforge:experimental-products', 'enabled')
+    await db.delete(); await db.open()
     host = document.createElement('div'); document.body.append(host); root = createRoot(host)
   })
   afterEach(async () => { await act(async () => root.unmount()); host.remove() })
