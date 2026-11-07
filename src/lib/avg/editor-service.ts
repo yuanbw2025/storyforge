@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import Dexie from 'dexie';
 import { db } from "../db/schema";
 import {
@@ -33,6 +34,7 @@ export async function saveAvgEditorV1(
   previewHash: string,
   pkg: ProductRuntimePackageV1,
 ) {
+  scope = structuredClone(scope);
   if (pkg.productType !== "avg" || !/^[a-f0-9]{64}$/.test(previewHash))
     throw new Error("AVG 编辑来源无效");
   const editorJson = JSON.stringify(pkg);
@@ -54,6 +56,7 @@ export async function saveAvgEditorV1(
         revision: revision + 1,
         updatedAt: Date.now(),
       };
+      assertCurrentProductEntryV1('upper.avg');
       await db.avgAuthoringDrafts.put(next);
       return next;
     },
@@ -62,6 +65,7 @@ export async function saveAvgEditorV1(
 
 /** Uses the existing draft/CAS/lifecycle; no canonical rules or Build is changed. */
 export async function saveAvgAuthorWorkspaceV1(scope: WorkspaceScope, revision: number, value: unknown) {
+  scope = structuredClone(scope);
   const draft = parseAvgAuthorWorkspaceV1(value);
   const editorJson = canonicalProductProductionJsonV2(draft);
   return db.transaction('rw', scopeTransactionTables(db.avgAuthoringDrafts), async () => {
@@ -69,6 +73,7 @@ export async function saveAvgAuthorWorkspaceV1(scope: WorkspaceScope, revision: 
     if (row.revision !== revision) throw new Error('编辑草稿已在其他页面修改，请刷新后继续');
     if (row.editorJson && JSON.parse(row.editorJson).schema !== 'storyforge.avg.author-workspace') throw new Error('已有旧版编辑草稿，请先导出保留后再显式转换');
     const next = { ...row, editorJson, editorPreviewHash: draft.basePreviewHash ?? '', revision: revision + 1, updatedAt: Date.now() };
+    assertCurrentProductEntryV1('upper.avg');
     await db.avgAuthoringDrafts.put(next);
     return next;
   });
@@ -152,12 +157,14 @@ async function importAvgMedia(input: AvgMediaImportInputV1, decode: boolean) {
     } finally { URL.revokeObjectURL(url); }
   }
   // Decode before storage; an invalid file never creates an unreferenced blob.
+  assertCurrentProductEntryV1('upper.avg');
   const blob = await putMediaBlobObject({scope,data:input.data,mimeType:input.mimeType,expectedContentHash:contentHash});
   await db.transaction('rw',scopeTransactionTables(db.mediaBlobObjects,db.avgDraftMedia),async()=>{
     await resolveScope({scope});
     const current = await db.mediaBlobObjects.get(blob.id!);
     if(!current || current.storageState!=='ready' || !await assertRecordInScope(scope,'mediaBlobObjects',current,{owner:'work'})
       ||current.contentHash!==contentHash||current.byteSize!==asset.byteSize||current.mimeType!==asset.mimeType) throw new Error('素材存储在导入期间已变化，请重新导入');
+    assertCurrentProductEntryV1('upper.avg');
     await db.avgDraftMedia.add(stampNewRecord(scope,'avgDraftMedia',{...scope,blobObjectId:blob.id!,assetJson:JSON.stringify(asset),createdAt:Date.now()},{owner:'work'}));
   });
   return asset;

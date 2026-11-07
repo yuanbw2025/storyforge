@@ -219,6 +219,11 @@ function key(value: unknown, label: string, maximum = 200): string {
   }
   return value
 }
+/** Audit retains only IDs accepted by the existing command-key protocol. */
+export function communityRequestIdForAuditV1(value: unknown): string | null {
+  try { return key(value, 'requestId') } catch { return null }
+}
+
 function text(value: unknown, label: string, maximum: number, allowEmpty = false): string {
   if (typeof value !== 'string') fail('protocol', `${label} 无效`)
   const result = value.trim().normalize('NFC')

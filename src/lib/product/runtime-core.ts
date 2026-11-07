@@ -10,12 +10,13 @@ import Dexie from "dexie";
 import { createProductRuntimeHeadParsingV1 } from "./runtime-head-parsing";
 import { assertProductReleaseUnchanged } from "./releases";
 import { cascadeRegisteredReferences } from "../workspace/lifecycle";
+import { resolveScope, scopeTransactionTables } from "../workspace/scope";
 import { db } from "../db/schema";
 import { evaluateNarrativeChoices, applyNarrativeChoiceEffects } from "./narrative-content";
 import { normalizeProductRuntimeCommandIdV1 } from "./runtime-command-id";
 import { assertProductRuntimeIntegerV1, isProductRuntimeJsonObjectV1, stableProductRuntimeJsonV1, type ProductRuntimeJsonObjectV1 } from "./runtime-values";
 import { parseNarrativeCondition, parseNarrativeEffects, evaluateNarrativeCondition, applyNarrativeEffects } from "../narrative/blueprint";
-import { transactionTablesForReferenceCascade } from "../registry/lifecycle";
+import { runtimeInstanceTablesV1, transactionTablesForReferenceCascade } from "../registry/lifecycle";
 import { type ProductRuntimeKind, type ProductRuntimeState, type FrozenNarrativeBeat, NARRATIVE_BEAT_KINDS, type FrozenNarrativeChoice, type ProductNarrativeRuntimeNodeSnapshot, NARRATIVE_NODE_KINDS, type ProductNarrativeRuntimeState, NARRATIVE_MODULE_KINDS, type NarrativeChoiceHistoryEntry, type RuntimeAttributes, type RuntimeEntityState, RUNTIME_ENTITY_KINDS, RUNTIME_LIFECYCLE_STATUSES, type RuntimeMemory, type ProductRuntimeEvent, PRODUCT_RUNTIME_EVENT_TYPES, type ProductRuntimeSession, PRODUCT_RUNTIME_KINDS, EMPTY_PRODUCT_RUNTIME_STATE, type AnyProductRuntimePackage, type ProductRuntimeEventType, type ProductRelease, type ProductRuntimeCheckpoint, type ProductRuntimeCheckpointPurposeV1 } from "../types";
 import { verifyProductReleaseManifest, requirePlayableProductRuntimePackage } from "../product-production/runtime-package";
 import { verifyProductRuntimeSource, verifyProductRuntimeSessionSourceV1 } from "../product-production/preview-source";
@@ -2196,11 +2197,33 @@ export interface BranchProductRuntimeSessionInputV1 {
   intent?: ProductRuntimeBranchIntentV1;
 }
 
+/** A later parent event/header update does not change an already selected cut. */
+function runtimeBranchParentBindingV1(parent: ProductRuntimeSession): string {
+  return stableJson({
+    id: parent.id,
+    projectId: parent.projectId,
+    worldId: parent.worldId ?? null,
+    workId: parent.workId ?? null,
+    worldGroupId: parent.worldGroupId ?? null,
+    kind: parent.kind,
+    seed: parent.seed,
+    rulesetVersion: parent.rulesetVersion,
+    productReleaseId: parent.productReleaseId ?? null,
+    productBuildId: parent.productBuildId ?? null,
+    runtimeSourceHash: parent.runtimeSourceHash,
+    canonSnapshotJson: parent.canonSnapshotJson,
+    initialStateJson: parent.initialStateJson,
+  });
+}
+
 async function branchProductRuntimeSessionInternal(
   input: BranchProductRuntimeSessionInputV1,
 ): Promise<ProductRuntimeSession> {
+  input = structuredClone(input);
   const parent = await db.productRuntimeSessions.get(input.parentSessionId);
   if (!parent) throw new Error("父产品运行会话不存在。");
+  const parentBinding = runtimeBranchParentBindingV1(parent);
+  const source = await captureFormalRuntimeSourceRecordsV1(parent);
   await verifyProductRuntimeSessionSourceV1({ scope: {
     projectId: parent.projectId, worldId: parent.worldId, workId: parent.workId,
   }, session: parent, ...productRuntimeContentReaderV1(parent.kind) });
@@ -2216,6 +2239,8 @@ async function branchProductRuntimeSessionInternal(
     input.throughSequence > latest
   )
     throw new Error("分支序号不在父会话事件范围内。");
+  const cutEvents = stableJson(events.filter(event => event.sequence <= input.throughSequence)
+    .sort((a, b) => a.sequence - b.sequence));
   const cutpoint = replayProductRuntimeEvents(
     parseProductRuntimeState(parent.initialStateJson),
     events,
@@ -2238,51 +2263,61 @@ async function branchProductRuntimeSessionInternal(
   };
   const ownedBranch = await createProductOwnedRuntimeBranchV1({ parent, state, childInput, events, throughSequence: input.throughSequence });
   if (ownedBranch) return ownedBranch;
-  let child: ProductRuntimeSession;
+  const lineage = { parentSessionId: parent.id!, parentThroughSequence: input.throughSequence };
+  let prepared: ProductRuntimeSession;
   if (parent.productReleaseId != null) {
-    child = await createReleasedProductRuntimeSession({
+    prepared = await prepareReleasedProductRuntimeSessionRecordV1({
       ...childInput,
       worldId: parent.worldId,
       workId: parent.workId,
       productReleaseId: parent.productReleaseId,
       origin: "branch",
-    });
+    }, lineage);
   } else {
-    const parentBuild = await db.productBuilds.get(parent.productBuildId);
-    if (!parentBuild) throw new Error("运行分支绑定的 Build Preview 不存在。");
-    child = await createPreviewProductRuntimeSession({
+    if (source.kind !== 'build') throw new Error("运行分支绑定的 Build Preview 不存在。");
+    prepared = await preparePreviewProductRuntimeSessionRecordV1({
       ...childInput,
       worldId: parent.worldId,
       workId: parent.workId,
       productBuildId: parent.productBuildId,
-      expectedPreviewHash: parentBuild.previewHash,
+      expectedPreviewHash: source.build.previewHash,
       runtimeSourceHash: parent.runtimeSourceHash,
       origin: "branch",
-    });
+    }, lineage);
   }
-  await db.productRuntimeSessions.update(child.id!, {
-    parentSessionId: parent.id!,
-    parentThroughSequence: input.throughSequence,
+  const tables = [...new Set([
+    ...runtimeInstanceTablesV1(),
+    ...transactionTablesForReferenceCascade('productRuntimeSessions'),
+    ...(source.kind === 'release' ? [db.productReleases]
+      : [db.productBuilds, db.productProductions, db.productProductionBriefs]),
+  ])];
+  // Source verification and hashing have finished. Commit the prepared lineage
+  // and all registered instance extensions together, without native crypto here.
+  return db.transaction('rw', scopeTransactionTables(...tables), async () => {
+    const currentParent = await db.productRuntimeSessions.get(parent.id!);
+    if (!currentParent || runtimeBranchParentBindingV1(currentParent) !== parentBinding) {
+      throw new Error("分支创建期间父会话或冻结绑定发生变化。");
+    }
+    await resolveScope({ scope: { projectId: currentParent.projectId,
+      worldId: currentParent.worldId!, workId: currentParent.workId! } });
+    const currentEvents = (await readSessionEvents(currentParent, input.throughSequence))
+      .sort((a, b) => a.sequence - b.sequence);
+    if (stableJson(currentEvents) !== cutEvents) {
+      throw new Error("分支创建期间父会话切点事件发生变化。");
+    }
+    await assertFormalRuntimeSourceRecordsUnchangedV1(source);
+    const child = await insertPreparedProductRuntimeSessionV1(prepared);
+    try {
+      await cloneProductRuntimeBranchExtensionsV1({
+        parent: currentParent, child, throughSequence: input.throughSequence, state, events,
+      });
+    } catch (cause) {
+      throw new Error(
+        `${parent.kind} 分支扩展复制失败:${cause instanceof Error ? cause.message : String(cause)}`,
+      );
+    }
+    return child;
   });
-  const boundChild = {
-    ...child,
-    parentSessionId: parent.id!,
-    parentThroughSequence: input.throughSequence,
-  };
-  try {
-    await cloneProductRuntimeBranchExtensionsV1({
-      parent,
-      child: boundChild,
-      throughSequence: input.throughSequence,
-      state,
-      events,
-    });
-  } catch (cause) {
-    throw new Error(
-      `${parent.kind} 分支扩展复制失败:${cause instanceof Error ? cause.message : String(cause)}`,
-    );
-  }
-  return boundChild;
 }
 
 export async function branchProductRuntimeSession(

@@ -712,7 +712,7 @@ export default function ComicStudio({ scope, page }: Props) {
           expectedRevision: selectedSubject?.revision,
           draft: {
             ...subjectDraft,
-            stableKey: subjectDraft.stableKey || `subject_${nanoid(8)}`,
+            stableKey: selectedSubject?.stableKey || subjectDraft.stableKey || `subject_${nanoid(8)}`,
             sourceUnitIds: sourceIds,
           },
         }),

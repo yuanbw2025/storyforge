@@ -754,6 +754,14 @@ export async function recoverPendingMasterAgentAdoptionsV1(
       const restored = await restoreMasterAgentCandidatesV1({ scope, runId: run.id })
       if (!isMasterAgentRunWorkflowKindV1(restored.snapshot.contract.workflowKind)) continue
       let snapshot = restored.snapshot
+      const pending = restored.candidates.find(candidate => {
+        const step = snapshot.projection.steps[candidate.payload.runStepId!]
+        return step?.confirmation === 'adopt'
+          && step.status === 'running'
+          && !step.adoptionHash
+          && startedFor(snapshot, candidate.payload.runStepId!, candidate.payload.candidateHash!)
+      })
+      if (!pending) continue
       if (snapshot.projection.state === 'paused') {
         const recovery = await beginAgentRunRecoveryV1({
           scope,
@@ -767,14 +775,6 @@ export async function recoverPendingMasterAgentAdoptionsV1(
           expectedLastSequence: recovery.snapshot.projection.lastSequence,
         })
       }
-      const pending = restored.candidates.find(candidate => {
-        const step = snapshot.projection.steps[candidate.payload.runStepId!]
-        return step?.confirmation === 'adopt'
-          && step.status === 'running'
-          && !step.adoptionHash
-          && startedFor(snapshot, candidate.payload.runStepId!, candidate.payload.candidateHash!)
-      })
-      if (!pending) continue
       const ref = {
         scope,
         runId: run.id,
