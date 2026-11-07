@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import { db } from "../db/schema";
 import {
   createWorkspace,
@@ -89,6 +90,7 @@ export async function saveAiTownDraft(
   title: string,
   options?: { expectedWorkTitle: string },
 ) {
+  assertCurrentProductEntryV1('upper.ai-town')
   const capturedScope = { ...scope };
   const expectedWorkTitle = options?.expectedWorkTitle;
   if (options && typeof expectedWorkTitle !== "string")
@@ -115,6 +117,7 @@ export async function saveAiTownDraft(
         preparedRevision: null,
         updatedAt: Date.now(),
       };
+      assertCurrentProductEntryV1('upper.ai-town')
       await db.aiTownAuthoringDrafts.put(next);
       await updateWorkTitle(capturedScope, title);
       return next;
@@ -126,6 +129,7 @@ export async function selectAiTownWorld(
   revision: number,
   releaseId: number,
 ) {
+  assertCurrentProductEntryV1('upper.ai-town')
   const row = await readAiTownDraft(scope);
   if (row.revision !== revision) throw new Error("方案已变化，请重新选择");
   const localId = await cacheWorldReferenceForProductV1(scope, releaseId);
@@ -145,6 +149,7 @@ export async function selectAiTownWorld(
         revision: revision + 1,
         updatedAt: Date.now(),
       };
+      assertCurrentProductEntryV1('upper.ai-town')
       await db.aiTownAuthoringDrafts.put(next);
       return next;
     },
@@ -157,6 +162,7 @@ export async function saveAiTownSourceSelection(
   suggestionKey: string,
   selection: import("../types").ProductProductionSourceSelectionV1,
 ) {
+  assertCurrentProductEntryV1('upper.ai-town')
   const row = await readAiTownDraft(scope);
   if (!row.worldReleaseId) throw new Error("请选择世界版本");
   const { consultProductProductionStartV1 } = await import(
@@ -200,6 +206,7 @@ export async function saveAiTownSourceSelection(
         revision: revision + 1,
         updatedAt: Date.now(),
       };
+      assertCurrentProductEntryV1('upper.ai-town')
       await db.aiTownAuthoringDrafts.put(next);
       return next;
     },

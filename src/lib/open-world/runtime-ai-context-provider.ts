@@ -2,10 +2,7 @@ import { estimateTokens } from '../ai/context-budget'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { db } from '../db/schema'
-import {
-  readProductRuntimeStateVersion,
-  readVerifiedProductRuntimeHeadV1,
-} from '../product/runtime-core'
+import { readVerifiedProductRuntimeHeadV1 } from '../product/runtime-core'
 import type {
   ContextResourceDescriptorV1,
   ContextResourceKind,
@@ -241,21 +238,25 @@ function eventGroups(events: readonly ProductRuntimeEvent[]): Array<{
 }
 
 async function loadCatalog(scope: FrozenResourceScopeV1): Promise<TextOpenWorldRuntimeContextCatalogV1> {
-  const sessionId = scope.productRuntimeSessionId
-  if (!Number.isSafeInteger(sessionId) || Number(sessionId) < 1) {
+  const { projectId, worldId, workId, worldGroupId, productRuntimeSessionId: sessionId } = scope
+  if (sessionId == null || !Number.isSafeInteger(sessionId) || sessionId < 1) {
     fail('scope', '冻结资源scope缺少productRuntimeSessionId')
   }
-  const sessionValue = await db.productRuntimeSessions.get(Number(sessionId))
-  if (!sessionValue?.id || sessionValue.kind !== 'text-open-world'
-    || sessionValue.projectId !== scope.projectId
-    || (scope.worldId != null && scope.worldId !== sessionValue.worldId)
-    || (scope.workId != null && scope.workId !== sessionValue.workId)
-    || (scope.worldGroupId !== undefined
-      && (scope.worldGroupId ?? null) !== (sessionValue.worldGroupId ?? null))) {
+  if (worldId == null || workId == null) {
+    fail('scope', '冻结资源scope必须包含World和Work')
+  }
+  const callerScope = { projectId, worldId, workId }
+  const matchesScope = (value: ProductRuntimeSession | undefined): value is ProductRuntimeSession & { id: number } =>
+    value?.id === sessionId && value.kind === 'text-open-world'
+    && value.projectId === projectId && value.worldId === worldId && value.workId === workId
+    && (worldGroupId === undefined || (worldGroupId ?? null) === (value.worldGroupId ?? null))
+  if (!matchesScope(await db.productRuntimeSessions.get(sessionId))) {
     fail('scope', 'ProductRuntimeSession不存在、产品类型不符或越过WorkspaceScope')
   }
-  const session = sessionValue as ProductRuntimeSession & { id: number }
-  const beforeVersion = await readProductRuntimeStateVersion(session.id)
+  const { assertInstanceBinding } = await import('../product/runtime-instances')
+  const session = await assertInstanceBinding(sessionId, callerScope)
+  if (!matchesScope(session)) fail('scope', '运行实例绑定在读取期间发生变化')
+  const beforeVersion = await readVerifiedProductRuntimeHeadV1(session)
   const cacheKey = canonicalStringify({
     projectId: session.projectId,
     worldId: session.worldId,
@@ -901,7 +902,14 @@ async function loadCatalog(scope: FrozenResourceScopeV1): Promise<TextOpenWorldR
     runtimeSourceHash: binding.formal.packageHash,
     visibilityHash,
   })
-  const afterVersion = await readProductRuntimeStateVersion(session.id)
+  const current = await db.productRuntimeSessions.get(session.id)
+  if (!matchesScope(current)
+    || current.runtimeSourceHash !== session.runtimeSourceHash
+    || current.productBuildId !== session.productBuildId
+    || current.productReleaseId !== session.productReleaseId) {
+    fail('scope', '运行实例绑定在目录构建期间发生变化')
+  }
+  const afterVersion = await readVerifiedProductRuntimeHeadV1(current)
   if (afterVersion.sequence !== beforeVersion.sequence || afterVersion.stateHash !== beforeVersion.stateHash) {
     fail('stale', '资源目录构建期间Session已经推进')
   }

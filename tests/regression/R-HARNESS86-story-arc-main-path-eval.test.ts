@@ -1,3 +1,4 @@
+import { installEvalWebLocksFixtureV1 } from '../helpers/eval-web-locks'
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -191,8 +192,11 @@ async function completedCheckpoint() {
   })
 }
 
+let restoreEvalWebLocks: (() => void) | undefined
+
 describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { timeout: 30_000 }, () => {
   beforeEach(async () => {
+    restoreEvalWebLocks = installEvalWebLocksFixtureV1()
     localStorage.clear()
     sessionStorage.clear()
     await db.delete()
@@ -200,6 +204,7 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
   })
 
   afterEach(() => {
+    restoreEvalWebLocks?.()
     vi.unstubAllGlobals()
     db.close()
   })

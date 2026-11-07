@@ -25,6 +25,7 @@ import { TTRPG_COMPATIBLE_OPENING_AUTHORED_TASKS_V1 } from '../ttrpg/open-compat
 import { produceTtrpgCompatibleOpeningArtifactV1 } from '../ttrpg/open-compatible-opening-production';
 
 import { parseTextAdventureQuestScriptArtifact, textAdventureQuestRecipientsV3 } from '../adventure/quest-settlement'
+import { assertAdventureRuntimeDiceSupportV1 } from '../adventure/runtime'
 import { createAvgAssemblyExecutorV1 } from '../avg/assembly-executor'
 import { parseProductionModelJsonObjectV1 } from './model-json-object'
 import { avgVisualPlanningExecutionReadyV4 } from '../avg/visual-planning-brief'
@@ -408,6 +409,7 @@ export type ProductionVisionRunnerV1 = (input: {
   projectId: number
   requirementKey: string
   category: string
+  expectedCapabilityHash?: string
   system: string
   contextText: string
   images: Array<{
@@ -5843,6 +5845,7 @@ async function defaultVisionRunner(input: Parameters<ProductionVisionRunnerV1>[0
       { role: 'user', content: `以下是登记的文字审查上下文，随后图片按 Artifact key/hash 标注：\n<registered-context>\n${input.contextText}\n</registered-context>` },
     ],
     images: input.images,
+    expectedCapabilityHash: input.expectedCapabilityHash,
     maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result,
     responseFormat: 'json_object',
   })
@@ -7095,6 +7098,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
   }
   const response = input.authorDraftJson ? null : await options.runText({
     projectId: input.scope.projectId, requirementKey, category: options.category,
+    expectedCapabilityHash: binding.bindingHash,
     system, contextText: input.contextText,
     ...(openingJsonSchema ? {jsonSchema: openingJsonSchema} : {}),
     maximumOutputTokens: Math.min(openOutputLimit ?? productProductionProviderOutputLimitV1(input.task, input.contextText),
@@ -9297,6 +9301,7 @@ async function executeTextAdventureVisionCapabilityPreflightTask(
     projectId: input.scope.projectId,
     requirementKey,
     category: options.category,
+    expectedCapabilityHash: binding.bindingHash,
     system: '你是图片输入能力验证器。必须实际观察唯一附图的四个纯色色块。' +
       '每个色块只允许使用标签 black、blue、cyan、green、magenta、red、white、yellow；' +
       '四个色块必须选择四个互不重复的标签。' +
@@ -9824,6 +9829,7 @@ async function executeTextAdventureVisualQualityReviewTask(
     try {
       const response = await options.runVision({
         projectId: input.scope.projectId, requirementKey, category: options.category,
+        expectedCapabilityHash: binding.bindingHash,
         system, contextText: input.contextText, images: visionImages,
         maximumOutputTokens: input.task.budgetReservation.outputTokens, signal: input.signal,
       })
@@ -10415,6 +10421,7 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
     runtimePackage.definition.enabledCapabilities.push('presentation')
   } else if (assets.length > 0) fail('当前产品 adapter 不能把媒资接入 RuntimePackage')
   const parsed = parseProductRuntimePackageV1(runtimePackage)
+  if (parsed.productType === 'text-adventure' && parsed.adventure) assertAdventureRuntimeDiceSupportV1(parsed.adventure)
   const ttrpgArtifacts: ProductProductionTaskArtifactV1[] = parsed.ttrpg ? [
     {
       artifactKey: 'ttrpg.rule-pack', kind: 'rule-pack', payload: parsed.ttrpg.rulePack.content,
