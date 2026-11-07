@@ -11,11 +11,14 @@ import { db } from '../../src/lib/db/schema'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { quickHash } from '../../src/lib/import/chunker'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
-import { useImportSessionStore } from '../../src/stores/import-session'
+import * as importAuthority from '../../src/stores/import-session'
+import * as modelEvidence from '../../src/lib/agent/run/creation-response-evidence'
+import { confirmDocumentImportChunkV1 } from '../../src/lib/import/document-parse-adoption'
+import { hashImportChunkTextV1, useImportSessionStore } from '../../src/stores/import-session'
 import { useImportStatusStore } from '../../src/stores/import-status'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { usePromptStore } from '../../src/stores/prompt'
-import { runSession, registerChunkTexts, clearChunkTexts, hasChunkTexts, isPipelineRunning, cancelPipeline } from '../../src/lib/import/pipeline'
+import { readPendingDocumentImportV1, runSession, registerChunkTexts, clearChunkTexts, hasChunkTexts, isPipelineRunning, cancelPipeline } from '../../src/lib/import/pipeline'
 import { DialogProvider } from '../../src/components/shared/Dialog'
 import { ToastProvider } from '../../src/components/shared/Toast'
 import ImportDocPanel from '../../src/components/system/ImportDocPanel'
@@ -42,11 +45,11 @@ const ids: number[] = []
 let project: Project
 let projectId: number
 let request: ReturnType<typeof vi.fn>
-const completion = () => new Response(JSON.stringify({ choices: [{ message: { content: '{}' }, finish_reason: 'stop' }], usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 } }), { status: 200 })
+const completion = () => new Response(JSON.stringify({ choices: [{ message: { content: '{"worldview":{}}' }, finish_reason: 'stop' }], usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 } }), { status: 200 })
 async function makeSession(status: ImportSession['status'] = 'pending') {
   const id = await store().create({ projectId, filename: 'fixture.txt', fileHash: quickHash(text),
     totalChars: text.length, totalChunks: 1, chunkSize: 1000,
-    chunks: [{ index: 0, startChar: 0, endChar: text.length, charCount: text.length, status: 'pending', attempts: 0 }],
+    chunks: [{ index: 0, startChar: 0, endChar: text.length, charCount: text.length, status: 'pending', attempts: 0, sourceTextHash: await hashImportChunkTextV1(text) }],
     merged: {}, rollingContext: '', importTarget: 'project', status })
   ids.push(id)
   registerChunkTexts(id, [{ index: 0, text }])
@@ -121,14 +124,17 @@ describe('SFQA013 actual pipeline interruption', () => {
   it('keeps a valid one-chunk pipeline working with a synthetic response and no real provider call', async () => {
     const id = await makeSession()
     await runSession({ projectId, sessionId: id })
+    expect(useImportStatusStore.getState().phase).toBe('paused')
+    const candidate = (await readPendingDocumentImportV1({ projectId, sessionId: id }))!.candidate!
+    expect((await store().load(id))?.chunks[0].status).toBe('pending')
+    await confirmDocumentImportChunkV1({ projectId, sessionId: id, chunkIndex: candidate.chunkIndex, candidateHash: candidate.candidateHash })
     expect((await store().load(id))?.status).toBe('done')
-    expect(useImportStatusStore.getState().phase).toBe('done')
     expect(isPipelineRunning()).toBe(false); expect(request).toHaveBeenCalledTimes(1)
   })
 
   it('releases its controller and reports startup persistence failure without sending a request', async () => {
     const id = await makeSession()
-    vi.spyOn(store(), 'patch').mockRejectedValueOnce(new Error('synthetic startup write failure'))
+    vi.spyOn(db.importSessions, 'update').mockRejectedValueOnce(new Error('synthetic startup write failure'))
     const outcome = await runSession({ projectId, sessionId: id }).then(() => null, error => error)
     await capture('pipeline-startup-write-failure')
     expect(outcome).toBeNull()
@@ -137,9 +143,11 @@ describe('SFQA013 actual pipeline interruption', () => {
     expect(request).not.toHaveBeenCalled()
   })
 
-  it('does not recreate logs when its Project disappears immediately after the public load', async () => {
-    const id = await makeSession(), load = store().load
-    vi.spyOn(store(), 'load').mockImplementationOnce(async sid => { const row = await load(sid); await cascadeDeleteProject(projectId); return row })
+  it('does not recreate logs when its Project disappears immediately before the first session write', async () => {
+    const id = await makeSession(), reserve = importAuthority.reserveImportChunkParseV1
+    vi.spyOn(importAuthority, 'reserveImportChunkParseV1').mockImplementationOnce(async (...args) => {
+      await cascadeDeleteProject(projectId); return reserve(...args)
+    })
     const outcome = await runSession({ projectId, sessionId: id }).then(() => null, error => error)
     await capture('pipeline-root-deleted-after-load')
     expect(outcome).toBeNull(); expect(isPipelineRunning()).toBe(false)
@@ -148,9 +156,11 @@ describe('SFQA013 actual pipeline interruption', () => {
     expect(await db.importLogs.count()).toBe(0); expect(await db.importSessions.count()).toBe(0)
   })
 
-  it('stops visibly when the Session disappears just before the first public log', async () => {
-    const id = await makeSession(), log = store().log
-    vi.spyOn(store(), 'log').mockImplementationOnce(async (...args) => { await store().deleteSession(id); return log(...args) })
+  it('stops visibly when the Session disappears just before durable request preparation', async () => {
+    const id = await makeSession(), prepare = modelEvidence.recordCreationModelRequestV1
+    vi.spyOn(modelEvidence, 'recordCreationModelRequestV1').mockImplementationOnce(async (...args) => {
+      await store().deleteSession(id); return prepare(...args)
+    })
     const outcome = await runSession({ projectId, sessionId: id }).then(() => null, error => error)
     await capture('pipeline-session-deleted-before-log')
     expect(outcome).toBeNull(); expect(isPipelineRunning()).toBe(false)
@@ -158,18 +168,24 @@ describe('SFQA013 actual pipeline interruption', () => {
     expect(request).not.toHaveBeenCalled(); expect(await db.importLogs.count()).toBe(0)
   })
 
-  it.each(['before-chunk', 'before-final-report'] as const)('reports disappearance at %s instead of silently leaving a running UI', async boundary => {
-    const id = await makeSession(), load = store().load
-    let reads = 0
-    vi.spyOn(store(), 'load').mockImplementation(async sid => {
-      if (++reads === (boundary === 'before-chunk' ? 2 : 3)) await store().deleteSession(id)
-      return load(sid)
-    })
+  it.each(['after-request-evidence', 'after-response-evidence'] as const)('reports disappearance at %s instead of silently leaving a running UI', async boundary => {
+    const id = await makeSession()
+    if (boundary === 'after-request-evidence') {
+      const prepare = modelEvidence.recordCreationModelRequestV1
+      vi.spyOn(modelEvidence, 'recordCreationModelRequestV1').mockImplementationOnce(async (...args) => {
+        const result = await prepare(...args); await store().deleteSession(id); return result
+      })
+    } else {
+      const record = modelEvidence.recordCreationModelResponseV1
+      vi.spyOn(modelEvidence, 'recordCreationModelResponseV1').mockImplementationOnce(async (...args) => {
+        const result = await record(...args); await store().deleteSession(id); return result
+      })
+    }
     const outcome = await runSession({ projectId, sessionId: id }).then(() => null, error => error)
     await capture(`pipeline-disappearance-${boundary}`)
     expect(outcome).toBeNull(); expect(isPipelineRunning()).toBe(false)
     expect(useImportStatusStore.getState().phase).toBe('failed')
-    expect(request).toHaveBeenCalledTimes(boundary === 'before-chunk' ? 0 : 1)
+    expect(request).toHaveBeenCalledTimes(boundary === 'after-request-evidence' ? 0 : 1)
     expect(await db.importLogs.count()).toBe(0)
   })
 
@@ -196,9 +212,11 @@ describe('SFQA013 actual pipeline interruption', () => {
 
 describe('SFQA013 real Panel buttons with real session persistence', () => {
   it('shows deleted Project refusal after the actual confirm button and does not create an orphan Session', async () => {
-    upload.showConfirm = true
-    await mount(); await cascadeDeleteProject(projectId)
-    await click(button(/导入当前项目（1 块）/))
+    await mount()
+    await click(button('开始解析'))
+    const confirm = await findButton(/导入当前项目（1 块）/)
+    await cascadeDeleteProject(projectId)
+    await click(confirm)
     await eventually(() => expect(useImportStatusStore.getState().phase).toBe('failed'))
     await capture('panel-start-deleted-project')
     expect(await db.importSessions.count()).toBe(0); expect(await db.importLogs.count()).toBe(0); expect(await db.importFiles.count()).toBe(0)
@@ -206,9 +224,11 @@ describe('SFQA013 real Panel buttons with real session persistence', () => {
   })
 
   it('keeps normal start possible after an optional Blob-storage failure, with the raw text still in memory', async () => {
-    upload.showConfirm = true
     vi.spyOn(db.importFiles, 'put').mockRejectedValueOnce(new Error('synthetic optional quota failure'))
-    await mount(); await click(button(/导入当前项目（1 块）/))
+    await mount()
+    await click(button('开始解析'))
+    await click(await findButton(/导入当前项目（1 块）/))
+    await click(await findButton('确认保存本块'))
     await eventually(() => expect(useImportStatusStore.getState().phase).toBe('done'))
     const sessions = await db.importSessions.toArray(); ids.push(...sessions.map(s => s.id!))
     expect(sessions).toHaveLength(1); expect(sessions[0]?.status).toBe('done')
@@ -218,7 +238,7 @@ describe('SFQA013 real Panel buttons with real session persistence', () => {
 
   it('shows a refusal when a cached unfinished Session was deleted before the actual resume button', async () => {
     const id = await makeSession('paused'); await mount()
-    const button = await findButton(/立即续跑/)
+    const button = await findButton(/继续处理/)
     await act(async () => { await store().deleteSession(id) })
     await click(button)
     await eventually(() => expect(textMatch(/已删除|不存在|无法续跑/)).toBeTruthy())
@@ -228,7 +248,7 @@ describe('SFQA013 real Panel buttons with real session persistence', () => {
 
   it('does not claim a deleted cached Session has a restored Blob after the actual reupload-resume button', async () => {
     const id = await makeSession('paused'); clearChunkTexts(id); await mount()
-    const button = await findButton(/用当前文件续跑/)
+    const button = await findButton(/用当前文件继续/)
     await act(async () => { await store().deleteSession(id) })
     await click(button)
     await eventually(() => expect(textMatch(/已删除|不存在|无法续跑/)).toBeTruthy())

@@ -300,6 +300,13 @@ export type ExportRefRemap = {
  * JSON from silently bypassing normal exportRemap handling.
  */
 export type PortableDataSpec = {
+  /** Actual immutable world package wire plus derived P/R/D indices. */
+  kind: 'world-source-receipt'
+} | {
+  /** An explicit selected editing D; never inferred from another receipt. */
+  kind: 'world-source-receipt-binding'
+  bindingField: 'sourceReceiptBinding'
+} | {
   kind: 'agent-run-root'
   contractField: string
   contractHashField: string
@@ -496,6 +503,8 @@ export interface CollectionAdoptionSpec {
   duplicatePolicy: 'skip' | 'update' | 'merge' | 'error'
   /** 必填字段;缺失则跳过该条 */
   required: string[]
+  /** Defaults for a genuinely new collection row, after in-transaction identity lookup. Never an update patch. */
+  createDefaults?: Readonly<Record<string, unknown>>
   /** 自动盖章字段 */
   autoStamps: ('projectId' | 'worldId' | 'workId' | 'worldGroupId' | 'homeWorldGroupId' | 'createdAt' | 'updatedAt')[]
   /** Owner selected from the trusted WorkspaceScope, never from AI output. */
@@ -653,6 +662,8 @@ export interface AssembleContextInput {
   extraStateIds?: number[]
   /** 手动输入/当前字段内容，供“内容反推结构化设定”类动作走注册表。 */
   manualSourceText?: string
+  /** SFQA-022: session selector for the already-frozen project-import category catalog. */
+  documentImportSessionId?: number
   /** HARNESS-11: 同一批量章纲任务中，上一卷尚未采纳的结构化候选。 */
   priorOutlineCandidateText?: string
   /** C2 反向哺喂：以某角色为主体，召回剧情里关于 TA 的事实/正文证据（characterFacts/characterPassages 源用）。 */
@@ -787,6 +798,9 @@ export interface ContextResourceDescriptorV1 {
   /** Retrieval policy identity, independent from Canon edits. */
   policyRevision: number
   policyHash: string
+  /** false excludes automatic selection and model resource tools. Author
+   * library viewing remains separate; absent legacy descriptors stay enabled. */
+  automaticSelectionEnabled?: boolean
   scope: {
     projectId: number
     worldId?: number

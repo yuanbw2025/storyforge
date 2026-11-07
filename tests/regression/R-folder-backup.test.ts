@@ -28,13 +28,19 @@ function makeFakeDir(name = 'BackupDir') {
   const dir: any = {
     name,
     kind: 'directory',
-    async getFileHandle(fname: string, _opts?: { create?: boolean }) {
+    async getFileHandle(fname: string, opts?: { create?: boolean }) {
+      if (!files.has(fname)) {
+        if (!opts?.create) throw new DOMException('Missing file', 'NotFoundError')
+        files.set(fname, '')
+      }
       return {
+        async getFile() { return new File([files.get(fname)!], fname) },
         async createWritable() {
           let buf = ''
           return {
             async write(chunk: string) { buf += chunk },
             async close() { files.set(fname, buf) },
+            async abort() {},
           }
         },
       }
@@ -103,10 +109,10 @@ describe('R-FOLDER · 本地文件夹持久层', () => {
     await finalizeCurrentFixtureV1(pid)
 
     const dir = makeFakeDir()
-    // 写盘:文件名按书名生成
+    // 写盘:文件名绑定稳定工作区身份；可读名称保留在快照内。
     const wrote = await writeProjectSnapshotToFolder(dir as any, pid)
     expect(wrote).toBe(true)
-    expect(dir._files.has(backupFilename('盘里的书'))).toBe(true)
+    expect(dir._files.has(backupFilename((await db.projects.get(pid))!.workspaceUid))).toBe(true)
 
     // 模拟"数据重置":删掉项目
     await db.projects.delete(pid)

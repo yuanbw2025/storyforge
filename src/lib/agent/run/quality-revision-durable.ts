@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { db } from '../../db/schema'
 import type { AgentRunContractV3, AgentRunRecord, ChatMessage, WorkspaceScope } from '../../types'
 import type { AIRequestConfigResolution, StreamResult } from '../../ai/client'
@@ -189,7 +190,9 @@ export async function readLatestQualityRevisionV1(input: { scope: WorkspaceScope
   const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope, snapshot.run.id)
   const draft = checkpoint?.resumePayload as QualityRevisionDraftV1 | undefined
   if (!draft || draft.version !== 'quality-revision-draft-v1' || draft.plan?.scope?.workId !== input.scope.workId || draft.plan.chapterId !== input.chapterId || snapshot.contract.runtimeBindingHash !== draft.plan.planHash) return null
-  const rebuilt = await previewQualityRevisionHTMLV1({ sourceHtml: draft.sourceHtml, plan: draft.plan, raw: draft.rawPatches, normalize: normalizeRichEditorHTMLV1 })
+  // After the DB read, this only checks hashes and rebuilds a detached DOM.
+  const pendingPreview = previewQualityRevisionHTMLV1({ sourceHtml: draft.sourceHtml, plan: draft.plan, raw: draft.rawPatches, normalize: normalizeRichEditorHTMLV1 })
+  const rebuilt = await (Dexie.currentTransaction?.db === db ? Dexie.waitFor(pendingPreview) : pendingPreview)
   if (rebuilt.contentHtml !== draft.contentHtml || rebuilt.outputText !== draft.outputText) throw new Error('修订预演证据已损坏。')
   const stored = await readLatestProseGenerationCandidateV1({ ...input, operations: ['quality-revise'] })
   const candidate = stored?.durable.runId === snapshot.run.id ? stored : null

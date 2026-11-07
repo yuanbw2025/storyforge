@@ -1208,6 +1208,8 @@ export interface TtrpgRuntimeAssetRequestRecordV1 {
   estimatedCostUsd: number | null;
   costReservationUsd: number;
   actualCostUsd: number | null;
+  /** Portable, bounded dispatch and measured-cost evidence. Absence is legacy uncertainty. */
+  attemptAccountingJson?: string | null;
   estimatedStorageBytes: number | null;
   mediaAssetId: number | null;
   mediaAssetVersion: number | null;

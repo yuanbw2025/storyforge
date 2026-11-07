@@ -61,7 +61,7 @@ import {
   inspectTextOpenWorldRuntimeHeadV1,
 } from './checkpoints'
 import { readTextOpenWorldArtifactGovernanceV1 } from './creator-artifact-governance'
-import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
+import { assertTextOpenWorldCreatorRoleForNewWorkV1, readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
 import {
   assertTextOpenWorldCalibrationLineageUnchangedV1,
   readTextOpenWorldCalibrationLineageV1,
@@ -353,7 +353,7 @@ function plausibleRealProviderIdentity(provider: string, model: string): boolean
   return !/(fixture|mock|simulat|fake|test-provider|test-model)/i.test(`${provider}/${model}`)
 }
 
-async function calibrationReadiness(authority: BuildAuthorityV1): Promise<{
+async function calibrationReadiness(authority: BuildAuthorityV1, requiresNewReview = false): Promise<{
   readiness: TextOpenWorldCreatorCalibrationReadinessV1
   graderConfig: ReturnType<typeof resolveRequestConfig>['config']
   graderResolution: ReturnType<typeof resolveRequestConfig>
@@ -362,6 +362,7 @@ async function calibrationReadiness(authority: BuildAuthorityV1): Promise<{
   const derived = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
     scope: authority.scope, buildId: authority.build.id,
   })
+  if (requiresNewReview) assertTextOpenWorldCreatorRoleForNewWorkV1(derived.contracts.creatorBrief.draft)
   const generator = derived.contracts.start.preflight.providerBinding
   const aiState = useAIConfigStore.getState()
   const resolved = resolveRequestConfig(aiState.config, {
@@ -1796,7 +1797,7 @@ export async function recordTextOpenWorldCreatorCalibrationV1(input: {
     scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId,
   })
   assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
-  const state = await calibrationReadiness(authority)
+  const state = await calibrationReadiness(authority, !input.reuseReceiptHash)
   if (!input.reuseReceiptHash && !state.readiness.ready) fail(state.readiness.issue ?? '独立校准尚未就绪')
   const { mainline, significant, regions, quests, director, scenes, contentBudget, semanticReview } = calibrationArtifacts(authority)
   const context: TextOpenWorldCreatorCalibrationReviewContextV1 = buildTextOpenWorldCreatorCalibrationContextV1({

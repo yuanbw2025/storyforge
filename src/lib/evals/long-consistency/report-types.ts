@@ -110,11 +110,22 @@ export interface LongConsistencyModelBindingV1 {
   promptVersion: string
 }
 
+export type LongConsistencyTokenSourceV1 = 'provider' | 'estimated' | 'missing'
+
+export interface LongConsistencyUsageProvenanceV1 {
+  input: LongConsistencyTokenSourceV1
+  output: LongConsistencyTokenSourceV1
+  providerTotalTokens: number | null
+  cost: 'catalog-estimate' | 'fallback-estimate' | 'missing'
+}
+
 export interface LongConsistencyModelUsageV1 {
   inputTokens: number
   outputTokens: number
   durationMs: number
   costUsd: number
+  /** Absent on legacy evidence; its numbers cannot attest provider metering. */
+  provenance?: LongConsistencyUsageProvenanceV1
 }
 
 export interface LongConsistencyEvalArtifactV1 {

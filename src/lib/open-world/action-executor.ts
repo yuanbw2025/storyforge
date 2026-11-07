@@ -24,7 +24,7 @@ import { executeTextOpenWorldPendingRewardV1 } from './reward-executor'
 import { deriveTextOpenWorldContextsV1, parseTextOpenWorldSessionProjectionV1 } from './session-projection'
 import { createTextOpenWorldFastTravelCatalogV1 } from './fast-travel'
 import { parseTextOpenWorldEffectsAppliedEventPayloadV1, resolveTextOpenWorldRandomEvidenceV1 } from './event-contract'
-import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
+import { fingerprintTextOpenWorldCommandV1, parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
 import { createTextOpenWorldWeatherCatalogV1 } from './weather'
 import { createTextOpenWorldActorScheduleCatalogV1 } from './actors'
 import { createTextOpenWorldCrimeCatalogV1 } from './crime'
@@ -958,6 +958,15 @@ async function recoverPendingCommandV1(sessionId: number): Promise<RecoveredPend
   const status = await getTextOpenWorldCommandStatusV1({ sessionId, commandId })
   if (status.status !== 'committed') fail(`待结算命令不存在:${commandId}`)
   const envelope = status.envelope
+  // Load the persisted AI proof reader only when recovering a mapped command.
+  // Unexpected evidence on any other source still enters the same validator.
+  const intentRecovery = envelope.source === 'mapped-intent' || envelope.payload.runtimeIntent !== undefined
+    ? await import('./runtime-intent-recovery') : null
+  const runtimeIntent = intentRecovery?.pendingRuntimeIntentEvidenceV1(envelope, modules) ?? null
+  if (await fingerprintTextOpenWorldCommandV1(envelope) !== status.receipt.requestFingerprint) {
+    fail(`待结算命令指纹与原回执不一致:${commandId}`)
+  }
+  if (intentRecovery && runtimeIntent) await intentRecovery.verifyPendingRuntimeIntentLedgerV1(envelope, runtimeIntent)
   const systemCauseCommandId = envelope.payload.systemCauseCommandId
   if (systemCauseCommandId != null) {
     if (typeof systemCauseCommandId !== 'string' || !COMMAND_ID.test(systemCauseCommandId)
@@ -974,6 +983,7 @@ async function recoverPendingCommandV1(sessionId: number): Promise<RecoveredPend
     ...(projection.protocol.pendingCombatTransitionIntent == null ? {} : { combatTransitionIntent: projection.protocol.pendingCombatTransitionIntent }),
     ...(projection.protocol.pendingDirectorTrigger == null ? {} : { directorTrigger: projection.protocol.pendingDirectorTrigger }),
     ...(systemCauseCommandId == null ? {} : { systemCauseCommandId }),
+    ...(runtimeIntent == null ? {} : { runtimeIntent }),
   }
   const pendingRandomSuffix = projection.protocol.randomEvidence
     .filter(item => item.eventSequence > commandSequence)

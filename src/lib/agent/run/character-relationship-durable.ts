@@ -1,6 +1,7 @@
+import { modelDispatchWasCancelledV1, ModelDispatchGuardRejectedV1 } from '../../ai/codex-transport'
 import { db } from '../../db/schema'
 import type { AIConfig, Character, CharacterRelation, ChatMessage, WorkspaceScope } from '../../types'
-import { chat } from '../../ai/client'
+import { chat, type ChatResult } from '../../ai/client'
 import { assembleContext } from '../../registry/assemble-context'
 import { adopt } from '../../registry/adopt'
 import { readOwnedRows } from '../../workspace/scope'
@@ -251,6 +252,8 @@ export async function generateCharacterRelationshipCandidateV1(input: {
   runAI?: RunAI
   aiConfig?: AIConfig
   authorRequest?: string
+  assertBeforeDispatch?: () => Promise<void>
+  signal?: AbortSignal
 }): Promise<CharacterRelationshipCandidateRunV1> {
   const before = await baseline(input.scope, input.worldGroupId)
   if (before.characters.length < 2) throw new Error('至少需要两个当前 World 的角色。')
@@ -283,9 +286,29 @@ export async function generateCharacterRelationshipCandidateV1(input: {
   snapshot = await append(input.scope, snapshot, 'model.requested', {
     stepId: CHARACTER_RELATIONSHIP_STEP_ID_V1, attempt: 1, bindingHash: await hashCanonicalValue(binding),
   })
-  const raw = await (input.runAI
-    ? input.runAI(messages)
-    : chat(messages, input.aiConfig!, { category: 'relation.extract', projectId: input.scope.projectId }))
+  let raw: string
+  const dispatchResult: ChatResult | undefined = input.assertBeforeDispatch
+    ? { beforeModelDispatch: input.assertBeforeDispatch } : undefined
+  try {
+    if (input.runAI && input.assertBeforeDispatch) {
+      try { await input.assertBeforeDispatch() }
+      catch (cause) { throw new ModelDispatchGuardRejectedV1(cause) }
+    }
+    raw = await (input.runAI
+      ? input.runAI(messages)
+      : chat(messages, input.aiConfig!, { category: 'relation.extract', projectId: input.scope.projectId },
+        input.signal, ...(dispatchResult ? [dispatchResult] as const : [] as const)))
+  } catch (cause) {
+    const cancelled = modelDispatchWasCancelledV1(dispatchResult)
+    if (cause instanceof ModelDispatchGuardRejectedV1 || cancelled) {
+      // A prepared request intent exists, but no dispatcher was entered.
+      try { await append(input.scope, snapshot, 'run.paused', { reason: cancelled ? 'character-relationship-pre-dispatch-cancelled' : 'character-relationship-pre-dispatch-source-changed', recoverable: false }) }
+      catch (persistenceFailure) {
+        throw Object.assign(new Error('关系候选未发送，暂停证据保存失败。'), { cause, persistenceFailures: [persistenceFailure] })
+      }
+    }
+    throw cause
+  }
   const outputHash = await hashCanonicalValue({ raw })
   snapshot = await append(input.scope, snapshot, 'model.responded', {
     stepId: CHARACTER_RELATIONSHIP_STEP_ID_V1, attempt: 1, outputHash,

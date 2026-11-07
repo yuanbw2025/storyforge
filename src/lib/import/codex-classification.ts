@@ -10,7 +10,8 @@ import {
 } from '../types/codex'
 import type { CodexImportCandidate } from '../types/import-session-data'
 import { useCodexStore } from '../../stores/codex'
-import { resolveScope, scopeTransactionTables } from '../workspace/scope'
+import { readOwnedRows, resolveScope, resolveScopeLike, scopeTransactionTables, type WorkspaceScopeLike } from '../workspace/scope'
+import type { WorkspaceScope } from '../types/world-ownership'
 
 export interface CodexImportCategoryOption {
   ref: string
@@ -89,7 +90,7 @@ export function buildCodexImportCategoryOptions(
       left.domain.localeCompare(right.domain) || left.label.localeCompare(right.label, 'zh-CN'))
 }
 
-export function formatCodexImportCatalog(options: readonly CodexImportCategoryOption[]): string {
+export function formatCodexImportCatalog(options: readonly Pick<CodexImportCategoryOption, 'ref' | 'label' | 'fields'>[]): string {
   return options.map(option => {
     const fields = option.fields
       .filter(field => field.type !== 'ref')
@@ -109,7 +110,7 @@ function cleanText(value: unknown, maxLength: number): string {
 
 function normalizeCandidateFields(
   raw: unknown,
-  option: CodexImportCategoryOption,
+  option: Pick<CodexImportCategoryOption, 'fields'>,
 ): Record<string, string> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
   const source = raw as Record<string, unknown>
@@ -136,7 +137,7 @@ export function normalizeCodexImportCandidates(
   raw: unknown,
   sourceText: string,
   chunkIndex: number,
-  options: readonly CodexImportCategoryOption[],
+  options: readonly Pick<CodexImportCategoryOption, 'ref' | 'fields'>[],
 ): CodexImportCandidate[] {
   if (!Array.isArray(raw)) return []
   const byRef = new Map(options.map(option => [option.ref, option]))
@@ -242,18 +243,20 @@ function parseStringArray(value: string | undefined): string[] {
  */
 export async function applyCodexImportCandidates(args: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId: number | null
   candidates: readonly CodexImportCandidate[]
 }): Promise<CodexImportApplyResult> {
-  await useCodexStore.getState().ensureBuiltIns(args.projectId)
-  const workspaceScope = await resolveScope({ projectId: args.projectId })
-  const categories = await db.codexCategories.where('projectId').equals(args.projectId).toArray()
-  const options = buildCodexImportCategoryOptions(categories)
-  const byRef = new Map(options.map(option => [option.ref, option]))
+  const workspaceScope = await resolveScope({ projectId: args.projectId, scope: args.scope })
+  await useCodexStore.getState().ensureBuiltIns(workspaceScope)
   const result: CodexImportApplyResult = { imported: 0, updated: 0, skipped: 0, errors: [] }
 
   await db.transaction('rw', scopeTransactionTables(db.codexCategories, db.codexEntries), async () => {
-    const existingEntries = await db.codexEntries.where('projectId').equals(args.projectId).toArray()
+    const options = buildCodexImportCategoryOptions(
+      await readOwnedRows<CodexCategory>(workspaceScope, 'codexCategories', { owner: 'world' }),
+    )
+    const byRef = new Map(options.map(option => [option.ref, option]))
+    const existingEntries = await readOwnedRows<CodexEntry>(workspaceScope, 'codexEntries', { owner: 'world' })
     for (const candidate of mergeCodexImportCandidates([], args.candidates)) {
       const option = byRef.get(candidate.categoryRef)
       if (!option) {
@@ -365,15 +368,15 @@ export async function applyCodexImportCandidates(args: {
       }
     }
   })
-  await useCodexStore.getState().loadAll(args.projectId)
+  await useCodexStore.getState().loadAll(workspaceScope)
   return result
 }
 
 export async function loadCodexImportCategoryOptions(
-  projectId: number,
+  scopeInput: WorkspaceScopeLike,
+  options: { initialize?: boolean } = {},
 ): Promise<CodexImportCategoryOption[]> {
-  await useCodexStore.getState().ensureBuiltIns(projectId)
-  return buildCodexImportCategoryOptions(
-    await db.codexCategories.where('projectId').equals(projectId).toArray(),
-  )
+  const scope = await resolveScopeLike(scopeInput)
+  if (options.initialize !== false) await useCodexStore.getState().ensureBuiltIns(scope)
+  return buildCodexImportCategoryOptions(await readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' }))
 }
