@@ -1,4 +1,5 @@
 import { parseProductRuntimePackage } from './runtime-package'
+import { assertCurrentProductEntryV1, productCatalogIdForProductionV1 } from '../product/product-catalog'
 import { avgMediaProductionEnabledV2, avgVoiceProductionEnabledV3 } from '../avg/assembly-contract'
 import { createProductBuildPreviewManifestV2 } from './preview-manifest'
 import { readProductProductionBuildWorldScopeV1 } from './world-binding'
@@ -81,7 +82,7 @@ import {
   textAdventureQualityReviewBatchTaskKeysV1,
   textAdventureQualityReviewScopeFromTaskKeyV1,
 } from './plan'
-import { createProductBuildPreviewManifestV1 } from './preview-manifest'
+import { createProductBuildPreviewManifestV1, verifyRestoredProductBuildPreviewManifestV1 } from './preview-manifest'
 import { createProductBuildRootTerminalReceiptV1 } from './receipts'
 import { verifyImportedPublishedRootOriginV1 } from './published-root-origin'
 import { readMediaBlobObjectData } from './media-blob-store'
@@ -5448,6 +5449,17 @@ async function runClaimedTaskCore(input: {
     && attemptBudgetReservation.modelCalls === 0) {
     throw new Error(`[product-production-scheduler] Build lifetime budget 不足:task=${input.task.taskKey},remainingModelCalls=0`)
   }
+  // This is derived from verified durable evidence, never a caller bypass flag.
+  const assertAttemptCatalogAdmission = () => {
+    if (originalAuthorSource) return
+    try {
+      if (!sourceProduction) throw new Error('[product-catalog] Production 不存在')
+      assertCurrentProductEntryV1(productCatalogIdForProductionV1(sourceProduction.productType))
+    } catch (error) {
+      throw new ProductProductionDraftRejectedErrorV1(safeExecutorError(error), zeroUsage())
+    }
+  }
+  assertAttemptCatalogAdmission()
   const bindingHash = frozenExecutionIdentityHash
   if (authorizedDirectResult) {
     snapshot = await append(input.scope, snapshot, 'tool.called', {
@@ -5526,6 +5538,9 @@ async function runClaimedTaskCore(input: {
       ? Math.min(input.task.timeoutMs, attemptBudgetReservation.durationMs) : input.task.timeoutMs)
   })
   try {
+    // Verified recovery of an already received answer remains zero-call. Every
+    // fresh execution, including deterministic authoring, needs catalog admission.
+    assertAttemptCatalogAdmission()
     result = authorizedDirectResult?.result ?? await Promise.race([
       input.executor({
         scope: input.scope, productionId: input.productionId, buildId: input.build.id,
@@ -5541,6 +5556,8 @@ async function runClaimedTaskCore(input: {
         signal: executionController.signal,
         beforeAdditionalModelRequest: async () => {
           if (!await refreshExecutionAttemptAuthority()) return 'discarded-stale'
+          if (!sourceProduction) throw new Error('[product-catalog] Production 不存在')
+          assertCurrentProductEntryV1(productCatalogIdForProductionV1(sourceProduction.productType))
         },
         onModelOutput: recordRawOutput,
         ...(input.task.executionMode === 'media-provider' ? { onMediaOutput: recordRawOutput } : {}),
@@ -6220,7 +6237,9 @@ async function compileTerminalBuild(input: {
     buildManifestHash: manifestHash, mediaBindings, fallbackSummary,
   }
   const preview = runtimePackage.version === 1
-    ? await createProductBuildPreviewManifestV1({ ...previewInput, runtimePackage }, { ttrpgProtocol: 2 })
+    ? input.restoreImportedProofs
+      ? await verifyRestoredProductBuildPreviewManifestV1(build.previewManifestJson, { ...previewInput, runtimePackage }, { ttrpgProtocol: 2 })
+      : await createProductBuildPreviewManifestV1({ ...previewInput, runtimePackage }, { ttrpgProtocol: 2 })
     : await createProductBuildPreviewManifestV2({ ...previewInput, runtimePackage })
   if (input.restoreImportedProofs && (manifestHash !== build.manifestHash
     || packageHash !== build.packageHash || preview.previewHash !== build.previewHash

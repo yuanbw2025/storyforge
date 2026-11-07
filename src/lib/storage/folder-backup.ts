@@ -11,6 +11,7 @@
 import { exportProjectJSON, type ProjectExportData } from '../export/json-export'
 import { inspectProjectBackup } from '../export/backup-trust'
 import { db } from '../db/schema'
+import { isWorkspaceUid } from '../memory/identity'
 
 interface WindowWithFSA extends Window {
   showDirectoryPicker?: (opts?: {
@@ -87,13 +88,30 @@ export async function ensureFolderPermission(
   }
 }
 
-function safeName(name: string): string {
-  return name.replace(/[/\\?%*:|"<>]/g, '-')
+/** 名称保留在快照内作为标签；文件身份不随改名或非法字符规范化变化。 */
+export function backupFilename(workspaceUid: string): string {
+  if (!isWorkspaceUid(workspaceUid)) throw new Error('工作区缺少有效的稳定身份，未写入快照。')
+  return `storyforge-${workspaceUid}.json`
 }
 
-/** 项目备份文件名（按书名生成，恢复时按 storyforge-*.json 识别） */
-export function backupFilename(projectName: string): string {
-  return `storyforge-${safeName(projectName)}.json`
+async function readSnapshotText(handle: FileSystemDirectoryHandle, filename: string): Promise<string | null> {
+  try {
+    const file = await handle.getFileHandle(filename)
+    return await (await file.getFile()).text()
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === 'NotFoundError') return null
+    throw cause
+  }
+}
+
+function assertSnapshotOwner(text: string, workspaceUid: string): void {
+  let existing: unknown
+  try { existing = JSON.parse(text) }
+  catch { throw new Error('现有快照无法解析，已保留原文件，请先另存或恢复。') }
+  if (!inspectProjectBackup(existing).valid) throw new Error('现有快照格式异常，已保留原文件，请先另存或恢复。')
+  if ((existing as ProjectExportData).project.workspaceUid !== workspaceUid) {
+    throw new Error('现有快照属于其他工作区，已阻止覆盖。')
+  }
 }
 
 /**
@@ -106,11 +124,31 @@ export async function writeProjectSnapshotToFolder(
 ): Promise<boolean> {
   const project = await db.projects.get(projectId)
   if (!project) return false
+  const filename = backupFilename(project.workspaceUid)
   const data = await exportProjectJSON(projectId)
-  const fileHandle = await handle.getFileHandle(backupFilename(project.name), { create: true })
+  if (data.project.workspaceUid !== project.workspaceUid) throw new Error('工作区身份已变化，请重新保存快照。')
+  const payload = JSON.stringify(data, null, 2)
+  const original = await readSnapshotText(handle, filename)
+  if (original !== null) assertSnapshotOwner(original, project.workspaceUid)
+  const fileHandle = await handle.getFileHandle(filename, { create: true })
   const writable = await fileHandle.createWritable()
-  await writable.write(JSON.stringify(data, null, 2))
-  await writable.close()
+  // FSA stages data until close(). Recheck the visible file after opening and
+  // before committing; an unrelated replacement must not become our snapshot.
+  const expected = original ?? ''
+  const assertUnchanged = async () => {
+    if (await (await fileHandle.getFile()).text() !== expected) {
+      throw new Error('快照已变化，已停止覆盖，请重新核对文件。')
+    }
+  }
+  try {
+    await assertUnchanged()
+    await writable.write(payload)
+    await assertUnchanged()
+    await writable.close()
+  } catch (cause) {
+    try { await writable.abort() } catch { /* The stream may already be closed. */ }
+    throw cause
+  }
   return true
 }
 

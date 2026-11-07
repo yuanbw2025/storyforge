@@ -3,6 +3,21 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+const args = process.argv.slice(2)
+if (args.length > 0) {
+  if (args.length !== 6 || args[0] !== '--shard' || args[2] !== '--manifest' || args[4] !== '--output') {
+    throw new Error('Expected --shard <index/count> --manifest <plan> --output <new-artifact-directory>')
+  }
+  try {
+    const { collectShard } = await import('./quality/coverage-shards.mjs')
+    await collectShard(process.cwd(), args[1], path.resolve(args[3]), path.resolve(args[5]))
+  } catch (error) {
+    console.error(error)
+    process.exit(1)
+  }
+  process.exit(0)
+}
+
 // Vitest cleans <reportsDirectory> before a coverage run. A shared
 // `coverage/.tmp` lets concurrent CI/tasks delete files that another run is
 // still writing. A unique child under coverage/ is insufficient because an

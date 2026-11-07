@@ -10,6 +10,6 @@ test('native v11 memory store migration failure rolls back and an explicit retry
   expect(result.failed).toBe(true)
   expect(result.beforeRetry).toEqual(result.original)
   expect(result.afterRetry).toEqual(result.original)
-  expect(result.version).toBe(13)
+  expect(result.version).toBe(14)
   expect(result.memoryCount).toBe(0)
 })
