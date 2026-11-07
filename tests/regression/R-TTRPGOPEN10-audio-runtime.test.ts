@@ -75,11 +75,23 @@ describe('R-TTRPGOPEN10 actual E16, licensed upload, recovery and media ownershi
     await expect(confirm(s, review)).rejects.toThrow(/audio storage rollback/); expect(await readProductRuntimeState(s.owner.sessionId)).toEqual(before)
     save.mockRestore()
     const transaction = db.transaction.bind(db)
-    const lost = vi.spyOn(db, 'transaction').mockImplementationOnce(async (...args: Parameters<typeof db.transaction>) => {
-      await transaction(...args); throw new Error('audio committed response lost')
+    let lostCommittedReturn = false
+    const lost = vi.spyOn(db, 'transaction').mockImplementation((...args: Parameters<typeof db.transaction>) => {
+      const result = transaction(...args)
+      // Reads may open their own transactions before the actual audio commit.
+      // Lose only the return from the RW transaction that persists the cue.
+      if (lostCommittedReturn || args[0] !== 'rw' || !Array.isArray(args[1])
+        || !args[1].includes(db.productRuntimeEvents) || !args[1].includes(db.productMediaBlobs)) return result
+      lostCommittedReturn = true
+      return result.then(() => { throw new Error('audio committed response lost') })
     })
     await expect(confirm(s, review)).rejects.toThrow(/committed response lost/); lost.mockRestore()
+    expect(lostCommittedReturn).toBe(true)
+    const committed = (await db.productRuntimeEvents.where('sessionId').equals(s.owner.sessionId).toArray())
+      .filter(row => row.type === 'ttrpg.audio.cue.applied')
+    expect(committed).toHaveLength(1)
     const result = { sequence: (await readProductRuntimeState(s.owner.sessionId)).lastSequence }
+    expect(result.sequence).toBe(committed[0].sequence)
     expect(await confirm(s, review)).toEqual(result); expect(await db.productMediaBlobs.count()).toBe(1)
     expect((await db.productRuntimeEvents.where('sessionId').equals(s.owner.sessionId).toArray()).filter(row => row.type === 'ttrpg.audio.cue.applied')).toHaveLength(1)
   })

@@ -1844,6 +1844,19 @@ async function assertConversationScope(input: RunDurableMasterAgentInputV1): Pro
   if ((conversation.worldGroupId ?? null) !== input.worldGroupId) fail('主 Agent durable run 对话世界组不一致')
 }
 
+const MASTER_SOURCE_REAUTHORIZATION_MESSAGE = '创作来源已变化，原执行等待作者核对来源并重新授权。'
+
+function masterRunAwaitsSourceAuthorizationV1(snapshot: AgentRunSnapshotV1): boolean {
+  if (snapshot.contract.failurePolicy.onStaleInput !== 'pause-for-author') return false
+  return snapshot.events.some(event => {
+    if (event.generation !== snapshot.projection.generation) return false
+    if (event.type === 'run.paused') return event.payload.reason === 'stale_input'
+    if (event.type !== 'step.failed' || event.payload.category !== 'stale-input') return false
+    const step = snapshot.projection.steps[event.payload.stepId]
+    return step?.status === 'failed' && step.attempt === event.payload.attempt
+  })
+}
+
 export async function runDurableMasterAgentPlanV1(
   input: RunDurableMasterAgentInputV1,
   dependencies: MasterAgentDurableDependenciesV1 = {},
@@ -1946,6 +1959,12 @@ export async function runDurableMasterAgentPlanV1(
     fail('恢复的团队预算证据与当前策略不一致')
   }
   budget = new AgentTeamBudgetTracker(restored.latestBudget.profile, restored.latestBudget)
+  if (resumed && ['paused', 'running', 'recovering'].includes(snapshot.projection.state)
+    && masterRunAwaitsSourceAuthorizationV1(snapshot)) {
+    // A checkpoint proves what was already paid and saved. It does not
+    // authorize a new request against a different source revision.
+    fail(MASTER_SOURCE_REAUTHORIZATION_MESSAGE)
+  }
   if (resumed && snapshot.projection.state === 'paused') {
     const recovery = await beginAgentRunRecoveryV1({
       scope: input.scope,
@@ -2771,6 +2790,10 @@ export async function runDurableMasterAgentPlanV1(
         category: 'unknown', action: 'pause-for-author',
         fingerprint: await hashCanonicalValue({ version: 1, code: 'model_evidence_persistence_failed', originalFailureFingerprint: classified.fingerprint }) }
     }
+    const waitsForStaleAuthor = !input.signal?.aborted && !modelEvidenceFailure
+      && snapshot.contract.failurePolicy.onStaleInput === 'pause-for-author'
+      && (classified.category === 'stale-input' || masterRunAwaitsSourceAuthorizationV1(snapshot))
+    if (waitsForStaleAuthor) classified = { ...classified, action: 'pause-for-author', retryable: false }
     if (input.signal?.aborted && !modelEvidenceFailure) {
       for (const failedTask of failedTasks) {
         const stepId = taskStepId(failedTask.id)
@@ -2883,7 +2906,7 @@ export async function runDurableMasterAgentPlanV1(
             fingerprint: classified.fingerprint,
           })
         } else if (existing?.type === 'step.failed') {
-          requiresReplan ||= existing.payload.action === 'replan'
+          requiresReplan ||= !waitsForStaleAuthor && existing.payload.action === 'replan'
           replanFailures.push({
             taskId: failedTask.id,
             code: existing.payload.code,
@@ -2911,7 +2934,7 @@ export async function runDurableMasterAgentPlanV1(
               runId: snapshot.run.id,
               type: 'run.paused',
               payload: {
-                reason: requiresReplan ? 'master_agent_replan_required' : classified.code,
+                reason: waitsForStaleAuthor ? 'stale_input' : requiresReplan ? 'master_agent_replan_required' : classified.code,
                 recoverable: true,
               },
               expectedLastSequence: snapshot.projection.lastSequence,
@@ -2990,6 +3013,7 @@ export async function runDurableMasterAgentPlanV1(
         }, dependencies)
       }
     }
+    if (waitsForStaleAuthor) fail(MASTER_SOURCE_REAUTHORIZATION_MESSAGE)
     throw error
   }
 
@@ -3051,6 +3075,10 @@ export async function findResumableMasterAgentRunV1(input: {
     try {
       const snapshot = await readAgentRunV1(input.scope, run.id)
       if (!isMasterAgentRunWorkflowKindV1(snapshot.contract.workflowKind)) continue
+      // The conversation's newest stale execution needs a new author decision
+      // even if an interrupted recovery already changed it to recovering.
+      if (['paused', 'running', 'recovering'].includes(snapshot.projection.state)
+        && masterRunAwaitsSourceAuthorizationV1(snapshot)) return null
       if (!['paused', 'running'].includes(snapshot.projection.state)) continue
       // Rejecting a candidate is an author decision, not an interrupted call.
       // Keep its ledger, but never offer a generic resume that can retry it.

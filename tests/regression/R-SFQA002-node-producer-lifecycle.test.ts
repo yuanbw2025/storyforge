@@ -334,12 +334,12 @@ describe('SFQA002 D5 real Node producer association', () => {
     expect({ run: await db.agentRuns.get(b.run.id), node: await db.nodeRuns.get(sibling.nodeRunId), flow: await db.nodeFlows.get(sibling.flowId), work: await db.works.get(workId) }).toEqual(before)
     await expectRaw(f.scope.projectId, rawB.artifact.contentHash)
   })
-  it('captures the registered internal17 snapshot in an actual caller-owned native transaction with zero DB writes', async () => {
+  it('captures the registered current snapshot in an actual caller-owned native transaction with zero DB writes', async () => {
     const f = await fixture(); const run = await createAgentRunV1(await inputFor(f)); await raw(run.run.id, f.scope)
     const before = await allRows()
     const internal = await db.transaction('r', transactionTablesFor('importProject'), () =>
       deriveStrictExportProjectSnapshotInCurrentTransaction(f.scope.projectId, { worldId: f.scope.worldId, workId: f.scope.workId }))
-    expect(internal.data.version).toBe(17)
+    expect(internal.data.version).toBe(CURRENT_EXPORT_VERSION)
     expect(internal.data.agentRuns![0]!._nodeRunExportId).toBe(0)
     expect(internal.data.nodeRuns![0]!._flowExportId).toBe(0)
     expect(await allRows()).toEqual(before)
