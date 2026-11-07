@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1, evaluateCurrentProductEntryV1 } from '../../lib/product/product-catalog'
 import SourceRunFailure from './SourceRunFailure'
 import {useEffect, useRef, useState} from 'react'
 import type {WorkspaceScope} from '../../lib/types'
@@ -12,6 +13,7 @@ import {generateChatConsultationV2, readLatestChatConsultationV2, adoptChatConsu
 export default function Consultation({scope, draft, dirty, onSource, onProduction}: {
   scope: WorkspaceScope | null; draft?: ChatAuthoringDraftV1; dirty: boolean; onSource: () => void; onProduction: () => void
 }) {
+  const canAuthor = evaluateCurrentProductEntryV1('upper.character-interaction').enterable
   const config = useAIConfigStore(state => state.config)
   const [view, setView] = useState<ChatConsultationViewV2 | null>(null)
   const [question, setQuestion] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('')
@@ -48,6 +50,7 @@ export default function Consultation({scope, draft, dirty, onSource, onProductio
   const oldTurns = draft ? JSON.parse(draft.conversationJson) as ChatConversationTurnV1[] : []
   const missing = draft ? chatPlanMissingInputsV1(parseChatAuthoringSettings(JSON.parse(draft.settingsJson)), !!draft.worldReleaseId) : []
   const send = () => act(async () => {
+    assertCurrentProductEntryV1('upper.character-interaction')
     if (!scope || !draft || dirty) throw new Error('请先保存当前方案')
     if (view?.status === 'ready' || view?.status === 'stale') await cancelChatConsultationV2(scope, view.runId)
     controller.current = new AbortController()
@@ -56,6 +59,7 @@ export default function Consultation({scope, draft, dirty, onSource, onProductio
     setQuestion('')
   })
   return <div className="avg-consult">
+    {!canAuthor && <p role="status">当前产品尚未开放新会谈或方案采纳；已有原文、候选和记录仍可查看、恢复或结束。</p>}
     <section className="lf-paper space-y-3">
       <h3>角色聊天 主 Agent</h3>
       <p>一起打磨人物牵挂、当前矛盾和开放的开场。你可选择带入的原文，并逐项采用建议；开始制作仍由你单独确认。</p>
@@ -76,11 +80,11 @@ export default function Consultation({scope, draft, dirty, onSource, onProductio
         </details>
         {view?.context?.history.length ? <details><summary>本次承接的讨论</summary>{view.context.history.map((turn, index) => <article className="my-2" key={index}><p>你：{turn.question}</p><p>主 Agent：{turn.candidate.answer}</p></article>)}</details> : null}
         {oldTurns.length > 0 && <details><summary>旧版会谈记录（只读）</summary><p>旧版整份方案候选不再直接覆盖当前方案，请在新会谈重新讨论需要的修改。</p>{oldTurns.map(turn => <article key={turn.id}><p>{turn.question}</p><p>{turn.answer || turn.error}</p></article>)}</details>}
-        <label className="block">你的想法<textarea aria-label="角色聊天 会谈输入" className="w-full" value={question} maxLength={5000} onChange={event => setQuestion(event.target.value)}/></label>
+        <label className="block">你的想法<textarea disabled={!canAuthor} aria-label="角色聊天 会谈输入" className="w-full" value={question} maxLength={5000} onChange={event => setQuestion(event.target.value)}/></label>
         {candidate && <label><input type="checkbox" checked={continueDiscussion} onChange={event => setContinueDiscussion(event.target.checked)}/>承接上一轮讨论</label>}
         <p>继续发送会保留上一份候选，尚未确认的修改不会自动采用；取消勾选可开始新的讨论。</p>
         {!isAIConfigReady(config) && <p>请先在全局设置中配置文本模型。</p>}
-        <button className="lf-action lf-action-primary" disabled={busy || dirty || unfinished || !question.trim() || !isAIConfigReady(config)} onClick={() => void send()}>{busy ? '会谈中…' : '发送'}</button>
+        <button className="lf-action lf-action-primary" disabled={busy || !canAuthor || dirty || unfinished || !question.trim() || !isAIConfigReady(config)} onClick={() => void send()}>{busy ? '会谈中…' : '发送'}</button>
         {busy && <button className="lf-action" onClick={() => controller.current?.abort()}>停止</button>}
         {unfinished && !view?.failure && <p>{view?.status === 'unknown' ? '这次请求的结果尚未留存。刷新不会重发；结束等待后，下一次发送会发起新请求。' : '本次会谈尚未完成。已有回复可以恢复；恢复不调用模型。'}</p>}
         {view && <div className="avg-actions">
@@ -103,13 +107,13 @@ export default function Consultation({scope, draft, dirty, onSource, onProductio
       {candidate ? <>
         <p className="whitespace-pre-wrap">{candidate.answer}</p>
         {candidate.changes.map(change => <article key={change.field} className="space-y-2 rounded border border-border p-3" data-testid="chat-plan-change">
-          <label><input type="checkbox" disabled={busy || dirty || view?.status !== 'ready'} checked={fields.includes(change.field)} onChange={event => setFields(list => event.target.checked ? [...list, change.field] : list.filter(field => field !== change.field))}/>{CHAT_PLAN_FIELDS[change.field]}</label>
+          <label><input type="checkbox" disabled={busy || !canAuthor || dirty || view?.status !== 'ready'} checked={fields.includes(change.field)} onChange={event => setFields(list => event.target.checked ? [...list, change.field] : list.filter(field => field !== change.field))}/>{CHAT_PLAN_FIELDS[change.field]}</label>
           <p className="text-sm">{change.basis === 'source' ? '有原文依据，仍需作者核对' : '体验创作提议，尚未成为事实'}</p>
           <p className="whitespace-pre-wrap break-words">当前：{String(view?.context?.plan[change.field] ?? '') || '尚未填写'}</p>
           <p className="whitespace-pre-wrap break-words">建议：{change.value}</p><p>{change.reason}</p>
           {change.evidence.map((evidence, index) => <blockquote key={index} className="whitespace-pre-wrap break-words border-l-2 border-border pl-3 text-sm">{evidence.quote}</blockquote>)}
         </article>)}
-        {candidate.changes.length > 0 && <button className="lf-action lf-action-primary" disabled={busy || dirty || view?.status !== 'ready' || !fields.length || !scope} onClick={() => void act(() => adoptChatConsultationV2({scope: scope!, runId: view!.runId, expectedCandidateHash: view!.candidateHash!, fields}))}>采用勾选的修改</button>}
+        {candidate.changes.length > 0 && <button className="lf-action lf-action-primary" disabled={busy || !canAuthor || dirty || view?.status !== 'ready' || !fields.length || !scope} onClick={() => void act(() => adoptChatConsultationV2({scope: scope!, runId: view!.runId, expectedCandidateHash: view!.candidateHash!, fields}))}>采用勾选的修改</button>}
       </> : <p>尚无可用候选。提出你的想法后，可以查看依据、选择需要的修改。</p>}
       {missing.length > 0 && <section aria-label="制作前待补齐"><h4>开始制作前还需</h4><ul>{missing.map(item => <li key={item}>{item}</li>)}</ul></section>}
       <p>采用建议只会更新方案。正式制作还会核对资料，并等待你明确开始。</p>

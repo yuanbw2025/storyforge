@@ -225,6 +225,12 @@ export default function TextOpenWorldScenePanel({
     operation: 'natural-input' | 'memory'
   } | null>(null)
   const interpretationRevision = useRef(0)
+  const memoryRevision = useRef(0)
+  const memoryView = useRef({ sessionKey, selectedSceneKey })
+  if (memoryView.current.sessionKey !== sessionKey || memoryView.current.selectedSceneKey !== selectedSceneKey) {
+    memoryView.current = { sessionKey, selectedSceneKey }
+  }
+  useEffect(() => () => { memoryRevision.current += 1 }, [])
 
   useEffect(() => {
     setSelectedSceneKey(projection.recommendedSceneKey)
@@ -464,6 +470,9 @@ export default function TextOpenWorldScenePanel({
 
   const commitDialogueMemory = async () => {
     if (!scene?.actor || !onCommitMemory || dialogueTurns.length < 2 || memoryBusy) return
+    const view = memoryView.current
+    const requestRevision = ++memoryRevision.current
+    const mayPublish = () => memoryView.current === view && memoryRevision.current === requestRevision
     setRuntimeAIFailure(null)
     setMemoryBusy(true)
     setMemoryNotice('正在把本场景对白压缩为最小长期记忆；完成前不会改变游戏状态。')
@@ -486,14 +495,16 @@ export default function TextOpenWorldScenePanel({
           dialogueRunId: turn.runId,
         })),
       })
+      if (!mayPublish()) return
       setDialogueTurns([])
       setMemoryNotice(`已写入长期记忆：${result.summary}`)
     } catch (error) {
+      if (!mayPublish()) return
       const failure = textOpenWorldRuntimeAIPlayerFailureV1(error)
       if (failure) setRuntimeAIFailure({ failure, operation: 'memory' })
       setMemoryNotice(`${failure?.message ?? '长期记忆整理失败'}；临时对白和确定性玩法不受影响。`)
     } finally {
-      setMemoryBusy(false)
+      if (mayPublish()) setMemoryBusy(false)
     }
   }
 
