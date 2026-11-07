@@ -4,17 +4,17 @@
  * 在角色卡片下方展示该角色的当前状态（来自状态卡系统），
  * 包括：位置、实力等级、持有物品、近期事件等。
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { liveQuery } from 'dexie'
 import { MapPin, Zap, Package, History, Swords } from 'lucide-react'
 import { db } from '../../lib/db/schema'
-import { assertRecordInScope, resolveReadScopeLike } from '../../lib/workspace/scope'
-import { useStateCardStore } from '../../stores/state-card'
+import { assertRecordInScope, readOwnedRows, resolveReadScopeLike } from '../../lib/workspace/scope'
 import { inspectStateFields } from '../../lib/types/state-card'
-import type { Chapter } from '../../lib/types'
+import type { Chapter, StateCard, WorkspaceScope } from '../../lib/types'
 
 interface Props {
-  projectId: number
+  scope: WorkspaceScope
+  characterId: number | undefined
   characterName: string
 }
 
@@ -28,30 +28,28 @@ function getFieldIcon(key: string) {
   return History
 }
 
-export default function CharacterStatusPanel({ projectId, characterName }: Props) {
-  const { cards } = useStateCardStore()
-
-  // 找到该角色的状态卡
-  const stateCard = useMemo(() => {
-    return cards.find(
-      c => c.projectId === projectId
-        && c.category === 'character'
-        && c.entityName === characterName,
-    )
-  }, [cards, projectId, characterName])
-
-  const [sourceChapter, setSourceChapter] = useState<Chapter | null>(null)
+export default function CharacterStatusPanel({ scope, characterId, characterName }: Props) {
+  const { projectId, worldId, workId } = scope
+  const key = `${projectId}:${worldId}:${workId}:${characterId}:${characterName}`
+  const [readback, setReadback] = useState<{ key: string; card: StateCard | null; chapter: Chapter | null; error?: string } | null>(null)
   useEffect(() => {
-    setSourceChapter(null)
     const subscription = liveQuery(async () => {
-      if (!stateCard?.lastChapterId) return null
-      const chapter = await db.chapters.get(stateCard.lastChapterId)
-      return chapter && await assertRecordInScope(await resolveReadScopeLike(projectId), 'chapters', chapter, { owner: 'work' })
-        ? chapter : null
-    }).subscribe({ next: setSourceChapter, error: () => setSourceChapter(null) })
+      const frozenScope = await resolveReadScopeLike({ projectId, worldId, workId })
+      const character = characterId == null ? null : await db.characters.get(characterId)
+      if (!character || character.name !== characterName || !await assertRecordInScope(frozenScope, 'characters', character, { owner: 'world' })) {
+        return { key, card: null, chapter: null }
+      }
+      const card = (await readOwnedRows<StateCard>(frozenScope, 'stateCards', { owner: 'work' }))
+        .find(card => card.category === 'character' && card.entityName === characterName) ?? null
+      const chapter = card?.lastChapterId ? await db.chapters.get(card.lastChapterId) : null
+      return { key, card, chapter: chapter && await assertRecordInScope(frozenScope, 'chapters', chapter, { owner: 'work' }) ? chapter : null }
+    }).subscribe({ next: setReadback, error: () => setReadback({ key, card: null, chapter: null, error: '当前作品的角色状态读取失败，请重新打开后重试。' }) })
     return () => subscription.unsubscribe()
-  }, [projectId, stateCard?.lastChapterId])
+  }, [projectId, worldId, workId, characterId, characterName, key])
 
+  const stateCard = readback?.key === key ? readback.card : null
+  const sourceChapter = readback?.key === key ? readback.chapter : null
+  if (readback?.key === key && readback.error) return <p role="alert" className="text-xs text-error">{readback.error}</p>
   if (!stateCard) return null
 
   const result = inspectStateFields(stateCard.fields)

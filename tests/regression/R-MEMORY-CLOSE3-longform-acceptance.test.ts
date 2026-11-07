@@ -702,4 +702,45 @@ describe('MEMORY-CLOSE-3 · 隔离长篇、多 World/Work、恢复与继续创�
     const index = JSON.parse(disk.read('.storyforge/runs/memory-index.json')).index
     expect(index.runs[0]).toMatchObject({ state: 'incomplete', settlementSource: 'derived-current' })
   }, 60_000)
+
+  it('完整往返保留多根大纲和后建父节点的便携坐标及全部引用', async () => {
+    const seeded = await seedRepresentativeLongform()
+    const disk = memoryDirectory('StoryForgeForwardParentRestore')
+    const lateVolume = {
+      projectId: seeded.projectId,
+      workId: seeded.firstScope.workId,
+      parentId: null,
+      type: 'volume' as const,
+      title: '后建卷：保留原便携坐标',
+      summary: '已有章节可以移动到后来创建的同作品卷。',
+      order: 99,
+      createdAt: now + 600,
+      updatedAt: now + 600,
+    }
+    const lateVolumeId = await db.outlineNodes.add(lateVolume)
+    await db.outlineNodes.update(seeded.target.outlineNodeId, { parentId: lateVolumeId })
+    await stampCurrentFixtureResourceUidsV1(seeded.projectId)
+    const baseline = await buildWorkspaceSelfCheckReportV1(seeded.projectId, disk.handle)
+    await synchronizeProjectChangesToFolderV1({ projectId: seeded.projectId, root: disk.handle,
+      expectedPlanHash: baseline.plan.planHash })
+    const original = await exportProjectJSON(seeded.projectId)
+    const child = original.outlineNodes.find(row => row.title === seeded.target.title)!
+    const parent = original.outlineNodes.find(row => row.title === lateVolume.title)!
+    expect(child._exportId).toBeLessThan(parent._exportId)
+    expect(child._parentExportId).toBe(parent._exportId)
+    const expectedHash = await portableHash(seeded.projectId)
+    const expectedCounts = await criticalCounts(seeded.projectId)
+
+    await db.delete()
+    await db.open()
+    const restored = await restoreWorkspaceFromFolderV1(disk.handle)
+    expect(restored.report.plan.items.every(item => item.changeKind === 'clean')).toBe(true)
+    expect(await criticalCounts(restored.projectId)).toEqual(expectedCounts)
+    expect(await portableHash(restored.projectId)).toBe(expectedHash)
+    const roundTrip = await exportProjectJSON(restored.projectId)
+    expect(roundTrip.outlineNodes).toEqual(original.outlineNodes)
+    expect(roundTrip.chapters).toEqual(original.chapters)
+    expect(roundTrip.detailedOutlines).toEqual(original.detailedOutlines)
+    expect(roundTrip.narrativeNodes).toEqual(original.narrativeNodes)
+  }, 60_000)
 })

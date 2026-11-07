@@ -4,7 +4,7 @@
  * 三列布局：L1 大类导航 → L2 子类列表 → 编辑区（双文本框 + 优先级）
  * 底部：规则预览 + Token 估算
  */
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { useWorldRulesStore } from '../../stores/world-rules'
 import { useWorldGroupStore } from '../../stores/world-group'
@@ -30,6 +30,8 @@ import { useDialog } from '../shared/Dialog'
 import WorldRuleEntryEditor from './WorldRuleEntryEditor'
 import WorldRulesNavigation from './WorldRulesNavigation'
 import type { WorldRuleNavigationNode } from './WorldRulesNavigation'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
+import { flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 import {
   INITIAL_RECORD_TARGET_CLASS,
   initialRecordTargetAttributes,
@@ -74,7 +76,7 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
     updateEntry, deleteEntry,
     updateGlobalNote,
     addCustomNode, deleteCustomNode,
-    filledCount,
+    filledCount, dirty, pendingSaves, saveError, _persist, discardDraft,
   } = useWorldRulesStore()
   const {
     groups: worldGroups,
@@ -88,6 +90,41 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
   const [previewText, setPreviewText] = useState('')
   const [previewTokens, setPreviewTokens] = useState(0)
   const [worldTab, setWorldTab] = useState<number | null>(null)
+  const [actionError, setActionError] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const [discarded, setDiscarded] = useState(false)
+  const actionSequence = useRef(0)
+  const loadSequence = useRef(0)
+  const reportError = useCallback((cause: unknown) => {
+    actionSequence.current++
+    setActionError(cause instanceof Error ? cause.message : '规则操作失败，输入已保留。')
+  }, [])
+  const runEdit = useCallback(async (operation: () => Promise<unknown>) => {
+    const action = ++actionSequence.current
+    setActionError('')
+    try {
+      await operation()
+      if (action === actionSequence.current) setActionError('')
+    } catch (cause) {
+      if (action === actionSequence.current) setActionError(cause instanceof Error ? cause.message : '规则操作失败，输入已保留。')
+    }
+  }, [])
+  useEffect(() => registerPendingDraftFlusherV1(() => {
+    const state = useWorldRulesStore.getState()
+    if (state.dirty && state.pendingSaves === 0) throw new Error(state.saveError || '规则草稿尚未保存，输入已保留。')
+  }), [])
+  useBeforeUnload(dirty || pendingSaves > 0)
+  const loadRules = useCallback(async () => {
+    if (project.enableMultiWorld && worldTab == null) return
+    const request = ++loadSequence.current
+    try {
+      await loadProfile(project.id!, project.enableMultiWorld ? worldTab : null)
+      if (request === loadSequence.current) setLoadError('')
+    } catch (cause) {
+      if (request === loadSequence.current) setLoadError(cause instanceof Error ? cause.message : '规则加载失败，原输入已保留。')
+      throw cause
+    }
+  }, [project.id, project.enableMultiWorld, worldTab, loadProfile])
 
   // 时间线 & 关键词（用于预览）
   const [timelineEvents, setTimelineEvents] = useState<HistoricalTimelineEvent[]>([])
@@ -117,9 +154,10 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
   }, [activeGroupId, project.enableMultiWorld, projectWorldGroups, worldTab])
 
   useEffect(() => {
-    if (project.enableMultiWorld && worldTab == null) return
-    loadProfile(project.id!, project.enableMultiWorld ? worldTab : null)
-  }, [project.id, project.enableMultiWorld, worldTab, loadProfile])
+    const sequence = loadSequence
+    void loadRules().catch(() => undefined)
+    return () => { sequence.current++ }
+  }, [loadRules])
 
   useEffect(() => {
     const loadExtras = async () => {
@@ -234,8 +272,8 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
     value: string | ConflictPriority,
   ) => {
     if (!selectedNode) return
-    await updateEntry(selectedNode, field, value)
-  }, [selectedNode, updateEntry])
+    await runEdit(() => updateEntry(selectedNode, field, value))
+  }, [selectedNode, updateEntry, runEdit])
 
   const handleDeleteCustomNode = useCallback(async (nodeId: string, label: string) => {
     const ok = await dialog.confirm({
@@ -245,9 +283,11 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
       tone: 'danger',
     })
     if (!ok) return
-    deleteCustomNode(nodeId)
-    if (selectedNode === nodeId) setSelectedNode(null)
-  }, [deleteCustomNode, dialog, selectedNode])
+    await runEdit(async () => {
+      await deleteCustomNode(nodeId)
+      if (selectedNode === nodeId) setSelectedNode(null)
+    })
+  }, [deleteCustomNode, dialog, selectedNode, runEdit])
 
   const handleClearEntry = useCallback(async (nodeId: string) => {
     const ok = await dialog.confirm({
@@ -256,8 +296,8 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
       confirmText: '清空',
       tone: 'danger',
     })
-    if (ok) deleteEntry(nodeId)
-  }, [deleteEntry, dialog])
+    if (ok) await runEdit(() => deleteEntry(nodeId))
+  }, [deleteEntry, dialog, runEdit])
 
   // 预览清单
   const handleTogglePreview = useCallback(async () => {
@@ -275,21 +315,36 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
   }, [showPreview, profile, scopedTimelineEvents, scopedKeywords])
 
   const handleSwitchWorld = useCallback((worldGroupId: number) => {
-    setWorldTab(worldGroupId)
-    setSelectedNode(null)
-    setShowPreview(false)
-  }, [])
+    void runEdit(async () => {
+      await flushPendingEditsV1()
+      setWorldTab(worldGroupId)
+      setSelectedNode(null)
+      setShowPreview(false)
+    })
+  }, [runEdit])
 
   // 新增自定义 L1
   const handleAddL1 = useCallback(async (label: string) => {
-    await addCustomNode({ parentId: null, label, icon: '🔖' })
-  }, [addCustomNode])
+    await runEdit(() => addCustomNode({ parentId: null, label, icon: '🔖' }))
+  }, [addCustomNode, runEdit])
 
   // 新增自定义 L2
   const handleAddL2 = useCallback(async (label: string) => {
-    const id = await addCustomNode({ parentId: selectedL1, label, icon: '📝' })
-    if (id) setSelectedNode(id)
-  }, [addCustomNode, selectedL1])
+    await runEdit(async () => {
+      const id = await addCustomNode({ parentId: selectedL1, label, icon: '📝' })
+      if (id) setSelectedNode(id)
+    })
+  }, [addCustomNode, selectedL1, runEdit])
+
+  const exportDraft = () => {
+    try {
+      const state = useWorldRulesStore.getState()
+      const url = URL.createObjectURL(new Blob([JSON.stringify({ format: 'storyforge-world-rules-draft-v1', scope: state.loadedScope, profile: state.profile }, null, 2)], { type: 'application/json' }))
+      const link = document.createElement('a')
+      link.href = url; link.download = 'storyforge-world-rules-draft.json'; link.click()
+      URL.revokeObjectURL(url)
+    } catch (cause) { reportError(cause) }
+  }
 
   // 检查节点是否为自定义节点
   const isCustomNode = useCallback((nodeId: string): boolean => {
@@ -299,7 +354,9 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
   if (loading || !profile) {
     return (
       <div className="flex items-center justify-center h-64">
-        <span className="text-text-muted">加载中...</span>
+        <span role={actionError || saveError || loadError ? 'alert' : undefined} className="text-text-muted">
+          {actionError || saveError || loadError || (discarded ? '未保存输入已按你的选择放弃，可以切换页面。' : '加载中...')}
+        </span>
       </div>
     )
   }
@@ -332,6 +389,27 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
           {showPreview ? '关闭预览' : 'AI 清单预览'}
         </button>
       </div>
+
+      {(dirty || pendingSaves > 0 || actionError || saveError || loadError) && <div className="space-y-2 rounded border border-amber-500/30 p-3 text-xs">
+        {(dirty || pendingSaves > 0 || actionError || saveError) && <p role={actionError || saveError ? 'alert' : 'status'} className="text-amber-400">
+          {saveError || actionError || (pendingSaves ? '正在保存规则…' : '规则输入尚未保存。')}
+          {(saveError || actionError) && ' 原输入仍保留在本页，请重试或导出草稿。'}
+        </p>}
+        {loadError && <p role="alert" className="text-amber-400">{loadError}</p>}
+        <div className="flex gap-3">
+          <button type="button" className="text-accent underline" onClick={exportDraft}>导出未保存规则草稿</button>
+          <button type="button" disabled={pendingSaves > 0} className="text-accent underline" onClick={() => { void runEdit(() => _persist()) }}>重试保存规则</button>
+          {loadError && <button type="button" disabled={pendingSaves > 0} className="text-accent underline" onClick={() => {
+            void runEdit(async () => {
+              await flushPendingEditsV1()
+              await loadRules()
+            })
+          }}>重试加载规则</button>}
+          <button type="button" disabled={pendingSaves > 0} className="text-text-muted underline" onClick={() => {
+            try { discardDraft(); actionSequence.current++; setActionError(''); setDiscarded(true) } catch (cause) { reportError(cause) }
+          }}>放弃未保存规则输入</button>
+        </div>
+      </div>}
 
       {project.enableMultiWorld && projectWorldGroups.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -386,7 +464,7 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
         </label>
         <textarea
           value={profile.globalNote || ''}
-          onChange={e => updateGlobalNote(e.target.value)}
+          onChange={event => { const note = event.target.value; void runEdit(() => updateGlobalNote(note)) }}
           placeholder="例如：本作以唐代为蓝本但加入仙侠元素，凡是涉及朝堂制度的一律遵循史实，力量体系完全虚构。"
           rows={3}
           className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-bg-base text-text-primary placeholder:text-text-muted/50 focus:ring-1 focus:ring-accent focus:border-accent resize-y"

@@ -18,6 +18,7 @@ import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../product-production/hash'
 import { parseProductProductionPlanV3 } from '../product-production/plan'
 import { assertTextOpenWorldNewSourceV1, assertTextOpenWorldProductionNewWorkV1 } from './source-admission'
+import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from './creator-ending-count'
 
 function fail(message: string): never {
   throw new Error(`[text-open-world-creator-derived-authority] ${message}`)
@@ -214,6 +215,17 @@ export async function readTextOpenWorldCreatorDerivedBuildAuthorityV1(input: {
 /** New production operations use the same strict reader, then apply the
  * current source policy. The historical reader above remains byte-compatible
  * for inspection, export and deterministic recovery of existing evidence. */
+export function assertTextOpenWorldCreatorDraftForNewWorkV1(
+  draft: TextOpenWorldCreatorDerivedBuildAuthorityV1['contracts']['creatorBrief']['draft'],
+): void {
+  if (draft.protagonistMode === 'source-character' && !draft.protagonistSourceResourceKey) {
+    throw new Error('[text-open-world-creator-authority] 旧简报未明确选择封存主角。请先停止原制作，再修订并确认简报后开始新的制作。')
+  }
+  if (!isTextOpenWorldCreatorEndingCountV1(draft.scale.endings)) {
+    fail(TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+  }
+}
+
 export async function readTextOpenWorldCreatorBuildNewWorkAuthorityV1(input: {
   scope: WorkspaceScope
   buildId: number
@@ -223,5 +235,6 @@ export async function readTextOpenWorldCreatorBuildNewWorkAuthorityV1(input: {
   const authority = await readTextOpenWorldCreatorDerivedBuildAuthorityV1(input)
   assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, input.operation)
   assertTextOpenWorldNewSourceV1(authority.contracts.sourcePlan.sourceKind, input.operation)
+  assertTextOpenWorldCreatorDraftForNewWorkV1(authority.contracts.creatorBrief.draft)
   return authority
 }

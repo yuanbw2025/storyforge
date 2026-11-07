@@ -47,6 +47,7 @@ type FieldProducerInput = {
   assembled: AssembleContextResult
   gateway: ContextGatewayExecutionV1 | undefined
   targetSnapshot: unknown
+  assertResumeSourcesCurrent?: () => Promise<void>
 }
 
 type NodeFieldPayloadV1 = WorldviewFieldCopilotCandidate | StoryCoreCopilotCandidate
@@ -279,9 +280,22 @@ export function createNodeFieldProducerV1(input: FieldProducerInput) {
       await originalPrepared?.(ref)
     }
     if (frozenResolution.config.provider === 'codex') result.onCodexRequestPrepared = onPrepared
+    const originalBeforeDispatch = result.beforeModelDispatch
+    const beforeModelDispatch = fixed.assertResumeSourcesCurrent ? async () => {
+      if (originalBeforeDispatch) await originalBeforeDispatch()
+      await fixed.assertResumeSourcesCurrent!()
+    } : undefined
+    if (beforeModelDispatch) result.beforeModelDispatch = beforeModelDispatch
     let raw: string
     const startedAt = performance.now()
     try {
+      if (fixed.assertResumeSourcesCurrent) {
+        // A saved request is intent. If its reused sources have changed,
+        // record the refusal before any transport or Codex POST hook starts.
+        result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }
+        await fixed.assertResumeSourcesCurrent()
+        signal?.throwIfAborted()
+      }
       // Runtime meta.category was checked above; these literal projections
       // preserve that value and make each real dispatcher binding machine-readable.
       raw = fixed.family === 'worldview'
@@ -303,6 +317,7 @@ export function createNodeFieldProducerV1(input: FieldProducerInput) {
       throw unavailable.report
     } finally {
       if (result.onCodexRequestPrepared === onPrepared) result.onCodexRequestPrepared = originalPrepared
+      if (beforeModelDispatch && result.beforeModelDispatch === beforeModelDispatch) result.beforeModelDispatch = originalBeforeDispatch
     }
     const latencyMs = Math.max(0, Math.round(performance.now() - startedAt))
     snapshot = await recordCreationModelResponseV1({ snapshot, request: request.request, raw, result })

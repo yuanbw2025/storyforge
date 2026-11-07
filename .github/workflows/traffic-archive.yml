@@ -8,26 +8,104 @@ on:
   workflow_dispatch: {}     # 支持在 Actions 页面手动触发（首次验证用）
 
 permissions:
-  contents: write           # 允许 workflow 把归档结果 commit 回仓库
+  contents: write           # 仅把统计产物快进推送到独立的 traffic-assets 分支
+
+concurrency:
+  group: traffic-archive-assets
+  cancel-in-progress: false
 
 jobs:
   archive:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
+      - name: Prepare traffic asset branch
+        id: archive-branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='traffic-assets'
+          test -z "$(git status --porcelain)"
+          scripts_dir="$(mktemp -d "${RUNNER_TEMP}/storyforge-traffic.XXXXXX")"
+          cp scripts/archive-traffic.py scripts/archive-release-downloads.py "${scripts_dir}/"
+          mkdir "${scripts_dir}/main-history"
+          for file in clones.csv views.csv release-assets.csv; do
+            cp "data/traffic/${file}" "${scripts_dir}/main-history/${file}"
+          done
+
+          if git ls-remote --exit-code --heads origin "refs/heads/${branch}" >/dev/null; then
+            git fetch --no-tags --depth=1 origin "refs/heads/${branch}:refs/remotes/origin/${branch}"
+            git switch --create "${branch}" --track "origin/${branch}"
+          else
+            status=$?
+            test "${status}" -eq 2 || exit "${status}"
+            # The first asset commit inherits every historical CSV from main.
+            git switch --create "${branch}"
+          fi
+
+          # Never replace a retained archive with an absent/empty/malformed fetch.
+          # Existing keys may have updated counts; all main history must remain.
+          python3 - "${scripts_dir}/main-history" <<'PY'
+          import csv
+          import sys
+          from pathlib import Path
+
+          keys = {"clones.csv": ("date",), "views.csv": ("date",),
+                  "release-assets.csv": ("snapshot_date", "asset_id")}
+          for name, columns in keys.items():
+              def read_keys(path):
+                  with path.open(newline="") as stream:
+                      reader = csv.DictReader(stream)
+                      if not reader.fieldnames or not set(columns).issubset(reader.fieldnames):
+                          raise ValueError(f"Archive header missing: {name}")
+                      result = [tuple(row[column] for column in columns) for row in reader]
+                  if any(not all(key) for key in result) or len(set(result)) != len(result):
+                      raise ValueError(f"Archive keys invalid: {name}")
+                  return set(result)
+              prior = read_keys(Path(sys.argv[1]) / name)
+              current = read_keys(Path("data/traffic") / name)
+              if not prior.issubset(current):
+                  raise ValueError(f"Retained archive history missing: {name}")
+          PY
+          echo "scripts_dir=${scripts_dir}" >> "${GITHUB_OUTPUT}"
+
       - name: Archive traffic data
+        id: archive-data
         env:
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}   # 需自建 PAT（repo scope）存为该 Secret
+          ARCHIVE_SCRIPTS: ${{ steps.archive-branch.outputs.scripts_dir }}
+        shell: bash
         run: |
-          python3 scripts/archive-traffic.py
-          python3 scripts/archive-release-downloads.py
+          set -euo pipefail
+          # Execute the reviewed main scripts, not an older asset-branch copy.
+          python3 "${ARCHIVE_SCRIPTS}/archive-traffic.py"
+          python3 "${ARCHIVE_SCRIPTS}/archive-release-downloads.py"
 
       - name: Commit updated data
+        shell: bash
         run: |
+          set -euo pipefail
+          branch='traffic-assets'
+          test "$(git branch --show-current)" = "${branch}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/traffic
+          git add -- data/traffic/clones.csv data/traffic/views.csv data/traffic/release-assets.csv
           git diff --cached --quiet || git commit -m "chore(traffic): 归档 $(date -u +%F) 流量数据"
-          git push
+          # No force, protected-main push, bot PR, or CI-triggering credential.
+          # Push even on a no-change first run to publish its historical seed.
+          git push origin "HEAD:refs/heads/${branch}"
+
+      - name: Retain unpublished traffic archive
+        if: ${{ failure() && steps.archive-data.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: traffic-archive-unpublished-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            data/traffic/clones.csv
+            data/traffic/views.csv
+            data/traffic/release-assets.csv
+          if-no-files-found: error
+          retention-days: 14

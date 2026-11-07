@@ -13,7 +13,7 @@ import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { generateWorkCode } from '../../src/lib/memory/identity'
 import { generateWorkspaceScopeCode } from '../../src/lib/workspace/identity'
-import { normalizeChapterText, sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
+import { CHAPTER_TEXT_NORMALIZATION_VERSION, normalizeChapterText, sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
 import {
   buildRagLibrary,
   updateRagFieldPolicy,
@@ -96,7 +96,7 @@ async function seedSixDomains() {
     worldGroupId: primaryGroupId, overview: '三百年前海面第一次倒悬。', eraSystem: '潮历', events: '[]',
   }, 'world')
   await addScoped(scope, 'importantLocations', {
-    name: '废弃王城', description: '被盐壳包裹的旧都', significance: '镜门入口', tags: ['王城'], parentId: null,
+    name: '废弃王城', description: '被盐壳包裹的旧都', significance: '镜门入口', tags: JSON.stringify(['城市']), parentId: null,
   }, 'world')
   const categoryId = await addScoped(scope, 'codexCategories', {
     name: '族群', description: '', order: 0, parentId: null,
@@ -159,6 +159,7 @@ async function seedSixDomains() {
       summarySourceTextHash: index === 0
         ? await sha256Text(normalizeChapterText(content))
         : '0'.repeat(64),
+      summaryTextNormalizationVersion: CHAPTER_TEXT_NORMALIZATION_VERSION,
     }, 'work'))
     if (index === 0) {
       await addScoped(scope, 'detailedOutlines', {

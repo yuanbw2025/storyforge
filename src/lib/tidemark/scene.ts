@@ -198,9 +198,9 @@ export function createTidemarkScene(host: HTMLDivElement, options: {
       else if(waypoints.length){const p=player.group.position;const next=advanceWalkingPath(p,waypoints,5.8*dt,point=>walkable(point,obstacles));const mx=next.x-p.x,mz=next.z-p.z;p.x=next.x;p.z=next.z;p.y=groundHeight(p.z);if(Math.hypot(mx,mz)>.001){player.group.rotation.y=Math.atan2(mx,mz);moving=true}}
       const length=Math.hypot(dx,dz)
       if(length>.01){
-        const speed=Math.min(length,(keys.has('shift')?9:5.8)*dt)
-        // Preserve walking speed on slower devices without tunnelling through
-        // walls or overshooting a path waypoint in a long render frame.
+        const speed=Math.min(1,length)*(keys.has('shift')?9:5.8)*dt
+        // Input strength scales distance per second, not the per-frame budget.
+        // Collision substeps keep the full long-frame budget from crossing walls.
         const steps=Math.max(1,Math.ceil(speed/.25));dx=dx/length*speed/steps;dz=dz/length*speed/steps
         const p=player.group.position
         for(let step=0;step<steps;step++){if(walkable({x:p.x+dx,z:p.z},obstacles))p.x+=dx;if(walkable({x:p.x,z:p.z+dz},obstacles))p.z+=dz}

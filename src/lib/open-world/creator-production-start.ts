@@ -1,6 +1,8 @@
+import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from './creator-ending-count'
 import { db } from '../db/schema'
 import { assertTextOpenWorldNewSourceV1, assertTextOpenWorldProductionNewWorkV1 } from './source-admission'
 import { assertTextOpenWorldCreatorBriefLifecycleV1 } from './creator-brief-lifecycle'
+import { assertTextOpenWorldCreatorProtagonistSelectionV1 } from './creator-source'
 import type {
   AIConfig,
   ProductProductionBriefRecordV1,
@@ -204,6 +206,8 @@ export async function createTextOpenWorldCreatorProductionSourcePlanV1(input: {
     || !sameJson(inspected.summary, brief.sourceSummary)) {
     fail('Creator Brief 与当前来源 CAS 不一致')
   }
+  await assertTextOpenWorldCreatorProtagonistSelectionV1({ selection: inspected.selection,
+    mode: brief.draft.protagonistMode, resourceKey: brief.draft.protagonistSourceResourceKey })
   let selection: TextOpenWorldCreatorProductionSourcePlanV1['selection']
   let expectedSourceBoundaryHash: string
   if (input.sourceLocator.kind === 'world-release') {
@@ -350,7 +354,16 @@ export async function createTextOpenWorldCreatorExecutionBriefV1(input: {
 }): Promise<ProductProductionBriefV3> {
   input = structuredClone(input)
   const brief = await verifyTextOpenWorldCreatorBriefV1(input.brief)
+  if (!isTextOpenWorldCreatorEndingCountV1(brief.draft.scale.endings)) {
+    fail(TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+  }
   const sourcePlan = await parseTextOpenWorldCreatorProductionSourcePlanV1(input.sourcePlan, brief)
+  const actorKey = brief.draft.protagonistSourceResourceKey
+  if (brief.draft.protagonistMode === 'source-character' &&
+    (!actorKey || sourcePlan.selection.kind !== 'world-release' || !sourcePlan.selection.resourceKeys.includes(actorKey))) {
+    fail('请在当前封存 SourcePlan 中明确选择来源主角')
+  }
+  const protagonistRefs = actorKey ? [actorKey] : []
   const selectionKey = planSelectionKey(sourcePlan.sourceBindingHash)
   const requiredPlayMinutes = Math.round(
     (brief.draft.scale.requiredPlayMinutes.minimum + brief.draft.scale.requiredPlayMinutes.maximum) / 2,
@@ -385,7 +398,7 @@ export async function createTextOpenWorldCreatorExecutionBriefV1(input: {
         version: 1,
         productType: 'text-open-world',
         worldReferenceHash: sourcePlan.sourceBindingHash,
-        resourceKeys: [selectionKey],
+        resourceKeys: [selectionKey, ...protagonistRefs],
         roleBindings: {},
       },
       startingPoint: {
@@ -393,18 +406,20 @@ export async function createTextOpenWorldCreatorExecutionBriefV1(input: {
         title: brief.draft.gameTitle,
         summary: brief.draft.playerFantasy,
         sourceRefs: [selectionKey],
-        protagonistRefs: [],
+        protagonistRefs,
         openingConflict: brief.draft.openingSituation,
       },
     },
     intent: {
       productType: 'text-open-world',
       playerRole: brief.draft.playerRole,
-      protagonistRefs: [],
+      protagonistRefs,
       openingSituation: brief.draft.openingSituation,
       coreExperience: [...new Set([
         brief.draft.playerFantasy,
         brief.draft.coreGoal,
+        brief.draft.protagonistDirective,
+        brief.draft.primaryConflict,
         ...brief.draft.experiencePillars,
       ])],
       requiredFacts: [...brief.draft.mustKeep],
@@ -553,14 +568,22 @@ export async function parseTextOpenWorldCreatorProductionStartV1(input: {
     || confirmation.estimateHash !== preflight.estimate.estimateHash) {
     fail('Start 的 Brief、来源、模型、报价或预算链不闭合')
   }
-  if (input.brief) {
-    const brief = await verifyTextOpenWorldCreatorBriefV1(input.brief)
-    if (parsed.productInstanceKey !== brief.productInstanceKey
-      || parsed.briefRevision !== brief.revision || parsed.briefHash !== brief.briefHash
-      || parsed.sourceBindingHash !== brief.sourceBindingHash) fail('Start 与 Creator Brief 不一致')
+  const verifiedBrief = input.brief ? await verifyTextOpenWorldCreatorBriefV1(input.brief) : undefined
+  if (verifiedBrief && (parsed.productInstanceKey !== verifiedBrief.productInstanceKey
+    || parsed.briefRevision !== verifiedBrief.revision || parsed.briefHash !== verifiedBrief.briefHash
+    || parsed.sourceBindingHash !== verifiedBrief.sourceBindingHash)) fail('Start 与 Creator Brief 不一致')
+  const actorKey = verifiedBrief?.draft.protagonistSourceResourceKey
+  if (actorKey && (!sameJson(executionBrief.intent.protagonistRefs, [actorKey]) ||
+    !sameJson(executionBrief.source.startingPoint.protagonistRefs, [actorKey]) ||
+    !executionBrief.source.selection.resourceKeys.includes(actorKey) ||
+    !executionBrief.intent.coreExperience.includes(verifiedBrief!.draft.protagonistDirective) ||
+    !executionBrief.intent.coreExperience.includes(verifiedBrief!.draft.primaryConflict))) {
+    fail('Start 执行简报没有保留准确的封存主角及作者约束')
   }
   if (input.sourcePlan) {
-    const sourcePlan = await parseTextOpenWorldCreatorProductionSourcePlanV1(input.sourcePlan, input.brief)
+    const sourcePlan = await parseTextOpenWorldCreatorProductionSourcePlanV1(input.sourcePlan, verifiedBrief)
+    if (actorKey && (sourcePlan.selection.kind !== 'world-release' || !sourcePlan.selection.resourceKeys.includes(actorKey)))
+      fail('Start 主角不在冻结 SourcePlan 中')
     if (parsed.sourcePlanHash !== sourcePlan.planHash) fail('Start 与 SourcePlan 不一致')
   }
   if (input.productionPlan) {
@@ -621,6 +644,9 @@ export async function createTextOpenWorldCreatorStartPreparationV1(input: {
     fail('当前 Creator Brief 已变化或不可授权')
   }
   const brief = await verifyTextOpenWorldCreatorBriefV1(briefRow.briefJson)
+  if (!isTextOpenWorldCreatorEndingCountV1(brief.draft.scale.endings)) {
+    fail(TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+  }
   assertTextOpenWorldProductionNewWorkV1(production, briefRow, '准备正式制作')
   assertTextOpenWorldNewSourceV1(brief.sourceBinding.kind, '准备正式制作')
   if (brief.revision !== briefRow.revision || brief.briefHash !== briefRow.briefHash
