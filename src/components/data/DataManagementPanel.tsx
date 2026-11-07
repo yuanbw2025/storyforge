@@ -19,6 +19,7 @@ import CloudBackupCard from './CloudBackupCard'
 import { useToast } from '../shared/Toast'
 import { useDialog } from '../shared/Dialog'
 import type {
+  Note,
   Project,
   Snapshot,
   WorkspaceFileCandidateSetV1,
@@ -26,7 +27,7 @@ import type {
   WorkspaceSelfCheckReportV1,
 } from '../../lib/types'
 import { buildLocalDiagnosticReport } from '../../lib/diagnostics/local-diagnostic-report'
-import { inspectProjectBackup, type BackupTrustReport } from '../../lib/export/backup-trust'
+import { BACKUP_REFERENCE_REVIEW_TITLE, inspectProjectBackup, type BackupTrustReport } from '../../lib/export/backup-trust'
 import {
   buildWorkspaceSelfCheckReportV1,
   buildWorkspaceFileAdoptionCandidatesV1,
@@ -45,6 +46,9 @@ import {
 import { buildWorkspaceImpactPlanV1 } from '../../lib/memory/workspace-impact'
 import { useProjectStore } from '../../stores/project'
 import { useActiveWork } from '../../hooks/useActiveWork'
+import { resolveWorkspaceScope } from '../../lib/workspace/ownership'
+import { readOwnedRows } from '../../lib/workspace/scope'
+import AutoBackupStatusNotice from '../system/AutoBackupStatusNotice'
 
 type Tab = 'export' | 'backup'
 type ExportStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -71,6 +75,10 @@ export default function DataManagementPanel({ project, onImported, onOpenStorage
       </div>
 
       {/* Tab 切换 */}
+      <AutoBackupStatusNotice project={project} />
+      {project.id != null && (
+        <RestoredReferenceReports key={`${project.id}:${project.activeWorkId}`} projectId={project.id} />
+      )}
       <div className="flex gap-1 bg-bg-elevated rounded-xl p-1 w-fit">
         {TABS.map(tab => {
           const Icon = tab.icon
@@ -94,6 +102,29 @@ export default function DataManagementPanel({ project, onImported, onOpenStorage
       {activeTab === 'export'    && <ExportTab project={project} onImported={onImported} onOpenStorageSettings={onOpenStorageSettings} />}
       {activeTab === 'backup'    && <BackupTab    project={project} onImported={onImported} />}
     </div>
+  )
+}
+
+function RestoredReferenceReports({ projectId }: { projectId: number }) {
+  const [reports, setReports] = useState<Note[]>([])
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let active = true
+    void resolveWorkspaceScope(projectId)
+      .then(scope => readOwnedRows<Note>(scope, 'notes', { owner: 'work' }))
+      .then(rows => {
+        if (active) setReports(rows.filter(note => note.content.startsWith(`${BACKUP_REFERENCE_REVIEW_TITLE}\n`)))
+      }).catch(() => { if (active) setFailed(true) })
+    return () => { active = false }
+  }, [projectId])
+  if (failed) return <p role="status" className="text-xs text-text-muted">未能读取当前作品的备份恢复便签。</p>
+  if (!reports.length) return null
+  return (
+    <details className="rounded-lg border border-border px-3 py-2 text-sm">
+      <summary className="cursor-pointer font-medium">{BACKUP_REFERENCE_REVIEW_TITLE}</summary>
+      <p className="mt-2 text-text-muted">这些原值保存在当前作品的便签中，可在核对后手动重新建立关联。</p>
+      {reports.map(note => <pre key={note.id} className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{note.content}</pre>)}
+    </details>
   )
 }
 
@@ -712,21 +743,31 @@ function BackupTrustResult({ report }: { report: BackupTrustReport }) {
 
 // ── 版本历史 Tab ─────────────────────────────────────────────
 function BackupTab({ project }: Props) {
-  const { snapshots, loading, loadSnapshots, createSnapshot, deleteSnapshot, restoreSnapshot } = useBackupStore()
+  const { snapshots: storedSnapshots, snapshotsOwner, loading, loadSnapshots, createSnapshot, deleteSnapshot, restoreSnapshot } = useBackupStore()
+  const snapshots = snapshotsOwner !== null && snapshotsOwner.projectId === project.id && snapshotsOwner.workspaceUid === project.workspaceUid ? storedSnapshots : []
   const toast = useToast()
   const dialog = useDialog()
   const [creating, setCreating] = useState(false)
   const [restoring, setRestoring] = useState<number | null>(null)
   const [label, setLabel] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [listError, setListError] = useState('')
 
-  useState(() => { loadSnapshots(project.id!) })
+  useEffect(() => {
+    let active = true
+    setListError('')
+    void loadSnapshots(project.id!).catch(() => {
+      if (active) setListError('快照列表读取失败，请保留原稿，重新打开版本历史后再试。')
+    })
+    return () => { active = false }
+  }, [project.id, project.workspaceUid, loadSnapshots])
 
   const handleCreate = async () => {
     setCreating(true)
     try {
-      await createSnapshot(project.id!, label.trim() || `手动备份 ${new Date().toLocaleString('zh-CN')}`, 'manual')
+      await createSnapshot(project.id!, label.trim() || `手动备份 ${new Date().toLocaleString('zh-CN')}`, 'manual', project.workspaceUid)
       toast.success('快照创建成功')
+      setListError('')
       setLabel(''); setShowForm(false)
     } catch (err) {
       toast.error('快照创建失败: ' + (err as Error).message)
@@ -751,6 +792,7 @@ function BackupTab({ project }: Props) {
   return (
     <div className="space-y-4">
       {/* 新建快照 */}
+      {listError && <p role="alert">{listError}</p>}
       <div className="bg-bg-surface border border-border rounded-lg p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

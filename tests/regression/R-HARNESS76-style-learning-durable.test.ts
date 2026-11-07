@@ -17,7 +17,8 @@ import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { FIELD_BY_TARGET } from '../../src/lib/registry/field-registry'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
 import { parseStyleLearningResultStrictV1 } from '../../src/lib/style/learning-agent'
-import type { WorkspaceScope } from '../../src/lib/types'
+import type { Chapter, OutlineNode } from '../../src/lib/types'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { generateWorkCode } from '../../src/lib/memory/identity'
 import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
@@ -25,12 +26,17 @@ import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/cur
 async function seed(suffix = '', withProfile = true) {
   const now = Date.now()
   const created = await seedCurrentWorkspace(`纸灯小说${suffix}`)
-  const { projectId, worldId, workId } = created.scope
-  const chapterId = await db.chapters.add({
-    projectId, worldId, workId, title: '雨落纸灯', order: 1, status: 'polished',
+  const scope = created.scope
+  const { projectId, worldId, workId } = scope
+  const outlineNodeId = await db.outlineNodes.add(stampNewRecord<OutlineNode>(scope, 'outlineNodes', {
+    projectId, parentId: null, type: 'chapter', title: '雨落纸灯', summary: '', order: 1,
+    createdAt: now, updatedAt: now,
+  }, { owner: 'work' }))
+  const chapterId = await db.chapters.add(stampNewRecord<Chapter>(scope, 'chapters', {
+    projectId, outlineNodeId, title: '雨落纸灯', order: 1, status: 'polished',
     content: '<p>雨落下来。灯没有灭。阿棠把伞收在门外，只带进一身潮湿。</p><p>她不解释。旧钟又响了一次。</p>',
-    summary: '', wordCount: 36, createdAt: now, updatedAt: now,
-  } as any) as number
+    summary: '', notes: '', wordCount: 36, createdAt: now, updatedAt: now,
+  }, { owner: 'work' }))
   let profileId: number | null = null
   if (withProfile) {
     profileId = await db.userStyleProfiles.add({
@@ -49,7 +55,7 @@ async function seed(suffix = '', withProfile = true) {
   }
   await stampCurrentFixtureResourceUidsV1(projectId)
   return {
-    scope: { projectId, worldId, workId } satisfies WorkspaceScope,
+    scope,
     projectId, worldId, workId, chapterId, profileId,
   }
 }

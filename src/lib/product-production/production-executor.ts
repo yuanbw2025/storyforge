@@ -25,6 +25,7 @@ import { TTRPG_COMPATIBLE_OPENING_AUTHORED_TASKS_V1 } from '../ttrpg/open-compat
 import { produceTtrpgCompatibleOpeningArtifactV1 } from '../ttrpg/open-compatible-opening-production';
 
 import { parseTextAdventureQuestScriptArtifact, textAdventureQuestRecipientsV3 } from '../adventure/quest-settlement'
+import { assertAdventureRuntimeDiceSupportV1 } from '../adventure/runtime'
 import { createAvgAssemblyExecutorV1 } from '../avg/assembly-executor'
 import { parseProductionModelJsonObjectV1 } from './model-json-object'
 import { avgVisualPlanningExecutionReadyV4 } from '../avg/visual-planning-brief'
@@ -117,6 +118,7 @@ import {
   type TextAdventureSystemsArtifactV1,
 } from '../adventure/production-artifacts'
 import {
+  projectTextAdventureNarrativeDesignModelResultV1,
   parseTextAdventureProductionSupervisionArtifactV1,
   parseTextAdventureCastBibleArtifactV1,
   parseTextAdventureNarrativeArcScenesArtifactV1,
@@ -204,6 +206,21 @@ const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const COLOR = /^#[0-9a-fA-F]{6}$/
 
 type JsonRecord = Record<string, unknown>
+
+function indexTextAdventureNestedKeys(
+  rows: JsonRecord[],
+  listKey: 'options' | 'alternatives',
+): Record<string, string[]> {
+  return Object.fromEntries(rows.flatMap(row => {
+    const entries = row[listKey]
+    return typeof row.key === 'string'
+      ? [[row.key, (Array.isArray(entries) ? entries : []).flatMap((entry: unknown) => (
+          entry && typeof entry === 'object' && !Array.isArray(entry)
+            && typeof (entry as JsonRecord).key === 'string'
+            ? [(entry as JsonRecord).key as string] : []
+        ))]] : []
+  }))
+}
 
 /**
  * A Plan reservation is the billable receipt ceiling and can therefore include
@@ -408,6 +425,7 @@ export type ProductionVisionRunnerV1 = (input: {
   projectId: number
   requirementKey: string
   category: string
+  expectedCapabilityHash?: string
   system: string
   contextText: string
   images: Array<{
@@ -5843,6 +5861,7 @@ async function defaultVisionRunner(input: Parameters<ProductionVisionRunnerV1>[0
       { role: 'user', content: `以下是登记的文字审查上下文，随后图片按 Artifact key/hash 标注：\n<registered-context>\n${input.contextText}\n</registered-context>` },
     ],
     images: input.images,
+    expectedCapabilityHash: input.expectedCapabilityHash,
     maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result,
     responseFormat: 'json_object',
   })
@@ -5921,14 +5940,7 @@ function textAdventureQualityReferenceEvidenceV1(
         typeof decision.key === 'string' && typeof decision.sceneKey === 'string'
           ? [[decision.key, decision.sceneKey]] : []
       ))),
-      decisionOptionKeysByKey: Object.fromEntries(decisionRows.flatMap(decision => (
-        typeof decision.key === 'string'
-          ? [[decision.key, (Array.isArray(decision.options) ? decision.options : []).flatMap(option => (
-              option && typeof option === 'object' && !Array.isArray(option)
-                && typeof (option as JsonRecord).key === 'string'
-                ? [(option as JsonRecord).key as string] : []
-            ))]] : []
-      ))),
+      decisionOptionKeysByKey: indexTextAdventureNestedKeys(decisionRows, 'options'),
       optionKeys: decisionRows.flatMap(decision => (
         Array.isArray(decision.options) ? decision.options : []
       )).flatMap(option => (
@@ -5953,15 +5965,7 @@ function textAdventureQualityReferenceEvidenceV1(
           && typeof objective.sceneKeys[0] === 'string'
           ? [[objective.key, objective.sceneKeys[0]]] : []
       ))),
-      objectiveAlternativeKeysByKey: Object.fromEntries(objectiveRows.flatMap(objective => (
-        typeof objective.key === 'string'
-          ? [[objective.key, (Array.isArray(objective.alternatives) ? objective.alternatives : [])
-              .flatMap(alternative => (
-                alternative && typeof alternative === 'object' && !Array.isArray(alternative)
-                  && typeof (alternative as JsonRecord).key === 'string'
-                  ? [(alternative as JsonRecord).key as string] : []
-              ))]] : []
-      ))),
+      objectiveAlternativeKeysByKey: indexTextAdventureNestedKeys(objectiveRows, 'alternatives'),
       alternativeKeys: objectiveRows.flatMap(objective => (
         Array.isArray(objective.alternatives) ? objective.alternatives : []
       )).flatMap(alternative => (
@@ -7095,6 +7099,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
   }
   const response = input.authorDraftJson ? null : await options.runText({
     projectId: input.scope.projectId, requirementKey, category: options.category,
+    expectedCapabilityHash: binding.bindingHash,
     system, contextText: input.contextText,
     ...(openingJsonSchema ? {jsonSchema: openingJsonSchema} : {}),
     maximumOutputTokens: Math.min(openOutputLimit ?? productProductionProviderOutputLimitV1(input.task, input.contextText),
@@ -7280,71 +7285,16 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     if (!options.brief.textAdventure) fail('文字冒险架构任务缺少专用 Brief')
     payload = parseTextAdventureArchitectureArtifactV1(raw, options.brief.textAdventure); kind = 'product-design'
     quality = { fourLevelSpaceVerified: true }
-  } else if (input.task.taskKey === 'content.narrative-arc-scenes') {
-    const storyBible = parseTextAdventureStoryBibleArtifactV1(
-      artifactPayload(input, 'content.story-bible'), options.brief,
-    )
-    const cast = parseTextAdventureCastBibleArtifactV1({
-      value: artifactPayload(input, 'content.cast-bible'),
-      brief: options.brief,
-      allowedResourceKeys: options.brief.source.selection.resourceKeys,
-    })
-    const arcScenes = parseTextAdventureNarrativeArcScenesArtifactV1({
-      value: raw, brief: options.brief, cast, storyBible,
+  } else if (input.task.taskKey === 'content.narrative-arc-scenes'
+    || input.task.taskKey === 'content.narrative-decision-plan'
+    || input.task.taskKey === 'content.ending-route-plan') {
+    const design = projectTextAdventureNarrativeDesignModelResultV1({
+      taskKey: input.task.taskKey, raw, brief: options.brief,
+      readArtifact: artifactKey => artifactPayload(input, artifactKey),
       locationTitles: textAdventureLocationTitles,
     })
-    payload = arcScenes
-    kind = 'product-design'; quality = {
-      narrativeArcScenesVerified: true,
-      sceneCardCount: arcScenes.acts.flatMap(act => act.sceneCards).length,
-      endingCount: arcScenes.endings.length,
-    }
-  } else if (input.task.taskKey === 'content.narrative-decision-plan') {
-    const storyBible = parseTextAdventureStoryBibleArtifactV1(
-      artifactPayload(input, 'content.story-bible'), options.brief,
-    )
-    const cast = parseTextAdventureCastBibleArtifactV1({
-      value: artifactPayload(input, 'content.cast-bible'),
-      brief: options.brief,
-      allowedResourceKeys: options.brief.source.selection.resourceKeys,
-    })
-    const decisionPlan = parseTextAdventureNarrativeDecisionPlanArtifactV1({
-      value: raw, brief: options.brief, cast, storyBible,
-    })
-    payload = decisionPlan
-    kind = 'product-design'; quality = {
-      narrativeDecisionPlanVerified: true,
-      meaningfulDecisionCount: decisionPlan.decisions.length,
-    }
-  } else if (input.task.taskKey === 'content.ending-route-plan') {
-    const storyBible = parseTextAdventureStoryBibleArtifactV1(
-      artifactPayload(input, 'content.story-bible'), options.brief,
-    )
-    const cast = parseTextAdventureCastBibleArtifactV1({
-      value: artifactPayload(input, 'content.cast-bible'),
-      brief: options.brief,
-      allowedResourceKeys: options.brief.source.selection.resourceKeys,
-    })
-    const arcPlan = parseTextAdventureNarrativeArcPlanArtifactV1({
-      value: artifactPayload(input, 'content.narrative-arc-plan'),
-      brief: options.brief,
-      cast,
-      storyBible,
-      locationTitles: textAdventureLocationTitles,
-    })
-    const endingRoutePlan = parseTextAdventureEndingRoutePlanArtifactV1({
-      value: raw,
-      arcPlan,
-      storyBible,
-    })
-    payload = endingRoutePlan
-    kind = 'product-design'; quality = {
-      endingRoutePlanVerified: true,
-      routeCount: endingRoutePlan.routes.length,
-      referencedEffectCount: new Set(
-        endingRoutePlan.routes.flatMap(route => route.requiredEffectKeys),
-      ).size,
-    }
+    payload = design.payload
+    kind = 'product-design'; quality = design.quality
   } else if (input.task.taskKey === 'content.main-quest-plan') {
     const cast = parseTextAdventureCastBibleArtifactV1({
       value: artifactPayload(input, 'content.cast-bible'),
@@ -7756,14 +7706,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
         typeof decision.key === 'string' && typeof decision.sceneKey === 'string'
           ? [[decision.key, decision.sceneKey]] : []
       ))),
-      decisionOptionKeysByKey: Object.fromEntries(decisionRows.flatMap(decision => (
-        typeof decision.key === 'string'
-          ? [[decision.key, (Array.isArray(decision.options) ? decision.options : []).flatMap(option => (
-              option && typeof option === 'object' && !Array.isArray(option)
-                && typeof (option as JsonRecord).key === 'string'
-                ? [(option as JsonRecord).key as string] : []
-            ))]] : []
-      ))),
+      decisionOptionKeysByKey: indexTextAdventureNestedKeys(decisionRows, 'options'),
       optionKeys: decisionRows.flatMap(decision => (
         Array.isArray(decision.options) ? decision.options : []
       )).flatMap(option => (
@@ -7788,15 +7731,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
           && typeof objective.sceneKeys[0] === 'string'
           ? [[objective.key, objective.sceneKeys[0]]] : []
       ))),
-      objectiveAlternativeKeysByKey: Object.fromEntries(objectiveRows.flatMap(objective => (
-        typeof objective.key === 'string'
-          ? [[objective.key, (Array.isArray(objective.alternatives) ? objective.alternatives : [])
-              .flatMap(alternative => (
-                alternative && typeof alternative === 'object' && !Array.isArray(alternative)
-                  && typeof (alternative as JsonRecord).key === 'string'
-                  ? [(alternative as JsonRecord).key as string] : []
-              ))]] : []
-      ))),
+      objectiveAlternativeKeysByKey: indexTextAdventureNestedKeys(objectiveRows, 'alternatives'),
       alternativeKeys: objectiveRows.flatMap(objective => (
         Array.isArray(objective.alternatives) ? objective.alternatives : []
       )).flatMap(alternative => (
@@ -9297,6 +9232,7 @@ async function executeTextAdventureVisionCapabilityPreflightTask(
     projectId: input.scope.projectId,
     requirementKey,
     category: options.category,
+    expectedCapabilityHash: binding.bindingHash,
     system: '你是图片输入能力验证器。必须实际观察唯一附图的四个纯色色块。' +
       '每个色块只允许使用标签 black、blue、cyan、green、magenta、red、white、yellow；' +
       '四个色块必须选择四个互不重复的标签。' +
@@ -9824,6 +9760,7 @@ async function executeTextAdventureVisualQualityReviewTask(
     try {
       const response = await options.runVision({
         projectId: input.scope.projectId, requirementKey, category: options.category,
+        expectedCapabilityHash: binding.bindingHash,
         system, contextText: input.contextText, images: visionImages,
         maximumOutputTokens: input.task.budgetReservation.outputTokens, signal: input.signal,
       })
@@ -10415,6 +10352,7 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
     runtimePackage.definition.enabledCapabilities.push('presentation')
   } else if (assets.length > 0) fail('当前产品 adapter 不能把媒资接入 RuntimePackage')
   const parsed = parseProductRuntimePackageV1(runtimePackage)
+  if (parsed.productType === 'text-adventure' && parsed.adventure) assertAdventureRuntimeDiceSupportV1(parsed.adventure)
   const ttrpgArtifacts: ProductProductionTaskArtifactV1[] = parsed.ttrpg ? [
     {
       artifactKey: 'ttrpg.rule-pack', kind: 'rule-pack', payload: parsed.ttrpg.rulePack.content,

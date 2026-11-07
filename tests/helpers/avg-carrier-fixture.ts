@@ -3,10 +3,10 @@ import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { createProductReleaseManifestV2, productReleaseIdentityHashV2 } from '../../src/lib/product-production/runtime-package'
 import { createProductBuildPreviewManifestV2 } from '../../src/lib/product-production/preview-manifest'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
-import { createProductReleaseLineageV1, productReleaseUidV1 } from '../../src/lib/product/source-contracts'
+import { productReleaseUidV1 } from '../../src/lib/product/source-contracts'
 import type { ProductReleaseManifestV2, ProductRuntimePackageV1, ProductRuntimePackageV2 } from '../../src/lib/types'
 import { currentProductSelection } from './current-product-world'
-import { createFixtureProductReleaseManifestV1 } from './product-release-v1'
+import { createFixtureProductReleaseManifestV1, createHistoricalFixtureReleaseLineageV1 } from './product-release-v1'
 
 const HASH = 'a'.repeat(64)
 
@@ -44,7 +44,7 @@ export async function fixture() {
   }
   const releaseIdentityHash = await productReleaseIdentityHashV2(body)
   const { sourcePlan, confirmedBrief, sourceManifest } = legacy.sourceContracts
-  const lineage = await createProductReleaseLineageV1({
+  const lineage = await createHistoricalFixtureReleaseLineageV1({
     productType: 'avg', productInstanceKey: legacy.productionProvenance.productionKey,
     releaseUid: productReleaseUidV1({ productType: 'avg', productInstanceKey: sourcePlan.productInstanceKey,
       releaseVersion: 1, releaseHash: releaseIdentityHash }),

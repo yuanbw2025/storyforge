@@ -5,7 +5,8 @@ import { fixture } from './avg-carrier-fixture'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { createProductReleaseManifestV2, productReleaseIdentityHashV2 } from '../../src/lib/product-production/runtime-package'
 import { createProductBuildPreviewManifestV2 } from '../../src/lib/product-production/preview-manifest'
-import { createProductReleaseLineageV1, productReleaseUidV1 } from '../../src/lib/product/source-contracts'
+import { productReleaseUidV1 } from '../../src/lib/product/source-contracts'
+import { createHistoricalFixtureReleaseLineageV1 } from './product-release-v1'
 
 export const AVG_SCRIPT: AvgSceneScriptV1 = {
   schema: 'storyforge.avg.scene-script', version: 1, sceneKey: 'archive',
@@ -30,7 +31,7 @@ export async function avgCarrierWithModule() {
     sourceWorldRelease: f.release.sourceWorldRelease, runtimePackage, packageHash: await hashProductProductionValueV2(runtimePackage), productionProvenance, sourceContracts }
   const releaseHash = await productReleaseIdentityHashV2(body)
   const { sourcePlan, confirmedBrief, sourceManifest } = sourceContracts
-  const lineage = await createProductReleaseLineageV1({
+  const lineage = await createHistoricalFixtureReleaseLineageV1({
     productType: 'avg', productInstanceKey: sourcePlan.productInstanceKey,
     releaseUid: productReleaseUidV1({ productType: 'avg', productInstanceKey: sourcePlan.productInstanceKey, releaseVersion: 1, releaseHash }),
     releaseVersion: 1, releaseHash, parentRelease: null, worldReference: sourcePlan.worldReference, sourcePlan, confirmedBrief, sourceManifest,

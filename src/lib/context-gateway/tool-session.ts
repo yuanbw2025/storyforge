@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { CONTEXT_SOURCES } from '../registry/context-sources'
@@ -115,7 +116,7 @@ export async function createContextGatewayToolSessionV1(input: {
     scope: Object.freeze({ ...input.scope }),
     scopeFingerprint: fingerprints[0],
     policy,
-    policyHash: await hashCanonicalValue(policy),
+    policyHash: await (Dexie.currentTransaction ? Dexie.waitFor(hashCanonicalValue(policy)) : hashCanonicalValue(policy)),
     providers: Object.freeze(providers),
     resourceKeyAllowList: allowedResourceKeys,
     resourceKeyDenyList: excluded,

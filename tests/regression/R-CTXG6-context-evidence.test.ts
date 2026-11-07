@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
 import { appendAgentRunEventV1, createAgentRunV1 } from '../../src/lib/agent/run/event-store'
@@ -116,7 +116,7 @@ function traced(decision: Awaited<ReturnType<typeof selectContextResourcesV1>>['
   }
 }
 
-async function beginAttempt() {
+async function beginAttempt(mixedRefs = false) {
   const fixture = await seed()
   let snapshot = await createAgentRunV1({ scope: fixture.scope, contract: contract(fixture.projectId), now: NOW + 1 })
   const append = async (type: any, payload: any) => {
@@ -170,11 +170,19 @@ async function beginAttempt() {
   const preflight = await recordContextGatewayPreflightEvidenceV1({
     scope: fixture.scope, runId: snapshot.run.id, stepId: 'races', attempt: 1,
     contextPacket: packet, selector, renderedRequest,
-    sourceSnapshots: [{
+    sourceSnapshots: [...(mixedRefs ? [
+      { sourceKey: 'ragSelection', resourceKey: 'z-snapshot', content: 'late key' },
+      { sourceKey: 'ragSelection', resourceKey: 'a-snapshot', content: 'early key' },
+      { resourceKey: 'resource-only', content: 'missing source key' },
+    ] : []), {
       sourceKey: descriptor.sourceKey, resourceKey: descriptor.resourceKey,
       sourceRefs: descriptor.sourceRefs, content: read.content,
     }],
-    toolTranscript: [{
+    toolTranscript: [...(mixedRefs ? [
+      { toolName: 'read_context_resource', callIndex: 10, arguments: {}, result: 'ten' },
+      { toolName: 'read_context_resource', callIndex: 2, arguments: {}, result: 'two' },
+      { toolName: 'a_tool', callIndex: 11, arguments: {}, result: 'different tool' },
+    ] : []), {
       toolName: 'read_context_resource', callIndex: 0,
       sourceKey: descriptor.sourceKey, resourceKey: descriptor.resourceKey,
       arguments: { resourceKey: descriptor.resourceKey, depth: selected.depth, maxTokens: 2_000 },
@@ -190,8 +198,8 @@ async function beginAttempt() {
   }
 }
 
-async function completeAttempt() {
-  const fixture = await beginAttempt()
+async function completeAttempt(mixedRefs = false) {
+  const fixture = await beginAttempt(mixedRefs)
   const candidateText = '新候选：潮民以星潮评定成年仪式。'
   const candidateHash = await sha256Text(candidateText)
   await fixture.append('model.requested', { stepId: 'races', attempt: 1, bindingHash: fixture.preflight.promptHash })
@@ -215,6 +223,58 @@ async function completeAttempt() {
 describe('CTXG-6 · Manifest V3 and exact attempt evidence', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
+
+  it('SFQA009 freezes the original mixed-ref preflight and Manifest V3 ordering and hashes', async () => {
+    const date = vi.spyOn(Date, 'now').mockReturnValue(NOW)
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.125)
+    let counter = 0
+    const uuid = vi.spyOn(crypto, 'randomUUID').mockImplementation(() =>
+      `00000000-0000-4000-8000-${(++counter).toString(16).padStart(12, '0')}`)
+    try {
+      const f = await completeAttempt(true)
+      const projected = (refs: typeof f.preflight.artifacts) => refs.map(ref =>
+        [ref.role, ref.sourceKey ?? null, ref.resourceKey ?? null, ref.toolName ?? null, ref.callIndex ?? null])
+      // Captured from the two original public evidence paths before extraction.
+      expect(f.preflight.preflightHash).toBe('92009e4ef7f81bbebcbc2fd835df8871a4b8afb2e60e2bea96ddf369df16a5b6')
+      const { manifest, manifestArtifactHash } = f.finalized
+      expect(manifest.manifestHash).toBe('a467aff7018429407b63b3a361d2a03fe2f1e16f6840724128bd06bcca37ba2f')
+      expect(manifestArtifactHash).toBe('3dd5c5c606ad72ff0173720af1ed9e0e75fd115e73d1b5380d88c769c7420093')
+      const preflightOrder = [
+        ['context-packet', null, null, null, null],
+        ['rendered-request', null, null, null, null],
+        ['selector-result', null, null, null, null],
+        ['source-snapshot', null, 'resource-only', null, null],
+        ['source-snapshot', 'ragSelection', 'a-snapshot', null, null],
+        ['source-snapshot', 'ragSelection', f.descriptor.resourceKey, null, null],
+        ['source-snapshot', 'ragSelection', 'z-snapshot', null, null],
+        ['tool-result', null, null, 'a_tool', 11],
+        ['tool-result', null, null, 'read_context_resource', 2],
+        ['tool-result', null, null, 'read_context_resource', 10],
+        ['tool-result', 'ragSelection', f.descriptor.resourceKey, 'read_context_resource', 0],
+      ]
+      expect(projected(f.preflight.artifacts)).toEqual(preflightOrder)
+      expect(projected(manifest.artifacts)).toEqual([
+        preflightOrder[0], ['raw-response', null, null, null, null], ...preflightOrder.slice(1),
+      ])
+      expect(await verifyContextManifestIntegrityV3(manifest)).toBe(true)
+      expect(parseContextManifestV3({ ...manifest, artifacts: [...manifest.artifacts].reverse() })).toEqual(manifest)
+      expect(() => parseContextManifestV3({ ...manifest, artifacts: [...manifest.artifacts, manifest.artifacts[0]] }))
+        .toThrow(/必须且只能有一份/)
+
+      // Same source/coordinate forces the remaining content and reference hash tie-breaks.
+      const source = manifest.artifacts.find(ref => ref.resourceKey === 'a-snapshot')!
+      const ties = ['baa', 'aba', 'aaf', 'aa0'].map(([content, refs, artifact]) => ({
+        ...source, resourceKey: 'tie-snapshot', sourceContentHash: content.repeat(64),
+        sourceRefsHash: refs.repeat(64), contentHash: artifact.repeat(64),
+      }))
+      expect(parseContextManifestV3({ ...manifest, artifacts: [...manifest.artifacts, ...ties] })
+        .artifacts.filter(ref => ref.resourceKey === 'tie-snapshot')).toEqual([...ties].reverse())
+    } finally {
+      uuid.mockRestore()
+      random.mockRestore()
+      date.mockRestore()
+    }
+  })
 
   it('reads an original in-flight request/packet without writing a candidate or advancing its running attempt', async () => {
     const f = await beginAttempt(), events = await db.agentRunEvents.where('runId').equals(f.snapshot.run.id).count()

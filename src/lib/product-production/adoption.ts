@@ -4,6 +4,7 @@ import { classifyAvgAuthorPrototypeBriefV1, assertAvgSoundPrototypeWriteEnabledV
 import { parseProductBuildQualityReportV1 } from './quality-contract'
 export { parseProductBuildQualityReportV1 } from './quality-contract'
 import { db } from '../db/schema'
+import { assertWorldSourcePurposeCasV1, prepareWorldSourcePurposeCasV1, worldSourcePurposeTransactionTablesV1 } from '../world-engine/source-purpose'
 import { assertTextOpenWorldProductionNewWorkV1 } from '../open-world/source-admission'
 import { readProductProductionBuildWorldScopeV1 } from './world-binding'
 import type {
@@ -1060,6 +1061,16 @@ export async function publishProductProductionBuild(input: {
     || command.expectedManifestHash !== prepared.intent.manifestHash
     || command.adoptionIntentHash !== prepared.adoptionIntentHash) fail('publish command 与 adoption intent 不一致或已过期')
 
+  const creatorBinding = prepared.creatorReleaseAuthority?.sourcePlan.sourceBinding
+  const purpose = creatorBinding?.kind === 'world-release' ? 'text-open-world' : prepared.sourcePlan?.productType
+  const purposeProof = creatorBinding?.kind === 'world-release' ? creatorBinding.sourcePurpose : prepared.sourcePlan?.sourcePurpose
+  const sourceReleaseId = prepared.intent.worldReleaseId
+  if (purpose && sourceReleaseId == null) fail('发布缺少已验证的世界版本定位')
+  const sourcePurposeWitness = purpose && sourceReleaseId != null ? await prepareWorldSourcePurposeCasV1({
+    worldReleaseId: sourceReleaseId, expectedProjectId: scope.projectId, expectedWorldId: scope.worldId,
+    purpose, proof: purposeProof,
+  }) : null
+
   let creatorAuthorization: TextOpenWorldCreatorReleaseAuthorizationV1 | null = null
   if (prepared.creatorReleaseAuthority) {
     if (!input.creatorReleaseAuthorization || !command.creatorReleaseAuthorizationHash) {
@@ -1203,7 +1214,7 @@ export async function publishProductProductionBuild(input: {
       db.productProductions, db.productProductionBriefs, db.productProductionCommands, db.productBuilds,
       db.productBuildArtifacts, db.mediaBlobObjects, db.productReleases,
       db.productMediaAssets, db.productMediaBlobs, db.productQualityGateReceipts,
-      db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints,
+      db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, ...worldSourcePurposeTransactionTablesV1(),
     ), async () => {
       const verified = prepared
       transactionStage = 'cas-authorities'
@@ -1211,6 +1222,7 @@ export async function publishProductProductionBuild(input: {
         readSet: verified.terminalVerification.casReadSet,
       })
       await assertPreparedAdoptionUnchangedInTransaction(verified, commitBlobProofRows)
+      if (sourcePurposeWitness) await assertWorldSourcePurposeCasV1(sourcePurposeWitness)
       transactionStage = 'claim-command'
       const duplicateCommand = await db.productProductionCommands
         .where('[productionId+commandId]').equals([input.productionId, command.commandId]).first()

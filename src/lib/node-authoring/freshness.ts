@@ -5,6 +5,7 @@ import { authoringConnectionsHash, hashAuthoringText, isAuthoringCanonReceiptCur
 import type { AuthoringCandidateMap, AuthoringRunSnapshotMap } from './executor'
 import { downstreamAuthoringNodeIds } from './graph'
 import { parseAuthoringGraph } from './graph-codec'
+import type { AuthoringNodeInstance } from './contracts'
 import { isQualityAuthoringReportCurrentV1, readQualityAuthoringRevisionV1 } from './quality-execution'
 import { resolveReadScope } from '../workspace/scope'
 
@@ -24,6 +25,12 @@ export interface AuthoringNodeFreshness {
 }
 
 export type AuthoringFreshnessMap = Record<string, AuthoringNodeFreshness>
+
+/** The same local Canon read budget is used at execution and at verification. */
+export function authoringCanonReadBudgetV1(node: AuthoringNodeInstance): number {
+  const value = node.config.contextBudget
+  return typeof value === 'number' && Number.isFinite(value) ? value : 12_000
+}
 
 function currentUpstreamHash(
   graph: ReturnType<typeof parseAuthoringGraph>,
@@ -93,7 +100,21 @@ export async function inspectAuthoringGraphFreshness(input: {
       : !signature || signature.upstreamHash !== currentUpstreamHash(graph, node.id, input.candidates)) {
       reasons.push('connections-updated')
     }
-    if (!confirmedCanon && snapshot?.sourceHash && signature?.executorVersion === 'FLOW-3B.2') {
+    if (!confirmedCanon && (node.templateId === 'continuity.fact' || node.templateId === 'chapter.organize')) {
+      try {
+        const domain = candidate.domain
+        const canonicalContext = snapshot?.sourceEvidence?.canonicalContext
+        if (signature?.executorVersion !== 'FLOW-3B.2' || !snapshot?.sourceHash || !canonicalContext
+          || !domain || (node.templateId === 'continuity.fact' ? domain.kind !== 'facts' : domain.kind !== 'chapter-organization')
+          || !('chapterId' in domain)) throw new Error('缺少原节点来源指纹证据。')
+        const current = await readAuthoringCanonBinding({
+          node, scope, projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null,
+          chapterId: domain.chapterId, canonicalContext,
+        })
+        if (current.missing.length) reasons.push('source-missing')
+        else if (current.sourceHash !== snapshot.sourceHash) reasons.push('source-updated')
+      } catch { reasons.push('source-missing') }
+    } else if (!confirmedCanon && snapshot?.sourceHash && signature?.executorVersion === 'FLOW-3B.2') {
       if (node.templateId === 'control.prompt') {
         try {
           const current = await renderAuthoringPromptControl({ node, scope, projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null })
@@ -105,7 +126,7 @@ export async function inspectAuthoringGraphFreshness(input: {
           scope,
           projectId: input.flow.projectId,
           worldGroupId: input.flow.worldGroupId ?? null,
-          contextBudget: typeof node.config.contextBudget === 'number' ? node.config.contextBudget : undefined,
+          contextBudget: authoringCanonReadBudgetV1(node),
         })
         if (current.missing.length) reasons.push('source-missing')
         else if (current.sourceHash !== snapshot.sourceHash) reasons.push('source-updated')

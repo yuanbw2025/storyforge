@@ -1,3 +1,4 @@
+import { parseWorldSourcePurposeProofV1, revalidateWorldSourcePurposeV1 } from '../world-engine/source-purpose'
 import { hashCanonicalValue } from '../agent/run/hash'
 import type {
   AdaptationSourceSelectionV1,
@@ -52,6 +53,17 @@ function text(value: unknown, label: string, maximum = 8_000, allowEmpty = false
   const normalized = value.trim().normalize('NFC')
   if ((!allowEmpty && !normalized) || normalized.length > maximum) fail('protocol', `${label} 为空或过长`)
   return normalized
+}
+
+export function readTextOpenWorldCreatorProtagonistSourceKeyV1(
+  row: Record<string, unknown>,
+): string | undefined {
+  if (!Object.prototype.hasOwnProperty.call(row, 'protagonistSourceResourceKey')) return undefined
+  const key = row.protagonistSourceResourceKey
+  if (row.protagonistMode !== 'source-character' || typeof key !== 'string' || !STABLE_KEY.test(key)) {
+    fail('protagonist', '仅来源型主角可以携带准确的封存角色标识')
+  }
+  return key
 }
 
 function hash(value: unknown, label: string): string {
@@ -121,11 +133,12 @@ export function parseTextOpenWorldCreatorSourceLocatorV1(
 ): TextOpenWorldCreatorSourceLocatorV1 {
   const row = record(value, 'sourceLocator')
   if (row.kind === 'world-release') {
-    exact(row, ['kind', 'localReleaseRecordId', 'expectedReleaseHash'], 'sourceLocator')
+    exact(row, ['kind', 'localReleaseRecordId', 'expectedReleaseHash', ...('sourcePurpose' in row ? ['sourcePurpose'] : [])], 'sourceLocator')
     return {
       kind: 'world-release',
       localReleaseRecordId: positiveId(row.localReleaseRecordId, 'localReleaseRecordId'),
       expectedReleaseHash: hash(row.expectedReleaseHash, 'expectedReleaseHash'),
+      ...('sourcePurpose' in row ? { sourcePurpose: parseCreatorPurpose(row.sourcePurpose, row.expectedReleaseHash) } : {}),
     }
   }
   if (row.kind === 'novel') {
@@ -151,6 +164,7 @@ export function createTextOpenWorldCreatorSourceLocatorV1(
         kind: 'world-release',
         localReleaseRecordId: selection.localReleaseRecordId,
         expectedReleaseHash: selection.expectedReleaseHash,
+        ...(selection.preview.sourcePurpose ? { sourcePurpose: selection.preview.sourcePurpose } : {}),
       }
     : {
         kind: 'novel',
@@ -176,6 +190,7 @@ export function textOpenWorldCreatorSourceBindingFromSelectionV1(
       manifestSchemaHash: reference.manifestIdentity.schemaHash,
       capabilityCatalogHash: reference.capabilityIdentity.catalogHash,
       capabilityProfileHash: reference.capabilityIdentity.profileHash,
+      ...(selection.preview.sourcePurpose ? { sourcePurpose: selection.preview.sourcePurpose } : {}),
     }
   }
   return {
@@ -223,6 +238,7 @@ export function textOpenWorldCreatorSourceSummaryFromSelectionV1(
 export async function inspectTextOpenWorldCreatorSourceLocatorV1(input: {
   scope: WorkspaceScope
   locator: TextOpenWorldCreatorSourceLocatorV1 | unknown
+  requirePurpose?: boolean
 }): Promise<{
   selection: TextOpenWorldCreatorSourceSelectionV1
   binding: TextOpenWorldCreatorSourceBindingV1
@@ -232,10 +248,18 @@ export async function inspectTextOpenWorldCreatorSourceLocatorV1(input: {
   const locator = parseTextOpenWorldCreatorSourceLocatorV1(input.locator)
   let selection: TextOpenWorldCreatorSourceSelectionV1
   if (locator.kind === 'world-release') {
+    // Old native records may retain their historical hash. For new work,
+    // verify actual ownership even when an old locator omitted the proof.
+    if (input.requirePurpose && !locator.sourcePurpose) await revalidateWorldSourcePurposeV1({
+      worldReleaseId: locator.localReleaseRecordId, expectedProjectId: input.scope.projectId,
+      expectedWorldId: input.scope.worldId, purpose: 'text-open-world',
+    })
     const preview = await inspectTextOpenWorldCreatorWorldSourceV1({
       scope: input.scope,
       localReleaseRecordId: locator.localReleaseRecordId,
       expectedReleaseHash: locator.expectedReleaseHash,
+      sourcePurpose: locator.sourcePurpose,
+      verifySourcePurpose: input.requirePurpose === true,
     })
     selection = {
       sourceKind: 'world-release', sourceScope: input.scope,
@@ -285,8 +309,10 @@ export const TEXT_OPEN_WORLD_CREATOR_PRODUCT_BOUNDARY_V1: TextOpenWorldCreatorPr
 
 function assertDraft(value: unknown): asserts value is TextOpenWorldCreatorBriefDraftV1 {
   const row = record(value, 'brief.draft')
+  const protagonistSourceKey = readTextOpenWorldCreatorProtagonistSourceKeyV1(row)
   exact(row, [
     'schema', 'version', 'gameTitle', 'playerRole', 'playerFantasy', 'protagonistMode',
+    ...(protagonistSourceKey === undefined ? [] : ['protagonistSourceResourceKey']),
     'protagonistDirective', 'coreGoal', 'primaryConflict', 'openingSituation',
     'experiencePillars', 'toneKeywords', 'mustKeep', 'allowedInferences', 'forbiddenChanges',
     'contentRating', 'contentBoundaries', 'authorNotes', 'unresolvedQuestions',
@@ -364,6 +390,15 @@ function assertDraft(value: unknown): asserts value is TextOpenWorldCreatorBrief
   }
 }
 
+function parseCreatorPurpose(value: unknown, releaseHash: unknown, releaseUid?: unknown) {
+  const proof = parseWorldSourcePurposeProofV1(value)
+  if (proof.purpose !== 'text-open-world' || proof.selectedRelease.releaseHash !== releaseHash
+    || (releaseUid !== undefined && proof.selectedRelease.releaseUid !== releaseUid)) {
+    fail('protocol', '用途证据不属于 Creator 的冻结来源')
+  }
+  return proof
+}
+
 export function parseTextOpenWorldCreatorSourceBindingV1(
   value: unknown,
 ): TextOpenWorldCreatorSourceBindingV1 {
@@ -372,6 +407,7 @@ export function parseTextOpenWorldCreatorSourceBindingV1(
     exact(row, [
       'kind', 'worldCode', 'releaseUid', 'releaseVersion', 'releaseHash', 'referenceHash',
       'manifestSchemaHash', 'capabilityCatalogHash', 'capabilityProfileHash',
+      ...('sourcePurpose' in row ? ['sourcePurpose'] : []),
     ], 'brief.sourceBinding')
     if (!STABLE_KEY.test(text(row.worldCode, 'worldCode', 200))) fail('protocol', 'worldCode 无效')
     text(row.releaseUid, 'releaseUid', 300)
@@ -379,6 +415,7 @@ export function parseTextOpenWorldCreatorSourceBindingV1(
     for (const key of ['releaseHash', 'referenceHash', 'manifestSchemaHash', 'capabilityCatalogHash', 'capabilityProfileHash']) {
       hash(row[key], `sourceBinding.${key}`)
     }
+    if ('sourcePurpose' in row) parseCreatorPurpose(row.sourcePurpose, row.releaseHash, row.releaseUid)
     return structuredClone(row) as unknown as TextOpenWorldCreatorSourceBindingV1
   }
   exact(row, [
@@ -575,21 +612,27 @@ export function textOpenWorldCreatorLocatorFromProductionV1(
     sourceChapterIdsJson: row.creatorSourceChapterIdsJson ?? '[]',
     sourceVersionHash: row.creatorSourceVersionHash,
     sourceBoundaryHash: row.creatorSourceBoundaryHash,
-  } as ProductProductionBriefRecordV1)
+  } as ProductProductionBriefRecordV1, row.creatorSourceBindingJson ? JSON.parse(row.creatorSourceBindingJson) : null)
 }
 
 export function textOpenWorldCreatorLocatorFromBriefRowV1(
   row: ProductProductionBriefRecordV1,
+  savedBinding?: unknown,
 ): TextOpenWorldCreatorSourceLocatorV1 {
   if ((row.sourceKind ?? 'world-release') === 'world-release') {
     if (!row.sourceWorldReleaseId || !row.sourceVersionHash && !row.sourceWorldContentHash) {
       fail('locator-corrupt', '世界 Brief 缺少 Release 定位')
     }
-    return {
+    const binding = savedBinding === undefined && row.briefJson
+      ? (JSON.parse(row.briefJson) as { sourceBinding?: unknown }).sourceBinding
+      : savedBinding
+    const parsed = binding == null ? undefined : parseTextOpenWorldCreatorSourceBindingV1(binding)
+    return parseTextOpenWorldCreatorSourceLocatorV1({
       kind: 'world-release',
       localReleaseRecordId: row.sourceWorldReleaseId,
       expectedReleaseHash: row.sourceVersionHash ?? row.sourceWorldContentHash!,
-    }
+      ...(parsed?.kind === 'world-release' && parsed.sourcePurpose ? { sourcePurpose: parsed.sourcePurpose } : {}),
+    })
   }
   if (!row.sourceWorkId || !row.sourceSelectionMode || !row.sourceVersionHash || !row.sourceBoundaryHash) {
     fail('locator-corrupt', '小说 Brief 缺少来源定位')

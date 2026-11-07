@@ -1,3 +1,5 @@
+import { sha256BinaryV1 } from '../../src/lib/media/blob-store'
+import { encodeFixtureRasterV1, installRasterDecoderForVitestV1 } from '../helpers/raster-decoder-vitest'
 import { CURRENT_BACKUP_VERSION } from '../../src/lib/export/backup-trust'
 import {readComicReleaseBookV1} from '../../src/lib/comic/release-book'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -18,7 +20,9 @@ import { assembleContext } from '../../src/lib/registry/assemble-context'
 const targetSpec: ComicTargetSpecV1 = { format: 'page-comic', audience: '青少年及以上', readingDirection: 'ltr', chapterCount: 1, targetPagesPerChapter: 1, pageSize: { width: 1200, height: 1700, unit: 'px', bleed: 0 }, colorMode: 'color', artStyleBrief: '冷蓝电影感页漫', renderCandidatesPerPanel: 2, imageCapabilityRequirement: { referenceImage: false, deterministicSeed: false, inpainting: false, commercialUseRequired: true, minimumWidth: 512, minimumHeight: 512 } }
 const screenplayTargetSpec: ScreenplayTargetSpecV1 = { format: 'film', language: 'zh-CN', episodeCount: null, targetMinutesPerEpisode: 2, rating: 'PG-13', dialogueDensity: 'balanced', productionScale: 'contained', preserveVoiceOver: false, titlePage: { creditLine: '改编', authorDisplayName: '测试作者', contactText: '', copyrightNotice: '', draftLabel: '测试稿' }, exportDefaults: ['fountain'] }
 const brief: AdaptationBriefV1 = { version: 1, coreTheme: '选择与代价', dominantEmotion: '克制', mustKeep: ['黎明前的选择'], mayCut: [], mayMerge: [], mayReorder: [], allowedAdditions: ['可视化时钟意象'], audience: '青少年及以上', rating: 'PG-13', targetScale: '一章一页', narrativePerspective: '林岚', timeBudget: '', costLimit: '', deviationNotes: '', unresolvedQuestions: [], assumptions: [] }
-function pngBytes(): ArrayBuffer { const bytes = new Uint8Array(32); bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]); const view = new DataView(bytes.buffer); view.setUint32(16, 1024); view.setUint32(20, 1536); return bytes.buffer }
+installRasterDecoderForVitestV1()
+
+function pngBytes(color?: string): ArrayBuffer { return encodeFixtureRasterV1(1024, 1536, 'image/png', color) }
 function rights(): MediaRightsV1 { return { version: 1, source: 'author-upload', commercialUse: 'allowed', redistribution: 'allowed', attribution: '', declaration: '作者确认拥有测试图片完整使用与再分发权利。', declaredAt: Date.now() } }
 async function fixture() {
   const source = await createWorkspace({ name: '漫画专业来源', genres: ['other'], status: 'drafting', description: '暴雨旧站', targetWordCount: 10_000, enableMultiWorld: false }, { kind: 'novel', novelProfile: 'short' })
@@ -117,14 +121,32 @@ describe('COMIC-2 · professional novel-to-comic pipeline', () => {
     const visualIssueContext = await assembleContext({ projectId: item.scope.projectId, scope: item.scope, sourceKeys: ['comic.reviewIssues'], adaptationProjectId: root.id!, adaptationSourceManifestVersion: 1 })
     expect(visualIssueContext.text).toContain(asset.stableKey)
     quality = await inspectComicQualityV1(item.scope); expect(quality.canVisualRelease).toBe(true)
-    root = (await db.adaptationProjects.get(root.id!))!; const visual = await publishComicReleaseV1({ scope: item.scope, expectedAdaptationRevision: root.revision, tier: 'visual' }); const visualManifest = await readComicReleaseManifestV1(item.scope, visual.id); expect(visualManifest.assets).toHaveLength(1); expect(await db.creationReleaseAssets.count()).toBe(1); expect((await listComicReleasesV1(item.scope)).map(row => row.version)).toEqual([1, 2])
+    root = (await db.adaptationProjects.get(root.id!))!
+    // A legacy row can have a matching SHA and claimed dimensions but no pixels.
+    const originalBlob = (await db.mediaBlobObjects.get(asset.blobObjectId))!
+    const fake = new Uint8Array(32)
+    fake.set([137, 80, 78, 71, 13, 10, 26, 10])
+    new DataView(fake.buffer).setUint32(16, 1024)
+    new DataView(fake.buffer).setUint32(20, 1536)
+    const legacy = { data: fake.buffer, byteSize: fake.length, contentHash: await sha256BinaryV1(fake.buffer) }
+    await db.mediaBlobObjects.update(asset.blobObjectId, legacy)
+    try {
+      const checked = await inspectComicQualityV1(item.scope)
+      expect(checked.canVisualRelease).toBe(false)
+      expect(checked.issues).toContainEqual(expect.objectContaining({code: 'selected-blob-invalid'}))
+      await expect(publishComicReleaseV1({ scope: item.scope, expectedAdaptationRevision: root.revision, tier: 'visual' }))
+        .rejects.toThrow('尚未达到 visual 发布条件')
+      expect((await listComicReleasesV1(item.scope)).map(release => release.id)).toEqual([storyboard.id])
+      expect(await db.mediaBlobObjects.get(asset.blobObjectId)).toMatchObject(legacy)
+    } finally { await db.mediaBlobObjects.put(originalBlob) }
+    const visual = await publishComicReleaseV1({ scope: item.scope, expectedAdaptationRevision: root.revision, tier: 'visual' }); const visualManifest = await readComicReleaseManifestV1(item.scope, visual.id); expect(visualManifest.assets).toHaveLength(1); expect(await db.creationReleaseAssets.count()).toBe(1); expect((await listComicReleasesV1(item.scope)).map(row => row.version)).toEqual([1, 2])
     await reopenAdaptationProductionV1({ scope: item.scope, expectedRevision: (await db.adaptationProjects.get(root.id!))!.revision }); await removeComicMediaAssetV1({ scope: item.scope, assetKey: asset.stableKey, clearReferences: true }); expect(await db.comicMediaAssets.get(asset.id!)).toBeUndefined(); expect(await db.mediaBlobObjects.count()).toBe(1); expect((await readComicReleaseManifestV1(item.scope, visual.id)).assets[0].contentHash).toBe(visualManifest.assets[0].contentHash)
     const frozenBook = await readComicReleaseBookV1(item.scope, visual.id)
     expect(frozenBook.book.pages[0].panels[0].stableKey).toBe(panel.stableKey)
     expect(Object.keys(frozenBook.book.pages[0].assetDataUrls)).toContain(asset.stableKey)
     await expect(readComicReleaseBookV1(wrongMedium.scope, visual.id)).rejects.toThrow('越界')
     // Replanning removes live candidates atomically but cannot delete release-pinned blobs.
-    const bytes = new Uint8Array(pngBytes()); bytes[31]=1
+    const bytes = new Uint8Array(pngBytes('#913240'))
     const disposable=await commitUploadedComicAssetV1({scope:item.scope,panelId:panel.id!,data:bytes.buffer,rights:rights()})
     root=(await db.adaptationProjects.get(root.id!))!
     const replacement=[{stableKey:'replacement_plan',chapterNumber:1,pageNumber:1,order:0,goal:'新的分页',beatKeys:['beat_choice'],endReveal:'新的揭示',pageTurn:'none' as const,expectedPanelCount:1,textBudget:30}]

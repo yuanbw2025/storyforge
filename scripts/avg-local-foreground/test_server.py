@@ -13,7 +13,7 @@ import numpy as np
 from PIL import Image
 
 from server import (ALLOWED_ORIGINS, ALGORITHM_V5, ForegroundHTTPServer, ForegroundQualityError,
-                    MATTING_METHOD, MODEL_ID, PROMPT_STRATEGY, PROMPT_STRATEGY_V5, QUALITY_GATE_V5,
+                    MATTING_METHOD, MODEL_ID, MODEL_REVISION, PROMPT_STRATEGY, PROMPT_STRATEGY_V5, QUALITY_GATE_V5,
                     canonical_json, parse_loopback_origin, portrait_prompts, prompt_manifest,
                     select_candidate_observations_v5, select_portrait_mask, sha256)
 from server import (ALGORITHM_V6, MATTING_METHOD_V6, NEUTRAL_BACKGROUND_RULE, QUALITY_GATE_V6,
@@ -34,6 +34,7 @@ def png_bytes(width=40, height=48):
 
 class FakeEngine:
     device = "cpu"
+    code_revision = MODEL_REVISION
 
     def __init__(self):
         self.calls = 0

@@ -1,3 +1,6 @@
+import type { WorldSourcePurposeProofV1 } from '../world-engine/source-purpose'
+import { freezeWorldSourcePurposeV1, revalidateWorldSourcePurposeV1 } from '../world-engine/source-purpose'
+import { listLocalWorldReferenceChoicesV1 } from '../world-engine/reference-cache'
 import {
   listAdaptationSourceOptions,
   previewAdaptationSourceSelection,
@@ -17,6 +20,7 @@ import type {
   TextOpenWorldCreatorSourceGapV1,
   TextOpenWorldCreatorSourcePreviewV1,
   TextOpenWorldCreatorSourceReadinessV1,
+  TextOpenWorldCreatorSourceSelectionV1,
   TextOpenWorldCreatorWorldResourceCountsV1,
   TextOpenWorldCreatorWorldSourceCandidateV1,
   TextOpenWorldNovelSourceSnapshotPreviewV1,
@@ -198,13 +202,32 @@ export async function listTextOpenWorldCreatorWorldSourcesV1(
   scope: WorkspaceScope,
 ): Promise<TextOpenWorldCreatorWorldSourceCandidateV1[]> {
   const entries = await listWorldReferenceCatalogV1(scope)
-  return Promise.all(entries.map(entry => inspectWorldCatalogEntryV1({ scope, entry })))
+  const choices = await listLocalWorldReferenceChoicesV1({ purpose: 'text-open-world', scope })
+  const byId = new Map(entries.map(entry => [entry.reference.localReleaseRecordId, entry]))
+  return Promise.all(choices.flatMap(choice => {
+    const entry = byId.get(choice.id)
+    if (!entry) return []
+    return [(async () => {
+      const candidate = await inspectWorldCatalogEntryV1({ scope, entry })
+      const sourcePurpose = choice.purposeAllowed
+        ? await freezeWorldSourcePurposeV1({
+            worldReleaseId: choice.id, expectedProjectId: scope.projectId, expectedWorldId: scope.worldId,
+            purpose: 'text-open-world', sourceDeclarationHash: choice.sourceDeclarationHash,
+          }).catch(() => undefined)
+        : undefined
+      return { ...candidate, sourceChoiceKey: choice.choiceKey, sourcePurpose, purposeAllowed: !!sourcePurpose,
+        sourceAttribution: choice.attribution, sourceAuthorName: choice.authorName,
+        sourceLicense: choice.license, sourceWarnings: choice.contentWarnings }
+    })()]
+  }))
 }
 
 export async function inspectTextOpenWorldCreatorWorldSourceV1(input: {
   scope: WorkspaceScope
   localReleaseRecordId: number
   expectedReleaseHash: string
+  sourcePurpose?: WorldSourcePurposeProofV1
+  verifySourcePurpose?: boolean
 }): Promise<TextOpenWorldCreatorWorldSourceCandidateV1> {
   if (!Number.isSafeInteger(input.localReleaseRecordId) || input.localReleaseRecordId < 1) {
     fail('world-release-id', 'localReleaseRecordId 必须是正整数')
@@ -216,7 +239,50 @@ export async function inspectTextOpenWorldCreatorWorldSourceV1(input: {
   if (entry.reference.releaseHash !== input.expectedReleaseHash) {
     fail('world-release-stale', 'WorldRelease Hash 已变化或候选身份不匹配')
   }
-  return inspectWorldCatalogEntryV1({ scope: input.scope, entry })
+  const candidate = await inspectWorldCatalogEntryV1({ scope: input.scope, entry })
+  if (!input.sourcePurpose) return candidate
+  if (input.verifySourcePurpose === false) return { ...candidate, sourcePurpose: input.sourcePurpose }
+  const sourcePurpose = await revalidateWorldSourcePurposeV1({
+    worldReleaseId: input.localReleaseRecordId, expectedProjectId: input.scope.projectId,
+    expectedWorldId: input.scope.worldId, purpose: 'text-open-world', proof: input.sourcePurpose,
+  })
+  return { ...candidate, sourcePurpose }
+
+}
+
+/** List only confirmed character descriptors from this exact frozen source. */
+export async function listTextOpenWorldCreatorProtagonistChoicesV1(
+  selection: TextOpenWorldCreatorSourceSelectionV1,
+): Promise<Array<{ resourceKey: string; label: string }>> {
+  if (selection.sourceKind !== 'world-release') return []
+  const catalog = await openWorldSemanticResourceCatalogV1({
+    localReleaseRecordId: selection.localReleaseRecordId,
+    expectedProjectId: selection.sourceScope.projectId,
+    expectedWorldId: selection.sourceScope.worldId,
+  })
+  if (catalog.description.identity.releaseHash !== selection.expectedReleaseHash ||
+    !sameWorldReference(catalog.description.worldReference, selection.preview.worldReference)) {
+    fail('world-release-drift', '角色目录与已选封存来源不一致')
+  }
+  return catalog.resources
+    .filter(item => item.worldSemantic?.area === 'characters' && item.worldSemantic.resourceKind === 'character')
+    .map(item => ({ resourceKey: item.resourceKey, label: item.title.trim() || item.resourceKey }))
+    .sort((left, right) => left.label.localeCompare(right.label) || left.resourceKey.localeCompare(right.resourceKey))
+}
+
+export async function assertTextOpenWorldCreatorProtagonistSelectionV1(input: {
+  selection: TextOpenWorldCreatorSourceSelectionV1
+  mode: 'source-character' | 'author-defined'
+  resourceKey?: string
+}): Promise<void> {
+  if (input.mode === 'author-defined') {
+    if (input.resourceKey !== undefined) fail('protagonist', '原创主角不能携带来源角色')
+    return
+  }
+  if (!input.resourceKey || input.selection.sourceKind !== 'world-release')
+    fail('protagonist', '请明确选择当前封存世界中的主角')
+  if (!(await listTextOpenWorldCreatorProtagonistChoicesV1(input.selection)).some(item => item.resourceKey === input.resourceKey))
+    fail('protagonist', '主角不属于当前封存来源的已确认角色')
 }
 
 function novelGaps(

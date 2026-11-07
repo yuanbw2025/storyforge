@@ -9,11 +9,53 @@ import { generateNarrativeAnnotationCandidateV1, readNarrativeAnnotationRunV1, r
   adoptNarrativeAnnotationCandidateV1 } from '../../src/lib/agent/run/narrative-annotation-durable'
 import { deriveExportProjectJSON } from '../../src/lib/export/registry-export'
 import { deriveImportProjectJSON } from '../../src/lib/export/registry-import'
+import { inspectProjectBackup } from '../../src/lib/export/backup-trust'
 import { seedConfirmedNarrativeDomainV1 } from '../helpers/narrative-domain-fixture'
 import type { ChatMessage } from '../../src/lib/types'
 import { CANON_RESOURCE_PROVIDER_V1 } from '../../src/lib/context-gateway/canon-provider'
 
 const legacyPath = 'tests/acceptance/narrative-world/target-state-legacy-candidate-20261015-v1.json'
+
+function readLegacyTargetCandidateV1() {
+  const raw = readFileSync(legacyPath)
+  expect(createHash('sha256').update(raw).digest('hex'))
+    .toBe('7761098b1e348fb08976737f9057a5f75abef6c9825494a03421714ec40a724f')
+  return JSON.parse(raw.toString('utf8'))
+}
+
+/** Explicit test-only transport repair, never an upgrade of the sealed archive.
+ * Its unrelated Work1 chapter had no outline. Add a new fixture outline instead
+ * of deleting content, borrowing Work0's outline, or changing candidate evidence. */
+function legacyCandidateTransportProjectV1(legacy: ReturnType<typeof readLegacyTargetCandidateV1>) {
+  const project = structuredClone(legacy.project)
+  const foreignChapter = project.chapters[4]
+  expect(project.version).toBe(16)
+  expect(foreignChapter).toMatchObject({ title: '另一作品的后章', _workOwnerExportId: 1, _outlineExportId: null })
+  expect(project.outlineNodes.map((row: { _exportId: number; _workOwnerExportId: number }) =>
+    [row._exportId, row._workOwnerExportId])).toEqual([[0, 0], [1, 0], [2, 0], [3, 0]])
+  const state = JSON.parse(project.agentRunCheckpoints.at(-1).resumePayloadJson)
+  expect(state.baseline.workCode).toBe(project.works[0].code)
+  expect(state.selection.owner).toEqual({ kind: 'work', workCode: project.works[0].code })
+  expect(state.baseline.sources.map((source: { table: string }) => source.table)).toEqual(['characters', 'foreshadows'])
+  expect(JSON.stringify(state.baseline)).not.toContain(foreignChapter.ragDocumentId)
+  const outlineUid = 'res:v1:outline-node:00000000-0000-4000-8000-0000000001c4'
+  expect(JSON.stringify(legacy.project)).not.toContain(outlineUid)
+  project.outlineNodes.push({
+    _exportId: 4, _workOwnerExportId: 1, _parentExportId: null, _worldGroupExportId: null,
+    ragDocumentId: outlineUid, type: 'chapter', title: '旧候选测试运输容器：另一作品的后章章纲',
+    summary: '仅补齐测试运输容器的必需关联，不是历史章纲或候选来源证据。', order: foreignChapter.order,
+    createdAt: foreignChapter.createdAt, updatedAt: foreignChapter.updatedAt,
+  })
+  foreignChapter._outlineExportId = 4
+  // The only changes are this one new row and this one transport FK. Every
+  // original Run/event/checkpoint/candidate/source/hash string stays exact.
+  const withoutTransportRepair = structuredClone(project)
+  withoutTransportRepair.outlineNodes.pop()
+  withoutTransportRepair.chapters[4]._outlineExportId = null
+  expect(JSON.stringify(withoutTransportRepair)).toBe(JSON.stringify(legacy.project))
+  expect(inspectProjectBackup(project).errors).toEqual([])
+  return project
+}
 
 describe('NW-1C · 既有子记录的目标状态交接', () => {
   beforeEach(async () => {
@@ -34,7 +76,19 @@ describe('NW-1C · 既有子记录的目标状态交接', () => {
     return { fixture, actor, row, selection }
   }
 
-  it('真实旧版 v3 候选备份仍可回读、审核和采纳；不重造旧 hash', async () => {
+  it('原旧档案的异作品章节缺少必需章纲时准确拒绝，档案字节与数据库均不变', async () => {
+    const legacy = readLegacyTargetCandidateV1()
+    const inputBefore = JSON.stringify(legacy.project)
+    const rowsBefore = await Promise.all(db.tables.map(table => table.toArray()))
+    const issue = 'chapters[4]._outlineExportId 必须是非空的非负安全整数。'
+    expect(inspectProjectBackup(legacy.project).errors).toEqual([issue])
+    await expect(deriveImportProjectJSON(legacy.project)).rejects.toThrow(`备份预检失败：${issue}`)
+    expect(await Promise.all(db.tables.map(table => table.toArray()))).toEqual(rowsBefore)
+    expect(JSON.stringify(legacy.project)).toBe(inputBefore)
+    expect(readLegacyTargetCandidateV1()).toEqual(legacy)
+  })
+
+  it('旧 v3 原候选字节在合法测试运输容器中仍可回读、审核和采纳；原 hash 不变', async () => {
     if (process.env.NW_CAPTURE_LEGACY_TARGET_STATE === '1') {
       const { fixture, actor, selection } = await setup()
       const proposal = { annotations: { narrativeDevelopmentsV1: [{ ...fixture.development,
@@ -55,8 +109,8 @@ describe('NW-1C · 既有子记录的目标状态交接', () => {
         project: await deriveExportProjectJSON(fixture.scope.projectId),
       }, null, 2) + '\n', { flag: 'wx' })
     }
-    const legacy = JSON.parse(readFileSync(legacyPath, 'utf8'))
-    const projectId = await deriveImportProjectJSON(legacy.project)
+    const legacy = readLegacyTargetCandidateV1()
+    const projectId = await deriveImportProjectJSON(legacyCandidateTransportProjectV1(legacy))
     const work = (await db.works.where('projectId').equals(projectId).toArray())[0]
     const scope = { projectId, workId: work.id!, worldId: work.worldId }
     const run = (await db.agentRuns.where('projectId').equals(projectId).toArray())[0]
@@ -65,6 +119,7 @@ describe('NW-1C · 既有子记录的目标状态交接', () => {
     expect(loaded.state.baselineHash).toBe(legacy.baselineHash)
     expect(loaded.candidate!.candidateHash).toBe(legacy.candidateHash)
     expect(loaded.state.baseline).not.toHaveProperty('targetState')
+    expect(loaded.staleReason).toBeNull()
     const proposal = structuredClone(loaded.candidate!.proposal!)
     const children = proposal.annotations.narrativeDevelopmentsV1 as Array<Record<string, unknown>>
     children[0].state = 'open'
@@ -75,6 +130,52 @@ describe('NW-1C · 既有子记录的目标状态交接', () => {
     const row = (await db.foreshadows.where('projectId').equals(projectId).toArray()).find(item => item.ragDocumentId === legacy.sourceUid)!
     expect(row.narrativeDevelopmentsV1![0].semanticSubKey).toBe(children[0].semanticSubKey)
     expect(row.narrativeDevelopmentsV1![0].state).toBe('open')
+  })
+
+  async function restoredLegacy() {
+    const legacy = readLegacyTargetCandidateV1()
+    const projectId = await deriveImportProjectJSON(legacyCandidateTransportProjectV1(legacy))
+    const work = (await db.works.where('projectId').equals(projectId).toArray())[0]
+    const run = (await db.agentRuns.where('projectId').equals(projectId).toArray())[0]
+    if (!work?.id || !run?.id) throw new Error('Missing actual restored legacy owner/run')
+    const scope = { projectId, workId: work.id, worldId: work.worldId }
+    const loaded = await readNarrativeAnnotationRunV1(scope, run.id)
+    const row = (await db.foreshadows.where('projectId').equals(projectId).toArray())
+      .find(item => item.ragDocumentId === loaded.state.selection.sourceUid)
+    if (!row?.id || !loaded.candidate?.proposal) throw new Error('Missing actual legacy target/candidate')
+    expect(loaded.state.baselineHash).toBe(legacy.baselineHash)
+    expect(loaded.candidate.candidateHash).toBe(legacy.candidateHash)
+    expect(loaded.staleReason).toBeNull()
+    return { scope, runId: run.id, loaded, row }
+  }
+
+  it.each(['original', 'author-policy', 'annotations'] as const)('合法测试运输容器内的旧 v3 policy recipe 仍拒绝真实 %s 变化', async mutation => {
+    const f = await restoredLegacy()
+    const proposal = structuredClone(f.loaded.candidate!.proposal!)
+    if (mutation === 'original') await db.foreshadows.update(f.row.id!, { description: f.row.description + '作者的后来修改' })
+    else if (mutation === 'author-policy') await db.foreshadows.update(f.row.id!, {
+      ragPolicy: { ...f.row.ragPolicy, enabled: true, weight: f.row.ragPolicy?.weight === 2 ? 3 : 2 },
+    })
+    else await db.foreshadows.update(f.row.id!, { narrativeDevelopmentsV1: [
+      { ...f.row.narrativeDevelopmentsV1![0], statement: '作者后来重新安排了计划' },
+    ] })
+    const changed = await db.foreshadows.get(f.row.id!)
+    expect((await readNarrativeAnnotationRunV1(f.scope, f.runId)).staleReason).not.toBeNull()
+    await expect(reviseNarrativeAnnotationCandidateV1({ scope: f.scope, runId: f.runId,
+      expectedCandidateHash: f.loaded.candidate!.candidateHash, draft: JSON.stringify(proposal) })).rejects.toThrow()
+    await expect(adoptNarrativeAnnotationCandidateV1({ scope: f.scope, runId: f.runId,
+      candidateHash: f.loaded.candidate!.candidateHash })).rejects.toThrow()
+    expect(await db.foreshadows.get(f.row.id!)).toEqual(changed)
+  })
+
+  it('合法测试运输容器内的旧 v3 policy recipe 不能跨真实 owner 使用原候选', async () => {
+    const f = await restoredLegacy(), foreign = await seedConfirmedNarrativeDomainV1()
+    const original = await db.foreshadows.get(f.row.id!), events = await db.agentRunEvents.count()
+    expect(foreign.scope.projectId).not.toBe(f.scope.projectId)
+    await expect(reviseNarrativeAnnotationCandidateV1({ scope: foreign.scope, runId: f.runId,
+      expectedCandidateHash: f.loaded.candidate!.candidateHash, draft: JSON.stringify(f.loaded.candidate!.proposal) })).rejects.toThrow()
+    expect(await db.foreshadows.get(f.row.id!)).toEqual(original)
+    expect(await db.agentRunEvents.count()).toBe(events)
   })
 
   it('登记源提供唯一目标的既有注释，原文与注释分开，FK 只保留便携身份', async () => {

@@ -175,13 +175,20 @@ describe('R-PRODUCTPROD-1A1 · current product-production lifecycle', () => {
     expect(Array.from(new Uint8Array(blob!.data!))).toEqual(Array.from(new Uint8Array(seeded.data)))
   })
 
-  it.sequential('损坏的必填生产外键使整个导入事务零写入', async () => {
+  it.sequential('损坏的必填生产外键使预检拒绝且零写入', async () => {
     const source = await db.projects.where('name').equals('PRODUCTPROD 生产生命周期').first()
     const exported = await exportProjectJSON(source!.id!)
     exported.productBuilds![0]._productionExportId = 999
-    const before = await db.projects.count()
-    await expect(importProjectJSON(exported)).rejects.toThrow(/生产引用越界|缺失必填外键映射/)
-    expect(await db.projects.count()).toBe(before)
+    const countRows = () => Promise.all([
+      db.projects.count(),
+      db.productProductions.count(),
+      db.productBuilds.count(),
+    ])
+    const before = await countRows()
+    await expect(importProjectJSON(exported)).rejects.toMatchObject({
+      message: '备份预检失败：productBuilds[0]._productionExportId=999 没有对应的 productProductions 记录。',
+    })
+    expect(await countRows()).toEqual(before)
   })
 
   it.sequential('跨 Build 只复用已验收 Artifact，错误父链或损坏媒资时事务零写入', async () => {

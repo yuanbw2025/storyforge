@@ -133,8 +133,12 @@ export async function seedNarrativeFamily(family: NarrativeFamily) {
   // impact graph or have its facts demoted. This is stronger than a project-only check.
   const otherWork = await createWorldWork(created.scope.projectId, { title: `${family.title}·独立作品`, kind: 'novel', novelProfile: 'long' })
   const otherScope = { ...created.scope, workId: otherWork.id! }
+  const foreignOutlineId = await db.outlineNodes.add(stampNewRecord(otherScope, 'outlineNodes', {
+    projectId: created.scope.projectId, parentId: null, type: 'chapter' as const, title: '另一作品的后章',
+    summary: '', order: 99, createdAt: now, updatedAt: now,
+  }, { owner: 'work' }))
   const foreignChapterId = await db.chapters.add(stampNewRecord(otherScope, 'chapters', {
-    projectId: created.scope.projectId, title: '另一作品的后章', content: '独立作品，不依赖评测原文。',
+    projectId: created.scope.projectId, outlineNodeId: foreignOutlineId, title: '另一作品的后章', content: '独立作品，不依赖评测原文。',
     order: 99, status: 'draft', wordCount: 16, notes: '', createdAt: now, updatedAt: now,
   } as never, { owner: 'work' })) as number
   const foreignFactId = await db.temporalFacts.add(stampNewRecord(otherScope, 'temporalFacts', {

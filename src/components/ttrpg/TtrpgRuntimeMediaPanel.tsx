@@ -4,27 +4,19 @@ import { useTtrpgMediaUrls } from "./useTtrpgMediaUrls";
 import {
   cancelTtrpgRuntimeAssetRequestV1,
   readVisibleTtrpgRuntimeMediaRequestsV1,
+  recoverTtrpgRuntimeMediaQueueV1,
   requestConfiguredTtrpgRuntimeAssetV1,
   retryConfiguredTtrpgRuntimeAssetRequestV1,
+  type VisibleTtrpgRuntimeMediaRequestV1 as VisibleRequest,
 } from "../../lib/ttrpg/runtime-media";
 import type {
   ProductRuntimePackageV1,
   ProductRuntimeSourceV1,
-  TtrpgRuntimeAssetRequestRecordV1,
   WorkspaceScope,
 } from "../../lib/types";
 import type { TtrpgViewerProjectionV1 } from "../../lib/ttrpg/viewer-projection";
 
 type MediaProjection = NonNullable<TtrpgViewerProjectionV1["media"]>;
-type VisibleRequest = Omit<
-  TtrpgRuntimeAssetRequestRecordV1,
-  | "prompt"
-  | "negativePrompt"
-  | "processorLeaseId"
-  | "processorLeaseExpiresAt"
-  | "lastErrorDetail"
->;
-
 const KIND_LABELS: Record<MediaProjection["slots"][number]["kind"], string> = {
   scene: "场景图",
   map: "地图",
@@ -108,6 +100,25 @@ export default function TtrpgRuntimeMediaPanel(props: {
     return () => window.clearInterval(timer);
   }, [onChanged, pending, refreshRequests]);
 
+  const processing = requests.some((row) => row.status === "generating");
+  useEffect(() => {
+    if (props.disabled || props.publicPresentation || !processing) return;
+    let cancelled = false;
+    async function recover() {
+      try {
+        if (await recoverTtrpgRuntimeMediaQueueV1({ sessionId: props.sessionId }) && !cancelled) {
+          await refreshRequests();
+          await onChanged();
+        }
+      } catch (cause) {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+      }
+    }
+    void recover();
+    const timer = window.setInterval(() => void recover(), 30_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [onChanged, processing, props.disabled, props.publicPresentation, props.sessionId, refreshRequests]);
+
   const requestByKey = useMemo(
     () => new Map(requests.map((row) => [row.requestKey, row])),
     [requests],
@@ -180,8 +191,7 @@ export default function TtrpgRuntimeMediaPanel(props: {
                   />
                 ) : (
                   <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
-                    {slot.status === "queued" ||
-                    row?.status === "generating" ? (
+                    {row?.status === "generating" || (slot.status === "queued" && !row?.hasUnresolvedAttempt) ? (
                       <Loader2 className="h-6 w-6 animate-spin text-accent" />
                     ) : (
                       <ImageIcon className="h-6 w-6 text-text-muted" />
@@ -201,9 +211,10 @@ export default function TtrpgRuntimeMediaPanel(props: {
                     className={`text-[9px] ${slot.status === "failed" ? "text-danger" : slot.status === "available" ? "text-success" : "text-text-muted"}`}
                   >
                     {url
-                      ? slot.mediaAssetId != null ? "运行时可用" : "预制可用"
+                      ? slot.runtimeAsset ? "运行时可用" : "预制可用"
                       : row?.status === "generating"
                       ? "生成中"
+                      : row?.hasUnresolvedAttempt && slot.status !== "cancelled" ? "结果待确认"
                       : STATUS_LABELS[slot.status]}
                   </span>
                 </div>
@@ -217,6 +228,9 @@ export default function TtrpgRuntimeMediaPanel(props: {
                   <p className="mt-1 text-[10px] text-danger">
                     错误代码：{slot.lastErrorCode}
                   </p>
+                )}
+                {!props.publicPresentation && row?.hasUnresolvedAttempt && (
+                  <p className="mt-1 text-[10px] text-text-muted">仍有未确认的发送费用，已保留预算。</p>
                 )}
                 <div className="mt-3 flex flex-wrap gap-2">
                   {!url && (slot.status === "placeholder" ||
@@ -249,9 +263,8 @@ export default function TtrpgRuntimeMediaPanel(props: {
                       后台生成
                     </button>
                   )}
-                  {slot.status === "failed" &&
-                    row &&
-                    row.attemptCount < row.maximumAttempts && (
+                  {row && ((slot.status === "failed" && row.canRetry) ||
+                    (slot.status === "queued" && row.canResume)) && (
                       <button
                         disabled={props.disabled || working}
                         onClick={() =>
@@ -269,7 +282,7 @@ export default function TtrpgRuntimeMediaPanel(props: {
                         className="rounded border border-border px-2 py-1 text-[10px] text-text-secondary disabled:opacity-40"
                       >
                         <RefreshCw className="mr-1 inline h-3 w-3" />
-                        重试 {row.attemptCount}/{row.maximumAttempts}
+                        {row.canResume ? "继续生成" : `重试 ${row.attemptCount}/${row.maximumAttempts}`}
                       </button>
                     )}
                   {(row?.status === "queued" || slot.status === "failed") &&

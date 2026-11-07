@@ -45,8 +45,13 @@ import {
   parseTtrpgVisualBibleV1,
 } from "./media-contract";
 import { parseRulePackV1 } from "./rule-pack";
-import { createTtrpgViewerProjectionV1 } from "./viewer-projection";
+import { createTtrpgViewerProjectionV1, type TtrpgViewerRuntimeMediaRefV1 } from "./viewer-projection";
 import { readTtrpgSessionParticipantsV2 } from "./participants";
+import {
+  EMPTY_RUNTIME_MEDIA_ACCOUNTING, canRetryRuntimeMedia, committedRuntimeMediaCost,
+  hasRuntimeMediaDispatchAuthority, hasUnresolvedRuntimeMediaAttempt, isRuntimeMediaCost, measuredRuntimeMediaCost,
+  readRuntimeMediaAccounting,
+} from "./runtime-media-attempt-accounting";
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const REQUEST_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,149}$/;
@@ -460,13 +465,7 @@ export async function enqueueTtrpgRuntimeAssetRequestV1(input: {
         .where("sessionId")
         .equals(input.sessionId)
         .toArray();
-      const committedCost = jobs.reduce(
-        (sum, row) =>
-          sum +
-          (row.actualCostUsd ??
-            (row.status === "cancelled" ? 0 : row.costReservationUsd)),
-        0,
-      );
+      const committedCost = jobs.reduce((sum, row) => sum + committedRuntimeMediaCost(row), 0);
       if (
         committedCost + reservation >
         context.manifest.runtimePolicy.maximumSessionCostUsd
@@ -528,6 +527,7 @@ export async function enqueueTtrpgRuntimeAssetRequestV1(input: {
         estimatedCostUsd: estimate.estimatedCostUsd,
         costReservationUsd: reservation,
         actualCostUsd: null,
+        attemptAccountingJson: EMPTY_RUNTIME_MEDIA_ACCOUNTING,
         estimatedStorageBytes: estimate.estimatedStorageBytes,
         mediaAssetId: null,
         mediaAssetVersion: null,
@@ -652,7 +652,13 @@ export async function retryConfiguredTtrpgRuntimeAssetRequestV1(input: {
   if (capability.adapter.capability.adapterId !== original.adapterId) {
     fail("重试时 provider 已变化；请取消旧请求并创建新的受预算请求");
   }
-  const row = await retryTtrpgRuntimeAssetRequestV1(input);
+  let row = original;
+  if (original.status === "queued") {
+    const visible = await readVisibleTtrpgRuntimeMediaRequestsV1({ sessionId: original.sessionId, viewerKey: input.viewerKey });
+    if (!visible.find(item => item.id === original.id)?.canResume) fail("媒资请求不可继续发送");
+  } else {
+    row = await retryTtrpgRuntimeAssetRequestV1(input);
+  }
   void processTtrpgRuntimeAssetRequestV1({
     requestId: row.id!,
     adapter: capability.adapter,
@@ -664,13 +670,48 @@ export async function retryConfiguredTtrpgRuntimeAssetRequestV1(input: {
   return row;
 }
 
+function sameRuntimeMediaOwner(session: ProductRuntimeSession | undefined, context: RuntimeMediaContextV1) {
+  return session?.id === context.session.id && session?.status === "active" &&
+    session.runtimeSourceHash === context.runtimeSourceHash &&
+    session.productBuildId === context.session.productBuildId &&
+    session.productReleaseId === context.session.productReleaseId &&
+    session.projectId === context.scope.projectId && session.worldId === context.scope.worldId &&
+    session.workId === context.scope.workId;
+}
+
+function mediaRowBelongsToSession(row: TtrpgRuntimeAssetRequestRecordV1, session: ProductRuntimeSession) {
+  return row.sessionId === session.id && row.projectId === session.projectId && row.worldGroupId === session.worldGroupId &&
+    row.worldId === session.worldId && row.workId === session.workId;
+}
+
+function sameRuntimeMediaIntent(row: TtrpgRuntimeAssetRequestRecordV1 | undefined, original: TtrpgRuntimeAssetRequestRecordV1) {
+  return row != null && row.id === original.id && row.sessionId === original.sessionId &&
+    row.projectId === original.projectId && row.worldGroupId === original.worldGroupId &&
+    row.worldId === original.worldId && row.workId === original.workId &&
+    row.requestKey === original.requestKey && row.slotKey === original.slotKey &&
+    row.inputHash === original.inputHash && row.requestedAtSequence === original.requestedAtSequence;
+}
+
+async function sessionMediaCommittedCost(sessionId: number) {
+  const rows = await db.ttrpgRuntimeAssetRequests.where("sessionId").equals(sessionId).toArray();
+  return rows.reduce((sum, row) => sum + committedRuntimeMediaCost(row), 0);
+}
+
+function markSettledMediaAttempt(row: TtrpgRuntimeAssetRequestRecordV1, sequence: number | null) {
+  const accounting = readRuntimeMediaAccounting(row);
+  const attempt = accounting?.attempts.find(item => item.ordinal === row.attemptCount &&
+    item.dispatchKey === row.processorLeaseId);
+  if (!attempt || attempt.costUsd === null || sequence === null) return row.attemptAccountingJson;
+  attempt.settledSequence = sequence;
+  return JSON.stringify(accounting);
+}
+
 async function terminalFailure(input: {
   context: RuntimeMediaContextV1;
   requestId: number;
-  leaseId: string;
+  leaseId: string | null;
   errorCode: string;
   detail: string;
-  actualCostUsd?: number | null;
 }): Promise<TtrpgRuntimeAssetRequestRecordV1> {
   const errorCode = key(
     input.errorCode.replace(/[^A-Za-z0-9._:-]/g, "-").slice(0, 200) ||
@@ -689,43 +730,39 @@ async function terminalFailure(input: {
         db.ttrpgRuntimeAssetRequests.get(input.requestId),
       ]);
       if (
-        !session ||
-        !row ||
+        !session || !sameRuntimeMediaOwner(session, input.context) ||
+        !row || !mediaRowBelongsToSession(row, session) ||
         row.status !== "generating" ||
         row.processorLeaseId !== input.leaseId
       )
         fail("媒资处理租约已失效");
       const { state } = await stateAndEvents(session);
-      const event = eventFor({
-        session,
-        sequence: state.lastSequence + 1,
-        type: "ttrpg.media.failed",
-        targetKey: row.slotKey,
-        commandId: `media.failed.${row.requestKey}.${row.attemptCount}`,
-        payload: {
-          requestKey: row.requestKey,
-          slotKey: row.slotKey,
-          errorCode,
-        },
-      });
-      applyProductRuntimeEvent(state, event);
-      event.id = (await db.productRuntimeEvents.add(event)) as number;
-      const updatedAt = event.createdAt;
+      const slot = state.ttrpg?.product?.media.slots.find(item => item.slotKey === row.slotKey);
+      let terminalEventSequence = row.terminalEventSequence;
+      let updatedAt = Date.now();
+      if (slot?.requestKey === row.requestKey && slot.status === "queued") {
+        const event = eventFor({
+          session, sequence: state.lastSequence + 1, type: "ttrpg.media.failed",
+          targetKey: row.slotKey, commandId: `media.failed.${row.requestKey}.${row.attemptCount}`,
+          payload: { requestKey: row.requestKey, slotKey: row.slotKey, errorCode },
+        });
+        applyProductRuntimeEvent(state, event);
+        event.id = (await db.productRuntimeEvents.add(event)) as number;
+        updatedAt = event.createdAt;
+        terminalEventSequence = event.sequence;
+        await db.productRuntimeSessions.update(session.id!, { updatedAt });
+      }
       await db.ttrpgRuntimeAssetRequests.update(row.id!, {
         status: "failed",
-        actualCostUsd:
-          input.actualCostUsd === undefined
-            ? row.actualCostUsd
-            : input.actualCostUsd,
         processorLeaseId: null,
         processorLeaseExpiresAt: null,
         lastErrorCode: errorCode,
         lastErrorDetail: detail,
-        terminalEventSequence: event.sequence,
+        terminalEventSequence,
+        attemptAccountingJson: markSettledMediaAttempt(row, terminalEventSequence),
         revision: row.revision + 1,
         updatedAt,
       });
-      await db.productRuntimeSessions.update(session.id!, { updatedAt });
       return (await db.ttrpgRuntimeAssetRequests.get(row.id!))!;
     },
   );
@@ -756,7 +793,9 @@ export async function processTtrpgRuntimeAssetRequestV1(input: {
       const row = await db.ttrpgRuntimeAssetRequests.get(original.id!);
       if (
         !row ||
+        !sameRuntimeMediaIntent(row, original) ||
         row.status !== "queued" ||
+        !hasRuntimeMediaDispatchAuthority(row) ||
         row.attemptCount >= row.maximumAttempts
       )
         fail("媒资请求当前不可处理或已耗尽重试");
@@ -791,7 +830,6 @@ export async function processTtrpgRuntimeAssetRequestV1(input: {
       leaseId,
       errorCode: "network-policy-blocked",
       detail: "当前网络策略不允许生成媒资。",
-      actualCostUsd: 0,
     });
   }
   const adapter =
@@ -802,46 +840,97 @@ export async function processTtrpgRuntimeAssetRequestV1(input: {
     qualityProfile: input.qualityProfile ?? "internal",
     environment: input.environment ?? "production",
   });
-  try {
-    const candidates = await adapter.generate(
-      request,
-      input.transport,
-      input.signal ?? new AbortController().signal,
-    );
-    if (candidates.length !== 1) fail("运行时媒资 adapter 必须返回一个候选");
-    const candidate = await adapter.parseAndVerify(candidates[0]);
-    const actualCostUsd = candidate.providerReceipt.costUsd;
-    if (
-      actualCostUsd != null &&
-      (!Number.isFinite(actualCostUsd) || actualCostUsd < 0)
-    )
-      fail("provider 成本收据无效");
-    const otherJobs = await db.ttrpgRuntimeAssetRequests
-      .where("sessionId")
-      .equals(claimed.sessionId)
-      .toArray();
-    const otherCost = otherJobs
-      .filter((row) => row.id !== claimed.id)
-      .reduce(
-        (sum, row) =>
-          sum +
-          (row.actualCostUsd ??
-            (row.status === "cancelled" ? 0 : row.costReservationUsd)),
-        0,
-      );
-    if (
-      otherCost + (actualCostUsd ?? claimed.costReservationUsd) >
-      claimed.maximumSessionCostUsd
-    ) {
-      return terminalFailure({
-        context,
-        requestId: claimed.id!,
-        leaseId,
-        errorCode: "session-cost-budget-exceeded",
-        detail: "provider 返回成本超过会话预算，候选未绑定。",
-        actualCostUsd,
+  const signal = input.signal ?? new AbortController().signal;
+  const maximumUsd = context.manifest.runtimePolicy.maximumSessionCostUsd;
+  let dispatched = false;
+
+  async function updateAttempt(update: (attempt: NonNullable<ReturnType<typeof readRuntimeMediaAccounting>>["attempts"][number]) => void) {
+    return db.transaction("rw", db.productRuntimeSessions, db.ttrpgRuntimeAssetRequests, async () => {
+      const [session, row] = await Promise.all([
+        db.productRuntimeSessions.get(claimed.sessionId), db.ttrpgRuntimeAssetRequests.get(claimed.id!),
+      ]);
+      if (!session || session.runtimeSourceHash !== context.runtimeSourceHash ||
+        session.projectId !== claimed.projectId || session.worldId !== claimed.worldId ||
+        session.workId !== claimed.workId || !row || !sameRuntimeMediaIntent(row, claimed))
+        fail("不能向已变更的媒资请求写入尝试证据");
+      const accounting = readRuntimeMediaAccounting(row);
+      const attempt = accounting?.attempts.find(item => item.ordinal === claimed.attemptCount && item.dispatchKey === leaseId);
+      if (!accounting || !attempt) fail("媒资尝试没有已确认的发送记录");
+      update(attempt);
+      await db.ttrpgRuntimeAssetRequests.update(row.id!, {
+        attemptAccountingJson: JSON.stringify(accounting),
+        actualCostUsd: measuredRuntimeMediaCost(accounting),
+        revision: row.revision + 1,
+        updatedAt: Date.now(),
       });
-    }
+    });
+  }
+
+  const transport: MediaProviderTransportV1 = {
+    executionLocation: input.transport.executionLocation,
+    rawResponseEvidence: input.transport.rawResponseEvidence,
+    async request(wire, requestSignal, onRawResponse) {
+      requestSignal.throwIfAborted();
+      if (dispatched || wire.adapterId !== claimed.adapterId || wire.requestId !== request.requestId)
+        fail("媒资尝试只允许发送一次与原请求一致的调用");
+      await db.transaction("rw", db.productRuntimeSessions, db.productRuntimeEvents,
+        db.ttrpgSessionParticipants, db.ttrpgRuntimeAssetRequests, async () => {
+          const [session, row] = await Promise.all([
+            db.productRuntimeSessions.get(claimed.sessionId), db.ttrpgRuntimeAssetRequests.get(claimed.id!),
+          ]);
+          if (!session || !sameRuntimeMediaOwner(session, context) || !row || !mediaRowBelongsToSession(row, session) || !sameRuntimeMediaIntent(row, claimed) ||
+            row.status !== "generating" || row.processorLeaseId !== leaseId ||
+            row.attemptCount !== claimed.attemptCount || (row.processorLeaseExpiresAt ?? 0) <= Date.now())
+            fail("媒资处理租约在发送前失效");
+          const accounting = readRuntimeMediaAccounting(row);
+          if (!accounting || !hasRuntimeMediaDispatchAuthority(row) ||
+            accounting.attempts.some(item => item.ordinal === row.attemptCount))
+            fail("媒资尝试存在未结算的发送记录");
+          const { state } = await stateAndEvents(session);
+          const product = state.ttrpg?.product;
+          const currentSlot = product?.media.slots.find(item => item.slotKey === row.slotKey);
+          const participant = await db.ttrpgSessionParticipants.where("sessionId").equals(row.sessionId)
+            .filter(item => item.viewerKey === row.requesterViewerKey).first();
+          if (!participant || !product?.sessionZero.completed || product.safety.status !== "active" ||
+            currentSlot?.requestKey !== row.requestKey || currentSlot.status !== "queued" ||
+            !visibleSlotKeys(context, participant, state).has(row.slotKey)) fail("媒资原槽位或授权在发送前失效");
+          // The generating row already holds this attempt's reservation. Do not count it twice.
+          if (await sessionMediaCommittedCost(row.sessionId) > maximumUsd) fail("运行时媒资会话成本预算不足");
+          requestSignal.throwIfAborted();
+          accounting.attempts.push({ ordinal: row.attemptCount, afterSequence: state.lastSequence, settledSequence: null, dispatchKey: leaseId,
+            reservationUsd: row.costReservationUsd, costUsd: null, receiptHash: null, candidate: null });
+          await db.ttrpgRuntimeAssetRequests.update(row.id!, {
+            attemptAccountingJson: JSON.stringify(accounting), revision: row.revision + 1, updatedAt: Date.now(),
+          });
+        });
+      dispatched = true;
+      const response = await input.transport.request(wire, requestSignal, onRawResponse);
+      const costUsd = isRuntimeMediaCost(response.costUsd) ? response.costUsd : null;
+      const receiptHash = await hashProductProductionValueV2({
+        adapterId: wire.adapterId, requestId: wire.requestId, status: response.status,
+        providerRequestId: response.providerRequestId, costUsd,
+      });
+      await updateAttempt(attempt => {
+        if (attempt.receiptHash !== null) fail("媒资尝试的已观察收据不能覆盖");
+        attempt.costUsd = costUsd;
+        attempt.receiptHash = receiptHash;
+      });
+      if (response.costUsd !== null && !isRuntimeMediaCost(response.costUsd)) fail("provider 成本收据无效");
+      return response;
+    },
+    ...(input.transport.fetchExternalAsset ? {
+      fetchExternalAsset: (asset, fetchSignal) => {
+        if (!dispatched) fail("原媒资尝试尚未发送");
+        return input.transport.fetchExternalAsset!(asset, fetchSignal);
+      },
+    } : {}),
+  };
+
+  try {
+    if (adapter.capability.adapterId !== claimed.adapterId) fail("媒资 adapter 与原请求不一致");
+    const candidates = await adapter.generate(request, transport, signal);
+    if (!dispatched || candidates.length !== 1) fail("运行时媒资 adapter 必须返回一次发送的一个候选");
+    const candidate = await adapter.parseAndVerify(candidates[0]);
     const dimensions = detectProductImageDimensionsV1(candidate.data);
     if (!dimensions) fail("provider 图片无法读取固有尺寸");
     const assetKey =
@@ -873,12 +962,27 @@ export async function processTtrpgRuntimeAssetRequestV1(input: {
     });
     if (asset.contentHash !== candidate.contentHash)
       fail("统一媒资采用后 content hash 漂移");
+    if (asset.ownerKind !== "runtime" || asset.productType !== "ttrpg" ||
+      asset.productRuntimeSessionId !== claimed.sessionId || asset.productReleaseId !== null ||
+      asset.projectId !== claimed.projectId || asset.worldId !== claimed.worldId || asset.workId !== claimed.workId)
+      fail("媒资候选不属于原请求 Instance");
+    await updateAttempt(attempt => {
+      if (attempt.receiptHash === null || attempt.candidate !== null) fail("不能覆盖或伪造媒资候选证据");
+      attempt.candidate = { assetKey: asset.assetKey, version: asset.version, contentHash: asset.contentHash };
+    });
+    const current = await db.ttrpgRuntimeAssetRequests.get(claimed.id!);
+    if (current && (current.status !== "generating" || current.processorLeaseId !== leaseId)) return current;
+    if (await sessionMediaCommittedCost(claimed.sessionId) > maximumUsd) {
+      return terminalFailure({ context, requestId: claimed.id!, leaseId,
+        errorCode: "session-cost-budget-exceeded", detail: "provider 返回成本超过会话预算，候选未绑定。" });
+    }
     return db.transaction(
       "rw",
       db.productRuntimeSessions,
       db.productRuntimeEvents,
       db.ttrpgRuntimeAssetRequests,
       db.productMediaAssets,
+      db.ttrpgSessionParticipants,
       async () => {
         const [session, row, currentAsset] = await Promise.all([
           db.productRuntimeSessions.get(context.session.id!),
@@ -886,15 +990,21 @@ export async function processTtrpgRuntimeAssetRequestV1(input: {
           db.productMediaAssets.get(asset.id!),
         ]);
         if (
-          !session ||
-          !row ||
-          row.status !== "generating" ||
-          row.processorLeaseId !== leaseId ||
-          !currentAsset ||
-          currentAsset.contentHash !== candidate.contentHash
-        )
-          fail("媒资完成时租约或统一媒资绑定失效");
+          !session || !sameRuntimeMediaOwner(session, context) ||
+          !row || !mediaRowBelongsToSession(row, session) || !sameRuntimeMediaIntent(row, claimed) ||
+          row.status !== "generating" || row.processorLeaseId !== leaseId ||
+          (row.processorLeaseExpiresAt ?? 0) <= Date.now() ||
+          !currentAsset || currentAsset.contentHash !== candidate.contentHash ||
+          currentAsset.productRuntimeSessionId !== row.sessionId
+        ) fail("媒资完成时租约或统一媒资绑定失效");
+        if (await sessionMediaCommittedCost(row.sessionId) > maximumUsd)
+          return terminalFailure({ context, requestId: row.id!, leaseId,
+            errorCode: "session-cost-budget-exceeded", detail: "provider 返回成本超过会话预算，候选未绑定。" });
         const { state } = await stateAndEvents(session);
+        const participant = await db.ttrpgSessionParticipants.where("sessionId").equals(row.sessionId)
+          .filter(item => item.viewerKey === row.requesterViewerKey).first();
+        if (!participant || state.ttrpg?.product?.safety.status !== "active" ||
+          !visibleSlotKeys(context, participant, state).has(row.slotKey)) fail("媒资原授权在绑定前失效");
         const event = eventFor({
           session,
           sequence: state.lastSequence + 1,
@@ -915,7 +1025,7 @@ export async function processTtrpgRuntimeAssetRequestV1(input: {
         const updatedAt = event.createdAt;
         await db.ttrpgRuntimeAssetRequests.update(row.id!, {
           status: "available",
-          actualCostUsd,
+          attemptAccountingJson: markSettledMediaAttempt(row, event.sequence),
           mediaAssetId: currentAsset.id!,
           mediaAssetVersion: currentAsset.version,
           mediaContentHash: currentAsset.contentHash,
@@ -942,8 +1052,9 @@ export async function processTtrpgRuntimeAssetRequestV1(input: {
       context,
       requestId: claimed.id!,
       leaseId,
-      errorCode:
-        cause instanceof DOMException && cause.name === "AbortError"
+      errorCode: dispatched && hasUnresolvedRuntimeMediaAttempt(current)
+        ? "provider-outcome-unknown"
+        : cause instanceof DOMException && cause.name === "AbortError"
           ? "provider-aborted"
           : "provider-generation-failed",
       detail: cause instanceof Error ? cause.message : String(cause),
@@ -979,14 +1090,14 @@ export async function retryTtrpgRuntimeAssetRequestV1(input: {
         db.productRuntimeSessions.get(context.session.id!),
         db.ttrpgRuntimeAssetRequests.get(original.id!),
       ]);
-      if (
-        !session ||
-        !row ||
-        row.status !== "failed" ||
-        row.attemptCount >= row.maximumAttempts
-      )
-        fail("媒资请求不可重试");
+      if (!session || !sameRuntimeMediaOwner(session, context) || !row || !mediaRowBelongsToSession(row, session) || !sameRuntimeMediaIntent(row, original) ||
+        !canRetryRuntimeMedia(row, await sessionMediaCommittedCost(original.sessionId),
+          context.manifest.runtimePolicy.maximumSessionCostUsd))
+        fail("媒资请求不可重试：尝试未结算、已耗尽或会话预算不足");
       const { state } = await stateAndEvents(session);
+      const slot = state.ttrpg?.product?.media.slots.find(item => item.slotKey === row.slotKey);
+      if (slot?.status !== "failed" || slot.requestKey !== row.requestKey)
+        fail("媒资槽已更换，不能重试原请求");
       const event = eventFor({
         session,
         sequence: state.lastSequence + 1,
@@ -1079,48 +1190,54 @@ export async function cancelTtrpgRuntimeAssetRequestV1(input: {
   );
 }
 
-/** Browser crash recovery: generation has no replay event, so an expired lease can safely return to queued. */
+/** Only an explicitly tracked claim with no dispatch can return to the queue. */
 export async function recoverTtrpgRuntimeMediaQueueV1(input: {
   sessionId: number;
   now?: number;
 }): Promise<number> {
-  await loadContext(input.sessionId);
+  const context = await loadContext(input.sessionId);
   const now = input.now ?? Date.now();
-  return db.transaction("rw", db.ttrpgRuntimeAssetRequests, async () => {
+  return db.transaction("rw", db.productRuntimeSessions, db.productRuntimeEvents, db.ttrpgRuntimeAssetRequests, async () => {
+    const session = await db.productRuntimeSessions.get(input.sessionId);
+    if (!sameRuntimeMediaOwner(session, context)) fail("Instance 在媒资恢复期间发生变化");
     const expired = await db.ttrpgRuntimeAssetRequests
       .where("[sessionId+status]")
       .equals([input.sessionId, "generating"])
       .filter((row) => (row.processorLeaseExpiresAt ?? 0) <= now)
       .toArray();
-    for (const row of expired)
-      await db.ttrpgRuntimeAssetRequests.update(row.id!, {
-        status: "queued",
-        processorLeaseId: null,
-        processorLeaseExpiresAt: null,
-        lastErrorCode: "processor-lease-expired",
-        lastErrorDetail: "上次处理器中断，任务已恢复到队列。",
-        revision: row.revision + 1,
-        updatedAt: now,
-      });
+    for (const row of expired) {
+      const accounting = readRuntimeMediaAccounting(row);
+      const attempt = accounting?.attempts.find(item => item.ordinal === row.attemptCount);
+      if (accounting && accounting.inherited === null && !attempt && row.attemptCount > 0) {
+        await db.ttrpgRuntimeAssetRequests.update(row.id!, {
+          status: "queued",
+          attemptCount: row.attemptCount - 1,
+          processorLeaseId: null,
+          processorLeaseExpiresAt: null,
+          lastErrorCode: "processor-lease-expired",
+          lastErrorDetail: "处理器在发送前中断，任务已恢复到队列。",
+          revision: row.revision + 1,
+          updatedAt: now,
+        });
+      } else {
+        const unknown = !attempt || attempt.costUsd === null;
+        await terminalFailure({ context, requestId: row.id!, leaseId: row.processorLeaseId,
+          errorCode: unknown ? "provider-outcome-unknown" : "processor-lease-expired",
+          detail: unknown ? "上次发送结果未确认，已保留预算，不能重复发送。" : "上次处理器在接收结果后中断。" });
+      }
+    }
     return expired.length;
   });
 }
 
+export type VisibleTtrpgRuntimeMediaRequestV1 = Omit<TtrpgRuntimeAssetRequestRecordV1,
+  "prompt" | "negativePrompt" | "processorLeaseId" | "processorLeaseExpiresAt" | "lastErrorDetail" | "attemptAccountingJson"
+> & { canRetry: boolean; canResume: boolean; hasUnresolvedAttempt: boolean };
+
 export async function readVisibleTtrpgRuntimeMediaRequestsV1(input: {
   sessionId: number;
   viewerKey: string;
-}): Promise<
-  Array<
-    Omit<
-      TtrpgRuntimeAssetRequestRecordV1,
-      | "prompt"
-      | "negativePrompt"
-      | "processorLeaseId"
-      | "processorLeaseExpiresAt"
-      | "lastErrorDetail"
-    >
-  >
-> {
+}): Promise<VisibleTtrpgRuntimeMediaRequestV1[]> {
   const viewerKey = key(input.viewerKey, "viewerKey");
   const context = await loadContext(input.sessionId, false);
   return db.transaction("r", scopeTransactionTables(
@@ -1137,6 +1254,7 @@ export async function readVisibleTtrpgRuntimeMediaRequestsV1(input: {
     if (!participant) fail("viewer 不属于该 TTRPG Instance");
     const visible = visibleSlotKeys(context, participant, (await stateAndEvents(session)).state);
     const rows = await db.ttrpgRuntimeAssetRequests.where("sessionId").equals(input.sessionId).sortBy("createdAt");
+    const committedUsd = rows.reduce((sum, row) => sum + committedRuntimeMediaCost(row), 0);
     return rows.filter(row => {
       const slot = context.manifest.slots.find(item => item.slotKey === row.slotKey);
       return slot && visible.has(slot.slotKey) && row.projectId === context.scope.projectId &&
@@ -1155,9 +1273,16 @@ export async function readVisibleTtrpgRuntimeMediaRequestsV1(input: {
         processorLeaseId: _lease,
         processorLeaseExpiresAt: _expires,
         lastErrorDetail: _detail,
+        attemptAccountingJson: _accounting,
         ...visible
       } = row;
-      return visible;
+      const canManage = participant.role === "gm" || row.requesterViewerKey === viewerKey;
+      return { ...visible, canResume: canManage && row.status === "queued" &&
+          row.attemptCount < row.maximumAttempts && hasRuntimeMediaDispatchAuthority(row) &&
+          committedUsd <= context.manifest.runtimePolicy.maximumSessionCostUsd,
+        canRetry: canManage && canRetryRuntimeMedia(row, committedUsd,
+        context.manifest.runtimePolicy.maximumSessionCostUsd),
+        hasUnresolvedAttempt: hasUnresolvedRuntimeMediaAttempt(row) };
     });
   });
 }
@@ -1165,25 +1290,38 @@ export async function readVisibleTtrpgRuntimeMediaRequestsV1(input: {
 export async function readTtrpgRuntimeMediaBlobV1(input: {
   scope: WorkspaceScope;
   sessionId: number;
-  mediaAssetId: number;
   viewerKey: string;
-}): Promise<Blob> {
+} & (
+  | { runtimeAsset: TtrpgViewerRuntimeMediaRefV1; mediaAssetId?: never }
+  | { mediaAssetId: number; runtimeAsset?: never }
+)): Promise<Blob> {
   const scope = await resolveScope({ scope: input.scope });
   const visible = await readVisibleTtrpgRuntimeMediaRequestsV1({
     sessionId: input.sessionId,
     viewerKey: input.viewerKey,
   });
-  const request = visible.find(
-    (row) =>
-      row.mediaAssetId === input.mediaAssetId && row.status === "available",
-  );
-  if (
-    !request ||
-    !request.mediaContentHash ||
-    request.mediaAssetVersion == null
-  )
+  // Backups remap the row FK; a replayed event can still carry the old local ID.
+  // Resolve that locator through the exact replayed slot and the viewer's owned request.
+  const session = await db.productRuntimeSessions.get(input.sessionId);
+  if (!session || session.projectId !== scope.projectId || session.worldId !== scope.worldId ||
+    session.workId !== scope.workId) fail("viewer 不能读取该运行时媒资");
+  const slots = (await stateAndEvents(session)).state.ttrpg?.product?.media.slots ?? [];
+  const stable = input.runtimeAsset;
+  const slot = stable ? slots.find(item => item.status === "available" &&
+    item.slotKey === stable.slotKey && item.requestKey === stable.requestKey && item.assetKey === stable.assetKey &&
+    item.mediaAssetVersion === stable.version && item.mediaContentHash === stable.contentHash)
+    : slots.find(item => item.status === "available" && item.mediaAssetId === input.mediaAssetId);
+  if (stable && !slot) fail("viewer 不能读取该运行时媒资");
+  const candidates = visible.filter(row => row.status === "available" && (slot
+    ? row.requestKey === slot.requestKey && row.slotKey === slot.slotKey &&
+      row.mediaAssetVersion === slot.mediaAssetVersion && row.mediaContentHash === slot.mediaContentHash
+    : row.mediaAssetId === input.mediaAssetId));
+  // Stable reads fail closed if restored rows do not prove one exact binding.
+  if (stable && candidates.length !== 1) fail("viewer 不能读取该运行时媒资");
+  const request = candidates[0];
+  if (!request?.mediaAssetId || !request.mediaContentHash || request.mediaAssetVersion == null)
     fail("viewer 不能读取该运行时媒资");
-  const asset = await db.productMediaAssets.get(input.mediaAssetId);
+  const asset = await db.productMediaAssets.get(request.mediaAssetId);
   if (
     !asset ||
     asset.ownerKind !== "runtime" || asset.productType !== "ttrpg" ||
@@ -1191,6 +1329,7 @@ export async function readTtrpgRuntimeMediaBlobV1(input: {
     !(await assertRecordInScope(scope, "productMediaAssets", asset, {
       owner: "work",
     })) ||
+    (slot != null && asset.assetKey !== slot.assetKey) ||
     asset.contentHash !== request.mediaContentHash ||
     asset.version !== request.mediaAssetVersion
   )

@@ -23,6 +23,7 @@ import {
 } from './work-kind'
 import type { Chapter } from '../types/outline'
 import { canonicalManuscriptWordCount } from '../chapters/selectors'
+import { assertCurrentProductEntryV1, productCatalogIdForWorkV1 } from '../product/product-catalog'
 
 export interface CreateWorkInput {
   title: string
@@ -97,6 +98,7 @@ export async function listWorldWorks(projectId: number, worldId?: number): Promi
 }
 
 export async function createWorldWork(projectId: number, input: CreateWorkInput): Promise<Work> {
+  input = structuredClone(input)
   const ownership = await resolveWorkspaceOwnership(projectId)
   const ts = Date.now()
   const row = buildWorkRecord({
@@ -106,6 +108,7 @@ export async function createWorldWork(projectId: number, input: CreateWorkInput)
     create: input,
     now: ts,
   })
+  assertCurrentProductEntryV1(productCatalogIdForWorkV1(row))
   const id = await db.works.add(row) as number
   return { ...row, id }
 }
