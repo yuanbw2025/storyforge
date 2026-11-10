@@ -13,7 +13,7 @@ import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { generateWorkCode } from '../../src/lib/memory/identity'
 import { generateWorkspaceScopeCode } from '../../src/lib/workspace/identity'
-import { normalizeChapterText, sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
+import { CHAPTER_TEXT_NORMALIZATION_VERSION, normalizeChapterText, sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
 import {
   buildRagLibrary,
   updateRagFieldPolicy,
@@ -159,6 +159,7 @@ async function seedSixDomains() {
       summarySourceTextHash: index === 0
         ? await sha256Text(normalizeChapterText(content))
         : '0'.repeat(64),
+      summaryTextNormalizationVersion: CHAPTER_TEXT_NORMALIZATION_VERSION,
     }, 'work'))
     if (index === 0) {
       await addScoped(scope, 'detailedOutlines', {
