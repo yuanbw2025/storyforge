@@ -43508,21 +43508,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-CHAT-02-inquiry-result.test.ts\",\"TS2322\",\"Type 'number' is not assignable to type '1 | 2 | 5 | 4 | 3 | undefined'.\",\"f2893ce07e50a29c90ff2861fa0e53dc67006ead94ee6d45d38d1ceba0dc6bb5\",100,22]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CHAT-02-inquiry-result.test.ts",
-        "code": "TS2322",
-        "message": "Type 'number' is not assignable to type '1 | 2 | 5 | 4 | 3 | undefined'.",
-        "anchor": "f2893ce07e50a29c90ff2861fa0e53dc67006ead94ee6d45d38d1ceba0dc6bb5",
-        "line": 95,
-        "column": 100,
-        "start": 8504,
-        "length": 22
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-CHAT-02-inquiry-result.test.ts\",\"TS2550\",\"Property 'at' does not exist on type 'ChatNarrativeTriggerStateV1[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.\",\"31b3a6fea3a858ba69d7830862c163374218feeb868c1b158efd40405ef07253\",66,2]",
       "count": 2,
       "diagnostic": {
@@ -58448,21 +58433,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1E-media-transport.test.ts\",\"TS2339\",\"Property 'headers' does not exist on type 'never'.\",\"e722758608ab3ee18a760bf47e6578203483776be68e3b21a07579f6f1560136\",17,7]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-PRODUCTPROD1E-media-transport.test.ts",
-        "code": "TS2339",
-        "message": "Property 'headers' does not exist on type 'never'.",
-        "anchor": "e722758608ab3ee18a760bf47e6578203483776be68e3b21a07579f6f1560136",
-        "line": 220,
-        "column": 17,
-        "start": 11799,
-        "length": 7
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1E-media-transport.test.ts\",\"TS2493\",\"Tuple type '[]' of length '0' has no element at index '0'.\",\"c19b22266e89ea069685dcf8478e774cb3537a9368390cbfdc2de0b62cb0d67d\",41,1]",
       "count": 1,
       "diagnostic": {
@@ -58489,36 +58459,6 @@
         "line": 171,
         "column": 40,
         "start": 9366,
-        "length": 1
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1E-media-transport.test.ts\",\"TS2493\",\"Tuple type '[target: URL | RequestInfo]' of length '1' has no element at index '1'.\",\"aa4f6e5a3ab4f44d7295c93d8348e5e3f3be3b9a6add8a0c10091a1926fb987b\",34,1]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-PRODUCTPROD1E-media-transport.test.ts",
-        "code": "TS2493",
-        "message": "Tuple type '[target: URL | RequestInfo]' of length '1' has no element at index '1'.",
-        "anchor": "aa4f6e5a3ab4f44d7295c93d8348e5e3f3be3b9a6add8a0c10091a1926fb987b",
-        "line": 107,
-        "column": 34,
-        "start": 5877,
-        "length": 1
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1E-media-transport.test.ts\",\"TS2493\",\"Tuple type '[target: URL | RequestInfo]' of length '1' has no element at index '1'.\",\"b9162bef4effa6af009765d5f0d47918e95e5088cf7e3db354d8d5461d84d5d5\",40,1]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-PRODUCTPROD1E-media-transport.test.ts",
-        "code": "TS2493",
-        "message": "Tuple type '[target: URL | RequestInfo]' of length '1' has no element at index '1'.",
-        "anchor": "b9162bef4effa6af009765d5f0d47918e95e5088cf7e3db354d8d5461d84d5d5",
-        "line": 216,
-        "column": 40,
-        "start": 11646,
         "length": 1
       }
     },
@@ -59795,21 +59735,6 @@
         "column": 31,
         "start": 1066,
         "length": 14
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-PROTOTYPE1-community-catalog.test.ts\",\"TS2493\",\"Tuple type '[target: URL | RequestInfo]' of length '1' has no element at index '1'.\",\"675bd0e80aa83ff4281ab9260b9050832ccf8a0d73abfbbf744a67e9eeaefdf3\",56,1]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-PROTOTYPE1-community-catalog.test.ts",
-        "code": "TS2493",
-        "message": "Tuple type '[target: URL | RequestInfo]' of length '1' has no element at index '1'.",
-        "anchor": "675bd0e80aa83ff4281ab9260b9050832ccf8a0d73abfbbf744a67e9eeaefdf3",
-        "line": 67,
-        "column": 56,
-        "start": 3115,
-        "length": 1
       }
     },
     {
