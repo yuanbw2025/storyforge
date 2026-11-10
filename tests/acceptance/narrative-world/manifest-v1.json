@@ -694,6 +694,28 @@
         "implementationCommit": "0bef15786bda529f36abbeb4bff4e64af829b07a",
         "workPackage": "SFQA-020",
         "note": "Independent measured receipt preserved before integration with the other product and repository fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality004-product-entry-v1.json",
+        "workPackage": "quality004-original-v1",
+        "note": "Original receipt on the cumulative branch before isolation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality004-product-entry-v2.json",
+        "workPackage": "quality004-original-v2",
+        "note": "Original receipt on the cumulative branch before isolation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality019020-318-combined-v1.json",
+        "implementationCommit": "fdd77243c9f100d9ffafae956aecb7b3f752935e",
+        "workPackage": "SFQA-019/020/088/098/099",
+        "note": "Measured parent receipt before combining the verified pull requests."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality004-isolated.json",
+        "implementationCommit": "1e33d6e2ef96b2cfd8ea78a983978afd76d7e18d",
+        "workPackage": "SFQA-004/105",
+        "note": "Measured parent receipt before combining the verified pull requests."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -987,7 +1009,9 @@
     "tests/regression/R-NW-2E-byte-sink.test.ts",
     "tests/regression/R-NW-2E-numeric-runs.test.ts",
     "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
-    "src/lib/types/state-card.ts"
+    "src/lib/types/state-card.ts",
+    "src/lib/product-platform/workspace-install.ts",
+    "src/lib/workspace/workspace-allocation.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

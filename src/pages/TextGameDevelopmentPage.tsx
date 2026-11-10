@@ -239,7 +239,7 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
 
   if (!openWorld && mode === 'play') return adventureFrame(<>
     {error && <p role="alert">{error}</p>}
-    {decision.enterable && scope && project ? <ErrorBoundary key={`${scope.projectId}:${scope.worldId}:${scope.workId}`}><Suspense fallback={<p className="adventure-page-loading">正在打开故事书…</p>}>
+    {scope && project ? <ErrorBoundary key={`${scope.projectId}:${scope.worldId}:${scope.workId}`}><Suspense fallback={<p className="adventure-page-loading">正在打开故事书…</p>}>
       <AdventureGamePlayer key={scope.workId} project={project} scope={scope}
         worldGroupId={project.enableMultiWorld ? activeWorldGroupId : null} initialSessionId={session}
         onOpenSession={openPlayer}
@@ -258,8 +258,9 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
         <small>无需选择工作区或配置模型；首次开始会建立独立的正式发布与存档。</small>
       </div>}
       {!decision.enterable
-        ? <p>当前产品通道尚未开放此入口。</p>
-        : openWorld && <label>
+        ? <p role="status">当前产品尚未开放创作；已保存制作记录与发行版本仍可查看和游玩。</p>
+        : null}
+      {openWorld && <label>
             选择创作工作区
             <select aria-label="创作工作区" value={projectId ?? ''} onChange={event => chooseProject(event.target.value)}>
               <option value="">请选择</option>
@@ -273,10 +274,10 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
       <BuiltinGameShelf />
     </section>}
     {error && <p role="alert">{error}</p>}
-    {decision.enterable && !error && (creatorSourceReady || (scope && project)) && <section className="lf-paper">
+    {!error && (creatorSourceReady || (scope && project)) && <section className="lf-paper">
       <Suspense fallback={<p>正在读取…</p>}>
         {mode === 'production'
-          ? openWorld
+          ? openWorld && decision.enterable
             ? <TextOpenWorldCreatorWorkflow
                 key={`${initialCreatorSource}:${handoff?.worldReleaseId ?? 'none'}:${handoff?.worldContentHash ?? 'none'}`}
                 worldScope={worldScope ?? null}
@@ -290,7 +291,7 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
                 onPreviewStarted={(creatorScope, id) => openPlayer(id, creatorScope)}
                 onPublished={creatorScope => openPlayer(null, creatorScope)}
               />
-            : productionDecision.enabled
+            : productionDecision.enabled || !decision.enterable
             ? <ProductProductionStudio
                 scope={scope!}
                 worldGroupId={project!.enableMultiWorld ? activeWorldGroupId : null}
@@ -307,6 +308,7 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
                 <p>{productionDecision.blockers.join('；')}</p>
                 <button
                   className="lf-action"
+                  disabled={!decision.enterable}
                   onClick={() => void updateWorkspace(project!.id!, {
                     productPlatformOptIns: {
                       ...project!.productPlatformOptIns,

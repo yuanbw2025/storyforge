@@ -571,15 +571,56 @@ function resolveQuestSkeletonEntity(
     .find(candidate => keyOf(candidate) === requirementKey))
 }
 
-function resolveNpcEntity(segments: string[], artifact: Record<string, unknown>): string | null {
-  if (segments[0] === 'factions') {
-    return entityFromFlatCollection({ artifact, collection: 'factions', index: Number(segments[1]), kind: 'faction' })
+interface NpcSourceDemandsV1 {
+  actors: ReadonlyMap<number, string>
+  factions: ReadonlyMap<number, string>
+}
+
+function npcSourceDemands(contextText: string): NpcSourceDemandsV1 {
+  const context = record(JSON.parse(contextText), 'NPC Context')
+  const sources = (field: string) => {
+    const result = new Map<number, string>()
+    for (const value of array(context[field])) {
+      const demand = record(value, field)
+      if (typeof demand.demandNumber !== 'number' || !Number.isSafeInteger(demand.demandNumber)
+        || demand.demandNumber < 1 || typeof demand.sourceDemandKey !== 'string' || !demand.sourceDemandKey
+        || result.has(demand.demandNumber)) fail(`NPC ${field} 缺少唯一需求来源`)
+      result.set(demand.demandNumber, demand.sourceDemandKey)
+    }
+    return result
   }
-  if (segments[0] !== 'actors') return null
-  const actor = array(artifact.actors).filter(candidate => objectAt(candidate)?.demandKind !== 'service-replacement')[Number(segments[1])]
-  if (segments[2] !== 'scheduleActivities') return identity('character', actor)
-  const schedule = array(artifact.schedules).find(candidate => objectAt(candidate)?.actorKey === keyOf(actor))
-  return identity('schedule', schedule)
+  return { actors: sources('actorDemands'), factions: sources('factionDemands') }
+}
+
+function resolveNpcEntity(input: {
+  segments: string[]
+  artifact: Record<string, unknown>
+  draft: unknown
+  sources: NpcSourceDemandsV1
+}): string | null {
+  const { segments, artifact, draft, sources } = input
+  const collection = segments[0]
+  if (collection !== 'actors' && collection !== 'factions') return null
+  // Draft rows retain every original demand, including explicit reuse rows.
+  // Artifact arrays contain only canonical entities, so their offsets differ.
+  const demandNumber = objectAt(draft, collection, Number(segments[1]))?.demandNumber
+  const sourceKey = typeof demandNumber === 'number' ? sources[collection].get(demandNumber) : undefined
+  if (!sourceKey) fail('NPC 编辑字段缺少冻结需求来源')
+  const matches = array(artifact[collection]).filter(candidate => (
+    objectAt(candidate)?.demandKind !== 'service-replacement'
+    && array(objectAt(candidate)?.sourceRefs).includes(sourceKey)
+  ))
+  if (matches.length !== 1) fail(`NPC 需求缺少唯一实体映射:${sourceKey}`)
+  const entity = matches[0]
+  if (collection === 'factions') return identity('faction', entity)
+  if (segments[2] !== 'scheduleActivities') return identity('character', entity)
+  const scheduleKey = objectAt(entity)?.scheduleKey
+  if (scheduleKey === null) return null
+  const schedules = array(artifact.schedules).filter(candidate => (
+    keyOf(candidate) === scheduleKey && objectAt(candidate)?.actorKey === keyOf(entity)
+  ))
+  if (schedules.length !== 1) fail(`NPC 需求缺少唯一角色日程:${sourceKey}`)
+  return identity('schedule', schedules[0])
 }
 
 function resolveEncounterEntity(segments: string[], artifact: Record<string, unknown>): string | null {
@@ -597,6 +638,8 @@ function resolveEntityIdentity(input: {
   artifactKey: TextOpenWorldCreatorEditableArtifactKindV1
   segments: string[]
   artifacts: readonly TextOpenWorldCreatorAuthorEditableArtifactV1[]
+  draft: unknown
+  npcSources?: NpcSourceDemandsV1
 }): string | null {
   const { taskKey, artifactKey, segments, artifacts } = input
   if (taskKey === 'p2.experience-design') {
@@ -657,7 +700,10 @@ function resolveEntityIdentity(input: {
       kind: collection === 'recipes' ? 'recipe' : 'vendor',
     })
   }
-  if (taskKey === 'p8.catalog.npc-runtime') return resolveNpcEntity(segments, artifactPayload(artifacts, artifactKey))
+  if (taskKey === 'p8.catalog.npc-runtime') return resolveNpcEntity({
+    segments, artifact: artifactPayload(artifacts, artifactKey), draft: input.draft,
+    sources: input.npcSources ?? fail('NPC 编辑缺少冻结需求映射'),
+  })
   if (taskKey === 'p8.catalog.map-interactions' && segments[0] === 'interactions') {
     return entityFromFlatCollection({ artifact: artifactPayload(artifacts, artifactKey), collection: 'interactions', index: Number(segments[1]), kind: 'interaction' })
   }
@@ -724,11 +770,13 @@ async function enumerateEditableFields(input: {
   task: ResolvedTaskV1
   artifacts: readonly TextOpenWorldCreatorAuthorEditableArtifactV1[]
   draft: unknown
+  context: string
   target: {
     artifactKey: TextOpenWorldCreatorEditableArtifactKindV1
     entityIdentity: string | null
   }
 }): Promise<TextOpenWorldCreatorEditFieldV1[]> {
+  const npcSources = input.task.taskKey === 'p8.catalog.npc-runtime' ? npcSourceDemands(input.context) : undefined
   const pending: Array<{ value: unknown; segments: string[] }> = [{ value: input.draft, segments: [] }]
   const candidates: Array<{
     artifactKey: TextOpenWorldCreatorEditableArtifactKindV1
@@ -750,6 +798,8 @@ async function enumerateEditableFields(input: {
         artifactKey,
         segments: current.segments,
         artifacts: input.artifacts,
+        draft: input.draft,
+        npcSources,
       })
       if (artifactKey !== input.target.artifactKey || entityIdentity !== input.target.entityIdentity) continue
       candidates.push({
@@ -977,7 +1027,7 @@ export async function projectTextOpenWorldCreatorAuthorEditableDraftV1(input: {
     draft: structuredClone(draft),
     draftHash,
     ...structural,
-    editableFields: await enumerateEditableFields({ task, artifacts, draft, target }),
+    editableFields: await enumerateEditableFields({ task, artifacts, draft, target, context: input.context }),
   }
 }
 
@@ -1084,20 +1134,83 @@ export async function applyTextOpenWorldCreatorEditPatchToAuthorEditableDraftV1(
   return { draft, draftHash: await hashProductProductionValueV2(draft) }
 }
 
+function changedDraftPointers(before: unknown, after: unknown, segments: string[] = []): string[] {
+  if (canonicalProductProductionJsonV2(before) === canonicalProductProductionJsonV2(after)) return []
+  if (valueKind(before) !== null && valueKind(before) === valueKind(after)) {
+    return [`/${segments.map(escapePointerSegment).join('/')}`]
+  }
+  if (Array.isArray(before) && Array.isArray(after) && before.length === after.length) {
+    return before.flatMap((value, index) => changedDraftPointers(value, after[index], [...segments, String(index)]))
+  }
+  if (before != null && after != null && typeof before === 'object' && typeof after === 'object'
+    && !Array.isArray(before) && !Array.isArray(after)) {
+    const left = record(before, 'NPC base draft')
+    const right = record(after, 'NPC edited draft')
+    if (canonicalProductProductionJsonV2(Object.keys(left).sort())
+      === canonicalProductProductionJsonV2(Object.keys(right).sort())) {
+      return Object.keys(left).flatMap(key => changedDraftPointers(left[key], right[key], [...segments, key]))
+    }
+  }
+  return fail('NPC 编辑改变了草稿字段、集合或值类型')
+}
+
+async function assertNpcChangedPointerTargets(input: {
+  task: ResolvedTaskV1
+  baseArtifacts: readonly TextOpenWorldCreatorAuthorEditableArtifactV1[]
+  artifacts: readonly TextOpenWorldCreatorAuthorEditableArtifactV1[]
+  context: string
+  draft: unknown
+  target?: { artifactKey: string; entityIdentity: string | null }
+}): Promise<void> {
+  const before = await projectDomainDraft({ taskKey: input.task.taskKey, artifacts: input.baseArtifacts, context: input.context })
+  const changed = changedDraftPointers(before, input.draft)
+  if (!changed.length) return
+  const target = input.target
+  if (!target || target.artifactKey !== 'text-open-world.npc-runtime-catalog') fail('NPC 修改必须绑定作者选中的精确目标')
+  const fields = await enumerateEditableFields({
+    task: input.task, artifacts: input.baseArtifacts, draft: before, context: input.context,
+    target: { artifactKey: 'text-open-world.npc-runtime-catalog', entityIdentity: target.entityIdentity },
+  })
+  const allowed = new Map(fields.map(field => [field.jsonPointer, field]))
+  const after = await projectDomainDraft({ taskKey: input.task.taskKey, artifacts: input.artifacts, context: input.context })
+  const artifact = artifactPayload(input.artifacts, 'text-open-world.npc-runtime-catalog')
+  const sources = npcSourceDemands(input.context)
+  for (const pointer of changed) {
+    const field = allowed.get(pointer) ?? fail(`NPC 修改字段不属于作者目标:${pointer}`)
+    const identityAfter = resolveNpcEntity({ segments: parsePointer(pointer), artifact, draft: after, sources })
+    if (field.entityIdentity !== target.entityIdentity || identityAfter !== target.entityIdentity) {
+      fail(`NPC 修改字段重建后归属发生变化:${pointer}`)
+    }
+    // The domain text parser trims and normalizes editable text. Compare its
+    // round-trip value at this exact demand, rather than only the ID sequence.
+    const requested = readPointer(input.draft, pointer)
+    const normalized = typeof requested === 'string' ? requested.trim().normalize('NFC')
+      : Array.isArray(requested) ? requested.map(value => typeof value === 'string' ? value.trim().normalize('NFC') : value)
+        : requested
+    if (canonicalProductProductionJsonV2(readPointer(after, pointer)) !== canonicalProductProductionJsonV2(normalized)) {
+      fail(`NPC 修改未回写到作者目标字段:${pointer}`)
+    }
+  }
+}
+
 export async function rebuildTextOpenWorldCreatorArtifactsFromAuthorEditableDraftV1(input: {
   taskKey: string
   baseArtifacts: readonly TextOpenWorldCreatorAuthorEditableArtifactInputV1[]
   context: string
   draft: unknown
+  target?: { artifactKey: string; entityIdentity: string | null }
 }): Promise<TextOpenWorldCreatorAuthorEditableRebuildV1> {
+  const target = input.target ? { artifactKey: input.target.artifactKey, entityIdentity: input.target.entityIdentity } : undefined
   const task = resolveTask(input.taskKey)
+  const context = input.context
+  const draft = task.taskKey === 'p8.catalog.npc-runtime' ? structuredClone(input.draft) : input.draft
   const baseArtifacts = exactSiblingGroup(task, input.baseArtifacts)
   const before = await structuralEvidence(task.taskKey, baseArtifacts)
   const rebuiltPayloads = await rebuildDomainArtifacts({
     taskKey: task.taskKey,
     artifacts: baseArtifacts,
-    context: input.context,
-    draft: input.draft,
+    context,
+    draft,
   })
   if (rebuiltPayloads.length !== task.outputArtifactKeys.length) fail(`${task.taskKey} rebuild 没有返回完整 sibling group`)
   const artifacts = task.outputArtifactKeys.map((artifactKey, index) => ({
@@ -1110,6 +1223,11 @@ export async function rebuildTextOpenWorldCreatorArtifactsFromAuthorEditableDraf
   }
   if (before.referenceHash !== after.referenceHash) fail(`${task.taskKey} 编辑改变了稳定引用`)
   if (before.stableStructureHash !== after.stableStructureHash) fail(`${task.taskKey} 编辑改变了 owner sibling 结构`)
+  if (task.taskKey === 'p8.catalog.npc-runtime') {
+    await assertNpcChangedPointerTargets({
+      task, baseArtifacts, artifacts, context, draft, target,
+    })
+  }
   return {
     taskKey: task.taskKey,
     validatorId: `text-open-world.${task.taskKey}.production-contract.v1`,
@@ -1117,7 +1235,7 @@ export async function rebuildTextOpenWorldCreatorArtifactsFromAuthorEditableDraf
     requiredGateIds: task.requiredGateIds,
     passedGateIds: [...task.requiredGateIds],
     artifacts,
-    draftHash: await hashProductProductionValueV2(input.draft),
+    draftHash: await hashProductProductionValueV2(draft),
     ...after,
   }
 }
