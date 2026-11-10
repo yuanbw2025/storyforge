@@ -257,7 +257,7 @@ export default function ChapterEditorToolbar({
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={closeGenerationPrompt}
                 className="rounded-lg border border-border px-4 py-2 text-sm text-text-secondary hover:bg-bg-elevated">取消</button>
-              <button type="button" disabled={isStreaming} onClick={() => { closeGenerationPrompt(); onGenerate() }}
+              <button type="button" disabled={isStreaming} data-diagnostic-action="generate" onClick={() => { closeGenerationPrompt(); onGenerate() }}
                 className="rounded-lg bg-accent px-4 py-2 text-sm text-white hover:bg-accent-hover disabled:opacity-50">开始生成</button>
             </div>
           </div>

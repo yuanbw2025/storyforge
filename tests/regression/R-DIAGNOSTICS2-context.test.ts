@@ -31,7 +31,7 @@ it('classifies browser software errors without retaining raw messages and strips
   error.stack = 'TypeError: SECRET\n at x (https://private.test/storyforge/assets/code-Abc.js:2:34?token=secret)'
   expect(diagnosticCode(error)).toBe('property-access')
   recordRuntimeDiagnosticError(error,'react')
-  const row = readRuntimeDiagnosticErrors().at(-1)!
+  const row = readRuntimeDiagnosticErrors().slice(-1)[0]!
   expect(row.details?.code).toBe('property-access'); expect(row.details?.trail).toHaveLength(1)
   expect(JSON.stringify(row)).not.toMatch(/SECRET|MANUSCRIPT|private.test|token/)
   expect(diagnosticWireError(row,false).details).toBeUndefined()
@@ -44,9 +44,9 @@ it('classifies browser software errors without retaining raw messages and strips
 it('captures resource errors and ErrorEvent code positions when the browser exposes no Error object', () => {
   installRuntimeDiagnostics(); setDiagnosticContextEnabled(true)
   window.dispatchEvent(new ErrorEvent('error',{filename:'https://private.test/storyforge/assets/code.js',lineno:4,colno:2,message:'PRIVATE'}))
-  expect(readRuntimeDiagnosticErrors().at(-1)?.frames).toEqual(['/storyforge/assets/code.js:4:2'])
+  expect(readRuntimeDiagnosticErrors().slice(-1)[0]?.frames).toEqual(['/storyforge/assets/code.js:4:2'])
   const script = document.createElement('script');document.body.append(script);script.dispatchEvent(new Event('error',{bubbles:false}))
-  expect(readRuntimeDiagnosticErrors().at(-1)?.details?.code).toBe('resource-load')
+  expect(readRuntimeDiagnosticErrors().slice(-1)[0]?.details?.code).toBe('resource-load')
   script.remove()
 })
 it('storage denial fails closed, persisted objects cannot attach raw fields or invalid codes', () => {

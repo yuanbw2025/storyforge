@@ -4553,96 +4553,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/desktop/diagnostics.mjs\",\"TS7006\",\"Parameter 'build' implicitly has an 'any' type.\",\"5c24e37cca5a7f63422bfedcfb3b7926e8f6518d671be2af75c8f52fd49d156f\",47,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/diagnostics.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'build' implicitly has an 'any' type.",
-        "anchor": "5c24e37cca5a7f63422bfedcfb3b7926e8f6518d671be2af75c8f52fd49d156f",
-        "line": 5,
-        "column": 47,
-        "start": 270,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/diagnostics.mjs\",\"TS7006\",\"Parameter 'directory' implicitly has an 'any' type.\",\"5c24e37cca5a7f63422bfedcfb3b7926e8f6518d671be2af75c8f52fd49d156f\",36,9]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/diagnostics.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'directory' implicitly has an 'any' type.",
-        "anchor": "5c24e37cca5a7f63422bfedcfb3b7926e8f6518d671be2af75c8f52fd49d156f",
-        "line": 5,
-        "column": 36,
-        "start": 259,
-        "length": 9
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/diagnostics.mjs\",\"TS7006\",\"Parameter 'name' implicitly has an 'any' type.\",\"da1562809f713d7ac2487c63a1fc8daa2a276d9b6945aa6b67185f11af3fc22e\",18,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/diagnostics.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'name' implicitly has an 'any' type.",
-        "anchor": "da1562809f713d7ac2487c63a1fc8daa2a276d9b6945aa6b67185f11af3fc22e",
-        "line": 16,
-        "column": 18,
-        "start": 1335,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/diagnostics.mjs\",\"TS7006\",\"Parameter 'row' implicitly has an 'any' type.\",\"55fc3a843fbc3b6858598470e0eaac615de7ab2366c28cd3b2525a994b45bdb4\",273,3]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/diagnostics.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'row' implicitly has an 'any' type.",
-        "anchor": "55fc3a843fbc3b6858598470e0eaac615de7ab2366c28cd3b2525a994b45bdb4",
-        "line": 11,
-        "column": 273,
-        "start": 777,
-        "length": 3
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/diagnostics.mjs\",\"TS7006\",\"Parameter 'row' implicitly has an 'any' type.\",\"55fc3a843fbc3b6858598470e0eaac615de7ab2366c28cd3b2525a994b45bdb4\",82,3]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/diagnostics.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'row' implicitly has an 'any' type.",
-        "anchor": "55fc3a843fbc3b6858598470e0eaac615de7ab2366c28cd3b2525a994b45bdb4",
-        "line": 11,
-        "column": 82,
-        "start": 586,
-        "length": 3
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/diagnostics.mjs\",\"TS7006\",\"Parameter 'value' implicitly has an 'any' type.\",\"730d6fac64ef41d2872f33e4ae237e5a85ded8d749209abf4cd0be48155974e8\",17,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/diagnostics.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'value' implicitly has an 'any' type.",
-        "anchor": "730d6fac64ef41d2872f33e4ae237e5a85ded8d749209abf4cd0be48155974e8",
-        "line": 15,
-        "column": 17,
-        "start": 1098,
-        "length": 5
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS2339\",\"Property 'checkForUpdates' does not exist on type 'EventEmitter<any>'.\",\"7b89d72d418a58286cf4b02c95c88cfaeed4845be8a2bd8a556a4c35a3253f69\",11,15]",
       "count": 1,
       "diagnostic": {
@@ -5063,21 +4973,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/desktop/main.mjs\",\"TS18047\",\"'event.senderFrame' is possibly 'null'.\",\"4ba14697e04ccf6b9c0120b8c00d4696f40b30393650a6d66a07362b60be3010\",112,17]",
-      "count": 2,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/main.mjs",
-        "code": "TS18047",
-        "message": "'event.senderFrame' is possibly 'null'.",
-        "anchor": "4ba14697e04ccf6b9c0120b8c00d4696f40b30393650a6d66a07362b60be3010",
-        "line": 44,
-        "column": 112,
-        "start": 2528,
-        "length": 17
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/desktop/main.mjs\",\"TS7005\",\"Variable 'server' implicitly has an 'any' type.\",\"1ff4519872cfa8236bf738f3c44aae7d5c23a68863f1824f43e069bb336a2160\",46,6]",
       "count": 1,
       "diagnostic": {
@@ -5138,96 +5033,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/desktop/main.mjs\",\"TS7005\",\"Variable 'window' implicitly has an 'any' type.\",\"4ba14697e04ccf6b9c0120b8c00d4696f40b30393650a6d66a07362b60be3010\",28,6]",
-      "count": 2,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/main.mjs",
-        "code": "TS7005",
-        "message": "Variable 'window' implicitly has an 'any' type.",
-        "anchor": "4ba14697e04ccf6b9c0120b8c00d4696f40b30393650a6d66a07362b60be3010",
-        "line": 44,
-        "column": 28,
-        "start": 2444,
-        "length": 6
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/main.mjs\",\"TS7005\",\"Variable 'window' implicitly has an 'any' type.\",\"4ba14697e04ccf6b9c0120b8c00d4696f40b30393650a6d66a07362b60be3010\",72,6]",
-      "count": 2,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/main.mjs",
-        "code": "TS7005",
-        "message": "Variable 'window' implicitly has an 'any' type.",
-        "anchor": "4ba14697e04ccf6b9c0120b8c00d4696f40b30393650a6d66a07362b60be3010",
-        "line": 44,
-        "column": 72,
-        "start": 2488,
-        "length": 6
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/main.mjs\",\"TS7005\",\"Variable 'window' implicitly has an 'any' type.\",\"ba156666ccf08cffe419a7c20003be70bf558ecf62d76c3db9f934c2304d7cb3\",40,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/main.mjs",
-        "code": "TS7005",
-        "message": "Variable 'window' implicitly has an 'any' type.",
-        "anchor": "ba156666ccf08cffe419a7c20003be70bf558ecf62d76c3db9f934c2304d7cb3",
-        "line": 72,
-        "column": 40,
-        "start": 4287,
-        "length": 6
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/main.mjs\",\"TS7005\",\"Variable 'window' implicitly has an 'any' type.\",\"c9a9e1107e67d5d13fe2837ed57302b3f9286443e813fddab6872b53eb4be6fb\",37,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/main.mjs",
-        "code": "TS7005",
-        "message": "Variable 'window' implicitly has an 'any' type.",
-        "anchor": "c9a9e1107e67d5d13fe2837ed57302b3f9286443e813fddab6872b53eb4be6fb",
-        "line": 32,
-        "column": 37,
-        "start": 1549,
-        "length": 6
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/main.mjs\",\"TS7005\",\"Variable 'window' implicitly has an 'any' type.\",\"c9a9e1107e67d5d13fe2837ed57302b3f9286443e813fddab6872b53eb4be6fb\",56,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/main.mjs",
-        "code": "TS7005",
-        "message": "Variable 'window' implicitly has an 'any' type.",
-        "anchor": "c9a9e1107e67d5d13fe2837ed57302b3f9286443e813fddab6872b53eb4be6fb",
-        "line": 32,
-        "column": 56,
-        "start": 1568,
-        "length": 6
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/main.mjs\",\"TS7005\",\"Variable 'window' implicitly has an 'any' type.\",\"d6a1c5c287010ae8f990cbf350d17183786f166ce03bc94114983f1b6e63d6b4\",34,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/main.mjs",
-        "code": "TS7005",
-        "message": "Variable 'window' implicitly has an 'any' type.",
-        "anchor": "d6a1c5c287010ae8f990cbf350d17183786f166ce03bc94114983f1b6e63d6b4",
-        "line": 65,
-        "column": 34,
-        "start": 3753,
-        "length": 6
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/desktop/main.mjs\",\"TS7006\",\"Parameter 'url' implicitly has an 'any' type.\",\"c5f22185a2125166166979f99b335b2b9ee3715cd8cf6253aea2e59896c0dd78\",27,3]",
       "count": 1,
       "diagnostic": {
@@ -5254,21 +5059,6 @@
         "line": 17,
         "column": 5,
         "start": 803,
-        "length": 6
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/main.mjs\",\"TS7034\",\"Variable 'window' implicitly has type 'any' in some locations where its type cannot be determined.\",\"0f36bf2bbeb1d1e8b8095f668ab5986579e0beb7ec01319bde7896659d9ea808\",5,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/main.mjs",
-        "code": "TS7034",
-        "message": "Variable 'window' implicitly has type 'any' in some locations where its type cannot be determined.",
-        "anchor": "0f36bf2bbeb1d1e8b8095f668ab5986579e0beb7ec01319bde7896659d9ea808",
-        "line": 16,
-        "column": 5,
-        "start": 792,
         "length": 6
       }
     },

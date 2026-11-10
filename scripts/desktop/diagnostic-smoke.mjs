@@ -2,8 +2,9 @@
 import assert from 'node:assert/strict'
 /** Synthetic profile only. Exercise the real renderer-crash event and IPC, then recover.
  * @param {import('@playwright/test').ElectronApplication} app
- * @param {import('@playwright/test').Page} page */
-export async function verifyDiagnosticContext(app, page) {
+ * @param {import('@playwright/test').Page} page
+ * @param {() => Promise<import('@playwright/test').ElectronApplication>} launch */
+export async function verifyDiagnosticContext(app, page, launch) {
   await page.goto('http://localhost:17831/storyforge/home/settings')
   const choice = page.getByLabel('附带最近操作轨迹（可选，默认关闭）')
   await choice.waitFor(); await choice.check()
@@ -12,13 +13,23 @@ export async function verifyDiagnosticContext(app, page) {
     if (!client?.diagnosticContext) throw new Error('Missing native diagnostic context')
     await client.diagnosticContext({enabled:true,trail:[{at:new Date().toISOString(),area:'longform',action:'save',text:'PRIVATE-SYNTHETIC'}]})
   })
-  const gone = await app.evaluate(({BrowserWindow}) => new Promise(resolve => {
-    const contents = BrowserWindow.getAllWindows()[0].webContents
-    contents.once('render-process-gone', (_event, details) => resolve({reason:details.reason,exitCode:details.exitCode}))
-    contents.forcefullyCrashRenderer()
+  const observed = app.evaluate(({BrowserWindow}) => new Promise(resolve => {
+    BrowserWindow.getAllWindows()[0].webContents.once('render-process-gone', (_event, details) => resolve({reason:details.reason,exitCode:details.exitCode}))
   }))
+  const session = await page.context().newCDPSession(page)
+  // CDP Page.crash exercises an actual renderer crash. forcefullyCrashRenderer
+  // can report `killed` on macOS, which must not be mislabeled as a crash.
+  void session.send('Page.crash').catch(() => {})
+  const gone = await observed
   assert.equal(gone.reason, 'crashed')
-  await page.reload(); await choice.waitFor()
+  const stopped = new Promise(resolve => app.process().once('exit', () => resolve(undefined)))
+  await app.evaluate(({app}) => app.exit(0))
+  await stopped
+  app = await launch(); page = await app.firstWindow()
+  await page.waitForSelector('#root main, #root button', {timeout:60000})
+  await page.goto('http://localhost:17831/storyforge/home/settings')
+  const restartedChoice = page.getByLabel('附带最近操作轨迹（可选，默认关闭）')
+  await restartedChoice.waitFor()
   const rows = await page.evaluate(async () => {
     const client = /** @type {Window & {storyforgeClient?: {diagnostics?():Promise<unknown[]>}}} */ (window).storyforgeClient
     return await client?.diagnostics?.() ?? []
@@ -29,11 +40,12 @@ export async function verifyDiagnosticContext(app, page) {
   assert.equal(row.details.native.exitCode, gone.exitCode)
   assert.ok(row.details.trail?.some(step => step.action === 'save'))
   assert.equal(JSON.stringify(rows).includes('PRIVATE-SYNTHETIC'), false)
-  await choice.uncheck()
+  await restartedChoice.uncheck()
   await page.waitForFunction(async () => {
     const client = /** @type {Window & {storyforgeClient?: {diagnostics?():Promise<unknown[]>}}} */ (window).storyforgeClient
     const rows = await client?.diagnostics?.() ?? []
     return rows.every(value => value && typeof value === 'object' && !('details' in value))
   })
   console.log('Native diagnostic context: real isolated renderer crash, bounded prior action, reason/exit code, reload and opt-out cleanup passed; no model or report upload.')
+  return { app, page }
 }

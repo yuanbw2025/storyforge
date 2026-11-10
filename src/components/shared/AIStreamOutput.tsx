@@ -276,7 +276,7 @@ export default function AIStreamOutput({
               {(output.length > 0 || hasOutput || error) && (
                 <button
                   disabled={accepting || savingDraft}
-                  onClick={onRetry}
+                  data-diagnostic-action="retry" onClick={onRetry}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-bg-hover text-text-secondary rounded-md hover:text-text-primary transition-colors"
                 >
                   <RotateCcw className="w-3 h-3" />
@@ -317,7 +317,7 @@ export default function AIStreamOutput({
               {(hasOutput || output.length > 0) && !error && onAccept && (
                 <button
                   disabled={accepting || savingDraft || !displayedOutput.trim()}
-                  onClick={() => { void handleAccept() }}
+                  data-diagnostic-action={acceptMode === 'preview' ? 'button' : 'adopt'} onClick={() => { void handleAccept() }}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-accent text-white rounded-md hover:bg-accent-hover transition-colors"
                 >
                   <Check className="w-3 h-3" />
@@ -328,7 +328,7 @@ export default function AIStreamOutput({
               {onDismiss && (output.length > 0 || hasOutput || error) && (
                 <button
                   disabled={accepting || savingDraft}
-                  onClick={onDismiss}
+                  data-diagnostic-action="dismiss" onClick={onDismiss}
                   title="关闭，保留原文不采纳"
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-bg-hover text-text-muted rounded-md hover:text-text-primary transition-colors"
                 >

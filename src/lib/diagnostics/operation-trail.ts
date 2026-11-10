@@ -45,7 +45,7 @@ export function installOperationTrail() {
     const raw = localStorage.getItem(TRAIL_KEY)
     // Retain only for native events whose timestamps precede this startup, never new errors.
     const rows: unknown = raw && raw.length < 8192 ? JSON.parse(raw) : []
-    const last = Array.isArray(rows) ? rows.at(-1) as { at?: unknown } | undefined : undefined
+    const last = Array.isArray(rows) ? rows[rows.length - 1] as { at?: unknown } | undefined : undefined
     const end = typeof last?.at === 'string' ? Date.parse(last.at) : NaN
     previousTrail = Number.isFinite(end) && end <= Date.now() && end >= Date.now() - 7 * 86400000
       ? parseDiagnosticDetails({ version: 1, code: 'unknown', trail: rows }, new Date(end).toISOString())?.trail ?? [] : []
