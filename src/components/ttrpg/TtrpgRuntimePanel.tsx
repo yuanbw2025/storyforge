@@ -28,6 +28,7 @@ export default function TtrpgRuntimePanel(props: {
   onOnlineHandoffConsumed?: () => void
 }) {
   const store = useTtrpgRuntimePlayerStore()
+  const { loading: selectionLoading, selectedSessionId, select: selectSession } = store
   const dialog = useDialog()
   const [actionError, setActionError] = useState('')
   const [toolsOpen, setToolsOpen] = useState(false)
@@ -63,9 +64,10 @@ export default function TtrpgRuntimePanel(props: {
   }
 
   useEffect(() => {
-    if (store.loading || sessions.some(session => session.id === store.selectedSessionId)) return
-    void store.select(sessions[0]?.id ?? null)
-  }, [sessions, store])
+    if (selectionLoading || sessions.some(session => session.id === selectedSessionId)) return
+    const nextSessionId = sessions[0]?.id ?? null
+    if (selectedSessionId !== nextSessionId) void selectSession(nextSessionId)
+  }, [sessions, selectionLoading, selectedSessionId, selectSession])
 
   const remove = async () => {
     if (!selected?.id || busy) return

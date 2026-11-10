@@ -1,5 +1,6 @@
 import { parseFailureEvent } from '../diagnostics/failure-summary'
 import { readRuntimeDiagnosticErrors, recordRuntimeDiagnosticEvent } from '../diagnostics/runtime-errors'
+import { diagnosticContextEnabled, previousOperationTrail } from '../diagnostics/operation-trail'
 
 export async function nativeTelemetryAllowed(): Promise<boolean> {
   if (window.storyforgeClient) return window.storyforgeClient.telemetryAllowed ? window.storyforgeClient.telemetryAllowed() : false
@@ -21,6 +22,10 @@ export async function collectNativeDiagnostics(): Promise<void> {
   const previous = readRuntimeDiagnosticErrors()
   for (const value of rows.slice(-5)) {
     const row = parseFailureEvent(value)
+    if (row && !row.details && diagnosticContextEnabled()) {
+      const trail = previousOperationTrail(row.occurredAt)
+      if (trail.length) row.details = { version: 1, code: 'native-exit', trail }
+    }
     if (row && !previous.some(item => item.occurredAt === row.occurredAt && item.source === row.source && item.name === row.name)) recordRuntimeDiagnosticEvent(row)
   }
 }

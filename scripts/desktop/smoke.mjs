@@ -3,6 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import assert from 'node:assert/strict'
+import { verifyDiagnosticContext } from './diagnostic-smoke.mjs'
+import { verifyDesktopRelay } from './relay-smoke.mjs'
 import runtimePolicy from '../distribution/desktop-runtime.cjs'
 const profile = await mkdtemp(join(tmpdir(), 'storyforge-client-smoke-'))
 const executablePath = process.argv[2]
@@ -27,6 +29,8 @@ try {
   await page.getByLabel('我已阅读并同意《用户协议》').check()
   await consent.click()
   await consent.waitFor({ state: 'hidden' })
+  ;({ app, page } = await verifyDiagnosticContext(app, page, launch))
+  await verifyDesktopRelay(app, page)
   await page.evaluate(async () => {
     localStorage.setItem('client-upgrade-probe', 'preserve-me')
     const request = indexedDB.open('client-upgrade-probe', 1)

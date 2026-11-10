@@ -1413,7 +1413,7 @@ export const AGENT_SKILLS = [
     contextCompression: WORLD_COMPRESSION_POLICY,
     maxOutputTokens: 3_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-HARNESS27-master-candidate-semantic-review'],
   },
   {
@@ -1768,7 +1768,7 @@ export const AGENT_SKILLS = [
       table: 'creativeRules',
       fields: ['writingStyle', 'atmosphere', 'specialRequirements', 'systemFictionElements'],
     }],
-    lastVerifiedAt: '2026-09-26',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: [
       'R-HARNESS39-creative-rules-agent',
       'R-HARNESS39-creative-rules-panel-ui',
@@ -1822,7 +1822,7 @@ export const AGENT_SKILLS = [
         ...CHARACTER_DIMENSIONS.map(dimension => dimension.key),
       ],
     }],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-AGENT1-chat-copilot-character', 'R-HARNESS33-character-panel-ui', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -1955,7 +1955,7 @@ export const AGENT_SKILLS = [
       table: 'characters',
       fields: CHARACTER_DIMENSIONS.map(dimension => dimension.key),
     }],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-HARNESS38-character-supplement-agent', 'R-HARNESS38-character-supplement-ui'],
   },
   {
@@ -2097,7 +2097,7 @@ export const AGENT_SKILLS = [
     contextCompression: INSPIRATION_COMPRESSION_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'inspirationWorkspaces', fields: ['versions'] }],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-AGENT1-chat-copilot-inspiration', 'R-CM1-inspiration-fusion-ui', 'R-HARNESS34-inspiration-entry', 'R-HARNESS34-inspiration-panel-ui', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -2117,7 +2117,7 @@ export const AGENT_SKILLS = [
     contextCompression: INSPIRATION_COMPRESSION_POLICY,
     maxOutputTokens: 3_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-HARNESS27-master-candidate-semantic-review'],
   },
   {
@@ -2192,7 +2192,7 @@ export const AGENT_SKILLS = [
       { table: 'storylineCrossings', fields: ['arcIdA', 'arcIdB', 'chapterId', 'chapterTitle', 'note', 'evidenceQuote'] },
       { table: 'storyArcs', fields: ['name', 'type', 'description', 'stages'] },
     ],
-    lastVerifiedAt: '2026-09-26',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-HARNESS40-storyline-progress-agent', 'R-PHASE39-storyline-progress-ui'],
   },
   {
@@ -2212,7 +2212,7 @@ export const AGENT_SKILLS = [
     contextCompression: OUTLINE_CHARACTER_DRIVEN_COMPRESSION_POLICY,
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'characterDrivenPlans', fields: ['generatedVolumes', 'status'] }],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: [
       'R-HARNESS35-character-driven-agent',
       'R-HARNESS35-character-driven-panel-ui',
@@ -2238,7 +2238,7 @@ export const AGENT_SKILLS = [
       { table: 'outlineNodes', fields: ['title', 'summary'] },
       { table: 'chapters', fields: ['title'] },
     ],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: [
       'R-HARNESS36-character-revision-agent',
       'R-HARNESS36-character-revision-panel-ui',
@@ -3232,7 +3232,7 @@ export const AGENT_SKILLS = [
       table: 'chapters',
       fields: ['summary', 'summarySourceTextHash', 'summaryTextNormalizationVersion', 'continuityHandoff', 'planReconciliation'],
     }],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-NS1-T3-chapter-memory-task', 'R-HARNESS20-chapter-post-adoption-durable'],
   },
   {
@@ -3252,7 +3252,7 @@ export const AGENT_SKILLS = [
     contextCompression: PROSE_CONSISTENCY_COMPRESSION_POLICY,
     maxOutputTokens: 1,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-26',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-HARNESS41-consistency-post-adoption'],
   },
   {
@@ -3616,7 +3616,7 @@ export const AGENT_SKILLS = [
     contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 800,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-20',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-ai-eval'],
   },
   {
@@ -3637,7 +3637,7 @@ export const AGENT_SKILLS = [
     contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 1_600,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-20',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-dialogue', 'R-OPEN-WORLD6-runtime-ai-eval'],
   },
   {
@@ -3658,7 +3658,7 @@ export const AGENT_SKILLS = [
     contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-20',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-expression', 'R-OPEN-WORLD6-runtime-ai-eval'],
   },
   {
@@ -3679,7 +3679,7 @@ export const AGENT_SKILLS = [
     contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-20',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-quest-packaging', 'R-OPEN-WORLD6-runtime-ai-eval'],
   },
   {
@@ -3700,7 +3700,7 @@ export const AGENT_SKILLS = [
     contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 1_200,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-20',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-direction', 'R-OPEN-WORLD6-runtime-ai-eval'],
   },
   {
@@ -3721,7 +3721,7 @@ export const AGENT_SKILLS = [
     contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 1_600,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-20',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-memory', 'R-OPEN-WORLD6-runtime-ai-eval'],
   },
   {
@@ -5151,7 +5151,7 @@ export const AGENT_SKILLS = [
     ]),
     maxOutputTokens: 4_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-20',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-TEXTADV3-agent-team', 'R-TEXTADV3-production-artifacts'],
   },
   {
