@@ -94,4 +94,38 @@ describe('SFQA032 runtime event append boundary', () => {
       payload: { locationKey: 'town.location.1', summary: '本轮不能再使用旧入口。' } })).rejects.toThrow('专用')
     expect((await readProductRuntimeStateVersion(session.id!)).sequence).toBe(version.sequence + 1)
   })
+
+  it('replays all six historic neutral event types and can append after the same persisted prefix', async () => {
+    const { session } = await seedAiTownRuntimeFixture()
+    const start = await readProductRuntimeState(session.id!)
+    const entityKey = 'character:legacy-neutral'
+    const memory = {
+      id: 'memory:legacy-neutral', subjectKey: entityKey, status: 'known',
+      content: '原保存的记忆', sourceEventSequence: start.lastSequence + 5,
+    }
+    const events: Array<{ type: ProductRuntimeEventType; payload: unknown }> = [
+      { type: 'time.advanced', payload: { amount: 2 } },
+      { type: 'entity.upserted', payload: { entity: { entityKey, kind: 'character', sourceId: 1,
+        name: '旧角色', locationKey: null, lifecycleStatus: 'active', attributes: {} } } },
+      { type: 'entity.patched', payload: { entityKey, patch: { name: '旧修订' } } },
+      { type: 'entity.removed', payload: { entityKey } },
+      { type: 'memory.recorded', payload: { memory } },
+      { type: 'narrative.recorded', payload: { text: '旧存档记录' } },
+    ]
+    await db.productRuntimeEvents.bulkAdd(events.map(({ type, payload }, index) => ({
+      projectId: session.projectId, worldGroupId: session.worldGroupId ?? null, sessionId: session.id!,
+      sequence: start.lastSequence + index + 1, type, actorKey: null, targetKey: null,
+      payloadJson: JSON.stringify(payload), createdAt: 1,
+    })))
+    db.close(); await db.open()
+    const prefix = await readSessionEvents(session)
+    const restored = await readProductRuntimeState(session.id!)
+    expect(restored.clock).toBe(start.clock + 2)
+    expect(restored.entities[entityKey]).toBeUndefined()
+    expect(restored.memories).toContainEqual(memory)
+    expect(restored.narratives[restored.narratives.length - 1]?.text).toBe('旧存档记录')
+    const next = await appendProductRuntimeEvent({ sessionId: session.id!, type: 'time.advanced', payload: { amount: 1 } })
+    expect(next.sequence).toBe(start.lastSequence + 7)
+    expect((await readSessionEvents(session)).slice(0, -1)).toEqual(prefix)
+  })
 })

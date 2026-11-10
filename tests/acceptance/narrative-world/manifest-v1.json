@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality082083-runtime-media-attempts-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality028032-runtime-events-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -686,6 +686,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality031069-independent-v1.json",
         "workPackage": "SFQA-082/083-runtime-media-attempts",
         "note": "Preserved before the runtime media attempt and branch-accounting changes. The corpus and all deterministic observations are compared to this receipt."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality082083-runtime-media-attempts-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserve the measured runtime-media receipt before the SFQA-028/032 runtime event admission and continuation owner fixes."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
