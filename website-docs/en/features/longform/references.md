@@ -2,6 +2,13 @@
 
 Entry: Longform workbench → Inspiration and references → Project references and analysis (灵感与参考 → 项目参考与分析). References support learning and evidence; uploading a file does not make it an official setting of your work.
 
+
+## Sharing novels and book analysis publicly
+
+Select public chapters at the novel entry, or select analysis content under Document parsing → Project references → Work analysis. Confirm chapters, analysis entries, description and genres separately. Inspect the exact generated public preview, enter a public pen name and license, and confirm publication rights. Email OTP signs into the community account while local writing remains independently available.
+
+Submission creates a fixed snapshot of the selected content. Check My submissions and review status after submission. Content becomes public after approval, with uncertain cases sent for human review. Open Reading space for the bookshelf, messages and flower baskets, or Manage submissions and updates to inspect, withdraw or appeal a submission. Confirm the version before withdrawal. Unselected chapters, notes, source files, prompts and local settings stay on the device. Verify rights for quotations and third-party content in analysis. See [PR #234](https://github.com/yuanbw2025/storyforge/pull/234).
+
 ## Choose the right purpose
 
 | Need | Appropriate entry |

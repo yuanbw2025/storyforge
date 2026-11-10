@@ -9,6 +9,11 @@ Start with a sentence, local novel, or imported source to prepare a series bible
 
 Delivery stops before external video generation. This workflow does not generate video, select takes, edit, mix audio, or produce a finished film inside StoryForge.
 
+
+## After a task fails or the page reloads
+
+Check task-list states such as failed, paused, recovering or requiring verification, and inspect the original task evidence. Recover an available saved candidate, review it and explicitly adopt it. Preserve the record when the original request result is unknown. Explicitly starting a new request creates a separate call that may incur charges. A failed recovery read keeps the error available for another inspection. See [PR #255](https://github.com/yuanbw2025/storyforge/pull/255).
+
 ## Before starting
 
 Define source scope, work type, target length, visual style, and intended external tools. When using a novel, check the frozen source first. A separate world is not required.
