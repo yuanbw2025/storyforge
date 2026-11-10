@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality004-isolated.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality307-product-entry-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -692,6 +692,12 @@
         "path": "tests/acceptance/narrative-world/baseline-20261103-quality004-product-entry-v2.json",
         "workPackage": "quality004-original-v2",
         "note": "Original receipt on the cumulative branch before isolation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality004-isolated.json",
+        "implementationCommit": "1e33d6e2ef96b2cfd8ea78a983978afd76d7e18d",
+        "workPackage": "SFQA-004/SFQA-105",
+        "note": "Original product-admission and NPC repair measurement before refreshing the domain-projection receipt pointer."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
