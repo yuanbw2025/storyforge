@@ -11,6 +11,7 @@
  * 治理依据:docs/DATA-GOVERNANCE.md。
  */
 import { db } from '../db/schema'
+import { assertWorldRevisionOriginRowV1 } from '../world-engine/publication-origin-contract'
 import { assertWorldSourceReceiptBindingV1, assertWorldSourceReceiptRowV1 } from '../world-engine/source-receipt-contract'
 import { NARRATIVE_SOURCE_FKS_V1 } from '../types/narrative-domain'
 import type { NarrativeDomainFieldsV1 } from '../types/narrative-domain'
@@ -646,6 +647,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'MEMORY-1 文件文档绑定与三方基线；不复制领域正文，可从正式表与磁盘 manifest 重建' },
 
   { table: db.worldRevisions, name: 'worldRevisions', owner: 'project', exportable: true, exportIdField: true,
+    portableData: { kind: 'world-revision-origin' },
+    validateImportRow: assertWorldRevisionOriginRowV1,
     domainOwner: { allowed: ['world'], defaultOwner: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
     tree: { parentField: 'parentRevisionId' },
     refs: [

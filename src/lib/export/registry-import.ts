@@ -1675,6 +1675,9 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
   const normalized = normalizeProjectBackup(input)
   if (!normalized.project) throw new Error('无效的导出文件格式')
   await validateCurrentBackup(normalized)
+  const revisionOrigins = PROJECT_TABLES.some(spec => spec.portableData?.kind === 'world-revision-origin')
+    ? await (await import('../world-engine/publication-origin')).preparePortableWorldRevisionOriginsV1(normalized)
+    : new Map()
   if (PROJECT_TABLES.some(spec => spec.portableData?.kind === 'world-source-receipt')) {
     const { assertWorldSourceReceiptRowsV1 } = await import('../world-engine/source-receipt')
     const portable = normalized
@@ -1821,6 +1824,10 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
         }
 
         if (spec.owner === 'project') obj.projectId = newProjectId
+        if (spec.portableData?.kind === 'world-revision-origin') {
+          const origin = revisionOrigins.get(exportId)
+          if (origin) obj.publicationOrigin = origin
+        }
         if (spec.portableData?.kind === 'exact-run-artifact') {
           await Dexie.waitFor(assertAgentRunArtifactRecordIntegrityV1(obj))
         }

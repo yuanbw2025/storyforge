@@ -1961,6 +1961,8 @@ const WORLD_RELEASE_PHYSICAL_OWNERS = new Set([
   'src/lib/world-engine/narrative-incremental.ts',
   'src/lib/world-engine/narrative-index-cache.ts',
   'src/lib/world-engine/release-codec.ts',
+  // World-owned seal/cache provenance checks exact frozen owner roots.
+  'src/lib/world-engine/publication-origin.ts',
   'src/lib/world-engine/releases.ts',
   'src/lib/world-engine/world-reference.ts',
   'src/lib/world-engine/world-reference-v2.ts',

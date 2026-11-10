@@ -5,6 +5,7 @@ import { resolveScope, resolveWorldOwnerScopeLike, scopeTransactionTables } from
 import { createWorldReferenceV1 } from "./world-reference";
 import { verifyPureWorldReleaseRecordV3, verifyWorldReleaseRecordV1 } from "./release-codec";
 import { createWorldReference } from './world-reference-v2';
+import { worldRevisionOriginV1 } from './publication-origin';
 
 interface NarrativeProductReferenceOption {
   narrativeProductType?: 'character-interaction' | 'avg';
@@ -35,7 +36,9 @@ export async function cacheFrozenWorldReleaseInTransactionV1(
   const now = Date.now()
   const revisionId = await db.worldRevisions.add({ projectId: scope.projectId, worldId: scope.worldId,
     parentRevisionId: null, revision: source.version, label: source.label,
-    manifestJson: source.manifestJson, contentHash: source.contentHash, createdAt: now, updatedAt: now })
+    manifestJson: source.manifestJson, contentHash: source.contentHash,
+    publicationOrigin: worldRevisionOriginV1('reference-cache', JSON.parse(source.manifestJson), source.contentHash),
+    createdAt: now, updatedAt: now })
   return db.worldReleases.add({ ...source, projectId: scope.projectId, worldId: scope.worldId, revisionId })
 }
 

@@ -1,6 +1,16 @@
 import type { WorldSourceReceiptBindingV1 } from './world-source-receipt'
 import type { WorldCapabilityArea } from '../registry/types'
 
+/** Local writer provenance, outside immutable semantic release bytes. A
+ * transported claim is checked against the complete frozen owner roots. */
+export interface WorldRevisionOriginV1 {
+  version: 1
+  kind: 'author-seal' | 'reference-cache'
+  sourceWorkspaceUid: string
+  worldCode: string
+  contentHash: string
+}
+
 export interface WorldRevision {
   id?: number
   projectId: number
@@ -10,6 +20,7 @@ export interface WorldRevision {
   label: string
   manifestJson: string
   contentHash: string
+  publicationOrigin?: WorldRevisionOriginV1
   createdAt: number
   updatedAt: number
 }

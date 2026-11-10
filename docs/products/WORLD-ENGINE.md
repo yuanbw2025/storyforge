@@ -54,6 +54,8 @@
 - 上层产品锁定 release ID/hash；世界草稿后续修改不影响已有产品。
 - 世界新版本从新草稿显式封存，不覆盖旧版本。
 
+本地作者来源须核对真实封存记录。V3/V4 封存 writer 在现有 WorldRevision 保存独立的 publicationOrigin；统一只读缓存 writer 标记 reference-cache。公开 world code 相同、存在修订行或包中的作者声明均不能单独赋予本地作者权限。重新发布及重新打包须核对准确 revision/release/hash、所属 World/Work 冻结根与来源记录；只读缓存继续通过其原来源包使用。完整备份在写入前校验来源记录及封存关联，能唯一复原原 owner 的旧完整记录可承接；模糊记录仍保留内容和只读能力。恢复时不改写原 manifestJson、contentHash 或来源引用，UID 碰撞后的再次备份恢复仍须复验。这是本地工程来源约束，不是外部作者身份或许可真实性认证。
+
 ## 4. 能力画像
 
 能力画像至少区分：

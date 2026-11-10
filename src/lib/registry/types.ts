@@ -300,6 +300,9 @@ export type ExportRefRemap = {
  * JSON from silently bypassing normal exportRemap handling.
  */
 export type PortableDataSpec = {
+  /** Local seal/cache origin validated against the complete frozen owner chain. */
+  kind: 'world-revision-origin'
+} | {
   /** Actual immutable world package wire plus derived P/R/D indices. */
   kind: 'world-source-receipt'
 } | {

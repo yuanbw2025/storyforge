@@ -6,6 +6,7 @@ import { resolveWorldOwnerScopeLike, scopeTransactionTables } from '../workspace
 import { cacheFrozenWorldReleaseInTransactionV1 } from './reference-cache'
 import { assertCapturedWorldSourceWireV1, captureWorldSourceWireV1, type CapturedWorldSourceWireV1 } from './world-package'
 import { assertWorldSourceReceiptBindingV1, assertWorldSourceReceiptRowV1 } from './source-receipt-contract'
+import { readWorldPublicationAuthorityV1 } from './publication-origin'
 import { inspectCommunityWorldOriginV1 } from './source-declaration'
 import type { VerifiedWorldReleaseV1 } from './release-codec'
 
@@ -217,6 +218,8 @@ export async function guardWorldPackageCreationV1(release: WorldRelease, verifie
   const world = await db.worlds.get(release.worldId)
   if (!world || world.projectId !== release.projectId || world.identityKind !== 'world-draft'
     || world.code !== release.sourceWorldCode || verified.manifest.worldCode !== world.code) fail('不能将外来冻结缓存重新署名打包；请选择 D 导出原来源包')
+  const authority = await readWorldPublicationAuthorityV1(release, verified)
+  if (!authority.author) fail('外来冻结缓存或未知作者来源不能重新署名打包；请选择 D 导出原来源包')
   const derivations = await db.worldDerivations.where('worldId').equals(world.id!).toArray()
   const copies = derivations.filter(row => row.sourceKind === 'world-release-copy')
   const external = hasOrigin(world) || hasOrigin(verified.manifest.semanticSnapshot.worlds[0])
@@ -232,6 +235,7 @@ export async function guardWorldPackageCreationV1(release: WorldRelease, verifie
     const [currentWorld, currentDerivations, currentRelease] = await Promise.all([
       db.worlds.get(world.id!), db.worldDerivations.where('worldId').equals(world.id!).toArray(), db.worldReleases.get(release.id!),
     ])
-    if (snapshot !== canonicalStringify({ world: currentWorld, derivations: currentDerivations, release: currentRelease })) fail('打包期间冻结版本或编辑来源变化；拒绝 stale 包')
+    if (snapshot !== canonicalStringify({ world: currentWorld, derivations: currentDerivations, release: currentRelease })
+      || authority.rows !== (await readWorldPublicationAuthorityV1(release, verified)).rows) fail('打包期间冻结版本或编辑来源变化；拒绝 stale 包')
   }
 }
