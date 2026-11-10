@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality325-307-combined-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality333-stable-recovery-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -716,6 +716,12 @@
         "implementationCommit": "1e33d6e2ef96b2cfd8ea78a983978afd76d7e18d",
         "workPackage": "SFQA-004/105",
         "note": "Measured parent receipt before combining the verified pull requests."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality325-307-combined-v1.json",
+        "implementationCommit": "7682e251584937b38e166aac159ddedec9b46331",
+        "workPackage": "SFQA-019",
+        "note": "Combined measurement before restoring the legacy parent-ready row order."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -792,6 +798,7 @@
     "src/lib/db/schema.ts",
     "src/lib/export/registry-export.ts",
     "src/lib/export/registry-import.ts",
+    "src/lib/export/portable-table-structure.ts",
     "src/lib/narrative-domain/codec.ts",
     "src/lib/narrative-domain/integrity.ts",
     "src/lib/narrative-domain/json.ts",
