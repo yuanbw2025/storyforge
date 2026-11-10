@@ -537,31 +537,31 @@ it('threads actual own World, SourceSelection and Brief revisions through later 
     await waitForUi(async () => { expect((await readAiTownDraft(owner.scope)).revision).toBe(6) })
     await recordNativeControl('own-source-brief-normal-chain-completed', router)
     await click('确认制作方案')
-    const nativePrepare = townService.prepareAiTownBrief
-    let changedDuringPrepare = false, nativePrepareSettled = false
-    let observationFailure: unknown
-    const observer = vi.spyOn(townService, 'prepareAiTownBrief').mockImplementation(async (...args) => {
-      const original = nativePrepare(...args)
-      // Keep the real work and result. Hold only its UI acknowledgement until
-      // the real source view is ready and the author has made the dirty edit.
-      void original.catch(() => {})
-      try {
-        await router.navigate('/town/source?project=' + owner.scope.projectId + '&work=' + owner.scope.workId, { flushSync: true })
-        await vi.waitFor(() => {
-          const input = sourceCheckbox()
-          flushSync(() => { input.click() })
-          changedDuringPrepare = true
-        }, { timeout: 5000 })
-      } catch (cause) { observationFailure = cause }
-      try { return await original } finally { nativePrepareSettled = true }
+    await waitForUi(() => {
+      expect(router.state.location.pathname).toBe('/town/confirm')
+      expect(field('小镇名称').closest('fieldset')?.disabled).toBe(false)
     })
-    restorePrepare = () => observer.mockRestore()
+    const nativePrepare = townService.prepareAiTownBrief
+    let releaseAcknowledgement!: () => void
+    const editedSource = new Promise<void>(resolve => { releaseAcknowledgement = resolve })
+    const observer = vi.spyOn(townService, 'prepareAiTownBrief').mockImplementation(async (...args) => {
+      const result = await nativePrepare(...args)
+      await editedSource
+      return result
+    })
+    restorePrepare = () => { releaseAcknowledgement(); observer.mockRestore() }
     await click('生成或更新审查方案')
-    await waitForUi(() => { expect(nativePrepareSettled).toBe(true) })
-    if (observationFailure) throw observationFailure
-    expect(changedDuringPrepare).toBe(true)
+    await waitForUi(() => { expect(observer).toHaveBeenCalledTimes(1) })
+    await act(async () => {
+      await router.navigate('/town/source?project=' + owner.scope.projectId + '&work=' + owner.scope.workId)
+    })
+    await waitForUi(() => { expect(sourceCheckbox()).not.toBeNull() })
+    const wasChecked = sourceCheckbox().checked
+    await act(async () => { sourceCheckbox().click() })
+    expect(sourceCheckbox().checked).toBe(!wasChecked)
+    await act(async () => { releaseAcknowledgement() })
+    await waitForUi(() => { expect(router.state.location.pathname).toBe('/town/production') })
     expect((await readAiTownDraft(owner.scope)).revision).toBe(7)
-    expect(router.state.location.pathname).toBe('/town/production')
     restorePrepare(); restorePrepare = undefined
     await recordNativeControl('own-brief-dirty-source-before-save', router)
     await click('世界引擎')

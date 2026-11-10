@@ -49418,21 +49418,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS3-master-impact-report.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"9fc1d66c730ea0f1bd224655a77baefe5d979b50b499296b6ec3250fe0a3d664\",49,91]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS3-master-impact-report.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type",
-        "anchor": "9fc1d66c730ea0f1bd224655a77baefe5d979b50b499296b6ec3250fe0a3d664",
-        "line": 22,
-        "column": 49,
-        "start": 1134,
-        "length": 91
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-HARNESS30-story-arc-agent.test.ts\",\"TS2493\",\"Tuple type '[]' of length '0' has no element at index '0'.\",\"2e992128e35e3e0a9ea170622eeb31cd1f4bc2bec41c25505563892372a871e5\",32,1]",
       "count": 1,
       "diagnostic": {
@@ -50123,51 +50108,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS42-post-adoption-resume-plan.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9\",49,68]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS42-post-adoption-resume-plan.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type",
-        "anchor": "502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9",
-        "line": 21,
-        "column": 49,
-        "start": 1028,
-        "length": 68
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS44-impact-patch-durable.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9\",49,68]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS44-impact-patch-durable.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type",
-        "anchor": "502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9",
-        "line": 21,
-        "column": 49,
-        "start": 779,
-        "length": 68
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS47-impact-remediation-durable.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9\",49,68]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS47-impact-remediation-durable.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type",
-        "anchor": "502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9",
-        "line": 13,
-        "column": 49,
-        "start": 821,
-        "length": 68
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-HARNESS49-impact-remediation-replan.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9\",49,68]",
       "count": 1,
       "diagnostic": {
@@ -50210,36 +50150,6 @@
         "column": 7,
         "start": 8729,
         "length": 7
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS50-impact-review-durable.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9\",49,68]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS50-impact-review-durable.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type",
-        "anchor": "502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9",
-        "line": 17,
-        "column": 49,
-        "start": 889,
-        "length": 68
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS54-impact-handoff-validation.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9\",49,68]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS54-impact-handoff-validation.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type",
-        "anchor": "502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9",
-        "line": 20,
-        "column": 49,
-        "start": 1021,
-        "length": 68
       }
     },
     {
@@ -51050,21 +50960,6 @@
         "column": 71,
         "start": 8498,
         "length": 20
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS8-detailed-outline-generation-durable.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"9fc1d66c730ea0f1bd224655a77baefe5d979b50b499296b6ec3250fe0a3d664\",49,91]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS8-detailed-outline-generation-durable.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type",
-        "anchor": "9fc1d66c730ea0f1bd224655a77baefe5d979b50b499296b6ec3250fe0a3d664",
-        "line": 36,
-        "column": 49,
-        "start": 1724,
-        "length": 91
       }
     },
     {

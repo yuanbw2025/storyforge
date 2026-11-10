@@ -51,7 +51,9 @@ test('a separate clean browser restores the complete author backup and explicitl
     const f = await helper.seedOpenBrowserProductionV1()
     await helper.runOpenBrowserProductionV1(f);await helper.runOpenBrowserProductionV1(f,true);await helper.runOpenBrowserProductionV1(f,true)
     const backup = await (await importer('/storyforge/src/lib/export/json-export.ts')).exportProjectJSON(f.scope.projectId)
-    return { ...f,backup,productionKey: (await db.productProductions.get(f.productionId)).productionKey }
+    const { exportOriginalAuthorSource } = await importer('/storyforge/tests/helpers/ttrpg-original-author-backup.ts')
+    const author = await exportOriginalAuthorSource(f.productionId)
+    return { ...f, backup, authorBackup: author.backup, productionKey: (await db.productProductions.get(f.productionId)).productionKey }
   })
   const isolated = await browser.newContext()
   try {
@@ -74,7 +76,17 @@ test('a separate clean browser restores the complete author backup and explicitl
     if (await optIn.count()) await optIn.click()
     await other.getByTestId('product-production-recover-import-proof').click()
     await expect(other.getByTestId('product-production-import-proof-recovery')).toHaveCount(0,{ timeout: 20000 })
-    await other.getByRole('button',{ name: '复验并原子发布',exact: true }).click()
+    const publish = other.getByRole('button',{ name: '复验并原子发布',exact: true })
+    await publish.click()
+    await expect(other.getByText(/已明确选择的原作者世界目前不可核实/).first()).toBeVisible()
+    await other.evaluate(async backup => {
+      const importer = new Function('p','return import(p)') as (p: string) => Promise<any>
+      const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+      if (await db.productReleases.count() !== 0) throw new Error('Missing author source allowed publication')
+      const { importProjectJSON } = await importer('/storyforge/src/lib/export/json-export.ts')
+      await importProjectJSON(backup)
+    }, source.authorBackup)
+    await publish.click()
     await expect(other).toHaveURL(/\/ttrpg\/play/,{ timeout: 20000 })
     await expect(other.getByRole('button',{ name: /· v1 开新团/ })).toBeVisible()
     expect(await page.evaluate(async () => {

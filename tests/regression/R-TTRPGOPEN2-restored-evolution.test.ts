@@ -14,6 +14,7 @@ import { parseProductProductionBriefV3 } from '../../src/lib/product-production/
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { applyCrossBuildEvolutionReuseV1 } from '../../src/lib/product-production/scheduler'
 import { carryForwardProductBuildArtifactsAcrossBuildsV1 } from '../../src/lib/product-production/artifact-store'
+import { exportOriginalAuthorSource } from '../helpers/ttrpg-original-author-backup'
 
 describe.each([2, 3] as const)('R-TTRPGOPEN2 restored author evolution retains source and immutable history profile=%s', { timeout: 60000 }, profile => {
   const retainedPlanFactory = productionPlan.createProductProductionPlanV3
@@ -41,6 +42,7 @@ describe.each([2, 3] as const)('R-TTRPGOPEN2 restored author evolution retains s
     const sourceRelease = released ? await db.productReleases.get(sourceProduction.currentProductReleaseId!) : null
     const sourceRootRunId = JSON.parse(sourceBuild.budgetLedgerJson).rootRunId
     const backup = await exportProjectJSON(source.scope.projectId)
+    const authorSource = keepOriginals ? null : await exportOriginalAuthorSource(source.productionId)
     // Both a clean machine and a copy beside real existing Run IDs must work.
     if (!keepOriginals) { await db.delete();await db.open() }
     for (let i = 0; i < 3; i++) await seedCurrentProductWorld(`other machine ${i}`)
@@ -63,6 +65,33 @@ describe.each([2, 3] as const)('R-TTRPGOPEN2 restored author evolution retains s
     const brief = (await db.productProductionBriefs.where('[productionId+revision]').equals([f.productionId,revised.currentBriefRevision!]).first())!
     const saved = JSON.parse(brief.briefJson)
     expect(saved.source.worldReleaseId).toBe(brief.sourceWorldReleaseId)
+    if (authorSource) {
+      expect(await db.projects.where('workspaceUid').equals(authorSource.authorWorld.workspaceUid).count()).toBe(0)
+      const cachedRelease = await db.worldReleases.get(brief.sourceWorldReleaseId!)
+      const readProductionBoundary = () => Promise.all([
+        db.productProductions.get(f.productionId),
+        db.productProductionBriefs.where('productionId').equals(f.productionId).toArray(),
+        db.productBuilds.where('productionId').equals(f.productionId).toArray(),
+        db.productProductionCommands.where('productionId').equals(f.productionId).toArray(),
+        db.agentRuns.where('projectId').equals(projectId).toArray(),
+      ])
+      const beforeDenied = await readProductionBoundary()
+      await expect(executeProductProductionCommand({ ...f,command: { type: 'authorize-start',commandId: 'restored.evolution.missing-author',expectedStateRevision: revised.stateRevision,
+        briefRevision: brief.revision,briefHash: brief.briefHash,authorizationNonce: 'restored.author.confirmed' } }))
+        .rejects.toThrow('[world-source-purpose] 已明确选择的原作者世界目前不可核实。')
+      expect(await readProductionBoundary()).toEqual(beforeDenied)
+      // Restore the actual author package explicitly only after historical readback
+      // and the new-action refusal. The old plan/proof and product cache stay intact.
+      const authorProjectId = await importProjectJSON(authorSource.backup)
+      expect((await db.projects.get(authorProjectId))!.workspaceUid).toBe(authorSource.authorWorld.workspaceUid)
+      const authorWorld = (await db.worlds.where('projectId').equals(authorProjectId).toArray()).find(row => row.code === authorSource.authorWorld.worldCode)!
+      const authorRelease = (await db.worldReleases.where('worldId').equals(authorWorld.id!).toArray()).find(row =>
+        row.releaseUid === authorSource.proof.selectedRelease.releaseUid && row.contentHash === authorSource.proof.selectedRelease.releaseHash)!
+      expect(authorRelease.manifestJson).toBe(authorSource.manifestJson)
+      expect(saved.source.sourcePurpose).toEqual(authorSource.proof)
+      expect(await readProductionBoundary()).toEqual(beforeDenied)
+      expect(await db.worldReleases.get(brief.sourceWorldReleaseId!)).toEqual(cachedRelease)
+    }
     expect((await executeProductProductionCommand({ ...f,command: { type: 'authorize-start',commandId: 'restored.evolution.start',expectedStateRevision: revised.stateRevision,
       briefRevision: brief.revision,briefHash: brief.briefHash,authorizationNonce: 'restored.author.confirmed' } })).ok).toBe(true)
     let result = await runOpenBrowserProductionV1(f)

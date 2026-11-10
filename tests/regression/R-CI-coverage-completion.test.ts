@@ -22,7 +22,8 @@ describe('isolated coverage completion receipts', () => {
         import fs from 'node:fs'; import path from 'node:path';
         const mode = ${JSON.stringify(mode)};
         const args = process.argv.slice(2);
-        if (!args.includes('--pool=forks') || !args.includes('--poolOptions.forks.singleFork=false')) process.exit(9);
+        const required = ['--pool=forks', '--isolate', '--maxWorkers=1'];
+        if (!required.every(flag => args.includes(flag))) process.exit(9);
         if (mode === 'exit-seven') process.exit(7);
         const reports = args.find(a => a.startsWith('--coverage.reportsDirectory=')).split('=').slice(1).join('=');
         const output = args.find(a => a.startsWith('--outputFile=')).split('=').slice(1).join('=');
