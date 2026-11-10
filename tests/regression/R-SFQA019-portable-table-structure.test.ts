@@ -32,6 +32,15 @@ describe.each(trees)('SFQA-019 · $name parent chain', spec => {
     expect(orderPortableTreeRows(spec, rows).map(row => row.text)).toEqual(['root', 'child', 'leaf'])
     expect(rows).toEqual(original)
   })
+  it('preserves the exported order of ready rows across independent trees and deferred parents', () => {
+    const input = [
+      { _exportId: 90, [parent]: null }, { _exportId: 40, [parent]: 90 },
+      { _exportId: 26, [parent]: 50 }, { _exportId: 70, [parent]: null },
+      { _exportId: 27, [parent]: 26 }, { _exportId: 50, [parent]: 70 },
+      { _exportId: 80, [parent]: 40 },
+    ]
+    expect(orderPortableTreeRows(spec, input).map(row => row._exportId)).toEqual([90, 40, 70, 50, 80, 26, 27])
+  })
   it.each([999, -1, '13', 0.5])('rejects absent or invalid parent %j', parentId => {
     const rows = [{ _exportId: 13, [parent]: parentId }]
     expect(inspectPortableTableStructure(spec, rows).join('；')).toContain(parent)
