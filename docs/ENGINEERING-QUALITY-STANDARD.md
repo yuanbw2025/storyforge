@@ -113,6 +113,10 @@ npm run ci
 
 `npm run ci` 应覆盖 required tables、AI Manual、AI 入口、架构、源码可达、路线图、Agent 上下文/freshness、Canon 覆盖、项目指标、依赖审计、lint、TypeScript、覆盖率测试、生产构建与 bundle 门。
 
+覆盖率由 `npm run test:coverage` 随 CI 执行。原有注册表、DB、导入导出和 AI 范围单独保留行/函数/语句/分支 58/50/58/60% 的合计门槛，原有各目录阈值也继续生效。新增 Harness、产品生产和运行时三个范围，每个范围单独要求 50/40/50/50%，扩大后的总体仍须通过 58/50/58/60%。[关键入口清单](../scripts/quality/critical-coverage-scopes.json)逐项列出参与计量的文件。Harness 关注事件、恢复和回执，生产关注命令授权、调度和结算，运行时关注来源、分支与媒资。CI 要求每个登记文件出现在报告中且有可执行语句，每个范围的四项指标都有分母。
+
+关键入口清单以外的同目录文件不计入这三个分域。UI、视觉地图、真实 AI 传输、静态提示词/文风和类型声明沿用[覆盖率配置](../vitest.config.ts)的边界。所有权拒绝、事务回滚和中断恢复仍须由行为回归证明。
+
 适用时再运行：
 
 ```bash

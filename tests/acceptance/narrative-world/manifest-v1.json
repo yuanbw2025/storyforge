@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality008-critical-coverage-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -676,6 +676,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261110-issue179-main834-v1.json",
         "workPackage": "owned-fixes-before-diagnostic-integration",
         "note": "Preserved measured Issue179/main834 receipt before precise shared fixture types and diagnostic/relay aggregation; semantic observations unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved before registering the critical coverage scopes imported by the Vitest configuration."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -960,6 +965,7 @@
     "tests/regression/R-STORY1-story-intent-projection.test.ts",
     "tests/regression/R-WORLD-D-phase-d-closure.test.ts",
     "tests/setup.ts",
+    "scripts/quality/critical-coverage-scopes.json",
     "vitest.config.ts",
     "tests/regression/R-NW-2E-posting-ownership.test.ts",
     "tests/regression/R-NW-2E-fused-freeze-hash.test.ts",
