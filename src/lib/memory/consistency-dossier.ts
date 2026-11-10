@@ -3,6 +3,7 @@ import { hashChapterText } from '../ai/chapter-memory/text-normalization'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { db } from '../db/schema'
+import { isCanonFactV1 } from '../fact-ledger/canon-eligibility'
 import { isWorkspaceUid, isWorkCode } from './identity'
 import type {
   ConsistencyDossierFindingV1,
@@ -143,7 +144,7 @@ export async function buildLongTermConsistencyDossierV1(input: {
   const boundaryWorldGroupId = boundaryOutline?.worldGroupId ?? null
   const relevantFacts = facts.filter(row => {
     if ((row.worldGroupId ?? null) !== boundaryWorldGroupId) return false
-    if (!['confirmed', 'superseded', 'stale', 'source-missing', 'invalid-range'].includes(row.status)) return false
+    if (!isCanonFactV1(row) && !STALE_STATUSES.has(row.status)) return false
     const from = row.validFromChapterId == null ? -1 : orderOf.get(row.validFromChapterId)
     if (from == null || from > boundaryOrder) return false
     if (!beforeOrAt(orderOf, row.sourceChapterId, boundaryOrder)) return false
@@ -181,7 +182,7 @@ export async function buildLongTermConsistencyDossierV1(input: {
   }
 
   const structuredFacts = relevantFacts
-    .filter(row => ['confirmed', 'superseded'].includes(row.status))
+    .filter(isCanonFactV1)
     .map(row => `${row.subjectName}｜${row.predicate}=${row.value}`)
   const characterKnowledge = relevantKnowledge
     .filter(row => row.status === 'confirmed')

@@ -1,3 +1,4 @@
+import { isCanonFactV1 } from '../fact-ledger/canon-eligibility'
 import type { Chapter, Character, OutlineNode } from '../types'
 import type { ConsistencyFinding } from '../ai/adapters/consistency-audit-adapter'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
@@ -89,8 +90,7 @@ export function projectCharacterLifecycles(
   if (!aliveSpec) return []
 
   const eligible = input.facts.flatMap(fact => {
-    if (fact.predicate !== 'aliveStatus'
-      || (fact.status !== 'confirmed' && fact.status !== 'superseded')) return []
+    if (fact.predicate !== 'aliveStatus' || !isCanonFactV1(fact)) return []
     if (fact.worldGroupId != null && fact.worldGroupId !== (input.worldGroupId ?? null)) return []
     const characterId = resolveFactCharacterId(fact, input.characters)
     const character = characterId != null ? characterById.get(characterId) : undefined
