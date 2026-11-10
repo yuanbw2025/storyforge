@@ -48068,21 +48068,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-CURRENT-SCHEMA-single-baseline.test.ts\",\"TS2769\",\"No overload matches this call.\\n  Overload 1 of 4, '(key: number): PromiseExtended<Work | undefined>', gave the following error.\\n    Argument of type 'IndexableType' is not assignable to parameter of type 'number'.\\n      Type 'string' is not assignable to type 'number'.\\n  Overload 2 of 4, '(equalityCriterias: { [key: string]: any; }): PromiseExtended<Work | undefined>', gave the following error.\\n    Argument of type 'IndexableType' is not assignable to parameter of type '{ [key: string]: any; }'.\\n      Type 'string' is not assignable to type '{ [key: string]: any; }'.\",\"25f01017313023d1e6b4b0cbd044a782248cac69ad50df59b22404be933840be\",61,2]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CURRENT-SCHEMA-single-baseline.test.ts",
-        "code": "TS2769",
-        "message": "No overload matches this call.\n  Overload 1 of 4, '(key: number): PromiseExtended<Work | undefined>', gave the following error.\n    Argument of type 'IndexableType' is not assignable to parameter of type 'number'.\n      Type 'string' is not assignable to type 'number'.\n  Overload 2 of 4, '(equalityCriterias: { [key: string]: any; }): PromiseExtended<Work | undefined>', gave the following error.\n    Argument of type 'IndexableType' is not assignable to parameter of type '{ [key: string]: any; }'.\n      Type 'string' is not assignable to type '{ [key: string]: any; }'.",
-        "anchor": "25f01017313023d1e6b4b0cbd044a782248cac69ad50df59b22404be933840be",
-        "line": 244,
-        "column": 61,
-        "start": 9818,
-        "length": 2
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-DETAIL1-gateway-scene-merge.test.ts\",\"TS2339\",\"Property 'ragDocumentId' does not exist on type 'DetailedOutline'.\",\"3ec95f85e27884a49a0a7af091a80ad7e0631090bab053431fa9dc2df1c91662\",61,13]",
       "count": 1,
       "diagnostic": {

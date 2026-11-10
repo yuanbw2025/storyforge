@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality020-independent-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-source-foundation-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality020-independent-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserve the measured SFQA020 predecessor before adding immutable world source receipts, registered schema14/backup18 lifecycle and the shared World owner prerequisite. Corpus and deterministic observations remain unchanged."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
         "workPackage": "NW-0B",

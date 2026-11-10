@@ -2,15 +2,16 @@
  * 便携备份预检（PRODUCT-1）。
  *
  * 这是导入边界的只读检查：表清单来自 PROJECT_TABLES，不复制一套导出枚举，也不访问
- * IndexedDB。v14/v15 和分支定义不同的 v16 经严格校验进入 v17；
+ * IndexedDB。v14/v15、分支定义不同的 v16 和 v17 经严格校验进入 v18；
  * 仅按表注册元数据补缺失的新增空表，不臆造注释、作者确认或运行记忆。
  */
 import { PROJECT_TABLES } from '../registry/project-tables'
 import { isCurrentWorldCode } from '../workspace/identity'
 import { NARRATIVE_DOMAIN_FIELDS_V1, parseNarrativeDomainFieldV1 } from '../narrative-domain/codec'
 import { assertNarrativeDomainReferenceRowsV1 } from '../narrative-domain/integrity'
+import { inspectCommunityWorldOriginV1 } from '../world-engine/source-declaration'
 
-export const CURRENT_BACKUP_VERSION = 17
+export const CURRENT_BACKUP_VERSION = 18
 
 export interface BackupTrustReport {
   valid: boolean
@@ -83,7 +84,7 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
   // 根项目记录在便携格式里使用 `project` 单独承载，其余表才是数组键。
   const exportableTables = PROJECT_TABLES
     .filter(spec => spec.exportable && spec.name !== 'projects' && (!isRecord(input)
-      || ![14, 15, 16].includes(input.version as number)
+      || ![14, 15, 16, 17].includes(input.version as number)
       || ((spec.introducedBackupVersion ?? 1) <= (input.version as number)
         && (!(spec.optionalInBackupVersions ?? []).includes(input.version as number) || spec.name in input))))
     .map(spec => spec.name)
@@ -104,11 +105,14 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
   const version = typeof input.version === 'number' && Number.isInteger(input.version)
     ? input.version
     : null
-  if (version !== CURRENT_BACKUP_VERSION && version !== 14 && version !== 15 && version !== 16) {
-    errors.push(`只接受 v14、v15、v16 或当前备份版本 v${CURRENT_BACKUP_VERSION}。`)
+  if (version !== CURRENT_BACKUP_VERSION && version !== 14 && version !== 15 && version !== 16 && version !== 17) {
+    errors.push(`只接受 v14、v15、v16、v17 或当前备份版本 v${CURRENT_BACKUP_VERSION}。`)
   }
 
-  if (version === 14 || version === 15 || version === 16) {
+  if (version === 14 || version === 15 || version === 16 || version === 17) {
+    for (const row of Array.isArray(input.worldDerivations) ? input.worldDerivations : []) {
+      if (isRecord(row) && Object.prototype.hasOwnProperty.call(row, 'sourceReceiptBinding')) errors.push(`v${version} 不允许携带 v18 编辑来源绑定。`)
+    }
     for (const spec of PROJECT_TABLES.filter(spec => spec.exportable && (spec.introducedBackupVersion ?? 1) > version)) {
       if (spec.name in input) errors.push(`v${version} 不允许携带 v${spec.introducedBackupVersion} 新增表 ${spec.name}。`)
     }
@@ -164,7 +168,7 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
         const portable = `_${field}Portable`
         if (field in row) errors.push(`${tableName}[${index}].${field} 不允许携带本地叙事坐标。`)
         if (!(portable in row)) continue
-        if ((version !== 16 && version !== CURRENT_BACKUP_VERSION) || !annotations.includes(field)) {
+        if ((version !== 16 && version !== 17 && version !== CURRENT_BACKUP_VERSION) || !annotations.includes(field)) {
           errors.push(`${tableName}[${index}].${portable} 未在此备份版本/来源登记。`)
           continue
         }
@@ -212,10 +216,12 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
         || !isCurrentWorldCode(row.identityKind, row.code)) {
         errors.push(`worlds[${index}] 的世界身份或稳定编号无效。`)
       }
+      const origin = inspectCommunityWorldOriginV1(row.communityOrigin)
+      errors.push(...origin.errors.map(error => `worlds[${index}].communityOrigin: ${error}`))
     })
   }
 
-  if ((version === 16 || version === CURRENT_BACKUP_VERSION) && errors.length === 0) {
+  if ((version === 16 || version === 17 || version === CURRENT_BACKUP_VERSION) && errors.length === 0) {
     try {
       assertNarrativeDomainReferenceRowsV1(new Map(PROJECT_TABLES.filter(spec => spec.exportable && spec.name !== 'projects')
         .map(spec => [spec.name, input[spec.name] as Record<string, unknown>[]])), 'portable')
@@ -234,16 +240,16 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
 }
 
 /** 在任何写库动作前调用；错误信息保持面向用户且可定位。 */
-export function assertTrustedProjectBackup(input: unknown): asserts input is Record<string, unknown> {
+export function assertTrustedProjectBackup(input: unknown): asserts input is Record<string, unknown> & { version: number } {
   const report = inspectProjectBackup(input)
   if (!report.valid) throw new Error(`备份预检失败：${report.errors.join('；')}`)
 }
 
 /** Validate the exact legacy contract before adding registry-declared missing tables. */
-export function normalizeProjectBackup<T extends { version: number }>(input: T): T {
+export function normalizeProjectBackup(input: unknown): Record<string, unknown> & { version: number } {
   assertTrustedProjectBackup(input)
   if (input.version === CURRENT_BACKUP_VERSION) return input
-  const next = { ...input, version: CURRENT_BACKUP_VERSION } as T & Record<string, unknown>
+  const next = { ...input, version: CURRENT_BACKUP_VERSION }
   for (const spec of PROJECT_TABLES) if (spec.exportable && !(spec.name in next)
     && ((spec.introducedBackupVersion ?? 1) > input.version
       || (spec.optionalInBackupVersions ?? []).includes(input.version))) {

@@ -11,6 +11,7 @@
  * 治理依据:docs/DATA-GOVERNANCE.md。
  */
 import { db } from '../db/schema'
+import { assertWorldSourceReceiptBindingV1, assertWorldSourceReceiptRowV1 } from '../world-engine/source-receipt-contract'
 import { NARRATIVE_SOURCE_FKS_V1 } from '../types/narrative-domain'
 import type { NarrativeDomainFieldsV1 } from '../types/narrative-domain'
 import type { DomainOwnershipSpec, TableSpec, WorkspaceMemoryClassificationV1 } from './types'
@@ -138,6 +139,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'works[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'worldRevisions[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'worldReleases[worldId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'worldSourceReceipts[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'worldDerivations[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'productReleases[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'productRuntimeSessions[worldId]', onDelete: 'cascade' },
@@ -659,6 +661,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     refs: [
       { kind: 'simple', field: 'id', target: 'productReleases[worldReleaseId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'worldNarrativeIndexCaches[releaseId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'worldSourceReceipts[worldReleaseId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'worldDerivations[targetReleaseId]', onDelete: 'setNull' },
     ],
     exportRemap: [
@@ -667,11 +670,25 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     ],
     note: 'WORLD-2E 不可变发布版本；运行实例只绑定该记录或显式草稿快照' },
 
+  { table: db.worldSourceReceipts, name: 'worldSourceReceipts', owner: 'project', exportable: true,
+    exportIdField: true, introducedBackupVersion: 18, domainOwner: WORLD_DOMAIN_OWNER,
+    validateImportRow: row => assertWorldSourceReceiptRowV1(row),
+    portableData: { kind: 'world-source-receipt' },
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'worldReleaseId', remapVia: 'worldReleases', exportAs: '_worldReleaseExportId', onUnmapped: 'require' },
+    ],
+    note: 'SFQA021 原 wire 单一事实源；P/R/D 仅派生索引，World-owned，不是 AI 写目标/语义投影；缓存删除只清 locator，回执保留至 owner 删除，不单独 GC' },
+
   { table: db.worldNarrativeIndexCaches, name: 'worldNarrativeIndexCaches', owner: 'project', exportable: false,
     domainOwner: { allowed: ['world'], defaultOwner: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
     note: 'NW-2A 可删除重建的冻结世界索引缓存；绑定 release FK，不导出、不成为世界语义或 AI 写目标；删除只清缓存' },
 
   { table: db.worldDerivations, name: 'worldDerivations', owner: 'project', exportable: true, exportIdField: true,
+    portableData: { kind: 'world-source-receipt-binding', bindingField: 'sourceReceiptBinding' },
+    validateImportRow: row => {
+      if (row.sourceReceiptBinding !== undefined) assertWorldSourceReceiptBindingV1(row.sourceReceiptBinding)
+    },
     domainOwner: { allowed: ['world'], defaultOwner: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
