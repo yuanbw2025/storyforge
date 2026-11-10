@@ -7,7 +7,7 @@ import { createTtrpgDraft } from '../../src/lib/ttrpg/authoring-service'
 import TtrpgRuntimePanel from '../../src/components/ttrpg/TtrpgRuntimePanel'
 import { useTtrpgRuntimePlayerStore } from '../../src/stores/ttrpg-runtime-player'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 let host: HTMLDivElement, root: Root
 const initial = useTtrpgRuntimePlayerStore.getInitialState()
 beforeEach(async () => {
