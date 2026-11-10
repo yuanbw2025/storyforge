@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality019020-318-combined-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -676,6 +676,24 @@
         "path": "tests/acceptance/narrative-world/baseline-20261110-issue179-main834-v1.json",
         "workPackage": "owned-fixes-before-diagnostic-integration",
         "note": "Preserved measured Issue179/main834 receipt before precise shared fixture types and diagnostic/relay aggregation; semantic observations unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+        "implementationCommit": "bc18dc8466f2e6661b6ce9a17131981f41992844",
+        "workPackage": "SFQA-019/SFQA-020",
+        "note": "Mainline receipt before the portable import tree and world-package provenance fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality019-portable-tree-v1.json",
+        "implementationCommit": "20584de83318bd2c6050d266ddf9134a8bd98142",
+        "workPackage": "SFQA-019",
+        "note": "Independent measured receipt preserved before integration with the other product and repository fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality020-independent-v1.json",
+        "implementationCommit": "0bef15786bda529f36abbeb4bff4e64af829b07a",
+        "workPackage": "SFQA-020",
+        "note": "Independent measured receipt preserved before integration with the other product and repository fixes."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
