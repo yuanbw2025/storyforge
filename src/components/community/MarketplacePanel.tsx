@@ -8,6 +8,7 @@ import {
   type CommercialHttpErrorV1,
 } from '../../lib/commercial/http-client'
 import { CommunityHttpClientV1 } from '../../lib/community/http-client'
+import { createCommunityRequestIntentsV1 } from '../../lib/community/request-intent'
 import { CommercialOperationsHttpClientV1 } from '../../lib/commercial/operations-http-client'
 import type { CommercialListingV1 } from '../../lib/commercial/authority'
 import type { CommunitySocialEdgeV1 } from '../../lib/community/authority'
@@ -134,7 +135,7 @@ export default function MarketplacePanel(props: {
   const [revisionListingId, setRevisionListingId] = useState<string | null>(null)
   const [textAdventureCandidate, setTextAdventureCandidate] = useState<TextAdventureCommunityCandidateDossierV1 | null>(null)
   const acquisitionIds = useRef(new Map<string, string>())
-  const socialRequestIds = useRef(new Map<string, string>())
+  const [socialRequests] = useState(createCommunityRequestIntentsV1)
   const operationRequestIds = useRef(new Map<string, string>())
   const submission = useRef<{
     fingerprint: string
@@ -236,12 +237,10 @@ export default function MarketplacePanel(props: {
     if (!accessToken.trim()) throw new Error('请输入当前账号的访问凭据。')
     const prior = socialEdges.find(edge => edge.kind === kind && edge.targetId === targetId)
     const active = !prior?.active
-    const requestKey = `${kind}:${targetId}:${active}`
-    const requestId = socialRequestIds.current.get(requestKey) ?? `social.${crypto.randomUUID()}`
-    socialRequestIds.current.set(requestKey, requestId)
-    const edge = await communityClient.setSocialEdge({
-      accessToken: accessToken.trim(), requestId, kind, targetId, active,
-    })
+    const token = accessToken.trim()
+    const body = { kind, targetId, active }
+    const edge = await socialRequests.send(communityClient, token, 'social.edge', body, ({ requestId }) =>
+      communityClient.setSocialEdge({ accessToken: token, requestId, ...body }))
     setSocialEdges(current => edge.active
       ? [edge, ...current.filter(item => item.edgeId !== edge.edgeId)]
       : current.filter(item => item.edgeId !== edge.edgeId))

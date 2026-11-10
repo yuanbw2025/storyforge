@@ -387,6 +387,13 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     expect(community.setSocialEdge).toHaveBeenCalledWith(expect.objectContaining({
       accessToken: 'token-social-buyer-12345', kind: 'favorite-listing', targetId: listing.listingId, active: true,
     }))
+    await act(async () => { button(host, '已收藏').click(); await settle() })
+    await waitFor(() => expect(button(host, '收藏')).toBeTruthy())
+    await act(async () => { button(host, '收藏').click(); await settle() })
+    await waitFor(() => expect(host.textContent).toContain('已收藏'))
+    const favorites = community.setSocialEdge.mock.calls.map(([input]) => input)
+    expect(favorites.map(input => input.active)).toEqual([true, false, true])
+    expect(new Set(favorites.map(input => input.requestId)).size).toBe(3)
     await act(async () => { button(host, '订阅更新').click(); await settle() })
     await act(async () => { button(host, '关注创作者').click(); await settle() })
     expect(community.setSocialEdge).toHaveBeenCalledWith(expect.objectContaining({
@@ -489,7 +496,7 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     await waitFor(() => expect(host.textContent).toContain('等待主持人处理'))
     expect(community.applyToLfg).toHaveBeenCalledWith(expect.objectContaining({
       accessToken: 'token-community-player-123', postId: 'lfg.ui',
-      requestId: expect.stringMatching(/^apply:lfg\.ui\./),
+      requestId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
     }))
   })
 
