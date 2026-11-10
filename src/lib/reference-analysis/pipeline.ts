@@ -11,12 +11,27 @@
  *   · 只有作者激活的 run 同步 Reference 当前投影并进入创作上下文。
  */
 import { db } from '../db/schema'
-import { chat, resolveRequestConfig, type AICallMeta } from '../ai/client'
+import { resolveRequestConfig, type ChatResult } from '../ai/client'
+import { isConfirmedProviderThrottleV1 } from '../ai/provider-rejection'
+import { assembleContext } from '../registry/assemble-context'
+import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
+import { executeFrozenFormalAIEntryV1, freezeFormalAIEntryBindingV1 } from '../agent/formal-ai-entry'
+import { getAgentSkillV1 } from '../agent/skill-registry'
+import { createContextManifestFromAssemblyV1 } from '../agent/run/context-manifest'
+import { appendAgentRunEventV1, createAgentRunV1, readAgentRunV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
+import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
+import { hashCanonicalValue } from '../agent/run/hash'
+import { sha256Text } from '../ai/chapter-memory/text-normalization'
+import { readAgentRunArtifactExactV1 } from '../memory/artifact-store'
+import { resolveWorkspaceScope } from '../workspace/ownership'
+import { ANALYSIS_DIMENSIONS } from '../types/reference'
+import type { AgentRunEventTypeV1 } from '../types/agent-run'
+import type { WorkspaceScope } from '../types/world-ownership'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chunkDocument, quickHash, type ChunkPlan } from '../import/chunker'
-import { extractJSON } from '../ai/adapters/import-adapter'
-import type { AIConfig, ChatMessage, Reference, ReferenceChunkAnalysis, ReferenceAnalysisDepth } from '../types'
+import type { ChatMessage, Reference, ReferenceChunkAnalysis, ReferenceAnalysisDepth } from '../types'
 import { adopt } from '../registry/adopt'
 import {
   completeReferenceAnalysisRun,
@@ -25,6 +40,9 @@ import {
   listReferenceAnalysisRuns,
   patchReferenceAnalysisRun,
   readReferenceAnalysisChunks,
+  readReferenceChunkAuthorityV1,
+  writeReferenceChunkRunLinkV1,
+  type ReferenceChunkRunLinkV1,
 } from './lifecycle'
 
 /** 两档:浅层(大块·轻析) / 深层(小块·深析) */
@@ -36,7 +54,7 @@ const DEPTH_PRESET: Record<ReferenceAnalysisDepth, {
   deep:  { targetChars: 15000, maxTokens: 8192 },  // 深层
 }
 
-const MAX_ATTEMPTS = 3
+const MAX_ATTEMPTS = 2
 const RETRY_DELAY_MS = 1500
 
 // ── 运行状态（单例） ────────────────────────────────────────
@@ -179,10 +197,11 @@ export async function runRefAnalysis(refId: number, requestedRunId?: number): Pr
     listener.onDone?.(refId, false, requestedRunId)
     return
   }
-  let chunks: ChunkPlan[] | undefined = IN_MEM_CHUNKS[run.id]
-  if (!chunks?.length) {
-    chunks = await readReferenceAnalysisChunks(run.id)
+  if (!['analyzing', 'failed', 'cancelled'].includes(run.status)) {
+    listener.onDone?.(refId, false, run.id)
+    return
   }
+  const chunks = await readReferenceAnalysisChunks(run.id)
   if (!chunks || chunks.length === 0) {
     await patchReferenceAnalysisRun(run.id, {
       status: 'failed',
@@ -193,29 +212,31 @@ export async function runRefAnalysis(refId: number, requestedRunId?: number): Pr
     return
   }
 
+  if (activeController) {
+    listener.onDone?.(refId, false, run.id)
+    return
+  }
   const depth = run.depth
   activeController = new AbortController()
   activePaused = { value: false }
   activeRefId = refId
   activeRunId = run.id
 
-  await patchReferenceAnalysisRun(run.id, {
-    status: 'analyzing',
-    progress: 0,
-    error: null,
-  })
-  listener.onActivity?.('info', `▶ 开始分析「${ref.title}」v${run.version}，共 ${chunks.length} 块（${depth}）`)
-
-  // 已有分析 → 断点续跑
-  const existing = await getReferenceAnalysisRunChunks(refId, run.id)
-  const doneSet = new Set(existing.map(r => r.chunkIndex))
-
-  let rollingContext = ''
-  const preset = DEPTH_PRESET[depth]
-  let completed = doneSet.size
-  const total = chunks.length
-
   try {
+    await patchReferenceAnalysisRun(run.id, {
+      status: 'analyzing',
+      progress: 0,
+      error: null,
+    })
+    listener.onActivity?.('info', `▶ 开始分析「${ref.title}」v${run.version}，共 ${chunks.length} 块（${depth}）`)
+
+    // 已有分析 → 断点续跑
+    const existing = await getReferenceAnalysisRunChunks(refId, run.id)
+    const doneSet = new Set(existing.map(r => r.chunkIndex))
+
+    const preset = DEPTH_PRESET[depth]
+    let completed = doneSet.size
+    const total = chunks.length
     for (const chunk of chunks) {
       if (activePaused.value) {
         listener.onActivity?.('warn', '⏸ 分析已中止')
@@ -225,73 +246,46 @@ export async function runRefAnalysis(refId: number, requestedRunId?: number): Pr
       }
       if (doneSet.has(chunk.index)) continue
 
-      let ok = false
-      let lastErr = ''
-      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        if (activePaused.value) break
-        listener.onActivity?.('info',
-          `▶ 块 ${chunk.index + 1}/${total} 分析中（第 ${attempt + 1} 次）`)
-        try {
-          const analysis = await analyzeChunkOnce({
-            ref,
-            depth,
-            chunk,
-            totalChunks: total,
-            knownContext: rollingContext,
-            maxTokens: preset.maxTokens,
-            signal: activeController.signal,
-          })
-          const row: ReferenceChunkAnalysis = {
-            referenceId: refId,
-            analysisRunId: run.id,
-            chunkIndex: chunk.index,
-            label: chunk.label,
-            startOffset: chunk.startChar,
-            endOffset: chunk.endChar,
-            // 13 小说维度
-            narrativeStyle:     trim(analysis.narrativeStyle),
-            openingTechnique:   trim(analysis.openingTechnique),
-            plotStructure:      trim(analysis.plotStructure),
-            pacingControl:      trim(analysis.pacingControl),
-            climaxDesign:       trim(analysis.climaxDesign),
-            conflictEscalation: trim(analysis.conflictEscalation),
-            characterCraft:     trim(analysis.characterCraft),
-            dialogueTechnique:  trim(analysis.dialogueTechnique),
-            proseStyle:         trim(analysis.proseStyle),
-            emotionalBeats:     trim(analysis.emotionalBeats),
-            foreshadowing:      trim(analysis.foreshadowing),
-            worldBuilding:      trim(analysis.worldBuilding),
-            otherTechniques:    trim(analysis.otherTechniques),
-            // 5 历史维度（仅历史题材）
-            historicalContext:  trim(analysis.historicalContext),
-            socialInstitutions: trim(analysis.socialInstitutions),
-            dailyLife:          trim(analysis.dailyLife),
-            materialCulture:    trim(analysis.materialCulture),
-            languageCustoms:    trim(analysis.languageCustoms),
-            rawExcerpt:         verifiedRawExcerpt(analysis.rawExcerpt, chunk.text),
-            createdAt: Date.now(),
-          }
-          await writeAnalysisRow(ref.projectId, row)
-          completed++
-          const progress = Math.min(100, Math.round((completed / total) * 100))
-          await patchReferenceAnalysisRun(run.id, { completedChunks: completed, progress })
-          listener.onProgress?.(progress, `块 ${chunk.index + 1} 完成`)
-          listener.onActivity?.('success', `✓ 块 ${chunk.index + 1} 完成`)
-          rollingContext = buildRollingContext(rollingContext, row)
-          ok = true
-          break
-        } catch (err) {
-          if ((err as Error).name === 'AbortError') throw err
-          lastErr = err instanceof Error ? err.message : String(err)
-          listener.onActivity?.('warn',
-            `块 ${chunk.index + 1} 第 ${attempt + 1} 次失败：${lastErr.slice(0, 80)}`)
-          if (attempt < MAX_ATTEMPTS - 1) await sleep(RETRY_DELAY_MS)
-        }
+      const analysis = await analyzeChunkDurably({
+        runId: run.id, ref, depth, chunk, totalChunks: total,
+        maxTokens: preset.maxTokens, signal: activeController.signal,
+      })
+      const row: ReferenceChunkAnalysis = {
+        referenceId: refId,
+        analysisRunId: run.id,
+        chunkIndex: chunk.index,
+        label: chunk.label,
+        startOffset: chunk.startChar,
+        endOffset: chunk.endChar,
+        // 13 小说维度
+        narrativeStyle:     trim(analysis.narrativeStyle),
+        openingTechnique:   trim(analysis.openingTechnique),
+        plotStructure:      trim(analysis.plotStructure),
+        pacingControl:      trim(analysis.pacingControl),
+        climaxDesign:       trim(analysis.climaxDesign),
+        conflictEscalation: trim(analysis.conflictEscalation),
+        characterCraft:     trim(analysis.characterCraft),
+        dialogueTechnique:  trim(analysis.dialogueTechnique),
+        proseStyle:         trim(analysis.proseStyle),
+        emotionalBeats:     trim(analysis.emotionalBeats),
+        foreshadowing:      trim(analysis.foreshadowing),
+        worldBuilding:      trim(analysis.worldBuilding),
+        otherTechniques:    trim(analysis.otherTechniques),
+        // 5 历史维度（仅历史题材）
+        historicalContext:  trim(analysis.historicalContext),
+        socialInstitutions: trim(analysis.socialInstitutions),
+        dailyLife:          trim(analysis.dailyLife),
+        materialCulture:    trim(analysis.materialCulture),
+        languageCustoms:    trim(analysis.languageCustoms),
+        rawExcerpt:         verifiedRawExcerpt(analysis.rawExcerpt, chunk.text),
+        createdAt: Date.now(),
       }
-      if (!ok) {
-        listener.onActivity?.('error',
-          `✗ 块 ${chunk.index + 1} 重试 ${MAX_ATTEMPTS} 次仍失败：${lastErr.slice(0, 80)}`)
-      }
+      await writeAnalysisRow(ref.projectId, row)
+      completed++
+      const progress = Math.min(100, Math.round((completed / total) * 100))
+      await patchReferenceAnalysisRun(run.id, { completedChunks: completed, progress })
+      listener.onProgress?.(progress, `块 ${chunk.index + 1} 完成`)
+      listener.onActivity?.('success', `✓ 块 ${chunk.index + 1} 完成`)
     }
 
     // 收尾
@@ -347,16 +341,18 @@ interface RawAnalysis {
   rawExcerpt?: string
 }
 
-async function analyzeChunkOnce(args: {
+type ReferenceChunkInput = {
+  runId: number
   ref: Reference
   depth: ReferenceAnalysisDepth
   chunk: ChunkPlan
   totalChunks: number
-  knownContext: string
   maxTokens: number
   signal?: AbortSignal
-}): Promise<RawAnalysis> {
-  const { ref, depth, chunk, totalChunks, knownContext } = args
+}
+
+function referenceChunkMessages(args: ReferenceChunkInput): ChatMessage[] {
+  const { ref, depth, chunk, totalChunks } = args
 
   const depthGuide = depth === 'deep'
     ? '【深层·拆成模板】请逐维度详尽论述（每维 300-500 字），并引用原文片段佐证。'
@@ -373,8 +369,6 @@ async function analyzeChunkOnce(args: {
 - 类型：历史考证资料 / 文献
 
 **当前进度**：第 ${chunk.index + 1}/${totalChunks} 块（${chunk.label || ''}，约 ${chunk.charCount} 字）
-
-${knownContext ? `**前文已识别的关键信息**：\n${knownContext}\n` : ''}
 
 **分析要求**：
 ${depthGuide}
@@ -418,8 +412,6 @@ ${depthGuide}
 
 **当前进度**：第 ${chunk.index + 1}/${totalChunks} 块（${chunk.label || ''}，约 ${chunk.charCount} 字）
 
-${knownContext ? `**前文已识别的关键信息**：\n${knownContext}\n` : ''}
-
 **分析要求**：
 ${depthGuide}
 
@@ -447,48 +439,232 @@ ${depthGuide}
 - 重点分析有特色、值得学习的写作手法，而非简单复述情节
 - 分析应当具体、可操作，让读者能学以致用`
 
-  const messages: ChatMessage[] = [
+  return [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: `请分析以下文本：\n\n${chunk.text}` },
   ]
 
-  const baseConfig = useAIConfigStore.getState().config
-  const config: AIConfig = { ...baseConfig, maxTokens: args.maxTokens }
-  const meta = {
-    category: 'reference.analysis',
-    projectId: args.ref.projectId,
-    configOverrides: { maxTokens: args.maxTokens },
-  } as const
-  const effectiveConfig = resolveRequestConfig(config, meta).config
-  if (!isAIConfigReady(effectiveConfig)) throw new Error(getAIConfigRequiredMessage(effectiveConfig))
-  const output = await chatWithAbort(messages, config, args.signal, meta)
-  const obj = extractJSON(output) as RawAnalysis
-  return obj || {}
 }
 
-// ── 工具函数 ─────────────────────────────────────────────────
+const PRIVATE_ENTRY = 'reference.analysis.private-chunk'
+const PRIVATE_SKILL = 'inspiration.reference-analysis-private-chunk'
+const STEP = 'reference-analysis.chunk'
+const SOURCE = 'referenceAnalysisPrivateChunk'
+const VERIFIER = 'reference-analysis-private-chunk-v1'
+const INPUT_BUDGET = 48_000
 
-async function chatWithAbort(
-  messages: ChatMessage[],
-  config: AIConfig,
-  signal?: AbortSignal,
-  meta?: AICallMeta,
-): Promise<string> {
-  if (signal?.aborted) {
-    const e = new Error('aborted'); e.name = 'AbortError'; throw e
+type BoundSource = Awaited<ReturnType<typeof readReferenceChunkAuthorityV1>>
+type PreparedRequest = Awaited<ReturnType<typeof recordCreationModelRequestV1>>['request']
+const unsavedResponses = new Map<number, { request: PreparedRequest; raw: string; result: ChatResult }>()
+
+function appendReferenceEvent<T extends AgentRunEventTypeV1>(
+  scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, type: T,
+  payload: Parameters<typeof appendAgentRunEventV1<T>>[0]['payload'],
+) {
+  return appendAgentRunEventV1({ scope, runId: snapshot.run.id, type, payload,
+    expectedLastSequence: snapshot.projection.lastSequence })
+}
+
+function exactEventHash(snapshot: AgentRunSnapshotV1, kind: 'raw-response' | 'tool-result' | 'rendered-request') {
+  for (const event of [...snapshot.events].reverse()) {
+    if (event.type === 'evidence.artifact.recorded' && event.payload.stepId === STEP
+      && event.payload.attempt === 1 && event.payload.artifactKind === kind) return event.payload.contentHash
   }
-  return await chat(messages, config, meta, signal)
+  return null
 }
 
-function buildRollingContext(prev: string, row: ReferenceChunkAnalysis): string {
-  const pieces: string[] = []
-  if (row.plotStructure) pieces.push(`情节：${row.plotStructure.slice(0, 120)}`)
-  if (row.foreshadowing) pieces.push(`伏笔：${row.foreshadowing.slice(0, 120)}`)
-  if (row.characterCraft) pieces.push(`角色：${row.characterCraft.slice(0, 100)}`)
-  if (row.conflictEscalation) pieces.push(`冲突：${row.conflictEscalation.slice(0, 100)}`)
-  const fresh = pieces.join('\n')
-  const merged = prev ? `${prev}\n---\n${fresh}` : fresh
-  return merged.length > 1500 ? merged.slice(-1500) : merged
+function manifestHash(snapshot: AgentRunSnapshotV1) {
+  for (const event of snapshot.events) if (event.type === 'context.assembled' && event.payload.stepId === STEP)
+    return event.payload.manifestHash
+  throw new Error('缺少本机参考分析上下文回执。')
+}
+
+async function privateBinding(source: BoundSource, link: ReferenceChunkRunLinkV1) {
+  return hashCanonicalValue({ scope: source.scope, runId: source.run.id, referenceId: source.ref.id,
+    fileHash: source.run.fileHash, sourceHash: await sha256Text(source.chunk.text),
+    chunkIndex: source.chunk.index, claimKey: link.claimKey, ordinal: link.ordinal })
+}
+
+async function referenceEvidence(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, kind: 'raw-response' | 'tool-result') {
+  const contentHash = exactEventHash(snapshot, kind)
+  if (!contentHash) return null
+  const evidence: { version?: unknown; raw?: unknown; requestArtifactHash?: unknown; contextManifestHash?: unknown;
+    observation?: { finishReason?: unknown; requestLifecycle?: ChatResult['requestLifecycle'] } } = JSON.parse(
+    await readAgentRunArtifactExactV1({ projectId: scope.projectId, artifactKind: kind, contentHash }))
+  if (evidence.version !== (kind === 'raw-response' ? 'creation-model-response-v1' : 'creation-model-observation-v1') ||
+    !exactEventHash(snapshot, 'rendered-request') || evidence.requestArtifactHash !== exactEventHash(snapshot, 'rendered-request') ||
+    evidence.contextManifestHash !== manifestHash(snapshot)) throw new Error('参考分析原答与请求证据不匹配。')
+  return { ...evidence, contentHash }
+}
+
+async function saveRawReferenceResponse(snapshot: AgentRunSnapshotV1, value: NonNullable<ReturnType<typeof unsavedResponses.get>>) {
+  unsavedResponses.set(snapshot.run.id, value)
+  snapshot = await recordCreationModelResponseV1({ snapshot, ...value })
+  unsavedResponses.delete(snapshot.run.id)
+  return snapshot
+}
+
+async function failReferenceAttempt(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, code: string,
+  category: 'protocol' | 'deterministic') {
+  snapshot = await appendReferenceEvent(scope, snapshot, 'step.failed', { stepId: STEP, attempt: 1, code,
+    retryable: false, category, action: 'fail' })
+  return appendReferenceEvent(scope, snapshot, 'run.failed', { code, retryable: false })
+}
+
+async function readReferenceReport(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, source: BoundSource): Promise<RawAnalysis | null> {
+  const pending = unsavedResponses.get(snapshot.run.id)
+  if (pending) snapshot = await saveRawReferenceResponse(snapshot, pending)
+  const raw = await referenceEvidence(scope, snapshot, 'raw-response')
+  if (!raw) return null
+  if (typeof raw.raw !== 'string') throw new Error('原参考分析回答格式损坏。')
+  if (!snapshot.events.some(event => event.type === 'model.responded') && snapshot.projection.state === 'running')
+    snapshot = await appendReferenceEvent(scope, snapshot, 'model.responded',
+      { stepId: STEP, attempt: 1, outputHash: raw.contentHash })
+  let analysis: RawAnalysis
+  try {
+    if (raw.observation?.finishReason === 'length' || raw.observation?.finishReason === 'content_filter')
+      throw new Error('原回答未完整结束')
+    const trimmed = raw.raw.trim()
+    const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed)
+    const obj: unknown = JSON.parse(fenced?.[1] ?? trimmed)
+    const allowedFields = new Set<string>([...ANALYSIS_DIMENSIONS, 'rawExcerpt'])
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj) ||
+      !Object.keys(obj).some(key => key !== 'rawExcerpt' && allowedFields.has(key)) ||
+      !Object.entries(obj).every(([key, value]) => allowedFields.has(key) && typeof value === 'string'))
+      throw new Error('没有合法分析对象')
+    analysis = obj as RawAnalysis
+  } catch {
+    if (snapshot.projection.state === 'running') await failReferenceAttempt(scope, snapshot, 'reference-protocol-invalid', 'protocol')
+    throw new Error('原回答和用量已保留，但不是完整分析结果；继续只会本地重解析。')
+  }
+  const current = await readReferenceChunkAuthorityV1(scope, source.run.id!, source.chunk.index)
+  if (current.chunk.text !== source.chunk.text || current.latest?.agentRunId !== snapshot.run.id)
+    throw new Error('参考分析来源已变化，原回答保留但未写入。')
+  if (snapshot.projection.steps[STEP]?.status === 'running') {
+    snapshot = await appendReferenceEvent(scope, snapshot, 'step.succeeded', { stepId: STEP, attempt: 1,
+      outputHash: await hashCanonicalValue(analysis) })
+  }
+  if (snapshot.projection.state === 'running')
+    snapshot = await appendReferenceEvent(scope, snapshot, 'verification.started', { verifierSetVersion: VERIFIER })
+  if (snapshot.projection.state === 'verifying') {
+    const receipt = await createVerificationReceiptV1({
+      version: 1, runId: snapshot.run.id, generation: snapshot.projection.generation,
+      contractHash: snapshot.projection.contractHash, contextManifestHashes: [manifestHash(snapshot)],
+      candidateHashes: [], adoptionEventIds: [], postStateHash: await hashCanonicalValue(analysis),
+      verifierSetVersion: VERIFIER, criteria: [{ id: 'reference.output', status: 'passed', evidenceRefs: [`raw:${raw.contentHash}`] }],
+      acceptedAt: Date.now(),
+    })
+    await appendReferenceEvent(scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
+  }
+  return analysis
+}
+
+async function analyzeChunkDurably(input: ReferenceChunkInput): Promise<RawAnalysis> {
+  const scope = await resolveWorkspaceScope(input.ref.projectId)
+  let source = await readReferenceChunkAuthorityV1(scope, input.runId, input.chunk.index)
+  for (;;) {
+    input.signal?.throwIfAborted()
+    if (source.run.status !== 'analyzing' || source.chunk.text !== input.chunk.text)
+      throw new Error('参考分析原文或授权已变化。')
+    const previous = source.latest
+    if (previous) {
+      if (previous.agentRunId == null) throw new Error('原分析请求未结，未自动重发。')
+      const original = await readAgentRunV1(scope, previous.agentRunId)
+      if (original.contract.runtimeBindingHash !== await privateBinding(source, previous) ||
+        original.contract.executionBindings?.find(item => item.stepId === STEP)?.formalEntry?.entryId !== PRIVATE_ENTRY)
+        throw new Error('原参考分析运行不属于当前原文块。')
+      const parsed = await readReferenceReport(scope, original, source)
+      if (parsed) return parsed
+      const observation = await referenceEvidence(scope, original, 'tool-result')
+      const throttled = observation?.observation?.requestLifecycle?.phase === 'response-observed'
+        && observation.observation.requestLifecycle.responseStatus === 429
+        && original.events.some(event => event.type === 'run.failed' && event.payload.code === 'reference-rate-limit-confirmed')
+      if (!throttled) {
+        const lifecycle = observation?.observation?.requestLifecycle
+        const status = lifecycle?.responseStatus
+        if (lifecycle?.phase === 'pre-dispatch') throw new Error('原请求未发出；请核对配置或来源后新建分析版本。')
+        if (lifecycle?.phase === 'response-observed' && status != null && status >= 400 && status < 500 && status !== 408)
+          throw new Error(`服务拒绝请求（${status}），未自动重发。`)
+        throw new Error('原请求结果未知，未自动重发。')
+      }
+      if (previous.ordinal >= MAX_ATTEMPTS) throw new Error('服务限流，已用尽明确重试额度。')
+      listener.onActivity?.('warn', '服务已明确限流；等待一次有界重试。')
+      await sleep(RETRY_DELAY_MS)
+    }
+    input.signal?.throwIfAborted()
+    await dispatchReferenceAttempt(input, source)
+    source = await readReferenceChunkAuthorityV1(scope, input.runId, input.chunk.index)
+  }
+}
+
+async function dispatchReferenceAttempt(input: ReferenceChunkInput, source: BoundSource) {
+  const scope = source.scope
+  const config = { ...useAIConfigStore.getState().config, maxTokens: input.maxTokens }
+  const metadata = { category: 'reference.analysis', projectId: scope.projectId, contextOverflowPolicy: 'reject' as const,
+    configOverrides: { maxTokens: input.maxTokens } }
+  const resolved = resolveRequestConfig(config, metadata)
+  if (!isAIConfigReady(resolved.config)) throw new Error(getAIConfigRequiredMessage(resolved.config))
+  const skill = getAgentSkillV1(PRIVATE_SKILL, 'inspiration')
+  const formalEntry = await freezeFormalAIEntryBindingV1(PRIVATE_ENTRY)
+  const assembled = await assembleContext({ scope, projectId: scope.projectId, sourceKeys: [SOURCE],
+    referenceAnalysisRunId: input.runId, referenceAnalysisChunkIndex: source.chunk.index, inputBudgetMaxTokens: INPUT_BUDGET,
+    provider: resolved.config.provider, model: resolved.config.model })
+  if (assembled.segments[assembled.included.indexOf(SOURCE)]?.content !== source.chunk.text)
+    throw new Error('正式来源必须是完整的已确认参考原文。')
+  const messages = referenceChunkMessages({ ...input, ref: source.ref, chunk: source.chunk })
+  const link = { chunkIndex: source.chunk.index, ordinal: (source.latest?.ordinal ?? 0) + 1,
+    claimKey: crypto.randomUUID(), agentRunId: null }
+  input.signal?.throwIfAborted()
+  await writeReferenceChunkRunLinkV1(scope, input.runId, source.chunk, source.latest, link)
+  const runtimeBindingHash = await privateBinding(source, link)
+  let snapshot = await createAgentRunV1({ scope, contract: {
+    version: 1, objective: '已确认本机原文的参考分析', workflowKind: 'read-only-audit',
+    scope: { projectId: scope.projectId, worldGroupId: null }, runtimeBindingHash,
+    permissions: { contextSourceKeys: [SOURCE], writeTargets: [] },
+    executionBindings: [{ stepId: STEP, ...createAgentSkillExecutionBindingV1(skill), formalEntry }],
+    budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: INPUT_BUDGET, maxOutputTokens: input.maxTokens, maxAttemptsPerStep: 1 },
+    acceptance: [{ id: 'reference.output', kind: 'output-present', required: true }],
+    verificationPlan: [{ id: 'reference.terminal', kind: 'terminal', verifier: VERIFIER, criterionIds: ['reference.output'] }],
+    failurePolicy: { onProtocolError: 'fail', onVerificationFailure: 'fail', onStaleInput: 'pause-for-author' },
+  } })
+  await writeReferenceChunkRunLinkV1(scope, input.runId, source.chunk, link, { ...link, agentRunId: snapshot.run.id })
+  snapshot = await appendReferenceEvent(scope, snapshot, 'step.scheduled', { stepId: STEP })
+  snapshot = await appendReferenceEvent(scope, snapshot, 'step.started', { stepId: STEP, attempt: 1 })
+  const manifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId: STEP, attempt: 1,
+    projectId: scope.projectId, worldGroupId: null, declaredSourceKeys: [SOURCE], assembled, readerVersion: VERIFIER })
+  snapshot = await appendReferenceEvent(scope, snapshot, 'context.assembled', { stepId: STEP, attempt: 1, manifestHash: manifest.manifestHash })
+  const prepared = await recordCreationModelRequestV1({ scope, snapshot, stepId: STEP, attempt: 1,
+    contextManifestHash: manifest.manifestHash, messages })
+  snapshot = await appendReferenceEvent(scope, prepared.snapshot, 'model.requested', { stepId: STEP, attempt: 1,
+    bindingHash: await hashCanonicalValue({ runtimeBindingHash, formalEntry, manifestHash: manifest.manifestHash,
+      provider: resolved.config.provider, model: resolved.config.model }) })
+  const result: ChatResult = { beforeModelDispatch: async () => {
+    input.signal?.throwIfAborted()
+    const live = await readReferenceChunkAuthorityV1(scope, input.runId, source.chunk.index)
+    if (live.run.status !== 'analyzing' || live.latest?.agentRunId !== snapshot.run.id ||
+      await privateBinding(live, live.latest) !== runtimeBindingHash) throw new Error('原文、作品或请求已变化，未发送。')
+  } }
+  let raw: string
+  try {
+    raw = await executeFrozenFormalAIEntryV1('reference.analysis.private-chunk', formalEntry, skill, 'src/lib/reference-analysis/pipeline.ts',
+      messages, config, { ...metadata, category: 'reference.analysis' }, input.signal, result, undefined, resolved)
+  } catch (error) {
+    const saved = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
+    const lifecycle = result.requestLifecycle
+    const status = lifecycle?.responseStatus ?? null
+    if (lifecycle?.phase === 'pre-dispatch' || (lifecycle?.phase === 'response-observed' && status != null &&
+      status >= 400 && status < 500 && status !== 408)) {
+      const throttled = lifecycle.phase === 'response-observed' && status != null && isConfirmedProviderThrottleV1({
+        status, message: error instanceof Error ? error.message : '',
+      })
+      await failReferenceAttempt(scope, saved.snapshot, throttled ? 'reference-rate-limit-confirmed' :
+        lifecycle.phase === 'pre-dispatch' ? 'reference-not-dispatched' : 'reference-provider-rejected', 'deterministic')
+    } else {
+      await appendReferenceEvent(scope, saved.snapshot, 'run.paused', { reason: 'reference-model-outcome-unknown', recoverable: false })
+    }
+    return
+  }
+  await saveRawReferenceResponse(snapshot, { request: prepared.request, raw, result })
 }
 
 async function writeAnalysisRow(projectId: number, row: ReferenceChunkAnalysis): Promise<void> {

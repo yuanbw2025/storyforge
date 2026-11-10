@@ -634,6 +634,7 @@ export interface AssembleContextInput {
   /** HARNESS-74: trusted version target for reference summary/character derivation. */
   referenceDerivedMode?: 'summary' | 'characters'
   referenceAnalysisRunId?: number
+  referenceAnalysisChunkIndex?: number
   /** HARNESS-76: trusted chapter selection for the registered style-learning baseline. */
   styleLearningChapterIds?: number[]
   /** HARNESS-79: trusted existing story-timeline event for single-record impact remediation. */

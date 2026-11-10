@@ -7,6 +7,8 @@ import type {
   AgentRunRecord,
   AnyAgentRunEventV1,
 } from '../../types'
+import type { TableSpec } from '../../registry/types'
+import { extractExactArtifactOwnerRootsV1 } from '../../memory/artifact-roots'
 import type { ProjectExportData } from '../../export/json-export'
 import { parseAgentRunEventV1 } from './event-schema'
 import { readAgentRunNodeProducerTupleV1, readRecord } from './schema-utils'
@@ -229,6 +231,77 @@ async function portableGenerationHashes(input: {
   input.run.contractJson = latest.contractJson
   input.run.contractHash = latest.contractHash
   return hashes
+}
+
+const PRIVATE_REFERENCE_FORMAL_ENTRY = 'reference.analysis.private-chunk'
+
+/** The registered reference source is local only. Its execution ledger and
+ * exact evidence must also remain local, with no mutation of original rows. */
+export function excludePrivateReferenceExecutionFromBackupV1(
+  rows: Map<string, ExportRow[]>, specs: readonly TableSpec[],
+): void {
+  const root = specs.find(spec => spec.portableData?.kind === 'agent-run-root')
+  if (!root || root.portableData?.kind !== 'agent-run-root') return
+  const contractField = root.portableData.contractField
+  const privateIds = new Set((rows.get(root.name) ?? []).filter(row => {
+    if (typeof row[contractField] !== 'string') return false
+    const value = JSON.parse(row[contractField])
+    return Array.isArray(value?.executionBindings)
+      && value.executionBindings.some((binding: ExportRow) => binding?.formalEntry?.entryId === PRIVATE_REFERENCE_FORMAL_ENTRY)
+  }).map(row => row.id))
+  if (!privateIds.size) return
+  const children = specs.filter(spec => spec.portableData?.kind === 'agent-run-child'
+    && spec.exportRemap?.some(ref => ref.remapVia === root.name))
+  const childByName = new Map(children.map(spec => [spec.name, spec]))
+  const isPrivateRow = (spec: TableSpec, row: ExportRow) => {
+    if (spec.name === root.name) return privateIds.has(row.id)
+    const data = childByName.get(spec.name)?.portableData
+    return data?.kind === 'agent-run-child' && privateIds.has(row[data.parentField])
+  }
+  const identity = (row: ExportRow) => `${row.artifactKind}:${row.contentHash}`
+  const privateArtifacts = new Set<string>()
+  const otherArtifacts = new Set<string>()
+  for (const spec of children) {
+    for (const row of rows.get(spec.name) ?? []) {
+      if (row.type !== 'evidence.artifact.recorded') continue
+      const key = identity(parsePayload(row))
+      const target = isPrivateRow(spec, row) ? privateArtifacts : otherArtifacts
+      target.add(key)
+    }
+  }
+  const at = (value: unknown, path: string[]): boolean => {
+    if (!path.length) return privateIds.has(value)
+    if (!value || typeof value !== 'object') return false
+    const [key, ...rest] = path
+    if (key === '*') return Object.values(value).some(child => at(child, rest))
+    return at((value as Record<string, unknown>)[key], rest)
+  }
+  for (const spec of specs) {
+    for (const [index, row] of (rows.get(spec.name) ?? []).entries()) {
+      if (isPrivateRow(spec, row)) continue
+      for (const ref of spec.exportRemap ?? []) {
+        if (ref.remapVia === root.name && privateIds.has(row[ref.field]))
+          fail(`${spec.name}[${index}].${ref.field} 不能引用本机私有参考分析 Run。`)
+      }
+      for (const ref of spec.exportRefRemap ?? []) {
+        if (ref.kind === 'narrative-source-refs-v1' || ref.remapVia !== root.name || row[ref.field] == null) continue
+        const raw = row[ref.field]
+        const value = typeof raw === 'string' ? JSON.parse(raw) : raw
+        const matching = ref.kind === 'object-array-id' && at(value, ['*', ref.itemField])
+          || ref.kind === 'id-array' && at(value, ['*'])
+          || ref.kind === 'json-id-paths' && ref.paths.some(path => at(value, path.split('.')))
+        if (matching) fail(`${spec.name}[${index}].${ref.field} 不能引用本机私有参考分析 Run。`)
+      }
+      for (const ref of spec.exactArtifactRoots ? extractExactArtifactOwnerRootsV1(row, spec.exactArtifactRoots) : []) {
+        if (privateArtifacts.has(identity(ref))) fail(`${spec.name}[${index}] 引用了本机私有参考分析证据。`)
+      }
+    }
+  }
+  if ([...privateArtifacts].some(key => otherArtifacts.has(key))) fail('本机私有参考分析证据同时被其它 Run 引用。')
+  for (const spec of [root, ...children]) rows.set(spec.name, (rows.get(spec.name) ?? []).filter(row => !isPrivateRow(spec, row)))
+  for (const spec of specs.filter(spec => spec.portableData?.kind === 'exact-run-artifact')) {
+    rows.set(spec.name, (rows.get(spec.name) ?? []).filter(row => !privateArtifacts.has(identity(row))))
+  }
 }
 
 /** Registry export hook: replace every embedded local ID and generation hash. */

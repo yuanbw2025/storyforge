@@ -11,6 +11,8 @@
  * 解析出来的具体数据照常写入 worldviews / characters / outlineNodes 表。
  */
 
+import type { VerificationReceiptV1 } from './agent-run'
+import type { WorkspaceScope } from './world-ownership'
 import type { UnifiedParseResult } from './import-session-data'
 
 /** 导入目标 */
@@ -39,6 +41,14 @@ export interface ChunkState {
   startChar: number
   endChar: number
   charCount: number
+  /** 当前创建入口冻结的确切解析文本摘要；旧档缺失不能自动续跑。 */
+  sourceTextHash?: string
+  /** Local link to the only candidate Run for this frozen source attempt. */
+  durableParse?: {
+    claimKey: string
+    runId: number | null
+    confirmation?: { editedHash: string; receipt: VerificationReceiptV1 }
+  }
   /** 章节/段落标题（如识别到的"第X章"）— 仅展示用 */
   label?: string
   status: ChunkStatus
@@ -61,6 +71,8 @@ export interface ChunkState {
 export interface ImportSession {
   id?: number
   projectId: number
+  /** 新任务创建时确认的落点；旧记录仍可读取，但缺失时不得执行。 */
+  targetScope?: WorkspaceScope
   /** 上传文件名 */
   filename: string
   /** 文件 SHA256（8 位前缀用作 id 显示） */
@@ -83,6 +95,10 @@ export interface ImportSession {
   analysisDepth?: import('./reference').ReferenceAnalysisDepth
   /** 多世界项目导入当前项目时的目标世界；null = 单世界/默认归属 */
   targetWorldGroupId?: number | null
+  /** Original atomically published reference; downstream analysis has its own lifecycle. */
+  publishedReferenceId?: number
+  /** Local claim for starting the published reference analysis from this import. */
+  referenceAnalysisStartedAt?: number
   /** 整体状态 */
   status: ImportSessionStatus
   /** 失败时的终结错误信息 */

@@ -267,6 +267,7 @@ const scannedFiles = [
   'src/lib/character-interaction/consultation-harness.ts',
   // G5-02 creator consultation is a formal durable service rather than a UI
   // hook; keep its literal entry/category binding under the same machine gate.
+  'src/lib/reference-analysis/pipeline.ts',
   'src/lib/open-world/creator-brief.ts',
   // G5-06 Creator Artifact Agent edits are a formal durable service; direct
   // edits share its candidate pipeline but never cross this AI entry.

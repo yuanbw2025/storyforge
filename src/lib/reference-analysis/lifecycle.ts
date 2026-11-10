@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie'
 import { db } from '../db/schema'
+import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { adopt } from '../registry/adopt'
 import type {
   AnalysisDimension,
@@ -19,6 +20,7 @@ import {
   readOwnedRows,
   resolveReadScopeLike,
   resolveScopeLike,
+  scopeTransactionTables,
   stampNewRecord,
 } from '../workspace/scope'
 
@@ -88,10 +90,15 @@ async function pruneOneDisposableRun(referenceId: number, scope: WorkspaceScope)
   if (runs.length < REFERENCE_ANALYSIS_RUN_POLICY.maxRunsPerReference) return true
   const disposable = runs
     .filter(run => run.status === 'failed' || run.status === 'cancelled' || run.status === 'superseded')
-    .sort((a, b) => a.updatedAt - b.updatedAt)[0]
-  if (!disposable?.id) return false
-  await discardReferenceAnalysisRun(disposable.id)
-  return true
+    .sort((a, b) => a.updatedAt - b.updatedAt)
+  for (const row of disposable) {
+    if (!row.id) continue
+    // A prepared or observed Harness attempt is never disposable by age.
+    if ((await localSourceTable().get(row.id))?.durableChunkRunsV1?.length) continue
+    await discardReferenceAnalysisRun(row.id)
+    return true
+  }
+  return false
 }
 
 export interface ReferenceAnalysisFirstStartGuardV1 {
@@ -142,10 +149,18 @@ export async function createReferenceAnalysisRun(
     [...new Set([db.referenceAnalysisRuns, db.referenceAnalysisSources, ...(firstStart?.transactionTables ?? [])])],
     async () => {
       const transaction = Dexie.currentTransaction!
+      let claimedImport = false
       if (firstStart) {
         if (await db.referenceAnalysisRuns.where('referenceId').equals(ref.id!).count() !== 0)
           throw new Error('原参考已有分析版本，请在项目参考查看。')
+        const sessionId = ref.importSessionId
+        const checksImport = sessionId != null && transaction.storeNames.includes(db.importSessions.name)
+        const original = checksImport ? await db.importSessions.get(sessionId) : undefined
         await Dexie.Promise.resolve(firstStart.claimInTransaction())
+        if (original && original.publishedReferenceId === ref.id && original.referenceAnalysisStartedAt == null) {
+          const claimed = await db.importSessions.get(original.id!)
+          claimedImport = claimed?.publishedReferenceId === ref.id && claimed?.referenceAnalysisStartedAt != null
+        }
       }
       const runs = firstStart ? transaction.table<ReferenceAnalysisRun, number>(db.referenceAnalysisRuns.name) : db.referenceAnalysisRuns
       const id = await runs.add(row) as number
@@ -165,6 +180,9 @@ export async function createReferenceAnalysisRun(
           filename: row.sourceFilename,
           fileHash: row.fileHash,
           chunks,
+          ...(input.rightsConfirmed || (input.depth === 'deep' && claimedImport) ? {
+            referencePrivateExecutionV1: input.rightsConfirmed ? 'rights-confirmed' as const : 'import-analysis-only' as const,
+          } : {}),
           createdAt: now,
         }, { owner: 'work' }) as ReferenceAnalysisSource
         const sources = firstStart ? transaction.table<ReferenceAnalysisSource, number>(db.referenceAnalysisSources.name) : db.referenceAnalysisSources
@@ -229,6 +247,91 @@ export async function readReferenceAnalysisChunks(runId: number): Promise<ChunkP
     : undefined
 }
 
+export interface ReferenceChunkRunLinkV1 {
+  chunkIndex: number
+  ordinal: number
+  claimKey: string
+  agentRunId: number | null
+}
+
+type LocalReferenceSource = ReferenceAnalysisSource & {
+  referencePrivateExecutionV1?: 'rights-confirmed' | 'import-analysis-only'
+  durableChunkRunsV1?: ReferenceChunkRunLinkV1[]
+}
+
+function localSourceTable() {
+  return db.table<LocalReferenceSource, number>(db.referenceAnalysisSources.name)
+}
+
+async function hasConfirmedImportChunk(scope: WorkspaceScope, ref: Reference, run: ReferenceAnalysisRun, chunk: ChunkPlan) {
+  if (ref.importSessionId == null || run.sourceKind !== 'unknown' || run.usageScope !== 'analysis-only') return false
+  const session = await db.importSessions.get(ref.importSessionId)
+  if (!session || session.importTarget !== 'reference' || session.analysisDepth !== 'deep' || session.status !== 'done' ||
+    session.referenceAnalysisStartedAt == null || session.publishedReferenceId !== ref.id || session.fileHash !== run.fileHash ||
+    session.projectId !== scope.projectId || session.targetScope?.projectId !== scope.projectId ||
+    session.targetScope.worldId !== scope.worldId || session.targetScope.workId !== scope.workId ||
+    session.totalChunks !== run.expectedChunks || session.chunks.length !== session.totalChunks) return false
+  const original = session.chunks[chunk.index]
+  const link = original?.durableParse
+  const receipt = link?.confirmation?.receipt
+  if (!original || original.status !== 'done' || original.index !== chunk.index ||
+    original.startChar !== chunk.startChar || original.endChar !== chunk.endChar || original.charCount !== chunk.charCount ||
+    link?.runId == null || !receipt || receipt.runId !== link.runId || receipt.verifierSetVersion !== 'document-import-terminal-v1') return false
+  const parser = await db.agentRuns.get(link.runId)
+  if (!parser || parser.projectId !== scope.projectId || parser.workId !== scope.workId ||
+    parser.terminalReceiptHash !== receipt.receiptHash || parser.contractHash !== receipt.contractHash) return false
+  const [sourceHash, validReceipt] = await Dexie.waitFor(Promise.all([
+    sha256Text(chunk.text),
+    import('../agent/run/verification-receipt').then(module => module.verifyVerificationReceiptIntegrityV1(receipt)),
+  ]))
+  return validReceipt && original.sourceTextHash === sourceHash
+}
+
+/** Only the physical Harness link lives on the existing private source.
+ * Attempt state, exact response and usage remain in the Harness event ledger. */
+export async function readReferenceChunkAuthorityV1(scope: WorkspaceScope, runId: number, chunkIndex: number) {
+  const { run, ref, scope: actual } = await requireRun(runId)
+  if (scope.projectId !== actual.projectId || scope.worldId !== actual.worldId || scope.workId !== actual.workId)
+    throw new Error('参考分析不属于当前作品。')
+  const source = await localSourceTable().get(runId)
+  const chunk = source?.chunks.find(row => row.index === chunkIndex)
+  if (!source || source.fileHash !== run.fileHash || !chunk
+    || !await assertRecordInScope(actual, 'referenceAnalysisSources', source, { owner: 'work' }))
+    throw new Error('参考分析原文已变化、丢失或切换作品。')
+  const confirmed = source.referencePrivateExecutionV1 === 'rights-confirmed' && run.rightsConfirmed
+  const importedAnalysisOnly = source.referencePrivateExecutionV1 === 'import-analysis-only' &&
+    await hasConfirmedImportChunk(actual, ref, run, chunk)
+  if (!confirmed && !importedAnalysisOnly)
+    throw new Error('旧版本没有可核实的请求授权，不能续发。请核对后新建分析版本。')
+  const latest = [...(source.durableChunkRunsV1 ?? [])].reverse().find(row => row.chunkIndex === chunkIndex)
+  return { run, ref, scope: actual, source, chunk, latest }
+}
+
+export async function writeReferenceChunkRunLinkV1(
+  scope: WorkspaceScope, runId: number, chunk: ChunkPlan,
+  expected: ReferenceChunkRunLinkV1 | undefined, next: ReferenceChunkRunLinkV1,
+): Promise<void> {
+  const sources = localSourceTable()
+  await db.transaction('rw', scopeTransactionTables(db.referenceAnalysisRuns, db.references, db.importSessions, db.agentRuns, sources), async () => {
+    const current = await readReferenceChunkAuthorityV1(scope, runId, chunk.index)
+    const latest = current.latest
+    if (current.chunk.text !== chunk.text || current.chunk.startChar !== chunk.startChar ||
+      current.chunk.endChar !== chunk.endChar || current.run.status !== 'analyzing' ||
+      latest?.claimKey !== expected?.claimKey || latest?.agentRunId !== expected?.agentRunId || next.chunkIndex !== chunk.index)
+      throw new Error('参考分析来源或请求状态已变化，未重复发送。')
+    const links = [...(current.source.durableChunkRunsV1 ?? [])]
+    if (next.agentRunId === null) {
+      if (next.ordinal !== (latest?.ordinal ?? 0) + 1) throw new Error('参考分析尝试顺序不符。')
+      links.push(next)
+    } else {
+      if (!latest || latest.agentRunId !== null || latest.claimKey !== next.claimKey || latest.ordinal !== next.ordinal)
+        throw new Error('参考分析 Harness 与原请求凭据不匹配。')
+      links[links.findIndex(row => row.claimKey === latest.claimKey)] = next
+    }
+    if (await sources.update(runId, { durableChunkRunsV1: links }) !== 1) throw new Error('参考分析原文已删除。')
+  })
+}
+
 export async function patchReferenceAnalysisRun(
   runId: number,
   changes: Partial<ReferenceAnalysisRun>,
@@ -274,7 +377,8 @@ export async function completeReferenceAnalysisRun(
   }
 
   const active = await getActiveReferenceAnalysisRun(run.referenceId)
-  if (!active) {
+  // The original free import projects already-reviewed techniques. Uploaded model results await activation.
+  if (!active && run.depth === 'quick' && !(await localSourceTable().get(runId))?.referencePrivateExecutionV1) {
     await patchReferenceAnalysisRun(runId, {
       status: 'ready',
       completedChunks,

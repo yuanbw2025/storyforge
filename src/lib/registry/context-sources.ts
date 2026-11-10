@@ -3269,6 +3269,23 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     }),
   },
   {
+    key: 'referenceAnalysisPrivateChunk',
+    label: '已确认的本机参考分析原文块',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 40_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isSafeInteger(input.referenceAnalysisRunId)
+      && Number.isSafeInteger(input.referenceAnalysisChunkIndex),
+    read: async input => {
+      const { readReferenceChunkAuthorityV1 } = await import('../reference-analysis/lifecycle')
+      const { run, chunk } = await readReferenceChunkAuthorityV1(input.scope!, input.referenceAnalysisRunId!, input.referenceAnalysisChunkIndex!)
+      if (run.status !== 'analyzing') throw new Error('参考分析来源未确认或已失效。')
+      return chunk.text
+    },
+  },
+  {
     key: 'referenceDerivedBaseline',
     label: '参考分析派生 Agent 正式输入基线',
     scope: 'project',
