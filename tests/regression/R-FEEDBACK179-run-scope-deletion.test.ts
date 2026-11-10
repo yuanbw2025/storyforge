@@ -47,8 +47,8 @@ function runContract(input: { projectId: number; worldGroupId: number; outlineNo
 
 async function seed() {
  const {scope}=await seedCurrentWorkspace('Issue179 synthetic lifecycle')
- const worldGroupId=await db.worldGroups.add(stampNewRecord(scope,'worldGroups',{name:'Synthetic world',order:0,createdAt:1,updatedAt:1},{owner:'world'})) as number
- const outlineNodeId=await db.outlineNodes.add(stampNewRecord(scope,'outlineNodes',{worldGroupId,parentId:null,type:'volume' as const,title:'Synthetic outline',summary:'',order:0,createdAt:1,updatedAt:1},{owner:'work'})) as number
+ const worldGroupId=await db.worldGroups.add(stampNewRecord(scope,'worldGroups',{projectId:scope.projectId,description:'',type:'custom' as const,name:'Synthetic world',order:0,createdAt:1,updatedAt:1},{owner:'world'})) as number
+ const outlineNodeId=await db.outlineNodes.add(stampNewRecord(scope,'outlineNodes',{projectId:scope.projectId,worldGroupId,parentId:null,type:'volume' as const,title:'Synthetic outline',summary:'',order:0,createdAt:1,updatedAt:1},{owner:'work'})) as number
  const run=await createAgentRunV1({scope,worldGroupId,contract:runContract({projectId:scope.projectId,worldGroupId,outlineNodeId})})
  return {scope,worldGroupId,outlineNodeId,run}
 }
@@ -62,8 +62,8 @@ describe('Issue179 synthetic backup lifecycle investigation',()=>{
   expect(await db.outlineNodes.where('projectId').equals(id).count()).toBe(1)
  })
  it('rejects a foreign world outline at run creation without inserting another run',async()=>{
-  const f=await seed();const g=await db.worldGroups.add(stampNewRecord(f.scope,'worldGroups',{name:'Other group',order:1,createdAt:1,updatedAt:1},{owner:'world'})) as number
-  const foreign=await db.outlineNodes.add(stampNewRecord(f.scope,'outlineNodes',{worldGroupId:g,parentId:null,type:'volume' as const,title:'Foreign outline',summary:'',order:1,createdAt:1,updatedAt:1},{owner:'work'})) as number
+  const f=await seed();const g=await db.worldGroups.add(stampNewRecord(f.scope,'worldGroups',{projectId:f.scope.projectId,description:'',type:'custom' as const,name:'Other group',order:1,createdAt:1,updatedAt:1},{owner:'world'})) as number
+  const foreign=await db.outlineNodes.add(stampNewRecord(f.scope,'outlineNodes',{projectId:f.scope.projectId,worldGroupId:g,parentId:null,type:'volume' as const,title:'Foreign outline',summary:'',order:1,createdAt:1,updatedAt:1},{owner:'work'})) as number
   await expect(createAgentRunV1({scope:f.scope,worldGroupId:f.worldGroupId,contract:runContract({projectId:f.scope.projectId,worldGroupId:f.worldGroupId,outlineNodeId:foreign})})).rejects.toThrow(/世界组/)
   expect(await db.agentRuns.count()).toBe(1)
  })
@@ -78,7 +78,7 @@ describe('Issue179 synthetic backup lifecycle investigation',()=>{
  })
  it('retains a target referenced only by an earlier contract generation',async()=>{
   const f=await seed()
-  const replacement=await db.outlineNodes.add(stampNewRecord(f.scope,'outlineNodes',{worldGroupId:f.worldGroupId,parentId:null,type:'volume' as const,title:'Replacement',summary:'',order:1,createdAt:1,updatedAt:1},{owner:'work'})) as number
+  const replacement=await db.outlineNodes.add(stampNewRecord(f.scope,'outlineNodes',{projectId:f.scope.projectId,worldGroupId:f.worldGroupId,parentId:null,type:'volume' as const,title:'Replacement',summary:'',order:1,createdAt:1,updatedAt:1},{owner:'work'})) as number
   await reviseAgentRunContractV1({scope:f.scope,runId:f.run.run.id!,contract:runContract({projectId:f.scope.projectId,worldGroupId:f.worldGroupId,outlineNodeId:replacement})})
   const before=await db.agentRunEvents.toArray()
   await useOutlineStore.getState().loadAll(f.scope)
@@ -88,7 +88,7 @@ describe('Issue179 synthetic backup lifecycle investigation',()=>{
  })
  it('rejects direct chapter deletion before changing prose or run events',async()=>{
   const f=await seed()
-  const id=await db.chapters.add(stampNewRecord(f.scope,'chapters',{outlineNodeId:f.outlineNodeId,title:'Prose',content:'<p>synthetic prose</p>',wordCount:2,status:'draft' as const,order:0,notes:'',createdAt:1,updatedAt:1},{owner:'work'})) as number
+  const id=await db.chapters.add(stampNewRecord(f.scope,'chapters',{projectId:f.scope.projectId,outlineNodeId:f.outlineNodeId,title:'Prose',content:'<p>synthetic prose</p>',wordCount:2,status:'draft' as const,order:0,notes:'',createdAt:1,updatedAt:1},{owner:'work'})) as number
   const c=runContract({projectId:f.scope.projectId,worldGroupId:f.worldGroupId,outlineNodeId:f.outlineNodeId})
   await reviseAgentRunContractV1({scope:f.scope,runId:f.run.run.id!,contract:{...c,scope:{...c.scope,chapterIds:[id]}}})
   const before=await db.chapters.toArray();const events=await db.agentRunEvents.toArray()
@@ -98,7 +98,7 @@ describe('Issue179 synthetic backup lifecycle investigation',()=>{
  })
  it('rolls back the whole mixed deletion batch and leaves the UI cache intact',async()=>{
   const f=await seed()
-  const unused=await db.outlineNodes.add(stampNewRecord(f.scope,'outlineNodes',{worldGroupId:f.worldGroupId,parentId:null,type:'volume' as const,title:'Unused',summary:'',order:1,createdAt:1,updatedAt:1},{owner:'work'})) as number
+  const unused=await db.outlineNodes.add(stampNewRecord(f.scope,'outlineNodes',{projectId:f.scope.projectId,worldGroupId:f.worldGroupId,parentId:null,type:'volume' as const,title:'Unused',summary:'',order:1,createdAt:1,updatedAt:1},{owner:'work'})) as number
   await useOutlineStore.getState().loadAll(f.scope)
   const before=await db.outlineNodes.toArray();const cache=structuredClone(useOutlineStore.getState().nodes)
   await expect(useOutlineStore.getState().deleteNodes([unused,f.outlineNodeId],f.scope)).rejects.toThrow('仍被运行历史引用')
@@ -106,7 +106,7 @@ describe('Issue179 synthetic backup lifecycle investigation',()=>{
  })
  it('still deletes an unreferenced outline with other run history present',async()=>{
   const f=await seed()
-  const unused=await db.outlineNodes.add(stampNewRecord(f.scope,'outlineNodes',{worldGroupId:f.worldGroupId,parentId:null,type:'volume' as const,title:'Unused',summary:'',order:1,createdAt:1,updatedAt:1},{owner:'work'})) as number
+  const unused=await db.outlineNodes.add(stampNewRecord(f.scope,'outlineNodes',{projectId:f.scope.projectId,worldGroupId:f.worldGroupId,parentId:null,type:'volume' as const,title:'Unused',summary:'',order:1,createdAt:1,updatedAt:1},{owner:'work'})) as number
   await useOutlineStore.getState().loadAll(f.scope);await useOutlineStore.getState().deleteNode(unused,f.scope)
   expect(await db.outlineNodes.get(unused)).toBeUndefined();await exportProjectJSON(f.scope.projectId)
  })
@@ -116,7 +116,7 @@ describe('Issue179 synthetic backup lifecycle investigation',()=>{
  })
  it('fails closed on malformed history without mutating the deletion batch',async()=>{
   const f=await seed()
-  const unused=await db.outlineNodes.add(stampNewRecord(f.scope,'outlineNodes',{worldGroupId:f.worldGroupId,parentId:null,type:'volume' as const,title:'Unused',summary:'',order:1,createdAt:1,updatedAt:1},{owner:'work'})) as number
+  const unused=await db.outlineNodes.add(stampNewRecord(f.scope,'outlineNodes',{projectId:f.scope.projectId,worldGroupId:f.worldGroupId,parentId:null,type:'volume' as const,title:'Unused',summary:'',order:1,createdAt:1,updatedAt:1},{owner:'work'})) as number
   const event=(await db.agentRunEvents.where('runId').equals(f.run.run.id!).toArray()).find(row=>row.type==='contract.accepted')
   await db.agentRunEvents.update(event!.id!,{payloadJson:'invalid'})
   await useOutlineStore.getState().loadAll(f.scope);const before=await db.outlineNodes.toArray()
@@ -128,11 +128,11 @@ describe('Issue179 synthetic backup lifecycle investigation',()=>{
   const f=await seed()
   const otherId=await db.works.add(currentWorkFixtureRecordV1({projectId:f.scope.projectId,worldId:f.scope.worldId,title:'Other Work'})) as number
   const otherScope={...f.scope,workId:otherId}
-  const otherNode=await db.outlineNodes.add(stampNewRecord(otherScope,'outlineNodes',{worldGroupId:f.worldGroupId,parentId:null,type:'volume' as const,title:'Other Work outline',summary:'',order:1,createdAt:1,updatedAt:1},{owner:'work'})) as number
+  const otherNode=await db.outlineNodes.add(stampNewRecord(otherScope,'outlineNodes',{projectId:otherScope.projectId,worldGroupId:f.worldGroupId,parentId:null,type:'volume' as const,title:'Other Work outline',summary:'',order:1,createdAt:1,updatedAt:1},{owner:'work'})) as number
   const otherRun=await createAgentRunV1({scope:otherScope,worldGroupId:f.worldGroupId,contract:runContract({projectId:f.scope.projectId,worldGroupId:f.worldGroupId,outlineNodeId:otherNode})})
   await db.agentRuns.update(otherRun.run.id!,{contractJson:'invalid'})
   const before=await db.agentRuns.get(otherRun.run.id!)
-  const unused=await db.outlineNodes.add(stampNewRecord(f.scope,'outlineNodes',{worldGroupId:f.worldGroupId,parentId:null,type:'volume' as const,title:'Unused own outline',summary:'',order:2,createdAt:1,updatedAt:1},{owner:'work'})) as number
+  const unused=await db.outlineNodes.add(stampNewRecord(f.scope,'outlineNodes',{projectId:f.scope.projectId,worldGroupId:f.worldGroupId,parentId:null,type:'volume' as const,title:'Unused own outline',summary:'',order:2,createdAt:1,updatedAt:1},{owner:'work'})) as number
   await useOutlineStore.getState().loadAll(f.scope)
   await useOutlineStore.getState().deleteNode(unused,f.scope)
   expect(await db.outlineNodes.get(unused)).toBeUndefined()
