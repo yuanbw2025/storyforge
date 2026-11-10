@@ -2,6 +2,11 @@
 
 AI generation requires your own model service. You can begin with manual writing and built-in works that need no API.
 
+
+## Configuration identity and embedding results
+
+Credentials follow the saved provider-configuration identity. Recheck the selected provider and model after switching or updating a configuration. Embedding responses with invalid indices or vector shapes are rejected before caching, with an error available for inspection. Check the embedding configuration and service response before continuing retrieval. See [#255](https://github.com/yuanbw2025/storyforge/pull/255) and [#256](https://github.com/yuanbw2025/storyforge/pull/256).
+
 ## First configuration
 
 1. Open “Models and local settings” (模型与本地设置) at the top right of Home, or “General settings” (通用设置) within a product.

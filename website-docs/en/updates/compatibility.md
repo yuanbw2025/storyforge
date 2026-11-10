@@ -1,6 +1,11 @@
 # Versions, upgrades, and data compatibility
 
 
+
+## Main after v4.0.5
+
+The formal stable release remains v4.0.5. Quality repairs #255/#256 and community sharing #234 are merged into main after the v4.0.5 tag `4dd8a4a1`. Database v13 and complete backup v17 still apply. The v4.0.6 release candidate [#268](https://github.com/yuanbw2025/storyforge/pull/268) remains pending merge. Publication dates follow actual formal releases.
+
 ## Formal v4.0.5
 
 [**v4.0.5**](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.5) was formally published on **October 30, 2026 at 13:15 UTC**, at tagged source `4dd8a4a1c9b6ef49924520c65cff5fb652f123c5` (the Release target field is `ae765da8`; both have the same code tree). It includes longform saving/load recovery #215, chapter encyclopedia-reference protection #231 and merged model-configuration, chapter-instruction and interactive-product changes. Product preview labels remain. Database v13 and complete backup v17 apply. Export complete JSON from the original environment before upgrading; do not uninstall or clear data. Choose Windows EXE, Mac ARM/Intel DMG, the formal Android APK or one of four portable ZIP targets. The release has 11 assets including update metadata, a blockmap and SHA256SUMS.txt.
@@ -9,7 +14,7 @@ Source-capability binding, repeated-quote detection and checker repairs in [#246
 
 ## Which version these docs describe
 
-This incremental review covers **November 3, 2026, main baseline 054d8a06**, checking user-visible changes since successful maintenance baseline `a3317feb`. Product status follows each product guide.
+This incremental review covers **November 10, 2026, main baseline 1304d29a**, checking user-visible changes since successful maintenance baseline `79c022c5`. Product status follows each product guide.
 
 The historical formal release [**v4.0.4**](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.4), published on **October 23, 2026 at 03:17 UTC**, at fixed source `d90961a2`. It delivers the large run-contract save and recovery repair in [PR #185](https://github.com/yuanbw2025/storyforge/pull/185), with [release preparation PR #190](https://github.com/yuanbw2025/storyforge/pull/190) merged. Contracts and event snapshots share a finite 32 MiB UTF-8 record budget and retain full snapshots. Oversized records are still explicitly rejected; model budgets, candidate adoption, permissions and stale checks remain, with no database migration. The independent release passed full production/browser checks, all clients and four portable startup targets, plus upgrades from formal v4.0.3. Android retains four-stage verification including the old-package restart baseline, new-package restore and final restart. Export a complete backup before upgrading, as described below.
 

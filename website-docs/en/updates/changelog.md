@@ -1,6 +1,13 @@
 # Changelog
 
 
+
+## November 10, 2026 · Community submissions and quality repairs
+
+Community sharing [#234](https://github.com/yuanbw2025/storyforge/pull/234) merged as `b1a4bf65`. Select novel or existing work-analysis content, inspect the exact public preview, confirm rights and submit. See [sharing steps](/en/features/longform/references#sharing-novels-and-book-analysis-publicly) for review status, withdrawal and appeals.
+
+[#255](https://github.com/yuanbw2025/storyforge/pull/255) and [#256](https://github.com/yuanbw2025/storyforge/pull/256) merged as `924d3f37` and `79e30c69`. They add interrupted-save/adoption recovery, node field versions, failed comic/motion-drama tasks, root-level chapter exports and deletion protection after cancelling backup. Open-world production from a novel first derives and seals a world draft. TTRPG room cancellation/timeouts, embedding-response validation, duplicate history-generation prevention, map zoom precision and preservation of newer feedback edits are also updated. Product guides cover the workflows. See [development status](/en/updates/development-status) for pending follow-ups.
+
 ## November 3, 2026 · Formal release and continuity evidence
 
 - Formal v4.0.5 was published on October 30, including editing recovery, chapter instructions, model configuration and merged product updates. See [compatibility](/en/updates/compatibility) for downloads, fixed source and data formats. Export a complete backup before updating in the original data environment.
