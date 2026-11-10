@@ -47,9 +47,11 @@ import type {
 import { assertRecordInScope, readOwnedRows, scopeTransactionTables } from '../workspace/scope'
 import { DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1 } from './product-config'
 import { assertTextOpenWorldNewSourceV1 } from './source-admission'
+import { assertTextOpenWorldCreatorProtagonistSelectionV1 } from './creator-source'
 import {
   createTextOpenWorldCreatorSourceLocatorV1,
   inspectTextOpenWorldCreatorSourceLocatorV1,
+  readTextOpenWorldCreatorProtagonistSourceKeyV1,
   TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1,
   TEXT_OPEN_WORLD_CREATOR_BRIEF_VERIFIER_V1,
   TEXT_OPEN_WORLD_CREATOR_PRODUCT_BOUNDARY_V1,
@@ -203,8 +205,10 @@ function rangeValue(value: unknown, label: string, minimum: number, maximum: num
 
 export function parseTextOpenWorldCreatorBriefDraftV1(value: unknown): TextOpenWorldCreatorBriefDraftV1 {
   const root = record(value, 'creatorBriefDraft')
+  const protagonistSourceResourceKey = readTextOpenWorldCreatorProtagonistSourceKeyV1(root)
   exact(root, [
     'schema', 'version', 'gameTitle', 'playerRole', 'playerFantasy', 'protagonistMode',
+    ...(protagonistSourceResourceKey === undefined ? [] : ['protagonistSourceResourceKey']),
     'protagonistDirective', 'coreGoal', 'primaryConflict', 'openingSituation',
     'experiencePillars', 'toneKeywords', 'mustKeep', 'allowedInferences', 'forbiddenChanges',
     'contentRating', 'contentBoundaries', 'authorNotes', 'unresolvedQuestions',
@@ -246,6 +250,7 @@ export function parseTextOpenWorldCreatorBriefDraftV1(value: unknown): TextOpenW
     playerRole: textValue(root.playerRole, 'playerRole', 2_000),
     playerFantasy: textValue(root.playerFantasy, 'playerFantasy', 2_000),
     protagonistMode,
+    ...(protagonistSourceResourceKey === undefined ? {} : { protagonistSourceResourceKey }),
     protagonistDirective: textValue(root.protagonistDirective, 'protagonistDirective', 2_000),
     coreGoal: textValue(root.coreGoal, 'coreGoal', 2_000),
     primaryConflict: textValue(root.primaryConflict, 'primaryConflict', 2_000),
@@ -1208,6 +1213,8 @@ export async function confirmTextOpenWorldCreatorBriefV1(input: {
   if (await hashCanonicalValue(selectionBinding(selection)) !== input.session.sourceBindingHash) {
     fail('source-stale', '来源已变化，请重新选择并重新会谈')
   }
+  await assertTextOpenWorldCreatorProtagonistSelectionV1({ selection, mode: draft.protagonistMode,
+    resourceKey: draft.protagonistSourceResourceKey })
   let snapshot: AgentRunSnapshotV1
   let previousCandidateHash: string
   let contextManifestHashes: string[]

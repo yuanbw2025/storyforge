@@ -55898,51 +55898,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD5-creator-quality.test.ts\",\"TS2322\",\"Type '\\\"ending.fixture\\\"' is not assignable to type 'null'.\",\"0186a1e24fb6909c8ceb73582498cd9523a523069c7c713a3201d318bb213da2\",5,51]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-OPEN-WORLD5-creator-quality.test.ts",
-        "code": "TS2322",
-        "message": "Type '\"ending.fixture\"' is not assignable to type 'null'.",
-        "anchor": "0186a1e24fb6909c8ceb73582498cd9523a523069c7c713a3201d318bb213da2",
-        "line": 677,
-        "column": 5,
-        "start": 35957,
-        "length": 51
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD5-creator-quality.test.ts\",\"TS2322\",\"Type 'string' is not assignable to type 'null'.\",\"1e00d430bd34e05de12e75e547eda97b940c525f298e5a8f4fce473ad01e8446\",3,51]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-OPEN-WORLD5-creator-quality.test.ts",
-        "code": "TS2322",
-        "message": "Type 'string' is not assignable to type 'null'.",
-        "anchor": "1e00d430bd34e05de12e75e547eda97b940c525f298e5a8f4fce473ad01e8446",
-        "line": 437,
-        "column": 3,
-        "start": 23461,
-        "length": 51
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD5-creator-quality.test.ts\",\"TS2550\",\"Property 'at' does not exist on type 'string[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.\",\"fe7dc3e1dd039b872a90e251a80816d2bc19e73b6782d79fa5cd08ed0f68b00b\",69,2]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-OPEN-WORLD5-creator-quality.test.ts",
-        "code": "TS2550",
-        "message": "Property 'at' does not exist on type 'string[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
-        "anchor": "fe7dc3e1dd039b872a90e251a80816d2bc19e73b6782d79fa5cd08ed0f68b00b",
-        "line": 980,
-        "column": 69,
-        "start": 52013,
-        "length": 2
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD5-creator-release-ui.test.tsx\",\"TS7017\",\"Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.\",\"1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee\",12,24]",
       "count": 1,
       "diagnostic": {

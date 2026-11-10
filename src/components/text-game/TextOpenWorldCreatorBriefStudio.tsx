@@ -21,6 +21,7 @@ import {
   TEXT_OPEN_WORLD_CREATOR_PRODUCT_BOUNDARY_V1,
   type TextOpenWorldCreatorBriefSessionV1,
 } from '../../lib/open-world/creator-brief'
+import { listTextOpenWorldCreatorProtagonistChoicesV1 } from '../../lib/open-world/creator-source'
 import { describeTextOpenWorldProviderFailureV1 } from '../../lib/open-world/creator-production-preflight'
 import type {
   TextOpenWorldCreatorBriefDraftV1,
@@ -126,6 +127,11 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
   const aiConfig = useAIConfigStore(state => state.config)
   const [session, setSession] = useState<TextOpenWorldCreatorBriefSessionV1 | null>(props.initialSession ?? null)
   const [draft, setDraft] = useState<TextOpenWorldCreatorBriefDraftV1 | null>(props.initialSession?.draft ?? null)
+  const [roleChoices, setRoleChoices] = useState<{
+    referenceHash: string
+    options: Awaited<ReturnType<typeof listTextOpenWorldCreatorProtagonistChoicesV1>>
+    error?: string
+  } | null>(null)
   const [followUp, setFollowUp] = useState('')
   const [busy, setBusy] = useState<BusyAction>(props.initialSession ? null : 'opening')
   const [error, setError] = useState('')
@@ -172,15 +178,43 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
   }, [props.initialSession, props.selection, readOnly])
 
   const endingCountReady = draft != null && isTextOpenWorldCreatorEndingCountV1(draft.scale.endings)
+  const selectedSource = session?.selection
+  const sourceCharacterMode = draft?.protagonistMode === 'source-character'
+  const sourceReferenceHash = selectedSource?.sourceKind === 'world-release'
+    ? selectedSource.preview.worldReference.referenceHash : null
+  useEffect(() => {
+    if (!sourceCharacterMode || !selectedSource || !sourceReferenceHash || readOnly) return
+    let cancelled = false
+    void listTextOpenWorldCreatorProtagonistChoicesV1(selectedSource).then(options => {
+      if (!cancelled) setRoleChoices({ referenceHash: sourceReferenceHash, options })
+    }).catch(cause => {
+      if (!cancelled) setRoleChoices({ referenceHash: sourceReferenceHash, options: [],
+        error: errorMessage(cause, '无法读取当前封存角色。') })
+    })
+    return () => { cancelled = true }
+  }, [readOnly, selectedSource, sourceCharacterMode, sourceReferenceHash])
+  const currentRoleChoices = roleChoices?.referenceHash === sourceReferenceHash ? roleChoices : null
+  const protagonistSelectionReady = !sourceCharacterMode ||
+    Boolean(currentRoleChoices?.options.some(item => item.resourceKey === draft?.protagonistSourceResourceKey))
+
   const allAcknowledged = Object.values(acknowledgements).every(Boolean)
   const canConfirm = Boolean(!readOnly && session && draft && !session.sourceIssue
-    && endingCountReady && draft.unresolvedQuestions.length === 0 && allAcknowledged && !busy)
+    && endingCountReady && protagonistSelectionReady && draft.unresolvedQuestions.length === 0 && allAcknowledged && !busy)
   const canContinue = Boolean(!readOnly && session?.confirmedBrief && draft && !busy && !session.sourceIssue
-    && endingCountReady && session.production.status === 'brief-ready'
+    && endingCountReady && protagonistSelectionReady && session.production.status === 'brief-ready'
     && canonicalStringify(draft) === canonicalStringify(session.confirmedBrief.draft))
   const sourceLabel = session?.sourceSummary.label ?? '正在读取来源…'
   const hasAI = isAIConfigReady(aiConfig)
   const fixedBoundary = useMemo(() => Object.entries(TEXT_OPEN_WORLD_CREATOR_PRODUCT_BOUNDARY_V1), [])
+
+  const updateProtagonist = (mode: TextOpenWorldCreatorBriefDraftV1['protagonistMode'], key?: string) => {
+    setDraft(current => {
+      if (!current) return current
+      const { protagonistSourceResourceKey: _previous, ...rest } = current
+      return { ...rest, protagonistMode: mode,
+        ...(mode === 'source-character' && key ? { protagonistSourceResourceKey: key } : {}) }
+    })
+  }
 
   const updateDraft = (patch: Partial<TextOpenWorldCreatorBriefDraftV1>) => {
     setDraft(current => current ? { ...current, ...patch } : current)
@@ -308,11 +342,30 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
           <span className="text-xs font-medium">主角来源</span>
           <select id="tow-protagonist-mode" value={draft.protagonistMode}
             className="w-full rounded-lg border border-border bg-bg-base px-3 py-2 text-sm"
-            onChange={event => updateDraft({ protagonistMode: event.target.value as TextOpenWorldCreatorBriefDraftV1['protagonistMode'] })}>
+            onChange={event => updateProtagonist(event.target.value as TextOpenWorldCreatorBriefDraftV1['protagonistMode'])}>
             <option value="author-defined">用户自己设定</option>
             <option value="source-character">从来源角色中选择</option>
           </select>
         </label>
+        {sourceCharacterMode && <label className="block space-y-1.5" htmlFor="tow-protagonist-resource">
+          <span className="text-xs font-medium">封存角色</span>
+          <select id="tow-protagonist-resource" value={draft.protagonistSourceResourceKey ?? ''}
+            disabled={!currentRoleChoices?.options.length}
+            className="w-full rounded-lg border border-border bg-bg-base px-3 py-2 text-sm"
+            onChange={event => updateProtagonist('source-character', event.target.value)}>
+            <option value="">{currentRoleChoices ? '请选择一名已封存角色' : readOnly
+              ? (draft.protagonistSourceResourceKey ?? '旧记录没有明确的封存角色') : '正在核对封存角色…'}</option>
+            {readOnly && draft.protagonistSourceResourceKey && <option value={draft.protagonistSourceResourceKey}>
+              {draft.protagonistSourceResourceKey}
+            </option>}
+            {currentRoleChoices?.options.map(option => <option key={option.resourceKey} value={option.resourceKey}>
+              {option.label}
+            </option>)}
+          </select>
+          {currentRoleChoices?.error && <span role="alert" className="block text-xs text-danger">{currentRoleChoices.error}</span>}
+          {currentRoleChoices && !currentRoleChoices.error && currentRoleChoices.options.length === 0 &&
+            <span className="block text-xs text-text-muted">当前封存来源没有可用角色。请选择原创主角，或更换封存来源。</span>}
+        </label>}
         <TextField id="tow-player-role" label="玩家扮演谁" value={draft.playerRole} multiline onChange={playerRole => updateDraft({ playerRole })} />
         <TextField id="tow-protagonist" label="主角设定约束" value={draft.protagonistDirective} multiline onChange={protagonistDirective => updateDraft({ protagonistDirective })} />
         <TextField id="tow-fantasy" label="玩家幻想 / 核心感受" value={draft.playerFantasy} multiline onChange={playerFantasy => updateDraft({ playerFantasy })} />
