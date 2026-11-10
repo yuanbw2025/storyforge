@@ -100,6 +100,7 @@ export async function writeShallowAnalysisFromTechniques(
   refId: number,
   wt: import('../types').WritingTechniques | undefined,
   source?: { filename?: string; fileHash?: string; totalChars?: number },
+  firstStart?: import('./lifecycle').ReferenceAnalysisFirstStartGuardV1,
 ): Promise<void> {
   const ref = await db.references.get(refId)
   if (!ref) throw new Error(`参考 #${refId} 不存在`)
@@ -114,7 +115,7 @@ export async function writeShallowAnalysisFromTechniques(
     usageScope: 'analysis-only',
     rightsNote: '由项目导入解析生成；尚未在版本面板补充来源声明',
     rightsConfirmed: false,
-  })
+  }, firstStart)
   const w = wt || {}
   const hasAny = Object.values(w).some(v => typeof v === 'string' && v.trim())
   if (hasAny) {

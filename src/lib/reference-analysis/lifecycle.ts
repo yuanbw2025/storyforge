@@ -1,3 +1,4 @@
+import Dexie, { type Table } from 'dexie'
 import { db } from '../db/schema'
 import { adopt } from '../registry/adopt'
 import type {
@@ -93,18 +94,25 @@ async function pruneOneDisposableRun(referenceId: number, scope: WorkspaceScope)
   return true
 }
 
+export interface ReferenceAnalysisFirstStartGuardV1 {
+  /** Tables needed to validate and record the original author's first-start claim. */
+  transactionTables: readonly Table[]
+  claimInTransaction: () => Promise<void>
+}
+
 export async function createReferenceAnalysisRun(
   input: CreateReferenceAnalysisRunInput,
+  firstStart?: ReferenceAnalysisFirstStartGuardV1,
 ): Promise<ReferenceAnalysisRun> {
   const { ref, scope } = await requireReference(input.referenceId)
   if (!input.sourceFilename.trim()) throw new Error('来源文件名不能为空')
   if (!input.fileHash.trim()) throw new Error('来源文件哈希不能为空')
   if (input.totalChars <= 0 || input.expectedChunks <= 0) throw new Error('来源文本或分块计划为空')
-  if (!await pruneOneDisposableRun(ref.id!, scope)) {
+  if (!firstStart && !await pruneOneDisposableRun(ref.id!, scope)) {
     throw new Error(`每份参考最多保留 ${REFERENCE_ANALYSIS_RUN_POLICY.maxRunsPerReference} 个版本，请先删除未使用版本`)
   }
 
-  const existing = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
+  const existing = firstStart ? [] : (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
     .filter(run => run.referenceId === ref.id)
   const version = Math.max(0, ...existing.map(run => run.version)) + 1
   const now = Date.now()
@@ -131,10 +139,16 @@ export async function createReferenceAnalysisRun(
 
   const runId = await db.transaction(
     'rw',
-    db.referenceAnalysisRuns,
-    db.referenceAnalysisSources,
+    [...new Set([db.referenceAnalysisRuns, db.referenceAnalysisSources, ...(firstStart?.transactionTables ?? [])])],
     async () => {
-      const id = await db.referenceAnalysisRuns.add(row) as number
+      const transaction = Dexie.currentTransaction!
+      if (firstStart) {
+        if (await db.referenceAnalysisRuns.where('referenceId').equals(ref.id!).count() !== 0)
+          throw new Error('原参考已有分析版本，请在项目参考查看。')
+        await Dexie.Promise.resolve(firstStart.claimInTransaction())
+      }
+      const runs = firstStart ? transaction.table<ReferenceAnalysisRun, number>(db.referenceAnalysisRuns.name) : db.referenceAnalysisRuns
+      const id = await runs.add(row) as number
       if (input.sourceText != null || input.sourceChunks?.length) {
         const chunks = input.sourceChunks?.length
           ? input.sourceChunks
@@ -153,7 +167,8 @@ export async function createReferenceAnalysisRun(
           chunks,
           createdAt: now,
         }, { owner: 'work' }) as ReferenceAnalysisSource
-        await db.referenceAnalysisSources.put(source)
+        const sources = firstStart ? transaction.table<ReferenceAnalysisSource, number>(db.referenceAnalysisSources.name) : db.referenceAnalysisSources
+        await sources.put(source)
       }
       return id
     },
