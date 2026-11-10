@@ -1053,10 +1053,11 @@ async function reviseIdleAuthoringCandidate(input: Parameters<typeof reviseAutho
     if (original.status === 'running' || frozen.status === 'adopted' || frozen.status === 'rejected') throw new Error('候选不存在、正在执行或已处理。')
     const node = parseAuthoringGraph(original.graphSnapshotJson ?? flow.graphJson).nodes.find(row => row.id === input.nodeId)
     if (!node) throw new Error('修订节点证据缺失。')
+    await assertAuthoringWorkProductEntryV1(scope)
     await rejectQualityAuthoringRevisionV1({ projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null, node, domain: frozen.domain })
   }
   return db.transaction('rw', fieldRead ? scopeTransactionTables(db.nodeRuns, db.nodeFlows,
-    db.agentRuns, db.agentRunEvents, db.agentRunArtifacts, db.agentRunCheckpoints) : [db.nodeRuns], async () => {
+    db.agentRuns, db.agentRunEvents, db.agentRunArtifacts, db.agentRunCheckpoints) : [db.nodeRuns, db.works], async () => {
     if (fieldRead) await fieldRead.assertCurrent()
     const run = await db.nodeRuns.get(input.runId)
     if (!run || run.flowId !== input.flow.id || !await assertRecordInScope(scope, 'nodeRuns', run, { owner: 'work' })) throw new Error('候选运行不存在或不属于当前作品。')

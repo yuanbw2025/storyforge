@@ -36,7 +36,7 @@ import { seedChatConsultationFixtureV2 } from '../helpers/chat-consultation'
 import { useNodeFlowStore } from '../../src/stores/node-flow'
 import { emptyAuthoringGraph, type AuthoringNodeGraph } from '../../src/lib/node-authoring/contracts'
 import { AUTHORING_NODE_BY_ID, defaultConfigForTemplate } from '../../src/lib/node-authoring/catalog'
-import { runAuthoringGraph, adoptAuthoringCandidate, recoverInterruptedAuthoringRun } from '../../src/lib/node-authoring/executor'
+import { runAuthoringGraph, adoptAuthoringCandidate, reviseAuthoringCandidate, recoverInterruptedAuthoringRun } from '../../src/lib/node-authoring/executor'
 import { createQualityNodeFieldFlow, qualityNodeFieldRaw } from '../helpers/quality002-node-field'
 import { generateTtrpgCampaignProposalCandidateV2 } from '../../src/lib/ttrpg/campaign-proposal-harness'
 import { generateTtrpgOpenAuthoringDesignCandidateV1 } from '../../src/lib/ttrpg/open-authoring-design-harness'
@@ -332,6 +332,28 @@ describe('SFQA004 · real authoring and production boundaries', () => {
     expect(await db.nodeRuns.count()).toBe(1)
     expect(fetch).not.toHaveBeenCalled()
   }, 30_000)
+
+  it('candidate revision and rejection use the stored Work gate and persist only an authorized decision', async () => {
+    sfqa004ChannelV1('local-development')
+    const owner = await createWorkspace(sfqa004WorkspaceInputV1(), { kind: 'character-interaction' })
+    const id = await useNodeFlowStore.getState().createFlow(owner.scope.projectId, null, { graph: manualNodeGraph() })
+    const flow = (await db.nodeFlows.get(id))!
+    const generated = await runAuthoringGraph({ flow })
+    const input = { flow, scope: owner.scope, nodeId: 'manual', runId: generated.run.id! }
+    const stored = await db.nodeRuns.get(input.runId)
+    sfqa004ChannelV1('production')
+    await expect(reviseAuthoringCandidate({ ...input, reject: true })).rejects.toThrow('product-catalog')
+    await expect(reviseAuthoringCandidate({ ...input, output: '未获准的修改' })).rejects.toThrow('product-catalog')
+    expect(await db.nodeRuns.get(input.runId)).toEqual(stored)
+    sfqa004ChannelV1('local-development')
+    await reviseAuthoringCandidate({ ...input, output: '作者修订' })
+    const draft = await db.nodeRuns.get(input.runId)
+    expect(JSON.parse(draft!.nodeResultsJson).manual).toMatchObject({ output: '作者修订', status: 'draft' })
+    await reviseAuthoringCandidate({ ...input, reject: true })
+    const saved = await db.nodeRuns.get(input.runId)
+    expect(JSON.parse(saved!.nodeResultsJson).manual).toMatchObject({ output: '作者修订', status: 'rejected' })
+    expect(fetch).not.toHaveBeenCalled()
+  })
 
   it('released longform uses the shared engine and original formal receipt in production without inheriting Node UI preview denial', async () => {
     sfqa004ChannelV1('local-development')
