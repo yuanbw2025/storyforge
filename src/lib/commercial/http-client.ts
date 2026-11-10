@@ -246,7 +246,7 @@ export class CommercialHttpClientV1 {
 
   constructor(input: { baseUrl: string; fetch?: FetchV1; timeoutMs?: number }) {
     this.baseUrl = normalizedBaseUrl(input.baseUrl)
-    this.fetchImpl = input.fetch ?? (globalThis.fetch as unknown as FetchV1)
+    this.fetchImpl = input.fetch ?? globalThis.fetch?.bind(globalThis)
     this.timeoutMs = input.timeoutMs ?? 30_000
     if (typeof this.fetchImpl !== 'function' || !Number.isInteger(this.timeoutMs)
       || this.timeoutMs < 100 || this.timeoutMs > 300_000) fail('configuration', '市场 HTTP 配置无效')
