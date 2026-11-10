@@ -20,3 +20,6 @@ Choose a product by your goal, then read its guide. Each covers entry points, pr
 ## Shared capabilities
 
 [Local memory workspace](/en/features/memory-workspace) · [AI candidates and recovery](/en/guides/ai-workflow) · [Current capabilities](/en/features/current-capabilities)
+
+
+Authors can submit selected novel or existing work-analysis content to the community after preview and explicit publication confirmation. See [public sharing](/en/features/longform/references#sharing-novels-and-book-analysis-publicly).
