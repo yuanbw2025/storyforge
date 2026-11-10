@@ -9,6 +9,8 @@ import { useActiveWork } from '../../hooks/useActiveWork'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { coordinatePendingEditV1, flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 import { db } from '../../lib/db/schema'
+import { communityClientConfig } from '../../lib/community-works/client'
+import NovelSharePanel from '../community-works/NovelSharePanel'
 
 // 按 group 分组
 const GENRE_GROUPS = Array.from(
@@ -41,6 +43,7 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
   const [error, setError] = useState('')
   const [modeSaving, setModeSaving] = useState(false)
   const [modeError, setModeError] = useState('')
+  const [showCommunityShare, setShowCommunityShare] = useState(false)
   const modeBusy = useRef(false)
   const projectIdRef = useRef(project.id)
   projectIdRef.current = project.id
@@ -307,6 +310,17 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
           </p>
         </div>
       </fieldset>
+      {communityClientConfig() && activeWork?.kind === 'novel' && activeWork.worldId && project.id && activeWork.id && <>
+        <div className="mt-6 pt-5 border-t border-border">
+          <button type="button" className="px-4 py-2 bg-accent text-white rounded-lg text-sm" onClick={() => {
+            void flushPendingEditsV1().then(() => setShowCommunityShare(true))
+              .catch(cause => setError(cause instanceof Error ? cause.message : '未能保存当前修改'))
+          }}>分享至社区作品集</button>
+        </div>
+        {showCommunityShare && <NovelSharePanel key={`${project.id}:${activeWork.id}`}
+          scope={{ projectId: project.id, worldId: activeWork.worldId, workId: activeWork.id }}
+          onClose={() => setShowCommunityShare(false)} />}
+      </>}
     </div>
   )
 }

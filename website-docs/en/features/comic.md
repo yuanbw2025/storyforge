@@ -7,6 +7,11 @@ lastVerified: 2026-09-20
 
 Turn a novel into a comic script, pagination, panels, images, and lettering. Entry: Comic → Library (漫画 → 作品库); select or create an adaptation, then enter Comic production (漫画制作台).
 
+
+## After a task fails or the page reloads
+
+Check task-list states such as failed, paused, recovering or requiring verification, and inspect the original task evidence. Recover an available saved candidate, review it and explicitly adopt it. Preserve the record when the original request result is unknown. Explicitly starting a new request creates a separate call that may incur charges. A failed recovery read keeps the error available for another inspection. See [PR #255](https://github.com/yuanbw2025/storyforge/pull/255).
+
 ## Watch a motion-comic sample
 
 Open **The Last Letter (末班来信)** from Comic → Library or Home → Example works → Comic. The 50-second sample plays with sound in a new tab without model configuration. It supports play, pause, seeking, replay, volume, fullscreen, and a still-frame comparison. Landscape viewing with headphones is recommended. Return to the comic examples to read the existing four complete page comics.

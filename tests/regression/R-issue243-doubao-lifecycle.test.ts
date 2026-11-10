@@ -30,8 +30,11 @@ describe('issue243 · 豆包官方型号生命周期', () => {
     localStorage.setItem('storyforge-ai-config', raw)
     sessionStorage.setItem('storyforge-ai-api-key-session', 'synthetic-only')
     let store = (await import('../../src/stores/ai-config')).useAIConfigStore
-    expect(store.getState().config).toEqual(config())
+    // Legacy unbound session keys are intentionally not replayed by current main.
+    expect(store.getState().config).toEqual(old)
     expect(localStorage.getItem('storyforge-ai-config')).toBe(raw)
+    store.getState().setConfig({ apiKey: 'synthetic-only' })
+    expect(store.getState().config).toEqual(config())
     const id = store.getState().saveAsPreset('旧型号合成预设')
     vi.resetModules(); store = (await import('../../src/stores/ai-config')).useAIConfigStore
     store.getState().applyPreset(id)

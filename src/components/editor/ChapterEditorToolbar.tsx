@@ -68,12 +68,14 @@ interface Props {
   impactOutlineRegenerationTargets: ImpactOutlineRegenerationTarget[]
   impactOutlineRegenerationItemId: string | null
   impactOutlineRegenerationCandidate: ImpactOutlineRegenerationCandidateV1 | null
+  impactOutlineRegenerationRecovering?: boolean
   impactOutlineRegenerationBusy: boolean
   impactOutlineRegenerationReceipt: string | null
   impactOutlineRegenerationError: string | null
   impactStoryTimelineRegenerationTargets: ImpactStoryTimelineRegenerationTarget[]
   impactStoryTimelineRegenerationItemId: string | null
   impactStoryTimelineRegenerationCandidate: ImpactStoryTimelineRegenerationCandidateV1 | null
+  impactStoryTimelineRegenerationRecovering?: boolean
   impactStoryTimelineRegenerationBusy: boolean
   impactStoryTimelineRegenerationReceipt: string | null
   impactStoryTimelineRegenerationError: string | null
@@ -154,12 +156,14 @@ export default function ChapterEditorToolbar({
   impactOutlineRegenerationTargets,
   impactOutlineRegenerationItemId,
   impactOutlineRegenerationCandidate,
+  impactOutlineRegenerationRecovering = false,
   impactOutlineRegenerationBusy,
   impactOutlineRegenerationReceipt,
   impactOutlineRegenerationError,
   impactStoryTimelineRegenerationTargets,
   impactStoryTimelineRegenerationItemId,
   impactStoryTimelineRegenerationCandidate,
+  impactStoryTimelineRegenerationRecovering = false,
   impactStoryTimelineRegenerationBusy,
   impactStoryTimelineRegenerationReceipt,
   impactStoryTimelineRegenerationError,
@@ -504,7 +508,9 @@ export default function ChapterEditorToolbar({
           )}
           {impactOutlineRegenerationCandidate && !impactStoryTimelineRegenerationCandidate && (
             <div className="space-y-2 rounded border border-violet-400/25 bg-bg-elevated/70 p-2 text-text-secondary">
-              <div className="text-xs text-text-secondary">H57 child 候选只允许写目标章纲摘要；作者确认前正式数据不变。</div>
+              <div className="text-xs text-text-secondary">{impactOutlineRegenerationRecovering
+                ? '作者确认已冻结；继续完成原任务，不会重新调用模型或替换摘要。'
+                : 'H57 child 候选只允许写目标章纲摘要；作者确认前正式数据不变。'}</div>
               <div className="whitespace-pre-wrap text-xs text-text-primary">{impactOutlineRegenerationCandidate.result.summary}</div>
               <div className="text-xs text-text-secondary">理由：{impactOutlineRegenerationCandidate.result.reason}</div>
               <div className="text-[10px] text-text-secondary">证据：{impactOutlineRegenerationCandidate.result.evidenceRefs.join('、')}</div>
@@ -516,12 +522,12 @@ export default function ChapterEditorToolbar({
                   className="flex items-center gap-1 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs text-success hover:bg-emerald-400/20 disabled:opacity-50"
                 >
                   {impactOutlineRegenerationBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  确认重建摘要
+                  {impactOutlineRegenerationRecovering ? '继续完成已确认摘要' : '确认重建摘要'}
                 </button>
                 <button
                   type="button"
                   onClick={onRejectImpactOutlineRegeneration}
-                  disabled={impactOutlineRegenerationBusy}
+                  disabled={impactOutlineRegenerationBusy || impactOutlineRegenerationRecovering}
                   className="flex items-center gap-1 rounded border border-border bg-bg-surface px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50"
                 >
                   <X className="h-3.5 w-3.5" />放弃候选
@@ -573,7 +579,9 @@ export default function ChapterEditorToolbar({
           {impactStoryTimelineRegenerationCandidate && !impactOutlineRegenerationCandidate && (
             <div className="space-y-2 rounded border border-cyan-400/25 bg-bg-elevated/70 p-2 text-text-secondary">
               <div className="text-xs text-text-secondary">
-                H57 child 候选：{impactStoryTimelineRegenerationCandidate.targetBaseline.title}；确认前正式年表不变。
+                H57 child：{impactStoryTimelineRegenerationCandidate.targetBaseline.title}；{impactStoryTimelineRegenerationRecovering
+                  ? '作者确认已冻结；继续完成原任务，不会重新调用模型。'
+                  : '确认前正式年表不变。'}
               </div>
               <div className="grid gap-1 text-xs md:grid-cols-2">
                 <div className="rounded border border-border/70 bg-bg-surface/60 p-2">
@@ -599,12 +607,12 @@ export default function ChapterEditorToolbar({
                   className="flex items-center gap-1 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs text-success hover:bg-emerald-400/20 disabled:opacity-50"
                 >
                   {impactStoryTimelineRegenerationBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  确认重建年表事件
+                  {impactStoryTimelineRegenerationRecovering ? '继续完成已确认年表' : '确认重建年表事件'}
                 </button>
                 <button
                   type="button"
                   onClick={onRejectImpactStoryTimelineRegeneration}
-                  disabled={impactStoryTimelineRegenerationBusy}
+                  disabled={impactStoryTimelineRegenerationBusy || impactStoryTimelineRegenerationRecovering}
                   className="flex items-center gap-1 rounded border border-border bg-bg-surface px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50"
                 >
                   <X className="h-3.5 w-3.5" />放弃年表候选

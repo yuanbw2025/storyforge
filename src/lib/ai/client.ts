@@ -7,7 +7,7 @@ import { createLog, updateLog, type TokenUsage } from './logger'
 import { recordUsage } from './usage-log'
 import { estimateTokens, trimMessagesToFit } from './context-budget'
 import { buildOpenAIEndpoint } from './openai-endpoint'
-import { getAIConfigPresetSessionApiKey, useAIConfigStore } from '../../stores/ai-config'
+import { getAIConfigPresetApiKeyV1, useAIConfigStore } from '../../stores/ai-config'
 import { resolveAIConfigForTask, type AITaskKind } from './task-routing'
 import { AICompletionResponseErrorV1, inspectCompletionResponseV1, requireCompletionTextV1 } from './completion-response'
 import { allowsSamplingTemperature, targetsOfficialProvider } from './provider-model-lifecycle'
@@ -39,7 +39,7 @@ export function resolveRequestConfig(config: AIConfig, meta?: AICallMeta) {
       ...preset,
       config: {
         ...preset.config,
-        apiKey: preset.config.apiKey || getAIConfigPresetSessionApiKey(preset.id),
+        apiKey: getAIConfigPresetApiKeyV1(preset),
       },
     })),
     routes: state.taskRoutes,

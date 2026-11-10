@@ -21,9 +21,34 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261103-issue179-mainfdb-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261110-issue179-main834-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved mainline receipt before re-evaluating the integrated community Auth/TUS dependency inputs; deterministic observations must remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261030-community-r2-main870-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved community branch receipt before integrating the 2026-11-02 source identity and evidence validation mainline fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261029-release405-mainc5-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved mainline v4.0.5 receipt before the community branch and R2 dependency integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261030-community-deps-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved community branch receipt before the v4.0.5 mainline merge and R2 replacement."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261028-longform-avg-integration-v1.json",
+        "workPackage": "NW-2E",
+        "note": "Preserved pre-community-dependency receipt; package, lockfile and the manifest's own receipt pointer changed in the next input fingerprint, while deterministic observations remained identical."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261013-v1.json",
         "workPackage": "NW-0B",
@@ -601,22 +626,51 @@
         "note": "Preserved the reviewed release-head receipt before integrating current main."
       },
       {
+        "path": "tests/acceptance/narrative-world/baseline-20261029-release405-mainc5-v1.json",
+        "workPackage": "release-4.0.5-mainc5-integration",
+        "note": "Preserved unchanged before independently delivered SFQA-015 and SFQA-054 source/test updates."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
+        "workPackage": "quality-independent-01",
+        "note": "Preserved unchanged before the independently reviewed product recovery, owner/reference, credential and desktop-runtime fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261102-quality-ready-02.json",
+        "workPackage": "SFQA-priority31",
+        "note": "Previous independent repairs receipt retained unchanged; deterministic observations unchanged by the WorldRelease-only source rule."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261102-quality-world-rule-03.json",
+        "workPackage": "SFQA-036-completion",
+        "note": "Previous measured receipt preserved unchanged before atomic prose/detail/impact adoption and interrupted impact completion recovery."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261102-quality-036-completion-04.json",
+        "workPackage": "quality-036-completion-04",
+        "note": "Preserved unchanged before final priority31 integration, including Node/runtime and longform raw evidence, adoption recovery, and engineering gates; actual corpus observations are compared after generation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261102-quality-engineering-144.json",
+        "workPackage": "quality-engineering-144",
+        "note": "Preserved exact reviewed engineering branch receipt while integrating the corrected cumulative source tree."
+      },
+      {
         "path": "tests/acceptance/narrative-world/baseline-20261029-issue179-run-scope-v1.json",
         "workPackage": "issue179-original-main5fc",
         "note": "Preserved measured pre-integration Issue179 run-scope receipt."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261029-release405-mainc5-v1.json",
-        "workPackage": "release405-mainc5",
-        "note": "Preserved main receipt before Issue179 source integration."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261030-issue179-maina331-v1.json",
         "workPackage": "issue179-before-main-fdb"
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
-        "workPackage": "main-SFQA015-054-113-139"
+        "path": "tests/acceptance/narrative-world/baseline-20261103-issue179-mainfdb-v1.json",
+        "workPackage": "issue179-pre-main-integration"
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-community-launch-v1.json",
+        "workPackage": "main-before-issue179-20261110"
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

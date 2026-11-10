@@ -17,6 +17,7 @@ import type { TextOpenWorldBudgetRecoveryAuthorityV1 } from './creator-budget-re
 import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../product-production/hash'
 import { parseProductProductionPlanV3 } from '../product-production/plan'
+import { assertTextOpenWorldNewSourceV1, assertTextOpenWorldProductionNewWorkV1 } from './source-admission'
 
 function fail(message: string): never {
   throw new Error(`[text-open-world-creator-derived-authority] ${message}`)
@@ -90,6 +91,7 @@ export async function readTextOpenWorldCreatorDerivedBuildAuthorityV1(input: {
   scope: WorkspaceScope
   buildId: number
 }): Promise<TextOpenWorldCreatorDerivedBuildAuthorityV1> {
+  input = structuredClone(input)
   const scope = await resolveScope({ scope: input.scope })
   const buildValue = await db.productBuilds.get(input.buildId)
   if (!buildValue?.id
@@ -207,4 +209,19 @@ export async function readTextOpenWorldCreatorDerivedBuildAuthorityV1(input: {
     repair: null,
     media: null,
   }
+}
+
+/** New production operations use the same strict reader, then apply the
+ * current source policy. The historical reader above remains byte-compatible
+ * for inspection, export and deterministic recovery of existing evidence. */
+export async function readTextOpenWorldCreatorBuildNewWorkAuthorityV1(input: {
+  scope: WorkspaceScope
+  buildId: number
+  operation: string
+}): Promise<TextOpenWorldCreatorDerivedBuildAuthorityV1> {
+  input = structuredClone(input)
+  const authority = await readTextOpenWorldCreatorDerivedBuildAuthorityV1(input)
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, input.operation)
+  assertTextOpenWorldNewSourceV1(authority.contracts.sourcePlan.sourceKind, input.operation)
+  return authority
 }

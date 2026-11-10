@@ -346,6 +346,14 @@ describe.sequential('R-HARNESS79 · H57 单事件故事年表受控重建', { ti
         runId: generated.snapshot.run.id,
         onDurableBoundary: reached => { if (reached === boundary) throw new Error(`interrupt:${boundary}`) },
       })).rejects.toThrow(`interrupt:${boundary}`)
+      if (boundary !== 'verification.accepted') {
+        const pending = await readPendingImpactStoryTimelineRegenerationCandidateV1({
+          scope: fixture.scope, sourceChapterId: fixture.sourceChapterId,
+        })
+        expect(pending?.snapshot.run.id).toBe(generated.snapshot.run.id)
+        expect(pending?.candidate).toEqual(generated.candidate)
+        expect(pending?.recovering).toBe(true)
+      }
     }
     const completed = await adoptImpactStoryTimelineRegenerationCandidateV1({
       scope: fixture.scope,

@@ -1,4 +1,5 @@
-import { chat } from '../../ai/client'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from './creation-response-evidence'
+import { chat, type ChatResult } from '../../ai/client'
 import { assembleContext } from '../../registry/assemble-context'
 import { readOwnedRows } from '../../workspace/scope'
 import type {
@@ -286,6 +287,9 @@ export async function generateShortNovelCandidateV1<K extends ShortNovelArtifact
   runAI?: RunAI
   signal?: AbortSignal
 }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ShortNovelStructuredCandidateV1<K> }> {
+  const callbackReceiver = input
+  const runAI = input.runAI
+  input = { ...input, scope: { ...input.scope }, aiConfig: input.aiConfig ? { ...input.aiConfig } : undefined }
   if (!input.aiConfig && !input.runAI) throw new Error('[short-novel-run] 缺少 AI 配置')
   const { production, manuscript, issue } = await assertPrerequisites(input)
   const config = ARTIFACT_CONFIG[input.artifactKind]
@@ -305,16 +309,25 @@ export async function generateShortNovelCandidateV1<K extends ShortNovelArtifact
     const manifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId: config.stepId, attempt: 1, projectId: input.scope.projectId, worldGroupId: null, declaredSourceKeys: [...skill.contextSourceKeys], assembled, readerVersion: `${config.skillId}-context-v1` })
     snapshot = await append(input.scope, snapshot, 'context.assembled', { stepId: config.stepId, attempt: 1, manifestHash: manifest.manifestHash })
     const messages = buildShortNovelPromptV1({ kind: input.artifactKind, context: assembled.text, authorInstruction: input.authorInstruction ?? '', chapterKey: input.chapterKey, issue })
+    const prepared = await recordCreationModelRequestV1({ scope: input.scope, snapshot, stepId: config.stepId, attempt: 1,
+      contextManifestHash: manifest.manifestHash, messages })
+    snapshot = prepared.snapshot
     snapshot = await append(input.scope, snapshot, 'model.requested', { stepId: config.stepId, attempt: 1, bindingHash: await hashCanonicalValue(snapshot.contract.executionBindings?.[0]) })
+    const result: ChatResult = {}
     let raw: string
     try {
-      raw = await (input.runAI ? input.runAI(messages) : chat(messages, input.aiConfig!, { category: config.category, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, input.signal))
+      raw = await (runAI ? runAI.call(callbackReceiver, messages) : chat(messages, input.aiConfig!, { category: config.category, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, input.signal, result))
     } catch (error) {
-      snapshot = await append(input.scope, snapshot, 'run.paused', { reason: `short-${input.artifactKind}-model-outcome-unknown`, recoverable: false })
-      throw error
+      const failed = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
+      try { snapshot = await append(input.scope, failed.snapshot, 'run.paused', { reason: `short-${input.artifactKind}-model-outcome-unknown`, recoverable: false }) }
+      catch (persistenceFailure) {
+        throw Object.assign(new Error('[short-novel-run] 请求结果未知，任务暂停证据未能完整保存。'), { cause: failed.report, persistenceFailures: [persistenceFailure] })
+      }
+      throw failed.report
     }
-    if (input.signal?.aborted) throw new Error('[short-novel] 生成已取消，未保存候选')
+    snapshot = await recordCreationModelResponseV1({ snapshot, request: prepared.request, raw, result })
     snapshot = await append(input.scope, snapshot, 'model.responded', { stepId: config.stepId, attempt: 1, outputHash: await hashCanonicalValue({ raw }) })
+    if (input.signal?.aborted) throw new Error('[short-novel] 生成已取消，未保存候选')
     let payload: ShortNovelCandidatePayloadMapV1[K]
     try { payload = parsePayload(input.artifactKind, parseShortNovelModelJsonV1(raw)) } catch (error) {
       snapshot = await append(input.scope, snapshot, 'step.failed', { stepId: config.stepId, attempt: 1, code: `short-${input.artifactKind}-protocol-failed`, retryable: false, category: 'protocol', action: 'fail' })
@@ -351,9 +364,13 @@ export async function generateShortNovelCandidateV1<K extends ShortNovelArtifact
     snapshot = await append(input.scope, snapshot, 'candidate.persisted', { stepId: config.stepId, attempt: 1, candidateHash: candidate.candidateHash, requiresConfirmation: true })
     return { snapshot, candidate }
   } catch (error) {
-    const current = await readAgentRunV1(input.scope, snapshot.run.id)
-    if (current.projection.state === 'running') {
-      await append(input.scope, current, 'run.failed', { code: `short-${input.artifactKind}-execution-failed`, retryable: false })
+    try {
+      const current = await readAgentRunV1(input.scope, snapshot.run.id)
+      if (current.projection.state === 'running') {
+        await append(input.scope, current, 'run.failed', { code: `short-${input.artifactKind}-execution-failed`, retryable: false })
+      }
+    } catch (persistenceFailure) {
+      throw Object.assign(new Error('[short-novel-run] 原失败与任务状态未能完整保存，请检查原错误及存储。'), { cause: error, persistenceFailures: [persistenceFailure] })
     }
     throw error
   }
@@ -543,6 +560,13 @@ export async function closeShortNovelTaskV1(scope: WorkspaceScope, runId: number
   let state: Awaited<ReturnType<typeof latestState>> | null = null
   try { state = await latestState(scope, runId) } catch { /* A failed pre-candidate run has no checkpoint. */ }
   if (state?.intent) throw new Error('此任务已记录采纳意图，请先继续完成采纳')
+  const inFlight = snapshot.projection.state === 'running' && snapshot.events.some(event => (
+    event.type === 'model.requested' && event.generation === snapshot.projection.generation
+    && snapshot.projection.steps[event.payload.stepId]?.attempt === event.payload.attempt
+    && !snapshot.events.some(response => response.type === 'model.responded' && response.generation === event.generation
+      && response.payload.stepId === event.payload.stepId && response.payload.attempt === event.payload.attempt)
+  ))
+  if (inFlight) throw new Error('模型请求仍在途，不能提前结束本运行；取消或停止等待不代表供应商已取消，请保留原运行等待结果。')
   return append(scope, snapshot, 'run.cancelled', { reason: 'author-closed-short-task' })
 }
 export async function resumeShortNovelAdoptionV1(scope: WorkspaceScope, runId: number) {

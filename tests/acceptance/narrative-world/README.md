@@ -4,6 +4,10 @@
 
 NW-0B 交付时只完成评测基础设施，没有模型调用、浏览器产品 E2E、真人验收或规模性能验收。后续各卡证据分别记录在下文，不回填为 NW-0B 的成绩。
 
+**2026-10-30 社区 R2 与 v4.0.5 主干整合复核**：将社区分支的旧上传依赖替换为 R2 签名直传，并普通整合主干 `8707bb8a1` 后，使用官方基线入口生成[当前确定性回执](./baseline-20261030-community-r2-main870-v1.json)；25 项检查通过。与主干及社区旧回执相比，`summary`、`observations`、`issues` 逐项相同，输入指纹和运行元数据更新。双方历史回执继续保留；这只记录工程输入，不改变世界引擎产品验收结论。
+
+**2026-10-30 社区依赖输入复核**：社区作品集分支新增 Supabase 与分片上传依赖，导致 NW-0B 输入指纹中的 `package.json`、`package-lock.json` 变化；新回执指针也改变清单自身的指纹。重新运行 25 项确定性评测并逐项比较，新[回执](./baseline-20261030-community-deps-v1.json)的观察、缺口和判定与上一版完全一致；旧回执保留。此处只更新输入来源记录，不增加世界引擎能力或产品验收结论。
+
 **2026-10-27 状态字段写入反例补验**：补齐稀疏数组写入拒绝后，再次实际运行三组110项测试，生成[基线v2](./baseline-20261027-longform-stability-v2.json)、[IR契约v2](./ir-contract-20261027-longform-stability-v2.json)和[投影契约v2](./domain-projection-20261027-longform-stability-v2.json)。[v2对照](./shared-source-refresh-20261027-longform-stability-v2.json)确认观察与v1一致，v1及更早回执均保留。完整交付检查另行核对。
 
 **2026-10-27 长篇稳定性修复的共享依赖回归**：完整 CI 中 5648 项测试通过、3 项跳过，三组末尾比较仍因来源指纹变化失败。保留历史回执和原失败后，实际重新运行三组 110 项测试，生成[新确定性基线](./baseline-20261027-longform-stability-v1.json)、[新 IR 契约](./ir-contract-20261027-longform-stability-v1.json)与[新领域投影契约](./domain-projection-20261027-longform-stability-v1.json)。[逐项对照记录](./shared-source-refresh-20261027-longform-stability-v1.json)确认原观察、gold 和历史文件不变，补充绑定新状态字段校验器。此更新只用于工程回归；完整 CI 继续复验，不新增世界引擎模型、性能或人工验收结论。
@@ -546,4 +550,6 @@ continuation-v3 集成的四个文件分别覆盖 NW-0B 25 项、IR codec 73 项
 
 2026-11-02 独立质量修复 SFQA-015/054 更新来源能力令牌和禁止表测试断言；活动回执为 `baseline-20261102-quality-independent-01.json`。实际生成和默认回读各 25 项通过，290 个输入摘要核对一致；全部确定性观察、问题和统计与保留的 release405-mainc5 回执相同，原 corpus 与旧回执字节未变。模型调用、产品 E2E 和人工评阅在该回执中仍为 0；不表示世界模型质量或产品验收升级。
 
-2026-11-03 Issue179/main-fdb integration: `baseline-20261103-issue179-mainfdb-v1.json` remeasures the merged inputs and preserves both parent receipts. All observations, issues and summary counts remain unchanged; this is not real-model or author acceptance.
+2026-11-02 已审质量修复组合更新所有权/引用生命周期、产品恢复、凭据读取与桌面运行时。活动 NW-0B、IR、领域回执使用 `20261102-quality-ready-02`；实际生成并默认回读共 110 项，逐项核对原语义观察不变，分别核验 290/18/28 个输入摘要。旧回执、corpus 和 codec gold 字节保持。该结果为确定性工程证据，不升级模型、真人或正式客户端发行验收。
+
+2026-11-02 优先整改最终累计组合：活动 NW 回执为 `baseline-20261102-quality-priority31-final-05.json`，IR 与领域回执为同后缀的 `ir-contract`、`domain-projection`。三份均实际生成，默认回读 110 项通过；所有非输入结果与保留的前份回执相同，旧 corpus、旧回执及 144 独立工程回执字节保留。输入摘要按实际最终实现校验；不代表模型、人工或产品验收升级。

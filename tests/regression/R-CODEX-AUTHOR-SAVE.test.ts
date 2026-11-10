@@ -97,14 +97,21 @@ describe('Codex author persistence acknowledgement', () => {
   })
   it('keeps a late create acknowledgement out of the next workspace cache', async () => {
     const a = await fixture('A')
-    const add = db.codexEntries.add.bind(db.codexEntries)
+    const transaction = db.transaction.bind(db)
     let release!: () => void
-    vi.spyOn(db.codexEntries, 'add').mockImplementationOnce(async row => {
-      await new Promise<void>(resolve => { release = resolve })
-      return add(row)
-    })
+    let committed!: () => void
+    const acknowledgement = new Promise<void>(resolve => { release = resolve })
+    const committedWrite = new Promise<void>(resolve => { committed = resolve })
+    // Delay only the caller acknowledgement after the real native RW has
+    // committed. Holding table.add across another workspace transaction would
+    // expire IndexedDB's transaction instead of modelling a late acknowledgement.
+    vi.spyOn(db, 'transaction').mockImplementationOnce((...args) => transaction(...args).then(result => {
+      committed()
+      return acknowledgement.then(() => result)
+    }))
     const pending = useCodexStore.getState().addEntry({ projectId: a.scope.projectId, categoryId: a.categoryId, name: '迟到的新词条', summary: '', description: '', fields: '{}', refs: '{}', order: 1 })
-    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    await committedWrite
+    expect((await db.codexEntries.toArray()).some(row => row.name === '迟到的新词条' && row.projectId === a.scope.projectId)).toBe(true)
     const b = await fixture('B')
     release(); const id = await pending
     expect((await db.codexEntries.get(id))!.projectId).toBe(a.scope.projectId)

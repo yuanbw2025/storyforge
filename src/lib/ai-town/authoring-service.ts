@@ -18,6 +18,7 @@ import {
   settingsFromAiTownDraft,
   parseAiTownSettings,
   type AiTownAuthoringSettingsV1,
+  type AiTownAuthoringDraftV1,
 } from "./authoring-contract";
 export async function createAiTownDraft(
   title: string,
@@ -86,7 +87,12 @@ export async function saveAiTownDraft(
   revision: number,
   settings: AiTownAuthoringSettingsV1,
   title: string,
+  options?: { expectedWorkTitle: string },
 ) {
+  const capturedScope = { ...scope };
+  const expectedWorkTitle = options?.expectedWorkTitle;
+  if (options && typeof expectedWorkTitle !== "string")
+    throw new Error("缺少本次编辑时载入的作品名称");
   if (!title.trim() || title.length > 200)
     throw new Error("请填写 1～200 字的小镇名称");
   const data = serializeAiTownSettings(settings);
@@ -94,9 +100,14 @@ export async function saveAiTownDraft(
     "rw",
     scopeTransactionTables(db.aiTownAuthoringDrafts),
     async () => {
-      const row = await readAiTownDraft(scope);
+      const row = await readAiTownDraft(capturedScope);
       if (row.revision !== revision)
         throw new Error("方案已在其他页面修改，请刷新后再保存");
+      if (expectedWorkTitle !== undefined) {
+        const work = await db.works.get(capturedScope.workId);
+        if (!work || work.title !== expectedWorkTitle)
+          throw new Error("作品名称已在其他页面修改，请先比较并确认本地输入后再保存");
+      }
       const next = {
         ...row,
         ...data,
@@ -105,7 +116,7 @@ export async function saveAiTownDraft(
         updatedAt: Date.now(),
       };
       await db.aiTownAuthoringDrafts.put(next);
-      await updateWorkTitle(scope, title);
+      await updateWorkTitle(capturedScope, title);
       return next;
     },
   );
@@ -195,10 +206,18 @@ export async function saveAiTownSourceSelection(
   );
 }
 
+export function prepareAiTownBrief(scope: WorkspaceScope, revision: number): Promise<number>;
+export function prepareAiTownBrief(
+  scope: WorkspaceScope,
+  revision: number,
+  options: { includeSavedDraft: true },
+): Promise<{ productionId: number; draft: AiTownAuthoringDraftV1 }>;
 export async function prepareAiTownBrief(
   scope: WorkspaceScope,
   revision: number,
+  options?: { includeSavedDraft: true },
 ) {
+  const includeSavedDraft = options?.includeSavedDraft === true;
   const {
     consultProductProductionStartV1,
     compileProductProductionBriefV3,
@@ -274,23 +293,25 @@ export async function prepareAiTownBrief(
       brief,
     });
   }
-  await db.transaction(
+  const savedDraft = await db.transaction(
     "rw",
     scopeTransactionTables(db.aiTownAuthoringDrafts),
     async () => {
       const latest = await readAiTownDraft(scope);
       if (latest.revision !== revision)
         throw new Error("方案已变化，已编译版本保留在制作记录中，请重新核对");
-      await db.aiTownAuthoringDrafts.put({
+      const next: AiTownAuthoringDraftV1 = {
         ...latest,
-        productionId: id,
+        productionId: id!,
         preparedRevision: revision + 1,
         revision: revision + 1,
         updatedAt: Date.now(),
-      });
+      };
+      await db.aiTownAuthoringDrafts.put(next);
+      return next;
     },
   );
-  return id!;
+  return includeSavedDraft ? { productionId: id!, draft: savedDraft } : id!;
 }
 
 export interface AiTownConversationTurnV1 {

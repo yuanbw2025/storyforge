@@ -2,25 +2,10 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
-import {
-  confirmTextOpenWorldCreatorBriefV1,
-  startTextOpenWorldCreatorBriefSessionV1,
-} from '../../src/lib/open-world/creator-brief'
-import {
-  inspectTextOpenWorldCreatorNovelSourceV1,
-} from '../../src/lib/open-world/creator-source'
 import { verifyTextOpenWorldCreatorBriefV1 } from '../../src/lib/open-world/creator-brief-persistence'
-import type { TextOpenWorldCreatorSourceSelectionV1 } from '../../src/lib/types'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
-import { stampNewRecord } from '../../src/lib/workspace/scope'
-
-const ACKNOWLEDGEMENTS = {
-  sourceIdentityReviewed: true,
-  productBoundaryReviewed: true,
-  unresolvedItemsClosed: true,
-  directPublishWorkflowReviewed: true,
-} as const
+import { seedQuality005LegacyChapterBriefV1 } from '../helpers/quality005-legacy-chapter-brief'
 
 async function snapshotPersistentDatabase() {
   const entries = await Promise.all([...db.tables]
@@ -44,114 +29,13 @@ async function expectImportPreflightFailure(
   expect(await snapshotPersistentDatabase()).toEqual(before)
 }
 
-async function seedChapterSelectionNovel(name: string) {
-  const created = await createWorkspace({
-    name,
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '用于验证 Creator Brief 章节定位器便携性的小说来源。',
-    targetWordCount: 80_000,
-    enableMultiWorld: false,
-  }, { purpose: 'independent-work', kind: 'novel', novelProfile: 'long' })
-  const now = Date.now()
-  const volumeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
-    projectId: created.scope.projectId,
-    parentId: null,
-    type: 'volume',
-    title: '盐脊卷',
-    summary: '巡井人沿着三处断流点追查旧日契约。',
-    order: 0,
-    createdAt: now,
-    updatedAt: now,
-  } as never, { owner: 'work' })) as number
-
-  const chapters: Array<{ id: number; title: string }> = []
-  for (const [index, title] of ['断流', '盐印', '潮井'].entries()) {
-    const outlineNodeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
-      projectId: created.scope.projectId,
-      parentId: volumeId,
-      type: 'chapter',
-      title: `第${index + 1}章 ${title}`,
-      summary: `巡井人在${title}线索中发现新的地区冲突。`,
-      order: index,
-      createdAt: now + index + 1,
-      updatedAt: now + index + 1,
-    } as never, { owner: 'work' })) as number
-    const chapterId = await db.chapters.add(stampNewRecord(created.scope, 'chapters', {
-      projectId: created.scope.projectId,
-      outlineNodeId,
-      title: `第${index + 1}章 ${title}`,
-      content: `<p>巡井人在${title}线索中发现新的地区冲突，并决定继续追查断流源头。</p>`,
-      wordCount: 34,
-      status: 'final',
-      order: index,
-      notes: '',
-      summary: `巡井人追查${title}线索。`,
-      createdAt: now + index + 1,
-      updatedAt: now + index + 1,
-    } as never, { owner: 'work' })) as number
-    chapters.push({ id: chapterId, title: `第${index + 1}章 ${title}` })
-  }
-  await db.storyCores.add(stampNewRecord(created.scope, 'storyCores', {
-    projectId: created.scope.projectId,
-    theme: '成长与守护',
-    centralConflict: '巡井人必须在城邦秩序与断流真相之间作出选择。',
-    plotPattern: '调查—成长—远行—回归',
-    logline: '巡井人追查正在吞噬各地水源的旧日契约。',
-    concept: '从非连续小说章节拆解文字开放世界。',
-    mainPlot: '逐区追查断流源头并完成主线目标。',
-    subPlots: '各地角色、势力和地域命运故事。',
-    createdAt: now,
-    updatedAt: now,
-  } as never, { owner: 'work' }))
-  return { ...created, chapters, now }
-}
-
-async function createConfirmedChapterBrief(name: string) {
-  const novel = await seedChapterSelectionNovel(name)
-  const selectedChapterIds = [novel.chapters[0]!.id, novel.chapters[2]!.id]
-  const selection = { mode: 'chapters', chapterIds: selectedChapterIds } as const
-  const preview = await inspectTextOpenWorldCreatorNovelSourceV1({
-    sourceScope: novel.scope,
-    selection,
-  })
-  const source: TextOpenWorldCreatorSourceSelectionV1 = {
-    sourceKind: 'novel',
-    sourceScope: novel.scope,
-    selection,
-    preview,
-  }
-  const started = await startTextOpenWorldCreatorBriefSessionV1({
-    selection: source,
-    sessionKey: `portability-${crypto.randomUUID()}`,
-    createdAt: novel.now + 10,
-  })
-  const confirmed = await confirmTextOpenWorldCreatorBriefV1({
-    session: started,
-    draft: {
-      ...started.draft,
-      gameTitle: '盐脊断流录',
-      coreGoal: '从两段被选中的小说章节拆解主线和地域故事。',
-    },
-    acknowledgements: ACKNOWLEDGEMENTS,
-    confirmedAt: novel.now + 11,
-  })
-  const brief = await db.productProductionBriefs
-    .where('productionId').equals(confirmed.production.id)
-    .first()
-  if (!brief?.id || !brief.candidateRunId || !confirmed.confirmedBrief) {
-    throw new Error('测试夹具未生成完整 Creator Brief 与 candidate Run')
-  }
-  return { novel, selectedChapterIds, confirmed, brief }
-}
-
-describe('R-OPEN-WORLD5 · Creator Brief 章节定位器便携闭包', () => {
+describe('R-OPEN-WORLD5 · 历史 Creator Brief 章节定位器便携闭包', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
   it('导出导入会同时重映射 Production、Creator Brief、章节列表和 candidate Run，并保持便携 Brief Hash', async () => {
+    const fixture = await seedQuality005LegacyChapterBriefV1()
     await createWorkspace({ name: '占位工作区', genres: ['other'], status: 'drafting', description: '', targetWordCount: 1, enableMultiWorld: false })
-    const fixture = await createConfirmedChapterBrief(`TOW G5 便携 ${crypto.randomUUID()}`)
     const sourceProductionId = fixture.confirmed.production.id
     const sourceBriefId = fixture.brief.id!
     const sourceRunId = fixture.brief.candidateRunId!
@@ -210,8 +94,8 @@ describe('R-OPEN-WORLD5 · Creator Brief 章节定位器便携闭包', () => {
       sourceBindingHash,
     })
     const expectedImportedChapterIds = [importedChapters[0]!.id!, importedChapters[2]!.id!]
-    expect(JSON.parse(production!.creatorSourceChapterIdsJson)).toEqual(expectedImportedChapterIds)
-    expect(JSON.parse(brief!.sourceChapterIdsJson)).toEqual(expectedImportedChapterIds)
+    expect(JSON.parse(production!.creatorSourceChapterIdsJson!)).toEqual(expectedImportedChapterIds)
+    expect(JSON.parse(brief!.sourceChapterIdsJson!)).toEqual(expectedImportedChapterIds)
 
     const verifiedBrief = await verifyTextOpenWorldCreatorBriefV1(brief!.briefJson)
     expect(verifiedBrief.briefHash).toBe(sourceBriefHash)
@@ -219,7 +103,7 @@ describe('R-OPEN-WORLD5 · Creator Brief 章节定位器便携闭包', () => {
     const importedRun = await readAgentRunV1(importedOwnership.scope, brief!.candidateRunId!)
     expect(importedRun.contract.runtimeBindingHash).toBe(verifiedBrief.candidateEvidence.runBindingHash)
     expect(importedRun.projection.state).toBe('running')
-    expect(importedRun.events.at(-1)).toMatchObject({
+    expect(importedRun.events.slice(-1)[0]).toMatchObject({
       type: 'verification.staled',
       payload: { reason: 'project-import-scope-rebound' },
     })
@@ -227,7 +111,7 @@ describe('R-OPEN-WORLD5 · Creator Brief 章节定位器便携闭包', () => {
   }, 30_000)
 
   it('缺失一个被 chapters locator 引用的章节映射时在事务前 fail-closed', async () => {
-    const fixture = await createConfirmedChapterBrief(`TOW G5 缺映射 ${crypto.randomUUID()}`)
+    const fixture = await seedQuality005LegacyChapterBriefV1()
     const backup = await exportProjectJSON(fixture.novel.scope.projectId)
     expect(backup.productProductions[0]?._creatorSourceChapterExportIds).toEqual([0, 2])
     expect(backup.productProductionBriefs[0]?._sourceChapterExportIds).toEqual([0, 2])
@@ -240,7 +124,7 @@ describe('R-OPEN-WORLD5 · Creator Brief 章节定位器便携闭包', () => {
   }, 30_000)
 
   it('Creator Brief 引用的候选 Run 不再是匹配完成态时在事务前拒绝导入', async () => {
-    const fixture = await createConfirmedChapterBrief(`TOW G5 伪造候选运行 ${crypto.randomUUID()}`)
+    const fixture = await seedQuality005LegacyChapterBriefV1()
     const backup = await exportProjectJSON(fixture.novel.scope.projectId)
     backup.agentRuns[0]!.status = 'running'
 
@@ -248,12 +132,12 @@ describe('R-OPEN-WORLD5 · Creator Brief 章节定位器便携闭包', () => {
   }, 30_000)
 
   it('删除候选 Run 的终态事件但保留伪完成投影时仍在事务前拒绝导入', async () => {
-    const fixture = await createConfirmedChapterBrief(`TOW G5 缺终态事件 ${crypto.randomUUID()}`)
+    const fixture = await seedQuality005LegacyChapterBriefV1()
     const backup = await exportProjectJSON(fixture.novel.scope.projectId)
-    const terminalIndex = backup.agentRunEvents.findLastIndex(event => (
+    const terminalIndex = backup.agentRunEvents.map(event => (
       event._agentRunExportId === backup.productProductionBriefs[0]!._candidateRunExportId
       && event.type === 'verification.accepted'
-    ))
+    )).lastIndexOf(true)
     expect(terminalIndex).toBeGreaterThanOrEqual(0)
     backup.agentRunEvents.splice(terminalIndex, 1)
 
@@ -261,7 +145,7 @@ describe('R-OPEN-WORLD5 · Creator Brief 章节定位器便携闭包', () => {
   }, 30_000)
 
   it('候选 Run 的 ContextManifest 证据与 Brief 分裂时拒绝导入', async () => {
-    const fixture = await createConfirmedChapterBrief(`TOW G5 上下文证据漂移 ${crypto.randomUUID()}`)
+    const fixture = await seedQuality005LegacyChapterBriefV1()
     const backup = await exportProjectJSON(fixture.novel.scope.projectId)
     const contextEvent = backup.agentRunEvents.find(event => event.type === 'context.assembled')
     expect(contextEvent).toBeDefined()
@@ -272,7 +156,7 @@ describe('R-OPEN-WORLD5 · Creator Brief 章节定位器便携闭包', () => {
   }, 30_000)
 
   it('候选 RunContract JSON 与 portable contractHash 分裂时在事务前拒绝导入', async () => {
-    const fixture = await createConfirmedChapterBrief(`TOW G5 契约 Hash 漂移 ${crypto.randomUUID()}`)
+    const fixture = await seedQuality005LegacyChapterBriefV1()
     const backup = await exportProjectJSON(fixture.novel.scope.projectId)
     const runExportId = backup.productProductionBriefs[0]!._candidateRunExportId
     const run = backup.agentRuns.find(candidate => candidate._exportId === runExportId)
@@ -287,7 +171,7 @@ describe('R-OPEN-WORLD5 · Creator Brief 章节定位器便携闭包', () => {
   }, 30_000)
 
   it('候选 Run event 的 portable 世界组与 Run 分裂时在事务前拒绝导入', async () => {
-    const fixture = await createConfirmedChapterBrief(`TOW G5 运行世界组漂移 ${crypto.randomUUID()}`)
+    const fixture = await seedQuality005LegacyChapterBriefV1()
     const backup = await exportProjectJSON(fixture.novel.scope.projectId)
     const runExportId = backup.productProductionBriefs[0]!._candidateRunExportId
     const run = backup.agentRuns.find(candidate => candidate._exportId === runExportId)
@@ -300,7 +184,7 @@ describe('R-OPEN-WORLD5 · Creator Brief 章节定位器便携闭包', () => {
   }, 30_000)
 
   it('已因首次导入失效的候选 Run 仍可随项目再次完整导出导入', async () => {
-    const fixture = await createConfirmedChapterBrief(`TOW G5 二次迁移 ${crypto.randomUUID()}`)
+    const fixture = await seedQuality005LegacyChapterBriefV1()
     const firstBackup = await exportProjectJSON(fixture.novel.scope.projectId)
     const firstImportedProjectId = await importProjectJSON(firstBackup)
     const secondBackup = await exportProjectJSON(firstImportedProjectId)
@@ -310,7 +194,7 @@ describe('R-OPEN-WORLD5 · Creator Brief 章节定位器便携闭包', () => {
     expect(brief?.candidateRunId).toBeTruthy()
     const run = await readAgentRunV1(ownership.scope, brief!.candidateRunId!)
     expect(run.projection.state).toBe('running')
-    expect(run.events.at(-1)).toMatchObject({
+    expect(run.events.slice(-1)[0]).toMatchObject({
       type: 'verification.staled',
       payload: { reason: 'project-import-scope-rebound' },
     })

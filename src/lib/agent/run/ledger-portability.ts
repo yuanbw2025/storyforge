@@ -9,6 +9,7 @@ import type {
 } from '../../types'
 import type { ProjectExportData } from '../../export/json-export'
 import { parseAgentRunEventV1 } from './event-schema'
+import { readAgentRunNodeProducerTupleV1, readRecord } from './schema-utils'
 import { canonicalStringify, hashCanonicalValue } from './hash'
 import {
   replayAgentRunEventsV1,
@@ -59,6 +60,63 @@ function indexRowsByRun(rows: ExportRow[]): Map<unknown, ExportRow[]> {
     bucket.sort((left, right) => left.sequence - right.sequence)
   }
   return index
+}
+
+/** Validate operational links in the same captured coordinate system. Signed
+ * Node JSON and opaque checkpoints are neither rewritten nor used as locators. */
+function assertNodeProducerRelationsV1(
+  runs: readonly unknown[],
+  nodeRuns: readonly unknown[],
+  flows: readonly unknown[],
+  works: readonly unknown[],
+  groups: readonly unknown[],
+  portable: boolean,
+): void {
+  const id = portable ? '_exportId' : 'id'
+  const owner = portable ? '_workOwnerExportId' : 'workId'
+  // nodeRuns uses its registered array export index; nodeFlows has _exportId.
+  const nodesById = new Map(nodeRuns.map((value, index) => {
+    const row = readRecord(value, 'nodeRuns'); return [portable ? index : row[id], row]
+  }))
+  const flowsById = new Map(flows.map(value => {
+    const row = readRecord(value, 'nodeFlows'); return [row[id], row]
+  }))
+  const worksById = new Map(works.map(value => {
+    const row = readRecord(value, 'works'); return [row[id], row]
+  }))
+  const groupsById = new Map(groups.map(value => {
+    const row = readRecord(value, 'worldGroups'); return [row[id], row]
+  }))
+  const tuples = new Set<string>()
+  for (const value of runs) {
+    const run = readRecord(value, 'agentRuns')
+    const tuple = readAgentRunNodeProducerTupleV1(run, portable ? '_nodeRunExportId' : 'nodeRunId', portable)
+    if (!tuple) continue
+    if (run[owner] == null || (portable ? run._productRuntimeSessionExportId : run.productRuntimeSessionId) != null
+      || (portable ? run._productBuildExportId : run.productBuildId) != null) fail('节点生产关联必须保留原 Work owner')
+    const work = worksById.get(run[owner])
+    const groupId = run[portable ? '_worldGroupExportId' : 'worldGroupId']
+    const group = groupId == null ? null : groupsById.get(groupId)
+    if (!work || work[portable ? '_worldExportId' : 'worldId'] == null
+      || !portable && run.projectId !== work.projectId
+      || groupId != null && (!group
+        || group[portable ? '_worldOwnerExportId' : 'worldId'] !== work[portable ? '_worldExportId' : 'worldId']
+        || !portable && run.projectId !== group.projectId)) {
+      fail('节点生产关联的 Work/世界组不属于同一实际 World')
+    }
+    if (tuple.nodeRunId === null) continue
+    const node = nodesById.get(tuple.nodeRunId)
+    const flow = node && flowsById.get(node[portable ? '_flowExportId' : 'flowId'])
+    if (!node || !flow || run[owner] == null || run[owner] !== node[owner] || run[owner] !== flow[owner]
+      || !portable && (run.projectId !== node.projectId || run.projectId !== flow.projectId)
+      || (run[portable ? '_worldGroupExportId' : 'worldGroupId'] ?? null)
+        !== (flow[portable ? '_worldGroupExportId' : 'worldGroupId'] ?? null)) {
+      fail('节点生产关联缺失或越过原 Work/世界组')
+    }
+    const key = JSON.stringify([tuple.nodeRunId, tuple.nodeProducerNodeId, tuple.nodeProducerVariantIndex, tuple.nodeProducerAttempt])
+    if (tuples.has(key)) fail('节点生产原版本/attempt 存在重复 Run')
+    tuples.add(key)
+  }
 }
 
 function exportedDomainEvents(run: ExportRow, events: ExportRow[]): AnyAgentRunEventV1[] {
@@ -182,6 +240,13 @@ export async function portableizeAgentRunLedgerExportV1(
   const runs = (data.agentRuns ?? []) as ExportRow[]
   const events = (data.agentRunEvents ?? []) as ExportRow[]
   const checkpoints = (data.agentRunCheckpoints ?? []) as ExportRow[]
+  assertNodeProducerRelationsV1(runs, (data.nodeRuns ?? []) as ExportRow[], (data.nodeFlows ?? []) as ExportRow[],
+    (data.works ?? []) as ExportRow[], (data.worldGroups ?? []) as ExportRow[], true)
+  // The generic optional scalar mapper emits null for absent native fields.
+  // Do not add a new coordinate to legacy capsules that never had a tuple.
+  for (const run of runs) {
+    if (readAgentRunNodeProducerTupleV1(run, '_nodeRunExportId', true) === null) delete run._nodeRunExportId
+  }
   // Large production histories must not rescan the entire ledger for each run.
   // Buckets retain row identity while leaving the exported arrays in their original order.
   const eventsByRun = indexRowsByRun(events)
@@ -337,6 +402,23 @@ function hasImportedCompletedPrefix(projection: AgentRunProjectionV1, events: An
     && prefix.terminalReceiptHash === last.payload.previousReceiptHash
 }
 
+/** Pure expected transition for strict backup/memory consumers. Callers must
+ * first verify the complete row relation and replayed event prefix. A Node slot
+ * is local execution correlation even before its first checkpoint exists. */
+export function expectedNodeProducerImportRetirementReasonV1(input: {
+  run: Record<string, unknown>
+  projection: AgentRunProjectionV1
+  events: AnyAgentRunEventV1[]
+  portable?: boolean
+}): 'project-import-node-producer-readonly' | null {
+  const tuple = readAgentRunNodeProducerTupleV1(input.run,
+    input.portable ? '_nodeRunExportId' : 'nodeRunId', input.portable)
+  if (!tuple || ['completed', 'failed', 'cancelled'].includes(input.projection.state)
+    || hasImportedCompletedPrefix(input.projection, input.events)) return null
+  if (input.projection.errors.length || input.projection.state === 'recovery_required') fail('节点生产导入前缀尚未核验')
+  return 'project-import-node-producer-readonly'
+}
+
 async function rebindGenerationHashes(input: {
   run: AgentRunRecord & { id: number }
   events: AgentRunEventRecord[]
@@ -376,6 +458,17 @@ export async function finalizeImportedAgentRunLedgersV1(input: {
   runIds: readonly number[]
   idMaps: IdMaps
 }): Promise<void> {
+  const imported = await db.agentRuns.bulkGet([...input.runIds])
+  const linked = imported.filter((row): row is AgentRunRecord => row != null)
+  const tuples = linked.map(row => readAgentRunNodeProducerTupleV1(row as unknown as Record<string, unknown>))
+  // Avoid adding Node tables to legacy/domain-specific subtransactions.
+  if (tuples.some(tuple => tuple !== null)) {
+    assertNodeProducerRelationsV1(linked,
+      await db.nodeRuns.where('projectId').equals(input.projectId).toArray(),
+      await db.nodeFlows.where('projectId').equals(input.projectId).toArray(),
+      await db.works.where('projectId').equals(input.projectId).toArray(),
+      await db.worldGroups.where('projectId').equals(input.projectId).toArray(), false)
+  }
   for (const runId of input.runIds) {
     const run = await db.agentRuns.get(runId)
     if (!run || run.id == null) fail(`导入 run ${runId} 不存在`)
@@ -436,6 +529,9 @@ export async function finalizeImportedAgentRunLedgersV1(input: {
       fail(`导入 run ${runId} 无法重放：${projection.errors.join('；')}`)
     }
     let appendedImportTerminalEvent = false
+    const nodeRetirementReason = expectedNodeProducerImportRetirementReasonV1({
+      run: run as unknown as Record<string, unknown>, projection, events: domainEvents,
+    })
     if (projection.state === 'completed' && projection.terminalReceiptHash) {
       const staled = parseAgentRunEventV1({
         version: 1,
@@ -466,7 +562,7 @@ export async function finalizeImportedAgentRunLedgersV1(input: {
       domainEvents = [...domainEvents, staled]
       projection = replayAgentRunEventsV1(domainEvents)
       appendedImportTerminalEvent = true
-    } else if (hasNonPortableCheckpoint(checkpoints) && !['failed', 'cancelled'].includes(projection.state)
+    } else if ((nodeRetirementReason !== null || hasNonPortableCheckpoint(checkpoints)) && !['failed', 'cancelled'].includes(projection.state)
       && !hasImportedCompletedPrefix(projection, domainEvents)) {
       const cancelled = parseAgentRunEventV1({
         version: 1,
@@ -477,7 +573,7 @@ export async function finalizeImportedAgentRunLedgersV1(input: {
         worldGroupId: run.worldGroupId ?? null,
         contractHash: run.contractHash,
         type: 'run.cancelled',
-        payload: { reason: 'project-import-nonportable-checkpoint' },
+        payload: { reason: nodeRetirementReason ?? 'project-import-nonportable-checkpoint' },
         createdAt: Date.now(),
       })
       await db.agentRunEvents.add({

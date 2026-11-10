@@ -20,9 +20,9 @@ import type { ProviderBindingReceiptV1 } from '../product-production/capabilitie
 import type { ResolvedProductMediaCapabilityV1 } from '../product-production/media-transport'
 import {
   createTextOpenWorldSourcePinCandidateArtifactsV1,
-  freezeTextOpenWorldNovelSourceV1,
   freezeTextOpenWorldWorldReleaseSourceV1,
 } from './source-pin'
+import { captureTextOpenWorldTaskExecutionInputV1, assertTextOpenWorldBuildNewWorkV1, assertTextOpenWorldNewSourceV1 } from './source-admission'
 import { textOpenWorldCreatorLocatorFromBriefRowV1 } from './creator-brief-persistence'
 import { createTextOpenWorldSourceCurationExecutorV1 } from './source-curation'
 import { createTextOpenWorldExperienceDesignExecutorV1 } from './experience-design'
@@ -76,6 +76,9 @@ function zeroUsage(storageBytes = 0): ProductProductionTaskExecutionResultV1['us
 export function createTextOpenWorldSourceLockExecutorV1(options: { now?: () => number } = {}): ProductProductionTaskExecutorV1 {
   const now = options.now ?? Date.now
   return async execution => {
+    execution = captureTextOpenWorldTaskExecutionInputV1(execution)
+    await assertTextOpenWorldBuildNewWorkV1({ scope: execution.scope, productionId: execution.productionId,
+      buildId: execution.buildId, operation: '执行新的文字开放世界制作任务' })
     if (execution.task.taskKey !== 'p0.source-lock' || execution.task.executionMode !== 'deterministic') {
       fail('P0 executor收到错误任务')
     }
@@ -99,6 +102,7 @@ export function createTextOpenWorldSourceLockExecutorV1(options: { now?: () => n
             scope: execution.scope, buildId: execution.buildId,
           })
           const locator = textOpenWorldCreatorLocatorFromBriefRowV1(briefRow)
+          assertTextOpenWorldNewSourceV1(contracts.sourcePlan.sourceKind, '冻结新制作来源')
           const authorization = {
             productInstanceKey: production.productionKey,
             briefRevision: briefRow.revision,
@@ -121,18 +125,6 @@ export function createTextOpenWorldSourceLockExecutorV1(options: { now?: () => n
               selection: {
                 mode: contracts.sourcePlan.selection.mode,
               },
-              authorization,
-              createdAt,
-            })
-          }
-          if (contracts.sourcePlan.sourceKind === 'novel' && locator.kind === 'novel'
-            && contracts.sourcePlan.selection.kind === 'novel') {
-            return freezeTextOpenWorldNovelSourceV1({
-              targetScope: execution.scope,
-              sourceScope: execution.scope,
-              selection: locator.selection,
-              expectedSourceVersionHash: contracts.sourcePlan.sourceVersionHash,
-              expectedSourceBoundaryHash: contracts.sourcePlan.expectedSourceBoundaryHash!,
               authorization,
               createdAt,
             })
@@ -445,6 +437,13 @@ function isTextOpenWorldModelTaskKeyV1(taskKey: string): taskKey is TextOpenWorl
 export function createTextOpenWorldProductionExecutorV1(
   options: TextOpenWorldProductionExecutorOptionsV1,
 ): ProductProductionTaskExecutorV1 {
+  options = { ...options, production: structuredClone(options.production), brief: structuredClone(options.brief),
+    ...(options.taskExecutors === undefined ? {} : { taskExecutors: { ...options.taskExecutors } }),
+    ...(options.textCapabilityReceipt === undefined ? {} : { textCapabilityReceipt: structuredClone(options.textCapabilityReceipt) }),
+    ...(options.mediaCapabilities === undefined ? {} : { mediaCapabilities: new Map([...options.mediaCapabilities].map(([key, provider]) => [key, {
+      ...provider, binding: structuredClone(provider.binding), receipt: structuredClone(provider.receipt),
+    }] as const)) }),
+  }
   const executors: Record<string, ProductProductionTaskExecutorV1> = {
     'p0.source-lock': createTextOpenWorldSourceLockExecutorV1(),
     'p1.source-curation': createTextOpenWorldSourceCurationExecutorV1(),
@@ -453,6 +452,9 @@ export function createTextOpenWorldProductionExecutorV1(
     'qa.release': createTextOpenWorldReleaseQaExecutorV1(),
   }
   return async execution => {
+    execution = captureTextOpenWorldTaskExecutionInputV1(execution)
+    await assertTextOpenWorldBuildNewWorkV1({ scope: execution.scope, productionId: execution.productionId,
+      buildId: execution.buildId, operation: '执行新的文字开放世界制作任务' })
     if (execution.task.taskKey === 'media.visual' || execution.task.taskKey === 'media.audio') {
       const mediaOptions = {
         production: options.production, brief: options.brief,

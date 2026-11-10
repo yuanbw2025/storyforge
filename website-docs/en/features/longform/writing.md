@@ -1,5 +1,10 @@
 # Longform: outlines, scene beats, and prose
 
+
+## Completing previously confirmed content after interruption
+
+After interrupted prose, detailed-outline or impact-patch adoption, inspect the candidate, task and recovery prompt first. Recovery checks the original author decision, source and target before continuing that confirmation. Use Continue completing confirmed content when offered instead of starting generation again. Failed writes or completion-event saves roll back together, retaining the candidate for confirmation. An existing completion proof reuses the original result. See [#255](https://github.com/yuanbw2025/storyforge/pull/255).
+
 ## Malformed encyclopedia references and chapter entry
 
 Encyclopedia names and summaries provide read-only reference previews in prose. [PR #231](https://github.com/yuanbw2025/storyforge/pull/231) fixes malformed names or preview values blocking chapter entry: invalid names do not participate in references, non-text previews are treated as empty, and original encyclopedia records stay unchanged. Continue editing, saving and reloading the chapter to check prose persistence. If an error remains, preserve the original records and report the version, error text and steps. The source of malformed writes remains unknown; unrelated native exits are not declared resolved.

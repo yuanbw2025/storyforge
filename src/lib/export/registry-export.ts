@@ -465,6 +465,9 @@ function toExportRow(
       const got = targetMap?.get(val)
       mapped = got ?? null
       if (got == null && rm.onUnmapped === 'drop') return null // 孤儿行丢弃
+      if (got == null && rm.onUnmapped === 'require') {
+        throw new Error(`[deriveExport] ${spec.name}.${rm.field} 缺少必填引用映射`)
+      }
     }
     obj[rm.exportAs] = mapped
   }
