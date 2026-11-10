@@ -92,7 +92,9 @@ it.each([12, 13, 14])('cannot attach the new inquiry version to a valid v%s revi
   const before = await readProductRuntimeState(f.sessionId), version = await readProductRuntimeStateVersion(f.sessionId)
   await expect(commitChatSituation({sessionId: f.sessionId, commandId: 'legacy-run-forged-version', baseSequence: version.sequence, baseStateHash: version.stateHash,
     triggerSequence: before.interaction!.chatNarrative!.triggers.at(-1)!.requestedSequence, draft,
-    review: {reviewedProposalJson: canonicalStringify(draft), ...chatInquiryReviewFixture(draft)}, inquiryEvidenceVersion: producerVersion - 11,
+    review: {reviewedProposalJson: canonicalStringify(draft), ...chatInquiryReviewFixture(draft)},
+    // @ts-expect-error Deliberately forged version: runtime must reject before changing the session.
+    inquiryEvidenceVersion: producerVersion - 11,
     harnessRun: {id: generated.snapshot.run.id, lastSequence: generated.snapshot.projection.lastSequence}})).rejects.toThrow('与原运行合同不一致')
   expect(await readProductRuntimeState(f.sessionId)).toEqual(before)
 })
