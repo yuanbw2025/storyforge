@@ -1,5 +1,5 @@
 import type { ChatMessage } from '../../types'
-import { estimateTokens } from '../../ai/context-budget'
+import { hasProviderUsageEvidenceV1, normalizeLongConsistencyCallUsageV1, parseLongConsistencyModelUsageV1, PROVIDER_USAGE_POLICY_V1 } from './model-usage'
 import { canonicalStringify, hashCanonicalValue } from '../../agent/run/hash'
 import {
   assertExactKeys,
@@ -106,6 +106,7 @@ export interface H4LongConsistencyRunCheckpointV1 {
   completed: H4LongConsistencyCompletedCaseV1[]
   failures: H4LongConsistencyRunFailureV1[]
   usage: H4LongConsistencyRunUsageV1
+  usagePolicy?: typeof PROVIDER_USAGE_POLICY_V1
   checkpointHash: string
 }
 
@@ -216,18 +217,6 @@ function parseBudget(value: unknown, path: string): H4LongConsistencyRunBudgetV1
   return budget
 }
 
-function parseModelUsage(value: unknown, path: string): LongConsistencyModelUsageV1 {
-  const record = readRecord(value, path)
-  const keys = ['inputTokens', 'outputTokens', 'durationMs', 'costUsd'] as const
-  assertExactKeys(record, keys, keys, path)
-  return {
-    inputTokens: readInteger(record.inputTokens, `${path}.inputTokens`),
-    outputTokens: readInteger(record.outputTokens, `${path}.outputTokens`),
-    durationMs: readNonNegativeNumber(record.durationMs, `${path}.durationMs`),
-    costUsd: readNonNegativeNumber(record.costUsd, `${path}.costUsd`),
-  }
-}
-
 function parseUsage(value: unknown, path: string): H4LongConsistencyRunUsageV1 {
   const record = readRecord(value, path)
   const keys = [
@@ -265,7 +254,7 @@ function parseFailure(value: unknown, path: string): H4LongConsistencyRunFailure
     attempt: readInteger(record.attempt, `${path}.attempt`, { min: 1 }),
     code: readString(record.code, `${path}.code`, { max: 120 }),
     message: readString(record.message, `${path}.message`, { max: 500 }),
-    usage: record.usage === null ? null : parseModelUsage(record.usage, `${path}.usage`),
+    usage: record.usage === null ? null : parseLongConsistencyModelUsageV1(record.usage, `${path}.usage`),
   }
 }
 
@@ -305,7 +294,10 @@ export function parseH4LongConsistencyRunCheckpointV1(value: unknown): H4LongCon
     'usage',
     'checkpointHash',
   ] as const
-  assertExactKeys(record, keys, keys, 'checkpoint')
+  assertExactKeys(record, [...keys, 'usagePolicy'], keys, 'checkpoint')
+  const usagePolicy = Object.prototype.hasOwnProperty.call(record, 'usagePolicy')
+    ? readEnum(record.usagePolicy, [PROVIDER_USAGE_POLICY_V1], 'checkpoint.usagePolicy')
+    : undefined
   if (record.schemaVersion !== 1) failSchema('unsupported_version', 'checkpoint.schemaVersion', '仅支持版本 1')
   if (record.checkpointType !== H4_LONG_CONSISTENCY_CHECKPOINT_TYPE_V1) {
     failSchema('invalid_value', 'checkpoint.checkpointType', '不是 H4 verifier checkpoint')
@@ -348,6 +340,7 @@ export function parseH4LongConsistencyRunCheckpointV1(value: unknown): H4LongCon
   })
   return {
     schemaVersion: 1,
+    ...(usagePolicy === undefined ? {} : { usagePolicy }),
     checkpointType: H4_LONG_CONSISTENCY_CHECKPOINT_TYPE_V1,
     runnerVersion: H4_LONG_CONSISTENCY_RUNNER_VERSION_V1,
     fixtureVersion: H4_LONG_CONSISTENCY_FIXTURE_VERSION_V1,
@@ -419,10 +412,13 @@ async function fixtureBindings(fixtures: readonly H4LongConsistencyFixtureV1[]) 
   })))
 }
 
-function aggregateUsage(checkpoint: Pick<H4LongConsistencyRunCheckpointV1, 'attempts' | 'completed' | 'failures'>) {
+function aggregateUsage(
+  checkpoint: Pick<H4LongConsistencyRunCheckpointV1, 'attempts' | 'completed' | 'failures'>,
+  providerEvidence: boolean,
+) {
   const completedUsage = checkpoint.completed.reduce<H4LongConsistencyRunUsageV1>((usage, item) => ({
     ...usage,
-    meteredModelCalls: usage.meteredModelCalls + 1,
+    meteredModelCalls: usage.meteredModelCalls + Number(!providerEvidence || hasProviderUsageEvidenceV1(item.artifact.execution.verifierUsage)),
     inputTokens: usage.inputTokens + item.artifact.execution.verifierUsage.inputTokens,
     outputTokens: usage.outputTokens + item.artifact.execution.verifierUsage.outputTokens,
     durationMs: usage.durationMs + item.artifact.execution.verifierUsage.durationMs,
@@ -440,7 +436,7 @@ function aggregateUsage(checkpoint: Pick<H4LongConsistencyRunCheckpointV1, 'atte
     failure.usage
       ? {
           ...total,
-          meteredModelCalls: total.meteredModelCalls + 1,
+          meteredModelCalls: total.meteredModelCalls + Number(!providerEvidence || hasProviderUsageEvidenceV1(failure.usage)),
           inputTokens: total.inputTokens + failure.usage.inputTokens,
           outputTokens: total.outputTokens + failure.usage.outputTokens,
           durationMs: total.durationMs + failure.usage.durationMs,
@@ -588,7 +584,12 @@ async function assertCheckpointAgainstCatalog(checkpoint: H4LongConsistencyRunCh
       rawJudgeOutput: completed.rawJudgeOutput,
     })) throw new Error(`H4 checkpoint 完成项 ${fixture.id} 的 artifact 无法验证`)
   }
-  const usage = aggregateUsage(checkpoint)
+  if (checkpoint.usagePolicy === undefined && (checkpoint.completed.some(item => (
+    item.artifact.execution.generationUsage.provenance || item.artifact.execution.verifierUsage.provenance
+  )) || checkpoint.failures.some(item => item.usage?.provenance))) {
+    throw new Error('H4 checkpoint 含新版用量来源却缺少用量策略')
+  }
+  const usage = aggregateUsage(checkpoint, checkpoint.usagePolicy === PROVIDER_USAGE_POLICY_V1)
   if (!sameValue(usage, checkpoint.usage)) throw new Error('H4 checkpoint usage 不可重算')
   if (checkpoint.status === 'completed' && checkpoint.completed.length !== fixtures.length) {
     throw new Error('H4 checkpoint 伪造 completed')
@@ -695,6 +696,7 @@ async function initialCheckpoint(input: RunH4LongConsistencyVerifierInputV1) {
   const bindings = await fixtureBindings(fixtures)
   return await signCheckpoint({
     schemaVersion: 1,
+    usagePolicy: PROVIDER_USAGE_POLICY_V1,
     checkpointType: H4_LONG_CONSISTENCY_CHECKPOINT_TYPE_V1,
     runnerVersion: H4_LONG_CONSISTENCY_RUNNER_VERSION_V1,
     fixtureVersion: H4_LONG_CONSISTENCY_FIXTURE_VERSION_V1,
@@ -732,6 +734,8 @@ async function updateCheckpoint(
   const next = await signCheckpoint({
     ...checkpointBody(checkpoint),
     ...patch,
+    usagePolicy: PROVIDER_USAGE_POLICY_V1,
+    usage: patch.usage ?? aggregateUsage(checkpoint, true),
     updatedAt: new Date(input.now?.() ?? Date.now()).toISOString(),
   })
   return next
@@ -835,21 +839,17 @@ export async function runH4LongConsistencyVerifierV1(
               traceHash,
             })
             rawJudgeOutput = response.output
-            failedAttemptUsage = {
-              inputTokens: response.usage?.inputTokens
-                ?? messages.reduce((sum, message) => sum + estimateTokens(message.content), 0),
-              outputTokens: response.usage?.outputTokens
-                ?? (typeof response.output === 'string' ? estimateTokens(response.output) : 0),
-              durationMs: response.usage?.durationMs ?? Math.round(performance.now() - startedAt),
-              costUsd: response.usage?.costUsd ?? 0,
-            }
-            return response
+            failedAttemptUsage = normalizeLongConsistencyCallUsageV1({
+              usage: response.usage, messages, output: response.output,
+              durationMs: Math.round(performance.now() - startedAt),
+            })
+            return { ...response, usage: failedAttemptUsage }
           },
         })
       } catch (error) {
         const failure = failureFrom(error, fixture.id, attempt, failedAttemptUsage)
         const failures = [...checkpoint.failures, failure]
-        const usage = aggregateUsage({ attempts, completed: checkpoint.completed, failures })
+        const usage = aggregateUsage({ attempts, completed: checkpoint.completed, failures }, true)
         const terminal = failure.code === 'verifier_error_non_retryable'
           || attempt >= checkpoint.maxAttemptsPerFixture
           || (
@@ -872,7 +872,7 @@ export async function runH4LongConsistencyVerifierV1(
         rawJudgeOutput,
         artifact,
       }]
-      const usage = aggregateUsage({ attempts, completed, failures: checkpoint.failures })
+      const usage = aggregateUsage({ attempts, completed, failures: checkpoint.failures }, true)
       const allCompleted = completed.length === fixtures.length
       checkpoint = await updateCheckpoint(checkpoint, input, {
         attempts,
