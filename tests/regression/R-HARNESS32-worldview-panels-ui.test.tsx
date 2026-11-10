@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
     submitRequest: vi.fn(async () => undefined),
     submitTargetedRequest: vi.fn(async () => undefined),
     updateCandidate: vi.fn(async () => undefined),
+    readVisibleCandidateDraft: vi.fn(() => undefined),
+    discardVisibleCandidateDraft: vi.fn(async () => undefined),
     rejectCandidate: vi.fn(async () => undefined),
     adoptCandidate: vi.fn(async () => undefined),
   },
@@ -259,7 +261,7 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
     expect(mocks.copilot.updateCandidate).toHaveBeenCalledWith(51, JSON.stringify({
       field: 'divineDesign',
       value: revisedValue,
-    }, null, 2))
+    }, null, 2), { rawValue: revised })
 
     const buttons = Array.from(host.querySelectorAll('button'))
     await act(async () => buttons.find(button => button.textContent?.includes('拒绝'))!.click())
@@ -321,7 +323,7 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
     expect(mocks.copilot.updateCandidate).toHaveBeenCalledWith(51, JSON.stringify({
       field: 'naturalResources',
       value: revisedValue,
-    }, null, 2))
+    }, null, 2), { rawValue: JSON.stringify(revisedValue, null, 2) })
   })
 })
 
