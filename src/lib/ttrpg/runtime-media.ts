@@ -45,7 +45,7 @@ import {
   parseTtrpgVisualBibleV1,
 } from "./media-contract";
 import { parseRulePackV1 } from "./rule-pack";
-import { createTtrpgViewerProjectionV1 } from "./viewer-projection";
+import { createTtrpgViewerProjectionV1, type TtrpgViewerRuntimeMediaRefV1 } from "./viewer-projection";
 import { readTtrpgSessionParticipantsV2 } from "./participants";
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
@@ -1165,25 +1165,38 @@ export async function readVisibleTtrpgRuntimeMediaRequestsV1(input: {
 export async function readTtrpgRuntimeMediaBlobV1(input: {
   scope: WorkspaceScope;
   sessionId: number;
-  mediaAssetId: number;
   viewerKey: string;
-}): Promise<Blob> {
+} & (
+  | { runtimeAsset: TtrpgViewerRuntimeMediaRefV1; mediaAssetId?: never }
+  | { mediaAssetId: number; runtimeAsset?: never }
+)): Promise<Blob> {
   const scope = await resolveScope({ scope: input.scope });
+  // Backups remap the row FK; a replayed event can still carry the old local ID.
+  // Resolve that locator through the exact replayed slot and the viewer's owned request.
+  const session = await db.productRuntimeSessions.get(input.sessionId);
+  if (!session || session.projectId !== scope.projectId || session.worldId !== scope.worldId ||
+    session.workId !== scope.workId) fail("viewer 不能读取该运行时媒资");
   const visible = await readVisibleTtrpgRuntimeMediaRequestsV1({
     sessionId: input.sessionId,
     viewerKey: input.viewerKey,
   });
-  const request = visible.find(
-    (row) =>
-      row.mediaAssetId === input.mediaAssetId && row.status === "available",
-  );
-  if (
-    !request ||
-    !request.mediaContentHash ||
-    request.mediaAssetVersion == null
-  )
+  const slots = (await stateAndEvents(session)).state.ttrpg?.product?.media.slots ?? [];
+  const stable = input.runtimeAsset;
+  const slot = stable ? slots.find(item => item.status === "available" &&
+    item.slotKey === stable.slotKey && item.requestKey === stable.requestKey && item.assetKey === stable.assetKey &&
+    item.mediaAssetVersion === stable.version && item.mediaContentHash === stable.contentHash)
+    : slots.find(item => item.status === "available" && item.mediaAssetId === input.mediaAssetId);
+  if (stable && !slot) fail("viewer 不能读取该运行时媒资");
+  const candidates = visible.filter(row => row.status === "available" && (slot
+    ? row.requestKey === slot.requestKey && row.slotKey === slot.slotKey &&
+      row.mediaAssetVersion === slot.mediaAssetVersion && row.mediaContentHash === slot.mediaContentHash
+    : row.mediaAssetId === input.mediaAssetId));
+  // Stable reads fail closed if restored rows do not prove one exact binding.
+  if (stable && candidates.length !== 1) fail("viewer 不能读取该运行时媒资");
+  const request = candidates[0];
+  if (!request?.mediaAssetId || !request.mediaContentHash || request.mediaAssetVersion == null)
     fail("viewer 不能读取该运行时媒资");
-  const asset = await db.productMediaAssets.get(input.mediaAssetId);
+  const asset = await db.productMediaAssets.get(request.mediaAssetId);
   if (
     !asset ||
     asset.ownerKind !== "runtime" || asset.productType !== "ttrpg" ||
@@ -1191,6 +1204,7 @@ export async function readTtrpgRuntimeMediaBlobV1(input: {
     !(await assertRecordInScope(scope, "productMediaAssets", asset, {
       owner: "work",
     })) ||
+    (slot != null && asset.assetKey !== slot.assetKey) ||
     asset.contentHash !== request.mediaContentHash ||
     asset.version !== request.mediaAssetVersion
   )

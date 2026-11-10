@@ -5,11 +5,12 @@
  * IndexedDB。v14/v15 和分支定义不同的 v16 经严格校验进入 v17；
  * 仅按表注册元数据补缺失的新增空表，不臆造注释、作者确认或运行记忆。
  */
+import type { TableSpec } from '../registry/types'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import { isCurrentWorldCode } from '../workspace/identity'
 import { NARRATIVE_DOMAIN_FIELDS_V1, parseNarrativeDomainFieldV1 } from '../narrative-domain/codec'
 import { assertNarrativeDomainReferenceRowsV1 } from '../narrative-domain/integrity'
-import { inspectPortableTableStructure } from './portable-table-structure'
+import { inspectPortableRequiredReferencesV1, inspectPortableTableStructure, readPortableOwnerShadowV1 } from './portable-table-structure'
 
 export const CURRENT_BACKUP_VERSION = 17
 
@@ -26,6 +27,148 @@ export interface BackupTrustReport {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+export const BACKUP_REFERENCE_REVIEW_TITLE = '备份恢复：待确认关联'
+
+interface BackupReferenceIssue {
+  table: string
+  rowIndex: number
+  rowKey: number
+  resourceUid?: string
+  path: string
+  value: unknown
+  reason: string
+  sampleId?: unknown
+}
+
+type ReviewOwner = { kind: 'world' | 'work' | 'instance'; exportId: number }
+
+export function referenceReviewScopeMatchesV1(
+  rule: string | undefined, holder: ReviewOwner | null, target: ReviewOwner | null,
+  worldOf: (owner: ReviewOwner) => number | null,
+): boolean {
+  if (!holder || !target || holder.kind === 'instance') return false
+  if (rule === 'same-owner' || (rule === 'chapter' && holder.kind === 'work'))
+    return holder.kind === target.kind && holder.exportId === target.exportId
+  const world = worldOf(holder)
+  return world != null && world === worldOf(target) && (rule === 'chapter' ? target.kind === 'work' : target.kind === 'world')
+}
+
+/** Prepare a detached patch. Old physical IDs are evidence, never fallback
+ * coordinates. Only a registered portable locator within scope can reconnect. */
+export function reviewPortableLocalReferencesV1(backup: Record<string, unknown>, prepare = true) {
+  const issues: BackupReferenceIssue[] = []
+  const patches = new Map<string, Map<number, Record<string, unknown>>>()
+  const specs = new Map<string, TableSpec>(PROJECT_TABLES.map(spec => [spec.name, spec]))
+  const indexes = new Map<string, Map<number, Record<string, unknown>>>()
+  const isKey = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+  function index(name: string) {
+    const cached = indexes.get(name)
+    if (cached) return cached
+    const indexed = new Map<number, Record<string, unknown>>()
+    const rows = backup[name]
+    if (Array.isArray(rows)) rows.forEach((row, position) => {
+      if (!isRecord(row)) return
+      const key = specs.get(name)?.exportIdField ? row._exportId : position
+      if (isKey(key)) indexed.set(key, row)
+    })
+    indexes.set(name, indexed)
+    return indexed
+  }
+  type Owner = ReturnType<typeof readPortableOwnerShadowV1>
+  function owner(spec: TableSpec, row: Record<string, unknown>): Owner {
+    try { return readPortableOwnerShadowV1(spec, row) } catch { return null }
+  }
+  function worldOf(value: ReviewOwner): number | null {
+    if (value.kind === 'instance') return null
+    if (value.kind === 'world') return value.exportId
+    const world = index('works').get(value.exportId)?._worldExportId
+    return isKey(world) ? world : null
+  }
+  function valid(ref: { remapVia: string; reviewLocal?: string }, holder: Owner, value: unknown) {
+    if (!holder || !isKey(value)) return false
+    const spec = specs.get(ref.remapVia)
+    const row = index(ref.remapVia).get(value)
+    const target = spec && row ? owner(spec, row) : null
+    return referenceReviewScopeMatchesV1(ref.reviewLocal, holder, target, worldOf)
+  }
+  const decode = (value: unknown): unknown => {
+    if (typeof value !== 'string') return value
+    try { return JSON.parse(value) as unknown } catch { return undefined }
+  }
+  for (const spec of specs.values()) {
+    const scalars = (spec.exportRemap ?? []).filter(ref => ref.reviewLocal)
+    const arrays = (spec.exportRefRemap ?? []).filter(ref =>
+      (ref.kind === 'id-array' || ref.kind === 'object-array-id') && ref.reviewLocal)
+    const rows = backup[spec.name]
+    if ((!scalars.length && !arrays.length) || !Array.isArray(rows)) continue
+    rows.forEach((row, rowIndex) => {
+      if (!isRecord(row)) return
+      const holder = owner(spec, row)
+      const resourceUid = spec.resourceIdentity ? row[spec.resourceIdentity.field] : undefined
+      const rowKey = spec.exportIdField && isKey(row._exportId) ? row._exportId : rowIndex
+      const patch: Record<string, unknown> = {}
+      const report = (path: string, value: unknown, reason: string, sampleId?: unknown) => {
+        issues.push({ table: spec.name, rowIndex, rowKey,
+          ...(typeof resourceUid === 'string' ? { resourceUid } : {}),
+          path, value, reason, ...(sampleId == null ? {} : { sampleId }) })
+      }
+      for (const ref of scalars) {
+        const matches = !ref.when || row[ref.when.field] === ref.when.equals
+        if (row[ref.field] != null) report(ref.field, row[ref.field], '旧库坐标无法确认')
+        if (row[ref.exportAs] != null && (!matches || !valid(ref, holder, row[ref.exportAs]))) {
+          report(ref.exportAs, row[ref.exportAs], '便携坐标无有效同域目标')
+          patch[ref.exportAs] = null
+        }
+      }
+      for (const ref of arrays) {
+        if (ref.kind !== 'id-array' && ref.kind !== 'object-array-id') continue
+        const raw = row[ref.field]
+        const original = decode(raw)
+        const wire = row[ref.exportAs]
+        if (ref.kind === 'id-array') {
+          if (raw != null && (!Array.isArray(original) || original.length > 0)) {
+            report(ref.field, raw, '旧库数组坐标无法确认')
+            patch[ref.field] = ref.storage === 'json-string' ? '[]' : []
+          }
+        } else if (Array.isArray(original)) {
+          let changed = false
+          const clean = original.map((item, index) => {
+            if (!isRecord(item) || item[ref.itemField] == null) return item
+            report(`${ref.field}[${index}].${ref.itemField}`, item[ref.itemField], '旧库坐标无法确认', item.id)
+            changed = true
+            return { ...item, [ref.itemField]: null }
+          })
+          if (changed) patch[ref.field] = ref.storage === 'json-string' ? JSON.stringify(clean) : clean
+        } else if (raw != null) {
+          report(ref.field, raw, '原字段不可解析')
+          patch[ref.field] = ref.storage === 'json-string' ? '[]' : []
+        }
+        if (wire == null) continue
+        if (!Array.isArray(wire)) {
+          report(ref.exportAs, wire, '便携坐标数组不可解析')
+          patch[ref.exportAs] = []
+          continue
+        }
+        const clean = wire.map((value, i) => {
+          if (ref.kind === 'object-array-id' && value === null) return null
+          const hasItem = ref.kind !== 'object-array-id' || (Array.isArray(original) && isRecord(original[i]))
+          if (hasItem && valid(ref, holder, value)) return value
+          report(`${ref.exportAs}[${i}]`, value, '便携坐标无有效同域目标或样本')
+          return null
+        })
+        if (clean.some((value, i) => value !== wire[i]))
+          patch[ref.exportAs] = ref.kind === 'id-array' ? clean.filter(value => value !== null) : clean
+      }
+      if (prepare && Object.keys(patch).length > 0) {
+        if (!patches.has(spec.name)) patches.set(spec.name, new Map())
+        patches.get(spec.name)!.set(rowIndex, patch)
+      }
+    })
+  }
+  return { issues, patches }
 }
 
 const CURRENT_PROJECT_EXPORT_KEYS = new Set([
@@ -217,11 +360,22 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
     })
   }
 
+  if (version === CURRENT_BACKUP_VERSION || version === 14 || version === 15 || version === 16) {
+    const present = new Set(['projects', ...exportableTables])
+    errors.push(...inspectPortableRequiredReferencesV1(PROJECT_TABLES.filter(spec => present.has(spec.name)), input))
+  }
+
   if ((version === 16 || version === CURRENT_BACKUP_VERSION) && errors.length === 0) {
     try {
       assertNarrativeDomainReferenceRowsV1(new Map(PROJECT_TABLES.filter(spec => spec.exportable && spec.name !== 'projects')
         .map(spec => [spec.name, input[spec.name] as Record<string, unknown>[]])), 'portable')
     } catch (error) { errors.push(String(error)) }
+  }
+  if (errors.length === 0) {
+    const { issues } = reviewPortableLocalReferencesV1(input, false)
+    if (issues.length > 0) warnings.push(
+      `有 ${issues.length} 项关联待确认。可确认内容会恢复；其余原值会保存到当前作品置顶便签「${BACKUP_REFERENCE_REVIEW_TITLE}」。`,
+    )
   }
   return {
     valid: errors.length === 0,

@@ -50,7 +50,7 @@ function projection(
         status,
         requestKey,
         assetKey: null,
-        mediaAssetId: null,
+        runtimeAsset: null,
         mediaContentHash: null,
         lastErrorCode:
           status === "failed" ? "provider-generation-failed" : null,

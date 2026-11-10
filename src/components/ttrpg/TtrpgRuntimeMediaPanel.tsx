@@ -201,7 +201,7 @@ export default function TtrpgRuntimeMediaPanel(props: {
                     className={`text-[9px] ${slot.status === "failed" ? "text-danger" : slot.status === "available" ? "text-success" : "text-text-muted"}`}
                   >
                     {url
-                      ? slot.mediaAssetId != null ? "运行时可用" : "预制可用"
+                      ? slot.runtimeAsset ? "运行时可用" : "预制可用"
                       : row?.status === "generating"
                       ? "生成中"
                       : STATUS_LABELS[slot.status]}

@@ -19,6 +19,7 @@ import CloudBackupCard from './CloudBackupCard'
 import { useToast } from '../shared/Toast'
 import { useDialog } from '../shared/Dialog'
 import type {
+  Note,
   Project,
   Snapshot,
   WorkspaceFileCandidateSetV1,
@@ -26,7 +27,7 @@ import type {
   WorkspaceSelfCheckReportV1,
 } from '../../lib/types'
 import { buildLocalDiagnosticReport } from '../../lib/diagnostics/local-diagnostic-report'
-import { inspectProjectBackup, type BackupTrustReport } from '../../lib/export/backup-trust'
+import { BACKUP_REFERENCE_REVIEW_TITLE, inspectProjectBackup, type BackupTrustReport } from '../../lib/export/backup-trust'
 import {
   buildWorkspaceSelfCheckReportV1,
   buildWorkspaceFileAdoptionCandidatesV1,
@@ -45,6 +46,8 @@ import {
 import { buildWorkspaceImpactPlanV1 } from '../../lib/memory/workspace-impact'
 import { useProjectStore } from '../../stores/project'
 import { useActiveWork } from '../../hooks/useActiveWork'
+import { resolveWorkspaceScope } from '../../lib/workspace/ownership'
+import { readOwnedRows } from '../../lib/workspace/scope'
 
 type Tab = 'export' | 'backup'
 type ExportStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -71,6 +74,9 @@ export default function DataManagementPanel({ project, onImported, onOpenStorage
       </div>
 
       {/* Tab 切换 */}
+      {project.id != null && (
+        <RestoredReferenceReports key={`${project.id}:${project.activeWorkId}`} projectId={project.id} />
+      )}
       <div className="flex gap-1 bg-bg-elevated rounded-xl p-1 w-fit">
         {TABS.map(tab => {
           const Icon = tab.icon
@@ -94,6 +100,29 @@ export default function DataManagementPanel({ project, onImported, onOpenStorage
       {activeTab === 'export'    && <ExportTab project={project} onImported={onImported} onOpenStorageSettings={onOpenStorageSettings} />}
       {activeTab === 'backup'    && <BackupTab    project={project} onImported={onImported} />}
     </div>
+  )
+}
+
+function RestoredReferenceReports({ projectId }: { projectId: number }) {
+  const [reports, setReports] = useState<Note[]>([])
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let active = true
+    void resolveWorkspaceScope(projectId)
+      .then(scope => readOwnedRows<Note>(scope, 'notes', { owner: 'work' }))
+      .then(rows => {
+        if (active) setReports(rows.filter(note => note.content.startsWith(`${BACKUP_REFERENCE_REVIEW_TITLE}\n`)))
+      }).catch(() => { if (active) setFailed(true) })
+    return () => { active = false }
+  }, [projectId])
+  if (failed) return <p role="status" className="text-xs text-text-muted">未能读取当前作品的备份恢复便签。</p>
+  if (!reports.length) return null
+  return (
+    <details className="rounded-lg border border-border px-3 py-2 text-sm">
+      <summary className="cursor-pointer font-medium">{BACKUP_REFERENCE_REVIEW_TITLE}</summary>
+      <p className="mt-2 text-text-muted">这些原值保存在当前作品的便签中，可在核对后手动重新建立关联。</p>
+      {reports.map(note => <pre key={note.id} className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{note.content}</pre>)}
+    </details>
   )
 }
 

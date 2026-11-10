@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality019-stable-recovery-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality030-037-backup-references-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -687,6 +687,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality019-portable-tree-v1.json",
         "workPackage": "SFQA-019-portable-tree",
         "note": "Preserve the initial independent tree-validation receipt before restoring stable parent-first insertion and measuring the shared portable-tree source."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality019-stable-recovery-v1.json",
+        "workPackage": "pre-quality030-037",
+        "note": "Saved the SFQA-019 receipt before verifying mandatory and optional portable backup reference changes."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
