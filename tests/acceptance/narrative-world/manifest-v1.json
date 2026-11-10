@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-source-foundation-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-source-foundation-nw1b-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-source-foundation-v2.json",
+        "workPackage": "NW-0B",
+        "note": "Preserve measured shared foundation before replacing the independently measured NW1B successor; only a receipt pointer changes, all original corpus/assertions and observations remain unchanged."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality020-independent-v1.json",
         "workPackage": "NW-0B",
