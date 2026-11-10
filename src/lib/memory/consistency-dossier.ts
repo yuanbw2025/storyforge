@@ -1,3 +1,4 @@
+import { keepIntegrityReadAlive } from '../db/transaction-integrity'
 import { estimateTokens } from '../ai/context-budget'
 import { hashChapterText } from '../ai/chapter-memory/text-normalization'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
@@ -175,7 +176,7 @@ export async function buildLongTermConsistencyDossierV1(input: {
     const keywords = chunk.keywords.map(value => value.toLocaleLowerCase())
     if (queryTerms.length && !queryTerms.some(term => lowerText.includes(term) || keywords.some(keyword => keyword.includes(term)))) continue
     const chapter = currentChapterById.get(chunk.sourceChapterId)
-    if (!chapter || chunk.sourceTextHash !== await hashChapterText(chapter.content ?? '')) continue
+    if (!chapter || chunk.sourceTextHash !== await keepIntegrityReadAlive(hashChapterText(chapter.content ?? ''))) continue
     keywordChunks.push(chunk)
     if (keywordChunks.length >= 12) break
   }
@@ -203,9 +204,9 @@ export async function buildLongTermConsistencyDossierV1(input: {
     ['storyTimelineEvents', relevantTimeline, 'accepted-evidence'],
     ['retrievalChunks', keywordChunks, 'derived-cache'],
   ]
-  const sourceRefs = (await Promise.all(sourceRows.flatMap(([table, rows, authority]) => (
+  const sourceRefs = (await keepIntegrityReadAlive(Promise.all(sourceRows.flatMap(([table, rows, authority]) => (
     rows.map(row => sourceRef(table, row, authority))
-  )))).filter((ref): ref is ConsistencyDossierSourceRefV1 => ref != null)
+  ))))).filter((ref): ref is ConsistencyDossierSourceRefV1 => ref != null)
 
   const findings: ConsistencyDossierFindingV1[] = []
   for (const ref of sourceRefs.filter(row => row.status !== 'current')) {
@@ -290,7 +291,7 @@ export async function buildLongTermConsistencyDossierV1(input: {
       modelCalls: 0 as const,
     },
   }
-  return { ...base, dossierHash: await hashCanonicalValue(base) }
+  return { ...base, dossierHash: await keepIntegrityReadAlive(hashCanonicalValue(base)) }
 }
 
 export function formatLongTermConsistencyDossierV1(dossier: LongTermConsistencyDossierV1): string {

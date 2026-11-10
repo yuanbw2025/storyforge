@@ -63,7 +63,7 @@ export async function executeQualityAuthoringNodeV1(input: DomainExecutionInput)
   const settings = describeResolvedAIRequestSettingsV1(resolution, false, wholeChapterQualityRequestOptionsV1(resolution.config))
   const identity = (value: typeof settings) => ({ provider: value.provider, model: value.model, parameters: value.parameters })
   const reusable = cached?.current && (cached.authorRequest ?? '') === authorRequest.trim() && await hashCanonicalValue(identity(cached.report.reviewer.settings)) === await hashCanonicalValue(identity(settings))
-  const result = reusable ? cached : await runWholeChapterQualityReviewV1({ scope, chapterId: chapter.id!, outlineNodeId: chapter.outlineNodeId, worldGroupId: input.worldGroupId, mode, configOverride: input.aiConfig, generationOverrides, authorRequest, signal: input.signal, call: createWholeChapterQualityCallV1(input.projectId, mode, input.signal) })
+  const result = reusable ? cached : await runWholeChapterQualityReviewV1({ scope, chapterId: chapter.id!, outlineNodeId: chapter.outlineNodeId, worldGroupId: input.worldGroupId, mode, configOverride: input.aiConfig, generationOverrides, authorRequest, signal: input.signal, call: createWholeChapterQualityCallV1(input.projectId, mode, input.signal, input.assertResumeSourcesCurrent) })
   const binding = await readAuthoringCanonBinding({ ...input, scope })
   return { output: JSON.stringify(result.report), semantic: 'chapter.quality-review', domain: { kind: 'quality-review', chapterTitle: chapter.title, mode, reportHash: result.report.artifactHash }, sourceKeys: binding.sourceKeys, sourceHash: binding.sourceHash, sourceEvidence: binding }
 }
@@ -103,7 +103,7 @@ export async function executeQualityRevisionAuthoringNodeV1(input: DomainExecuti
       if (await hashCanonicalValue(identity(expected)) !== await hashCanonicalValue(identity(actual))) throw new Error('已保存修订的模型参数与当前选择不同，请先处理原候选，再明确开启新一轮。')
     }
   }
-  result ??= await runQualityRevisionV1({ scope, chapterId: chapter.id!, outlineNodeId: chapter.outlineNodeId, worldGroupId: input.worldGroupId, mode, reportRunId: report.runId, reportHash: report.report.artifactHash, selectedIssueIds: issueIds, additionalParagraphs: paragraphs, protectedQuotes, configOverride: input.aiConfig, generationOverrides, authorRequest, signal: input.signal, revise: createQualityRevisionCallV1(input.projectId, 'revision', input.signal), recheck: createQualityRevisionCallV1(input.projectId, 'recheck', input.signal) })
+  result ??= await runQualityRevisionV1({ scope, chapterId: chapter.id!, outlineNodeId: chapter.outlineNodeId, worldGroupId: input.worldGroupId, mode, reportRunId: report.runId, reportHash: report.report.artifactHash, selectedIssueIds: issueIds, additionalParagraphs: paragraphs, protectedQuotes, configOverride: input.aiConfig, generationOverrides, authorRequest, signal: input.signal, revise: createQualityRevisionCallV1(input.projectId, 'revision', input.signal, input.assertResumeSourcesCurrent), recheck: createQualityRevisionCallV1(input.projectId, 'recheck', input.signal, input.assertResumeSourcesCurrent) })
   if (!result.candidate) throw new Error('修订复核未完成，已收到预演只供查看。')
   return { output: result.candidate.outputText, semantic: 'chapter.prose', domain: { kind: 'quality-revision', chapterTitle: chapter.title, reportHash: report.report.artifactHash, candidateHash: result.candidate.durable.candidateHash }, sourceKeys: binding.sourceKeys, sourceHash: binding.sourceHash, sourceEvidence: binding }
 }

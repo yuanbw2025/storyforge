@@ -2,6 +2,7 @@ import { buildChapterOrganizationPrompt } from '../agent/chapter-organization'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { buildFactExtractPrompt } from '../ai/adapters/fact-extract-adapter'
 import { normalizeChapterText } from '../ai/chapter-memory/text-normalization'
+import { keepIntegrityReadAlive } from '../db/transaction-integrity'
 import { assembleContext } from '../registry/assemble-context'
 import type { AIConfig, Chapter, Character, CharacterRelation, ChatMessage, Foreshadow, ItemLedgerEntry, WorkspaceScope } from '../types'
 import { readOwnedRows } from '../workspace/scope'
@@ -50,7 +51,7 @@ async function readChapterSource({ projectId, scope, worldGroupId, chapter, poli
 // The model also receives the chapter title and, for organization, scoped target
 // lists. Hash the exact prepared messages before dispatch alongside registered sources.
 function fingerprint(policy: AuthoringCanonicalChapterContext, assembly: Assembly, messages: ChatMessage[]) {
-  return hashCanonicalValue({ keys: policy.sourceKeys, context: assembly.text, messages })
+  return keepIntegrityReadAlive(hashCanonicalValue({ keys: policy.sourceKeys, context: assembly.text, messages }))
 }
 
 export async function readFactNodeSource(input: ChapterSourceInput) {

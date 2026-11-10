@@ -419,20 +419,20 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
-| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:778`<br/>`src/lib/node-authoring/domain-execution.ts:835` |
+| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:796`<br/>`src/lib/node-authoring/domain-execution.ts:855` |
 | `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1800` |
 | `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1778` |
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1768` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
-| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:647` |
+| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:660` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:129` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:943` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
-| `node.creation` | `src/lib/node-authoring/executor.ts:391` |
+| `node.creation` | `src/lib/node-authoring/executor.ts:395` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:200`<br/>`src/lib/outline/generation-node.ts:61` |
 | `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:666` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:56` |
@@ -441,7 +441,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `outline.workshop.scan` | `src/lib/outline/workshop.ts:442` |
 | `outline.workshop.scenes` | `src/lib/outline/workshop.ts:461` |
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:128` |
-| `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:288` |
+| `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:299` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:457` |
 | `runtime.character.chat-narrative-action` | `src/lib/character-interaction/action-choice-harness.ts:131` |
 | `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:271` |
@@ -456,25 +456,25 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 ### 动态 category 调用
 
 - `src/lib/adventure/harness.ts:396 · chat`
-- `src/lib/agent/character-copilot.ts:515 · chat`
+- `src/lib/agent/character-copilot.ts:518 · chat`
 - `src/lib/agent/character-driven-copilot.ts:505 · chat`
 - `src/lib/agent/character-lifecycle-copilot.ts:448 · chat`
 - `src/lib/agent/character-revision-copilot.ts:727 · chat`
-- `src/lib/agent/character-supplement-copilot.ts:578 · chat`
+- `src/lib/agent/character-supplement-copilot.ts:581 · chat`
 - `src/lib/agent/context-compression.ts:355 · chat`
 - `src/lib/agent/creative-rules-copilot.ts:448 · chat`
 - `src/lib/agent/inspiration-copilot.ts:345 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
 - `src/lib/agent/outline-copilot.ts:521 · chat`
-- `src/lib/agent/outline-copilot.ts:771 · chat`
+- `src/lib/agent/outline-copilot.ts:773 · chat`
 - `src/lib/agent/prose-copilot.ts:704 · chat`
-- `src/lib/agent/prose-copilot.ts:983 · chat`
+- `src/lib/agent/prose-copilot.ts:985 · chat`
 - `src/lib/agent/run/codex-extraction-durable.ts:784 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
 - `src/lib/agent/run/short-novel-durable.ts:319 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1671 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1723 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1697 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1749 · chat`
 - `src/lib/agent/story-core-copilot.ts:582 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:935 · chat`
@@ -486,7 +486,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:22 · ai.start`
 - `src/lib/motion-drama/durable-production.ts:348 · chat`
-- `src/lib/node-authoring/executor.ts:449 · chat`
+- `src/lib/node-authoring/executor.ts:457 · chat`
 - `src/lib/open-world/evolution-harness.ts:251 · chat`
 - `src/lib/open-world/harness.ts:150 · chat`
 - `src/lib/product-production/authoring-consultation.ts:169 · chat`
@@ -584,4 +584,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `bc18dc846`
+生成时间基准:commit `5fd276352`
