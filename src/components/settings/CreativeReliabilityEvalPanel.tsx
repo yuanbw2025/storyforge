@@ -264,7 +264,7 @@ export default function CreativeReliabilityEvalPanel() {
         || resumeCheckpoint.verifier.provider !== verifierConfig.provider
         || resumeCheckpoint.verifier.model !== verifierConfig.model
       )) throw new Error('当前预设与 checkpoint 冻结模型身份不一致')
-      await cleanupStrandedCreativeReliabilityWorkspacesV1()
+      await cleanupStrandedCreativeReliabilityWorkspacesV1(runId)
       const next = await runCreativeReliabilityEvalV1({
         suiteVersion: CREATIVE_RELIABILITY_FIXTURE_SET_VERSION_V1,
         runId,
@@ -315,10 +315,13 @@ export default function CreativeReliabilityEvalPanel() {
       tone: 'danger',
     })
     if (!confirmed) return
-    clearCreativeReliabilityEvalCheckpointV1()
-    await cleanupStrandedCreativeReliabilityWorkspacesV1()
-    setCheckpoint(null)
-    setError('')
+    try {
+      await clearCreativeReliabilityEvalCheckpointV1(checkpoint.runId)
+      setCheckpoint(null)
+      setError('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
   }
 
   const exportCheckpoint = async () => {
