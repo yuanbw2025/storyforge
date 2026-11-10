@@ -1,4 +1,5 @@
 import { chat, resolveRequestConfig } from "../ai/client";
+import { assertCurrentProductEntryV1, type StoryForgeProductIdV1 } from '../product/product-catalog'
 import { assembleContext } from "../registry/assemble-context";
 import { getAgentSkillV1 } from "../agent/skill-registry";
 import { createAgentSkillExecutionBindingV1 } from "../agent/execution-binding";
@@ -26,6 +27,7 @@ export interface AuthoringConsultationInput {
     runAI?: (messages: ChatMessage[]) => Promise<string>;
 }
 export async function consultAuthoringV1<S>(input: AuthoringConsultationInput, port: {
+    productId: StoryForgeProductIdV1;
     skillId: Parameters<typeof getAgentSkillV1>[0];
     step: string;
     verifier: string;
@@ -39,6 +41,8 @@ export async function consultAuthoringV1<S>(input: AuthoringConsultationInput, p
     }>;
     parse: (value: unknown) => S;
 }) {
+    const productId = port.productId;
+    assertCurrentProductEntryV1(productId);
     const STEP = port.step, VERIFIER = port.verifier;
     const readDraft = port.read, saveConversation = port.save, parseSettings = port.parse;
     const question = input.question.trim();
@@ -159,11 +163,13 @@ export async function consultAuthoringV1<S>(input: AuthoringConsultationInput, p
             attempt: 1,
             manifestHash: manifest.manifestHash,
         });
+        assertCurrentProductEntryV1(productId);
         await append("model.requested", {
             stepId: STEP,
             attempt: 1,
             bindingHash: await hashCanonicalValue(messages),
         });
+        assertCurrentProductEntryV1(productId);
         const output = input.runAI
             ? await input.runAI(messages)
             : await chat(messages, input.config!, {
