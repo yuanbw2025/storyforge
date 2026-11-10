@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality010-production-reader-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -676,6 +676,12 @@
         "path": "tests/acceptance/narrative-world/baseline-20261110-issue179-main834-v1.json",
         "workPackage": "owned-fixes-before-diagnostic-integration",
         "note": "Preserved measured Issue179/main834 receipt before precise shared fixture types and diagnostic/relay aggregation; semantic observations unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+        "workPackage": "SFQA-010",
+        "implementationCommit": "bc18dc8466f2e6661b6ce9a17131981f41992844",
+        "note": "Preserve the measured baseline before extracting the shared production details reader."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -763,6 +769,9 @@
     "src/lib/product-production/commands.ts",
     "src/lib/product-production/preview-source.ts",
     "src/lib/product-production/production-executor.ts",
+    "src/lib/product-production/original-response-author-source.ts",
+    "src/lib/product-production/original-response-booking.ts",
+    "src/lib/product-production/read-details.ts",
     "src/lib/product-production/service.ts",
     "src/lib/product-production/source-contracts.ts",
     "src/lib/product-production/world-source.ts",
