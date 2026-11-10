@@ -5684,7 +5684,12 @@ async function runClaimedTaskCore(input: {
     return !!currentBuild && !!currentProduction
       && currentBuild.controlEpoch === input.build.controlEpoch
       && currentProduction.controlEpoch === input.build.controlEpoch
-      && currentBuild.status === 'building'
+      && (currentBuild.status === 'building'
+        // Confirmed AVG author inputs advance the two zero-provider assembly
+        // tasks to integrating before dispatch; this is still active execution.
+        || currentBuild.status === 'integrating' && currentProduction.productType === 'avg'
+          && input.task.executionMode === 'deterministic'
+          && ['avg.assembly.integrate', 'avg.assembly.verify'].includes(input.task.taskKey))
       && currentProduction.status === 'producing'
   }
   const executionController = new AbortController()
@@ -5923,9 +5928,8 @@ async function runClaimedTaskCore(input: {
   if (!result) throw new Error('[product-production-scheduler] executor 未返回结果')
   const paidUsage = result.usage
   const discardStoppedResult = async (): Promise<boolean> => {
+    if (await refreshExecutionAttemptAuthority()) return false
     const current = await db.productBuilds.get(input.build.id)
-    if (current?.controlEpoch === input.build.controlEpoch && current.status === 'building'
-      && snapshot.projection.state === 'running') return false
     if (!current) return true
     // Book first: cancellation and candidate authority are independent from
     // the cost of this exact, already dispatched attempt.
