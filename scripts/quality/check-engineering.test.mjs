@@ -176,3 +176,8 @@ test('actual compiler type printing can change when an otherwise unrelated root 
   assert.equal(compareDebt(changed,debtEntries(b)).passed,false)
  } finally {fs.rmSync(root,{recursive:true,force:true})}
 })
+
+test('compiler type canonicalization never changes ESLint message identity', () => {
+ const d={kind: /** @type {const} */ ('eslint'),file:'test.mjs',code:'example-rule',message:"Rule 'A | B'",anchor:'same',line:1,column:1,start:0,length:1}
+ assert.equal(compareDebt(debtEntries([{...d,message:"Rule 'B | A'"}]),debtEntries([d])).passed,false)
+})

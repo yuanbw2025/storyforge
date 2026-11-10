@@ -113,7 +113,7 @@ export function stableDiagnosticMessage(message) {
  *
  * @param {Diagnostic} diagnostic */
 export function diagnosticIdentity(diagnostic) {
-  return JSON.stringify([diagnostic.kind, diagnostic.file, diagnostic.code, stableDiagnosticMessage(diagnostic.message),
+  return JSON.stringify([diagnostic.kind, diagnostic.file, diagnostic.code, diagnostic.kind === 'typescript' ? stableDiagnosticMessage(diagnostic.message) : diagnostic.message,
     diagnostic.anchor, diagnostic.column, diagnostic.length])
 }
 
@@ -126,7 +126,7 @@ export function debtEntries(diagnostics) {
   /** @type {Map<string, DebtEntry>} */
   const grouped = new Map()
   for (const diagnostic of diagnostics) {
-    const occurrence = JSON.stringify([diagnostic.kind, diagnostic.file, diagnostic.start, diagnostic.length, diagnostic.code, stableDiagnosticMessage(diagnostic.message)])
+    const occurrence = JSON.stringify([diagnostic.kind, diagnostic.file, diagnostic.start, diagnostic.length, diagnostic.code, diagnostic.kind === 'typescript' ? stableDiagnosticMessage(diagnostic.message) : diagnostic.message])
     if (exact.has(occurrence)) continue // Same imported source reported by two cohorts.
     exact.add(occurrence)
     const identity = diagnosticIdentity(diagnostic), previous = grouped.get(identity)
