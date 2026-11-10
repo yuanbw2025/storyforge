@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality325-stable-recovery-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality22-without004-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -706,6 +706,16 @@
         "implementationCommit": "23a32a5a8f728614142d82330233137e5876bc68",
         "workPackage": "SFQA-019/020/088/098/099",
         "note": "Preserved the measured independent SFQA-019 stable recovery receipt before combining with the SFQA-020 and editor inputs."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality325-stable-recovery-v1.json",
+        "workPackage": "pre-quality22-without-004",
+        "note": "Preserved frozen input for verified source PR before the 22-finding integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality034039-isolated-v1.json",
+        "workPackage": "pre-quality22-without-004",
+        "note": "Preserved frozen input for verified source PR before the 22-finding integration."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
