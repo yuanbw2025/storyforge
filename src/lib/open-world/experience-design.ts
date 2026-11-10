@@ -1,4 +1,5 @@
 import { captureTextOpenWorldTaskExecutionInputV1, assertTextOpenWorldBuildNewWorkV1 } from './source-admission'
+import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_V1, TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from './creator-ending-count'
 import type { ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
 import { db } from '../db/schema'
@@ -654,7 +655,12 @@ async function compileGameBrief(input: {
     || budget.maximumCostUsd > config.aiBudget.production.maximumEstimatedCostUsd) {
     fail('作者生产预算不满足文字开放世界最低Run数或产品硬上限/价格要求')
   }
-  if (brief.scale.targetEndingCount < 2) fail('文字开放世界首版至少需要两个合规结局')
+  if (authoredScale && !isTextOpenWorldCreatorEndingCountV1(brief.scale.targetEndingCount)) {
+    fail(TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+  }
+  if (!authoredScale && brief.scale.targetEndingCount < TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_V1.minimum) {
+    fail('文字开放世界首版至少需要两个合规结局')
+  }
   if (brief.media.visualLevel === 'none') fail('首版必须启用程序地图、角色头像和场景背景')
   if (!brief.intent.playerRole.trim()) fail('作者尚未确认玩家角色')
   const body: Omit<TextOpenWorldGameBriefV1, 'gameBriefHash'> = {

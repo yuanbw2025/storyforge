@@ -1,4 +1,5 @@
 import { estimateTokens } from '../ai/context-budget'
+import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from './creator-ending-count'
 import { resolveRequestConfig, type ChatResult } from '../ai/client'
 import { computeKnownCostUsd } from '../ai/usage-log'
 import {
@@ -650,6 +651,9 @@ export async function saveTextOpenWorldCreatorBriefDraftV1(input: {
   assertTextOpenWorldNewSourceV1(input.session.sourceBinding.kind, '保存制作简报草稿')
   await recheckSelection(requireSessionSelection(input.session))
   const draft = parseTextOpenWorldCreatorBriefDraftV1(input.draft)
+  if (!isTextOpenWorldCreatorEndingCountV1(draft.scale.endings)) {
+    fail('ending-count', TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+  }
   const payload: CreatorBriefDraftEventV1 = {
     schema: 'storyforge.text-open-world-creator-brief-draft-event',
     version: 1,
@@ -1190,6 +1194,9 @@ export async function confirmTextOpenWorldCreatorBriefV1(input: {
   }
   await assertTextOpenWorldCreatorBriefLifecycleV1({ scope: input.session.scope, production, phase: 'revise' })
   const draft = parseTextOpenWorldCreatorBriefDraftV1(input.draft)
+  if (!isTextOpenWorldCreatorEndingCountV1(draft.scale.endings)) {
+    fail('ending-count', TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+  }
   if (draft.unresolvedQuestions.length) fail('unresolved', '仍有未决问题；请回答、删除或转为明确接受的假设')
   if (!input.acknowledgements.sourceIdentityReviewed
     || !input.acknowledgements.productBoundaryReviewed

@@ -2359,6 +2359,8 @@ Session ID + Action Key + Recipe/Vendor Target + Item Key? + Quantity
 
 ### 24.2 工作台页面
 
+Creator 新制作的核心结局数量统一为 2 至 12 个整数。表单、草稿保存、Brief 确认、生产预检、Start 与 P2 编译复用同一准入合同；旧单结局 Build 的新执行在调度器分配 Run 或 claim 前拒绝。历史 Brief、SourcePlan、Start 和 Plan 仍按原版本与 Hash 只读核验，不批量改写；作者须先停止未发布制作，确认修订后的 Brief，再明确授权后继 Build，保留旧版本和父子关系。
+
 | 页面 | 内容 |
 |---|---|
 | 来源 | 冻结 WorldRelease、能力画像、精确资源选择、未读和缺口；小说仅提供“显式派生世界草稿”引导 |
