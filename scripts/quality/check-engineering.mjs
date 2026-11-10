@@ -97,13 +97,23 @@ export function assertRootCoverage(expected, actual) {
     || [...all].sort().some((name, index) => name !== desired[index])) throw new Error('Incomplete or duplicate primary root coverage')
 }
 
+/** TypeScript assigns union-print order from program construction order. Only
+ * reorder complete simple union runs inside quoted compiler type descriptions.
+ * Keep members, nesting, arrays, diagnostics, source anchors and counts exact.
+ * @param {string} message */
+export function stableDiagnosticMessage(message) {
+  const token = '(?:"[A-Za-z0-9_./-]+"|[A-Za-z_$][A-Za-z0-9_$]*|[0-9]+)'
+  const union = new RegExp('(?<![\\w$".\\[\\]<>])'+token+'(?:\\s+\\|\\s+'+token+')+(?![\\w$".\\[\\]<>]|\\s*[|<&])','g')
+  return message.replace(/'([^'\n]*\|[^'\n]*)'/g, (_, type) => "'"+type.replace(union, (/** @type {string} */ run) => run.split(/\s+\|\s+/).sort().join(' | '))+"'")
+}
+
 /** Identity uses the exact diagnostic and source line(s), not an error quota.
  * Line numbers remain visible but adding an unrelated earlier line does not
  * silently create or forgive debt. Repeated identical errors retain counts.
  *
  * @param {Diagnostic} diagnostic */
 export function diagnosticIdentity(diagnostic) {
-  return JSON.stringify([diagnostic.kind, diagnostic.file, diagnostic.code, diagnostic.message,
+  return JSON.stringify([diagnostic.kind, diagnostic.file, diagnostic.code, stableDiagnosticMessage(diagnostic.message),
     diagnostic.anchor, diagnostic.column, diagnostic.length])
 }
 
@@ -116,7 +126,7 @@ export function debtEntries(diagnostics) {
   /** @type {Map<string, DebtEntry>} */
   const grouped = new Map()
   for (const diagnostic of diagnostics) {
-    const occurrence = JSON.stringify([diagnostic.kind, diagnostic.file, diagnostic.start, diagnostic.length, diagnostic.code, diagnostic.message])
+    const occurrence = JSON.stringify([diagnostic.kind, diagnostic.file, diagnostic.start, diagnostic.length, diagnostic.code, stableDiagnosticMessage(diagnostic.message)])
     if (exact.has(occurrence)) continue // Same imported source reported by two cohorts.
     exact.add(occurrence)
     const identity = diagnosticIdentity(diagnostic), previous = grouped.get(identity)
