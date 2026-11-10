@@ -7,6 +7,11 @@ lastVerified: 2026-10-28
 
 > Preview: production, rule adjudication, AI hosting, and saves exist. The complete multiplayer experience is unfinished; public online multiplayer is not deployed.
 
+
+## Room operations and timeout recovery
+
+After a failed room operation, inspect its original operation and current state. Cancellation and timeout apply through response-body reading. Definitively rejected commands release waiting while retaining author drafts. Unknown-result operations keep their receipts for inspection before the next action. Existing saves are checked against their original seats and player authorization, and runtime media follow the current viewer and instance. See [PR #256](https://github.com/yuanbw2025/storyforge/pull/256).
+
 ## Try an existing campaign
 
 Open TTRPG → Library / Play (跑团 → 作品库 / 游玩) and select Fog Harbor: The Last Lamp (雾港：最后一盏灯). AI game-master experiences require a working model configuration. Do not confuse this with the no-API Fog Harbor: The Lost-Tide Bells (雾港：失潮钟声).

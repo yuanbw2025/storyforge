@@ -1,13 +1,20 @@
 ---
 productId: upper.text-open-world
 status: preview
-lastVerified: 2026-10-26
+lastVerified: 2026-11-10
 ---
 # Text open world
 
 > Preview. Dedicated production, player UI, and runtime AI are connected; general production still requires real-provider calibration and human acceptance of both ending paths.
 
-Text open world combines regional exploration, character schedules, quests, combat, inventory, and ongoing change. Sources can be a frozen world version or an explicitly selected range of a novel. Product assets and play results belong to the product and do not automatically update the world or original work.
+Text open world combines regional exploration, character schedules, quests, combat, inventory, and ongoing change. New production reads an author-confirmed, sealed world version. Product assets and play results belong to the product and do not automatically update the world or original work.
+
+
+## Starting production from a novel
+
+Open an independent longform or short story and choose Derive a world draft from the novel first. Check the scope and explicitly confirm. The current scope includes all confirmed semantics. Inspect, confirm and seal the draft on the world page, then select its WorldRelease for product direction and explicitly start production. The novel and derived world are maintained separately afterward, without automatic synchronization.
+
+Older novel-source production records, releases and saves retain original evidence and read-only inspection paths. When source admission blocks an operation, inspect its source and version before starting new production. See [PR #255](https://github.com/yuanbw2025/storyforge/pull/255).
 
 ## Try Salt Ridge: Night of the Cutoff (盐脊：断流之夜)
 
@@ -29,7 +36,7 @@ The main stories use frozen scripts supplied with the repository, without free-f
 
 ## Produce your own work
 
-1. Open Text open world → Produce (制作), then choose a workspace and a world version or novel source range.
+1. Open Text open world → Produce (制作), then choose a workspace and a sealed world version.
 2. Review available sources and gaps before continuing to the main Agent conversation. Selecting sources alone does not start production or billing.
 3. Confirm the goal, gameplay, scale, budget, and production brief; resolve required inputs and model configuration.
 4. Explicitly authorize production. Inspect progress and pending artifacts; use the current task's recovery guidance after interruptions.
