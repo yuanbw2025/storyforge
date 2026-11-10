@@ -61,7 +61,7 @@ describe('R-PRODUCTPROD-1E · trusted media relay transport', () => {
         source: 'StoryForge original AI-generated concept art',
       }],
     }
-    const fetcher = vi.fn(async (target: RequestInfo | URL) => {
+    const fetcher = vi.fn<(target: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async (target: RequestInfo | URL) => {
       const url = String(target)
       if (url.endsWith('/manifest.json')) {
         return new Response(JSON.stringify(manifest), {
@@ -199,7 +199,7 @@ describe('R-PRODUCTPROD-1E · trusted media relay transport', () => {
       baseUrl: 'https://apihub.agnes-ai.com/v1', temperature: 0.7, maxTokens: 0,
     }
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).buffer
-    const fetcher = vi.fn(async (target: RequestInfo | URL) => {
+    const fetcher = vi.fn<(target: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async (target: RequestInfo | URL) => {
       const url = String(target)
       if (url.includes('/images/generations')) return new Response('{}', { status: 200 })
       return new Response(png, {
