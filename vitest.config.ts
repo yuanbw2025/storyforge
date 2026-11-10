@@ -37,7 +37,6 @@ export default defineConfig({
     // simulations, IndexedDB lifecycles, long replays and UI cases. Capping
     // file workers prevents timer starvation and non-reproducible timeouts on
     // high-core developer machines without weakening individual test limits.
-    minWorkers: 1,
     maxWorkers: 4,
     include: [
       'tests/**/*.test.ts',

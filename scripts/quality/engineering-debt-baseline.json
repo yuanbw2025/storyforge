@@ -73,13 +73,13 @@
     ],
     "configurationHashes": {
       "eslint.tooling.config.mjs": "aaed9857f330cae6193062683163c527e35f7053c25652262eebd21ab6d01f9d",
-      "scripts/quality/engineering-scope.json": "73b7cec1f5b270f46f13ab8a83020dd4dcdd33785f0458d7a515dad9417edc6b",
+      "scripts/quality/engineering-scope.json": "611493231b398ac8eea1d1d70149799e175a7f620e49562853c9381f1c1e8f60",
       "tsconfig.json": "ce0f1499282ee25e4b50445bb320229b565f1a3194007dac4f7226d96f39ce7d",
       "tsconfig.tests.json": "7e886dede7a8551e1d79962a6204c019a46a4c34f100e0a5c6a747c404857836",
       "tsconfig.tests.open-world-experience.json": "7596a50c2d283b59660b6402b2c2a421c73b6d6482eb2b7a7a1612006622db31",
       "tsconfig.tooling.json": "2f8f44cd11e5314602f6a753d8898590d0e8b75f227de3cf4b0394f7df54761a"
     },
-    "lockfileHash": "e396c3ff001c93542bea86ddcf5f87f9c4f19cfb86296db35690dfed37efaf20"
+    "lockfileHash": "3277ba3c65af7184bc07cd0a083e5b9c7b0526acfd654316b338ea548fb437be"
   },
   "entries": [
     {
@@ -35363,13 +35363,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/registry/codex-c6-location-importance.test.ts\",\"TS2345\",\"Argument of type '(key: CodexEntry | number, patch: UpdateSpec<CodexEntry> | ((obj: CodexEntry, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: CodexEntry | number, changes: UpdateSpec<CodexEntry> | ((obj: CodexEntry, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => PromiseExtended<...>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"555d94b0c141868d4afcb9f1ecdb58f998f3979e9ecc9a4a9df1e16b39dea3d6\",60,23]",
+      "identity": "[\"typescript\",\"tests/registry/codex-c6-location-importance.test.ts\",\"TS2345\",\"Argument of type '(key: CodexEntry | number, patch: UpdateSpec<CodexEntry> | ((obj: CodexEntry, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: CodexEntry | number, changes: UpdateSpec<CodexEntry> | ((obj: CodexEntry, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => PromiseExtended<...>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"555d94b0c141868d4afcb9f1ecdb58f998f3979e9ecc9a4a9df1e16b39dea3d6\",60,23]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/registry/codex-c6-location-importance.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: number | CodexEntry, patch: UpdateSpec<CodexEntry> | ((obj: CodexEntry, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: number | CodexEntry, changes: UpdateSpec<CodexEntry> | ((obj: CodexEntry, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => PromiseExtended<...>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(key: number | CodexEntry, patch: UpdateSpec<CodexEntry> | ((obj: CodexEntry, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: number | CodexEntry, changes: UpdateSpec<CodexEntry> | ((obj: CodexEntry, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => PromiseExtended<...>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "555d94b0c141868d4afcb9f1ecdb58f998f3979e9ecc9a4a9df1e16b39dea3d6",
         "line": 56,
         "column": 60,
@@ -36563,13 +36563,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-outline-generation-controller.test.tsx\",\"TS2322\",\"Type 'Mock<(_worldGroupId: null | number, volumeId?: null | number | undefined) => Promise<AssembleContextResult>>' is not assignable to type '(request: OutlineGenerationRequest, worldGroupId: null | number, outlineNodeId?: null | number | undefined, priorOutlineCandidateText?: string | undefined) => Promise<...>'.\\n  Types of parameters '_worldGroupId' and 'request' are incompatible.\\n    Type 'OutlineGenerationRequest' is not assignable to type 'null | number'.\\n      Type '{ kind: \\\"volumes\\\"; }' is not assignable to type 'number'.\",\"0e0f131e973a9b160cb2e05940a6ce83fa7d69e3bee1794b12d9366bbd8212db\",19,15]",
+      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-outline-generation-controller.test.tsx\",\"TS2322\",\"Type 'Mock<(_worldGroupId: null | number, volumeId?: null | number | undefined) => Promise<AssembleContextResult>>' is not assignable to type '((request: OutlineGenerationRequest, worldGroupId: null | number, outlineNodeId?: null | number | undefined, priorOutlineCandidateText?: string | undefined) => Promise<...>) | undefined'.\\n  Type 'Mock<(_worldGroupId: null | number, volumeId?: null | number | undefined) => Promise<AssembleContextResult>>' is not assignable to type '(request: OutlineGenerationRequest, worldGroupId: null | number, outlineNodeId?: null | number | undefined, priorOutlineCandidateText?: string | undefined) => Promise<...>'.\\n    Types of parameters '_worldGroupId' and 'request' are incompatible.\\n      Type 'OutlineGenerationRequest' is not assignable to type 'null | number'.\\n        Type '{ kind: \\\"volumes\\\"; }' is not assignable to type 'number'.\",\"0e0f131e973a9b160cb2e05940a6ce83fa7d69e3bee1794b12d9366bbd8212db\",19,15]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-AUDIT6-outline-generation-controller.test.tsx",
         "code": "TS2322",
-        "message": "Type 'Mock<(_worldGroupId: number | null, volumeId?: number | null | undefined) => Promise<AssembleContextResult>>' is not assignable to type '(request: OutlineGenerationRequest, worldGroupId: number | null, outlineNodeId?: number | null | undefined, priorOutlineCandidateText?: string | undefined) => Promise<...>'.\n  Types of parameters '_worldGroupId' and 'request' are incompatible.\n    Type 'OutlineGenerationRequest' is not assignable to type 'number | null'.\n      Type '{ kind: \"volumes\"; }' is not assignable to type 'number'.",
+        "message": "Type 'Mock<(_worldGroupId: number | null, volumeId?: number | null | undefined) => Promise<AssembleContextResult>>' is not assignable to type '((request: OutlineGenerationRequest, worldGroupId: number | null, outlineNodeId?: number | null | undefined, priorOutlineCandidateText?: string | undefined) => Promise<...>) | undefined'.\n  Type 'Mock<(_worldGroupId: number | null, volumeId?: number | null | undefined) => Promise<AssembleContextResult>>' is not assignable to type '(request: OutlineGenerationRequest, worldGroupId: number | null, outlineNodeId?: number | null | undefined, priorOutlineCandidateText?: string | undefined) => Promise<...>'.\n    Types of parameters '_worldGroupId' and 'request' are incompatible.\n      Type 'OutlineGenerationRequest' is not assignable to type 'number | null'.\n        Type '{ kind: \"volumes\"; }' is not assignable to type 'number'.",
         "anchor": "0e0f131e973a9b160cb2e05940a6ce83fa7d69e3bee1794b12d9366bbd8212db",
         "line": 176,
         "column": 19,
@@ -40568,13 +40568,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-04B-sound-production-harness.test.ts\",\"TS2345\",\"Argument of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductBuildRecordV1 | undefined, unknown>) => Promise<unknown>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: number): PromiseExtended<ProductBuildRecordV1 | undefined>; <R>(key: number, thenShortcut: ThenShortcut<ProductBuildRecordV1 | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): Prom...'.\\n  Property 'timeout' is missing in type 'Promise<unknown>' but required in type 'PromiseExtended<unknown>'.\",\"a3b9f5db86df18e951e9dcbafd6e32a5c828d3ffdb8b7979d3db593772c7d039\",78,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-AVG-04B-sound-production-harness.test.ts\",\"TS2345\",\"Argument of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductBuildRecordV1 | undefined, unknown>) => Promise<unknown>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductBuildRecordV1 | undefined, unknown>) => PromiseExtended<unknown>'.\\n  Property 'timeout' is missing in type 'Promise<unknown>' but required in type 'PromiseExtended<unknown>'.\",\"a3b9f5db86df18e951e9dcbafd6e32a5c828d3ffdb8b7979d3db593772c7d039\",78,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-AVG-04B-sound-production-harness.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductBuildRecordV1 | undefined, unknown>) => Promise<unknown>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: number): PromiseExtended<ProductBuildRecordV1 | undefined>; <R>(key: number, thenShortcut: ThenShortcut<ProductBuildRecordV1 | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): Prom...'.\n  Property 'timeout' is missing in type 'Promise<unknown>' but required in type 'PromiseExtended<unknown>'.",
+        "message": "Argument of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductBuildRecordV1 | undefined, unknown>) => Promise<unknown>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductBuildRecordV1 | undefined, unknown>) => PromiseExtended<unknown>'.\n  Property 'timeout' is missing in type 'Promise<unknown>' but required in type 'PromiseExtended<unknown>'.",
         "anchor": "a3b9f5db86df18e951e9dcbafd6e32a5c828d3ffdb8b7979d3db593772c7d039",
         "line": 74,
         "column": 78,
@@ -46958,13 +46958,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-CHAT-07-composer-draft.test.ts\",\"TS2345\",\"Argument of type '(key: ProductRuntimeSession | number, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: ProductRuntimeSession | number, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"3fcb7c8c1054317cbc39c296247c3a92c979451befde9da9a6c7a68f76bbe876\",80,25]",
+      "identity": "[\"typescript\",\"tests/regression/R-CHAT-07-composer-draft.test.ts\",\"TS2345\",\"Argument of type '(key: ProductRuntimeSession | number, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: ProductRuntimeSession | number, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"3fcb7c8c1054317cbc39c296247c3a92c979451befde9da9a6c7a68f76bbe876\",80,25]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-CHAT-07-composer-draft.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: number | ProductRuntimeSession, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: number | ProductRuntimeSession, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(key: number | ProductRuntimeSession, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: number | ProductRuntimeSession, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "3fcb7c8c1054317cbc39c296247c3a92c979451befde9da9a6c7a68f76bbe876",
         "line": 86,
         "column": 80,
@@ -47303,17 +47303,17 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-CODEX-AUTHOR-SAVE.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<Project | undefined>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: any): PromiseExtended<Project | undefined>; <R>(key: any, thenShortcut: ThenShortcut<Project | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): PromiseExtended<...>; }>'.\\n  Property 'timeout' is missing in type 'Promise<Project | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"76da6f4b3695709556f0da03d27c35375543542e748f4aab5b72a7eff01d1d05\",57,14]",
+      "identity": "[\"typescript\",\"tests/regression/R-CODEX-AUTHOR-SAVE.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<Project | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<Project | undefined, unknown>) => PromiseExtended<unknown>'.\\n  Property 'timeout' is missing in type 'Promise<Project | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"76da6f4b3695709556f0da03d27c35375543542e748f4aab5b72a7eff01d1d05\",57,14]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-CODEX-AUTHOR-SAVE.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<Project | undefined>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: any): PromiseExtended<Project | undefined>; <R>(key: any, thenShortcut: ThenShortcut<Project | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): PromiseExtended<...>; }>'.\n  Property 'timeout' is missing in type 'Promise<Project | undefined>' but required in type 'PromiseExtended<unknown>'.",
+        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<Project | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<Project | undefined, unknown>) => PromiseExtended<unknown>'.\n  Property 'timeout' is missing in type 'Promise<Project | undefined>' but required in type 'PromiseExtended<unknown>'.",
         "anchor": "76da6f4b3695709556f0da03d27c35375543542e748f4aab5b72a7eff01d1d05",
-        "line": 125,
+        "line": 132,
         "column": 57,
-        "start": 8791,
+        "start": 9310,
         "length": 14
       }
     },
@@ -48233,13 +48233,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-DETAILED-author-save-boundary.test.ts\",\"TS2345\",\"Argument of type '(key: any, changes: UpdateSpec<DetailedOutline> | ((obj: DetailedOutline, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: any, changes: UpdateSpec<DetailedOutline> | ((obj: DetailedOutline, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => PromiseExtended<...>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"ba7cbfe39e6b801baab2f65af597bbd0671766be139525a9c7fc03f4393387c5\",68,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-DETAILED-author-save-boundary.test.ts\",\"TS2345\",\"Argument of type '(key: any, changes: UpdateSpec<DetailedOutline> | ((obj: DetailedOutline, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: any, changes: UpdateSpec<DetailedOutline> | ((obj: DetailedOutline, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => PromiseExtended<...>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"ba7cbfe39e6b801baab2f65af597bbd0671766be139525a9c7fc03f4393387c5\",68,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-DETAILED-author-save-boundary.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: any, changes: UpdateSpec<DetailedOutline> | ((obj: DetailedOutline, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: any, changes: UpdateSpec<DetailedOutline> | ((obj: DetailedOutline, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => PromiseExtended<...>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(key: any, changes: UpdateSpec<DetailedOutline> | ((obj: DetailedOutline, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: any, changes: UpdateSpec<DetailedOutline> | ((obj: DetailedOutline, ctx: { value: any; primKey: IndexableType; }) => boolean | void)) => PromiseExtended<...>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "ba7cbfe39e6b801baab2f65af597bbd0671766be139525a9c7fc03f4393387c5",
         "line": 144,
         "column": 68,
@@ -51008,17 +51008,17 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS7-prose-generation-durable.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7\",71,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-HARNESS7-prose-generation-durable.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7\",71,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-HARNESS7-prose-generation-durable.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7",
-        "line": 215,
+        "line": 225,
         "column": 71,
-        "start": 9034,
+        "start": 9399,
         "length": 20
       }
     },
@@ -51368,17 +51368,17 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS8-detailed-outline-generation-durable.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7\",71,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-HARNESS8-detailed-outline-generation-durable.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7\",71,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-HARNESS8-detailed-outline-generation-durable.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7",
-        "line": 191,
+        "line": 201,
         "column": 71,
-        "start": 8133,
+        "start": 8498,
         "length": 20
       }
     },
@@ -52028,13 +52028,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-LFQ8-quality-revision-durable.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7\",71,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-LFQ8-quality-revision-durable.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7\",71,20]",
       "count": 2,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-LFQ8-quality-revision-durable.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7",
         "line": 87,
         "column": 71,
@@ -52928,13 +52928,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-NW-1C-adoption.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7\",71,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-NW-1C-adoption.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7\",71,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-NW-1C-adoption.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7",
         "line": 149,
         "column": 71,
@@ -53078,13 +53078,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-NW-2A-package.test.ts\",\"TS2345\",\"Argument of type '(item: WorldRelease, key?: number | undefined) => Promise<never>' is not assignable to parameter of type 'NormalizedPrecedure<(item: WorldRelease, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<number>'.\",\"a4a51b2e35ce78e24a1aedbb20edc0a49aaeef426d53f83fd404215c9e65086e\",62,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-NW-2A-package.test.ts\",\"TS2345\",\"Argument of type '(item: WorldRelease, key?: number | undefined) => Promise<never>' is not assignable to parameter of type '(item: WorldRelease, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<number>'.\",\"a4a51b2e35ce78e24a1aedbb20edc0a49aaeef426d53f83fd404215c9e65086e\",62,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-NW-2A-package.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: WorldRelease, key?: number | undefined) => Promise<never>' is not assignable to parameter of type 'NormalizedPrecedure<(item: WorldRelease, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: WorldRelease, key?: number | undefined) => Promise<never>' is not assignable to parameter of type '(item: WorldRelease, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<number>'.",
         "anchor": "a4a51b2e35ce78e24a1aedbb20edc0a49aaeef426d53f83fd404215c9e65086e",
         "line": 66,
         "column": 62,
@@ -54473,13 +54473,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD4-crafting-economy-store.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: number): PromiseExtended<ProductRuntimeSession | undefined>; <R>(key: number, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): Pr...'.\\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"a77230920ddaf47de6ebc515d8fec2349614e0664a5c89fbd7134a2520df080c\",82,14]",
+      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD4-crafting-economy-store.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, unknown>) => PromiseExtended<unknown>'.\\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"a77230920ddaf47de6ebc515d8fec2349614e0664a5c89fbd7134a2520df080c\",82,14]",
       "count": 2,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-OPEN-WORLD4-crafting-economy-store.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: number): PromiseExtended<ProductRuntimeSession | undefined>; <R>(key: number, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): Pr...'.\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.",
+        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, unknown>) => PromiseExtended<unknown>'.\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.",
         "anchor": "a77230920ddaf47de6ebc515d8fec2349614e0664a5c89fbd7134a2520df080c",
         "line": 171,
         "column": 82,
@@ -54878,13 +54878,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD4-player-library-store.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<ProductRelease | undefined>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: number): PromiseExtended<ProductRelease | undefined>; <R>(key: number, thenShortcut: ThenShortcut<ProductRelease | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): PromiseExtended<...'.\\n  Property 'timeout' is missing in type 'Promise<ProductRelease | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"598e1fe9ad643ddabeb7f51b2d5affe03675670e6cb919b8d7f548e94463f872\",72,14]",
+      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD4-player-library-store.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<ProductRelease | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductRelease | undefined, unknown>) => PromiseExtended<unknown>'.\\n  Property 'timeout' is missing in type 'Promise<ProductRelease | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"598e1fe9ad643ddabeb7f51b2d5affe03675670e6cb919b8d7f548e94463f872\",72,14]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-OPEN-WORLD4-player-library-store.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<ProductRelease | undefined>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: number): PromiseExtended<ProductRelease | undefined>; <R>(key: number, thenShortcut: ThenShortcut<ProductRelease | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): PromiseExtended<...'.\n  Property 'timeout' is missing in type 'Promise<ProductRelease | undefined>' but required in type 'PromiseExtended<unknown>'.",
+        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<ProductRelease | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductRelease | undefined, unknown>) => PromiseExtended<unknown>'.\n  Property 'timeout' is missing in type 'Promise<ProductRelease | undefined>' but required in type 'PromiseExtended<unknown>'.",
         "anchor": "598e1fe9ad643ddabeb7f51b2d5affe03675670e6cb919b8d7f548e94463f872",
         "line": 138,
         "column": 72,
@@ -54893,13 +54893,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD4-player-library-store.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<ProductRelease | undefined>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: number): PromiseExtended<ProductRelease | undefined>; <R>(key: number, thenShortcut: ThenShortcut<ProductRelease | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): PromiseExtended<...'.\\n  Property 'timeout' is missing in type 'Promise<ProductRelease | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"5e94fd55e2be285561347d0031d842d088605f1ba8299bf769dfe5d4a2736860\",75,14]",
+      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD4-player-library-store.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<ProductRelease | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductRelease | undefined, unknown>) => PromiseExtended<unknown>'.\\n  Property 'timeout' is missing in type 'Promise<ProductRelease | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"5e94fd55e2be285561347d0031d842d088605f1ba8299bf769dfe5d4a2736860\",75,14]",
       "count": 2,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-OPEN-WORLD4-player-library-store.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<ProductRelease | undefined>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: number): PromiseExtended<ProductRelease | undefined>; <R>(key: number, thenShortcut: ThenShortcut<ProductRelease | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): PromiseExtended<...'.\n  Property 'timeout' is missing in type 'Promise<ProductRelease | undefined>' but required in type 'PromiseExtended<unknown>'.",
+        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<ProductRelease | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductRelease | undefined, unknown>) => PromiseExtended<unknown>'.\n  Property 'timeout' is missing in type 'Promise<ProductRelease | undefined>' but required in type 'PromiseExtended<unknown>'.",
         "anchor": "5e94fd55e2be285561347d0031d842d088605f1ba8299bf769dfe5d4a2736860",
         "line": 333,
         "column": 75,
@@ -54908,13 +54908,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD4-player-library-store.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: number): PromiseExtended<ProductRuntimeSession | undefined>; <R>(key: number, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): Pr...'.\\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"a77230920ddaf47de6ebc515d8fec2349614e0664a5c89fbd7134a2520df080c\",82,14]",
+      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD4-player-library-store.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, unknown>) => PromiseExtended<unknown>'.\\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"a77230920ddaf47de6ebc515d8fec2349614e0664a5c89fbd7134a2520df080c\",82,14]",
       "count": 2,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-OPEN-WORLD4-player-library-store.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: number): PromiseExtended<ProductRuntimeSession | undefined>; <R>(key: number, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): Pr...'.\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.",
+        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, unknown>) => PromiseExtended<unknown>'.\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.",
         "anchor": "a77230920ddaf47de6ebc515d8fec2349614e0664a5c89fbd7134a2520df080c",
         "line": 247,
         "column": 82,
@@ -55358,13 +55358,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD4-player-save-store-integration.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: number): PromiseExtended<ProductRuntimeSession | undefined>; <R>(key: number, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): Pr...'.\\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"f65fe2bbaed1b9b4d39275f8a6fa29be47660baf000c2c2c10e8c9df4bf6b993\",77,14]",
+      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD4-player-save-store-integration.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, unknown>) => PromiseExtended<unknown>'.\\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"f65fe2bbaed1b9b4d39275f8a6fa29be47660baf000c2c2c10e8c9df4bf6b993\",77,14]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-OPEN-WORLD4-player-save-store-integration.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: number): PromiseExtended<ProductRuntimeSession | undefined>; <R>(key: number, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): Pr...'.\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.",
+        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, unknown>) => PromiseExtended<unknown>'.\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.",
         "anchor": "f65fe2bbaed1b9b4d39275f8a6fa29be47660baf000c2c2c10e8c9df4bf6b993",
         "line": 140,
         "column": 77,
@@ -55433,13 +55433,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD4-player-store-races.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: number): PromiseExtended<ProductRuntimeSession | undefined>; <R>(key: number, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): Pr...'.\\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"f65fe2bbaed1b9b4d39275f8a6fa29be47660baf000c2c2c10e8c9df4bf6b993\",77,14]",
+      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD4-player-store-races.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, unknown>) => PromiseExtended<unknown>'.\\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"f65fe2bbaed1b9b4d39275f8a6fa29be47660baf000c2c2c10e8c9df4bf6b993\",77,14]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-OPEN-WORLD4-player-store-races.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type 'NormalizedPrecedure<{ (key: number): PromiseExtended<ProductRuntimeSession | undefined>; <R>(key: number, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, R>): PromiseExtended<...>; (equalityCriterias: { ...; }): PromiseExtended<...>; <R>(equalityCriterias: { ...; }, thenShortcut: ThenShortcut<...>): Pr...'.\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.",
+        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<ProductRuntimeSession | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<ProductRuntimeSession | undefined, unknown>) => PromiseExtended<unknown>'.\n  Property 'timeout' is missing in type 'Promise<ProductRuntimeSession | undefined>' but required in type 'PromiseExtended<unknown>'.",
         "anchor": "f65fe2bbaed1b9b4d39275f8a6fa29be47660baf000c2c2c10e8c9df4bf6b993",
         "line": 65,
         "column": 77,
@@ -56528,13 +56528,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-OUTLINE-structure-owner-lifecycle.test.ts\",\"TS2345\",\"Argument of type '(id: any) => Promise<void>' is not assignable to parameter of type 'NormalizedPrecedure<(key: any) => PromiseExtended<void>>'.\\n  Property 'timeout' is missing in type 'Promise<void>' but required in type 'PromiseExtended<void>'.\",\"a82c173ac6b3120aab875c3b39384274b8c7fa57d3eb0b474639c543f885ed17\",60,78]",
+      "identity": "[\"typescript\",\"tests/regression/R-OUTLINE-structure-owner-lifecycle.test.ts\",\"TS2345\",\"Argument of type '(id: any) => Promise<void>' is not assignable to parameter of type '(key: any) => PromiseExtended<void>'.\\n  Property 'timeout' is missing in type 'Promise<void>' but required in type 'PromiseExtended<void>'.\",\"a82c173ac6b3120aab875c3b39384274b8c7fa57d3eb0b474639c543f885ed17\",60,78]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-OUTLINE-structure-owner-lifecycle.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(id: any) => Promise<void>' is not assignable to parameter of type 'NormalizedPrecedure<(key: any) => PromiseExtended<void>>'.\n  Property 'timeout' is missing in type 'Promise<void>' but required in type 'PromiseExtended<void>'.",
+        "message": "Argument of type '(id: any) => Promise<void>' is not assignable to parameter of type '(key: any) => PromiseExtended<void>'.\n  Property 'timeout' is missing in type 'Promise<void>' but required in type 'PromiseExtended<void>'.",
         "anchor": "a82c173ac6b3120aab875c3b39384274b8c7fa57d3eb0b474639c543f885ed17",
         "line": 109,
         "column": 60,
@@ -56543,13 +56543,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-OUTLINE-structure-owner-lifecycle.test.ts\",\"TS2345\",\"Argument of type '(key: any) => Promise<void>' is not assignable to parameter of type 'NormalizedPrecedure<(key: any) => PromiseExtended<void>>'.\\n  Property 'timeout' is missing in type 'Promise<void>' but required in type 'PromiseExtended<void>'.\",\"49a1b0fd1847213e930c23eaa2f0660025e3f869bfbb896353295182e30bc642\",60,14]",
+      "identity": "[\"typescript\",\"tests/regression/R-OUTLINE-structure-owner-lifecycle.test.ts\",\"TS2345\",\"Argument of type '(key: any) => Promise<void>' is not assignable to parameter of type '(key: any) => PromiseExtended<void>'.\\n  Property 'timeout' is missing in type 'Promise<void>' but required in type 'PromiseExtended<void>'.\",\"49a1b0fd1847213e930c23eaa2f0660025e3f869bfbb896353295182e30bc642\",60,14]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-OUTLINE-structure-owner-lifecycle.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: any) => Promise<void>' is not assignable to parameter of type 'NormalizedPrecedure<(key: any) => PromiseExtended<void>>'.\n  Property 'timeout' is missing in type 'Promise<void>' but required in type 'PromiseExtended<void>'.",
+        "message": "Argument of type '(key: any) => Promise<void>' is not assignable to parameter of type '(key: any) => PromiseExtended<void>'.\n  Property 'timeout' is missing in type 'Promise<void>' but required in type 'PromiseExtended<void>'.",
         "anchor": "49a1b0fd1847213e930c23eaa2f0660025e3f869bfbb896353295182e30bc642",
         "line": 52,
         "column": 60,
@@ -56558,13 +56558,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-OUTLINE-structure-owner-lifecycle.test.ts\",\"TS2345\",\"Argument of type '(row: OutlineNode) => Promise<any>' is not assignable to parameter of type 'NormalizedPrecedure<(item: OutlineNode, key?: any) => PromiseExtended<any>>'.\\n  Property 'timeout' is missing in type 'Promise<any>' but required in type 'PromiseExtended<any>'.\",\"a95bf37ce0a21fceeebb6b5e4c4d7c9b7107f574186dbae7ac78237ca0554559\",57,14]",
+      "identity": "[\"typescript\",\"tests/regression/R-OUTLINE-structure-owner-lifecycle.test.ts\",\"TS2345\",\"Argument of type '(row: OutlineNode) => Promise<any>' is not assignable to parameter of type '(item: OutlineNode, key?: any) => PromiseExtended<any>'.\\n  Property 'timeout' is missing in type 'Promise<any>' but required in type 'PromiseExtended<any>'.\",\"a95bf37ce0a21fceeebb6b5e4c4d7c9b7107f574186dbae7ac78237ca0554559\",57,14]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-OUTLINE-structure-owner-lifecycle.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(row: OutlineNode) => Promise<any>' is not assignable to parameter of type 'NormalizedPrecedure<(item: OutlineNode, key?: any) => PromiseExtended<any>>'.\n  Property 'timeout' is missing in type 'Promise<any>' but required in type 'PromiseExtended<any>'.",
+        "message": "Argument of type '(row: OutlineNode) => Promise<any>' is not assignable to parameter of type '(item: OutlineNode, key?: any) => PromiseExtended<any>'.\n  Property 'timeout' is missing in type 'Promise<any>' but required in type 'PromiseExtended<any>'.",
         "anchor": "a95bf37ce0a21fceeebb6b5e4c4d7c9b7107f574186dbae7ac78237ca0554559",
         "line": 137,
         "column": 57,
@@ -57353,13 +57353,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1A2-media-blob-store.test.ts\",\"TS2345\",\"Argument of type '(item: MediaBlobObjectRecordV1, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: MediaBlobObjectRecordV1, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"5d354db5ace72ad4f4cdc5608cbe41677dbb60a70592a085d4d549e3c3bbf68d\",77,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1A2-media-blob-store.test.ts\",\"TS2345\",\"Argument of type '(item: MediaBlobObjectRecordV1, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: MediaBlobObjectRecordV1, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"5d354db5ace72ad4f4cdc5608cbe41677dbb60a70592a085d4d549e3c3bbf68d\",77,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-PRODUCTPROD1A2-media-blob-store.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: MediaBlobObjectRecordV1, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: MediaBlobObjectRecordV1, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: MediaBlobObjectRecordV1, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: MediaBlobObjectRecordV1, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "5d354db5ace72ad4f4cdc5608cbe41677dbb60a70592a085d4d549e3c3bbf68d",
         "line": 70,
         "column": 77,
@@ -57458,13 +57458,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1C-acceptance-fixture.test.ts\",\"TS2769\",\"No overload matches this call.\\n  Overload 1 of 3, '(name: Function | string, fn: (...args: [\\\"metadataJson\\\", \\\"metadata\\\"] | [\\\"rightsJson\\\", \\\"rights\\\"]) => Awaitable<void>, options: TestOptions): void', gave the following error.\\n    Argument of type '(field: \\\"metadataJson\\\" | \\\"rightsJson\\\") => Promise<void>' is not assignable to parameter of type '(...args: [\\\"metadataJson\\\", \\\"metadata\\\"] | [\\\"rightsJson\\\", \\\"rights\\\"]) => Awaitable<void>'.\\n      Types of parameters 'field' and 'args' are incompatible.\\n        Type '[\\\"metadataJson\\\", \\\"metadata\\\"] | [\\\"rightsJson\\\", \\\"rights\\\"]' is not assignable to type '[field: \\\"metadataJson\\\" | \\\"rightsJson\\\"]'.\\n          Type '[\\\"metadataJson\\\", \\\"metadata\\\"]' is not assignable to type '[field: \\\"metadataJson\\\" | \\\"rightsJson\\\"]'.\\n            Source has 2 element(s) but target allows only 1.\\n  Overload 2 of 3, '(name: Function | string, fn: (...args: [\\\"metadataJson\\\", \\\"metadata\\\"] | [\\\"rightsJson\\\", \\\"rights\\\"]) => Awaitable<void>, options?: TestOptions | number | undefined): void', gave the following error.\\n    Argument of type '(field: \\\"metadataJson\\\" | \\\"rightsJson\\\") => Promise<void>' is not assignable to parameter of type '(...args: [\\\"metadataJson\\\", \\\"metadata\\\"] | [\\\"rightsJson\\\", \\\"rights\\\"]) => Awaitable<void>'.\\n      Types of parameters 'field' and 'args' are incompatible.\\n        Type '[\\\"metadataJson\\\", \\\"metadata\\\"] | [\\\"rightsJson\\\", \\\"rights\\\"]' is not assignable to type '[field: \\\"metadataJson\\\" | \\\"rightsJson\\\"]'.\\n          Type '[\\\"metadataJson\\\", \\\"metadata\\\"]' is not assignable to type '[field: \\\"metadataJson\\\" | \\\"rightsJson\\\"]'.\\n            Source has 2 element(s) but target allows only 1.\\n  Overload 3 of 3, '(name: Function | string, options: TestOptions, fn: (...args: [\\\"metadataJson\\\", \\\"metadata\\\"] | [\\\"rightsJson\\\", \\\"rights\\\"]) => Awaitable<void>): void', gave the following error.\\n    Type '(field: \\\"metadataJson\\\" | \\\"rightsJson\\\") => Promise<void>' has no properties in common with type 'TestOptions'.\",\"bdfe822c1a4010cfd6c994cace7d75b9c667b1ef9bd164d8464ffc97e98402ec\",70,27]",
+      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1C-acceptance-fixture.test.ts\",\"TS2769\",\"No overload matches this call.\\n  Overload 1 of 2, '(name: Function | string, fn: (...args: [\\\"metadataJson\\\", \\\"metadata\\\"] | [\\\"rightsJson\\\", \\\"rights\\\"]) => Awaitable<void>, options?: number | undefined): void', gave the following error.\\n    Argument of type '(field: \\\"metadataJson\\\" | \\\"rightsJson\\\") => Promise<void>' is not assignable to parameter of type '(...args: [\\\"metadataJson\\\", \\\"metadata\\\"] | [\\\"rightsJson\\\", \\\"rights\\\"]) => Awaitable<void>'.\\n      Types of parameters 'field' and 'args' are incompatible.\\n        Type '[\\\"metadataJson\\\", \\\"metadata\\\"] | [\\\"rightsJson\\\", \\\"rights\\\"]' is not assignable to type '[field: \\\"metadataJson\\\" | \\\"rightsJson\\\"]'.\\n          Type '[\\\"metadataJson\\\", \\\"metadata\\\"]' is not assignable to type '[field: \\\"metadataJson\\\" | \\\"rightsJson\\\"]'.\\n            Source has 2 element(s) but target allows only 1.\\n  Overload 2 of 2, '(name: Function | string, options: TestCollectorOptions, fn: (...args: [\\\"metadataJson\\\", \\\"metadata\\\"] | [\\\"rightsJson\\\", \\\"rights\\\"]) => Awaitable<void>): void', gave the following error.\\n    Type '(field: \\\"metadataJson\\\" | \\\"rightsJson\\\") => Promise<void>' has no properties in common with type 'TestCollectorOptions'.\",\"bdfe822c1a4010cfd6c994cace7d75b9c667b1ef9bd164d8464ffc97e98402ec\",70,27]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-PRODUCTPROD1C-acceptance-fixture.test.ts",
         "code": "TS2769",
-        "message": "No overload matches this call.\n  Overload 1 of 3, '(name: string | Function, fn: (...args: [\"metadataJson\", \"metadata\"] | [\"rightsJson\", \"rights\"]) => Awaitable<void>, options: TestOptions): void', gave the following error.\n    Argument of type '(field: \"metadataJson\" | \"rightsJson\") => Promise<void>' is not assignable to parameter of type '(...args: [\"metadataJson\", \"metadata\"] | [\"rightsJson\", \"rights\"]) => Awaitable<void>'.\n      Types of parameters 'field' and 'args' are incompatible.\n        Type '[\"metadataJson\", \"metadata\"] | [\"rightsJson\", \"rights\"]' is not assignable to type '[field: \"metadataJson\" | \"rightsJson\"]'.\n          Type '[\"metadataJson\", \"metadata\"]' is not assignable to type '[field: \"metadataJson\" | \"rightsJson\"]'.\n            Source has 2 element(s) but target allows only 1.\n  Overload 2 of 3, '(name: string | Function, fn: (...args: [\"metadataJson\", \"metadata\"] | [\"rightsJson\", \"rights\"]) => Awaitable<void>, options?: number | TestOptions | undefined): void', gave the following error.\n    Argument of type '(field: \"metadataJson\" | \"rightsJson\") => Promise<void>' is not assignable to parameter of type '(...args: [\"metadataJson\", \"metadata\"] | [\"rightsJson\", \"rights\"]) => Awaitable<void>'.\n      Types of parameters 'field' and 'args' are incompatible.\n        Type '[\"metadataJson\", \"metadata\"] | [\"rightsJson\", \"rights\"]' is not assignable to type '[field: \"metadataJson\" | \"rightsJson\"]'.\n          Type '[\"metadataJson\", \"metadata\"]' is not assignable to type '[field: \"metadataJson\" | \"rightsJson\"]'.\n            Source has 2 element(s) but target allows only 1.\n  Overload 3 of 3, '(name: string | Function, options: TestOptions, fn: (...args: [\"metadataJson\", \"metadata\"] | [\"rightsJson\", \"rights\"]) => Awaitable<void>): void', gave the following error.\n    Type '(field: \"metadataJson\" | \"rightsJson\") => Promise<void>' has no properties in common with type 'TestOptions'.",
+        "message": "No overload matches this call.\n  Overload 1 of 2, '(name: string | Function, fn: (...args: [\"metadataJson\", \"metadata\"] | [\"rightsJson\", \"rights\"]) => Awaitable<void>, options?: number | undefined): void', gave the following error.\n    Argument of type '(field: \"metadataJson\" | \"rightsJson\") => Promise<void>' is not assignable to parameter of type '(...args: [\"metadataJson\", \"metadata\"] | [\"rightsJson\", \"rights\"]) => Awaitable<void>'.\n      Types of parameters 'field' and 'args' are incompatible.\n        Type '[\"metadataJson\", \"metadata\"] | [\"rightsJson\", \"rights\"]' is not assignable to type '[field: \"metadataJson\" | \"rightsJson\"]'.\n          Type '[\"metadataJson\", \"metadata\"]' is not assignable to type '[field: \"metadataJson\" | \"rightsJson\"]'.\n            Source has 2 element(s) but target allows only 1.\n  Overload 2 of 2, '(name: string | Function, options: TestCollectorOptions, fn: (...args: [\"metadataJson\", \"metadata\"] | [\"rightsJson\", \"rights\"]) => Awaitable<void>): void', gave the following error.\n    Type '(field: \"metadataJson\" | \"rightsJson\") => Promise<void>' has no properties in common with type 'TestCollectorOptions'.",
         "anchor": "bdfe822c1a4010cfd6c994cace7d75b9c667b1ef9bd164d8464ffc97e98402ec",
         "line": 610,
         "column": 70,
@@ -57488,13 +57488,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1D-original-response-author-source.test.ts\",\"TS2345\",\"Argument of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"3d0fbd24e81e40961a33c7b8d572c2b410889cb508300c01935e3f9fe272a114\",79,148]",
+      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1D-original-response-author-source.test.ts\",\"TS2345\",\"Argument of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"3d0fbd24e81e40961a33c7b8d572c2b410889cb508300c01935e3f9fe272a114\",79,148]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-PRODUCTPROD1D-original-response-author-source.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "3d0fbd24e81e40961a33c7b8d572c2b410889cb508300c01935e3f9fe272a114",
         "line": 244,
         "column": 79,
@@ -57563,13 +57563,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1D-original-response-booking.test.ts\",\"TS2345\",\"Argument of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"264a197a341c26da7bfea828c1925502553c7473a6eec0cbd03dbb533be19bd6\",79,17]",
+      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1D-original-response-booking.test.ts\",\"TS2345\",\"Argument of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"264a197a341c26da7bfea828c1925502553c7473a6eec0cbd03dbb533be19bd6\",79,17]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-PRODUCTPROD1D-original-response-booking.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "264a197a341c26da7bfea828c1925502553c7473a6eec0cbd03dbb533be19bd6",
         "line": 226,
         "column": 79,
@@ -57623,13 +57623,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1D-original-response-capture.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunArtifactRecordV1, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunArtifactRecordV1, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"e15a5df94b1151f929e199845ebc60767ae2a0eb22d0e763fb999b731c17596c\",68,17]",
+      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1D-original-response-capture.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunArtifactRecordV1, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunArtifactRecordV1, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"e15a5df94b1151f929e199845ebc60767ae2a0eb22d0e763fb999b731c17596c\",68,17]",
       "count": 2,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-PRODUCTPROD1D-original-response-capture.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunArtifactRecordV1, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunArtifactRecordV1, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunArtifactRecordV1, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunArtifactRecordV1, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "e15a5df94b1151f929e199845ebc60767ae2a0eb22d0e763fb999b731c17596c",
         "line": 174,
         "column": 68,
@@ -60263,13 +60263,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN1-authorization-epoch.test.ts\",\"TS2345\",\"Argument of type '(id: ProductRuntimeSession | number, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: ProductRuntimeSession | number, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"05c363f01c797f7d633536591cbe9238720e9e0fddcae6d6a8627af2e7a2237d\",74,24]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN1-authorization-epoch.test.ts\",\"TS2345\",\"Argument of type '(id: ProductRuntimeSession | number, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: ProductRuntimeSession | number, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"05c363f01c797f7d633536591cbe9238720e9e0fddcae6d6a8627af2e7a2237d\",74,24]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN1-authorization-epoch.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(id: number | ProductRuntimeSession, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: number | ProductRuntimeSession, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(id: number | ProductRuntimeSession, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: number | ProductRuntimeSession, changes: UpdateSpec<ProductRuntimeSession> | ((obj: ProductRuntimeSession, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "05c363f01c797f7d633536591cbe9238720e9e0fddcae6d6a8627af2e7a2237d",
         "line": 141,
         "column": 74,
@@ -60278,13 +60278,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN1-authorization-epoch.test.ts\",\"TS2345\",\"Argument of type '(row: TtrpgSessionParticipantRecordV2) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: TtrpgSessionParticipantRecordV2, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"fc33d502cca814f34bd0b9b776ed516b9ac6107b02efc328d5cb6821d6c3ed92\",73,14]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN1-authorization-epoch.test.ts\",\"TS2345\",\"Argument of type '(row: TtrpgSessionParticipantRecordV2) => Promise<number>' is not assignable to parameter of type '(item: TtrpgSessionParticipantRecordV2, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"fc33d502cca814f34bd0b9b776ed516b9ac6107b02efc328d5cb6821d6c3ed92\",73,14]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN1-authorization-epoch.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(row: TtrpgSessionParticipantRecordV2) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: TtrpgSessionParticipantRecordV2, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(row: TtrpgSessionParticipantRecordV2) => Promise<number>' is not assignable to parameter of type '(item: TtrpgSessionParticipantRecordV2, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "fc33d502cca814f34bd0b9b776ed516b9ac6107b02efc328d5cb6821d6c3ed92",
         "line": 137,
         "column": 73,
@@ -61778,13 +61778,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN1-operation-recovery.test.ts\",\"TS2345\",\"Argument of type '(event: ProductRuntimeEvent) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"4c02304b9d9dbe35c1ac31b54b7f252393b3cf58aef3fc407e63cb43a7dc1334\",77,16]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN1-operation-recovery.test.ts\",\"TS2345\",\"Argument of type '(event: ProductRuntimeEvent) => Promise<number>' is not assignable to parameter of type '(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"4c02304b9d9dbe35c1ac31b54b7f252393b3cf58aef3fc407e63cb43a7dc1334\",77,16]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN1-operation-recovery.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(event: ProductRuntimeEvent) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(event: ProductRuntimeEvent) => Promise<number>' is not assignable to parameter of type '(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "4c02304b9d9dbe35c1ac31b54b7f252393b3cf58aef3fc407e63cb43a7dc1334",
         "line": 257,
         "column": 77,
@@ -62243,36 +62243,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-audio-crossfade.test.ts\",\"TS2349\",\"This expression is not callable.\\n  Type 'MockInstance<() => void>' has no call signatures.\",\"25300af989608388e4970d4d9b8ed5289803461f0aeeab3f3339e48494e9be35\",49,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN10-audio-crossfade.test.ts",
-        "code": "TS2349",
-        "message": "This expression is not callable.\n  Type 'MockInstance<() => void>' has no call signatures.",
-        "anchor": "25300af989608388e4970d4d9b8ed5289803461f0aeeab3f3339e48494e9be35",
-        "line": 29,
-        "column": 49,
-        "start": 2258,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-audio-crossfade.test.ts\",\"TS2349\",\"This expression is not callable.\\n  Type 'MockInstance<() => void>' has no call signatures.\",\"b023363adf39cc9636d7e60f460635571ab38dbd3f1960af74a3e08b6c36f55e\",49,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN10-audio-crossfade.test.ts",
-        "code": "TS2349",
-        "message": "This expression is not callable.\n  Type 'MockInstance<() => void>' has no call signatures.",
-        "anchor": "b023363adf39cc9636d7e60f460635571ab38dbd3f1960af74a3e08b6c36f55e",
-        "line": 25,
-        "column": 49,
-        "start": 1850,
-        "length": 5
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-audio-playback.test.tsx\",\"TS7017\",\"Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.\",\"1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee\",12,24]",
       "count": 1,
       "diagnostic": {
@@ -62288,13 +62258,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-audio-runtime.test.ts\",\"TS2345\",\"Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<{ <U>(mode: TransactionMode, tables: readonly (string | Table<any, any, any>)[], scope: (trans: Transaction & { characters: Table<Character, any, Character>; ... 128 more ...; motionDramaReviewIssues: Table<...>; }) => U | PromiseLike<...>): PromiseExtended<...>; <U>(mode: TransactionMode, table:...'.\\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.\",\"cf12f695726069a78719a2255e52041534491d7ef42d9c6472a71f26cb641ee1\",69,55]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-audio-runtime.test.ts\",\"TS2345\",\"Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => PromiseExtended<...>'.\\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.\",\"cf12f695726069a78719a2255e52041534491d7ef42d9c6472a71f26cb641ee1\",69,55]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN10-audio-runtime.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<{ <U>(mode: TransactionMode, tables: readonly (string | Table<any, any, any>)[], scope: (trans: Transaction & { characters: Table<Character, any, Character>; ... 128 more ...; motionDramaReviewIssues: Table<...>; }) => U | PromiseLike<...>): PromiseExtended<...>; <U>(mode: TransactionMode, table:...'.\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.",
+        "message": "Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => PromiseExtended<...>'.\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.",
         "anchor": "cf12f695726069a78719a2255e52041534491d7ef42d9c6472a71f26cb641ee1",
         "line": 78,
         "column": 69,
@@ -62783,13 +62753,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-adoption.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"35533fe3b382f7b68e0dfca9251a96bdf3709cdbe34aedec049af08a3eda3697\",59,117]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-adoption.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"35533fe3b382f7b68e0dfca9251a96bdf3709cdbe34aedec049af08a3eda3697\",59,117]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN10-public-situation-adoption.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "35533fe3b382f7b68e0dfca9251a96bdf3709cdbe34aedec049af08a3eda3697",
         "line": 61,
         "column": 59,
@@ -62993,13 +62963,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-authorization.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"d4f816d47c5901add85ead61960b4741ea9f6d192ac6c96b1e01938f549deaaf\",59,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-authorization.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"d4f816d47c5901add85ead61960b4741ea9f6d192ac6c96b1e01938f549deaaf\",59,20]",
       "count": 2,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN10-public-situation-authorization.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "d4f816d47c5901add85ead61960b4741ea9f6d192ac6c96b1e01938f549deaaf",
         "line": 124,
         "column": 59,
@@ -63008,13 +62978,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-authorization.test.ts\",\"TS2345\",\"Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"9b34b4d35224ab39da3b0282689cf04344949907094181d15fc3faa93f0b01d6\",65,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-authorization.test.ts\",\"TS2345\",\"Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"9b34b4d35224ab39da3b0282689cf04344949907094181d15fc3faa93f0b01d6\",65,20]",
       "count": 2,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN10-public-situation-authorization.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "9b34b4d35224ab39da3b0282689cf04344949907094181d15fc3faa93f0b01d6",
         "line": 98,
         "column": 65,
@@ -63263,13 +63233,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-desk.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"5736c53c8364e61be216a38bde13022a73803edae43162e31e05cefbe7ddfac4\",71,133]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-desk.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"5736c53c8364e61be216a38bde13022a73803edae43162e31e05cefbe7ddfac4\",71,133]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN10-public-situation-desk.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "5736c53c8364e61be216a38bde13022a73803edae43162e31e05cefbe7ddfac4",
         "line": 58,
         "column": 71,
@@ -63863,13 +63833,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-harness.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"65df2bd68831379c51b061f82817b7d74d619226b527d734cc933fb0a4a4b09a\",61,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-harness.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"65df2bd68831379c51b061f82817b7d74d619226b527d734cc933fb0a4a4b09a\",61,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN10-public-situation-harness.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "65df2bd68831379c51b061f82817b7d74d619226b527d734cc933fb0a4a4b09a",
         "line": 117,
         "column": 61,
@@ -63878,13 +63848,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-harness.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"d4f816d47c5901add85ead61960b4741ea9f6d192ac6c96b1e01938f549deaaf\",59,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-harness.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"d4f816d47c5901add85ead61960b4741ea9f6d192ac6c96b1e01938f549deaaf\",59,20]",
       "count": 2,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN10-public-situation-harness.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "d4f816d47c5901add85ead61960b4741ea9f6d192ac6c96b1e01938f549deaaf",
         "line": 81,
         "column": 59,
@@ -63893,13 +63863,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-harness.test.ts\",\"TS2345\",\"Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"43cc31059cddc6d99b3612027de8e8aa7a04d3533612cbdcd2af51f4fda00649\",67,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-harness.test.ts\",\"TS2345\",\"Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"43cc31059cddc6d99b3612027de8e8aa7a04d3533612cbdcd2af51f4fda00649\",67,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN10-public-situation-harness.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "43cc31059cddc6d99b3612027de8e8aa7a04d3533612cbdcd2af51f4fda00649",
         "line": 123,
         "column": 67,
@@ -64043,13 +64013,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-input.test.ts\",\"TS2345\",\"Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"9b34b4d35224ab39da3b0282689cf04344949907094181d15fc3faa93f0b01d6\",65,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-public-situation-input.test.ts\",\"TS2345\",\"Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"9b34b4d35224ab39da3b0282689cf04344949907094181d15fc3faa93f0b01d6\",65,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN10-public-situation-input.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "9b34b4d35224ab39da3b0282689cf04344949907094181d15fc3faa93f0b01d6",
         "line": 65,
         "column": 65,
@@ -64148,6 +64118,21 @@
       }
     },
     {
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-qwen-product.test.ts\",\"TS2345\",\"Argument of type '{ voice: \\\"qwen.serena\\\" | \\\"qwen.uncle_fu\\\"; requestKey: string; decision: string; scope: WorkspaceScope; sessionId: number; viewerKey: string; }' is not assignable to parameter of type 'Locator & { decision: \\\"prepare-this-confirmed-local-voice-execution\\\"; voice?: \\\"melo.zh\\\" | \\\"qwen.serena\\\" | \\\"qwen.uncle_fu\\\" | undefined; }'.\\n  Type '{ voice: \\\"qwen.serena\\\" | \\\"qwen.uncle_fu\\\"; requestKey: string; decision: string; scope: WorkspaceScope; sessionId: number; viewerKey: string; }' is not assignable to type '{ decision: \\\"prepare-this-confirmed-local-voice-execution\\\"; voice?: \\\"melo.zh\\\" | \\\"qwen.serena\\\" | \\\"qwen.uncle_fu\\\" | undefined; }'.\\n    Types of property 'decision' are incompatible.\\n      Type 'string' is not assignable to type '\\\"prepare-this-confirmed-local-voice-execution\\\"'.\",\"8401caa0cc349bdaa474a7d81b806c996e383580cb8670e535b6f19d05ad5508\",101,21]",
+      "count": 1,
+      "diagnostic": {
+        "kind": "typescript",
+        "file": "tests/regression/R-TTRPGOPEN10-qwen-product.test.ts",
+        "code": "TS2345",
+        "message": "Argument of type '{ voice: \"qwen.uncle_fu\" | \"qwen.serena\"; requestKey: string; decision: string; scope: WorkspaceScope; sessionId: number; viewerKey: string; }' is not assignable to parameter of type 'Locator & { decision: \"prepare-this-confirmed-local-voice-execution\"; voice?: \"qwen.uncle_fu\" | \"qwen.serena\" | \"melo.zh\" | undefined; }'.\n  Type '{ voice: \"qwen.uncle_fu\" | \"qwen.serena\"; requestKey: string; decision: string; scope: WorkspaceScope; sessionId: number; viewerKey: string; }' is not assignable to type '{ decision: \"prepare-this-confirmed-local-voice-execution\"; voice?: \"qwen.uncle_fu\" | \"qwen.serena\" | \"melo.zh\" | undefined; }'.\n    Types of property 'decision' are incompatible.\n      Type 'string' is not assignable to type '\"prepare-this-confirmed-local-voice-execution\"'.",
+        "anchor": "8401caa0cc349bdaa474a7d81b806c996e383580cb8670e535b6f19d05ad5508",
+        "line": 18,
+        "column": 101,
+        "start": 1483,
+        "length": 21
+      }
+    },
+    {
       "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-qwen-product.test.ts\",\"TS2345\",\"Argument of type '{ voice: \\\"qwen.serena\\\"; requestKey: string; decision: string; scope: WorkspaceScope; sessionId: number; viewerKey: string; }' is not assignable to parameter of type 'Locator & { decision: \\\"prepare-this-confirmed-local-voice-execution\\\"; voice?: \\\"melo.zh\\\" | \\\"qwen.serena\\\" | \\\"qwen.uncle_fu\\\" | undefined; }'.\\n  Type '{ voice: \\\"qwen.serena\\\"; requestKey: string; decision: string; scope: WorkspaceScope; sessionId: number; viewerKey: string; }' is not assignable to type '{ decision: \\\"prepare-this-confirmed-local-voice-execution\\\"; voice?: \\\"melo.zh\\\" | \\\"qwen.serena\\\" | \\\"qwen.uncle_fu\\\" | undefined; }'.\\n    Types of property 'decision' are incompatible.\\n      Type 'string' is not assignable to type '\\\"prepare-this-confirmed-local-voice-execution\\\"'.\",\"4f67e4eae8984942642efe6b94687c1a5d91d2e62a01f566f9b2e63045d8fcdc\",61,36]",
       "count": 1,
       "diagnostic": {
@@ -64175,21 +64160,6 @@
         "column": 54,
         "start": 3591,
         "length": 36
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-qwen-product.test.ts\",\"TS2345\",\"Argument of type '{ voice: \\\"qwen.serena\\\" | \\\"qwen.uncle_fu\\\"; requestKey: string; decision: string; scope: WorkspaceScope; sessionId: number; viewerKey: string; }' is not assignable to parameter of type 'Locator & { decision: \\\"prepare-this-confirmed-local-voice-execution\\\"; voice?: \\\"melo.zh\\\" | \\\"qwen.serena\\\" | \\\"qwen.uncle_fu\\\" | undefined; }'.\\n  Type '{ voice: \\\"qwen.serena\\\" | \\\"qwen.uncle_fu\\\"; requestKey: string; decision: string; scope: WorkspaceScope; sessionId: number; viewerKey: string; }' is not assignable to type '{ decision: \\\"prepare-this-confirmed-local-voice-execution\\\"; voice?: \\\"melo.zh\\\" | \\\"qwen.serena\\\" | \\\"qwen.uncle_fu\\\" | undefined; }'.\\n    Types of property 'decision' are incompatible.\\n      Type 'string' is not assignable to type '\\\"prepare-this-confirmed-local-voice-execution\\\"'.\",\"8401caa0cc349bdaa474a7d81b806c996e383580cb8670e535b6f19d05ad5508\",101,21]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN10-qwen-product.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ voice: \"qwen.uncle_fu\" | \"qwen.serena\"; requestKey: string; decision: string; scope: WorkspaceScope; sessionId: number; viewerKey: string; }' is not assignable to parameter of type 'Locator & { decision: \"prepare-this-confirmed-local-voice-execution\"; voice?: \"qwen.uncle_fu\" | \"qwen.serena\" | \"melo.zh\" | undefined; }'.\n  Type '{ voice: \"qwen.uncle_fu\" | \"qwen.serena\"; requestKey: string; decision: string; scope: WorkspaceScope; sessionId: number; viewerKey: string; }' is not assignable to type '{ decision: \"prepare-this-confirmed-local-voice-execution\"; voice?: \"qwen.uncle_fu\" | \"qwen.serena\" | \"melo.zh\" | undefined; }'.\n    Types of property 'decision' are incompatible.\n      Type 'string' is not assignable to type '\"prepare-this-confirmed-local-voice-execution\"'.",
-        "anchor": "8401caa0cc349bdaa474a7d81b806c996e383580cb8670e535b6f19d05ad5508",
-        "line": 18,
-        "column": 101,
-        "start": 1483,
-        "length": 21
       }
     },
     {
@@ -65753,13 +65723,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-situation-request-recovery.test.ts\",\"TS2345\",\"Argument of type '(row: AgentRunEventRecord) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"1dabb29e9e145c0ab23243930f344b450e152e52edaf62aa150e9224cf4be8a9\",73,14]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-situation-request-recovery.test.ts\",\"TS2345\",\"Argument of type '(row: AgentRunEventRecord) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"1dabb29e9e145c0ab23243930f344b450e152e52edaf62aa150e9224cf4be8a9\",73,14]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN10-situation-request-recovery.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(row: AgentRunEventRecord) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(row: AgentRunEventRecord) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "1dabb29e9e145c0ab23243930f344b450e152e52edaf62aa150e9224cf4be8a9",
         "line": 42,
         "column": 73,
@@ -65768,13 +65738,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-situation-request-recovery.test.ts\",\"TS2345\",\"Argument of type '(row: ProductRuntimeEvent) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"d6c20f20374bf226392886483888cce5ab01b6573522779a286b6df8980c6548\",79,14]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-situation-request-recovery.test.ts\",\"TS2345\",\"Argument of type '(row: ProductRuntimeEvent) => Promise<number>' is not assignable to parameter of type '(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"d6c20f20374bf226392886483888cce5ab01b6573522779a286b6df8980c6548\",79,14]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN10-situation-request-recovery.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(row: ProductRuntimeEvent) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(row: ProductRuntimeEvent) => Promise<number>' is not assignable to parameter of type '(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "d6c20f20374bf226392886483888cce5ab01b6573522779a286b6df8980c6548",
         "line": 48,
         "column": 79,
@@ -66338,13 +66308,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-voice-review-recovery.test.ts\",\"TS2345\",\"Argument of type '(input: never) => Promise<never>' is not assignable to parameter of type 'NormalizedPrecedure<((input: { scope: WorkspaceScope; runId: number; productRuntimeSessionId?: number | undefined; expectedLastSequence?: number | undefined; now?: number | undefined; }) => Promise<...>) | ((input: { ...; }) => Promise<...>)>'.\\n  Types of parameters 'input' and 'args' are incompatible.\\n    Type '[input: { scope: WorkspaceScope; runId: number; productRuntimeSessionId?: number | undefined; expectedLastSequence?: number | undefined; now?: number | undefined; }] | [input: ...]' is not assignable to type '[input: never]'.\\n      Type '[input: { scope: WorkspaceScope; runId: number; productRuntimeSessionId?: number | undefined; expectedLastSequence?: number | undefined; now?: number | undefined; }]' is not assignable to type '[input: never]'.\\n        Type '{ scope: WorkspaceScope; runId: number; productRuntimeSessionId?: number | undefined; expectedLastSequence?: number | undefined; now?: number | undefined; }' is not assignable to type 'never'.\",\"b8ff9950ff758af5b4af0b5319aeaa162b297bee094bc485fe0a2740ae6b179b\",65,84]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-voice-review-recovery.test.ts\",\"TS2345\",\"Argument of type '(input: never) => Promise<never>' is not assignable to parameter of type '((input: { scope: WorkspaceScope; runId: number; productRuntimeSessionId?: number | undefined; expectedLastSequence?: number | undefined; now?: number | undefined; }) => Promise<...>) | ((input: { ...; }) => Promise<...>)'.\\n  Type '(input: never) => Promise<never>' is not assignable to type '(input: { scope: WorkspaceScope; runId: number; productRuntimeSessionId?: number | undefined; expectedLastSequence?: number | undefined; now?: number | undefined; }) => Promise<...>'.\\n    Types of parameters 'input' and 'input' are incompatible.\\n      Type '{ scope: WorkspaceScope; runId: number; productRuntimeSessionId?: number | undefined; expectedLastSequence?: number | undefined; now?: number | undefined; }' is not assignable to type 'never'.\",\"b8ff9950ff758af5b4af0b5319aeaa162b297bee094bc485fe0a2740ae6b179b\",65,84]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN10-voice-review-recovery.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(input: never) => Promise<never>' is not assignable to parameter of type 'NormalizedPrecedure<((input: { scope: WorkspaceScope; runId: number; productRuntimeSessionId?: number | undefined; expectedLastSequence?: number | undefined; now?: number | undefined; }) => Promise<...>) | ((input: { ...; }) => Promise<...>)>'.\n  Types of parameters 'input' and 'args' are incompatible.\n    Type '[input: { scope: WorkspaceScope; runId: number; productRuntimeSessionId?: number | undefined; expectedLastSequence?: number | undefined; now?: number | undefined; }] | [input: ...]' is not assignable to type '[input: never]'.\n      Type '[input: { scope: WorkspaceScope; runId: number; productRuntimeSessionId?: number | undefined; expectedLastSequence?: number | undefined; now?: number | undefined; }]' is not assignable to type '[input: never]'.\n        Type '{ scope: WorkspaceScope; runId: number; productRuntimeSessionId?: number | undefined; expectedLastSequence?: number | undefined; now?: number | undefined; }' is not assignable to type 'never'.",
+        "message": "Argument of type '(input: never) => Promise<never>' is not assignable to parameter of type '((input: { scope: WorkspaceScope; runId: number; productRuntimeSessionId?: number | undefined; expectedLastSequence?: number | undefined; now?: number | undefined; }) => Promise<...>) | ((input: { ...; }) => Promise<...>)'.\n  Type '(input: never) => Promise<never>' is not assignable to type '(input: { scope: WorkspaceScope; runId: number; productRuntimeSessionId?: number | undefined; expectedLastSequence?: number | undefined; now?: number | undefined; }) => Promise<...>'.\n    Types of parameters 'input' and 'input' are incompatible.\n      Type '{ scope: WorkspaceScope; runId: number; productRuntimeSessionId?: number | undefined; expectedLastSequence?: number | undefined; now?: number | undefined; }' is not assignable to type 'never'.",
         "anchor": "b8ff9950ff758af5b4af0b5319aeaa162b297bee094bc485fe0a2740ae6b179b",
         "line": 36,
         "column": 65,
@@ -67778,13 +67748,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN12-entity-adoption.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"26152d448137e46204a498d30a3c5b2aa57d239721b3ac43b6fe5dd2d23bf0e8\",73,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN12-entity-adoption.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"26152d448137e46204a498d30a3c5b2aa57d239721b3ac43b6fe5dd2d23bf0e8\",73,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN12-entity-adoption.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "26152d448137e46204a498d30a3c5b2aa57d239721b3ac43b6fe5dd2d23bf0e8",
         "line": 202,
         "column": 73,
@@ -67793,13 +67763,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN12-entity-adoption.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7\",71,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN12-entity-adoption.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7\",71,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN12-entity-adoption.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7",
         "line": 111,
         "column": 71,
@@ -67808,13 +67778,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN12-entity-adoption.test.ts\",\"TS2345\",\"Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"43b192da52978200244901ce07c9f290e0b397d30e862c834bee69a1f94d47c7\",77,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN12-entity-adoption.test.ts\",\"TS2345\",\"Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"43b192da52978200244901ce07c9f290e0b397d30e862c834bee69a1f94d47c7\",77,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN12-entity-adoption.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "43b192da52978200244901ce07c9f290e0b397d30e862c834bee69a1f94d47c7",
         "line": 100,
         "column": 77,
@@ -68108,13 +68078,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN12-entity-harness.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"0f8a856651a2e5369ded1def40700a9930862ed0d4d8900a8a29121c7f1a195f\",66,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN12-entity-harness.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"0f8a856651a2e5369ded1def40700a9930862ed0d4d8900a8a29121c7f1a195f\",66,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN12-entity-harness.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "0f8a856651a2e5369ded1def40700a9930862ed0d4d8900a8a29121c7f1a195f",
         "line": 127,
         "column": 66,
@@ -68123,13 +68093,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN12-entity-harness.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"d4f816d47c5901add85ead61960b4741ea9f6d192ac6c96b1e01938f549deaaf\",59,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN12-entity-harness.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"d4f816d47c5901add85ead61960b4741ea9f6d192ac6c96b1e01938f549deaaf\",59,20]",
       "count": 2,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN12-entity-harness.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "d4f816d47c5901add85ead61960b4741ea9f6d192ac6c96b1e01938f549deaaf",
         "line": 81,
         "column": 59,
@@ -68138,13 +68108,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN12-entity-harness.test.ts\",\"TS2345\",\"Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"8d86fd6e925d95b5b95f8e43c93954b989409250f4cac587e025b6766ff39e82\",91,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN12-entity-harness.test.ts\",\"TS2345\",\"Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"8d86fd6e925d95b5b95f8e43c93954b989409250f4cac587e025b6766ff39e82\",91,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN12-entity-harness.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: ProductRuntimeEvent, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: ProductRuntimeEvent, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "8d86fd6e925d95b5b95f8e43c93954b989409250f4cac587e025b6766ff39e82",
         "line": 123,
         "column": 91,
@@ -68378,13 +68348,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN12-entity-model-desk.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"26152d448137e46204a498d30a3c5b2aa57d239721b3ac43b6fe5dd2d23bf0e8\",73,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN12-entity-model-desk.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"26152d448137e46204a498d30a3c5b2aa57d239721b3ac43b6fe5dd2d23bf0e8\",73,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN12-entity-model-desk.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "26152d448137e46204a498d30a3c5b2aa57d239721b3ac43b6fe5dd2d23bf0e8",
         "line": 92,
         "column": 73,
@@ -70163,13 +70133,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN13-normalization-model-desk.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"9bbefc555e62ed95b491d36a02ff5bdda77b817387fcc9d205405d0012ceaf5c\",71,126]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN13-normalization-model-desk.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"9bbefc555e62ed95b491d36a02ff5bdda77b817387fcc9d205405d0012ceaf5c\",71,126]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN13-normalization-model-desk.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "9bbefc555e62ed95b491d36a02ff5bdda77b817387fcc9d205405d0012ceaf5c",
         "line": 135,
         "column": 71,
@@ -71753,13 +71723,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN13-normalization-runtime-recovery.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7\",71,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN13-normalization-runtime-recovery.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7\",71,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN13-normalization-runtime-recovery.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7",
         "line": 32,
         "column": 71,
@@ -71933,13 +71903,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN13-oracle-model-desk.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7\",71,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN13-oracle-model-desk.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7\",71,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN13-oracle-model-desk.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunEventRecord, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunEventRecord, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "a8b9b548a73240e662a8ae8696ae3dfc2e3c123c7ae660c6159426bea7fd1bc7",
         "line": 123,
         "column": 71,
@@ -77738,13 +77708,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN2-content-revision.test.ts\",\"TS2345\",\"Argument of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"3af4a2a9ad3c8fb7850fffec757387d3128945771b2da3d48be04f57ae02cdea\",83,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN2-content-revision.test.ts\",\"TS2345\",\"Argument of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"3af4a2a9ad3c8fb7850fffec757387d3128945771b2da3d48be04f57ae02cdea\",83,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN2-content-revision.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "3af4a2a9ad3c8fb7850fffec757387d3128945771b2da3d48be04f57ae02cdea",
         "line": 80,
         "column": 83,
@@ -77768,13 +77738,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN2-local-no-dispatch-booking.test.ts\",\"TS2345\",\"Argument of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"3af4a2a9ad3c8fb7850fffec757387d3128945771b2da3d48be04f57ae02cdea\",83,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN2-local-no-dispatch-booking.test.ts\",\"TS2345\",\"Argument of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"3af4a2a9ad3c8fb7850fffec757387d3128945771b2da3d48be04f57ae02cdea\",83,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN2-local-no-dispatch-booking.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "3af4a2a9ad3c8fb7850fffec757387d3128945771b2da3d48be04f57ae02cdea",
         "line": 51,
         "column": 83,
@@ -77888,13 +77858,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN2-original-response-author-services.test.ts\",\"TS2345\",\"Argument of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"3d0fbd24e81e40961a33c7b8d572c2b410889cb508300c01935e3f9fe272a114\",79,148]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN2-original-response-author-services.test.ts\",\"TS2345\",\"Argument of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: ProductProductionCommandRecordV1 | number, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"3d0fbd24e81e40961a33c7b8d572c2b410889cb508300c01935e3f9fe272a114\",79,148]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN2-original-response-author-services.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: number | ProductProductionCommandRecordV1, changes: UpdateSpec<ProductProductionCommandRecordV1> | ((obj: ProductProductionCommandRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "3d0fbd24e81e40961a33c7b8d572c2b410889cb508300c01935e3f9fe272a114",
         "line": 244,
         "column": 79,
@@ -78083,13 +78053,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN2-production-local-request.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunArtifactRecordV1, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunArtifactRecordV1, key?: number | undefined) => PromiseExtended<number>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"468378edc16c3dbccdb4129ed38f31040ff1b4b6100cb366a3cca3c41b062402\",60,20]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN2-production-local-request.test.ts\",\"TS2345\",\"Argument of type '(item: AgentRunArtifactRecordV1, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunArtifactRecordV1, key?: number | undefined) => PromiseExtended<number>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"468378edc16c3dbccdb4129ed38f31040ff1b4b6100cb366a3cca3c41b062402\",60,20]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN2-production-local-request.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(item: AgentRunArtifactRecordV1, key?: number | undefined) => Promise<number>' is not assignable to parameter of type 'NormalizedPrecedure<(item: AgentRunArtifactRecordV1, key?: number | undefined) => PromiseExtended<number>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(item: AgentRunArtifactRecordV1, key?: number | undefined) => Promise<number>' is not assignable to parameter of type '(item: AgentRunArtifactRecordV1, key?: number | undefined) => PromiseExtended<number>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "468378edc16c3dbccdb4129ed38f31040ff1b4b6100cb366a3cca3c41b062402",
         "line": 155,
         "column": 60,
@@ -78218,13 +78188,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN2-publish-journey.test.ts\",\"TS2345\",\"Argument of type '(key: ProductBuildRecordV1 | number, changes: UpdateSpec<ProductBuildRecordV1> | ((obj: ProductBuildRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: ProductBuildRecordV1 | number, changes: UpdateSpec<ProductBuildRecordV1> | ((obj: ProductBuildRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"da954e12bb9fdecac5965618338a93e2b1e388a60390b3715bd3acf2850c167f\",72,24]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN2-publish-journey.test.ts\",\"TS2345\",\"Argument of type '(key: ProductBuildRecordV1 | number, changes: UpdateSpec<ProductBuildRecordV1> | ((obj: ProductBuildRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: ProductBuildRecordV1 | number, changes: UpdateSpec<ProductBuildRecordV1> | ((obj: ProductBuildRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.\",\"da954e12bb9fdecac5965618338a93e2b1e388a60390b3715bd3acf2850c167f\",72,24]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN2-publish-journey.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(key: number | ProductBuildRecordV1, changes: UpdateSpec<ProductBuildRecordV1> | ((obj: ProductBuildRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<(key: number | ProductBuildRecordV1, changes: UpdateSpec<ProductBuildRecordV1> | ((obj: ProductBuildRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
+        "message": "Argument of type '(key: number | ProductBuildRecordV1, changes: UpdateSpec<ProductBuildRecordV1> | ((obj: ProductBuildRecordV1, ctx: { ...; }) => boolean | void)) => Promise<...>' is not assignable to parameter of type '(key: number | ProductBuildRecordV1, changes: UpdateSpec<ProductBuildRecordV1> | ((obj: ProductBuildRecordV1, ctx: { ...; }) => boolean | void)) => PromiseExtended<...>'.\n  Property 'timeout' is missing in type 'Promise<number>' but required in type 'PromiseExtended<number>'.",
         "anchor": "da954e12bb9fdecac5965618338a93e2b1e388a60390b3715bd3acf2850c167f",
         "line": 90,
         "column": 72,
@@ -83903,13 +83873,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN6-author-diagnostics-ui.test.tsx\",\"TS2345\",\"Argument of type '() => void' is not assignable to parameter of type 'NormalizedPrecedure<(content: string, filename: string, mimeType?: string) => Promise<void>>'.\\n  Type 'void' is not assignable to type 'Promise<void>'.\",\"1e5d86e902b61f6b14be21bf355ac1fdf31bc8d539a27d4e8ceadb799eb9053e\",81,8]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN6-author-diagnostics-ui.test.tsx\",\"TS2345\",\"Argument of type '() => void' is not assignable to parameter of type '(content: string, filename: string, mimeType?: string | undefined) => Promise<void>'.\\n  Type 'void' is not assignable to type 'Promise<void>'.\",\"1e5d86e902b61f6b14be21bf355ac1fdf31bc8d539a27d4e8ceadb799eb9053e\",81,8]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN6-author-diagnostics-ui.test.tsx",
         "code": "TS2345",
-        "message": "Argument of type '() => void' is not assignable to parameter of type 'NormalizedPrecedure<(content: string, filename: string, mimeType?: string) => Promise<void>>'.\n  Type 'void' is not assignable to type 'Promise<void>'.",
+        "message": "Argument of type '() => void' is not assignable to parameter of type '(content: string, filename: string, mimeType?: string | undefined) => Promise<void>'.\n  Type 'void' is not assignable to type 'Promise<void>'.",
         "anchor": "1e5d86e902b61f6b14be21bf355ac1fdf31bc8d539a27d4e8ceadb799eb9053e",
         "line": 29,
         "column": 81,
@@ -85028,21 +84998,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN7-context-runtime.test.ts\",\"TS2339\",\"Property 'mockImplementation' does not exist on type 'never'.\",\"ff02f853dbd7d1815c6dc7fd85c467c3d68fa3d72808d3cd5b990849d2ee2a2d\",36,18]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN7-context-runtime.test.ts",
-        "code": "TS2339",
-        "message": "Property 'mockImplementation' does not exist on type 'never'.",
-        "anchor": "ff02f853dbd7d1815c6dc7fd85c467c3d68fa3d72808d3cd5b990849d2ee2a2d",
-        "line": 40,
-        "column": 36,
-        "start": 3200,
-        "length": 18
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN7-context-runtime.test.ts\",\"TS2339\",\"Property 'runtimePolicy' does not exist on type 'TtrpgCampaignContentV1 | TtrpgCampaignContentV2'.\\n  Property 'runtimePolicy' does not exist on type 'TtrpgCampaignContentV1'.\",\"1e78868dadcd52f994e0e8168858c80ff2f016341fbf52fc477b286e93b1caa8\",25,13]",
       "count": 1,
       "diagnostic": {
@@ -85100,36 +85055,6 @@
         "column": 66,
         "start": 4874,
         "length": 13
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN7-context-runtime.test.ts\",\"TS7006\",\"Parameter 'request' implicitly has an 'any' type.\",\"edf75583acc2bbaf07416d33e99b9d0580c26b3f6fd112ea9984f749629d1023\",75,7]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN7-context-runtime.test.ts",
-        "code": "TS7006",
-        "message": "Parameter 'request' implicitly has an 'any' type.",
-        "anchor": "edf75583acc2bbaf07416d33e99b9d0580c26b3f6fd112ea9984f749629d1023",
-        "line": 42,
-        "column": 75,
-        "start": 3355,
-        "length": 7
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN7-context-runtime.test.ts\",\"TS7006\",\"Parameter 'scope' implicitly has an 'any' type.\",\"ff02f853dbd7d1815c6dc7fd85c467c3d68fa3d72808d3cd5b990849d2ee2a2d\",61,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN7-context-runtime.test.ts",
-        "code": "TS7006",
-        "message": "Parameter 'scope' implicitly has an 'any' type.",
-        "anchor": "ff02f853dbd7d1815c6dc7fd85c467c3d68fa3d72808d3cd5b990849d2ee2a2d",
-        "line": 40,
-        "column": 61,
-        "start": 3225,
-        "length": 5
       }
     },
     {
@@ -85868,13 +85793,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN8-memory-receipt.test.ts\",\"TS2345\",\"Argument of type '(keys: number[]) => Promise<(ProductRuntimeEvent | undefined)[]>' is not assignable to parameter of type 'NormalizedPrecedure<(keys: number[]) => PromiseExtended<(ProductRuntimeEvent | undefined)[]>>'.\\n  Property 'timeout' is missing in type 'Promise<(ProductRuntimeEvent | undefined)[]>' but required in type 'PromiseExtended<(ProductRuntimeEvent | undefined)[]>'.\",\"feb0cf051527a805501fb5f20760145080af12c859aaf090ed0ddcb16122c3a5\",73,15]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN8-memory-receipt.test.ts\",\"TS2345\",\"Argument of type '(keys: number[]) => Promise<(ProductRuntimeEvent | undefined)[]>' is not assignable to parameter of type '(keys: number[]) => PromiseExtended<(ProductRuntimeEvent | undefined)[]>'.\\n  Property 'timeout' is missing in type 'Promise<(ProductRuntimeEvent | undefined)[]>' but required in type 'PromiseExtended<(ProductRuntimeEvent | undefined)[]>'.\",\"feb0cf051527a805501fb5f20760145080af12c859aaf090ed0ddcb16122c3a5\",73,15]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN8-memory-receipt.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(keys: number[]) => Promise<(ProductRuntimeEvent | undefined)[]>' is not assignable to parameter of type 'NormalizedPrecedure<(keys: number[]) => PromiseExtended<(ProductRuntimeEvent | undefined)[]>>'.\n  Property 'timeout' is missing in type 'Promise<(ProductRuntimeEvent | undefined)[]>' but required in type 'PromiseExtended<(ProductRuntimeEvent | undefined)[]>'.",
+        "message": "Argument of type '(keys: number[]) => Promise<(ProductRuntimeEvent | undefined)[]>' is not assignable to parameter of type '(keys: number[]) => PromiseExtended<(ProductRuntimeEvent | undefined)[]>'.\n  Property 'timeout' is missing in type 'Promise<(ProductRuntimeEvent | undefined)[]>' but required in type 'PromiseExtended<(ProductRuntimeEvent | undefined)[]>'.",
         "anchor": "feb0cf051527a805501fb5f20760145080af12c859aaf090ed0ddcb16122c3a5",
         "line": 99,
         "column": 73,
@@ -86198,13 +86123,13 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN9-identity-knowledge.test.ts\",\"TS2345\",\"Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<{ <U>(mode: TransactionMode, tables: readonly (string | Table<any, any, any>)[], scope: (trans: Transaction & { characters: Table<Character, any, Character>; ... 128 more ...; motionDramaReviewIssues: Table<...>; }) => U | PromiseLike<...>): PromiseExtended<...>; <U>(mode: TransactionMode, table:...'.\\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.\",\"cde9ec88292dfd6f4706f7ec8d41956339b7a5b898d716acc57f5a5d4afde300\",108,55]",
+      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN9-identity-knowledge.test.ts\",\"TS2345\",\"Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => PromiseExtended<...>'.\\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.\",\"cde9ec88292dfd6f4706f7ec8d41956339b7a5b898d716acc57f5a5d4afde300\",108,55]",
       "count": 1,
       "diagnostic": {
         "kind": "typescript",
         "file": "tests/regression/R-TTRPGOPEN9-identity-knowledge.test.ts",
         "code": "TS2345",
-        "message": "Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type 'NormalizedPrecedure<{ <U>(mode: TransactionMode, tables: readonly (string | Table<any, any, any>)[], scope: (trans: Transaction & { characters: Table<Character, any, Character>; ... 128 more ...; motionDramaReviewIssues: Table<...>; }) => U | PromiseLike<...>): PromiseExtended<...>; <U>(mode: TransactionMode, table:...'.\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.",
+        "message": "Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => PromiseExtended<...>'.\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.",
         "anchor": "cde9ec88292dfd6f4706f7ec8d41956339b7a5b898d716acc57f5a5d4afde300",
         "line": 79,
         "column": 108,
@@ -88008,6 +87933,7 @@
       "tests/e2e/avg-visual-prototype-read.spec.ts",
       "tests/e2e/avg-voice-production.spec.ts",
       "tests/e2e/avg-voice-workbench.spec.ts",
+      "tests/e2e/batch-detail-confirmation.spec.ts",
       "tests/e2e/bootstrap-module-recovery.spec.ts",
       "tests/e2e/brand-icon.spec.ts",
       "tests/e2e/builtin-games-catalog.spec.ts",
@@ -88088,11 +88014,14 @@
       "tests/e2e/codex-reference-read.spec.ts",
       "tests/e2e/comic-motion-showcase.spec.ts",
       "tests/e2e/comic-production.spec.ts",
+      "tests/e2e/community-works-share.spec.ts",
       "tests/e2e/compact-workspaces.spec.ts",
       "tests/e2e/context-compression-transport.spec.ts",
       "tests/e2e/context-owner-exact-transaction.spec.ts",
       "tests/e2e/core-workflow.spec.ts",
+      "tests/e2e/diagnostic-context.spec.ts",
       "tests/e2e/docx-import-compat.spec.ts",
+      "tests/e2e/doubao-model-lifecycle.spec.ts",
       "tests/e2e/example-library.spec.ts",
       "tests/e2e/failure-reporting.spec.ts",
       "tests/e2e/feedback-fixes.spec.ts",
@@ -88173,6 +88102,8 @@
       "tests/e2e/provider-model-lifecycle.spec.ts",
       "tests/e2e/provider-output-accounting.spec.ts",
       "tests/e2e/quality001016-creation-task-recovery.spec.ts",
+      "tests/e2e/quality002-node-field-adoption.spec.ts",
+      "tests/e2e/quality002-node-prefix-recovery.spec.ts",
       "tests/e2e/quality013-import-lifecycle.spec.ts",
       "tests/e2e/quality026-comic-visual-deletion.spec.ts",
       "tests/e2e/quality027-root-chapter-export.spec.ts",
@@ -88181,12 +88112,18 @@
       "tests/e2e/quality049-codex-category-delete.spec.ts",
       "tests/e2e/quality053-102-credential-ownership.spec.ts",
       "tests/e2e/quality059060-inspiration-writes.spec.ts",
+      "tests/e2e/quality078-embedding-response.spec.ts",
       "tests/e2e/quality080-safe-presentation.spec.ts",
       "tests/e2e/quality093-missing-chapter-delete.spec.ts",
       "tests/e2e/quality100-backup-dialog-consent.spec.ts",
       "tests/e2e/quality106108-prompt-library.spec.ts",
       "tests/e2e/quality107-prompt-example-late-edit.spec.ts",
       "tests/e2e/quality112-ai-town-draft-conflict.spec.ts",
+      "tests/e2e/quality114-http-body-lifetime.spec.ts",
+      "tests/e2e/quality115-room-rejection.spec.ts",
+      "tests/e2e/quality125-history-retry.spec.ts",
+      "tests/e2e/quality130-home-menu.spec.ts",
+      "tests/e2e/run-scope-deletion-safety.spec.ts",
       "tests/e2e/salt-ridge-showcase.spec.ts",
       "tests/e2e/screenplay-integration.spec.ts",
       "tests/e2e/screenplay-production.spec.ts",
@@ -88222,6 +88159,7 @@
       "tests/e2e/ttrpg-author-draft-conflict.spec.ts",
       "tests/e2e/ttrpg-authoring-ui.spec.ts",
       "tests/e2e/ttrpg-community-recovery.spec.ts",
+      "tests/e2e/ttrpg-empty-session-stability.spec.ts",
       "tests/e2e/ttrpg-memory-receipt.spec.ts",
       "tests/e2e/ttrpg-memory-storage-migration.spec.ts",
       "tests/e2e/ttrpg-open-audio.spec.ts",
@@ -88482,6 +88420,16 @@
       "tests/helpers/product-release-v1.ts",
       "tests/helpers/production-canonical-key-fixture.ts",
       "tests/helpers/quality001016-creation-fixtures.ts",
+      "tests/helpers/quality002-node-field.ts",
+      "tests/helpers/quality005-legacy-attempts.ts",
+      "tests/helpers/quality005-legacy-chapter-brief.ts",
+      "tests/helpers/quality005-legacy-choice.ts",
+      "tests/helpers/quality005-legacy-hybrid.ts",
+      "tests/helpers/quality005-legacy-interaction-candidate.ts",
+      "tests/helpers/quality005-legacy-large-source.ts",
+      "tests/helpers/quality005-legacy-media-branch.ts",
+      "tests/helpers/quality005-legacy-novel.ts",
+      "tests/helpers/quality005-own-runtime-recovery.ts",
       "tests/helpers/ready-ttrpg-session.ts",
       "tests/helpers/salt-ridge-world.ts",
       "tests/helpers/seed-full-project.ts",
@@ -89019,6 +88967,7 @@
       "tests/regression/R-CI-coverage-completion.test.ts",
       "tests/regression/R-CLIENT-LEGAL1-consent.test.tsx",
       "tests/regression/R-CLIENT-SUPPORT1-feedback-telemetry.test.tsx",
+      "tests/regression/R-CLIENT-desktop-transport.test.ts",
       "tests/regression/R-CLIENT-native-transport.test.ts",
       "tests/regression/R-CLIENT-save-file.test.ts",
       "tests/regression/R-CLIENT-signed-upgrade-fixture.test.ts",
@@ -89042,6 +88991,11 @@
       "tests/regression/R-COMMUNITY1-authority.test.ts",
       "tests/regression/R-COMMUNITY1-collaboration.test.ts",
       "tests/regression/R-COMMUNITY1-gateway.test.ts",
+      "tests/regression/R-COMMUNITY1-public-snapshot.test.ts",
+      "tests/regression/R-COMMUNITY2-local-preview.test.ts",
+      "tests/regression/R-COMMUNITY3-snapshot-seal.test.ts",
+      "tests/regression/R-COMMUNITY4-client-upload.test.ts",
+      "tests/regression/R-COMMUNITY5-share-ui.test.tsx",
       "tests/regression/R-CONSISTENCY1-held-items.test.ts",
       "tests/regression/R-CONSISTENCY2-knowledge-ledger.test.ts",
       "tests/regression/R-CONSISTENCY2-knowledge-ui.test.tsx",
@@ -89068,6 +89022,7 @@
       "tests/regression/R-CTXG4-context-gateway-tools.test.ts",
       "tests/regression/R-CTXG5-context-selector.test.ts",
       "tests/regression/R-CTXG6-context-evidence.test.ts",
+      "tests/regression/R-CTXG6-manifest-base-reader.test.ts",
       "tests/regression/R-CTXG7-gateway-execution.test.ts",
       "tests/regression/R-CTXG8-owner-read-session.test.ts",
       "tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts",
@@ -89077,6 +89032,8 @@
       "tests/regression/R-DETAILED-author-save-boundary.test.ts",
       "tests/regression/R-DEXIE-PREMATURE-COMMIT.test.ts",
       "tests/regression/R-DIAGNOSTICS1-failure-reporting.test.tsx",
+      "tests/regression/R-DIAGNOSTICS2-context.test.ts",
+      "tests/regression/R-DIAGNOSTICS2-wire.test.ts",
       "tests/regression/R-E-group-ui-and-divine.test.ts",
       "tests/regression/R-EDITOR1-find-replace.test.ts",
       "tests/regression/R-EDITOR3-compare-polish.test.ts",
@@ -89100,6 +89057,7 @@
       "tests/regression/R-FEEDBACK101-production-proxy.test.tsx",
       "tests/regression/R-FEEDBACK102-context-resources.test.ts",
       "tests/regression/R-FEEDBACK116-unnamed-canon.test.ts",
+      "tests/regression/R-FEEDBACK179-run-scope-deletion.test.ts",
       "tests/regression/R-FEEDBACK19-connection-guidance.test.tsx",
       "tests/regression/R-FEEDBACK225-codex-reference-read.test.ts",
       "tests/regression/R-FEEDBACK54-outline-scroll.test.tsx",
@@ -89705,6 +89663,22 @@
       "tests/regression/R-PROSE1-gateway-prose.test.ts",
       "tests/regression/R-PROTOTYPE1-community-catalog.test.ts",
       "tests/regression/R-QUALITY-agent-freshness-legacy-chat.test.ts",
+      "tests/regression/R-QUALITY005-direct-executor-admission.test.ts",
+      "tests/regression/R-QUALITY005-formal-source-capture.test.ts",
+      "tests/regression/R-QUALITY005-legacy-artifact-admission.test.ts",
+      "tests/regression/R-QUALITY005-legacy-paid-unknown.test.ts",
+      "tests/regression/R-QUALITY005-legacy-portable-readers.test.ts",
+      "tests/regression/R-QUALITY005-legacy-production-admission.test.ts",
+      "tests/regression/R-QUALITY005-legacy-readonly-ui.test.tsx",
+      "tests/regression/R-QUALITY005-legacy-runtime-admission.test.ts",
+      "tests/regression/R-QUALITY005-legacy-shared-command-admission.test.ts",
+      "tests/regression/R-QUALITY005-media-commit-guard.test.ts",
+      "tests/regression/R-QUALITY005-media-source-admission.test.ts",
+      "tests/regression/R-QUALITY005-novel-world-derivation.test.ts",
+      "tests/regression/R-QUALITY005-own-runtime-recovery.test.ts",
+      "tests/regression/R-QUALITY005-runtime-media-admission.test.ts",
+      "tests/regression/R-QUALITY005-studio-first-production-refresh.test.tsx",
+      "tests/regression/R-QUALITY005-world-source-admission.test.ts",
       "tests/regression/R-QUALITY015-source-capabilities.test.ts",
       "tests/regression/R-QUALITY017-screenplay-frozen-intent.test.ts",
       "tests/regression/R-QUALITY080-safe-theater-privacy.test.tsx",
@@ -89730,6 +89704,22 @@
       "tests/regression/R-SCREEN5-planning-refresh.test.tsx",
       "tests/regression/R-SFQA001016-creation-task-state.test.ts",
       "tests/regression/R-SFQA001016-creation-task-ui.test.tsx",
+      "tests/regression/R-SFQA002-ai-manual-local-meta.test.ts",
+      "tests/regression/R-SFQA002-avg-exact-response.test.ts",
+      "tests/regression/R-SFQA002-creation-raw-response.test.ts",
+      "tests/regression/R-SFQA002-impact-rebuild-raw-response.test.ts",
+      "tests/regression/R-SFQA002-master-raw-response.test.ts",
+      "tests/regression/R-SFQA002-node-field-adoption-atomic.test.ts",
+      "tests/regression/R-SFQA002-node-field-adoption-lifecycle.test.ts",
+      "tests/regression/R-SFQA002-node-field-adoption-ui.test.tsx",
+      "tests/regression/R-SFQA002-node-field-prefix-recovery.test.ts",
+      "tests/regression/R-SFQA002-node-field-raw-response.test.ts",
+      "tests/regression/R-SFQA002-node-prefix-recovery-ui.test.tsx",
+      "tests/regression/R-SFQA002-node-producer-lifecycle.test.ts",
+      "tests/regression/R-SFQA002-node-public-memory-interop.test.ts",
+      "tests/regression/R-SFQA002-prose-semantic-raw-response.test.ts",
+      "tests/regression/R-SFQA002-runtime-raw-response.test.ts",
+      "tests/regression/R-SFQA008-critical-coverage.test.ts",
       "tests/regression/R-SFQA013-import-session-interruption.test.tsx",
       "tests/regression/R-SFQA013-import-session-lifecycle.test.ts",
       "tests/regression/R-SFQA014-owner-primary-key.test.ts",
@@ -89737,6 +89727,7 @@
       "tests/regression/R-SFQA027-root-chapter-list.test.tsx",
       "tests/regression/R-SFQA027-root-chapter-text-export.test.ts",
       "tests/regression/R-SFQA035-adoption-reference-validation.test.ts",
+      "tests/regression/R-SFQA036-brief-atomic-recovery.test.tsx",
       "tests/regression/R-SFQA047-location-hierarchy-ui.test.tsx",
       "tests/regression/R-SFQA047-location-hierarchy.test.ts",
       "tests/regression/R-SFQA047-location-input-snapshot.test.ts",
@@ -89747,12 +89738,24 @@
       "tests/regression/R-SFQA053-102-provider-credential-identity.test.tsx",
       "tests/regression/R-SFQA059060-inspiration-hook.test.tsx",
       "tests/regression/R-SFQA059060-inspiration-writes.test.ts",
+      "tests/regression/R-SFQA061-quality-repair-integrity.test.ts",
+      "tests/regression/R-SFQA074075076-scripted-runtime.test.ts",
+      "tests/regression/R-SFQA078-embedding-response.test.ts",
+      "tests/regression/R-SFQA079-open-seat-start.test.ts",
+      "tests/regression/R-SFQA091-runtime-media-visibility.test.ts",
       "tests/regression/R-SFQA093-missing-chapter-delete-cas.test.ts",
       "tests/regression/R-SFQA100-backup-dialog-consent.test.tsx",
+      "tests/regression/R-SFQA101-brief-finish.test.tsx",
       "tests/regression/R-SFQA106108-prompt-library.test.tsx",
       "tests/regression/R-SFQA107-prompt-example-late-edit.test.tsx",
+      "tests/regression/R-SFQA110-room-mutation-recovery.test.ts",
       "tests/regression/R-SFQA112-ai-town-draft-basis.test.tsx",
       "tests/regression/R-SFQA113-overlapping-evidence.test.ts",
+      "tests/regression/R-SFQA114-http-body-lifetime.test.ts",
+      "tests/regression/R-SFQA115-client-rejections.test.ts",
+      "tests/regression/R-SFQA115-room-rejection-ui.test.tsx",
+      "tests/regression/R-SFQA119-nation-expansion-precision.test.ts",
+      "tests/regression/R-SFQA125-history-retry.test.tsx",
       "tests/regression/R-SHORT1-workflow-prompt-template.test.ts",
       "tests/regression/R-SHORT2-professional-production.test.ts",
       "tests/regression/R-SHORT3-showcase-placement.test.tsx",
@@ -90152,6 +90155,8 @@
       "tests/regression/R-issue214-provider-lifecycle.test.ts",
       "tests/regression/R-issue218-provider-output-accounting.test.ts",
       "tests/regression/R-issue23-ai-config-readiness.test.ts",
+      "tests/regression/R-issue242-ttrpg-empty-selection.test.tsx",
+      "tests/regression/R-issue243-doubao-lifecycle.test.ts",
       "tests/regression/R-open-truncation.test.ts",
       "tests/regression/R-opencode-provider.test.ts",
       "tests/regression/R-project-json-file.test.ts",
@@ -90173,6 +90178,7 @@
       "playwright.config.ts",
       "playwright.showcase.config.ts",
       "postcss.config.js",
+      "scripts/ai-call-meta.mjs",
       "scripts/avg-audio-input-contract.mjs",
       "scripts/build-adventure-player.mjs",
       "scripts/check-agent-context.mjs",
@@ -90202,12 +90208,16 @@
       "scripts/check-text-open-world-stress.mjs",
       "scripts/desktop/build-upgrade-fixture.mjs",
       "scripts/desktop/build-upgrade-fixture.test.mjs",
+      "scripts/desktop/diagnostic-smoke.mjs",
       "scripts/desktop/diagnostics.mjs",
       "scripts/desktop/diagnostics.test.mjs",
+      "scripts/desktop/http-transport.mjs",
+      "scripts/desktop/http-transport.test.mjs",
       "scripts/desktop/mac-updater.mjs",
       "scripts/desktop/mac-updater.test.mjs",
       "scripts/desktop/main.mjs",
       "scripts/desktop/preload.cjs",
+      "scripts/desktop/relay-smoke.mjs",
       "scripts/desktop/smoke.mjs",
       "scripts/desktop/updater.mjs",
       "scripts/desktop/updater.test.mjs",
@@ -90271,6 +90281,8 @@
       "scripts/narrative-world-baseline-contract.mjs",
       "scripts/quality-evals/longform-author-repair.mjs",
       "scripts/quality-evals/longform-choice-questionnaire.mjs",
+      "scripts/quality/check-dev-dependency-report.mjs",
+      "scripts/quality/check-dev-dependency-report.test.mjs",
       "scripts/quality/check-engineering.mjs",
       "scripts/quality/check-engineering.test.mjs",
       "scripts/report-narrative-reader.mjs",
@@ -90334,6 +90346,8 @@
     "zeroDebtFiles": [
       "scripts/quality/check-engineering.mjs",
       "scripts/quality/check-engineering.test.mjs",
+      "scripts/quality/check-dev-dependency-report.mjs",
+      "scripts/quality/check-dev-dependency-report.test.mjs",
       "eslint.tooling.config.mjs",
       "tests/regression/R-OPEN-WORLD3-experience-design.test.ts",
       "tests/helpers/text-open-world-delivery-recognition-assertions.ts"
