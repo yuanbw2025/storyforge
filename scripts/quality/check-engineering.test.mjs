@@ -6,7 +6,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 import ts from 'typescript'
-import { assertCompatiblePins, assertNoDebtInFiles, assertRootCoverage, compareDebt, compileRoots, currentScope, debtEntries, lintNode, portablePins } from './check-engineering.mjs'
+import { assertCompatiblePins, assertNoDebtInFiles, assertRootCoverage, compareDebt, compileRoots, currentScope, debtEntries, lintNode, portablePins, stableDiagnosticMessage } from './check-engineering.mjs'
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const options = { strict: true, noEmit: true, skipLibCheck: true, types: [],
@@ -151,4 +151,28 @@ test('the actual CI entry retains production checking and reaches engineering se
   assert.doesNotMatch(pkg.scripts.ci, /npm run check:types:open-world-experience/)
   assert.equal(pkg.scripts['check:engineering'], 'node scripts/quality/check-engineering.mjs')
   assert.equal(pkg.scripts['test:engineering-gate'], 'node --test scripts/quality/check-engineering.test.mjs')
+})
+
+test('union print order is commutative but members, array binding, anchors and counts stay protected', () => {
+  const d = {kind: /** @type {const} */ ('typescript'), file:'test.ts',code:'TS2322',message:'Type \'"ttrpg" | "avg" | undefined\' is invalid.',anchor:'same',line:1,column:1,start:0,length:3}
+  const reordered = {...d,message:'Type \'"avg" | "ttrpg" | undefined\' is invalid.'}
+  assert.equal(compareDebt(debtEntries([d]),debtEntries([reordered])).passed,true)
+  assert.equal(compareDebt(debtEntries([{...d,message:'Type \'"avg" | "other" | undefined\' is invalid.'}]),debtEntries([d])).passed,false)
+  assert.equal(compareDebt(debtEntries([{...d,anchor:'different'}]),debtEntries([d])).passed,false)
+  assert.equal(compareDebt(debtEntries([d,{...d,start:10,line:2}]),debtEntries([d])).passed,false)
+  assert.notEqual(stableDiagnosticMessage("'A | B[]'"),stableDiagnosticMessage("'B | A[]'"))
+})
+
+test('actual compiler type printing can change when an otherwise unrelated root interns a union member first', () => {
+ const root=temporary()
+ try {
+  fs.writeFileSync(path.join(root,'seed.ts'),'export const seed: "avg" = "avg";\n')
+  fs.writeFileSync(path.join(root,'target.ts'),'export {}; let value: "ttrpg" | "avg"; value=123;\n')
+  const a=compileRoots(root,['seed.ts','target.ts'],options).diagnostics.filter(x=>x.file==='target.ts')
+  const b=compileRoots(root,['target.ts','seed.ts'],options).diagnostics.filter(x=>x.file==='target.ts')
+  assert.equal(a.length,1);assert.equal(b.length,1)
+  assert.equal(compareDebt(debtEntries(a),debtEntries(b)).passed,true)
+  const changed=debtEntries([{...a[0],message:a[0].message.replace('"avg"','"other"')}])
+  assert.equal(compareDebt(changed,debtEntries(b)).passed,false)
+ } finally {fs.rmSync(root,{recursive:true,force:true})}
 })
