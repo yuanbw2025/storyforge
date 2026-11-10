@@ -1,16 +1,13 @@
-import { db } from '../db/schema'
-import type { WorldRelease, WorldRevisionOriginV1 } from '../types/world-release'
+import type { WorldRevisionOriginV1 } from '../types/world-release'
 import { assertWorldRevisionOriginV1 } from './publication-origin-contract'
 import { verifyWorldReleaseManifestV1, type VerifiedWorldReleaseV1 } from './release-codec'
+import { readWorldPublicationAuthoritySnapshotV1, type PublicationRelease } from './publication-authority-rows'
 
 type Row = Record<string, unknown>
 type Manifest = VerifiedWorldReleaseV1['manifest']
 
-/** Called by the actual seal or cache writer, never copied from package data. */
-export function worldRevisionOriginV1(kind: WorldRevisionOriginV1['kind'], manifest: Manifest, contentHash: string): WorldRevisionOriginV1 {
-  return { version: 1, kind, sourceWorkspaceUid: manifest.sourceManifest.sourceWorkspaceUid,
-    worldCode: manifest.worldCode, contentHash }
-}
+export { worldRevisionOriginV1 } from './publication-origin-contract'
+import { worldRevisionOriginV1 } from './publication-origin-contract'
 
 function matchesOrigin(origin: unknown, manifest: Manifest, contentHash: string): origin is WorldRevisionOriginV1 {
   try { assertWorldRevisionOriginV1(origin) } catch { return false }
@@ -30,13 +27,8 @@ function ownsFrozenRoots(manifest: Manifest, world: Row, works: Row[]) {
 
 /** Public code is a lookup key. Authority requires the exact sealed revision
  * and owned frozen World/Work roots; an explicit cache can never be promoted. */
-export async function readWorldPublicationAuthorityV1(release: Pick<WorldRelease, 'projectId' | 'worldId' | 'revisionId' | 'manifestJson' | 'contentHash' | 'sourceWorldCode'>, verified: VerifiedWorldReleaseV1) {
-  const [project, world, revision, revisions, works] = await Promise.all([
-    db.projects.get(release.projectId), db.worlds.get(release.worldId), db.worldRevisions.get(release.revisionId),
-    db.worldRevisions.where('worldId').equals(release.worldId).toArray(),
-    db.works.where('worldId').equals(release.worldId).toArray(),
-  ])
-  const rows = JSON.stringify({ project, world, revision, revisions, works })
+export async function readWorldPublicationAuthorityV1(release: PublicationRelease, verified: VerifiedWorldReleaseV1) {
+  const { project, world, revision, revisions, works, rows } = await readWorldPublicationAuthoritySnapshotV1(release)
   if (!project || project.workspacePurpose !== 'world-engine' || !world || world.projectId !== release.projectId
     || !revision || revision.projectId !== release.projectId || revision.worldId !== release.worldId
     || revision.manifestJson !== release.manifestJson || revision.contentHash !== release.contentHash

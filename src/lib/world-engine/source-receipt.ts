@@ -6,7 +6,6 @@ import { resolveWorldOwnerScopeLike, scopeTransactionTables } from '../workspace
 import { cacheFrozenWorldReleaseInTransactionV1 } from './reference-cache'
 import { assertCapturedWorldSourceWireV1, captureWorldSourceWireV1, type CapturedWorldSourceWireV1 } from './world-package'
 import { assertWorldSourceReceiptBindingV1, assertWorldSourceReceiptRowV1 } from './source-receipt-contract'
-import { readWorldPublicationAuthorityV1 } from './publication-origin'
 import { inspectCommunityWorldOriginV1 } from './source-declaration'
 import type { VerifiedWorldReleaseV1 } from './release-codec'
 
@@ -215,6 +214,7 @@ export function assertWorldPackageEditingSourceV1(captured: CapturedWorldSourceW
 /** The existing public creation API must enforce this even when no UI runs.
  * A readonly cached R never proves inheritance by the author's unrelated R. */
 export async function guardWorldPackageCreationV1(release: WorldRelease, verified: VerifiedWorldReleaseV1): Promise<() => Promise<void>> {
+  const { readWorldPublicationAuthorityV1 } = await import('./publication-origin')
   const world = await db.worlds.get(release.worldId)
   if (!world || world.projectId !== release.projectId || world.identityKind !== 'world-draft'
     || world.code !== release.sourceWorldCode || verified.manifest.worldCode !== world.code) fail('不能将外来冻结缓存重新署名打包；请选择 D 导出原来源包')

@@ -6,6 +6,7 @@ import { createSfqa021WorldSharingCarrierV1 as fixture } from '../helpers/sfqa02
 import { createWorldPackage, importWorldPackage, inspectWorldPackage } from '../../src/lib/world-engine/world-package'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { exportOriginalWorldSourceWireV1, installWorldSourcePackageV1, readWorldSourceReceiptV1, resolveWorldEditingSourceV1 } from '../../src/lib/world-engine/source-receipt'
+import { freezeWorldSourcePurposeV1, readWorldSourcePurposeDeclarationV1 } from '../../src/lib/world-engine/source-purpose'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { resolveWorkspaceScope } from '../../src/lib/workspace/ownership'
 
@@ -39,6 +40,20 @@ describe('SFQA021 F2 · existing package API source closure', () => {
     const revision = await createWorldRevision({ scope, label: '新世界封存', formatVersion: version === 3 ? 3 : 4 })
     const release = await publishWorldRevision(revision.id!)
     await expect(createWorldPackage(release.id!, { ...packet.manifest, authorName: '新namespace的新作者' })).rejects.toThrow('旧 v3/v4/v5 重包')
+    const newPurpose = { worldReleaseId: release.id!, expectedProjectId: scope.projectId, expectedWorldId: scope.worldId }
+    const proof = await freezeWorldSourcePurposeV1({ ...newPurpose, purpose: 'ttrpg' })
+    if (proof.origin.kind !== 'declared') throw new Error('Editing lineage lost exact D')
+    expect(proof.origin.relation).toBe('editing-lineage')
+    expect(proof.selectedRelease.releaseHash).toBe(release.contentHash)
+    expect(readWorldSourcePurposeDeclarationV1(proof.origin)).toMatchObject({
+      declarationHash: source.row.declarationHash, attribution: packet.manifest.attribution,
+      contentWarnings: packet.manifest.contentWarnings,
+    })
+    await expect(freezeWorldSourcePurposeV1({ ...newPurpose, purpose: 'avg' })).rejects.toThrow(/不允许/)
+    const sibling = await installWorldSourcePackageV1(scope, f.pkg)
+    await expect(freezeWorldSourcePurposeV1({ ...newPurpose, purpose: 'ttrpg',
+      sourceDeclarationHash: sibling.declarationHash })).rejects.toThrow(/编辑时明确绑定/)
+
     expect((await readWorldSourceReceiptV1(scope, source.row.declarationHash)).captured.declaration.attribution).toBe(packet.manifest.attribution)
   })
 

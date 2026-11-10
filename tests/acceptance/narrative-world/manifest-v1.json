@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-publication-origin-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-product-purpose-v5.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-publication-origin-v2.json",
+        "workPackage": "NW-0B",
+        "note": "Preserve actual local seal/cache origin foundation before explicit product-purpose proofs and the readonly sharing declaration selector. Frozen corpus and all deterministic observations remain unchanged."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality129-nw1b-v1.json",
         "workPackage": "NW-0B",
@@ -843,6 +848,7 @@
     "src/lib/world-engine/narrative-semantic-transfer.ts",
     "src/lib/world-engine/narrative-time.ts",
     "src/lib/world-engine/promotion.ts",
+    "src/lib/world-engine/publication-authority-rows.ts",
     "src/lib/world-engine/publication-origin-contract.ts",
     "src/lib/world-engine/publication-origin.ts",
     "src/lib/world-engine/reference-cache.ts",
@@ -853,6 +859,10 @@
     "src/lib/world-engine/semantic-registry-v3.ts",
     "src/lib/world-engine/semantic-registry-v4.ts",
     "src/lib/world-engine/semantic-snapshot.ts",
+    "src/lib/world-engine/source-purpose-actions.ts",
+    "src/lib/world-engine/source-purpose-cas.ts",
+    "src/lib/world-engine/source-purpose-contract.ts",
+    "src/lib/world-engine/source-purpose.ts",
     "src/lib/world-engine/source-receipt.ts",
     "src/lib/world-engine/tidemark-echo-preset.ts",
     "src/lib/world-engine/tidemark-preset.ts",
