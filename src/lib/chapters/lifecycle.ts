@@ -5,6 +5,7 @@ import { detachTemporalFactsForDeletedChapters } from '../fact-ledger/lifecycle'
 import { detachKnowledgeForDeletedChapters } from '../knowledge-ledger/lifecycle'
 import { transactionTablesFor } from '../registry/lifecycle'
 import { detachStorylineForDeletedChapters } from '../storyline/lifecycle'
+import { assertRetainedRunScopeTargetsV1 } from '../agent/run/scope-lifecycle'
 import { canonicalStringify } from '../agent/run/hash'
 import { assertRecordInScope } from '../workspace/scope'
 import type { WorkspaceScope } from '../types'
@@ -66,6 +67,7 @@ export async function cascadeDeleteChapterRecords(
           || !await assertRecordInScope(target.scope, 'chapters', current, { owner: 'work' })) throw stale()
       }
     }
+    await assertRetainedRunScopeTargetsV1(new Map([['chapters', chapterIds]]))
     await detachTemporalFactsForDeletedChapters([...chapterIds])
     await detachKnowledgeForDeletedChapters([...chapterIds])
     await detachStorylineForDeletedChapters([...chapterIds])

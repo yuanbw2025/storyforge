@@ -88,10 +88,11 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
     { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', desc: '最强，支持深度思考' },
   ],
   doubao: [
-    { value: 'doubao-1-5-pro-32k-250115', label: 'Doubao 1.5 Pro 32K', desc: '32K 上下文·纯文本生成' },
+    { value: 'doubao-seed-2-0-lite-260428', label: 'Doubao Seed 2.0 Lite（LTS）', desc: '官方当前推荐迁移项；新建配置使用，已有配置不迁移' },
+    { value: 'doubao-1-5-pro-32k-250115', label: 'Doubao 1.5 Pro 32K', desc: '官方 API 已于 2026-09-21 下线；已有配置保留，需手动选择可用型号' },
     { value: 'deepseek-v4-flash-ga-260731', label: 'DeepSeek V4 Flash 正式版', desc: '火山方舟·快速文本推理' },
-    { value: 'deepseek-v4-pro-260425', label: 'DeepSeek V4 Pro', desc: '火山方舟·高质量文本推理' },
-    { value: 'deepseek-v4-flash-260425', label: 'DeepSeek V4 Flash', desc: '火山方舟·文本推理' },
+    { value: 'deepseek-v4-pro-260425', label: 'DeepSeek V4 Pro', desc: '火山方舟官方计划于 2026-11-24 下线；请提前由作者选择迁移型号' },
+    { value: 'deepseek-v4-flash-260425', label: 'DeepSeek V4 Flash', desc: '火山方舟官方 API 已于 2026-09-21 下线；已有配置保留' },
   ],
   // Gemini lifecycle / OpenAI compatibility reviewed 2026-10-26; saved IDs remain author-owned.
   gemini: [
@@ -170,7 +171,7 @@ export const PROVIDER_PRESETS: Record<string, Partial<AIConfig>> = {
   },
   doubao: {
     baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-    model: 'doubao-1-5-pro-32k-250115',
+    model: 'doubao-seed-2-0-lite-260428',
   },
   minimax: {
     baseUrl: 'https://api.minimax.chat/v1',
