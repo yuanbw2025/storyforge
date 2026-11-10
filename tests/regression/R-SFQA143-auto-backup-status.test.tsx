@@ -127,6 +127,48 @@ it('143 the same single interval recovers with a real new snapshot and clears it
   expect(await db.snapshots.get(status.snapshotId!)).toBeDefined()
 })
 
+it('143 a timer that recovers an initially unreadable owner makes its real quota failure visible', async () => {
+  const f = await seedCurrentWorkspace('首次读取后恢复')
+  vi.spyOn(db.projects, 'get').mockRejectedValueOnce(new DOMException('temporary read failure', 'UnknownError'))
+  vi.spyOn(db.snapshots, 'add').mockRejectedValueOnce(new DOMException('quota failure', 'QuotaExceededError'))
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+  await renderSurface(f.project)
+  expect(useBackupStore.getState().activeView?.owner).toBeNull()
+  await act(async () => vi.advanceTimersByTimeAsync(AUTO_BACKUP_INTERVAL))
+  await settle(() => host!.textContent!.includes('自动快照未更新'))
+  expect(host!.textContent).toContain('可用存储空间不足')
+  expect(useBackupStore.getState().activeView?.owner?.workspaceUid).toBe(f.project.workspaceUid)
+  expect(vi.getTimerCount()).toBe(1)
+})
+
+it('143 a recovered owner read cannot bind or write after the author switches workspaces', async () => {
+  const a = await seedCurrentWorkspace('延迟读取的旧工作区')
+  const b = await seedCurrentWorkspace('切换后的新工作区')
+  const read = vi.spyOn(db.projects, 'get').mockRejectedValueOnce(new Error('first read failed'))
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+  await renderSurface(a.project)
+  expect(useBackupStore.getState().activeView?.owner).toBeNull()
+  let release!: () => void
+  const held = new Promise<void>(resolve => { release = resolve })
+  read.mockReturnValueOnce(db.projects.where('id').equals(a.project.id!).first().then(async row => {
+    await held
+    return row
+  }))
+  const recover = vi.spyOn(useBackupStore.getState(), 'resolveActiveBackupOwner')
+  await act(async () => vi.advanceTimersByTimeAsync(AUTO_BACKUP_INTERVAL))
+  expect(read).toHaveBeenCalledTimes(2)
+  expect(recover).toHaveBeenCalledTimes(1)
+  const pendingRecovery = recover.mock.results[0].value
+  await renderSurface(b.project)
+  await settle(() => useBackupStore.getState().activeView?.owner?.workspaceUid === b.project.workspaceUid)
+  await act(async () => { release(); expect(await pendingRecovery).toBeNull() })
+  expect(useBackupStore.getState().activeView?.owner?.workspaceUid).toBe(b.project.workspaceUid)
+  expect(useBackupStore.getState().autoStatus[backupOwnerKey({ projectId: a.project.id!, workspaceUid: a.project.workspaceUid })]).toBeUndefined()
+  expect(await db.snapshots.count()).toBe(0)
+  expect(host!.textContent).not.toContain('自动快照未更新')
+  expect(vi.getTimerCount()).toBe(1)
+})
+
 it.each(['export', 'serialize', 'write'] as const)('143 %s failure preserves prior snapshots and records no success', async phase => {
   const f = await seedCurrentWorkspace('143各失败边界')
   await useBackupStore.getState().createSnapshot(f.project.id!, '旧快照', 'manual')

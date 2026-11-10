@@ -60,6 +60,7 @@ interface BackupStore {
   activeView: { projectId: number; routeKey: string; owner: BackupOwner | null } | null
   detailOwnerKey: string | null
   activateAutoBackup: (projectId: number, routeKey: string) => () => void
+  resolveActiveBackupOwner: (projectId: number, expectedOwner?: BackupOwner | null) => Promise<BackupOwner | null>
   showBackupDetails: (owner: BackupOwner) => () => void
   readAutoBackupStatus: (projectId: number) => Promise<BackupOwner>
 
@@ -90,13 +91,25 @@ export const useBackupStore = create<BackupStore>((set, get) => ({
   activateAutoBackup: (projectId, routeKey) => {
     const sequence = ++viewSequence
     set({ activeView: { projectId, routeKey, owner: null } })
-    void readOwner(projectId).then(async owner => {
-      if (sequence === viewSequence) set({ activeView: { projectId, routeKey, owner } })
-      if (!get().autoStatus[backupOwnerKey(owner)]) await get().readAutoBackupStatus(projectId)
+    void get().resolveActiveBackupOwner(projectId).then(async owner => {
+      if (owner && !get().autoStatus[backupOwnerKey(owner)]) await get().readAutoBackupStatus(projectId)
     }).catch(() => { /* A removed owner must not borrow another workspace's status. */ })
     return () => {
       if (sequence === viewSequence) { viewSequence++; set({ activeView: null }) }
     }
+  },
+
+  resolveActiveBackupOwner: async (projectId, expectedOwner) => {
+    const view = get().activeView
+    if (!view || view.projectId !== projectId) return null
+    const sequence = viewSequence
+    const owner = view.owner ?? await readOwner(projectId)
+    const current = get().activeView
+    if (!current || sequence !== viewSequence
+      || (expectedOwner && !sameOwner(expectedOwner, owner))
+      || (current.owner && !sameOwner(current.owner, owner))) return null
+    if (!current.owner) set({ activeView: { ...current, owner } })
+    return owner
   },
 
   showBackupDetails: owner => {
