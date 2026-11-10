@@ -7369,6 +7369,9 @@ export async function runProductProductionSchedulerCycleV1(input: {
     return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
   }
   assertTextOpenWorldProductionNewWorkV1(current.production, current.briefRow, '继续制作调度')
+  if (current.production.productType === 'text-open-world') await assertTextOpenWorldBuildNewWorkV1({
+    scope, productionId: input.productionId, buildId: current.build.id!, operation: '开始制作调度',
+  })
   const state = await ensureRootRun({ scope, productionId: input.productionId, suppliedPlan: input.suppliedPlan })
   await invalidateStaleCarriedTextAdventureVisionClosureV1({
     scope,
