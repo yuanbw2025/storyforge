@@ -26,8 +26,10 @@ function inspectRows(spec: StructureSpec, input: readonly unknown[]) {
   const parent = spec.exportRemap?.find(ref => ref.selfTree && ref.field === spec.tree!.parentField)
   if (!spec.exportIdField || !parent) throw new Error(`${spec.name} 的树形便携身份/父引用未登记。`)
   const roots: number[] = []
+  const sourceIndex = new Map<number, number>()
   const children = new Map<number, number[]>()
   for (const [id, row] of rows) {
+    sourceIndex.set(id, sourceIndex.size)
     const parentId = row[parent.exportAs]
     if (parentId == null) { roots.push(id); continue }
     if (!isPortableId(parentId) || !rows.has(parentId)) {
@@ -38,19 +40,32 @@ function inspectRows(spec: StructureSpec, input: readonly unknown[]) {
     siblings.push(id); children.set(parentId, siblings)
   }
   if (errors.length) return { errors, ordered }
-  // Iterative O(n) traversal supports arbitrarily ordered long chains without
-  // recursion or a fallback that silently drops rows or changes their parent.
+  // The legacy importer scanned the input from left to right on each pass.
+  // A child appearing before its parent waits one extra pass. Keep that
+  // stable order without repeatedly scanning reversed chains.
+  const passByIndex = Array<number>(rows.size).fill(0)
   for (let index = 0; index < roots.length; index++) {
     const id = roots[index]
-    ordered.push(rows.get(id)!)
-    for (const child of children.get(id) ?? []) roots.push(child)
+    const parentIndex = sourceIndex.get(id)!
+    for (const child of children.get(id) ?? []) {
+      const childIndex = sourceIndex.get(child)!
+      passByIndex[childIndex] = passByIndex[parentIndex] + (childIndex < parentIndex ? 1 : 0)
+      roots.push(child)
+    }
   }
-  if (ordered.length !== rows.size) {
+  if (roots.length !== rows.size) {
     const placed = new Set(roots)
     const blocked = [...rows.keys()].find(id => !placed.has(id))!
     errors.push(`${spec.name}[_exportId=${blocked}] 的父链形成循环。`)
+    return { errors, ordered }
   }
-  return { errors, ordered }
+  const passes: Record<string, unknown>[][] = []
+  for (const [id, row] of rows) {
+    const pass = passByIndex[sourceIndex.get(id)!]
+    passes[pass] ??= []
+    passes[pass].push(row)
+  }
+  return { errors, ordered: passes.flat() }
 }
 
 /** Shared by the read-only preflight and the direct registry import boundary. */
