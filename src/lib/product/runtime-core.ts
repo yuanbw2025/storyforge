@@ -1,3 +1,4 @@
+import { createNewBranchProjectionAuthorityV1 } from './runtime-new-branch-projection'
 import { captureFormalRuntimeSourceRecordsV1, assertFormalRuntimeSourceRecordsUnchangedV1,
   verifyFormalRuntimeSourceV1, assertFormalRuntimeSourceUnchangedV1, type VerifiedFormalRuntimeSourceV1 } from './runtime-source-authority'
 export { verifyFormalRuntimeSourceV1, assertFormalRuntimeSourceUnchangedV1, type VerifiedFormalRuntimeSourceV1 } from './runtime-source-authority'
@@ -1299,6 +1300,12 @@ export async function preparePreviewProductRuntimeSessionRecordV1(
   return session;
 }
 
+const newBranchProjectionAuthorityV1 = createNewBranchProjectionAuthorityV1({
+  parseState: parseProductRuntimeState, hashStateJson, readLatestSequence: readLatestSessionEventSequenceV1,
+  update: (id, projection) => db.productRuntimeSessions.update(id, projection),
+});
+export const finalizeInsertedRuntimeBranchProjectionV1 = newBranchProjectionAuthorityV1.finalize;
+
 /** Commit-only half of the formal session boundary. */
 export async function insertPreparedProductRuntimeSessionV1(
   session: ProductRuntimeSession,
@@ -1323,6 +1330,7 @@ export async function insertPreparedProductRuntimeSessionV1(
   }
   session.id = (await db.productRuntimeSessions.add(session)) as number;
   preparedProductRuntimeSessionsV1.delete(session);
+  newBranchProjectionAuthorityV1.recordNewInsert(session);
   return session;
 }
 
@@ -2288,6 +2296,7 @@ async function branchProductRuntimeSessionInternal(
   const tables = [...new Set([
     ...runtimeInstanceTablesV1(),
     ...transactionTablesForReferenceCascade('productRuntimeSessions'),
+    ...(parent.kind === 'ttrpg' ? transactionTablesForReferenceCascade('mediaBlobObjects') : []),
     ...(source.kind === 'release' ? [db.productReleases]
       : [db.productBuilds, db.productProductions, db.productProductionBriefs]),
   ])];

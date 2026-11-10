@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality031069-independent-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality082083-runtime-media-attempts-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -681,6 +681,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
         "workPackage": "SFQA-031/069-independent",
         "note": "Preserved byte-for-byte before the independent atomic runtime/checkpoint branch closure. Corpus, findings and deterministic observations are compared exactly; only actual changed source/test and finalized manifest input fingerprints may change."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality031069-independent-v1.json",
+        "workPackage": "SFQA-082/083-runtime-media-attempts",
+        "note": "Preserved before the runtime media attempt and branch-accounting changes. The corpus and all deterministic observations are compared to this receipt."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
