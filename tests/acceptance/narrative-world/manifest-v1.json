@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality333-sources-synced-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality333-comic-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -740,6 +740,24 @@
         "implementationCommit": "89ab4ea5a538df7d5c4ef194f1e05c428b878e14",
         "workPackage": "SFQA-004/105",
         "note": "Preserve the measured source receipt before synchronizing the two corrected pull request heads."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality325-stable-recovery-v1.json",
+        "implementationCommit": "f84f28b3ea2debd30116d63b8d087def65082461",
+        "workPackage": "SFQA-019/020/088/098/099",
+        "note": "Preserve the original measured receipt before integrating the reviewed product and comic changes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality034039-isolated-v1.json",
+        "implementationCommit": "d83c026e59469554a914979927025706b9f36373",
+        "workPackage": "SFQA-034/039/043/046",
+        "note": "Preserve the original measured receipt before integrating the reviewed product and comic changes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality333-sources-synced-v1.json",
+        "implementationCommit": "29ba906115dc09849d28c8f80e85c3232f66730e",
+        "workPackage": "SFQA-004/019/020/088/098/099/105",
+        "note": "Preserve the original measured receipt before integrating the reviewed product and comic changes."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
