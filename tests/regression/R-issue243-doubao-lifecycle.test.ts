@@ -44,8 +44,8 @@ describe('issue243 · 豆包官方型号生命周期', () => {
     const store = (await import('../../src/stores/ai-config')).useAIConfigStore
     store.getState().switchProvider('doubao');store.getState().setConfig({ apiKey: 'synthetic-only' })
     const bodies: Array<{model: string}> = []
-    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
-      const body = JSON.parse(String(init.body));bodies.push(body)
+    vi.stubGlobal('fetch', vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));bodies.push(body)
       return body.model === retired ? new Response('{"error":{"message":"synthetic retired model"}}', { status: 404 }) : new Response(JSON.stringify({ choices: [{ message: { content: '合成回执' }, finish_reason: 'stop' }] }), { status: 200 })
     }))
     const { chat } = await import('../../src/lib/ai/client')
