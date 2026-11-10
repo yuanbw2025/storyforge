@@ -8,6 +8,7 @@ export interface ClientUpdateState {
 }
 export interface ClientBridge {
   diagnosticContext?(value: { enabled: boolean; trail: import('../diagnostics/diagnostic-context').DiagnosticStep[] }): Promise<void>
+  http?: import('./android-fetch').NativeHttp
   diagnostics?(): Promise<unknown[]>
   telemetryAllowed?(): Promise<boolean>
   getState(): Promise<ClientUpdateState>

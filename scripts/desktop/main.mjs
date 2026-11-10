@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, session } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, session, net } from 'electron'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createPortableServer } from '../distribution/server.mjs'
@@ -6,6 +6,7 @@ import { installUpdater } from './updater.mjs'
 import updater from 'electron-updater'
 import { desktopDiagnostics } from './diagnostics.mjs'
 import { createMacUpdater } from './mac-updater.mjs'
+import { installHttpTransport } from './http-transport.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 // This identity, profile and origin are part of the data contract. Never randomize them.
@@ -42,6 +43,7 @@ else {
       webPreferences: { preload: join(root, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true },
     })
     window = mainWindow
+    installHttpTransport({ window: mainWindow, ipcMain, origin, fetch: net.fetch })
     ipcMain.handle('client-diagnostics:read', event => {
       if (!event.senderFrame || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || new URL(event.senderFrame.url).origin !== origin) throw new Error('Invalid diagnostics caller')
       return diagnostics.read()
