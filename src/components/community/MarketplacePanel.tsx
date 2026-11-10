@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   Bell, Download, ExternalLink, Heart, KeyRound, Loader2, PackageCheck, RefreshCw, Search, Send, ShieldAlert, ShoppingBag, Upload, UserPlus,
 } from 'lucide-react'
@@ -127,7 +127,7 @@ export default function MarketplacePanel(props: {
   const [error, setError] = useState('')
   const [checkout, setCheckout] = useState<{ listingId: string; url: string } | null>(null)
   const [reviewListingId, setReviewListingId] = useState<string | null>(null)
-  const [socialEdges, setSocialEdges] = useState<CommunitySocialEdgeV1[]>([])
+  const [socialEdges, setSocialEdges] = useState<CommunitySocialEdgeV1[] | null>(null)
   const [creatorListings, setCreatorListings] = useState<CommercialListingV1[]>([])
   const [reviewQueue, setReviewQueue] = useState<CommercialListingV1[]>([])
   const [reviewCandidates, setReviewCandidates] = useState<Record<string, CommercialTextAdventureReviewProjectionV1>>({})
@@ -136,6 +136,7 @@ export default function MarketplacePanel(props: {
   const [textAdventureCandidate, setTextAdventureCandidate] = useState<TextAdventureCommunityCandidateDossierV1 | null>(null)
   const acquisitionIds = useRef(new Map<string, string>())
   const [socialRequests] = useState(createCommunityRequestIntentsV1)
+  const socialIntentOwners = useRef(new Map<string, CommunityHttpClientV1>())
   const operationRequestIds = useRef(new Map<string, string>())
   const submission = useRef<{
     fingerprint: string
@@ -161,6 +162,30 @@ export default function MarketplacePanel(props: {
     try { return new CommunityHttpClientV1({ baseUrl: serviceUrl, timeoutMs: 60_000 }) } catch { return null }
   }, [props.communityClient, serviceUrl])
   const communityClient = props.communityClient ?? generatedCommunityClient
+
+  const socialToken = accessToken.trim()
+  const socialOwner = useMemo(() => ({ client: communityClient, token: socialToken, current: false, revision: 0 }), [communityClient, socialToken])
+  useLayoutEffect(() => {
+    socialOwner.current = true
+    setSocialEdges(null)
+    setBusy(previous => previous?.startsWith('social:') ? null : previous)
+    setMessage(''); setError('')
+    return () => { socialOwner.current = false }
+  }, [socialOwner])
+
+  const refreshSocial = async () => {
+    if (!socialOwner.current || !socialOwner.client || !socialOwner.token) return
+    const revision = ++socialOwner.revision
+    try {
+      const edges = await socialOwner.client.mySocialEdges(socialOwner.token)
+      if (socialOwner.current && socialOwner.revision === revision) setSocialEdges(edges)
+    } catch (cause) {
+      if (socialOwner.current && socialOwner.revision === revision) {
+        setSocialEdges(null)
+        setError(messageOf(cause))
+      }
+    }
+  }
 
   useEffect(() => {
     discoveryEpoch.current += 1
@@ -189,10 +214,10 @@ export default function MarketplacePanel(props: {
     submission.current = null
   }, [localReleases, selectedReleaseId])
 
-  const run = async (key: string, operation: () => Promise<void>) => {
+  const run = async (key: string, operation: () => Promise<void>, owner?: typeof socialOwner) => {
     setBusy(key); setMessage(''); setError('')
-    try { await operation() } catch (cause) { setError(messageOf(cause)) }
-    finally { setBusy(null) }
+    try { await operation() } catch (cause) { if (!owner || owner.current) setError(messageOf(cause)) }
+    finally { if (!owner || owner.current) setBusy(null) }
   }
   const operationRequestId = (key: string) => {
     const prior = operationRequestIds.current.get(key)
@@ -227,25 +252,31 @@ export default function MarketplacePanel(props: {
       ? [...new Map([...current, ...page.items].map(item => [item.listingId, item])).values()]
       : page.items)
     setNextDiscoveryCursor(page.nextCursor)
-    if (!append && communityClient && accessToken.trim()) {
-      try { setSocialEdges(await communityClient.mySocialEdges(accessToken.trim())) } catch { setSocialEdges([]) }
-    }
+    if (!append) void refreshSocial()
   })
 
   const toggleSocial = (kind: CommunitySocialEdgeV1['kind'], targetId: string) => run(`social:${kind}:${targetId}`, async () => {
     if (!communityClient) throw new Error('请先配置社区服务地址。')
     if (!accessToken.trim()) throw new Error('请输入当前账号的访问凭据。')
+    if (!socialOwner.current) return
+    if (socialEdges === null) { await refreshSocial(); return }
     const prior = socialEdges.find(edge => edge.kind === kind && edge.targetId === targetId)
     const active = !prior?.active
-    const token = accessToken.trim()
+    const token = socialOwner.token
+    const revision = ++socialOwner.revision
     const body = { kind, targetId, active }
-    const edge = await socialRequests.send(communityClient, token, 'social.edge', body, ({ requestId }) =>
-      communityClient.setSocialEdge({ accessToken: token, requestId, ...body }))
-    setSocialEdges(current => edge.active
-      ? [edge, ...current.filter(item => item.edgeId !== edge.edgeId)]
-      : current.filter(item => item.edgeId !== edge.edgeId))
+    // Returning to a configured endpoint can create a new transport for the same outstanding command.
+    const intentOwner = props.communityClient ?? socialIntentOwners.current.get(communityClient.baseUrl) ?? communityClient
+    if (!props.communityClient) socialIntentOwners.current.set(communityClient.baseUrl, intentOwner)
+    const edge = await socialRequests.send(intentOwner, token, 'social.edge', body, ({ requestId }) =>
+      communityClient.setSocialEdge({ accessToken: token, requestId, ...body }), { ...body, active: !active })
+    if (!socialOwner.current || revision !== socialOwner.revision) return
+    setSocialEdges(current => {
+      const remaining = (current ?? []).filter(item => item.edgeId !== edge.edgeId)
+      return edge.active ? [edge, ...remaining] : remaining
+    })
     setMessage(active ? '社区关系已保存到账号。' : '社区关系已取消。')
-  })
+  }, socialOwner)
 
   const download = async (listing: CommercialListingV1) => {
     if (!client) throw new Error('请先配置市场服务地址。')
@@ -432,7 +463,7 @@ export default function MarketplacePanel(props: {
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
         {!props.client && <label className="grid gap-2 text-[10px] text-text-muted">市场服务地址<input value={serviceUrl} onChange={event => { invalidateDiscovery(); setServiceUrl(event.target.value) }} placeholder="https://market.example.com" className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label>}
-        <label className="grid gap-2 text-[10px] text-text-muted">账号访问凭据（仅保存在当前页面内存）<span className="flex items-center gap-2 rounded border border-border bg-bg-base px-2"><KeyRound className="h-4 w-4" /><input type="password" value={accessToken} onChange={event => setAccessToken(event.target.value)} autoComplete="off" className="min-w-0 flex-1 bg-transparent py-2 text-xs text-text-primary outline-none" /></span></label>
+        <label className="grid gap-2 text-[10px] text-text-muted">账号访问凭据（仅保存在当前页面内存）<span className="flex items-center gap-2 rounded border border-border bg-bg-base px-2"><KeyRound className="h-4 w-4" /><input type="password" value={accessToken} onChange={event => setAccessToken(event.target.value)} onBlur={() => { if (listings.length && socialEdges === null) void refreshSocial() }} autoComplete="off" className="min-w-0 flex-1 bg-transparent py-2 text-xs text-text-primary outline-none" /></span></label>
       </div>
       <div className="mt-4 flex flex-wrap gap-2"><button onClick={() => setMode('discover')} className={`rounded px-3 py-2 text-xs ${mode === 'discover' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><ShoppingBag className="mr-2 inline h-4 w-4" />玩家市场</button><button onClick={() => setMode('groups')} className={`rounded px-3 py-2 text-xs ${mode === 'groups' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><PackageCheck className="mr-2 inline h-4 w-4" />组团中心</button><button onClick={() => setMode('creator')} className={`rounded px-3 py-2 text-xs ${mode === 'creator' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><Upload className="mr-2 inline h-4 w-4" />创作者提交</button><button onClick={() => setMode('review')} className={`rounded px-3 py-2 text-xs ${mode === 'review' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><PackageCheck className="mr-2 inline h-4 w-4" />发行审核</button><button onClick={() => setMode('safety')} className={`rounded px-3 py-2 text-xs ${mode === 'safety' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><ShieldAlert className="mr-2 inline h-4 w-4" />安全与申诉</button><button onClick={() => setMode('operations')} className={`rounded px-3 py-2 text-xs ${mode === 'operations' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><KeyRound className="mr-2 inline h-4 w-4" />支持与结算</button></div>
     </section>
@@ -449,13 +480,13 @@ export default function MarketplacePanel(props: {
         <button disabled={busy != null || !client} onClick={() => void discover()} className="flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><RefreshCw className="h-4 w-4" />刷新</button>
       </div>
       <div className="mt-5 grid gap-3 lg:grid-cols-2">{listings.map(listing => {
-        const favorite = socialEdges.some(edge => edge.kind === 'favorite-listing' && edge.targetId === listing.listingId)
-        const subscribed = socialEdges.some(edge => edge.kind === 'subscribe-listing' && edge.targetId === listing.listingId)
-        const followed = socialEdges.some(edge => edge.kind === 'follow-creator' && edge.targetId === listing.creatorId)
+        const favorite = socialEdges?.some(edge => edge.kind === 'favorite-listing' && edge.targetId === listing.listingId)
+        const subscribed = socialEdges?.some(edge => edge.kind === 'subscribe-listing' && edge.targetId === listing.listingId)
+        const followed = socialEdges?.some(edge => edge.kind === 'follow-creator' && edge.targetId === listing.creatorId)
         return <article key={listing.listingId} className="rounded border border-border bg-bg-base p-4">
           <div className="flex items-start gap-3"><PackageCheck className="mt-0.5 h-5 w-5 text-accent" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold text-text-primary">{listing.title}</h3><span className="rounded bg-accent/10 px-2 py-0.5 text-[10px] text-accent">{PRODUCT_OPTIONS.find(item => item.value === listing.productType)?.label}</span><strong className="ml-auto text-xs text-text-primary">{price(listing)}</strong></div><p className="mt-2 text-xs leading-5 text-text-muted">{listing.summary}</p><p className="mt-2 break-all font-mono text-[9px] text-text-muted">Release {listing.releaseHash}</p><p className="mt-1 font-mono text-[9px] text-text-muted">Listing {listing.listingId} · Creator {listing.creatorId}</p>
             <div className="mt-3 flex flex-wrap gap-2"><button disabled={busy != null} onClick={() => void acquire(listing)} className="rounded bg-accent px-3 py-2 text-xs text-white">{listing.amountMinor === 0 ? '领取并导入' : '创建支付订单'}</button><button disabled={busy != null} onClick={() => void run(`download:${listing.listingId}`, () => download(listing))} className="flex items-center gap-2 rounded border border-border px-3 py-2 text-xs text-text-primary"><Download className="h-4 w-4" />下载已拥有版本</button><button onClick={() => setReviewListingId(current => current === listing.listingId ? null : listing.listingId)} className="rounded border border-border px-3 py-2 text-xs text-text-primary">评价与评分</button>{checkout?.listingId === listing.listingId && <a href={checkout.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded border border-warning px-3 py-2 text-xs text-warning">前往支付<ExternalLink className="h-4 w-4" /></a>}</div>
-            <div className="mt-2 flex flex-wrap gap-2"><button aria-pressed={favorite} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('favorite-listing', listing.listingId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${favorite ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><Heart className="h-3 w-3" />{favorite ? '已收藏' : '收藏'}</button><button aria-pressed={subscribed} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('subscribe-listing', listing.listingId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${subscribed ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><Bell className="h-3 w-3" />{subscribed ? '已订阅更新' : '订阅更新'}</button><button aria-pressed={followed} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('follow-creator', listing.creatorId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${followed ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><UserPlus className="h-3 w-3" />{followed ? '已关注创作者' : '关注创作者'}</button></div>
+            <div className="mt-2 flex flex-wrap gap-2"><button aria-pressed={favorite ?? 'mixed'} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('favorite-listing', listing.listingId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${favorite ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><Heart className="h-3 w-3" />{favorite === undefined && socialToken ? '读取收藏状态' : favorite ? '已收藏' : '收藏'}</button><button aria-pressed={subscribed ?? 'mixed'} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('subscribe-listing', listing.listingId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${subscribed ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><Bell className="h-3 w-3" />{subscribed === undefined && socialToken ? '读取订阅状态' : subscribed ? '已订阅更新' : '订阅更新'}</button><button aria-pressed={followed ?? 'mixed'} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('follow-creator', listing.creatorId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${followed ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><UserPlus className="h-3 w-3" />{followed === undefined && socialToken ? '读取关注状态' : followed ? '已关注创作者' : '关注创作者'}</button></div>
           </div></div>
         </article>
       })}{listings.length === 0 && <div className="rounded border border-dashed border-border p-8 text-center text-xs text-text-muted lg:col-span-2">配置服务后点击刷新；公开目录只返回已审核且可领取的发行物。</div>}</div>

@@ -15,14 +15,19 @@ export function createCommunityRequestIntentsV1() {
       operation: string,
       body: unknown,
       submit: (intent: CommunityRequestIntentV1) => Promise<Result>,
+      supersededBody?: unknown,
     ): Promise<Result> {
       // Remember only a digest of private text and credentials during a retry.
-      const fingerprint = await hashCanonicalValue([accessToken, operation, body])
+      const [fingerprint, superseded] = await Promise.all([
+        hashCanonicalValue([accessToken, operation, body]),
+        supersededBody === undefined ? undefined : hashCanonicalValue([accessToken, operation, supersededBody]),
+      ])
       let pending = clients.get(client)
       if (!pending) {
         pending = new Map()
         clients.set(client, pending)
       }
+      const previousOpposite = superseded && pending.get(superseded)
       let intent = pending.get(fingerprint)
       if (!intent) {
         intent = { requestId: crypto.randomUUID(), createdAt: Date.now() }
@@ -30,6 +35,8 @@ export function createCommunityRequestIntentsV1() {
       }
       const result = await submit(intent)
       if (pending.get(fingerprint) === intent) pending.delete(fingerprint)
+      // A confirmed opposite toggle supersedes its earlier unknown result.
+      if (superseded && previousOpposite && pending.get(superseded) === previousOpposite) pending.delete(superseded)
       return result
     },
   }

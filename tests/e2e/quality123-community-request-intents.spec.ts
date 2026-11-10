@@ -182,3 +182,83 @@ test('community forms keep free text in bodies and exact unknown-result commands
   await safety.screenshot({ path: testInfo.outputPath('community-accepted-report.png') })
   await testInfo.attach('sfqa123-community-request-proof', { body: Buffer.from(JSON.stringify({ reviewRetry, reportRetry, final, modelRequests }, null, 2)), contentType: 'application/json' })
 })
+
+test('marketplace favorite actions use the active credential and service', async ({ page, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const first = origin + '/sfqa123/first'
+  const second = origin + '/sfqa123/second'
+  const listing = {
+    listingId: 'listing.scope', releaseHash: RELEASE, creatorId: 'creator.scope', productType: 'avg',
+    title: '合成作品', summary: '隔离市场', contentWarnings: [], license: {
+      licenseId: 'license.scope', licenseVersion: '1.0.0', allowOfflineExport: true,
+      allowRemix: false, commercialReuse: false, requiresAttribution: false,
+      termsUrl: 'https://terms.example.invalid/license',
+    },
+    currency: 'CNY', amountMinor: 0, creatorShareBps: 8000, status: 'published', rightsConfirmed: true,
+    reviewedBy: 'reviewer.scope', reviewReasonCode: null, createdAt: 1, updatedAt: 1,
+  }
+  const commands: Array<[string, string, boolean]> = []
+  const ids: string[] = []
+  let interruptWrite = false
+  const rows = new Map<string, { edgeId: string; kind: string; actorId: string; targetId: string; active: boolean; createdAt: number; updatedAt: number }>()
+  await page.route(url => url.origin !== origin || url.pathname.startsWith('/sfqa123/'), async route => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (url.origin !== origin) return route.abort()
+    const service = [first, second].find(value => url.href.startsWith(value + '/'))
+    if (!service) return route.abort()
+    const path = url.href.slice(service.length)
+    const token = request.headers().authorization?.replace(/^Bearer /, '') ?? ''
+    const owner = [service, token].join('/')
+    if (path === '/v1/commercial/discover') return route.fulfill({ json: [listing] })
+    if (path === '/v1/community/social/mine') return route.fulfill({ json: rows.has(owner) ? [rows.get(owner)] : [] })
+    if (path !== '/v1/community/social') return route.abort()
+    const body = request.postDataJSON()
+    const edge = { edgeId: 'edge.scope', actorId: token, kind: body.kind, targetId: body.targetId, active: body.active, createdAt: 1, updatedAt: 1 }
+    commands.push([service, token, body.active])
+    ids.push(body.requestId)
+    if (interruptWrite) { interruptWrite = false; return route.abort() }
+    if (edge.active) rows.set(owner, edge)
+    else rows.delete(owner)
+    return route.fulfill({ json: edge })
+  })
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge_guide_completed', 'sfqa123-isolated')
+    localStorage.setItem('storyforge:experimental-products', 'enabled')
+  })
+  await page.goto(new URL('community/market', baseURL!).href)
+  const panel = page.getByTestId('community-marketplace')
+  const service = panel.getByLabel('市场服务地址', { exact: true })
+  const token = panel.getByLabel('账号访问凭据（仅保存在当前页面内存）', { exact: true })
+  const action = (name: string) => panel.getByRole('button', { name, exact: true })
+  await service.fill(first)
+  await token.fill(HOST)
+  await action('刷新').click()
+  await action('收藏').click()
+  await expect(action('已收藏')).toBeVisible()
+  await token.fill(PLAYER)
+  await token.press('Tab')
+  await action('收藏').click()
+  await expect(action('已收藏')).toBeVisible()
+  await token.fill(HOST)
+  await token.press('Tab')
+  await action('已收藏').click()
+  await expect(action('收藏')).toBeVisible()
+  await service.fill(second)
+  await action('刷新').click()
+  await action('收藏').click()
+  await expect(action('已收藏')).toBeVisible()
+  interruptWrite = true
+  await action('已收藏').click()
+  await expect(panel.getByText(/无法连接社区服务/)).toBeVisible()
+  await service.fill(first)
+  await action('刷新').click()
+  await expect(action('收藏')).toBeVisible()
+  await service.fill(second)
+  await action('刷新').click()
+  await action('已收藏').click()
+  await expect(action('收藏')).toBeVisible()
+  expect(commands).toEqual([[first, HOST, true], [first, PLAYER, true], [first, HOST, false], [second, HOST, true], [second, HOST, false], [second, HOST, false]])
+  expect(ids[4]).toMatch(UUID)
+  expect(ids[5]).toBe(ids[4])
+})
