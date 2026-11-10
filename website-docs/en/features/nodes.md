@@ -11,6 +11,11 @@ See the [longform quality trial](/en/updates/development-status) for development
 
 Entry: Longform → Workbench → Node authoring (长篇 → 长篇工作台 → 节点创作). Nodes place inputs, generation steps, and intermediate results on a canvas for inspection and composition.
 
+
+## Field versions and recovery
+
+Formal world-setting and story-core field production retains candidate versions, author drafts and adoption records. Inspect candidates and actual sources before explicit adoption. Changes limited to node coordinates, titles or other presentation properties preserve recovery against the original execution inputs. Recheck freshness after execution-graph, configuration or source changes. Reconfirming an already confirmed result reuses its receipt. Other node families follow their own available recovery prompts. See [PR #255](https://github.com/yuanbw2025/storyforge/pull/255).
+
 ## When to use it
 
 Once familiar with step-by-step longform, try a small workflow to break down a generation, reuse intermediate materials, or inspect upstream/downstream inputs.
