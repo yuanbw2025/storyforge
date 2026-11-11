@@ -1,3 +1,4 @@
+import frozenMainCheckpoints from '../fixtures/sfqa009-h4-main-checkpoints-v1.json'
 import { describe, expect, it, vi } from 'vitest'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import {
@@ -7,6 +8,8 @@ import {
   clearH4SubtypeAdjudicationBrowserCheckpointV1,
   deriveH4SubtypeAdjudicatedIssuesV1,
   loadH4SubtypeAdjudicationBrowserStateV1,
+  parseH4LongConsistencyRunCheckpointV1,
+  parseH4SubtypeAdjudicationCheckpointV1,
   persistH4SubtypeAdjudicationBrowserCheckpointV1,
   runH4LongConsistencyVerifierV1,
   runH4SubtypeAdjudicationV1,
@@ -111,6 +114,30 @@ async function resignCheckpoint(
 }
 
 describe('R-HARNESS85 · verified evidence pair subtype adjudication', () => {
+  it('SFQA009 preserves frozen main H4 checkpoint bytes and run usage/budget errors', async () => {
+    const base = parseH4LongConsistencyRunCheckpointV1(frozenMainCheckpoints.base)
+    const adjudication = parseH4SubtypeAdjudicationCheckpointV1(frozenMainCheckpoints.adjudication)
+    const { checkpointHash: baseHash, ...baseBody } = base
+    const { checkpointHash: adjudicationHash, ...adjudicationBody } = adjudication
+    expect(baseHash).toBe('4157d6e07adf76b2029758894b038c0375c46028a7a839d9b11fc1fb1a10d859')
+    expect(adjudicationHash).toBe('552be6d1bd8c43526cec85ace324cc1b8bb5d23f6782f0cb4b40da40200e566d')
+    expect(await hashCanonicalValue(baseBody)).toBe(baseHash)
+    expect(await hashCanonicalValue(adjudicationBody)).toBe(adjudicationHash)
+    expect(base).toEqual(frozenMainCheckpoints.base)
+    expect(adjudication).toEqual(frozenMainCheckpoints.adjudication)
+    const checkErrors = (
+      checkpoint: H4LongConsistencyRunCheckpointV1 | H4SubtypeAdjudicationCheckpointV1,
+      parse: (value: unknown) => unknown,
+    ) => {
+      expect(() => parse({ ...checkpoint, usage: { ...checkpoint.usage, unmeteredModelCalls: 99 } }))
+        .toThrow('checkpoint.usage: metered + unmetered 必须等于 modelCalls')
+      expect(() => parse({ ...checkpoint, budget: { ...checkpoint.budget, maxCostUsd: 0 } }))
+        .toThrow('checkpoint.budget: 时长与成本预算必须大于 0')
+    }
+    checkErrors(base, parseH4LongConsistencyRunCheckpointV1)
+    checkErrors(adjudication, parseH4SubtypeAdjudicationCheckpointV1)
+  })
+
   it('shows only deterministic candidate ids and verified quote pairs, never stage-one labels or summaries', async () => {
     const base = await createBase([CONFLICT_FIXTURE.id])
     const sourceCase = base.completed[0]

@@ -716,7 +716,7 @@ function parseSourceV2(value: unknown, path: string): ContextManifestSourceV2 {
   }
 }
 
-function sortArtifactRefsV3(refs: readonly ContextManifestArtifactRefV3[]): ContextManifestArtifactRefV3[] {
+export function sortArtifactRefsV3(refs: readonly ContextManifestArtifactRefV3[]): ContextManifestArtifactRefV3[] {
   return [...refs].sort((left, right) => (
     left.role.localeCompare(right.role)
       || (left.sourceKey ?? '').localeCompare(right.sourceKey ?? '')
