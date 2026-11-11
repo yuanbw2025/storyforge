@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality129-nw1b-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality129-inherited-ir-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-source-foundation-ir-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retain the measured upstream receipt inherited by this branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality129-nw1b-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retain this branch’s previously measured NW-0B receipt after the IR input changed."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality129-independent-v1.json",
         "workPackage": "NW-0B",
