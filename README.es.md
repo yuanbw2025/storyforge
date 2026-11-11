@@ -19,6 +19,43 @@ StoryForge es una herramienta de código abierto para crear y vivir historias co
 
 **Sin entorno de desarrollo:** [descarga la versión portátil más reciente](https://github.com/yuanbw2025/storyforge/releases/latest), elige Windows x64, Mac Apple Silicon/Intel o Linux x64, extrae toda la carpeta y ejecuta `Start-StoryForge`. Incluye aplicación, medios y Node.js; no requiere instalar npm. La IA necesita tu propio proveedor y las funciones preliminares conservan su estado.
 
+## ¿Primera vez? Elige cómo descargar y pide ayuda a una IA local
+
+**Puedes utilizar StoryForge de dos maneras.**
+
+- **Instalador o paquete portátil** — descarga el programa adecuado desde las Releases oficiales e instálalo o descomprímelo.
+- **Código fuente mediante Git** — cómodo para actualizar, consultar el código, reparar problemas o desarrollar funciones.
+
+Un Agent de escritorio como ByteDance Trae, Tencent WorkBuddy, Alibaba Tongyi Lingma o Google Antigravity puede ayudarte. Para instalación habitual, revisión del funcionamiento y diagnóstico básico, empieza con una versión o cuota gratuita. **Rellena el dispositivo y la carpeta y copia la instrucción correspondiente.**
+
+### Opción 1 — Descargar el repositorio con Git
+
+> Quiero **descargar el código fuente de StoryForge con Git y ejecutarlo localmente**. El repositorio es https://github.com/yuanbw2025/storyforge y la carpeta de destino es «ruta de mi carpeta». Comprueba el entorno, instala Git si hace falta, lee el README y las instrucciones de desarrollo, instala el entorno y las dependencias requeridos, inicia el proyecto e indícame dónde abrirlo. **Revisa primero los archivos existentes y conserva mis obras, configuración y cambios locales.** Explícame también cómo actualizarlo después.
+
+### Opción 2 — Descargar un paquete Release oficial
+
+> Quiero **descargar una aplicación StoryForge empaquetada desde las Releases oficiales**, para «Windows, macOS, Linux o Android», en «ruta de la carpeta». La página es https://github.com/yuanbw2025/storyforge/releases/latest . Comprueba la última versión estable oficial, elige el instalador o paquete portátil correspondiente al sistema y arquitectura del procesador, verifica las sumas de comprobación facilitadas y ayúdame a instalar o descomprimir y ejecutar la aplicación. Para un teléfono, explica cómo transferir e instalar el paquete. **Si StoryForge ya está instalado, ayúdame primero a respaldar mis obras y configuración y después actualiza según las instrucciones oficiales.** Indica las opciones disponibles si no hay un paquete compatible.
+
+**Las guías y los canales para informar de bugs, sugerencias y errores de documentación están en la [documentación oficial](https://docs.storyforge-lab.com/en/).**
+
+**Marca el repositorio con una Star, arriba a la derecha, para encontrarlo y seguir sus actualizaciones.**
+
+---
+
+## Importante — Usa la IA local para investigar problemas y enviar informes
+
+StoryForge sigue en desarrollo y **una sola persona lo desarrolla y mantiene**. Con tantas funciones pueden aparecer bugs. Tus comentarios son bienvenidos.
+
+**Un Agent local puede ayudarte tanto con el código Git como con el cliente descargado.** Si un capítulo no abre, falla la generación o el guardado, o la aplicación se cierra, pídele que revise los errores y diagnósticos disponibles y envíe directamente el informe. **Copia esta instrucción y describe el problema.**
+
+> Mi StoryForge presenta este problema: «descripción». Revisa la versión actual, los errores y los diagnósticos relevantes. Organiza los pasos para reproducirlo, los resultados esperados y reales y los registros pertinentes, y **envía directamente un informe mediante la entrada oficial de comentarios del proyecto**. Si ya existe el mismo problema, añade la información al informe existente. Retira claves API, información de cuenta y manuscritos privados antes de enviarlo y dame después el identificador o enlace del informe. **Conserva mis obras, configuración y cambios locales, sigue investigando y propón una solución.**
+
+El Agent puede investigar, organizar y enviar todo junto para facilitar el trabajo del mantenedor. También puede ayudarte con reparaciones sencillas mientras sigues usando la aplicación y esperas actualizaciones. **Haz una copia antes de operar sobre datos y conserva originales y obras antes de modificarlos.**
+
+Puedes desarrollar funciones con un Agent local, crear tu propio proyecto o contribuir a StoryForge mediante una PR.
+
+---
+
 ## Web oficial, demostración y documentación
 
 Conoce el proyecto en la web, explora la interfaz real en la demostración aislada y descarga el código para crear con todas las funciones.

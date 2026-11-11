@@ -17,6 +17,43 @@ StoryForge is an open-source, local-first AI narrative creation and experience t
 
 **Run without a development setup:** [Download the latest portable release](https://github.com/yuanbw2025/storyforge/releases/latest). Extract the ZIP for Windows x64, Apple Silicon/Intel Mac or Linux x64 and launch `Start-StoryForge`. The built app, media and Node.js runtime are included; no npm installation is required. AI requires your own provider, and preview products keep their maturity labels. [Installation guide](https://docs.storyforge-lab.com/en/getting-started/install).
 
+## First time here? Choose a download method and let a local AI help
+
+**Choose the way you want to use StoryForge.**
+
+- **Installer or portable package** — download the matching program from the official Release, then install or extract it.
+- **Source code through Git** — convenient for keeping up with updates, reading code, fixing problems or developing features.
+
+A desktop AI Agent such as ByteDance Trae, Tencent WorkBuddy, Alibaba Tongyi Lingma or Google Antigravity can help with installation. For routine installation, checking the app and basic troubleshooting, start with a free version or free allowance. **Fill in your device and folder details, then copy the appropriate prompt below.**
+
+### Option 1 — Clone the repository with Git
+
+> I want to **download the StoryForge source through Git and run it locally**. The repository is https://github.com/yuanbw2025/storyforge and the destination is “[enter your folder path]”. Check my environment, install Git as needed, read the README and development instructions, install the required runtime and dependencies, start the project, and tell me where to open it. **Inspect existing files first and preserve my works, configuration and local changes.** Tell me how to update the project afterward.
+
+### Option 2 — Download an official Release package
+
+> I want to **download a packaged StoryForge application from the official Release** for “[Windows, macOS, Linux or Android]” into “[folder path]”. The release page is https://github.com/yuanbw2025/storyforge/releases/latest . Check the latest formal stable release, select the installer or portable package for the target system and processor architecture, verify the supplied checksums, and help me install or extract and launch it. For a phone package, explain how to transfer and install it on the phone. **If StoryForge is already installed, help me back up my works and configuration before updating according to the official instructions.** Explain the available choices if there is no matching package.
+
+**Guides, the knowledge base, and feedback for bugs, feature requests and documentation issues are available in the [official knowledge base](https://docs.storyforge-lab.com/en/).**
+
+**Star the repository in the upper-right corner to find it again and follow updates.**
+
+---
+
+## Important — Use local AI to investigate problems and submit feedback
+
+StoryForge is still in development and **developed and maintained by one person**. With many features, bugs can occur. Feedback is welcome.
+
+**A local desktop Agent can help whether you run the Git source or a downloaded client.** If a chapter fails to open, generation or saving fails, or the app exits, ask it to inspect the error and available diagnostics, organize the evidence and submit a bug report directly. **Copy this prompt and describe the problem.**
+
+> My StoryForge has a problem: “[describe what happened]”. Check the current version, error messages and relevant diagnostics. Organize reproduction steps, expected and actual results, and relevant logs, then **submit a bug report directly through the project's official feedback entry**. Add evidence to an existing report if the same issue already exists. Remove API keys, account details and private manuscripts before submission, then give me the feedback ID or link. **Preserve my works, configuration and local changes, continue investigating, and propose a repair.**
+
+The Agent can investigate, organize and submit the report together, giving the maintainer the version, steps and errors needed to address it. For a simple problem, it can also help you repair it while you continue using the app and wait for updates. **Back up before data operations and preserve original files and your works before editing.**
+
+You can also use a local Agent to build features on this project, create your own project, or contribute improvements to StoryForge through a PR.
+
+---
+
 ## Official website, preview, and knowledge base
 
 Start with the website overview, explore the real interface in the isolated preview, then download the source and follow the knowledge base for full creation.
