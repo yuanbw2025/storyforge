@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality077-citation-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -676,6 +676,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261110-issue179-main834-v1.json",
         "workPackage": "owned-fixes-before-diagnostic-integration",
         "note": "Preserved measured Issue179/main834 receipt before precise shared fixture types and diagnostic/relay aggregation; semantic observations unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+        "workPackage": "sfqa077-chapter-audit-citation",
+        "note": "Preserve the measured baseline before chapter audits bound each citation to a delivered source row and version. The measured semantic observations are unchanged."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

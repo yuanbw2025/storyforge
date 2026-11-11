@@ -1,6 +1,8 @@
+import { db } from '../db/schema'
+import { resolveCanonicalOutlineAncestry } from '../outline/canonical-outline-walk'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import type { TableSpec } from '../registry/types'
-import type { WorkspaceScope } from '../types'
+import type { OutlineNode, WorkspaceScope } from '../types'
 import { assertRecordInScope, readOwnedRows } from '../workspace/scope'
 import { hashCanonicalValue } from '../agent/run/hash'
 import Dexie from 'dexie'
@@ -98,14 +100,46 @@ export async function captureWorkspaceContentRevisionV1(input: {
   worldGroupId: number | null
 }): Promise<WorkspaceContentRevisionVectorV1> {
   const entries: WorkspaceContentRevisionEntryV1[] = []
+  let worldGroupRows: Record<string, unknown>[] | undefined
   for (const spec of contentRevisionTableSpecsV1()) {
-    const rows = (await readRevisionRows(spec, input.scope))
-      .filter(row => inWorldGroup(spec, row, input.worldGroupId))
-      .sort((left, right) => Number(left.id ?? 0) - Number(right.id ?? 0))
+    const owned = spec.name === 'worldGroups' && worldGroupRows ? worldGroupRows : await readRevisionRows(spec, input.scope)
+    let rows: Record<string, unknown>[]
+    const invalidOutlineRows: Record<string, unknown>[] = []
+    if (spec.name === 'outlineNodes') {
+      worldGroupRows = await readOwnedRows<Record<string, unknown>>(input.scope, 'worldGroups', { owner: 'world' })
+      const worldGroupIds = new Set(worldGroupRows.map(row => row.id))
+      const singleWorld = input.worldGroupId === null
+        && (await db.projects.get(input.scope.projectId))?.enableMultiWorld !== true
+      const workOutlines = new Map(owned.filter(row => row.workId === input.scope.workId)
+        .map(row => [row.id as number, row as unknown as OutlineNode]))
+      rows = owned.filter(row => {
+        // Preserve the existing World-owned selection. Work ancestry never
+        // follows a World-owned or another Work's parent.
+        if (row.workId !== input.scope.workId) return inWorldGroup(spec, row, input.worldGroupId)
+        try {
+          const ancestry = resolveCanonicalOutlineAncestry(row.id as number, workOutlines)
+          if (ancestry.path.every(node => node.worldGroupId == null || worldGroupIds.has(node.worldGroupId))) {
+            return singleWorld || ancestry.worldGroupId === input.worldGroupId
+          }
+        } catch {
+          // Broken or foreign parents must not become normal group members.
+        }
+        invalidOutlineRows.push(row)
+        return false
+      })
+    } else {
+      rows = owned.filter(row => inWorldGroup(spec, row, input.worldGroupId))
+    }
+    rows.sort((left, right) => Number(left.id ?? 0) - Number(right.id ?? 0))
+    // Mark damaged ancestry as changed instead of hiding a previously paid
+    // report behind an exception. Valid row arrays keep their original hash.
+    const hashedRows = invalidOutlineRows.length
+      ? { rows, invalidOutlineRows: invalidOutlineRows.sort((left, right) => Number(left.id ?? 0) - Number(right.id ?? 0)) }
+      : rows
     entries.push({
       table: spec.name,
       rowCount: rows.length,
-      contentHash: await Dexie.waitFor(hashCanonicalValue(rows)),
+      contentHash: await Dexie.waitFor(hashCanonicalValue(hashedRows)),
     })
   }
   const body = {

@@ -171,7 +171,9 @@ async function seedRepresentativeLongform() {
 
   const firstVolume = (await db.outlineNodes.where('projectId').equals(projectId).toArray())
     .find(node => node.type === 'volume' && (node as typeof node & { workId?: number }).workId === first.scope.workId)
-  if (!firstVolume?.id) throw new Error('代表性 fixture 缺少第一卷')
+  if (!firstVolume?.id || firstVolume.worldGroupId == null) throw new Error('代表性 fixture 缺少带世界组的第一卷')
+  const firstWorldGroup = await db.worldGroups.get(firstVolume.worldGroupId)
+  expect(firstWorldGroup).toMatchObject({ id: firstVolume.worldGroupId, projectId, worldId: first.scope.worldId })
   const chapters: Array<{ id: number; outlineNodeId: number; title: string }> = []
   for (let index = 2; index <= 42; index += 1) {
     const title = `第${index}章 潮汐刻度${index}`
@@ -309,6 +311,7 @@ async function seedRepresentativeLongform() {
     firstStoryId: firstStory.id,
     firstRulesId: firstRules.id,
     firstVolumeId: firstVolume.id,
+    firstWorldGroupId: firstVolume.worldGroupId,
     target: chapters[9],
     externallyEdited: chapters[11],
     interrupted: chapters[13],
@@ -494,7 +497,7 @@ describe('MEMORY-CLOSE-3 · 隔离长篇、多 World/Work、恢复与继续创�
       scope: seeded.firstScope,
       chapterId: seeded.target.id,
       chapterTitle: targetBeforeAudit.title,
-      worldGroupId: null,
+      worldGroupId: seeded.firstWorldGroupId,
       outlineNodeId: seeded.target.outlineNodeId,
       chapterContent: targetBeforeAudit.content,
       mode: 'deep',
@@ -647,7 +650,7 @@ describe('MEMORY-CLOSE-3 · 隔离长篇、多 World/Work、恢复与继续创�
       scope: seeded.firstScope,
       chapterId: seeded.target.id,
       chapterTitle: chapter.title,
-      worldGroupId: null,
+      worldGroupId: seeded.firstWorldGroupId,
       outlineNodeId: seeded.target.outlineNodeId,
       chapterContent: chapter.content,
       mode: 'fast',
