@@ -1,9 +1,10 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import { expect, test } from '@playwright/test'
 
 test('screenplay product UI creates from imported text, plans, edits, reviews, publishes and exports',async({page})=>{
  test.setTimeout(120000)
  await page.addInitScript(()=>localStorage.setItem('storyforge_guide_completed','e2e'))
- await page.goto('./script/library')
+ await gotoWithBrowserFixtureAIConfigV1(page, './script/library')
  await page.getByRole('button',{name:'新建剧本改编',exact:true}).click()
  await page.getByLabel('剧本名称',{exact:true}).fill('车站改编 UI 验收')
  await page.getByLabel('来源方式',{exact:true}).selectOption('import')
@@ -48,7 +49,7 @@ test('screenplay product UI creates from imported text, plans, edits, reviews, p
  await nav.getByRole('button',{name:'原作一致性',exact:true}).click()
  await nav.getByRole('button',{name:'剧本编辑',exact:true}).click()
  await expect(page.getByPlaceholder('地点',{exact:true})).toHaveValue('旧车站')
- await page.reload()
+ await reloadWithBrowserFixtureAIConfigV1(page)
  await expect(page.getByPlaceholder('地点',{exact:true})).toHaveValue('旧车站')
  await page.getByRole('button',{name:'保存场景',exact:true}).click()
  await expect(page.getByRole('alert')).toHaveCount(0)
@@ -65,7 +66,7 @@ test('screenplay product UI creates from imported text, plans, edits, reviews, p
  const download=page.waitForEvent('download')
  await page.getByRole('button',{name:'Fountain',exact:true}).click()
  expect((await download).suggestedFilename()).toMatch(/\.fountain$/)
- await page.reload()
+ await reloadWithBrowserFixtureAIConfigV1(page)
  await expect(page.getByRole('button',{name:'已发布 v1',exact:true})).toBeVisible()
  await nav.getByRole('button',{name:'剧本编辑',exact:true}).click()
  await expect(page.getByPlaceholder('地点',{exact:true})).toBeDisabled()
@@ -78,7 +79,7 @@ test('screenplay product UI creates from imported text, plans, edits, reviews, p
 
 test('every screenplay page is open without a work and does not create data merely by browsing',async({page})=>{
  for(const id of ['library','source','brief','structure','scenes','editor','grounding','review','versions']){
-  await page.goto('./script/'+id)
+  await gotoWithBrowserFixtureAIConfigV1(page, './script/'+id)
   await expect(page.getByRole('navigation',{name:'剧本页面导航'})).toBeVisible()
   await expect(page.getByTestId('approved-product-ui')).toHaveCount(0)
  }
@@ -87,16 +88,15 @@ test('every screenplay page is open without a work and does not create data mere
 test('screenplay AI candidate edits and excluded items survive refresh before adoption',async({page})=>{
  await page.addInitScript(()=>{
   localStorage.setItem('storyforge_guide_completed','e2e')
-  localStorage.setItem('storyforge-ai-config',JSON.stringify({provider:'openai',baseUrl:'https://screenplay-test.invalid/v1',model:'gpt-4o',temperature:0.2,maxTokens:4000}))
-  sessionStorage.setItem('storyforge-ai-api-key-session','isolated-test-key')
  })
+ registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://screenplay-test.invalid/v1', model: 'gpt-4o', temperature: 0.2, maxTokens: 4000, apiKey: 'isolated-test-key' })
  let calls=0
  await page.route('https://screenplay-test.invalid/**',async route=>{
   calls++;const request=JSON.stringify(route.request().postDataJSON());const key=request.match(/asu_[A-Za-z0-9_-]{8,64}/)?.[0];expect(key).toBeTruthy()
   const facts=[{stableKey:'fact.arrival',kind:'event',statement:'林岚到达车站。',subjectKeys:[],sourceUnitKeys:[key],confidence:1},{stableKey:'fact.wait',kind:'event',statement:'她决定等待。',subjectKeys:[],sourceUnitKeys:[key],confidence:1}]
   await route.fulfill({contentType:'application/json',body:JSON.stringify({choices:[{message:{role:'assistant',content:JSON.stringify(facts)},finish_reason:'stop'}],usage:{prompt_tokens:100,completion_tokens:100,total_tokens:200}})})
  })
- await page.goto('./script/library?create=1')
+ await gotoWithBrowserFixtureAIConfigV1(page, './script/library?create=1')
  await page.getByLabel('剧本名称',{exact:true}).fill('候选恢复剧本')
  await page.getByLabel('来源方式',{exact:true}).selectOption('import')
  await page.getByLabel('导入原作内容').fill('林岚走进车站。她决定等待。')
@@ -110,7 +110,7 @@ test('screenplay AI candidate edits and excluded items survive refresh before ad
  await expect(candidate.locator('.screenplay-candidate-items input').nth(1)).not.toBeChecked()
  await page.getByRole('navigation',{name:'剧本页面导航'}).getByRole('button',{name:'改编目标',exact:true}).click()
  await expect(page).toHaveURL(/script\/brief\?work=\d+/)
- await page.reload()
+ await reloadWithBrowserFixtureAIConfigV1(page)
  await expect(candidate.getByLabel('第1项 原作事实',{exact:true})).toHaveValue('作者核对：林岚到达旧车站。')
  await expect(candidate.locator('.screenplay-candidate-items input').nth(1)).not.toBeChecked()
  expect(calls).toBe(1)
@@ -124,7 +124,7 @@ test('screenplay AI candidate edits and excluded items survive refresh before ad
 
 for (const profile of ['long','short'] as const) test(`adapting a ${profile} novel preserves its library, edits and other product ownership`,async({page})=>{
  await page.addInitScript(()=>localStorage.setItem('storyforge_guide_completed','e2e'))
- await page.goto('./script/library')
+ await gotoWithBrowserFixtureAIConfigV1(page, './script/library')
  // Only the source manuscript is seeded; selection, adaptation and library operations use the UI.
  const source=await page.evaluate(async profile=>{
   const importer=new Function('path','return import(path)') as (path:string)=>Promise<any>
@@ -138,7 +138,7 @@ for (const profile of ['long','short'] as const) test(`adapting a ${profile} nov
  await page.getByRole('button',{name:'冻结来源并创建剧本',exact:true}).click()
  await expect(page).toHaveURL(/script\/source\?work=\d+/)
  const scriptUrl=page.url()
- await page.goto(`./${profile}${profile==='short'?'/library':''}`)
+ await gotoWithBrowserFixtureAIConfigV1(page, `./${profile}${profile==='short'?'/library':''}`)
  let book=page.locator('article').filter({has:page.getByRole('heading',{name:'原作保留验收',exact:true})})
  await expect(book).toBeVisible()
  await book.getByRole('button',{name:'重命名',exact:true}).click()
@@ -152,17 +152,17 @@ for (const profile of ['long','short'] as const) test(`adapting a ${profile} nov
   const importer=new Function('path','return import(path)') as (path:string)=>Promise<any>
   const {db}=await importer('/storyforge/src/lib/db/schema.ts');return (await db.projects.get(id))?.activeWorkId
  },source.projectId)).toBe(source.workId)
- await page.goto('./script/library')
+ await gotoWithBrowserFixtureAIConfigV1(page, './script/library')
  await expect(page.locator('article').getByRole('heading',{name:'保留独立剧本',exact:true})).toBeVisible()
- await page.goto(scriptUrl)
+ await gotoWithBrowserFixtureAIConfigV1(page, scriptUrl)
  await expect(page.getByRole('navigation',{name:'剧本页面导航'})).toBeVisible()
- await page.goto(`./${profile}${profile==='short'?'/library':''}`)
+ await gotoWithBrowserFixtureAIConfigV1(page, `./${profile}${profile==='short'?'/library':''}`)
  await page.locator('article').filter({has:page.getByRole('heading',{name:'修改后的原作',exact:true})}).getByRole('button',{name:'删除作品',exact:true}).click()
  await page.getByRole('dialog').getByRole('button',{name:'继续',exact:true}).click()
  const download=page.waitForEvent('download')
  await page.getByRole('dialog').getByRole('button',{name:'立即备份',exact:true}).click()
  expect((await download).suggestedFilename()).toMatch(/\.json$/)
  await expect(page.locator('article').getByRole('heading',{name:'修改后的原作',exact:true})).toHaveCount(0)
- await page.goto('./script/library')
+ await gotoWithBrowserFixtureAIConfigV1(page, './script/library')
  await expect(page.locator('article').getByRole('heading',{name:'保留独立剧本',exact:true})).toBeVisible()
 })

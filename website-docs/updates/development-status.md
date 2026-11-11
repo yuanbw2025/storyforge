@@ -1,6 +1,244 @@
 # 待合并开发记录与分支核对
 
 
+
+
+## 2026-11-11 · 已合并修复与开发增量
+
+从 `834718d1` 核对 main `5420f854`。枚举317个本地分支、89个注册工作区（含detached），285个head尚非main祖先，72个工作区含工作文件状态。#301已合入并承接#240/#275/#245原head，独立章纲审校#303也已合并。旧日期段落保留历史快照。
+
+### 新增或更新的待合并 PR
+
+下表均仍开放、未合并，路径只标识观察到的源码区域。整合继承内容按祖先、相同head和稳定补丁去重，其余开放PR延续上一轮快照。
+
+| PR / head | 观察到的源码区域 |
+| --- | --- |
+| [#391](https://github.com/yuanbw2025/storyforge/pull/391) · `e038588b` | `src/components/text-game/TextOpenWorldCreatorProductionStart.tsx`, `src/lib/agent/creative-execution.ts` |
+| [#390](https://github.com/yuanbw2025/storyforge/pull/390) · `19002292` | `src/components/comic/ComicSource.tsx`, `src/components/geography/LocationTreeMap.tsx` |
+| [#389](https://github.com/yuanbw2025/storyforge/pull/389) · `c1775938` | `src/components/editor/ChapterEditor.tsx`, `src/components/editor/ChapterPostAdoptionSettingsPanel.tsx` |
+| [#388](https://github.com/yuanbw2025/storyforge/pull/388) · `ecd0ba53` | `scripts/ai-call-meta.mjs`, `scripts/check-ai-entry-registry.mjs` |
+| [#387](https://github.com/yuanbw2025/storyforge/pull/387) · `1374cc2f` | `src/components/product/ProductProductionStudio.tsx`, `src/components/product/TextAdventureMediaReview.tsx` |
+| [#386](https://github.com/yuanbw2025/storyforge/pull/386) · `cec18d69` | `src/components/system/ImportDocPanel.tsx`, `src/components/system/import/ImportConfirmModal.tsx` |
+| [#385](https://github.com/yuanbw2025/storyforge/pull/385) · `5c6b262e` | `src/lib/comic/qa.ts`, `src/lib/comic/release.ts` |
+| [#384](https://github.com/yuanbw2025/storyforge/pull/384) · `bd7bdf92` | `src/lib/product-production/scheduler.ts` |
+| [#383](https://github.com/yuanbw2025/storyforge/pull/383) · `b706f4f1` | `src/components/editor/ReviewPanel.tsx`, `src/lib/agent/consistency-agent.ts` |
+| [#382](https://github.com/yuanbw2025/storyforge/pull/382) · `05860d6e` | `.github/workflows/deploy-docs.yml`, `scripts/deploy/verify-docs-ssh-host-key.mjs` |
+| [#381](https://github.com/yuanbw2025/storyforge/pull/381) · `d2843b0e` | `src/lib/product-production/chat-media-tasks.ts`, `src/lib/product-production/chat-situation-tasks.ts` |
+| [#380](https://github.com/yuanbw2025/storyforge/pull/380) · `66e08051` | `src/components/facts/FactLibraryPanel.tsx`, `src/lib/consistency/lifecycle-boundary.ts` |
+| [#379](https://github.com/yuanbw2025/storyforge/pull/379) · `1cde5ac9` | `scripts/evaluate-narrative-reader-judge-local-codex.mjs`, `scripts/narrative-reader-judge-continuation.mjs` |
+| [#378](https://github.com/yuanbw2025/storyforge/pull/378) · `f2ec7acf` | `src/components/comic/ComicSourcePanel.tsx`, `src/components/comic/ComicStudio.tsx` |
+| [#377](https://github.com/yuanbw2025/storyforge/pull/377) · `3362bad5` | `src/lib/product/source-contracts.ts` |
+| [#376](https://github.com/yuanbw2025/storyforge/pull/376) · `d46eb0c7` | `src/components/text-game/TextOpenWorldCreatorBriefStudio.tsx`, `src/lib/open-world/creator-brief-persistence.ts` |
+| [#375](https://github.com/yuanbw2025/storyforge/pull/375) · `dfb6c61b` | `src/lib/salt-ridge/production.ts`, `src/pages/SaltRidgePage.tsx` |
+| [#374](https://github.com/yuanbw2025/storyforge/pull/374) · `94e65980` | `src/components/editor/ChapterEditor.tsx`, `src/components/editor/ReconciliationTable.tsx` |
+| [#373](https://github.com/yuanbw2025/storyforge/pull/373) · `772584c9` | `src/components/editor/ChapterContextPreview.tsx`, `src/components/editor/ChapterEditor.tsx` |
+| [#372](https://github.com/yuanbw2025/storyforge/pull/372) · `32792ad7` | `src/components/text-game/TextOpenWorldCreatorProductionReadiness.tsx`, `src/lib/open-world/creator-brief.ts` |
+| [#371](https://github.com/yuanbw2025/storyforge/pull/371) · `46e9ab7f` | `src/components/data/DataManagementPanel.tsx`, `src/components/home/HomeTools.tsx` |
+| [#370](https://github.com/yuanbw2025/storyforge/pull/370) · `a1cccb2d` | `src/components/location/LocationPanel.tsx`, `src/components/location/LocationTreeView.tsx` |
+| [#369](https://github.com/yuanbw2025/storyforge/pull/369) · `da90513e` | `src/components/node-authoring/NodeAuthoringWorkspace.tsx` |
+| [#368](https://github.com/yuanbw2025/storyforge/pull/368) · `544078d4` | `src/components/character-interaction/useChatMedia.ts`, `src/lib/character-interaction/runtime-visuals.ts` |
+| [#367](https://github.com/yuanbw2025/storyforge/pull/367) · `a92bec3c` | `src/components/worldview/WorldRulesPanel.tsx`, `src/stores/world-rules.ts` |
+| [#366](https://github.com/yuanbw2025/storyforge/pull/366) · `d41da09c` | `src/components/settings/HarnessEvalPanel.tsx`, `src/lib/ai/client.ts` |
+| [#365](https://github.com/yuanbw2025/storyforge/pull/365) · `54f04267` | `src/components/outline/OutlinePanel.tsx`, `src/components/outline/OutlineVolumeSidebar.tsx` |
+| [#364](https://github.com/yuanbw2025/storyforge/pull/364) · `2a4d6997` | `src/components/text-game/TextOpenWorldScenePanel.tsx`, `src/components/text-game/TextOpenWorldVNextPlayer.tsx` |
+| [#363](https://github.com/yuanbw2025/storyforge/pull/363) · `8d6416e6` | `src/components/text-game/TextOpenWorldCreatorBriefStudio.tsx`, `src/lib/open-world/creator-brief.ts` |
+| [#362](https://github.com/yuanbw2025/storyforge/pull/362) · `c071628b` | `src/components/text-game/AdventureGamePlayer.tsx`, `src/lib/adventure/harness.ts` |
+| [#361](https://github.com/yuanbw2025/storyforge/pull/361) · `0238c7dd` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#360](https://github.com/yuanbw2025/storyforge/pull/360) · `27278756` | `src/components/settings/HarnessEvalPanel.tsx`, `src/lib/ai/client.ts` |
+| [#359](https://github.com/yuanbw2025/storyforge/pull/359) · `b92975c6` | `src/lib/agent/character-copilot.ts`, `src/lib/agent/character-supplement-copilot.ts` |
+| [#358](https://github.com/yuanbw2025/storyforge/pull/358) · `c7229971` | `src/lib/product-production/capabilities.ts`, `src/lib/product-production/production-executor.ts` |
+| [#357](https://github.com/yuanbw2025/storyforge/pull/357) · `eefb698e` | `src/lib/agent/run/extraction-adoption.ts`, `src/lib/agent/run/inventory-extraction-durable.ts` |
+| [#356](https://github.com/yuanbw2025/storyforge/pull/356) · `90c11cb3` | `src/lib/product/runtime-media-library.ts` |
+| [#355](https://github.com/yuanbw2025/storyforge/pull/355) · `5fd27635` | `src/lib/node-authoring/bindings.ts`, `src/lib/node-authoring/chapter-source.ts` |
+| [#354](https://github.com/yuanbw2025/storyforge/pull/354) · `1b6fdc02` | `src/lib/open-world/action-executor.ts`, `src/lib/open-world/runtime-intent-recovery.ts` |
+| [#353](https://github.com/yuanbw2025/storyforge/pull/353) · `860a7ab6` | `src/components/agent/useMasterCopilot.ts`, `src/components/worldview/WorldviewAgentControls.tsx` |
+| [#352](https://github.com/yuanbw2025/storyforge/pull/352) · `6aa9ada8` | `src/components/editor/EntityRenamePanel.tsx`, `src/lib/editor/entity-rename.ts` |
+| [#351](https://github.com/yuanbw2025/storyforge/pull/351) · `eebed79b` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#350](https://github.com/yuanbw2025/storyforge/pull/350) · `6c480363` | `src/components/facts/FactLibraryPanel.tsx`, `src/lib/consistency/lifecycle-boundary.ts` |
+| [#349](https://github.com/yuanbw2025/storyforge/pull/349) · `81cf761f` | `src/components/location/LocationPanel.tsx`, `src/components/location/LocationTreeView.tsx` |
+| [#348](https://github.com/yuanbw2025/storyforge/pull/348) · `d618de1f` | `docs/ENGINEERING-QUALITY-STANDARD.md`, `package-lock.json` |
+| [#347](https://github.com/yuanbw2025/storyforge/pull/347) · `0e59e8f9` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#346](https://github.com/yuanbw2025/storyforge/pull/346) · `1b4daada` | `src/lib/agent/orchestrator.ts` |
+| [#345](https://github.com/yuanbw2025/storyforge/pull/345) · `0e22b609` | `src/components/comic/ComicStudio.tsx`, `src/components/comic/ComicVisualPanel.tsx` |
+| [#344](https://github.com/yuanbw2025/storyforge/pull/344) · `84dd2c81` | `docs/ENGINEERING-QUALITY-STANDARD.md`, `scripts/quality/critical-coverage-scopes.json` |
+| [#343](https://github.com/yuanbw2025/storyforge/pull/343) · `59e39ba1` | `scripts/avg-local-foreground/README.md`, `scripts/avg-local-foreground/runtime_guard.py` |
+| [#342](https://github.com/yuanbw2025/storyforge/pull/342) · `2ac13a9e` | `src/lib/aphelion/scene.ts`, `src/lib/tidemark/scene.ts` |
+| [#341](https://github.com/yuanbw2025/storyforge/pull/341) · `2801f1bc` | `src/lib/adventure/runtime.ts`, `src/lib/product-production/preview-manifest.ts` |
+| [#340](https://github.com/yuanbw2025/storyforge/pull/340) · `63e283b8` | `src/components/settings/AIConfigPanel.tsx`, `src/lib/ai/model-list.ts` |
+| [#339](https://github.com/yuanbw2025/storyforge/pull/339) · `85f9dbbd` | `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/ai-manual-context-sources.mjs` |
+| [#338](https://github.com/yuanbw2025/storyforge/pull/338) · `56de9ba8` | `src/components/community/CommunityReviewPanel.tsx`, `src/components/community/CommunitySafetyPanel.tsx` |
+| [#337](https://github.com/yuanbw2025/storyforge/pull/337) · `7d65daa9` | `src/components/text-game/AvgGamePlayer.tsx` |
+| [#336](https://github.com/yuanbw2025/storyforge/pull/336) · `4c8f7520` | `src/components/character/CharacterDetailCard.tsx`, `src/components/character/CharacterStatusPanel.tsx` |
+| [#335](https://github.com/yuanbw2025/storyforge/pull/335) · `aeda7d16` | `src/components/settings/CreativeReliabilityEvalPanel.tsx`, `src/components/settings/H86StoryArcEvalPanel.tsx` |
+| [#334](https://github.com/yuanbw2025/storyforge/pull/334) · `a118cc01` | `src/lib/product-production/original-response-author-source.ts`, `src/lib/product-production/original-response-booking.ts` |
+| [#333](https://github.com/yuanbw2025/storyforge/pull/333) · `29ba9061` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#332](https://github.com/yuanbw2025/storyforge/pull/332) · `c1994b1e` | `src/components/geography/GeographyPanel.tsx`, `src/components/world-group/ScopedWorldAuthoringBoundary.tsx` |
+| [#331](https://github.com/yuanbw2025/storyforge/pull/331) · `9f93e983` | `src/components/outline/DetailedOutlinePanel.tsx`, `src/lib/agent/run/detailed-outline-batch-durable.ts` |
+| [#330](https://github.com/yuanbw2025/storyforge/pull/330) · `e15540e9` | `src/lib/memory/workspace-projection.ts`, `src/lib/types/memory-engineering.ts` |
+| [#329](https://github.com/yuanbw2025/storyforge/pull/329) · `12b3096c` | `src/components/location/LocationPanel.tsx`, `src/components/location/LocationTreeView.tsx` |
+| [#328](https://github.com/yuanbw2025/storyforge/pull/328) · `fe69aa11` | `src/App.tsx`, `src/components/data/DataManagementPanel.tsx` |
+| [#327](https://github.com/yuanbw2025/storyforge/pull/327) · `848c637c` | `src/components/product/WorldSharingPanel.tsx`, `src/lib/db/ensure-schema.ts` |
+| [#326](https://github.com/yuanbw2025/storyforge/pull/326) · `9baf6e83` | `src/components/ttrpg/TtrpgRuntimeMediaPanel.tsx`, `src/lib/open-world/checkpoints.ts` |
+| [#325](https://github.com/yuanbw2025/storyforge/pull/325) · `f84f28b3` | `src/components/product/WorldSharingPanel.tsx`, `src/lib/editor/find-replace.ts` |
+| [#324](https://github.com/yuanbw2025/storyforge/pull/324) · `fdc4a38c` | `src/lib/extensions/domain.ts`, `src/lib/types/world-ownership.ts` |
+| [#323](https://github.com/yuanbw2025/storyforge/pull/323) · `c10f3791` | `src/components/outline/OutlinePanel.tsx`, `src/components/outline/OutlineVolumeSidebar.tsx` |
+| [#322](https://github.com/yuanbw2025/storyforge/pull/322) · `43c622ae` | `src/lib/product-production/media-blob-store.ts` |
+| [#321](https://github.com/yuanbw2025/storyforge/pull/321) · `5ded129f` | `src/components/ttrpg/TtrpgRuntimeMediaPanel.tsx`, `src/lib/open-world/checkpoints.ts` |
+| [#320](https://github.com/yuanbw2025/storyforge/pull/320) · `fd8c3052` | `src/lib/product-production/artifact-store.ts`, `src/lib/product-production/contracts.ts` |
+| [#319](https://github.com/yuanbw2025/storyforge/pull/319) · `51ae322a` | `CLAUDE.md`, `docs/ARCHITECTURE.md` |
+| [#318](https://github.com/yuanbw2025/storyforge/pull/318) · `39fe5b69` | `src/lib/editor/find-replace.ts` |
+| [#317](https://github.com/yuanbw2025/storyforge/pull/317) · `03d235e5` | `src/lib/screenplay/renderers.ts` |
+| [#316](https://github.com/yuanbw2025/storyforge/pull/316) · `0b79f7b2` | `src/lib/open-world/checkpoints.ts`, `src/lib/product/runtime-branch-lineage.ts` |
+| [#315](https://github.com/yuanbw2025/storyforge/pull/315) · `dabb50eb` | `src/lib/open-world/player-preferences.ts` |
+| [#314](https://github.com/yuanbw2025/storyforge/pull/314) · `ecc99701` | `src/components/editor/ChapterEditor.tsx`, `src/hooks/useAIStream.ts` |
+| [#313](https://github.com/yuanbw2025/storyforge/pull/313) · `20f8fa0a` | `src/lib/commercial/authority.ts`, `src/lib/community/commercial-release-policy.ts` |
+| [#312](https://github.com/yuanbw2025/storyforge/pull/312) · `9dbf6ad2` | `src/lib/motion-drama/contracts.ts`, `src/lib/motion-drama/delivery.ts` |
+| [#311](https://github.com/yuanbw2025/storyforge/pull/311) · `5703deea` | `.github/workflows/traffic-archive.yml`, `data/traffic/README.md` |
+| [#310](https://github.com/yuanbw2025/storyforge/pull/310) · `a1c42b7e` | `src/lib/context-gateway/canon-provider.ts` |
+| [#309](https://github.com/yuanbw2025/storyforge/pull/309) · `765a4906` | `src/lib/open-world/runtime-ai-context-provider.ts`, `src/lib/registry/assemble-context.ts` |
+| [#308](https://github.com/yuanbw2025/storyforge/pull/308) · `8371513e` | `src/lib/open-world/creator-artifact-edit-dispatch.ts`, `src/lib/open-world/creator-artifact-edit.ts` |
+| [#307](https://github.com/yuanbw2025/storyforge/pull/307) · `d4d42acf` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#306](https://github.com/yuanbw2025/storyforge/pull/306) · `8103cc53` | `src/components/comic/ComicSourcePanel.tsx`, `src/lib/comic/production.ts` |
+| [#305](https://github.com/yuanbw2025/storyforge/pull/305) · `0bef1578` | `src/components/product/WorldSharingPanel.tsx`, `src/lib/world-engine/world-package.ts` |
+| [#304](https://github.com/yuanbw2025/storyforge/pull/304) · `23a32a5a` | `src/lib/export/backup-trust.ts`, `src/lib/export/portable-table-structure.ts` |
+| [#302](https://github.com/yuanbw2025/storyforge/pull/302) · `57945be8` | `src/lib/editor/find-replace.ts` |
+| [#295](https://github.com/yuanbw2025/storyforge/pull/295) · `5145a169` | `src/App.tsx`, `src/components/agent/useMasterCopilot.ts` |
+
+### 未提交观察的变化
+
+- `quality-secondline-closeout-20261111` · `fix/quality021-purpose-on-foundation-20261111` · 49 项工作/暂存条目 · `src/components/product/ProductProductionStudio.tsx`, `src/components/text-game/TextOpenWorldCreatorStudio.tsx`, `src/components/ttrpg/AuthorProposal.tsx`
+- `quality028032021-final-20261104` · `fix/quality-shared-regression-closure-20261104` · 1 项工作/暂存条目 · `tests/e2e/quality004-product-entry-admission.spec.ts`
+- `quality098099-split-20261111` · `fix/quality129-independent-20261111` · 19 项工作/暂存条目 · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `docs/ARCHITECTURE.md`, `docs/DATA-GOVERNANCE.md`
+
+此前11个唯一未推送非合并提交保留本地差异，新观察的3个未推送提交仅为合并历史。其它工作文件条目延续上轮登记范围。完整分支/工作区路径、差异和祖先证明保留私有证据，文件观察不作为产品完成验收。
+
+## 2026-11-10 · 当前整合核对
+
+从成功基线 `79c022c5` 核对 main `1304d29a`。枚举220个本地分支、79个注册工作区（含 detached），193个head尚非main祖先。#255/#256已合并，承接#250～#254及其原head，社区#234也已合入。旧日期正文保留当时快照。
+
+### 待合并 PR
+
+| PR / head | 负责人记录的范围 |
+| --- | --- |
+| [#295](https://github.com/yuanbw2025/storyforge/pull/295) · `4c5ace3f` | test(avg): 恢复真实作者来源后验证声音继承修订 |
+| [#294](https://github.com/yuanbw2025/storyforge/pull/294) · `855f10ca` | fix(quality): 补齐开发依赖审计与关键业务覆盖率门 |
+| [#293](https://github.com/yuanbw2025/storyforge/pull/293) · `e5bed6db` | fix(quality): 收口来源用途、失败恢复与维护热点 |
+| [#292](https://github.com/yuanbw2025/storyforge/pull/292) · `972f1d65` | fix: repair seven data and authoring audit findings |
+| [#291](https://github.com/yuanbw2025/storyforge/pull/291) · `870c9498` | fix(quality): preserve import, adoption recovery and frozen product sources |
+| [#290](https://github.com/yuanbw2025/storyforge/pull/290) · `1d2e0b9f` | fix: close five node and world production audit findings |
+| [#289](https://github.com/yuanbw2025/storyforge/pull/289) · `cc6329d7` | fix(quality): reconcile saves, runtime media and evaluation evidence (081/082/083/120/137) |
+| [#288](https://github.com/yuanbw2025/storyforge/pull/288) · `5a394e51` | fix(quality): preserve runtime owners and AVG assembly compatibility |
+| [#287](https://github.com/yuanbw2025/storyforge/pull/287) · `0ecb3dc2` | fix: retain production charges and pause stale agent recovery |
+| [#286](https://github.com/yuanbw2025/storyforge/pull/286) · `41786f24` | fix(quality): bind runtime reads and adopt only visible saved candidates |
+| [#285](https://github.com/yuanbw2025/storyforge/pull/285) · `2ed4a7bc` | fix(quality): preserve active eval workspaces and checkpoint branches |
+| [#284](https://github.com/yuanbw2025/storyforge/pull/284) · `ccef5349` | fix: integrate nine reviewed authoring and runtime quality corrections |
+| [#283](https://github.com/yuanbw2025/storyforge/pull/283) · `c4e1362f` | fix: 对齐文字冒险骰式准入并修复 Canon 目录并发失效 |
+| [#282](https://github.com/yuanbw2025/storyforge/pull/282) · `cf23f644` | fix: preserve adventure scene speed at low frame rates (SFQA-128) |
+| [#281](https://github.com/yuanbw2025/storyforge/pull/281) · `03c14ab3` | fix(backup): show automatic snapshot failures and preserve recovery |
+| [#280](https://github.com/yuanbw2025/storyforge/pull/280) · `8cb0aee3` | fix(media): restore verified OPFS assets after transient read failures |
+| [#279](https://github.com/yuanbw2025/storyforge/pull/279) · `15be60a5` | fix: 校验备份字段并提供损坏地点标签的显式修复（SFQA-129） |
+| [#278](https://github.com/yuanbw2025/storyforge/pull/278) · `b3676c67` | fix(audit): restore author recovery, sparse backups and complete CI validation |
+| [#277](https://github.com/yuanbw2025/storyforge/pull/277) · `b3cbb470` | fix(settings): 隔离模型列表异步响应归属（SFQA-103） |
+| [#276](https://github.com/yuanbw2025/storyforge/pull/276) · `2f843cab` | fix(SFQA-142): preserve stream usage and prose recovery receipts |
+| [#275](https://github.com/yuanbw2025/storyforge/pull/275) · `6f1acb8a` | fix(desktop): 修复自定义中转模型、聊天与嵌入的 CORS 阻断 |
+| [#274](https://github.com/yuanbw2025/storyforge/pull/274) · `5cb30f87` | fix: 保留 Fountain 导出的中文对白与字面文本（SFQA-029） |
+| [#273](https://github.com/yuanbw2025/storyforge/pull/273) · `4613d54a` | fix: 让产品成熟度贯通实际入口与正式写入（SFQA-004） |
+| [#272](https://github.com/yuanbw2025/storyforge/pull/272) · `3806ee8f` | fix(comic): 固定视觉主体身份并撤销过期视觉复核 |
+| [#271](https://github.com/yuanbw2025/storyforge/pull/271) · `bbc9192d` | fix: 收口累计质量整改的备份恢复、旧版兼容与验收阻塞 |
+| [#270](https://github.com/yuanbw2025/storyforge/pull/270) · `4f8fd009` | fix(world): preserve verified source wire receipts and exact D binding |
+| [#269](https://github.com/yuanbw2025/storyforge/pull/269) · `1172b155` | fix(ttrpg): expose busy navigation until save acknowledgement |
+| [#268](https://github.com/yuanbw2025/storyforge/pull/268) · `9212302c` | fix(distribution): 锁定Android发行源码与升级实测APK（v4.0.6候选） |
+| [#267](https://github.com/yuanbw2025/storyforge/pull/267) · `b1af4dea` | fix: 冻结提供方路由并修复运行媒资并发（SFQA-050/056） |
+| [#265](https://github.com/yuanbw2025/storyforge/pull/265) · `5fa88fb3` | fix(production): 外发前核对冻结供应商与配置（SFQA-050） |
+| [#264](https://github.com/yuanbw2025/storyforge/pull/264) · `bd75de32` | fix(quality): preserve runtime recovery, content identity and AVG reading delay |
+| [#259](https://github.com/yuanbw2025/storyforge/pull/259) · `d3426692` | refactor(world): 添加便携来源声明基础（SFQA-021 F1） |
+| [#258](https://github.com/yuanbw2025/storyforge/pull/258) · `3ac7ef74` | fix: 恢复映射命令的原始授权与中断结算（SFQA-072） |
+| [#257](https://github.com/yuanbw2025/storyforge/pull/257) · `26ece3ba` | fix(quality): 集成27项整改并验证跨作用域恢复 |
+| [#245](https://github.com/yuanbw2025/storyforge/pull/245) · `1258a5c1` | fix(ttrpg): 避免无存档时空选择反复更新导致React185 |
+| [#244](https://github.com/yuanbw2025/storyforge/pull/244) · `eec8ad5e` | fix(ai): 新建豆包配置采用当前LTS并补官方退役提示 |
+| [#240](https://github.com/yuanbw2025/storyforge/pull/240) · `55485908` | fix: 交付批量细纲确认、豆包型号与备份引用保护 |
+| [#238](https://github.com/yuanbw2025/storyforge/pull/238) · `4d295c81` | docs(chat): 以完整故事质量重写内容生产与回合计划 |
+| [#236](https://github.com/yuanbw2025/storyforge/pull/236) · `5b52b35f` | fix(quality): 修复手稿生命周期、生成恢复、来源准入与安全边界 |
+| [#235](https://github.com/yuanbw2025/storyforge/pull/235) · `3a5b3722` | docs(quality): audit baseline, world-source rule and staged remediation |
+| [#233](https://github.com/yuanbw2025/storyforge/pull/233) · `ca120a73` | fix(backup): preserve history-bound outline and chapter targets (#179) |
+
+后续质量PR继承前序修复。相同head、祖先topic和仅合并历史已按私有审计去重。11个唯一未推送非合并提交在本轮获取的origin比较集合中未命中等价补丁，保留各自本地差异，由原负责人继续交付。
+
+### 未提交工作区
+
+- `ed9f` · `feat/community-works-library-20261029` — 2 项观察到的工作/暂存条目 · 本地CLI元数据
+- `quality-002-semantic-raw` · `fix/quality-002-longform-semantic-raw-20261102` — 5 项观察到的工作/暂存条目 · `src/lib/agent/prose-semantic-review.ts`, `src/lib/agent/run/prose-generation-durable.ts`
+- `quality-audit-baseline` · `fix/quality011-home-results-20261104` — 7 项观察到的工作/暂存条目 · `src/components/editor/ChapterEditor.tsx`, `src/components/ttrpg/TtrpgCampaignGuide.tsx`
+- `quality-audit-plan` · `fix/quality-036-brief-atomic-20261102` — 26 项观察到的工作/暂存条目 · `src/components/editor/ChapterEditor.tsx`, `src/components/editor/ChapterEditorToolbar.tsx`
+- `quality-ci-complete-coverage-20261103` · `fix/quality-node-admission-scope-20261103` — 2 项观察到的工作/暂存条目 · `src/lib/node-authoring/executor.ts`, `tests/regression/R-SFQA-node-admission-transaction.test.ts`
+- `quality-ci278-catalog-consistency-20261104` · `fix/quality-ci278-catalog-consistency-20261104` — 4 项观察到的工作/暂存条目 · `src/lib/context-gateway/canon-provider.ts`, `src/lib/context-gateway/provider-cache.ts`
+- `quality-ci278-third-shard-20261104` · `fix/quality-ci278-third-shard-20261104` — 4 项观察到的工作/暂存条目 · `tests/helpers/sfqa105-creator-source-refs.ts`, `tests/regression/R-SFQA004-product-entry-admission.test.tsx`
+- `quality-client-round1` · `fix/quality-048-original-counterfactual-20261031` — 1 项观察到的工作/暂存条目 · `tests/regression/R-SFQA048-foreshadow-delete-refs.test.ts`
+- `quality-context-round1` · `fix/quality085-memory-session-guard-20261104` — 4 项观察到的工作/暂存条目 · `src/components/text-game/TextOpenWorldScenePanel.tsx`, `src/components/text-game/TextOpenWorldVNextPlayer.tsx`
+- `quality-data-round1` · `fix/quality-037-canon-read-prep-20261031` — 6 项观察到的工作/暂存条目 · `scripts/check-architecture.mjs`, `src/lib/context-gateway/canon-provider.ts`
+- `quality-extra-data9-20261102` · `fix/quality257-memory-roundtrip-20261103` — 2 项观察到的工作/暂存条目 · `src/lib/export/registry-import.ts`, `tests/regression/R-MEMORY-CLOSE3-longform-acceptance.test.ts`
+- `quality-extra-runtime9-20261102` · `fix/quality257-canon-compat-20261103` — 3 项观察到的工作/暂存条目 · `src/lib/agent/run/narrative-annotation-durable.ts`, `tests/regression/R-NW-1C-target-state.test.ts`
+- `quality-extra-web8-20261102` · `fix/quality143-auto-backup-status-20261103` — 10 项观察到的工作/暂存条目 · `docs/ARCHITECTURE.md`, `docs/DATA-GOVERNANCE.md`
+- `quality-game-controls-20261103` · `fix/quality128-direct-movement-20261103` — 4 项观察到的工作/暂存条目 · `src/lib/aphelion/scene.ts`, `src/lib/tidemark/scene.ts`
+- `quality-independent79-20261102` · `fix/quality141-context-manual-20261103` — 7 项观察到的工作/暂存条目 · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/ai-manual-context-sources.mjs`
+- `quality-intent-round1` · `fix/quality-002-node-producers-20261031` — 20 项观察到的工作/暂存条目 · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `docs/ARCHITECTURE.md`
+- `quality-linked34-20261102` · `fix/quality-world-source-library-ui-20261103` — 5 项观察到的工作/暂存条目 · `docs/ARCHITECTURE.md`, `docs/products/WORLD-ENGINE.md`
+- `quality-main-docs-delta-20261103` · `fix/quality257-browser-causality-20261103` — 2 项观察到的工作/暂存条目 · `tests/e2e/core-workflow.spec.ts`, `tests/e2e/longform-chapter-review.spec.ts`
+- `quality-next-three-20261104` · `fix/quality044-attempt-recovery-20261104` — 27 项观察到的工作/暂存条目 · `docs/DATA-GOVERNANCE.md`, `src/components/data/DataManagementPanel.tsx`
+- `quality-node002-delivery` · `fix/quality-002-node-delivery-20261102` — 46 项观察到的工作/暂存条目 · `scripts/ai-call-meta.mjs`, `scripts/check-ai-entry-registry.mjs`
+- `quality-round1-integration` · `fix/quality002-runtime-raw-evidence-20261102` — 8 项观察到的工作/暂存条目 · `src/lib/adventure/harness.ts`, `src/lib/agent/run/creation-response-evidence.ts`
+- `quality-studio005-20261031` · `fix/quality144-tooling-gates-20261102` — 10 项观察到的工作/暂存条目 · `docs/ENGINEERING-QUALITY-STANDARD.md`, `package-lock.json`
+- `quality002-master-raw` · `fix/quality002-master-raw-20261102` — 7 项观察到的工作/暂存条目 · `src/lib/agent/detailed-outline-authoring.ts`, `src/lib/agent/orchestrator.ts`
+- `quality021-world-source-library-20261104` · `fix/quality021-purpose-admission-20261104` — 50 项观察到的工作/暂存条目 · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `docs/products/WORLD-ENGINE.md`
+- `quality022-author-confirmed-import-20261104` · `fix/quality022-author-confirmed-import-20261104` — 35 项观察到的工作/暂存条目 · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/check-ai-entry-registry.mjs`
+- `quality022-durable-import-candidate-20261104` · `fix/quality022-durable-import-candidate-20261104` — 25 项观察到的工作/暂存条目 · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/check-ai-entry-registry.mjs`
+- `quality022-final-dispatch-r6` · `fix/quality022-final-dispatch-r6` — 27 项观察到的工作/暂存条目 · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/check-ai-entry-registry.mjs`
+- `quality022-full-source-admission-r8` · `fix/quality022-full-source-admission-r8` — 18 项观察到的工作/暂存条目 · `src/components/system/ImportDocPanel.tsx`, `src/components/system/import/ImportConfirmModal.tsx`
+- `quality022-legacy-import-admission-20261104` · `fix/quality022-legacy-import-admission-20261104` — 18 项观察到的工作/暂存条目 · `src/components/system/ImportDocPanel.tsx`, `src/components/system/import/ImportConfirmModal.tsx`
+- `quality022-reference-start-r2` · `fix/quality044-reference-attempt-20261104` — 41 项观察到的工作/暂存条目 · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/check-ai-entry-registry.mjs`
+- `quality028-ttrpg-continuation-20261104` · `fix/quality028-ttrpg-continuation-20261104` — 2 项观察到的工作/暂存条目 · `src/lib/product/runtime-instances.ts`, `tests/regression/R-SFQA028-ttrpg-continuation-group.test.ts`
+- `quality028032021-final-20261104` · `fix/quality-shared-regression-closure-20261104` — 9 项观察到的工作/暂存条目 · `tests/registry/ai-manual.test.ts`, `tests/regression/R-CHAT-01-role-profile.test.ts`
+- `quality030-portable-required-refs-20261104` · `fix/quality007-dev-dependency-report-20261104` — 32 项观察到的工作/暂存条目 · `scripts/ai-call-meta.mjs`, `scripts/check-ai-entry-registry.mjs`
+- `quality031-runtime-branch-atomic-20261103` · `fix/quality066-detail-parser-consistency-20261103` — 2 项观察到的工作/暂存条目 · `src/lib/agent/orchestrator.ts`, `tests/regression/R-SFQA066-detail-parser-consistency.test.ts`
+- `quality032-runtime-event-boundary-20261104` · `fix/quality032-runtime-event-boundary-20261104` — 2 项观察到的工作/暂存条目 · `src/lib/product/runtime-core.ts`, `tests/regression/R-SFQA032-runtime-event-boundary.test.ts`
+- `quality033-traffic-assets-20261104` · `fix/quality133-docs-host-pin-20261104` — 8 项观察到的工作/暂存条目 · `.github/workflows/deploy-docs.yml`, `.github/workflows/traffic-archive.yml`
+- `quality034039-comic-visual-20261103` · `fix/quality136-context-preview-20261103` — 5 项观察到的工作/暂存条目 · `src/components/editor/ChapterContextPreview.tsx`, `src/components/editor/ChapterEditor.tsx`
+- `quality040-045-067-final-20261104` · `fix/quality018-source-plan-conditional-20261104` — 2 项观察到的工作/暂存条目 · `src/lib/product/source-contracts.ts`, `tests/regression/R-SFQA018-source-plan-conditional.test.ts`
+- `quality040045-atomic-budget-seal-20261104` · `fix/quality040045-atomic-budget-seal-20261104` — 6 项观察到的工作/暂存条目 · `src/lib/product-production/artifact-store.ts`, `src/lib/product-production/contracts.ts`
+- `quality040045-production-budget-ledger-20261104` · `fix/quality040045-production-budget-ledger-20261104` — 5 项观察到的工作/暂存条目 · `src/lib/product-production/artifact-store.ts`, `src/lib/product-production/contracts.ts`
+- `quality041-118-final-20261104` · `fix/quality058-chat-frozen-plan-20261104` — 4 项观察到的工作/暂存条目 · `src/lib/product-production/chat-media-tasks.ts`, `src/lib/product-production/chat-situation-tasks.ts`
+- `quality041-runtime-context-scope-20261104` · `fix/quality041-runtime-context-scope-20261104` — 4 项观察到的工作/暂存条目 · `src/lib/open-world/runtime-ai-context-provider.ts`, `src/lib/registry/assemble-context.ts`
+- `quality051-node-resume-freshness-20261104` · `fix/quality051-node-resume-freshness-20261104` — 26 项观察到的工作/暂存条目 · `src/lib/agent/character-copilot.ts`, `src/lib/agent/character-supplement-copilot.ts`
+- `quality052-node-source-fingerprint-20261104` · `fix/quality052-node-source-fingerprint-20261104` — 5 项观察到的工作/暂存条目 · `src/lib/node-authoring/bindings.ts`, `src/lib/node-authoring/domain-execution.ts`
+- `quality064-adoption-recovery-stale-20261104` · `fix/quality064-adoption-recovery-stale-20261104` — 9 项观察到的工作/暂存条目 · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `src/lib/agent/character-revision-copilot.ts`
+- `quality065-chat-visual-recovery-20261104` · `fix/quality065-chat-visual-recovery-20261104` — 4 项观察到的工作/暂存条目 · `src/components/character-interaction/useChatMedia.ts`, `src/lib/character-interaction/runtime-visuals.ts`
+- `quality067-master-stale-policy-20261104` · `fix/quality067-master-stale-policy-20261104` — 3 项观察到的工作/暂存条目 · `src/lib/agent/run/master-adoption.ts`, `src/lib/agent/run/master-durable.ts`
+- `quality068-character-cold-cas-20261104` · `fix/quality068-character-cold-cas-20261104` — 3 项观察到的工作/暂存条目 · `src/lib/agent/orchestrator.ts`, `tests/regression/R-SFQA066-detail-parser-consistency.test.ts`
+- `quality069-parent-timeline-branch-20261104` · `fix/quality069-parent-timeline-branch-20261104` — 2 项观察到的工作/暂存条目 · `src/lib/open-world/checkpoints.ts`, `tests/regression/R-SFQA069-parent-timeline-branch.test.ts`
+- `quality081-chapter-reconciliation-20261104` · `fix/quality081-chapter-reconciliation-20261104` — 6 项观察到的工作/暂存条目 · `src/components/editor/ChapterEditor.tsx`, `src/components/editor/ReconciliationTable.tsx`
+- `quality082083-cut-history-r10-20261104` · `fix/quality082083-cut-history-r10-20261104` — 11 项观察到的工作/暂存条目 · `src/components/ttrpg/TtrpgRuntimeMediaPanel.tsx`, `src/lib/product/runtime-core.ts`
+- `quality082083-late-fee-cut-r11-20261104` · `fix/quality082083-late-fee-cut-r11-20261104` — 11 项观察到的工作/暂存条目 · `src/components/ttrpg/TtrpgRuntimeMediaPanel.tsx`, `src/lib/product/runtime-core.ts`
+- `quality082083-runtime-media-attempts-20261104` · `fix/quality082083-runtime-media-attempts-20261104` — 11 项观察到的工作/暂存条目 · `src/components/ttrpg/TtrpgRuntimeMediaPanel.tsx`, `src/lib/product/runtime-core.ts`
+- `quality084-dialogue-window-20261104` · `fix/quality084-dialogue-window-20261104` — 7 项观察到的工作/暂存条目 · `src/components/text-game/TextOpenWorldScenePanel.tsx`, `src/lib/open-world/runtime-ai-contract.ts`
+- `quality089-creator-consultation-usage-20261104` · `fix/quality089-creator-consultation-usage-20261104` — 4 项观察到的工作/暂存条目 · `src/components/text-game/TextOpenWorldCreatorProductionReadiness.tsx`, `src/lib/open-world/creator-brief.ts`
+- `quality096-creator-protagonist-handoff-20261104` · `fix/quality096-creator-protagonist-handoff-20261104` — 13 项观察到的工作/暂存条目 · `src/components/text-game/TextOpenWorldCreatorBriefStudio.tsx`, `src/lib/open-world/creator-brief-persistence.ts`
+- `quality096-creator-scheduler-admission-r10-20261104` · `fix/quality096-creator-scheduler-admission-r10-20261104` — 16 项观察到的工作/暂存条目 · `src/components/text-game/TextOpenWorldCreatorBriefStudio.tsx`, `src/lib/open-world/creator-brief-persistence.ts`
+- `quality096-historical-start-proof-20261104` · `fix/quality096-historical-start-proof-20261104` — 1 项观察到的工作/暂存条目 · `tests/regression/R-SFQA096-historical-proof-only.test.ts`
+- `quality103-ai-config-20261103` · `fix/quality129-missing-location-tags-probe-20261103` — 11 项观察到的工作/暂存条目 · `src/components/location/LocationPanel.tsx`, `src/components/location/LocationTreeView.tsx`
+- `quality109-adventure-dice-20261103` · `fix/quality109-adventure-dice-admission-20261103` — 7 项观察到的工作/暂存条目 · `src/lib/adventure/runtime.ts`, `src/lib/product-production/preview-manifest.ts`
+- `quality111-eval-cleanup-ownership-20261104` · `fix/quality111-eval-cleanup-ownership-20261104` — 18 项观察到的工作/暂存条目 · `src/components/settings/CreativeReliabilityEvalPanel.tsx`, `src/components/settings/H86StoryArcEvalPanel.tsx`
+- `quality116-intent-session-guard-20261104` · `fix/quality116-intent-session-guard-20261104` — 6 项观察到的工作/暂存条目 · `docs/products/TEXT-ADVENTURE.md`, `src/components/text-game/AdventureGamePlayer.tsx`
+- `quality118-visible-candidate-draft-20261104` · `fix/quality118-visible-candidate-draft-20261104` — 6 项观察到的工作/暂存条目 · `src/components/agent/useMasterCopilot.ts`, `src/components/worldview/WorldviewAgentControls.tsx`
+- `quality120-h4-usage-provenance-20261104` · `fix/quality120-h4-usage-provenance-20261104` — 13 项观察到的工作/暂存条目 · `src/components/settings/HarnessEvalPanel.tsx`, `src/lib/ai/client.ts`
+- `quality123-community-request-intents-20261104` · `fix/quality123-community-request-intents-20261104` — 8 项观察到的工作/暂存条目 · `src/components/community/CommunityReviewPanel.tsx`, `src/components/community/CommunitySafetyPanel.tsx`
+- `quality129-backup-field-shapes-20261103` · `fix/quality131-svg-preview-isolation-20261103` — 4 项观察到的工作/暂存条目 · `src/components/geography/GeographyPanel.tsx`, `tests/e2e/quality131-svg-preview-isolation.spec.ts`
+- `quality132-salt-ridge-resource-hashes-20261104` · `fix/quality132-salt-ridge-resource-hashes-20261104` — 5 项观察到的工作/暂存条目 · `src/lib/salt-ridge/production.ts`, `src/pages/SaltRidgePage.tsx`
+- `quality135-sam-source-20261104` · `fix/quality135-sam-source-20261104` — 5 项观察到的工作/暂存条目 · `scripts/avg-local-foreground/README.md`, `scripts/avg-local-foreground/server.py`
+- `quality137-judge-continuation-20261104` · `fix/quality137-judge-continuation-20261104` — 3 项观察到的工作/暂存条目 · `scripts/evaluate-narrative-reader-judge-local-codex.mjs`, `scripts/narrative-reader-judge-continuation.mjs`
+- `quality271-browser-recovery-20261103` · `fix/quality009-domain-evidence-leaves-20261104` — 75 项观察到的工作/暂存条目 · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/quality/coverage-shards.mjs`
+
+以上仅登记文件范围，部分保留已整合或重叠改动、测试材料及生成文件。完整路径、摘要与差异保留在私有证据中，工作内容和交付继续由原负责人维护。
+
 ## 2026-11-03 · 当前开发核对
 
 从成功基线 `a3317feb` 核对至远程 main `054d8a06`：**110 个本地分支、24 个注册工作区（含 detached）、103 个 head 尚非 main 祖先**。这些是核对数量，不是功能数。正式 v4.0.5 已发布，#246 已合入；下表其它开放 PR 均未进入 main。旧日期正文保留历史快照。

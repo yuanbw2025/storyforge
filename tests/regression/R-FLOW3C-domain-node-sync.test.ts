@@ -1,12 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../src/lib/ai/client', () => ({
-  chat: vi.fn(async () => JSON.stringify({
-    field: 'worldOrigin',
-    value: '节点生成的候选世界来源。',
-  })),
-}))
-
+import * as usageLog from '../../src/lib/ai/usage-log'
+import { useAIConfigStore } from '../../src/stores/ai-config'
 import { db } from '../../src/lib/db/schema'
 import type { NodeFlow, Project } from '../../src/lib/types'
 import {
@@ -37,10 +32,25 @@ const project: Project = {
 }
 
 describe('FLOW-3C · Canon 绑定概览与下游失效', () => {
+  let usage: Promise<unknown>[]
   beforeEach(async () => {
     await db.delete()
     await db.open()
     await putCurrentWorkspaceFixtureV1(project)
+    usage = []
+    vi.stubGlobal('window', undefined)
+    useAIConfigStore.getState().setConfig({ provider: 'custom', apiKey: '', model: 'isolated-domain-sync',
+      baseUrl: 'http://127.0.0.1:9/v1', temperature: .5, maxTokens: 8_000, contextWindow: 128_000 })
+    const recordUsage = usageLog.recordUsage
+    vi.spyOn(usageLog, 'recordUsage').mockImplementation(function (this: unknown, input) {
+      const pending = recordUsage.call(this, input); usage.push(pending); return pending
+    })
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (url, request) => {
+      if (String(url) !== 'http://127.0.0.1:9/v1/chat/completions' || request?.method !== 'POST') throw new Error('Unexpected external model request')
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+        field: 'worldOrigin', value: '节点生成的候选世界来源。',
+      }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 17, completion_tokens: 9, total_tokens: 26 } }), { status: 200 })
+    }))
     const scope = await resolveScopeLike(project.id!)
     await db.worldviews.put(stampNewRecord(scope, 'worldviews', {
       projectId: project.id!,
@@ -59,7 +69,7 @@ describe('FLOW-3C · Canon 绑定概览与下游失效', () => {
     }, { owner: 'work' }) as any)
   })
 
-  afterEach(() => db.close())
+  afterEach(async () => { await Promise.allSettled(usage); vi.unstubAllGlobals(); vi.restoreAllMocks(); db.close() })
 
   it('从项目资料生成实时绑定概览，不把正文复制进图 JSON', async () => {
     const overview = await buildAuthoringOverviewGraph({ projectId: project.id!, worldGroupId: null })
@@ -138,7 +148,8 @@ describe('FLOW-3C · Canon 绑定概览与下游失效', () => {
       flow,
       nodeId: origin.id,
       output: outcome.candidates[origin.id].output,
-    })).rejects.toThrow('目标内容已在分步骤模式或其它入口中更新')
+    })).rejects.toThrow('节点字段采纳未完成：来源、配置或上游已过期')
     expect((await db.worldviews.get(worldviewId))?.worldOrigin).toBe('分步骤模式刚刚保存的新世界来源。')
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 })

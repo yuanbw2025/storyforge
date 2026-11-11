@@ -304,6 +304,11 @@ export type PortableDataSpec = {
   contractField: string
   contractHashField: string
   dependencies: readonly string[]
+  /** Local deletion cannot orphan immutable current or historical run scopes. */
+  retainedScopeTargets?: readonly {
+    table: string
+    scopeField: 'chapterIds' | 'outlineNodeIds'
+  }[]
 } | {
   kind: 'agent-run-child'
   parentField: string

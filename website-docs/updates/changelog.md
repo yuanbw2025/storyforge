@@ -1,6 +1,20 @@
 # 更新日志
 
 
+
+
+## 2026-11-11 · 章纲审校、批量细纲与可选诊断
+
+[PR #303](https://github.com/yuanbw2025/storyforge/pull/303) 已合入 `5420f854`。章纲诊断显示空回答、非法报告与调用错误并保留原始响应，选择性改写核对真实原文、预览和最终补丁，未选内容逐字保留。操作见[章纲与正文](/features/longform/writing)。
+
+[PR #301](https://github.com/yuanbw2025/storyforge/pull/301) 已合入 `bc18dc84`，整合历史引用删除保护、批量细纲明确采纳、桌面模型连接、豆包新建默认/退役提示及跑团空存档选择循环修复。通用设置新增默认关闭的最近操作轨迹选项，预览、开关与基础摘要回退见[故障排查](/guides/troubleshooting)。正式安装包和后续分支状态见[版本兼容](/updates/compatibility)与[开发记录](/updates/development-status)。
+
+## 2026-11-10 · 社区投稿与质量修复使用说明
+
+社区作品分享 [#234](https://github.com/yuanbw2025/storyforge/pull/234) 已合入 `b1a4bf65`。从小说或已有作品分析中选择内容、逐字预览、确认权利并投稿，审核状态、撤回和申诉见[分享步骤](/features/longform/references#公开分享小说与作品分析)。
+
+[#255](https://github.com/yuanbw2025/storyforge/pull/255) 与 [#256](https://github.com/yuanbw2025/storyforge/pull/256) 已合入 `924d3f37`、`79e30c69`。补齐保存与采纳中断恢复、节点字段版本、漫画/漫剧失败任务、根级章节导出和取消备份后的删除保护。文字开放世界从小说开始时先派生世界草稿并封存。跑团房间取消/超时、嵌入结果校验、历史生成防重复、地图缩放精度及反馈提交期间的新编辑保护也已更新。对应操作见各产品指南，待合并后续见[开发记录](/updates/development-status)。
+
 ## 2026-11-03 · 正式版本与连续性证据核对
 
 - 正式 v4.0.5 已于 10 月 30 日发布，包含编辑恢复、逐章要求、模型配置及已合并产品增量。下载、固定源码与数据格式见[版本兼容](/updates/compatibility)。升级先导出完整备份，再在原数据环境覆盖安装。

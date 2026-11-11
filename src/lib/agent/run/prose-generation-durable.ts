@@ -1,7 +1,8 @@
+import Dexie from 'dexie'
 import { db } from '../../db/schema'
 import { observeDuplicatedProseFrameV1 } from '../../prose/provider-frame-observation'
 import { normalizeProseForEditorV1, plainTextToHtml } from '../../utils/html'
-import { adopt } from '../../registry/adopt'
+import { adopt, adoptionTransactionTablesV1 } from '../../registry/adopt'
 import { hashChapterText, normalizeChapterText, sha256Text, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../../ai/chapter-memory/text-normalization'
 import type { AgentConversation, AgentEvent, Chapter, ChatMessage, WorkspaceScope } from '../../types'
 import type {
@@ -18,6 +19,9 @@ import {
   readAgentRunV1,
   readVerifiedAgentRunInTransactionV1,
   appendPrivilegedAgentRunEventInTransactionV1,
+  appendAgentRunEventWithSettlementInTransactionV1,
+  withAgentRunMutationLockV1,
+  agentRunScopeTransactionTablesV1,
   type AgentRunSnapshotV1,
 } from './event-store'
 import { parseAgentRunEventV1 } from './event-schema'
@@ -58,6 +62,7 @@ import type {
 } from '../../types/agent-run'
 import {
   assertWorkspaceContentRevisionFreshV1,
+  contentRevisionTableSpecsV1,
   parseWorkspaceContentRevisionV1,
   type WorkspaceContentRevisionVectorV1,
 } from '../../authoring/content-revision'
@@ -75,7 +80,8 @@ import type { ContextGatewayExecutionV1 } from '../../context-gateway/execution'
 import { assertContextGatewayCandidateAdoptableV1 } from '../../context-gateway/execution'
 import { proseGatewayExecutionFromAssemblyV1 } from '../../prose/gateway-context'
 import { proseRenderedRequestV1 } from '../../prose/request-evidence'
-import type { AIRequestSettingsV1 } from '../../ai/client'
+import type { AIRequestSettingsV1, ChatResult } from '../../ai/client'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1 } from './creation-response-evidence'
 import { parseProseLengthObservationV1, type ProseLengthObservationV1 } from '../../prose/length-observation'
 import { recordAgentRunArtifactV1, readAgentRunArtifactExactV1 } from '../../memory/artifact-store'
 import { QUALITY_RECHECK_STEP_V1, verifyQualityRevisionEvidenceV1, type QualityRevisionEvidenceV1 } from '../../prose/quality-revision-evidence'
@@ -502,6 +508,23 @@ async function append(
   } as any)
 }
 
+async function appendAdoptionInTransaction(
+  scope: WorkspaceScope,
+  snapshot: AgentRunSnapshotV1,
+  type: Parameters<typeof appendAgentRunEventV1>[0]['type'],
+  payload: unknown,
+): Promise<AgentRunSnapshotV1> {
+  return appendAgentRunEventWithSettlementInTransactionV1({
+    scope, snapshot,
+    event: parseAgentRunEventV1({
+      version: 1, runId: snapshot.run.id, sequence: snapshot.projection.lastSequence + 1,
+      generation: snapshot.projection.generation, projectId: snapshot.run.projectId,
+      worldGroupId: snapshot.run.worldGroupId ?? null, contractHash: snapshot.projection.contractHash,
+      type, payload, createdAt: Date.now(),
+    }),
+  })
+}
+
 export async function proseGenerationManifestV1(input: {
   runId: number
   scope: WorkspaceScope
@@ -662,8 +685,9 @@ export async function beginProseSemanticStepV1(input: {
   contextManifest: ContextManifestV1
   executionBinding: AgentSkillExecutionBindingV1 | AgentSkillExecutionBindingV2
   requestBinding: unknown
+  messages: readonly ChatMessage[]
   reservedTokens: number
-}): Promise<AgentRunSnapshotV1> {
+}) {
   assertProseGenerationExecutionBindingsV1(input.snapshot)
   if (
     input.contextManifest.runId !== input.snapshot.run.id
@@ -683,6 +707,11 @@ export async function beginProseSemanticStepV1(input: {
     attempt: 1,
     manifestHash: input.contextManifest.manifestHash,
   })
+  const prepared = await recordCreationModelRequestV1({
+    scope: input.scope, snapshot, stepId: input.stepId, attempt: 1,
+    contextManifestHash: input.contextManifest.manifestHash, messages: input.messages,
+  })
+  snapshot = prepared.snapshot
   snapshot = await append(input.scope, snapshot, 'model.requested', {
     stepId: input.stepId,
     attempt: 1,
@@ -692,12 +721,13 @@ export async function beginProseSemanticStepV1(input: {
       contextManifestHash: input.contextManifest.manifestHash,
     }),
   })
-  return append(input.scope, snapshot, 'budget.reserved', {
+  snapshot = await append(input.scope, snapshot, 'budget.reserved', {
     stepId: input.stepId,
     modelCalls: 1,
     toolCalls: 0,
     tokens: Math.max(1, Math.floor(input.reservedTokens)),
   })
+  return { snapshot, request: prepared.request }
 }
 
 export async function recordProseSemanticModelOutputV1(input: {
@@ -705,13 +735,24 @@ export async function recordProseSemanticModelOutputV1(input: {
   snapshot: AgentRunSnapshotV1
   stepId: ProseSemanticStepIdV1
   output: string
+  request: Awaited<ReturnType<typeof beginProseSemanticStepV1>>['request']
+  result?: ChatResult
   usedTokens: number
 }): Promise<AgentRunSnapshotV1> {
   const step = input.snapshot.projection.steps[input.stepId]
   if (!step || step.status !== 'running' || step.attempt !== 1) {
     throw new Error(`正文语义步骤 ${input.stepId} 不在模型响应状态。`)
   }
-  let snapshot = await append(input.scope, input.snapshot, 'model.responded', {
+  if (input.request.stepId !== input.stepId || input.request.attempt !== 1
+    || input.request.scope.projectId !== input.scope.projectId
+    || input.request.scope.worldId !== input.scope.worldId
+    || input.request.scope.workId !== input.scope.workId) {
+    throw new Error('正文语义响应不属于原始请求的步骤或作用域。')
+  }
+  let snapshot = await recordCreationModelResponseV1({
+    snapshot: input.snapshot, request: input.request, raw: input.output, result: input.result,
+  })
+  snapshot = await append(input.scope, snapshot, 'model.responded', {
     stepId: input.stepId,
     attempt: 1,
     outputHash: await hashCanonicalValue(input.output),
@@ -1222,12 +1263,12 @@ async function prosePostStateHash(input: { scope: WorkspaceScope; chapterId: num
   if (!chapter || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) {
     throw new Error('正文生成终态校验找不到章节。')
   }
-  return hashCanonicalValue({
+  return Dexie.waitFor(hashCanonicalValue({
     version: 1,
     chapterId: input.chapterId,
     content: chapter.content,
     wordCount: chapter.wordCount,
-  })
+  }))
 }
 
 export async function commitProseGenerationAdoptionV1(input: {
@@ -1237,6 +1278,33 @@ export async function commitProseGenerationAdoptionV1(input: {
   contentHtml: string
   wordCount: number
 }): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1 }> {
+  input = structuredClone(input)
+  if (input.runId !== input.candidate.durable.runId) throw new Error('正文候选与 Run 不一致。')
+  const intentBody = {
+    version: 1, candidateHash: input.candidate.durable.candidateHash,
+    chapterId: input.candidate.chapterId, operation: input.candidate.operation,
+    sourceTextHash: input.candidate.sourceTextHash,
+    contentHtml: input.contentHtml, wordCount: input.wordCount,
+  }
+  const intentHash = await hashCanonicalValue(intentBody)
+  const previous = await readAgentRunV1(input.scope, input.runId)
+  if (previous.projection.state === 'completed' && previous.projection.terminalReceiptHash) {
+    const { durable, ...body } = input.candidate
+    const chapter = await db.chapters.get(input.candidate.chapterId)
+    const started = previous.events.find(event => event.type === 'adoption.started'
+      && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1
+      && event.payload.candidateHash === durable.candidateHash && event.payload.intentHash === intentHash)
+    const committed = previous.events.find(event => event.type === 'adoption.committed'
+      && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1
+      && event.payload.candidateHash === durable.candidateHash)
+    if (input.runId !== durable.runId || await hashProseGenerationCandidateV1(body) !== durable.candidateHash
+      || !started || !committed || !chapter
+      || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })
+      || chapter.content !== input.contentHtml || chapter.wordCount !== input.wordCount) {
+      throw new Error('正文完成证明与原确认载荷或当前正式正文不一致，不能重放采纳。')
+    }
+    return { snapshot: previous, receiptHash: previous.projection.terminalReceiptHash }
+  }
   const frame = observeDuplicatedProseFrameV1(input.candidate.outputText)
   if (frame) throw new Error(frame.message)
   if (input.candidate.operation === 'quality-revise' && input.candidate.qualityRevision) {
@@ -1304,104 +1372,97 @@ export async function commitProseGenerationAdoptionV1(input: {
     })
     throw new Error('正文编辑器的待写入内容与作者确认的候选不一致。')
   }
-  snapshot = await append(input.scope, snapshot, 'confirmation.recorded', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    candidateHash: input.candidate.durable.candidateHash,
-    decision: 'adopt',
-  })
-  snapshot = await append(input.scope, snapshot, 'adoption.started', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    candidateHash: input.candidate.durable.candidateHash,
-    intentHash: await hashCanonicalValue({
-      chapterId: input.candidate.chapterId,
-      operation: input.candidate.operation,
-      sourceTextHash: input.candidate.sourceTextHash,
-    }),
-  })
-  let result
-  try {
-    result = await adopt({
-      projectId: input.scope.projectId,
-      scope: input.scope,
-      target: 'chapters',
-      recordId: input.candidate.chapterId,
-      mode: 'replace',
-      data: {
-        content: input.contentHtml,
+  await assertProseTerminalCandidateEvidence(input, snapshot)
+  const preflightSequence = snapshot.projection.lastSequence
+  return withAgentRunMutationLockV1(input.runId, () => db.transaction(
+    'rw',
+    agentRunScopeTransactionTablesV1(input.runId,
+      ...adoptionTransactionTablesV1('chapters', { content: input.contentHtml, wordCount: input.wordCount }),
+      ...contentRevisionTableSpecsV1().map(spec => spec.table),
+      db.characterDrivenPlans, db.agentRuns, db.agentRunEvents,
+    ),
+    async () => {
+      snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
+      if (snapshot.projection.lastSequence !== preflightSequence) {
+        throw new Error('正文 Run 已推进，请重新读取原候选后确认。')
+      }
+      await assertWorkspaceContentRevisionFreshV1(input.candidate.contentRevision, {
+        scope: input.scope, worldGroupId: input.candidate.worldGroupId,
+      })
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'confirmation.recorded', {
+        stepId: PROSE_GENERATION_STEP_ID_V1,
+        candidateHash: input.candidate.durable.candidateHash,
+        decision: 'adopt',
+      })
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'adoption.started', {
+        stepId: PROSE_GENERATION_STEP_ID_V1,
+        candidateHash: input.candidate.durable.candidateHash,
+        intentHash,
+      })
+      const result = await adopt({
+        projectId: input.scope.projectId,
+        scope: input.scope,
+        target: 'chapters',
+        recordId: input.candidate.chapterId,
+        mode: 'replace',
+        data: {
+          content: input.contentHtml,
+          wordCount: input.wordCount,
+        },
+        compareAndSet: {
+          kind: 'chapter-source-text-hash',
+          expectedHash: input.candidate.sourceTextHash,
+          ...(input.candidate.qualityRevision ? { expectedContentHash: input.candidate.qualityRevision.sourceHtmlHash } : {}),
+          textNormalizationVersion: CHAPTER_TEXT_NORMALIZATION_VERSION,
+        },
+      })
+      if (!result.written.some(item => item.id === input.candidate.chapterId && item.fields.includes('content'))
+        || result.unknown.length || result.typeErrors.length || result.fkErrors.length || result.skipped.length) {
+        throw new Error(result.skipped[0]?.reason || '正文候选没有完整写入章节。')
+      }
+      const writtenChapter = await db.chapters.get(input.candidate.chapterId)
+      if (!writtenChapter || writtenChapter.content !== input.contentHtml || writtenChapter.wordCount !== input.wordCount) {
+        throw new Error('正文写入后的完整 HTML 或字数与冻结确认不一致。')
+      }
+      const adoptionHash = await Dexie.waitFor(hashCanonicalValue({
+        version: 1,
+        candidateHash: input.candidate.durable.candidateHash,
+        chapterId: input.candidate.chapterId,
+        sourceTextHash: input.candidate.sourceTextHash,
+        outputContentHash,
         wordCount: input.wordCount,
-      },
-      compareAndSet: {
-        kind: 'chapter-source-text-hash',
-        expectedHash: input.candidate.sourceTextHash,
-        ...(input.candidate.qualityRevision ? { expectedContentHash: input.candidate.qualityRevision.sourceHtmlHash } : {}),
-        textNormalizationVersion: CHAPTER_TEXT_NORMALIZATION_VERSION,
-      },
-    })
-  } catch (error) {
-    const current = await readAgentRunV1(input.scope, input.runId)
-    if (current.projection.state === 'running') {
-      await append(input.scope, current, 'adoption.rejected', {
+      }))
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'adoption.committed', {
         stepId: PROSE_GENERATION_STEP_ID_V1,
         candidateHash: input.candidate.durable.candidateHash,
-        code: error instanceof Error ? error.message : 'prose_adoption_failed',
+        adoptionHash,
       })
-    }
-    throw error
-  }
-  if (!result.written.some(item => item.id === input.candidate.chapterId && item.fields.includes('content'))) {
-    const current = await readAgentRunV1(input.scope, input.runId)
-    if (current.projection.state === 'running') {
-      await append(input.scope, current, 'adoption.rejected', {
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'step.succeeded', {
         stepId: PROSE_GENERATION_STEP_ID_V1,
-        candidateHash: input.candidate.durable.candidateHash,
-        code: result.skipped[0]?.reason || 'prose_adoption_skipped',
+        attempt: input.candidate.durable.attempt,
+        outputHash: input.candidate.durable.candidateHash,
       })
-    }
-    throw new Error(result.skipped[0]?.reason || '正文候选没有写入章节。')
-  }
-  const adoptionHash = await hashCanonicalValue({
-    version: 1,
-    candidateHash: input.candidate.durable.candidateHash,
-    chapterId: input.candidate.chapterId,
-    sourceTextHash: input.candidate.sourceTextHash,
-    outputContentHash,
-    wordCount: input.wordCount,
-  })
-  snapshot = await append(input.scope, snapshot, 'adoption.committed', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    candidateHash: input.candidate.durable.candidateHash,
-    adoptionHash,
-  })
-  snapshot = await append(input.scope, snapshot, 'step.succeeded', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    attempt: input.candidate.durable.attempt,
-    outputHash: input.candidate.durable.candidateHash,
-  })
-  return verifyProseGenerationRunV1({
-    scope: input.scope,
-    runId: input.runId,
-    candidate: input.candidate,
-    snapshot,
-  })
+      return verifyProseGenerationRunState({
+        scope: input.scope,
+        runId: input.runId,
+        candidate: input.candidate,
+        snapshot,
+      }, appendAdoptionInTransaction)
+    },
+  ))
 }
 
-export async function verifyProseGenerationRunV1(input: {
+async function assertProseTerminalCandidateEvidence(input: {
   scope: WorkspaceScope
   runId: number
   candidate: ProseGenerationCandidateV1
-  snapshot?: AgentRunSnapshotV1
-}): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1 }> {
+}, snapshot: AgentRunSnapshotV1): Promise<void> {
   if (input.candidate.operation === 'quality-revise') {
-    const state = input.snapshot ?? await readAgentRunV1(input.scope, input.runId)
+    const state = snapshot
     if (!input.candidate.qualityRevision || !await verifyQualityRevisionEvidenceV1(input.candidate.qualityRevision, input.candidate.outputText)
       || !verifyQualityRevisionDurableEvidence(state, input.candidate)
       || !await verifyQualityRevisionGatewayEvidence(input.scope, input.candidate)) throw new Error('范围修订保护与复核证据不一致，不能通过终验。')
   }
-  let snapshot = input.snapshot ?? await readAgentRunV1(input.scope, input.runId)
-  if (snapshot.projection.state === 'completed' && snapshot.run.terminalReceiptHash) {
-    return { snapshot, receiptHash: snapshot.run.terminalReceiptHash }
-  }
-  const step = snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
   assertProseGenerationExecutionBindingsV1(snapshot)
   const semanticRequired = requiresSemanticReview(snapshot)
   if (semanticRequired && (
@@ -1410,6 +1471,34 @@ export async function verifyProseGenerationRunV1(input: {
   )) {
     throw new Error('正文生成终态校验发现语义评审证据缺失、过期或被篡改。')
   }
+}
+
+export async function verifyProseGenerationRunV1(input: {
+  scope: WorkspaceScope
+  runId: number
+  candidate: ProseGenerationCandidateV1
+  snapshot?: AgentRunSnapshotV1
+}): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1 }> {
+  const snapshot = input.snapshot ?? await readAgentRunV1(input.scope, input.runId)
+  await assertProseTerminalCandidateEvidence(input, snapshot)
+  return verifyProseGenerationRunState({ ...input, snapshot })
+}
+
+async function verifyProseGenerationRunState(input: {
+  scope: WorkspaceScope
+  runId: number
+  candidate: ProseGenerationCandidateV1
+  snapshot: AgentRunSnapshotV1
+}, writeEvent: typeof append = append): Promise<{
+  snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1
+}> {
+  let snapshot = input.snapshot
+  if (snapshot.projection.state === 'completed' && snapshot.run.terminalReceiptHash) {
+    return { snapshot, receiptHash: snapshot.run.terminalReceiptHash }
+  }
+  const step = snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
+  assertProseGenerationExecutionBindingsV1(snapshot)
+  const semanticRequired = requiresSemanticReview(snapshot)
   const adoption = snapshot.events.find(event => (
     event.type === 'adoption.committed'
       && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1
@@ -1433,7 +1522,7 @@ export async function verifyProseGenerationRunV1(input: {
   if (!chapter || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) {
     throw new Error('正文生成终态校验找不到来源章节。')
   }
-  if (await hashChapterText(chapter.content ?? '') !== input.candidate.expectedContentHash) {
+  if (await Dexie.waitFor(hashChapterText(chapter.content ?? '')) !== input.candidate.expectedContentHash) {
     throw new Error('正文生成终态校验发现章节正文与候选不一致。')
   }
   const currentBoundary = await buildChapterInformationBoundaryV1({
@@ -1450,14 +1539,14 @@ export async function verifyProseGenerationRunV1(input: {
   const verifierSetVersion = semanticRequired
     ? PROSE_GENERATION_VERIFIER_SET_V3
     : PROSE_GENERATION_VERIFIER_SET_V2
-  snapshot = await append(input.scope, snapshot, 'verification.started', {
+  snapshot = await writeEvent(input.scope, snapshot, 'verification.started', {
     verifierSetVersion,
   })
   const postStateHash = await prosePostStateHash({
     scope: input.scope,
     chapterId: input.candidate.chapterId,
   })
-  const receipt = await createVerificationReceiptV1({
+  const receipt = await Dexie.waitFor(createVerificationReceiptV1({
     version: 1,
     runId: input.runId,
     generation: snapshot.projection.generation,
@@ -1507,7 +1596,7 @@ export async function verifyProseGenerationRunV1(input: {
       { id: 'prose-generation.post-state', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },
     ],
     acceptedAt: Date.now(),
-  })
-  snapshot = await append(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
+  }))
+  snapshot = await writeEvent(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
   return { snapshot, receiptHash: receipt.receiptHash, receipt }
 }

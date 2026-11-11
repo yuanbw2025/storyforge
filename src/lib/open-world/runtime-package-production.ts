@@ -1,3 +1,4 @@
+import { captureTextOpenWorldTaskExecutionInputV1, assertTextOpenWorldBuildNewWorkV1 } from './source-admission'
 import { hashProductProductionValueV2, isSha256Hash } from '../product-production/hash'
 import { parseProductBuildQualityReportV1 } from '../product-production/adoption'
 import { parseProductProductionBriefV3 } from '../product-production/contracts'
@@ -1535,6 +1536,9 @@ function zeroUsage(): ProductProductionTaskExecutionResultV1['usage'] {
 
 export function createTextOpenWorldRuntimePackageExecutorV1(options: { now?: () => number } = {}): ProductProductionTaskExecutorV1 {
   return async execution => {
+    execution = captureTextOpenWorldTaskExecutionInputV1(execution)
+    await assertTextOpenWorldBuildNewWorkV1({ scope: execution.scope, productionId: execution.productionId,
+      buildId: execution.buildId, operation: '执行新的文字开放世界制作任务' })
     if (execution.task.taskKey !== 'v3.runtime-package' || execution.task.executionMode !== 'deterministic') {
       fail('V3 executor收到错误任务')
     }
@@ -1558,6 +1562,9 @@ export function createTextOpenWorldRuntimePackageExecutorV1(options: { now?: () 
 
 export function createTextOpenWorldReleaseQaExecutorV1(): ProductProductionTaskExecutorV1 {
   return async execution => {
+    execution = captureTextOpenWorldTaskExecutionInputV1(execution)
+    await assertTextOpenWorldBuildNewWorkV1({ scope: execution.scope, productionId: execution.productionId,
+      buildId: execution.buildId, operation: '执行新的文字开放世界制作任务' })
     if (execution.task.taskKey !== 'qa.release' || execution.task.executionMode !== 'deterministic') {
       fail('QA executor收到错误任务')
     }

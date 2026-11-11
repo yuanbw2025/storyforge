@@ -2,6 +2,16 @@
 
 AI generation requires your own model service. You can begin with manual writing and built-in works that need no API.
 
+
+
+## Custom relay connections in the desktop client
+
+After configuring a custom model service, check the original endpoint and parameters separately for model lists, streaming chat and embeddings. Mainline desktop clients now provide a restricted HTTP connection path for CORS-blocked requests in these three categories. Web clients follow browser connection restrictions. Authentication failures, cancellation and rejected redirects retain their actual results. Correct the configuration based on the error before explicitly retrying. New Doubao configurations also have an updated default model and official retirement notices; authors continue to review existing configurations. See [PR #301](https://github.com/yuanbw2025/storyforge/pull/301).
+
+## Configuration identity and embedding results
+
+Credentials follow the saved provider-configuration identity. Recheck the selected provider and model after switching or updating a configuration. Embedding responses with invalid indices or vector shapes are rejected before caching, with an error available for inspection. Check the embedding configuration and service response before continuing retrieval. See [#255](https://github.com/yuanbw2025/storyforge/pull/255) and [#256](https://github.com/yuanbw2025/storyforge/pull/256).
+
 ## First configuration
 
 1. Open “Models and local settings” (模型与本地设置) at the top right of Home, or “General settings” (通用设置) within a product.

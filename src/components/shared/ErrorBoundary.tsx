@@ -63,7 +63,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           {isModuleLoadFailure(this.state.error) && <p className="text-xs text-text-muted mb-4 max-w-md">重试会先保存编辑，再重新加载页面；尚在运行的任务可能中断。</p>}
           {this.state.recoveryError && <p role="alert" className="text-sm text-error mb-4">{this.state.recoveryError}</p>}
           <button
-            onClick={() => void this.handleReset()}
+            data-diagnostic-action="retry" onClick={() => void this.handleReset()}
             disabled={this.state.recovering}
             className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg text-sm hover:bg-accent-hover transition-colors"
           >

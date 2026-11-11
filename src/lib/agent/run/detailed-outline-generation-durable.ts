@@ -1,4 +1,7 @@
+import Dexie from 'dexie'
 import { db } from '../../db/schema'
+import { adoptionTransactionTablesV1 } from '../../registry/adopt'
+import { parseAgentRunEventV1 } from './event-schema'
 import type { AgentConversation, AgentEvent, ChatMessage, WorkspaceScope } from '../../types'
 import type {
   AgentRunFormalAIEntryBindingV1,
@@ -17,6 +20,10 @@ import {
   appendAgentRunEventV1,
   createAgentRunV1,
   readAgentRunV1,
+  readVerifiedAgentRunInTransactionV1,
+  appendAgentRunEventWithSettlementInTransactionV1,
+  withAgentRunMutationLockV1,
+  agentRunScopeTransactionTablesV1,
   type AgentRunSnapshotV1,
 } from './event-store'
 import { createVerificationReceiptV1 } from './verification-receipt'
@@ -47,6 +54,8 @@ import {
 import { parseNarrativeBriefV1, type NarrativeBriefV1 } from '../narrative-brief'
 import {
   assertWorkspaceContentRevisionFreshV1,
+  captureWorkspaceContentRevisionV1,
+  contentRevisionTableSpecsV1,
   parseWorkspaceContentRevisionV1,
   type WorkspaceContentRevisionVectorV1,
 } from '../../authoring/content-revision'
@@ -316,6 +325,23 @@ async function append(
     payload,
     expectedLastSequence: snapshot.projection.lastSequence,
   } as any)
+}
+
+async function appendAdoptionInTransaction(
+  scope: WorkspaceScope,
+  snapshot: AgentRunSnapshotV1,
+  type: Parameters<typeof appendAgentRunEventV1>[0]['type'],
+  payload: unknown,
+): Promise<AgentRunSnapshotV1> {
+  return appendAgentRunEventWithSettlementInTransactionV1({
+    scope, snapshot,
+    event: parseAgentRunEventV1({
+      version: 1, runId: snapshot.run.id, sequence: snapshot.projection.lastSequence + 1,
+      generation: snapshot.projection.generation, projectId: snapshot.run.projectId,
+      worldGroupId: snapshot.run.worldGroupId ?? null, contractHash: snapshot.projection.contractHash,
+      type, payload, createdAt: Date.now(),
+    }),
+  })
 }
 
 export interface DetailedOutlineGatewayAttemptV1 {
@@ -755,6 +781,10 @@ export async function commitDetailedOutlineGenerationAdoptionV1(input: {
   currentContextManifestHash?: () => Promise<string>
   postStateMatches?: (postState: unknown) => boolean
 }): Promise<DetailedOutlineGenerationAdoptionResultV1> {
+  input = { ...input, scope: { ...input.scope }, candidate: structuredClone(input.candidate) }
+  const adoptionRevision = await captureWorkspaceContentRevisionV1({
+    scope: input.scope, worldGroupId: input.candidate.worldGroupId,
+  })
   await assertDetailedOutlineTargetsUnwrittenFutureV1({
     scope: input.scope,
     worldGroupId: input.candidate.worldGroupId,
@@ -766,6 +796,33 @@ export async function commitDetailedOutlineGenerationAdoptionV1(input: {
   }
   if (await hashCanonicalValue(input.candidate.output) !== input.candidate.outputHash) {
     throw new Error('细纲候选输出 hash 校验失败，请重新生成。')
+  }
+  if (input.runId !== input.candidate.durable.runId || input.output !== input.candidate.output) {
+    throw new Error('细纲采纳内容或 Run 与作者确认候选不一致。')
+  }
+  const previous = await readAgentRunV1(input.scope, input.runId)
+  assertDetailedOutlineGenerationExecutionBindingV1(previous)
+  if (previous.projection.state === 'completed' && previous.projection.terminalReceiptHash) {
+    const outline = await db.outlineNodes.get(input.candidate.outlineNodeId)
+    const rows = await db.detailedOutlines.where('outlineNodeId').equals(input.candidate.outlineNodeId).toArray()
+    const owned: typeof rows = []
+    for (const row of rows) {
+      if (await assertRecordInScope(input.scope, 'detailedOutlines', row, { owner: 'work' })) owned.push(row)
+    }
+    const postStateHash = owned.length === 1 ? await hashCanonicalValue(owned[0]) : null
+    const committedHash = postStateHash ? await hashCanonicalValue({
+      candidateHash: input.candidate.durable.candidateHash, postStateHash,
+    }) : null
+    const committed = previous.events.find(event => event.type === 'adoption.committed'
+      && event.payload.stepId === DETAILED_OUTLINE_GENERATION_STEP_ID_V1
+      && event.payload.candidateHash === input.candidate.durable.candidateHash
+      && event.payload.adoptionHash === committedHash)
+    if (!outline || !postStateHash || !committed
+      || await hashDetailedOutlineSourceSummaryV1(outline.summary ?? '') !== input.candidate.sourceSummaryHash
+      || (input.postStateMatches && !input.postStateMatches(owned[0]))) {
+      throw new Error('细纲完成证明与原候选或当前正式后态不一致，不能重放采纳。')
+    }
+    return { snapshot: previous, receiptHash: previous.projection.terminalReceiptHash, postStateHash }
   }
   if (input.candidate.contentRevision) {
     try {
@@ -791,7 +848,7 @@ export async function commitDetailedOutlineGenerationAdoptionV1(input: {
     && !creativeArtifactCanAdoptV1(input.candidate.creativeArtifact)
   ) throw new Error('细纲候选仍有未修复的结构问题，不能采纳。')
   if (input.output !== input.candidate.output) throw new Error('细纲采纳内容与作者确认候选不一致。')
-  let snapshot = await readAgentRunV1(input.scope, input.runId)
+  let snapshot = previous
   assertDetailedOutlineGenerationExecutionBindingV1(snapshot)
   const governed = snapshot.contract.executionBindings !== undefined
   const summaryChanged = await input.currentSourceSummaryHash() !== input.candidate.sourceSummaryHash
@@ -834,93 +891,109 @@ export async function commitDetailedOutlineGenerationAdoptionV1(input: {
   if (!step || step.status !== 'awaiting_confirmation' || step.candidateHash !== input.candidate.durable.candidateHash) {
     throw new Error('细纲 durable run 尚未满足作者采纳条件。')
   }
-  snapshot = await append(input.scope, snapshot, 'confirmation.recorded', {
-    stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
+  const preflightSequence = snapshot.projection.lastSequence
+  const intentHash = await hashCanonicalValue({
+    kind: DETAILED_OUTLINE_GENERATION_CANDIDATE_TYPE_V1,
     candidateHash: input.candidate.durable.candidateHash,
-    decision: 'adopt',
   })
-  snapshot = await append(input.scope, snapshot, 'adoption.started', {
-    stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
-    candidateHash: input.candidate.durable.candidateHash,
-    intentHash: await hashCanonicalValue({
-      kind: DETAILED_OUTLINE_GENERATION_CANDIDATE_TYPE_V1,
-      candidateHash: input.candidate.durable.candidateHash,
-    }),
-  })
-  try {
-    await input.adopt()
-  } catch (error) {
-    await append(input.scope, snapshot, 'adoption.rejected', {
-      stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
-      candidateHash: input.candidate.durable.candidateHash,
-      code: 'detailed_outline_adoption_failed',
-    })
-    throw error
-  }
-  const postState = await input.postState()
-  if (postState == null || (input.postStateMatches && !input.postStateMatches(postState))) {
-    await append(input.scope, snapshot, 'adoption.rejected', {
-      stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
-      candidateHash: input.candidate.durable.candidateHash,
-      code: postState == null
-        ? 'detailed_outline_post_state_missing'
-        : 'detailed_outline_post_state_mismatch',
-    })
-    throw new Error(postState == null
-      ? '细纲采纳后未找到正式数据，终态校验失败。'
-      : '细纲采纳后的正式数据与作者确认候选不一致。')
-  }
-  if (governed && !input.postStateMatches) {
-    await append(input.scope, snapshot, 'adoption.rejected', {
-      stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
-      candidateHash: input.candidate.durable.candidateHash,
-      code: 'detailed_outline_post_state_verifier_missing',
-    })
-    throw new Error('细纲采纳缺少正式后状态匹配校验。')
-  }
-  const postStateHash = await hashCanonicalValue(postState)
-  const adoptionHash = await hashCanonicalValue({
-    candidateHash: input.candidate.durable.candidateHash,
-    postStateHash,
-  })
-  snapshot = await append(input.scope, snapshot, 'adoption.committed', {
-    stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
-    candidateHash: input.candidate.durable.candidateHash,
-    adoptionHash,
-  })
-  snapshot = await append(input.scope, snapshot, 'step.succeeded', {
-    stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
-    attempt: input.candidate.durable.attempt,
-    outputHash: input.candidate.durable.candidateHash,
-  })
-  snapshot = await append(input.scope, snapshot, 'verification.started', {
-    verifierSetVersion: 'detailed-outline-terminal-v1',
-  })
-  const adoptionEventIds = (await db.agentRunEvents.where('runId').equals(input.runId).toArray())
-    .filter(event => event.type === 'adoption.committed' && event.id != null)
-    .map(event => event.id!)
-  const receipt = await createVerificationReceiptV1({
-    version: 1,
-    runId: input.runId,
-    generation: snapshot.projection.generation,
-    contractHash: snapshot.projection.contractHash,
-    contextManifestHashes: [input.candidate.contextManifestHash],
-    candidateHashes: [input.candidate.durable.candidateHash],
-    adoptionEventIds,
-    postStateHash,
-    verifierSetVersion: 'detailed-outline-terminal-v1',
-    criteria: [
-      { id: 'detailed-outline.output', status: 'passed', evidenceRefs: [`candidate:${input.candidate.durable.candidateHash}`] },
-      { id: 'detailed-outline.confirmed', status: 'passed', evidenceRefs: [`candidate:${input.candidate.durable.candidateHash}`] },
-      { id: 'detailed-outline.adopted', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },
-      { id: 'detailed-outline.post-state', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },
-    ],
-    acceptedAt: Date.now(),
-  })
-  snapshot = await append(input.scope, snapshot, 'verification.accepted', {
-    receiptHash: receipt.receiptHash,
-  })
-  return { snapshot, receiptHash: receipt.receiptHash, postStateHash }
+  return withAgentRunMutationLockV1(input.runId, () => db.transaction(
+    'rw',
+    agentRunScopeTransactionTablesV1(input.runId,
+      ...adoptionTransactionTablesV1('detailedOutlines'),
+      ...contentRevisionTableSpecsV1().map(spec => spec.table),
+      db.agentRuns, db.agentRunEvents,
+    ),
+    async () => {
+      snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
+      if (snapshot.projection.lastSequence !== preflightSequence) {
+        throw new Error('细纲 Run 已推进，请重新读取原候选后确认。')
+      }
+      await assertWorkspaceContentRevisionFreshV1(adoptionRevision, {
+        scope: input.scope, worldGroupId: input.candidate.worldGroupId,
+      })
+      await assertDetailedOutlineTargetsUnwrittenFutureV1({
+        scope: input.scope, worldGroupId: input.candidate.worldGroupId,
+        outlineNodeId: input.candidate.outlineNodeId,
+      })
+      const outline = await db.outlineNodes.get(input.candidate.outlineNodeId)
+      if (!outline || await Dexie.waitFor(hashDetailedOutlineSourceSummaryV1(outline.summary ?? ''))
+        !== input.candidate.sourceSummaryHash) {
+        throw new Error('章节大纲已变化，细纲候选已过期，请重新生成。')
+      }
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'confirmation.recorded', {
+        stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
+        candidateHash: input.candidate.durable.candidateHash,
+        decision: 'adopt',
+      })
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'adoption.started', {
+        stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
+        candidateHash: input.candidate.durable.candidateHash,
+        intentHash,
+      })
+      await input.adopt()
+      const postState = await input.postState()
+      if (postState == null || (input.postStateMatches && !input.postStateMatches(postState))) {
+        throw new Error(postState == null
+          ? '细纲采纳后未找到正式数据，终态校验失败。'
+          : '细纲采纳后的正式数据与作者确认候选不一致。')
+      }
+      if (governed && !input.postStateMatches) {
+        throw new Error('细纲采纳缺少正式后状态匹配校验。')
+      }
+      const formalRows = (await db.detailedOutlines.where('outlineNodeId').equals(input.candidate.outlineNodeId).toArray())
+      const owned: typeof formalRows = []
+      for (const row of formalRows) {
+        if (await assertRecordInScope(input.scope, 'detailedOutlines', row, { owner: 'work' })) owned.push(row)
+      }
+      if (owned.length !== 1 || await Dexie.waitFor(hashCanonicalValue(owned[0]))
+        !== await Dexie.waitFor(hashCanonicalValue(postState))) {
+        throw new Error('细纲终验后态不是当前 Work 的唯一真实正式记录。')
+      }
+      const postStateHash = await Dexie.waitFor(hashCanonicalValue(postState))
+      const adoptionHash = await Dexie.waitFor(hashCanonicalValue({
+        candidateHash: input.candidate.durable.candidateHash,
+        postStateHash,
+      }))
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'adoption.committed', {
+        stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
+        candidateHash: input.candidate.durable.candidateHash,
+        adoptionHash,
+      })
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'step.succeeded', {
+        stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
+        attempt: input.candidate.durable.attempt,
+        outputHash: input.candidate.durable.candidateHash,
+      })
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'verification.started', {
+        verifierSetVersion: 'detailed-outline-terminal-v1',
+      })
+      const adoptionEventIds = (await db.agentRunEvents.where('runId').equals(input.runId).toArray())
+        .filter(event => event.type === 'adoption.committed' && event.id != null)
+        .map(event => event.id!)
+      const receipt = await Dexie.waitFor(createVerificationReceiptV1({
+        version: 1,
+        runId: input.runId,
+        generation: snapshot.projection.generation,
+        contractHash: snapshot.projection.contractHash,
+        contextManifestHashes: [input.candidate.contextManifestHash],
+        candidateHashes: [input.candidate.durable.candidateHash],
+        adoptionEventIds,
+        postStateHash,
+        verifierSetVersion: 'detailed-outline-terminal-v1',
+        criteria: [
+          { id: 'detailed-outline.output', status: 'passed', evidenceRefs: [`candidate:${input.candidate.durable.candidateHash}`] },
+          { id: 'detailed-outline.confirmed', status: 'passed', evidenceRefs: [`candidate:${input.candidate.durable.candidateHash}`] },
+          { id: 'detailed-outline.adopted', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },
+          { id: 'detailed-outline.post-state', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },
+        ],
+        acceptedAt: Date.now(),
+      }))
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'verification.accepted', {
+        receiptHash: receipt.receiptHash,
+      })
+      return { snapshot, receiptHash: receipt.receiptHash, postStateHash }
+    },
+  ))
 }
 
 export async function detailedOutlineManifestV1(input: {

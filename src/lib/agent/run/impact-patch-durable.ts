@@ -1,11 +1,18 @@
+import Dexie from 'dexie'
 import { db } from '../../db/schema'
 import { parseAgentEventPayload, type AgentEvent, type WorkspaceScope } from '../../types'
 import { appendAgentEvent, getOrCreateAgentConversation } from '../conversations'
 import { assembleContext } from '../../registry/assemble-context'
-import { adopt } from '../../registry/adopt'
+import { adopt, adoptionTransactionTablesV1 } from '../../registry/adopt'
 import { buildEditImpactGraphV1, type EditImpactGraphV1 } from '../../consistency/impact-analysis'
 import { createContextManifestFromAssemblyV1 } from './context-manifest'
-import { createAgentRunV1, appendAgentRunEventV1, readAgentRunV1, type AgentRunSnapshotV1 } from './event-store'
+import {
+  createAgentRunV1, appendAgentRunEventV1, readAgentRunV1, type AgentRunSnapshotV1,
+  withAgentRunMutationLockV1, agentRunScopeTransactionTablesV1,
+  readVerifiedAgentRunInTransactionV1, appendAgentRunEventWithSettlementInTransactionV1,
+} from './event-store'
+import { parseAgentRunEventV1 } from './event-schema'
+import { contentRevisionTableSpecsV1 } from '../../authoring/content-revision'
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { hashCanonicalValue } from './hash'
 import { hashChapterText } from '../../ai/chapter-memory/text-normalization'
@@ -41,6 +48,8 @@ export interface ImpactPatchCandidateV1 {
   sourceChapterId: number
   sourceTextHash: string
   sourceGraphHash: string
+  /** Original full target row; absent on older read-only candidates. */
+  targetPreStateHash?: string
   proposal: ImpactPatchProposalV1
   createdAt: number
   durable: ImpactPatchDurableEvidenceV1
@@ -56,6 +65,8 @@ function isImpactPatchCandidate(value: unknown): value is ImpactPatchCandidateV1
     || typeof candidate.sourceChapterId !== 'number'
     || typeof candidate.sourceTextHash !== 'string'
     || typeof candidate.sourceGraphHash !== 'string'
+    || (candidate.targetPreStateHash !== undefined
+      && !/^[a-f0-9]{64}$/.test(candidate.targetPreStateHash))
     || typeof candidate.createdAt !== 'number'
     || !candidate.durable
   ) return false
@@ -110,6 +121,23 @@ async function append(
     payload,
     expectedLastSequence: snapshot.projection.lastSequence,
   } as any)
+}
+
+async function appendAdoptionInTransaction(
+  scope: WorkspaceScope,
+  snapshot: AgentRunSnapshotV1,
+  type: Parameters<typeof appendAgentRunEventV1>[0]['type'],
+  payload: unknown,
+): Promise<AgentRunSnapshotV1> {
+  return appendAgentRunEventWithSettlementInTransactionV1({
+    scope, snapshot,
+    event: parseAgentRunEventV1({
+      version: 1, runId: snapshot.run.id, sequence: snapshot.projection.lastSequence + 1,
+      generation: snapshot.projection.generation, projectId: snapshot.run.projectId,
+      worldGroupId: snapshot.run.worldGroupId ?? null, contractHash: snapshot.projection.contractHash,
+      type, payload, createdAt: Date.now(),
+    }),
+  })
 }
 
 function buildImpactPatchContract(input: {
@@ -173,12 +201,12 @@ async function readTargetOutline(scope: WorkspaceScope, recordId: number): Promi
 async function currentPostStateHash(scope: WorkspaceScope, candidate: ImpactPatchCandidateV1): Promise<string> {
   const target = await readTargetOutline(scope, candidate.proposal.recordId)
   const source = await db.chapters.get(candidate.sourceChapterId)
-  return hashCanonicalValue({
+  return Dexie.waitFor(hashCanonicalValue({
     version: IMPACT_PATCH_RUN_VERSION_V1,
     sourceChapterId: candidate.sourceChapterId,
-    sourceTextHash: await hashChapterText(source?.content ?? ''),
+    sourceTextHash: await Dexie.waitFor(hashChapterText(source?.content ?? '')),
     target: { id: target.id, summary: target.summary ?? '' },
-  })
+  }))
 }
 
 /** Create a durable, author-confirmed candidate without modifying Canon. */
@@ -193,6 +221,7 @@ export async function createImpactPatchCandidateV1(input: {
   event: AgentEvent
   graph: EditImpactGraphV1
 }> {
+  input = structuredClone(input)
   assertProposal(input.proposal)
   const source = await db.chapters.get(input.sourceChapterId)
   if (!source || !await assertRecordInScope(input.scope, 'chapters', source, { owner: 'work' })) {
@@ -202,7 +231,7 @@ export async function createImpactPatchCandidateV1(input: {
   if (!graph.nodes.some(node => node.kind === 'outline' && node.recordId === input.proposal.recordId)) {
     throw new Error('影响 patch 目标必须来自当前影响图的大纲依赖节点。')
   }
-  await readTargetOutline(input.scope, input.proposal.recordId)
+  const targetPreStateHash = await hashCanonicalValue(await readTargetOutline(input.scope, input.proposal.recordId))
   const conversation = await getOrCreateAgentConversation({
     projectId: input.scope.projectId,
     worldGroupId: input.worldGroupId,
@@ -261,6 +290,7 @@ export async function createImpactPatchCandidateV1(input: {
     sourceChapterId: input.sourceChapterId,
     sourceTextHash: graph.source.sourceTextHash,
     sourceGraphHash: graph.graphHash,
+    targetPreStateHash,
     proposal: input.proposal,
     createdAt: Date.now(),
   }
@@ -353,76 +383,109 @@ export async function adoptImpactPatchCandidateV1(input: {
   scope: WorkspaceScope
   candidate: ImpactPatchCandidateV1
 }): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string; adoption: { id: number; fields: string[] } }> {
-  assertProposal(input.candidate.proposal)
-  const durable = input.candidate.durable
-  const { durable: _durable, ...withoutDurable } = input.candidate
-  if (await hashCandidateWithoutDurable(withoutDurable) !== durable.candidateHash) {
-    throw new Error('影响 patch 候选 hash 不匹配。')
-  }
-  const graph = await buildEditImpactGraphV1(input.scope, input.candidate.sourceChapterId)
-  if (graph.graphHash !== input.candidate.sourceGraphHash || graph.source.sourceTextHash !== input.candidate.sourceTextHash) {
-    throw new Error('影响 patch 来源正文或影响图已变化，候选已过期。')
-  }
-  const target = await readTargetOutline(input.scope, input.candidate.proposal.recordId)
-  let snapshot = await readAgentRunV1(input.scope, durable.runId)
-  const step = snapshot.projection.steps[IMPACT_PATCH_STEP_ID_V1]
-  if (!step || step.status !== 'awaiting_confirmation' || step.candidateHash !== durable.candidateHash) {
-    throw new Error('影响 patch 当前不在作者确认边界。')
-  }
-  snapshot = await append(input.scope, snapshot, 'confirmation.recorded', {
-    stepId: IMPACT_PATCH_STEP_ID_V1,
-    candidateHash: durable.candidateHash,
-    decision: 'adopt',
-  })
-  snapshot = await append(input.scope, snapshot, 'adoption.started', {
-    stepId: IMPACT_PATCH_STEP_ID_V1,
-    candidateHash: durable.candidateHash,
-    intentHash: await hashCanonicalValue({ kind: 'impact-patch', candidateHash: durable.candidateHash }),
-  })
-  const result = await adopt({
-    projectId: input.scope.projectId,
-    scope: input.scope,
-    recordId: target.id,
-    target: 'outlineNodes',
-    mode: 'merge-diffs',
-    data: input.candidate.proposal.fields,
-  })
-  const adoption = result.written.find(row => row.id === target.id)
-  if (!adoption) throw new Error(result.skipped[0]?.reason ?? '影响 patch 未写入目标大纲。')
-  snapshot = await append(input.scope, snapshot, 'adoption.committed', {
-    stepId: IMPACT_PATCH_STEP_ID_V1,
-    candidateHash: durable.candidateHash,
-    adoptionHash: await hashCanonicalValue({ candidateHash: durable.candidateHash, adoption }),
-  })
-  snapshot = await append(input.scope, snapshot, 'step.succeeded', {
-    stepId: IMPACT_PATCH_STEP_ID_V1,
-    attempt: durable.attempt,
-    outputHash: await hashCanonicalValue({ candidateHash: durable.candidateHash, adoption }),
-  })
-  const postStateHash = await currentPostStateHash(input.scope, input.candidate)
-  snapshot = await append(input.scope, snapshot, 'verification.started', { verifierSetVersion: IMPACT_PATCH_VERIFIER_SET_V1 })
-  const adoptionEventIds = (await db.agentRunEvents.where('runId').equals(snapshot.run.id).toArray())
-    .filter(row => row.type === 'adoption.committed' && row.id != null)
-    .map(row => row.id!)
-  const manifestHash = [...snapshot.events].reverse().find(event => event.type === 'context.assembled')?.payload.manifestHash
-  if (!manifestHash) throw new Error('影响 patch 缺少 Context Manifest 证据。')
-  const receipt = await createVerificationReceiptV1({
-    version: 1,
-    runId: snapshot.run.id,
-    generation: snapshot.projection.generation,
-    contractHash: snapshot.projection.contractHash,
-    contextManifestHashes: [manifestHash],
-    candidateHashes: [durable.candidateHash],
-    adoptionEventIds,
-    postStateHash,
-    verifierSetVersion: IMPACT_PATCH_VERIFIER_SET_V1,
-    criteria: [
-      { id: 'impact-patch.candidate', status: 'passed', evidenceRefs: [`candidate:${durable.candidateHash}`] },
-      { id: 'impact-patch.adoption', status: 'passed', evidenceRefs: adoptionEventIds.map(id => `event:${id}`) },
-      { id: 'impact-patch.post-state', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },
-    ],
-    acceptedAt: Date.now(),
-  })
-  snapshot = await append(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
-  return { snapshot, receiptHash: receipt.receiptHash, adoption }
+  input = structuredClone(input)
+  return withAgentRunMutationLockV1(input.candidate.durable.runId, () => db.transaction(
+    'rw',
+    agentRunScopeTransactionTablesV1(input.candidate.durable.runId,
+      ...adoptionTransactionTablesV1('outlineNodes', input.candidate.proposal.fields),
+      ...contentRevisionTableSpecsV1().map(spec => spec.table),
+      db.retrievalChunks, db.narrativeSummaryNodes, db.agentRuns, db.agentRunEvents,
+    ),
+    async () => {
+      assertProposal(input.candidate.proposal)
+      const durable = input.candidate.durable
+      const { durable: _durable, ...withoutDurable } = input.candidate
+      if (await Dexie.waitFor(hashCandidateWithoutDurable(withoutDurable)) !== durable.candidateHash) {
+        throw new Error('影响 patch 候选 hash 不匹配。')
+      }
+      const graph = await buildEditImpactGraphV1(input.scope, input.candidate.sourceChapterId)
+      if (graph.graphHash !== input.candidate.sourceGraphHash || graph.source.sourceTextHash !== input.candidate.sourceTextHash) {
+        throw new Error('影响 patch 来源正文或影响图已变化，候选已过期。')
+      }
+      const target = await readTargetOutline(input.scope, input.candidate.proposal.recordId)
+      let snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, durable.runId)
+      if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash) {
+        // This is a checked projection of the recorded write, never a new AdoptResult.
+        const adoption = { id: input.candidate.proposal.recordId, fields: ['summary', 'updatedAt'] }
+        const proofHash = await Dexie.waitFor(hashCanonicalValue({ candidateHash: durable.candidateHash, adoption }))
+        const committed = snapshot.events.find(event => event.type === 'adoption.committed'
+          && event.payload.stepId === IMPACT_PATCH_STEP_ID_V1
+          && event.payload.candidateHash === durable.candidateHash && event.payload.adoptionHash === proofHash)
+        if (!committed || target.summary !== input.candidate.proposal.fields.summary) {
+          throw new Error('影响 patch 完成证明与原确认或当前正式摘要不一致。')
+        }
+        return { snapshot, receiptHash: snapshot.projection.terminalReceiptHash, adoption }
+      }
+      if (!input.candidate.targetPreStateHash
+        || await Dexie.waitFor(hashCanonicalValue(target)) !== input.candidate.targetPreStateHash) {
+        throw new Error('影响 patch 目标基线缺失或正式数据已变化，请重新创建候选。')
+      }
+      const step = snapshot.projection.steps[IMPACT_PATCH_STEP_ID_V1]
+      if (!step || step.status !== 'awaiting_confirmation' || step.candidateHash !== durable.candidateHash) {
+        throw new Error('影响 patch 当前不在作者确认边界。')
+      }
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'confirmation.recorded', {
+        stepId: IMPACT_PATCH_STEP_ID_V1,
+        candidateHash: durable.candidateHash,
+        decision: 'adopt',
+      })
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'adoption.started', {
+        stepId: IMPACT_PATCH_STEP_ID_V1,
+        candidateHash: durable.candidateHash,
+        intentHash: await Dexie.waitFor(hashCanonicalValue({ kind: 'impact-patch', candidateHash: durable.candidateHash })),
+      })
+      const result = await adopt({
+        projectId: input.scope.projectId,
+        scope: input.scope,
+        recordId: target.id,
+        target: 'outlineNodes',
+        mode: 'merge-diffs',
+        data: input.candidate.proposal.fields,
+      })
+      const adoption = result.written.find(row => row.id === target.id)
+      if (!adoption || result.unknown.length || result.typeErrors.length || result.fkErrors.length || result.skipped.length) {
+        throw new Error(result.skipped[0]?.reason ?? '影响 patch 未完整写入目标大纲。')
+      }
+      const writtenTarget = await readTargetOutline(input.scope, target.id)
+      if (writtenTarget.summary !== input.candidate.proposal.fields.summary) {
+        throw new Error('影响 patch 实际正式后态与冻结确认不一致。')
+      }
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'adoption.committed', {
+        stepId: IMPACT_PATCH_STEP_ID_V1,
+        candidateHash: durable.candidateHash,
+        adoptionHash: await Dexie.waitFor(hashCanonicalValue({ candidateHash: durable.candidateHash, adoption })),
+      })
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'step.succeeded', {
+        stepId: IMPACT_PATCH_STEP_ID_V1,
+        attempt: durable.attempt,
+        outputHash: await Dexie.waitFor(hashCanonicalValue({ candidateHash: durable.candidateHash, adoption })),
+      })
+      const postStateHash = await currentPostStateHash(input.scope, input.candidate)
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'verification.started', { verifierSetVersion: IMPACT_PATCH_VERIFIER_SET_V1 })
+      const adoptionEventIds = (await db.agentRunEvents.where('runId').equals(snapshot.run.id).toArray())
+        .filter(row => row.type === 'adoption.committed' && row.id != null)
+        .map(row => row.id!)
+      const manifestHash = [...snapshot.events].reverse().find(event => event.type === 'context.assembled')?.payload.manifestHash
+      if (!manifestHash) throw new Error('影响 patch 缺少 Context Manifest 证据。')
+      const receipt = await Dexie.waitFor(createVerificationReceiptV1({
+        version: 1,
+        runId: snapshot.run.id,
+        generation: snapshot.projection.generation,
+        contractHash: snapshot.projection.contractHash,
+        contextManifestHashes: [manifestHash],
+        candidateHashes: [durable.candidateHash],
+        adoptionEventIds,
+        postStateHash,
+        verifierSetVersion: IMPACT_PATCH_VERIFIER_SET_V1,
+        criteria: [
+          { id: 'impact-patch.candidate', status: 'passed', evidenceRefs: [`candidate:${durable.candidateHash}`] },
+          { id: 'impact-patch.adoption', status: 'passed', evidenceRefs: adoptionEventIds.map(id => `event:${id}`) },
+          { id: 'impact-patch.post-state', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },
+        ],
+        acceptedAt: Date.now(),
+      }))
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
+      return { snapshot, receiptHash: receipt.receiptHash, adoption }
+    },
+  ))
 }

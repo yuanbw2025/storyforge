@@ -1,6 +1,7 @@
-import type { Project, Work } from '../types'
+import type { Project, Work, WorkspaceScope } from '../types'
 import type { ChatMessage, PromptTemplate, PromptVariableContext } from '../types'
 import { assembleContext } from '../registry/assemble-context'
+import { resolveReadScope } from '../workspace/scope'
 import { CONTEXT_SOURCE_BY_KEY } from '../registry/context-sources'
 import { renderPrompt } from './prompt-engine'
 import { effectiveWorkKind } from '../workspace/work-kind'
@@ -47,6 +48,7 @@ export interface AssembleBoundPromptInput {
   template: PromptTemplate
   project?: Project
   work?: Work | null
+  scope?: WorkspaceScope
   worldGroupId?: number | null
   outlineNodeId?: number | null
   chapterId?: number | null
@@ -72,6 +74,9 @@ export interface AssembleBoundPromptResult {
  * 同一 source 只进入最终请求一次；变量槽位只保留语义指引和作者补充。
  */
 export async function assembleBoundPrompt(input: AssembleBoundPromptInput): Promise<AssembleBoundPromptResult> {
+  const scope = input.scope ? await resolveReadScope({ projectId: input.project?.id, scope: input.scope }) : undefined
+  if (scope && input.work && (input.work.id !== scope.workId || input.work.projectId !== scope.projectId
+    || input.work.worldId !== scope.worldId)) throw new Error('Prompt Work 与显式 WorkspaceScope 不一致')
   const bindings = input.template.variableBindings ?? []
   const sourceKeys = getPromptBindingSourceKeys(input.template)
   for (const key of sourceKeys) {
@@ -131,6 +136,7 @@ export async function assembleBoundPrompt(input: AssembleBoundPromptInput): Prom
   const assembled = input.project?.id && sourceKeys.length && !missingScopes.has('world')
     ? await assembleContext({
         projectId: input.project.id,
+        ...(scope ? { scope } : {}),
         worldGroupId: input.worldGroupId,
         outlineNodeId: input.outlineNodeId,
         chapterId: input.chapterId,

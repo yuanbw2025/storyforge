@@ -23,8 +23,8 @@ describe('ARCH-07 · 世界能力边界与产品成熟度入口', () => {
 
     const openWorld = PRODUCT_CATALOG_V1.find(item => item.id === 'upper.text-open-world')!
     expect(openWorld).toMatchObject({
-      sourcePolicy: 'world-release-or-novel',
-      requiresWorldReference: false,
+      sourcePolicy: 'world-release-required',
+      requiresWorldReference: true,
     })
     expect(upperProducts.filter(item => item.id !== openWorld.id).every(item => (
       item.sourcePolicy === 'world-release-required' && item.requiresWorldReference

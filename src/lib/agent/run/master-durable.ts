@@ -68,6 +68,11 @@ import {
   readLatestVerifiedAgentRunCheckpointV1,
 } from './checkpoint'
 import { canonicalStringify, hashCanonicalValue } from './hash'
+import {
+  recordCreationModelRequestV1,
+  recordCreationModelResponseV1,
+  recordUnavailableCreationResponseV1,
+} from './creation-response-evidence'
 import { parseAgentRunEventV1 } from './event-schema'
 import {
   classifyAgentRunFailureV1,
@@ -2018,6 +2023,18 @@ export async function runDurableMasterAgentPlanV1(
     baseManifest: ContextManifestV2
   }>()
   let gatewayPreflightQueue: Promise<void> = Promise.resolve()
+  const modelCalls = new Map<string, {
+    callIndex: number
+    request: Awaited<ReturnType<typeof recordCreationModelRequestV1>>['request']
+    completed: boolean
+    lastReturnedHash: string | null
+  }>()
+  let modelEvidenceFailure: { error: unknown } | null = null
+  const queueModelEvidence = async (action: () => Promise<void>) => {
+    const queued = gatewayPreflightQueue.then(action)
+    gatewayPreflightQueue = queued.catch(() => undefined)
+    try { await queued } catch (error) { modelEvidenceFailure ??= { error }; throw error }
+  }
   let previousBudget = restored.latestBudget
   const recordGatewayPrepared = async (
     task: MasterAgentTask,
@@ -2193,7 +2210,92 @@ export async function runDurableMasterAgentPlanV1(
       gatewayPreflightQueue = queued.catch(() => undefined)
       await queued
     },
+    async modelCallRequested(task, call) {
+      await queueModelEvidence(async () => {
+        if (modelEvidenceFailure) throw modelEvidenceFailure.error
+        const gateway = gatewayAttempts.get(task.id)
+        const stepId = taskStepId(task.id)
+        const step = snapshot.projection.steps[stepId]
+        const previous = modelCalls.get(task.id)
+        if (!activeTasks.has(task.id) || !gateway || step?.status !== 'running'
+          || call.callIndex !== (previous?.callIndex ?? 0) + 1
+          || previous?.completed === false) fail(`主 Agent 模型调用 ${task.id} 缺少原任务/attempt 或前次响应边界`)
+        const saved = await recordCreationModelRequestV1({
+          scope: input.scope, snapshot, stepId, attempt: step.attempt,
+          contextManifestHash: gateway.baseManifest.manifestHash, messages: call.messages,
+        })
+        snapshot = saved.snapshot
+        modelCalls.set(task.id, { callIndex: call.callIndex, request: saved.request, completed: false,
+          lastReturnedHash: previous?.lastReturnedHash ?? null })
+      })
+    },
+    async modelCallReturned(task, call) {
+      await queueModelEvidence(async () => {
+        if (modelEvidenceFailure) snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
+        const current = modelCalls.get(task.id)
+        if (!current || current.callIndex !== call.callIndex || current.completed) fail(`主 Agent 响应 ${task.id} 与实际请求不一致`)
+        snapshot = await recordCreationModelResponseV1({ snapshot, request: current.request, raw: call.raw, result: call.result })
+        const rawEvent = snapshot.events[snapshot.events.length - 1]
+        if (rawEvent?.type !== 'evidence.artifact.recorded' || rawEvent.payload.artifactKind !== 'raw-response') {
+          fail(`主 Agent 响应 ${task.id} 未形成原始响应工件`)
+        }
+        const outputHash = await hashCanonicalValue(call.raw)
+        const saved = await recordAgentRunArtifactV1({
+          scope: input.scope, runId: snapshot.run.id, stepId: current.request.stepId,
+          attempt: current.request.attempt, artifactKind: 'tool-result',
+          content: JSON.stringify({
+            version: 'master-model-call-v1', taskId: task.id, callIndex: call.callIndex,
+            purpose: call.callIndex === 1 ? 'generate' : 'repair', outcome: 'returned',
+            requestArtifactHash: current.request.artifactHash,
+            rawResponseArtifactHash: rawEvent.payload.contentHash,
+            outputHash,
+          }), expectedLastSequence: snapshot.projection.lastSequence, now: now(),
+        })
+        snapshot = saved.snapshot
+        current.lastReturnedHash = outputHash
+        current.completed = true
+      })
+    },
+    async modelCallUnavailable(task, call) {
+      await queueModelEvidence(async () => {
+        if (modelEvidenceFailure) snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
+        const current = modelCalls.get(task.id)
+        if (!current || current.callIndex !== call.callIndex || current.completed) fail(`主 Agent 未知响应 ${task.id} 与实际请求不一致`)
+        const saved = await recordUnavailableCreationResponseV1({ snapshot, request: current.request, result: call.result, error: call.error })
+        snapshot = saved.snapshot
+        if (saved.persistenceFailures.length) throw saved.report
+        const recorded = await recordAgentRunArtifactV1({
+          scope: input.scope, runId: snapshot.run.id, stepId: current.request.stepId,
+          attempt: current.request.attempt, artifactKind: 'tool-result',
+          content: JSON.stringify({
+            version: 'master-model-call-v1', taskId: task.id, callIndex: call.callIndex,
+            purpose: call.callIndex === 1 ? 'generate' : 'repair', outcome: 'unavailable',
+            requestArtifactHash: current.request.artifactHash, rawResponseArtifactHash: null,
+          }), expectedLastSequence: snapshot.projection.lastSequence, now: now(),
+        })
+        snapshot = recorded.snapshot
+        current.completed = true
+      })
+    },
     async taskFailed(task, error) {
+      const modelCall = modelCalls.get(task.id)
+      if (modelCall) {
+        if (modelCall.lastReturnedHash && !modelEvidenceFailure) await queueModelEvidence(async () => {
+          const step = snapshot.projection.steps[modelCall.request.stepId]
+          if (step?.status !== 'running' || snapshot.events.some(event => event.type === 'model.responded'
+            && event.payload.stepId === modelCall.request.stepId && event.payload.attempt === modelCall.request.attempt)) return
+          // Successful candidates keep the original Gateway output hash. A
+          // failure before candidateReady still acknowledges the actual saved
+          // response; it does not finalize a manifest or grant candidate status.
+          snapshot = await appendAgentRunEventV1({
+            scope: input.scope, runId: snapshot.run.id, type: 'model.responded',
+            payload: { stepId: modelCall.request.stepId, attempt: modelCall.request.attempt, outputHash: modelCall.lastReturnedHash! },
+            expectedLastSequence: snapshot.projection.lastSequence, now: now(),
+          })
+          await notify(input.onDurableBoundary, 'model.responded', snapshot)
+        })
+        return
+      }
       const failureEvidence = structuredOutputFailureEvidenceV1(error)
       if (!failureEvidence || !gatewayAttempts.has(task.id)) return
       const queued = gatewayPreflightQueue.then(async () => {
@@ -2663,8 +2765,13 @@ export async function runDurableMasterAgentPlanV1(
     const latest = await readAgentRunV1(input.scope, snapshot.run.id)
     snapshot = latest
     const failedTasks = [...activeTasks.values()]
-    const classified = await classifyAgentRunFailureV1(error)
-    if (input.signal?.aborted) {
+    let classified = await classifyAgentRunFailureV1(error)
+    if (modelEvidenceFailure) {
+      classified = { ...classified, code: 'model_evidence_persistence_failed', retryable: false,
+        category: 'unknown', action: 'pause-for-author',
+        fingerprint: await hashCanonicalValue({ version: 1, code: 'model_evidence_persistence_failed', originalFailureFingerprint: classified.fingerprint }) }
+    }
+    if (input.signal?.aborted && !modelEvidenceFailure) {
       for (const failedTask of failedTasks) {
         const stepId = taskStepId(failedTask.id)
         if (snapshot.projection.steps[stepId]?.status !== 'running') continue

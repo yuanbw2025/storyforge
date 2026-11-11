@@ -51,7 +51,7 @@ export function parseInspirationFragments(raw: string | undefined): InspirationF
         sourceKind,
         createdAt: Number.isFinite(item.createdAt) ? Number(item.createdAt) : Date.now(),
       }]
-    }).slice(-MAX_INSPIRATION_FRAGMENTS)
+    })
   } catch {
     return []
   }
@@ -120,7 +120,10 @@ export function upsertInspirationFragment(
   const duplicate = current.find(item =>
     item.text.replace(/\s+/g, '').toLocaleLowerCase() === normalized)
   if (duplicate) return current
-  return [...current, next].slice(-MAX_INSPIRATION_FRAGMENTS)
+  if (current.length >= MAX_INSPIRATION_FRAGMENTS) {
+    throw new Error(`素材库已达到 ${MAX_INSPIRATION_FRAGMENTS} 条上限；请先删除未被确认版本引用的片段。新输入和已有来源均已保留`)
+  }
+  return [...current, next]
 }
 
 export function createInspirationVersion(input: {
@@ -130,6 +133,10 @@ export function createInspirationVersion(input: {
   result: unknown
   now?: number
 }): InspirationVersion {
+  const fragmentIds = [...new Set(input.fragmentIds)]
+  if (fragmentIds.length > MAX_INSPIRATION_FRAGMENTS) {
+    throw new Error(`每个确认版本最多引用 ${MAX_INSPIRATION_FRAGMENTS} 个片段，请明确选择来源后重试`)
+  }
   const resultJson = JSON.stringify(input.result)
   if (resultJson.length > MAX_INSPIRATION_RESULT_CHARS) {
     throw new Error(`融合结果超过 ${MAX_INSPIRATION_RESULT_CHARS} 字符，未写入版本历史`)
@@ -138,7 +145,7 @@ export function createInspirationVersion(input: {
     id: createId('idea-version'),
     parentVersionId: input.parentVersionId ?? null,
     mode: input.mode,
-    fragmentIds: [...new Set(input.fragmentIds)].slice(0, MAX_INSPIRATION_FRAGMENTS),
+    fragmentIds,
     resultJson,
     createdAt: input.now ?? Date.now(),
   }

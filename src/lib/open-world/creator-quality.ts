@@ -1,3 +1,4 @@
+import { assertTextOpenWorldProductionNewWorkV1 } from './source-admission'
 import { db } from '../db/schema'
 import { readMediaBlobObjectData } from '../product-production/media-blob-store'
 import {
@@ -478,6 +479,7 @@ async function loadBuildAuthority(input: {
   productionId: number
   expectedBuildId?: number
 }): Promise<BuildAuthorityV1> {
+  input = structuredClone(input)
   const scope = await resolveScope({ scope: input.scope })
   const production = await db.productProductions.get(input.productionId)
   if (!production || production.id == null
@@ -1788,9 +1790,12 @@ export async function recordTextOpenWorldCreatorCalibrationV1(input: {
   runReview?: typeof runTextOpenWorldCreatorIndependentCalibrationReviewV1
   now?: () => number
 } = {}): Promise<TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorCalibrationEvidence>> {
+  input = { ...input, scope: structuredClone(input.scope) }
+  dependencies = { ...dependencies }
   const authority = await loadBuildAuthority({
     scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId,
   })
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
   const state = await calibrationReadiness(authority)
   if (!input.reuseReceiptHash && !state.readiness.ready) fail(state.readiness.issue ?? '独立校准尚未就绪')
   const { mainline, significant, regions, quests, director, scenes, contentBudget, semanticReview } = calibrationArtifacts(authority)
@@ -1937,7 +1942,9 @@ export async function recordTextOpenWorldCreatorGrayboxV1(input: {
   humanChecks: TextOpenWorldCreatorGrayboxHumanChecksV1
   authorNote: string
 }): Promise<TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorGrayboxEvidenceV1>> {
+  input = structuredClone(input)
   const authority = await loadBuildAuthority({ scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId })
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
   const sessionIds = [...new Set(input.sessionIds)]
   if (sessionIds.length !== input.sessionIds.length || sessionIds.length < 1 || sessionIds.length > 6
     || sessionIds.some(id => !Number.isInteger(id) || id < 1)) fail('灰盒Session选择无效')
@@ -2014,9 +2021,11 @@ export async function recordTextOpenWorldCreatorFullPlaytestV1(input: {
   }
   authorNote: string
 }): Promise<TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorFullPlaytestEvidenceV1>> {
+  input = structuredClone(input)
   const authority = await loadBuildAuthority({
     scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId,
   })
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
   const sessionIds = input.routes.map(route => route.sessionId)
   if (new Set(sessionIds).size !== sessionIds.length || sessionIds.length < 2 || sessionIds.length > 6
     || sessionIds.some(id => !Number.isInteger(id) || id < 1)) fail('完整试玩路线选择无效')
@@ -2146,9 +2155,11 @@ export async function recordTextOpenWorldCreatorUpdateVerificationV1(input: {
   humanChecks: TextOpenWorldCreatorUpdateVerificationHumanChecksV1
   authorNote: string
 }): Promise<TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorUpdateVerificationEvidenceV1>> {
+  input = structuredClone(input)
   const authority = await loadBuildAuthority({
     scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId,
   })
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
   if (authority.build.sourceProductReleaseId == null || authority.build.status !== 'released') {
     fail('只有已正式发布的Creator修复Build可以记录更新验证')
   }
@@ -2388,6 +2399,7 @@ export async function recordTextOpenWorldCreatorIssueV1(input: {
   sessionId?: number | null
   sourceTextExcluded: true
 }): Promise<TextOpenWorldCreatorIssueRecordV1> {
+  input = structuredClone(input)
   const authority = await loadBuildAuthority({ scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId })
   if (!['advisory', 'blocking'].includes(input.severity)
     || !TEXT_OPEN_WORLD_CREATOR_ISSUE_CATEGORIES_V1.includes(input.category)
@@ -2486,7 +2498,9 @@ export async function waiveTextOpenWorldCreatorAdvisoryIssueV1(input: {
   reason: string
   confirmation: 'author-accepts-advisory-risk'
 }): Promise<TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorIssueWaiverEvidenceV1>> {
+  input = structuredClone(input)
   const authority = await loadBuildAuthority({ scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId })
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
   const reason = boundedText(input.reason, 'reason', 2_000, 20)
   if (!isSha256Hash(input.issueReceiptHash) || input.confirmation !== 'author-accepts-advisory-risk') fail('问题回执Hash或确认无效')
   const issues = await readIssues(authority)
@@ -2532,7 +2546,9 @@ export async function finalizeTextOpenWorldCreatorQualityV1(input: {
   humanChecks: TextOpenWorldCreatorHumanQualityChecksV1
   authorNote: string
 }): Promise<TextOpenWorldCreatorQualityWorkspaceV1> {
+  input = structuredClone(input)
   const authority = await loadBuildAuthority({ scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId })
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
   if (authority.hardChecks.some(check => !check.passed)) fail('代码硬门未全部通过，不能豁免')
   if (authority.reviews.some(review => review.verdict !== 'pass'
     || review.findings.some(finding => finding.severity === 'blocking'))) fail('模型评审仍有阻断项，必须创建新Build修复')
@@ -2770,7 +2786,9 @@ export async function recordTextOpenWorldVisualReviewV1(input: {
   imagesActuallyViewed: true
   noAutomationProxy: true
 }) {
+  input = structuredClone(input)
   const authority = await loadBuildAuthority({ ...input, expectedBuildId: input.buildId })
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
   if (authority.build.status === 'released') fail('已发布 Build 的视觉确认保留原回执；需要变更请创建子 Build')
   const visual = await visualReviewInputs(authority)
   if (input.expectedAssetsHash !== visual.consistency.assetsHash || visual.consistency.issues.length > 0) {

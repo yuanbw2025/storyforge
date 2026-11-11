@@ -821,7 +821,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'narrativeBeats[speakerCharacterId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'comicVisualSubjects[characterId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'itemLedger[characterId]', onDelete: 'setNull' },
-      { kind: 'array', field: 'appearingCharacterIds', itemTarget: 'detailedOutlines', onDelete: 'removeItem' },
     ],
     exportRemap: [
       { field: 'homeWorldGroupId', remapVia: 'worldGroups', exportAs: '_homeWorldGroupExportId' },
@@ -1222,6 +1221,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'parentRunId', remapVia: 'agentRuns', selfTree: true, exportAs: '_parentExportId' },
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
       { field: 'conversationId', remapVia: 'agentConversations', exportAs: '_conversationExportId' },
+      { field: 'nodeRunId', remapVia: 'nodeRuns', exportAs: '_nodeRunExportId', onUnmapped: 'require' },
       { field: 'productRuntimeSessionId', remapVia: 'productRuntimeSessions',
         exportAs: '_productRuntimeSessionExportId' },
       { field: 'productBuildId', remapVia: 'productBuilds', exportAs: '_productBuildExportId' },
@@ -1231,6 +1231,10 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       contractField: 'contractJson',
       contractHashField: 'contractHash',
       dependencies: ['worldGroups', 'chapters', 'outlineNodes', 'productRuntimeSessions', 'productBuilds'],
+      retainedScopeTargets: [
+        { table: 'chapters', scopeField: 'chapterIds' },
+        { table: 'outlineNodes', scopeField: 'outlineNodeIds' },
+      ],
     },
     defaults: {
       status: 'planned',
@@ -1300,6 +1304,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.nodeRuns, name: 'nodeRuns', owner: 'project', exportable: true,
     domainOwner: WORK_DOMAIN_OWNER,
+    refs: [{ kind: 'simple', field: 'id', target: 'agentRuns[nodeRunId]', onDelete: 'setNull' }],
     exportRemap: [
       { field: 'flowId', remapVia: 'nodeFlows', exportAs: '_flowExportId', onUnmapped: 'require' },
     ],

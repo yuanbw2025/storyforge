@@ -29,9 +29,11 @@ const REPAIR_LABELS = {
 export default function CreativeArtifactSummary({
   artifact,
   narrativeBrief,
+  readOnly = false,
 }: {
   artifact: CreativeArtifactV1
   narrativeBrief?: NarrativeBriefV1
+  readOnly?: boolean
 }) {
   const view = STATUS_VIEW[artifact.status]
   const totalTokens = artifact.callEvidence.reduce(
@@ -53,7 +55,7 @@ export default function CreativeArtifactSummary({
       className={`mt-2 rounded border px-2.5 py-2 text-[10px] ${view.className}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <strong className="text-[11px]">{view.label}</strong>
+        <strong className="text-[11px]">{readOnly && artifact.status === 'ready' ? '已保存，仅供核对' : view.label}</strong>
         <span>
           {artifact.callEvidence.length} 次模型调用
           {tokenEvidenceComplete ? ` · ${totalTokens.toLocaleString()} tokens` : ' · token 用量不完整'}

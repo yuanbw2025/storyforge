@@ -1,3 +1,5 @@
+import type { AgentRunNodeProducerTupleV1 } from '../../types/agent-run'
+
 export class AgentRunSchemaError extends Error {
   readonly code: string
   readonly path: string
@@ -94,4 +96,25 @@ export function readHash(value: unknown, path: string): string {
     failSchema('invalid_hash', path, '必须是 64 位小写 SHA-256')
   }
   return value
+}
+
+/** Pure optional-row codec, shared by native creation/read and portable ledgers.
+ * This reads operational scalars only; it does not parse a Node graph or grant authority. */
+export function readAgentRunNodeProducerTupleV1(
+  row: Record<string, unknown>,
+  parentField = 'nodeRunId',
+  portable = false,
+): AgentRunNodeProducerTupleV1 | null {
+  const nodeId = row.nodeProducerNodeId
+  const variant = row.nodeProducerVariantIndex
+  const attempt = row.nodeProducerAttempt
+  const parent = row[parentField]
+  if (nodeId === undefined && variant === undefined && attempt === undefined && parent == null) return null
+  if (typeof nodeId !== 'string' || !nodeId.trim()
+    || !Number.isSafeInteger(variant) || (variant as number) < 0 || (variant as number) > 7
+    || attempt !== 1 || parent !== null && (!Number.isSafeInteger(parent) || (parent as number) < (portable ? 0 : 1))) {
+    failSchema('node_producer_tuple', 'nodeProducer', '节点生产关联必须包含完整原节点、版本、attempt 和可空父定位')
+  }
+  return { nodeRunId: parent as number | null, nodeProducerNodeId: nodeId,
+    nodeProducerVariantIndex: variant as number, nodeProducerAttempt: 1 }
 }
