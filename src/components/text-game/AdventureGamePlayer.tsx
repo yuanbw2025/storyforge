@@ -282,6 +282,24 @@ export default function AdventureGamePlayer(props: {
   ))
   const endingChoices = narrativeChoices.filter(choice => endingKeys.has(choice.targetNodeKey))
   const progressionChoices = narrativeChoices.filter(choice => !endingKeys.has(choice.targetNodeKey))
+  function renderNarrativeChoice(choice: (typeof narrativeChoices)[number]) {
+    const action = narrativeActionByChoice.get(choice.choiceKey)
+    const unavailable = action != null && !action.available
+    return (
+      <button
+        key={choice.choiceKey}
+        title={unavailable ? presentationText(action.reason) : undefined}
+        disabled={store.busy || narrativeReading || unavailable}
+        onClick={() => void run(() => store.choose(choice.choiceKey))}
+      >
+        <span>
+          {presentationText(choice.text)}
+          {unavailable && <small className="adventure-choice-reason">{presentationText(action.reason)}</small>}
+        </span>
+        <ChevronRight />
+      </button>
+    )
+  }
   const resolved = resolveRequestConfig(config, { category: 'runtime.prose.adventure-intent-parser' })
   const aiReady = isAIConfigReady(resolved.config)
   const generating = store.generatingRunId != null
@@ -707,8 +725,8 @@ export default function AdventureGamePlayer(props: {
           {!!store.recoverableRunIds.length && <details className="adventure-console-recovery"><summary>恢复未完成的主 Agent 行动</summary><p>候选已经保存在统一 Harness 中，可以从原检查点继续，不会重复调用模型。</p>{store.recoverableRunIds.map(runId => <button key={runId} disabled={store.busy || generating} onClick={() => void run(() => store.resumeRun(runId))}>恢复行动 #{runId}</button>)}</details>}
         </section>
 
-        {!!progressionChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>{progressionChoices.some(choice => narrativeActionByChoice.get(choice.choiceKey)?.available !== false) ? '选择接下来的行动' : '先完成现场探索，继续故事'}</small>{progressionChoices.map(choice => { const action = narrativeActionByChoice.get(choice.choiceKey); return <button key={choice.choiceKey} title={action && !action.available ? presentationText(action.reason) : undefined} disabled={store.busy || narrativeReading || (action != null && !action.available)} onClick={() => void run(() => store.choose(choice.choiceKey))}><span>{presentationText(choice.text)}{action && !action.available && <small className="adventure-choice-reason">{presentationText(action.reason)}</small>}</span><ChevronRight /></button> })}</section>}
-        {!!endingChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>{endingChoices.some(choice => narrativeActionByChoice.get(choice.choiceKey)?.available !== false) ? '最终抉择已经解锁' : '先完成现场探索，再作最终抉择'}</small>{endingChoices.map(choice => { const action = narrativeActionByChoice.get(choice.choiceKey); return <button key={choice.choiceKey} title={action && !action.available ? presentationText(action.reason) : undefined} disabled={store.busy || narrativeReading || (action != null && !action.available)} onClick={() => void run(() => store.choose(choice.choiceKey))}><span>{presentationText(choice.text)}{action && !action.available && <small className="adventure-choice-reason">{presentationText(action.reason)}</small>}</span><ChevronRight /></button> })}</section>}
+        {!!progressionChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>{progressionChoices.some(choice => narrativeActionByChoice.get(choice.choiceKey)?.available !== false) ? '选择接下来的行动' : '先完成现场探索，继续故事'}</small>{progressionChoices.map(renderNarrativeChoice)}</section>}
+        {!!endingChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>{endingChoices.some(choice => narrativeActionByChoice.get(choice.choiceKey)?.available !== false) ? '最终抉择已经解锁' : '先完成现场探索，再作最终抉择'}</small>{endingChoices.map(renderNarrativeChoice)}</section>}
         {store.runtimeState.narrative?.completed && <section className="adventure-console-ending"><BookOpenCheck /><div><small>冒险结束</small><h2>{store.runtimeState.narrative.nodes.find(item => item.key === store.runtimeState.narrative?.endingKey)?.title}</h2><p>这条时间线已经完整保存。你可以回顾关键决定，或从检查点探索另一种结果。</p></div><span><button onClick={() => setPanel('ending')}><BookOpenCheck />结局因果</button><button onClick={() => setPanel('saves')}><GitBranch />查看时间线</button></span></section>}
 
         {!store.runtimeState.narrative?.completed && <section className={`adventure-command-center${narrativeReading ? ' is-reading' : ''}`} aria-label="冒险指令台" aria-busy={narrativeReading}>
