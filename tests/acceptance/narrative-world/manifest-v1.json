@@ -21,9 +21,15 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality051-node-resume-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality044-private-reference-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality051-node-resume-v1.json",
+        "implementationCommit": "b92975c6fcfafe17bcd800a811ebde9d01e805d7",
+        "workPackage": "NW-0B",
+        "note": "Preserved the previous frozen receipt before the reference execution backup boundary changed."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
         "implementationCommit": "bc18dc8466f2e6661b6ce9a17131981f41992844",
@@ -976,7 +982,10 @@
     "tests/regression/R-NW-2E-byte-sink.test.ts",
     "tests/regression/R-NW-2E-numeric-runs.test.ts",
     "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
-    "src/lib/types/state-card.ts"
+    "src/lib/types/state-card.ts",
+    "src/lib/agent/run/ledger-portability.ts",
+    "src/lib/import/document-parse-backup-privacy.ts",
+    "src/lib/import/document-parse-binding.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

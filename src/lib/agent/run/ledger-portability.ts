@@ -6,7 +6,9 @@ import type {
   AgentRunEventRecord,
   AgentRunRecord,
   AnyAgentRunEventV1,
+  ImportSession,
 } from '../../types'
+import { assertPortableDocumentImportOriginV1, identifyPrivateReferenceRunsV1 } from '../../import/document-parse-backup-privacy'
 import type { TableSpec } from '../../registry/types'
 import { extractExactArtifactOwnerRootsV1 } from '../../memory/artifact-roots'
 import type { ProjectExportData } from '../../export/json-export'
@@ -233,22 +235,14 @@ async function portableGenerationHashes(input: {
   return hashes
 }
 
-const PRIVATE_REFERENCE_FORMAL_ENTRY = 'reference.analysis.private-chunk'
-
-/** The registered reference source is local only. Its execution ledger and
- * exact evidence must also remain local, with no mutation of original rows. */
-export function excludePrivateReferenceExecutionFromBackupV1(
-  rows: Map<string, ExportRow[]>, specs: readonly TableSpec[],
-): void {
+/** The registered reference source, private execution ledger and exact evidence remain local.
+ * All pruning and ordinary import proofs apply only to detached backup rows. */
+export async function excludePrivateReferenceExecutionFromBackupV1(
+  rows: Map<string, ExportRow[]>, specs: readonly TableSpec[], readImportSessions: () => Promise<ImportSession[]>,
+): Promise<void> {
   const root = specs.find(spec => spec.portableData?.kind === 'agent-run-root')
   if (!root || root.portableData?.kind !== 'agent-run-root') return
-  const contractField = root.portableData.contractField
-  const privateIds = new Set((rows.get(root.name) ?? []).filter(row => {
-    if (typeof row[contractField] !== 'string') return false
-    const value = JSON.parse(row[contractField])
-    return Array.isArray(value?.executionBindings)
-      && value.executionBindings.some((binding: ExportRow) => binding?.formalEntry?.entryId === PRIVATE_REFERENCE_FORMAL_ENTRY)
-  }).map(row => row.id))
+  const privateIds = await identifyPrivateReferenceRunsV1(rows.get(root.name) ?? [], root.portableData.contractField, readImportSessions)
   if (!privateIds.size) return
   const children = specs.filter(spec => spec.portableData?.kind === 'agent-run-child'
     && spec.exportRemap?.some(ref => ref.remapVia === root.name))
@@ -270,7 +264,7 @@ export function excludePrivateReferenceExecutionFromBackupV1(
     }
   }
   const at = (value: unknown, path: string[]): boolean => {
-    if (!path.length) return privateIds.has(value)
+    if (!path.length) return typeof value === 'number' && privateIds.has(value)
     if (!value || typeof value !== 'object') return false
     const [key, ...rest] = path
     if (key === '*') return Object.values(value).some(child => at(child, rest))
@@ -545,6 +539,9 @@ export async function finalizeImportedAgentRunLedgersV1(input: {
   for (const runId of input.runIds) {
     const run = await db.agentRuns.get(runId)
     if (!run || run.id == null) fail(`导入 run ${runId} 不存在`)
+    if (run.portableDocumentImportOriginJson !== undefined) {
+      await Dexie.waitFor(assertPortableDocumentImportOriginV1(run, JSON.parse(run.contractJson)))
+    }
     if (run.portableWorldContextBindingsJson !== undefined) {
       await Dexie.waitFor((async () => {
         const { assertPortableWorldContextBindingsV1 } = await import('../../product/world-context-portability')

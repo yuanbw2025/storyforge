@@ -1,0 +1,69 @@
+{
+  "producer": "e5bed6db324a29cdaf8ed78f1e75dd621b70cd52",
+  "records": [
+    {
+      "run": {
+        "id": 1,
+        "projectId": 1,
+        "workId": 1,
+        "worldGroupId": null,
+        "contractJson": "{\"acceptance\":[{\"id\":\"document-import.candidate\",\"kind\":\"output-present\",\"required\":true},{\"id\":\"document-import.author\",\"kind\":\"author-confirmed\",\"required\":true}],\"budget\":{\"maxAttemptsPerStep\":1,\"maxInputTokens\":100000,\"maxModelCalls\":1,\"maxOutputTokens\":16384,\"maxToolCalls\":0},\"executionBindings\":[{\"formalEntry\":{\"bindingHash\":\"d06b4126193876b833b40ec12b709c23781ac60643e2b2d1dac90ab826cd4794\",\"bindingJson\":\"{\\\"adoptAllowed\\\":false,\\\"adoptionTargets\\\":[],\\\"allowedCallers\\\":[\\\"src/lib/import/document-parse-durable.ts\\\"],\\\"candidateKind\\\":\\\"document-import-chunk-candidate\\\",\\\"categories\\\":[\\\"import.parse-chunk\\\"],\\\"entryId\\\":\\\"import.document-chunk.parse\\\",\\\"entryKind\\\":\\\"formal\\\",\\\"executionBoundary\\\":\\\"durable-run\\\",\\\"reason\\\":\\\"仅从冻结分块生成可编辑候选并保存原始证据；没有正式写入或自动重发权限。\\\",\\\"runContractBuilderId\\\":\\\"document-import-chunk-durable\\\",\\\"skillId\\\":\\\"inspiration.document-import-parse\\\"}\",\"entryId\":\"import.document-chunk.parse\",\"version\":1},\"promptVersion\":\"document-import-parse-v2\",\"skillId\":\"inspiration.document-import-parse\",\"skillVersion\":1,\"stepId\":\"document-import.parse\",\"toolSchemaHash\":\"78723a81dfb12f89ca7ab15e579fa4056508eec8694834f557ace62753d419d0\",\"toolSchemaVersion\":\"agent-read-tools-v21-narrative-query-v1\",\"version\":1}],\"failurePolicy\":{\"onProtocolError\":\"fail\",\"onStaleInput\":\"pause-for-author\",\"onVerificationFailure\":\"fail\"},\"objective\":\"从已确认的原文分块提取候选\",\"permissions\":{\"contextSourceKeys\":[\"manualText\",\"documentImportCodexCategories\"],\"writeTargets\":[]},\"runtimeBindingHash\":\"e00d308d7bcb4d82a0cc9095d548f14037c3ffb57bdacb4b3936d66d0b89026c\",\"scope\":{\"projectId\":1,\"worldGroupId\":null},\"verificationPlan\":[{\"criterionIds\":[\"document-import.candidate\",\"document-import.author\"],\"id\":\"document-import.terminal\",\"kind\":\"terminal\",\"verifier\":\"document-import-terminal-v1\"}],\"version\":1,\"workflowKind\":\"direct-generation\"}",
+        "contractHash": "9c9de15af72bbd94a00c7bcc1b2cb7cfde03f4c697f399cac0faf09a956ed0bd"
+      },
+      "session": {
+        "id": 1,
+        "projectId": 1,
+        "targetScope": {
+          "projectId": 1,
+          "worldId": 1,
+          "workId": 1
+        },
+        "importTarget": "project",
+        "targetWorldGroupId": null,
+        "fileHash": "e3d02c88ae6247df-p",
+        "chunks": [
+          {
+            "index": 0,
+            "sourceTextHash": "f3a1fabf29cfa672ba3bd10492130d8e58e74ae7f067b4aba5a7eb7849be3730",
+            "durableParse": {
+              "claimKey": "b199dc3b-c406-499f-bef4-b4179eef8054",
+              "runId": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "id": 2,
+        "projectId": 2,
+        "workId": 2,
+        "worldGroupId": null,
+        "contractJson": "{\"acceptance\":[{\"id\":\"document-import.candidate\",\"kind\":\"output-present\",\"required\":true},{\"id\":\"document-import.author\",\"kind\":\"author-confirmed\",\"required\":true}],\"budget\":{\"maxAttemptsPerStep\":1,\"maxInputTokens\":100000,\"maxModelCalls\":1,\"maxOutputTokens\":16384,\"maxToolCalls\":0},\"executionBindings\":[{\"formalEntry\":{\"bindingHash\":\"d06b4126193876b833b40ec12b709c23781ac60643e2b2d1dac90ab826cd4794\",\"bindingJson\":\"{\\\"adoptAllowed\\\":false,\\\"adoptionTargets\\\":[],\\\"allowedCallers\\\":[\\\"src/lib/import/document-parse-durable.ts\\\"],\\\"candidateKind\\\":\\\"document-import-chunk-candidate\\\",\\\"categories\\\":[\\\"import.parse-chunk\\\"],\\\"entryId\\\":\\\"import.document-chunk.parse\\\",\\\"entryKind\\\":\\\"formal\\\",\\\"executionBoundary\\\":\\\"durable-run\\\",\\\"reason\\\":\\\"仅从冻结分块生成可编辑候选并保存原始证据；没有正式写入或自动重发权限。\\\",\\\"runContractBuilderId\\\":\\\"document-import-chunk-durable\\\",\\\"skillId\\\":\\\"inspiration.document-import-parse\\\"}\",\"entryId\":\"import.document-chunk.parse\",\"version\":1},\"promptVersion\":\"document-import-parse-v2\",\"skillId\":\"inspiration.document-import-parse\",\"skillVersion\":1,\"stepId\":\"document-import.parse\",\"toolSchemaHash\":\"78723a81dfb12f89ca7ab15e579fa4056508eec8694834f557ace62753d419d0\",\"toolSchemaVersion\":\"agent-read-tools-v21-narrative-query-v1\",\"version\":1}],\"failurePolicy\":{\"onProtocolError\":\"fail\",\"onStaleInput\":\"pause-for-author\",\"onVerificationFailure\":\"fail\"},\"objective\":\"从已确认的原文分块提取候选\",\"permissions\":{\"contextSourceKeys\":[\"manualText\"],\"writeTargets\":[]},\"runtimeBindingHash\":\"ea39f490918c105e8b236b34b049852c9eb90a156258e42f19415a001fbcdeff\",\"scope\":{\"projectId\":2,\"worldGroupId\":null},\"verificationPlan\":[{\"criterionIds\":[\"document-import.candidate\",\"document-import.author\"],\"id\":\"document-import.terminal\",\"kind\":\"terminal\",\"verifier\":\"document-import-terminal-v1\"}],\"version\":1,\"workflowKind\":\"direct-generation\"}",
+        "contractHash": "e0286f13f273871c070f7638b15fc5a81d9b8ee20d64dc8da7315a726a0f2df3"
+      },
+      "session": {
+        "id": 2,
+        "projectId": 2,
+        "targetScope": {
+          "projectId": 2,
+          "worldId": 2,
+          "workId": 2
+        },
+        "importTarget": "reference",
+        "targetWorldGroupId": null,
+        "fileHash": "e3d02c88ae6247df-p",
+        "chunks": [
+          {
+            "index": 0,
+            "sourceTextHash": "f3a1fabf29cfa672ba3bd10492130d8e58e74ae7f067b4aba5a7eb7849be3730",
+            "durableParse": {
+              "claimKey": "eba37101-7465-4ede-bf20-d87aa6158af9",
+              "runId": 2
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
