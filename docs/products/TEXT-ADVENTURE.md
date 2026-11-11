@@ -62,5 +62,5 @@
 - 生产 DAG 与执行器：`src/lib/product-production/plan.ts`、`src/lib/product-production/production-executor.ts`
 - RuntimePackage 边界：`src/lib/product-production/runtime-package.ts`
 - 运行组合根：`src/lib/product/runtime-product-adapters.ts`、`src/lib/product/runtime-instances.ts`
-- 作者工作台：`src/components/product/ProductProductionStudio.tsx`、`src/components/text-game/TextAdventureProductionWizard.tsx`
+- 作者工作台：`src/components/product/ProductProductionStudio.tsx`、`src/components/text-game/TextAdventureProductionWizard.tsx`。逐图审查及已校验原图的展示位于 `src/components/product/TextAdventureMediaReview.tsx`。上传、返修、作者确认和发布仍经工作台的生产命令完成。
 - 玩家入口：`src/stores/adventure-game-player.ts`、`src/components/text-game/AdventureGamePlayer.tsx`

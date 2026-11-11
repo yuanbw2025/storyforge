@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality011-production-review-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -676,6 +676,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261110-issue179-main834-v1.json",
         "workPackage": "owned-fixes-before-diagnostic-integration",
         "note": "Preserved measured Issue179/main834 receipt before precise shared fixture types and diagnostic/relay aggregation; semantic observations unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+        "workPackage": "sfqa011-production-dispatch-review",
+        "note": "Preserve the measured baseline before extracting production recovery evidence, three adventure design artifacts and the author image review display."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -725,6 +730,7 @@
     "src/components/facts/NarrativeAnnotationPanel.tsx",
     "src/components/longform/LongformWorlds.tsx",
     "src/components/product/ProductProductionStudio.tsx",
+    "src/components/product/TextAdventureMediaReview.tsx",
     "src/components/product/WorldSharingPanel.tsx",
     "src/components/world-engine/NarrativeCompilationPanel.tsx",
     "src/lib/agent/context-gateway-tools.ts",
@@ -761,8 +767,10 @@
     "src/lib/narrative-domain/visibility.ts",
     "src/lib/open-world/player-save-migration.ts",
     "src/lib/product-production/commands.ts",
+    "src/lib/product-production/recovery-policy.ts",
     "src/lib/product-production/preview-source.ts",
     "src/lib/product-production/production-executor.ts",
+    "src/lib/adventure/production-artifacts-v2.ts",
     "src/lib/product-production/service.ts",
     "src/lib/product-production/source-contracts.ts",
     "src/lib/product-production/world-source.ts",
