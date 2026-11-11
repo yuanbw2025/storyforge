@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-source-foundation-nw1b-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-source-foundation-ir-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-source-foundation-nw1b-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Previous active NW-1B foundation receipt retained unchanged; superseded only by the pointer to the IR-correction receipt."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-source-foundation-v2.json",
         "workPackage": "NW-0B",
