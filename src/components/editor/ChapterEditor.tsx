@@ -53,6 +53,7 @@ import {
   plainTextToHtml,
 } from '../../lib/utils/html'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import ChapterPostAdoptionSettingsPanel from './ChapterPostAdoptionSettingsPanel'
 import ContextBudgetBar from '../shared/ContextBudgetBar'
 import { useDialog } from '../shared/Dialog'
 import { useReviewResultStore } from '../../stores/review-result'
@@ -2940,10 +2941,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       return
     }
 
-    if (aiAction === 'continue') {
-      editorRef.current.appendContent(html)
-    } else if (aiAction === 'generate' || aiAction === 'deai-full') {
-      // generate / 整章去AI味 / 按报告修改：替换全文
+    if (aiAction === 'deai-full') {
+      // 整章去 AI 味：替换全文。
       editorRef.current.setContent(html)
       // setContent 不触发 onChange，这里手动同步
       const newHtml = editorRef.current.getHTML()
@@ -2954,27 +2953,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
     setProseGenerationError('')
     ai.reset()
-
-    // 先把完整正文落库，再启动带 hash CAS 的异步后处理。
-    if (shouldAutoProcess) {
-      const fullHtml = editorRef.current.getHTML()
-      const fullText = editorRef.current.getPlainText()
-      await updateChapter(acceptedChapterId, {
-        content: fullHtml,
-        wordCount: countWords(fullText),
-      })
-      setContent(fullHtml)
-      setPlainText(fullText)
-      setSavedContent(fullHtml)
-      void preparePostAdoptionAfterCommit({
-        chapterId: acceptedChapterId,
-        chapterTitle: acceptedChapterTitle,
-        chapterContent: fullHtml,
-        chapterPlainText: fullText,
-      }).catch(error => {
-        setTransitionError(error instanceof Error ? error.message : '章节后处理启动失败')
-      })
-    }
   }
 
   const handleDismissAI = async () => {
@@ -3434,85 +3412,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       )}
 
       {postAdoptionSettings && (
-        <details className="mb-3 rounded-lg border border-border bg-bg-surface p-3 text-xs text-text-secondary">
-          <summary className="cursor-pointer font-medium text-text-primary">正文采纳后的演化策略</summary>
-          <div className="mt-3 space-y-3">
-            <label className="flex flex-wrap items-center gap-2">
-              <span>运行方式</span>
-              <select
-                value={postAdoptionSettings.policy}
-                onChange={event => void persistPostAdoptionSettings({
-                  ...postAdoptionSettings,
-                  policy: event.target.value as ResolvedPostAdoptionSettingsV1['policy'],
-                })}
-                className="rounded border border-border bg-bg-base px-2 py-1 text-text-primary"
-              >
-                <option value="off">关闭（只做本地失效标记）</option>
-                <option value="suggest">建议（默认，确认后运行）</option>
-                <option value="auto-with-budget">预算内自动运行</option>
-              </select>
-            </label>
-            <div className="flex flex-wrap gap-3">
-              {(['organization', 'memory', 'retrieval', 'consistency'] as const).map(taskType => (
-                <label key={taskType} className="inline-flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={postAdoptionSettings.taskTypes.includes(taskType)}
-                    onChange={event => void persistPostAdoptionSettings({
-                      ...postAdoptionSettings,
-                      taskTypes: event.target.checked
-                        ? [...postAdoptionSettings.taskTypes, taskType]
-                        : postAdoptionSettings.taskTypes.filter(item => item !== taskType),
-                    })}
-                    className="accent-accent"
-                  />
-                  {taskType === 'organization' ? '七域候选'
-                    : taskType === 'memory' ? '章节记忆'
-                      : taskType === 'retrieval' ? '检索重建'
-                        : '一致性守卫'}
-                </label>
-              ))}
-            </div>
-            {postAdoptionSettings.policy === 'auto-with-budget' && (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {([
-                  ['maxModelCalls', '调用上限', 1],
-                  ['maxInputTokens', '输入 token', 1000],
-                  ['maxOutputTokens', '输出 token', 1000],
-                  ['maxCostUsd', '费用上限 USD', 0.01],
-                ] as const).map(([key, label, step]) => (
-                  <label key={key} className="space-y-1">
-                    <span className="block text-text-muted">{label}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step={step}
-                      defaultValue={postAdoptionSettings.budget[key]}
-                      onBlur={event => void persistPostAdoptionSettings({
-                        ...postAdoptionSettings,
-                        budget: { ...postAdoptionSettings.budget, [key]: Number(event.target.value) },
-                      })}
-                      className="w-full rounded border border-border bg-bg-base px-2 py-1 text-text-primary"
-                    />
-                  </label>
-                ))}
-                <label className="col-span-2 inline-flex items-center gap-2 sm:col-span-4">
-                  <input
-                    type="checkbox"
-                    checked={postAdoptionSettings.budget.allowUnknownCost}
-                    onChange={event => void persistPostAdoptionSettings({
-                      ...postAdoptionSettings,
-                      budget: { ...postAdoptionSettings.budget, allowUnknownCost: event.target.checked },
-                    })}
-                    className="accent-accent"
-                  />
-                  允许免费或尚无可信价格表的模型在其它预算通过时自动运行
-                </label>
-              </div>
-            )}
-            <p className="text-text-muted">检索依赖章节记忆，一致性守卫依赖检索；保存时会自动补齐必要前置任务。</p>
-          </div>
-        </details>
+        <ChapterPostAdoptionSettingsPanel
+          settings={postAdoptionSettings}
+          onPersist={persistPostAdoptionSettings}
+        />
       )}
 
       {/* Phase A1/A3: 自动后处理状态指示 */}
