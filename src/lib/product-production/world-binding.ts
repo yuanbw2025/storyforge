@@ -36,5 +36,6 @@ export async function readProductProductionBuildWorldScopeV1(input: {
     || sourcePlan.worldReference.localReleaseRecordId !== row.sourceWorldReleaseId) {
     throw new Error('[product-production-source] Brief/SourcePlan 本地世界引用不一致')
   }
-  return resolveProductProductionWorldScopeV1({ ...input, sourcePlan })
+  const worldScope = await resolveProductProductionWorldScopeV1({ ...input, sourcePlan })
+  return { ...worldScope, sourcePlan }
 }
