@@ -32,7 +32,7 @@ export function isFSASupported(): boolean {
   return typeof window !== 'undefined' && 'showDirectoryPicker' in window
 }
 
-/** 弹出系统选择框让用户挑一个文件夹（readwrite）。取消返回 null。 */
+/** 弹出系统选择框让用户挑一个文件夹（readwrite）。取消返回 null，其它失败交由入口提示。 */
 export async function pickFolder(options: PickFolderOptions = {}): Promise<FileSystemDirectoryHandle | null> {
   const picker = (window as WindowWithFSA).showDirectoryPicker
   if (!picker) return null
@@ -40,8 +40,8 @@ export async function pickFolder(options: PickFolderOptions = {}): Promise<FileS
     return await picker({ mode: 'readwrite', ...options })
   } catch (err) {
     const e = err as { name?: string }
-    if (e?.name !== 'AbortError') console.error('[folder] 选择目录失败:', err)
-    return null
+    if (e?.name === 'AbortError') return null
+    throw err
   }
 }
 
