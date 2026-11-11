@@ -47348,21 +47348,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-COMIC1-complete-workflow.test.ts\",\"TS18047\",\"'importedBlob.data' is possibly 'null'.\",\"b2c4a5fdc08c76ff164338e0f1585691c662d7776c7889a4c84b6ce704feb559\",12,18]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-COMIC1-complete-workflow.test.ts",
-        "code": "TS18047",
-        "message": "'importedBlob.data' is possibly 'null'.",
-        "anchor": "b2c4a5fdc08c76ff164338e0f1585691c662d7776c7889a4c84b6ce704feb559",
-        "line": 236,
-        "column": 12,
-        "start": 19105,
-        "length": 18
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-COMIC1-complete-workflow.test.ts\",\"TS2339\",\"Property 'workId' does not exist on type 'Chapter'.\",\"9e34ac278cf722223d348d7cdf154505cfe3c2373df9c13a26fcb1878701c242\",105,6]",
       "count": 1,
       "diagnostic": {
