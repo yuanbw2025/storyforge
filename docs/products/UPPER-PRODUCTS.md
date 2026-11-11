@@ -460,7 +460,7 @@ ProductRelease、可搬运游戏包、工作区安装记录和社区/市场条�
 
 《盐脊：断流之夜》是 `text-open-world` 产品的内置纵向展示作品，不新增产品身份，也不替代作者从冻结 WorldRelease 开始的正式 AI 生产链（小说须先显式派生世界草稿、作者确认和封存）。它复用当前文字开放世界玩家、Action/Effect/Event、ProductRelease 和存档体系，用一段可完整通关的小型内容证明产品主路径，而不冒充 G7 规划中的 3—5 小时完整验收体量。
 
-- 入口：首页与文字开放世界产品页 → `/play/salt-ridge` → 明确“安装并开始”。介绍页只读；只有开始按钮创建本地内容。
+- 入口：首页与文字开放世界产品页 → `/play/salt-ridge` → 明确“安装并开始”。介绍页只读；只有开始按钮创建本地内容。生产域名的公开安装按本次核实的内置作品、冻结来源和确定性任务放行。普通作者制作仍须通过产品目录准入。
 - S1：`salt-ridge-preset` 在稳定独立工作区安装 7 名来源角色、10 个地点、世界规则与 3 条故事弧，然后冻结 WorldRelease；重入按稳定工作区身份和已有 Release 复用，不覆盖来源。
 - S2/S3：内置 Brief 与 SourcePlan 仍从真实 WorldRelease 选择生成；确定性两任务生产计划把已校验的 Salt Ridge vNext 内容编译为共享 ProductRuntimePackage，经过 scheduler 和质量闸门后原子发布正式 ProductRelease。没有模型调用、外部 provider 或隐藏费用。
 - 所有权：世界只保存盐脊语义来源；任务、战斗、物品、制作、经济、关系、导演、双结局、会话和检查点全部属于文字开放世界产品。

@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality307-product-entry-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality307-salt-ridge-install-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality307-product-entry-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the previous product entry receipt before verifying the fixed public Salt Ridge installation."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
         "workPackage": "NW-0B",
