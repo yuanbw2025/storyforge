@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality042-raster-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -676,6 +676,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261110-issue179-main834-v1.json",
         "workPackage": "owned-fixes-before-diagnostic-integration",
         "note": "Preserved measured Issue179/main834 receipt before precise shared fixture types and diagnostic/relay aggregation; semantic observations unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the measured aggregate baseline before adding the comic and motion-drama raster verification inputs."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -752,6 +757,8 @@
     "src/lib/db/schema.ts",
     "src/lib/export/registry-export.ts",
     "src/lib/export/registry-import.ts",
+    "src/lib/media/blob-store.ts",
+    "src/lib/media/raster-image.ts",
     "src/lib/narrative-domain/codec.ts",
     "src/lib/narrative-domain/integrity.ts",
     "src/lib/narrative-domain/json.ts",
@@ -884,6 +891,7 @@
     "tests/helpers/narrative-scale-fixture.ts",
     "tests/helpers/narrative-scale-v2-fixture.ts",
     "tests/helpers/narrative-world-evaluation.ts",
+    "tests/helpers/raster-decoder-vitest.ts",
     "tests/regression/R-AGENT1-read-tool-registry.test.ts",
     "tests/regression/R-CTXG1-contract-provider-version.test.ts",
     "tests/regression/R-CTXG7-gateway-execution.test.ts",
