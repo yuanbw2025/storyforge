@@ -21,9 +21,21 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality051-node-resume-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261111-quality022-formal-import-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality044-private-reference-v1.json",
+        "implementationCommit": "1f60bb587d086f82a5a576e22b843693914b6ea1",
+        "workPackage": "NW-0B",
+        "note": "Preserved the reference privacy receipt before the actual document-import candidate and author-adoption integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality051-node-resume-v1.json",
+        "implementationCommit": "b92975c6fcfafe17bcd800a811ebde9d01e805d7",
+        "workPackage": "NW-0B",
+        "note": "Preserved the previous frozen receipt before the reference execution backup boundary changed."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
         "implementationCommit": "bc18dc8466f2e6661b6ce9a17131981f41992844",
@@ -976,7 +988,19 @@
     "tests/regression/R-NW-2E-byte-sink.test.ts",
     "tests/regression/R-NW-2E-numeric-runs.test.ts",
     "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
-    "src/lib/types/state-card.ts"
+    "src/lib/types/state-card.ts",
+    "src/lib/agent/run/ledger-portability.ts",
+    "src/lib/import/document-parse-backup-privacy.ts",
+    "src/lib/import/document-parse-binding.ts",
+    "src/lib/import/document-parse-durable.ts",
+    "src/lib/import/document-parse-adoption.ts",
+    "src/lib/import/pipeline.ts",
+    "src/lib/registry/adopt.ts",
+    "src/lib/registry/context-sources.ts",
+    "src/lib/agent/ai-entry-registry.json",
+    "src/lib/agent/skill-registry.ts",
+    "src/stores/import-session.ts",
+    "src/lib/types/import-session.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

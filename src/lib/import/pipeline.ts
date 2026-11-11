@@ -1,76 +1,35 @@
-/**
- * 大文档分块导入流水线（Phase 18）
- *
- * 设计目标：让百万字～千万字小说也能稳定解析入库，并保证：
- *   · 每块即时写库（标签切走、刷新页面、断电都不丢已解析数据）
- *   · 明确的服务繁忙至多尝试 3 次；解析、授权和结果未知时停止，保留手动重试
- *   · 支持暂停 / 恢复 / 取消
- *   · 状态、进度、日志全程通过 useImportStatusStore 暴露给 UI
- *   · 每 N 块 + 终末跑一次 AI 跨块角色合并，避免"一个人多个名"
- *
- * 严格串行（用户授权："慢点就慢点，保证不断就行"）。
- *
- * 本文件只负责"总控流"：
- *   · 持久化到单块 DB（chunk-writer.ts）
- *   · 结果累积 / 规范化 / 报告（unified-merge.ts）
- *   · AbortSignal 包装的 chat（chat-with-abort.ts）
- *   · AI 跨块角色合并（character-merge.ts）
- */
-
-import { renderPrompt } from '../ai/prompt-engine'
-import { usePromptStore } from '../../stores/prompt'
-import { useAIConfigStore } from '../../stores/ai-config'
-import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
-import { ImportSessionUnavailableError, useImportSessionStore } from '../../stores/import-session'
+/** File admission and explicit progress for the author-confirmed import. */
+import {
+  cancelImportSessionInScopeV1, claimImportedReferenceAnalysisInTransactionV1, importedReferenceAnalysisStartTablesV1, hashImportChunkTextV1, ImportSessionAuthorityError, ImportSessionUnavailableError,
+  readImportSessionAuthorityV1, verifyImportProjectTargetGroupV1, useImportSessionStore,
+} from '../../stores/import-session'
 import { useImportStatusStore } from '../../stores/import-status'
-import { extractJSON, IMPORT_MAX_TOKENS } from '../ai/adapters/import-adapter'
-import type { UnifiedParseResult } from '../types'
-import type { AIConfig } from '../types'
-import { AIError } from '../types'
-import { resolveRequestConfig, type ChatResult } from '../ai/client'
-import type { ImportSession, ChunkState } from '../types'
+import type { ImportSession } from '../types'
 import {
   registerChunkTexts as _registerChunkTexts,
   hasChunkTexts as _hasChunkTexts,
   clearChunkTexts as _clearChunkTexts,
   getChunkText,
 } from './chunk-text-registry'
-import {
-  mergeUnified, buildRollingContext, normalizeUnified, buildFinalReport,
-} from './unified-merge'
 import { applyChunkResult, type ApplyChunkCounts } from './chunk-writer'
-import { useReferenceStore } from '../../stores/reference'
+import { createDocumentImportChunkCandidateV1, readDocumentImportChunkEvidenceV1 } from './document-parse-durable'
+import { importedReferenceDataV1, useReferenceStore } from '../../stores/reference'
 import {
   writeShallowAnalysisFromTechniques,
   registerRefChunks,
   runRefAnalysis,
 } from '../reference-analysis/pipeline'
-import { createReferenceAnalysisRun } from '../reference-analysis/lifecycle'
-import { chatWithAbort } from './chat-with-abort'
+import { createReferenceAnalysisRun, listReferenceAnalysisRuns, type ReferenceAnalysisFirstStartGuardV1 } from '../reference-analysis/lifecycle'
 import { runCharacterMerge } from './character-merge'
-import {
-  formatCodexImportCatalog,
-  loadCodexImportCategoryOptions,
-  type CodexImportCategoryOption,
-} from './codex-classification'
 
 // 保留原有 API：UI / 其他模块一直从 pipeline 引入这三个函数。
 export const registerChunkTexts = _registerChunkTexts
 export const hasChunkTexts = _hasChunkTexts
 export const clearChunkTexts = _clearChunkTexts
 
-/** 跨块合并的触发周期 */
-const MERGE_EVERY_N = 10
-
-/** 单块最大重试次数（用户已批准 3 次） */
-const MAX_ATTEMPTS = 3
-
-/** 重试之间等多久（避免触发 rate limit），毫秒 */
-const RETRY_DELAY_MS = 1500
-
 /** 控制器：用户暂停 / 取消时切给 pipeline */
 let activeController: AbortController | null = null
-let activePauseFlag = { paused: false }
+let activePauseFlag = { paused: false, cancelled: false }
 
 export function pausePipeline() {
   activePauseFlag.paused = true
@@ -80,8 +39,9 @@ export function pausePipeline() {
 }
 
 export function cancelPipeline() {
-  activeController?.abort()
   activePauseFlag.paused = true
+  activePauseFlag.cancelled = true
+  activeController?.abort()
   useImportStatusStore.getState().setPhase('idle')
   useImportStatusStore.getState().pushActivity('warn', '✕ 用户取消任务')
 }
@@ -90,332 +50,92 @@ export function isPipelineRunning() {
   return activeController !== null && !activePauseFlag.paused
 }
 
-/** 暴露给 UI：跑一次完整的流水线（新会话 或 续跑现有会话） */
-export async function runSession(args: {
-  sessionId: number
-  projectId: number
-}): Promise<void> {
+/** Capture all strings synchronously so later registry replacement cannot change the admitted input. */
+async function captureImportSource(session: ImportSession): Promise<ReadonlyMap<number, string>> {
+  const captured = new Map<number, string>()
+  for (const chunk of session.chunks) {
+    const text = getChunkText(session.id!, chunk.index)
+    if (captured.has(chunk.index) || !text)
+      throw new ImportSessionAuthorityError('分块原文不完整；请重新上传原文件后继续。')
+    captured.set(chunk.index, text)
+  }
+  for (const chunk of session.chunks) {
+    if (await hashImportChunkTextV1(captured.get(chunk.index)!) !== chunk.sourceTextHash)
+      throw new ImportSessionAuthorityError('分块原文与已确认文件不一致；请上传原文件重新核对。')
+  }
+  return captured
+}
+
+export async function readPendingDocumentImportV1(input: { sessionId: number; projectId: number }) {
+  const session = await readImportSessionAuthorityV1(input.sessionId, input.projectId)
+  const first = session.chunks.find(chunk => chunk.status !== 'done')
+  if (!first?.durableParse || session.status === 'cancelled') return null
+  return readDocumentImportChunkEvidenceV1({ ...input, chunkIndex: first.index })
+}
+
+/** An explicit start/continue can submit at most one previously unsent chunk.
+ * Pending/unknown/returned attempts are read-only and never replayed. */
+export async function runSession(args: { sessionId: number; projectId: number }): Promise<void> {
+  args = { ...args }
   const { sessionId, projectId } = args
   const sessionStore = useImportSessionStore.getState()
-  const statusStore = useImportStatusStore.getState()
-
-  // 拉最新 session
-  let session = await sessionStore.load(sessionId)
-  if (!session) throw new ImportSessionUnavailableError()
-
-  // 重置控制
-  activeController = new AbortController()
-  activePauseFlag = { paused: false }
-
+  const status = useImportStatusStore.getState()
+  if (activeController) throw new ImportSessionAuthorityError('已有导入任务在处理，请稍后继续。')
+  const session = await readImportSessionAuthorityV1(sessionId, projectId)
+  if (activeController) throw new ImportSessionAuthorityError('已有导入任务在处理，请稍后继续。')
+  if (session.status === 'cancelled' || session.status === 'done')
+    throw new ImportSessionAuthorityError('已结束的导入不能再次发送模型请求。')
+  const first = session.chunks.find(chunk => chunk.status !== 'done')
+  const attach = (phase: 'running' | 'paused' | 'failed' | 'done') => status.attachSession({
+    sessionId, filename: session.filename, totalChunks: session.totalChunks, phase,
+    finishedChunks: session.chunks.filter(chunk => chunk.status === 'done').length,
+    failedChunks: session.chunks.filter(chunk => chunk.status === 'failed').length,
+  })
+  const controller = new AbortController()
+  const control = { paused: false, cancelled: false }
+  activeController = controller
+  activePauseFlag = control
   try {
-    statusStore.attachSession({
-      sessionId,
-      filename: session.filename,
-      totalChunks: session.totalChunks,
-      finishedChunks: session.chunks.filter(c => c.status === 'done').length,
-      failedChunks: session.chunks.filter(c => c.status === 'failed').length,
-      phase: 'running',
-    })
-    statusStore.pushActivity('info',
-      `▶ 开始处理「${session.filename}」共 ${session.totalChunks} 块`)
-    await sessionStore.patch(sessionId, { status: 'running' })
-    await sessionStore.log(sessionId, -1, 'info',
-      `开始处理：共 ${session.totalChunks} 块，已完成 ${
-        session.chunks.filter(c => c.status === 'done').length} 块`)
-
-    let processedSinceMerge = 0
-    // 目录在本次 session 内固定，避免每块重复查库；确认写回时仍会重新解析当前目录。
-    const codexOptions = await loadCodexImportCategoryOptions(projectId)
-
-    for (const chunk of session.chunks) {
-      // 已完成的跳过
-      if (chunk.status === 'done') continue
-      // 检查暂停 / 取消
-      if (activePauseFlag.paused) {
-        await sessionStore.patch(sessionId, { status: 'paused' })
-        statusStore.pushActivity('warn', '已暂停，可点恢复继续')
-        return
-      }
-
-      session = await sessionStore.load(sessionId) // 重新读一次（防外部修改）
-      if (!session) throw new ImportSessionUnavailableError()
-
-      const ok = await runChunk(session, chunk.index, projectId, codexOptions)
-      if (ok) processedSinceMerge++
-
-      // 每 N 块跑一次合并
-      if (processedSinceMerge >= MERGE_EVERY_N) {
-        processedSinceMerge = 0
-        if (!activePauseFlag.paused) {
-          await runCharacterMerge({
-            sessionId,
-            projectId,
-            isFinal: false,
-            signal: activeController?.signal,
-            isPaused: () => activePauseFlag.paused,
-          })
-        }
-      }
-    }
-
-    if (activePauseFlag.paused) return
-
-    // 终末合并 + 收尾
-    await runCharacterMerge({
-      sessionId,
-      projectId,
-      isFinal: true,
-      signal: activeController?.signal,
-      isPaused: () => activePauseFlag.paused,
-    })
-
-    const fresh = await sessionStore.load(sessionId)
-    if (!fresh) throw new ImportSessionUnavailableError()
-    const failedCount = fresh.chunks.filter(c => c.status === 'failed').length
-    const doneCount = fresh.chunks.filter(c => c.status === 'done').length
-
-    const report = buildFinalReport(fresh)
-
-    // 项目参考模式：写入 references 表 + 按档位跑 13 维统一分析（浅层免费 / 深层逐块）
-    if (fresh.importTarget === 'reference' && doneCount > 0) {
-      try {
-        await applyReferenceFromSession(projectId, fresh, sessionId, statusStore)
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        statusStore.pushActivity('error', `保存项目参考失败：${msg}`)
-      }
-    }
-
-    await sessionStore.patch(sessionId, {
-      status: failedCount === 0 ? 'done' : 'failed',
-      finalReport: report,
-      fatalError: failedCount > 0
-        ? `${failedCount} 个块在重试 ${MAX_ATTEMPTS} 次后仍失败`
-        : undefined,
-    })
-    statusStore.setPhase(failedCount === 0 ? 'done' : 'failed')
-    statusStore.pushActivity(failedCount === 0 ? 'success' : 'warn',
-      `任务结束：成功 ${doneCount} 块，失败 ${failedCount} 块`)
-    if (failedCount > 0) {
-      statusStore.setFatalError(`${failedCount} 个块多次重试仍失败，可在面板内单独重试这些块。`)
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    if ((err as Error).name === 'AbortError') {
-      statusStore.pushActivity('warn', '已中止')
+    if (!first) {
+      if (session.importTarget === 'reference') attach('paused')
       return
     }
-    statusStore.setPhase('failed')
-    statusStore.setFatalError(msg)
-    statusStore.pushActivity('error', `任务异常终止：${msg}`)
-    if (!(err instanceof ImportSessionUnavailableError)) {
-      try {
-        await sessionStore.patch(sessionId, { status: 'failed', fatalError: msg })
-      } catch (saveError) {
-        const detail = saveError instanceof Error ? saveError.message : String(saveError)
-        statusStore.setFatalError(`${msg}；保存任务状态失败：${detail}`)
-        statusStore.pushActivity('error', `保存任务状态失败：${detail}`)
-      }
+    if (first.durableParse) {
+      const evidence = await readPendingDocumentImportV1(args)
+      attach(evidence?.candidate ? 'paused' : 'failed')
+      if (!evidence?.candidate) status.setFatalError('已有尝试记录。可查看原证据，继续操作不会再次发送本块。')
+      return
     }
+    if (session.importTarget === 'reference' && session.chunks.some(chunk => chunk.status === 'done' && !chunk.durableParse?.confirmation))
+      throw new ImportSessionAuthorityError('旧参考结果没有作者确认；原记录仍可查看，请明确新建导入。')
+    if (first.attempts !== 0 || first.status === 'running' || first.status === 'failed')
+      throw new ImportSessionAuthorityError('旧会话的本块已有发送记录，无法证明结果。可查看历史，请明确新建导入以重新解析。')
+    const source = await captureImportSource(session)
+    controller.signal.throwIfAborted()
+    await readImportSessionAuthorityV1(sessionId, projectId, session)
+    attach('running')
+    status.setActiveChunk(first.index, 1)
+    await createDocumentImportChunkCandidateV1({ ...args, chunkIndex: first.index,
+      signal: controller.signal, sourceText: source.get(first.index)! })
+    status.setActiveChunk(null)
+    status.setPhase('paused')
+    status.pushActivity('success', `第 ${first.index + 1} 块解析完成，等待你审查并确认。`, first.index)
+    await sessionStore.load(sessionId)
+  } catch (error) {
+    if (controller.signal.aborted) {
+      if (control.cancelled) await cancelImportSessionInScopeV1(args)
+      return
+    }
+    const message = error instanceof Error ? error.message : String(error)
+    attach('failed')
+    status.setFatalError(message)
+    status.pushActivity('error', message)
   } finally {
-    activeController = null
+    if (activeController === controller) activeController = null
   }
 }
 
-/** 跑单个 chunk，返回是否成功 */
-async function runChunk(
-  session: ImportSession,
-  chunkIndex: number,
-  projectId: number,
-  codexOptions: readonly CodexImportCategoryOption[],
-): Promise<boolean> {
-  const sessionStore = useImportSessionStore.getState()
-  const statusStore = useImportStatusStore.getState()
-  const chunkState = session.chunks.find(c => c.index === chunkIndex)!
-
-  // 重新切出本块原文（session 没保存原文，由调用方上传时已切；
-  // 但因 session 不保存原文，我们让 ImportDocPanel 在 runSession 前把切好的文本
-  // 缓存到 module 层的 IN_MEM_CHUNK_TEXT 里）
-  const text = getChunkText(session.id!, chunkIndex)
-  if (!text) {
-    await sessionStore.patchChunk(session.id!, chunkIndex, {
-      status: 'failed',
-      errorMessage: '内存里找不到本块原文（页面刷新后续跑需重新上传同一文件）',
-      attempts: chunkState.attempts,
-      finishedAt: Date.now(),
-    })
-    statusStore.markChunkFinished({ success: false })
-    statusStore.pushActivity('error',
-      `块 ${chunkIndex + 1} 无原文，跳过（请重新上传文件以续跑）`, chunkIndex)
-    await sessionStore.log(session.id!, chunkIndex, 'error', '原文丢失，跳过')
-    return false
-  }
-
-  for (let attempt = chunkState.attempts; attempt < MAX_ATTEMPTS; attempt++) {
-    if (activePauseFlag.paused) return false
-
-    statusStore.setActiveChunk(chunkIndex, attempt + 1)
-    await sessionStore.patchChunk(session.id!, chunkIndex, {
-      status: 'running',
-      attempts: attempt + 1,
-      startedAt: chunkState.startedAt || Date.now(),
-    })
-
-    const attemptNo = attempt + 1
-    statusStore.pushActivity('info',
-      `▶ 块 ${chunkIndex + 1}/${session.totalChunks} 解析中（第 ${attemptNo} 次）`,
-      chunkIndex)
-    await sessionStore.log(session.id!, chunkIndex, 'info',
-      `第 ${attemptNo} 次尝试 · ${chunkState.charCount.toLocaleString()} 字`)
-
-    try {
-      const result = await parseChunkOnce({
-        projectId,
-        chunkIndex,
-        totalChunks: session.totalChunks,
-        knownContext: session.rollingContext || '（尚无已识别上下文）',
-        rawDocument: text,
-        codexOptions,
-        signal: activeController?.signal,
-      })
-
-      // 入库（仅"导入当前项目"时写入项目表；"导入项目参考"只累积到 merged）
-      let counts: ApplyChunkCounts
-      if (session.importTarget === 'reference') {
-        // 项目参考模式：不写项目表，只统计
-        const wvFields = result.worldview ? Object.keys(result.worldview).filter(k => {
-          const v = result.worldview![k]; return typeof v === 'string' && v.trim()
-        }).length : 0
-        counts = {
-          worldviewFields: wvFields,
-          characters: Array.isArray(result.characters) ? result.characters.length : 0,
-          outlineNodes: Array.isArray(result.outline) ? result.outline.length : 0,
-          codexCandidates: result.codexCandidates?.length || 0,
-        }
-      } else {
-        counts = await applyChunkResult(projectId, result, session.targetWorldGroupId ?? null)
-      }
-
-      // 更新 session.merged 和 rollingContext
-      const merged = mergeUnified(session.merged || {}, result)
-      const rolling = buildRollingContext(merged)
-
-      await sessionStore.patchChunk(session.id!, chunkIndex, {
-        status: 'done',
-        errorMessage: undefined,
-        extractedCounts: counts,
-        finishedAt: Date.now(),
-      })
-      await sessionStore.patch(session.id!, { merged, rollingContext: rolling })
-
-      statusStore.markChunkFinished({ success: true })
-      statusStore.pushActivity('success',
-        `✓ 块 ${chunkIndex + 1} 完成 · 入库 世界观${counts.worldviewFields}/角色${counts.characters}/大纲${counts.outlineNodes} · 词条候选${counts.codexCandidates || 0}`,
-        chunkIndex)
-      await sessionStore.log(session.id!, chunkIndex, 'success',
-        `成功：世界观+${counts.worldviewFields} 角色+${counts.characters} 大纲+${counts.outlineNodes} 词条候选+${counts.codexCandidates || 0}`)
-      return true
-    } catch (err) {
-      if ((err as Error).name === 'AbortError') return false
-      if (err instanceof ImportSessionUnavailableError) throw err
-      const msg = err instanceof Error ? err.message : String(err)
-      statusStore.pushActivity('warn',
-        `块 ${chunkIndex + 1} 第 ${attemptNo} 次失败：${msg.slice(0, 80)}`, chunkIndex)
-      await sessionStore.log(session.id!, chunkIndex, 'warn',
-        `第 ${attemptNo} 次失败：${msg}`)
-      await sessionStore.patchChunk(session.id!, chunkIndex, {
-        status: 'pending',
-        errorMessage: msg,
-      })
-      // Only a definite service-unavailable response can be retried automatically.
-      // Parsed/empty answers already consumed tokens; transport failures may have
-      // completed remotely. Stop the session instead of billing the next chunks.
-      const retryable = err instanceof AIError && err.status === 503
-        && !('retryable' in err && err.retryable === false)
-      if (!retryable) {
-        await sessionStore.patchChunk(session.id!, chunkIndex, {
-          status: 'failed', finishedAt: Date.now(),
-        })
-        statusStore.markChunkFinished({ success: false })
-        throw new Error(`块 ${chunkIndex + 1} 已停止，未自动重发。${msg}；请查看设置中的模型日志，调整后手动重试。`)
-      }
-      if (attempt < MAX_ATTEMPTS - 1) {
-        await sleep(RETRY_DELAY_MS)
-      } else {
-        // 最终失败
-        await sessionStore.patchChunk(session.id!, chunkIndex, {
-          status: 'failed',
-          finishedAt: Date.now(),
-        })
-        statusStore.markChunkFinished({ success: false })
-        statusStore.pushActivity('error',
-          `✗ 块 ${chunkIndex + 1} 重试 ${MAX_ATTEMPTS} 次仍失败：${msg.slice(0, 80)}`,
-          chunkIndex)
-        await sessionStore.log(session.id!, chunkIndex, 'error',
-          `最终失败：${msg}`)
-        return false
-      }
-    }
-  }
-  return false
-}
-
-/** 调一次 AI 解析一个 chunk */
-async function parseChunkOnce(args: {
-  projectId: number
-  chunkIndex: number
-  totalChunks: number
-  knownContext: string
-  rawDocument: string
-  codexOptions: readonly CodexImportCategoryOption[]
-  signal?: AbortSignal
-}): Promise<UnifiedParseResult> {
-  const tpl = usePromptStore.getState().getActive('import.parse-chunk')
-  const { messages } = renderPrompt(tpl, {
-    chunkIndex: args.chunkIndex + 1,
-    totalChunks: args.totalChunks,
-    knownContext: args.knownContext.slice(0, 2000),
-    codexCategoryCatalog: formatCodexImportCatalog(args.codexOptions),
-    rawDocument: args.rawDocument,
-  })
-  const baseConfig = useAIConfigStore.getState().config
-  const overrideMax = Math.max(baseConfig.maxTokens ?? 4096, IMPORT_MAX_TOKENS.all)
-  const config: AIConfig = { ...baseConfig, maxTokens: overrideMax }
-  const meta = {
-    category: 'import.parse-chunk',
-    projectId: args.projectId,
-    configOverrides: { maxTokens: overrideMax },
-  } as const
-  const effectiveConfig = resolveRequestConfig(config, meta).config
-  if (!isAIConfigReady(effectiveConfig)) throw new Error(getAIConfigRequiredMessage(effectiveConfig))
-
-  const response: ChatResult = {}
-  const output = await chatWithAbort(messages, config, args.signal, meta, response,
-    effectiveConfig.provider === 'deepseek'
-      ? { responseFormat: 'json_object', thinkingMode: 'disabled' } : undefined)
-  let obj: UnifiedParseResult
-  try {
-    // Never adopt a partially repaired JSON when the provider reports truncation.
-    if (response.finishReason === 'length') throw new Error('模型输出达到 token 上限；请减小分块或提高输出上限')
-    const parsed = extractJSON(output)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('需要 JSON 对象')
-    obj = parsed as UnifiedParseResult
-  } catch {
-    const finish = ['stop', 'length', 'content_filter'].includes(response.finishReason ?? '')
-      ? response.finishReason : 'unknown'
-    throw new Error(`文档解析未返回完整 JSON 对象（回答 ${output.length} 字符，结束原因 ${finish}）。`
-      + (finish === 'length' ? '请减小分块或提高输出上限。' : '请检查模型是否支持 JSON 输出。'))
-  }
-  return normalizeUnified(obj, {
-    sourceText: args.rawDocument,
-    chunkIndex: args.chunkIndex,
-    options: args.codexOptions,
-  })
-}
-
-function sleep(ms: number) {
-  return new Promise(r => setTimeout(r, ms))
-}
+export const cancelPausedDocumentImportV1 = cancelImportSessionInScopeV1
 
 /**
  * 从一份(已解析完成的) session 落地到「项目参考」+ 跑 13 维统一分析。
@@ -430,73 +150,82 @@ export async function applyReferenceFromSession(
   statusStore?: { pushActivity: (level: 'info' | 'success' | 'warn' | 'error', msg: string) => void },
   depthOverride?: import('../types').ReferenceAnalysisDepth,
 ): Promise<number> {
-  const depth = depthOverride ?? session.analysisDepth ?? 'quick'
-  const refId = await useReferenceStore.getState().addReference({
-    projectId,
-    title: session.filename.replace(/\.[^.]+$/, ''),
-    author: '',
-    type: 'story',
-    note: `从「${session.filename}」导入 · ${session.totalChars.toLocaleString()} 字`,
-    url: '',
-    fileHash: session.fileHash,
-    importSessionId: sessionId,
-    analysisDepth: depth,
-    importedData: {
-      worldview: session.merged?.worldview,
-      geography: session.merged?.geography,
-      history: session.merged?.history,
-      characters: session.merged?.characters,
-      outline: session.merged?.outline,
-      writingTechniques: session.merged?.writingTechniques,
-      codexCandidates: session.merged?.codexCandidates,
-      sourceFilename: session.filename,
-      importedAt: Date.now(),
-    },
-  })
-  statusStore?.pushActivity('success', '📚 已保存到「项目参考」')
-
-  if (depth === 'deep') {
-    // 深层:复用 session 已切的块(文本在 chunk-text-registry)逐块深析
-    const chunkPlans: ChunkPlanLite[] = session.chunks.map(c => ({
-      index: c.index,
-      startChar: c.startChar,
-      endChar: c.endChar,
-      charCount: c.charCount,
-      label: c.label,
-      text: getChunkText(sessionId, c.index) ?? '',
-    })).filter(c => c.text)
-    if (chunkPlans.length > 0) {
-      // chunk registry 已是 DOCX/PDF/EPUB 等格式解析后的纯文本；不能把原始二进制
-      // Blob 用 .text() 当成断点原文。用本轮真实分析文本持久化即可安全续跑。
-      const sourceText = chunkPlans.map(chunk => chunk.text).join('\n\n')
-      const run = await createReferenceAnalysisRun({
-        referenceId: refId,
-        depth: 'deep',
-        sourceFilename: session.filename,
-        fileHash: session.fileHash,
-        totalChars: session.totalChars,
-        expectedChunks: chunkPlans.length,
-        sourceKind: 'unknown',
-        usageScope: 'analysis-only',
-        rightsNote: '由项目导入流程建立；尚未在版本面板补充来源声明',
-        rightsConfirmed: false,
-        sourceText,
-        sourceChunks: chunkPlans,
-      })
-      registerRefChunks(run.id!, chunkPlans)
-      statusStore?.pushActivity('info', `🔬 开始深层分析（${chunkPlans.length} 块）…`)
-      await runRefAnalysis(refId, run.id)
-    } else {
-      // 块文本丢了(刷新过) → 退回浅层,免得卡住
-      await writeShallowAnalysisFromTechniques(refId, session.merged?.writingTechniques)
-      statusStore?.pushActivity('warn', '块文本不可用,已退回浅层分析')
-    }
-  } else {
-    // 浅层:免费,用解析已出的写作技法
-    await writeShallowAnalysisFromTechniques(refId, session.merged?.writingTechniques)
-    statusStore?.pushActivity('success', '✓ 浅层作品分析已完成')
+  const original = await readImportSessionAuthorityV1(sessionId, projectId, session)
+  requireConfirmedImport(original)
+  const depth = depthOverride ?? original.analysisDepth ?? 'quick'
+  if (original.importTarget === 'reference') {
+    if (original.publishedReferenceId == null || depth !== (original.analysisDepth ?? 'quick'))
+      throw new ImportSessionAuthorityError('请从原参考打开对应的分析版本。')
+    await runPublishedReferenceAnalysisV1({ projectId, sessionId }, statusStore)
+    return original.publishedReferenceId
   }
+  const chunks = depth === 'deep' ? await captureImportSource(original) : null
+  await readImportSessionAuthorityV1(sessionId, projectId, original)
+  const refId = await useReferenceStore.getState().addReference(importedReferenceDataV1({ ...original, id: sessionId }, depth), original.targetScope)
+  await analyzeConfirmedReference(refId, { ...original, id: sessionId }, depth, chunks, statusStore)
   return refId
+}
+
+function requireConfirmedImport(session: ImportSession) {
+  if (session.status !== 'done' || !session.chunks.every(chunk => chunk.status === 'done' && chunk.durableParse?.confirmation))
+    throw new ImportSessionAuthorityError('原导入没有完整作者确认，历史结果仅可查看。')
+}
+
+const analyzingReferences = new Set<number>()
+
+export async function runPublishedReferenceAnalysisV1(
+  input: { projectId: number; sessionId: number },
+  statusStore?: { pushActivity: (level: 'info' | 'success' | 'warn' | 'error', msg: string) => void },
+): Promise<void> {
+  const original = await readImportSessionAuthorityV1(input.sessionId, input.projectId)
+  requireConfirmedImport(original)
+  const refId = original.publishedReferenceId
+  if (original.importTarget !== 'reference' || refId == null) throw new ImportSessionAuthorityError('未找到原确认发布的项目参考。')
+  const depth = original.analysisDepth ?? 'quick'
+  if (analyzingReferences.has(refId)) return
+  analyzingReferences.add(refId)
+  try {
+    // Existing durable reference analysis owns resume/retry after its first start.
+    if ((await listReferenceAnalysisRuns(refId)).length > 0) return
+    const chunks = depth === 'deep' ? await captureImportSource(original) : null
+    const session = { ...original, id: input.sessionId }
+    await analyzeConfirmedReference(refId, session, depth, chunks, statusStore, {
+      transactionTables: importedReferenceAnalysisStartTablesV1(),
+      claimInTransaction: () => claimImportedReferenceAnalysisInTransactionV1(session),
+    })
+  } finally {
+    analyzingReferences.delete(refId)
+  }
+}
+
+async function analyzeConfirmedReference(
+  refId: number, session: ImportSession & { id: number }, depth: 'quick' | 'deep',
+  captured: ReadonlyMap<number, string> | null,
+  statusStore?: { pushActivity: (level: 'info' | 'success' | 'warn' | 'error', msg: string) => void },
+  firstStart?: ReferenceAnalysisFirstStartGuardV1,
+): Promise<void> {
+  const verify = () => readImportSessionAuthorityV1(session.id, session.projectId, session)
+  await verify()
+  if (depth === 'deep') {
+    if (!captured) throw new ImportSessionAuthorityError('深层分析需要完整原文件。')
+    const sourceChunks = session.chunks.map(({ index, startChar, endChar, charCount, label }) =>
+      ({ index, startChar, endChar, charCount, label, text: captured.get(index)! }))
+    const run = await createReferenceAnalysisRun({
+      referenceId: refId, depth, sourceFilename: session.filename, fileHash: session.fileHash,
+      totalChars: session.totalChars, expectedChunks: sourceChunks.length,
+      sourceKind: 'unknown', usageScope: 'analysis-only',
+      rightsNote: '由项目导入流程建立；尚未在版本面板补充来源声明', rightsConfirmed: false,
+      sourceText: sourceChunks.map(chunk => chunk.text).join('\n\n'), sourceChunks,
+    }, firstStart)
+    registerRefChunks(run.id!, sourceChunks)
+    statusStore?.pushActivity('info', `开始深层分析（${sourceChunks.length} 块）`)
+    await verify()
+    await runRefAnalysis(refId, run.id)
+  } else {
+    await writeShallowAnalysisFromTechniques(refId, session.merged.writingTechniques,
+      { filename: session.filename, fileHash: session.fileHash, totalChars: session.totalChars }, firstStart)
+    statusStore?.pushActivity('success', '浅层作品分析已完成')
+  }
 }
 
 /**
@@ -509,30 +238,30 @@ export async function applyProjectFromSession(
   session: ImportSession,
   worldGroupId: number | null = null,
   statusStore?: { pushActivity: (level: 'info' | 'success' | 'warn' | 'error', msg: string) => void },
+  explicitReferenceReuse = false,
 ): Promise<ApplyChunkCounts> {
-  const merged = (session.merged ?? {}) as UnifiedParseResult
-  const counts = await applyChunkResult(projectId, merged, worldGroupId ?? session.targetWorldGroupId ?? null)
+  if (session.id == null) throw new ImportSessionUnavailableError()
+  const original = await readImportSessionAuthorityV1(session.id, projectId, session)
+  requireConfirmedImport(original)
+  if (original.importTarget === 'reference' && !explicitReferenceReuse)
+    throw new ImportSessionAuthorityError('仅参考的结果需要作者明确选择写入设定库。')
+  if (original.importTarget === 'project' && worldGroupId != null && worldGroupId !== original.targetWorldGroupId)
+    throw new ImportSessionAuthorityError('不能将导入结果静默改写到其他世界组。')
+  const group = original.importTarget === 'project' ? original.targetWorldGroupId ?? null : worldGroupId
+  await verifyImportProjectTargetGroupV1(original.targetScope, group)
+  const counts = await applyChunkResult(original.targetScope, original.merged, group, async () => {
+    await readImportSessionAuthorityV1(session.id!, projectId, original)
+    await verifyImportProjectTargetGroupV1(original.targetScope, group)
+  })
+  await runCharacterMerge({ projectId, sessionId: original.id!, isFinal: true })
   statusStore?.pushActivity('success', `📥 已灌入设定库：世界观 +${counts.worldviewFields} 字段 · 角色 +${counts.characters} · 大纲 +${counts.outlineNodes}`)
   return counts
 }
-
-type ChunkPlanLite = { index: number; startChar: number; endChar: number; charCount: number; label?: string; text: string }
 
 /** 单独重试某个失败的块（用户在 ReportModal 里点的"重试失败块"） */
 export async function retryFailedChunks(args: {
   sessionId: number
   projectId: number
 }): Promise<void> {
-  const { sessionId, projectId } = args
-  const sessionStore = useImportSessionStore.getState()
-  const session = await sessionStore.load(sessionId)
-  if (!session) throw new ImportSessionUnavailableError()
-  // 把失败的重置成 pending 并清空 attempts
-  const chunks: ChunkState[] = session.chunks.map(c =>
-    c.status === 'failed'
-      ? { ...c, status: 'pending', attempts: 0, errorMessage: undefined }
-      : c,
-  )
-  await sessionStore.patch(sessionId, { chunks, status: 'running', fatalError: undefined })
-  await runSession({ sessionId, projectId })
+  await runSession(args)
 }

@@ -30893,51 +30893,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/e2e/core-workflow.spec.ts\",\"TS2339\",\"Property 'value' does not exist on type 'HTMLElement | SVGElement'.\\n  Property 'value' does not exist on type 'HTMLElement'.\",\"61161171ffc5a474b21ba321f65cdfec05908349fab72caf51033c493ed5f637\",54,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/e2e/core-workflow.spec.ts",
-        "code": "TS2339",
-        "message": "Property 'value' does not exist on type 'HTMLElement | SVGElement'.\n  Property 'value' does not exist on type 'HTMLElement'.",
-        "anchor": "61161171ffc5a474b21ba321f65cdfec05908349fab72caf51033c493ed5f637",
-        "line": 407,
-        "column": 54,
-        "start": 19605,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/e2e/core-workflow.spec.ts\",\"TS2349\",\"This expression is not callable.\\n  Type 'never' has no call signatures.\",\"4dceb17c08370ee80745886130048bc3518046016382ce5e691f09db81a82df8\",3,18]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/e2e/core-workflow.spec.ts",
-        "code": "TS2349",
-        "message": "This expression is not callable.\n  Type 'never' has no call signatures.",
-        "anchor": "4dceb17c08370ee80745886130048bc3518046016382ce5e691f09db81a82df8",
-        "line": 2581,
-        "column": 3,
-        "start": 111454,
-        "length": 18
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/e2e/core-workflow.spec.ts\",\"TS2550\",\"Property 'replaceAll' does not exist on type 'string'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2021' or later.\",\"f0390991e4ca31138653ae77ea6f85852927c39c9d5fc0c3d45ddb80b3edaf97\",69,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/e2e/core-workflow.spec.ts",
-        "code": "TS2550",
-        "message": "Property 'replaceAll' does not exist on type 'string'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2021' or later.",
-        "anchor": "f0390991e4ca31138653ae77ea6f85852927c39c9d5fc0c3d45ddb80b3edaf97",
-        "line": 413,
-        "column": 69,
-        "start": 19830,
-        "length": 10
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/e2e/home-integration.spec.ts\",\"TS7006\",\"Parameter 'w' implicitly has an 'any' type.\",\"382517dc6f82db2d58f5a13cfa33de2b82a7f4a565d14568c2dbd7b2f93d8b98\",523,1]",
       "count": 1,
       "diagnostic": {

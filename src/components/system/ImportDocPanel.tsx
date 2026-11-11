@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { chunkDocument, quickHash } from '../../lib/import/chunker'
 import {
-  runSession, pausePipeline, cancelPipeline, retryFailedChunks,
+  runSession, pausePipeline, cancelPipeline, isPipelineRunning, cancelPausedDocumentImportV1,
+  readPendingDocumentImportV1, runPublishedReferenceAnalysisV1,
   registerChunkTexts, hasChunkTexts, clearChunkTexts,
   applyReferenceFromSession, applyProjectFromSession,
 } from '../../lib/import/pipeline'
-import type { ReferenceAnalysisDepth } from '../../lib/types'
-import { ImportSessionUnavailableError, useImportSessionStore } from '../../stores/import-session'
+import { confirmDocumentImportChunkV1 } from '../../lib/import/document-parse-adoption'
+import type { UnifiedParseResult, ReferenceAnalysisDepth } from '../../lib/types'
+import { hashImportChunkTextV1, hasFrozenImportIdentityV1, ImportSessionAuthorityError, ImportSessionUnavailableError,
+  readImportSessionAuthorityV1, useImportSessionStore, verifyImportProjectTargetGroupV1 } from '../../stores/import-session'
 import { useImportStatusStore } from '../../stores/import-status'
-import { useOutlineStore } from '../../stores/outline'
 import { useWorldGroupStore } from '../../stores/world-group'
 import ImportConfirmModal from './import/ImportConfirmModal'
 import ImportReportModal from './import/ImportReportModal'
@@ -19,7 +21,8 @@ import ImportUnfinishedBanner from './import/ImportUnfinishedBanner'
 import ImportUploadZone from './import/ImportUploadZone'
 import useImportDocumentPreparation from './import/useImportDocumentPreparation'
 import useImportSessionRecovery from './import/useImportSessionRecovery'
-import type { Project } from '../../lib/types'
+import type { Project, WorkspaceScope } from '../../lib/types'
+import { resolveScope } from '../../lib/workspace/scope'
 import type { ImportSession, ChunkState, ImportTarget } from '../../lib/types/import-session'
 import type { SidebarModule } from '../layout/sidebar-tree'
 import { useDialog } from '../shared/Dialog'
@@ -39,8 +42,7 @@ interface Props {
 /**
  * v3 §6 Phase 18 — 大文档分块解析导入（重写版 + 方案 A 持久化）
  *
- * 用户只要上传一个文件 → 预览确认 → AI 串行分块解析 → 实时入库 → 汇报结果。
- * 支持百万～千万字文档，断点续跑，自动重试，跨块角色合并。
+ * 上传原文件、选择目标、分块解析，作者审查确认后保存结果。
  *
  * 2026-05-12 增强：
  *   · 上传时把原文 Blob 存到 IndexedDB（importFiles 表）
@@ -55,12 +57,14 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
 
   // 报告 modal + 未完成会话
   const [reportSession, setReportSession] = useState<ImportSession | null>(null)
+  const [reportEvidence, setReportEvidence] = useState<Awaited<ReturnType<typeof readPendingDocumentImportV1>>>(null)
   const [codexReview, setCodexReview] = useState<{
     session: ImportSession
     categories: CodexImportCategoryOption[]
   } | null>(null)
   const [applyingReuse, setApplyingReuse] = useState(false)
-  const recovery = useImportSessionRecovery(project.id!)
+  const recovery = useImportSessionRecovery(project.id!, project.activeWorldId, project.activeWorkId)
+  const previewTargetScope = useRef<WorkspaceScope | null>(null)
   const {
     filename, rawText, fileError, loadingFile, extractInfo, plans, chunkSize,
     showConfirm, volumeDetect, previewPlans, handleFile, handleRawTextChange,
@@ -79,8 +83,8 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
   } = useWorldGroupStore()
   const phase = status.phase
   const worldGroups = useMemo(
-    () => allWorldGroups.filter(group => group.projectId === project.id),
-    [allWorldGroups, project.id],
+    () => allWorldGroups.filter(group => group.projectId === project.id && group.worldId === project.activeWorldId),
+    [allWorldGroups, project.activeWorldId, project.id],
   )
 
   useEffect(() => {
@@ -88,8 +92,9 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       setTargetWorldGroupId(null)
       return
     }
-    loadWorldGroups(project.id!)
-  }, [project.enableMultiWorld, project.id, loadWorldGroups])
+    if (project.activeWorldId != null && project.activeWorkId != null)
+      loadWorldGroups({ projectId: project.id!, worldId: project.activeWorldId, workId: project.activeWorkId })
+  }, [project.activeWorldId, project.activeWorkId, project.enableMultiWorld, project.id, loadWorldGroups])
 
   useEffect(() => {
     if (!project.enableMultiWorld) return
@@ -106,11 +111,12 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
           && autoReportShown.current !== status.sessionId) {
         autoReportShown.current = status.sessionId
         const s = await useImportSessionStore.getState().load(status.sessionId)
-        if (s) setReportSession(s)
+        if (s && s.projectId === project.id && (!s.targetScope ||
+          (s.targetScope.worldId === project.activeWorldId && s.targetScope.workId === project.activeWorkId))) setReportSession(s)
       }
     }
     showReport()
-  }, [phase, status.sessionId])
+  }, [phase, project.activeWorkId, project.activeWorldId, project.id, status.sessionId])
 
   const reportImportFailure = (action: string, error: unknown, sessionId?: number) => {
     const message = error instanceof Error ? error.message : String(error)
@@ -122,6 +128,15 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       current.pushActivity('error', `${action}：${message}`)
     }
     toast.error(`${action}：${message}`)
+  }
+
+  const prepareScopedConfirmation = async () => {
+    try {
+      previewTargetScope.current = await resolveScope({ projectId: project.id! })
+      prepareConfirmation()
+    } catch (error) {
+      reportImportFailure('无法确认导入目标', error)
+    }
   }
 
   // ── 在 Confirm Modal 里确认：创建 session 并启动 ───────────
@@ -138,23 +153,25 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
 
     let createdSessionId: number | undefined
     try {
+      const targetScope = previewTargetScope.current
+      if (!targetScope || targetScope.projectId !== project.id)
+        throw new ImportSessionAuthorityError('请在当前世界和作品重新预览并确认导入。')
+      const chunks: ChunkState[] = []
+      for (const plan of plans) {
+        chunks.push({ index: plan.index, startChar: plan.startChar, endChar: plan.endChar,
+          charCount: plan.charCount, label: plan.label, status: 'pending', attempts: 0,
+          sourceTextHash: await hashImportChunkTextV1(plan.text) })
+      }
       const fileHash = quickHash(rawText)
       const sessionData: Omit<ImportSession, 'id' | 'createdAt' | 'updatedAt'> = {
         projectId: project.id!,
+        targetScope,
         filename: filename || '未命名文档',
         fileHash,
         totalChars: rawText.length,
         totalChunks: plans.length,
         chunkSize,
-        chunks: plans.map<ChunkState>(p => ({
-          index: p.index,
-          startChar: p.startChar,
-          endChar: p.endChar,
-          charCount: p.charCount,
-          label: p.label,
-          status: 'pending',
-          attempts: 0,
-        })),
+        chunks,
         merged: { worldview: {}, characters: [], outline: [], codexCandidates: [] },
         rollingContext: '',
         importTarget,
@@ -179,44 +196,13 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
         console.warn('[import] saveBlob 失败（本次跑不受影响，但下次刷新将无法自动续跑）：', err)
       }
 
-      // Phase 28.4: 如果检测到分卷结构，且是导入当前项目，先预写卷结构骨架
-      if (importTarget === 'project' && volumeDetect?.hasVolumes) {
-        try {
-          const olStore = useOutlineStore.getState()
-          await olStore.loadAll(project.id!)
-          const startOrder = useOutlineStore.getState().nodes
-            .filter(n => n.parentId === null).length
-
-          for (let vi = 0; vi < volumeDetect.volumes.length; vi++) {
-            const vol = volumeDetect.volumes[vi]
-            await olStore.addNode({
-              projectId: project.id!,
-              parentId: null,
-              type: 'volume',
-              worldGroupId: selectedWorldGroupId ?? null,
-              title: vol.title,
-              summary: '',
-              order: startOrder + vi,
-            })
-          }
-          useImportStatusStore.getState().pushActivity(
-            'info',
-            `📚 已创建 ${volumeDetect.volumes.length} 个卷结构骨架`,
-          )
-        } catch (err) {
-          console.warn('[import] 预写卷结构失败（不影响主流程）：', err)
-        }
-      }
-
       // 刷新未完成列表（新 session 本身就是未完成态）
       clearUnfinished()
       autoReportShown.current = null
       setReportSession(null)
 
-      // 启动流水线（不 await，让 UI 先渲染 StatusBar/ProgressPanel）
-      runSession({ sessionId, projectId: project.id! }).catch(err => {
-        reportImportFailure('导入已停止', err, sessionId)
-      })
+      // Wait for the formal candidate, then open the existing review surface.
+      await runAndReview(sessionId)
     } catch (error) {
       reportImportFailure('无法开始导入', error, createdSessionId)
     }
@@ -231,7 +217,8 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     statusStore.setPhase('preparing')
     statusStore.pushActivity('info', `♻️ 复用已解析《${reusable.filename}》→ 当前项目设定库（不重新解析）`)
     try {
-      await applyProjectFromSession(project.id!, reusable, null, statusStore)
+      const targetGroup = reusable.importTarget === 'reference' && project.enableMultiWorld ? targetWorldGroupId : null
+      await applyProjectFromSession(project.id!, reusable, targetGroup, statusStore, reusable.importTarget === 'reference')
       statusStore.setPhase('done')
       clearReusable()
       toast.success('对标设定已灌入当前项目的世界观 / 角色 / 大纲')
@@ -266,6 +253,57 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     }
   }
 
+  const showImportRecord = async (sessionId: number) => {
+    const row = await useImportSessionStore.getState().load(sessionId)
+    if (!row || row.projectId !== project.id || (row.targetScope &&
+      (row.targetScope.workId !== project.activeWorkId || row.targetScope.worldId !== project.activeWorldId))) return
+    const evidence = row.targetScope && hasFrozenImportIdentityV1(row) && row.status !== 'done'
+      ? await readPendingDocumentImportV1({ sessionId, projectId: project.id! }) : null
+    setReportEvidence(evidence)
+    setReportSession(row)
+  }
+
+  const runAndReview = async (sessionId: number) => {
+    await runSession({ sessionId, projectId: project.id! })
+    if (useImportStatusStore.getState().sessionId === sessionId) await showImportRecord(sessionId)
+  }
+
+  const handleConfirmCandidate = async (reviewedResult: UnifiedParseResult) => {
+    const candidate = reportEvidence?.candidate
+    if (!candidate || !reportSession?.id || candidate.sessionId !== reportSession.id) throw new Error('请重新打开原候选。')
+    const id = reportSession.id
+    await confirmDocumentImportChunkV1({ projectId: project.id!, sessionId: id, chunkIndex: candidate.chunkIndex,
+      candidateHash: candidate.candidateHash, reviewedResult })
+    const row = await useImportSessionStore.getState().load(id)
+    if (!row) throw new Error('导入会话已不存在。')
+    setReportEvidence(null)
+    clearUnfinished()
+    const current = useImportStatusStore.getState()
+    current.attachSession({ sessionId: id, filename: row.filename, totalChunks: row.totalChunks,
+      finishedChunks: row.chunks.filter(chunk => chunk.status === 'done').length,
+      phase: row.status === 'done' ? 'done' : 'paused' })
+    setReportSession(row.status === 'done' ? row : null)
+    if (row.publishedReferenceId && row.analysisDepth !== 'deep') {
+      runPublishedReferenceAnalysisV1({ sessionId: id, projectId: project.id! }, current).then(async () => {
+        const fresh = await useImportSessionStore.getState().load(id)
+        setReportSession(open => open?.id === id ? fresh : open)
+      }).catch(error => toast.error(`项目参考已保存，浅层分析未完成：${error instanceof Error ? error.message : String(error)}`))
+    }
+  }
+
+  const handleStartPublishedAnalysis = async () => {
+    if (!reportSession?.id) return
+    try {
+      const id = reportSession.id
+      await runPublishedReferenceAnalysisV1({ sessionId: id, projectId: project.id! }, useImportStatusStore.getState())
+      const fresh = await useImportSessionStore.getState().load(id)
+      setReportSession(open => open?.id === id ? fresh : open)
+      toast.success('请在项目参考中查看分析进度。')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   // ── 续跑入口（Blob 已恢复 → 直接跑） ─────────────────────
   const handleResume = async () => {
     if (!unfinished?.id) return
@@ -276,39 +314,38 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     autoReportShown.current = null
     setReportSession(null)
     try {
-      await retryFailedChunks({ sessionId: unfinished.id, projectId: project.id! })
+      await runAndReview(unfinished.id)
     } catch (error) {
       reportImportFailure('无法续跑', error, unfinished.id)
     }
   }
 
   // ── 用当前上传的文件续跑（作为兜底） ─────────────────────
-  const handleResumeWithUploaded = async () => {
-    if (!unfinished?.id || !rawText) return
+  const restoreOriginalFromUpload = async (session: ImportSession) => {
+    if (!session.id || !rawText) return
+    const id = session.id
     const newHash = quickHash(rawText)
-    if (newHash !== unfinished.fileHash) {
-      const ok = await dialog.confirm({
-        title: '上传文件与未完成任务不一致',
-        message:
-          `原任务文件 hash: ${unfinished.fileHash}\n` +
-          `当前上传 hash:   ${newHash}\n\n` +
-          '仍要用当前文件继续吗？强烈不建议，可能会出现角色/章节错位。',
-        confirmText: '仍要继续',
-        tone: 'danger',
-      })
-      if (!ok) return
+    if (newHash !== session.fileHash) {
+      toast.error('上传文件与原导入文件不同。请上传原文件，或为新文件另开导入。')
+      return
     }
-    const p = chunkDocument(rawText, { targetChars: unfinished.chunkSize })
-    if (p.length !== unfinished.totalChunks) {
-      toast.error(`重新切块得到 ${p.length} 块，与原任务的 ${unfinished.totalChunks} 块不一致，无法续跑。建议清理该任务后重新开始解析。`)
+    const p = chunkDocument(rawText, { targetChars: session.chunkSize })
+    if (p.length !== session.totalChunks) {
+      toast.error(`重新切块得到 ${p.length} 块，与原任务的 ${session.totalChunks} 块不一致，无法续跑。建议清理该任务后重新开始解析。`)
       return
     }
     try {
-      registerChunkTexts(unfinished.id, p.map(c => ({ index: c.index, text: c.text })))
+      const frozen = await readImportSessionAuthorityV1(id, project.id!, session)
+      for (const chunk of p) {
+        if (frozen.chunks[chunk.index]?.sourceTextHash !== await hashImportChunkTextV1(chunk.text))
+          throw new ImportSessionAuthorityError('上传文件与原分块内容不同；请另开导入。')
+      }
+      await readImportSessionAuthorityV1(id, project.id!, frozen)
+      registerChunkTexts(id, p.map(c => ({ index: c.index, text: c.text })))
       // 普通持久化失败仍可用本次内存原文；父根已删必须停止。
       try {
         const { blob: fileBlob, filename: saveName } = sourceBlob()
-        await useImportSessionStore.getState().saveBlob(unfinished.id, saveName, fileBlob, unfinished.fileHash)
+        await useImportSessionStore.getState().saveBlob(id, saveName, fileBlob, session.fileHash)
       } catch (error) {
         if (error instanceof ImportSessionUnavailableError) throw error
         toast.info('原文未能保存到本地存档；本次仍可继续，刷新后需要重新上传。')
@@ -316,10 +353,14 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       markBlobRestored()
       autoReportShown.current = null
       setReportSession(null)
-      await retryFailedChunks({ sessionId: unfinished.id, projectId: project.id! })
+      if (session.status === 'done') await showImportRecord(id)
+      else await runAndReview(id)
     } catch (error) {
-      reportImportFailure('无法续跑', error, unfinished.id)
+      reportImportFailure('无法恢复原文件', error, id)
     }
+  }
+  const handleResumeWithUploaded = () => {
+    if (unfinished) return restoreOriginalFromUpload(unfinished)
   }
 
   // ── Report Modal 里：重试失败块 / 关闭 / 清理 ─────────────
@@ -332,15 +373,16 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     setReportSession(null)
     autoReportShown.current = null
     try {
-      await retryFailedChunks({ sessionId: reportSession.id, projectId: project.id! })
+      await runAndReview(reportSession.id)
     } catch (error) {
       reportImportFailure('无法重试', error, reportSession.id)
     }
   }
   const handleCloseReport = () => {
     setReportSession(null)
+    setReportEvidence(null)
     // done 的会话：清内存原文 + Blob 存档释放空间
-    if (reportSession?.id && reportSession.status === 'done') {
+    if (reportSession?.id && reportSession.status === 'done' && reportSession.analysisDepth !== 'deep') {
       clearChunkTexts(reportSession.id)
       useImportSessionStore.getState().deleteBlob(reportSession.id).catch(error => {
         toast.error(`原文存档清理失败：${error instanceof Error ? error.message : String(error)}`)
@@ -373,26 +415,38 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       confirmText: '取消任务',
       tone: 'danger',
     })
-    if (ok) cancelPipeline()
+    if (!ok) return
+    try {
+      if (isPipelineRunning()) cancelPipeline()
+      else if (status.sessionId != null) {
+        await cancelPausedDocumentImportV1({ sessionId: status.sessionId, projectId: project.id! })
+        useImportStatusStore.getState().reset()
+        setReportSession(null)
+        setReportEvidence(null)
+      }
+    } catch (error) { toast.error(error instanceof Error ? error.message : String(error)) }
   }
 
   const handleResumeCurrent = () => {
     if (!status.sessionId) return
-    runSession({ sessionId: status.sessionId, projectId: project.id! }).catch(err => {
-      reportImportFailure('无法续跑', err, status.sessionId!)
-    })
+    runAndReview(status.sessionId).catch(err => reportImportFailure('无法续跑', err, status.sessionId!))
   }
 
   const handleShowCurrentReport = async () => {
-    if (!status.sessionId) return
-    const session = await useImportSessionStore.getState().load(status.sessionId)
-    if (session) setReportSession(session)
+    if (status.sessionId != null) {
+      try { await showImportRecord(status.sessionId) }
+      catch (error) { reportImportFailure('无法读取原记录', error, status.sessionId) }
+    }
   }
 
   const handleOpenCodexReview = async (session: ImportSession) => {
-    if (!session.merged?.codexCandidates?.length || session.codexAdoption) return
+    if (!session.merged?.codexCandidates?.length || session.codexAdoption ||
+      session.status !== 'done' || !session.chunks.every(chunk => chunk.durableParse?.confirmation)) return
     try {
-      const categories = await loadCodexImportCategoryOptions(project.id!)
+      if (session.id == null) throw new ImportSessionUnavailableError()
+      const original = await readImportSessionAuthorityV1(session.id, project.id!, session)
+      const categories = await loadCodexImportCategoryOptions(original.targetScope)
+      await readImportSessionAuthorityV1(session.id, project.id!, original)
       setCodexReview({ session, categories })
     } catch (error) {
       toast.error(`加载词条分类失败：${error instanceof Error ? error.message : String(error)}`)
@@ -411,8 +465,12 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
       return
     }
     try {
+      if (session.id == null) throw new ImportSessionUnavailableError()
+      const original = await readImportSessionAuthorityV1(session.id, project.id!, session)
+      await verifyImportProjectTargetGroupV1(original.targetScope, worldGroupId)
       const result = await applyCodexImportCandidates({
         projectId: project.id!,
+        scope: original.targetScope,
         worldGroupId,
         candidates,
       })
@@ -471,9 +529,13 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
           restoringBlob={restoringBlob}
           blobRestored={blobRestored}
           hasRawText={!!rawText.trim()}
+          boundToOriginal={hasFrozenImportIdentityV1(unfinished)}
           onResume={handleResume}
           onResumeWithUploaded={handleResumeWithUploaded}
-          onShowDetail={() => setReportSession(unfinished)}
+          onShowDetail={() => {
+            if (unfinished.id != null) showImportRecord(unfinished.id).catch(error =>
+              reportImportFailure('无法读取原记录', error, unfinished.id))
+          }}
           onDiscard={async () => {
             const ok = await dialog.confirm({
               title: '放弃这个未完成任务？',
@@ -502,6 +564,12 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
           onApplyProject={handleReuseToProject}
           onApplyReference={handleReuseToReference}
           onReviewCodex={() => handleOpenCodexReview(reusable)}
+          onRestoreOriginal={reusable.publishedReferenceId && reusable.analysisDepth === 'deep' &&
+            !hasChunkTexts(reusable.id!) && rawText.trim() ? () => { void restoreOriginalFromUpload(reusable) } : undefined}
+          onShowReport={() => {
+            if (reusable.id != null) showImportRecord(reusable.id).catch(error =>
+              reportImportFailure('无法读取原记录', error, reusable.id))
+          }}
           onIgnore={clearReusable}
         />
       )}
@@ -518,7 +586,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
           previewPlans={previewPlans}
           onFile={handleFile}
           onRawTextChange={handleRawTextChange}
-          onStart={prepareConfirmation}
+          onStart={prepareScopedConfirmation}
         />
       )}
 
@@ -558,7 +626,14 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
           onRetryFailed={handleRetryFailed}
           onClose={handleCloseReport}
           onDiscard={handleDiscardSession}
-          onReviewCodex={(reportSession.merged?.codexCandidates?.length || 0) > 0
+          evidence={reportEvidence}
+          onStartAnalysis={reportSession.publishedReferenceId && reportSession.referenceAnalysisStartedAt == null
+            ? handleStartPublishedAnalysis : undefined}
+          review={reportEvidence?.candidate && reportEvidence.candidate.sessionId === reportSession.id && reportEvidence.state === 'awaiting_confirmation'
+            ? { candidate: reportEvidence.candidate, raw: reportEvidence.raw,
+              canConfirm: hasChunkTexts(reportSession.id!), onConfirm: handleConfirmCandidate }
+            : undefined}
+          onReviewCodex={reportSession.status === 'done' && reportSession.chunks.every(chunk => chunk.durableParse?.confirmation) && (reportSession.merged?.codexCandidates?.length || 0) > 0
             ? () => handleOpenCodexReview(reportSession)
             : undefined}
           onNavigate={onNavigate && (() => {

@@ -21,7 +21,7 @@ import type { TableSpec } from '../registry/types'
 import type { ProjectExportData } from './json-export'
 import { redactAuthoringSecrets } from '../node-authoring/contracts'
 import { resolveWorkspaceOwnership } from '../workspace/ownership'
-import { portableizeAgentRunLedgerExportV1 } from '../agent/run/ledger-portability'
+import { excludePrivateReferenceExecutionFromBackupV1, portableizeAgentRunLedgerExportV1 } from '../agent/run/ledger-portability'
 import { assertAgentRunArtifactRecordIntegrityV1 } from '../memory/artifact-record'
 import { readVerifiedMediaBlobObjectData } from '../product-production/media-blob-store'
 import { assertProductRuntimeSourceSnapshotV3 } from '../product/runtime-source-branch'
@@ -730,8 +730,12 @@ async function captureProjectExportInTransaction(
     spec,
     rows: await queryRows(spec, projectId),
   })))
-  for (const { spec, rows } of capturedRows) {
-    rowsByTable.set(spec.name, rows)
+  for (const { spec, rows } of capturedRows) rowsByTable.set(spec.name, rows)
+  await Dexie.waitFor(excludePrivateReferenceExecutionFromBackupV1(rowsByTable, specs,
+    () => db.importSessions.where('projectId').equals(projectId).toArray(),
+  ))
+  for (const spec of specs) {
+    const rows = rowsByTable.get(spec.name)!
     const idMap = new Map<number, number>()
     rows.forEach((r, i) => { if (r.id != null) idMap.set(r.id, i) })
     idMaps.set(spec.name, idMap)
@@ -761,7 +765,8 @@ async function captureProjectExportInTransaction(
 }
 
 async function captureProjectExport(projectId: number, version: number, strictOwners: boolean): Promise<CapturedProjectExportSnapshot> {
-  const tables = [...new Set(PROJECT_TABLES.filter(spec => spec.exportable).map(spec => spec.table))]
+  // The original local import binding is read in the same snapshot and is never exported as a session.
+  const tables = [...new Set([...PROJECT_TABLES.filter(spec => spec.exportable).map(spec => spec.table), db.importSessions])]
   const captured = await db.transaction(
     'r',
     tables,
