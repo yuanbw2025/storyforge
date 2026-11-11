@@ -98,6 +98,15 @@ export default function StatePanel({ project, onOpenInventory, initialStateCardI
     const result = inspectStateFields(card.fields)
     return result.ok ? [] : [{ card, error: result.error }]
   }), [cards])
+  const cardErrors = useMemo(() => {
+    const map = new Map<number, string | null>()
+    for (const card of cards) {
+      if (card.id == null) continue
+      const result = inspectStateFields(card.fields)
+      map.set(card.id, result.ok ? null : result.error)
+    }
+    return map
+  }, [cards])
   const targetCard = cards.find(card => card.id === initialStateCardId) ?? null
   const targetCharacterExists = targetCard != null
     && targetCard.category === 'character'
@@ -159,8 +168,10 @@ export default function StatePanel({ project, onOpenInventory, initialStateCardI
       </div>
       {editError && <p role="alert" className="text-xs text-error">{editError}</p>}
 
-      {damagedCards.map(({ card, error }) => <StateCardRepair key={card.id} card={card} error={error}
-        onSave={(fields, expectedFields) => updateCard(card.id!, { fields }, { expectedFields, scope: projectId })} />)}
+      {cards.map(card => card.id != null && (
+        <StateCardRepair key={`repair:${ownerKey}:${card.id}`} card={card} error={cardErrors.get(card.id) ?? null}
+          onSave={(fields, expectedFields) => updateCard(card.id!, { fields }, { expectedFields, scope: projectId })} />
+      ))}
 
       {targetCard && !targetCharacterExists && (
         <StandaloneStateTargetCard
