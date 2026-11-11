@@ -58,7 +58,7 @@ const TTRPG_REPLAY_CHUNK_MODULES = {
     'open-situation-work-reducer', 'open-stage-opening-reducer', 'open-stage-close-reducer', 'open-terminal-gates-reducer', 'runtime',
     'runtime-branch', 'runtime-event-reducer', 'open-session-situation-reducer',
     'open-entity-reducer',
-    'open-audio-reducer', 'open-voice-request-reducer', 'open-audio-media',
+    'open-audio-reducer', 'open-voice-request-reducer', 'open-audio-media', 'runtime-media-attempt-accounting',
   ],
 } as const
 
