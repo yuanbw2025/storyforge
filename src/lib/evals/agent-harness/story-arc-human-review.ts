@@ -313,7 +313,11 @@ export async function loadH86HumanReviewV1(): Promise<H86HumanReviewRecordV1 | n
   return record
 }
 
-export function clearH86HumanReviewV1(): void {
+export function clearH86HumanReviewV1(checkpointHash?: string): void {
+  if (checkpointHash != null) {
+    const raw = localStorage.getItem(H86_HUMAN_REVIEW_STORAGE_KEY_V1)
+    if (raw == null || (JSON.parse(raw) as H86HumanReviewRecordV1).checkpointHash !== checkpointHash) return
+  }
   localStorage.removeItem(H86_HUMAN_REVIEW_STORAGE_KEY_V1)
 }
 

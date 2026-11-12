@@ -79,7 +79,7 @@
       "tsconfig.tests.open-world-experience.json": "7596a50c2d283b59660b6402b2c2a421c73b6d6482eb2b7a7a1612006622db31",
       "tsconfig.tooling.json": "2f8f44cd11e5314602f6a753d8898590d0e8b75f227de3cf4b0394f7df54761a"
     },
-    "lockfileHash": "e396c3ff001c93542bea86ddcf5f87f9c4f19cfb86296db35690dfed37efaf20"
+    "lockfileHash": "f50834bc54f6691a65a5bbc6fcd6605c23aa71aedc4f1efb728053d024ad9ec8"
   },
   "entries": [
     {
@@ -47435,36 +47435,6 @@
         "column": 3,
         "start": 678,
         "length": 21
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts\",\"TS2345\",\"Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\\\"chapter\\\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\\n  Types of property 'kinds' are incompatible.\\n    The type 'readonly [\\\"chapter\\\"]' is 'readonly' and cannot be assigned to the mutable type '(\\\"world\\\" | \\\"reference\\\" | \\\"character\\\" | \\\"location\\\" | \\\"codex-entry\\\" | \\\"foreshadow\\\" | \\\"character-relation\\\" | \\\"story-arc\\\" | \\\"storyline-progress\\\" | \\\"chapter\\\" | \\\"worldview-field\\\" | ... 6 more ... | \\\"narrative-blueprint\\\")[]'.\",\"6108da874eca93a74340081bf05c12f1d39ae014ef950bf1785fc9690b806d06\",49,11]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\"chapter\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\n  Types of property 'kinds' are incompatible.\n    The type 'readonly [\"chapter\"]' is 'readonly' and cannot be assigned to the mutable type '(\"world\" | \"reference\" | \"character\" | \"location\" | \"codex-entry\" | \"foreshadow\" | \"character-relation\" | \"story-arc\" | \"storyline-progress\" | \"chapter\" | \"worldview-field\" | ... 6 more ... | \"narrative-blueprint\")[]'.",
-        "anchor": "6108da874eca93a74340081bf05c12f1d39ae014ef950bf1785fc9690b806d06",
-        "line": 146,
-        "column": 49,
-        "start": 5156,
-        "length": 11
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts\",\"TS2345\",\"Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\\\"chapter\\\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\\n  Types of property 'kinds' are incompatible.\\n    The type 'readonly [\\\"chapter\\\"]' is 'readonly' and cannot be assigned to the mutable type '(\\\"world\\\" | \\\"reference\\\" | \\\"character\\\" | \\\"location\\\" | \\\"codex-entry\\\" | \\\"foreshadow\\\" | \\\"character-relation\\\" | \\\"story-arc\\\" | \\\"storyline-progress\\\" | \\\"chapter\\\" | \\\"worldview-field\\\" | ... 6 more ... | \\\"narrative-blueprint\\\")[]'.\",\"a49ff1075618d6cabff5a9955633161f7363525c8852fdd4bcc95542a6f7e7ff\",39,11]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\"chapter\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\n  Types of property 'kinds' are incompatible.\n    The type 'readonly [\"chapter\"]' is 'readonly' and cannot be assigned to the mutable type '(\"world\" | \"reference\" | \"character\" | \"location\" | \"codex-entry\" | \"foreshadow\" | \"character-relation\" | \"story-arc\" | \"storyline-progress\" | \"chapter\" | \"worldview-field\" | ... 6 more ... | \"narrative-blueprint\")[]'.",
-        "anchor": "a49ff1075618d6cabff5a9955633161f7363525c8852fdd4bcc95542a6f7e7ff",
-        "line": 148,
-        "column": 39,
-        "start": 5254,
-        "length": 11
       }
     },
     {
