@@ -6,7 +6,7 @@ import { CInput, CTextarea } from '../shared/CompositionInput'
 /** A damaged record is editable only through explicit, validated author repair. */
 export default function StateCardRepair({ card, error, onSave }: {
   card: StateCard
-  error: string
+  error: string | null
   onSave: (fields: string, expectedFields: unknown) => Promise<void>
 }) {
   const [editing, setEditing] = useState(false)
@@ -16,6 +16,8 @@ export default function StateCardRepair({ card, error, onSave }: {
   const [saving, setSaving] = useState(false)
   const [rawMode, setRawMode] = useState(false)
   const originalText = typeof card.fields === 'string' ? card.fields : JSON.stringify(card.fields, null, 2) ?? ''
+
+  if (!editing && error === null) return null
 
   let rows: unknown[] | null = null
   try { const parsed: unknown = JSON.parse(draft); if (Array.isArray(parsed)) rows = parsed } catch { /* raw editor retains the invalid input */ }
@@ -51,7 +53,7 @@ export default function StateCardRepair({ card, error, onSave }: {
 
   return <article data-testid={`state-card-repair-${card.id}`} className="rounded-xl border border-warning/50 bg-bg-surface p-4 space-y-3">
     <h3 className="font-semibold text-text-primary">{card.entityName} · 状态字段需要修复</h3>
-    <p className="text-sm text-text-secondary">{error} 原始记录已保留，修复前不会作为完整状态用于生成。</p>
+    <p className="text-sm text-text-secondary">{error ?? '检测到字段异常。'} 原始记录已保留，修复前不会作为完整状态用于生成。</p>
     <div className="flex flex-wrap gap-3 text-sm">
       {!editing && <button type="button" className="text-accent" onClick={() => {
         setExpectedFields(card.fields)
