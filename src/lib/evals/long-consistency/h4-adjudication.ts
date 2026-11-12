@@ -9,7 +9,6 @@ import {
   readEnum,
   readHash,
   readInteger,
-  readNonNegativeNumber,
   readRecord,
   readString,
 } from '../../agent/run/schema-utils'
@@ -24,6 +23,8 @@ import {
   getH4LongConsistencyFixturesV1,
 } from './h4-fixtures'
 import {
+  parseH4LongConsistencyRunBudgetV1,
+  parseH4LongConsistencyRunUsageV1,
   parseH4LongConsistencyRunCheckpointV1,
   verifyH4LongConsistencyRunCheckpointV1,
   type H4LongConsistencyCompletedCaseV1,
@@ -227,50 +228,6 @@ function parseModelBinding(value: unknown, path: string): LongConsistencyModelBi
     model: readString(record.model, `${path}.model`, { max: 200 }),
     promptVersion: readString(record.promptVersion, `${path}.promptVersion`, { max: 160 }),
   }
-}
-
-function parseRunUsage(value: unknown, path: string): H4LongConsistencyRunUsageV1 {
-  const record = readRecord(value, path)
-  const keys = [
-    'modelCalls',
-    'meteredModelCalls',
-    'unmeteredModelCalls',
-    'inputTokens',
-    'outputTokens',
-    'durationMs',
-    'costUsd',
-  ] as const
-  assertExactKeys(record, keys, keys, path)
-  const usage = {
-    modelCalls: readInteger(record.modelCalls, `${path}.modelCalls`),
-    meteredModelCalls: readInteger(record.meteredModelCalls, `${path}.meteredModelCalls`),
-    unmeteredModelCalls: readInteger(record.unmeteredModelCalls, `${path}.unmeteredModelCalls`),
-    inputTokens: readInteger(record.inputTokens, `${path}.inputTokens`),
-    outputTokens: readInteger(record.outputTokens, `${path}.outputTokens`),
-    durationMs: readNonNegativeNumber(record.durationMs, `${path}.durationMs`),
-    costUsd: readNonNegativeNumber(record.costUsd, `${path}.costUsd`),
-  }
-  if (usage.meteredModelCalls + usage.unmeteredModelCalls !== usage.modelCalls) {
-    failSchema('invalid_value', path, 'metered + unmetered 必须等于 modelCalls')
-  }
-  return usage
-}
-
-function parseBudget(value: unknown, path: string): H4LongConsistencyRunBudgetV1 {
-  const record = readRecord(value, path)
-  const keys = ['maxModelCalls', 'maxInputTokens', 'maxOutputTokens', 'maxDurationMs', 'maxCostUsd'] as const
-  assertExactKeys(record, keys, keys, path)
-  const budget = {
-    maxModelCalls: readInteger(record.maxModelCalls, `${path}.maxModelCalls`, { min: 1 }),
-    maxInputTokens: readInteger(record.maxInputTokens, `${path}.maxInputTokens`, { min: 1 }),
-    maxOutputTokens: readInteger(record.maxOutputTokens, `${path}.maxOutputTokens`, { min: 1 }),
-    maxDurationMs: readNonNegativeNumber(record.maxDurationMs, `${path}.maxDurationMs`),
-    maxCostUsd: readNonNegativeNumber(record.maxCostUsd, `${path}.maxCostUsd`),
-  }
-  if (budget.maxDurationMs <= 0 || budget.maxCostUsd <= 0) {
-    failSchema('invalid_value', path, '时长与成本预算必须大于 0')
-  }
-  return budget
 }
 
 function parseFixtureBinding(value: unknown, path: string): LongConsistencyFixtureBindingV1 {
@@ -884,7 +841,7 @@ export function parseH4SubtypeAdjudicationCheckpointV1(
       'checkpoint.maxAttemptsPerFixture',
       { min: 1 },
     ),
-    budget: parseBudget(record.budget, 'checkpoint.budget'),
+    budget: parseH4LongConsistencyRunBudgetV1(record.budget, 'checkpoint.budget'),
     fixtureIds,
     fixtureSetHash: readHash(record.fixtureSetHash, 'checkpoint.fixtureSetHash'),
     attempts,
@@ -894,7 +851,7 @@ export function parseH4SubtypeAdjudicationCheckpointV1(
       .map((item, index) => parseFailure(item, `checkpoint.failures[${index}]`)),
     calls: readArray(record.calls, 'checkpoint.calls')
       .map((item, index) => parseCallRecord(item, `checkpoint.calls[${index}]`)),
-    usage: parseRunUsage(record.usage, 'checkpoint.usage'),
+    usage: parseH4LongConsistencyRunUsageV1(record.usage, 'checkpoint.usage'),
     checkpointHash: readHash(record.checkpointHash, 'checkpoint.checkpointHash'),
   }
 }
@@ -1258,7 +1215,7 @@ function resolvedBudget(
   maxAttemptsPerFixture: number,
   override: Partial<H4LongConsistencyRunBudgetV1> | undefined,
 ): H4LongConsistencyRunBudgetV1 {
-  return parseBudget({
+  return parseH4LongConsistencyRunBudgetV1({
     // Protocol repairs stay capped by maxAttemptsPerFixture. Two additional calls per
     // fixture are reserved only for explicit, user-triggered provider-blocked resumes.
     maxModelCalls: override?.maxModelCalls ?? Math.max(1, fixtureCount * (maxAttemptsPerFixture + 2)),
