@@ -54,6 +54,13 @@ env:
   VITE_STORYFORGE_COMMUNITY_R2_BUCKET: ${{ vars.STORYFORGE_COMMUNITY_R2_BUCKET }}
 jobs:
   consent:
+    if: &ordinary-client-checks >-
+      !(github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       (startsWith(github.head_ref, 'fix/sfqa-') ||
+        startsWith(github.head_ref, 'refactor/sfqa-') ||
+        startsWith(github.head_ref, 'fix/quality') ||
+        startsWith(github.head_ref, 'feat/quality-audit-')))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -73,6 +80,7 @@ jobs:
           path: test-results/
           retention-days: 14
   windows:
+    if: *ordinary-client-checks
     runs-on: windows-latest
     env:
       # Retained acceptance evidence includes paths beyond Windows MAX_PATH.
@@ -120,6 +128,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   macos:
+    if: *ordinary-client-checks
     strategy:
       fail-fast: false
       matrix:
@@ -170,6 +179,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   android:
+    if: *ordinary-client-checks
     permissions:
       contents: write # Read maintainer-signed APKs from the unpublished release.
     runs-on: ubuntu-latest

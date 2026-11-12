@@ -122,9 +122,9 @@ Harness 必须承担权限、状态、预算、幂等、stale、恢复、证据�
 
 - 当前是本地优先 React + TypeScript + IndexedDB 产品；用户手稿主要存于浏览器。
 - `Project` 只保存 LocalWorkspace 身份、用途、当前 World/Work 指针和工作区级开关；`Work` 是作品标题、简介、流派、状态、目标/当前字数、封面、文风、方法论和活动叙事计划的唯一 owner。创建表单可以同时收集两类输入，但必须在事务边界分开写入，禁止 Project/Work 镜像、双写、fallback 或隐式同步。
-- `main` 直接部署，没有 staging。当前硬切换只支持唯一 schema v1；不存在前代迁移或兼容读取。任何 schema、删除或导入错误都可能损坏真实创作数据。
+- `main` 直接部署，没有 staging。当前 schema/表集合以[生成工程指标](docs/ARCHITECTURE.md#3-当前工程指标)、[`STORYFORGE_SCHEMA_VERSION`](src/lib/db/schema.ts)、[`REQUIRED_TABLES`](src/lib/db/ensure-schema.ts) 和 [`PROJECT_TABLES`](src/lib/registry/project-tables.ts) 为准；已声明的旧库原位升级与便携备份转换是独立支持窗口，详见[数据治理 §7](docs/DATA-GOVERNANCE.md#7-schema-支持窗口与演进门)。未支持版本与损坏数据仍须拒绝；任何 schema、删除或导入错误都可能损坏真实创作数据。
 - 每条持久化数据必须能回答 owner、project/world/work/product instance、draft/release、来源、revision 与引用。
-- schema 变更必须有新库、严格拒绝、反例、往返、删除与失败回滚验证；不得靠隐式补字段或清库掩盖问题。未来只有在明确设定支持窗口后，才可为届时受支持的当前发行版本设计单向迁移。
+- schema 变更必须有新库、严格拒绝、反例、往返、删除与失败回滚验证；不得靠隐式补字段或清库掩盖问题。新增迁移须明确适用的发行版本与单向升级范围。
 - 正式封存版本不可变；上层实例必须锁定源世界版本，草稿修改不得静默改变已有发行或运行。
 - API Key 不进入仓库、日志、测试夹具或文档；连接成功不代表模型、余额、权限与任务输出契约均可用。
 - 失败状态必须区分 provider、认证、配额、限流、协议、结构、预算、stale 和结果未知，禁止笼统吞错。

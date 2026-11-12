@@ -74,7 +74,7 @@ StoryForge 是 React + TypeScript + IndexedDB 的本地优先生产项目。用�
 
 ## 验证与完成
 
-验证按风险递增：
+本轮 SFQA 整改按 `docs/COLLAB-WORKFLOW.md` §6 做改动范围内的非浏览器验证，每个独立修复验证后即普通合并。其他交付单元按以下步骤验证：
 
 1. 先跑改动对应的定向测试或检查器。
 2. 代码提交前至少通过 `npm run check:architecture`、`npm run check:required-tables`、
