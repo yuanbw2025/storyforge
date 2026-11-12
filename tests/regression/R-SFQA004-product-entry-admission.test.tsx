@@ -58,7 +58,6 @@ import { createAvgAuthoringPresetV1 } from '../../src/lib/avg/authoring-presets'
 import { legacyPackage as avgEditorPackage } from '../helpers/avg-carrier-fixture'
 import { seedAvgAuthorArtifacts, stageAuthorFixture } from '../helpers/avg-author-artifact-fixture'
 
-import { readTextOpenWorldArtifactGovernanceV1 } from '../../src/lib/open-world/creator-artifact-governance'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { prepareTextOpenWorldCreatorArtifactEditV1, createTextOpenWorldCreatorDirectEditOperationsV1, generateTextOpenWorldCreatorArtifactEditCandidateV1,
   confirmTextOpenWorldCreatorArtifactEditIntentV1, reviseTextOpenWorldCreatorArtifactEditCandidateV1, readLatestTextOpenWorldCreatorArtifactEditStateV1,
@@ -684,10 +683,9 @@ describe('SFQA004 · real authoring and production boundaries', () => {
   })
 
   async function creatorEditFixture() {
-    const f = await seedSfqa105GovernedBuild()
-    const governance = await readTextOpenWorldArtifactGovernanceV1({ scope: f.scope, productionId: f.productionId })
+    const f = await seedSfqa105GovernedBuild({ includeComparisonHashes: false })
     const selection = { scope: f.scope, productionId: f.productionId, buildId: f.buildId,
-      expectedSnapshotHash: governance.snapshotHash, artifactKey: SFQA105_ARTIFACT_KEY, entityIdentity: f.entityIdentity }
+      expectedSnapshotHash: f.governanceSnapshotHash, artifactKey: SFQA105_ARTIFACT_KEY, entityIdentity: f.entityIdentity }
     const context = await prepareTextOpenWorldCreatorArtifactEditV1(selection)
     const field = context.editableFields.find(row => row.jsonPointer.endsWith('/biography'))!
     const operations = await createTextOpenWorldCreatorDirectEditOperationsV1({ context, values: { [field.fieldId]: '004 author explicitly changes only this biography.' } })
