@@ -43,6 +43,7 @@ describe('NW-1B · unchanged corpus with explicit fixture author annotations', (
       'src/lib/registry/adopt.ts', 'src/lib/registry/adoption-schema.ts', 'src/lib/export/registry-export.ts',
       'src/lib/export/registry-import.ts', 'src/lib/export/portable-table-structure.ts', 'src/lib/export/backup-trust.ts', 'src/lib/world-engine/semantic-registry-v3.ts',
       'src/lib/context-gateway/canon-provider.ts',
+      'src/lib/utils/legacy-id-array.ts',
       'tests/helpers/narrative-domain-fixture.ts', 'tests/regression/R-NW-1B-corpus.test.ts',
       'tests/acceptance/narrative-world/corpus-v1.json',
     ]
@@ -51,6 +52,6 @@ describe('NW-1B · unchanged corpus with explicit fixture author annotations', (
       modelCalls: 0, independentHumanReviews: 0, queryProviderChanged: false,
       cases: observations, inputHashes: Object.fromEntries(paths.sort().map(file => [file, createHash('sha256').update(fs.readFileSync(file)).digest('hex')])) }
     if (process.env.NW_DOMAIN_REPORT) fs.writeFileSync(process.env.NW_DOMAIN_REPORT, JSON.stringify(receipt, null, 2) + '\n')
-    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/domain-projection-20261112-quality034039-after341-v1.json', 'utf8')))
+    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/domain-projection-20261112-sfqa009-after345-v1.json', 'utf8')))
   })
 })

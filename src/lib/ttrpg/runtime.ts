@@ -1,3 +1,4 @@
+import { stableRuntimeJsonV1 } from "../product/runtime-stable-json";
 import { initialCharacterAttributes } from "./character-mechanical-initialization";
 import { initializeTtrpgOpenMechanicalFactsV1 } from './open-fact-authority';
 import type {
@@ -28,17 +29,6 @@ import type { TtrpgRuntimeContentV2 } from "./content-version";
 import { parseTtrpgRuntimeStateV2, type TtrpgRuntimeStateV2 } from "./open-runtime-contract";
 import { key as parseOpenKey } from "./open-contract-parse";
 import { frozenTtrpgOpenEpochBudgetV1, ttrpgOpenEpochBudgetForTriggerV1 } from "./open-coordination";
-
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (value && typeof value === "object")
-    return `{${Object.entries(value as Record<string, unknown>)
-      .filter(([, child]) => child !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([field, child]) => `${JSON.stringify(field)}:${stableJson(child)}`)
-      .join(",")}}`;
-  return JSON.stringify(value) ?? "null";
-}
 
 
 export function createInitialTtrpgProductStateV1(input: {
@@ -618,8 +608,8 @@ export function assertInitialTtrpgOpenProductStateV1(input: {
     initialState: { ...structuredClone(input.state), entities: {}, ttrpg: null },
     content: input.content, mechanicalRulePack: input.mechanicalRulePack, sessionKey: runtime.sessionKey,
   });
-  if (stableJson(input.state.ttrpg) !== stableJson(expected.ttrpg)
-    || stableJson(input.state.entities) !== stableJson(expected.entities)) {
+  if (stableRuntimeJsonV1(input.state.ttrpg) !== stableRuntimeJsonV1(expected.ttrpg)
+    || stableRuntimeJsonV1(input.state.entities) !== stableRuntimeJsonV1(expected.entities)) {
     throw new Error("[ttrpg] open 初始机械状态/库存/身份必须精确来自冻结内容。");
   }
 }
@@ -658,8 +648,8 @@ export function assertInitialTtrpgProductStateV1(input: {
     JSON.stringify(expectedProduct.clueCatalog)
       ? "clues"
       : "",
-    stableJson(actualProduct.clockCatalog) !==
-    stableJson(expectedProduct.clockCatalog)
+    stableRuntimeJsonV1(actualProduct.clockCatalog) !==
+    stableRuntimeJsonV1(expectedProduct.clockCatalog)
       ? "clocks"
       : "",
     JSON.stringify(actualProduct.sessionZero.requiredItemKeys) !==
@@ -683,8 +673,8 @@ export function assertInitialTtrpgProductStateV1(input: {
     )
       ? "quests"
       : "",
-    stableJson(actualProduct.endingCatalog) !==
-    stableJson(expectedProduct.endingCatalog)
+    stableRuntimeJsonV1(actualProduct.endingCatalog) !==
+    stableRuntimeJsonV1(expectedProduct.endingCatalog)
       ? "endings"
       : "",
     actualProduct.advancement.currencyKey !==
@@ -727,13 +717,13 @@ export function assertInitialTtrpgProductStateV1(input: {
     )
       ? "media-catalog"
       : "",
-    stableJson(actualProduct.media?.runtimePolicy ?? null) !==
-    stableJson(expectedProduct.media?.runtimePolicy ?? null)
+    stableRuntimeJsonV1(actualProduct.media?.runtimePolicy ?? null) !==
+    stableRuntimeJsonV1(expectedProduct.media?.runtimePolicy ?? null)
       ? "media-policy"
       : "",
     actualProduct.media &&
     !input.allowProgress &&
-    stableJson(actualProduct.media) !== stableJson(expectedProduct.media)
+    stableRuntimeJsonV1(actualProduct.media) !== stableRuntimeJsonV1(expectedProduct.media)
       ? "media-state"
       : "",
     !input.allowProgress && actualProduct.characterCustomizations.length > 0

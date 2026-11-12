@@ -1,3 +1,4 @@
+import { parseLegacyIdArray } from "../utils/legacy-id-array"
 import { db } from '../db/schema'
 import { adopt } from '../registry/adopt'
 import type {
@@ -360,7 +361,7 @@ export async function deleteReferenceWithAnalysis(referenceId: number): Promise<
       const rules = await readOwnedRows<any>(scope, 'creativeRules', { owner: 'work' })
       for (const rule of rules) {
         if (!rule.id) continue
-        const ids = parseIdArray(rule.citedReferenceIds)
+        const ids = parseLegacyIdArray(rule.citedReferenceIds)
         if (!ids.includes(referenceId)) continue
         await db.creativeRules.update(rule.id, {
           citedReferenceIds: JSON.stringify(ids.filter(id => id !== referenceId)),
@@ -389,17 +390,6 @@ async function patchReferenceActiveProjection(referenceId: number, changes: Part
     data: changes as Record<string, unknown>,
   })
   if (!result.written.length) throw new Error('参考资料激活投影写回失败')
-}
-
-function parseIdArray(value: unknown): number[] {
-  if (Array.isArray(value)) return value.filter((id): id is number => typeof id === 'number')
-  if (typeof value !== 'string') return []
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed.filter((id): id is number => typeof id === 'number') : []
-  } catch {
-    return []
-  }
 }
 
 export interface ReferenceAnalysisDiff {
