@@ -695,7 +695,7 @@ async function projectionPolicy(input: {
     ...own,
     enabled: isRagSelectionEnabledV1(input.row.ragPolicy, fields) && snapshots.every(item => !item.required || item.enabled),
     revision: snapshots.reduce((revision, item) => Math.max(revision, item.revision), own.revision),
-    hash: await hashCanonicalValue({ version: 1, ownPolicyHash: own.hash, fields: [...fields].sort(), dependencies: snapshots }),
+    hash: await hashCanonProjection({ version: 1, ownPolicyHash: own.hash, fields: [...fields].sort(), dependencies: snapshots }),
   }
 }
 
