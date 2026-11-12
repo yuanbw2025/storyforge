@@ -1,10 +1,11 @@
 import { db } from '../db/schema'
 import { adopt as governedAdopt } from '../registry/adopt'
-import { createWorldRevision, publishWorldRevision } from './releases'
+import { buildWorldReleaseManifest, createWorldRevision, publishWorldRevision } from './releases'
 import { createWorkspace } from '../workspace/create-workspace'
 import { readOwnedRows, stampNewRecord } from '../workspace/scope'
 import { resolveWorkspaceScope } from '../workspace/ownership'
-import type { CodexCategory } from '../types'
+import { readWorldReleaseEditionV3 } from './release-codec'
+import type { CodexCategory, WorkspaceScope } from '../types'
 
 async function adopt(input: Parameters<typeof governedAdopt>[0]) {
   const result = await governedAdopt(input)
@@ -20,6 +21,8 @@ async function adopt(input: Parameters<typeof governedAdopt>[0]) {
   return result
 }
 
+export const SALT_RIDGE_WORKSPACE_UID = 'WS-5942cf5a-0dca-5ca2-b6de-e59863c8a9ef'
+
 /**
  * Canonical semantic source for the G7 vertical acceptance world.
  *
@@ -29,12 +32,13 @@ async function adopt(input: Parameters<typeof governedAdopt>[0]) {
  * must be created by the text-open-world production pipeline.
  */
 export async function createSaltRidgeWorldV1(name = '盐脊 · 断流之夜') {
-  const workspaceUid = 'WS-5942cf5a-0dca-5ca2-b6de-e59863c8a9ef'
+  const workspaceUid = SALT_RIDGE_WORKSPACE_UID
   const existing = await db.projects.filter(row => row.workspaceUid === workspaceUid).first()
   if (existing) {
     const scope = await resolveWorkspaceScope(existing.id!)
     const frozen = await db.worldReleases.where('worldId').equals(scope.worldId).first()
     if (frozen) return { scope, worldReleaseId: frozen.id! }
+    await assertSaltRidgeEdition(await buildWorldReleaseManifest({ scope }))
     const revision = await createWorldRevision({ scope, label: `${name} · 内置展示世界 v1` })
     const release = await publishWorldRevision(revision.id!)
     return { scope, worldReleaseId: release.id! }
@@ -268,3 +272,27 @@ export async function createSaltRidgeWorldV1(name = '盐脊 · 断流之夜') {
 
 /** Historical name retained for production-pipeline regression suites. */
 export const seedSaltRidgeWorldV1 = createSaltRidgeWorldV1
+
+// Hash of the built-in edition's semantic rows and portable relationships.
+// Independent installs generate different timestamps and portable document IDs.
+const SALT_RIDGE_EDITION_HASH = 'dd6b658ff3646236e179782da0e2a921e3699cb397f6ac96c805a5c2f5edcd75'
+
+export async function verifySaltRidgeShowcaseSourceV1(scope: WorkspaceScope, worldReleaseId: number) {
+  const release = await db.worldReleases.get(worldReleaseId)
+  if (!release || release.projectId !== scope.projectId || release.worldId !== scope.worldId) {
+    throw new Error('盐脊展示冻结来源不属于该世界')
+  }
+  const { sourceWorkCode } = await assertSaltRidgeEdition(release.manifestJson, release.contentHash, release.sourceWorldCode)
+  const owners = await db.works.where('worldId').equals(scope.worldId)
+    .filter(work => work.projectId === scope.projectId && work.code === sourceWorkCode).toArray()
+  if (owners.length !== 1 || owners[0]?.id == null) throw new Error('盐脊展示冻结作品归属不明确')
+  return { contentHash: release.contentHash, scope: { ...scope, workId: owners[0].id } }
+}
+
+async function assertSaltRidgeEdition(manifest: unknown, expectedContentHash?: string, expectedWorldCode?: string) {
+  const edition = await readWorldReleaseEditionV3({ manifest, expectedContentHash, expectedWorldCode })
+  if (edition.editionHash !== SALT_RIDGE_EDITION_HASH || edition.sourceWorkspaceUid !== SALT_RIDGE_WORKSPACE_UID) {
+    throw new Error('冻结来源与内置盐脊展示作品不一致')
+  }
+  return edition
+}

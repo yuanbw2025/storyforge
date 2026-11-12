@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1, evaluateCurrentProductEntryV1 } from '../../lib/product/product-catalog'
 import { useEffect, useRef, useState } from "react";
 import type {
   WorkspaceScope,
@@ -24,6 +25,7 @@ export default function AuthorProposal({
   productionId: number;
   onProduction?: () => void;
 }) {
+  const canAuthor = evaluateCurrentProductEntryV1('upper.ttrpg').enterable
   const [details, setDetails] = useState<Awaited<
       ReturnType<typeof readProductProductionDetailsV1>
     > | null>(null),
@@ -57,6 +59,7 @@ export default function AuthorProposal({
     };
   }, [scope, productionId]);
   const save = async (next: TtrpgCampaignDesignV2) => {
+    assertCurrentProductEntryV1('upper.ttrpg')
     if (!details?.brief || details.build)
       throw new Error("已进入制作的版本不可在这里改写，请从方案页生成新一版");
     const brief = parseProductProductionBriefV3(details.brief.briefJson);
@@ -148,6 +151,7 @@ export default function AuthorProposal({
   </>;
   return (
     <section className="lf-paper">
+      {!canAuthor && <p role="status">当前产品尚未开放新提案或方案确认；已有提案仍可查看。</p>}
       <h3>讨论方案，比较不同的战役方向</h3>
       <p>
         需求来自“世界与指令”和九步配置。可比较提案、混合分区、锁定满意部分，再按需请
@@ -161,7 +165,7 @@ export default function AuthorProposal({
         </p>
       ) : null}
       {design ? (
-        <fieldset disabled={busy || Boolean(details?.build)}>
+        <fieldset disabled={busy || !canAuthor || Boolean(details?.build)}>
           <TtrpgCampaignProposalSelector
             value={design}
             onChange={(v) => {

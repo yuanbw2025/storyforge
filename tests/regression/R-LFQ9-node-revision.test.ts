@@ -95,6 +95,25 @@ describe('LFQ9 · 可组合的范围修订节点', () => {
     expect((await db.chapters.get(f.chapterId))!.content).toBe(f.content)
   })
 
+  it('作品已无准入时，节点拒绝前保留原修订候选及正式取消回执状态', async () => {
+    const f = await seed()
+    const generated = await runAuthoringGraph({ flow: f.flow, targetNodeId: f.repair.id })
+    const decision = { flow: f.flow, runId: generated.run.id!, nodeId: f.repair.id, reject: true }
+    const stored = await db.nodeRuns.get(decision.runId)
+    const eventsBefore = await db.agentRunEvents.toArray()
+    const previousURL = window.location.href
+    try {
+      window.location.href = 'https://storyforge.example/'
+      await db.works.update(f.scope.workId, { kind: 'character-interaction', novelProfile: null })
+      await expect(reviseAuthoringCandidate(decision)).rejects.toThrow('product-catalog')
+      expect(await db.agentRunEvents.toArray()).toEqual(eventsBefore)
+      expect(await db.nodeRuns.get(decision.runId)).toEqual(stored)
+      expect((await db.chapters.get(f.chapterId))!.content).toBe(f.content)
+    } finally {
+      window.location.href = previousURL
+    }
+  })
+
   it('错误报告、未选问题和变化后的原稿均在修订模型前拒绝', async () => {
     const f = await seed(); const input = args(f)
     await expect(executeDomainNode({ ...input, node: { ...f.repair, config: { ...f.repair.config, reportHash: '错误' } } })).rejects.toThrow('报告已变化')
