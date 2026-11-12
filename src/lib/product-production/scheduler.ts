@@ -87,7 +87,7 @@ import {
   textAdventureQualityReviewBatchTaskKeysV1,
   textAdventureQualityReviewScopeFromTaskKeyV1,
 } from './plan'
-import { createProductBuildPreviewManifestV1 } from './preview-manifest'
+import { createProductBuildPreviewManifestV1, verifyRestoredProductBuildPreviewManifestV1 } from './preview-manifest'
 import { createProductBuildRootTerminalReceiptV1 } from './receipts'
 import { verifyImportedPublishedRootOriginV1 } from './published-root-origin'
 import { readMediaBlobObjectData } from './media-blob-store'
@@ -136,7 +136,7 @@ import {
   type TextAdventureQualityReferenceIndexV1,
   type TextAdventureQualityReviewBatchCoverageV1,
 } from './text-adventure-quality'
-import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../open-world/creator-derived-authority'
+import { assertTextOpenWorldCreatorRoleForNewWorkV1, readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../open-world/creator-derived-authority'
 import {
   resolveTextOpenWorldCreatorRepairTaskResultV1,
   type TextOpenWorldCreatorRepairExecutionAuthorityV1,
@@ -2425,6 +2425,7 @@ async function ensurePlan(input: {
   if (['paused', 'cancelled', 'failed', 'recovery-required', 'archived', 'released'].includes(state.build.status)) {
     throw new Error(`[product-production-scheduler] Build 状态 ${state.build.status} 不允许调度`)
   }
+  if (state.creatorContracts) assertTextOpenWorldCreatorRoleForNewWorkV1(state.creatorContracts.creatorBrief.draft)
   let currentPlan: ProductProductionPlanV3 | null = null
   try {
     currentPlan = parseProductProductionPlanV3(state.build.planJson, state.brief, state.briefRow.briefHash)
@@ -6551,7 +6552,9 @@ async function compileTerminalBuild(input: {
     buildManifestHash: manifestHash, mediaBindings, fallbackSummary,
   }
   const preview = runtimePackage.version === 1
-    ? await createProductBuildPreviewManifestV1({ ...previewInput, runtimePackage }, { ttrpgProtocol: 2 })
+    ? input.restoreImportedProofs
+      ? await verifyRestoredProductBuildPreviewManifestV1(build.previewManifestJson, { ...previewInput, runtimePackage }, { ttrpgProtocol: 2 })
+      : await createProductBuildPreviewManifestV1({ ...previewInput, runtimePackage }, { ttrpgProtocol: 2 })
     : await createProductBuildPreviewManifestV2({ ...previewInput, runtimePackage })
   if (input.restoreImportedProofs && (manifestHash !== build.manifestHash
     || packageHash !== build.packageHash || preview.previewHash !== build.previewHash

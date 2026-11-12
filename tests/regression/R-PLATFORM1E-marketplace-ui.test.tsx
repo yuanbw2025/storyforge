@@ -395,6 +395,7 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     expect(favorites.map(input => input.active)).toEqual([true, false, true])
     expect(new Set(favorites.map(input => input.requestId)).size).toBe(3)
     await act(async () => { button(host, '订阅更新').click(); await settle() })
+    await waitFor(() => expect(button(host, '已订阅更新').getAttribute('aria-pressed')).toBe('true'))
     await act(async () => { button(host, '关注创作者').click(); await settle() })
     expect(community.setSocialEdge).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'follow-creator', targetId: listing.creatorId, active: true,
@@ -496,6 +497,7 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     const firstWrite = deferred<Awaited<ReturnType<typeof service.setSocialEdge>>>()
     service.setSocialEdge.mockImplementationOnce(() => firstWrite.promise)
     await clickSocial('收藏')
+    await waitFor(() => expect(service.setSocialEdge).toHaveBeenCalledTimes(1))
     const id = service.setSocialEdge.mock.calls[0][0].requestId
     await credential(accountB)
     await clickSocial('读取收藏状态')
@@ -507,6 +509,7 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     await clickSocial('读取收藏状态')
     service.setSocialEdge.mockImplementationOnce(async input => { service.save(input); throw new Error('回复未送达') })
     await clickSocial('收藏')
+    await waitFor(() => expect(host.textContent).toContain('回复未送达'))
     expect(service.setSocialEdge.mock.calls[2][0].requestId).toBe(id)
     await clickSocial('刷新')
     await expectFavorite('已收藏')
