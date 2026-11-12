@@ -395,6 +395,7 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     expect(favorites.map(input => input.active)).toEqual([true, false, true])
     expect(new Set(favorites.map(input => input.requestId)).size).toBe(3)
     await act(async () => { button(host, '订阅更新').click(); await settle() })
+    await waitFor(() => expect(button(host, '已订阅更新').getAttribute('aria-pressed')).toBe('true'))
     await act(async () => { button(host, '关注创作者').click(); await settle() })
     expect(community.setSocialEdge).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'follow-creator', targetId: listing.creatorId, active: true,
