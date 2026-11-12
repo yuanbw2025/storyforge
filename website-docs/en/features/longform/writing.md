@@ -1,6 +1,17 @@
 # Longform: outlines, scene beats, and prose
 
 
+
+## Outline diagnosis and selective rewriting
+
+Open AI chapter-outline diagnosis, start diagnosis, then expand an issue to choose AI repair, manual editing or ignore. A valid empty issue list reports that this diagnosis located no issue so the author can continue reviewing the original. Empty responses, invalid reports and call failures show their actual errors. Inspect any received raw response before explicitly restarting diagnosis or rewriting.
+
+Check the selected outline and the after-application preview before confirming. Preview and adoption use the frozen real outline and uniquely located patches, preserving unselected content verbatim. Resolve mismatched model quotations, ambiguous locations or changed sources while retaining the candidate. See [PR #303](https://github.com/yuanbw2025/storyforge/pull/303).
+
+## Confirming batch detailed outlines individually
+
+Inspect each current candidate after batch generation and explicitly adopt it before continuing. After reload, return to a pending chapter to recover a saved candidate. Refresh and inspect a changed candidate or target before confirming again. Failed adoption retains its error, and completion requires a full readback of the written result. Outlines or prose still referenced by historical runs are protected before local deletion to retain history and backup references. See [PR #301](https://github.com/yuanbw2025/storyforge/pull/301).
+
 ## Completing previously confirmed content after interruption
 
 After interrupted prose, detailed-outline or impact-patch adoption, inspect the candidate, task and recovery prompt first. Recovery checks the original author decision, source and target before continuing that confirmation. Use Continue completing confirmed content when offered instead of starting generation again. Failed writes or completion-event saves roll back together, retaining the candidate for confirmation. An existing completion proof reuses the original result. See [#255](https://github.com/yuanbw2025/storyforge/pull/255).
