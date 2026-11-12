@@ -55,7 +55,6 @@ import {
 } from '../agent/creative-reliability'
 import { buildNarrativeBriefV1, formatNarrativeBriefForPromptV1 } from '../agent/narrative-brief'
 import {
-  buildChapterOrganizationPrompt,
   isChapterOrganizationCurrent,
   persistChapterOrganizationCandidate,
   adoptChapterOrganizationSelection,
@@ -65,7 +64,6 @@ import {
 import { AgentTeamBudgetTracker, type AgentTeamBudgetProfile } from '../agent/team-budget'
 import { hashChapterText, normalizeChapterText } from '../ai/chapter-memory/text-normalization'
 import {
-  buildFactExtractPrompt,
   parseCanonicalFactCandidateDraftV1,
   parseFactExtractResult,
 } from '../ai/adapters/fact-extract-adapter'
@@ -77,10 +75,11 @@ import type { AIConfig, WorkspaceScope } from '../types'
 import type { AdoptResult } from '../registry/types'
 import { AUTHORING_NODE_BY_ID } from './catalog'
 import {
-  hashAuthoringText,
   readAuthoringCanonBinding,
   resolveAuthoringBoundRecordId,
+  type AuthoringSourceEvidenceV1,
 } from './bindings'
+import { chapterNodeContextPolicy, readFactNodeSource, readOrganizationNodeSource } from './chapter-source'
 import type {
   AuthoringCandidateDomain,
   AuthoringInputEnvelope,
@@ -97,12 +96,7 @@ export interface DomainExecutionResult {
   creativeArtifacts?: CreativeArtifactV1[]
   sourceKeys?: string[]
   sourceHash?: string
-  sourceEvidence?: {
-    included: string[]
-    omitted: string[]
-    trimmed: string[]
-    missing: string[]
-  }
+  sourceEvidence?: AuthoringSourceEvidenceV1
   semantic: AuthoringSemantic
   domain: AuthoringCandidateDomain
 }
@@ -768,56 +762,15 @@ async function resolveOrganizationChapter(input: DomainExecutionInput) {
   return { chapter, outline, scope }
 }
 
-function chapterSegment(assembled: Awaited<ReturnType<typeof assembleContext>>, key: string): string {
-  const index = assembled.included.indexOf(key)
-  return index >= 0 ? assembled.segments[index]?.content ?? '' : ''
-}
-
 async function executeChapterOrganization(input: DomainExecutionInput): Promise<DomainExecutionResult> {
-  const { chapter, outline, scope } = await resolveOrganizationChapter(input)
+  const { chapter, scope } = await resolveOrganizationChapter(input)
   const contextBudgetValue = contextBudget(input.node, input.inputs, 28_000)
-  const assembled = await assembleContext({
-    projectId: input.projectId,
-    scope,
-    worldGroupId: input.worldGroupId,
-    outlineNodeId: outline.id,
-    chapterId: chapter.id,
-    sourceKeys: AUTHORING_NODE_BY_ID.get(input.node.templateId)?.reads?.sourceKeys,
-    inputBudgetTokens: contextBudgetValue,
-    provider: input.aiConfig.provider,
-    model: input.aiConfig.model,
+  const canonicalContext = chapterNodeContextPolicy(input.node.templateId, contextBudgetValue, input.aiConfig)
+  const { assembled, chapterText, messages, sourceHash, characters, visibleRelations, foreshadows } = await readOrganizationNodeSource({
+    projectId: input.projectId, scope, worldGroupId: input.worldGroupId, chapter, policy: canonicalContext,
   })
-  const chapterText = normalizeChapterText(chapterSegment(assembled, 'chapterContent') || chapter.content || '')
   if (!chapterText) throw new Error('目标章节没有可整理的正文。')
-  const [allCharacters, relations, foreshadows, itemRows] = await Promise.all([
-    readOwnedRows<any>(scope, 'characters', { owner: 'world' }),
-    readOwnedRows<any>(scope, 'characterRelations', { owner: 'world' }),
-    readOwnedRows<any>(scope, 'foreshadows', { owner: 'work' }),
-    readOwnedRows<any>(scope, 'itemLedger', { owner: 'work' }),
-  ])
-  const characters = allCharacters.filter(character => (
-    Boolean(character.isCrossWorld) || (character.homeWorldGroupId ?? null) === input.worldGroupId
-  ))
-  const visibleCharacterIds = new Set(characters.flatMap(character => character.id == null ? [] : [character.id]))
-  const visibleRelations = relations.filter(relation => (
-    visibleCharacterIds.has(relation.fromCharacterId) && visibleCharacterIds.has(relation.toCharacterId)
-  ))
-  const knownItemNames = [...new Set(itemRows.map(item => item.itemName.trim()).filter(Boolean))]
   const tracker = new AgentTeamBudgetTracker(organizationBudgetProfile(contextBudgetValue))
-  const messages = buildChapterOrganizationPrompt({
-    chapterTitle: chapter.title,
-    chapterText,
-    stateContext: [
-      chapterSegment(assembled, 'stateCards'),
-      chapterSegment(assembled, 'currentFacts'),
-      chapterSegment(assembled, 'characterKnowledge'),
-      chapterSegment(assembled, 'storylineProgress'),
-    ].filter(Boolean).join('\n\n'),
-    characters,
-    knownItemNames,
-    existingRelations: visibleRelations,
-    foreshadows,
-  })
   if (configText(input.node, 'request')) messages.push({ role: 'user', content: configText(input.node, 'request') })
   const trackerReservation = tracker.reserveCall({ label: '整理本章', messages, maxOutputTokens: 8_000 })
   let raw: string
@@ -852,8 +805,9 @@ async function executeChapterOrganization(input: DomainExecutionInput): Promise<
     output: JSON.stringify(parsed, null, 2),
     semantic: 'continuity.report',
     sourceKeys: assembled.included,
-    sourceHash: hashAuthoringText(`${assembled.included.join(',')}:${sourceTextHash}`),
+    sourceHash,
     sourceEvidence: {
+      canonicalContext,
       included: assembled.included,
       omitted: assembled.omitted,
       trimmed: assembled.trimmed,
@@ -870,22 +824,13 @@ async function executeChapterOrganization(input: DomainExecutionInput): Promise<
 }
 
 async function executeFactNode(input: DomainExecutionInput): Promise<DomainExecutionResult> {
-  const { chapter, outline, scope } = await resolveOrganizationChapter(input)
+  const { chapter, scope } = await resolveOrganizationChapter(input)
   const contextBudgetValue = contextBudget(input.node, input.inputs, 20_000)
-  const assembled = await assembleContext({
-    projectId: input.projectId,
-    scope,
-    worldGroupId: input.worldGroupId,
-    outlineNodeId: outline.id,
-    chapterId: chapter.id,
-    sourceKeys: AUTHORING_NODE_BY_ID.get(input.node.templateId)?.reads?.sourceKeys,
-    inputBudgetTokens: contextBudgetValue,
-    provider: input.aiConfig.provider,
-    model: input.aiConfig.model,
+  const canonicalContext = chapterNodeContextPolicy(input.node.templateId, contextBudgetValue, input.aiConfig)
+  const { assembled, chapterText, messages, sourceHash } = await readFactNodeSource({
+    projectId: input.projectId, scope, worldGroupId: input.worldGroupId, chapter, policy: canonicalContext,
   })
-  const chapterText = normalizeChapterText(chapterSegment(assembled, 'chapterContent') || chapter.content || '')
   if (!chapterText) throw new Error('目标章节没有可抽取事实的正文。')
-  const messages = buildFactExtractPrompt({ chapterTitle: chapter.title, chapterContent: chapterText })
   if (configText(input.node, 'request')) messages.push({ role: 'user', content: configText(input.node, 'request') })
   const raw = await chat(messages, input.aiConfig, {
     category: 'chapter.continuity',
@@ -899,8 +844,8 @@ async function executeFactNode(input: DomainExecutionInput): Promise<DomainExecu
     output: JSON.stringify({ facts: candidates }, null, 2),
     semantic: 'continuity.fact',
     sourceKeys: assembled.included,
-    sourceHash: hashAuthoringText(`${assembled.included.join(',')}:${sourceTextHash}`),
-    sourceEvidence: { included: assembled.included, omitted: assembled.omitted, trimmed: assembled.trimmed, missing: [] },
+    sourceHash,
+    sourceEvidence: { canonicalContext, included: assembled.included, omitted: assembled.omitted, trimmed: assembled.trimmed, missing: [] },
     domain: { kind: 'facts', chapterId: chapter.id!, sourceTextHash, candidateJson: JSON.stringify(candidates) },
   }
 }

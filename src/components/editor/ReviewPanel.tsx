@@ -449,7 +449,12 @@ function ConsistencyResultView({ result }: { result: ConsistencyAuditResult }) {
           <p className="mt-1 text-[11px] text-text-muted border-l-2 border-border pl-2">正文：“{finding.quote}”</p>
           {finding.evidence.map((evidence, evidenceIndex) => (
             <p key={evidenceIndex} className="mt-1 text-[11px] text-accent/80">
-              证据 {evidence.sourceType}#{evidence.sourceId}：“{evidence.quote}”
+              {evidence.position ? (
+                <>证据 {evidence.sourceType}#{evidence.sourceId}
+                  {' · '}{evidence.anchorId ?? `字符 ${evidence.position.start + 1}–${evidence.position.end}`}
+                  {' · '}<span title={evidence.position.versionHash}>版本 {evidence.position.versionHash.slice(0, 12)}</span>
+                </>
+              ) : '未核验来源位置的引文'}：“{evidence.quote}”
             </p>
           ))}
           {finding.suggestion && <p className="mt-1 text-xs text-accent">建议：{finding.suggestion}</p>}

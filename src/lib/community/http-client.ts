@@ -251,13 +251,13 @@ function normalizedBaseUrl(value: string): string {
 }
 
 export class CommunityHttpClientV1 {
-  private readonly baseUrl: string
+  readonly baseUrl: string
   private readonly fetchImpl: FetchV1
   private readonly timeoutMs: number
 
   constructor(input: { baseUrl: string; fetch?: FetchV1; timeoutMs?: number }) {
     this.baseUrl = normalizedBaseUrl(input.baseUrl)
-    this.fetchImpl = input.fetch ?? (globalThis.fetch as unknown as FetchV1)
+    this.fetchImpl = input.fetch ?? globalThis.fetch?.bind(globalThis)
     this.timeoutMs = input.timeoutMs ?? 30_000
     if (typeof this.fetchImpl !== 'function' || !Number.isInteger(this.timeoutMs)
       || this.timeoutMs < 100 || this.timeoutMs > 120_000) fail('configuration', '社区 HTTP 配置无效')

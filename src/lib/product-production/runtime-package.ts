@@ -1,6 +1,6 @@
 import {parseChatVisualDesignV1} from '../character-interaction/visual-design'
 import {parseChatExperienceInfoV1} from '../character-interaction/experience-info'
-import { parseAdventureContent } from '../adventure/runtime'
+import { parseAdventureContent, assertAdventureRuntimeDiceSupportV1 } from '../adventure/runtime'
 import {parseChatMediaBindingsV1} from '../character-interaction/media-contract'
 import {parseChatCharacterCardCreditsV1} from '../character-interaction/card-credits'
 import { parseAvgPresentationContent, validateAvgPresentation } from '../avg/runtime'
@@ -871,6 +871,9 @@ export async function createProductReleaseManifestV1(
   const runtimePackage = reader
     ? parseProductRuntimePackageV1(input.runtimePackage, reader)
     : parseProductRuntimePackageV1(input.runtimePackage)
+  if (runtimePackage.productType === 'text-adventure' && runtimePackage.adventure) {
+    assertAdventureRuntimeDiceSupportV1(runtimePackage.adventure)
+  }
   const identityBody: ProductReleaseIdentityBodyV1 = {
     schema: 'storyforge.product-release',
     version: 1,

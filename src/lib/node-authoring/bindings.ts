@@ -4,11 +4,14 @@ import { buildRagLibrary, makeRagEntryKey } from '../retrieval/rag-library'
 import { createRagSelectionTrace, type RagLibraryEntry } from '../types/rag-library'
 import type { AuthoringCandidate, AuthoringNodeGraph, AuthoringNodeInstance } from './contracts'
 import type { WorkspaceScope } from '../types/world-ownership'
+import type { Chapter, OutlineNode } from '../types'
 import { readOwnedRows, resolveScopeLike } from '../workspace/scope'
 import { REGISTRY_BY_NAME } from '../registry/project-tables'
 import { FIELD_BY_TARGET } from '../registry/field-registry'
 import type { AdoptResult } from '../registry/types'
 import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
+
+import { readFactNodeSource, readOrganizationNodeSource, type AuthoringCanonicalChapterContext } from './chapter-source'
 
 /**
  * FLOW-3 Canon binding adapter.
@@ -17,14 +20,19 @@ import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
  * value is always read through the RAG projection and assembleContext, so this
  * module never becomes a second content authority.
  */
-export interface AuthoringBindingRead {
-  content: string
-  sourceHash: string
-  sourceKeys: string[]
+export interface AuthoringSourceEvidenceV1 {
   included: string[]
   omitted: string[]
   trimmed: string[]
   missing: string[]
+  /** Non-secret parameters of the assembly captured before the model call. */
+  canonicalContext?: AuthoringCanonicalChapterContext
+}
+
+export interface AuthoringBindingRead extends AuthoringSourceEvidenceV1 {
+  content: string
+  sourceHash: string
+  sourceKeys: string[]
 }
 
 export interface AuthoringTargetFingerprint {
@@ -148,20 +156,21 @@ function fingerprintEntries(entries: RagLibraryEntry[], keys: string[]): string 
   }).join('\n'))
 }
 
-async function resolveChapterScope(node: AuthoringNodeInstance, scope: WorkspaceScope, worldGroupId: number | null) {
+async function resolveChapterScope(node: AuthoringNodeInstance, scope: WorkspaceScope, worldGroupId: number | null, chapterId?: number) {
   const title = typeof node.config.chapterTitle === 'string' ? node.config.chapterTitle.trim() : ''
-  if (!title) return {}
+  if (!title && chapterId == null) return undefined
   const [chapters, outlines] = await Promise.all([
-    readOwnedRows<any>(scope, 'chapters', { owner: 'work' }),
-    readOwnedRows<any>(scope, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
+    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
   ])
   const outlineById = new Map(outlines.flatMap(item => item.id == null ? [] : [[item.id, item] as const]))
   const match = chapters.find(chapter => {
     const outline = outlineById.get(chapter.outlineNodeId)
-    return chapter.title === title
+    return (chapterId == null ? chapter.title === title : chapter.id === chapterId && outline?.id != null)
       && (outline?.worldGroupId ?? null) === worldGroupId
   })
-  return match?.id == null ? {} : { chapterId: match.id, outlineNodeId: match.outlineNodeId }
+  if (chapterId != null && !match) throw new Error('原节点来源章节已删除或不属于本次作品。')
+  return match?.id == null ? undefined : match
 }
 
 /** Read the current Canon value for a node's registered sources or exact fields. */
@@ -171,10 +180,28 @@ export async function readAuthoringCanonBinding(input: {
   scope?: WorkspaceScope
   worldGroupId: number | null
   contextBudget?: number
+  /** Existing domain.chapterId, never a second persisted record reference. */
+  chapterId?: number
+  canonicalContext?: AuthoringCanonicalChapterContext
 }): Promise<AuthoringBindingRead> {
   const scope = input.scope ?? await resolveScopeLike(input.projectId)
-  const exactKeys = exactEntryKeysFor(input.node)
-  const sourceKeys = sourceKeysFor(input.node)
+  const canonical = input.canonicalContext
+  if (canonical) {
+    const registeredKeys = AUTHORING_NODE_BY_ID.get(input.node.templateId)?.reads?.sourceKeys ?? []
+    if (!['continuity.fact', 'chapter.organize'].includes(input.node.templateId)
+      || canonical.scheme !== 'registered-chapter-context-v2'
+      || !Array.isArray(canonical.sourceKeys)
+      || canonical.sourceKeys.length !== registeredKeys.length
+      || canonical.sourceKeys.some((key, index) => key !== registeredKeys[index])
+      || !Number.isSafeInteger(canonical.inputBudgetTokens) || canonical.inputBudgetTokens <= 0
+      || typeof canonical.provider !== 'string' || !canonical.provider
+      || typeof canonical.model !== 'string' || !canonical.model
+      || !Number.isSafeInteger(input.chapterId) || input.chapterId! <= 0) {
+      throw new Error('节点缺少可核验的原来源指纹参数；请明确开始新一轮。')
+    }
+  }
+  const exactKeys = canonical ? [] : exactEntryKeysFor(input.node)
+  const sourceKeys = canonical ? [...canonical.sourceKeys] : sourceKeysFor(input.node)
   if (exactKeys.length) {
     const entries = await buildRagLibrary({ projectId: input.projectId, scope, worldGroupId: input.worldGroupId })
     const byKey = new Map(entries.map(entry => [entry.key, entry]))
@@ -200,11 +227,17 @@ export async function readAuthoringCanonBinding(input: {
     }
   }
 
+  const chapter = await resolveChapterScope(input.node, scope, input.worldGroupId, canonical ? input.chapterId : undefined)
+  if (canonical && chapter) {
+    const sourceInput = { projectId: input.projectId, scope, worldGroupId: input.worldGroupId, chapter, policy: canonical }
+    const { assembled, sourceHash } = input.node.templateId === 'chapter.organize'
+      ? await readOrganizationNodeSource(sourceInput) : await readFactNodeSource(sourceInput)
+    return { content: assembled.text, sourceHash, sourceKeys, included: assembled.included, omitted: assembled.omitted,
+      trimmed: assembled.trimmed, missing: [] }
+  }
   const assembled = await assembleContext({
-    projectId: input.projectId,
-    scope,
-    worldGroupId: input.worldGroupId,
-    ...(await resolveChapterScope(input.node, scope, input.worldGroupId)),
+    projectId: input.projectId, scope, worldGroupId: input.worldGroupId,
+    chapterId: chapter?.id, outlineNodeId: chapter?.outlineNodeId,
     sourceKeys: sourceKeys.length ? sourceKeys : undefined,
     inputBudgetTokens: input.contextBudget,
   })

@@ -121,6 +121,9 @@ export interface StreamResult {
 /** 可变容器，chat 写入非流式调用返回的真实 token 用量。 */
 export interface ChatResult {
   usage?: TokenUsage
+  /** Opt in to exact field presence from an ordinary non-streaming provider response. */
+  captureProviderTokenUsage?: boolean
+  providerTokenUsage?: Partial<TokenUsage>
   /** Optional durable caller hook. Must finish saving the exact local request
    * reference before its single POST. Failure prevents dispatch; no retry.
    * Opt-in receipts are held until this owner saves and acknowledges them.
@@ -400,6 +403,11 @@ export async function* streamChat(
     if (result) result.completion = signal?.aborted ? 'cancelled' : 'complete'
     return
   }
+  if (result) {
+    delete result.usage
+    delete result.finishReason
+    delete result.completion
+  }
   const req = buildRequest(config, trimmed.messages, true)
 
   const log = createLog({
@@ -414,6 +422,10 @@ export async function* streamChat(
   })
 
   const startTime = Date.now()
+  let usage: TokenUsage | undefined
+  let finishReason: string | undefined
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  let terminalObserved = false
 
   try {
     // 自动重试：遇到 429（频率限制）或 503（服务不可用）时，最多重试 2 次
@@ -447,10 +459,9 @@ export async function* streamChat(
       throw new AIError(response!.status, errorText)
     }
 
-    const reader = response!.body!.getReader()
+    reader = response!.body!.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
-    let usage: TokenUsage | undefined
 
     while (true) {
       const { done, value } = await reader.read()
@@ -464,45 +475,66 @@ export async function* streamChat(
         if (line.startsWith('data: ')) {
           const data = line.slice(6).trim()
           if (data === '[DONE]') {
+            terminalObserved = true
             if (result) result.completion = 'complete'
-            const logUpdate: Record<string, unknown> = { status: 'success', statusCode: response!.status, duration: Date.now() - startTime }
-            if (usage) logUpdate.usage = usage
-            if (result && usage) result.usage = usage
-            updateLog(log.id, logUpdate)
-            if (usage) void recordUsage(usageEntry(meta, config, resolved.taskKind, usage))
+            updateLog(log.id, { status: 'success', statusCode: response!.status, duration: Date.now() - startTime })
             return
           }
-          try {
-            const json = JSON.parse(data)
-            if (result && typeof json.choices?.[0]?.finish_reason === 'string') result.finishReason = json.choices[0].finish_reason
-            const content = json.choices?.[0]?.delta?.content
-            if (content) yield content
-            // 提取 token 用量（通常在最后一个 chunk 中）
-            if (json.usage) {
-              usage = {
-                inputTokens: json.usage.prompt_tokens ?? 0,
-                outputTokens: json.usage.completion_tokens ?? 0,
-                totalTokens: json.usage.total_tokens ?? 0,
-              }
-            }
-          } catch {
-            // 忽略解析错误
+          let json: unknown
+          try { json = JSON.parse(data) } catch { continue }
+          if (!json || typeof json !== 'object' || Array.isArray(json)) continue
+          const chunk = json as {
+            choices?: Array<{ finish_reason?: unknown; delta?: { content?: unknown } }>
+            usage?: { prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown }
           }
+          const inputTokens = chunk.usage?.prompt_tokens
+          const outputTokens = chunk.usage?.completion_tokens
+          const totalTokens = chunk.usage?.total_tokens
+          // Capture the provider snapshot before yielding: a consumer may return
+          // immediately after this delta. Missing/malformed fields stay unknown.
+          if (typeof inputTokens === 'number' && Number.isSafeInteger(inputTokens) && inputTokens >= 0
+            && typeof outputTokens === 'number' && Number.isSafeInteger(outputTokens) && outputTokens >= 0
+            && typeof totalTokens === 'number' && Number.isSafeInteger(totalTokens) && totalTokens >= 0) {
+            usage = { inputTokens, outputTokens, totalTokens }
+            if (result) result.usage = { ...usage }
+          }
+          if (typeof chunk.choices?.[0]?.finish_reason === 'string') {
+            finishReason = chunk.choices[0].finish_reason
+            if (result) result.finishReason = finishReason
+          }
+          const content = chunk.choices?.[0]?.delta?.content
+          if (typeof content === 'string' && content) yield content
         }
       }
     }
 
-    if (result) result.completion = result.finishReason ? 'complete' : 'unknown'
-    const logUpdate: Record<string, unknown> = { status: result?.completion === 'unknown' ? 'error' : 'success', statusCode: response!.status, duration: Date.now() - startTime }
-    if (usage) logUpdate.usage = usage
-    if (result && usage) result.usage = usage
-    updateLog(log.id, logUpdate)
-    if (usage) void recordUsage(usageEntry(meta, config, resolved.taskKind, usage))
+    terminalObserved = true
+    const completion = signal?.aborted ? 'cancelled' : finishReason ? 'complete' : 'unknown'
+    if (result) result.completion = completion
+    updateLog(log.id, { status: completion === 'complete' ? 'success' : 'error', statusCode: response!.status, duration: Date.now() - startTime })
   } catch (err) {
+    terminalObserved = true
+    if (result) result.completion = signal?.aborted || (err instanceof Error && err.name === 'AbortError') ? 'cancelled' : 'failed'
     if (err instanceof AIError) throw err
     const duration = Date.now() - startTime
     updateLog(log.id, { status: 'error', duration, errorMessage: (err as Error).message })
     throw err
+  } finally {
+    if (!terminalObserved) {
+      if (result) result.completion = 'cancelled'
+      updateLog(log.id, { status: 'error', duration: Date.now() - startTime, errorMessage: '流已由调用方停止' })
+    }
+    // Exactly one best-effort aggregate write for this generator. Durable
+    // callers still own run/step/attempt receipts and cross-refresh accounting.
+    if (usage) {
+      if (result) result.usage = { ...usage }
+      updateLog(log.id, { usage: { ...usage } })
+      void recordUsage(usageEntry(meta, config, resolved.taskKind, usage))
+    }
+    if (reader) {
+      try { void reader.cancel().catch(() => {}); reader.releaseLock() }
+      catch { /* Cleanup must not replace the original transport error. */ }
+    }
   }
 }
 
@@ -518,6 +550,7 @@ export async function chat(
   options?: ChatRequestOptions,
   frozenResolution?: AIRequestConfigResolution,
 ): Promise<string> {
+  if (result?.captureProviderTokenUsage) result.providerTokenUsage = {}
   assertGenerationAvailable()
   if (result) {
     result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }
@@ -586,6 +619,16 @@ export async function chat(
     }
     const responseSummary = inspectCompletionResponseV1(json).summary
     updateLog(log.id, { statusCode: response.status, responseSummary })
+    if (result?.captureProviderTokenUsage && json?.usage && typeof json.usage === 'object' && !Array.isArray(json.usage)) {
+      const reported = result.providerTokenUsage!
+      for (const [wireKey, tokenKey] of [
+        ['prompt_tokens', 'inputTokens'], ['completion_tokens', 'outputTokens'], ['total_tokens', 'totalTokens'],
+      ] as const) {
+        const value: unknown = json.usage[wireKey]
+        if (Object.prototype.hasOwnProperty.call(json.usage, wireKey)
+          && typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) reported[tokenKey] = value
+      }
+    }
     if (json?.usage) {
       const usage = {
         inputTokens: json.usage.prompt_tokens ?? 0,

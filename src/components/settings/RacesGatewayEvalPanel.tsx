@@ -254,16 +254,20 @@ export default function RacesGatewayEvalPanel() {
   const clear = async () => {
     const confirmed = await dialog.confirm({
       title: '清除 RACE-6 评测？',
-      message: '这会删除本机 checkpoint，并通过 PROJECT_TABLES 生命周期清理所有 RACE-6 隔离项目。请先导出需要保留的证据。',
+      message: '这会清除本次运行的本机 checkpoint 和隔离项目。请先导出需要保留的证据。',
       confirmText: '清除评测',
       cancelText: '取消',
       tone: 'danger',
     })
     if (!confirmed) return
-    await clearRacesGatewayEvalCheckpointV1()
-    setCheckpoint(null)
-    setProgress('')
-    setError('')
+    try {
+      await clearRacesGatewayEvalCheckpointV1(checkpoint?.workspaceOwnerId)
+      setCheckpoint(null)
+      setProgress('')
+      setError('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
   }
 
   const score = checkpoint?.score
