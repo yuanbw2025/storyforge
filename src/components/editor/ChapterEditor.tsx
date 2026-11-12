@@ -36,7 +36,7 @@ import { saveChapterOrganizationSelectionV1 } from '../../lib/agent/chapter-orga
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { db } from '../../lib/db/schema'
 import { assembleContext } from '../../lib/registry/assemble-context'
-import { prepareProseGatewayAssemblyV1 } from '../../lib/prose/gateway-context'
+import { prepareProseGatewayAssemblyV1, type ProseGatewayAssemblyV1 } from '../../lib/prose/gateway-context'
 import { resolveChapterDisplayMeta } from '../../lib/outline/chapter-display'
 import { pickBestChapterForOutline } from '../../lib/chapters/selectors'
 import {
@@ -75,7 +75,7 @@ import CoordinationView from './CoordinationView'
 import FloatingToolbar from './FloatingToolbar'
 import ChapterEditorHeader from './ChapterEditorHeader'
 import ChapterMemoryPanel from './ChapterMemoryPanel'
-import ChapterContextPreview from './ChapterContextPreview'
+import ChapterContextPreview, { type ContextPreviewOperation } from './ChapterContextPreview'
 import ChapterEditorToolbar from './ChapterEditorToolbar'
 import { type ReconciliationActionMap } from './ReconciliationTable'
 import PromptPreviewGate from '../shared/PromptPreviewGate'
@@ -192,7 +192,7 @@ import {
   rejectImpactStoryTimelineRegenerationCandidateV1,
   type ImpactStoryTimelineRegenerationCandidateV1,
 } from '../../lib/agent/run/impact-story-timeline-regeneration-durable'
-import { resolveScopeLike } from '../../lib/workspace/scope'
+import { assertRecordInScope, resolveScopeLike } from '../../lib/workspace/scope'
 import {
   readWorkPostAdoptionSettingsV1,
   updateWorkPostAdoptionSettingsV1,
@@ -391,8 +391,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
   }, [stateCards])
 
-  // A2: 按需召回 — 手动额外勾选/取消的状态卡 ID
-  const [extraStateIds, setExtraStateIds] = useState<number[]>([])
+  // Organization focus belongs to the selected chapter, including its Work.
+  const extraStateTarget = `${project.id}:${project.activeWorldId}:${project.activeWorkId}:${currentChapter?.id}`
+  const [extraStateSelection, setExtraStateSelection] = useState<{ target: string; ids: number[] }>({ target: extraStateTarget, ids: [] })
+  const extraStateIds = useMemo(() => extraStateSelection.target === extraStateTarget ? extraStateSelection.ids : [], [extraStateSelection, extraStateTarget])
+  const setExtraStateIds = (ids: number[]) => setExtraStateSelection({ target: extraStateTarget, ids })
   const [showStatePreview, setShowStatePreview] = useState(false)
   const ai = useAIStream(createAISessionKey(
     project.id!,
@@ -1195,6 +1198,74 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     })
     return () => { cancelled = true }
   }, [project.id, chapterWorldGroupId, outlineNode?.id, currentChapter?.id, aiConfig, perspectiveCharacterId])
+
+  const [contextPreviewOperation, setContextPreviewOperation] = useState<ContextPreviewOperation>('generate')
+  const [contextPreviewRefresh, setContextPreviewRefresh] = useState(0)
+  // A preview is a separate read-only packet. The review panel retains its own
+  // review context above; organization focus cards never select prose sources.
+  const contextPreviewInput = useMemo(() => {
+    let citedIds: number[] = []
+    try { citedIds = JSON.parse(creativeRules?.citedReferenceIds || '[]') } catch { /* same as generation */ }
+    return {
+      projectId: project.id,
+      worldId: project.activeWorldId,
+      workId: project.activeWorkId,
+      chapterId: currentChapter?.id,
+      outlineNodeId: outlineNode?.id,
+      worldGroupId: chapterWorldGroupId ?? null,
+      operation: contextPreviewOperation,
+      authorRequest: contextPreviewOperation === 'review'
+        ? '预览当前章节受控创作上下文'
+        : [customInstruction.trim(), outlineNode?.title, outlineNode?.summary, plainText.slice(-2_000)]
+          .filter(Boolean).join('\n'),
+      citedReferenceIds: contextPreviewOperation === 'review' ? undefined : citedIds,
+      perspectiveCharacterId,
+      config: aiConfig,
+      stateCardIssue,
+      // Changes to loaded state cards invalidate the displayed snapshot too.
+      stateCards,
+    }
+  }, [project.id, project.activeWorldId, project.activeWorkId,
+    currentChapter?.id, outlineNode?.id, chapterWorldGroupId, contextPreviewOperation, customInstruction,
+    outlineNode?.title, outlineNode?.summary, plainText, creativeRules?.citedReferenceIds, perspectiveCharacterId,
+    aiConfig, stateCardIssue, stateCards])
+  const [contextPreviewResult, setContextPreviewResult] = useState<{
+    input: typeof contextPreviewInput
+    assembly?: ProseGatewayAssemblyV1
+    error?: string
+  } | null>(null)
+  useEffect(() => {
+    if (!showContext) return
+    const input = contextPreviewInput
+    const controller = new AbortController()
+    let active = true
+    setContextPreviewResult(null)
+    // Coalesce typing without issuing any model request or saving author drafts.
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        if (input.stateCardIssue) throw new Error(input.stateCardIssue)
+        if (!input.projectId || !input.chapterId || !input.outlineNodeId) throw new Error('请先选择当前作品的章节。')
+        const scope = await resolveScopeLike(input.projectId)
+        const matchesScope = (value: WorkspaceScope) => value.projectId === input.projectId
+          && value.worldId === input.worldId && value.workId === input.workId
+        const chapter = await db.chapters.get(input.chapterId)
+        if (!matchesScope(scope) || !await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' }))
+          throw new Error('当前章节与所选作品不一致，请重新选择章节。')
+        const assembly = await prepareProseGatewayAssemblyV1({
+          projectId: scope.projectId, scope, chapterId: input.chapterId, outlineNodeId: input.outlineNodeId,
+          worldGroupId: input.worldGroupId, operation: input.operation, authorRequest: input.authorRequest,
+          citedReferenceIds: input.citedReferenceIds, perspectiveCharacterId: input.perspectiveCharacterId,
+          config: input.config, signal: controller.signal,
+        })
+        if (!matchesScope(await resolveScopeLike(input.projectId))) throw new Error('作品已切换，请刷新当前章节预览。')
+        if (active) setContextPreviewResult({ input, assembly })
+      })().catch(error => {
+        if (active) setContextPreviewResult({ input, error: error instanceof Error ? error.message : '读取失败，请刷新预览。' })
+      })
+    }, 150)
+    return () => { active = false; controller.abort(); window.clearTimeout(timer) }
+  }, [showContext, contextPreviewInput, contextPreviewRefresh])
+  const currentContextPreview = showContext && contextPreviewResult?.input === contextPreviewInput ? contextPreviewResult : null
 
   // A2: 按需召回 — 根据章节大纲+标题+已有文本筛选相关状态卡
   const selectiveState = useMemo(() => {
@@ -3069,12 +3140,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
       {showContext && (
         <ChapterContextPreview
-          worldContext={worldCtx}
-          characterContext={charCtx}
-          outlineNode={outlineNode ?? undefined}
+          operation={contextPreviewOperation}
+          assembly={currentContextPreview?.assembly}
+          error={currentContextPreview?.error}
+          onOperationChange={setContextPreviewOperation}
+          onRefresh={() => { setContextPreviewResult(null); setContextPreviewRefresh(value => value + 1) }}
           stateCards={stateCards}
           matchedIds={selectiveState.matchedIds}
-          allIds={selectiveState.allIds}
           extraIds={extraStateIds}
           stateListExpanded={showStatePreview}
           onToggleStateList={() => setShowStatePreview(!showStatePreview)}
