@@ -1,5 +1,6 @@
 import type {
   ProductBuildRecordV1,
+  ProductProductionCommandV1,
   ProductProductionPlanTaskV3,
   ProductionProductKindV1,
 } from '../types'
@@ -47,6 +48,79 @@ export function isRepairRetryableFailedProductBuildV1(
     return (failure.taskKey === 'integration.package' || failure.taskKey === 'qa.release')
       && (failure.code === 'task-executor-failed' || failure.code === 'task-timeout')
   } catch { return false }
+}
+
+/** Project the existing resume evidence after the command has validated and settled its inputs. */
+export function buildResumedFailureEvidenceV1(input: {
+  command: Extract<ProductProductionCommandV1, { type: 'resume' }>
+  restored: ProductBuildRecordV1['status']
+  resumedFromControlEpoch: number
+  pausedFailure: Record<string, unknown>
+  previousFailure: Record<string, unknown>
+  pausedReservationAccountings: readonly unknown[]
+  preparedTtrpgContentRevision?: { sourceProofHash: string } | null
+  now: number
+}) {
+  const { command, restored, resumedFromControlEpoch, pausedFailure, previousFailure,
+    pausedReservationAccountings, preparedTtrpgContentRevision, now } = input
+  const { openWorldContentRevision, ttrpgContentRevision, contentRevision } = command
+  const revision = ttrpgContentRevision ?? contentRevision
+  if (openWorldContentRevision) {
+    return {
+      code: 'author-revised-content', commandId: command.commandId, revisionCommand: command,
+      blockerKey: openWorldContentRevision.taskKey,
+      revisionSource: { planHash: openWorldContentRevision.expectedPlanHash,
+        controlEpoch: openWorldContentRevision.expectedControlEpoch, artifacts: openWorldContentRevision.expectedArtifacts },
+      resolution: { action: 'author-edit', note: openWorldContentRevision.note, authorDraftJson: openWorldContentRevision.authorDraftJson },
+      resumedFromControlEpoch, pauseReceipt: pausedFailure, pausedReservationAccountings, resolvedAt: now,
+    }
+  }
+  if (revision) {
+    return {
+      code: 'author-revised-content', commandId: command.commandId, revisionCommand: command,
+      blockerKey: revision.artifactKey,
+      revisionSource: {
+        artifactKey: revision.artifactKey,
+        version: revision.expectedArtifactVersion,
+        contentHash: revision.expectedArtifactHash,
+      },
+      ...(ttrpgContentRevision ? { revisionSourceProofHash: preparedTtrpgContentRevision!.sourceProofHash } : {}),
+      resolution: { action: 'author-edit', note: revision.note, authorDraftJson: revision.authorDraftJson },
+      resumedFromControlEpoch,
+      pauseReceipt: pausedFailure, pausedReservationAccountings, resolvedAt: now,
+    }
+  }
+  if (restored === 'recovery-required' && typeof previousFailure.taskKey === 'string') {
+    return {
+      // Resuming a failed Build restores its blocker; it does not authorize
+      // another provider call. Keep the original Run/epoch/attempt unchanged.
+      // Recovery validates every intervening pause/resume receipt separately.
+      ...previousFailure,
+      resumedFromControlEpoch,
+      pausedReservationAccountings,
+    }
+  }
+  if (pausedReservationAccountings.length) {
+    return {
+      code: 'user-pause-resolved',
+      previousFailureCode: 'pause-provider-result-unknown',
+      resumedFromControlEpoch,
+      pauseReceipt: pausedFailure,
+      ...(Object.keys(previousFailure).length > 0 ? { previousFailure } : {}),
+      pausedReservationAccountings,
+      resolvedAt: now,
+    }
+  }
+  return {
+    code: 'user-resumed', resumedFromControlEpoch,
+    pauseReceipt: {
+      code: pausedFailure.code === 'user-paused' ? 'user-paused' : 'unknown-pause-receipt',
+      ...(typeof pausedFailure.reason === 'string' ? { reason: pausedFailure.reason.slice(0, 500) } : {}),
+      ...(Number.isSafeInteger(pausedFailure.pausedFromControlEpoch)
+        ? { pausedFromControlEpoch: pausedFailure.pausedFromControlEpoch } : {}),
+    },
+    ...(Object.keys(previousFailure).length > 0 ? { previousFailure } : {}),
+  }
 }
 
 const STABLE_TASK_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/

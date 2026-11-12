@@ -1,5 +1,6 @@
 import { createWorldPackage } from '../../src/lib/world-engine/world-package'
 import { installWorldSourcePackageV1 } from '../../src/lib/world-engine/source-receipt'
+import { encodeFixtureRasterV1, installRasterDecoderForVitestV1 } from './raster-decoder-vitest'
 import { defaultAiTownSettings, serializeAiTownSettings } from '../../src/lib/ai-town/authoring-contract'
 import { defaultTtrpgSettings, serializeTtrpgSettings } from '../../src/lib/ttrpg/authoring-contract'
 import {DEFAULT_CHAT_SETTINGS} from '../../src/lib/character-interaction/authoring-contract'
@@ -153,14 +154,9 @@ const motionDramaTargetSpec: MotionDramaTargetSpecV1 = {
   dialogueDensity: 'balanced', artDirection: '东方奇幻动态漫画，稳定人物与空间设计', providerTargets: ['generic'],
 }
 
-function fixturePng(width = 1200, height = 1700): ArrayBuffer {
-  const bytes = new Uint8Array(32)
-  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-  const view = new DataView(bytes.buffer)
-  view.setUint32(16, width)
-  view.setUint32(20, height)
-  return bytes.buffer
-}
+installRasterDecoderForVitestV1()
+
+function fixturePng(width = 1200, height = 1700): ArrayBuffer { return encodeFixtureRasterV1(width, height) }
 
 async function seedAdaptationProducts(sourceScope: WorkspaceScope) {
   const screenplay = await createAdaptation({

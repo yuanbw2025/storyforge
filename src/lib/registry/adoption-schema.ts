@@ -691,7 +691,7 @@ const ADOPTION_EXTENSION_REGISTRATIONS: readonly AdoptionExtensionSpec[] = [
   {
     id: 'adaptation-root-lifecycle',
     target: 'adaptationProjects',
-    entrypoints: ['src/lib/adaptation/source-manifest.ts', 'src/lib/adaptation/completion.ts', 'src/lib/adaptation/analysis.ts', 'src/lib/screenplay/production.ts', 'src/lib/screenplay/release.ts', 'src/lib/comic/production.ts', 'src/lib/comic/release.ts', 'src/lib/comic/authoring.ts', 'src/lib/motion-drama/service.ts', 'src/lib/motion-drama/release.ts'],
+    entrypoints: ['src/lib/adaptation/source-manifest.ts', 'src/lib/adaptation/completion.ts', 'src/lib/adaptation/analysis.ts', 'src/lib/screenplay/production.ts', 'src/lib/screenplay/release.ts', 'src/lib/comic/production.ts', 'src/lib/comic/release.ts', 'src/lib/comic/authoring.ts', 'src/lib/motion-drama/service.ts', 'src/lib/motion-drama/release.ts', 'src/lib/comic/service.ts'],
     policyRegistry: 'PROJECT_TABLES + ADOPTION_SCHEMAS + adaptation state machine + source manifest CAS',
     reason: '改编创建、来源重同步、Brief/Plan 确认与阶段推进必须同步校验来源 manifest、目标 Work 和 revision；模型可编辑字段仍只作为候选进入正式确认服务。',
     reviewAfter: '2027-08-01',
