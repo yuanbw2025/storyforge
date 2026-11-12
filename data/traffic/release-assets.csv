@@ -3562,14 +3562,14 @@ snapshot_date,tag_name,asset_id,asset_name,download_count,size,updated_at,browse
 2026-11-12,v4.0.4,667822152,StoryForge-4.0.4-windows-x64-setup.exe.blockmap,73,484850,2026-10-23T03:17:28Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.4/StoryForge-4.0.4-windows-x64-setup.exe.blockmap
 2026-11-12,v4.0.4,667822206,SHA256SUMS.txt,63,983,2026-10-23T03:17:29Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.4/SHA256SUMS.txt
 2026-11-12,v4.0.5,692171497,StoryForge-v4.0.5-linux-x64.zip,33,383419547,2026-10-30T13:14:45Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.5/StoryForge-v4.0.5-linux-x64.zip
-2026-11-12,v4.0.5,692171498,StoryForge-4.0.5-windows-x64-setup.exe,753,472475028,2026-10-30T13:14:52Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.5/StoryForge-4.0.5-windows-x64-setup.exe
+2026-11-12,v4.0.5,692171498,StoryForge-4.0.5-windows-x64-setup.exe,756,472475028,2026-10-30T13:14:52Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.5/StoryForge-4.0.5-windows-x64-setup.exe
 2026-11-12,v4.0.5,692171499,StoryForge-v4.0.5-macos-x64.zip,20,379417790,2026-10-30T13:14:44Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.5/StoryForge-v4.0.5-macos-x64.zip
 2026-11-12,v4.0.5,692171500,StoryForge-v4.0.5-macos-arm64.zip,29,378206206,2026-10-30T13:14:42Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.5/StoryForge-v4.0.5-macos-arm64.zip
 2026-11-12,v4.0.5,692171503,StoryForge-v4.0.5-windows-x64.zip,808,373848537,2026-10-30T13:14:42Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.5/StoryForge-v4.0.5-windows-x64.zip
 2026-11-12,v4.0.5,692174258,StoryForge-4.0.5-macos-arm64.dmg,49,509628426,2026-10-30T13:15:42Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.5/StoryForge-4.0.5-macos-arm64.dmg
 2026-11-12,v4.0.5,692174280,StoryForge-4.0.5-macos-x64.dmg,30,516502294,2026-10-30T13:15:47Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.5/StoryForge-4.0.5-macos-x64.dmg
 2026-11-12,v4.0.5,692174380,StoryForge-4.0.5-android.apk,141,344859522,2026-10-30T13:15:28Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.5/StoryForge-4.0.5-android.apk
-2026-11-12,v4.0.5,692174505,latest.yml,937,373,2026-10-30T13:14:47Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.5/latest.yml
+2026-11-12,v4.0.5,692174505,latest.yml,941,373,2026-10-30T13:14:47Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.5/latest.yml
 2026-11-12,v4.0.5,692174551,StoryForge-4.0.5-windows-x64-setup.exe.blockmap,61,493911,2026-10-30T13:14:47Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.5/StoryForge-4.0.5-windows-x64-setup.exe.blockmap
 2026-11-12,v4.0.5,692174592,SHA256SUMS.txt,121,983,2026-10-30T13:14:48Z,https://github.com/yuanbw2025/storyforge/releases/download/v4.0.5/SHA256SUMS.txt
 2026-11-12,v4.0.6,734651446,StoryForge-4.0.6-android.apk,1,345133608,2026-11-11T07:55:17Z,https://github.com/yuanbw2025/storyforge/releases/download/untagged-d981cc87fec9b54481b2/StoryForge-4.0.6-android.apk
