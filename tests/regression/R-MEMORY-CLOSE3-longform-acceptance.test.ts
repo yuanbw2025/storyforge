@@ -1,3 +1,4 @@
+import { workspaceWriteText } from '../helpers/workspace-projection-write'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { db } from '../../src/lib/db/schema'
@@ -67,12 +68,13 @@ function memoryDirectory(name = 'StoryForgeLongformAcceptance') {
             size: new TextEncoder().encode(stored.text).byteLength,
             lastModified: stored.lastModified,
             async text() { return stored.text },
+            async arrayBuffer() { return new TextEncoder().encode(stored.text).buffer },
           } as File
         },
         async createWritable() {
           let next = ''
           return {
-            async write(value: string | Blob | BufferSource) { next += String(value) },
+            async write(value: string | ArrayBuffer) { next += workspaceWriteText(value) },
             async close() {
               if (failAtAbsoluteWrite === writeOrder.length + 1) {
                 failAtAbsoluteWrite = null

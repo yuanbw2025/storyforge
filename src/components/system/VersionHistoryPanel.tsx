@@ -7,6 +7,7 @@ import { useBackupStore } from '../../stores/backup'
 import type { Project } from '../../lib/types'
 import { useDialog } from '../shared/Dialog'
 import { useToast } from '../shared/Toast'
+import AutoBackupStatusNotice from './AutoBackupStatusNotice'
 
 interface Props {
   project: Project
@@ -17,18 +18,29 @@ export default function VersionHistoryPanel({ project }: Props) {
   const navigate = useNavigate()
   const dialog = useDialog()
   const toast = useToast()
-  const { snapshots, loading, loadSnapshots, createSnapshot, deleteSnapshot, restoreSnapshot } = useBackupStore()
+  const { snapshots: storedSnapshots, snapshotsOwner, loading, loadSnapshots, createSnapshot, deleteSnapshot, restoreSnapshot } = useBackupStore()
+  const snapshots = snapshotsOwner !== null && snapshotsOwner.projectId === project.id && snapshotsOwner.workspaceUid === project.workspaceUid ? storedSnapshots : []
   const [newLabel, setNewLabel] = useState('')
   const [creating, setCreating] = useState(false)
   const [restoring, setRestoring] = useState<number | null>(null)
+  const [listError, setListError] = useState('')
 
-  useEffect(() => { loadSnapshots(project.id!) }, [project.id, loadSnapshots])
+  useEffect(() => {
+    let active = true
+    setListError('')
+    void loadSnapshots(project.id!).catch(() => {
+      if (active) setListError('快照列表读取失败，请保留原稿，重新打开版本历史后再试。')
+    })
+    return () => { active = false }
+  }, [project.id, project.workspaceUid, loadSnapshots])
 
   const handleCreate = async () => {
     setCreating(true)
     try {
-      await createSnapshot(project.id!, newLabel.trim() || `手动快照 · ${formatTime(Date.now())}`, 'manual')
+      await createSnapshot(project.id!, newLabel.trim() || `手动快照 · ${formatTime(Date.now())}`, 'manual', project.workspaceUid)
       setNewLabel('')
+    } catch {
+      toast.error('手动快照创建失败，请保留原稿并导出外部备份。')
     } finally {
       setCreating(false)
     }
@@ -78,6 +90,8 @@ export default function VersionHistoryPanel({ project }: Props) {
       </div>
 
       {/* 创建快照 */}
+      <AutoBackupStatusNotice project={project} />
+      {listError && <p role="alert">{listError}</p>}
       <div className="bg-bg-surface border border-border rounded-xl p-4">
         <div className="flex items-center gap-2">
           <input

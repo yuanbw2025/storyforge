@@ -1,25 +1,5 @@
 name: Build Desktop and Android Clients
 on:
-  pull_request:
-    paths:
-      - 'android/**'
-      - 'scripts/desktop/**'
-      - 'scripts/distribution/**'
-      - 'src/lib/platform/**'
-      - 'src/lib/feedback/**'
-      - 'src/lib/diagnostics/**'
-      - 'src/components/shared/FailureFeedbackPanel.tsx'
-      - 'src/components/settings/ClientPrivacyPanel.tsx'
-      - 'src/components/settings/ClientAgreement.tsx'
-      - 'src/main.tsx'
-      - 'src/components/settings/ClientUpdatePanel.tsx'
-      - 'capacitor.config.json'
-      - 'electron-builder.config.cjs'
-      - 'package*.json'
-      - 'playwright.clients.config.ts'
-      - 'tests/e2e/client-support.spec.ts'
-      - 'tests/regression/R-CLIENT-LEGAL1-consent.test.tsx'
-      - '.github/workflows/clients.yml'
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -54,13 +34,6 @@ env:
   VITE_STORYFORGE_COMMUNITY_R2_BUCKET: ${{ vars.STORYFORGE_COMMUNITY_R2_BUCKET }}
 jobs:
   consent:
-    if: &ordinary-client-checks >-
-      !(github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       (startsWith(github.head_ref, 'fix/sfqa-') ||
-        startsWith(github.head_ref, 'refactor/sfqa-') ||
-        startsWith(github.head_ref, 'fix/quality') ||
-        startsWith(github.head_ref, 'feat/quality-audit-')))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -80,7 +53,6 @@ jobs:
           path: test-results/
           retention-days: 14
   windows:
-    if: *ordinary-client-checks
     runs-on: windows-latest
     env:
       # Retained acceptance evidence includes paths beyond Windows MAX_PATH.
@@ -128,7 +100,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   macos:
-    if: *ordinary-client-checks
     strategy:
       fail-fast: false
       matrix:
@@ -179,7 +150,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   android:
-    if: *ordinary-client-checks
     permissions:
       contents: write # Read maintainer-signed APKs from the unpublished release.
     runs-on: ubuntu-latest

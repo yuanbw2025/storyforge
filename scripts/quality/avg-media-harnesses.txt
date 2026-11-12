@@ -1,0 +1,6 @@
+tests/regression/R-AVG-04A5-visual-planning-harness.test.ts
+tests/regression/R-AVG-04B-sound-planning-harness.test.ts
+tests/regression/R-AVG-04B-sound-production-harness.test.ts
+tests/regression/R-AVG-04B-sound-publisher-harness.test.ts
+tests/regression/R-AVG-BASE01B-media-harness.test.ts
+tests/regression/R-AVG-BASE02-voice-harness.test.ts

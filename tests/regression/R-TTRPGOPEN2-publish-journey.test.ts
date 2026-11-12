@@ -80,6 +80,26 @@ describe.each([2, 3] as const)('R-TTRPGOPEN2 normal author production adoption p
     expect(prepared.intent.packageHash).toBe(original.packageHash)
     expect((await publishProductProductionV1(f)).receipt.releaseVersion).toBe(1)
   })
+  it('refuses local preview verification when the pause receipt belongs to another epoch', async () => {
+    const f = await produce()
+    const revision = async () => (await db.productProductions.get(f.productionId))!.stateRevision
+    expect((await executeProductProductionCommand({ ...f, command: {
+      type: 'pause', commandId: 'epoch.pause', expectedStateRevision: await revision(), reason: '检查暂停来源',
+    } })).ok).toBe(true)
+    expect((await executeProductProductionCommand({ ...f, command: {
+      type: 'resume', commandId: 'epoch.resume', expectedStateRevision: await revision(),
+    } })).ok).toBe(true)
+    const build = (await db.productBuilds.where('productionId').equals(f.productionId).first())!
+    const receipt = JSON.parse(build.failureJson)
+    receipt.pauseReceipt.pausedFromControlEpoch -= 1
+    await db.productBuilds.update(build.id!, { failureJson: JSON.stringify(receipt) })
+
+    const resumed = await runOpenBrowserProductionV1(f)
+    expect(resumed).toMatchObject({ terminal: false, status: 'recovery-required',
+      taskKey: profile === 2 ? 'ttrpg.open.integration' : 'ttrpg.open.media-plan',
+      modelCalls: profile === 2 ? 4 : 3 })
+    expect(JSON.parse((await db.productBuilds.get(build.id!))!.failureJson).code).toBe('task-aborted')
+  })
   it('rolls back immutable carry with a failed Plan commit and resumes without discarding content or repeating a paid call', async () => {
     const f = await seedOpenBrowserProductionV1()
     await runOpenBrowserProductionV1(f);await runOpenBrowserProductionV1(f,true)
