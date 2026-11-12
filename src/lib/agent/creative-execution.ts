@@ -61,7 +61,7 @@ export function createCreativeIssueV1(input: {
   }
 }
 
-async function callEvidence(input: {
+export async function buildCreativeCallEvidenceV1(input: {
   callIndex: 1 | 2
   purpose: CreativeCallEvidenceV1['purpose']
   messages: readonly ChatMessage[]
@@ -154,7 +154,7 @@ export async function runCreativeExecutionV1<TOutput>(input: {
     throw error
   }
 
-  const calls: CreativeCallEvidenceV1[] = [await callEvidence({
+  const calls: CreativeCallEvidenceV1[] = [await buildCreativeCallEvidenceV1({
     callIndex: 1,
     purpose: 'generate',
     messages: input.initialMessages,
@@ -181,7 +181,7 @@ export async function runCreativeExecutionV1<TOutput>(input: {
     try {
       repaired = await input.runRaw(messages)
       input.budget.settleCall(reservation, repaired.output)
-      calls.push(await callEvidence({
+      calls.push(await buildCreativeCallEvidenceV1({
         callIndex: 2,
         purpose: 'repair',
         messages,
@@ -195,7 +195,7 @@ export async function runCreativeExecutionV1<TOutput>(input: {
       })
     } catch {
       input.budget.settleFailedCall(reservation)
-      calls.push(await callEvidence({
+      calls.push(await buildCreativeCallEvidenceV1({
         callIndex: 2,
         purpose: 'repair',
         messages,

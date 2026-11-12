@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-quality034-039-after341-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-after345-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -719,26 +719,10 @@
         "path": "tests/acceptance/narrative-world/baseline-20261028-avg-pr172-main-integration-v1.json"
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261028-longform-avg-integration-v1.json",
-        "workPackage": "main-c5-longform-avg-integration",
-        "implementationCommit": "c5b51da301abd3875b26732d9657ad485ad39105",
-        "note": "Preserved current main receipt before v4.0.5 release source integration."
-      },
-      {
         "path": "tests/acceptance/narrative-world/baseline-20261028-release405-main3b-v1.json",
         "workPackage": "release-4.0.5-main3b-integration",
         "implementationCommit": "372af8bdba34f2ea3b3e3cf2020d0815d0072ce4",
         "note": "Preserved the reviewed release-head receipt before integrating current main."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261029-release405-mainc5-v1.json",
-        "workPackage": "release-4.0.5-mainc5-integration",
-        "note": "Preserved unchanged before independently delivered SFQA-015 and SFQA-054 source/test updates."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
-        "workPackage": "quality-independent-01",
-        "note": "Preserved unchanged before the independently reviewed product recovery, owner/reference, credential and desktop-runtime fixes."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261102-quality-ready-02.json",
@@ -783,12 +767,6 @@
         "note": "Preserved measured Issue179/main834 receipt before precise shared fixture types and diagnostic/relay aggregation; semantic observations unchanged."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
-        "implementationCommit": "bc18dc8466f2e6661b6ce9a17131981f41992844",
-        "workPackage": "pre-quality019-portable-tree",
-        "note": "Preserved the main receipt before validating portable tree imports for SFQA-019."
-      },
-      {
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality019-portable-tree-v1.json",
         "workPackage": "SFQA-019-portable-tree",
         "note": "Preserve the initial independent tree-validation receipt before restoring stable parent-first insertion and measuring the shared portable-tree source."
@@ -797,6 +775,56 @@
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality010-production-reader-v1.json",
         "workPackage": "SFQA-010",
         "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-sfqa009-core-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the source-pinned report before SFQA-009 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-quality086-integrated-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the source-pinned report before SFQA-009 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261111-sfqa009-core-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the source-pinned report before SFQA-009 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261110-issue179-main834-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved pre-SFQA009 main receipt. Fixed corpus and historical evidence are unchanged; pure helper extraction has its own source-pinned receipt."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-integrated-v1.json",
+        "workPackage": "SFQA-009",
+        "note": "Preserved the shared-contract measurement before World history scope integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-world-scope-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the measured inputs before integrating shared contracts and critical coverage."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality034-039-after341-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the measured receipt before integrating shared core contracts with booking and product validation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-critical-coverage-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the measured receipt before integrating shared core contracts with booking and product validation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-quality034039-after341-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained the measured receipt before integrating shared core contracts with booking and product validation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-sfqa009-integrated-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained the measured receipt before integrating shared core contracts with booking and product validation."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -1099,7 +1127,9 @@
     "scripts/quality/critical-coverage-scopes.json",
     "src/lib/product-production/original-response-author-source.ts",
     "src/lib/product-production/original-response-booking.ts",
-    "src/lib/product-production/read-details.ts"
+    "src/lib/product-production/read-details.ts",
+    "src/lib/agent/run/context-manifest.ts",
+    "src/lib/utils/legacy-id-array.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",
