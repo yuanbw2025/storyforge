@@ -62,7 +62,8 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
   })
   it('AST 守卫证明实际 member/alias/wrapper 调用均携带登记 entryId', () => {
     const output = execFileSync(process.execPath, ['scripts/check-ai-entry-registry.mjs'], { encoding: 'utf8' })
-    expect(output).toContain('68 bindings / 72 calls')
+    // H17 compression and generation share a governed dispatch site.
+    expect(output).toContain('68 bindings / 71 calls')
     expect(output).toContain('formal 46, auxiliary 15, evaluation 6, experimental 1')
   })
 
