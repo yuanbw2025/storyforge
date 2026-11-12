@@ -24,6 +24,7 @@ interface OutlineVolumeSidebarProps {
   worldGroups: WorldGroup[]
   aiStreaming: boolean
   batchRunning: boolean
+  batchConfirming?: boolean
   batchProgress: BatchOutlineProgress | null
   batchResult: Map<number, ParsedChapter[]> | null
   activeChapterDrag: ChapterDragPayload | null
@@ -49,6 +50,7 @@ export default function OutlineVolumeSidebar({
   worldGroups,
   aiStreaming,
   batchRunning,
+  batchConfirming = false,
   batchProgress,
   batchResult,
   activeChapterDrag,
@@ -82,7 +84,7 @@ export default function OutlineVolumeSidebar({
         </button>
         <button
           onClick={onGenerateVolumes}
-          disabled={aiStreaming || batchRunning}
+          disabled={aiStreaming || batchRunning || batchConfirming}
           className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-accent text-white rounded-md hover:bg-accent-hover disabled:opacity-50 transition-colors"
         >
           <Sparkles className="w-3.5 h-3.5" /> 批量生成卷级大纲
@@ -90,7 +92,7 @@ export default function OutlineVolumeSidebar({
         {volumes.length >= 2 && (
           <button
             onClick={onGenerateAllChapters}
-            disabled={aiStreaming || batchRunning}
+            disabled={aiStreaming || batchRunning || batchConfirming}
             className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-bg-elevated text-accent rounded-md hover:bg-accent/10 border border-accent/30 disabled:opacity-50 transition-colors"
           >
             <Layers className="w-3.5 h-3.5" /> 批量生成所有卷的章节
@@ -130,12 +132,14 @@ export default function OutlineVolumeSidebar({
                 <div className="flex gap-1">
                   <button
                     onClick={onConfirmBatch}
+                    disabled={batchConfirming}
                     className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[10px] bg-accent text-white rounded hover:bg-accent-hover transition-colors"
                   >
-                    <Check className="w-3 h-3" /> 全部写入
+                    <Check className="w-3 h-3" /> {batchConfirming ? '正在写入…' : '全部写入'}
                   </button>
                   <button
                     onClick={onDismissBatch}
+                    disabled={batchConfirming}
                     title="关闭批量生成结果"
                     className="px-2 py-1 text-[10px] text-text-muted border border-border rounded hover:text-text-primary transition-colors"
                   >
