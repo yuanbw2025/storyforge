@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
-import { posix } from 'node:path'
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join, posix } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const unit = /^(?:src|tests)\/.*\.test\.tsx?$/
@@ -87,16 +87,70 @@ export function plan(paths, exists = existsSync) {
     npm: Boolean(docs || related.length || units.length || scripts.size || typeConfigs.length || [...nodeTests].some(path => path !== routingTest)) }
 }
 
+// Below this size one runner avoids another dependency install and artifact transfer.
+/** @param {string[]} files */
+export function partitionUnits(files) {
+  const selected = [...new Set(files)].sort()
+  const count = Math.max(1, Math.min(4, Math.ceil(selected.length / 96)))
+  /** @type {string[][]} */
+  const groups = Array.from({ length: count }, () => [])
+  selected.forEach((file, i) => groups[i % count].push(file))
+  return groups
+}
+
+/** @param {string} file @param {string} index @param {string} head */
+export function readUnitShard(file, index, head) {
+  const plan = JSON.parse(readFileSync(file, 'utf8'))
+  if (plan.head !== head || !Array.isArray(plan.groups) || plan.groups.length < 2 || plan.groups.length > 4
+      || !/^[0-3]$/.test(index) || !Array.isArray(plan.groups[Number(index)])) {
+    throw new Error('Missing or mismatched scoped test shard')
+  }
+  /** @type {Set<string>} */
+  const seen = new Set()
+  for (const group of plan.groups) {
+    if (!Array.isArray(group) || !group.length) throw new Error('Empty scoped test shard')
+    for (const path of group) {
+      if (typeof path !== 'string' || !unit.test(path) || posix.normalize(path) !== path || manualMedia.has(path)
+          || !existsSync(path) || seen.has(path)) throw new Error('Invalid scoped test path: ' + path)
+      seen.add(path)
+    }
+  }
+  return plan.groups[Number(index)]
+}
+
+/** @param {Set<string>} units */
+function runOrShareUnits(units) {
+  const { GITHUB_OUTPUT, RUNNER_TEMP } = process.env
+  if (!GITHUB_OUTPUT || !RUNNER_TEMP) throw new Error('GitHub output and temporary directory required')
+  const groups = partitionUnits([...units])
+  if (groups.length === 1) {
+    if (groups[0].length) run('node_modules/.bin/vitest', ['run', ...groups[0]])
+    appendFileSync(GITHUB_OUTPUT, 'shards=[]\n')
+    return
+  }
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+  writeFileSync(join(RUNNER_TEMP, 'changed-files-plan.json'), JSON.stringify({ head, groups }))
+  appendFileSync(GITHUB_OUTPUT, 'shards=' + JSON.stringify(groups.map((_, i) => i)) + '\n')
+  console.log('Selected Vitest files by runner:', groups.map(group => group.length))
+}
+
 async function main() {
-  const [base, option] = process.argv.slice(2)
-  if (!base || base.startsWith('-') || (option && option !== '--install')) throw new Error('Usage: node scripts/quality/check-merge-scope.mjs BASE [--install]')
+  const [base, option, index] = process.argv.slice(2)
+  if (base === '--run-shard' && option && index !== undefined) {
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+    run('node_modules/.bin/vitest', ['run', '--maxWorkers=2', ...readUnitShard(option, index, head)])
+    return
+  }
+  if (!base || base.startsWith('-') || index !== undefined || (option && !['--install', '--ci'].includes(option))) {
+    throw new Error('Usage: check-merge-scope.mjs BASE [--install|--ci] or --run-shard PLAN INDEX')
+  }
   // Resolve an immutable base and compare it with the checked-out merge tree.
   const sha = execFileSync('git', ['rev-parse', '--verify', base + '^{commit}'], { encoding: 'utf8' }).trim()
   run('git', ['-c', 'core.whitespace=trailing-space,space-before-tab,cr-at-eol', 'diff', '--check', sha, 'HEAD'])
   const paths = names(['diff', '--no-renames', '--name-only', '-z', sha, 'HEAD'])
   const checks = plan(paths)
   console.log('Changed paths:', JSON.stringify(paths))
-  if (checks.npm && option === '--install') run('npm', ['ci', '--no-audit', '--no-fund'])
+  if (checks.npm && (option === '--install' || option === '--ci')) run('npm', ['ci', '--no-audit', '--no-fund'])
   if (checks.workflowFiles.length) run('ruby', ['-rpsych', '-e', 'ARGV.each { |f| Psych.parse_file(f) }', ...checks.workflowFiles])
   for (const file of checks.js) run('node', ['--check', file])
   for (const file of checks.shell) run('bash', ['-n', file])
@@ -146,7 +200,8 @@ async function main() {
     if (!units.size && checks.related.some(path => app.test(path))) checks.typeConfigs.push('tsconfig.json')
   }
   for (const config of new Set(checks.typeConfigs)) run('node_modules/.bin/tsc', ['--noEmit', '-p', config])
-  if (units.size) run('node_modules/.bin/vitest', ['run', ...units])
+  if (option === '--ci') runOrShareUnits(units)
+  else if (units.size) run('node_modules/.bin/vitest', ['run', ...units])
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main()
