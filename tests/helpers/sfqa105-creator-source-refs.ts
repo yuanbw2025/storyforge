@@ -1,4 +1,5 @@
 import captured from './fixtures/sfqa105-creator-source-refs.json'
+import authorizedCapture from './fixtures/sfqa105-authorized-protagonist.json'
 import JSZip from 'jszip'
 import { db } from '../../src/lib/db/schema'
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
@@ -190,9 +191,8 @@ interface GovernedCapture {
 
 type GovernedCaptureEnvelope = { encoding: string; entry: string; rawBytes: number; sha256: string; data: string }
 
-export async function readSfqa105GovernedCapture(): Promise<GovernedCapture> {
-  const data: { governedCapture?: GovernedCaptureEnvelope } = JSON.parse(JSON.stringify(captured))
-  const envelope = data.governedCapture
+export async function readSfqa105GovernedCapture(kind: 'legacy' | 'authorized' = 'legacy'): Promise<GovernedCapture> {
+  const envelope: GovernedCaptureEnvelope = kind === 'legacy' ? captured.governedCapture : authorizedCapture
   if (!envelope || envelope.encoding !== 'zip-base64') throw new Error('SFQA105 governed fixture envelope is missing')
   const archive = await JSZip.loadAsync(envelope.data, { base64: true, checkCRC32: true })
   const file = archive.file(envelope.entry)
@@ -208,10 +208,10 @@ export async function readSfqa105GovernedCapture(): Promise<GovernedCapture> {
   return fixture
 }
 
-export async function seedSfqa105GovernedBuild(options: { includeComparisonHashes?: boolean } = {}) {
-  // Keep the original official v17 export intact on the standalone mainline.
-  // A later cumulative branch's v18 capture requires unrelated backup changes.
-  const fixture = await readSfqa105GovernedCapture()
+export async function seedSfqa105GovernedBuild(options: { includeComparisonHashes?: boolean; capture?: 'legacy' | 'authorized' } = {}) {
+  // The archived v17 Build predates explicit source-character selection.
+  // A separate, author-confirmed Build exercises current candidate production.
+  const fixture = await readSfqa105GovernedCapture(options.capture ?? 'authorized')
   if (!fixture.governed || !fixture.native) throw new Error('SFQA105 governed fixture metadata is missing')
   const projectId = await importProjectJSON(structuredClone(fixture.governed))
   const production = await db.productProductions.where('projectId').equals(projectId)

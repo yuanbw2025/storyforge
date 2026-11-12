@@ -1,9 +1,8 @@
+import { buildCreativeCallEvidenceV1 } from "./creative-execution"
 import { canonRowResourceKeysV1 } from '../context-gateway/canon-provider'
 import { nanoid } from 'nanoid'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
-import { estimateTokens } from '../ai/context-budget'
-import { computeKnownCostUsd } from '../ai/usage-log'
 import { supportsVerifiedJsonObjectResponseV1 } from '../ai/provider-capabilities'
 import { db } from '../db/schema'
 import type {
@@ -1065,42 +1064,6 @@ function buildStoryArcRepairMessagesV1(input: {
   }]
 }
 
-function storyArcCallEvidenceV1(input: {
-  callIndex: 1 | 2
-  purpose: CreativeCallEvidenceV1['purpose']
-  messages: readonly ChatMessage[]
-  modelIdentity: PreparedStoryArcCopilot['modelIdentity']
-  result?: StoryArcRawModelResultV1
-  failed?: boolean
-}): Promise<CreativeCallEvidenceV1> {
-  return (async () => {
-    const estimatedInput = input.messages.reduce((sum, message) => sum + estimateTokens(message.content), 0)
-    const estimatedOutput = input.result ? estimateTokens(input.result.output) : null
-    const usage = input.result?.usage
-    const inputTokens = usage?.inputTokens ?? (input.result ? estimatedInput : null)
-    const outputTokens = usage?.outputTokens ?? estimatedOutput
-    return {
-      version: 1,
-      callIndex: input.callIndex,
-      purpose: input.purpose,
-      status: input.failed ? 'failed' : 'succeeded',
-      provider: input.modelIdentity.provider,
-      model: input.modelIdentity.model,
-      usageSource: usage ? 'provider' : input.result ? 'estimated' : 'unknown',
-      inputTokens,
-      outputTokens,
-      totalTokens: usage?.totalTokens ?? (
-        estimatedOutput === null ? null : estimatedInput + estimatedOutput
-      ),
-      latencyMs: input.result?.durationMs ?? null,
-      estimatedCostUsd: inputTokens == null || outputTokens == null
-        ? null
-        : computeKnownCostUsd(input.modelIdentity.model, inputTokens, outputTokens),
-      outputHash: input.result ? await hashCanonicalValue(input.result.output) : null,
-    }
-  })()
-}
-
 export async function runStoryArcCreativeReliabilityV1(input: {
   prepared: PreparedStoryArcCopilot
   budget: AgentTeamBudgetTracker
@@ -1123,7 +1086,7 @@ export async function runStoryArcCreativeReliabilityV1(input: {
     input.budget.settleFailedCall(firstReservation)
     throw error
   }
-  const calls: CreativeCallEvidenceV1[] = [await storyArcCallEvidenceV1({
+  const calls: CreativeCallEvidenceV1[] = [await buildCreativeCallEvidenceV1({
     callIndex: 1,
     purpose: 'generate',
     messages: firstMessages,
@@ -1177,7 +1140,7 @@ export async function runStoryArcCreativeReliabilityV1(input: {
     try {
       repaired = await input.prepared.runRaw(repairMessages)
       input.budget.settleCall(reservation, repaired.output)
-      calls.push(await storyArcCallEvidenceV1({
+      calls.push(await buildCreativeCallEvidenceV1({
         callIndex: 2,
         purpose: 'repair',
         messages: repairMessages,
@@ -1206,7 +1169,7 @@ export async function runStoryArcCreativeReliabilityV1(input: {
       outcome = next
     } catch {
       input.budget.settleFailedCall(reservation)
-      calls.push(await storyArcCallEvidenceV1({
+      calls.push(await buildCreativeCallEvidenceV1({
         callIndex: 2,
         purpose: 'repair',
         messages: repairMessages,

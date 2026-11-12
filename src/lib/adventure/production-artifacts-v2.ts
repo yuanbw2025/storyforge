@@ -1154,6 +1154,61 @@ export function parseTextAdventureNarrativeDecisionPlanArtifactV1(input: {
   }
 }
 
+/** Project one model result using the same frozen upstream artifacts and task-specific checks. */
+export function projectTextAdventureNarrativeDesignModelResultV1(input: {
+  taskKey: 'content.narrative-arc-scenes' | 'content.narrative-decision-plan' | 'content.ending-route-plan'
+  raw: unknown
+  brief: ProductProductionBriefV3
+  readArtifact: (key: 'content.story-bible' | 'content.cast-bible' | 'content.narrative-arc-plan') => unknown
+  locationTitles: readonly string[]
+}) {
+  const { taskKey, raw, brief, readArtifact, locationTitles } = input
+  const storyBible = parseTextAdventureStoryBibleArtifactV1(readArtifact('content.story-bible'), brief)
+  const cast = parseTextAdventureCastBibleArtifactV1({
+    value: readArtifact('content.cast-bible'),
+    brief,
+    allowedResourceKeys: brief.source.selection.resourceKeys,
+  })
+  if (taskKey === 'content.narrative-arc-scenes') {
+    const arcScenes = parseTextAdventureNarrativeArcScenesArtifactV1({
+      value: raw, brief, cast, storyBible, locationTitles,
+    })
+    return { payload: arcScenes, quality: {
+      narrativeArcScenesVerified: true,
+      sceneCardCount: arcScenes.acts.flatMap(act => act.sceneCards).length,
+      endingCount: arcScenes.endings.length,
+    } }
+  }
+  if (taskKey === 'content.narrative-decision-plan') {
+    const decisionPlan = parseTextAdventureNarrativeDecisionPlanArtifactV1({
+      value: raw, brief, cast, storyBible,
+    })
+    return { payload: decisionPlan, quality: {
+      narrativeDecisionPlanVerified: true,
+      meaningfulDecisionCount: decisionPlan.decisions.length,
+    } }
+  }
+  const arcPlan = parseTextAdventureNarrativeArcPlanArtifactV1({
+    value: readArtifact('content.narrative-arc-plan'),
+    brief,
+    cast,
+    storyBible,
+    locationTitles,
+  })
+  const endingRoutePlan = parseTextAdventureEndingRoutePlanArtifactV1({
+    value: raw,
+    arcPlan,
+    storyBible,
+  })
+  return { payload: endingRoutePlan, quality: {
+    endingRoutePlanVerified: true,
+    routeCount: endingRoutePlan.routes.length,
+    referencedEffectCount: new Set(
+      endingRoutePlan.routes.flatMap(route => route.requiredEffectKeys),
+    ).size,
+  } }
+}
+
 export interface TextAdventureQuestPlanArtifactV1 {
   schema: 'storyforge.text-adventure-quest-plan-artifact'
   version: 1

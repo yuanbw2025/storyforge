@@ -86,7 +86,7 @@ import {
   verifyTextAdventureHumanVisualReviewReceiptV1,
 } from './quality-receipts'
 import { isTextAdventureReadableGlyphViolationV1 } from './text-adventure-quality'
-import { inspectProductProductionBuildRecoveryPolicyV1, isRepairRetryableFailedProductBuildV1 } from './recovery-policy'
+import { buildResumedFailureEvidenceV1, inspectProductProductionBuildRecoveryPolicyV1, isRepairRetryableFailedProductBuildV1 } from './recovery-policy'
 import { validateProductProductionRecoveryDirectiveV1 } from './context'
 import { readAgentRunV1 } from '../agent/run/event-store'
 import { preparePausedProductTaskFailureV1, reconcilePausedProductTaskFailureV1, type PreparedPausedProductTaskFailureV1 } from './failed-run-reconciliation'
@@ -2168,50 +2168,10 @@ async function applyCommand(input: {
       controlEpoch,
       stateRevision: build.stateRevision + 1,
       budgetLedgerJson,
-      failureJson: openWorldContentRevision ? safeJson({
-        code: 'author-revised-content', commandId: command.commandId, revisionCommand: command,
-        blockerKey: openWorldContentRevision.taskKey,
-        revisionSource: { planHash: openWorldContentRevision.expectedPlanHash,
-          controlEpoch: openWorldContentRevision.expectedControlEpoch, artifacts: openWorldContentRevision.expectedArtifacts },
-        resolution: { action: 'author-edit', note: openWorldContentRevision.note, authorDraftJson: openWorldContentRevision.authorDraftJson },
-        resumedFromControlEpoch: build.controlEpoch, pauseReceipt: pausedFailure, pausedReservationAccountings, resolvedAt: now,
-      }) : revision ? safeJson({
-        code: 'author-revised-content', commandId: command.commandId, revisionCommand: command,
-        blockerKey: revision.artifactKey,
-        revisionSource: {
-          artifactKey: revision.artifactKey,
-          version: revision.expectedArtifactVersion,
-          contentHash: revision.expectedArtifactHash,
-        },
-        ...(ttrpgContentRevision ? { revisionSourceProofHash: input.preparedTtrpgContentRevision!.sourceProofHash } : {}),
-        resolution: { action: 'author-edit', note: revision.note, authorDraftJson: revision.authorDraftJson },
-        resumedFromControlEpoch: build.controlEpoch,
-        pauseReceipt: pausedFailure, pausedReservationAccountings, resolvedAt: now,
-      }) : restored === 'recovery-required' && typeof previousFailure.taskKey === 'string' ? safeJson({
-        // Resuming a failed Build restores its blocker; it does not authorize
-        // another provider call. Keep the original Run/epoch/attempt unchanged.
-        // Recovery validates every intervening pause/resume receipt separately.
-        ...previousFailure,
-        resumedFromControlEpoch: build.controlEpoch,
-        pausedReservationAccountings,
-      }) : pausedReservationAccountings.length ? safeJson({
-        code: 'user-pause-resolved',
-        previousFailureCode: 'pause-provider-result-unknown',
-        resumedFromControlEpoch: build.controlEpoch,
-        pauseReceipt: pausedFailure,
-        ...(Object.keys(previousFailure).length > 0 ? { previousFailure } : {}),
-        pausedReservationAccountings,
-        resolvedAt: now,
-      }) : safeJson({
-        code: 'user-resumed', resumedFromControlEpoch: build.controlEpoch,
-        pauseReceipt: {
-          code: pausedFailure.code === 'user-paused' ? 'user-paused' : 'unknown-pause-receipt',
-          ...(typeof pausedFailure.reason === 'string' ? { reason: pausedFailure.reason.slice(0, 500) } : {}),
-          ...(Number.isSafeInteger(pausedFailure.pausedFromControlEpoch)
-            ? { pausedFromControlEpoch: pausedFailure.pausedFromControlEpoch } : {}),
-        },
-        ...(Object.keys(previousFailure).length > 0 ? { previousFailure } : {}),
-      }),
+      failureJson: safeJson(buildResumedFailureEvidenceV1({
+        command, restored, resumedFromControlEpoch: build.controlEpoch, pausedFailure, previousFailure,
+        pausedReservationAccountings, preparedTtrpgContentRevision: input.preparedTtrpgContentRevision, now,
+      })),
       updatedAt: now,
     })
     const productionStatus = restored === 'preview-ready' || restored === 'release-ready' ? 'preview-ready' as const : 'producing' as const

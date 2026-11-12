@@ -1,11 +1,13 @@
 import { db } from '../db/schema'
 import { assembleContext } from '../registry/assemble-context'
-import { normalizeChapterText, hashChapterText } from '../ai/chapter-memory/text-normalization'
+import { normalizeChapterText, hashChapterText, sha256Text } from '../ai/chapter-memory/text-normalization'
 import { estimateTokens } from '../ai/context-budget'
 import {
   buildConsistencyAuditPrompt,
+  consistencyAuditEvidenceOffsetV1,
   parseConsistencyAuditResult,
   type ConsistencyAuditResult,
+  type ConsistencyAuditCitationSourceV1,
   type ConsistencyFinding,
 } from '../ai/adapters/consistency-audit-adapter'
 import {
@@ -28,6 +30,7 @@ import type {
   AgentConversation,
   AgentEvent,
   ChatMessage,
+  OutlineNode,
 } from '../types'
 import { parseAgentEventPayload } from '../types'
 import {
@@ -42,6 +45,8 @@ import {
   stampNewRecord,
 } from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
+import type { ConsistencyAuditSourceReadV1 } from '../registry/types'
+import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
 import { hashCanonicalValue } from './run/hash'
 import { readAgentRunV1 } from './run/event-store'
 
@@ -58,6 +63,7 @@ export interface ConsistencyAgentContextEvidence {
   truncated?: string[]
   /** Frozen by explicit durable audits; historical/background reports may lack it. */
   contentRevisionHash?: string
+  citationIndexHash?: string
   inputTokens: number
   inputBudget: number
 }
@@ -131,11 +137,19 @@ export const CONSISTENCY_AGENT_OUTPUT_BUDGET_V1 = {
   deep: 16_000,
 } as const
 
+interface ConsistencyAuditCitationIndexV1 {
+  chapterVersionHash: string
+  sources: Array<Omit<ConsistencyAuditCitationSourceV1, 'text'>>
+  segments: Array<{ key: ConsistencyAuditSourceReadV1['key']; start: number; end: number; versionHash: string }>
+}
+
 export interface ConsistencyAgentExecutionTraceV1 {
   contextAssembled?: (input: {
     assembled: Awaited<ReturnType<typeof assembleContext>>
     messages: ChatMessage[]
     sourceTextHash: string
+    citationIndex: ConsistencyAuditCitationIndexV1
+    citationIndexHash: string
   }) => void | Promise<void>
   modelRequested?: (input: { messages: ChatMessage[] }) => void | Promise<void>
   modelResponded?: (input: { raw: string; completion?: 'complete' | 'incomplete'; finishReason?: string }) => void | Promise<void>
@@ -267,6 +281,7 @@ export async function runBackgroundConsistencyAgent(input: {
  */
 export async function runConsistencyAgent(input: {
   projectId: number
+  scope: WorkspaceScope
   chapterId: number
   chapterTitle: string
   worldGroupId: number | null
@@ -279,19 +294,31 @@ export async function runConsistencyAgent(input: {
   call: (messages: ChatMessage[]) => Promise<ConsistencyAgentModelResponseV1>
   trace?: ConsistencyAgentExecutionTraceV1
 }): Promise<ConsistencyAgentCandidate> {
-  const scope = await resolveReadScopeLike(input.projectId)
+  const scope = input.scope
   const chapter = await db.chapters.get(input.chapterId)
-  if (!await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) {
+  if (!chapter || scope.projectId !== input.projectId || !await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) {
     throw new Error('一致性审计章节不存在或不属于当前作品。')
+  }
+  const [project, outlineNodes] = await Promise.all([
+    db.projects.get(scope.projectId),
+    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
+  ])
+  const target = walkOutlineChaptersInCanonicalOrder(outlineNodes).chapters
+    .find(entry => entry.outlineNode.id === chapter.outlineNodeId)
+  if (!target || (project?.enableMultiWorld ? target.worldGroupId : null) !== input.worldGroupId
+    || (input.outlineNodeId != null && input.outlineNodeId !== target.outlineNode.id)) {
+    throw new Error('一致性审计来源不属于当前章节的作品与世界组。')
   }
   const chapterText = normalizeChapterText(input.chapterContent)
   const sourceTextHash = await hashChapterText(chapterText)
+  const captured: ConsistencyAuditSourceReadV1[] = []
   const [evidence, cognition, lifecycle, deterministicFindings] = await Promise.all([
     assembleContext({
       projectId: input.projectId,
       scope,
       chapterId: input.chapterId,
-      outlineNodeId: input.outlineNodeId,
+      outlineNodeId: target.outlineNode.id,
+      captureConsistencyAuditSource: source => { captured.push(source) },
       worldGroupId: input.worldGroupId,
       sourceKeys: [...(input.mode === 'fast'
         ? CONSISTENCY_AGENT_FAST_SOURCES_V1
@@ -310,11 +337,36 @@ export async function runConsistencyAgent(input: {
       scope,
     }),
   ])
+  const sources: ConsistencyAuditCitationSourceV1[] = []
+  const segments: ConsistencyAuditCitationIndexV1['segments'] = []
+  for (const capture of captured) {
+    const index = evidence.included.indexOf(capture.key)
+    const delivered = evidence.segments[index]
+    const source = evidence.sourceEvidence?.find(item => item.key === capture.key)
+    if (source?.status !== 'included' || source.delivery !== 'full' || !source.sourceHash
+      || delivered?.content !== capture.content || await sha256Text(capture.content) !== source.sourceHash) continue
+    const startInRequest = evidence.segments.slice(0, index).reduce(
+      (offset, segment) => offset + segment.content.length + 2,
+      consistencyAuditEvidenceOffsetV1(input.chapterTitle),
+    )
+    segments.push({ key: capture.key, start: startInRequest, end: startInRequest + capture.content.length, versionHash: source.sourceHash })
+    for (const { id, start, end } of capture.rows) {
+      sources.push({ sourceType: capture.key === 'canonAssertions' ? 'canon' : 'observation', sourceId: id,
+        sourceKey: capture.key, versionHash: source.sourceHash, start, end, text: capture.content.slice(start, end) })
+    }
+  }
+  const citationIndex: ConsistencyAuditCitationIndexV1 = {
+    chapterVersionHash: sourceTextHash,
+    sources: sources.map(({ text: _text, ...location }) => location),
+    segments,
+  }
+  const citationIndexHash = await hashCanonicalValue(citationIndex)
   const messages = buildConsistencyAuditPrompt({
     mode: input.mode,
     chapterTitle: input.chapterTitle,
     chapterContent: chapterText,
     evidenceContext: evidence.text,
+    citationSources: sources,
     cognitionCatalog: formatCognitionCatalog(cognition.catalog),
     lifecycleCatalog: formatLifecycleCatalog(lifecycle.catalog),
   })
@@ -323,7 +375,7 @@ export async function runConsistencyAgent(input: {
   if (requestTokens > CONSISTENCY_AGENT_INPUT_BUDGET_V1[input.mode]) {
     throw new Error(`本章全文与审计资料超出${input.mode === 'fast' ? ' Fast Guard' : ' Deep Audit'} 输入预算；未发送模型请求。${input.mode === 'fast' ? '可选择 Deep Audit 进行更大范围审计。' : ''}`)
   }
-  await input.trace?.contextAssembled?.({ assembled: evidence, messages, sourceTextHash })
+  await input.trace?.contextAssembled?.({ assembled: evidence, messages, sourceTextHash, citationIndex, citationIndexHash })
   await input.trace?.modelRequested?.({ messages })
   const reservation = input.budget.reserveCall({
     label: input.mode === 'fast' ? '一致性 Fast Guard' : '一致性 Deep Audit',
@@ -348,7 +400,8 @@ export async function runConsistencyAgent(input: {
     raw,
     mode: input.mode,
     chapterContent: chapterText,
-    evidenceContext: evidence.text,
+    chapterVersionHash: sourceTextHash,
+    sources,
   })
   if (!parsed) {
     throw new Error('一致性 Agent 返回的 JSON 无法解析或引文、证据无效；没有保存不完整报告。')
@@ -377,6 +430,7 @@ export async function runConsistencyAgent(input: {
       omitted: evidence.omitted,
       trimmed: evidence.trimmed,
       truncated: (evidence.sourceEvidence ?? []).filter(source => source.delivery === 'truncated').map(source => source.key),
+      citationIndexHash,
       inputTokens: evidence.totalInputTokens,
       inputBudget: evidence.inputBudget,
     },
@@ -564,8 +618,11 @@ export async function isConsistencyAgentCurrent(
 export function toConsistencyAuditResult(
   candidate: ConsistencyAgentCandidate,
 ): ConsistencyAuditResult {
+  const legacy = candidate.mode !== 'background' && !candidate.context.citationIndexHash
   return {
     mode: candidate.mode === 'deep' ? 'deep' : 'fast',
-    findings: candidate.findings,
+    findings: legacy ? candidate.findings.map(finding =>
+      finding.evidence.some(evidence => !evidence.position) ? { ...finding, severity: 'unknown' } : finding,
+    ) : candidate.findings,
   }
 }

@@ -1,3 +1,4 @@
+import { addTextOpenWorldTaskUsageV1, readTextOpenWorldObservedTokenPairV1 } from './production-usage'
 import type { ChatResult } from '../ai/client'
 import { captureTextOpenWorldTaskExecutionInputV1, assertTextOpenWorldBuildNewWorkV1, assertTextOpenWorldNewSourceV1 } from './source-admission'
 import { estimateTokens } from '../ai/context-budget'
@@ -871,24 +872,13 @@ async function restoreDurableBatchResponse(input: {
   return { response, draft }
 }
 
-function observedCurationUsage(value: unknown): { inputTokens: number; outputTokens: number } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const usage = value as Record<string, unknown>
-  if (!Number.isSafeInteger(usage.inputTokens) || Number(usage.inputTokens) < 0
-    || !Number.isSafeInteger(usage.outputTokens) || Number(usage.outputTokens) < 0) return null
-  return {
-    inputTokens: Number(usage.inputTokens),
-    outputTokens: Number(usage.outputTokens),
-  }
-}
-
 function curationUsageForResponse(input: {
   response: TextOpenWorldSourceCurationModelExecutionV1
   batch: CurationBatchV1
   startedAt: number
   system: string
 }): ProductProductionTaskUsageV1 {
-  const observed = input.response.usage == null ? null : observedCurationUsage(input.response.usage)
+  const observed = input.response.usage == null ? null : readTextOpenWorldObservedTokenPairV1(input.response.usage)
   if (input.response.usage != null && !observed) throw new ProductProductionResultUnknownErrorV1()
   return {
     modelCalls: 1,
@@ -1543,18 +1533,6 @@ export async function validateTextOpenWorldSourceCurationArtifactsV1(input: {
   return structuredClone({ manifest, ledger, gapReport })
 }
 
-function addUsage(left: ProductProductionTaskUsageV1, right: ProductProductionTaskUsageV1): ProductProductionTaskUsageV1 {
-  return {
-    modelCalls: left.modelCalls + right.modelCalls,
-    inputTokens: left.inputTokens + right.inputTokens,
-    outputTokens: left.outputTokens + right.outputTokens,
-    mediaCalls: left.mediaCalls + right.mediaCalls,
-    costUsd: left.costUsd == null || right.costUsd == null ? null : left.costUsd + right.costUsd,
-    durationMs: left.durationMs + right.durationMs,
-    storageBytes: left.storageBytes + right.storageBytes,
-  }
-}
-
 function zeroUsage(): ProductProductionTaskUsageV1 {
   return { modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0, costUsd: 0, durationMs: 0, storageBytes: 0 }
 }
@@ -1668,7 +1646,7 @@ async function executeCuration(input: {
       })
       drafts.push(result.draft)
       if (result.chargeable) {
-        usage = addUsage(usage, result.usage)
+        usage = addTextOpenWorldTaskUsageV1(usage, result.usage)
         freshBatchKeys.delete(batch.batchKey)
       }
     }
@@ -1687,13 +1665,13 @@ async function executeCuration(input: {
     if (error instanceof ProductProductionRetryableExecutionErrorV1) {
       throw new ProductProductionRetryableExecutionErrorV1(
         error.message,
-        addUsage(usage, error.usage),
+        addTextOpenWorldTaskUsageV1(usage, error.usage),
       )
     }
     if (error instanceof ProductProductionDraftRejectedErrorV1) {
       throw new ProductProductionDraftRejectedErrorV1(
         error.message,
-        addUsage(usage, error.usage),
+        addTextOpenWorldTaskUsageV1(usage, error.usage),
       )
     }
     if (usage.modelCalls > 0) {

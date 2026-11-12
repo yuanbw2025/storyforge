@@ -1,3 +1,4 @@
+import { resolveFieldGenerationRequestModeV1 } from './field-generation-request-mode'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { getModelPreset } from '../ai/context-budget'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
@@ -310,11 +311,7 @@ export function resolveWorldviewAgentFieldV1(request: string): WorldviewAgentFie
 }
 
 export function resolveWorldviewFieldModeV1(request: string): FieldGenerationMode {
-  const explicit = /生成模式\s*=\s*(expand|rewrite|polish)\b/i.exec(request)?.[1]?.toLowerCase()
-  if (explicit === 'rewrite' || explicit === 'polish' || explicit === 'expand') return explicit
-  if (/重写|重做|推倒重来/.test(request)) return 'rewrite'
-  if (/润色|优化表达/.test(request)) return 'polish'
-  return 'expand'
+  return resolveFieldGenerationRequestModeV1(request)
 }
 
 export function resolveWorldviewFieldOperationV1(input: {
