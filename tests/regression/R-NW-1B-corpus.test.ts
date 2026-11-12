@@ -50,6 +50,7 @@ describe('NW-1B · unchanged corpus with explicit fixture author annotations', (
       'src/lib/world-engine/reference-cache.ts',
       'src/lib/world-engine/source-receipt.ts',
       'src/lib/types/world-release.ts',
+      'src/lib/utils/legacy-id-array.ts',
       'tests/helpers/narrative-domain-fixture.ts', 'tests/regression/R-NW-1B-corpus.test.ts',
       'tests/acceptance/narrative-world/corpus-v1.json',
     ]
@@ -58,6 +59,6 @@ describe('NW-1B · unchanged corpus with explicit fixture author annotations', (
       modelCalls: 0, independentHumanReviews: 0, queryProviderChanged: false,
       cases: observations, inputHashes: Object.fromEntries(paths.sort().map(file => [file, createHash('sha256').update(fs.readFileSync(file)).digest('hex')])) }
     if (process.env.NW_DOMAIN_REPORT) fs.writeFileSync(process.env.NW_DOMAIN_REPORT, JSON.stringify(receipt, null, 2) + '\n')
-    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/domain-projection-20261112-quality030037-integrated-v1.json', 'utf8')))
+    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/domain-projection-20261112-quality030037-post391-v1.json', 'utf8')))
   })
 })

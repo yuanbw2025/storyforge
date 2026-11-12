@@ -1,3 +1,4 @@
+import { sumProductTaskBudgetReservationsV1 } from './task-budget-totals'
 import {CHAT_OPENING_DEVELOPMENT_GATE_V3} from '../character-interaction/opening-development'
 import {CHAT_OPENING_AGENCY_GATE_V2} from '../character-interaction/opening-agency'
 import {CHAT_OPENING_REPAIR_GATE_V2} from '../character-interaction/opening-repair-patch'
@@ -449,19 +450,7 @@ export function parseProductProductionPlanV3(
         fail('open 跑团计划必须绑定专属任务、真实依赖与授权预算，不能偷换 scripted DAG')
       }
     }
-    const totals = tasks.reduce((sum, task) => ({
-      modelCalls: sum.modelCalls + task.budgetReservation.modelCalls,
-      inputTokens: sum.inputTokens + task.budgetReservation.inputTokens,
-      outputTokens: sum.outputTokens + task.budgetReservation.outputTokens,
-      mediaCalls: sum.mediaCalls + task.budgetReservation.mediaCalls,
-      durationMs: sum.durationMs + task.budgetReservation.durationMs,
-      storageBytes: sum.storageBytes + task.budgetReservation.storageBytes,
-      maximumCostUsd: sum.maximumCostUsd == null || task.budgetReservation.maximumCostUsd == null
-        ? null : sum.maximumCostUsd + task.budgetReservation.maximumCostUsd,
-    }), {
-      modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0,
-      durationMs: 0, storageBytes: 0, maximumCostUsd: 0 as number | null,
-    })
+    const totals = sumProductTaskBudgetReservationsV1(tasks)
     const budget = brief.productionBudget
     // Provider completion usage can include hidden reasoning tokens even when
     // visible JSON is tightly bounded. Text-adventure task ceilings may be

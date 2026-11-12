@@ -79,7 +79,7 @@ export async function addSfqa043MediaAndPageV1(f: Awaited<ReturnType<typeof crea
     action: '林岚停在站台', visualPrompt: 'no text', negativePrompt: 'text, watermark',
     continuityRefs: [{ subjectKey: 'hero', note: '保持风衣轮廓' }], lettering: [], sourceUnitIds: [f.unit.id!],
   }] })
-  const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X8WgWQAAAABJRU5ErkJggg=='), value => value.charCodeAt(0)).buffer
+  const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'), value => value.charCodeAt(0)).buffer
   const rights: MediaRightsV1 = { version: 1, source: 'author-upload', commercialUse: 'allowed', redistribution: 'allowed',
     attribution: '', declaration: '原创合成测试图片，仅验证存储与引用。', declaredAt: Date.now() }
   const subjectAsset = await commitUploadedComicAssetV1({ scope: f.scope, subjectId: f.subject.id!, data: bytes, rights })
