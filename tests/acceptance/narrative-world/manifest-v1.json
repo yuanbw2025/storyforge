@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-quality021129-integrated-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-quality030037-integrated-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -821,6 +821,16 @@
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality082083-runtime-media-attempts-v1.json",
         "workPackage": "NW-0B",
         "note": "Preserve the measured runtime-media receipt before the SFQA-028/032 runtime event admission and continuation owner fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality021129-integrated-v2.json",
+        "workPackage": "SFQA-030/037",
+        "note": "Preserve inputs and observations for the measured parent receipt."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality030-037-backup-references-v1.json",
+        "workPackage": "SFQA-030/037",
+        "note": "Preserve inputs and observations for the measured parent receipt."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

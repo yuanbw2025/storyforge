@@ -1,11 +1,12 @@
 import { db } from '../db/schema'
 import { PROJECT_TABLES, REGISTRY_BY_NAME } from './project-tables'
-import type { ArrayRef, DomainOwnerKind, TableSpec } from './types'
+import type { ArrayRef, DomainOwnerKind, ScopedScalarRef, TableSpec } from './types'
 
 /** Array declarations belong to the holder; their items point to the source. */
-export function registeredArrayReferencesTo(sourceTableName: string): { holder: TableSpec; ref: ArrayRef }[] {
+export function registeredArrayReferencesTo(sourceTableName: string): { holder: TableSpec; ref: ArrayRef | ScopedScalarRef }[] {
   return PROJECT_TABLES.flatMap(holder => (holder.refs ?? []).flatMap(ref =>
-    ref.kind === 'array' && ref.itemTarget === sourceTableName && ref.onDelete !== 'keep'
+    (ref.kind === 'array' && ref.itemTarget === sourceTableName && ref.onDelete !== 'keep') ||
+      (ref.kind === 'scoped-scalar' && ref.sourceTable === sourceTableName)
       ? [{ holder, ref }] : []))
 }
 
@@ -52,13 +53,17 @@ async function referenceOwner(spec: TableSpec, row: Record<string, unknown>, vis
   return typeof id === 'number' && Number.isSafeInteger(id) && id > 0 ? { kind, id } : null
 }
 
-async function sameReferenceOwner(source: ReferenceOwner, holder: ReferenceOwner | null, projectId: number): Promise<boolean> {
+async function sameReferenceOwner(source: ReferenceOwner, holder: ReferenceOwner | null, projectId: number, allowParentWorld = false): Promise<boolean> {
   if (!holder) return false
   if (source.kind === 'workspace') return source.id === projectId
   if (source.kind === holder.kind) return source.id === holder.id
   if (source.kind === 'world' && holder.kind === 'work') {
     const work = await db.works.get(holder.id)
     return work?.projectId === projectId && work.worldId === source.id
+  }
+  if (allowParentWorld && source.kind === 'work' && holder.kind === 'world') {
+    const work = await db.works.get(source.id)
+    return work?.projectId === projectId && work.worldId === holder.id
   }
   return false
 }
@@ -82,17 +87,34 @@ export async function clearRegisteredArrayReferences(sourceTableName: string, so
       : holder.table.filter(row => row.projectId === source.projectId)
     for (const key of await rows.primaryKeys()) {
       const row = await holder.table.get(key) as Record<string, unknown> | undefined
-      if (!row || !await sameReferenceOwner(sourceOwner, await referenceOwner(holder, row), source.projectId)) continue
+      if (!row) continue
+      const owner = await referenceOwner(holder, row)
       const patch: Record<string, unknown> = {}
       for (const ref of refs) {
+        if (!await sameReferenceOwner(sourceOwner, owner, source.projectId, ref.scope === 'same-owner-or-parent-world')) continue
         const current = row[ref.field]
         if (current == null) continue
+        if (ref.kind === 'scoped-scalar') {
+          if ((!ref.when || row[ref.when.field] === ref.when.equals) && current === sourceId) patch[ref.field] = null
+          continue
+        }
         let values: unknown = current
         if (typeof current === 'string') {
           try { values = JSON.parse(current) }
           catch { throw new Error(`引用清理遇到损坏的 ${holder.name}.${ref.field}；删除已取消，原数据保留。`) }
         }
         if (!Array.isArray(values)) throw new Error(`引用清理遇到无效的 ${holder.name}.${ref.field}；删除已取消，原数据保留。`)
+        if (ref.itemField) {
+          const field = ref.itemField
+          let changed = false
+          const next = values.map(item => {
+            if (item === null || typeof item !== 'object' || Array.isArray(item) || (item as Record<string, unknown>)[field] !== sourceId) return item
+            changed = true
+            return { ...item, [field]: null }
+          })
+          if (changed) patch[ref.field] = typeof current === 'string' ? JSON.stringify(next) : next
+          continue
+        }
         if (!values.includes(sourceId)) continue
         const next = ref.onDelete === 'setNullItem' ? values.map(value => value === sourceId ? null : value)
           : values.filter(value => value !== sourceId)

@@ -23,10 +23,11 @@ import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
 import { assertProductRuntimeSourceSnapshotV3 } from '../product/runtime-source-branch'
 import { remapWorldPortalTargets } from '../utils/world-portals'
 import { transactionTablesFor } from '../registry/lifecycle'
-import { inspectPortableTableStructure, orderPortableTreeRows } from './portable-table-structure'
+import { inspectPortableTableStructure, orderPortableTreeRows, readPortableOwnerShadowV1 } from './portable-table-structure'
 import type { ExportRefRemap, TableSpec } from '../registry/types'
 import type { ProjectExportData, ProjectImportOptionsV1 } from './json-export'
-import { CURRENT_BACKUP_VERSION, normalizeProjectBackup } from './backup-trust'
+import { stampNewRecord } from '../workspace/scope'
+import { type BackupReferenceIssue, BACKUP_REFERENCE_REVIEW_TITLE, CURRENT_BACKUP_VERSION, normalizeProjectBackup, reviewPortableLocalReferencesV1 } from './backup-trust'
 import { assertTtrpgNarrativeMemoryBackupV1 } from '../ttrpg/narrative-memory-backup'
 import { remapNarrativeDomainFieldV1 } from '../narrative-domain/references'
 import { assertNarrativeLineageRowsV1 } from '../world-engine/narrative-lineage-lifecycle'
@@ -889,42 +890,6 @@ async function validateIndependentCreationBackup(value: Record<string, any>): Pr
   }
 }
 
-function strictOwnerShadow(spec: TableSpec, row: Record<string, any>): {
-  kind: 'world' | 'work' | 'instance'
-  exportId: number
-  field: string
-} | null {
-  if (spec.name === 'worlds' || spec.name === 'works') return null
-  const locator = spec.domainOwner?.locator
-  if (!locator || locator.kind === 'workspace') return null
-  if (locator.kind === 'field') {
-    if (locator.owner !== 'world' && locator.owner !== 'work') return null
-    const shadowField = locator.owner === 'world' ? '_worldOwnerExportId' : '_workOwnerExportId'
-    const opposite = locator.owner === 'world' ? '_workOwnerExportId' : '_worldOwnerExportId'
-    if (row[opposite] != null || !Number.isInteger(row[shadowField])) {
-      throw new Error(`[deriveImport] v4 owner 缺失或越界:${spec.name}.${shadowField}`)
-    }
-    return { kind: locator.owner, exportId: row[shadowField], field: locator.field }
-  }
-  if (locator.kind === 'exclusive-fields') {
-    const hasWorld = Number.isInteger(row._worldOwnerExportId)
-    const hasWork = Number.isInteger(row._workOwnerExportId)
-    if (hasWorld === hasWork) throw new Error(`[deriveImport] v4 owner 必须且只能有一个:${spec.name}`)
-    return hasWorld
-      ? { kind: 'world', exportId: row._worldOwnerExportId, field: locator.worldField }
-      : { kind: 'work', exportId: row._workOwnerExportId, field: locator.workField }
-  }
-  if (locator.kind === 'exclusive-work-instance') {
-    const hasWork = Number.isInteger(row._workOwnerExportId)
-    const hasInstance = Number.isInteger(row._instanceOwnerExportId)
-    if (hasWork === hasInstance) throw new Error(`[deriveImport] v4 Work/Instance owner 必须且只能有一个:${spec.name}`)
-    return hasWork
-      ? { kind: 'work', exportId: row._workOwnerExportId, field: locator.workField }
-      : { kind: 'instance', exportId: row._instanceOwnerExportId, field: locator.instanceField }
-  }
-  return null
-}
-
 async function validateCurrentBackup(data: Record<string, unknown>): Promise<void> {
   if (data.version !== CURRENT_BACKUP_VERSION) {
     throw new Error(`[deriveImport] 只接受当前备份版本 v${CURRENT_BACKUP_VERSION}`)
@@ -1005,7 +970,7 @@ async function validateCurrentBackup(data: Record<string, unknown>): Promise<voi
       if (!row || typeof row !== 'object') throw new Error(`[deriveImport] ${spec.name} 包含非法记录`)
       spec.validateImportRow?.(row)
       if ('worldId' in row || 'workId' in row) throw new Error(`[deriveImport] ${spec.name} 泄露本地主键 owner`)
-      const shadow = strictOwnerShadow(spec, row)
+      const shadow = readPortableOwnerShadowV1(spec, row)
       if (!shadow) continue
       const validIds = shadow.kind === 'world' ? worldIds : shadow.kind === 'work' ? workIds : instanceIds
       if (!validIds.has(shadow.exportId)) throw new Error(`[deriveImport] owner 越界:${spec.name}`)
@@ -1516,7 +1481,7 @@ function restoreCurrentOwner(
   obj: Record<string, any>,
   newIdMaps: Map<string, Map<number, number>>,
 ): void {
-  const shadow = strictOwnerShadow(spec, obj)
+  const shadow = readPortableOwnerShadowV1(spec, obj)
   delete obj._worldOwnerExportId
   delete obj._workOwnerExportId
   delete obj._instanceOwnerExportId
@@ -1657,7 +1622,8 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
   // Direct callers receive the same immutable input boundary as the facade.
   input = structuredClone(input)
   const finalizeInTransaction = options.finalizeInTransaction
-  const normalized = normalizeProjectBackup(input)
+  const detachedChapters: BackupReferenceIssue[] = []
+  const normalized = normalizeProjectBackup(input, detachedChapters)
   if (!normalized.project) throw new Error('无效的导出文件格式')
   await validateCurrentBackup(normalized)
   const revisionOrigins = PROJECT_TABLES.some(spec => spec.portableData?.kind === 'world-revision-origin')
@@ -1676,6 +1642,10 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
   // Only after all current-contract, raw-wire and lineage validation does the
   // detached normalized structure become the current import DTO.
   const data = normalized as unknown as ProjectExportData
+  const sourceVersion = (input as { version: number }).version
+  const referenceReview = reviewPortableLocalReferencesV1(data as unknown as Record<string, unknown>)
+  referenceReview.issues.push(...detachedChapters)
+  const sourceDigest = referenceReview.issues.length > 0 ? await sha256PortableText(JSON.stringify(input)) : null
   const now = Date.now()
   const specs = PROJECT_TABLES.filter(s => s.exportable && s.name !== 'projects')
   const order = deriveImportOrder(specs)
@@ -1731,7 +1701,7 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
       let exportIndex = -1
       for (const row of rows) {
         exportIndex++
-        const obj: any = { ...row }
+        const obj: any = { ...row, ...referenceReview.patches.get(spec.name)?.get(exportIndex) }
         const exportId = obj._exportId
         delete obj._exportId
 
@@ -1744,7 +1714,13 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
         for (const rm of spec.exportRemap ?? []) {
           const exportVal = obj[rm.exportAs]
           delete obj[rm.exportAs]
+          if (rm.when && obj[rm.when.field] !== rm.when.equals) {
+            obj[rm.field] = null
+            continue
+          }
           let mappedId: number | null = null
+          if (exportVal == null && rm.requiredOnImport)
+            throw new Error(`[deriveImport] 缺失必填外键:${spec.name}.${rm.exportAs}`)
           if (exportVal != null) {
             const m = rm.selfTree ? newIdMap : newIdMaps.get(rm.remapVia)
             const got = m?.get(exportVal)
@@ -1755,7 +1731,7 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
                 hasUnmappedTemporalSourceRef = true
               }
               if (rm.onUnmapped === 'drop') { dropRow = true; break }
-              if (rm.onUnmapped === 'require') {
+              if (rm.onUnmapped === 'require' || rm.requiredOnImport) {
                 throw new Error(`[deriveImport] 缺失必填外键映射:${spec.name}.${rm.field}=${exportVal}`)
               }
               if (!rm.selfTree) {
@@ -1977,8 +1953,29 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
         ? null
         : (newIdMaps.get(rm.remapVia)?.get(exportValue) ?? null)
     }
-    if (Object.keys(projectPatch).length > 0) {
-      await db.projects.update(newProjectId, projectPatch as any)
+    const activeWorld = projectPatch.activeWorldId == null ? null : await db.worlds.get(projectPatch.activeWorldId)
+    const activeWork = projectPatch.activeWorkId == null ? null : await db.works.get(projectPatch.activeWorkId)
+    if (!activeWorld || !activeWork || activeWorld.projectId !== newProjectId ||
+      activeWork.projectId !== newProjectId || activeWork.worldId !== activeWorld.id)
+      throw new Error('[deriveImport] 恢复后的 active Work / World 根不一致。')
+    await db.projects.update(newProjectId, projectPatch as any)
+
+    if (sourceDigest != null) {
+      const content = [
+        BACKUP_REFERENCE_REVIEW_TITLE,
+        `已通过备份校验 · 来源 v${sourceVersion} · 解析后 JSON SHA-256：${sourceDigest}`,
+        '以下原值仅供人工核对。新库位置是恢复时的定位记录。',
+        ...referenceReview.issues.map(issue => {
+          const restoredId = newIdMaps.get(issue.table)?.get(issue.rowKey)
+          const { table, rowIndex, rowKey, resourceUid, path, value, reason, sampleId } = issue
+          return JSON.stringify({ 来源表: table, 原行序号: rowIndex, 便携行键: rowKey, 资源UID: resourceUid,
+            字段: path, 原值: value, 样本ID: sampleId, 原因: reason,
+            恢复时新库位置: restoredId == null ? null : `${table}#${restoredId}` })
+        }),
+      ].join('\n')
+      await db.notes.add(stampNewRecord({ projectId: newProjectId, worldId: activeWorld.id!, workId: activeWork.id! },
+        'notes', { projectId: newProjectId, content, color: 'yellow', pinned: true, createdAt: now, updatedAt: now },
+        { owner: 'work' }))
     }
 
     const agentRunIds = [...(newIdMaps.get('agentRuns')?.values() ?? [])]

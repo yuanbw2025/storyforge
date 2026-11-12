@@ -24,6 +24,16 @@ export interface TtrpgVisibleCharacterSheetV2 {
   privateFieldsVisible: boolean;
 }
 
+/** A runtime image is located by its viewer-visible frozen slot identity.
+ * Replay's local primary key is historical and never leaves the state owner. */
+export interface TtrpgViewerRuntimeMediaRefV1 {
+  slotKey: string;
+  requestKey: string;
+  assetKey: string;
+  version: number;
+  contentHash: string;
+}
+
 export interface TtrpgViewerProjectionV1 {
   schema: "storyforge.ttrpg-viewer-projection";
   version: 1;
@@ -399,7 +409,7 @@ export interface TtrpgViewerProjectionV1 {
       status: "placeholder" | "queued" | "available" | "failed" | "cancelled";
       requestKey: string | null;
       assetKey: string | null;
-      mediaAssetId: number | null;
+      runtimeAsset: TtrpgViewerRuntimeMediaRefV1 | null;
       mediaContentHash: string | null;
       lastErrorCode: string | null;
     }>;
@@ -1645,7 +1655,11 @@ export function createTtrpgViewerProjectionV1(input: {
               status: slot.status,
               requestKey: slot.requestKey,
               assetKey: slot.assetKey,
-              mediaAssetId: slot.mediaAssetId,
+              runtimeAsset: slot.status === "available" && slot.requestKey && slot.assetKey &&
+                slot.mediaAssetVersion != null && slot.mediaContentHash
+                ? { slotKey: slot.slotKey, requestKey: slot.requestKey, assetKey: slot.assetKey,
+                    version: slot.mediaAssetVersion, contentHash: slot.mediaContentHash }
+                : null,
               mediaContentHash: slot.mediaContentHash,
               lastErrorCode: slot.lastErrorCode,
             })),
