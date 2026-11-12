@@ -22,7 +22,8 @@ const declaredInputs = [
 async function scan(source: string): Promise<string> {
   const directory = await mkdtemp(path.join(tmpdir(), 'storyforge-ai-manual-meta-'))
   try {
-    for (const relative of [...declaredInputs, 'scripts/generate-ai-manual.mjs', 'scripts/ai-call-meta.mjs', 'scripts/ai-manual-context-sources.mjs']) {
+    for (const relative of [...declaredInputs, 'scripts/generate-ai-manual.mjs', 'scripts/ai-call-meta.mjs',
+      'scripts/ai-manual-context-sources.mjs', 'scripts/static-guard-bindings.mjs']) {
       const output = path.join(directory, relative)
       await mkdir(path.dirname(output), { recursive: true })
       await writeFile(output, await readFile(path.join(repository, relative)))
