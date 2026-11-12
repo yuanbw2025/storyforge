@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-quality018-integrated-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-quality008-main416-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality018-integrated-v1.json",
+        "workPackage": "SFQA-008",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality008-critical-coverage-v1.json",
+        "workPackage": "SFQA-008",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-quality086-integrated-v1.json",
         "workPackage": "SFQA-018",
@@ -1050,7 +1060,8 @@
     "tests/regression/R-NW-2E-byte-sink.test.ts",
     "tests/regression/R-NW-2E-numeric-runs.test.ts",
     "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
-    "src/lib/types/state-card.ts"
+    "src/lib/types/state-card.ts",
+    "scripts/quality/critical-coverage-scopes.json"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

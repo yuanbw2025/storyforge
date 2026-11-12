@@ -60,4 +60,25 @@ if (report.success !== true || report.numTotalTests < 1
   console.error('[coverage] The completed test report does not establish a successful test run.')
   process.exit(1)
 }
+// A native glob threshold can pass on an empty map. Every named risk entry
+// must contribute executable statements, and each domain must have a real
+// denominator for all four independently enforced Vitest metrics.
+/** @type {Record<string, string[]>} */
+const criticalScopes = JSON.parse(readFileSync(new URL('./quality/critical-coverage-scopes.json', import.meta.url), 'utf8'))
+const summary = JSON.parse(readFileSync(path.join(reportsDirectory, 'coverage-summary.json'), 'utf8'))
+if (!summary?.total) throw new Error('[coverage] Missing aggregate coverage summary')
+for (const [domain, files] of Object.entries(criticalScopes)) {
+  const entries = files.map(file => {
+    const absolute = path.resolve(file)
+    const row = summary[absolute] ?? summary[absolute.split(path.sep).join('/')]
+    if (!(row?.statements?.total > 0)) throw new Error(`[coverage] Missing executable coverage in ${domain}: ${file}`)
+    return row
+  })
+  for (const metric of ['lines', 'functions', 'statements', 'branches']) {
+    if (!entries.some(row => row[metric]?.total > 0)) {
+      throw new Error(`[coverage] Empty ${metric} denominator in ${domain}`)
+    }
+  }
+}
+
 console.info(`[coverage] completed: ${report.testResults.length} files, ${report.numTotalTests} tests`)
