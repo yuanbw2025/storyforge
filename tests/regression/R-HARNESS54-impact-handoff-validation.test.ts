@@ -17,7 +17,7 @@ async function seed(): Promise<{
   const now = Date.now()
   const createdWorkspaceV1 = await seedCurrentWorkspace('交接验签')
   const { projectId, worldId, workId } = createdWorkspaceV1.scope
-  const worldGroupId = await db.worldGroups.add({ projectId, name: '主世界', order: 0, createdAt: now, updatedAt: now }) as number
+  const worldGroupId = await db.worldGroups.add({ projectId, worldId, name: '主世界', description: '', type: 'primary', order: 0, createdAt: now, updatedAt: now }) as number
   const outlineNodeId = await db.outlineNodes.add({ projectId, workId, worldGroupId, parentId: null, type: 'chapter', title: '第一章', summary: '旧章纲', order: 0, createdAt: now, updatedAt: now } as any) as number
   const chapterId = await db.chapters.add({ projectId, workId, outlineNodeId, title: '第一章', content: '<p>潮声穿过旧港。</p>', wordCount: 8, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
   return { scope: { projectId, worldId, workId }, chapterId, outlineNodeId, worldGroupId }
