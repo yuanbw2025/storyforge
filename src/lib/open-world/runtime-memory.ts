@@ -1,3 +1,7 @@
+import {
+  TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1,
+  textOpenWorldRuntimeDialogueRecordLimitV1,
+} from './runtime-dialogue-window'
 import { assertTextOpenWorldSessionNewWorkV1, assertTextOpenWorldRuntimeNewWorkV1 } from './source-admission'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import {
@@ -61,7 +65,7 @@ import { parseTextOpenWorldSessionProjectionV1 } from './session-projection'
 import { verifyTextOpenWorldVNextSessionBindingV1 } from './session-binding'
 
 export const TEXT_OPEN_WORLD_RUNTIME_MEMORY_STEP_ID_V1 = 'text-open-world-runtime-ai:memory' as const
-export const TEXT_OPEN_WORLD_RUNTIME_MEMORY_DIALOGUE_LIMIT_V1 = 12 as const
+export const TEXT_OPEN_WORLD_RUNTIME_MEMORY_DIALOGUE_LIMIT_V1 = TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1.records
 
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 const HASH = /^[a-f0-9]{64}$/
@@ -221,7 +225,7 @@ function normalizeDialogue(
   actorKey: string,
 ): TextOpenWorldRuntimeMemoryDialogueTurnV1[] {
   if (!Array.isArray(value) || value.length < 2 || value.length > TEXT_OPEN_WORLD_RUNTIME_MEMORY_DIALOGUE_LIMIT_V1) {
-    fail('dialogue-window', `关闭窗口必须包含2到${TEXT_OPEN_WORLD_RUNTIME_MEMORY_DIALOGUE_LIMIT_V1}轮记录`)
+    fail('dialogue-window', `关闭窗口必须包含2到${TEXT_OPEN_WORLD_RUNTIME_MEMORY_DIALOGUE_LIMIT_V1}条记录`)
   }
   let total = 0
   const result = value.map((turn, index) => {
@@ -246,9 +250,10 @@ function normalizeDialogue(
     } else if (source.actorKey !== actorKey || turnSource === 'player-input') {
       fail('dialogue-window', 'NPC对白越过当前角色作用域')
     }
-    const normalizedText = text(source.text, `dialogue[${index}].text`, 1_000)
+    const normalizedText = text(source.text, `dialogue[${index}].text`, textOpenWorldRuntimeDialogueRecordLimitV1(speaker))
     total += normalizedText.length
-    if (total > 6_000) fail('dialogue-window', '关闭窗口超过6000字符')
+    const { totalChars } = TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1
+    if (total > totalChars) fail('dialogue-window', `关闭窗口超过${totalChars}字符`)
     const citedKnowledgeKeys = keys(source.citedKnowledgeKeys, `dialogue[${index}].citedKnowledgeKeys`, 32)
     const candidateHash = source.dialogueCandidateHash == null ? null : String(source.dialogueCandidateHash)
     const manifestHash = source.dialogueContextManifestHash == null ? null : String(source.dialogueContextManifestHash)

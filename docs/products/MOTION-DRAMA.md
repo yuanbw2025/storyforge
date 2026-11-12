@@ -55,6 +55,9 @@
 - 调用、预算、repair、stale、媒资权利和确认门；
 - provider capability 和 Release 完成门。
 
+Image/Video Prompt IR 按 `shotKey` 唯一且精确覆盖当前集全部镜头；目标与 revision 全部校验后才写入。
+切集在同一事务内读取生产根、核对 `expectedRevision` 和集数范围并更新版本；旧版本冲突由作者刷新复核，不自动重试。
+
 每次运行冻结最终模板、变量、版本和 hash，保证候选可解释、Release 可复现。
 
 ## 6. 物料与参考帧
@@ -77,6 +80,8 @@ V1 不要求、读取或生成 WorldRelease，不向世界引擎写入人物图�
 - `reference-ready`：必需物料和 shot 参考帧已选择，引用实际存在、可解码、权利与 hash 完整，adapter 包通过当前 capability profile。
 
 二者是同一产品的成熟度，不建立第二产品。两级 Release 都停在外部视频生成之前。
+
+交付 ZIP 按冻结 Prompt Pack 核齐素材归属、版本、hash、MIME 与实际字节。`reference-ready` 也核对原发布器封存的物料：本次发布镜头或声音方案引用的已选物料，以及全部已选音色、声音。旧提示词包没有列出这些物料时，仍按冻结清单保留；缺少必需素材、夹带无关素材或版本不符，均拒绝导出。`prompt-only` 的归档不得含实际素材。校验不从当前草稿补齐，也不改写旧 Release。
 
 ## 10. 完成判据
 

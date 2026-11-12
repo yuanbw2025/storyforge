@@ -10,6 +10,23 @@ import { inspectMotionDramaQualityV1 } from './quality'
 import { assertMotionDramaReleaseManifestV1 } from './release-contracts'
 import { requireMotionDramaRootsV1 } from './service'
 
+/** The publisher has always included selected audio as well as subjects used by these shots. */
+export function motionReleaseSubjectKeys(
+  shots: readonly { subjectKeys?: unknown; soundPlan?: unknown }[],
+  subjects: readonly { stableKey?: unknown; kind?: unknown }[],
+): Set<string> {
+  const keys = new Set<string>()
+  for (const { subjectKeys, soundPlan } of shots) {
+    if (!Array.isArray(subjectKeys) || !Array.isArray(soundPlan)) throw new Error('冻结镜头缺少物料或声音清单')
+    for (const key of subjectKeys) if (typeof key === 'string') keys.add(key)
+    for (const cue of soundPlan) if (typeof cue?.subjectKey === 'string') keys.add(cue.subjectKey)
+  }
+  for (const { stableKey, kind } of subjects) {
+    if ((kind === 'voice' || kind === 'sound') && typeof stableKey === 'string') keys.add(stableKey)
+  }
+  return keys
+}
+
 function portable<T extends Record<string, any>>(row: T): Record<string, unknown> {
   const { id: _id, projectId: _projectId, worldId: _worldId, workId: _workId, adaptationProjectId: _adaptationProjectId, createdAt: _createdAt, updatedAt: _updatedAt, ...body } = row
   return structuredClone(body)
@@ -40,8 +57,7 @@ export async function publishMotionDramaReleaseV1(input: { scope: WorkspaceScope
   if (!bible) throw new Error('[motion-drama-release] 系列圣经缺失')
   const latestPacks = episodeNumbers.flatMap(episodeNumber => providers.map(provider => packs.filter(pack => pack.episodeNumber === episodeNumber && pack.provider === provider).sort((a, b) => b.version - a.version)[0]).filter(Boolean))
   const verifiedPacks = await Promise.all(latestPacks.map(verifyMotionDramaPromptPackV1))
-  const usedSubjects = new Set(shots.flatMap(shot => [...shot.subjectKeys, ...shot.soundPlan.flatMap(cue => cue.subjectKey ? [cue.subjectKey] : [])]))
-  for (const subject of assets) if (subject.kind === 'voice' || subject.kind === 'sound') usedSubjects.add(subject.stableKey)
+  const usedSubjects = motionReleaseSubjectKeys(shots, assets)
   const selectedVersions = input.tier === 'reference-ready' ? assets.filter(subject => usedSubjects.has(subject.stableKey)).map(subject => versions.find(version => version.stableKey === subject.selectedVersionKey)).filter((row): row is NonNullable<typeof row> => Boolean(row?.blobObjectId)) : []
   const selectedReferences = input.tier === 'reference-ready' ? references.filter(reference => shots.some(shot => shot.stableKey === reference.shotKey) && reference.blobObjectId != null) : []
   const blobRows = new Map<number, import('../types').MediaBlobObjectRecordV1 & { id: number }>()

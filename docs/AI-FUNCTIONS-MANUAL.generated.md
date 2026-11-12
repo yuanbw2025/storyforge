@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 171 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 173 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -189,6 +189,8 @@
 | `chatMemoryReview` | 记忆正文与实际共同来源 | runtime | L0 | 20000 |
 | `chatActionCandidate` | 待审查的持久化行动候选 | runtime | L0 | 8000 |
 | `chatSituationCandidate` | 待审查的持久化情境候选 | runtime | L0 | 8000 |
+| `chatSituationRuntime` | 角色聊天情境协调视角 | runtime | L0 | 12000 |
+| `interactionRuntime` | 角色互动单一视角 | runtime | L0 | 8000 |
 | `aiTownRuntime` | 后日谈 AI 小镇居民单一视角 | runtime | L0 | 8000 |
 | `aiTownDirectorRuntime` | 后日谈 AI 小镇导演公开运行视角 | runtime | L0 | 10000 |
 | `productRuntime` | 冻结运行时状态 | runtime | L0 | 8000 |
@@ -355,7 +357,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `workspace-root-lifecycle` | `projects` | `PROJECT_TABLES + workspace purpose + import trust + world lifecycle` | `src/lib/export/registry-import.ts`<br/>`src/lib/memory/workspace-projection.ts`<br/>`src/lib/world-engine/world-package.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/promotion.ts`<br/>`src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
 | `world-root-lifecycle` | `worlds` | `PROJECT_TABLES refs + world package trust + world release lifecycle` | `src/lib/world-engine/world-package.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/promotion.ts`<br/>`src/lib/world-engine/draft.ts`<br/>`src/lib/world-engine/narrative-derivation.ts` | 2027-08-01 |
 | `work-root-lifecycle` | `works` | `PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle` | `src/lib/memory/workspace-projection.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/release.ts` | 2027-08-01 |
-| `adaptation-root-lifecycle` | `adaptationProjects` | `PROJECT_TABLES + ADOPTION_SCHEMAS + adaptation state machine + source manifest CAS` | `src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts`<br/>`src/lib/adaptation/analysis.ts`<br/>`src/lib/screenplay/production.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/production.ts`<br/>`src/lib/comic/release.ts`<br/>`src/lib/comic/authoring.ts`<br/>`src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-08-01 |
+| `adaptation-root-lifecycle` | `adaptationProjects` | `PROJECT_TABLES + ADOPTION_SCHEMAS + adaptation state machine + source manifest CAS` | `src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts`<br/>`src/lib/adaptation/analysis.ts`<br/>`src/lib/screenplay/production.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/production.ts`<br/>`src/lib/comic/release.ts`<br/>`src/lib/comic/authoring.ts`<br/>`src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/release.ts`<br/>`src/lib/comic/service.ts` | 2027-08-01 |
 | `adaptation-source-manifest-lifecycle` | `adaptationSourceUnits` | `PROJECT_TABLES + immutable source manifest policy + canonical chapter sequence` | `src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
 | `adaptation-source-fact-lifecycle` | `adaptationSourceFacts` | `PROJECT_TABLES + FIELD_REGISTRY + closed source-fact contract + adaptation manifest CAS` | `src/lib/adaptation/analysis.ts` | 2027-09-01 |
 | `adaptation-causal-edge-lifecycle` | `adaptationCausalEdges` | `PROJECT_TABLES + FIELD_REGISTRY + closed causal-edge contract + same-manifest fact graph validator` | `src/lib/adaptation/analysis.ts` | 2027-09-01 |
@@ -419,20 +421,20 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
-| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:825`<br/>`src/lib/node-authoring/domain-execution.ts:890` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1800` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1778` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1768` |
+| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:778`<br/>`src/lib/node-authoring/domain-execution.ts:835` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1880` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1858` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1848` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
-| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:653` |
+| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:647` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
-| `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
-| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:129` |
+| `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:576` |
+| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:190` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
-| `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:943` |
+| `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:945` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
-| `node.creation` | `src/lib/node-authoring/executor.ts:395` |
+| `node.creation` | `src/lib/node-authoring/executor.ts:391` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:200`<br/>`src/lib/outline/generation-node.ts:61` |
 | `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:666` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:56` |
@@ -448,7 +450,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:134` |
 | `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:310` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
-| `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:688`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
+| `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:688`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:760` |
 | `style.learn` | `src/lib/agent/run/style-learning-durable.ts:493` |
 | `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:466` |
 | `world-group.suggest` | `src/lib/agent/run/world-suggest-durable.ts:622` |
@@ -459,7 +461,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/character-copilot.ts:515 · chat`
 - `src/lib/agent/character-driven-copilot.ts:505 · chat`
 - `src/lib/agent/character-lifecycle-copilot.ts:448 · chat`
-- `src/lib/agent/character-revision-copilot.ts:727 · chat`
+- `src/lib/agent/character-revision-copilot.ts:796 · chat`
 - `src/lib/agent/character-supplement-copilot.ts:578 · chat`
 - `src/lib/agent/context-compression.ts:355 · chat`
 - `src/lib/agent/creative-rules-copilot.ts:448 · chat`
@@ -472,12 +474,12 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/run/codex-extraction-durable.ts:784 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
-- `src/lib/agent/run/short-novel-durable.ts:319 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1671 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1723 · chat`
-- `src/lib/agent/story-core-copilot.ts:582 · chat`
+- `src/lib/agent/run/short-novel-durable.ts:195 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1634 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1686 · chat`
+- `src/lib/agent/story-core-copilot.ts:579 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
-- `src/lib/agent/worldview-field-copilot.ts:935 · chat`
+- `src/lib/agent/worldview-field-copilot.ts:932 · chat`
 - `src/lib/character-interaction/harness.ts:894 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:73 · chat`
 - `src/lib/character-interaction/situation-harness.ts:189 · chat`
@@ -486,11 +488,11 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:22 · ai.start`
 - `src/lib/motion-drama/durable-production.ts:348 · chat`
-- `src/lib/node-authoring/executor.ts:453 · chat`
+- `src/lib/node-authoring/executor.ts:449 · chat`
 - `src/lib/open-world/evolution-harness.ts:251 · chat`
 - `src/lib/open-world/harness.ts:150 · chat`
 - `src/lib/product-production/authoring-consultation.ts:169 · chat`
-- `src/lib/product-production/capabilities.ts:325 · chat`
+- `src/lib/product-production/capabilities.ts:330 · chat`
 - `src/lib/screenplay/durable-production.ts:486 · chat`
 - `src/lib/ttrpg/gm-actor-harness.ts:481 · chat`
 - `src/lib/ttrpg/gm-harness.ts:550 · chat`
@@ -584,4 +586,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `98ddec1e4`
+生成时间基准:commit `05700d48d`

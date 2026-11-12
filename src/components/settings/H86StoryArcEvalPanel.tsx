@@ -121,9 +121,10 @@ export default function H86StoryArcEvalPanel() {
         || checkpoint.verifier.provider !== verifierConfig.provider
         || checkpoint.verifier.model !== verifierConfig.model
       )) throw new Error(`请切回 checkpoint 冻结身份再继续：${frozenIdentity}`)
-      await cleanupStrandedH86WorkspacesV1()
+      const runId = checkpoint?.runId ?? `h86-story-arc-${crypto.randomUUID()}`
+      await cleanupStrandedH86WorkspacesV1(runId)
       const next = await runH86StoryArcMainPathEvalV1({
-        runId: checkpoint?.runId ?? `h86-story-arc-${crypto.randomUUID()}`,
+        runId,
         codeRevision: checkpoint?.codeRevision ?? APP_BUILD_ID,
         generator: checkpoint?.generator ?? {
           provider: generatorConfig.provider,
@@ -151,6 +152,7 @@ export default function H86StoryArcEvalPanel() {
   }
 
   const reset = async () => {
+    if (!checkpoint) return
     const confirmed = await dialog.confirm({
       title: '清除 H86 checkpoint？',
       message: '请先导出需要保留的真实调用证据。清除后不能恢复。',
@@ -159,12 +161,15 @@ export default function H86StoryArcEvalPanel() {
       tone: 'danger',
     })
     if (!confirmed) return
-    clearH86CheckpointV1()
-    clearH86HumanReviewV1()
-    await cleanupStrandedH86WorkspacesV1()
-    setCheckpoint(null)
-    setExportDraft('')
-    setError('')
+    try {
+      await clearH86CheckpointV1(checkpoint.runId)
+      clearH86HumanReviewV1(checkpoint.checkpointHash)
+      setCheckpoint(null)
+      setExportDraft('')
+      setError('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
   }
 
   const exportCheckpoint = async (mode: 'download' | 'copy' | 'readonly') => {

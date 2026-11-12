@@ -9,6 +9,7 @@ import { PROJECT_TABLES } from '../registry/project-tables'
 import { isCurrentWorldCode } from '../workspace/identity'
 import { NARRATIVE_DOMAIN_FIELDS_V1, parseNarrativeDomainFieldV1 } from '../narrative-domain/codec'
 import { assertNarrativeDomainReferenceRowsV1 } from '../narrative-domain/integrity'
+import { inspectPortableTableStructure } from './portable-table-structure'
 
 export const CURRENT_BACKUP_VERSION = 17
 
@@ -157,6 +158,7 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
     presentTables += 1
     recordCount += rows.length
     const spec = PROJECT_TABLES.find(table => table.name === tableName)!
+    errors.push(...inspectPortableTableStructure(spec, rows))
     const annotations = spec.worldSemantic?.projector?.annotationFields ?? []
     rows.forEach((row, index) => {
       if (!isRecord(row)) return

@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url'
 import { execSync } from 'node:child_process'
 import ts from 'typescript'
 import { localChatMetaCategoryPositions } from './ai-call-meta.mjs'
+import { readStaticContextSources } from './ai-manual-context-sources.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const OUT = path.join(root, 'docs/AI-FUNCTIONS-MANUAL.generated.md')
@@ -69,11 +70,6 @@ function booleanValue(node) {
   if (node?.kind === ts.SyntaxKind.TrueKeyword) return true
   if (node?.kind === ts.SyntaxKind.FalseKeyword) return false
   return null
-}
-
-function numberValue(node, sourceFile) {
-  if (!node || !ts.isNumericLiteral(node)) return null
-  return Number(node.getText(sourceFile).replaceAll('_', ''))
 }
 
 function stringArrayValue(node) {
@@ -148,22 +144,7 @@ function extractSeeds() {
 
 // ── ③ CONTEXT_SOURCES ──
 function extractContextSources() {
-  const out = []
-  const sourceFile = parseSource('src/lib/registry/context-sources.ts')
-  visit(sourceFile, node => {
-    if (!ts.isObjectLiteralExpression(node)) return
-    const key = stringValue(objectProperty(node, 'key')?.initializer)
-    const budget = numberValue(objectProperty(node, 'budgetTokens')?.initializer, sourceFile)
-    if (!key || budget == null) return
-    out.push({
-      key,
-      label: stringValue(objectProperty(node, 'label')?.initializer) ?? '',
-      scope: stringValue(objectProperty(node, 'scope')?.initializer) ?? '',
-      layer: stringValue(objectProperty(node, 'layer')?.initializer) ?? '',
-      budget: String(budget),
-    })
-  })
-  return out
+  return readStaticContextSources(path.join(root, 'src/lib/registry/context-sources.ts'))
 }
 
 // ── ④ FIELD_REGISTRY 可写字段(target → field 列表) ──
