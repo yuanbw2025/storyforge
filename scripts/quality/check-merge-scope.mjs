@@ -29,16 +29,21 @@ function moduleName(path) {
   return path.replace(/\.(?:[cm]?[jt]sx?)$/, '').replace(/\/index$/, '')
 }
 
-// Only direct imports are automatic. A PR also records the targeted checks for
-// runtime registration, generated inputs and other relationships outside imports.
-/** @param {string[]} changed @param {string[]} tests @param {(test: string) => string[]} importsOf */
-export function directTests(changed, tests, importsOf) {
-  const modules = new Set(changed.map(moduleName))
+/** @param {string} importer @param {string} specifier */
+function importedModule(importer, specifier) {
+  if (specifier.startsWith('@/')) return moduleName('src/' + specifier.slice(2))
+  if (specifier.startsWith('.')) return moduleName(posix.join(posix.dirname(importer), specifier))
+}
+
+// Indirect and dynamic contracts are verified using the PR's targeted cases.
+/** @param {string[]} changed @param {string[]} tests @param {(test: string) => string[]} importsOf
+ * @param {(test:string, specifier:string, source:string)=>boolean} affected */
+export function directTests(changed, tests, importsOf, affected = () => true) {
+  const modules = new Map(changed.map(path => [moduleName(path), path]))
   return tests.filter(test => importsOf(test).some(specifier => {
-    let file
-    if (specifier.startsWith('@/')) file = 'src/' + specifier.slice(2)
-    else if (specifier.startsWith('.')) file = posix.join(posix.dirname(test), specifier)
-    return file !== undefined && modules.has(moduleName(file))
+    const name = importedModule(test, specifier)
+    const source = name && modules.get(name)
+    return source && affected(test, specifier, source)
   }))
 }
 
@@ -101,8 +106,28 @@ async function main() {
   if (checks.related.length) {
     const { default: ts } = await import('typescript')
     const tests = names(['ls-files', '-z', '--', 'src', 'tests']).filter(path => unit.test(path) && existsSync(path))
-    const matches = directTests(checks.related, tests, test =>
-      ts.preProcessFile(readFileSync(test, 'utf8'), true, true).importedFiles.map(file => file.fileName))
+    const { unchangedFunctions, onlyUnchangedImports, inertModule } = await import('./affected-exports.mjs')
+    const changedModules = new Set(paths.map(moduleName))
+    const priorPaths = new Set(names(['ls-tree', '-rz', '--name-only', sha, '--', 'src', 'tests']))
+    /** @type {Map<string, Set<string>>} */
+    const stable = new Map()
+    for (const file of checks.related.filter(f => app.test(f) && priorPaths.has(f) && existsSync(f))) {
+      const before = execFileSync('git', ['show', sha + ':' + file], { encoding: 'utf8' })
+      const after = readFileSync(file, 'utf8')
+      stable.set(file, unchangedFunctions(file, before, after,
+        specifier => changedModules.has(importedModule(file, specifier) ?? ''),
+        specifier => {
+          const name = importedModule(file, specifier)
+          if (!name || changedModules.has(name)) return false
+          const path = [name + '.ts', name + '.tsx', name + '/index.ts'].find(p => priorPaths.has(p) && existsSync(p))
+          return Boolean(path && inertModule(path, readFileSync(path, 'utf8')))
+        }))
+    }
+    let contents = ''
+    const matches = directTests(checks.related, tests, test => {
+      contents = readFileSync(test, 'utf8')
+      return ts.preProcessFile(contents, true, true).importedFiles.map(file => file.fileName)
+    }, (test, specifier, source) => !onlyUnchangedImports(test, contents, specifier, stable.get(source) ?? new Set()))
     for (const file of matches) units.add(file)
     if (!units.size && checks.related.some(path => app.test(path))) checks.typeConfigs.push('tsconfig.json')
   }
