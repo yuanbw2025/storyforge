@@ -328,6 +328,8 @@ S3 使用四个共同定位点：
 
 ## 5. 世界数据按协议统一、按产品适配
 
+V1 `ProductSourcePlan` 的新正式开始与发布聚合，在 `missingStrategy: block` 下把已激活的 `conditional` 作为条件必读：资源缺失、不足、冲突或缺少实际读取证据时拒绝继续。未激活条件、推荐来源和明确的降级策略沿既有合同处理。历史 V1 Plan/Manifest 按原字节和 Hash 只读核验，序列化 readiness 不回写；V2 继续执行自身更严格的版本合同。
+
 上层产品共享 `describe/search/read` 世界资源协议，但不共享固定数据 payload：
 
 ```text

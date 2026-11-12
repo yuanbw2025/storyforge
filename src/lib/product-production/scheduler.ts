@@ -4125,7 +4125,8 @@ export async function recoveryInvalidatedTaskKeys(input: {
   const reviewEvidenceInvalid = textAdventureQualityReviewAuthorityViolationsV1(
     reviewPayload.issues,
   ).length > 0 || textAdventureQualityReviewScopeViolationsV1(reviewPayload.issues).length > 0
-  const reviewedEvidenceRows = (await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray())
+  const reviewedEpochRows = await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray()
+  const reviewedEvidenceRows = reviewedEpochRows
     .filter(row => (row.artifactKey === 'content.narrative-arc-plan'
       || row.artifactKey === 'content.narrative'
       || row.artifactKey === 'content.cast-bible'
@@ -4139,16 +4140,44 @@ export async function recoveryInvalidatedTaskKeys(input: {
   const reviewedNarrativeRow = reviewedEvidence('content.narrative')
   const reviewedCastRow = reviewedEvidence('content.cast-bible')
   const reviewedArchitectureRow = reviewedEvidence('content.adventure-architecture')
-  const reviewedMainQuestPlanRow = reviewedEvidence('content.main-quest-plan')
   const reviewedArcPlan = reviewedArcPlanRow ? parsedObject(reviewedArcPlanRow.payloadJson) : null
   const reviewedNarrative = reviewedNarrativeRow ? parsedObject(reviewedNarrativeRow.payloadJson) : null
   const reviewedCast = reviewedCastRow ? parsedObject(reviewedCastRow.payloadJson) : null
   const reviewedArchitecture = reviewedArchitectureRow
     ? parsedObject(reviewedArchitectureRow.payloadJson) : null
-  const reviewedMainQuestPlan = reviewedMainQuestPlanRow
-    ? parsedObject(reviewedMainQuestPlanRow.payloadJson) : null
-  const reviewedLocationTitles = (Array.isArray(reviewedArchitecture?.regions)
-    ? reviewedArchitecture.regions : []).flatMap(regionValue => {
+  // A location finding in the aggregate must be recomputed from the inputs it
+  // actually reviewed. An older quest/map, an unaccepted row or a damaged
+  // payload cannot turn a known conflict into a review-only retry.
+  const recordedQuestLocationIssues = Array.isArray(reviewPayload.issues)
+    ? reviewPayload.issues.filter(issue => issue?.severity === 'blocking'
+        && issue.artifactKey === 'content.main-quest-plan'
+        && typeof issue.detail === 'string' && issue.detail.includes('冻结地点为「'))
+    : []
+  const build = recordedQuestLocationIssues.length > 0 ? await db.productBuilds.get(input.buildId) : null
+  const readQuestLocationEvidence = async (artifactKey: string) => {
+    const rows = reviewedEpochRows.filter(row => row.artifactKey === artifactKey
+      && row.controlEpoch === failedQualityReview.controlEpoch)
+    const row = rows.length === 1 ? rows[0] : null
+    if (!row || !build || row.projectId !== build.projectId || row.worldId !== build.worldId
+      || row.workId !== build.workId
+      || !['accepted', 'carried-forward', 'invalid'].includes(row.status)
+      || !isSha256Hash(row.producerReceiptHash ?? '') || !isSha256Hash(row.contentHash)) {
+      throw new Error(`文字冒险主线地点返修证据缺失或无效:${artifactKey}`)
+    }
+    const payload = parsedObject(row.payloadJson)
+    if (await hashProductProductionValueV2(payload) !== row.contentHash) {
+      throw new Error(`文字冒险主线地点返修工件哈希不符:${artifactKey}`)
+    }
+    return payload
+  }
+  const [reviewedMainQuestPlan, questLocationArchitecture] = recordedQuestLocationIssues.length > 0
+    ? await Promise.all([
+        readQuestLocationEvidence('content.main-quest-plan'),
+        readQuestLocationEvidence('content.adventure-architecture'),
+      ])
+    : [null, null]
+  const reviewedLocationTitles = (Array.isArray(questLocationArchitecture?.regions)
+    ? questLocationArchitecture.regions : []).flatMap(regionValue => {
     if (!regionValue || typeof regionValue !== 'object' || Array.isArray(regionValue)) return []
     const region = regionValue as Record<string, unknown>
     return (Array.isArray(region.areas) ? region.areas : []).flatMap(areaValue => {
@@ -4161,6 +4190,12 @@ export async function recoveryInvalidatedTaskKeys(input: {
       })
     })
   })
+  const questLocationIssues = textAdventureQuestLocationAuthorityIssuesV1(
+    reviewedMainQuestPlan, reviewedLocationTitles,
+  )
+  if (recordedQuestLocationIssues.some(recorded => !questLocationIssues.some(issue => issue.detail === recorded.detail))) {
+    throw new Error('文字冒险主线地点返修证据无法重现已签收的冲突')
+  }
   const providerBlockingIssues = !reviewEvidenceInvalid && Array.isArray(reviewPayload.issues)
     ? reviewPayload.issues.flatMap(value => {
         const issue = value && typeof value === 'object' && !Array.isArray(value)
@@ -4183,7 +4218,7 @@ export async function recoveryInvalidatedTaskKeys(input: {
     ...textAdventureUnauthorizedKinshipIssuesV1(reviewedNarrative, reviewedCast),
     ...textAdventureDialogueAttributionIssuesV1(reviewedNarrative, reviewedCast),
     ...textAdventureSceneSpeakerAuthorityIssuesV1(reviewedNarrative, reviewedArcPlan, reviewedCast),
-    ...textAdventureQuestLocationAuthorityIssuesV1(reviewedMainQuestPlan, reviewedLocationTitles),
+    ...questLocationIssues,
   ].map(issue => [
     `${issue.artifactKey}\n${issue.detail}\n${issue.recommendation}`, issue,
   ] as const)).values()]
@@ -4371,6 +4406,16 @@ export async function recoveryInvalidatedTaskKeys(input: {
         const taskKey = taskByArtifactKey.get(artifactKey)
         return taskKey ? sceneScriptPartKeys(taskKey) : []
       }))
+  if (questLocationIssues.length > 0 && !invalidated.has('content.main-quest-plan')) {
+    throw new Error('文字冒险主线地点返修缺少已登记的主线任务')
+  }
+  // The recomputed fix changes objective copy while keeping the frozen
+  // locations and scene keys. Keep the existing visual plan when no other
+  // blocking issue requires media to be rebuilt.
+  const preserveQuestLocationMedia = questLocationIssues.length > 0
+    && !reviewEvidenceInvalid
+    && blockingIssues.every(issue => questLocationIssues.some(locationIssue => locationIssue === issue)
+      || textAdventureNarrativeRepairPreservesFrozenMediaV1([issue]))
   if (invalidated.size === 0) {
     for (const taskKey of textAdventureQualityReviewRerunTaskKeysV1(input.plan)) {
       invalidated.add(taskKey)
@@ -4381,7 +4426,7 @@ export async function recoveryInvalidatedTaskKeys(input: {
     expanded = false
     for (const task of input.plan.tasks) {
       if (invalidated.has(task.taskKey) || !task.dependsOn.some(key => invalidated.has(key))) continue
-      if (preserveFrozenMedia && task.taskKey === 'media.requirements') continue
+      if ((preserveFrozenMedia || preserveQuestLocationMedia) && task.taskKey === 'media.requirements') continue
       invalidated.add(task.taskKey)
       expanded = true
     }
