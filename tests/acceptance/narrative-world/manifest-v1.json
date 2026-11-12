@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-after345-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-quality077-after391-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-after345-v1.json",
+        "workPackage": "SFQA-077",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality077-after345-v1.json",
+        "workPackage": "SFQA-077",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-quality109-after344-010-v1.json",
         "workPackage": "SFQA-034",
@@ -825,6 +835,11 @@
         "path": "tests/acceptance/narrative-world/domain-projection-20261112-sfqa009-integrated-v1.json",
         "workPackage": "NW-1B",
         "note": "Retained the measured receipt before integrating shared core contracts with booking and product validation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality077-citation-v1.json",
+        "workPackage": "SFQA-077",
+        "note": "Preserved the measurement on the independent fix branch."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
