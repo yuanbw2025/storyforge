@@ -17,6 +17,7 @@ const creatorBriefMocks = vi.hoisted(() => ({
   save: vi.fn(),
   consult: vi.fn(),
   confirm: vi.fn(),
+  roleChoices: vi.fn(),
 }))
 
 vi.mock('../../src/lib/open-world/creator-brief', async importOriginal => {
@@ -31,6 +32,11 @@ vi.mock('../../src/lib/open-world/creator-brief', async importOriginal => {
     confirmTextOpenWorldCreatorBriefV1: creatorBriefMocks.confirm,
   }
 })
+
+vi.mock('../../src/lib/open-world/creator-source', async importOriginal => ({
+  ...await importOriginal<typeof import('../../src/lib/open-world/creator-source')>(),
+  listTextOpenWorldCreatorProtagonistChoicesV1: creatorBriefMocks.roleChoices,
+}))
 
 vi.mock('../../src/components/text-game/TextOpenWorldCreatorStudio', async () => {
   const { createElement: element } = await import('react')
@@ -362,6 +368,37 @@ describe('TOW-G5-02 · Creator Brief UI', () => {
   afterEach(async () => {
     await act(async () => root.unmount())
     host.remove()
+  })
+
+  it('096 要求作者选定封存角色，并在切回原创时清除角色引用', async () => {
+    const roleKey = 'world-release:character:river-lantern-keeper'
+    creatorBriefMocks.roleChoices.mockResolvedValue([{ resourceKey: roleKey, label: '守灯人' }])
+    const session = consultationSession()
+    session.draft.unresolvedQuestions = []
+    await act(async () => root.render(createElement(TextOpenWorldCreatorBriefStudio, { initialSession: session, onBack: vi.fn() })))
+    const changeSelect = async (id: string, value: string) => act(async () => {
+      const element = host.querySelector<HTMLSelectElement>(id)!
+      element.value = value
+      element.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await changeSelect('#tow-protagonist-mode', 'source-character')
+    for (const label of ['我确认当前来源身份与 Hash', '我理解首版是有边界的自由演绎',
+      '我确认未决问题已经清空', '我理解通过质量门后直接发布'])
+      await act(async () => checkbox(host, label).click())
+    const confirm = button(host, '确认 Brief')
+    expect(confirm.disabled).toBe(true)
+    await waitFor(() => expect(host.querySelector<HTMLSelectElement>('#tow-protagonist-resource')?.options[1]?.text).toBe('守灯人'))
+    await changeSelect('#tow-protagonist-resource', roleKey)
+    expect(confirm.disabled).toBe(false)
+    await act(async () => button(host, '保存草稿').click())
+    await waitFor(() => expect(creatorBriefMocks.save).toHaveBeenCalledWith(expect.objectContaining({
+      draft: expect.objectContaining({ protagonistMode: 'source-character', protagonistSourceResourceKey: roleKey }),
+    })))
+    await changeSelect('#tow-protagonist-mode', 'author-defined')
+    await act(async () => confirm.click())
+    await waitFor(() => expect(creatorBriefMocks.confirm).toHaveBeenCalled())
+    expect(creatorBriefMocks.confirm.mock.calls[0]?.[0].draft).toMatchObject({ protagonistMode: 'author-defined' })
+    expect(creatorBriefMocks.confirm.mock.calls[0]?.[0].draft).not.toHaveProperty('protagonistSourceResourceKey')
   })
 
   it('005 恢复历史小说会谈只显示原草稿，不重新会谈、保存、确认或进入制作核对', async () => {
