@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-quality011-direct-391-077-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-quality042-direct-391-077-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality011-direct-391-077-v1.json",
+        "workPackage": "SFQA-042",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality042-raster-v1.json",
+        "workPackage": "SFQA-042",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-quality050-direct-391-077-v1.json",
         "workPackage": "SFQA-011",
@@ -1167,7 +1177,10 @@
     "src/lib/utils/legacy-id-array.ts",
     "src/components/product/TextAdventureMediaReview.tsx",
     "src/lib/product-production/recovery-policy.ts",
-    "src/lib/adventure/production-artifacts-v2.ts"
+    "src/lib/adventure/production-artifacts-v2.ts",
+    "src/lib/media/blob-store.ts",
+    "src/lib/media/raster-image.ts",
+    "tests/helpers/raster-decoder-vitest.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

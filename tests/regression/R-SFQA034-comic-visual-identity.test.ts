@@ -7,6 +7,9 @@ import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { useCharacterStore } from '../../src/stores/character'
 import { addCurrentWorldFixtureV1 } from '../helpers/current-workspace'
 import { addSfqa043MediaAndPageV1, createSfqa043ComicFixtureV1 } from '../helpers/sfqa043-comic'
+import { installRasterDecoderForVitestV1 } from '../helpers/raster-decoder-vitest'
+
+installRasterDecoderForVitestV1()
 
 beforeEach(async () => { await db.delete(); await db.open() })
 afterEach(() => db.close())
