@@ -357,6 +357,8 @@ export interface TextOpenWorldCreatorBriefDraftV1 {
   playerRole: string
   playerFantasy: string
   protagonistMode: 'source-character' | 'author-defined'
+  /** Author-selected stable resource key in the exact frozen WorldReference. */
+  protagonistSourceResourceKey?: string
   protagonistDirective: string
   coreGoal: string
   primaryConflict: string
