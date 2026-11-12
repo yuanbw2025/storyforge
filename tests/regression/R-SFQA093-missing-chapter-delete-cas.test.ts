@@ -1,3 +1,4 @@
+import { workspaceWriteText } from '../helpers/workspace-projection-write'
 import Dexie from 'dexie'
 import { File as NativeFile } from 'node:buffer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -41,7 +42,7 @@ function memoryDirectory() {
         async createWritable() {
           let staged = ''
           return {
-            async write(value: string) { staged += value },
+            async write(value: string | ArrayBuffer) { staged += workspaceWriteText(value) },
             async close() {
               if (rejectClose?.(path)) throw new DOMException('测试目录写入授权已撤回', 'NotAllowedError')
               files.set(path, { text: staged, modified: ++clock })

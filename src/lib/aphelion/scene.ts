@@ -132,7 +132,19 @@ export function createAphelionScene(host:HTMLDivElement,options:AphelionSceneOpt
       if(ix||iz){path=[];dx=ix*Math.cos(angle)+iz*Math.sin(angle);dz=-ix*Math.sin(angle)+iz*Math.cos(angle)}
       else if(path.length){const p=player.group.position;const next=advanceWalkingPath(p,path,6.5*dt,walkable);const mx=next.x-p.x,mz=next.z-p.z;p.x=next.x;p.z=next.z;if(Math.hypot(mx,mz)>.001){player.group.rotation.y=Math.atan2(mx,mz);moving=true}}
       const length=Math.hypot(dx,dz)
-      if(length>.01){const speed=Math.min(length,(keys.has('shift')?9:6.5)*dt);const steps=Math.max(1,Math.ceil(speed/.2));dx=dx/length*speed/steps;dz=dz/length*speed/steps;const p=player.group.position;for(let i=0;i<steps;i++){if(walkable({x:p.x+dx,z:p.z}))p.x+=dx;if(walkable({x:p.x,z:p.z+dz}))p.z+=dz}player.group.rotation.y=Math.atan2(dx,dz);moving=true}
+      if (length > .01) {
+        const distance = Math.min(1, length) * (keys.has('shift') ? 9 : 6.5) * dt
+        const steps = Math.max(1, Math.ceil(distance / .2))
+        dx = dx / length * distance / steps
+        dz = dz / length * distance / steps
+        const p = player.group.position
+        for (let i = 0; i < steps; i++) {
+          if (walkable({ x: p.x + dx, z: p.z })) p.x += dx
+          if (walkable({ x: p.x, z: p.z + dz })) p.z += dz
+        }
+        player.group.rotation.y = Math.atan2(dx, dz)
+        moving = true
+      }
       const nearest=PLACES.find(place=>Math.hypot(player.group.position.x-place.x,player.group.position.z-place.z)<3.6)?.key??null
       if(nearest!==nearby){nearby=nearest;options.onNearby(nearby)}
       // A selected route commits once on arrival, not at every landmark passed.

@@ -2,6 +2,55 @@ import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 
 const endpoint = 'https://agent-experience.invalid/v1/chat/completions'
+
+for (const scenario of ['hot-detail', 'restored-character'] as const) {
+  test(`author can adopt a ${scenario} master candidate without a second generation`, async ({ page }) => {
+    const detail = scenario === 'hot-detail'
+    await setup(page, detail ? '场景细纲即时采纳' : '刷新后采纳角色')
+    if (detail) {
+      await page.getByRole('navigation', { name: '长篇工作台二级导航' })
+        .getByRole('button', { name: '大纲与章纲', exact: true }).click()
+      await page.getByRole('button', { name: '添加卷', exact: true }).click()
+      await page.getByRole('button', { name: '添加章节', exact: true }).click()
+    }
+    const request = detail ? '生成第一章的场景细纲' : '创建一个新的主要角色'
+    const candidate = detail ? {
+      openingHook: '来信上的印章仍然温热。', endingCliffhanger: '失踪的亲人正在敲门。',
+      sceneLocation: '旧港邮局', emotionArc: 'rising', appearingCharacterIds: [], foreshadowIds: [], prohibitions: [],
+      scenes: [{ title: '查验来信', summary: '主角翻开登记簿，查验一封本不该存在的家书。',
+        location: '邮局柜台', conflict: '邮差急于关门，主角仍然需要证据。', pace: 'fast', characterIds: [], estimatedWords: 1200 }],
+    } : {
+      name: '旧港修表师', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral',
+      relationships: '帮助港口居民保存来信。', shortDescription: '用怀表记录邮轮抵港时间的修表师。',
+    }
+    let generations = 0
+    await page.route(endpoint, async route => {
+      const messages = route.request().postDataJSON().messages as Array<{ content: string }>
+      const planning = messages.some(message => message.content.includes('你只把用户目标拆成幕后领域任务'))
+      if (!planning) generations++
+      const content = planning
+        ? { summary: request, tasks: [{ id: 'create', agentId: detail ? 'outline' : 'character', instruction: request, dependsOn: [] }] }
+        : candidate
+      await route.fulfill({ json: { choices: [{ message: { role: 'assistant', content: JSON.stringify(content) }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 31, completion_tokens: 17, total_tokens: 48 } } })
+    })
+    await agent(page)
+    await page.getByRole('textbox', { name: '告诉主 Agent 你的目标' }).fill(request)
+    await page.getByRole('button', { name: '讨论与规划', exact: true }).click()
+    await page.getByRole('button', { name: '确认计划并开始', exact: true }).click()
+    const approve = page.getByRole('button', { name: '采纳', exact: true })
+    await expect(approve).toBeEnabled()
+    if (!detail) await page.reload()
+    await approve.click()
+    await expect.poll(() => page.evaluate(async detail => {
+      const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+      const rows = detail ? await db.detailedOutlines.toArray() : await db.characters.toArray()
+      const receipts = await db.agentRunEvents.filter((event: { type: string }) => event.type === 'adoption.committed').count()
+      return { rows: rows.map((row: { scenes?: Array<{ title: string }>; name?: string }) => detail ? row.scenes?.[0]?.title : row.name), receipts }
+    }, detail)).toEqual({ rows: [detail ? '查验来信' : '旧港修表师'], receipts: 1 })
+    expect(generations).toBe(1)
+  })
+}
 const draft =
   '雨停以后，邮差发现信箱里有一封来自自己的信。他推开值班室的门，将信放在灯下。' +
   '信上的日期还没有到来，他决定追查邮戳，却发现登记簿已经被人撕去一页。'.repeat(6)

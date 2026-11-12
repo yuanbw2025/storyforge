@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CalendarClock, Check, Link2, Loader2, LogIn, RefreshCw, ShieldCheck, UserPlus, Users, X } from 'lucide-react'
 import type { CommunityLfgApplicationV1, CommunityLfgAttendanceV1, CommunityLfgParticipationV1, CommunityProfileV1 } from '../../lib/community/authority'
 import type { CommunityHttpClientV1, CommunityHttpErrorV1 } from '../../lib/community/http-client'
+import { createCommunityRequestIntentsV1 } from '../../lib/community/request-intent'
 import type { OnlineRoomJoinHandoffV1 } from '../../lib/online/http-transport'
 import CommunityReviewPanel from './CommunityReviewPanel'
 
@@ -56,19 +57,12 @@ export default function LfgCenterPanel(props: {
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const requestIds = useRef(new Map<string, string>())
+  const [requestIntents] = useState(createCommunityRequestIntentsV1)
 
   useEffect(() => {
     if (!releaseHash && props.releases[0]) setReleaseHash(props.releases[0].releaseHash)
   }, [props.releases, releaseHash])
 
-  const requestId = (key: string) => {
-    const existing = requestIds.current.get(key)
-    if (existing) return existing
-    const created = `${key}.${crypto.randomUUID()}`
-    requestIds.current.set(key, created)
-    return created
-  }
   const run = async (key: string, operation: () => Promise<void>) => {
     setBusy(key); setError(''); setMessage('')
     try { await operation() } catch (cause) { setError(errorMessage(cause)) }
@@ -99,31 +93,36 @@ export default function LfgCenterPanel(props: {
   })
   const saveProfile = () => run('profile', async () => {
     const client = requireClient()
-    const next = await client.upsertProfile({
-      accessToken: token(), requestId: requestId(`profile:${handle}:${displayName}:${ageBand}:${locale}:${timeZone}`),
-      handle, displayName, bio: '', locale, timeZone, ageBand,
-    })
+    const accessToken = token()
+    const bodyInput = { handle, displayName, bio: '', locale, timeZone, ageBand }
+    const next = await requestIntents.send(client, accessToken, 'lfg.profile', bodyInput, ({ requestId }) => client.upsertProfile({
+      accessToken, requestId, ...bodyInput,
+    }))
     setProfile(next); setMessage('社区资料已保存；年龄段只用于招募准入，不在公开卡片展示。')
   })
   const apply = (postId: string) => run(`apply:${postId}`, async () => {
     const client = requireClient()
-    const result = await client.applyToLfg({
-      accessToken: token(), requestId: requestId(`apply:${postId}`), postId,
-      characterPreference: applicationPreference, note: applicationNote,
-    })
+    const accessToken = token()
+    const bodyInput = { postId, characterPreference: applicationPreference, note: applicationNote }
+    const result = await requestIntents.send(client, accessToken, 'lfg.apply', bodyInput, ({ requestId }) => client.applyToLfg({
+      accessToken, requestId, ...bodyInput,
+    }))
     setMyApplications(current => [result, ...current.filter(item => item.applicationId !== result.applicationId)])
     setMessage(result.status === 'pending' ? '申请已提交，等待主持人处理。' : `申请状态：${result.status}`)
   })
   const create = () => run('create-lfg', async () => {
     const client = requireClient()
+    const accessToken = token()
     const timestamp = new Date(startsAt).getTime()
     if (!Number.isFinite(timestamp)) throw new Error('请选择有效的未来开团时间。')
-    const post = await client.createLfg({
-      accessToken: token(), requestId: requestId(`create:${releaseHash}:${startsAt}:${title}`),
+    const bodyInput = {
       releaseHash, title, summary, locale, timeZone, startsAt: timestamp,
       durationMinutes, playerCapacity, waitlistCapacity, audience,
       safetyTags: ['X-card', 'lines-and-veils'],
-    })
+    }
+    const post = await requestIntents.send(client, accessToken, 'lfg.create', bodyInput, ({ requestId }) => client.createLfg({
+      accessToken, requestId, ...bodyInput,
+    }))
     setPosts(current => [{ post, accepted: 0, waitlisted: 0, availableSeats: post.playerCapacity }, ...current])
     setMessage('招募已公开；主持人可在下方读取申请、安排正式席位和候补。')
   })
@@ -138,14 +137,17 @@ export default function LfgCenterPanel(props: {
   })
   const decide = (applicationId: string, decision: 'accept' | 'decline') => run(`decide:${applicationId}`, async () => {
     const client = requireClient()
-    const updated = await client.decideApplication({
-      accessToken: token(), requestId: requestId(`decide:${applicationId}:${decision}`), applicationId, decision,
-    })
+    const accessToken = token()
+    const bodyInput = { applicationId, decision }
+    const updated = await requestIntents.send(client, accessToken, 'lfg.decide', bodyInput, ({ requestId }) => client.decideApplication({
+      accessToken, requestId, ...bodyInput,
+    }))
     setHostApplications(current => current.map(item => item.applicationId === updated.applicationId ? updated : item))
     setMessage(decision === 'accept' ? `申请已进入 ${updated.status === 'accepted' ? '正式席位' : '候补席位'}。` : '申请已婉拒。')
   })
   const bindAcceptedSeats = () => run(`bind:${managedPostId ?? ''}`, async () => {
     const client = requireClient()
+    const accessToken = token()
     const post = posts.find(item => item.post.postId === managedPostId)?.post
     if (!post) throw new Error('请先从公开招募卡片进入申请管理。')
     const accepted = hostApplications.filter(item => item.status === 'accepted')
@@ -155,11 +157,10 @@ export default function LfgCenterPanel(props: {
       actorKey: (actorAssignments[item.applicationId] ?? '').trim(),
     }))
     if (bindings.some(item => !item.actorKey)) throw new Error('请为每个已接受申请填写唯一角色 Key。')
-    const result = await client.bindRoomHandoffs({
-      accessToken: token(), requestId: requestId(`bind:${post.postId}:${handoffRoomId}:${JSON.stringify(bindings)}`),
-      postId: post.postId, roomId: handoffRoomId.trim(), releaseHash: post.releaseHash,
-      expiresAt: Date.now() + 24 * 60 * 60 * 1_000, bindings,
-    })
+    const bodyInput = { postId: post.postId, roomId: handoffRoomId.trim(), releaseHash: post.releaseHash, bindings }
+    const result = await requestIntents.send(client, accessToken, 'lfg.bind', bodyInput, ({ requestId, createdAt }) => client.bindRoomHandoffs({
+      accessToken, requestId, ...bodyInput, expiresAt: createdAt + 24 * 60 * 60 * 1_000,
+    }))
     setMessage(`已为 ${result.length} 个正式席位绑定在线房间；邀请密钥只会交给对应申请人。`)
   })
   const claimRoom = (application: CommunityLfgApplicationV1) => run(`claim:${application.applicationId}`, async () => {
@@ -173,9 +174,11 @@ export default function LfgCenterPanel(props: {
   })
   const markAttendance = (applicationId: string, status: 'confirmed' | 'no-show') => run(`attendance:${applicationId}:${status}`, async () => {
     const client = requireClient()
-    const row = await client.markAttendance({
-      accessToken: token(), requestId: requestId(`attendance:${applicationId}:${status}`), applicationId, status,
-    })
+    const accessToken = token()
+    const bodyInput = { applicationId, status }
+    const row = await requestIntents.send(client, accessToken, 'lfg.attendance', bodyInput, ({ requestId }) => client.markAttendance({
+      accessToken, requestId, ...bodyInput,
+    }))
     setHostAttendance(current => [row, ...current.filter(item => item.attendanceId !== row.attendanceId)])
     if (status === 'no-show') setReplacementAbsentId(applicationId)
     setMessage(status === 'confirmed' ? '已确认成员实际出席。' : '已登记缺席；可从候补中补入席位。')
@@ -183,10 +186,11 @@ export default function LfgCenterPanel(props: {
   const promoteWaitlist = (replacementApplicationId: string) => run(`promote:${replacementAbsentId}:${replacementApplicationId}`, async () => {
     if (!replacementAbsentId) throw new Error('请先选择一个已登记缺席的正式成员。')
     const client = requireClient()
-    const result = await client.promoteWaitlist({
-      accessToken: token(), requestId: requestId(`promote:${replacementAbsentId}:${replacementApplicationId}`),
-      absentApplicationId: replacementAbsentId, replacementApplicationId,
-    })
+    const accessToken = token()
+    const bodyInput = { absentApplicationId: replacementAbsentId, replacementApplicationId }
+    const result = await requestIntents.send(client, accessToken, 'lfg.promote', bodyInput, ({ requestId }) => client.promoteWaitlist({
+      accessToken, requestId, ...bodyInput,
+    }))
     setHostApplications(current => current.map(item => item.applicationId === result.absent.applicationId
       ? result.absent : item.applicationId === result.replacement.applicationId ? result.replacement : item))
     setHostAttendance(current => [result.attendance, ...current.filter(item => item.attendanceId !== result.attendance.attendanceId)])
@@ -195,9 +199,11 @@ export default function LfgCenterPanel(props: {
   const closePost = (status: 'closed' | 'cancelled') => run(`close:${managedPostId}:${status}`, async () => {
     if (!managedPostId) throw new Error('请先选择主持的招募。')
     const client = requireClient()
-    const post = await client.closeLfg({
-      accessToken: token(), requestId: requestId(`close:${managedPostId}:${status}`), postId: managedPostId, status,
-    })
+    const accessToken = token()
+    const bodyInput = { postId: managedPostId, status }
+    const post = await requestIntents.send(client, accessToken, 'lfg.close', bodyInput, ({ requestId }) => client.closeLfg({
+      accessToken, requestId, ...bodyInput,
+    }))
     setPosts(current => current.map(item => item.post.postId === post.postId ? { ...item, post } : item))
     setMessage(status === 'closed' ? '场次已正常结束；到达开团时间且已确认出席的成员可以发布实际参团评价。' : '招募已取消，全部有效申请已撤回。')
   })
