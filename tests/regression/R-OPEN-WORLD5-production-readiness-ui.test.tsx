@@ -13,6 +13,18 @@ import type {
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 
+vi.mock('../../src/lib/open-world/creator-brief', async importOriginal => ({
+  ...await importOriginal<typeof import('../../src/lib/open-world/creator-brief')>(),
+  readTextOpenWorldCreatorConsultationUsageV1: async (session: TextOpenWorldCreatorBriefSessionV1) => ({
+    calls: (session.candidate?.modelCalls ?? []).map((call, index) => ({
+      ...call, runId: session.candidateRunId ?? 1, generation: 1, attempt: index + 1,
+    })),
+    unresolvedRequests: 0,
+    confirmedOrigin: session.confirmedBrief?.candidateEvidence.origin ?? null,
+    confirmedCalls: session.candidate?.modelCalls.length ?? 0,
+  }),
+}))
+
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 const SCOPE: WorkspaceScope = { projectId: 451, worldId: 452, workId: 453 }
