@@ -10,6 +10,9 @@ import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { ComicVisualBibleCandidateV1, Geography, Location, WorkspaceScope } from '../../src/lib/types'
 import { addCurrentWorkFixtureV1, addCurrentWorldFixtureV1 } from '../helpers/current-workspace'
 import { addSfqa043MediaAndPageV1, createSfqa043ComicFixtureV1 } from '../helpers/sfqa043-comic'
+import { installRasterDecoderForVitestV1 } from '../helpers/raster-decoder-vitest'
+
+installRasterDecoderForVitestV1()
 
 beforeEach(async () => { await db.delete(); await db.open() })
 afterEach(() => db.close())

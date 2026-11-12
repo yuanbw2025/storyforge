@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa004-final-integration-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa004-runtime-owner-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -1145,6 +1145,71 @@
         "path": "tests/acceptance/narrative-world/domain-projection-20261112-sfqa009-after345-runtime-v1.json",
         "workPackage": "NW-1B",
         "note": "Retained the measured receipt before integrating source admission, portable backups, runtime ownership, and verified product entry."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-family-v1.json",
+        "workPackage": "SFQA-021-129",
+        "note": "Preserved the measured mainline before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality011-direct-391-077-v1.json",
+        "workPackage": "SFQA-042",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality050-direct-391-077-v1.json",
+        "workPackage": "SFQA-011",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality077-after391-v1.json",
+        "workPackage": "SFQA-050",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality077-after345-v1.json",
+        "workPackage": "SFQA-077",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality077-citation-v1.json",
+        "workPackage": "SFQA-077",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality042-direct-391-077-v1.json",
+        "workPackage": "SFQA-028-032",
+        "note": "Preserved the measured runtime and product input before their shared integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa004-final-integration-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the measured parent receipt for product admission and runtime ownership integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261112-quality030037-post380-v1.json",
+        "workPackage": "NW-1A",
+        "note": "Preserved the measured parent receipt for product admission and runtime ownership integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261113-sfqa004-final-integration-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the measured parent receipt for product admission and runtime ownership integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-canon-source-compatibility-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the measured parent receipt for product admission and runtime ownership integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261113-runtime-canon-source-compatibility-v1.json",
+        "workPackage": "NW-1A",
+        "note": "Preserved the measured parent receipt for product admission and runtime ownership integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261113-runtime-canon-source-compatibility-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the measured parent receipt for product admission and runtime ownership integration."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

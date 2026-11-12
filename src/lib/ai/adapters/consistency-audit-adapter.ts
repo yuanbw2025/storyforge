@@ -4,9 +4,22 @@ import { formatQualityReviewAnchorsV1, qualityReviewAnchorsV1 } from '../../pros
 export type ConsistencyAuditMode = 'fast' | 'deep'
 export type ConsistencySeverity = 'hard' | 'risk' | 'unknown'
 
-export const CONSISTENCY_AUDIT_PROMPT_VERSION_V1 = 'consistency-evidence-audit-v4'
+export const CONSISTENCY_AUDIT_PROMPT_VERSION_V1 = 'consistency-evidence-audit-v5'
 // Freeze the shared catalog's numbering rules for this audit protocol.
 const AUDIT_ANCHOR_VERSION = 'whole-chapter-quality-review-v10'
+
+export interface ConsistencyCitationPositionV1 {
+  sourceKey: 'currentChapter' | 'canonAssertions' | 'itemLedger'
+  versionHash: string
+  start: number
+  end: number
+}
+
+export interface ConsistencyAuditCitationSourceV1 extends ConsistencyCitationPositionV1 {
+  sourceType: 'canon' | 'observation'
+  sourceId: number
+  text: string
+}
 
 export interface ConsistencyFinding {
   category: string
@@ -20,6 +33,7 @@ export interface ConsistencyFinding {
     sourceId: number
     quote: string
     anchorId?: string
+    position?: ConsistencyCitationPositionV1
   }>
   reason: string
   suggestion?: string
@@ -30,28 +44,41 @@ export interface ConsistencyAuditResult {
   findings: ConsistencyFinding[]
 }
 
+function evidenceHeading(chapterTitle: string): string {
+  return `【章节】${chapterTitle}\n\n【只读资料：规则与已确认条件用于核对，章纲/细纲是计划】\n`
+}
+
+export function consistencyAuditEvidenceOffsetV1(chapterTitle: string): number {
+  return evidenceHeading(chapterTitle).length
+}
+
 export function buildConsistencyAuditPrompt(args: {
   mode: ConsistencyAuditMode
   chapterTitle: string
   chapterContent: string
   evidenceContext: string
+  citationSources?: readonly ConsistencyAuditCitationSourceV1[]
   cognitionCatalog?: string
   lifecycleCatalog?: string
 }): ChatMessage[] {
   const focus = args.mode === 'fast'
     ? '检查正文内部及其与已确认资料之间的直接矛盾：资源收支、明确时限、实际动作与结算、人物知情来源、证据能否支持结论，以及地点/世界归属、存亡、力量阶段和直接规则冲突。目标是低误报；证据不足就不要报 hard。'
     : '检查因果链、角色动机与长期弧光、伏笔遗漏或错误回收、故事线推进、复杂时间关系、社会规范、世界规则和叙事软风险。'
+  const allowedCitations = ['canon', 'observation'].map(type => {
+    const ids = args.citationSources?.filter(source => source.sourceType === type).map(source => source.sourceId)
+    return ids?.length ? `${type}：${ids.join(',')}` : ''
+  }).filter(Boolean).join('；')
   return [
     {
       role: 'system',
       content: `你是小说一致性证据审计器。契约：${CONSISTENCY_AUDIT_PROMPT_VERSION_V1}。${focus}
 
 输出严格 JSON：
-{"findings":[{"category":"分类","severity":"hard|risk|unknown","anchorId":"逐字复制正文目录编号","evidence":[{"sourceType":"chapter|summary|observation|canon","sourceId":0,"quote":"证据上下文逐字引文"}],"reason":"为何冲突或有风险","suggestion":"可选建议"}],"cognitionReferences":[{"characterId":1,"knowledgeKey":"闭集中的key","quote":"该角色运用或陈述该知识的正文逐字引文"}],"lifecycleReferences":[{"characterId":1,"activityType":"normal-activity","quote":"已死亡角色作为活人正常行动的正文逐字引文"}]}
+{"findings":[{"category":"分类","severity":"hard|risk|unknown","anchorId":"逐字复制正文目录编号","evidence":[{"sourceType":"chapter|observation|canon","sourceId":0,"quote":"证据上下文逐字引文"}],"reason":"为何冲突或有风险","suggestion":"可选建议"}],"cognitionReferences":[{"characterId":1,"knowledgeKey":"闭集中的key","quote":"该角色运用或陈述该知识的正文逐字引文"}],"lifecycleReferences":[{"characterId":1,"activityType":"normal-activity","quote":"已死亡角色作为活人正常行动的正文逐字引文"}]}
 
 规则：
 1. findings.anchorId 必须逐字复制正文定位目录的编号，不能自行缩写或生成编号；代码从该位置取原文，不要另抄 findings.quote。若额外附带不同引文，该意见会降为信息不足并提示核对，不以附注改变原文；
-2. 外部 evidence.quote 必须逐字来自只读资料；正文内部的另一处依据使用 {"sourceType":"chapter","sourceId":0,"anchorId":"正文目录中的对应编号"}，不要另抄 quote。0 仅代表本次待审章，不能用于伪造外部证据；
+2. 外部证据只能选可引用目录中列出的 [canon#编号] 或 [observation#编号]，quote 必须逐字来自该编号的条目；没有编号的资料只能用于理解，不能成为可认证引文。正文内部的另一处依据使用 {"sourceType":"chapter","sourceId":0,"anchorId":"正文目录中的对应编号"}，不要另抄 quote。0 仅代表本次待审章，不能用于伪造外部证据；
 3. hard 必须有至少一条正确证据，且只能用于直接矛盾；
 4. 创作选择、信息不足或可能解释得通的内容只能标 risk/unknown；
 5. cognitionReferences 只能从提供的角色认知审计闭集中选择 characterId + knowledgeKey；quote 必须是正文逐字引文；不确定就不输出；
@@ -63,16 +90,23 @@ export function buildConsistencyAuditPrompt(args: {
     },
     {
       role: 'user',
-      content: `【章节】${args.chapterTitle}\n\n【只读资料：规则与已确认条件用于核对，章纲/细纲是计划】\n${args.evidenceContext}\n\n${args.cognitionCatalog || '【角色认知审计闭集】无'}\n\n${args.lifecycleCatalog || '【角色存亡审计闭集】无'}\n\n【待审正文：其中的断言也需要核对，不能自证正确】\n${args.chapterContent}\n【正文结束】\n【正文定位目录：findings与本章证据只复制anchorId】\n${formatQualityReviewAnchorsV1(args.chapterContent, AUDIT_ANCHOR_VERSION)}\n\n请输出 JSON：`,
+      content: `${evidenceHeading(args.chapterTitle)}${args.evidenceContext}\n\n【可引用外部资料目录】${allowedCitations || '无'}\n\n${args.cognitionCatalog || '【角色认知审计闭集】无'}\n\n${args.lifecycleCatalog || '【角色存亡审计闭集】无'}\n\n【待审正文：其中的断言也需要核对，不能自证正确】\n${args.chapterContent}\n【正文结束】\n【正文定位目录：findings与本章证据只复制anchorId】\n${formatQualityReviewAnchorsV1(args.chapterContent, AUDIT_ANCHOR_VERSION)}\n\n请输出 JSON：`,
     },
   ]
+}
+
+function exactQuoteOffset(source: string, quote: string): number {
+  const start = quote.trim() ? source.indexOf(quote) : -1
+  if (start < 0 || source.indexOf(quote, start + 1) >= 0) throw new Error('Invalid or ambiguous evidence quote')
+  return start
 }
 
 export function parseConsistencyAuditResult(args: {
   raw: string
   mode: ConsistencyAuditMode
   chapterContent: string
-  evidenceContext: string
+  chapterVersionHash: string
+  sources: readonly ConsistencyAuditCitationSourceV1[]
 }): ConsistencyAuditResult | null {
   const start = args.raw.indexOf('{')
   const end = args.raw.lastIndexOf('}')
@@ -81,11 +115,15 @@ export function parseConsistencyAuditResult(args: {
     const parsed = JSON.parse(args.raw.slice(start, end + 1)) as { findings?: unknown }
     if (!Array.isArray(parsed.findings)) return null
     const anchors = new Map(qualityReviewAnchorsV1(args.chapterContent, AUDIT_ANCHOR_VERSION).map(anchor => [anchor.anchorId, anchor]))
-    const currentQuote = (value: Record<string, unknown>): { quote: string; anchorId?: string; citationWarning?: boolean } => {
+    const sources = new Map(args.sources.map(source => [`${source.sourceType}:${source.sourceId}`, source]))
+    if (sources.size !== args.sources.length) return null
+    const currentQuote = (value: Record<string, unknown>): {
+      quote: string; anchorId?: string; start?: number; citationWarning?: boolean
+    } => {
       if (Object.prototype.hasOwnProperty.call(value, 'anchorId')) {
         const anchor = typeof value.anchorId === 'string' ? anchors.get(value.anchorId) : undefined
         if (!anchor) throw new Error('Invalid chapter anchor')
-        return { quote: anchor.quote, anchorId: anchor.anchorId,
+        return { quote: anchor.quote, anchorId: anchor.anchorId, start: anchor.start,
           ...(value.quote !== undefined && value.quote !== anchor.quote ? { citationWarning: true } : {}) }
       }
       return { quote: typeof value.quote === 'string' ? value.quote.trim() : '' }
@@ -106,21 +144,26 @@ export function parseConsistencyAuditResult(args: {
       const evidence = item.evidence.map((entry): ConsistencyFinding['evidence'][number] => {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('Invalid evidence')
         const value = entry as Record<string, unknown>
-        const currentChapter = value.sourceType === 'chapter' && value.sourceId === 0
-        if (!currentChapter && Object.prototype.hasOwnProperty.call(value, 'anchorId')) throw new Error('External evidence cannot use chapter anchors')
-        const cited: ReturnType<typeof currentQuote> = currentChapter ? currentQuote(value) : { quote: typeof value.quote === 'string' ? value.quote.trim() : '' }
-        const evidenceQuote = cited.quote
-        citationWarning ||= cited.citationWarning === true
-        if (!evidenceQuote || !['canon', 'observation', 'chapter', 'summary'].includes(String(value.sourceType))
-          || !Number.isInteger(value.sourceId) || (value.sourceId as number) < 0
-          || !(currentChapter ? args.chapterContent : args.evidenceContext).includes(evidenceQuote)) {
-          throw new Error('Invalid evidence contract or source anchor')
+        if (!Number.isSafeInteger(value.sourceId) || (value.sourceId as number) < 0) throw new Error('Invalid evidence identity')
+        const sourceId = value.sourceId as number
+        if (value.sourceType === 'chapter' && sourceId === 0) {
+          const cited = currentQuote(value)
+          const start = cited.start ?? exactQuoteOffset(args.chapterContent, cited.quote)
+          citationWarning ||= cited.citationWarning === true
+          return {
+            sourceType: 'chapter', sourceId, quote: cited.quote,
+            ...(cited.anchorId ? { anchorId: cited.anchorId } : {}),
+            position: { sourceKey: 'currentChapter', versionHash: args.chapterVersionHash, start, end: start + cited.quote.length },
+          }
         }
+        if (Object.prototype.hasOwnProperty.call(value, 'anchorId')) throw new Error('External evidence cannot use chapter anchors')
+        if (value.sourceType !== 'canon' && value.sourceType !== 'observation') throw new Error('Unbound evidence type')
+        const source = sources.get(`${value.sourceType}:${sourceId}`)
+        if (!source || typeof value.quote !== 'string') throw new Error('Unbound evidence identity')
+        const start = source.start + exactQuoteOffset(source.text, value.quote)
         return {
-          sourceType: value.sourceType as ConsistencyFinding['evidence'][number]['sourceType'],
-          sourceId: value.sourceId as number,
-          quote: evidenceQuote,
-          ...(cited.anchorId ? { anchorId: cited.anchorId } : {}),
+          sourceType: source.sourceType, sourceId, quote: value.quote,
+          position: { sourceKey: source.sourceKey, versionHash: source.versionHash, start, end: start + value.quote.length },
         }
       })
       const requested = item.severity as ConsistencySeverity

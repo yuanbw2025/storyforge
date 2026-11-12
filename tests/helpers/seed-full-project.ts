@@ -1,6 +1,6 @@
-import { encodeFixtureRasterV1, installRasterDecoderForVitestV1 } from './raster-decoder-vitest'
 import { createWorldPackage } from '../../src/lib/world-engine/world-package'
 import { installWorldSourcePackageV1 } from '../../src/lib/world-engine/source-receipt'
+import { encodeFixtureRasterV1, installRasterDecoderForVitestV1 } from './raster-decoder-vitest'
 import { defaultAiTownSettings, serializeAiTownSettings } from '../../src/lib/ai-town/authoring-contract'
 import { defaultTtrpgSettings, serializeTtrpgSettings } from '../../src/lib/ttrpg/authoring-contract'
 import {DEFAULT_CHAT_SETTINGS} from '../../src/lib/character-interaction/authoring-contract'

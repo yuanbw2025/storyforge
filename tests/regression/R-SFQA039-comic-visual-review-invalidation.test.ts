@@ -13,6 +13,9 @@ import { publishComicReleaseV1, readComicReleaseManifestV1 } from '../../src/lib
 import * as qa from '../../src/lib/comic/qa'
 import type { AdaptationBriefV1, ComicVisualSubject, MediaRightsV1 } from '../../src/lib/types'
 import { addSfqa043MediaAndPageV1, createSfqa043ComicFixtureV1 } from '../helpers/sfqa043-comic'
+import { installRasterDecoderForVitestV1 } from '../helpers/raster-decoder-vitest'
+
+installRasterDecoderForVitestV1()
 
 beforeEach(async () => { await db.delete(); await db.open() })
 afterEach(() => { vi.restoreAllMocks(); db.close() })

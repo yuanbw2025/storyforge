@@ -11,6 +11,7 @@ import { isAdventureActionPlayerVisible } from '../adventure/player-experience'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
 import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
 import { getFactPredicate } from './fact-predicate-registry'
+import { resolveProjectionBoundary } from '../consistency/projection-boundary'
 import { retrieveChunks, embedQuery, readNarrativeSummaryContext } from '../retrieval/retrieval'
 import { isEmbeddingReady, embeddingModelTag } from '../ai/adapters/embedding-adapter'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -40,7 +41,9 @@ import { buildForeshadowTaskContext } from '../foreshadow/context'
 import { formatHeldItemsContext, readProjectHeldItems } from '../consistency/held-items'
 import { formatCharacterKnowledgeContext, readProjectCharacterKnowledge } from '../knowledge-ledger/knowledge-ledger'
 import {
+  canonAssertionContextRows,
   formatCanonAssertionsContext,
+  validateSettingAssertionSource,
   readCanonAssertions,
   readSettingAssertionScanContext,
 } from '../fact-ledger/setting-assertions'
@@ -78,6 +81,7 @@ import type {
   Chapter,
   Character,
   Geography,
+  ItemLedgerEntry,
   Location,
   NarrativeModule,
   NarrativeNode,
@@ -90,7 +94,7 @@ import {
   parseCharacterDrivenPlanArcs,
   parseCharacterDrivenPlotVolumes,
 } from '../types/character-driven-plan'
-import type { ContextResourceProviderV1 } from './types'
+import type { ConsistencyAuditSourceReadV1, ContextResourceProviderV1 } from './types'
 import type { ContextSource } from './types'
 import { countWords, htmlToPlainText } from '../utils/html'
 import {
@@ -1843,18 +1847,50 @@ async function readDetailedOutline(projectId: number, outlineNodeId?: number | n
   return parts.join('\n')
 }
 
-async function readItemLedger(projectId: number, characterId?: number | null, scope?: WorkspaceScope): Promise<string> {
-  const resolved = scope ?? await resolveScope({ projectId })
-  const rows = await readOwnedRows<any>(resolved, 'itemLedger', { owner: 'work' })
-  const filtered = characterId != null
-    ? rows.filter(r => (r.characterId ?? null) === (characterId ?? null))
+function renderConsistencyAuditRows(
+  type: 'canon' | 'observation',
+  heading: string,
+  rows: ReadonlyArray<{ id?: number; text: string }>,
+): Pick<ConsistencyAuditSourceReadV1, 'content' | 'rows'> {
+  let content = heading
+  const positions: ConsistencyAuditSourceReadV1['rows'] = []
+  for (const { id, text } of rows) {
+    if (id == null || !Number.isSafeInteger(id) || id < 1) continue
+    content += `\n[${type}#${id}] `
+    const start = content.length
+    content += text
+    positions.push({ id, start, end: content.length })
+  }
+  return { content, rows: positions }
+}
+
+async function readItemLedger(input: AssembleContextInput): Promise<string> {
+  const resolved = input.scope ?? await resolveScope({ projectId: input.projectId })
+  const rows = await readOwnedRows<ItemLedgerEntry>(resolved, 'itemLedger', { owner: 'work' })
+  const filtered = input.characterId != null
+    ? rows.filter(row => (row.characterId ?? null) === input.characterId)
     : rows
-  if (!filtered.length) return ''
-  return [
-    '【物品流水证据】',
-    ...filtered.slice(-120).map(row =>
-      `#${row.id ?? 0} ${row.chapterTitle ?? `章节#${row.chapterId ?? '?'}`}：${row.action === 'gain' ? '获得' : '消耗'} ${row.itemName} ×${row.quantity}${row.heldByName ? `（${row.heldByName}）` : ''}${row.note ? ` ${row.note}` : ''}`),
-  ].join('\n')
+  const heading = '【物品流水证据】'
+  const line = (row: ItemLedgerEntry) =>
+    `${row.chapterTitle ?? `章节#${row.chapterId ?? '?'}`}：${row.action === 'gain' ? '获得' : '消耗'} ${row.itemName} ×${row.quantity}${row.heldByName ? `（${row.heldByName}）` : ''}${row.note ? ` ${row.note}` : ''}`
+  if (!input.captureConsistencyAuditSource) {
+    return filtered.length ? [heading, ...filtered.slice(-120).map(row => `#${row.id ?? 0} ${line(row)}`)].join('\n') : ''
+  }
+  const [chapters, outlineNodes] = await Promise.all([
+    readOwnedRows<Chapter>(resolved, 'chapters', { owner: 'work' }),
+    readOwnedRows<OutlineNode>(resolved, 'outlineNodes', { owner: 'work' }),
+  ])
+  const boundary = resolveProjectionBoundary({ chapters, outlineNodes, chapterId: input.chapterId })
+  const scoped = filtered.filter(row => {
+    const order = row.chapterId == null ? undefined : boundary.orderOfChapter.get(row.chapterId)
+    if (order == null || boundary.targetOrder == null || order >= boundary.targetOrder || row.chapterId == null) return false
+    const group = boundary.worldOfChapter.get(row.chapterId)
+    return group === null || group === (input.worldGroupId ?? null)
+  }).slice(-120)
+  if (!scoped.length) return ''
+  const rendered = renderConsistencyAuditRows('observation', heading, scoped.map(row => ({ id: row.id, text: line(row) })))
+  input.captureConsistencyAuditSource({ key: 'itemLedger', ...rendered })
+  return rendered.content
 }
 
 async function readHeldItems(
@@ -3503,10 +3539,21 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     requiresWorldGroupId: true,
     read: async input => {
       if (input.productRuntimeSessionId != null) throw new Error('产品运行只能读取冻结世界，不能读取作者草稿注释')
-      return [
-        formatCanonAssertionsContext(await readCanonAssertions(input.projectId, input.worldGroupId, input.scope)),
-        await readNarrativeCanonContextV1({ scope: input.scope!, worldGroupId: input.worldGroupId }),
-      ].filter(Boolean).join('\n\n')
+      const facts = await readCanonAssertions(input.projectId, input.worldGroupId, input.scope)
+      const narrative = await readNarrativeCanonContextV1({ scope: input.scope!, worldGroupId: input.worldGroupId })
+      if (!input.captureConsistencyAuditSource) {
+        return [formatCanonAssertionsContext(facts), narrative].filter(Boolean).join('\n\n')
+      }
+      const { heading, rows } = canonAssertionContextRows(facts)
+      const checked = await Promise.all(rows.map(async ({ fact, text }) => ({
+        id: fact.id, text, current: await validateSettingAssertionSource(fact, input.scope) === 'current',
+      })))
+      const current = checked.filter(row => row.current)
+      if (!current.length) return narrative
+      const rendered = renderConsistencyAuditRows('canon', heading, current)
+      const content = [rendered.content, narrative].filter(Boolean).join('\n\n')
+      input.captureConsistencyAuditSource({ key: 'canonAssertions', content, rows: rendered.rows })
+      return content
     },
   },
   {
@@ -3862,7 +3909,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     ownerFrom: 'work',
     layer: 'L2',
     budgetTokens: 2400,
-    read: input => readItemLedger(input.projectId, input.characterId, input.scope),
+    read: readItemLedger,
   },
   {
     key: 'heldItems',
