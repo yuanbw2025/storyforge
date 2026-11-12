@@ -422,9 +422,9 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:778`<br/>`src/lib/node-authoring/domain-execution.ts:835` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1878` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1856` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1846` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1880` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1858` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1848` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:647` |
@@ -474,12 +474,12 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/run/codex-extraction-durable.ts:784 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
-- `src/lib/agent/run/short-novel-durable.ts:319 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1671 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1723 · chat`
-- `src/lib/agent/story-core-copilot.ts:582 · chat`
+- `src/lib/agent/run/short-novel-durable.ts:195 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1634 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1686 · chat`
+- `src/lib/agent/story-core-copilot.ts:579 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
-- `src/lib/agent/worldview-field-copilot.ts:935 · chat`
+- `src/lib/agent/worldview-field-copilot.ts:932 · chat`
 - `src/lib/character-interaction/harness.ts:894 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:73 · chat`
 - `src/lib/character-interaction/situation-harness.ts:189 · chat`

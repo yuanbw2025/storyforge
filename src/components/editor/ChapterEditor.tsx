@@ -24,7 +24,7 @@ import {
 } from '../../lib/consistency/impact-handoff'
 import { runChapterMemoryTask } from '../../lib/ai/chapter-memory/run-chapter-memory'
 import { prepareContinuityContext } from '../../lib/ai/chapter-memory/continuity-context'
-import { isPlanReconciliationCurrent } from '../../lib/ai/chapter-memory/plan-reconciliation'
+import { isPlanReconciliationReviewCurrent, saveChapterPlanReconciliationReview } from '../../lib/ai/chapter-memory/plan-reconciliation'
 import { findNextCanonicalChapter, findPreviousCanonicalChapter } from '../../lib/ai/chapter-memory/canonical-chapter-sequence'
 import { resolveRequestConfig, describeResolvedAIRequestSettingsV1, type AIRequestConfigResolution, type StreamResult } from '../../lib/ai/client'
 import { observeProseLengthV1, proseLengthExpectationV1 } from '../../lib/prose/length-observation'
@@ -53,6 +53,7 @@ import {
   plainTextToHtml,
 } from '../../lib/utils/html'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import ChapterPostAdoptionSettingsPanel from './ChapterPostAdoptionSettingsPanel'
 import ContextBudgetBar from '../shared/ContextBudgetBar'
 import { useDialog } from '../shared/Dialog'
 import { useReviewResultStore } from '../../stores/review-result'
@@ -88,6 +89,7 @@ import { buildEditorEntityReferences } from '../../lib/editor/entity-reference'
 import type {
   AgentSkillExecutionBindingV2,
   ChatMessage,
+  Chapter,
   ChapterStatus,
   Project,
   StateDiffItem,
@@ -287,7 +289,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const currentChapter = storeChapter && storeChapter.projectId === project.id
     && (outlineNodeId == null || storeChapter.outlineNodeId === outlineNodeId)
     ? storeChapter : null
-  const { nodes, updateNode, loadAll: loadOutlineNodes } = useOutlineStore()
+  const { nodes, loadAll: loadOutlineNodes } = useOutlineStore()
   const { cards: stateCards, loadAll: loadStateCards, buildStateContext, buildSelectiveStateContext, applyDiffs } = useStateCardStore()
   const { characters, loadAll: loadCharacters } = useCharacterStore()
   const { creativeRules } = useCreativeRulesStore()
@@ -982,17 +984,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setCompareSourceHtml(null)
   }, [currentChapter?.id])
 
-  useEffect(() => {
-    let cancelled = false
-    if (!currentChapter?.planReconciliation) {
-      setPlanReconciliationCurrent(false)
-      return
-    }
-    isPlanReconciliationCurrent(project.id!, currentChapter).then(current => {
-      if (!cancelled) setPlanReconciliationCurrent(current)
-    })
-    return () => { cancelled = true }
-  }, [project.id, currentChapter])
 
   // 自动保存
   // Debounce only author-staged buffers. A cleanup's older React value must
@@ -1002,6 +993,17 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }, [flushChapterDrafts]))
 
   const outlineNode = currentChapter ? nodes.find(n => n.id === currentChapter.outlineNodeId) : null
+  useEffect(() => {
+    let cancelled = false
+    if (!currentChapter?.planReconciliation) {
+      setPlanReconciliationCurrent(false)
+      return
+    }
+    isPlanReconciliationReviewCurrent(project.id!, currentChapter).then(current => {
+      if (!cancelled) setPlanReconciliationCurrent(current)
+    }).catch(() => { if (!cancelled) setPlanReconciliationCurrent(false) })
+    return () => { cancelled = true }
+  }, [project.id, currentChapter, outlineNode?.updatedAt])
   const chapterDisplay = useMemo(() => {
     return currentChapter ? resolveChapterDisplayMeta(currentChapter, nodes) : null
   }, [currentChapter, nodes])
@@ -2728,61 +2730,37 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleSaveReconciliation = async (actions: ReconciliationActionMap) => {
-    if (!currentChapter?.id || !currentChapter.planReconciliation) return
-
-    const reconciliation = currentChapter.planReconciliation
-    const actionValues = Object.values(actions)
-    const hasApplyActions = actionValues.some(action => action.action === 'apply')
-    const hasAcceptedActions = actionValues.some(action => action.action === 'confirm' || action.action === 'foreshadow')
-    const reviewStatus = hasApplyActions
-      ? 'applied-outline' as const
-      : hasAcceptedActions
-        ? 'confirmed-constraint' as const
-        : 'dismissed' as const
-
-    const updatedReconciliation = {
-      ...reconciliation,
+    const chapter = currentChapter
+    const owner = useOutlineStore.getState().loadedScope
+    if (!chapter?.id || !chapter.planReconciliation || !outlineNode?.id || !owner
+      || owner.projectId !== chapter.projectId || !('workId' in chapter) || chapter.workId !== owner.workId) {
+      throw new Error('原章节或章纲归属已变化，对账未保存。')
+    }
+    const scope = { ...owner }
+    const saved = await saveChapterPlanReconciliationReview({
+      scope,
+      expected: chapter.planReconciliation,
+      outline: { id: outlineNode.id, summary: outlineNode.summary, updatedAt: outlineNode.updatedAt },
       actions,
-      reviewStatus,
-      reviewedAt: Date.now(),
-    }
-
-    await updateChapter(currentChapter.id, {
-      planReconciliation: updatedReconciliation,
     })
-
-    // “同步”是作者明确动作，因此在保存时更新章纲；AI 候选本身仍未绕过采纳。
-    if (outlineNode?.id) {
-      const itemsToAdd: string[] = []
-
-      Object.entries(actions).forEach(([actionKey, action]) => {
-        if (action.action === 'apply') {
-          const sectionKey = actionKey.split(':')[0]
-          const items = reconciliation[sectionKey as keyof typeof reconciliation] as Array<{ text: string }> | undefined
-          if (Array.isArray(items)) {
-            action.indices.forEach(index => {
-              if (items[index]) {
-                const prefix = sectionKey === 'unfinishedGoals' ? '[待完成]' :
-                              sectionKey === 'deviations' ? '[补充]' :
-                              sectionKey === 'newConstraints' ? '[新约束]' : '[更新]'
-                itemsToAdd.push(`${prefix} ${items[index].text}`)
-              }
-            })
-          }
-        }
-      })
-
-      if (itemsToAdd.length > 0) {
-        const currentSummary = outlineNode.summary || ''
-        const additions = itemsToAdd.join('\n')
-        const newSummary = currentSummary
-          ? `${currentSummary}\n\n[基于对账更新]\n${additions}`
-          : additions
-        await updateNode(outlineNode.id, { summary: newSummary })
-      }
-    }
-
-    console.log('[Reconciliation] Saved actions:', actions)
+    // Publish only the metadata this transaction changed; preserve any
+    // concurrently staged or saved body and any later outline revision.
+    const updateCachedChapter = (cached: Chapter) => cached.id === chapter.id
+      && cached.projectId === scope.projectId && 'workId' in cached && cached.workId === scope.workId
+      && cached.updatedAt <= saved.chapter.updatedAt
+      ? { ...cached, planReconciliation: saved.chapter.planReconciliation, updatedAt: saved.chapter.updatedAt }
+      : cached
+    useChapterStore.setState(state => ({
+      chapters: state.chapters.map(updateCachedChapter),
+      currentChapter: state.currentChapter ? updateCachedChapter(state.currentChapter) : null,
+    }))
+    useOutlineStore.setState(state => {
+      const owner = state.loadedScope
+      if (owner?.projectId !== scope.projectId || owner.worldId !== scope.worldId || owner.workId !== scope.workId) return state
+      return { nodes: state.nodes.map(node => node.id === saved.outline.id && node.updatedAt <= saved.outline.updatedAt
+        ? { ...node, summary: saved.outline.summary, updatedAt: saved.outline.updatedAt }
+        : node) }
+    })
   }
 
   const handleForeshadowReconciliation = async (item: { section: string; index: number; text: string }) => {
@@ -3037,10 +3015,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       return
     }
 
-    if (aiAction === 'continue') {
-      editorRef.current.appendContent(html)
-    } else if (aiAction === 'generate' || aiAction === 'deai-full') {
-      // generate / 整章去AI味 / 按报告修改：替换全文
+    if (aiAction === 'deai-full') {
+      // 整章去 AI 味：替换全文。
       editorRef.current.setContent(html)
       // setContent 不触发 onChange，这里手动同步
       const newHtml = editorRef.current.getHTML()
@@ -3051,27 +3027,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
     setProseGenerationError('')
     ai.reset()
-
-    // 先把完整正文落库，再启动带 hash CAS 的异步后处理。
-    if (shouldAutoProcess) {
-      const fullHtml = editorRef.current.getHTML()
-      const fullText = editorRef.current.getPlainText()
-      await updateChapter(acceptedChapterId, {
-        content: fullHtml,
-        wordCount: countWords(fullText),
-      })
-      setContent(fullHtml)
-      setPlainText(fullText)
-      setSavedContent(fullHtml)
-      void preparePostAdoptionAfterCommit({
-        chapterId: acceptedChapterId,
-        chapterTitle: acceptedChapterTitle,
-        chapterContent: fullHtml,
-        chapterPlainText: fullText,
-      }).catch(error => {
-        setTransitionError(error instanceof Error ? error.message : '章节后处理启动失败')
-      })
-    }
   }
 
   const handleDismissAI = async () => {
@@ -3529,85 +3484,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       )}
 
       {postAdoptionSettings && (
-        <details className="mb-3 rounded-lg border border-border bg-bg-surface p-3 text-xs text-text-secondary">
-          <summary className="cursor-pointer font-medium text-text-primary">正文采纳后的演化策略</summary>
-          <div className="mt-3 space-y-3">
-            <label className="flex flex-wrap items-center gap-2">
-              <span>运行方式</span>
-              <select
-                value={postAdoptionSettings.policy}
-                onChange={event => void persistPostAdoptionSettings({
-                  ...postAdoptionSettings,
-                  policy: event.target.value as ResolvedPostAdoptionSettingsV1['policy'],
-                })}
-                className="rounded border border-border bg-bg-base px-2 py-1 text-text-primary"
-              >
-                <option value="off">关闭（只做本地失效标记）</option>
-                <option value="suggest">建议（默认，确认后运行）</option>
-                <option value="auto-with-budget">预算内自动运行</option>
-              </select>
-            </label>
-            <div className="flex flex-wrap gap-3">
-              {(['organization', 'memory', 'retrieval', 'consistency'] as const).map(taskType => (
-                <label key={taskType} className="inline-flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={postAdoptionSettings.taskTypes.includes(taskType)}
-                    onChange={event => void persistPostAdoptionSettings({
-                      ...postAdoptionSettings,
-                      taskTypes: event.target.checked
-                        ? [...postAdoptionSettings.taskTypes, taskType]
-                        : postAdoptionSettings.taskTypes.filter(item => item !== taskType),
-                    })}
-                    className="accent-accent"
-                  />
-                  {taskType === 'organization' ? '七域候选'
-                    : taskType === 'memory' ? '章节记忆'
-                      : taskType === 'retrieval' ? '检索重建'
-                        : '一致性守卫'}
-                </label>
-              ))}
-            </div>
-            {postAdoptionSettings.policy === 'auto-with-budget' && (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {([
-                  ['maxModelCalls', '调用上限', 1],
-                  ['maxInputTokens', '输入 token', 1000],
-                  ['maxOutputTokens', '输出 token', 1000],
-                  ['maxCostUsd', '费用上限 USD', 0.01],
-                ] as const).map(([key, label, step]) => (
-                  <label key={key} className="space-y-1">
-                    <span className="block text-text-muted">{label}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step={step}
-                      defaultValue={postAdoptionSettings.budget[key]}
-                      onBlur={event => void persistPostAdoptionSettings({
-                        ...postAdoptionSettings,
-                        budget: { ...postAdoptionSettings.budget, [key]: Number(event.target.value) },
-                      })}
-                      className="w-full rounded border border-border bg-bg-base px-2 py-1 text-text-primary"
-                    />
-                  </label>
-                ))}
-                <label className="col-span-2 inline-flex items-center gap-2 sm:col-span-4">
-                  <input
-                    type="checkbox"
-                    checked={postAdoptionSettings.budget.allowUnknownCost}
-                    onChange={event => void persistPostAdoptionSettings({
-                      ...postAdoptionSettings,
-                      budget: { ...postAdoptionSettings.budget, allowUnknownCost: event.target.checked },
-                    })}
-                    className="accent-accent"
-                  />
-                  允许免费或尚无可信价格表的模型在其它预算通过时自动运行
-                </label>
-              </div>
-            )}
-            <p className="text-text-muted">检索依赖章节记忆，一致性守卫依赖检索；保存时会自动补齐必要前置任务。</p>
-          </div>
-        </details>
+        <ChapterPostAdoptionSettingsPanel
+          settings={postAdoptionSettings}
+          onPersist={persistPostAdoptionSettings}
+        />
       )}
 
       {/* Phase A1/A3: 自动后处理状态指示 */}
