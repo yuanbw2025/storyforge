@@ -1,6 +1,7 @@
 import { assembleContext } from '../registry/assemble-context'
 import { FIELD_BY_TARGET } from '../registry/field-registry'
 import { REGISTRY_BY_NAME } from '../registry/project-tables'
+import { historicalCanonFieldPolicyHashV1 } from '../context-gateway/canon-provider'
 import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
 import type { RagOriginalFieldV1 } from '../retrieval/rag-library'
 import type { RagAnnotationTargetStateV1 } from '../types/rag-library'
@@ -124,6 +125,20 @@ export async function prepareNarrativeCandidateV1(input: { scope: WorkspaceScope
   await assertNarrativeCandidateBaselineV1(current, baseline)
   return { selection, baseline, baselineHash: await hashNarrativeValueV1(baseline), capture: current, assembled,
     catalogReadRestarts: transport.catalogReadRestarts }
+}
+
+/** Exact compatibility with saved field digests written before Canon began
+ * including source dependencies. The caller already performed today's governed
+ * read. Every other field, source, actual byte, grant and owner remains bound. */
+export async function matchesSavedNarrativeBaselineV1(prepared: PreparedNarrativeCandidateV1, savedHash: string) {
+  if (prepared.baselineHash === savedHash) return true
+  const originalFields = await Promise.all(prepared.baseline.originalFields.map(async field => {
+    const row = findNarrativeCandidateSourceV1(prepared.capture, field.table, field.sourceUid)
+    const prefix = field.sourceUid + '::'
+    if (!field.key.startsWith(prefix)) narrativeFail('candidate-selection', '选定原文的身份和字段不匹配')
+    return { ...field, policyHash: await historicalCanonFieldPolicyHashV1(row, field.key.slice(prefix.length)) }
+  }))
+  return await hashNarrativeValueV1({ ...prepared.baseline, originalFields }) === savedHash
 }
 
 export async function assertNarrativeCandidateBaselineV1(capture: NarrativeDomainCaptureV1, baseline: NarrativeCandidateBaselineV1) {

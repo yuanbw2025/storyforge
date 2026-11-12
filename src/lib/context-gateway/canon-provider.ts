@@ -209,7 +209,9 @@ function normalizedPolicy(value: RagFieldPolicy | undefined): Required<RagFieldP
   }
 }
 
-async function resourcePolicy(row: ResourceRow, fieldKey?: string): Promise<{
+type PolicyRow = Record<string, unknown> & Pick<ResourceRow, 'ragDocumentId' | 'ragPolicy' | 'ragPolicyRevision' | 'ragPolicyHash'>
+
+async function resourcePolicy(row: PolicyRow, fieldKey?: string): Promise<{
   enabled: boolean
   revision: number
   hash: string
@@ -639,6 +641,14 @@ function projectionPolicyFields(spec: ResourceSpec, row: ResourceRow, field: Fie
     ...ragSourceFieldPolicyKeysV1(spec.name, field.key, row.fields),
     ...field.sourceFields.map(source => source.key),
   ])]
+}
+
+/** Recompute the field policy stored by pre-dependency Canon providers.
+ * Historical evidence comparison only; a fresh read still uses projectionPolicy. */
+export async function historicalCanonFieldPolicyHashV1(row: PolicyRow, fieldKey: string): Promise<string> {
+  const policy = await resourcePolicy(row, fieldKey)
+  if (!policy.enabled) fail('policy-disabled', '旧版候选的原文读取授权已停用')
+  return policy.hash
 }
 
 async function projectionPolicy(input: {

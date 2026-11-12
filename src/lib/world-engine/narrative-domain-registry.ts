@@ -10,8 +10,14 @@ export function currentNarrativeDomainRegistryV1(): NarrativeDomainRegistryV1 {
     tables: PROJECT_TABLES.filter(spec => spec.worldSemantic).map(spec => {
       const { name, worldSemantic, resourceIdentity, domainOwner, worldScoped, worldGroupField, homeWorldScoped,
         exportRemap, exportRefRemap, exportIdField, tree, selfIdPaths } = spec
+      // Backup-only locators and import validation flags do not participate in
+      // the versioned semantic interpretation of a sealed world.
+      const semanticRemap = exportRemap?.filter(ref => !ref.reviewLocal)
+        .map(({ requiredOnImport, sameWorkOnImport, ...semantic }) => semantic)
+      const semanticRefs = exportRefRemap?.filter(ref => !('reviewLocal' in ref && ref.reviewLocal))
       return JSON.parse(JSON.stringify({ name, worldSemantic, resourceIdentity, domainOwner, worldScoped,
-        worldGroupField, homeWorldScoped, exportRemap, exportRefRemap, exportIdField, tree, selfIdPaths })) as NarrativeDomainTableContractV1
+        worldGroupField, homeWorldScoped, exportRemap: semanticRemap?.length ? semanticRemap : undefined,
+        exportRefRemap: semanticRefs?.length ? semanticRefs : undefined, exportIdField, tree, selfIdPaths })) as NarrativeDomainTableContractV1
     }),
     evidenceFields: Object.fromEntries(CANON_ASSERTION_SOURCE_REGISTRY.map(spec => [spec.table, spec.fields.map(field => field.field)])),
     predicates: JSON.parse(JSON.stringify(FACT_PREDICATE_REGISTRY)),

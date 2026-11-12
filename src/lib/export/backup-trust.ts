@@ -44,11 +44,11 @@ export interface BackupReferenceIssue {
   sampleId?: unknown
 }
 
-/** v17 could export an owned manuscript with an explicit null outline link.
+/** v16 and v17 could export an owned manuscript with an explicit null outline link.
  * Give only those rows empty, clearly labelled recovery nodes. No existing outline
  * is chosen, and source evidence is kept in the same review report as other ambiguous links. */
-function recoverV17DetachedChapters(input: Record<string, unknown>, issues: BackupReferenceIssue[]) {
-  if (input.version !== 17 || !Array.isArray(input.chapters) || !Array.isArray(input.outlineNodes)) return input
+function recoverLegacyDetachedChapters(input: Record<string, unknown>, issues: BackupReferenceIssue[]) {
+  if ((input.version !== 16 && input.version !== 17) || !Array.isArray(input.chapters) || !Array.isArray(input.outlineNodes)) return input
   const detached = input.chapters.flatMap((row: unknown, index: number) => isRecord(row)
     && row._outlineExportId === null && Number.isSafeInteger(row._workOwnerExportId)
     && typeof row.title === 'string' && typeof row.content === 'string' ? [{ row, index }] : [])
@@ -411,7 +411,7 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
   const detachedChapters: BackupReferenceIssue[] = []
   if (version === CURRENT_BACKUP_VERSION || version === 14 || version === 15 || version === 16 || version === 17) {
     const present = new Set(['projects', ...exportableTables])
-    errors.push(...inspectPortableRequiredReferencesV1(PROJECT_TABLES.filter(spec => present.has(spec.name)), recoverV17DetachedChapters(input, detachedChapters)))
+    errors.push(...inspectPortableRequiredReferencesV1(PROJECT_TABLES.filter(spec => present.has(spec.name)), recoverLegacyDetachedChapters(input, detachedChapters)))
   }
 
   if ((version === 16 || version === 17 || version === CURRENT_BACKUP_VERSION) && errors.length === 0) {
@@ -449,7 +449,7 @@ export function assertTrustedProjectBackup(input: unknown): asserts input is Rec
 export function normalizeProjectBackup(input: unknown, detachedChapters: BackupReferenceIssue[] = []): Record<string, unknown> & { version: number } {
   assertTrustedProjectBackup(input)
   if (input.version === CURRENT_BACKUP_VERSION) return input
-  const next = { ...recoverV17DetachedChapters(input, detachedChapters), version: CURRENT_BACKUP_VERSION }
+  const next = { ...recoverLegacyDetachedChapters(input, detachedChapters), version: CURRENT_BACKUP_VERSION }
   for (const spec of PROJECT_TABLES) if (spec.exportable && !(spec.name in next)
     && ((spec.introducedBackupVersion ?? 1) > input.version
       || (spec.optionalInBackupVersions ?? []).includes(input.version))) {
