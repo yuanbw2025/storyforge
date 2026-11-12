@@ -61,12 +61,28 @@ it('actual mainline v17 bytes retain confirmed annotations through restore/deriv
   expect(wire.version).toBe(17)
   expect(Object.keys(expected)).toEqual(['storyTimelineEvents'])
   expect(Object.prototype.hasOwnProperty.call(wire, 'worldSourceReceipts')).toBe(false)
-  expect(inspectProjectBackup(wire).valid).toBe(true)
+  const preflight = inspectProjectBackup(wire)
+  expect(preflight.valid).toBe(true)
+  expect(preflight.warnings.join(' ')).toContain('关联待确认')
+  const original = wire.chapters.find(chapter => chapter._outlineExportId === null)!
+  expect(original.content).toBeTruthy()
   for (const operation of [importProjectJSON, deriveImportProjectJSON]) {
     const id = await operation(wire)
     db.close(); await db.open()
     const exported = await exportProjectJSON(id)
     expect(annotationProjection(exported)).toEqual(expected)
+    const restoredChapter = exported.chapters.find(chapter => chapter.ragDocumentId === original.ragDocumentId)!
+    expect(restoredChapter.content).toBe(original.content)
+    const placeholder = exported.outlineNodes.find(node => node._exportId === restoredChapter._outlineExportId)!
+    expect(placeholder.title).toBe('【恢复占位·原章纲待确认】' + original.title)
+    expect(placeholder.summary).toBe('')
+    const report = exported.notes.find(note => note.content.startsWith('备份恢复：待确认关联'))!
+    expect(report.content).toContain('来源 v17')
+    expect(report.content).toContain(original.ragDocumentId!)
+    expect(report.content).toContain('"原值":null')
+    const next = await exportProjectJSON(await operation(exported))
+    expect(next.outlineNodes.filter(node => node.ragDocumentId === placeholder.ragDocumentId)).toHaveLength(1)
+    expect(next.notes.filter(note => note.content === report.content)).toHaveLength(1)
     expect(inspectProjectBackup(exported).valid).toBe(true)
     expect(JSON.stringify(wire)).toBe(beforeWire)
   }

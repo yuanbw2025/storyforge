@@ -170,6 +170,19 @@ export interface ArrayRef {
   field: string       // 数组字段名(或 JSON 数组字符串字段名)
   itemTarget: string  // 数组元素指向哪张表
   onDelete: 'removeItem' | 'setNullItem' | 'keep'
+  /** Optional object field inside a JSON array; clear only this locator. */
+  itemField?: string
+  scope?: 'same-owner-or-parent-world'
+}
+
+/** Nullable holder field cleared only after source and holder owners agree. */
+export interface ScopedScalarRef {
+  kind: 'scoped-scalar'
+  field: string
+  sourceTable: string
+  onDelete: 'setNull'
+  scope?: 'same-owner-or-parent-world'
+  when?: { field: string; equals: string }
 }
 
 /** 间接归属(本表没有 projectId,通过另一张表的字段间接挂项目) */
@@ -204,7 +217,7 @@ export interface NarrativeSourceRefSpecV1 {
   onDelete: 'tombstone'
 }
 
-export type RefSpec = SimpleRef | JsonRef | ArrayRef | IndirectRef | BlobOwnerRef | NarrativeSourceRefSpecV1
+export type RefSpec = SimpleRef | JsonRef | ArrayRef | ScopedScalarRef | IndirectRef | BlobOwnerRef | NarrativeSourceRefSpecV1
 
 /** 导出时的 ID 重映射声明 */
 export interface ExportRemapField {
@@ -224,10 +237,18 @@ export interface ExportRemapField {
   /**
    * 该外键找不到映射时:
    * - 'drop'    丢弃整行(孤儿,如 characterRelations 端点角色已删)
-   * - 'require' 导入时抛错并整体回滚(必填外键完整性保护,如 chapters.outlineNodeId)
+   * - 'require' 非空但无映射时拒绝导入；是否允许缺失或 null 由 requiredOnImport 决定
    * - 'null' / 省略  置空(可空外键 / worldGroupId / 树 parentId)
    */
   onUnmapped?: 'drop' | 'require' | 'null'
+  /** A portable row must carry this non-null coordinate before any import write. */
+  requiredOnImport?: true
+  /** A chapter-local coordinate may resolve only inside the same Work. */
+  sameWorkOnImport?: true
+  /** Scope and review policy for a nullable locator introduced to portability. */
+  reviewLocal?: 'chapter' | 'world-group' | 'same-owner'
+  /** Only this actual producer type owns this locator. */
+  when?: { field: string; equals: string }
   /**
    * Optional cyclic pointer patched after every table is imported. Use only
    * to break an intentional parent/current-child cycle; ordinary refs still
@@ -257,6 +278,7 @@ export type ExportRefRemap = {
   storage?: 'array' | 'json-string'
   /** Fail closed when any non-null local/portable id has no mapping. */
   onUnmapped?: 'require' | 'drop'
+  reviewLocal?: 'chapter'
 } | {
   field: string
   remapVia: string
@@ -270,6 +292,7 @@ export type ExportRefRemap = {
   exportAs: string
   itemField: string
   storage?: 'array' | 'json-string'
+  reviewLocal?: 'chapter'
 } | {
   /** JSON object paths containing one local foreign key each. */
   field: string

@@ -275,7 +275,11 @@ export const seedSaltRidgeWorldV1 = createSaltRidgeWorldV1
 
 // Hash of the built-in edition's semantic rows and portable relationships.
 // Independent installs generate different timestamps and portable document IDs.
-const SALT_RIDGE_EDITION_HASH = 'dd6b658ff3646236e179782da0e2a921e3699cb397f6ac96c805a5c2f5edcd75'
+const SALT_RIDGE_EDITION_HASHES = new Set([
+  'dd6b658ff3646236e179782da0e2a921e3699cb397f6ac96c805a5c2f5edcd75', // Original frozen edition.
+  // Same edition with portable character chapter and story arc group references.
+  '3d5917b91c01073aab9ee9c093706e99d099f5014d89ba15a1259fc18e895390',
+])
 
 export async function verifySaltRidgeShowcaseSourceV1(scope: WorkspaceScope, worldReleaseId: number) {
   const release = await db.worldReleases.get(worldReleaseId)
@@ -291,7 +295,7 @@ export async function verifySaltRidgeShowcaseSourceV1(scope: WorkspaceScope, wor
 
 async function assertSaltRidgeEdition(manifest: unknown, expectedContentHash?: string, expectedWorldCode?: string) {
   const edition = await readWorldReleaseEditionV3({ manifest, expectedContentHash, expectedWorldCode })
-  if (edition.editionHash !== SALT_RIDGE_EDITION_HASH || edition.sourceWorkspaceUid !== SALT_RIDGE_WORKSPACE_UID) {
+  if (!SALT_RIDGE_EDITION_HASHES.has(edition.editionHash) || edition.sourceWorkspaceUid !== SALT_RIDGE_WORKSPACE_UID) {
     throw new Error('冻结来源与内置盐脊展示作品不一致')
   }
   return edition

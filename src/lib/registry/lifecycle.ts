@@ -11,7 +11,7 @@ import { markAndSweepAgentRunArtifactsV1 } from '../memory/artifact-retention-st
 import type { TableSpec } from './types'
 import { remapNarrativeDomainReferencesV1 } from '../narrative-domain/lifecycle'
 import { readOwnedRows } from '../workspace/scope'
-import { includeReferenceOwnerTables, registeredArrayReferencesTo } from './array-references'
+import { clearRegisteredArrayReferences, includeReferenceOwnerTables, registeredArrayReferencesTo } from './array-references'
 
 // ─────────────────────────────────────────────────────────────
 // 派生选择器
@@ -56,6 +56,10 @@ export function transactionTablesFor(
     set.add(db.outlineNodes)
     set.add(db.worldGroups)
     set.add(db.worldGroupLinks)
+    const refs = registeredArrayReferencesTo('worldGroups')
+    const owners = new Set(refs.map(({ holder }) => holder.name))
+    if (refs.length) includeReferenceOwnerTables(owners)
+    for (const name of owners) set.add(REGISTRY_BY_NAME.get(name)!.table)
     for (const spec of PROJECT_TABLES) if (spec.worldSemantic?.projector) set.add(spec.table)
     return [...set]
   }
@@ -220,6 +224,8 @@ async function deleteBlobsInTransaction(
 
 export async function cascadeDeleteGroup(projectId: number, wgId: number): Promise<void> {
   await db.transaction('rw', transactionTablesFor('deleteGroup'), async () => {
+    const group = await db.worldGroups.get(wgId)
+    if (group?.projectId === projectId) await clearRegisteredArrayReferences('worldGroups', wgId)
     for (const spec of worldScopedTables()) {
       const wgField = spec.worldGroupField ?? 'worldGroupId'
 
