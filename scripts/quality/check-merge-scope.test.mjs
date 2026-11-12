@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { directTests, partitionUnits, plan, readUnitShard, runnerBatches } from './check-merge-scope.mjs'
+import { directTests, partitionUnits, plan, readUnitShard, runnerBatches, runUnits } from './check-merge-scope.mjs'
 
 const present = () => true
 
@@ -16,6 +16,22 @@ test('runs governed edit admission without a competing file and preserves every 
   assert.deepEqual(runnerBatches([first, second]), [[first, second]])
   assert.deepEqual(runnerBatches([admission]), [[admission]])
   assert.deepEqual(runnerBatches([first, admission, second]), [[admission], [first, second]])
+})
+
+test('finishes the other selected files when isolated admission fails and keeps the gate red', () => {
+  const admission = 'tests/regression/R-SFQA004-product-entry-admission.test.tsx'
+  const other = 'tests/registry/project-tables.test.ts'
+  /** @type {string[][]} */
+  const invocations = []
+  const original = new Error('admission timed out')
+  assert.throws(() => runUnits([admission, other], ['--maxWorkers=2'], (command, args) => {
+    assert.equal(command, 'node_modules/.bin/vitest')
+    invocations.push(args)
+    if (args.includes(admission)) throw original
+  }), error => error instanceof AggregateError && error.errors[0] === original)
+  assert.deepEqual(invocations, [admission, other].map(file => [
+    'run', '--tagsFilter', '!manual-media', '--maxWorkers=2', file,
+  ]))
 })
 
 test('documentation and workflow-only changes avoid dependency installation', () => {
