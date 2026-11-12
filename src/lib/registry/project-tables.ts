@@ -16,6 +16,7 @@ import type { NarrativeDomainFieldsV1 } from '../types/narrative-domain'
 import type { DomainOwnershipSpec, TableSpec, WorkspaceMemoryClassificationV1 } from './types'
 import { parseSystemFictionElementsV1 } from '../prose/system-fiction-contract'
 import { normalizeDetailedScenes } from '../types/detailed-outline'
+import { assertPortableRuntimeMediaAccounting } from '../ttrpg/runtime-media-attempt-accounting'
 
 const WORKSPACE_DOMAIN_OWNER = {
   allowed: ['workspace'], defaultOwner: 'workspace', locator: { kind: 'workspace' },
@@ -2219,6 +2220,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     },
     worldScoped: true,
     exportable: true,
+    validateImportRow: assertPortableRuntimeMediaAccounting,
     exportRemap: [
       {
         field: "worldGroupId",
@@ -2257,6 +2259,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       estimatedCostUsd: null,
       costReservationUsd: 0,
       actualCostUsd: null,
+      attemptAccountingJson: null,
       estimatedStorageBytes: null,
       mediaAssetId: null,
       mediaAssetVersion: null,
