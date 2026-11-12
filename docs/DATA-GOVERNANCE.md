@@ -185,6 +185,7 @@ Narrative IR 的 owner、事实/信念/意图/假设隔离、字段证据、时�
 ## 8. 安全查询与写入
 
 - 所有查询必须带足够 owner/作用域条件；只按主键读取后仍需校验 owner。
+- 正式运行上下文在打开产品版本、构建或事件载荷前，必须先以调用方解析的 `Project/World/Work` 核对所选实例；同 Project 的其他 Work 也属于外域。公开注册源、`assembleContext()` 与资源 provider 均守住此门，缓存命中、切换作品或备份重映射不能借旧实例编号取得新 owner 的读取权。
 - 世界切换、多世界切换和作品切换必须使缓存、Context Gateway 和候选失效。
 - immutable release 按 content hash 读取；不得读取“最新草稿”替代锁定版本。世界衍生产品还必须核对 `WorldReference`、`ProductSourcePlan`、`ProductSourceManifest` 与 ProductRelease 谱系一致。
 - 事务内不能等待可能导致 Dexie 提前提交的外部异步工作；先准备数据，再开启最小事务。

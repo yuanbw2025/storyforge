@@ -8,6 +8,7 @@ import { advanceAiTownTimeV1, resolveAiTownEventSeedV1, runAiTownOfflineBatchV1 
 import { readProductRuntimeState, readProductRuntimeStateVersion } from '../../src/lib/product/runtime-api'
 import { CONTEXT_SOURCES } from '../../src/lib/registry/context-sources'
 import { seedAiTownRuntimeFixture } from '../helpers/ai-town-runtime'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 describe('R-AITOWN2 · AI 小镇自治导演 durable Harness', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
@@ -17,10 +18,12 @@ describe('R-AITOWN2 · AI 小镇自治导演 durable Harness', () => {
     const seeded = await seedAiTownRuntimeFixture()
     const source = CONTEXT_SOURCES.find(item => item.key === 'aiTownDirectorRuntime')!
     expect(await source.read({ projectId: seeded.scope.projectId })).toBe('')
-    expect(await source.read({
-      projectId: seeded.scope.projectId + 1,
+    const foreign = await seedCurrentWorkspace('AI 小镇跨项目上下文隔离')
+    await expect(source.read({
+      projectId: foreign.scope.projectId,
+      scope: foreign.scope,
       productRuntimeSessionId: seeded.session.id!,
-    })).toBe('')
+    })).rejects.toThrow('[runtime-context] 运行实例不属于当前 Project/World/Work')
     expect(await source.read({
       projectId: seeded.scope.projectId,
       scope: seeded.scope,
