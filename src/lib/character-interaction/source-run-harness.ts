@@ -1,3 +1,5 @@
+import { revalidateWorldSourcePurposeV1 } from '../world-engine/source-purpose-actions'
+import { readChatDraftV1 } from './draft-service'
 import {resolveRequestConfig, type ChatResult} from '../ai/client'
 import {CodexTerminalFailureV1Schema, type CodexTerminalFailureV1} from '../ai/codex-terminal-failure'
 import {estimateTokens} from '../ai/context-budget'
@@ -11,6 +13,7 @@ import type {ContextManifestV1} from '../types/agent-run'
 import {appendAgentRunEventV1, createAgentRunV1, readAgentRunV1, type AgentRunSnapshotV1} from '../agent/run/event-store'
 import {hashCanonicalValue} from '../agent/run/hash'
 import {createVerificationReceiptV1} from '../agent/run/verification-receipt'
+import {recordAgentRunArtifactV1} from '../memory/artifact-store'
 import {getAgentSkillV1} from '../agent/skill-registry'
 import type {CreativeArtifactV1, CreativeCallEvidenceV1} from '../agent/creative-reliability'
 import {assembleContext} from '../registry/assemble-context'
@@ -49,6 +52,7 @@ export interface ChatSourceRunProtocolV1<R, Q = ChatSourceReviewRequestV1, C = C
   prompt: string | ((promptVersion: string) => string); objective: string; criterion: string; writeTargets: AgentRunWriteTargetV1[]
   source?: {key: string; options: (request: Q) => Partial<AssembleContextInput>; read: (scope: WorkspaceScope, request: Q) => Promise<C>; validateRequest: (request: Q) => void}
   confirmationCriteria?: readonly [string, string, string]
+  requiresWorldSource?: (request: Q) => boolean
   createArtifact: (raw: string, context: C, call: CreativeCallEvidenceV1) => R
   hasCandidate: (result: R) => boolean
   validateContext?: (context: C) => void
@@ -226,6 +230,19 @@ async function generate(input: {
   return withLock(scope, !!input.runAI, async () => {
     if (protocol.source) protocol.source.validateRequest(request)
     else {const legacy = request as ChatSourceReviewRequestV1; if (!legacy.fragmentKeys.length || legacy.fragmentKeys.length > 12) throw new Error('请一次选择1至12项资料')}
+    const requiresWorldSource = protocol.requiresWorldSource?.(request) ?? true
+    const verifySourcePurpose = async (expectedHash?: string) => {
+      if (!requiresWorldSource) return undefined
+      const draft = await readChatDraftV1(scope)
+      if (draft.worldReleaseId == null) throw new Error('请先明确选择冻结来源')
+      const proof = await revalidateWorldSourcePurposeV1({
+        worldReleaseId: draft.worldReleaseId, expectedProjectId: scope.projectId, expectedWorldId: scope.worldId,
+        purpose: 'character-interaction', proof: draft.sourcePurpose,
+      })
+      if (expectedHash && expectedHash !== proof.evidenceHash) throw new Error('来源用途已变化，未发送模型请求')
+      return proof.evidenceHash
+    }
+    const sourcePurposeHash = await verifySourcePurpose()
     for (const row of (await reviewRuns(scope)).filter(row => !terminal.has(row.status))) {
       const previous = await readAgentRunV1(scope, row.id!)
       // Import invalidates old receipts. Historical finished reports are not
@@ -248,6 +265,7 @@ async function generate(input: {
     const inputTokens = messages.reduce((sum, row) => sum + estimateTokens(row.content), 0)
     if (inputTokens > 24_000) throw new Error('本次资料超过整理容量，请减少选中资料')
     const payload: ChatSourceRunPayloadV1<R, Q, C> = {kind: KIND, version: 1, request, context, model, messages, manifestHash: '', response: null, result: null}
+    await verifySourcePurpose(sourcePurposeHash)
     let snapshot = await createAgentRunV1({scope, worldGroupId: null, contract: {
       version: 1, objective: protocol.objective, workflowKind: 'direct-generation',
       scope: {projectId: scope.projectId, worldGroupId: null}, permissions: {contextSourceKeys: [SOURCE], writeTargets: protocol.writeTargets},
@@ -265,11 +283,23 @@ async function generate(input: {
     payload.manifest = {value: manifest, sourceText: assembled.segments[0].content}
     snapshot = await append(scope, snapshot, 'context.assembled', {stepId: STEP, attempt: 1, manifestHash: manifest.manifestHash})
     snapshot = await checkpoint(scope, snapshot, payload)
+    const denyBeforeDispatch = async (cause: unknown, code = 'world-source-purpose-denied-before-dispatch'): Promise<never> => {
+      snapshot = (await recordAgentRunArtifactV1({scope, runId: snapshot.run.id, stepId: STEP, attempt: 1,
+        artifactKind: 'tool-result', content: JSON.stringify({schema: 'storyforge.chat-source-no-dispatch', version: 1,
+          code, dispatched: false, modelCalls: 0, inputTokens: 0, outputTokens: 0,
+          detail: cause instanceof Error ? cause.message : String(cause)}),
+        expectedLastSequence: snapshot.projection.lastSequence})).snapshot
+      snapshot = await append(scope, snapshot, 'step.failed', {stepId: STEP, attempt: 1, code, retryable: false, category: 'deterministic', action: 'fail'})
+      await append(scope, snapshot, 'run.failed', {code, retryable: false})
+      throw cause
+    }
     await input.onBoundary?.('prepared', snapshot.run.id)
     if (input.signal?.aborted) throw new Error('已取消资料整理，未发送模型请求')
     if (await hashCanonicalValue(await readContext(scope, request)) !== await hashCanonicalValue(context)) throw new Error('资料已变化，未发送模型请求')
     snapshot = await append(scope, snapshot, 'model.requested', {stepId: STEP, attempt: 1, bindingHash: await hashCanonicalValue(messages)})
     await input.onBoundary?.('model.requested', snapshot.run.id)
+    try { await verifySourcePurpose(sourcePurposeHash) }
+    catch (cause) { await denyBeforeDispatch(cause, 'world-source-purpose-denied-before-dispatch') }
     const result: ChatResult = {}, start = Date.now()
     let raw: string
     try {

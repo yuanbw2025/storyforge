@@ -353,6 +353,7 @@ async function recheckSelection(selection: TextOpenWorldCreatorSourceSelectionV1
   const inspected = await inspectTextOpenWorldCreatorSourceLocatorV1({
     scope: selection.sourceScope,
     locator: createTextOpenWorldCreatorSourceLocatorV1(selection),
+    requirePurpose: true,
   })
   if (inspected.bindingHash !== await hashCanonicalValue(selectionBinding(selection))) {
     fail('source-stale', '来源版本、边界或能力身份已变化，请重新选择来源')
@@ -935,8 +936,10 @@ export async function generateTextOpenWorldCreatorBriefCandidateV1(input: {
     },
     scope: saved.scope,
   })
+  const sourceBinding = { ...saved.sourceBinding }
+  if (sourceBinding.kind === 'world-release') delete sourceBinding.sourcePurpose
   const manualContext = canonicalStringify({
-    sourceBinding: saved.sourceBinding,
+    sourceBinding,
     sourceSummary: saved.sourceSummary,
     authorDraft: draft,
     productBoundary: TEXT_OPEN_WORLD_CREATOR_PRODUCT_BOUNDARY_V1,

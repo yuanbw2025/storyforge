@@ -1,3 +1,4 @@
+import { CURRENT_BACKUP_VERSION } from './backup-trust'
 import { assertFrozenRuntimePackageSessionV1, parseProductRuntimeState } from '../product/runtime-core'
 import type { AnyProductBuildPreviewManifest } from '../types'
 import { avgExecutableModule } from '../avg/executable-module'
@@ -35,7 +36,7 @@ import { canonicalNarrativeJsonV1, compareUnicodeCodePointsV1 } from '../narrati
 import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
 
 /** 当前完整便携备份契约。 */
-export const CURRENT_EXPORT_VERSION = 17
+export const CURRENT_EXPORT_VERSION = CURRENT_BACKUP_VERSION
 
 export interface StrictProjectExportSnapshot {
   data: ProjectExportData
@@ -791,6 +792,11 @@ async function portableizeSnapshot(snapshot: CapturedProjectExportSnapshot, opti
     else await portableLedger
   }
   const portable = snapshot.data as unknown as Record<string, unknown>
+  if (PROJECT_TABLES.some(spec => spec.portableData?.kind === 'world-source-receipt')) {
+    const { assertWorldSourceReceiptRowsV1 } = await import('../world-engine/source-receipt')
+    await assertWorldSourceReceiptRowsV1(new Map(PROJECT_TABLES.filter(spec => spec.exportable)
+      .map(spec => [spec.name, (Array.isArray(portable[spec.name]) ? portable[spec.name] : []) as Record<string, unknown>[]])), 'portable')
+  }
   for (const spec of PROJECT_TABLES) {
     if (spec.portableData?.kind === 'exact-run-artifact') {
       const rows = portable[spec.name]

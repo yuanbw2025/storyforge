@@ -1,3 +1,4 @@
+import { type WorldSourcePurposeProofV1 } from '../world-engine/source-purpose-contract'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
 import { computeKnownCostUsd } from '../ai/usage-log'
@@ -258,6 +259,7 @@ export function ttrpgCampaignDesignFromProposalCandidateV2(candidate: TtrpgCampa
 export async function generateTtrpgCampaignProposalCandidateV2(input: {
   scope: WorkspaceScope
   worldReleaseId: number
+  sourcePurpose?: WorldSourcePurposeProofV1
   objective: string
   seed: {
     title: string
@@ -294,6 +296,7 @@ export async function generateTtrpgCampaignProposalCandidateV2(input: {
   const sourcePlan = await freezeProductSourcePlanV1({
     productInstanceKey: `ttrpg-proposal:${catalog.worldReference.referenceHash.slice(0, 32)}`,
     worldReference: catalog.worldReference,
+    sourcePurpose: input.sourcePurpose,
     adapter: TTRPG_WORLD_REQUIREMENT_ADAPTER_V1,
     goal: {
       selectedAreas: ['foundation', 'characters', 'relations', 'story', 'storylines', 'outline', 'detailed-outline', 'manuscript', 'entities', 'multi-world'],

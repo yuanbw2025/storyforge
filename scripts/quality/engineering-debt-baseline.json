@@ -47438,21 +47438,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-CURRENT-SCHEMA-single-baseline.test.ts\",\"TS2769\",\"No overload matches this call.\\n  Overload 1 of 4, '(key: number): PromiseExtended<Work | undefined>', gave the following error.\\n    Argument of type 'IndexableType' is not assignable to parameter of type 'number'.\\n      Type 'string' is not assignable to type 'number'.\\n  Overload 2 of 4, '(equalityCriterias: { [key: string]: any; }): PromiseExtended<Work | undefined>', gave the following error.\\n    Argument of type 'IndexableType' is not assignable to parameter of type '{ [key: string]: any; }'.\\n      Type 'string' is not assignable to type '{ [key: string]: any; }'.\",\"25f01017313023d1e6b4b0cbd044a782248cac69ad50df59b22404be933840be\",61,2]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CURRENT-SCHEMA-single-baseline.test.ts",
-        "code": "TS2769",
-        "message": "No overload matches this call.\n  Overload 1 of 4, '(key: number): PromiseExtended<Work | undefined>', gave the following error.\n    Argument of type 'IndexableType' is not assignable to parameter of type 'number'.\n      Type 'string' is not assignable to type 'number'.\n  Overload 2 of 4, '(equalityCriterias: { [key: string]: any; }): PromiseExtended<Work | undefined>', gave the following error.\n    Argument of type 'IndexableType' is not assignable to parameter of type '{ [key: string]: any; }'.\n      Type 'string' is not assignable to type '{ [key: string]: any; }'.",
-        "anchor": "25f01017313023d1e6b4b0cbd044a782248cac69ad50df59b22404be933840be",
-        "line": 244,
-        "column": 61,
-        "start": 9818,
-        "length": 2
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-DETAIL1-gateway-scene-merge.test.ts\",\"TS2339\",\"Property 'ragDocumentId' does not exist on type 'DetailedOutline'.\",\"3ec95f85e27884a49a0a7af091a80ad7e0631090bab053431fa9dc2df1c91662\",61,13]",
       "count": 1,
       "diagnostic": {
@@ -52613,66 +52598,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-NW-2C-source-plan.test.ts\",\"TS2339\",\"Property 'resources' does not exist on type 'ProductSourceManifest | TextOpenWorldSourceManifestV1'.\\n  Property 'resources' does not exist on type 'TextOpenWorldSourceManifestV1'.\",\"e6ba2f1f77814f72b28d199b11f3f4ed5b2eca6fa9a8d83252ae6822f8a1cb4b\",53,9]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-NW-2C-source-plan.test.ts",
-        "code": "TS2339",
-        "message": "Property 'resources' does not exist on type 'ProductSourceManifest | TextOpenWorldSourceManifestV1'.\n  Property 'resources' does not exist on type 'TextOpenWorldSourceManifestV1'.",
-        "anchor": "e6ba2f1f77814f72b28d199b11f3f4ed5b2eca6fa9a8d83252ae6822f8a1cb4b",
-        "line": 559,
-        "column": 53,
-        "start": 45272,
-        "length": 9
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-NW-2C-source-plan.test.ts\",\"TS2339\",\"Property 'runContextManifests' does not exist on type 'ProductSourceManifest | TextOpenWorldSourceManifestV1'.\\n  Property 'runContextManifests' does not exist on type 'TextOpenWorldSourceManifestV1'.\",\"dd2eb38231e021c7b051e0cfaa0247c01d9e2593efc5b87d5c11496e0de8de26\",53,19]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-NW-2C-source-plan.test.ts",
-        "code": "TS2339",
-        "message": "Property 'runContextManifests' does not exist on type 'ProductSourceManifest | TextOpenWorldSourceManifestV1'.\n  Property 'runContextManifests' does not exist on type 'TextOpenWorldSourceManifestV1'.",
-        "anchor": "dd2eb38231e021c7b051e0cfaa0247c01d9e2593efc5b87d5c11496e0de8de26",
-        "line": 558,
-        "column": 53,
-        "start": 45173,
-        "length": 19
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-NW-2C-source-plan.test.ts\",\"TS2724\",\"'\\\"../../src/lib/types/agent-run\\\"' has no exported member named 'AgentRunEventPayloadMapV1'. Did you mean 'AgentRunEventPayloadByTypeV1'?\",\"bf8fd8f2a38078add5dfe1617c8e7bfea34c588b78d5a4f7de2ece26c43a684f\",15,25]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-NW-2C-source-plan.test.ts",
-        "code": "TS2724",
-        "message": "'\"../../src/lib/types/agent-run\"' has no exported member named 'AgentRunEventPayloadMapV1'. Did you mean 'AgentRunEventPayloadByTypeV1'?",
-        "anchor": "bf8fd8f2a38078add5dfe1617c8e7bfea34c588b78d5a4f7de2ece26c43a684f",
-        "line": 27,
-        "column": 15,
-        "start": 2610,
-        "length": 25
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-NW-2C-source-plan.test.ts\",\"TS7006\",\"Parameter 'item' implicitly has an 'any' type.\",\"e6ba2f1f77814f72b28d199b11f3f4ed5b2eca6fa9a8d83252ae6822f8a1cb4b\",67,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-NW-2C-source-plan.test.ts",
-        "code": "TS7006",
-        "message": "Parameter 'item' implicitly has an 'any' type.",
-        "anchor": "e6ba2f1f77814f72b28d199b11f3f4ed5b2eca6fa9a8d83252ae6822f8a1cb4b",
-        "line": 559,
-        "column": 67,
-        "start": 45286,
-        "length": 4
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-NW-2D-confirmed-sequence.test.ts\",\"TS2339\",\"Property 'ragDocumentId' does not exist on type 'StoryTimelineEvent'.\",\"256849f4c8a02469c408fabc9f1cb435c4d11db869caee805ee7f6fd6bcd7462\",96,13]",
       "count": 1,
       "diagnostic": {
@@ -55325,21 +55250,6 @@
         "column": 12,
         "start": 612,
         "length": 24
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD5-creator-source.test.ts\",\"TS2322\",\"Type '\\\"longform\\\"' is not assignable to type 'WorkspacePurpose | undefined'.\",\"8f0115903a5b6fba142cc9bd86bc2e8b2104da220e17a0cbb634a8081d2e48d1\",8,7]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-OPEN-WORLD5-creator-source.test.ts",
-        "code": "TS2322",
-        "message": "Type '\"longform\"' is not assignable to type 'WorkspacePurpose | undefined'.",
-        "anchor": "8f0115903a5b6fba142cc9bd86bc2e8b2104da220e17a0cbb634a8081d2e48d1",
-        "line": 40,
-        "column": 8,
-        "start": 1501,
-        "length": 7
       }
     },
     {
