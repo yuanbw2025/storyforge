@@ -3,6 +3,11 @@
 Works are primarily stored in the current browser's local database for the current site. Autosave helps daily editing but cannot replace an independent backup.
 
 
+
+## Deletion blocked by historical references
+
+If local outline or prose deletion reports a historical run reference, retain the original content and run history, then export and inspect a backup. The local deletion is rejected atomically to prevent dangling targets in future complete backups. Unreferenced content and whole-work/project deletion follow their respective confirmation flows. Preserve an already damaged backup for separate investigation. The repair merged with [PR #301](https://github.com/yuanbw2025/storyforge/pull/301).
+
 ## Confirming deletion, import and export
 
 Cancelling the backup also stops the associated project-deletion flow. Check the work and source before deletion. Preserve content and errors after a failed save or conflict, then inspect the original records. Import tasks stay bound to their original source, and late results cannot recreate that source after task deletion. Prose export retains root-level chapters in the work's canonical chapter order. Check the beginning, chapter order and end of the exported document. See [PR #255](https://github.com/yuanbw2025/storyforge/pull/255).
