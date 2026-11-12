@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-quality021129-integrated-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-quality021129-integrated-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -781,6 +781,46 @@
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-source-foundation-v2.json",
         "workPackage": "NW-0B",
         "note": "Preserve measured source-receipt foundation before SFQA129 registered field validation, absent legacy reads and new-only adoption defaults; corpus and deterministic observations unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality021129-integrated-v1.json",
+        "workPackage": "SFQA-021/129",
+        "note": "Preserve the measured parent receipt when combining frozen source, backup and runtime contracts."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-runtime-source-plan-v1.json",
+        "workPackage": "SFQA-021/129",
+        "note": "Preserve the measured parent receipt when combining frozen source, backup and runtime contracts."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality018-integrated-v1.json",
+        "workPackage": "SFQA-028-031-032-069-082-083",
+        "note": "Preserved the measured mainline before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-runtime-integration-v1.json",
+        "workPackage": "SFQA-028-031-032-069-082-083",
+        "note": "Preserved the measurements from the reviewed change."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-sfqa018-standalone-v1.json",
+        "workPackage": "SFQA-018",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality028032-runtime-events-v1.json",
+        "workPackage": "SFQA-028-031-032-069-082-083",
+        "note": "Preserved the measurements from the reviewed change."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality031069-independent-v1.json",
+        "workPackage": "SFQA-082/083-runtime-media-attempts",
+        "note": "Preserved before the runtime media attempt and branch-accounting changes. The corpus and all deterministic observations are compared to this receipt."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality082083-runtime-media-attempts-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserve the measured runtime-media receipt before the SFQA-028/032 runtime event admission and continuation owner fixes."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -791,7 +831,6 @@
     "package.json",
     "scripts/ai-call-meta.mjs",
     "scripts/check-architecture.mjs",
-    "scripts/static-guard-bindings.mjs",
     "scripts/check-narrative-world-baseline.mjs",
     "scripts/evaluate-narrative-author-quality-local-codex.mjs",
     "scripts/evaluate-narrative-candidates-local-codex.mjs",
@@ -831,6 +870,7 @@
     "scripts/narrative-world-baseline-contract.mjs",
     "scripts/report-narrative-reader.mjs",
     "scripts/run-narrative-world-baseline.mjs",
+    "scripts/static-guard-bindings.mjs",
     "src/components/facts/NarrativeAnnotationPanel.tsx",
     "src/components/longform/LongformWorlds.tsx",
     "src/components/product/ProductProductionStudio.tsx",
@@ -859,9 +899,9 @@
     "src/lib/context-gateway/world-release-provider.ts",
     "src/lib/context-gateway/world-release-query-provider.ts",
     "src/lib/db/schema.ts",
+    "src/lib/export/portable-table-structure.ts",
     "src/lib/export/registry-export.ts",
     "src/lib/export/registry-import.ts",
-    "src/lib/export/portable-table-structure.ts",
     "src/lib/narrative-domain/codec.ts",
     "src/lib/narrative-domain/integrity.ts",
     "src/lib/narrative-domain/json.ts",

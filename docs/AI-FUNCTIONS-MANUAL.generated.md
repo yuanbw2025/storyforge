@@ -421,20 +421,20 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
-| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:825`<br/>`src/lib/node-authoring/domain-execution.ts:890` |
+| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:778`<br/>`src/lib/node-authoring/domain-execution.ts:835` |
 | `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1871` |
 | `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1849` |
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1839` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
-| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:653` |
+| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:647` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:576` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:190` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:945` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
-| `node.creation` | `src/lib/node-authoring/executor.ts:395` |
+| `node.creation` | `src/lib/node-authoring/executor.ts:391` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:200`<br/>`src/lib/outline/generation-node.ts:61` |
 | `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:666` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:56` |
@@ -488,7 +488,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:22 · ai.start`
 - `src/lib/motion-drama/durable-production.ts:348 · chat`
-- `src/lib/node-authoring/executor.ts:453 · chat`
+- `src/lib/node-authoring/executor.ts:449 · chat`
 - `src/lib/open-world/evolution-harness.ts:251 · chat`
 - `src/lib/open-world/harness.ts:150 · chat`
 - `src/lib/product-production/authoring-consultation.ts:169 · chat`
