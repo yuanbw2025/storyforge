@@ -29,6 +29,7 @@ import type {
   ProductBuildQualityReportV1,
   ProductProductionBriefV3,
   ProductProductionPlanV3,
+  ProductRelease,
   ProductRuntimePackageV1,
   TextOpenWorldRuntimePackageV1,
   WorkspaceScope,
@@ -36,6 +37,37 @@ import type {
 
 export const SALT_RIDGE_SHOWCASE_PRODUCT_KEY = 'storyforge.original.salt-ridge.openworld.v1'
 export const SALT_RIDGE_SHOWCASE_TITLE = '盐脊：断流之夜'
+
+const FROZEN_RESOURCE_GATE = 'salt-ridge.frozen-resource-evidence'
+
+async function frozenShowcaseSource(
+  scope: WorkspaceScope,
+  source: Pick<ProductProductionBriefV3['source'], 'worldReleaseId' | 'worldContentHash' | 'selection'>,
+): Promise<TextOpenWorldRuntimePackageV1['sourceManifest']> {
+  const catalog = await openWorldSemanticResourceCatalogV1({
+    localReleaseRecordId: source.worldReleaseId,
+    expectedProjectId: scope.projectId,
+    expectedWorldId: scope.worldId,
+  })
+  const reference = catalog.description.worldReference
+  if (reference.releaseHash !== source.worldContentHash
+    || reference.referenceHash !== source.selection.worldReferenceHash) {
+    throw new Error('盐脊展示的冻结世界或选择来源不匹配')
+  }
+  const resources = new Map(catalog.resources.map(row => [row.resourceKey, row]))
+  return {
+    kind: 'world-release',
+    sourceKey: `salt-ridge.${reference.releaseHash.slice(0, 16)}`,
+    sourceVersion: reference.releaseVersion,
+    contentHash: reference.releaseHash,
+    selectionHash: await hashProductProductionValueV2(source.selection),
+    resourceHashes: source.selection.resourceKeys.map(resourceId => {
+      const resource = resources.get(resourceId)
+      if (!resource?.worldSemantic) throw new Error(`盐脊展示的冻结资源不存在：${resourceId}`)
+      return { resourceId, contentHash: resource.contentHash }
+    }),
+  }
+}
 
 function frozenNarrative(): ProductRuntimePackageV1['narrative'] {
   return {
@@ -169,7 +201,7 @@ export async function createSaltRidgeShowcaseBriefV1(
       requiresPlayablePreview: true,
       requiredGateIds: [
         'runtime.package.valid', 'runtime.playable', 'narrative.graph.valid', 'rights.complete',
-        'salt-ridge.showcase-journey',
+        'salt-ridge.showcase-journey', FROZEN_RESOURCE_GATE,
       ],
       minimumMediaCoverage: 0, allowSoftWaivers: false,
     },
@@ -192,7 +224,7 @@ export function createSaltRidgeShowcasePlanV1(
     {
       taskKey: 'quality.verify', kind: 'quality-report', lane: 'qa',
       outputArtifactKeys: ['text-open-world.quality-report'], inputArtifactKeys: ['text-open-world.runtime-package'], dependsOn: ['runtime.integrate'],
-      acceptanceGateIds: ['runtime.playable', 'salt-ridge.showcase-journey'],
+      acceptanceGateIds: ['runtime.playable', 'salt-ridge.showcase-journey', FROZEN_RESOURCE_GATE],
     },
   ]
   return parseProductProductionPlanV3({
@@ -228,14 +260,7 @@ export function saltRidgeShowcaseExecutorV1(
       inner.metadata.packageKey = SALT_RIDGE_SHOWCASE_PRODUCT_KEY
       inner.metadata.title = SALT_RIDGE_SHOWCASE_TITLE
       inner.metadata.description = '一段可完整通关的文字开放世界纵向样板。'
-      inner.sourceManifest = {
-        kind: 'world-release', sourceKey: `salt-ridge.${brief.source.worldContentHash.slice(0, 16)}`,
-        sourceVersion: 1, contentHash: brief.source.worldContentHash,
-        selectionHash: brief.source.selection.worldReferenceHash,
-        resourceHashes: brief.source.selection.resourceKeys.map(resourceId => ({
-          resourceId, contentHash: brief.source.worldContentHash,
-        })),
-      }
+      inner.sourceManifest = await frozenShowcaseSource(task.scope, brief.source)
       const runtimePackage = wrapRuntimePackage(inner, brief)
       return {
         artifacts: [{
@@ -252,6 +277,11 @@ export function saltRidgeShowcaseExecutorV1(
     if (!artifact) throw new Error('盐脊展示运行包缺失')
     const runtimePackage = parseProductRuntimePackageV1(artifact.payloadJson)
     if (!runtimePackage.textOpenWorldVNext) throw new Error('盐脊展示缺少文字开放世界运行模块')
+    const source = await frozenShowcaseSource(task.scope, brief.source)
+    if (await hashProductProductionValueV2(runtimePackage.textOpenWorldVNext.sourceManifest)
+      !== await hashProductProductionValueV2(source)) {
+      throw new Error('盐脊展示运行包与冻结资源证据不匹配')
+    }
     const modules = parseTextOpenWorldModulesV1(runtimePackage.textOpenWorldVNext)
     const packageHash = await hashProductProductionValueV2(runtimePackage)
     const complete = modules.world.regions.length >= 2
@@ -266,7 +296,9 @@ export function saltRidgeShowcaseExecutorV1(
       schema: 'storyforge.product-build-quality-report', version: 1, buildNumber: task.buildNumber, packageHash,
       hardGateResults: brief.completionContract.requiredGateIds.map(gateId => ({
         gateId, passed: true,
-        evidence: [packageHash, '双地区 / 正式任务 / 回合战斗 / 制作交易 / 双结局 / 无模型依赖'],
+        evidence: gateId === FROZEN_RESOURCE_GATE
+          ? [packageHash, source.contentHash, source.selectionHash]
+          : [packageHash, '双地区 / 正式任务 / 回合战斗 / 制作交易 / 双结局 / 无模型依赖'],
       })),
       softGateResults: [], mediaCoverage: 1, playable: true, releaseReady: true,
       warnings: ['内置纵向展示世界；用于证明完整系统闭环，不代表3—5小时内容验收规模。'],
@@ -282,38 +314,81 @@ export function saltRidgeShowcaseExecutorV1(
 let localInstallationQueue: Promise<unknown> = Promise.resolve()
 let installation: Promise<{ scope: WorkspaceScope; releaseId: number }> | null = null
 
-export const saltRidgeShowcase = {
-  async findInstalled() {
-    const releases = await db.productReleases.toArray()
-    const release = releases.find(row => {
-      try {
-        return parseAnyProductReleaseManifest(row.manifestJson).definition.productKey
-          === SALT_RIDGE_SHOWCASE_PRODUCT_KEY
-      } catch {
-        return false
-      }
-    })
-    if (!release) return null
-    await assertProductReleaseUnchanged(release.id!)
-    return {
-      scope: await resolveScope({ scope: { projectId: release.projectId, worldId: release.worldId, workId: release.workId } }),
-      releaseId: release.id!,
+async function installedReleaseRows(): Promise<ProductRelease[]> {
+  return (await db.productReleases.toArray()).filter(row => {
+    try {
+      return parseAnyProductReleaseManifest(row.manifestJson).definition.productKey === SALT_RIDGE_SHOWCASE_PRODUCT_KEY
+    } catch {
+      return false
     }
+  }).sort((left, right) => right.version - left.version || right.id! - left.id!)
+}
+
+async function readInstalledRelease(releaseId: number) {
+  const row = await assertProductReleaseUnchanged(releaseId)
+  const scope = await resolveScope({ scope: { projectId: row.projectId, worldId: row.worldId, workId: row.workId } })
+  const runtime = parseAnyProductReleaseManifest(row.manifestJson)
+  if (runtime.productType !== 'text-open-world' || runtime.definition.productKey !== SALT_RIDGE_SHOWCASE_PRODUCT_KEY) {
+    throw new Error('发行不是盐脊文字开放世界展示版本')
+  }
+  return { row, scope, runtime }
+}
+
+/** Check provenance for compilation or upgrade; a bound save only needs its
+ * immutable ProductRelease and can play without the source world. */
+async function hasCurrentReleaseSource(releaseId: number): Promise<boolean> {
+  const { row, scope, runtime } = await readInstalledRelease(releaseId)
+  if (row.worldReleaseId == null) throw new Error('盐脊展示缺少可核验的冻结世界来源')
+  const observed = runtime.textOpenWorldVNext?.sourceManifest
+  const source = {
+    worldReleaseId: row.worldReleaseId,
+    worldContentHash: runtime.sourceWorld.contentHash,
+    selection: runtime.sourceWorld.selection,
+  }
+  const expected = await frozenShowcaseSource(scope, source)
+  const expectedHash = await hashProductProductionValueV2(expected)
+  const observedHash = observed ? await hashProductProductionValueV2(observed) : null
+  const current = observedHash === expectedHash
+  if (!current) {
+    const original = {
+      ...expected, sourceVersion: 1, selectionHash: source.selection.worldReferenceHash,
+      resourceHashes: expected.resourceHashes.map(({ resourceId }) => ({ resourceId, contentHash: expected.contentHash })),
+    }
+    if (observedHash !== await hashProductProductionValueV2(original)) {
+      throw new Error('盐脊展示发行与已知的冻结来源证据不匹配')
+    }
+  }
+  return current
+}
+
+export const saltRidgeShowcase = {
+  async listInstalledReleaseIds() {
+    return (await installedReleaseRows()).map(row => row.id!)
+  },
+
+  async findInstalled(releaseId?: number) {
+    const releases = await installedReleaseRows()
+    const row = releaseId == null ? releases[0] : releases.find(item => item.id === releaseId)
+    if (!row) return null
+    const installed = await readInstalledRelease(row.id!)
+    return { scope: installed.scope, releaseId: row.id! }
   },
 
   install(onProgress: (message: string) => void = () => {}) {
     if (installation) return installation
     const performInstall = async () => {
-      const installed = await saltRidgeShowcase.findInstalled()
-      if (installed) return installed
       onProgress('正在准备盐脊的冻结世界…')
-      const world = await createSaltRidgeWorldV1()
-      const { scope, worldReleaseId } = world
+      const { scope, worldReleaseId } = await createSaltRidgeWorldV1()
+      const previous = (await installedReleaseRows()).find(row => row.projectId === scope.projectId
+        && row.worldId === scope.worldId && row.workId === scope.workId && row.worldReleaseId === worldReleaseId)
+      if (previous && await hasCurrentReleaseSource(previous.id!)) return { scope, releaseId: previous.id! }
       onProgress('正在锁定任务、规则与来源…')
       const workspace = await listProductProductionWorkspaceV1(scope, ['text-open-world'])
       let productionId = workspace.productions.find(item => (
         item.title === SALT_RIDGE_SHOWCASE_TITLE && item.status !== 'archived'
+        && (!previous || item.productionKey === previous.productionKey)
       ))?.id
+      if (productionId == null && previous) throw new Error('盐脊旧版制作记录缺失，无法安全建立新版')
       if (productionId == null) {
         productionId = await createProductProductionWithBriefV1({
           scope, worldReleaseId, title: SALT_RIDGE_SHOWCASE_TITLE,
@@ -322,7 +397,28 @@ export const saltRidgeShowcase = {
       }
       let details = await readProductProductionDetailsV1(scope, productionId)
       if (!details?.brief) throw new Error('盐脊展示 Brief 缺失')
-      if (details.build && ['failed', 'cancelled'].includes(details.build.status)) {
+      const priorBrief = parseProductProductionBriefV3(details.brief.briefJson)
+      if (priorBrief.source.worldReleaseId !== worldReleaseId
+        || !priorBrief.completionContract.requiredGateIds.includes('salt-ridge.showcase-journey')) {
+        throw new Error('现有制作不属于此冻结盐脊展示，未修改该制作')
+      }
+      const failedBuild = details.production.status !== 'brief-ready'
+        && details.build && ['failed', 'cancelled'].includes(details.build.status)
+      if (!priorBrief.completionContract.requiredGateIds.includes(FROZEN_RESOURCE_GATE) || (previous && failedBuild)) {
+        onProgress('正在保留旧记录并核验新版来源…')
+        const revised = await executeProductProductionCommand({
+          scope, productionId,
+          command: {
+            type: 'save-brief-revision',
+            commandId: `salt-ridge.sources.${productionId}.${details.production.stateRevision}`,
+            expectedStateRevision: details.production.stateRevision,
+            parentRevision: details.production.currentBriefRevision,
+            brief: await createSaltRidgeShowcaseBriefV1(scope, worldReleaseId),
+          },
+        })
+        if (!revised.ok) throw new Error(String(revised.result.message ?? revised.errorCode))
+        details = await readProductProductionDetailsV1(scope, productionId)
+      } else if (failedBuild) {
         onProgress('正在保留旧记录并重新核验内容…')
         await archiveProductProductionV1({ scope, production: details.production })
         productionId = await createProductProductionWithBriefV1({
@@ -331,11 +427,11 @@ export const saltRidgeShowcase = {
         })
         details = await readProductProductionDetailsV1(scope, productionId)
       }
-      if (details.build?.status === 'recovery-required') {
+      if (details?.production.status !== 'brief-ready' && details?.build?.status === 'recovery-required') {
         await retryProductProductionBlockerV1({ scope, details })
         details = await readProductProductionDetailsV1(scope, productionId)
       }
-      if (details.build?.status === 'paused') {
+      if (details?.production.status !== 'brief-ready' && details?.build?.status === 'paused') {
         const resumed = await executeProductProductionCommand({
           scope, productionId,
           command: {
@@ -385,7 +481,9 @@ export const saltRidgeShowcase = {
       const completed = await readProductProductionDetailsV1(scope, productionId)
       const releaseId = completed?.production.currentProductReleaseId
       if (releaseId == null) throw new Error('盐脊展示发布尚未完成')
-      await assertProductReleaseUnchanged(releaseId)
+      if (!await hasCurrentReleaseSource(releaseId)) {
+        throw new Error('盐脊新版没有通过冻结资源核验')
+      }
       return { scope, releaseId }
     }
     const queued = localInstallationQueue.catch(() => undefined).then(async () => (

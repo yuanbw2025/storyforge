@@ -3,7 +3,7 @@ import { db } from "../db/schema";
 import type { WorkspaceScope } from "../types";
 import { createWorkspace, workspaceCreationTransactionTablesV1, } from "../workspace/create-workspace";
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord, } from "../workspace/scope";
-import { cacheWorldReferenceForProductV1 } from "../world-engine/reference-cache";
+import { selectWorldReferenceForProductPurposeV1 } from "../world-engine/reference-cache";
 import { DEFAULT_CHAT_SETTINGS, DEFAULT_CHAT_SETTINGS_V2, DEFAULT_CHAT_SETTINGS_V3, parseChatAuthoringSettings, type ChatAuthoringDraftV1, type ChatAuthoringSettings, } from "./authoring-contract";
 import { loadProductProductionConsultationSourceV2, loadProductProductionWorldSourceCatalogV2 } from '../product-production/world-source';
 import { readChatSourceProjectionViewV1, type ChatSourceReviewV1 } from './source-projection';
@@ -92,17 +92,20 @@ export async function saveChatDraftV1(scope: WorkspaceScope, revision: number, s
         return next;
     });
 }
-export async function selectChatWorldV1(scope: WorkspaceScope, revision: number, releaseId: number) {
+export async function selectChatWorldV1(scope: WorkspaceScope, revision: number, releaseId: number, sourceDeclarationHash?: string) {
     const current = await readChatDraftV1(scope);
     if (current.revision !== revision)
         throw new Error("角色聊天 方案已变化，请刷新后重新选择世界");
-    const localId = await cacheWorldReferenceForProductV1(scope, releaseId, { narrativeProductType: 'character-interaction' });
+    const { localId, sourcePurpose } = await selectWorldReferenceForProductPurposeV1(scope, releaseId, 'character-interaction', { narrativeProductType: 'character-interaction', sourceDeclarationHash });
     return db.transaction("rw", scopeTransactionTables(db.chatAuthoringDrafts), async () => {
         const row = await readChatDraftV1(scope);
         if (row.revision !== revision)
             throw new Error("角色聊天 方案已变化，请刷新后重新选择世界");
         const settings = parseChatAuthoringSettings(JSON.parse(row.settingsJson));
-        if (row.worldReleaseId !== localId) {
+        const samePurpose = row.sourcePurpose
+            ? row.sourcePurpose.evidenceHash === sourcePurpose.evidenceHash
+            : sourcePurpose.origin.kind === 'local-author';
+        if (row.worldReleaseId !== localId || !samePurpose) {
             settings.characters = [];
             if (settings.version === 3) delete settings.narrative.playerCharacterKey;
             if (settings.version !== 1) {settings.sourceReview = null; if (settings.backgroundResourceKeys) settings.backgroundResourceKeys = [];}
@@ -110,6 +113,7 @@ export async function selectChatWorldV1(scope: WorkspaceScope, revision: number,
         const next = {
             ...row,
             worldReleaseId: localId,
+            sourcePurpose,
             settingsJson: JSON.stringify(settings),
             revision: revision + 1,
             updatedAt: Date.now(),

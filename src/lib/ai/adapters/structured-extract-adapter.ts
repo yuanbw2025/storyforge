@@ -1,7 +1,7 @@
 import type { AIConfig, ChatMessage, LocationTag } from '../../types'
 import type { ChatRequestOptions } from '../client'
 import type { CodexFieldDef } from '../../types/codex'
-import { ALL_LOCATION_TAGS } from '../../types/location'
+import { ALL_LOCATION_TAGS, parseLocationTagsV1 } from '../../types/location'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../prompt-engine'
 import { parseJsonArray, splitExtractionText } from '../structured-extraction'
@@ -319,7 +319,6 @@ export function parseLocations(raw: string): ExtractedLocation[] {
     throw new Error('地点提取输出不是有效 JSON。')
   }
   if (!Array.isArray(parsed)) throw new Error('地点提取输出必须是 JSON 数组。')
-  const allowedTags = new Set<string>(ALL_LOCATION_TAGS)
   const tagOrder = new Map<string, number>(ALL_LOCATION_TAGS.map((tag, index) => [tag, index]))
   return parsed.map((value, index) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -337,13 +336,9 @@ export function parseLocations(raw: string): ExtractedLocation[] {
       || (!row.description.trim() && !row.significance.trim())
       || !Array.isArray(row.tags)
     ) throw new Error(`地点候选 ${index + 1} 字段类型、长度或必需内容无效。`)
-    const tags = row.tags.map(tag => {
-      if (typeof tag !== 'string' || !allowedTags.has(tag)) {
-        throw new Error(`地点候选 ${index + 1} 包含未登记标签。`)
-      }
-      return tag as LocationTag
-    })
-    if (new Set(tags).size !== tags.length) throw new Error(`地点候选 ${index + 1} 标签重复。`)
+    let tags: LocationTag[]
+    try { tags = parseLocationTagsV1(row.tags) }
+    catch (error) { throw new Error(`地点候选 ${index + 1} ${error instanceof Error ? error.message : String(error)}`) }
     return {
       name: row.name.trim(),
       tags: [...tags].sort((left, right) => tagOrder.get(left)! - tagOrder.get(right)!),

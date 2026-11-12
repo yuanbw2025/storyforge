@@ -1,5 +1,6 @@
 import { estimateTokens } from '../ai/context-budget'
-import { normalizeChapterText, sha256Text } from '../ai/chapter-memory/text-normalization'
+import { CHAPTER_TEXT_NORMALIZATION_VERSION, getChapterDerivedMemoryStatus, normalizeChapterText, sha256Text } from '../ai/chapter-memory/text-normalization'
+import type { Chapter } from '../types'
 import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { db } from '../db/schema'
 import { getFactPredicate } from '../registry/fact-predicate-registry'
@@ -45,7 +46,7 @@ import {
 } from './provider-cache'
 
 const PROVIDER_SOURCE_KEY = 'ragSelection'
-const PROVIDER_VERSION = 'canon-resource-provider-v9'
+const PROVIDER_VERSION = 'canon-resource-provider-v10'
 const NORMALIZATION_VERSION = 'canon-resource-normalization-v1'
 const MAX_PAGE_SIZE = 100
 const MAX_READ_TOKENS = 100_000
@@ -564,12 +565,15 @@ function timeRangeForRow(tableName: string, row: ResourceRow): ContextTimeRangeV
 
 async function chapterDerivedAuthority(row: ResourceRow, field: string): Promise<ContextResourceAuthorityV1> {
   if (!['summary', 'continuityHandoff', 'planReconciliation'].includes(field)) return 'author-canon'
-  const content = typeof row.content === 'string' ? normalizeChapterText(row.content) : ''
-  const currentHash = await sha256Text(content)
-  const expected = field === 'summary'
-    ? row.summarySourceTextHash
-    : (row[field] as { sourceTextHash?: unknown } | undefined)?.sourceTextHash
-  return expected === currentHash ? 'derived-summary' : 'candidate'
+  if (typeof row.content !== 'string') return 'candidate'
+  const chapter = row as unknown as Chapter
+  const status = await getChapterDerivedMemoryStatus(chapter)
+  if (field === 'summary') return status.summary === 'verified' ? 'derived-summary' : 'candidate'
+  if (field === 'continuityHandoff') return status.handoff === 'verified' ? 'derived-summary' : 'candidate'
+  const reconciliation = chapter.planReconciliation
+  if (!reconciliation || reconciliation.sourceTextHash !== status.currentSourceTextHash
+    || reconciliation.textNormalizationVersion !== CHAPTER_TEXT_NORMALIZATION_VERSION) return 'candidate'
+  return 'derived-summary'
 }
 
 async function authorityFor(spec: ResourceSpec, row: ResourceRow, field?: string): Promise<ContextResourceAuthorityV1> {
@@ -836,16 +840,27 @@ async function nestedChapterContinuity(
   if (spec.name !== 'chapters' || typeof row.content !== 'string' || !row.content.trim()) return []
   const plain = normalizeChapterText(row.content)
   const tail = plain.slice(-4_000)
-  const fields = ['content', 'summary', 'continuityHandoff', 'planReconciliation']
-    .filter(field => row[field] !== undefined && exactValue(row[field]).trim())
+  const fields = ['content']
+  const derivedLines: string[] = []
+  const omitted: string[] = []
+  for (const [field, label] of [
+    ['summary', '当前派生摘要'], ['continuityHandoff', '当前派生交接'], ['planReconciliation', '当前派生计划对账（保留作者处理状态）'],
+  ]) {
+    if (row[field] === undefined || !exactValue(row[field]).trim()) continue
+    if (await chapterDerivedAuthority(row, field) !== 'derived-summary') {
+      omitted.push(label)
+      continue
+    }
+    fields.push(field)
+    derivedLines.push(`${label}：${exactValue(row[field])}`)
+  }
   const refs = await Promise.all(fields.map(field => sourceRef(spec, row, field, exactValue(row[field]))))
   const relations = await relationsForRow(spec, row)
   const body = [
     '【章节直接连续性】',
     `章节：${rowTitle(spec, row)}`,
-    row.summary ? `已验摘要：${exactValue(row.summary)}` : '',
-    row.continuityHandoff ? `交接：${exactValue(row.continuityHandoff)}` : '',
-    row.planReconciliation ? `计划对账：${exactValue(row.planReconciliation)}` : '',
+    ...derivedLines,
+    omitted.length ? `未纳入：${omitted.join('、')}已过期或缺少当前来源证据；以下使用实际作者原文。` : '',
     `原文尾部（最多 4000 字符）：\n${tail}`,
   ].filter(Boolean).join('\n')
   return [await makeDescriptor({
@@ -858,7 +873,7 @@ async function nestedChapterContinuity(
     fullContent: body,
     sourceRefs: refs,
     relations: [{ kind: 'parent', targetResourceKey: recordKey(spec, row), direction: 'outgoing' }, ...relations],
-    authority: await chapterDerivedAuthority(row, row.continuityHandoff ? 'continuityHandoff' : 'content'),
+    authority: derivedLines.length ? 'derived-summary' : 'author-canon',
     policyField: 'content',
     timeRange: timeRangeForRow(spec.name, row),
   })]

@@ -23,7 +23,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
-import { localChatMetaCategoryPositions } from './ai-call-meta.mjs'
+import { localConstChatMetaHasCategory } from './ai-call-meta.mjs'
+import {
+  createStaticBindingResolver, staticCallArguments, staticLiteralMember, staticPropertyKey,
+  staticTransportKind, unwrapStaticExpression,
+} from './static-guard-bindings.mjs'
 import { importsNarrativeGold, physicalWorldReleaseType, validateNarrativeBaselineFiles } from './narrative-world-baseline-contract.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -99,15 +103,11 @@ for (const file of walk('src/stores')) {
 
 // ── ② components/hooks 直接写库 ──
 const UI_DIRS = ['src/components', 'src/hooks', 'src/pages']
+const writeMethods = new Set(['add', 'update', 'put', 'delete', 'bulkDelete', 'bulkPut', 'clear'])
 for (const dir of UI_DIRS) {
   for (const file of walk(dir)) {
-    const src = read(file)
-    for (const m of src.matchAll(/\bdb\.\w+\.(add|update|put|delete|bulkDelete|bulkPut)\(/g)) {
-      // 行级:取该匹配所在行,排除注释
-      const lineStart = src.lastIndexOf('\n', m.index) + 1
-      const line = src.slice(lineStart, src.indexOf('\n', m.index))
-      if (line.trim().startsWith('//') || line.trim().startsWith('*')) continue
-      violations.push(`[②直接写库] ${file}: \`${m[0]}\` —— UI 层不得直接写库,应走 adopt() 或 store action`)
+    for (const { target, method, line } of findDbWrites(parseSource(file))) {
+      violations.push(`[②直接写库] ${file}:${line}: db.${target}.${method}(...) —— UI 层不得直接写库,应走 adopt() 或 store action`)
     }
   }
 }
@@ -136,64 +136,76 @@ const AI_META_FORWARDERS = new Set([
   'src/lib/reference-analysis/pipeline.ts',
 ])
 
-function findCallRanges(src, callee) {
-  const ranges = []
-  const re = new RegExp(`\\b${callee.replace('.', '\\.')}\\s*\\(`, 'g')
-  let m
-  while ((m = re.exec(src))) {
-    const prefix = src.slice(Math.max(0, m.index - 24), m.index)
-    if (/\bfunction\s*$/.test(prefix) || /\bexport\s+async\s+function\s*$/.test(prefix)) continue
-    let depth = 0
-    let quote = null
-    let escaped = false
-    for (let i = m.index + callee.length; i < src.length; i++) {
-      const ch = src[i]
-      if (quote) {
-        if (escaped) escaped = false
-        else if (ch === '\\') escaped = true
-        else if (ch === quote) quote = null
-        continue
-      }
-      if (ch === '"' || ch === "'" || ch === '`') {
-        quote = ch
-      } else if (ch === '(') {
-        depth++
-      } else if (ch === ')') {
-        depth--
-        if (depth === 0) {
-          ranges.push({ start: m.index, end: i + 1, text: src.slice(m.index, i + 1) })
-          break
-        }
-      }
+/** @param {ts.SourceFile} ast @param {string} file */
+function findUncategorizedTransportCalls(ast, file) {
+  // Keep the existing physical forwarding exemptions. The binder recognizes
+  // the actual hook/client import before applying any category policy.
+  if (file === 'src/lib/agent/formal-ai-entry.ts' || file === 'src/lib/ai/client.ts') return []
+  if (!ast.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
+    && /(?:^|\/)(?:client|useAIStream)(?:\.[cm]?[jt]sx?)?$/.test(node.moduleSpecifier.text))) return []
+  const bindings = createStaticBindingResolver(ast)
+  /** @type {Array<{ name: string, line: number }>} */
+  const findings = []
+  visit(ast, /** @param {ts.Node} node */ node => {
+    if (!ts.isCallExpression(node)) return
+    const reported = new Set()
+    for (const origin of bindings.resolve(node.expression)) {
+      const { segments, args } = staticCallArguments(origin, node)
+      const role = staticTransportKind(bindings, origin, segments)
+      if (!role || reported.has(role)) continue
+      if (AI_META_FORWARDERS.has(file) && /\bmeta\b/.test(node.getText(ast))) continue
+      const meta = args[role === 'streamChat' ? 4 : 2]
+      const value = unwrapStaticExpression(meta)
+      if (value && ts.isObjectLiteralExpression(value) && value.properties.some(property => (
+        (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property))
+        && staticPropertyKey(property.name) === 'category'
+      ))) continue
+      if (role === 'chat' && localConstChatMetaHasCategory(node, meta, bindings.declaration)) continue
+      reported.add(role)
+      findings.push({
+        name: role === 'hook-start' ? 'ai.start' : role,
+        line: ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1,
+      })
     }
-  }
-  return ranges
+  })
+  return findings
 }
 
 for (const dir of ['src/components', 'src/hooks', 'src/lib']) {
   for (const file of walk(dir)) {
-    const src = read(file)
-    let localMetaCategories
-    for (const callee of ['ai.start', 'chat', 'streamChat']) {
-      for (const call of findCallRanges(src, callee)) {
-        const lineStart = src.lastIndexOf('\n', call.start) + 1
-        const lineEnd = src.indexOf('\n', call.start)
-        const lineText = src.slice(lineStart, lineEnd < 0 ? src.length : lineEnd).trim()
-        if (lineText.startsWith('//') || lineText.startsWith('*')) continue
-        if (file === 'src/lib/agent/formal-ai-entry.ts') continue
-        if (AI_META_FORWARDERS.has(file) && /\bmeta\b/.test(call.text)) continue
-        if (file === 'src/lib/ai/client.ts') continue
-        if (!/\bcategory\s*:/.test(call.text)) {
-          if (callee === 'chat') {
-            localMetaCategories ??= localChatMetaCategoryPositions(file, src)
-            if (localMetaCategories.has(call.start)) continue
-          }
-          const line = src.slice(0, call.start).split('\n').length
-          violations.push(`[④AI分类] ${file}:${line}: \`${callee}(...)\` 缺少 category meta,消耗统计与 AI manual 会漏记`)
-        }
-      }
+    for (const { name, line } of findUncategorizedTransportCalls(parseSource(file), file)) {
+      violations.push(`[④AI分类] ${file}:${line}: \`${name}(...)\` 缺少 category meta,消耗统计与 AI manual 会漏记`)
     }
   }
+}
+
+const categoryBindingSelfTest = ts.createSourceFile('src/lib/category-binding-test.ts', `
+  import { chat as request } from './ai/client'
+  import * as api from './ai/client'
+  import { useAIStream as hook } from '../hooks/useAIStream'
+  request([{ content: 'category: misleading string' }], {}, {})
+  const { ['chat']: send } = api
+  send([], {})
+  const stream = api['streamChat']
+  stream([], {}, undefined, undefined, {})
+  const { start: launch } = hook()
+  launch([], {}, {})
+  const outsideMeta = { category: 'x' }
+  function governed() {
+    const meta = { category: 'x' }
+    send([], {}, meta)
+    send([], {}, { ['category']: 'x' })
+    stream([], {}, undefined, undefined, { category: 'x' })
+    launch([], {}, { category: 'x' })
+  }
+  function unrelated(request) { request([], {}); const client = { chat() {} }; client.chat() }
+  // request([], {}) is not a call; neither is the string below.
+  const text = "chat([], {})"
+  function uncategorized() { send([], {}, outsideMeta) }
+`, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+if (findUncategorizedTransportCalls(categoryBindingSelfTest, categoryBindingSelfTest.fileName)
+  .map(item => item.name).join(',') !== 'chat,chat,streamChat,ai.start,chat') {
+  violations.push('[④守卫自测] category 与本地 const meta 的绑定规则失效')
 }
 
 // ── ⑤ exportable 表必须接入 JSON 导出/导入 ──
@@ -294,29 +306,30 @@ visit(adoptionAst, node => {
   }
 })
 
-const writeMethods = new Set(['add', 'update', 'put', 'delete', 'bulkDelete', 'bulkPut', 'clear'])
-function dbTableFromExpression(node) {
-  if (ts.isPropertyAccessExpression(node)) {
-    if (ts.isIdentifier(node.expression) && node.expression.text === 'db') return node.name.text
-    return dbTableFromExpression(node.expression)
-  }
-  if (ts.isCallExpression(node)) return dbTableFromExpression(node.expression)
-  return null
-}
-
+/** @param {ts.SourceFile} sourceFile */
 function findDbWrites(sourceFile) {
+  if (!sourceFile.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
+    && /(?:^|\/)schema(?:\.[cm]?[jt]sx?)?$/.test(node.moduleSpecifier.text))) return []
+  const { resolve } = createStaticBindingResolver(sourceFile)
+  /** @type {Array<{ target: string, method: string, line: number }>} */
   const writes = []
-  visit(sourceFile, node => {
-    if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return
-    const method = node.expression.name.text
-    if (!writeMethods.has(method)) return
-    const target = dbTableFromExpression(node.expression.expression)
-    if (!target) return
-    writes.push({
-      target,
-      method,
-      line: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
-    })
+  visit(sourceFile, /** @param {ts.Node} node */ node => {
+    if (!ts.isCallExpression(node)) return
+    const seen = new Set()
+    for (const origin of resolve(node.expression)) {
+      if (origin.kind !== 'import' || origin.module !== 'src/lib/db/schema' || origin.segments[0]?.key !== 'db') continue
+      const access = origin.segments
+      const terminal = access[access.length - 1]?.key
+      const methodIndex = access.length - (terminal === 'call' || terminal === 'apply' ? 2 : 1)
+      const method = access[methodIndex]?.key
+      if (methodIndex < 2 || !method || !writeMethods.has(method)) continue
+      const target = access[1]?.key === 'table'
+        ? staticLiteralMember(access[2]?.args?.[0])
+        : access[1]?.key
+      if (!target || seen.has(target)) continue
+      seen.add(target)
+      writes.push({ target, method, line: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1 })
+    }
   })
   return writes
 }
@@ -367,8 +380,8 @@ for (const dir of ['src/components', 'src/hooks', 'src/pages', 'src/lib']) {
 
 // 守卫自测：防止 AST 扫描器自身退化后与被检查代码一起“假绿”。
 const selfTestSource = ts.createSourceFile(
-  'architecture-self-test.ts',
-  "await db.references.update(1, {}); await db.referenceChunkAnalysis.where('referenceId').equals(1).delete(); buildCodexContext(1, null)",
+  'src/lib/architecture-self-test.ts',
+  "import { db } from './db/schema'; await db.references.update(1, {}); await db.referenceChunkAnalysis.where('referenceId').equals(1).delete(); buildCodexContext(1, null)",
   ts.ScriptTarget.Latest,
   true,
   ts.ScriptKind.TS,
@@ -376,6 +389,26 @@ const selfTestSource = ts.createSourceFile(
 const selfTestWrites = findDbWrites(selfTestSource).map(write => `${write.target}.${write.method}`)
 if (!selfTestWrites.includes('references.update') || !selfTestWrites.includes('referenceChunkAnalysis.delete')) {
   violations.push('[⑧守卫自测] lib 写回 AST 扫描器未识别基准违规')
+}
+const dbAliasSelfTest = ts.createSourceFile('src/lib/architecture-alias-test.ts', `
+  import { db as imported } from './db/schema'
+  import * as schema from './db/schema'
+  const store = imported
+  const { references: refs } = store
+  refs['update'](1, {})
+  const { ['put']: put } = schema.db['references']
+  put.call(refs, {})
+  schema['db'].table('references')['delete'](1)
+  const clear = refs.clear.bind(refs)
+  clear()
+  function shadow(store, refs) { store.references.put({}); refs['update'](1, {}) }
+  function unrelated() { const db = { references: { update() {} } }; db.references.update(1, {}) }
+  // db.references.delete(1) is a comment, not a write.
+  const dynamic = 'references'; store[dynamic].delete(1)
+`, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+const aliasDbWrites = findDbWrites(dbAliasSelfTest).map(write => `${write.target}.${write.method}`)
+if (aliasDbWrites.join(',') !== 'references.update,references.put,references.delete,references.clear') {
+  violations.push('[⑧守卫自测] alias/namespace/literal/解构与作用域回归：' + aliasDbWrites.join(','))
 }
 if (!findLegacyContextCalls(selfTestSource).some(call => call.name === 'buildCodexContext')) {
   violations.push('[⑨守卫自测] context builder AST 扫描器未识别基准违规')
@@ -1877,7 +1910,7 @@ if (!productRuntimeMediaLibrarySource.includes('productRuntimeSessionId: number'
   violations.push('[㉝B运行媒资隔离] 运行中新生成的媒资必须绑定具体 ProductRuntimeSession')
 }
 if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'")
-  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 13')
+  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 14')
   || !currentSchemaSource.includes('this.version(1).stores(STORYFORGE_STORES_V1)')
   || !currentSchemaSource.includes('this.version(2).stores(STORYFORGE_STORES_V2)')
   || !currentSchemaSource.includes('this.version(3).stores(STORYFORGE_STORES_V3)')
@@ -1889,11 +1922,15 @@ if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'"
   || !currentSchemaSource.includes('this.version(10).stores(STORYFORGE_STORES_V10)')
   || !currentSchemaSource.includes('this.version(11).stores(STORYFORGE_STORES_V11)')
   || !currentSchemaSource.includes('this.version(12).stores(STORYFORGE_STORES_V12)')
+  || !currentSchemaSource.includes('this.version(13).stores(STORYFORGE_STORES_V13)')
+  || !/export const STORYFORGE_STORES_V13\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V12,?\s*\}/.test(currentSchemaSource)
+  || !/export const STORYFORGE_STORES\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V13,/.test(currentSchemaSource)
+  || !currentSchemaSource.includes("worldSourceReceipts: '++id, projectId, worldId, worldReleaseId, &[worldId+declarationHash], [worldId+packageDigest], [worldId+releaseUid]'" )
   || !currentSchemaSource.includes('this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)')
-  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 13
+  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 14
   || currentSchemaSource.includes('.upgrade(')
   || !currentSchemaSource.includes("productMediaAssets: '++id, projectId, worldId, workId, ownerKind, productType, productReleaseId, productRuntimeSessionId, &[productReleaseId+assetKey+version], &[productRuntimeSessionId+assetKey+version]")) {
-  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v13、保留 v1 至 v12 兼容桥、零数据改写 upgrade，并保留当前根/媒资隔离索引')
+  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v14、保留 v1 至 v13 兼容桥与独立 v13 形状、零数据改写 upgrade，并保留新来源回执与当前根/媒资隔离索引')
 }
 if (!deriveImportSrc.includes('ProductMedia 必须具有唯一、有效的产品所有者')
   || !deriveImportSrc.includes("asset.ownerKind === 'release'")
@@ -1957,6 +1994,8 @@ const WORLD_RELEASE_PHYSICAL_OWNERS = new Set([
   'src/lib/world-engine/narrative-incremental.ts',
   'src/lib/world-engine/narrative-index-cache.ts',
   'src/lib/world-engine/release-codec.ts',
+  // World-owned seal/cache provenance checks exact frozen owner roots.
+  'src/lib/world-engine/publication-origin.ts',
   'src/lib/world-engine/releases.ts',
   'src/lib/world-engine/world-reference.ts',
   'src/lib/world-engine/world-reference-v2.ts',

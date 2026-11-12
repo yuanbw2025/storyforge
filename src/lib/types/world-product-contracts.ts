@@ -1,3 +1,4 @@
+import { type WorldSourcePurposeProofV1 } from '../world-engine/source-purpose-contract'
 import type {
   ContextAccessPolicyV1,
   ContextResourceDepthV1,
@@ -119,6 +120,8 @@ export interface ProductSourcePlanV1 {
   productType: UpperProductKindV1
   productInstanceKey: string
   worldReference: WorldReferenceV1
+  /** Optional because historical frozen plans keep their original bytes. */
+  sourcePurpose?: WorldSourcePurposeProofV1
   adapter: WorldRequirementAdapterSnapshotV1
   requirements: WorldRequirementResolutionV1[]
   /** User/adapter selected starting set. Production may progressively discover

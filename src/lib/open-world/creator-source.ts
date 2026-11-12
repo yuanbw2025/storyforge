@@ -1,3 +1,6 @@
+import { type WorldSourcePurposeProofV1 } from '../world-engine/source-purpose-contract'
+import { freezeWorldSourcePurposeV1, revalidateWorldSourcePurposeV1 } from '../world-engine/source-purpose-actions'
+import { listLocalWorldReferenceChoicesV1 } from '../world-engine/reference-cache'
 import {
   listAdaptationSourceOptions,
   previewAdaptationSourceSelection,
@@ -198,13 +201,32 @@ export async function listTextOpenWorldCreatorWorldSourcesV1(
   scope: WorkspaceScope,
 ): Promise<TextOpenWorldCreatorWorldSourceCandidateV1[]> {
   const entries = await listWorldReferenceCatalogV1(scope)
-  return Promise.all(entries.map(entry => inspectWorldCatalogEntryV1({ scope, entry })))
+  const choices = await listLocalWorldReferenceChoicesV1({ purpose: 'text-open-world', scope })
+  const byId = new Map(entries.map(entry => [entry.reference.localReleaseRecordId, entry]))
+  return Promise.all(choices.flatMap(choice => {
+    const entry = byId.get(choice.id)
+    if (!entry) return []
+    return [(async () => {
+      const candidate = await inspectWorldCatalogEntryV1({ scope, entry })
+      const sourcePurpose = choice.purposeAllowed
+        ? await freezeWorldSourcePurposeV1({
+            worldReleaseId: choice.id, expectedProjectId: scope.projectId, expectedWorldId: scope.worldId,
+            purpose: 'text-open-world', sourceDeclarationHash: choice.sourceDeclarationHash,
+          }).catch(() => undefined)
+        : undefined
+      return { ...candidate, sourceChoiceKey: choice.choiceKey, sourcePurpose, purposeAllowed: !!sourcePurpose,
+        sourceAttribution: choice.attribution, sourceAuthorName: choice.authorName,
+        sourceLicense: choice.license, sourceWarnings: choice.contentWarnings }
+    })()]
+  }))
 }
 
 export async function inspectTextOpenWorldCreatorWorldSourceV1(input: {
   scope: WorkspaceScope
   localReleaseRecordId: number
   expectedReleaseHash: string
+  sourcePurpose?: WorldSourcePurposeProofV1
+  verifySourcePurpose?: boolean
 }): Promise<TextOpenWorldCreatorWorldSourceCandidateV1> {
   if (!Number.isSafeInteger(input.localReleaseRecordId) || input.localReleaseRecordId < 1) {
     fail('world-release-id', 'localReleaseRecordId 必须是正整数')
@@ -216,7 +238,15 @@ export async function inspectTextOpenWorldCreatorWorldSourceV1(input: {
   if (entry.reference.releaseHash !== input.expectedReleaseHash) {
     fail('world-release-stale', 'WorldRelease Hash 已变化或候选身份不匹配')
   }
-  return inspectWorldCatalogEntryV1({ scope: input.scope, entry })
+  const candidate = await inspectWorldCatalogEntryV1({ scope: input.scope, entry })
+  if (!input.sourcePurpose) return candidate
+  if (input.verifySourcePurpose === false) return { ...candidate, sourcePurpose: input.sourcePurpose }
+  const sourcePurpose = await revalidateWorldSourcePurposeV1({
+    worldReleaseId: input.localReleaseRecordId, expectedProjectId: input.scope.projectId,
+    expectedWorldId: input.scope.worldId, purpose: 'text-open-world', proof: input.sourcePurpose,
+  })
+  return { ...candidate, sourcePurpose }
+
 }
 
 function novelGaps(

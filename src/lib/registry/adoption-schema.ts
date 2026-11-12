@@ -252,6 +252,7 @@ const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
     identity: { kind: 'composite', fields: ['outlineNodeId', 'title'] },
     duplicatePolicy: 'update',
     required: ['outlineNodeId', 'title'],
+    createDefaults: { content: '' },
     autoStamps: ['projectId', 'createdAt', 'updatedAt'],
     ownerFrom: 'work',
     fkChecks: [
@@ -361,6 +362,7 @@ const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
     identity: 'name',
     duplicatePolicy: 'merge',
     required: ['name'],
+    createDefaults: { tags: '[]' },
     autoStamps: ['projectId', 'createdAt', 'updatedAt'],
     fkChecks: [{ field: 'parentId', target: 'importantLocations' }],
   },

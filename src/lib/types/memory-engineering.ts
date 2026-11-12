@@ -78,6 +78,8 @@ export interface WorkspaceDocumentBindingV1 extends WorkspaceDocumentHashTripleV
 }
 
 export interface WorkspaceSelfCheckItemV1 extends WorkspaceDocumentHashTripleV1 {
+  /** Exact on-disk bytes observed during this check. Older journals omit this witness. */
+  fileByteHash?: string | null
   identity: WorkspaceDocumentIdentityV1
   relativePath: string
   codec: WorkspaceDocumentCodecV1

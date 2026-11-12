@@ -1,3 +1,6 @@
+import { listLocalWorldReferenceChoicesV1 } from '../../lib/world-engine/reference-cache'
+import { freezeWorldSourcePurposeV1, revalidateWorldSourcePurposeV1 } from '../../lib/world-engine/source-purpose-actions'
+import { type WorldSourcePurposeProofV1 } from '../../lib/world-engine/source-purpose-contract'
 import MediaSelection from '../character-interaction/MediaSelection'
 import {chatVisualMediaProfileV1} from '../../lib/character-interaction/visual-intent'
 import type {ChatMediaProductionDecisionV1} from '../../lib/character-interaction/media-selection'
@@ -53,7 +56,6 @@ import {
   readProductProductionProgressV1,
   recoverImportedProductProductionProofsV1,
   readProductProductionTaskEvidenceV1,
-  readTextAdventureMediaAssetBytesV1,
   regenerateTextAdventureMediaAssetsV1,
   reviseTextAdventureMediaAssetV1,
   reviseTextAdventureContentV1,
@@ -108,55 +110,28 @@ import {
 } from '../../lib/product-platform/distribution-bundle'
 import { downloadTextFile } from '../../lib/export/text-export'
 import { hashProductProductionValueV2 } from '../../lib/product-production/hash'
-import { isTextAdventureReadableGlyphViolationV1 } from '../../lib/product-production/text-adventure-quality'
 import { isTextOpenWorldBudgetRecoveryFailureV1 } from '../../lib/open-world/creator-budget-recovery-policy'
 import { readTextOpenWorldProductionSourceKindV1, TEXT_OPEN_WORLD_WORLD_SOURCE_REQUIRED_V1 } from '../../lib/open-world/source-admission'
 
 type RepairCandidateSectionV1 = SceneScriptsRepairSectionV1 | QuestFinalizeRepairSectionV1 | ItemRewardRepairSectionV1 | CraftingEconomyRepairSectionV1 | NpcRuntimeRepairSectionV1
 
-export function visualReviewRepairTargets(artifact: ProductProductionReviewArtifactV1 | undefined): Array<{
-  artifactKey: string
-  verdict: string
-  issues: Array<{ severity: string; category: string; detail: string; recommendation: string }>
-}> {
-  if (!artifact?.payload || typeof artifact.payload !== 'object' || Array.isArray(artifact.payload)) return []
-  const reviews = (artifact.payload as Record<string, unknown>).reviews
-  if (!Array.isArray(reviews)) return []
-  return reviews.flatMap(value => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return []
-    const row = value as Record<string, unknown>
-    if (typeof row.artifactKey !== 'string' || !Array.isArray(row.issues)) return []
-    const issues = row.issues.flatMap(issueValue => {
-      if (!issueValue || typeof issueValue !== 'object' || Array.isArray(issueValue)) return []
-      const issue = issueValue as Record<string, unknown>
-      return typeof issue.severity === 'string' && typeof issue.category === 'string'
-        && typeof issue.detail === 'string' && typeof issue.recommendation === 'string'
-        ? [{
-            severity: isTextAdventureReadableGlyphViolationV1(issue) ? 'blocking' : issue.severity,
-            category: issue.category,
-            detail: issue.detail,
-            recommendation: issue.recommendation,
-          }]
-        : []
-    })
-    const verdict = String(row.verdict ?? '')
-    return verdict === 'revise' || verdict === 'replace' || verdict === 'human-review'
-      || issues.some(issue => issue.severity === 'blocking')
-      ? [{ artifactKey: row.artifactKey, verdict, issues }]
-      : []
-  })
-}
 import {
   inspectProductProductionBuildRecoveryPolicyV1,
   readProductProductionRecoveryTaskKeyV1,
 } from '../../lib/product-production/recovery-policy'
 import TextOpenWorldCreatorArtifactBrowser from '../text-game/TextOpenWorldCreatorArtifactBrowser'
 import TextOpenWorldResponsibilityOverview from '../text-game/TextOpenWorldResponsibilityOverview'
+import {
+  TextAdventureMediaEvidence, TextAdventureMediaThumbnail, mediaRequirementDisplay,
+  mediaArtifactPurposeLabel, mediaVisualReviewDisplay, visualReviewRepairTargets,
+} from './TextAdventureMediaReview'
 import TextOpenWorldCreatorMediaStudio from '../text-game/TextOpenWorldCreatorMediaStudio'
 import TextOpenWorldVisualReview from '../text-game/TextOpenWorldVisualReview'
 import TextOpenWorldCreatorQualityStudio from '../text-game/TextOpenWorldCreatorQualityStudio'
 import TextOpenWorldCreatorReleaseStudio from '../text-game/TextOpenWorldCreatorReleaseStudio'
 import { canReviseStoppedTextOpenWorldCreatorBriefV1 } from '../../lib/open-world/creator-brief-lifecycle'
+export { TextAdventureMediaThumbnail, visualReviewRepairTargets } from './TextAdventureMediaReview'
+
 type SupportedProduct = ProductionProductKindV1
 
 const PRODUCT_LABELS: Record<SupportedProduct, string> = {
@@ -212,53 +187,6 @@ function formatBytes(value: number): string {
 function formatDurationMs(value: number): string {
   const totalSeconds = Math.max(0, Math.floor(value / 1000))
   return `${String(Math.floor(totalSeconds / 60)).padStart(2, '0')}:${String(totalSeconds % 60).padStart(2, '0')}`
-}
-
-export function TextAdventureMediaThumbnail(props: { scope: WorkspaceScope; asset: TextAdventureMediaAssetV1 }) {
-  const identity = `${props.scope.projectId}:${props.scope.worldId}:${props.scope.workId}:`
-    + `${props.asset.assetKey}:${props.asset.blobObjectId}:${props.asset.contentHash}`
-  const [loaded, setLoaded] = useState<{ identity: string; url: string } | null>(null)
-  const [failedIdentity, setFailedIdentity] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState(false)
-  useEffect(() => {
-    let active = true
-    let objectUrl = ''
-    setFailedIdentity(null)
-    setExpanded(false)
-    void readTextAdventureMediaAssetBytesV1({ scope: props.scope, asset: props.asset })
-      .then(data => {
-        if (!active) return
-        objectUrl = URL.createObjectURL(new Blob([data], { type: props.asset.mimeType }))
-        setLoaded({ identity, url: objectUrl })
-      })
-      .catch(() => { if (active) setFailedIdentity(identity) })
-    return () => {
-      active = false
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
-    }
-  }, [identity, props.asset, props.scope])
-  useEffect(() => {
-    if (!expanded) return
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setExpanded(false)
-    }
-    document.addEventListener('keydown', closeOnEscape)
-    return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [expanded])
-  const url = loaded?.identity === identity ? loaded.url : ''
-  if (failedIdentity === identity) return <div className="flex min-h-40 items-center justify-center bg-error/5 text-[10px] text-error">图片校验失败</div>
-  if (!url) return <div className="flex min-h-40 items-center justify-center bg-bg-surface text-[10px] text-text-muted">正在校验图片…</div>
-  const altText = String(props.asset.metadata.altText ?? '')
-  return <>
-    <div className="relative flex min-h-40 items-center justify-center bg-bg-surface p-2">
-      <img src={url} alt={altText} className="max-h-[32rem] w-full object-contain" data-testid={`text-adventure-media-image-${props.asset.artifactKey}`} />
-      <button type="button" onClick={() => setExpanded(true)} className="absolute bottom-3 right-3 rounded border border-border bg-bg-base/90 px-2 py-1 text-[10px] text-text-primary shadow" aria-label={`放大查看 ${props.asset.artifactKey}`}>放大原图</button>
-    </div>
-    {expanded && <div role="dialog" aria-modal="true" aria-label={`${props.asset.artifactKey} 原图审查`} className="fixed inset-0 z-50 flex flex-col bg-black/90 p-4" data-testid={`text-adventure-media-lightbox-${props.asset.artifactKey}`}>
-      <div className="mb-3 flex items-center justify-between gap-3 text-xs text-white"><span>{props.asset.artifactKey} · 原比例完整图</span><div className="flex gap-2"><a href={url} target="_blank" rel="noreferrer" className="rounded border border-white/40 px-3 py-1.5">新窗口打开</a><button type="button" onClick={() => setExpanded(false)} className="rounded border border-white/40 px-3 py-1.5">关闭</button></div></div>
-      <img src={url} alt={altText} className="min-h-0 flex-1 object-contain" />
-    </div>}
-  </>
 }
 
 function nonEmptyLines(value: string): string[] {
@@ -530,86 +458,6 @@ function mediaAnchorDisplay(
   }
 }
 
-interface MediaRequirementDisplayV1 {
-  artifactKey: string
-  mediaKind: string
-  sceneTag: string
-  beatKey: string
-  prompt: string
-  altText: string
-  width: number
-  height: number
-  characterAnchorRefs: string[]
-  hardConstraints: string[]
-}
-
-function mediaRequirementDisplay(
-  artifacts: ProductProductionReviewArtifactV1[],
-): Map<string, MediaRequirementDisplayV1> {
-  const artifact = artifacts.find(item => item.artifactKey === 'media.requirements')
-  if (!artifact?.payload || typeof artifact.payload !== 'object' || Array.isArray(artifact.payload)) return new Map()
-  const visual = (artifact.payload as Record<string, unknown>).visual
-  if (!Array.isArray(visual)) return new Map()
-  return new Map(visual.flatMap(value => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return []
-    const item = value as Record<string, unknown>
-    if (typeof item.artifactKey !== 'string' || typeof item.mediaKind !== 'string'
-      || typeof item.sceneTag !== 'string' || typeof item.beatKey !== 'string'
-      || typeof item.prompt !== 'string' || typeof item.altText !== 'string'
-      || !Number.isFinite(item.width) || !Number.isFinite(item.height)
-      || !Array.isArray(item.characterAnchorRefs) || !Array.isArray(item.hardConstraints)) return []
-    return [[item.artifactKey, {
-      artifactKey: item.artifactKey, mediaKind: item.mediaKind,
-      sceneTag: item.sceneTag, beatKey: item.beatKey, prompt: item.prompt, altText: item.altText,
-      width: Number(item.width), height: Number(item.height),
-      characterAnchorRefs: item.characterAnchorRefs.filter((key): key is string => typeof key === 'string'),
-      hardConstraints: item.hardConstraints.filter((rule): rule is string => typeof rule === 'string'),
-    }] as const]
-  }))
-}
-
-interface MediaVisualReviewDisplayV1 {
-  verdict: string
-  scores: Record<string, number> | null
-  issues: Array<{ severity: string; category: string; detail: string; recommendation: string }>
-}
-
-function mediaVisualReviewDisplay(
-  artifacts: ProductProductionReviewArtifactV1[],
-): Map<string, MediaVisualReviewDisplayV1> {
-  const artifact = artifacts.find(item => item.artifactKey === 'quality.visual-review')
-  if (!artifact?.payload || typeof artifact.payload !== 'object' || Array.isArray(artifact.payload)) return new Map()
-  const reviews = (artifact.payload as Record<string, unknown>).reviews
-  if (!Array.isArray(reviews)) return new Map()
-  return new Map(reviews.flatMap(value => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return []
-    const item = value as Record<string, unknown>
-    if (typeof item.artifactKey !== 'string' || typeof item.verdict !== 'string' || !Array.isArray(item.issues)) return []
-    const scores = item.scores && typeof item.scores === 'object' && !Array.isArray(item.scores)
-      ? Object.fromEntries(Object.entries(item.scores as Record<string, unknown>)
-          .filter((entry): entry is [string, number] => typeof entry[1] === 'number')) : null
-    const issues = item.issues.flatMap(issueValue => {
-      if (!issueValue || typeof issueValue !== 'object' || Array.isArray(issueValue)) return []
-      const issue = issueValue as Record<string, unknown>
-      return typeof issue.severity === 'string' && typeof issue.category === 'string'
-        && typeof issue.detail === 'string' && typeof issue.recommendation === 'string'
-        ? [{ severity: issue.severity, category: issue.category, detail: issue.detail, recommendation: issue.recommendation }]
-        : []
-    })
-    return [[item.artifactKey, { verdict: item.verdict, scores, issues }] as const]
-  }))
-}
-
-function mediaArtifactPurposeLabel(artifactKey: string): string {
-  return ({
-    'media.visual.001': '封面与开场背景', 'media.visual.002': '主角视觉锚点',
-    'media.visual.003': '区域地图', 'media.visual.004': '第一幕主线转折 CG',
-    'media.visual.005': '次级区域锚点', 'media.visual.006': '第一件重要物品',
-    'media.visual.007': '核心配角视觉锚点', 'media.visual.008': '第二幕主线转折 CG',
-    'media.visual.009': '辅助角色视觉锚点', 'media.visual.010': '第三幕主线转折 CG',
-    'media.visual.011': '第二件重要物品', 'media.visual.012': '结局后果 CG',
-  } as Record<string, string>)[artifactKey] ?? '插图职责'
-}
 function buildFailureCode(value: string | undefined): string | null {
   if (!value) return null
   try {
@@ -674,8 +522,8 @@ export default function ProductProductionStudio(props: {
   initialSource?: ProductProductionHandoffV1 | null
   managedCreation?: boolean
   embedded?: boolean
-  chatSetup?: {settings:ChatAuthoringSettings;title:string;worldReleaseId:number|null}
-  avgSetup?: { settings: AvgAuthoringSettingsV1; title: string; worldReleaseId: number | null }
+  chatSetup?: {settings:ChatAuthoringSettings;title:string;worldReleaseId:number|null;sourcePurpose?:WorldSourcePurposeProofV1}
+  avgSetup?: { settings: AvgAuthoringSettingsV1; title: string; worldReleaseId: number | null; sourcePurpose?: WorldSourcePurposeProofV1 }
   onProductionSelected?: (id: number | null) => void
   authorOptIn?: boolean
   view?: 'confirm' | 'production' | 'review' | 'release'
@@ -693,6 +541,8 @@ export default function ProductProductionStudio(props: {
   const [selectedProductionId, setSelectedProductionId] = useState<number | null>(null)
   const [details, setDetails] = useState<ProductProductionDetailsV1 | null>(null)
   const [worldReleaseId, setWorldReleaseId] = useState<number | null>(props.chatSetup?.worldReleaseId ?? props.avgSetup?.worldReleaseId ?? null)
+  const [purposeChoices, setPurposeChoices] = useState<Awaited<ReturnType<typeof listLocalWorldReferenceChoicesV1>>>([])
+  const [pickedSource, setPickedSource] = useState<{ releaseId: number; declarationHash?: string; key: string; useSetupPurpose?: boolean } | null>(null)
   const [suggestions, setSuggestions] = useState<ProductStartingPointSuggestionV1[]>([])
   const [suggestionKey, setSuggestionKey] = useState('')
   const [sourceOptions, setSourceOptions] = useState<ProductProductionSourceOptionsV1 | null>(null)
@@ -862,7 +712,7 @@ export default function ProductProductionStudio(props: {
       props.allowedProducts, props.initialProduct ?? null, props.productionOnly ?? false]),
     setupKey: JSON.stringify([props.initialSource ?? null, props.chatSetup ?? null, props.avgSetup ?? null]),
     initialProductionId: props.initialProductionId ?? null,
-    selectedProductionId, productType, worldReleaseId, title, draft,
+    selectedProductionId, productType, worldReleaseId, sourceChoiceKey: pickedSource?.key ?? null, title, draft,
   }
   const briefSaveViewRef = useRef(briefSaveView)
   briefSaveViewRef.current = briefSaveView
@@ -876,7 +726,7 @@ export default function ProductProductionStudio(props: {
   }, [])
   useLayoutEffect(() => {
     invalidateCommandUi()
-  }, [briefSaveView.ownerKey, briefSaveView.setupKey, productType, worldReleaseId, invalidateCommandUi])
+  }, [briefSaveView.ownerKey, briefSaveView.setupKey, briefSaveView.sourceChoiceKey, productType, worldReleaseId, invalidateCommandUi])
   const sourceAdmissionKey = `${props.scope.projectId}:${props.scope.worldId}:${props.scope.workId}:${selectedProductionId}:${details?.production.id ?? null}:${details?.production.stateRevision ?? null}:${details?.brief?.briefHash ?? ''}`
   const sourceAdmissionKeyRef = useRef(sourceAdmissionKey)
   sourceAdmissionKeyRef.current = sourceAdmissionKey
@@ -1165,16 +1015,20 @@ export default function ProductProductionStudio(props: {
     performanceLabAbort.current?.abort('product-production-build-changed')
   }, [details?.build?.id])
 
+  const stillOwnsSourceChoice = (origin: typeof briefSaveView) => {
+    const current = briefSaveViewRef.current
+    return mountedRef.current && current.ownerKey === origin.ownerKey && current.setupKey === origin.setupKey
+      && current.productType === origin.productType && current.worldReleaseId === origin.worldReleaseId
+      && current.sourceChoiceKey === origin.sourceChoiceKey
+  }
+
   const run = async (action: () => Promise<void | false>, label = '受治理操作', mode: 'new-work' | 'maintenance' = 'new-work') => {
     const generation = ++commandUiGeneration.current
     const origin = briefSaveViewRef.current
     // Parent selection of this run's first new intent is not a different user
     // choice. Explicit navigation invalidates only its transient UI ownership.
     const ownsUi = () => {
-      const current = briefSaveViewRef.current
-      return mountedRef.current && commandUiGeneration.current === generation
-        && current.ownerKey === origin.ownerKey && current.setupKey === origin.setupKey
-        && current.productType === origin.productType && current.worldReleaseId === origin.worldReleaseId
+      return commandUiGeneration.current === generation && stillOwnsSourceChoice(origin)
     }
     setBusy(true); setError(''); setMessage('')
     const activity: CommandActivityV1 = { label, status: 'pending', detail: '正在等待 durable receipt…' }
@@ -1203,9 +1057,22 @@ export default function ProductProductionStudio(props: {
     finally { if (ownsUi()) setBusy(false) }
   }
 
+  const verifyPurpose = async (releaseId: number) => {
+    const setup = props.chatSetup ?? props.avgSetup
+    const carried = (!pickedSource || pickedSource.useSetupPurpose) && setup?.worldReleaseId === releaseId
+      ? setup.sourcePurpose : undefined
+    const purposeInput = { worldReleaseId: releaseId, expectedProjectId: props.scope.projectId,
+      expectedWorldId: props.scope.worldId, purpose: productType }
+    return carried ? revalidateWorldSourcePurposeV1({ ...purposeInput, proof: carried })
+      : freezeWorldSourcePurposeV1({ ...purposeInput, sourceDeclarationHash: pickedSource?.releaseId === releaseId ? pickedSource.declarationHash : undefined })
+  }
+
   const consult = () => run(async () => {
     if (worldReleaseId == null) throw new Error('请先发布一个 WorldRelease。')
+    const sourceChoice = briefSaveViewRef.current
+    await verifyPurpose(worldReleaseId)
     const result = await consultProductProductionStartV1({ scope: props.scope, worldReleaseId, productType })
+    if (!stillOwnsSourceChoice(sourceChoice)) return false
     setSuggestions(result.suggestions)
     setSourceOptions(result.sourceOptions)
     setSelectionDefaults(result.selectionDefaults)
@@ -1223,12 +1090,28 @@ export default function ProductProductionStudio(props: {
     setMessage(`已通过中立世界网关生成 ${result.suggestions.length} 个可追溯起点；尚未开始制作。`)
   }, '分析世界并生成起点建议')
 
+  useEffect(() => {
+    setPickedSource(null)
+  }, [props.scope.projectId, props.scope.worldId, props.scope.workId, props.initialSource?.worldReleaseId,
+    props.chatSetup?.sourcePurpose?.evidenceHash, props.avgSetup?.sourcePurpose?.evidenceHash])
+
+  useEffect(() => {
+    let alive = true
+    const narrativeProductType = productType === 'avg' || productType === 'character-interaction' ? productType : undefined
+    void listLocalWorldReferenceChoicesV1({ purpose: productType, narrativeProductType, scope: { projectId: props.scope.projectId, worldId: props.scope.worldId } })
+      .then(choices => { if (alive) setPurposeChoices(choices) })
+      .catch(() => { if (alive) setPurposeChoices([]) })
+    return () => { alive = false }
+  }, [productType, props.scope.projectId, props.scope.worldId])
+
   const compileBrief = () => run(async () => {
     if (worldReleaseId == null || !suggestionKey) throw new Error('请选择 WorldRelease 与游戏起点。')
     if (productType === 'ttrpg' && !ttrpgWizard) throw new Error('跑团创建向导仍在载入，请稍后重试。')
     const ttrpgWizardModule = productType === 'ttrpg' ? await loadTtrpgProductionWizardV2() : null
+    const sourceChoice = briefSaveViewRef.current
+    const sourcePurpose = await verifyPurpose(worldReleaseId)
     const next = await compileProductProductionBriefV3({
-      scope: props.scope, worldReleaseId, suggestionKey, productType, qualityProfile,
+      scope: props.scope, worldReleaseId, sourcePurpose, suggestionKey, productType, qualityProfile,
       scale, visualLevel, audioLevel, playerRole, openingSituation,
       ...(productType === "character-interaction" && props.chatSetup ? {characterChat:{...props.chatSetup.settings,playerRole,openingSituation,qualityProfile}} : {}),
       ...(productType === 'avg' && props.avgSetup ? { avg: {...props.avgSetup.settings,playerRole,openingSituation,visualLevel: visualLevel === 'illustrated' ? 'key-scenes' : visualLevel,audioLevel,qualityProfile} } : {}),
@@ -1249,6 +1132,7 @@ export default function ProductProductionStudio(props: {
         : undefined,
       sourceSelection: sourceSelection ?? undefined,
     })
+    if (!stillOwnsSourceChoice(sourceChoice)) return false
     setDraft(next)
     setMessage(next.unresolvedDecisionKeys.length
       ? `Brief 仍有 ${next.unresolvedDecisionKeys.length} 项需要作者决定。`
@@ -1258,12 +1142,15 @@ export default function ProductProductionStudio(props: {
   const generateAiCampaignProposals = (sections?: TtrpgCampaignProposalSectionV2[]) => run(async () => {
     if (!draft?.ttrpg || draft.intent.productType !== 'ttrpg') throw new Error('请先编译 TTRPG Brief。')
     const sourceHash = draft.source.worldContentHash
+    const sourceChoice = briefSaveViewRef.current
+    const sourcePurposeHash = draft.source.sourcePurpose?.evidenceHash
     setCampaignProposalRunning(true)
     try {
       const { generateTtrpgCampaignProposalCandidateV2 } = await import('../../lib/ttrpg/campaign-proposal-harness')
       const result = await generateTtrpgCampaignProposalCandidateV2({
         scope: props.scope,
         worldReleaseId: draft.source.worldReleaseId,
+        sourcePurpose: draft.source.sourcePurpose,
         objective: draft.ttrpg.naturalLanguageInstruction,
         seed: {
           title: draft.ttrpg.campaign.title,
@@ -1276,8 +1163,10 @@ export default function ProductProductionStudio(props: {
         priorDesign: draft.ttrpg.campaignDesign,
         regenerateSections: sections,
       })
+      if (!stillOwnsSourceChoice(sourceChoice)) return false
       setDraft(current => {
-        if (!current?.ttrpg || current.source.worldContentHash !== sourceHash) return current
+        if (!current?.ttrpg || current.source.worldContentHash !== sourceHash
+          || current.source.sourcePurpose?.evidenceHash !== sourcePurposeHash) return current
         return {
           ...current,
           ttrpg: { ...current.ttrpg, campaignDesign: result.design },
@@ -1301,8 +1190,7 @@ export default function ProductProductionStudio(props: {
     })
     const acceptsResult = () => {
       const current = briefSaveViewRef.current
-      return mountedRef.current && current.ownerKey === request.ownerKey && current.setupKey === request.setupKey
-        && current.productType === request.productType && current.worldReleaseId === request.worldReleaseId
+      return stillOwnsSourceChoice(request)
         && current.title === request.title && current.draft === request.draft
         && (current.initialProductionId === request.initialProductionId || current.initialProductionId === productionId)
         && (current.selectedProductionId === request.selectedProductionId || current.selectedProductionId === productionId)
@@ -2314,8 +2202,34 @@ export default function ProductProductionStudio(props: {
         : !details ? <>
         <header className="mb-6 border-b border-border pb-5"><small className="font-mono text-[9px] tracking-widest text-accent">CONSULT → BRIEF → AUTHORIZE</small><h1 className="mt-2 font-serif text-2xl">从冻结世界版本开始制作</h1><p className="mt-2 max-w-3xl text-xs leading-6 text-text-muted">先选择来源和起点，系统生成可审查 Brief。只有点击“保存 Brief”并再次“授权开始”后，才会创建 Build。</p></header>
         <section className="grid gap-4 rounded border border-border bg-bg-elevated p-5 md:grid-cols-2">
-          <label className="grid gap-2 text-[10px] text-text-muted">冻结 WorldRelease<select aria-label="冻结 WorldRelease" value={worldReleaseId ?? ''} onChange={event => { setWorldReleaseId(Number(event.target.value) || null); setSuggestions([]); setSourceOptions(null); setSelectionDefaults({}); setSourceSelection(null); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary">{releases.map(release => <option key={release.reference.releaseUid} value={release.reference.localReleaseRecordId}>v{release.reference.releaseVersion} · {release.label}</option>)}</select></label>
-          <label className="grid gap-2 text-[10px] text-text-muted">产品形态<select aria-label="产品形态" disabled={props.allowedProducts.length === 1} value={productType} onChange={event => { const next = event.target.value as SupportedProduct; if (!props.allowedProducts.includes(next)) return; const nextScale = next === 'text-adventure' ? 'short-arc' : 'scene'; setProductType(next); setScale(nextScale); setTextAdventureWizard(createDefaultTextAdventureProductionWizardValueV1(nextScale)); props.onProductSelected?.(next); setVisualLevel(next === 'avg' || next === 'ttrpg' || next === 'ai-town' || next === 'text-adventure' ? 'key-scenes' : 'none'); setAudioLevel(next === 'avg' ? 'music-sfx' : 'none'); setConfirmTtrpgDefaultMappings(false); void loadTtrpgProductionWizardV2().then(module => setTtrpgWizard(module.createDefaultTtrpgProductionWizardValueV2())); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary disabled:opacity-70">{props.allowedProducts.map(kind => <option key={kind} value={kind}>{PRODUCT_LABELS[kind]}</option>)}</select><span>{productType === 'ttrpg' ? '跑团使用自己的需求适配器、规则、战役、媒资和运行协议；世界事实只从冻结 WorldRelease 渐进读取。' : productType === 'text-adventure' ? '文字冒险拥有独立的叙事、规则、媒资、Build、Release 与运行状态；只读引用冻结 WorldRelease。' : '每种产品使用自己的需求适配器和生产图，共享中立世界协议但不共享业务表。'}</span></label>
+          <label className="grid gap-2 text-[10px] text-text-muted">冻结 WorldRelease
+            <select aria-label="冻结 WorldRelease" value={pickedSource?.key ?? worldReleaseId ?? ''} onChange={event => {
+              const key = event.target.value
+              const choice = purposeChoices.find(row => row.sourceDeclarationHash && row.choiceKey === key)
+              const releaseId = choice?.id ?? (Number(key) || null)
+              const setup = props.chatSetup ?? props.avgSetup
+              const hasNativeChoice = purposeChoices.some(row => row.id === releaseId && !row.sourceDeclarationHash && row.purposeAllowed)
+              const useSetupPurpose = !choice && !hasNativeChoice && setup?.worldReleaseId === releaseId && Boolean(setup?.sourcePurpose)
+              setWorldReleaseId(releaseId)
+              setPickedSource(releaseId == null ? null : { releaseId, declarationHash: choice?.sourceDeclarationHash, key, useSetupPurpose })
+              setSuggestions([]); setSourceOptions(null); setSelectionDefaults({}); setSourceSelection(null); setDraft(null)
+            }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary">
+              {releases.flatMap(release => {
+                const id = release.reference.localReleaseRecordId
+                const candidates = purposeChoices.filter(choice => choice.id === id)
+                const native = candidates.find(choice => !choice.sourceDeclarationHash && choice.purposeAllowed)
+                const keptFromSetup = (props.chatSetup ?? props.avgSetup)?.worldReleaseId === id && Boolean((props.chatSetup ?? props.avgSetup)?.sourcePurpose)
+                return [<option key={id} value={id} disabled={candidates.length > 0 && !native && !keptFromSetup}>
+                  v{release.reference.releaseVersion} · {release.label}{!native && keptFromSetup ? ' · 已确认来源' : !native && candidates.length ? ' · 请选择原包声明' : ''}
+                </option>, ...candidates.filter(choice => choice.sourceDeclarationHash).map(choice =>
+                  <option key={choice.choiceKey} value={choice.choiceKey} disabled={!choice.purposeAllowed}>
+                    v{release.reference.releaseVersion} · {release.label} · {choice.authorName} · {choice.license} · {choice.attribution}{choice.purposeAllowed ? '' : ' · 不允许此用途'}
+                  </option>)]
+              })}
+            </select>
+            {purposeChoices.find(row => row.choiceKey === pickedSource?.key)?.contentWarnings?.map((warning, index) => <span key={index}>{warning}</span>)}
+          </label>
+          <label className="grid gap-2 text-[10px] text-text-muted">产品形态<select aria-label="产品形态" disabled={props.allowedProducts.length === 1} value={productType} onChange={event => { const next = event.target.value as SupportedProduct; if (!props.allowedProducts.includes(next)) return; const nextScale = next === 'text-adventure' ? 'short-arc' : 'scene'; setProductType(next); setPickedSource(null); setScale(nextScale); setTextAdventureWizard(createDefaultTextAdventureProductionWizardValueV1(nextScale)); props.onProductSelected?.(next); setVisualLevel(next === 'avg' || next === 'ttrpg' || next === 'ai-town' || next === 'text-adventure' ? 'key-scenes' : 'none'); setAudioLevel(next === 'avg' ? 'music-sfx' : 'none'); setConfirmTtrpgDefaultMappings(false); void loadTtrpgProductionWizardV2().then(module => setTtrpgWizard(module.createDefaultTtrpgProductionWizardValueV2())); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary disabled:opacity-70">{props.allowedProducts.map(kind => <option key={kind} value={kind}>{PRODUCT_LABELS[kind]}</option>)}</select><span>{productType === 'ttrpg' ? '跑团使用自己的需求适配器、规则、战役、媒资和运行协议；世界事实只从冻结 WorldRelease 渐进读取。' : productType === 'text-adventure' ? '文字冒险拥有独立的叙事、规则、媒资、Build、Release 与运行状态；只读引用冻结 WorldRelease。' : '每种产品使用自己的需求适配器和生产图，共享中立世界协议但不共享业务表。'}</span></label>
           <label className="grid gap-2 text-[10px] text-text-muted">制作质量<select value={qualityProfile} onChange={event => { setQualityProfile(event.target.value as ProductProductionBriefV3['qualityProfile']); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary"><option value="prototype">{productType === 'character-interaction' ? '技术预览 · 使用真实图片' : '原型 · 内置占位素材'}</option><option value="internal">{productType === 'character-interaction' ? '内部评审' : '内部评审 · Agnes 就绪则生成图片'}</option><option value="commercial-candidate">{productType === 'character-interaction' ? '商业候选 · 完成质量门' : '商业候选 · 生成正式图片并完成质量门'}</option></select><span>文字复用设置中的全局配置或任务分流；图片复用全局 Agnes 配置并自动使用专用图片模型，无需重复填写 API Key。</span></label>
           <label className="grid gap-2 text-[10px] text-text-muted">{productType === 'character-interaction' ? '作品名称' : '游戏标题'}<input value={title} onChange={event => setTitle(event.target.value)} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" placeholder="会谈后可修改" /></label>
           <div className={`rounded border p-3 text-[10px] leading-5 md:col-span-2 ${capabilityReadiness.text.ready && requestedImageReady && requestedCommercialAudioReady ? 'border-success/30 bg-success/5 text-success' : 'border-error/30 bg-error/5 text-error'}`} data-testid="product-production-capability-readiness"><strong className="block text-xs">{capabilityReadiness.text.ready ? '文本生成能力已就绪' : '文本生成能力未就绪'}</strong><span>{capabilityReadiness.text.ready ? `将直接复用 ${capabilityReadiness.text.provider} / ${capabilityReadiness.text.model}，无需再次填写 API Key。` : capabilityReadiness.text.issue}</span>{['avg', 'ttrpg', 'ai-town', 'text-adventure', 'character-interaction'].includes(productType) && (productType === 'ttrpg' ? (ttrpgWizard?.maximumGeneratedAssets ?? 0) > 0 : visualLevel !== 'none') && <span className="block">{productType === 'ai-town' && qualityProfile === 'internal' && capabilityReadiness.authoredImagePackReady ? `原创媒资包已就绪：${capabilityReadiness.authoredImagePackManifestPath}；生产时逐文件校验 SHA-256、MIME 与尺寸。` : capabilityReadiness.image.ready ? `图片能力已就绪：复用同一 Agnes Key，自动调用 ${capabilityReadiness.image.model}。` : capabilityReadiness.mediaRelayReady ? `Agnes 图片不可用，将使用已绑定媒体中继${capabilityReadiness.mediaRelayOrigin ? `：${capabilityReadiness.mediaRelayOrigin}` : ''}。` : capabilityReadiness.image.issue}</span>}{(productType === 'avg' || productType === 'ai-town') && audioLevel !== 'none' && <span className="block">{capabilityReadiness.mediaRelayReady ? `音乐与音效能力已绑定${capabilityReadiness.mediaRelayOrigin ? `：${capabilityReadiness.mediaRelayOrigin}` : ''}。` : 'Agnes 当前公开接口未提供独立音乐/SFX 生成；选择商业音频时仍需绑定音频能力，或改为静音。'}</span>}</div>
@@ -2670,25 +2584,8 @@ export default function ProductProductionStudio(props: {
           <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{mediaAssets.map(asset => <article key={`${asset.artifactKey}:${asset.version}`} className="overflow-hidden rounded border border-border bg-bg-base">
             <TextAdventureMediaThumbnail scope={props.scope} asset={asset} />
             <div className="p-3 text-[10px]"><span className="flex items-center justify-between gap-2"><strong className="text-xs">{String(asset.metadata.name ?? asset.artifactKey)}</strong><em className={`not-italic ${asset.locked ? 'text-accent' : 'text-text-muted'}`}>{asset.locked ? '已锁定' : '可重生成'}</em></span><p className="mt-1 text-text-muted">{asset.assetKey} · {asset.artifactKey} · {asset.mimeType} · {formatBytes(asset.byteSize)}</p><p className="mt-1 text-text-muted">{String(asset.metadata.source ?? 'unknown')} · {String(asset.metadata.license ?? asset.rights.license ?? '未声明许可')}</p><code className="mt-1 block text-[9px]" title={asset.contentHash}>{compactHash(asset.contentHash)}</code>
-              {(() => {
-                const requirement = mediaRequirementByKey.get(asset.artifactKey)
-                const visualReview = mediaVisualReviewByKey.get(asset.artifactKey)
-                const actualWidth = Number(asset.metadata.width ?? 0)
-                const actualHeight = Number(asset.metadata.height ?? 0)
-                return <div className="mt-3 grid gap-2 rounded border border-border bg-bg-surface p-3" data-testid={`text-adventure-media-contract-${asset.artifactKey}`}>
-                  <p><strong>职责：</strong>{mediaArtifactPurposeLabel(asset.artifactKey)} · {requirement?.mediaKind ?? asset.mediaKind}</p>
-                  <p><strong>场景 / 节拍：</strong>{requirement?.sceneTag ?? String(asset.metadata.sceneTag ?? '—')} / {requirement?.beatKey ?? '—'}</p>
-                  <p><strong>请求 / 实际尺寸：</strong>{requirement ? `${requirement.width}×${requirement.height}` : '—'} / {actualWidth > 0 && actualHeight > 0 ? `${actualWidth}×${actualHeight}` : '—'}</p>
-                  <p><strong>替代文本：</strong>{requirement?.altText ?? String(asset.metadata.altText ?? '—')}</p>
-                  <p><strong>角色锚点：</strong>{requirement?.characterAnchorRefs.join('、') || '无'}</p>
-                  <div><strong>硬约束：</strong>{requirement?.hardConstraints.length ? <ul className="mt-1 grid gap-1 text-text-muted">{requirement.hardConstraints.map(rule => <li key={rule}>· {rule}</li>)}</ul> : <span className="text-text-muted">无</span>}</div>
-                  <div className={`rounded border p-2 ${visualReview?.verdict === 'accept' ? 'border-success/30 bg-success/5' : 'border-accent/30 bg-accent/5'}`}>
-                    <p><strong>Visual QA：</strong>{visualReview?.verdict ?? '等待审查'}</p>
-                    {visualReview?.scores && <dl className="mt-1 grid grid-cols-2 gap-1 text-text-muted">{Object.entries(visualReview.scores).map(([key, score]) => <div key={key}><dt className="inline">{key}</dt><dd className="ml-1 inline font-semibold text-text-primary">{score}/5</dd></div>)}</dl>}
-                    {visualReview?.issues.length ? <ul className="mt-2 grid gap-1">{visualReview.issues.map((issue, index) => <li key={`${issue.category}:${index}`} className={issue.severity === 'blocking' ? 'text-error' : 'text-accent'}><strong>{issue.severity} · {issue.category}：</strong>{issue.detail}<span className="block pl-3 text-text-muted">建议：{issue.recommendation}</span></li>)}</ul> : visualReview && <p className="mt-1 text-success">未报告问题</p>}
-                  </div>
-                </div>
-              })()}
+              <TextAdventureMediaEvidence asset={asset} requirement={mediaRequirementByKey.get(asset.artifactKey)}
+                visualReview={mediaVisualReviewByKey.get(asset.artifactKey)} />
               <div className="mt-3 flex flex-wrap gap-2"><label className={`flex cursor-pointer items-center gap-1 rounded border border-accent/40 px-2 py-1 text-accent ${(busy || productionRunning || !canUploadMediaReplacement) ? 'pointer-events-none opacity-40' : ''}`}><Upload className="h-3 w-3" />上传替换<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={busy || productionRunning || !canUploadMediaReplacement} onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void reviseMediaAsset(asset, 'upload-replacement', file) }} /></label>{asset.locked ? <button disabled={busy || productionRunning || details.production.status !== 'preview-ready'} onClick={() => reviseMediaAsset(asset, 'unlock')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><Unlock className="h-3 w-3" />解锁</button> : <><button disabled={busy || productionRunning || details.production.status !== 'preview-ready'} onClick={() => reviseMediaAsset(asset, 'lock')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><Lock className="h-3 w-3" />锁定</button><button disabled={busy || productionRunning || details.production.status !== 'preview-ready' || !authorRejectedAssetKeys.has(asset.artifactKey)} title={authorRejectedAssetKeys.has(asset.artifactKey) ? '按冻结作者退回意见生成新候选' : '先退回此图并冻结逐图审查回执'} onClick={() => reviseMediaAsset(asset, 'regenerate')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><RefreshCw className="h-3 w-3" />按作者意见重生成</button></>}</div>
               {commercialHumanVisualRequired && <fieldset disabled={!humanVisualReviewReady} className="mt-3 rounded border border-border bg-bg-surface p-3 disabled:opacity-50" data-testid={`text-adventure-human-visual-${asset.artifactKey}`}><legend className="px-1 font-semibold">作者对当前冻结图片的判断</legend><div className="flex gap-2"><button type="button" aria-pressed={humanVisualDecisions[asset.artifactKey] === 'approved'} onClick={() => setHumanVisualDecisions(current => ({ ...current, [asset.artifactKey]: 'approved' }))} className={`rounded border px-3 py-1 ${humanVisualDecisions[asset.artifactKey] === 'approved' ? 'border-success bg-success/10 text-success' : 'border-border'}`}>接受此图</button><button type="button" aria-pressed={humanVisualDecisions[asset.artifactKey] === 'rejected'} onClick={() => setHumanVisualDecisions(current => ({ ...current, [asset.artifactKey]: 'rejected' }))} className={`rounded border px-3 py-1 ${humanVisualDecisions[asset.artifactKey] === 'rejected' ? 'border-error bg-error/10 text-error' : 'border-border'}`}>退回修改</button></div><label className="mt-2 grid gap-1"><span>审查备注{humanVisualDecisions[asset.artifactKey] === 'rejected' ? '（退回必填）' : '（可选）'}</span><textarea value={humanVisualNotes[asset.artifactKey] ?? ''} onChange={event => setHumanVisualNotes(current => ({ ...current, [asset.artifactKey]: event.target.value }))} maxLength={2000} rows={2} placeholder="说明构图、角色一致性、剧透、文字伪影或其他问题" className="rounded border border-border bg-bg-base p-2" /></label></fieldset>}
             </div>

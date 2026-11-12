@@ -112,6 +112,40 @@ async function classifiedFailurePayload(
 const MASTER_COPILOT_SYNC_EVENT = 'storyforge:master-copilot-sync-v1'
 const MASTER_COPILOT_SCOPE_OWNERS = new Map<string, symbol>()
 
+/** Ephemeral view state only; the existing candidate queue owns all saves. */
+export interface VisibleMasterCandidateDraftV1 {
+  rawValue: string
+  error?: string
+  status: 'saving' | 'blocked' | 'failed' | 'discarding'
+}
+const visibleCandidateDrafts = new Map<string, VisibleMasterCandidateDraftV1>()
+
+function flushVisibleCandidateDrafts(): void {
+  void Promise.allSettled([...visibleCandidateDrafts.keys()].map(key => flushCandidateDraftV1(key)))
+}
+
+function protectVisibleCandidateDrafts(event: BeforeUnloadEvent): void {
+  if (!visibleCandidateDrafts.size) return
+  flushVisibleCandidateDrafts()
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+function setVisibleCandidateDraft(key: string, draft?: VisibleMasterCandidateDraftV1): void {
+  const hadDrafts = visibleCandidateDrafts.size > 0
+  if (draft) visibleCandidateDrafts.set(key, draft)
+  else visibleCandidateDrafts.delete(key)
+  if (typeof window === 'undefined' || hadDrafts === (visibleCandidateDrafts.size > 0)) return
+  // Keep protecting visible edits even after a candidate tab or panel unmounts.
+  if (visibleCandidateDrafts.size) {
+    window.addEventListener('beforeunload', protectVisibleCandidateDrafts)
+    window.addEventListener('pagehide', flushVisibleCandidateDrafts)
+  } else {
+    window.removeEventListener('beforeunload', protectVisibleCandidateDrafts)
+    window.removeEventListener('pagehide', flushVisibleCandidateDrafts)
+  }
+}
+
 interface MasterCopilotSyncDetail {
   scopeKey: string
   busy: boolean
@@ -193,6 +227,7 @@ export function useMasterCopilot(input: {
   const [loading, setLoading] = useState(true)
   const [recoveryAvailable, setRecoveryAvailable] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [, refreshVisibleCandidateDraft] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
   const runtimeCandidates = useRef(new Map<number, ExecutedMasterCandidate>())
   const localCandidateDrafts = useRef(new Map<number, string>())
@@ -643,18 +678,32 @@ export function useMasterCopilot(input: {
     }
   }, [busy, conversationId, project.id, recordTask, reload, scopeKey, worldGroupId, workspaceScope])
 
-  const updateCandidate = useCallback((eventId: number, draft: string): Promise<void> => {
+  const updateCandidate = useCallback((eventId: number, draft: string, visible?: { rawValue: string; error?: string }): Promise<void> => {
     const key = candidateDraftKey(eventId)
     const editingScope = scopeKey
-    localCandidateDrafts.current.set(eventId, draft)
-    setEvents(current => current.map(event => event.id === eventId
-      ? { ...event, content: draft }
-      : event))
-    setError(null)
+    if (!visible && visibleCandidateDrafts.has(key)) {
+      setError('此候选在字段面板还有未确认的编辑，请先修正或放弃该修改。')
+      return Promise.resolve()
+    }
+    const edit: VisibleMasterCandidateDraftV1 | undefined = visible && {
+      ...visible,
+      status: visible.error ? 'blocked' : 'saving',
+    }
+    if (edit) {
+      setVisibleCandidateDraft(key, edit)
+      refreshVisibleCandidateDraft(value => value + 1)
+    }
+    if (!visible?.error) {
+      localCandidateDrafts.current.set(eventId, draft)
+      setEvents(current => current.map(event => event.id === eventId
+        ? { ...event, content: draft }
+        : event))
+    }
+    setError(visible?.error ?? null)
     queueCandidateDraftV1({
       key,
       draft,
-      persist: persistedDraft => updateAgentEventCandidate(
+      persist: persistedDraft => visible?.error ? Promise.reject(new Error(visible.error)) : updateAgentEventCandidate(
         eventId,
         project.id!,
         persistedDraft,
@@ -670,6 +719,11 @@ export function useMasterCopilot(input: {
         },
       ),
       onSynced: (persistedDraft, result) => {
+        if (result != null && typeof result !== 'string') return
+        if (edit && !visible?.error && visibleCandidateDrafts.get(key) === edit && persistedDraft === draft) {
+          setVisibleCandidateDraft(key)
+          if (activeCandidateScope.current === editingScope) refreshVisibleCandidateDraft(value => value + 1)
+        }
         if (activeCandidateScope.current !== editingScope) return
         const currentDraft = localCandidateDrafts.current.get(eventId)
         if (currentDraft === persistedDraft) localCandidateDrafts.current.delete(eventId)
@@ -684,11 +738,60 @@ export function useMasterCopilot(input: {
         notifyMasterCopilotSync(editingScope)
       },
       onError: syncError => {
+        if (edit && !visible?.error && visibleCandidateDrafts.get(key) === edit) {
+          edit.status = 'failed'
+          edit.error = syncError.message
+          if (activeCandidateScope.current === editingScope) refreshVisibleCandidateDraft(value => value + 1)
+        }
         if (activeCandidateScope.current === editingScope) setError(syncError.message)
       },
     })
     return Promise.resolve()
   }, [candidateDraftKey, project.id, scopeKey, workspaceScope])
+
+  const discardVisibleCandidateDraft = useCallback(async (eventId: number): Promise<void> => {
+    if (conversationId == null || MASTER_COPILOT_SCOPE_OWNERS.has(scopeKey)) return
+    const key = candidateDraftKey(eventId)
+    const current = visibleCandidateDrafts.get(key)
+    if (!current || current.status === 'discarding') return
+    const discarding: VisibleMasterCandidateDraftV1 = { rawValue: current.rawValue, status: 'discarding' }
+    setVisibleCandidateDraft(key, discarding)
+    refreshVisibleCandidateDraft(value => value + 1)
+    // Serialize the read behind any in-flight save of this candidate. Discard
+    // does not write a revision or resurrect an older optimistic value.
+    queueCandidateDraftV1({
+      key,
+      draft: current.rawValue,
+      persist: async () => {
+        const rows = await readAgentEvents(conversationId, workspaceScope)
+        const saved = rows.find(event => event.id === eventId && event.kind === 'candidate')
+        if (!saved) throw new Error('找不到已保存的候选，未放弃当前输入。')
+        return saved
+      },
+      onSynced: (_draft, result) => {
+        if (!result || typeof result !== 'object' || visibleCandidateDrafts.get(key) !== discarding) return
+        const saved = result as AgentEvent
+        if (saved.id !== eventId || saved.kind !== 'candidate') return
+        setVisibleCandidateDraft(key)
+        if (activeCandidateScope.current !== scopeKey) return
+        localCandidateDrafts.current.delete(eventId)
+        setEvents(rows => rows.map(event => event.id === eventId ? saved : event))
+        setError(null)
+        refreshVisibleCandidateDraft(value => value + 1)
+        notifyMasterCopilotSync(scopeKey)
+      },
+      onError: syncError => {
+        if (visibleCandidateDrafts.get(key) !== discarding) return
+        discarding.status = 'failed'
+        discarding.error = syncError.message
+        if (activeCandidateScope.current === scopeKey) {
+          setError(syncError.message)
+          refreshVisibleCandidateDraft(value => value + 1)
+        }
+      },
+    })
+    await flushCandidateDraftV1(key).catch(() => undefined)
+  }, [candidateDraftKey, conversationId, scopeKey, workspaceScope])
 
   const resolveCandidate = useCallback(async (
     candidate: PendingMasterCandidate,
@@ -704,8 +807,11 @@ export function useMasterCopilot(input: {
     let shouldReload = false
     let failureStage: HarnessFailureClassV1 = 'candidate'
     try {
+      const draftKey = candidateDraftKey(candidate.event.id)
       await flushCandidateDraftV1(candidateDraftKey(candidate.event.id))
       const persistedEvents = await readAgentEvents(conversationId, workspaceScope)
+      const visible = visibleCandidateDrafts.get(draftKey)
+      if (visible) throw new CandidateDraftSyncErrorV1(draftKey, visible.error ?? '可见编辑尚未确认保存。')
       const persistedEvent = persistedEvents.find(event => event.id === candidate.event.id && event.kind === 'candidate')
       if (!persistedEvent) throw new Error('待确认候选在同步后不存在。')
       const persistedCandidate: PendingMasterCandidate = {
@@ -911,6 +1017,9 @@ export function useMasterCopilot(input: {
     resume,
     stop,
     updateCandidate,
+    readVisibleCandidateDraft: (eventId?: number) => eventId == null || conversationId == null
+      ? undefined : visibleCandidateDrafts.get(candidateDraftKey(eventId)),
+    discardVisibleCandidateDraft,
     adoptCandidate: (candidate: PendingMasterCandidate) => resolveCandidate(candidate, 'adopted'),
     rejectCandidate: (candidate: PendingMasterCandidate) => resolveCandidate(candidate, 'rejected'),
   }
