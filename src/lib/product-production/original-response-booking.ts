@@ -2,7 +2,7 @@
 import { db } from '../db/schema'
 import type { WorkspaceScope, ProductProductionCommandV1, ProductProductionRecordV1, ProductBuildRecordV1,
   AgentRunRecord, AgentRunArtifactRecordV1, ProductBuildArtifactRecordV1 } from '../types'
-import { readProductProductionDetailsV1 } from './service'
+import { readProductProductionDetailsV1 } from './read-details'
 import { parseProductProductionBriefV3 } from './contracts'
 import { parseProductProductionPlanV3 } from './plan'
 import { hashProductProductionValueV2, canonicalProductProductionJsonV2 } from './hash'

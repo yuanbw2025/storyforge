@@ -24,7 +24,7 @@ import {
 } from '../../lib/consistency/impact-handoff'
 import { runChapterMemoryTask } from '../../lib/ai/chapter-memory/run-chapter-memory'
 import { prepareContinuityContext } from '../../lib/ai/chapter-memory/continuity-context'
-import { isPlanReconciliationCurrent } from '../../lib/ai/chapter-memory/plan-reconciliation'
+import { isPlanReconciliationReviewCurrent, saveChapterPlanReconciliationReview } from '../../lib/ai/chapter-memory/plan-reconciliation'
 import { findNextCanonicalChapter, findPreviousCanonicalChapter } from '../../lib/ai/chapter-memory/canonical-chapter-sequence'
 import { resolveRequestConfig, describeResolvedAIRequestSettingsV1, type AIRequestConfigResolution, type StreamResult } from '../../lib/ai/client'
 import { observeProseLengthV1, proseLengthExpectationV1 } from '../../lib/prose/length-observation'
@@ -36,7 +36,7 @@ import { saveChapterOrganizationSelectionV1 } from '../../lib/agent/chapter-orga
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { db } from '../../lib/db/schema'
 import { assembleContext } from '../../lib/registry/assemble-context'
-import { prepareProseGatewayAssemblyV1 } from '../../lib/prose/gateway-context'
+import { prepareProseGatewayAssemblyV1, type ProseGatewayAssemblyV1 } from '../../lib/prose/gateway-context'
 import { resolveChapterDisplayMeta } from '../../lib/outline/chapter-display'
 import { pickBestChapterForOutline } from '../../lib/chapters/selectors'
 import {
@@ -53,6 +53,7 @@ import {
   plainTextToHtml,
 } from '../../lib/utils/html'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import ChapterPostAdoptionSettingsPanel from './ChapterPostAdoptionSettingsPanel'
 import ContextBudgetBar from '../shared/ContextBudgetBar'
 import { useDialog } from '../shared/Dialog'
 import { useReviewResultStore } from '../../stores/review-result'
@@ -75,7 +76,7 @@ import CoordinationView from './CoordinationView'
 import FloatingToolbar from './FloatingToolbar'
 import ChapterEditorHeader from './ChapterEditorHeader'
 import ChapterMemoryPanel from './ChapterMemoryPanel'
-import ChapterContextPreview from './ChapterContextPreview'
+import ChapterContextPreview, { type ContextPreviewOperation } from './ChapterContextPreview'
 import ChapterEditorToolbar from './ChapterEditorToolbar'
 import { type ReconciliationActionMap } from './ReconciliationTable'
 import PromptPreviewGate from '../shared/PromptPreviewGate'
@@ -88,6 +89,7 @@ import { buildEditorEntityReferences } from '../../lib/editor/entity-reference'
 import type {
   AgentSkillExecutionBindingV2,
   ChatMessage,
+  Chapter,
   ChapterStatus,
   Project,
   StateDiffItem,
@@ -192,7 +194,7 @@ import {
   rejectImpactStoryTimelineRegenerationCandidateV1,
   type ImpactStoryTimelineRegenerationCandidateV1,
 } from '../../lib/agent/run/impact-story-timeline-regeneration-durable'
-import { resolveScopeLike } from '../../lib/workspace/scope'
+import { assertRecordInScope, resolveScopeLike } from '../../lib/workspace/scope'
 import {
   readWorkPostAdoptionSettingsV1,
   updateWorkPostAdoptionSettingsV1,
@@ -215,6 +217,7 @@ import {
   recoverProseGenerationCandidateV1,
   recordInterruptedProseGenerationV1,
   readLatestInterruptedProseGenerationV1,
+  readProseGenerationObservedUsageV1,
   resolveProseGenerationExecutionBindingV2,
   PROSE_GENERATION_STEP_ID_V1,
   type ProseGenerationCandidateV1,
@@ -286,7 +289,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const currentChapter = storeChapter && storeChapter.projectId === project.id
     && (outlineNodeId == null || storeChapter.outlineNodeId === outlineNodeId)
     ? storeChapter : null
-  const { nodes, updateNode, loadAll: loadOutlineNodes } = useOutlineStore()
+  const { nodes, loadAll: loadOutlineNodes } = useOutlineStore()
   const { cards: stateCards, loadAll: loadStateCards, buildStateContext, buildSelectiveStateContext, applyDiffs } = useStateCardStore()
   const { characters, loadAll: loadCharacters } = useCharacterStore()
   const { creativeRules } = useCreativeRulesStore()
@@ -391,8 +394,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
   }, [stateCards])
 
-  // A2: 按需召回 — 手动额外勾选/取消的状态卡 ID
-  const [extraStateIds, setExtraStateIds] = useState<number[]>([])
+  // Organization focus belongs to the selected chapter, including its Work.
+  const extraStateTarget = `${project.id}:${project.activeWorldId}:${project.activeWorkId}:${currentChapter?.id}`
+  const [extraStateSelection, setExtraStateSelection] = useState<{ target: string; ids: number[] }>({ target: extraStateTarget, ids: [] })
+  const extraStateIds = useMemo(() => extraStateSelection.target === extraStateTarget ? extraStateSelection.ids : [], [extraStateSelection, extraStateTarget])
+  const setExtraStateIds = (ids: number[]) => setExtraStateSelection({ target: extraStateTarget, ids })
   const [showStatePreview, setShowStatePreview] = useState(false)
   const ai = useAIStream(createAISessionKey(
     project.id!,
@@ -680,14 +686,17 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       const recovered = candidate ? await recoverProseGenerationCandidateV1({ scope, candidate }) : null
       if (!active) return
       if (candidate && recovered?.projection.state === 'awaiting_confirmation') {
+        const tokenUsage = await readProseGenerationObservedUsageV1({ scope, runId: candidate.durable.runId, attempt: candidate.durable.attempt })
+        if (!active || editorChapterIdRef.current !== chapterId) return
         setProseCandidate(candidate)
         proseCandidateRef.current = candidate
-        restoreAI({ output: candidate.outputText, operation: candidate.operation })
+        restoreAI({ output: candidate.outputText, operation: candidate.operation, tokenUsage })
         proseSnapshotRef.current = recovered
         return
       }
       const interrupted = await readLatestInterruptedProseGenerationV1({ scope, chapterId })
-      if (active && interrupted) restoreAI({ output: interrupted.outputText, operation: interrupted.operation, error: interrupted.message })
+      if (active && editorChapterIdRef.current === chapterId && interrupted) restoreAI({ output: interrupted.outputText,
+        operation: interrupted.operation, error: interrupted.message, tokenUsage: interrupted.observedUsage ?? null })
     })().catch(error => {
       if (active) console.warn('[ProseGeneration] durable candidate 恢复失败:', error)
     })
@@ -975,17 +984,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setCompareSourceHtml(null)
   }, [currentChapter?.id])
 
-  useEffect(() => {
-    let cancelled = false
-    if (!currentChapter?.planReconciliation) {
-      setPlanReconciliationCurrent(false)
-      return
-    }
-    isPlanReconciliationCurrent(project.id!, currentChapter).then(current => {
-      if (!cancelled) setPlanReconciliationCurrent(current)
-    })
-    return () => { cancelled = true }
-  }, [project.id, currentChapter])
 
   // 自动保存
   // Debounce only author-staged buffers. A cleanup's older React value must
@@ -995,6 +993,17 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }, [flushChapterDrafts]))
 
   const outlineNode = currentChapter ? nodes.find(n => n.id === currentChapter.outlineNodeId) : null
+  useEffect(() => {
+    let cancelled = false
+    if (!currentChapter?.planReconciliation) {
+      setPlanReconciliationCurrent(false)
+      return
+    }
+    isPlanReconciliationReviewCurrent(project.id!, currentChapter).then(current => {
+      if (!cancelled) setPlanReconciliationCurrent(current)
+    }).catch(() => { if (!cancelled) setPlanReconciliationCurrent(false) })
+    return () => { cancelled = true }
+  }, [project.id, currentChapter, outlineNode?.updatedAt])
   const chapterDisplay = useMemo(() => {
     return currentChapter ? resolveChapterDisplayMeta(currentChapter, nodes) : null
   }, [currentChapter, nodes])
@@ -1195,6 +1204,74 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     })
     return () => { cancelled = true }
   }, [project.id, chapterWorldGroupId, outlineNode?.id, currentChapter?.id, aiConfig, perspectiveCharacterId])
+
+  const [contextPreviewOperation, setContextPreviewOperation] = useState<ContextPreviewOperation>('generate')
+  const [contextPreviewRefresh, setContextPreviewRefresh] = useState(0)
+  // A preview is a separate read-only packet. The review panel retains its own
+  // review context above; organization focus cards never select prose sources.
+  const contextPreviewInput = useMemo(() => {
+    let citedIds: number[] = []
+    try { citedIds = JSON.parse(creativeRules?.citedReferenceIds || '[]') } catch { /* same as generation */ }
+    return {
+      projectId: project.id,
+      worldId: project.activeWorldId,
+      workId: project.activeWorkId,
+      chapterId: currentChapter?.id,
+      outlineNodeId: outlineNode?.id,
+      worldGroupId: chapterWorldGroupId ?? null,
+      operation: contextPreviewOperation,
+      authorRequest: contextPreviewOperation === 'review'
+        ? '预览当前章节受控创作上下文'
+        : [customInstruction.trim(), outlineNode?.title, outlineNode?.summary, plainText.slice(-2_000)]
+          .filter(Boolean).join('\n'),
+      citedReferenceIds: contextPreviewOperation === 'review' ? undefined : citedIds,
+      perspectiveCharacterId,
+      config: aiConfig,
+      stateCardIssue,
+      // Changes to loaded state cards invalidate the displayed snapshot too.
+      stateCards,
+    }
+  }, [project.id, project.activeWorldId, project.activeWorkId,
+    currentChapter?.id, outlineNode?.id, chapterWorldGroupId, contextPreviewOperation, customInstruction,
+    outlineNode?.title, outlineNode?.summary, plainText, creativeRules?.citedReferenceIds, perspectiveCharacterId,
+    aiConfig, stateCardIssue, stateCards])
+  const [contextPreviewResult, setContextPreviewResult] = useState<{
+    input: typeof contextPreviewInput
+    assembly?: ProseGatewayAssemblyV1
+    error?: string
+  } | null>(null)
+  useEffect(() => {
+    if (!showContext) return
+    const input = contextPreviewInput
+    const controller = new AbortController()
+    let active = true
+    setContextPreviewResult(null)
+    // Coalesce typing without issuing any model request or saving author drafts.
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        if (input.stateCardIssue) throw new Error(input.stateCardIssue)
+        if (!input.projectId || !input.chapterId || !input.outlineNodeId) throw new Error('请先选择当前作品的章节。')
+        const scope = await resolveScopeLike(input.projectId)
+        const matchesScope = (value: WorkspaceScope) => value.projectId === input.projectId
+          && value.worldId === input.worldId && value.workId === input.workId
+        const chapter = await db.chapters.get(input.chapterId)
+        if (!matchesScope(scope) || !await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' }))
+          throw new Error('当前章节与所选作品不一致，请重新选择章节。')
+        const assembly = await prepareProseGatewayAssemblyV1({
+          projectId: scope.projectId, scope, chapterId: input.chapterId, outlineNodeId: input.outlineNodeId,
+          worldGroupId: input.worldGroupId, operation: input.operation, authorRequest: input.authorRequest,
+          citedReferenceIds: input.citedReferenceIds, perspectiveCharacterId: input.perspectiveCharacterId,
+          config: input.config, signal: controller.signal,
+        })
+        if (!matchesScope(await resolveScopeLike(input.projectId))) throw new Error('作品已切换，请刷新当前章节预览。')
+        if (active) setContextPreviewResult({ input, assembly })
+      })().catch(error => {
+        if (active) setContextPreviewResult({ input, error: error instanceof Error ? error.message : '读取失败，请刷新预览。' })
+      })
+    }, 150)
+    return () => { active = false; controller.abort(); window.clearTimeout(timer) }
+  }, [showContext, contextPreviewInput, contextPreviewRefresh])
+  const currentContextPreview = showContext && contextPreviewResult?.input === contextPreviewInput ? contextPreviewResult : null
 
   // A2: 按需召回 — 根据章节大纲+标题+已有文本筛选相关状态卡
   const selectiveState = useMemo(() => {
@@ -1448,7 +1525,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             attempt: gatewayAttempt,
             output: String(output ?? ''),
             lengthObservation: observeProseLengthV1(String(output ?? ''), proseLengthExpectationV1(customInstruction), streamResult.finishReason ?? null),
-            usedTokens: generationReservation.estimatedInputTokens + estimateTokens(String(output ?? '')),
+            usedTokens: streamResult.usage?.totalTokens ?? generationReservation.estimatedInputTokens + estimateTokens(String(output ?? '')),
+            observedUsage: streamResult.usage ? { ...streamResult.usage } : null,
           })
           snapshot = finalized.snapshot
           gatewayManifestHash = finalized.manifest.manifestHash
@@ -1507,14 +1585,15 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           persistedCandidate = candidate
           setProseCandidate(candidate)
           proseCandidateRef.current = candidate
-          restoreAI({ output: outputText, operation: input.operation })
+          restoreAI({ output: outputText, operation: input.operation, tokenUsage: streamResult.usage ? { ...streamResult.usage } : null })
         },
         stepSucceeded: async () => {},
         stepFailed: async failure => {
           if (failure.error instanceof InterruptedChapterGenerationErrorV1) {
             snapshot = await recordInterruptedProseGenerationV1({
               scope, snapshot,
-              response: { version: 'prose-interrupted-response-v1', outputText: failure.error.output, completion: failure.error.completion, message: failure.error.message },
+              response: { version: 'prose-interrupted-response-v1', outputText: failure.error.output, completion: failure.error.completion,
+                message: failure.error.message, observedUsage: streamResult.usage ? { ...streamResult.usage } : null },
             })
           }
           snapshot = await failProseGenerationStepV1({
@@ -1525,7 +1604,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           })
           proseSnapshotRef.current = snapshot
           if (failure.error instanceof InterruptedChapterGenerationErrorV1 && failure.error.completion !== 'failed') {
-            restoreAI({ output: failure.error.output, operation: input.operation, error: failure.error.message })
+            restoreAI({ output: failure.error.output, operation: input.operation, error: failure.error.message,
+              tokenUsage: streamResult.usage ? { ...streamResult.usage } : null })
           }
         },
         onTraceError: error => { traceError = error },
@@ -2650,61 +2730,37 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleSaveReconciliation = async (actions: ReconciliationActionMap) => {
-    if (!currentChapter?.id || !currentChapter.planReconciliation) return
-
-    const reconciliation = currentChapter.planReconciliation
-    const actionValues = Object.values(actions)
-    const hasApplyActions = actionValues.some(action => action.action === 'apply')
-    const hasAcceptedActions = actionValues.some(action => action.action === 'confirm' || action.action === 'foreshadow')
-    const reviewStatus = hasApplyActions
-      ? 'applied-outline' as const
-      : hasAcceptedActions
-        ? 'confirmed-constraint' as const
-        : 'dismissed' as const
-
-    const updatedReconciliation = {
-      ...reconciliation,
+    const chapter = currentChapter
+    const owner = useOutlineStore.getState().loadedScope
+    if (!chapter?.id || !chapter.planReconciliation || !outlineNode?.id || !owner
+      || owner.projectId !== chapter.projectId || !('workId' in chapter) || chapter.workId !== owner.workId) {
+      throw new Error('原章节或章纲归属已变化，对账未保存。')
+    }
+    const scope = { ...owner }
+    const saved = await saveChapterPlanReconciliationReview({
+      scope,
+      expected: chapter.planReconciliation,
+      outline: { id: outlineNode.id, summary: outlineNode.summary, updatedAt: outlineNode.updatedAt },
       actions,
-      reviewStatus,
-      reviewedAt: Date.now(),
-    }
-
-    await updateChapter(currentChapter.id, {
-      planReconciliation: updatedReconciliation,
     })
-
-    // “同步”是作者明确动作，因此在保存时更新章纲；AI 候选本身仍未绕过采纳。
-    if (outlineNode?.id) {
-      const itemsToAdd: string[] = []
-
-      Object.entries(actions).forEach(([actionKey, action]) => {
-        if (action.action === 'apply') {
-          const sectionKey = actionKey.split(':')[0]
-          const items = reconciliation[sectionKey as keyof typeof reconciliation] as Array<{ text: string }> | undefined
-          if (Array.isArray(items)) {
-            action.indices.forEach(index => {
-              if (items[index]) {
-                const prefix = sectionKey === 'unfinishedGoals' ? '[待完成]' :
-                              sectionKey === 'deviations' ? '[补充]' :
-                              sectionKey === 'newConstraints' ? '[新约束]' : '[更新]'
-                itemsToAdd.push(`${prefix} ${items[index].text}`)
-              }
-            })
-          }
-        }
-      })
-
-      if (itemsToAdd.length > 0) {
-        const currentSummary = outlineNode.summary || ''
-        const additions = itemsToAdd.join('\n')
-        const newSummary = currentSummary
-          ? `${currentSummary}\n\n[基于对账更新]\n${additions}`
-          : additions
-        await updateNode(outlineNode.id, { summary: newSummary })
-      }
-    }
-
-    console.log('[Reconciliation] Saved actions:', actions)
+    // Publish only the metadata this transaction changed; preserve any
+    // concurrently staged or saved body and any later outline revision.
+    const updateCachedChapter = (cached: Chapter) => cached.id === chapter.id
+      && cached.projectId === scope.projectId && 'workId' in cached && cached.workId === scope.workId
+      && cached.updatedAt <= saved.chapter.updatedAt
+      ? { ...cached, planReconciliation: saved.chapter.planReconciliation, updatedAt: saved.chapter.updatedAt }
+      : cached
+    useChapterStore.setState(state => ({
+      chapters: state.chapters.map(updateCachedChapter),
+      currentChapter: state.currentChapter ? updateCachedChapter(state.currentChapter) : null,
+    }))
+    useOutlineStore.setState(state => {
+      const owner = state.loadedScope
+      if (owner?.projectId !== scope.projectId || owner.worldId !== scope.worldId || owner.workId !== scope.workId) return state
+      return { nodes: state.nodes.map(node => node.id === saved.outline.id && node.updatedAt <= saved.outline.updatedAt
+        ? { ...node, summary: saved.outline.summary, updatedAt: saved.outline.updatedAt }
+        : node) }
+    })
   }
 
   const handleForeshadowReconciliation = async (item: { section: string; index: number; text: string }) => {
@@ -2837,14 +2893,33 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     })
   }
 
+  const handleKeepSeparatedProse = async () => {
+    const candidate = proseCandidate
+    const output = ai.output
+    const frame = observeSeparatedProseFrameV1(output)
+    if (!candidate || !frame) return
+    try {
+      const scope = await resolveScopeLike(project.id!)
+      const tokenUsage = await readProseGenerationObservedUsageV1({ scope, runId: candidate.durable.runId, attempt: candidate.durable.attempt })
+      if (editorChapterIdRef.current !== candidate.chapterId || proseCandidateRef.current?.durable.runId !== candidate.durable.runId) return
+      restoreAI({ output: output.slice(frame.afterSeparator).trim(), operation: candidate.operation, tokenUsage })
+    } catch (error) {
+      if (editorChapterIdRef.current === candidate.chapterId && proseCandidateRef.current?.durable.runId === candidate.durable.runId) setProseGenerationError(error instanceof Error ? error.message : '原正文用量证据无法读取，候选仍已保留。')
+    }
+  }
+
   const handleSaveProseCandidateDraft = async (text: string) => {
     const candidate = proseCandidate
     if (!candidate || candidate.semanticReview) throw new Error('当前结果不能保存为正文候选，请重新打开对应章节。')
+    const expectedChapterId = candidate.chapterId
     const scope = await resolveScopeLike(project.id!)
+    const tokenUsage = await readProseGenerationObservedUsageV1({ scope, runId: candidate.durable.runId, attempt: candidate.durable.attempt })
+    if (editorChapterIdRef.current !== expectedChapterId || proseCandidateRef.current?.durable.runId !== candidate.durable.runId) throw new Error('章节已切换，原候选与用量仍保留在原运行。')
     const revised = await reviseProseGenerationCandidateV1({ scope, candidate, outputText: text })
+    if (editorChapterIdRef.current !== expectedChapterId || proseCandidateRef.current?.durable.runId !== candidate.durable.runId) return
     setProseCandidate(revised)
     proseCandidateRef.current = revised
-    restoreAI({ output: revised.outputText, operation: revised.operation })
+    restoreAI({ output: revised.outputText, operation: revised.operation, tokenUsage })
   }
 
   const handleAcceptAI = async (text: string) => {
@@ -2940,10 +3015,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       return
     }
 
-    if (aiAction === 'continue') {
-      editorRef.current.appendContent(html)
-    } else if (aiAction === 'generate' || aiAction === 'deai-full') {
-      // generate / 整章去AI味 / 按报告修改：替换全文
+    if (aiAction === 'deai-full') {
+      // 整章去 AI 味：替换全文。
       editorRef.current.setContent(html)
       // setContent 不触发 onChange，这里手动同步
       const newHtml = editorRef.current.getHTML()
@@ -2954,27 +3027,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
     setProseGenerationError('')
     ai.reset()
-
-    // 先把完整正文落库，再启动带 hash CAS 的异步后处理。
-    if (shouldAutoProcess) {
-      const fullHtml = editorRef.current.getHTML()
-      const fullText = editorRef.current.getPlainText()
-      await updateChapter(acceptedChapterId, {
-        content: fullHtml,
-        wordCount: countWords(fullText),
-      })
-      setContent(fullHtml)
-      setPlainText(fullText)
-      setSavedContent(fullHtml)
-      void preparePostAdoptionAfterCommit({
-        chapterId: acceptedChapterId,
-        chapterTitle: acceptedChapterTitle,
-        chapterContent: fullHtml,
-        chapterPlainText: fullText,
-      }).catch(error => {
-        setTransitionError(error instanceof Error ? error.message : '章节后处理启动失败')
-      })
-    }
   }
 
   const handleDismissAI = async () => {
@@ -3069,12 +3121,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
       {showContext && (
         <ChapterContextPreview
-          worldContext={worldCtx}
-          characterContext={charCtx}
-          outlineNode={outlineNode ?? undefined}
+          operation={contextPreviewOperation}
+          assembly={currentContextPreview?.assembly}
+          error={currentContextPreview?.error}
+          onOperationChange={setContextPreviewOperation}
+          onRefresh={() => { setContextPreviewResult(null); setContextPreviewRefresh(value => value + 1) }}
           stateCards={stateCards}
           matchedIds={selectiveState.matchedIds}
-          allIds={selectiveState.allIds}
           extraIds={extraStateIds}
           stateListExpanded={showStatePreview}
           onToggleStateList={() => setShowStatePreview(!showStatePreview)}
@@ -3408,10 +3461,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         <div className="mb-3">
           {!ai.isStreaming && proseCandidate && (ai.operation === 'generate' || ai.operation === 'continue') && observeSeparatedProseFrameV1(ai.output) && <div role="alert" className="mb-2 rounded border border-warning/30 bg-warning/5 p-3 text-xs text-text-secondary">
             <p>{observeSeparatedProseFrameV1(ai.output)!.message}</p>
-            <button type="button" className="mt-2 rounded border border-border px-2 py-1" onClick={() => {
-              const frame = observeSeparatedProseFrameV1(ai.output)
-              if (frame) restoreAI({ output: ai.output.slice(frame.afterSeparator).trim(), operation: ai.operation })
-            }}>保留分隔后的正文供核对</button>
+            <button type="button" className="mt-2 rounded border border-border px-2 py-1" onClick={() => { void handleKeepSeparatedProse() }}>保留分隔后的正文供核对</button>
           </div>}
           {proseCandidate?.lengthObservation?.message && <p role="status" className="mb-2 rounded border border-warning/30 bg-warning/5 p-3 text-xs text-text-secondary">生成时：{proseCandidate.lengthObservation.message}</p>}
           <AIStreamOutput key={proseCandidate?.durable.runId ?? 'active-prose-output'} output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
@@ -3434,85 +3484,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       )}
 
       {postAdoptionSettings && (
-        <details className="mb-3 rounded-lg border border-border bg-bg-surface p-3 text-xs text-text-secondary">
-          <summary className="cursor-pointer font-medium text-text-primary">正文采纳后的演化策略</summary>
-          <div className="mt-3 space-y-3">
-            <label className="flex flex-wrap items-center gap-2">
-              <span>运行方式</span>
-              <select
-                value={postAdoptionSettings.policy}
-                onChange={event => void persistPostAdoptionSettings({
-                  ...postAdoptionSettings,
-                  policy: event.target.value as ResolvedPostAdoptionSettingsV1['policy'],
-                })}
-                className="rounded border border-border bg-bg-base px-2 py-1 text-text-primary"
-              >
-                <option value="off">关闭（只做本地失效标记）</option>
-                <option value="suggest">建议（默认，确认后运行）</option>
-                <option value="auto-with-budget">预算内自动运行</option>
-              </select>
-            </label>
-            <div className="flex flex-wrap gap-3">
-              {(['organization', 'memory', 'retrieval', 'consistency'] as const).map(taskType => (
-                <label key={taskType} className="inline-flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={postAdoptionSettings.taskTypes.includes(taskType)}
-                    onChange={event => void persistPostAdoptionSettings({
-                      ...postAdoptionSettings,
-                      taskTypes: event.target.checked
-                        ? [...postAdoptionSettings.taskTypes, taskType]
-                        : postAdoptionSettings.taskTypes.filter(item => item !== taskType),
-                    })}
-                    className="accent-accent"
-                  />
-                  {taskType === 'organization' ? '七域候选'
-                    : taskType === 'memory' ? '章节记忆'
-                      : taskType === 'retrieval' ? '检索重建'
-                        : '一致性守卫'}
-                </label>
-              ))}
-            </div>
-            {postAdoptionSettings.policy === 'auto-with-budget' && (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {([
-                  ['maxModelCalls', '调用上限', 1],
-                  ['maxInputTokens', '输入 token', 1000],
-                  ['maxOutputTokens', '输出 token', 1000],
-                  ['maxCostUsd', '费用上限 USD', 0.01],
-                ] as const).map(([key, label, step]) => (
-                  <label key={key} className="space-y-1">
-                    <span className="block text-text-muted">{label}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step={step}
-                      defaultValue={postAdoptionSettings.budget[key]}
-                      onBlur={event => void persistPostAdoptionSettings({
-                        ...postAdoptionSettings,
-                        budget: { ...postAdoptionSettings.budget, [key]: Number(event.target.value) },
-                      })}
-                      className="w-full rounded border border-border bg-bg-base px-2 py-1 text-text-primary"
-                    />
-                  </label>
-                ))}
-                <label className="col-span-2 inline-flex items-center gap-2 sm:col-span-4">
-                  <input
-                    type="checkbox"
-                    checked={postAdoptionSettings.budget.allowUnknownCost}
-                    onChange={event => void persistPostAdoptionSettings({
-                      ...postAdoptionSettings,
-                      budget: { ...postAdoptionSettings.budget, allowUnknownCost: event.target.checked },
-                    })}
-                    className="accent-accent"
-                  />
-                  允许免费或尚无可信价格表的模型在其它预算通过时自动运行
-                </label>
-              </div>
-            )}
-            <p className="text-text-muted">检索依赖章节记忆，一致性守卫依赖检索；保存时会自动补齐必要前置任务。</p>
-          </div>
-        </details>
+        <ChapterPostAdoptionSettingsPanel
+          settings={postAdoptionSettings}
+          onPersist={persistPostAdoptionSettings}
+        />
       )}
 
       {/* Phase A1/A3: 自动后处理状态指示 */}

@@ -29,7 +29,7 @@ import { isProductBuildArtifactKindV1 } from '../types/product-production'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import { parseProductBuildManifestV1, parseProductBuildQualityReportV1 } from './adoption'
-import { parseProductProductionBriefV3 } from './contracts'
+import { parseProductProductionBriefV3, productProductionTaskUsageBudgetViolationsV1 } from './contracts'
 import { ttrpgOpenEvolutionReuseEnvelopeV1, ttrpgOpenEvolutionTaskLaneV1 } from '../ttrpg/open-production-plan'
 import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../open-world/creator-derived-authority'
 import { readTextOpenWorldCreatorMediaTaskBudgetV1 } from '../open-world/creator-media-authority'
@@ -1052,14 +1052,9 @@ function safeUsageWithinBudget(value: unknown, budget: ProductTaskBudgetReservat
   if (cost !== null && (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0)) {
     throw new Error('[product-production-artifact] producer candidate usage.costUsd 无效')
   }
-  if (Number(usage.modelCalls) > budget.modelCalls
-    || Number(usage.inputTokens) > budget.inputTokens
-    || Number(usage.outputTokens) > budget.outputTokens
-    || Number(usage.mediaCalls) > budget.mediaCalls
-    || Number(usage.durationMs) > budget.durationMs
-    || Number(usage.storageBytes) > budget.storageBytes
-    || (budget.maximumCostUsd != null
-      && Number(cost ?? 0) > budget.maximumCostUsd)) {
+  if (productProductionTaskUsageBudgetViolationsV1(
+    usage as unknown as Omit<ProductTaskBudgetReservationV1, 'maximumCostUsd'> & { costUsd: number | null }, budget,
+  ).length > 0) {
     throw new Error('[product-production-artifact] producer candidate usage 超出 Plan 预算')
   }
 }
