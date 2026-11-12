@@ -8,6 +8,7 @@ on:
   workflow_dispatch: {}     # 支持在 Actions 页面手动触发（首次验证用）
 
 permissions:
+  checks: write
   contents: write           # 允许 workflow 把归档结果 commit 回仓库
 
 jobs:
@@ -24,10 +25,38 @@ jobs:
           python3 scripts/archive-traffic.py
           python3 scripts/archive-release-downloads.py
 
-      - name: Commit updated data
+      - name: Validate and publish the daily CSV update
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/traffic
-          git diff --cached --quiet || git commit -m "chore(traffic): 归档 $(date -u +%F) 流量数据"
-          git push
+          git add -- data/traffic
+          if git diff --cached --quiet; then exit 0; fi
+          # This scheduled writer may attest only its three generated CSV files.
+          git diff --cached --quiet -- . ':(exclude)data/traffic/clones.csv' ':(exclude)data/traffic/views.csv' ':(exclude)data/traffic/release-assets.csv'
+          python3 - <<'PYCSV'
+          import csv, pathlib, subprocess
+          for path in pathlib.Path('data/traffic').glob('*.csv'):
+              header = subprocess.check_output(['git', 'show', f'HEAD:{path}']).decode().splitlines()[0]
+              with path.open(newline='') as stream:
+                  rows = csv.reader(stream, strict=True)
+                  fields = next(rows)
+                  if fields != next(csv.reader([header])) or any(len(row) != len(fields) for row in rows):
+                      raise SystemExit(f'Invalid archive columns in {path}')
+          PYCSV
+          git diff --cached --quiet --diff-filter=D || { echo 'Archive deletion refused'; exit 1; }
+          git commit -m "chore(traffic): 归档 $(date -u +%F) 流量数据"
+          node scripts/quality/check-merge-scope.mjs HEAD^1
+
+          sha=$(git rev-parse HEAD)
+          ref="refs/heads/automation/traffic-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git push origin "HEAD:$ref"
+          trap 'git push origin --delete "$ref"' EXIT
+          gh api --method POST "repos/$GITHUB_REPOSITORY/check-runs" \
+            -f name='Changed files' -f head_sha="$sha" -f status=completed -f conclusion=success \
+            -f details_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            -f 'output[title]=Traffic CSV validation' -f 'output[summary]=Changed paths, archive columns and Git diff validated for this commit.' >/dev/null
+          git push origin HEAD:refs/heads/main
