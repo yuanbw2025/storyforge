@@ -340,6 +340,10 @@ export interface ProjectExportData {
     Omit<WorldRelease, 'id' | 'projectId' | 'worldId' | 'revisionId'>
     & { _exportId: number; _worldExportId: number; _revisionExportId: number }
   )[]
+  worldSourceReceipts: (
+    Omit<import('../types/world-source-receipt').WorldSourceReceiptV1, 'id' | 'projectId' | 'worldId' | 'worldReleaseId'>
+    & { _exportId: number; _worldExportId: number; _worldOwnerExportId: number; _worldReleaseExportId?: number | null }
+  )[]
   worldDerivations: (
     Omit<WorldDerivationV1, 'id' | 'projectId' | 'worldId' | 'targetRevisionId' | 'targetReleaseId'>
     & { _exportId: number; _worldExportId: number; _targetRevisionExportId?: number | null; _targetReleaseExportId?: number | null }
@@ -652,7 +656,9 @@ export interface ProjectImportOptionsV1 {
    * transaction after FK remapping; no model, network or external side effect. */
   finalizeInTransaction?: (projectId: number) => Promise<void>
 }
-export async function importProjectJSON(data: ProjectExportData, options: ProjectImportOptionsV1 = {}): Promise<number> {
+export async function importProjectJSON(data: unknown, options: ProjectImportOptionsV1 = {}): Promise<number> {
+  // Caller-owned objects cannot change after asynchronous trust checks begin.
+  data = structuredClone(data)
   const capturedOptions = { finalizeInTransaction: options.finalizeInTransaction }
   // 预检必须发生在事务外、写库前；失败时保证项目表也不会出现半导入根记录。
   assertTrustedProjectBackup(data)

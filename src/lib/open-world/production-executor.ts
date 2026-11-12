@@ -116,12 +116,13 @@ export function createTextOpenWorldSourceLockExecutorV1(options: { now?: () => n
             authorizedAt: contracts.start.authorizedAt,
           }
           const createdAt = Math.max(now(), contracts.start.authorizedAt)
-          if (contracts.sourcePlan.sourceKind === 'world-release' && locator.kind === 'world-release'
+          if (contracts.sourcePlan.sourceKind === 'world-release' && contracts.sourcePlan.sourceBinding.kind === 'world-release' && locator.kind === 'world-release'
             && contracts.sourcePlan.selection.kind === 'world-release') {
             return freezeTextOpenWorldWorldReleaseSourceV1({
               scope: execution.scope,
               localReleaseRecordId: locator.localReleaseRecordId,
               expectedReleaseHash: contracts.sourcePlan.sourceVersionHash,
+              purposeAuthorization: { proof: contracts.sourcePlan.sourceBinding.sourcePurpose },
               selection: {
                 mode: contracts.sourcePlan.selection.mode,
               },
@@ -139,6 +140,7 @@ export function createTextOpenWorldSourceLockExecutorV1(options: { now?: () => n
           return freezeTextOpenWorldWorldReleaseSourceV1({
             scope: execution.scope,
             localReleaseRecordId: brief.source.worldReleaseId,
+            purposeAuthorization: { proof: sourcePlan.sourcePurpose },
             selection: { mode: 'selected-resources', resourceKeys: brief.source.selection.resourceKeys },
             authorization: {
               productInstanceKey: production.productionKey,

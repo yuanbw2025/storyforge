@@ -300,6 +300,16 @@ export type ExportRefRemap = {
  * JSON from silently bypassing normal exportRemap handling.
  */
 export type PortableDataSpec = {
+  /** Local seal/cache origin validated against the complete frozen owner chain. */
+  kind: 'world-revision-origin'
+} | {
+  /** Actual immutable world package wire plus derived P/R/D indices. */
+  kind: 'world-source-receipt'
+} | {
+  /** An explicit selected editing D; never inferred from another receipt. */
+  kind: 'world-source-receipt-binding'
+  bindingField: 'sourceReceiptBinding'
+} | {
   kind: 'agent-run-root'
   contractField: string
   contractHashField: string
@@ -501,6 +511,8 @@ export interface CollectionAdoptionSpec {
   duplicatePolicy: 'skip' | 'update' | 'merge' | 'error'
   /** 必填字段;缺失则跳过该条 */
   required: string[]
+  /** Defaults for a genuinely new collection row, after in-transaction identity lookup. Never an update patch. */
+  createDefaults?: Readonly<Record<string, unknown>>
   /** 自动盖章字段 */
   autoStamps: ('projectId' | 'worldId' | 'workId' | 'worldGroupId' | 'homeWorldGroupId' | 'createdAt' | 'updatedAt')[]
   /** Owner selected from the trusted WorkspaceScope, never from AI output. */
