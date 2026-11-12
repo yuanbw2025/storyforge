@@ -21,9 +21,34 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-quality018-integrated-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-integrated-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality018-integrated-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the source-pinned report before SFQA-009 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-sfqa009-core-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the source-pinned report before SFQA-009 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-quality086-integrated-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the source-pinned report before SFQA-009 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261111-sfqa009-core-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the source-pinned report before SFQA-009 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261110-issue179-main834-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved pre-SFQA009 main receipt. Fixed corpus and historical evidence are unchanged; pure helper extraction has its own source-pinned receipt."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-quality086-integrated-v1.json",
         "workPackage": "SFQA-018",
@@ -1050,7 +1075,9 @@
     "tests/regression/R-NW-2E-byte-sink.test.ts",
     "tests/regression/R-NW-2E-numeric-runs.test.ts",
     "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
-    "src/lib/types/state-card.ts"
+    "src/lib/types/state-card.ts",
+    "src/lib/agent/run/context-manifest.ts",
+    "src/lib/utils/legacy-id-array.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",
