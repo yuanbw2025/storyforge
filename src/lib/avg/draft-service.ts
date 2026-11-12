@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import {updateWorkTitle} from "../workspace/works";
 import { db } from "../db/schema";
 import type { WorkspaceScope } from "../types";
@@ -86,6 +87,7 @@ export async function saveAvgDraftV1(
   settings: AvgAuthoringSettingsV1,
   title?: string,
 ) {
+  assertCurrentProductEntryV1('upper.avg')
   const parsed = parseAvgAuthoringSettingsV1(settings);
   if (title !== undefined && (!title.trim() || title.length > 200))
     throw new Error("请填写 1～200 字的作品名称");
@@ -102,6 +104,7 @@ export async function saveAvgDraftV1(
         revision: revision + 1,
         updatedAt: Date.now(),
       };
+      assertCurrentProductEntryV1('upper.avg')
       await db.avgAuthoringDrafts.put(next);
       if(title!==undefined)await updateWorkTitle(scope,title);
       return next;
@@ -114,6 +117,7 @@ export async function selectAvgWorldV1(
   releaseId: number,
   sourceDeclarationHash?: string,
 ) {
+  assertCurrentProductEntryV1('upper.avg')
   const current = await readAvgDraftV1(scope);
   if (current.revision !== revision)
     throw new Error("AVG 方案已变化，请刷新后重新选择世界");
@@ -132,6 +136,7 @@ export async function selectAvgWorldV1(
         revision: revision + 1,
         updatedAt: Date.now(),
       };
+      assertCurrentProductEntryV1('upper.avg')
       await db.avgAuthoringDrafts.put(next);
       return next;
     },
@@ -192,6 +197,7 @@ export async function ensureAvgProductionDraftV1(scope:WorkspaceScope,production
   if(existing)return readAvgDraftV1(scope)
   const now=Date.now();const settings=brief?.avg??{...DEFAULT_AVG_SETTINGS,playerRole:brief?.intent.playerRole??'',openingSituation:brief?.intent.openingSituation??'',experience:brief?.intent.coreExperience.join('\n')??'',qualityProfile:brief?.qualityProfile??'prototype',targetPlayMinutes:Math.min(900,brief?.scale.targetPlayMinutes??30),targetEndingCount:Math.min(8,brief?.scale.targetEndingCount??2)}
   const row=stampNewRecord(scope,'avgAuthoringDrafts',{...scope,revision:0,settingsJson:JSON.stringify(parseAvgAuthoringSettingsV1(settings)),worldReleaseId:brief?.source.worldReleaseId??null,productionId,conversationJson:'[]',createdAt:now,updatedAt:now},{owner:'work'})
+  assertCurrentProductEntryV1('upper.avg')
   await db.avgAuthoringDrafts.add(row);return readAvgDraftV1(scope)
  })
 }
@@ -210,6 +216,7 @@ export async function bindAvgDraftProductionV1(scope: WorkspaceScope, revision: 
     if (row.productionId === productionId) return row
     if (row.productionId != null) throw new Error('作者草稿已有制作记录，不能静默替换')
     const next = { ...row,productionId,revision:revision+1,updatedAt:Date.now() }
+    assertCurrentProductEntryV1('upper.avg')
     await db.avgAuthoringDrafts.put(next)
     return next
   })

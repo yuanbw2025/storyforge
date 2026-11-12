@@ -21,9 +21,50 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-post385-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa004-integrated-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-post385-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the product admission and preceding mainline source measurements."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality307-salt-ridge-install-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the product admission and preceding mainline source measurements."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-sfqa009-post385-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained the product admission and preceding mainline source measurements."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261111-quality307-product-entry-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained the product admission and preceding mainline source measurements."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality307-product-entry-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the previous product entry receipt before verifying the fixed public Salt Ridge installation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality004-product-entry-v1.json",
+        "workPackage": "quality004-original-v1",
+        "note": "Original receipt on the cumulative branch before isolation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality004-product-entry-v2.json",
+        "workPackage": "quality004-original-v2",
+        "note": "Original receipt on the cumulative branch before isolation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality004-isolated.json",
+        "implementationCommit": "1e33d6e2ef96b2cfd8ea78a983978afd76d7e18d",
+        "workPackage": "SFQA-004/SFQA-105",
+        "note": "Original product-admission and NPC repair measurement before refreshing the domain-projection receipt pointer."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-quality042-integrated-v1.json",
         "workPackage": "NW-0B",
@@ -1215,7 +1256,9 @@
     "src/lib/media/raster-image.ts",
     "tests/helpers/raster-decoder-vitest.ts",
     "src/lib/agent/run/context-manifest.ts",
-    "src/lib/utils/legacy-id-array.ts"
+    "src/lib/utils/legacy-id-array.ts",
+    "src/lib/product-platform/workspace-install.ts",
+    "src/lib/workspace/workspace-allocation.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

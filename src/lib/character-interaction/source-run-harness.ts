@@ -1,9 +1,11 @@
 import { revalidateWorldSourcePurposeV1 } from '../world-engine/source-purpose-actions'
 import { readChatDraftV1 } from './draft-service'
 import {resolveRequestConfig, type ChatResult} from '../ai/client'
+import {assertCurrentProductEntryV1} from '../product/product-catalog'
 import {CodexTerminalFailureV1Schema, type CodexTerminalFailureV1} from '../ai/codex-terminal-failure'
 import {estimateTokens} from '../ai/context-budget'
 import {computeKnownCostUsd} from '../ai/usage-log'
+import {recordAgentRunArtifactV1} from '../memory/artifact-store'
 import {createAgentSkillExecutionBindingV1} from '../agent/execution-binding'
 import {freezeFormalAIEntryBindingV1} from '../agent/formal-ai-entry'
 import {createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1} from '../agent/run/checkpoint'
@@ -13,7 +15,6 @@ import type {ContextManifestV1} from '../types/agent-run'
 import {appendAgentRunEventV1, createAgentRunV1, readAgentRunV1, type AgentRunSnapshotV1} from '../agent/run/event-store'
 import {hashCanonicalValue} from '../agent/run/hash'
 import {createVerificationReceiptV1} from '../agent/run/verification-receipt'
-import {recordAgentRunArtifactV1} from '../memory/artifact-store'
 import {getAgentSkillV1} from '../agent/skill-registry'
 import type {CreativeArtifactV1, CreativeCallEvidenceV1} from '../agent/creative-reliability'
 import {assembleContext} from '../registry/assemble-context'
@@ -226,6 +227,7 @@ async function generate(input: {
   runAI?: (messages: ChatMessage[]) => Promise<string>
   onBoundary?: (boundary: ChatSourceRunBoundaryV1, runId: number) => void | Promise<void>
 }) {
+  assertCurrentProductEntryV1('upper.character-interaction')
   const scope = structuredClone(input.scope), request = structuredClone(input.request)
   return withLock(scope, !!input.runAI, async () => {
     if (protocol.source) protocol.source.validateRequest(request)
@@ -296,10 +298,14 @@ async function generate(input: {
     await input.onBoundary?.('prepared', snapshot.run.id)
     if (input.signal?.aborted) throw new Error('已取消资料整理，未发送模型请求')
     if (await hashCanonicalValue(await readContext(scope, request)) !== await hashCanonicalValue(context)) throw new Error('资料已变化，未发送模型请求')
+    try { assertCurrentProductEntryV1('upper.character-interaction') }
+    catch (cause) { await denyBeforeDispatch(cause, 'product-catalog-denied-before-dispatch') }
     snapshot = await append(scope, snapshot, 'model.requested', {stepId: STEP, attempt: 1, bindingHash: await hashCanonicalValue(messages)})
     await input.onBoundary?.('model.requested', snapshot.run.id)
     try { await verifySourcePurpose(sourcePurposeHash) }
     catch (cause) { await denyBeforeDispatch(cause, 'world-source-purpose-denied-before-dispatch') }
+    try { assertCurrentProductEntryV1('upper.character-interaction') }
+    catch (cause) { await denyBeforeDispatch(cause, 'product-catalog-denied-before-dispatch') }
     const result: ChatResult = {}, start = Date.now()
     let raw: string
     try {

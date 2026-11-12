@@ -1,4 +1,6 @@
+import { admitsSaltRidgeInstall, type SaltRidgeInstallPermit } from '../salt-ridge/install-admission'
 import { parseProductRuntimePackage } from './runtime-package'
+import { assertCurrentProductEntryV1, productCatalogIdForProductionV1 } from '../product/product-catalog'
 import { avgMediaProductionEnabledV2, avgVoiceProductionEnabledV3 } from '../avg/assembly-contract'
 import { createProductBuildPreviewManifestV2 } from './preview-manifest'
 import { readProductProductionBuildWorldScopeV1 } from './world-binding'
@@ -5165,6 +5167,7 @@ async function recoverCompletedOrCheckpointed(input: {
 }
 
 async function runClaimedTaskCore(input: {
+  saltRidgeInstall?: SaltRidgeInstallPermit
   scope: WorkspaceScope
   productionId: number
   build: { id: number; buildNumber: number; controlEpoch: number; planHash: string; failureJson: string }
@@ -5661,6 +5664,23 @@ async function runClaimedTaskCore(input: {
     && attemptBudgetReservation.modelCalls === 0) {
     throw new Error(`[product-production-scheduler] Build lifetime budget 不足:task=${input.task.taskKey},remainingModelCalls=0`)
   }
+  // This is derived from verified durable evidence, never a caller bypass flag.
+  const installBrief = input.saltRidgeInstall && sourceProduction?.currentBriefRevision != null
+    ? await db.productProductionBriefs.where('[productionId+revision]').equals([input.productionId, sourceProduction.currentBriefRevision]).first()
+    : null
+  const assertAttemptCatalogAdmission = () => {
+    if (originalAuthorSource) return
+    try {
+      if (!sourceProduction) throw new Error('[product-catalog] Production 不存在')
+      if (input.task.executionMode === 'deterministic' && (input.task.kind === 'runtime-package' || input.task.kind === 'quality-report')
+        && admitsSaltRidgeInstall(input.saltRidgeInstall, sourceProduction.productType, input.scope, installBrief?.sourceWorldReleaseId ?? null,
+          { contentHash: installBrief?.sourceWorldContentHash ?? undefined })) return
+      assertCurrentProductEntryV1(productCatalogIdForProductionV1(sourceProduction.productType))
+    } catch (error) {
+      throw new ProductProductionDraftRejectedErrorV1(safeExecutorError(error), zeroUsage())
+    }
+  }
+  assertAttemptCatalogAdmission()
   const bindingHash = frozenExecutionIdentityHash
   if (authorizedDirectResult) {
     snapshot = await append(input.scope, snapshot, 'tool.called', {
@@ -5787,6 +5807,9 @@ async function runClaimedTaskCore(input: {
       // executor is entered. No provider was invoked by this callback.
       throw Object.assign(new DOMException('原执行授权已停止', 'AbortError'), { productProductionUsage: zeroUsage() })
     }
+    // Verified recovery of an already received answer remains zero-call. Every
+    // fresh execution, including deterministic authoring, needs catalog admission.
+    assertAttemptCatalogAdmission()
     result = authorizedDirectResult?.result ?? await Promise.race([
       input.executor({
         scope: input.scope, productionId: input.productionId, buildId: input.build.id,
@@ -5802,6 +5825,8 @@ async function runClaimedTaskCore(input: {
         signal: executionController.signal,
         beforeAdditionalModelRequest: async () => {
           if (!await refreshExecutionAttemptAuthority('provider')) return 'discarded-stale'
+          if (!sourceProduction) throw new Error('[product-catalog] Production 不存在')
+          assertCurrentProductEntryV1(productCatalogIdForProductionV1(sourceProduction.productType))
         },
         onModelOutput: recordRawOutput,
         ...(input.task.executionMode === 'media-provider' ? { onMediaOutput: recordRawOutput } : {}),
@@ -7655,6 +7680,7 @@ async function pauseBeforeMediaForFailedTextAdventureReviewV1(input: {
 }
 
 export async function runProductProductionSchedulerCycleV1(input: {
+  saltRidgeInstall?: SaltRidgeInstallPermit
   scope: WorkspaceScope
   productionId: number
   executor: ProductProductionTaskExecutorV1
@@ -7872,6 +7898,7 @@ export async function runProductProductionSchedulerCycleV1(input: {
     else input.signal?.addEventListener('abort', abort, { once: true })
     try {
       await Promise.all(claimed.map(({ task, snapshot }) => runClaimedTask({
+        saltRidgeInstall: input.saltRidgeInstall,
         scope, productionId: input.productionId,
         build: {
           id: state.build.id!, buildNumber: state.build.buildNumber,
@@ -7902,6 +7929,7 @@ export async function runProductProductionSchedulerCycleV1(input: {
 }
 
 export async function runProductProductionUntilBlockedV1(input: {
+  saltRidgeInstall?: SaltRidgeInstallPermit
   scope: WorkspaceScope
   productionId: number
   executor: ProductProductionTaskExecutorV1

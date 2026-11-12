@@ -1,7 +1,8 @@
 import { createSaltRidgeShowcaseJourneyV1 } from '../../content/salt-ridge/showcase-journey'
 import { db } from '../db/schema'
 import { parseTextOpenWorldModulesV1 } from '../open-world/modules'
-import { createSaltRidgeWorldV1 } from '../world-engine/salt-ridge-preset'
+import { SALT_RIDGE_WORKSPACE_UID } from '../world-engine/salt-ridge-preset'
+import { admitsSaltRidgeInstall, installFrozenSaltRidge, type SaltRidgeInstallPermit } from './install-admission'
 import { openWorldSemanticResourceCatalogV1 } from '../context-gateway/world-release-client'
 import {
   createProductProductionWithBriefV1,
@@ -245,6 +246,16 @@ export function createSaltRidgeShowcasePlanV1(
   }, brief, briefHash)
 }
 
+async function compileSaltRidgeRuntimePackage(scope: WorkspaceScope, brief: ProductProductionBriefV3) {
+  const journey = await createSaltRidgeShowcaseJourneyV1()
+  const inner = structuredClone(journey.runtimePackage)
+  inner.metadata.packageKey = SALT_RIDGE_SHOWCASE_PRODUCT_KEY
+  inner.metadata.title = SALT_RIDGE_SHOWCASE_TITLE
+  inner.metadata.description = '一段可完整通关的文字开放世界纵向样板。'
+  inner.sourceManifest = await frozenShowcaseSource(scope, brief.source)
+  return wrapRuntimePackage(inner, brief)
+}
+
 export function saltRidgeShowcaseExecutorV1(
   brief: ProductProductionBriefV3,
 ): ProductProductionTaskExecutorV1 {
@@ -255,13 +266,7 @@ export function saltRidgeShowcaseExecutorV1(
       durationMs: Math.ceil(performance.now() - startedAt), storageBytes,
     })
     if (task.task.kind === 'runtime-package') {
-      const journey = await createSaltRidgeShowcaseJourneyV1()
-      const inner = structuredClone(journey.runtimePackage)
-      inner.metadata.packageKey = SALT_RIDGE_SHOWCASE_PRODUCT_KEY
-      inner.metadata.title = SALT_RIDGE_SHOWCASE_TITLE
-      inner.metadata.description = '一段可完整通关的文字开放世界纵向样板。'
-      inner.sourceManifest = await frozenShowcaseSource(task.scope, brief.source)
-      const runtimePackage = wrapRuntimePackage(inner, brief)
+      const runtimePackage = await compileSaltRidgeRuntimePackage(task.scope, brief)
       return {
         artifacts: [{
           artifactKey: 'text-open-world.runtime-package', kind: 'presentation', payload: runtimePackage,
@@ -311,17 +316,31 @@ export function saltRidgeShowcaseExecutorV1(
   }
 }
 
+// The public v1 game ships fixed rules, text, quests and endings. Its local
+// WorldRelease coordinates vary across installations and are verified separately.
+const SALT_RIDGE_GAME_V1_HASH = '58538ccdd23513eeb39bfcfc1cb6544b9a31b394abce137fb29a2a485fa78809'
+
+async function isFrozenSaltRidgeGame(runtime: ProductRuntimePackageV1): Promise<boolean> {
+  if (runtime.definition.productKey !== SALT_RIDGE_SHOWCASE_PRODUCT_KEY || !runtime.textOpenWorldVNext) return false
+  return await hashProductProductionValueV2({
+    ...runtime, sourceWorld: null, textOpenWorldVNext: { ...runtime.textOpenWorldVNext, sourceManifest: null },
+  }) === SALT_RIDGE_GAME_V1_HASH
+}
+
 let localInstallationQueue: Promise<unknown> = Promise.resolve()
 let installation: Promise<{ scope: WorkspaceScope; releaseId: number }> | null = null
 
 async function installedReleaseRows(): Promise<ProductRelease[]> {
-  return (await db.productReleases.toArray()).filter(row => {
-    try {
-      return parseAnyProductReleaseManifest(row.manifestJson).definition.productKey === SALT_RIDGE_SHOWCASE_PRODUCT_KEY
-    } catch {
-      return false
-    }
-  }).sort((left, right) => right.version - left.version || right.id! - left.id!)
+  const project = await db.projects.filter(row => row.workspaceUid === SALT_RIDGE_WORKSPACE_UID).first()
+  if (project?.id == null) return []
+  const releases = await db.productReleases.where('projectId').equals(project.id).toArray()
+  const installed: ProductRelease[] = []
+  for (const release of releases) {
+    let runtime: ProductRuntimePackageV1
+    try { runtime = parseAnyProductReleaseManifest(release.manifestJson) } catch { continue }
+    if (await isFrozenSaltRidgeGame(runtime)) installed.push(release)
+  }
+  return installed.sort((left, right) => right.version - left.version || right.id! - left.id!)
 }
 
 async function readInstalledRelease(releaseId: number) {
@@ -378,113 +397,7 @@ export const saltRidgeShowcase = {
     if (installation) return installation
     const performInstall = async () => {
       onProgress('正在准备盐脊的冻结世界…')
-      const { scope, worldReleaseId } = await createSaltRidgeWorldV1()
-      const previous = (await installedReleaseRows()).find(row => row.projectId === scope.projectId
-        && row.worldId === scope.worldId && row.workId === scope.workId && row.worldReleaseId === worldReleaseId)
-      if (previous && await hasCurrentReleaseSource(previous.id!)) return { scope, releaseId: previous.id! }
-      onProgress('正在锁定任务、规则与来源…')
-      const workspace = await listProductProductionWorkspaceV1(scope, ['text-open-world'])
-      let productionId = workspace.productions.find(item => (
-        item.title === SALT_RIDGE_SHOWCASE_TITLE && item.status !== 'archived'
-        && (!previous || item.productionKey === previous.productionKey)
-      ))?.id
-      if (productionId == null && previous) throw new Error('盐脊旧版制作记录缺失，无法安全建立新版')
-      if (productionId == null) {
-        productionId = await createProductProductionWithBriefV1({
-          scope, worldReleaseId, title: SALT_RIDGE_SHOWCASE_TITLE,
-          brief: await createSaltRidgeShowcaseBriefV1(scope, worldReleaseId),
-        })
-      }
-      let details = await readProductProductionDetailsV1(scope, productionId)
-      if (!details?.brief) throw new Error('盐脊展示 Brief 缺失')
-      const priorBrief = parseProductProductionBriefV3(details.brief.briefJson)
-      if (priorBrief.source.worldReleaseId !== worldReleaseId
-        || !priorBrief.completionContract.requiredGateIds.includes('salt-ridge.showcase-journey')) {
-        throw new Error('现有制作不属于此冻结盐脊展示，未修改该制作')
-      }
-      const failedBuild = details.production.status !== 'brief-ready'
-        && details.build && ['failed', 'cancelled'].includes(details.build.status)
-      if (!priorBrief.completionContract.requiredGateIds.includes(FROZEN_RESOURCE_GATE) || (previous && failedBuild)) {
-        onProgress('正在保留旧记录并核验新版来源…')
-        const revised = await executeProductProductionCommand({
-          scope, productionId,
-          command: {
-            type: 'save-brief-revision',
-            commandId: `salt-ridge.sources.${productionId}.${details.production.stateRevision}`,
-            expectedStateRevision: details.production.stateRevision,
-            parentRevision: details.production.currentBriefRevision,
-            brief: await createSaltRidgeShowcaseBriefV1(scope, worldReleaseId),
-          },
-        })
-        if (!revised.ok) throw new Error(String(revised.result.message ?? revised.errorCode))
-        details = await readProductProductionDetailsV1(scope, productionId)
-      } else if (failedBuild) {
-        onProgress('正在保留旧记录并重新核验内容…')
-        await archiveProductProductionV1({ scope, production: details.production })
-        productionId = await createProductProductionWithBriefV1({
-          scope, worldReleaseId, title: SALT_RIDGE_SHOWCASE_TITLE,
-          brief: await createSaltRidgeShowcaseBriefV1(scope, worldReleaseId),
-        })
-        details = await readProductProductionDetailsV1(scope, productionId)
-      }
-      if (details?.production.status !== 'brief-ready' && details?.build?.status === 'recovery-required') {
-        await retryProductProductionBlockerV1({ scope, details })
-        details = await readProductProductionDetailsV1(scope, productionId)
-      }
-      if (details?.production.status !== 'brief-ready' && details?.build?.status === 'paused') {
-        const resumed = await executeProductProductionCommand({
-          scope, productionId,
-          command: {
-            type: 'resume', commandId: `salt-ridge.resume.${productionId}.${details.production.stateRevision}`,
-            expectedStateRevision: details.production.stateRevision,
-          },
-        })
-        if (!resumed.ok) throw new Error(String(resumed.result.message ?? resumed.errorCode))
-        details = await readProductProductionDetailsV1(scope, productionId)
-      }
-      if (!details?.brief) throw new Error('盐脊展示 Brief 缺失')
-      if (!details.build || details.production.status === 'brief-ready') {
-        const authorized = await executeProductProductionCommand({
-          scope, productionId,
-          command: {
-            type: 'authorize-start', commandId: `salt-ridge.authorize.${productionId}.${details.brief.revision}`,
-            expectedStateRevision: details.production.stateRevision,
-            briefRevision: details.brief.revision, briefHash: details.brief.briefHash,
-            authorizationNonce: `player-start.${crypto.randomUUID()}`,
-          },
-        })
-        if (!authorized.ok) throw new Error(String(authorized.errorCode ?? '盐脊展示开始授权失败'))
-        details = await readProductProductionDetailsV1(scope, productionId)
-      }
-      if (!details?.build || !details.brief) throw new Error('盐脊展示构建未就绪')
-      const brief = parseProductProductionBriefV3(details.brief.briefJson)
-      if (!['release-ready', 'released'].includes(details.build.status)) {
-        onProgress('正在编译任务、战斗、制作与双结局…')
-        const result = await runProductProductionUntilBlockedV1({
-          scope, productionId,
-          suppliedPlan: createSaltRidgeShowcasePlanV1(
-            brief, details.brief.briefHash, details.build.buildNumber, details.build.controlEpoch,
-          ),
-          executor: saltRidgeShowcaseExecutorV1(brief), maximumCycles: 12,
-          onDurableBoundary: boundary => onProgress(
-            boundary === 'root.completed' ? '内容核验完成，正在保存版本…'
-              : boundary === 'candidate.checkpoint' || boundary === 'artifact.accepted'
-                ? '正在保存开放世界运行包…' : '正在核对冻结来源…',
-          ),
-        })
-        if (result.buildStatus !== 'release-ready') {
-          throw new Error(`盐脊展示准备中断：${result.buildStatus}。已有进度已保留。`)
-        }
-      }
-      onProgress('正在发布不可变游戏版本…')
-      await publishProductProductionV1({ scope, productionId })
-      const completed = await readProductProductionDetailsV1(scope, productionId)
-      const releaseId = completed?.production.currentProductReleaseId
-      if (releaseId == null) throw new Error('盐脊展示发布尚未完成')
-      if (!await hasCurrentReleaseSource(releaseId)) {
-        throw new Error('盐脊新版没有通过冻结资源核验')
-      }
-      return { scope, releaseId }
+      return installFrozenSaltRidge(onProgress)
     }
     const queued = localInstallationQueue.catch(() => undefined).then(async () => (
       typeof navigator !== 'undefined' && navigator.locks
@@ -495,4 +408,140 @@ export const saltRidgeShowcase = {
     installation = queued.finally(() => { installation = null })
     return installation
   },
+}
+
+/** Internal materialization for the verified, fixed, offline showcase. */
+export async function materializeSaltRidgeShowcase(
+  scope: WorkspaceScope, worldReleaseId: number, saltRidgeInstall: SaltRidgeInstallPermit, onProgress: (message: string) => void,
+) {
+  if (!admitsSaltRidgeInstall(saltRidgeInstall, 'text-open-world', scope, worldReleaseId)) throw new Error('缺少本次内置展示安装凭据')
+  const previous = (await installedReleaseRows()).find(row => row.projectId === scope.projectId
+    && row.worldId === scope.worldId && row.workId === scope.workId && row.worldReleaseId === worldReleaseId)
+  if (previous && await hasCurrentReleaseSource(previous.id!)) return { scope, releaseId: previous.id! }
+  const expectedBrief = await createSaltRidgeShowcaseBriefV1(scope, worldReleaseId)
+  if (!admitsSaltRidgeInstall(saltRidgeInstall, 'text-open-world', scope, worldReleaseId, {
+    contentHash: expectedBrief.source.worldContentHash, referenceHash: expectedBrief.source.selection.worldReferenceHash,
+  })) throw new Error('盐脊展示冻结来源已变化')
+  onProgress('正在锁定任务、规则与来源…')
+  const workspace = await listProductProductionWorkspaceV1(scope, ['text-open-world'])
+  let productionId = workspace.productions.find(item => (
+    item.title === SALT_RIDGE_SHOWCASE_TITLE && item.status !== 'archived'
+    && (!previous || item.productionKey === previous.productionKey)
+  ))?.id
+  if (productionId == null && previous) throw new Error('盐脊旧版制作记录缺失，无法安全建立新版')
+  if (productionId == null) {
+    productionId = await createProductProductionWithBriefV1({
+      scope, saltRidgeInstall, worldReleaseId, title: SALT_RIDGE_SHOWCASE_TITLE,
+      brief: expectedBrief,
+    })
+  }
+  let details = await readProductProductionDetailsV1(scope, productionId)
+  if (!details?.brief) throw new Error('盐脊展示 Brief 缺失')
+  const priorBrief = parseProductProductionBriefV3(details.brief.briefJson)
+  if (priorBrief.source.worldReleaseId !== worldReleaseId
+    || !priorBrief.completionContract.requiredGateIds.includes('salt-ridge.showcase-journey')) {
+    throw new Error('现有制作不属于此冻结盐脊展示，未修改该制作')
+  }
+  const hasResourceGate = priorBrief.completionContract.requiredGateIds.includes(FROZEN_RESOURCE_GATE)
+  const expectedPriorBrief = hasResourceGate ? expectedBrief : {
+    ...expectedBrief,
+    completionContract: {
+      ...expectedBrief.completionContract,
+      requiredGateIds: expectedBrief.completionContract.requiredGateIds.filter(gate => gate !== FROZEN_RESOURCE_GATE),
+    },
+  }
+  if (await hashProductProductionValueV2(expectedPriorBrief) !== details.brief.briefHash
+    || await hashProductProductionValueV2(priorBrief) !== details.brief.briefHash) {
+    throw new Error('已有制作与内置盐脊 Brief 不一致')
+  }
+  if (hasResourceGate && details.build?.briefHash === details.brief.briefHash && details.build.planJson && details.build.planHash) {
+    const priorPlan = parseProductProductionPlanV3(details.build.planJson, expectedBrief, details.brief.briefHash)
+    const expectedPlan = createSaltRidgeShowcasePlanV1(expectedBrief, details.brief.briefHash, details.build.buildNumber, priorPlan.controlEpoch)
+    if (await hashProductProductionValueV2(expectedPlan) !== details.build.planHash
+      || await hashProductProductionValueV2(priorPlan) !== details.build.planHash) throw new Error('已有制作与内置盐脊计划不一致')
+  }
+  const failedBuild = details.production.status !== 'brief-ready'
+    && details.build && ['failed', 'cancelled'].includes(details.build.status)
+  if (!priorBrief.completionContract.requiredGateIds.includes(FROZEN_RESOURCE_GATE) || (previous && failedBuild)) {
+    onProgress('正在保留旧记录并核验新版来源…')
+    const revised = await executeProductProductionCommand({
+      scope, productionId, saltRidgeInstall,
+      command: {
+        type: 'save-brief-revision',
+        commandId: `salt-ridge.sources.${productionId}.${details.production.stateRevision}`,
+        expectedStateRevision: details.production.stateRevision,
+        parentRevision: details.production.currentBriefRevision,
+        brief: expectedBrief,
+      },
+    })
+    if (!revised.ok) throw new Error(String(revised.result.message ?? revised.errorCode))
+    details = await readProductProductionDetailsV1(scope, productionId)
+  } else if (failedBuild) {
+    onProgress('正在保留旧记录并重新核验内容…')
+    await archiveProductProductionV1({ scope, production: details.production })
+    productionId = await createProductProductionWithBriefV1({
+      scope, saltRidgeInstall, worldReleaseId, title: SALT_RIDGE_SHOWCASE_TITLE,
+      brief: expectedBrief,
+    })
+    details = await readProductProductionDetailsV1(scope, productionId)
+  }
+  if (details?.production.status !== 'brief-ready' && details?.build?.status === 'recovery-required') {
+    await retryProductProductionBlockerV1({ scope, details, saltRidgeInstall })
+    details = await readProductProductionDetailsV1(scope, productionId)
+  }
+  if (details?.production.status !== 'brief-ready' && details?.build?.status === 'paused') {
+    const resumed = await executeProductProductionCommand({
+      scope, productionId, saltRidgeInstall,
+      command: {
+        type: 'resume', commandId: `salt-ridge.resume.${productionId}.${details.production.stateRevision}`,
+        expectedStateRevision: details.production.stateRevision,
+      },
+    })
+    if (!resumed.ok) throw new Error(String(resumed.result.message ?? resumed.errorCode))
+    details = await readProductProductionDetailsV1(scope, productionId)
+  }
+  if (!details?.brief) throw new Error('盐脊展示 Brief 缺失')
+  if (!details.build || details.production.status === 'brief-ready') {
+    const authorized = await executeProductProductionCommand({
+      scope, productionId, saltRidgeInstall,
+      command: {
+        type: 'authorize-start', commandId: `salt-ridge.authorize.${productionId}.${details.brief.revision}`,
+        expectedStateRevision: details.production.stateRevision,
+        briefRevision: details.brief.revision, briefHash: details.brief.briefHash,
+        authorizationNonce: `player-start.${crypto.randomUUID()}`,
+      },
+    })
+    if (!authorized.ok) throw new Error(String(authorized.errorCode ?? '盐脊展示开始授权失败'))
+    details = await readProductProductionDetailsV1(scope, productionId)
+  }
+  if (!details?.build || !details.brief) throw new Error('盐脊展示构建未就绪')
+  const brief = parseProductProductionBriefV3(details.brief.briefJson)
+  if (!['release-ready', 'released'].includes(details.build.status)) {
+    onProgress('正在编译任务、战斗、制作与双结局…')
+    const result = await runProductProductionUntilBlockedV1({
+      scope, productionId, saltRidgeInstall,
+      suppliedPlan: createSaltRidgeShowcasePlanV1(
+        brief, details.brief.briefHash, details.build.buildNumber, details.build.controlEpoch,
+      ),
+      executor: saltRidgeShowcaseExecutorV1(brief), maximumCycles: 12,
+      onDurableBoundary: boundary => onProgress(
+        boundary === 'root.completed' ? '内容核验完成，正在保存版本…'
+          : boundary === 'candidate.checkpoint' || boundary === 'artifact.accepted'
+            ? '正在保存开放世界运行包…' : '正在核对冻结来源…',
+      ),
+    })
+    if (result.buildStatus !== 'release-ready') {
+      throw new Error(`盐脊展示准备中断：${result.buildStatus}。已有进度已保留。`)
+    }
+  }
+  onProgress('正在发布不可变游戏版本…')
+  const expectedPackageHash = await hashProductProductionValueV2(await compileSaltRidgeRuntimePackage(scope, brief))
+  await publishProductProductionV1({ scope, productionId, expectedPackageHash })
+  const completed = await readProductProductionDetailsV1(scope, productionId)
+  const releaseId = completed?.production.currentProductReleaseId
+  if (releaseId == null) throw new Error('盐脊展示发布尚未完成')
+  if (!await hasCurrentReleaseSource(releaseId)) {
+    throw new Error('盐脊新版没有通过冻结资源核验')
+  }
+  return { scope, releaseId }
 }
