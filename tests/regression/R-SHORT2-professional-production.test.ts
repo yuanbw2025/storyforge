@@ -172,6 +172,13 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
     expect(backup.creationReleases).toHaveLength(2)
     const importedProjectId = await importProjectJSON(structuredClone(backup))
     const importedReleases = await db.creationReleases.where('projectId').equals(importedProjectId).sortBy('version')
+    const corrupt = structuredClone(backup)
+    corrupt.creationReleases[0].contentHash = '0'.repeat(64)
+    const countRows = () => Promise.all(db.tables.map(table => table.count()))
+    const before = await countRows()
+    await expect(importProjectJSON(corrupt)).rejects.toThrow('manifest 身份或 hash 校验失败')
+    expect(await countRows()).toEqual(before)
+
     const importedRelease = importedReleases[0]
     const importedWork = await db.works.where('projectId').equals(importedProjectId).first()
     const importedWorld = await db.worlds.where('projectId').equals(importedProjectId).first()
@@ -288,7 +295,7 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
     expect((await ensureShortNovelProductionV1(second.scope)).brief).toBeNull()
   })
 
-  it('导入前验证冻结发布 hash，损坏备份不会产生半个项目', async () => {
+  it('缺失作品归属的伪造发布在导入前被拒绝', async () => {
     const created = await seedCurrentWorkspace('损坏发布样例', { targetWordCount: 5_000, novelProfile: 'short' })
     const backup = await exportProjectJSON(created.scope.projectId)
     backup.creationReleases.push({
@@ -305,7 +312,7 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
       createdAt: 1,
     })
     const before = await db.projects.count()
-    await expect(importProjectJSON(backup)).rejects.toThrow('manifest 身份或 hash 校验失败')
+    await expect(importProjectJSON(backup)).rejects.toThrow('creationReleases[0]: creationReleases owner 缺失或越界')
     expect(await db.projects.count()).toBe(before)
   })
   it('错误模型目标会终结运行，作者可关闭待处理候选且不能绕过候选确认', async () => {

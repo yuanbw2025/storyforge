@@ -4,7 +4,7 @@
  * R-04：导入原子性与外键反例。
  *
  * 期望:
- *   FK remap 缺失时在事务内抛错,整个导入回滚,不留下项目或子表残留。
+ *   缺少外键映射时拒绝导入，不留下项目或子表残留。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
@@ -54,9 +54,11 @@ describe('R-04: importProjectJSON 原子性 + FK fail-fast', () => {
     await db.delete()
     await db.open()
 
-    await expect(importProjectJSON(brokenExport)).rejects.toThrow('chapters.outlineNodeId')
-
-    expect(await db.projects.count()).toBe(0)
-    expect(await db.chapters.count()).toBe(0)
+    const countRows = () => Promise.all(db.tables.map(table => table.count()))
+    const before = await countRows()
+    await expect(importProjectJSON(brokenExport)).rejects.toThrow(
+      'chapters[0]._outlineExportId=0 没有对应的 outlineNodes 记录',
+    )
+    expect(await countRows()).toEqual(before)
   })
 })

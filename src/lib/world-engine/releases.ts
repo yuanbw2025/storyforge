@@ -22,6 +22,8 @@ import { canonicalWorldReleaseJsonV1, hashWorldReleaseValueV1 } from './release-
 import { isWorkCode, isWorkspaceUid } from '../memory/identity'
 import { NARRATIVE_DOMAIN_FIELDS_V1 } from '../narrative-domain/codec'
 import Dexie from 'dexie'
+import { readWorldPublicationAuthorityV1 } from './publication-origin'
+import { worldRevisionOriginV1 } from './publication-origin-contract'
 import { captureWorldReleaseInputV4, captureWorldReleaseInputInTransactionV4, narrativeReleaseCaptureTablesV4, type WorldReleaseInputV4 } from './narrative-release-capture'
 import { compileNarrativeReleaseInWorkerV1 } from './narrative-release-worker'
 import { verifyWorldReleaseContentV4 } from './narrative-release-v4'
@@ -451,6 +453,7 @@ export async function createWorldRevision(input: {
       label: input.label.trim() || `修订 ${revisions.length + 1}`,
       manifestJson,
       contentHash,
+      publicationOrigin: worldRevisionOriginV1('author-seal', manifest, contentHash),
       createdAt: ts,
       updatedAt: ts,
     }
@@ -504,14 +507,16 @@ async function commitNarrativeWorldRevisionV4(input: {
       if (!parent || parent.worldId !== input.scope.worldId || parent.projectId !== input.scope.projectId) throw new Error('[release] 父修订不属于当前 World')
     }
     const revisions = await db.worldRevisions.where('worldId').equals(input.scope.worldId).toArray()
-    const existing = revisions.find(row => row.contentHash === compiled.contentHash && row.manifestJson === compiled.manifestJson
+    const existing = revisions.find(row => row.publicationOrigin?.kind === 'author-seal'
+      && row.contentHash === compiled.contentHash && row.manifestJson === compiled.manifestJson
       && row.parentRevisionId === parentRevisionId && row.label === label)
     if (input.signal?.aborted) throw new DOMException('编译已取消', 'AbortError')
     if (existing) return existing
     const ts = Date.now()
     const row: WorldRevision = { projectId: input.scope.projectId, worldId: input.scope.worldId, parentRevisionId,
       revision: Math.max(0, ...revisions.map(item => item.revision)) + 1, label,
-      manifestJson: compiled.manifestJson, contentHash: compiled.contentHash, createdAt: ts, updatedAt: ts }
+      manifestJson: compiled.manifestJson, contentHash: compiled.contentHash,
+      publicationOrigin: worldRevisionOriginV1('author-seal', compiled.manifest, compiled.contentHash), createdAt: ts, updatedAt: ts }
     const id = await db.worldRevisions.add(row) as number
     return { ...row, id }
   }).catch(cause => {
@@ -523,19 +528,22 @@ export async function publishWorldRevision(revisionId: number, label?: string): 
   const revision = await db.worldRevisions.get(revisionId)
   if (!revision) throw new Error('[release] 修订不存在')
   const verified = await verifyWorldReleaseManifestV1({ manifest: revision.manifestJson, expectedContentHash: revision.contentHash })
-  return db.transaction('rw', db.worldRevisions, db.worldReleases, db.worlds, async () => {
+  return db.transaction('rw', db.worldRevisions, db.worldReleases, db.worlds, db.projects, db.works, async () => {
     const currentRevision = await db.worldRevisions.get(revisionId)
     if (!currentRevision
       || currentRevision.manifestJson !== revision.manifestJson
       || currentRevision.contentHash !== revision.contentHash) {
       throw new Error('[release] 修订在发布过程中发生变化')
     }
-    const existing = await db.worldReleases.where('revisionId').equals(revisionId).first()
-    if (existing) return existing
     const world = await db.worlds.get(currentRevision.worldId)
     if (!world || world.projectId !== currentRevision.projectId) throw new Error('[release] 修订 World 不存在')
     if (!isShareableWorld(world)) throw new Error('[release] 内部作用域不能发布为 WorldRelease')
     if (verified.manifest.worldCode !== world.code) throw new Error('[release] 冻结内容与目标 World 身份不一致')
+    const authority = await readWorldPublicationAuthorityV1({ ...currentRevision, revisionId,
+      sourceWorldCode: world.code }, verified)
+    if (!authority.author) throw Error('[release] 只读缓存或未知作者来源不能冒充本地封存发布')
+    const existing = await db.worldReleases.where('revisionId').equals(revisionId).first()
+    if (existing) return existing
     const releases = await db.worldReleases.where('worldId').equals(currentRevision.worldId).toArray()
     const row: WorldRelease = {
       releaseUid: worldReleaseUidV1({

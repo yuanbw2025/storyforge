@@ -75,7 +75,7 @@ async function seedResources() {
     shortDescription: '追逐潮门', identity: '潮民', goals: '开启潮门',
   }, 'world')
   const arcId = await addScoped(scope, 'storyArcs', {
-    name: '潮门主线', type: 'main', description: '寻找潮门', stages: '[]',
+    worldGroupId: primaryGroupId, name: '潮门主线', type: 'main', description: '寻找潮门', stages: '[]',
   }, 'work')
   await addScoped(scope, 'storylineProgress', {
     arcId, currentStageId: null, status: 'active', progressNote: '潮门计划推进到港口',
@@ -150,6 +150,9 @@ describe('CTXG-4 · Context Gateway read tools', () => {
 
   it('lists metadata only and searches by kind, relation, story arc and time with bound cursors', async () => {
     const fixture = await seedResources()
+    await addScoped(fixture.scope, 'storyArcs', {
+      name: '旧作品未分组的潮门支线', type: 'sub', description: '默认组', stages: '[]',
+    }, 'work')
     const frozenScope = { ...fixture.scope, worldGroupId: fixture.primaryGroupId }
     const session = await createContextGatewayToolSessionV1({ scope: frozenScope, policy: policy() })
     const first = await executeAgentTool('list_context_catalog', {
@@ -171,7 +174,9 @@ describe('CTXG-4 · Context Gateway read tools', () => {
     expect(JSON.parse(second.content).items[0].resourceKey).not.toBe(firstBody.items[0].resourceKey)
 
     const all = await descriptorKeys(fixture.scope, fixture.primaryGroupId)
-    const arcKey = all.find(item => item.kind === 'story-arc' && !item.resourceKey.includes(':field:'))!.resourceKey
+    const arcs = all.filter(item => item.kind === 'story-arc' && !item.resourceKey.includes(':field:'))
+    expect(arcs.map(item => item.title)).toEqual([expect.stringContaining('潮门主线')])
+    const arcKey = arcs[0].resourceKey
     const characterKey = all.find(item => item.kind === 'character' && !item.resourceKey.includes(':field:'))!.resourceKey
     const progress = await executeAgentTool('search_context', {
       projectId: fixture.projectId, scope: fixture.scope, worldGroupId: fixture.primaryGroupId,

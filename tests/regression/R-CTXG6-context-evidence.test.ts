@@ -116,7 +116,7 @@ function traced(decision: Awaited<ReturnType<typeof selectContextResourcesV1>>['
   }
 }
 
-async function beginAttempt(mixedRefs = false, catalogVersion = CANON_RESOURCE_PROVIDER_V1.providerVersion) {
+async function beginAttempt(mixedRefs = false, catalogVersion = CANON_RESOURCE_PROVIDER_V1.providerVersion, recordedFieldPolicy?: string) {
   const fixture = await seed()
   let snapshot = await createAgentRunV1({ scope: fixture.scope, contract: contract(fixture.projectId), now: NOW + 1 })
   const append = async (type: any, payload: any) => {
@@ -129,7 +129,8 @@ async function beginAttempt(mixedRefs = false, catalogVersion = CANON_RESOURCE_P
   await append('step.started', { stepId: 'races', attempt: 1 })
   const session = await createContextGatewayToolSessionV1({ scope: { ...fixture.scope, worldGroupId: null }, policy: policy() })
   const catalog = await descriptors(fixture.scope)
-  const descriptor = catalog.find(item => item.resourceKey.endsWith(':field:races'))!
+  const live = catalog.find(item => item.resourceKey.endsWith(':field:races'))!
+  const descriptor = recordedFieldPolicy ? { ...live, policyHash: recordedFieldPolicy } : live
   const selector = await selectContextResourcesV1({
     taskKind: 'agent-world-origin', accessPolicy: session.policy, scope: session.scope,
     descriptors: [descriptor], budgetTokens: 10_000, targetResourceKeys: [descriptor.resourceKey], readsAllowed: false,
@@ -198,8 +199,8 @@ async function beginAttempt(mixedRefs = false, catalogVersion = CANON_RESOURCE_P
   }
 }
 
-async function completeAttempt(mixedRefs = false, catalogVersion = CANON_RESOURCE_PROVIDER_V1.providerVersion) {
-  const fixture = await beginAttempt(mixedRefs, catalogVersion)
+async function completeAttempt(mixedRefs = false, catalogVersion = CANON_RESOURCE_PROVIDER_V1.providerVersion, recordedFieldPolicy?: string) {
+  const fixture = await beginAttempt(mixedRefs, catalogVersion, recordedFieldPolicy)
   const candidateText = '新候选：潮民以星潮评定成年仪式。'
   const candidateHash = await sha256Text(candidateText)
   await fixture.append('model.requested', { stepId: 'races', attempt: 1, bindingHash: fixture.preflight.promptHash })
@@ -224,19 +225,31 @@ describe('CTXG-6 · Manifest V3 and exact attempt evidence', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
 
-  // Frozen before extraction on bc18dc846 (catalog v9) and e6fce3374 (v10).
+  // The original v9 (bc18dc846) and v10 (e6fce3374) runs measured the same
+  // field policy. From v11 onward the digest also identifies its source.
+  const historicalPolicy = '1acf956fedc7c4f7276707e74fac18658df79099e6a19fdba77221c665c751dc'
   it.each([
     {
-      catalogVersion: 'canon-resource-provider-v9',
+      catalogVersion: 'canon-resource-provider-v9', recordedFieldPolicy: historicalPolicy,
       preflightHash: '6417c3d533d6e1171c44488b60cbcf919f837e4804ed2ea8fcc1905bb5aad8ef',
       manifestHash: '470b664e8b123f3fe0c3e344344f1915821d35ac5e6596dc78a490d4afe68179',
       artifactHash: '2bc41369225a860f546f5b4caaa6336b34168b2d1d6c84d34e92bdf6c3559576',
     },
     {
-      catalogVersion: CANON_RESOURCE_PROVIDER_V1.providerVersion,
+      catalogVersion: 'canon-resource-provider-v10', recordedFieldPolicy: historicalPolicy,
       preflightHash: '488681604e3ef84c2af5848585539dbad3a6a76344cc82804ea85d5f99d7662d',
       manifestHash: '83a34be4118a488e26cd0ed5b339f5a1c4c3d6765645143cf04126c2d41a96b5',
       artifactHash: 'd7ae7321ce6427ff56212f183734a0880d5a6ecf5c83e070c98cfd4e1a84dfb8',
+    },
+    {
+      catalogVersion: 'canon-resource-provider-v11',
+      preflightHash: '92009e4ef7f81bbebcbc2fd835df8871a4b8afb2e60e2bea96ddf369df16a5b6',
+      manifestHash: 'a467aff7018429407b63b3a361d2a03fe2f1e16f6840724128bd06bcca37ba2f',
+      artifactHash: '3dd5c5c606ad72ff0173720af1ed9e0e75fd115e73d1b5380d88c769c7420093',
+    },
+    {
+      catalogVersion: CANON_RESOURCE_PROVIDER_V1.providerVersion,
+      preflightHash: 'e59d166aaf10b1dbf1314b471cb394d4b968a53d1dbd742e0f2e6f6a34edb133', manifestHash: '35a1b7927310c5f703839993187ae32c5182353432f287b292699db65813745e', artifactHash: 'a1d85a3fea2dee1eee09a053871eb5a024f1e230358c231d2eea82b9160d370a',
     },
   ])('SFQA009 preserves mixed-ref ordering and exact hashes for $catalogVersion', async expected => {
     const date = vi.spyOn(Date, 'now').mockReturnValue(NOW)
@@ -245,7 +258,7 @@ describe('CTXG-6 · Manifest V3 and exact attempt evidence', () => {
     const uuid = vi.spyOn(crypto, 'randomUUID').mockImplementation(() =>
       `00000000-0000-4000-8000-${(++counter).toString(16).padStart(12, '0')}`)
     try {
-      const f = await completeAttempt(true, expected.catalogVersion)
+      const f = await completeAttempt(true, expected.catalogVersion, expected.recordedFieldPolicy)
       const projected = (refs: typeof f.preflight.artifacts) => refs.map(ref =>
         [ref.role, ref.sourceKey ?? null, ref.resourceKey ?? null, ref.toolName ?? null, ref.callIndex ?? null])
       expect(f.preflight.preflightHash).toBe(expected.preflightHash)

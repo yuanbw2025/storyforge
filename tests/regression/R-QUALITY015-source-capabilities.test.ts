@@ -82,9 +82,17 @@ describe('SFQA-015 · source capabilities preserve immutable source identity', (
     const f = await fixture()
     expect(new Set(f.fields.map(item => item.resourceKey)).size).toBe(3)
     expect(new Set(f.fields.map(item => item.contentHash)).size).toBe(1)
-    // Canon's field policy is allowed to differ between appearance/background;
-    // the two different records' appearance fields share both hashes.
-    expect(f.fields[0].policyHash).toBe(f.fields[1].policyHash)
+    // v9/v10 used only the effective field policy. Replaying that measured
+    // collision must still issue a different capability for each source.
+    const historicalPolicy = '4780b05219dd22ec438b95408e58ff1a67d0c295fe3b9abdc2daeacc743d6e45'
+    const historical = f.fields.slice(0, 2).map(descriptor => {
+      const [token] = issueContextSourceRefCapabilitiesV1(f.session, { ...descriptor, policyHash: historicalPolicy })
+      expect(resolveContextSourceRefCapabilityV1(f.session, token).sourceRef).toEqual(descriptor.sourceRefs[0])
+      return token
+    })
+    expect(new Set(historical).size).toBe(2)
+    // Current policy also binds the source UID, while the original text stays equal.
+    expect(f.fields[0].policyHash).not.toBe(f.fields[1].policyHash)
     const tokens: string[] = []
     for (const descriptor of f.fields) {
       const read = await f.read(descriptor.resourceKey)

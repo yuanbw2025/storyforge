@@ -1,3 +1,5 @@
+import { revalidateWorldSourcePurposeV1 } from '../world-engine/source-purpose-actions'
+import type { SaltRidgeInstallPermit } from '../salt-ridge/install-admission'
 import { canonicalProductProductionJsonV2 } from './hash'
 import { deriveAvgAssemblyRecoveryBaseV1 } from '../avg/assembly-recovery'
 import { AVG_VISUAL_TEXT_CAPABILITY_V4 } from '../avg/visual-planning-roles'
@@ -1080,6 +1082,7 @@ export async function compileProductProductionBriefV3(
 }
 
 export async function createProductProductionWithBriefV1(input: {
+  saltRidgeInstall?: SaltRidgeInstallPermit
   scope: WorkspaceScope
   worldReleaseId: number
   title: string
@@ -1087,8 +1090,16 @@ export async function createProductProductionWithBriefV1(input: {
 }): Promise<number> {
   const title = input.title.trim()
   if (!title) throw new Error('[product-production-service] 游戏标题不能为空')
+  if (input.worldReleaseId !== input.brief.source.worldReleaseId) {
+    throw new Error('[product-production-service] Brief 与所选冻结来源不一致')
+  }
+  await revalidateWorldSourcePurposeV1({
+    worldReleaseId: input.worldReleaseId, expectedProjectId: input.scope.projectId, expectedWorldId: input.scope.worldId,
+    purpose: input.brief.intent.productType, proof: input.brief.source.sourcePurpose,
+  })
   const productionKey = `productprod.${Date.now().toString(36)}.${crypto.randomUUID().slice(0, 8)}`
   const created = await executeProductProductionCommand({
+    saltRidgeInstall: input.saltRidgeInstall,
     scope: input.scope,
     command: {
       type: 'create-intent', commandId: commandId('intent'), productionKey,
@@ -1097,6 +1108,7 @@ export async function createProductProductionWithBriefV1(input: {
     },
   })
   const saved = await executeProductProductionCommand({
+    saltRidgeInstall: input.saltRidgeInstall,
     scope: input.scope, productionId: created.productionId,
     command: {
       type: 'save-brief-revision', commandId: commandId('brief'), expectedStateRevision: 0,
@@ -1465,6 +1477,7 @@ export async function restoreArchivedProductProductionV1(input: {
 }
 
 export async function retryProductProductionBlockerV1(input: {
+  saltRidgeInstall?: SaltRidgeInstallPermit
   scope: WorkspaceScope
   details: ProductProductionDetailsV1
   afterCapabilityChange?: boolean
@@ -1546,6 +1559,7 @@ export async function retryProductProductionBlockerV1(input: {
     throw new Error('[product-production-service] 当前 blocker 不存在待结算 provider reservation')
   }
   const receipt = await executeProductProductionCommand({
+    saltRidgeInstall: input.saltRidgeInstall,
     scope: input.scope, productionId: input.details.production.id!,
     command: {
       type: 'resolve-blocker', commandId: commandId('resolve-blocker'),
@@ -1880,10 +1894,14 @@ export async function runAuthorizedProductProductionV1(input: {
 }
 
 export async function publishProductProductionV1(input: {
+  expectedPackageHash?: string
   scope: WorkspaceScope
   productionId: number
 }) {
   const prepared = await prepareProductProductionAdoption(input)
+  if (input.expectedPackageHash != null && input.expectedPackageHash !== prepared.intent.packageHash) {
+    throw new Error('制作运行包与预期的冻结作品版本不一致')
+  }
   if (prepared.creatorRelease) {
     throw new Error('文字开放世界 Creator Build 必须经过专属作者发布确认，不能调用通用发布入口。')
   }

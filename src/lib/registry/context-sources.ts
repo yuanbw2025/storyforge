@@ -3295,6 +3295,31 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: async input => input.manualSourceText || '',
   },
   {
+    key: 'documentImportCodexCategories',
+    label: '文档导入已登记词条类别目录',
+    scope: 'world',
+    ownerFrom: 'world',
+    layer: 'L0',
+    budgetTokens: 8_000,
+    protectedFromTrim: true,
+    requiresWorldGroupId: true,
+    enabled: input => Number.isSafeInteger(input.documentImportSessionId),
+    read: async input => {
+      const { readImportSessionAuthorityV1 } = await import('../../stores/import-session')
+      const { loadCodexImportCategoryOptions } = await import('../import/codex-classification')
+      const session = await readImportSessionAuthorityV1(input.documentImportSessionId!, input.projectId)
+      const original = session.targetScope
+      if (session.importTarget !== 'project' || session.status === 'cancelled' || session.status === 'done' ||
+        input.scope?.projectId !== original.projectId || input.scope?.worldId !== original.worldId ||
+        input.scope?.workId !== original.workId || (input.worldGroupId ?? null) !== (session.targetWorldGroupId ?? null))
+        throw new Error('词条类别目录不属于原导入目标。')
+      const categories = await loadCodexImportCategoryOptions(original, { initialize: false })
+      await readImportSessionAuthorityV1(input.documentImportSessionId!, input.projectId, session)
+      // No local ID, existing Codex entries or other Work material enters the prompt.
+      return JSON.stringify(categories.map(({ ref, label, domain, fields }) => ({ ref, label, domain, fields })))
+    },
+  },
+  {
     key: 'codexExtractionBaseline',
     label: 'Codex 目标分类与既有词条闭集',
     scope: 'world',
@@ -3331,6 +3356,23 @@ export const CONTEXT_SOURCES: ContextSource[] = [
       targetKind: input.historyAgentTargetKind!,
       targetId: input.historyAgentTargetId!,
     }),
+  },
+  {
+    key: 'referenceAnalysisPrivateChunk',
+    label: '已确认的本机参考分析原文块',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 40_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isSafeInteger(input.referenceAnalysisRunId)
+      && Number.isSafeInteger(input.referenceAnalysisChunkIndex),
+    read: async input => {
+      const { readReferenceChunkAuthorityV1 } = await import('../reference-analysis/lifecycle')
+      const { run, chunk } = await readReferenceChunkAuthorityV1(input.scope!, input.referenceAnalysisRunId!, input.referenceAnalysisChunkIndex!)
+      if (run.status !== 'analyzing') throw new Error('参考分析来源未确认或已失效。')
+      return chunk.text
+    },
   },
   {
     key: 'referenceDerivedBaseline',

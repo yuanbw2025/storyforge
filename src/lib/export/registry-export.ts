@@ -1,4 +1,5 @@
-import { parseLegacyIdArray } from "../utils/legacy-id-array"
+import { BACKUP_REFERENCE_REVIEW_TITLE, CURRENT_BACKUP_VERSION, referenceReviewScopeMatchesV1 } from './backup-trust'
+import { parseLegacyIdArray } from '../utils/legacy-id-array'
 import { assertFrozenRuntimePackageSessionV1, parseProductRuntimeState } from '../product/runtime-core'
 import type { AnyProductBuildPreviewManifest } from '../types'
 import { avgExecutableModule } from '../avg/executable-module'
@@ -22,7 +23,7 @@ import type { TableSpec } from '../registry/types'
 import type { ProjectExportData } from './json-export'
 import { redactAuthoringSecrets } from '../node-authoring/contracts'
 import { resolveWorkspaceOwnership } from '../workspace/ownership'
-import { portableizeAgentRunLedgerExportV1 } from '../agent/run/ledger-portability'
+import { excludePrivateReferenceExecutionFromBackupV1, portableizeAgentRunLedgerExportV1 } from '../agent/run/ledger-portability'
 import { assertAgentRunArtifactRecordIntegrityV1 } from '../memory/artifact-record'
 import { readVerifiedMediaBlobObjectData } from '../product-production/media-blob-store'
 import { assertProductRuntimeSourceSnapshotV3 } from '../product/runtime-source-branch'
@@ -36,7 +37,7 @@ import { canonicalNarrativeJsonV1, compareUnicodeCodePointsV1 } from '../narrati
 import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
 
 /** 当前完整便携备份契约。 */
-export const CURRENT_EXPORT_VERSION = 17
+export const CURRENT_EXPORT_VERSION = CURRENT_BACKUP_VERSION
 
 export interface StrictProjectExportSnapshot {
   data: ProjectExportData
@@ -144,6 +145,7 @@ export function deriveRegisteredSemanticRowsV1(input: {
 
 interface CapturedProjectExportSnapshot extends StrictProjectExportSnapshot {
   integrityRows: ReadonlyMap<string, readonly any[]>
+  referenceReview: string[]
 }
 
 function maximumRuntimeSequenceForExport(sequences: ReadonlySet<number> | undefined): number {
@@ -445,6 +447,55 @@ async function queryRows(spec: TableSpec, projectId: number): Promise<any[]> {
   return await (db as any)[spec.name].where(linkRemap.field).anyOf(parentIds).toArray()
 }
 
+type LocalReferenceExportReview = {
+  resolve(rule: string, target: string, value: unknown): number | undefined
+  preserve(path: string, value: unknown, reason: string): void
+}
+
+function makeLocalReferenceExportReview(
+  spec: TableSpec, row: Record<string, unknown>, sourceKey: number,
+  rows: ReadonlyMap<string, readonly Record<string, unknown>[]>,
+  idMaps: ReadonlyMap<string, ReadonlyMap<number, number>>,
+  entries: string[],
+): LocalReferenceExportReview {
+  function owner(table: TableSpec | undefined, record: Record<string, unknown>) {
+    const locator = table?.domainOwner?.locator
+    const world = locator?.kind === 'field' && locator.owner === 'world' ? record[locator.field]
+      : locator?.kind === 'exclusive-fields' ? record[locator.worldField] : null
+    const work = locator?.kind === 'field' && locator.owner === 'work' ? record[locator.field]
+      : locator?.kind === 'exclusive-fields' ? record[locator.workField] : null
+    if (typeof world === 'number' && work == null) return { kind: 'world' as const, exportId: world }
+    if (typeof work === 'number' && world == null) return { kind: 'work' as const, exportId: work }
+    return null
+  }
+  const worldOf = (candidate: NonNullable<ReturnType<typeof owner>>) => {
+    if (candidate.kind === 'world') return candidate.exportId
+    const i = idMaps.get('works')?.get(candidate.exportId)
+    const world = i == null ? null : rows.get('works')?.[i]?.worldId
+    return typeof world === 'number' ? world : null
+  }
+  return {
+    resolve(rule, target, value) {
+      if (typeof value !== 'number') return undefined
+      const i = idMaps.get(target)?.get(value)
+      const targetRow = i == null ? undefined : rows.get(target)?.[i]
+      if (!targetRow || !referenceReviewScopeMatchesV1(rule, owner(spec, row), owner(REGISTRY_BY_NAME.get(target), targetRow),
+        candidate => candidate.kind === 'instance' ? null : worldOf({ kind: candidate.kind, exportId: candidate.exportId }))) return undefined
+      return i
+    },
+    preserve(path, value, reason) {
+      entries.push(JSON.stringify({ 来源表: spec.name, 原行序号: sourceKey, 便携行键: sourceKey,
+        资源UID: spec.resourceIdentity ? row[spec.resourceIdentity.field] : undefined,
+        字段: path, 原值: value, 原因: reason }))
+    },
+  }
+}
+
+function readReferenceArray(value: unknown): unknown {
+  if (typeof value !== 'string') return value
+  try { return JSON.parse(value) as unknown } catch { return undefined }
+}
+
 /** 把一行库记录转成导出对象(剥 id/projectId、外键→导出序号、写 _exportId、JSON 引用重映射) */
 function toExportRow(
   spec: TableSpec,
@@ -452,6 +503,7 @@ function toExportRow(
   index: number,
   idMaps: Map<string, Map<number, number>>,
   strictOwners = false,
+  review?: LocalReferenceExportReview,
 ): any | null {
   const obj: any = { ...row }
   delete obj.id
@@ -460,10 +512,15 @@ function toExportRow(
   for (const rm of spec.exportRemap ?? []) {
     const val = obj[rm.field]
     delete obj[rm.field]
+    if (rm.when && row[rm.when.field] !== rm.when.equals) {
+      if (review && rm.reviewLocal && val != null) review.preserve(rm.field, val, '来源类型没有可确认的关联目标')
+      continue
+    }
     const targetMap = rm.selfTree ? idMaps.get(spec.name) : idMaps.get(rm.remapVia)
     let mapped: number | null = null
     if (val != null) {
-      const got = targetMap?.get(val)
+      const got = review && rm.reviewLocal ? review.resolve(rm.reviewLocal, rm.remapVia, val) : targetMap?.get(val)
+      if (review && rm.reviewLocal && got == null) review.preserve(rm.field, val, '旧库坐标无有效同域目标')
       mapped = got ?? null
       if (got == null && rm.onUnmapped === 'drop') return null // 孤儿行丢弃
       if (got == null && rm.onUnmapped === 'require') {
@@ -487,7 +544,12 @@ function toExportRow(
     } else if (rr.kind === 'id-array') {
       const map = idMaps.get(rr.remapVia)
       const raw = parseLegacyIdArray(obj[rr.field])
-      const mapped = raw.map(id => map?.get(id))
+      const mapped = raw.map(id => review && rr.reviewLocal ? review.resolve(rr.reviewLocal, rr.remapVia, id) : map?.get(id))
+      if (review && rr.reviewLocal && obj[rr.field] != null) {
+        const original = readReferenceArray(obj[rr.field])
+        if (!Array.isArray(original) || original.length !== raw.length || mapped.some(id => id == null))
+          review.preserve(rr.field, obj[rr.field], '数组中有无法确认的旧库坐标或原字段不可解析')
+      }
       if (rr.onUnmapped === 'require' && mapped.some(id => id == null)) {
         throw new Error(`[deriveExport] ${spec.name}.${rr.field} 缺少必填引用映射`)
       }
@@ -505,8 +567,18 @@ function toExportRow(
     } else if (rr.kind === 'object-array-id') {
       const map = idMaps.get(rr.remapVia)
       const items = parseObjectArray(obj[rr.field])
-      obj[rr.exportAs] = items.map(item => {
+      if (review && rr.reviewLocal && obj[rr.field] != null) {
+        const original = readReferenceArray(obj[rr.field])
+        if (!Array.isArray(original) || original.length !== items.length)
+          review.preserve(rr.field, obj[rr.field], '原样本字段部分或全部不可解析')
+      }
+      obj[rr.exportAs] = items.map((item, i) => {
         const id = item[rr.itemField]
+        if (review && rr.reviewLocal && id != null) {
+          const target = review.resolve(rr.reviewLocal, rr.remapVia, id)
+          if (target == null) review.preserve(`${rr.field}[${i}].${rr.itemField}`, id, '样本旧库坐标无有效同域目标')
+          return target ?? null
+        }
         return typeof id === 'number' ? (map?.get(id) ?? null) : null
       })
       if (strictOwners) {
@@ -704,6 +776,7 @@ async function captureProjectExportInTransaction(
   projectId: number,
   version: number,
   strictOwners: boolean,
+  includeReferenceReview = false,
 ): Promise<CapturedProjectExportSnapshot> {
   const project = await db.projects.get(projectId)
   if (!project) throw new Error('项目不存在')
@@ -720,8 +793,12 @@ async function captureProjectExportInTransaction(
     spec,
     rows: await queryRows(spec, projectId),
   })))
-  for (const { spec, rows } of capturedRows) {
-    rowsByTable.set(spec.name, rows)
+  for (const { spec, rows } of capturedRows) rowsByTable.set(spec.name, rows)
+  await Dexie.waitFor(excludePrivateReferenceExecutionFromBackupV1(rowsByTable, specs,
+    () => db.importSessions.where('projectId').equals(projectId).toArray(),
+  ))
+  for (const spec of specs) {
+    const rows = rowsByTable.get(spec.name)!
     const idMap = new Map<number, number>()
     rows.forEach((r, i) => { if (r.id != null) idMap.set(r.id, i) })
     idMaps.set(spec.name, idMap)
@@ -737,25 +814,30 @@ async function captureProjectExportInTransaction(
     exportedAt: Date.now(),
     project: projectData,
   }
+  const referenceReview: string[] = []
   for (const spec of specs) {
     const rows = rowsByTable.get(spec.name)!
     const out: any[] = []
+    const needsReview = includeReferenceReview && (spec.exportRemap?.some(ref => ref.reviewLocal) ||
+      spec.exportRefRemap?.some(ref => (ref.kind === 'id-array' || ref.kind === 'object-array-id') && ref.reviewLocal))
     rows.forEach((row, i) => {
-      const exported = toExportRow(spec, row, i, idMaps, strictOwners)
+      const review = needsReview ? makeLocalReferenceExportReview(spec, row, i, rowsByTable, idMaps, referenceReview) : undefined
+      const exported = toExportRow(spec, row, i, idMaps, strictOwners, review)
       if (exported != null) out.push(exported)
     })
     result[spec.name] = out
   }
 
-  return { data: result as ProjectExportData, exportIds: idMaps, integrityRows: rowsByTable }
+  return { data: result as ProjectExportData, exportIds: idMaps, integrityRows: rowsByTable, referenceReview }
 }
 
-async function captureProjectExport(projectId: number, version: number, strictOwners: boolean): Promise<CapturedProjectExportSnapshot> {
-  const tables = [...new Set(PROJECT_TABLES.filter(spec => spec.exportable).map(spec => spec.table))]
+async function captureProjectExport(projectId: number, version: number, strictOwners: boolean, includeReferenceReview: boolean): Promise<CapturedProjectExportSnapshot> {
+  // The original local import binding is read in the same snapshot and is never exported as a session.
+  const tables = [...new Set([...PROJECT_TABLES.filter(spec => spec.exportable).map(spec => spec.table), db.importSessions])]
   const captured = await db.transaction(
     'r',
     tables,
-    () => captureProjectExportInTransaction(projectId, version, strictOwners),
+    () => captureProjectExportInTransaction(projectId, version, strictOwners, includeReferenceReview),
   )
   // Dynamic Creator-release validators and WebCrypto run against the immutable
   // rows captured by the read transaction. Keeping them outside IndexedDB
@@ -776,6 +858,11 @@ async function portableizeSnapshot(snapshot: CapturedProjectExportSnapshot, opti
     else await portableLedger
   }
   const portable = snapshot.data as unknown as Record<string, unknown>
+  if (PROJECT_TABLES.some(spec => spec.portableData?.kind === 'world-source-receipt')) {
+    const { assertWorldSourceReceiptRowsV1 } = await import('../world-engine/source-receipt')
+    await assertWorldSourceReceiptRowsV1(new Map(PROJECT_TABLES.filter(spec => spec.exportable)
+      .map(spec => [spec.name, (Array.isArray(portable[spec.name]) ? portable[spec.name] : []) as Record<string, unknown>[]])), 'portable')
+  }
   for (const spec of PROJECT_TABLES) {
     if (spec.portableData?.kind === 'exact-run-artifact') {
       const rows = portable[spec.name]
@@ -851,12 +938,14 @@ async function portableizeSnapshot(snapshot: CapturedProjectExportSnapshot, opti
  * 物理主键绝不跨越备份边界。
  */
 export async function deriveStrictExportProjectJSON(projectId: number): Promise<ProjectExportData> {
-  return (await deriveStrictExportProjectSnapshot(projectId)).data
+  return (await deriveStrictExportProjectSnapshot(projectId, { includeReferenceReview: true })).data
 }
 
-export async function deriveStrictExportProjectSnapshot(projectId: number): Promise<StrictProjectExportSnapshot> {
+export async function deriveStrictExportProjectSnapshot(
+  projectId: number, options: { includeReferenceReview?: boolean } = {},
+): Promise<StrictProjectExportSnapshot> {
   const ownership = await resolveWorkspaceOwnership(projectId)
-  const captured = await captureProjectExport(projectId, CURRENT_EXPORT_VERSION, true)
+  const captured = await captureProjectExport(projectId, CURRENT_EXPORT_VERSION, true, options.includeReferenceReview ?? false)
   const snapshot = await Dexie.ignoreTransaction(() => portableizeSnapshot(captured))
   const worldExportId = snapshot.exportIds.get('worlds')?.get(ownership.scope.worldId)
   const workExportId = snapshot.exportIds.get('works')?.get(ownership.scope.workId)
@@ -867,6 +956,21 @@ export async function deriveStrictExportProjectSnapshot(projectId: number): Prom
     workExportId,
   }
   if (!ownership.scope.worldId || !ownership.scope.workId) throw new Error('[strictExport] ownership 根不完整')
+  if (captured.referenceReview.length > 0) {
+    const content = [
+      BACKUP_REFERENCE_REVIEW_TITLE,
+      `导出时发现无法确认的关联 · 备份 v${CURRENT_EXPORT_VERSION}`,
+      '以下原值仅供人工核对。恢复时不会使用这些旧库坐标。',
+      ...captured.referenceReview,
+    ].join('\n')
+    // This is part of the detached public backup only, never the live Work,
+    // a release source snapshot, or a new wire field.
+    if (!snapshot.data.notes.some(note => note.content === content)) snapshot.data.notes.push({
+      _workOwnerExportId: workExportId, _chapterExportId: null, content, color: 'yellow', pinned: true,
+      // The report describes captured project state. Re-exporting it must preserve the recovery plan hash.
+      createdAt: snapshot.data.project.updatedAt, updatedAt: snapshot.data.project.updatedAt,
+    } as ProjectExportData['notes'][number])
+  }
   return snapshot
 }
 

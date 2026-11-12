@@ -20,6 +20,7 @@ import { createTextOpenWorldProductionExecutorV1 } from '../../src/lib/open-worl
 import { readTextOpenWorldProductionPlanAuthorityV1 } from '../../src/lib/open-world/production-authority'
 import {
   inspectTextOpenWorldCreatorWorldSourceV1,
+  listTextOpenWorldCreatorWorldSourcesV1,
 } from '../../src/lib/open-world/creator-source'
 import {
   authorizeTextOpenWorldCreatorProductionStartV1,
@@ -54,6 +55,9 @@ import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 import { deriveTextOpenWorldNovelWorldDraftV1, previewTextOpenWorldNovelWorldDraftV1 } from '../../src/lib/open-world/novel-world-derivation'
+import { createWorldPackage } from '../../src/lib/world-engine/world-package'
+import { installWorldSourcePackageV1 } from '../../src/lib/world-engine/source-receipt'
+import { readWorldSourcePurposeDeclarationV1 } from '../../src/lib/world-engine/source-purpose'
 import { publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { validateTextOpenWorldSourcePinBundleV1, validateTextOpenWorldSourcePinV1, validateTextOpenWorldSourcePinUnitV1 } from '../../src/lib/open-world/source-pin'
 import { readQuality005LegacyLargeSourceV1 } from '../helpers/quality005-legacy-large-source'
@@ -265,6 +269,49 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
     db.close()
     useAIConfigStore.setState(originalAIState)
   })
+
+  it('021: Creator starts and pins the exact allowed D; R-only cannot create even a consultation', async () => {
+    const source = await seedCurrentProductWorld('Creator purpose original')
+    const { scope } = await createWorkspace({ name: 'Creator purpose target', description: '', genres: ['other'],
+      status: 'drafting', targetWordCount: 0 }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
+    const options = { authorName: '合成作者', attribution: ' 原署名 é ', license: 'CC-BY-4.0' as const,
+      contentWarnings: [' 原提示 '], allowedUses: { 'world-remix': false, ttrpg: false, 'character-interaction': false,
+        'ai-town': true, 'text-adventure': false, avg: false, 'text-open-world': true } }
+    const allowed = await installWorldSourcePackageV1(scope, await createWorldPackage(source.release.id!, options))
+    const denied = await installWorldSourcePackageV1(scope, await createWorldPackage(source.release.id!, {
+      ...options, allowedUses: { ...options.allowedUses, 'text-open-world': false },
+    }))
+    expect(denied.worldReleaseId).toBe(allowed.worldReleaseId)
+    const candidates = await listTextOpenWorldCreatorWorldSourcesV1(scope)
+    expect(candidates.map(candidate => candidate.purposeAllowed).sort()).toEqual([false, true])
+    const bare = await inspectTextOpenWorldCreatorWorldSourceV1({ scope, localReleaseRecordId: allowed.worldReleaseId,
+      expectedReleaseHash: source.release.contentHash })
+    const selection = { sourceKind: 'world-release' as const, sourceScope: scope,
+      localReleaseRecordId: allowed.worldReleaseId, expectedReleaseHash: source.release.contentHash, preview: bare }
+    const before = await productionMutationSnapshot()
+    await expect(startTextOpenWorldCreatorBriefSessionV1({ selection, sessionKey: 'purpose-missing' }))
+      .rejects.toThrow(/明确选择|unknown/)
+    expect(await productionMutationSnapshot()).toEqual(before)
+
+    const preview = candidates.find(candidate => candidate.purposeAllowed)!
+    const prepared = await prepareStart({ ...selection, preview }, 'purpose-licensed')
+    const binding = prepared.preview.sourcePlan.sourceBinding
+    if (binding.kind !== 'world-release' || binding.sourcePurpose?.origin.kind !== 'declared') throw new Error('Missing exact D')
+    expect(readWorldSourcePurposeDeclarationV1(binding.sourcePurpose.origin)).toMatchObject({
+      declarationHash: allowed.declarationHash, attribution: options.attribution, contentWarnings: options.contentWarnings,
+    })
+    const result = await authorizeTextOpenWorldCreatorProductionStartV1({
+      ...prepared.input, expectedPlanHash: prepared.preview.start.productionPlanHash,
+    })
+    expect(result.ok).toBe(true)
+    const executor = createTextOpenWorldProductionExecutorV1({ production: prepared.preview.production,
+      brief: prepared.preview.start.executionBrief })
+    const pinned = await runProductProductionSchedulerCycleV1({
+      scope: prepared.preview.scope, productionId: prepared.input.productionId, executor,
+    })
+    const p0 = pinned.tasks.find(task => task.taskKey === 'p0.source-lock')
+    expect(p0?.status, JSON.stringify(p0)).toBe('completed')
+  }, 30_000)
 
   it.each([
     ['world-release', () => worldSelection(`Creator revision world ${crypto.randomUUID()}`)],
@@ -888,7 +935,7 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
     const first = await runProductProductionSchedulerCycleV1({
       scope: prepared.preview.scope, productionId: prepared.input.productionId, executor,
     })
-    expect(first.tasks.find(task => task.taskKey === 'p0.source-lock')?.status).toBe('completed')
+    expect(first.tasks.find(task => task.taskKey === 'p0.source-lock')?.status, JSON.stringify(first.tasks[0])).toBe('completed')
     expect(executor).toHaveBeenCalledTimes(1)
     const artifacts = await db.productBuildArtifacts.where('buildId').equals(first.buildId).toArray()
     expect(artifacts.length).toBeGreaterThan(1)

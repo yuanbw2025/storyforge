@@ -404,13 +404,13 @@ async function openSidebarLeaf(page: Page, branchName: string, leafName: string)
 
 async function expectInputValue(page: Page, value: string) {
   await expect.poll(() => page.locator('input').evaluateAll(
-    (inputs, expected) => inputs.some(input => input.value === expected),
+    (inputs, expected) => inputs.some(input => input instanceof HTMLInputElement && input.value === expected),
     value,
   )).toBe(true)
 }
 
 async function expectNumericInputValue(locator: ReturnType<Page['getByPlaceholder']>, expected: number) {
-  await expect.poll(async () => Number((await locator.inputValue()).replaceAll(',', ''))).toBe(expected)
+  await expect.poll(async () => Number((await locator.inputValue()).replace(/,/g, ''))).toBe(expected)
 }
 
 async function createBookWithSavedChapter(page: Page, projectName: string, chapterText: string) {
@@ -2244,18 +2244,10 @@ test('主 Agent 为明确章纲生成正文，拒绝零写入并把可见修订�
 })
 
 test('外部文档词条先形成带证据候选，作者确认后才进入 Codex', async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({
-      provider: 'ollama',
-      apiKey: '',
-      model: 'codex-import-e2e',
-      baseUrl: 'http://localhost:1234/v1',
-      temperature: 0,
-      maxTokens: 0,
-      contextWindow: 100000,
-    }))
-  })
+  let posts = 0
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    expect(route.request().method()).toBe('POST')
+    posts++
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -2286,6 +2278,14 @@ test('外部文档词条先形成带证据候选，作者确认后才进入 Code
   })
   await openCleanHome(page)
   await createProject(page, 'E2E 词条导入审查')
+  await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { useAIConfigStore } = await load<typeof import('../../src/stores/ai-config')>('/storyforge/src/stores/ai-config.ts')
+    useAIConfigStore.getState().setConfig({
+      provider: 'ollama', apiKey: '', model: 'codex-import-e2e', baseUrl: 'http://localhost:1234/v1',
+      temperature: 0, contextWindow: 100000,
+    })
+  })
 
   await openWorkspaceLeaf(page, '文档解析')
   await page.getByPlaceholder(/把文档内容粘贴在这里/).fill(
@@ -2294,7 +2294,12 @@ test('外部文档词条先形成带证据候选，作者确认后才进入 Code
   await page.getByRole('button', { name: '开始解析', exact: true }).click()
   await page.getByRole('button', { name: /导入当前项目（1 块）/ }).click()
 
-  await expect(page.getByRole('heading', { name: '✓ 全部解析完成' })).toBeVisible()
+  const chunkReview = page.getByRole('dialog', { name: '审查导入候选' })
+  await expect(chunkReview.getByRole('heading', { name: '审查第 1 块' })).toBeVisible()
+  await expect(chunkReview.getByText('另有 1 条词条候选，完成文档导入后可单独审查。')).toBeVisible()
+  expect(posts).toBe(1)
+  await chunkReview.getByRole('button', { name: '确认保存本块' }).click()
+  await expect(page.getByRole('heading', { name: '✓ 全部导入完成' })).toBeVisible()
   await expect(page.getByText('1 条 Codex 候选等待作者审查')).toBeVisible()
   await page.getByRole('button', { name: '审查并选择', exact: true }).click()
   await expect(page.getByText('逐字证据：')).toBeVisible()
@@ -2307,6 +2312,7 @@ test('外部文档词条先形成带证据候选，作者确认后才进入 Code
   await openWorkspaceLeaf(page, '人文环境')
   await page.getByRole('button', { name: /城池重镇/ }).click()
   await expect(page.getByText('新临渊城', { exact: true })).toBeVisible()
+  expect(posts).toBe(1)
 })
 
 test('真实章节入口可打开五阶段工坊并预览首节点最终提示词', async ({ page }) => {
@@ -2469,7 +2475,7 @@ test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ 
 
 test('世界地图把明确距离和方位落实到命名实体，并持久化手动比例尺', async ({ page }) => {
   let generationCalls = 0
-  let releaseMapResponse: (() => void) | null = null
+  let releaseMapResponse!: () => void
   let responseFulfilled = false
   const mapResponseGate = new Promise<void>(resolve => { releaseMapResponse = resolve })
   await page.addInitScript(() => {
@@ -2578,7 +2584,7 @@ test('世界地图把明确距离和方位落实到命名实体，并持久化�
   await page.getByRole('button', { name: 'AI 生成地图', exact: true }).click()
   await expect.poll(() => generationCalls).toBe(1)
   await page.getByText('新世界', { exact: true }).click()
-  releaseMapResponse?.()
+  releaseMapResponse()
   await expect.poll(() => responseFulfilled).toBe(true)
   await expect(page.getByText('地图候选尚未写入', { exact: true })).toHaveCount(0)
   await page.getByText('主世界', { exact: true }).click()

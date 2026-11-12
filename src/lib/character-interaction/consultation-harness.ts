@@ -1,4 +1,5 @@
 import Dexie from 'dexie'
+import {assertCurrentProductEntryV1} from '../product/product-catalog'
 import {db} from '../db/schema'
 import {scopeTransactionTables} from '../workspace/scope'
 import type {WorkspaceScope, ProductProductionBriefV3, ContextManifestPointerV1} from '../types'
@@ -21,6 +22,7 @@ const harness = createChatSourceRunHarnessV1<ReturnType<typeof createChatPlanArt
   verifier: VERIFIER, lockKey: 'chat-consultation', prompt: CHAT_CONSULTATION_PROMPT_V2, objective: '根据作者问题与本次选中资料，起草可逐项确认的角色聊天方案；不开始制作、不改世界或知情权限',
   criterion: CRITERION, confirmationCriteria: CONFIRMATION, writeTargets: [{table: 'chatAuthoringDrafts', fields: ['settingsJson'], mode: 'author-confirmed'}],
   source: {key: 'chat.consultation', options: request => ({chatConsultationRequest: request}), read: readChatConsultationContextV2, validateRequest: validateChatConsultationRequestV2},
+  requiresWorldSource: request => request.source !== null,
   createArtifact: createChatPlanArtifactV2, hasCandidate: result => !!result.candidate,
   runModel: ({formalEntry, skill, messages, resolved, scope, signal, result}) => executeFrozenFormalAIEntryV1('chat.consultation', formalEntry, skill,
     'src/lib/character-interaction/consultation-harness.ts', messages, resolved.config,
@@ -140,6 +142,7 @@ export async function adoptChatConsultationV2(input: {scope: WorkspaceScope; run
       await verify(scope, loaded.snapshot, payload)
       return readChatConsultationV2(scope, runId)
     }
+    assertCurrentProductEntryV1('upper.character-interaction')
     if (loaded.snapshot.projection.state !== 'awaiting_confirmation') throw new Error('本次方案不在等待作者确认状态')
     const prepared = await prepareChatPlanWriteV2(scope, payload.request, payload.result.candidate, fields)
     if (await hash(prepared.context) !== await hash(payload.context)) throw new Error('方案或来源已变化，请重新讨论')
@@ -150,6 +153,7 @@ export async function adoptChatConsultationV2(input: {scope: WorkspaceScope; run
     await db.transaction('rw', scopeTransactionTables(db.chatAuthoringDrafts, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints), async () => {
       let snapshot = await readAgentRunV1(scope, runId)
       if (snapshot.projection.lastSequence !== loaded.snapshot.projection.lastSequence || snapshot.projection.state !== 'awaiting_confirmation') throw new Error('方案任务已变化，本次没有写入')
+      assertCurrentProductEntryV1('upper.character-interaction')
       snapshot = await harness.append(scope, snapshot, 'candidate.revised', {stepId: STEP, attempt: 1, previousCandidateHash: expectedCandidateHash, candidateHash})
       snapshot = await harness.append(scope, snapshot, 'confirmation.recorded', {stepId: STEP, candidateHash, decision: 'adopt'})
       snapshot = await harness.append(scope, snapshot, 'adoption.started', {stepId: STEP, candidateHash, intentHash: adoptionHash})

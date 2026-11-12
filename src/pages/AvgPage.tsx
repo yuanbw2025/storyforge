@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1, evaluateCurrentProductEntryV1 } from '../lib/product/product-catalog'
 import BrandIcon from '../components/shared/BrandIcon'
 import ExampleLibrary from '../components/examples/ExampleLibrary'
 import {
@@ -52,6 +53,8 @@ type Row = {
 };
 const PRODUCTS = ["avg"] as const;
 export default function AvgPage() {
+  const catalogEntry = evaluateCurrentProductEntryV1('upper.avg')
+  const canAuthor = catalogEntry.enterable
   const { pageId = "library" } = useParams();
   const page = AVG_PAGES.find((p) => p[0] === pageId) ?? AVG_PAGES[0];
   const primaryId = avgPrimaryForPage(page[0]);
@@ -155,7 +158,7 @@ export default function AvgPage() {
     }
   }, [row?.work.id, row?.draft?.revision, dirty]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    void listLocalWorldReferenceChoicesV1(narrativePreview ? { narrativeProductType: 'avg' } : {})
+    void listLocalWorldReferenceChoicesV1({ purpose: 'avg', ...(narrativePreview ? { narrativeProductType: 'avg' as const } : {}) })
       .then(setWorlds)
       .catch((e) => setError(String(e)));
   }, [pageId, row?.draft?.worldReleaseId, narrativePreview]);
@@ -185,6 +188,8 @@ export default function AvgPage() {
     }
   };
   const save = async () => {
+    assertCurrentProductEntryV1('upper.avg')
+
     if (scope && row?.draft) {
       await saveAvgDraftV1(scope, row.draft.revision, settings, title);
       setDirty(false);
@@ -227,13 +232,13 @@ export default function AvgPage() {
     <label key={key}>
       {label}
       {area ? (
-        <textarea
+        <textarea disabled={!canAuthor}
           value={String(settings[key])}
           maxLength={5000}
           onChange={(e) => update(key, e.target.value as never)}
         />
       ) : (
-        <input
+        <input disabled={!canAuthor}
           value={String(settings[key])}
           maxLength={5000}
           onChange={(e) => update(key, e.target.value as never)}
@@ -249,7 +254,7 @@ export default function AvgPage() {
               row.draft.settingsJson,
             ) as AvgAuthoringSettingsV1,
             title: row.work.title,
-            worldReleaseId: row.draft.worldReleaseId,
+            worldReleaseId: row.draft.worldReleaseId, sourcePurpose: row.draft.sourcePurpose,
           }
         : undefined,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -372,6 +377,7 @@ export default function AvgPage() {
             </nav>
           </aside>}
           <main ref={contentRef} className="lf-content">
+      {!canAuthor && <p role="status" className="lf-paper">当前产品尚未开放创作；已保存作品、原始内容和发行版本仍可查看。</p>}
 
             {primaryId === "workbench" && ["confirm", "production", "review"].includes(page[0]) && <h3 className="avg-page-heading">{page[1]}</h3>}
             {error && (
@@ -388,7 +394,7 @@ export default function AvgPage() {
                   <>
                     <section className="lf-paper">
                       <div className="avg-actions">
-                        <button
+                        <button disabled={!canAuthor}
                           className="lf-action lf-action-primary"
                           onClick={() => {
                             setDirty(false);
@@ -455,13 +461,13 @@ export default function AvgPage() {
                     </h3>
                     <p>保存方案不会启动制作。未选择世界时也可以填写。</p>
                     <fieldset
-                      disabled={busy || Boolean(row && !row.draft)}
+                      disabled={(busy || Boolean(row && !row.draft)) || !canAuthor}
                       className="avg-form"
                     >
                       {(!row || row.draft) && (
                         <label>
                           作品名称
-                          <input
+                          <input disabled={!canAuthor}
                             aria-label="AVG 作品名称"
                             value={title}
                             maxLength={200}
@@ -479,7 +485,7 @@ export default function AvgPage() {
                           {field("experience", "体验重点", true)}
                           <label>
                             画幅
-                            <select
+                            <select disabled={!canAuthor}
                               value={settings.aspectRatio}
                               onChange={(e) =>
                                 update(
@@ -494,7 +500,7 @@ export default function AvgPage() {
                           </label>
                           <label>
                             目标游玩时长（分钟）
-                            <input
+                            <input disabled={!canAuthor}
                               type="number"
                               min={1}
                               max={900}
@@ -509,7 +515,7 @@ export default function AvgPage() {
                           </label>
                           <label>
                             视觉素材
-                            <select
+                            <select disabled={!canAuthor}
                               value={settings.visualLevel}
                               onChange={(e) =>
                                 update(
@@ -526,7 +532,7 @@ export default function AvgPage() {
                           </label>
                           <label>
                             音频目标
-                            <select
+                            <select disabled={!canAuthor}
                               value={settings.audioLevel}
                               onChange={(e) =>
                                 update(
@@ -541,7 +547,7 @@ export default function AvgPage() {
                           </label>
                           <label>
                             制作质量
-                            <select
+                            <select disabled={!canAuthor}
                               value={settings.qualityProfile}
                               onChange={(e) =>
                                 update(
@@ -570,7 +576,7 @@ export default function AvgPage() {
                           {field("endings", "结局方向", true)}
                           <label>
                             目标结局数
-                            <input
+                            <input disabled={!canAuthor}
                               type="number"
                               min={1}
                               max={8}
@@ -587,7 +593,7 @@ export default function AvgPage() {
                         </>
                       )}
                       <div className="avg-actions">
-                        <button
+                        <button disabled={!canAuthor}
                           className="lf-action lf-action-primary"
                           onClick={() =>
                             void run(async () => {
@@ -641,7 +647,7 @@ export default function AvgPage() {
                         <p>已从世界引擎带入选择，请确认对应版本后继续。</p>
                       )}
                       {worlds.map((w) => (
-                        <article className="avg-source" key={w.id}>
+                        <article className="avg-source" key={w.choiceKey ?? w.id}>
                           <div>
                             <h4>
                               {w.label}
@@ -652,11 +658,11 @@ export default function AvgPage() {
                             <p>
                               {w.worldCode} · v{w.version}
                               {w.narrative ? ' · 叙事世界接入（实验性）' : ''}
-                            </p>
+                            </p>{w.authorName && <p className="text-xs">{w.authorName} · {w.license}</p>}{w.attribution && <p className="text-xs">{w.attribution}</p>}{w.contentWarnings?.map((warning, index) => <p key={index} className="text-xs">{warning}</p>)}{w.purposeAllowed === false && <p className="text-xs">此来源未允许本产品使用</p>}
                           </div>
                           <button
                             className="lf-action"
-                            disabled={busy || Boolean(row && !row.draft)}
+                            disabled={(w.purposeAllowed === false || busy || Boolean(row && !row.draft)) || !canAuthor}
                             onClick={() =>
                               void run(async () => {
                                 let target = row;
@@ -692,7 +698,7 @@ export default function AvgPage() {
                                 await selectAvgWorldV1(
                                   targetScope,
                                   draft.revision,
-                                  w.id,
+                                  w.id, w.sourceDeclarationHash,
                                 );
                                 navigate(path("source", target));
                                 setNotice(
@@ -737,7 +743,7 @@ export default function AvgPage() {
                     }
                     onSource={() => go("source")}
                   />
-                ) : scope&&nativeAssembly&&['confirm','production','narrative','variables','visual','audio','media-all','review','release'].includes(page[0]) ? (
+                ) : canAuthor&&scope&&nativeAssembly&&['confirm','production','narrative','variables','visual','audio','media-all','review','release'].includes(page[0]) ? (
                   <AssemblyWorkbench key={scope.workId} scope={scope} productionId={productionId??row?.draft?.productionId??row?.productionId??null}
                     page={page[0]} onRegisterFlush={registerNativeFlush} onSource={()=>go('source')}
                     onPreviewStarted={id=>navigate(path('play',row,`&session=${id}`))}/>
@@ -762,7 +768,7 @@ export default function AvgPage() {
                     ) : (
                       <>
                         <section className="lf-paper"><h3>系统与效果组装（实验）</h3><p>使用作者输入和合法导入素材，确认后组装规则、对白、物件与舞台。可先验证系统效果。</p>
-                          <button className="lf-action" onClick={()=>void run(async()=>{if(dirty)await save();navigate(path('production',row,'&assembly=1'))})}>打开系统与效果工作台</button>
+                          <button disabled={!canAuthor} className="lf-action" onClick={()=>void run(async()=>{if(dirty)await save();navigate(path('production',row,'&assembly=1'))})}>打开系统与效果工作台</button>
                         </section>
                         {row?.draft && !row.draft.worldReleaseId ? (
                           <section className="lf-paper">
@@ -788,7 +794,7 @@ export default function AvgPage() {
                                   制作会使用全局 AI
                                   配置，生成内容与所选媒资。启用后仍需审查方案、授权开始；尚未验收的生成质量会明确标识。
                                 </p>
-                                <button className="lf-action" onClick={enable}>
+                                <button disabled={!canAuthor} className="lf-action" onClick={enable}>
                                   启用并继续确认
                                 </button>
                               </section>

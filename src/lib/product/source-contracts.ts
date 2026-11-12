@@ -1,3 +1,5 @@
+import { freezeWorldSourcePurposeV1, revalidateWorldSourcePurposeV1 } from '../world-engine/source-purpose-actions'
+import { validateWorldSourcePurposeProofV1, type WorldSourcePurposeProofV1 } from '../world-engine/source-purpose-contract'
 import { lookupContextResourceMetadataV1 } from '../context-gateway/resource-metadata'
 import { hashCanonicalValue } from '../agent/run/hash'
 import type { AgentContextTaskKind } from '../agent/context-policy'
@@ -267,6 +269,9 @@ export async function previewWorldRequirementsV1<TGoal>(input: {
 export interface ProductSourcePlanFreezeInputV1<TGoal> {
   productInstanceKey: string
   worldReference: WorldReferenceV1
+  /** Explicit choice, never inferred from a cached R. */
+  sourceDeclarationHash?: string
+  sourcePurpose?: WorldSourcePurposeProofV1
   adapter: WorldRequirementAdapterV1<TGoal>
   goal: TGoal
   missingStrategy: ProductSourceMissingStrategyV1
@@ -298,7 +303,13 @@ export async function createProductSourcePlanBasisV2<TGoal>(input: Omit<ProductS
 }): Promise<ProductSourcePlanBasisV2> {
   assertStableKey(input.productInstanceKey, 'productInstanceKey')
   const worldReference = await validatePortableWorldReference(input.worldReference)
-  await resolveWorldReferenceResourceScope(worldReference)
+  const sourceScope = await resolveWorldReferenceResourceScope(worldReference)
+  if (sourceScope.worldId == null || sourceScope.worldReleaseId == null) fail('source-purpose', '缺少冻结世界 owner')
+  const purposeInput = { worldReleaseId: sourceScope.worldReleaseId,
+    expectedProjectId: sourceScope.projectId, expectedWorldId: sourceScope.worldId, purpose: input.adapter.productType }
+  const sourcePurpose = input.sourcePurpose
+    ? await revalidateWorldSourcePurposeV1({ ...purposeInput, proof: input.sourcePurpose })
+    : await freezeWorldSourcePurposeV1({ ...purposeInput, sourceDeclarationHash: input.sourceDeclarationHash })
   const descriptors = [...input.descriptors]
   const requirementPreview = await previewWorldRequirementsV1({
     adapter: input.adapter,
@@ -349,6 +360,7 @@ export async function createProductSourcePlanBasisV2<TGoal>(input: Omit<ProductS
     productType: input.adapter.productType,
     productInstanceKey: input.productInstanceKey,
     worldReference,
+    sourcePurpose,
     adapter,
     requirements,
     initialResourceKeys,
@@ -380,6 +392,7 @@ export async function validateProductSourcePlan(plan: ProductSourcePlan): Promis
     || await hashCanonicalValue(plan.gatewayPolicy) !== plan.gatewayPolicyHash) {
     fail('plan-hash', 'SourcePlan 或 Gateway policy hash 不匹配')
   }
+  if (plan.sourcePurpose !== undefined) validateWorldSourcePurposeProofV1(plan.sourcePurpose, plan.worldReference, plan.productType)
   const expectedPermission = permissionFromRequirements(plan.requirements, plan.permission.allowedDepths)
   if (await hashCanonicalValue(expectedPermission) !== await hashCanonicalValue(plan.permission)) {
     fail('plan-permission', 'SourcePlan permission 不是由冻结需求规则推导所得')
@@ -863,6 +876,7 @@ export async function createProductReleaseLineageV1(input: {
   const plan = await validateProductSourcePlan(input.sourcePlan)
   await validatePortableWorldReference(input.worldReference)
   if (input.worldReference.referenceHash !== plan.worldReference.referenceHash) fail('lineage-chain', 'lineage 与来源计划的世界引用不一致')
+  await assertProductSourcePurposeCurrentV1(plan, input.worldReference)
   await validateConfirmedProductBriefV1({ brief: input.confirmedBrief, sourcePlan: plan })
   await validateProductSourceManifest({ sourceManifest: input.sourceManifest, sourcePlan: plan })
   if (input.sourceManifest.sourcePlanHash !== plan.planHash
@@ -921,12 +935,24 @@ export async function validateProductReleaseLineageV1(value: ProductReleaseLinea
   return structuredClone(value)
 }
 
+export async function assertProductSourcePurposeCurrentV1(
+  plan: ProductSourcePlan, currentReference = plan.worldReference,
+) {
+  if (currentReference.referenceHash !== plan.worldReference.referenceHash)
+    fail('source-purpose', '新动作的世界版本与来源计划不一致')
+  const scope = await resolveWorldReferenceResourceScope(currentReference)
+  if (scope.worldId == null || scope.worldReleaseId == null) fail('source-purpose', '缺少冻结世界 owner')
+  return revalidateWorldSourcePurposeV1({ worldReleaseId: scope.worldReleaseId,
+    expectedProjectId: scope.projectId, expectedWorldId: scope.worldId, purpose: plan.productType, proof: plan.sourcePurpose })
+}
+
 export async function assertFormalProductProductionStartV1(input: {
   sourcePlan: ProductSourcePlan
   confirmedBrief: ConfirmedProductBriefV1
   authorStartRevision: number
 }): Promise<void> {
   const plan = await validateProductSourcePlan(input.sourcePlan)
+  await assertProductSourcePurposeCurrentV1(plan)
   await resolveProductSourceReadBoundary(plan)
   const brief = await validateConfirmedProductBriefV1({ brief: input.confirmedBrief, sourcePlan: plan })
   if (plan.readiness === 'blocked') fail('source-plan-blocked', 'SourcePlan 存在未解决的稳定必读缺口')

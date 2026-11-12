@@ -28,7 +28,7 @@ describe('TTRPG/NW integration · preserve independent owners through version co
       for (const [table, row] of Object.entries(rows)) await old.table(table).add(structuredClone(row))
       old.close()
       await next.open()
-      expect(next.verno).toBe(13)
+      expect(next.verno).toBe(STORYFORGE_SCHEMA_VERSION)
       for (const [table, row] of Object.entries(rows)) expect(await next.table(table).get(1)).toEqual(row)
       expect(await next.ttrpgNarrativeMemories.count()).toBe(profile === 'ttrpg-v12' ? 1 : 0)
       expect(await next.worldNarrativeIndexCaches.count()).toBe(profile === 'world-v12' ? 1 : 0)
@@ -44,7 +44,7 @@ describe('TTRPG/NW integration · preserve independent owners through version co
       const row = { id: 1, title: '未来版本保持原样' }
       await future.table('works').add(row)
       future.close()
-      await expect(openCurrentSchema()).rejects.toThrow('只支持当前 schema v13')
+      await expect(openCurrentSchema()).rejects.toThrow(`只支持当前 schema v${STORYFORGE_SCHEMA_VERSION}`)
       await future.open()
       expect(await future.table('works').get(1)).toEqual(row)
     } finally { db.close(); future.close(); await Dexie.delete(db.name) }
@@ -56,6 +56,8 @@ describe('TTRPG/NW integration · preserve independent owners through version co
       { purpose: 'independent-work', kind: 'novel', novelProfile: 'long' })
     const backup = await exportProjectJSON(created.scope.projectId)
     const legacy = { ...structuredClone(backup), version: 16 } as Record<string, unknown> & { version: number }
+    // Both v16 branches predate source receipts. Only the TTRPG branch carries native memories.
+    delete legacy.worldSourceReceipts
     if (profile === 'world-v16') delete legacy.ttrpgNarrativeMemories
     const original = JSON.stringify(legacy)
     expect(inspectProjectBackup(legacy).valid).toBe(true)
@@ -76,6 +78,7 @@ describe('TTRPG/NW integration · preserve independent owners through version co
     const missing = { ...structuredClone(backup) } as Record<string, unknown>
     delete missing.ttrpgNarrativeMemories
     expect(inspectProjectBackup(missing).valid).toBe(false)
+    delete missing.worldSourceReceipts
     const oldMissingCore = { ...missing, version: 16 }
     delete oldMissingCore.chapters
     expect(inspectProjectBackup(oldMissingCore).valid).toBe(false)

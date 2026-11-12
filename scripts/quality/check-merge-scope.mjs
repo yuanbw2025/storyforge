@@ -119,13 +119,32 @@ export function readUnitShard(file, index, head) {
   return plan.groups[Number(index)]
 }
 
+// Edit admission replays complete governed Builds, including the initial and
+// final data checks. A sibling file on the same runner can exhaust its bounded
+// recovery time. Give it that runner alone, then continue the selected files.
+const editAdmissionSuite = 'tests/regression/R-SFQA004-product-entry-admission.test.tsx'
+
+/** @param {string[]} files */
+export function runnerBatches(files) {
+  if (!files.includes(editAdmissionSuite)) return files.length ? [files] : []
+  const others = files.filter(file => file !== editAdmissionSuite)
+  return others.length ? [[editAdmissionSuite], others] : [[editAdmissionSuite]]
+}
+
+/** @param {string[]} files @param {string[]} [options] */
+function runUnits(files, options = []) {
+  for (const batch of runnerBatches(files)) {
+    run('node_modules/.bin/vitest', [...ordinaryVitest, ...options, ...batch])
+  }
+}
+
 /** @param {Set<string>} units */
 function runOrShareUnits(units) {
   const { GITHUB_OUTPUT, RUNNER_TEMP } = process.env
   if (!GITHUB_OUTPUT || !RUNNER_TEMP) throw new Error('GitHub output and temporary directory required')
   const groups = partitionUnits([...units])
   if (groups.length === 1) {
-    if (groups[0].length) run('node_modules/.bin/vitest', [...ordinaryVitest, ...groups[0]])
+    runUnits(groups[0])
     appendFileSync(GITHUB_OUTPUT, 'shards=[]\n')
     return
   }
@@ -139,7 +158,7 @@ async function main() {
   const [base, option, index] = process.argv.slice(2)
   if (base === '--run-shard' && option && index !== undefined) {
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
-    run('node_modules/.bin/vitest', [...ordinaryVitest, '--maxWorkers=2', ...readUnitShard(option, index, head)])
+    runUnits(readUnitShard(option, index, head), ['--maxWorkers=2'])
     return
   }
   if (!base || base.startsWith('-') || index !== undefined || (option && !['--install', '--ci'].includes(option))) {
@@ -202,7 +221,7 @@ async function main() {
   }
   for (const config of new Set(checks.typeConfigs)) run('node_modules/.bin/tsc', ['--noEmit', '-p', config])
   if (option === '--ci') runOrShareUnits(units)
-  else if (units.size) run('node_modules/.bin/vitest', [...ordinaryVitest, ...units])
+  else runUnits([...units])
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main()

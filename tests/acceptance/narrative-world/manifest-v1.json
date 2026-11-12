@@ -21,88 +21,28 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261113-five-repairs-runtime-424-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa307-with-five-runtime-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality042-direct-391-077-v1.json",
-        "workPackage": "SFQA-007",
-        "note": "Preserved the mainline measurement before integration."
+        "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa004-toolchain-delivery-v1.json",
+        "workPackage": "SFQA-004-009-021-030-remaining-20",
+        "note": "Preserved the measured mainline before integration."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-post345-v1.json",
-        "workPackage": "SFQA-007",
-        "note": "Preserved the measurement on the independent fix branch."
+        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-merged424-v1.json",
+        "workPackage": "SFQA-004-009-021-030-remaining-20",
+        "note": "Preserved the measurements from the reviewed change."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality011-direct-391-077-v1.json",
-        "workPackage": "SFQA-042",
-        "note": "Preserved the mainline measurement before integration."
+        "path": "tests/acceptance/narrative-world/baseline-20261112-runtime-main344-v1.json",
+        "workPackage": "SFQA-021-129",
+        "note": "Preserved the measured mainline before integration."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261111-quality042-raster-v1.json",
-        "workPackage": "SFQA-042",
-        "note": "Preserved the measurement on the independent fix branch."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality050-direct-391-077-v1.json",
-        "workPackage": "SFQA-011",
-        "note": "Preserved the mainline measurement before integration."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261111-quality011-production-review-v1.json",
-        "workPackage": "SFQA-011",
-        "note": "Preserved the measurement on the independent fix branch."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality077-after391-v1.json",
-        "workPackage": "SFQA-050",
-        "note": "Preserved the mainline measurement before integration."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261111-sfqa050-dispatch-v1.json",
-        "workPackage": "SFQA-050",
-        "note": "Preserved the measurement on the independent fix branch."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-after345-v1.json",
-        "workPackage": "SFQA-077",
-        "note": "Preserved the mainline measurement before integration."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality077-after345-v1.json",
-        "workPackage": "SFQA-077",
-        "note": "Preserved the measurement on the independent fix branch."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality109-after344-010-v1.json",
-        "workPackage": "SFQA-034",
-        "note": "Preserved the mainline measurement before integration."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261111-quality034039-isolated-v1.json",
-        "workPackage": "SFQA-034",
-        "note": "Preserved the measurement on the independent fix branch."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality010-post344-v1.json",
-        "workPackage": "SFQA-109",
-        "note": "Preserved the mainline measurement before integration."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261111-quality109-isolated-v1.json",
-        "workPackage": "SFQA-109",
-        "note": "Preserved the measurement on the independent fix branch."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality008-main416-v1.json",
-        "workPackage": "SFQA-010",
-        "note": "Preserved the mainline measurement before integration."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality010-main416-v1.json",
-        "workPackage": "SFQA-010",
-        "note": "Preserved the measurement on the independent fix branch."
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality021129-integrated-v2.json",
+        "workPackage": "SFQA-021-129",
+        "note": "Preserved the measurements from the reviewed change."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-quality018-integrated-v1.json",
@@ -176,13 +116,14 @@
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
-        "workPackage": "NW-0B",
-        "note": "Preserved the previous baseline before tracking the updated architecture checker and its static binding analysis."
+        "implementationCommit": "bc18dc8466f2e6661b6ce9a17131981f41992844",
+        "workPackage": "pre-quality019-portable-tree",
+        "note": "Preserved the main receipt before validating portable tree imports for SFQA-019."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
-        "workPackage": "NW-0B",
-        "note": "Preserved mainline receipt before re-evaluating the integrated community Auth/TUS dependency inputs; deterministic observations must remain unchanged."
+        "workPackage": "quality-independent-01",
+        "note": "Preserved unchanged before the independently reviewed product recovery, owner/reference, credential and desktop-runtime fixes."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261030-community-r2-main870-v1.json",
@@ -191,8 +132,8 @@
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261029-release405-mainc5-v1.json",
-        "workPackage": "NW-0B",
-        "note": "Preserved mainline v4.0.5 receipt before the community branch and R2 dependency integration."
+        "workPackage": "release-4.0.5-mainc5-integration",
+        "note": "Preserved unchanged before independently delivered SFQA-015 and SFQA-054 source/test updates."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261030-community-deps-v1.json",
@@ -201,8 +142,9 @@
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261028-longform-avg-integration-v1.json",
-        "workPackage": "NW-2E",
-        "note": "Preserved pre-community-dependency receipt; package, lockfile and the manifest's own receipt pointer changed in the next input fingerprint, while deterministic observations remained identical."
+        "workPackage": "main-c5-longform-avg-integration",
+        "implementationCommit": "c5b51da301abd3875b26732d9657ad485ad39105",
+        "note": "Preserved current main receipt before v4.0.5 release source integration."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261013-v1.json",
@@ -822,81 +764,6 @@
         "note": "Preserve the initial independent tree-validation receipt before restoring stable parent-first insertion and measuring the shared portable-tree source."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261111-quality010-production-reader-v1.json",
-        "workPackage": "SFQA-010",
-        "note": "Preserved the measurement on the independent fix branch."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261111-sfqa009-core-v1.json",
-        "workPackage": "NW-0B",
-        "note": "Preserved the source-pinned report before SFQA-009 integration."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/domain-projection-20261112-quality086-integrated-v1.json",
-        "workPackage": "NW-1B",
-        "note": "Preserved the source-pinned report before SFQA-009 integration."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/domain-projection-20261111-sfqa009-core-v1.json",
-        "workPackage": "NW-1B",
-        "note": "Preserved the source-pinned report before SFQA-009 integration."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/domain-projection-20261110-issue179-main834-v1.json",
-        "workPackage": "NW-1B",
-        "note": "Preserved pre-SFQA009 main receipt. Fixed corpus and historical evidence are unchanged; pure helper extraction has its own source-pinned receipt."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-integrated-v1.json",
-        "workPackage": "SFQA-009",
-        "note": "Preserved the shared-contract measurement before World history scope integration."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-world-scope-v1.json",
-        "workPackage": "NW-0B",
-        "note": "Retained the measured inputs before integrating shared contracts and critical coverage."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality034-039-after341-v1.json",
-        "workPackage": "NW-0B",
-        "note": "Retained the measured receipt before integrating shared core contracts with booking and product validation."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-critical-coverage-v1.json",
-        "workPackage": "NW-0B",
-        "note": "Retained the measured receipt before integrating shared core contracts with booking and product validation."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/domain-projection-20261112-quality034039-after341-v1.json",
-        "workPackage": "NW-1B",
-        "note": "Retained the measured receipt before integrating shared core contracts with booking and product validation."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/domain-projection-20261112-sfqa009-integrated-v1.json",
-        "workPackage": "NW-1B",
-        "note": "Retained the measured receipt before integrating shared core contracts with booking and product validation."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261111-quality077-citation-v1.json",
-        "workPackage": "SFQA-077",
-        "note": "Preserved the measurement on the independent fix branch."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-direct-main-v1.json",
-        "workPackage": "SFQA-007",
-        "note": "Preserved the measurement on the independent fix branch."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261111-quality007-dev-audit-v1.json",
-        "workPackage": "SFQA-007",
-        "note": "Preserved the measurement on the independent fix branch."
-      },
-      {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-after-five-v1.json",
-        "workPackage": "NW-0B",
-        "note": "Retained the measured five repair groups and mainline before scoped CI configuration changed."
-      },
-      {
         "path": "tests/acceptance/narrative-world/baseline-20261112-runtime-integration-v1.json",
         "workPackage": "SFQA-028-031-032-069-082-083",
         "note": "Preserved the measurements from the reviewed change."
@@ -922,7 +789,475 @@
         "note": "Preserved the measured runtime continuation and mainline inputs before combining them."
       },
       {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality008-main416-v1.json",
+        "workPackage": "SFQA-028-032",
+        "note": "Preserved the measured runtime continuation and mainline inputs before combining them."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-product-purpose-ir-v1.json",
+        "workPackage": "SFQA-021/129",
+        "note": "Preserve the measured parent receipt before combining the source and backup contracts."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-source-foundation-ir-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retain the measured upstream receipt inherited by this branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality129-inherited-ir-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retain the measured upstream receipt inherited by this branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-publication-origin-ir-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retain the measured upstream receipt inherited by this branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-product-purpose-v5.json",
+        "workPackage": "NW-0B",
+        "note": "Retain this branch’s previously measured NW-0B receipt after the IR input changed."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-publication-origin-v2.json",
+        "workPackage": "NW-0B",
+        "note": "Preserve actual local seal/cache origin foundation before explicit product-purpose proofs and the readonly sharing declaration selector. Frozen corpus and all deterministic observations remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality129-nw1b-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserve actual129 successor before deterministic local seal/cache provenance. Frozen corpus and all deterministic observations remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality129-independent-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserve original129 measurement before integrating the real source-foundation projection successor."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-source-foundation-nw1b-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserve measured327 NW1B input repair brought by its actual Git commit."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality021-source-foundation-v2.json",
+        "workPackage": "NW-0B",
+        "note": "Preserve measured source-receipt foundation before SFQA129 registered field validation, absent legacy reads and new-only adoption defaults; corpus and deterministic observations unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality021129-integrated-v1.json",
+        "workPackage": "SFQA-021/129",
+        "note": "Preserve the measured parent receipt when combining frozen source, backup and runtime contracts."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality030-037-backup-references-v1.json",
+        "workPackage": "SFQA-030/037",
+        "note": "Preserve inputs and observations for the measured parent receipt."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality030037-integrated-v1.json",
+        "workPackage": "SFQA-030/037",
+        "note": "Retain the measured parent for the integration of backup and shared contracts."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-post385-v1.json",
+        "workPackage": "SFQA-030/037",
+        "note": "Retain the measured shared-contract parent."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality042-integrated-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained source-pinned measurement before SFQA-009 joined the product fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-integrated-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained source-pinned measurement before SFQA-009 joined the product fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-quality021129-integrated-v2.json",
+        "workPackage": "NW-1B",
+        "note": "Retained source-pinned measurement before SFQA-009 joined the product fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-sfqa009-integrated-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained source-pinned measurement before SFQA-009 joined the product fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-sfqa009-core-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the source-pinned report before SFQA-009 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-quality086-integrated-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the source-pinned report before SFQA-009 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261111-sfqa009-core-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the source-pinned report before SFQA-009 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261110-issue179-main834-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved pre-SFQA009 main receipt. Fixed corpus and historical evidence are unchanged; pure helper extraction has its own source-pinned receipt."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality011-integrated-v1.json",
+        "workPackage": "SFQA-042",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality042-raster-v1.json",
+        "workPackage": "SFQA-042",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality050-integrated-v1.json",
+        "workPackage": "SFQA-011",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality011-production-review-v1.json",
+        "workPackage": "SFQA-011",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality109-integrated-v1.json",
+        "workPackage": "SFQA-050",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-sfqa050-dispatch-v1.json",
+        "workPackage": "SFQA-050",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality109-isolated-v1.json",
+        "workPackage": "SFQA-109",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality030037-post391-v1.json",
+        "workPackage": "SFQA-030/037",
+        "note": "Preserve the measured parent receipt for backup restoration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-author-policy-combined-v1.json",
+        "workPackage": "SFQA-030/037",
+        "note": "Preserve the measured privacy and source-policy parent receipt."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-import-shared-contract-v1.json",
+        "workPackage": "SFQA-087",
+        "note": "Preserved the measured mainline before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality087-author-policy-v1.json",
+        "workPackage": "SFQA-087",
+        "note": "Preserved the measurements from the reviewed change."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-import-purpose-v1.json",
+        "workPackage": "SFQA-022-044-051",
+        "note": "Preserved the measurements from the reviewed change."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-import-nodes-v1.json",
+        "workPackage": "SFQA-022-044-051",
+        "note": "Preserved the measurements from the reviewed change."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality022-formal-import-v1.json",
+        "workPackage": "SFQA-022-044-051",
+        "note": "Preserved the measurements from the reviewed change."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality044-private-reference-v1.json",
+        "implementationCommit": "1f60bb587d086f82a5a576e22b843693914b6ea1",
+        "workPackage": "NW-0B",
+        "note": "Preserved the reference privacy receipt before the actual document-import candidate and author-adoption integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality051-node-resume-v1.json",
+        "implementationCommit": "b92975c6fcfafe17bcd800a811ebde9d01e805d7",
+        "workPackage": "NW-0B",
+        "note": "Preserved the previous frozen receipt before the reference execution backup boundary changed."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality030037-post380-v1.json",
+        "workPackage": "SFQA-030-037",
+        "note": "Preserved the measured backup and node-resume parent before combining their validated changes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-author-policy-resume-v1.json",
+        "workPackage": "SFQA-030-037",
+        "note": "Preserved the measured backup and node-resume parent before combining their validated changes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa004-integrated-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the source-pinned measurement before product admission and author policy integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-author-policy-combined-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the source-pinned measurement before product admission and author policy integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-sfqa004-integrated-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the source-pinned measurement before product admission and author policy integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality307-salt-ridge-install-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the product admission and preceding mainline source measurements."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-sfqa009-post385-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained the product admission and preceding mainline source measurements."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261111-quality307-product-entry-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained the product admission and preceding mainline source measurements."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality307-product-entry-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the previous product entry receipt before verifying the fixed public Salt Ridge installation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality004-product-entry-v1.json",
+        "workPackage": "quality004-original-v1",
+        "note": "Original receipt on the cumulative branch before isolation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261103-quality004-product-entry-v2.json",
+        "workPackage": "quality004-original-v2",
+        "note": "Original receipt on the cumulative branch before isolation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality004-isolated.json",
+        "implementationCommit": "1e33d6e2ef96b2cfd8ea78a983978afd76d7e18d",
+        "workPackage": "SFQA-004/SFQA-105",
+        "note": "Original product-admission and NPC repair measurement before refreshing the domain-projection receipt pointer."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality030037-resume-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the measured receipt before combining product admission and backup recovery."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa004-post380-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the measured receipt before combining product admission and backup recovery."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-quality030037-resume-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained the measured receipt before combining product admission and backup recovery."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-sfqa004-post380-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained the measured receipt before combining product admission and backup recovery."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-world-source-restore-contract-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the measured receipt before combining catalog, ownership, and frozen source admission."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa004-post371-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the measured receipt before combining catalog, ownership, and frozen source admission."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-world-source-restore-contract-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained the measured receipt before combining catalog, ownership, and frozen source admission."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-sfqa004-post371-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained the measured receipt before combining catalog, ownership, and frozen source admission."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality109-after344-010-v1.json",
+        "workPackage": "SFQA-034",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality034039-isolated-v1.json",
+        "workPackage": "SFQA-034",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality010-post344-v1.json",
+        "workPackage": "SFQA-109",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality010-main416-v1.json",
+        "workPackage": "SFQA-010",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality010-production-reader-v1.json",
+        "workPackage": "SFQA-010",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-world-scope-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the measured inputs before integrating shared contracts and critical coverage."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality034-039-after341-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the measured receipt before integrating shared core contracts with booking and product validation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-critical-coverage-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the measured receipt before integrating shared core contracts with booking and product validation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-quality034039-after341-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained the measured receipt before integrating shared core contracts with booking and product validation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-after345-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the measured receipt before integrating frozen-source and runtime ownership evidence."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-runtime-integration-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained the measured receipt before integrating frozen-source and runtime ownership evidence."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-sfqa009-after345-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained the measured receipt before integrating frozen-source and runtime ownership evidence."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-after345-runtime-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the measured receipt before integrating source admission, portable backups, runtime ownership, and verified product entry."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-sfqa009-after345-runtime-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained the measured receipt before integrating source admission, portable backups, runtime ownership, and verified product entry."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-family-v1.json",
+        "workPackage": "SFQA-021-129",
+        "note": "Preserved the measured mainline before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality011-direct-391-077-v1.json",
+        "workPackage": "SFQA-042",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality050-direct-391-077-v1.json",
+        "workPackage": "SFQA-011",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality077-after391-v1.json",
+        "workPackage": "SFQA-050",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality077-after345-v1.json",
+        "workPackage": "SFQA-077",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality077-citation-v1.json",
+        "workPackage": "SFQA-077",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality042-direct-391-077-v1.json",
+        "workPackage": "SFQA-028-032",
+        "note": "Preserved the measured runtime and product input before their shared integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa004-final-integration-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the measured parent receipt for product admission and runtime ownership integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261112-quality030037-post380-v1.json",
+        "workPackage": "NW-1A",
+        "note": "Preserved the measured parent receipt for product admission and runtime ownership integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261113-sfqa004-final-integration-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the measured parent receipt for product admission and runtime ownership integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-canon-source-compatibility-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the measured parent receipt for product admission and runtime ownership integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/ir-contract-20261113-runtime-canon-source-compatibility-v1.json",
+        "workPackage": "NW-1A",
+        "note": "Preserved the measured parent receipt for product admission and runtime ownership integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261113-runtime-canon-source-compatibility-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the measured parent receipt for product admission and runtime ownership integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-after-five-v1.json",
+        "workPackage": "SFQA-021-129",
+        "note": "Preserved the measured mainline before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-post345-v1.json",
+        "workPackage": "SFQA-007",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-direct-main-v1.json",
+        "workPackage": "SFQA-007",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality007-dev-audit-v1.json",
+        "workPackage": "SFQA-007",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa004-runtime-owner-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the measured parent receipt before checking combined product admission on the updated test toolchain."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-world-runtime-audited-tools-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained the measured parent receipt before checking combined product admission on the updated test toolchain."
+      },
+      {
         "path": "tests/acceptance/narrative-world/baseline-20261112-runtime-main344-v1.json",
+        "workPackage": "SFQA-028-032",
+        "note": "Preserved the measured independent runtime and comic contract evidence before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality034-039-after341-v1.json",
         "workPackage": "SFQA-028-032",
         "note": "Preserved the measured independent runtime and comic contract evidence before integration."
       },
@@ -932,9 +1267,19 @@
         "note": "Preserved the measured six-fix branch receipt before merging current main; its observations are unchanged by the merge."
       },
       {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-post345-v1.json",
+        "workPackage": "SFQA-007",
+        "note": "Preserved the mainline receipt measured before the six-fix integration."
+      },
+      {
         "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-merged422-v1.json",
         "workPackage": "SFQA-028-031-032-069-082-083",
         "note": "Six runtime fixes measured before the manual media tag was added to the Vitest configuration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261113-runtime-merged422-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the measured projection before integrating the current scope and historical backup repairs."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261113-five-repairs-424-v1.json",
@@ -942,9 +1287,14 @@
         "note": "Preserved the independent measurement before integrating five product repairs and six runtime repairs."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-merged424-v1.json",
-        "workPackage": "SFQA-009/011/028-032/042/050/077",
-        "note": "Preserved the independent measurement before integrating five product repairs and six runtime repairs."
+        "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa-remaining20-main424-v1.json",
+        "workPackage": "SFQA-004/009/011/028-032/042/050/077",
+        "note": "Retained the current signed-off input and observations before incorporating the independent five-repair evidence."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-five-repairs-runtime-424-v1.json",
+        "workPackage": "SFQA-004/009/011/028-032/042/050/077",
+        "note": "Retained the current signed-off input and observations before incorporating the independent five-repair evidence."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -1102,6 +1452,9 @@
     "src/lib/world-engine/narrative-semantic-transfer.ts",
     "src/lib/world-engine/narrative-time.ts",
     "src/lib/world-engine/promotion.ts",
+    "src/lib/world-engine/publication-authority-rows.ts",
+    "src/lib/world-engine/publication-origin-contract.ts",
+    "src/lib/world-engine/publication-origin.ts",
     "src/lib/world-engine/reference-cache.ts",
     "src/lib/world-engine/release-codec.ts",
     "src/lib/world-engine/release-hash.ts",
@@ -1110,6 +1463,11 @@
     "src/lib/world-engine/semantic-registry-v3.ts",
     "src/lib/world-engine/semantic-registry-v4.ts",
     "src/lib/world-engine/semantic-snapshot.ts",
+    "src/lib/world-engine/source-purpose-actions.ts",
+    "src/lib/world-engine/source-purpose-cas.ts",
+    "src/lib/world-engine/source-purpose-contract.ts",
+    "src/lib/world-engine/source-purpose.ts",
+    "src/lib/world-engine/source-receipt.ts",
     "src/lib/world-engine/tidemark-echo-preset.ts",
     "src/lib/world-engine/tidemark-preset.ts",
     "src/lib/world-engine/world-identity.ts",
@@ -1245,17 +1603,33 @@
     "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
     "src/lib/types/state-card.ts",
     "scripts/quality/critical-coverage-scopes.json",
-    "src/lib/product-production/original-response-author-source.ts",
-    "src/lib/product-production/original-response-booking.ts",
-    "src/lib/product-production/read-details.ts",
-    "src/lib/agent/run/context-manifest.ts",
-    "src/lib/utils/legacy-id-array.ts",
     "src/components/product/TextAdventureMediaReview.tsx",
-    "src/lib/product-production/recovery-policy.ts",
     "src/lib/adventure/production-artifacts-v2.ts",
+    "src/lib/agent/ai-entry-registry.json",
+    "src/lib/agent/run/context-manifest.ts",
+    "src/lib/agent/run/ledger-portability.ts",
+    "src/lib/agent/skill-registry.ts",
+    "src/lib/db/transaction-integrity.ts",
+    "src/lib/import/document-parse-adoption.ts",
+    "src/lib/import/document-parse-backup-privacy.ts",
+    "src/lib/import/document-parse-binding.ts",
+    "src/lib/import/document-parse-durable.ts",
+    "src/lib/import/pipeline.ts",
     "src/lib/media/blob-store.ts",
     "src/lib/media/raster-image.ts",
-    "tests/helpers/raster-decoder-vitest.ts"
+    "src/lib/product-production/recovery-policy.ts",
+    "src/lib/registry/adopt.ts",
+    "src/lib/registry/context-sources.ts",
+    "src/lib/retrieval/rag-policy.ts",
+    "src/lib/types/import-session.ts",
+    "src/lib/utils/legacy-id-array.ts",
+    "src/stores/import-session.ts",
+    "tests/helpers/raster-decoder-vitest.ts",
+    "src/lib/product-platform/workspace-install.ts",
+    "src/lib/workspace/workspace-allocation.ts",
+    "src/lib/product-production/original-response-author-source.ts",
+    "src/lib/product-production/original-response-booking.ts",
+    "src/lib/product-production/read-details.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

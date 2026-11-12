@@ -1,3 +1,4 @@
+import Dexie, { type Transaction } from 'dexie'
 import { estimateTokens } from '../ai/context-budget'
 import { CHAPTER_TEXT_NORMALIZATION_VERSION, getChapterDerivedMemoryStatus, normalizeChapterText, sha256Text } from '../ai/chapter-memory/text-normalization'
 import type { Chapter } from '../types'
@@ -29,6 +30,7 @@ import type { RagDocumentPolicy, RagFieldPolicy } from '../types/rag-library'
 import { parseEntryFields, parseFieldSchema } from '../types/codex'
 import { normalizeDetailedScenes } from '../types/detailed-outline'
 import { parseStages } from '../types/story-arc'
+import { isRagSelectionEnabledV1, ragSourceFieldPolicyKeysV1 } from '../retrieval/rag-policy'
 import {
   buildLongTermConsistencyDossierV1,
   formatLongTermConsistencyDossierV1,
@@ -45,8 +47,26 @@ import {
   createCachedContextResourceProviderV1,
 } from './provider-cache'
 
+// Authoritative reads may run in the caller's Dexie snapshot. Keep only the
+// pure digest leaves alive. Projection fans out in parallel, so serialize its
+// keep-alives within one transaction; concurrent waits can settle out of order.
+const canonDigestTails = new WeakMap<Transaction, Promise<unknown>>()
+
+function keepCanonDigestAlive<T>(digest: () => Promise<T>): Promise<T> {
+  const transaction = Dexie.currentTransaction
+  if (transaction?.db !== db) return digest()
+  const wait = () => Dexie.waitFor(digest())
+  const tail = canonDigestTails.get(transaction)
+  const pending = tail ? tail.then(wait, wait) : wait()
+  canonDigestTails.set(transaction, pending)
+  return pending
+}
+
+const hashCanonProjection = (value: unknown) => keepCanonDigestAlive(() => hashCanonicalValue(value))
+const hashCanonText = (text: string) => keepCanonDigestAlive(() => sha256Text(text))
+
 const PROVIDER_SOURCE_KEY = 'ragSelection'
-const PROVIDER_VERSION = 'canon-resource-provider-v10'
+const PROVIDER_VERSION = 'canon-resource-provider-v12'
 const NORMALIZATION_VERSION = 'canon-resource-normalization-v1'
 const MAX_PAGE_SIZE = 100
 const MAX_READ_TOKENS = 100_000
@@ -82,6 +102,13 @@ interface ProjectedResourceV1 {
   descriptor: ContextResourceDescriptorV1
   fullContent: string
   focusedContent: string
+}
+
+interface CanonPolicyDependencyV1 {
+  table: string
+  row: ResourceRow
+  fields: readonly string[]
+  required?: boolean
 }
 
 interface CatalogCursorV1 {
@@ -175,14 +202,17 @@ function normalizeTokenCap(value: unknown): number {
 
 function normalizedPolicy(value: RagFieldPolicy | undefined): Required<RagFieldPolicy> {
   return {
-    enabled: value?.enabled !== false,
+    enabled: isRagSelectionEnabledV1(value),
     weight: normalizeWeight(value?.weight),
     tokenCap: normalizeTokenCap(value?.tokenCap),
     priority: priority(value?.priority),
   }
 }
 
-async function resourcePolicy(row: ResourceRow, fieldKey?: string): Promise<{
+type PolicyRow = Record<string, unknown> & Pick<ResourceRow, 'ragDocumentId' | 'ragPolicy' | 'ragPolicyRevision' | 'ragPolicyHash'>
+
+async function resourcePolicy(row: PolicyRow, fieldKey?: string): Promise<{
+  enabled: boolean
   revision: number
   hash: string
   priority: 'normal' | 'pinned' | 'must-read'
@@ -190,13 +220,14 @@ async function resourcePolicy(row: ResourceRow, fieldKey?: string): Promise<{
   tokenCap: number
 }> {
   const raw = row.ragPolicy ?? {}
-  const documentHash = await hashCanonicalValue({ version: 1, policy: raw })
+  const documentHash = await hashCanonProjection({ version: 1, policy: raw })
   if (row.ragPolicyHash && row.ragPolicyHash !== documentHash) {
     fail('policy-hash-mismatch', `资源 ${row.ragDocumentId ?? '?'} 的检索策略 hash 已损坏`)
   }
   const document = normalizedPolicy(raw)
   if (!fieldKey) {
     return {
+      enabled: document.enabled,
       revision: row.ragPolicyRevision ?? 0,
       hash: documentHash,
       priority: document.priority,
@@ -206,14 +237,15 @@ async function resourcePolicy(row: ResourceRow, fieldKey?: string): Promise<{
   }
   const own = normalizedPolicy(raw.fields?.[fieldKey])
   const effective = {
-    enabled: document.enabled && own.enabled,
+    enabled: isRagSelectionEnabledV1(raw, [fieldKey]),
     weight: raw.fields?.[fieldKey]?.weight == null ? document.weight : own.weight,
     tokenCap: raw.fields?.[fieldKey]?.tokenCap == null ? document.tokenCap : own.tokenCap,
     priority: raw.fields?.[fieldKey]?.priority == null ? document.priority : own.priority,
   }
   return {
+    enabled: effective.enabled,
     revision: row.ragPolicyRevision ?? 0,
-    hash: await hashCanonicalValue({ version: 1, documentHash, fieldKey, effective }),
+    hash: await hashCanonProjection({ version: 1, documentHash, fieldKey, effective }),
     priority: effective.priority,
     weight: effective.weight,
     tokenCap: effective.tokenCap,
@@ -340,10 +372,12 @@ function rowTitle(spec: ResourceSpec, row: ResourceRow): string {
   // History rows identify occurrences, not one definition of the named item
   // or event. Their fields share the registered portable occurrence identity.
   if (spec.name === 'itemLedger' || spec.name === 'storyTimelineEvents') {
-    const name = exactValue(spec.name === 'itemLedger' ? row.itemName : row.title).trim()
+    const key = spec.name === 'itemLedger' ? 'itemName' : 'title'
+    const name = isRagSelectionEnabledV1(row.ragPolicy, [key]) ? exactValue(row[key]).trim() : ''
     return `${name || spec.resourceIdentity.label} · ${row.ragDocumentId}`
   }
   for (const key of ['title', 'name', 'entityName', 'subjectName', 'itemName', 'key']) {
+    if (!isRagSelectionEnabledV1(row.ragPolicy, [key])) continue
     const value = row[key]
     if (typeof value === 'string' && value.trim()) return value.trim()
   }
@@ -368,7 +402,7 @@ async function sourceRef(
   exact: string,
 ): Promise<ContextSourceRefV1> {
   if (!Number.isInteger(row.id)) fail('record-id', `${spec.name} 资源缺少 numeric id`)
-  const contentHash = await sha256Text(exact)
+  const contentHash = await hashCanonText(exact)
   return {
     table: spec.name,
     recordId: row.id!,
@@ -419,6 +453,9 @@ async function worldGroupForRow(
   if (spec.name === 'worldGroupLinks') return fallback
   // Codex 分类 schema 属于整个 World，而不是某个 worldGroup。
   if (spec.name === 'codexCategories') return undefined
+  // Story arcs without a saved group use the default scope, including older rows
+  // whose optional foreign key becomes an explicit null on backup restoration.
+  if (spec.name === 'storyArcs' && row.worldGroupId == null) return null
   if (typeof row.worldGroupId === 'number' || row.worldGroupId === null) return row.worldGroupId as number | null
   if (spec.homeWorldScoped) return (row.homeWorldGroupId as number | null | undefined) ?? null
   let outlineNodeId: number | undefined
@@ -501,6 +538,8 @@ export async function canonRowResourceKeysV1(tableName: string, row: ResourceRow
 
 async function temporalFactTitle(row: ResourceRow): Promise<string> {
   const predicate = getFactPredicate(String(row.predicate ?? ''))
+  const titleFields = ['subjectName', 'predicate', ...(!predicate || (predicate.cardinality === 'single' && predicate.factKind === 'state') ? [] : ['value'])]
+  if (!isRagSelectionEnabledV1(row.ragPolicy, titleFields)) return `事实 · ${row.ragDocumentId}`
   const subject = exactValue(row.subjectName).trim() || '未命名主体'
   const title = `${subject} ｜ ${predicate?.label ?? exactValue(row.predicate)}`
   // Unknown/single-valued predicates remain conservative: differing values
@@ -567,7 +606,7 @@ async function chapterDerivedAuthority(row: ResourceRow, field: string): Promise
   if (!['summary', 'continuityHandoff', 'planReconciliation'].includes(field)) return 'author-canon'
   if (typeof row.content !== 'string') return 'candidate'
   const chapter = row as unknown as Chapter
-  const status = await getChapterDerivedMemoryStatus(chapter)
+  const status = await keepCanonDigestAlive(() => getChapterDerivedMemoryStatus(chapter))
   if (field === 'summary') return status.summary === 'verified' ? 'derived-summary' : 'candidate'
   if (field === 'continuityHandoff') return status.handoff === 'verified' ? 'derived-summary' : 'candidate'
   const reconciliation = chapter.planReconciliation
@@ -600,6 +639,79 @@ function conservativeAuthority(values: readonly ContextResourceAuthorityV1[]): C
   return 'author-canon'
 }
 
+function projectionPolicyFields(spec: ResourceSpec, row: ResourceRow, field: FieldProjectionV1): string[] {
+  return [...new Set([
+    ...ragSourceFieldPolicyKeysV1(spec.name, field.key, row.fields),
+    ...field.sourceFields.map(source => source.key),
+  ])]
+}
+
+/** Recompute the field policy stored by pre-dependency Canon providers.
+ * Historical evidence comparison only; a fresh read still uses projectionPolicy. */
+export async function historicalCanonFieldPolicyHashV1(row: PolicyRow, fieldKey: string): Promise<string> {
+  const policy = await resourcePolicy(row, fieldKey)
+  if (!policy.enabled) fail('policy-disabled', '旧版候选的原文读取授权已停用')
+  return policy.hash
+}
+
+async function projectionPolicy(input: {
+  spec: ResourceSpec
+  row: ResourceRow
+  policyField?: string
+  policyFields?: readonly string[]
+  sourceRefs: readonly ContextSourceRefV1[]
+  policyDependencies?: readonly CanonPolicyDependencyV1[]
+}) {
+  const own = await resourcePolicy(input.row, input.policyField)
+  const fields = input.policyFields ?? (input.policyField ? [input.policyField] : [])
+  const dependencies: CanonPolicyDependencyV1[] = [...(input.policyDependencies ?? [])]
+  // A complete aggregate dependency contract replaces its bounded evidence
+  // sample. Ordinary resources derive their permissions from exact source refs.
+  if (input.policyDependencies === undefined) {
+    for (const ref of input.sourceRefs) {
+      if (typeof ref.recordId !== 'number' || !Number.isSafeInteger(ref.recordId) || ref.recordId < 0) {
+        fail('policy-source-record', `${ref.table} 的 Canon 策略来源必须使用合法本地主键`)
+      }
+      const sourceRow = ref.table === input.spec.name && ref.recordId === input.row.id
+        ? input.row
+        : await REGISTRY_BY_NAME.get(ref.table)?.table.get(ref.recordId) as ResourceRow | undefined
+      if (!sourceRow) fail('policy-source-missing', `${ref.table}#${ref.recordId} 的策略来源已缺失`)
+      dependencies.push({ table: ref.table, row: sourceRow, fields: [ref.field] })
+    }
+  }
+  const grouped = new Map<string, { table: string; row: ResourceRow; fields: Set<string>; required: boolean }>()
+  for (const dependency of dependencies) {
+    const required = dependency.required !== false
+    const identity = REGISTRY_BY_NAME.get(dependency.table)?.resourceIdentity
+    if (!identity || !isPortableResourceUidV1(dependency.row.ragDocumentId, identity.resourceKind)) {
+      fail('policy-source-identity', `${dependency.table}#${dependency.row.id} 的策略来源缺少有效可移植身份`)
+    }
+    const key = `${dependency.table}:${dependency.row.ragDocumentId}:${required}`
+    const group = grouped.get(key)
+    grouped.set(key, { ...dependency, fields: new Set([...(group?.fields ?? []), ...dependency.fields]), required })
+  }
+  const snapshots = await Promise.all([...grouped.entries()].sort(([left], [right]) => left.localeCompare(right))
+    .map(async ([, dependency]) => {
+      const policy = await resourcePolicy(dependency.row)
+      const dependencyFields = [...dependency.fields].sort()
+      return {
+        table: dependency.table,
+        sourceUid: dependency.row.ragDocumentId,
+        fields: dependencyFields,
+        required: dependency.required,
+        enabled: isRagSelectionEnabledV1(dependency.row.ragPolicy, dependencyFields),
+        revision: policy.revision,
+        policyHash: policy.hash,
+      }
+    }))
+  return {
+    ...own,
+    enabled: isRagSelectionEnabledV1(input.row.ragPolicy, fields) && snapshots.every(item => !item.required || item.enabled),
+    revision: snapshots.reduce((revision, item) => Math.max(revision, item.revision), own.revision),
+    hash: await hashCanonProjection({ version: 1, ownPolicyHash: own.hash, fields: [...fields].sort(), dependencies: snapshots }),
+  }
+}
+
 async function makeDescriptor(input: {
   spec: ResourceSpec
   row: ResourceRow
@@ -614,9 +726,11 @@ async function makeDescriptor(input: {
   authority: ContextResourceAuthorityV1
   originalTokenEstimate?: number
   policyField?: string
+  policyFields?: readonly string[]
+  policyDependencies?: readonly CanonPolicyDependencyV1[]
   timeRange?: ContextTimeRangeV1
 }): Promise<ProjectedResourceV1> {
-  const policy = await resourcePolicy(input.row, input.policyField)
+  const policy = await projectionPolicy(input)
   const sourceRefs = [...new Map(input.sourceRefs.map(ref => [
     `${ref.table}\u0000${ref.recordId}\u0000${ref.field}\u0000${ref.revision}\u0000${ref.contentHash}`,
     ref,
@@ -626,7 +740,7 @@ async function makeDescriptor(input: {
       ? Math.max(latest, ref.revision)
       : String(ref.revision) > String(latest) ? ref.revision : latest
   ), 0)
-  const contentHash = await sha256Text(input.fullContent)
+  const contentHash = await hashCanonText(input.fullContent)
   return {
     descriptor: {
       version: 1,
@@ -640,6 +754,7 @@ async function makeDescriptor(input: {
       contentHash,
       policyRevision: policy.revision,
       policyHash: policy.hash,
+      ...(policy.enabled ? {} : { automaticSelectionEnabled: false }),
       scope: await scopeForRow(input.frozenScope, input.spec, input.row),
       relations: input.relations,
       ...(input.timeRange ? { timeRange: input.timeRange } : {}),
@@ -675,16 +790,20 @@ async function genericResources(
   const group = groupId == null ? undefined : await db.worldGroups.get(groupId)
   const scopeIdentity = spec.homeWorldScoped && row.isCrossWorld === true
     ? '跨世界'
-    : group?.projectId === row.projectId ? `世界：${group.name}` : ''
+    : group?.projectId === row.projectId && isRagSelectionEnabledV1(group.ragPolicy, ['name']) ? `世界：${group.name}` : ''
   const title = scopeIdentity ? `${baseTitle} · ${scopeIdentity}` : baseTitle
   const relations = await relationsForRow(spec, row)
   const refsByField = await Promise.all(fields.map(current => Promise.all(
     current.sourceFields.map(source => sourceRef(spec, row, source.key, source.exact)),
   )))
-  const refs = refsByField.flat()
   const fieldAuthorities = await Promise.all(fields.map(current => authorityFor(spec, row, current.key)))
-  const body = [`【${spec.resourceIdentity.label} / ${title}】`, ...fields.map(current => `${current.label}：${current.presented}`)].join('\n')
-  const preferred = fields.find(current => ['summary', 'description', 'overview', 'logline', 'progressNote'].includes(current.key)) ?? fields[0]
+  const enabledFields = fields.filter(current => isRagSelectionEnabledV1(row.ragPolicy, projectionPolicyFields(spec, row, current)))
+  // Keep every exact field for author inspection. A partial record is not a
+  // sufficient full-record mandatory read; its open fields remain selectable.
+  const bodyFields = new Set(enabledFields.length ? enabledFields : fields)
+  const recordFields = fields.filter(current => bodyFields.has(current))
+  const body = [`【${spec.resourceIdentity.label} / ${title}】`, ...recordFields.map(current => `${current.label}：${current.presented}`)].join('\n')
+  const preferred = recordFields.find(current => ['summary', 'description', 'overview', 'logline', 'progressNote'].includes(current.key)) ?? recordFields[0]
   const record = await makeDescriptor({
     spec,
     row,
@@ -694,9 +813,10 @@ async function genericResources(
     shortSummary: preferred.presented,
     fullContent: body,
     focusedContent: preferred.presented,
-    sourceRefs: refs,
+    sourceRefs: refsByField.flatMap((refs, index) => bodyFields.has(fields[index]) ? refs : []),
     relations,
-    authority: conservativeAuthority(fieldAuthorities),
+    authority: conservativeAuthority(fieldAuthorities.filter((_, index) => bodyFields.has(fields[index]))),
+    policyFields: fields.flatMap(current => projectionPolicyFields(spec, row, current)),
     timeRange: timeRangeForRow(spec.name, row),
   })
   const fieldResources = await Promise.all(fields.map(async (current, index) => makeDescriptor({
@@ -712,6 +832,7 @@ async function genericResources(
     relations: [{ kind: 'parent', targetResourceKey: recordKey(spec, row), direction: 'outgoing' }, ...relations],
     authority: fieldAuthorities[index],
     policyField: current.key,
+    policyFields: projectionPolicyFields(spec, row, current),
     timeRange: timeRangeForRow(spec.name, row),
   })))
   return [record, ...fieldResources]
@@ -731,7 +852,7 @@ async function nestedStoryStages(
     // A stage title can recur in the same Arc. Its portable parent+stage key
     // identifies the occurrence; a digest also preserves opaque IDs that a
     // normalized-name conflict check would otherwise collapse.
-    const stageTitle = `${rowTitle(spec, row)} · ${stage.title} · ${await sha256Text(stageKey)}`
+    const stageTitle = `${rowTitle(spec, row)} · ${stage.title} · ${await hashCanonText(stageKey)}`
     const body = canonicalStringify(stage)
     const stageResource = await makeDescriptor({
       spec,
@@ -806,7 +927,7 @@ async function nestedWrittenBoundary(
     .map(field => sourceRef(spec, row, field, exactValue(row[field]))))
   const relations = await relationsForRow(spec, row)
   const wordCount = typeof row.wordCount === 'number' ? row.wordCount : 0
-  const contentHash = await sha256Text(row.content)
+  const contentHash = await hashCanonText(row.content)
   const body = [
     '【已写正文保护边界】',
     `章节：${rowTitle(spec, row)}`,
@@ -843,10 +964,15 @@ async function nestedChapterContinuity(
   const fields = ['content']
   const derivedLines: string[] = []
   const omitted: string[] = []
+  const disabled: string[] = []
   for (const [field, label] of [
     ['summary', '当前派生摘要'], ['continuityHandoff', '当前派生交接'], ['planReconciliation', '当前派生计划对账（保留作者处理状态）'],
   ]) {
     if (row[field] === undefined || !exactValue(row[field]).trim()) continue
+    if (!isRagSelectionEnabledV1(row.ragPolicy, [field])) {
+      disabled.push(label)
+      continue
+    }
     if (await chapterDerivedAuthority(row, field) !== 'derived-summary') {
       omitted.push(label)
       continue
@@ -860,6 +986,7 @@ async function nestedChapterContinuity(
     '【章节直接连续性】',
     `章节：${rowTitle(spec, row)}`,
     ...derivedLines,
+    disabled.length ? `未纳入：作者已停用${disabled.join('、')}。` : '',
     omitted.length ? `未纳入：${omitted.join('、')}已过期或缺少当前来源证据；以下使用实际作者原文。` : '',
     `原文尾部（最多 4000 字符）：\n${tail}`,
   ].filter(Boolean).join('\n')
@@ -894,6 +1021,7 @@ async function nestedConsistencyDossier(
 ): Promise<ProjectedResourceV1[]> {
   if (spec.name !== 'chapters' || typeof row.id !== 'number'
     || frozenScope.chapterId !== row.id) return []
+  const policyDependencies: CanonPolicyDependencyV1[] = []
   const dossier = await buildLongTermConsistencyDossierV1({
     scope: {
       projectId: frozenScope.projectId,
@@ -903,6 +1031,14 @@ async function nestedConsistencyDossier(
     boundaryChapterId: row.id,
     perspectiveCharacterId: frozenScope.characterId,
     maxTokens: 5_500,
+    inspectSourcePolicy: dependency => {
+      // Rebuildable caches have no author retrieval policy of their own. Their
+      // real chapter source is inspected separately by the same builder.
+      if (!REGISTRY_BY_NAME.get(dependency.table)?.resourceIdentity) return true
+      const source = { ...dependency, row: dependency.row as ResourceRow }
+      policyDependencies.push(source)
+      return isRagSelectionEnabledV1(source.row.ragPolicy, source.fields)
+    },
   })
   const refs: ContextSourceRefV1[] = []
   const referenced = new Map<string, Set<number>>()
@@ -947,6 +1083,10 @@ async function nestedConsistencyDossier(
     relations: [{ kind: 'parent', targetResourceKey: recordKey(spec, row), direction: 'outgoing' }],
     authority: 'confirmed-evidence',
     policyField: 'content',
+    // Preserve the existing budget/priority policy without inventing a read of
+    // the target chapter body. Actual dossier dependencies govern permission.
+    policyFields: [],
+    policyDependencies,
     timeRange: timeRangeForRow(spec.name, row),
   })]
 }
@@ -1065,7 +1205,7 @@ async function validatedScope(scope: FrozenResourceScopeV1) {
 
 export async function canonScopeFingerprintV1(scope: FrozenResourceScopeV1): Promise<string> {
   await validatedScope(scope)
-  return hashCanonicalValue({ version: 1, scope: {
+  return hashCanonProjection({ version: 1, scope: {
     projectId: scope.projectId,
     worldId: scope.worldId,
     workId: scope.workId,
@@ -1180,7 +1320,7 @@ async function catalogPage(input: ResourceListInputV1 | ResourceSearchInputV1): 
   const timeRange = 'query' in input ? input.timeRange : undefined
   assertTimeRangeFilter(timeRange)
   const catalogEpoch = contextGatewayCacheEpochV1()
-  const requestHash = await hashCanonicalValue({
+  const requestHash = await hashCanonProjection({
     version: 1, scopeFingerprint, catalogEpoch, requestedKinds, query, entityKeys, storyArcKeys, timeRange: timeRange ?? null,
   })
   const cursor = decodeCursor(input.cursor)
@@ -1349,7 +1489,7 @@ async function buildResourceRead(
     descriptor: projected.descriptor,
     depth,
     content,
-    contentHash: await sha256Text(content),
+    contentHash: await hashCanonText(content),
     tokenCount: estimateTokens(content),
     sourceRefs: projected.descriptor.sourceRefs,
   }
@@ -1405,6 +1545,9 @@ async function readOriginal(input: OriginalEvidenceReadInputV1): Promise<Origina
   const row = await spec.table.get(canonicalRef.recordId as number) as ResourceRow | undefined
   const workspace = await validatedScope(input.scope)
   if (!row || !await assertRecordInScope(workspace, spec.name, row)) fail('source-scope', '原文来源不存在或越过 scope')
+  if (!isRagSelectionEnabledV1(row.ragPolicy, ragSourceFieldPolicyKeysV1(spec.name, canonicalRef.field, row.fields))) {
+    fail('source-disabled', '原文字段或其组成字段已停用；请恢复启用，或选择允许的字段投影。')
+  }
   const exact = exactValue(row[canonicalRef.field])
   if (revisionOf(row) !== canonicalRef.revision || await sha256Text(exact) !== canonicalRef.contentHash) {
     fail('source-stale', '原文来源 revision/hash 已变化')

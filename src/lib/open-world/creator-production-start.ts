@@ -1,4 +1,5 @@
 import { db } from '../db/schema'
+import { assertWorldSourcePurposeCasV1, prepareWorldSourcePurposeCasV1, worldSourcePurposeTransactionTablesV1, type WorldSourcePurposeCasWitnessV1 } from '../world-engine/source-purpose-cas'
 import { assertTextOpenWorldNewSourceV1, assertTextOpenWorldProductionNewWorkV1 } from './source-admission'
 import { assertTextOpenWorldCreatorBriefLifecycleV1 } from './creator-brief-lifecycle'
 import { assertTextOpenWorldCreatorProtagonistSelectionV1 } from './creator-source'
@@ -31,6 +32,7 @@ import { parseProductProductionPlanV3 } from '../product-production/plan'
 import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import {
   inspectTextOpenWorldCreatorSourceLocatorV1,
+  parseTextOpenWorldCreatorSourceBindingV1,
   verifyTextOpenWorldCreatorBriefV1,
 } from './creator-brief-persistence'
 import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from './creator-ending-count'
@@ -104,10 +106,16 @@ function normalizedText(value: unknown, label: string, maximum: number, allowEmp
 export async function assertTextOpenWorldCreatorProductionSourceCurrentV1(input: {
   scope: WorkspaceScope
   sourceLocator: TextOpenWorldCreatorSourceLocatorV1
+  worldSourcePurposeCasWitness?: WorldSourcePurposeCasWitnessV1 | null
   novelSourceCasWitness?: TextOpenWorldNovelSourceCasWitnessV1 | null
 }): Promise<void> {
   const scope = await resolveScope({ scope: input.scope })
   if (input.sourceLocator.kind === 'world-release') {
+    const witness = input.worldSourcePurposeCasWitness
+    if (!witness || witness.input.worldReleaseId !== input.sourceLocator.localReleaseRecordId
+      || witness.input.expectedProjectId !== scope.projectId || witness.input.expectedWorldId !== scope.worldId
+      || witness.input.proof?.evidenceHash !== input.sourceLocator.sourcePurpose?.evidenceHash) fail('世界用途缺少对应的事务外见证')
+    await assertWorldSourcePurposeCasV1(witness)
     await assertWorldSemanticReleaseCurrentV1({
       localReleaseRecordId: input.sourceLocator.localReleaseRecordId,
       expectedProjectId: scope.projectId,
@@ -135,7 +143,7 @@ export function textOpenWorldCreatorProductionSourceTransactionTablesV1(
   sourceLocator: TextOpenWorldCreatorSourceLocatorV1,
 ) {
   return sourceLocator.kind === 'world-release'
-    ? worldSemanticReleaseTransactionTablesV1()
+    ? [...worldSemanticReleaseTransactionTablesV1(), ...worldSourcePurposeTransactionTablesV1()]
     : textOpenWorldNovelSourceTransactionTablesV1()
 }
 
@@ -215,6 +223,7 @@ export async function createTextOpenWorldCreatorProductionSourcePlanV1(input: {
       scope,
       localReleaseRecordId: input.sourceLocator.localReleaseRecordId,
       expectedReleaseHash: input.sourceLocator.expectedReleaseHash,
+      purposeAuthorization: { proof: input.sourceLocator.sourcePurpose },
       selection: { mode: 'entire-release' },
     })
     selection = {
@@ -319,7 +328,7 @@ export async function parseTextOpenWorldCreatorProductionSourcePlanV1(
     productType: 'text-open-world',
     productInstanceKey: stableKey(row.productInstanceKey, 'productInstanceKey'),
     sourceKind: row.sourceKind as TextOpenWorldCreatorProductionSourcePlanV1['sourceKind'],
-    sourceBinding: structuredClone(row.sourceBinding) as TextOpenWorldCreatorProductionSourcePlanV1['sourceBinding'],
+    sourceBinding: parseTextOpenWorldCreatorSourceBindingV1(row.sourceBinding),
     sourceBindingHash: hash(row.sourceBindingHash, 'sourceBindingHash'),
     sourceVersionHash: hash(row.sourceVersionHash, 'sourceVersionHash'),
     expectedSourceBoundaryHash: row.expectedSourceBoundaryHash as string,
@@ -605,6 +614,7 @@ export interface TextOpenWorldCreatorStartPreparationV1 {
   start: TextOpenWorldCreatorProductionStartV1
   plan: ProductProductionPlanV3
   buildNumber: number
+  worldSourcePurposeCasWitness: WorldSourcePurposeCasWitnessV1 | null
   novelSourceCasWitness: TextOpenWorldNovelSourceCasWitnessV1 | null
 }
 
@@ -672,6 +682,12 @@ export async function createTextOpenWorldCreatorStartPreparationV1(input: {
     sourceLocator: input.sourceLocator,
     createdAt: authorizedAt,
   })
+  const worldSourcePurposeCasWitness = input.sourceLocator.kind === 'world-release'
+    ? await prepareWorldSourcePurposeCasV1({
+        worldReleaseId: input.sourceLocator.localReleaseRecordId, expectedProjectId: scope.projectId,
+        expectedWorldId: scope.worldId, purpose: 'text-open-world', proof: input.sourceLocator.sourcePurpose,
+      })
+    : null
   const novelSourceCasWitness = input.sourceLocator.kind === 'novel'
     ? await createTextOpenWorldNovelSourceCasWitnessV1({
         sourceScope: scope,
@@ -747,6 +763,7 @@ export async function createTextOpenWorldCreatorStartPreparationV1(input: {
     start,
     plan,
     buildNumber,
+    worldSourcePurposeCasWitness,
     novelSourceCasWitness,
   }
 }

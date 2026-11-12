@@ -1,4 +1,5 @@
-import { buildCreativeCallEvidenceV1 } from "./creative-execution"
+import { modelDispatchWasCancelledV1, ModelDispatchGuardRejectedV1 } from '../ai/codex-transport'
+import { buildCreativeCallEvidenceV1, checkCreativeRepairAdmissionV1, creativeRepairRefusalIssueV1 } from './creative-execution'
 import { canonRowResourceKeysV1 } from '../context-gateway/canon-provider'
 import { nanoid } from 'nanoid'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -1068,22 +1069,30 @@ export async function runStoryArcCreativeReliabilityV1(input: {
   prepared: PreparedStoryArcCopilot
   budget: AgentTeamBudgetTracker
   qualityMode: CreativeQualityModeV1
+  assertBeforeModelCall?: () => Promise<void>
   validate?: (candidates: StoryArcCopilotCandidate[]) => Promise<GenerationGateIssue[]> | GenerationGateIssue[]
 }): Promise<StoryArcCreativeRunResultV1> {
   const policy = resolveCreativeQualityPolicyV1(input.qualityMode)
   const maxOutputTokens = input.prepared.input.generationOverrides?.maxTokens ?? 10_000
   const firstMessages = input.prepared.prepared.messages
+  const dispatchResult = (): ChatResult | undefined => input.assertBeforeModelCall
+    ? { beforeModelDispatch: input.assertBeforeModelCall } : undefined
+  const runRaw = (messages: ChatMessage[], result?: ChatResult) => result
+    ? input.prepared.runRaw(messages, result) : input.prepared.runRaw(messages)
+  if (input.assertBeforeModelCall) await input.assertBeforeModelCall()
   const firstReservation = input.budget.reserveCall({
     label: '故事线编排 Skill',
     messages: firstMessages,
     maxOutputTokens,
   })
   let first: StoryArcRawModelResultV1
+  const firstDispatch = dispatchResult()
   try {
-    first = await input.prepared.runRaw(firstMessages)
+    first = await runRaw(firstMessages, firstDispatch)
     input.budget.settleCall(firstReservation, first.output)
   } catch (error) {
-    input.budget.settleFailedCall(firstReservation)
+    if (error instanceof ModelDispatchGuardRejectedV1 || modelDispatchWasCancelledV1(firstDispatch)) input.budget.releaseUnsentCall(firstReservation)
+    else input.budget.settleFailedCall(firstReservation)
     throw error
   }
   const calls: CreativeCallEvidenceV1[] = [await buildCreativeCallEvidenceV1({
@@ -1118,7 +1127,13 @@ export async function runStoryArcCreativeReliabilityV1(input: {
 
   const repairable = outcome.issues.some(issue => issue.suggestedAction === 'repair-once')
   let repair: CreativeArtifactV1['repair'] = null
-  if (policy.allowAutomaticRepair && repairable) {
+  const shouldRepair = policy.allowAutomaticRepair && repairable
+  const notSent = shouldRepair && input.assertBeforeModelCall
+    ? await checkCreativeRepairAdmissionV1(input.assertBeforeModelCall, outcome.status) : null
+  if (notSent) {
+    outcome = { ...outcome, status: outcome.status === 'blocked' ? 'blocked' : 'manual-repair',
+      issues: [...outcome.issues, notSent] }
+  } else if (shouldRepair) {
     const repairIssues = outcome.issues.filter(issue => issue.suggestedAction === 'repair-once')
     const repairTargetIssueCodes = [...new Set(repairIssues.map(issue => issue.code))]
     const repairTarget = input.prepared.snapshot.arcs
@@ -1137,8 +1152,10 @@ export async function runStoryArcCreativeReliabilityV1(input: {
       maxOutputTokens,
     })
     let repaired: StoryArcRawModelResultV1 | null = null
+    let repairRefused = false
+    const repairDispatch = dispatchResult()
     try {
-      repaired = await input.prepared.runRaw(repairMessages)
+      repaired = await runRaw(repairMessages, repairDispatch)
       input.budget.settleCall(reservation, repaired.output)
       calls.push(await buildCreativeCallEvidenceV1({
         callIndex: 2,
@@ -1167,27 +1184,35 @@ export async function runStoryArcCreativeReliabilityV1(input: {
         }
       }
       outcome = next
-    } catch {
-      input.budget.settleFailedCall(reservation)
-      calls.push(await buildCreativeCallEvidenceV1({
-        callIndex: 2,
-        purpose: 'repair',
-        messages: repairMessages,
-        modelIdentity: input.prepared.modelIdentity,
-        failed: true,
-      }))
-      const wasBlocked = outcome.status === 'blocked'
-      if (!wasBlocked) outcome.status = 'manual-repair'
-      outcome.issues.push(creativeIssue({
-        code: 'story-arc-repair-provider-failed',
-        path: '$',
-        message: '唯一一次定向修复调用失败；已停止自动调用并保留首次产物。',
-        disposition: wasBlocked ? 'blocking' : 'repairable',
-        action: 'edit',
-        deterministic: false,
-      }))
+    } catch (error) {
+      const cancelled = modelDispatchWasCancelledV1(repairDispatch)
+      if (error instanceof ModelDispatchGuardRejectedV1 || cancelled) {
+        input.budget.releaseUnsentCall(reservation)
+        repairRefused = true
+        outcome = { ...outcome, status: outcome.status === 'blocked' ? 'blocked' : 'manual-repair',
+          issues: [...outcome.issues, creativeRepairRefusalIssueV1(error, outcome.status, cancelled)] }
+      } else {
+        input.budget.settleFailedCall(reservation)
+        calls.push(await buildCreativeCallEvidenceV1({
+          callIndex: 2,
+          purpose: 'repair',
+          messages: repairMessages,
+          modelIdentity: input.prepared.modelIdentity,
+          failed: true,
+        }))
+        const wasBlocked = outcome.status === 'blocked'
+        if (!wasBlocked) outcome.status = 'manual-repair'
+        outcome.issues.push(creativeIssue({
+          code: 'story-arc-repair-provider-failed',
+          path: '$',
+          message: '唯一一次定向修复调用失败；已停止自动调用并保留首次产物。',
+          disposition: wasBlocked ? 'blocking' : 'repairable',
+          action: 'edit',
+          deterministic: false,
+        }))
+      }
     }
-    repair = {
+    if (!repairRefused) repair = {
       version: 1,
       sourceTextHash: await hashCanonicalValue(first.output),
       targetIssueCodes: repairTargetIssueCodes,

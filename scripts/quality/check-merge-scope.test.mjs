@@ -4,9 +4,19 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { directTests, partitionUnits, plan, readUnitShard } from './check-merge-scope.mjs'
+import { directTests, partitionUnits, plan, readUnitShard, runnerBatches } from './check-merge-scope.mjs'
 
 const present = () => true
+
+test('runs governed edit admission without a competing file and preserves every selected suite', () => {
+  const admission = 'tests/regression/R-SFQA004-product-entry-admission.test.tsx'
+  const first = 'tests/regression/R-04-import-atomic-fk.test.ts'
+  const second = 'tests/registry/project-tables.test.ts'
+  assert.deepEqual(runnerBatches([]), [])
+  assert.deepEqual(runnerBatches([first, second]), [[first, second]])
+  assert.deepEqual(runnerBatches([admission]), [[admission]])
+  assert.deepEqual(runnerBatches([first, admission, second]), [[admission], [first, second]])
+})
 
 test('documentation and workflow-only changes avoid dependency installation', () => {
   assert.equal(plan(['README.md'], present).npm, false)

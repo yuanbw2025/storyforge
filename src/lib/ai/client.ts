@@ -1,5 +1,5 @@
 import { assertGenerationAvailable } from '../showcase/policy'
-import { streamCodex, CODEX_BASE_URL, type CodexRequestRefV1 } from './codex-transport'
+import { streamCodex, CODEX_BASE_URL, assertModelDispatchGuardV1, modelDispatchWasCancelledV1, ModelDispatchGuardRejectedV1, type CodexRequestRefV1 } from './codex-transport'
 import type { CodexTerminalFailureV1 } from './codex-terminal-failure'
 import type { AIConfig, ChatMessage } from '../types'
 import { AIError, CodexRequestError } from '../types'
@@ -124,6 +124,10 @@ export interface ChatResult {
   /** Opt in to exact field presence from an ordinary non-streaming provider response. */
   captureProviderTokenUsage?: boolean
   providerTokenUsage?: Partial<TokenUsage>
+  /** Local, per-call admission after request preparation, immediately before dispatch. */
+  beforeModelDispatch?: () => Promise<void>
+  /** Per-call observation; a stopped guard never entered transport. */
+  modelDispatchGuardCancelled?: true
   /** Optional durable caller hook. Must finish saving the exact local request
    * reference before its single POST. Failure prevents dispatch; no retry.
    * Opt-in receipts are held until this owner saves and acknowledges them.
@@ -551,6 +555,7 @@ export async function chat(
   frozenResolution?: AIRequestConfigResolution,
 ): Promise<string> {
   if (result?.captureProviderTokenUsage) result.providerTokenUsage = {}
+  if (result) delete result.modelDispatchGuardCancelled
   assertGenerationAvailable()
   if (result) {
     result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }
@@ -595,6 +600,7 @@ export async function chat(
     { sensitiveValues: [config.apiKey], baseUrl: config.baseUrl },
   )
   try {
+    if (result?.beforeModelDispatch) await assertModelDispatchGuardV1(result, signal)
     if (result) {
       result.requestLifecycle = { phase: 'request-dispatched', responseStatus: null }
     }
@@ -655,7 +661,7 @@ export async function chat(
     updateLog(log.id, {
       status: 'error', duration: Date.now() - startedAt,
       ...(error instanceof AIError ? { statusCode: error.status } : {}),
-      errorMessage: error instanceof AICompletionResponseErrorV1 ? error.message
+      errorMessage: error instanceof AICompletionResponseErrorV1 || error instanceof ModelDispatchGuardRejectedV1 ? error.message
         : error instanceof AIError ? `模型服务返回 HTTP ${error.status}` : '模型请求失败或连接中断',
     })
     throw error
@@ -670,15 +676,20 @@ async function* loggedCodex(
   if (meta?.category?.startsWith('eval.')) throw new CodexRequestError('Codex 订阅暂不支持当前带 API 金额统计的模型评测；请显式选择 API 评测预设。')
   const startedAt = Date.now()
   const receipt = result ?? {}
+  let refusedBeforeDispatch = false
   const log = createLog({ type: 'chat', provider: 'codex', model: config.model, url: CODEX_BASE_URL, status: 'pending' })
   try {
     yield* streamCodex(messages, config.model, signal, receipt, schema, responseFormat)
     updateLog(log.id, { status: 'success', duration: Date.now() - startedAt, usage: receipt.usage })
   } catch (error) {
     updateLog(log.id, { status: 'error', duration: Date.now() - startedAt, errorMessage: error instanceof Error ? error.message : 'Codex 连接失败' })
+    if (error instanceof ModelDispatchGuardRejectedV1 || modelDispatchWasCancelledV1(receipt)) {
+      refusedBeforeDispatch = true
+      throw error
+    }
     if (error instanceof DOMException && error.name === 'AbortError') throw error
     throw new CodexRequestError(error instanceof Error ? error.message : 'Codex 连接失败')
   } finally {
-    if (receipt.usage) void recordUsage(usageEntry(meta, config, taskKind, receipt.usage))
+    if (!refusedBeforeDispatch && receipt.usage) void recordUsage(usageEntry(meta, config, taskKind, receipt.usage))
   }
 }

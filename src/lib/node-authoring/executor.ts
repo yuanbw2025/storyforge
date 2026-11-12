@@ -1,4 +1,6 @@
+import { CREATIVE_REPAIR_PRE_DISPATCH_CANCELLED_V1 } from '../agent/creative-execution'
 import Dexie from 'dexie'
+import { assertCurrentProductEntryV1, productCatalogIdForWorkV1 } from '../product/product-catalog'
 import { renderAuthoringPromptControl } from './prompt-control'
 import { estimateTokens } from '../ai/context-budget'
 import { chat } from '../ai/client'
@@ -11,6 +13,7 @@ import {
 import { db } from '../db/schema'
 import { canonicalStringify } from '../agent/run/hash'
 import { adopt } from '../registry/adopt'
+import { projectScopedTables } from '../registry/lifecycle'
 import type { AdoptResult } from '../registry/types'
 import type { NodeFlow, NodeRunRecord, WorkspaceScope } from '../types'
 import { AUTHORING_NODE_BY_ID } from './catalog'
@@ -43,7 +46,7 @@ import { confirmNodeFieldAdoptionIntentV1, commitNodeFieldBusinessV1,
 import { withAgentRunMutationLockV1 } from '../agent/run/event-store'
 import { authoringDomainActionBindingV1 } from './domain-action-registry'
 import { rejectQualityAuthoringRevisionV1 } from './quality-execution'
-import { inspectAuthoringGraphFreshness } from './freshness'
+import { authoringCanonReadBudgetV1, inspectAuthoringGraphFreshness } from './freshness'
 import { assertRecordInScope, readOwnedRows, resolveReadScope, resolveScopeLike, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 
 export interface AuthoringRunSnapshot {
@@ -305,6 +308,17 @@ function parseRunMaps(run: NodeRunRecord): {
   }
 }
 
+/** The shared engine serves released longform as well as other Work owners.
+ * Node UI maturity is checked at its own creation/interaction entry. */
+async function assertAuthoringWorkProductEntryV1(scope: Awaited<ReturnType<typeof resolveReadScope>>): Promise<void> {
+  if (!Number.isInteger(scope.workId)) throw new Error('[product-catalog] 节点执行缺少确定的 Work owner')
+  const work = await db.works.get(scope.workId!)
+  if (!work || work.id !== scope.workId || work.projectId !== scope.projectId || work.worldId !== scope.worldId) {
+    throw new Error('[product-catalog] 节点执行的 Work owner 不存在或跨作用域')
+  }
+  assertCurrentProductEntryV1(productCatalogIdForWorkV1(work))
+}
+
 async function executeNode(input: {
   node: AuthoringNodeInstance
   inputs: AuthoringInputEnvelope[]
@@ -313,6 +327,7 @@ async function executeNode(input: {
   worldGroupId: number | null
   signal?: AbortSignal
   nodeRunId: number
+  assertResumeSourcesCurrent?: () => Promise<void>
 }): Promise<{
   output: string
   variants?: string[]
@@ -323,6 +338,7 @@ async function executeNode(input: {
   domain?: AuthoringCandidateDomain
   creativeArtifacts?: AuthoringCandidate['creativeArtifacts']
 }> {
+  await assertAuthoringWorkProductEntryV1(input.scope)
   const template = AUTHORING_NODE_BY_ID.get(input.node.templateId)
   if (!template) throw new Error(`节点模板不存在：${input.node.templateId}`)
   const { node, inputs } = input
@@ -332,7 +348,7 @@ async function executeNode(input: {
       projectId: input.projectId,
       scope: input.scope,
       worldGroupId: input.worldGroupId,
-      contextBudget: numberConfig(node, 'contextBudget', 12_000),
+      contextBudget: authoringCanonReadBudgetV1(node),
     })
     if (binding.missing.length) throw new Error(`绑定来源已不存在：${binding.missing.join('、')}`)
     return {
@@ -361,7 +377,7 @@ async function executeNode(input: {
       projectId: input.projectId,
       scope: input.scope,
       worldGroupId: input.worldGroupId,
-      contextBudget: numberConfig(node, 'contextBudget', 12_000),
+      contextBudget: authoringCanonReadBudgetV1(node),
     })
     return {
       output: binding.content,
@@ -388,6 +404,7 @@ async function executeNode(input: {
     const generationCount = Math.min(8, Math.max(1, Math.round(controlNumber(inputs, 'control.count', numberConfig(node, 'candidateCount', 1)))))
     const variants: string[] = []
     for (let index = 0; index < generationCount; index += 1) {
+      if (input.assertResumeSourcesCurrent) await input.assertResumeSourcesCurrent()
       const result = await chat([
         { role: 'system', content: stringConfig(node, 'systemPrompt', '你是 StoryForge 的创作节点，只能使用作者提供的材料。') },
         { role: 'user', content: `${promptTemplate ? `【Prompt 模板补充】\n${promptTemplate}\n\n` : ''}【作者指令】\n${instruction}\n\n【节点输入】\n${composeInputs(inputs) || '（无上游输入）'}${generationCount > 1 ? `\n\n【候选序号】\n${index + 1}/${generationCount}` : ''}` },
@@ -399,7 +416,8 @@ async function executeNode(input: {
         maxTokens: controlNumber(inputs, 'control.max-tokens', numberConfig(node, 'maxTokens', aiConfig.maxTokens)),
       },
       contextOverflowPolicy: 'reject',
-      }, input.signal)
+      }, input.signal, ...(input.assertResumeSourcesCurrent
+        ? [{ beforeModelDispatch: input.assertResumeSourcesCurrent }] as const : [] as const))
       variants.push(result.trim())
     }
     return { output: variants.join('\n\n--- 候选分隔 ---\n\n'), variants, semantic: 'candidate' }
@@ -407,6 +425,8 @@ async function executeNode(input: {
   if (template.capability === 'generate-field' || template.capability === 'generate-collection') {
     const actionBinding = authoringDomainActionBindingV1(template)
     const aiState = useAIConfigStore.getState()
+    await assertAuthoringWorkProductEntryV1(input.scope)
+    if (input.assertResumeSourcesCurrent) await input.assertResumeSourcesCurrent()
     const domain = await executeDomainNode({
       node,
       inputs,
@@ -420,6 +440,7 @@ async function executeNode(input: {
       },
       signal: input.signal,
       nodeRunId: input.nodeRunId,
+      assertResumeSourcesCurrent: input.assertResumeSourcesCurrent,
     })
     if (domain) return domain
     if (actionBinding?.mode === 'formal-domain-action') {
@@ -446,6 +467,8 @@ async function executeNode(input: {
     const generationCount = Math.min(8, Math.max(1, Math.round(controlNumber(inputs, 'control.count', numberConfig(node, 'candidateCount', 1)))))
     const variants: string[] = []
     for (let index = 0; index < generationCount; index += 1) {
+      await assertAuthoringWorkProductEntryV1(input.scope)
+      if (input.assertResumeSourcesCurrent) await input.assertResumeSourcesCurrent()
       const result = await chat([
         {
           role: 'system',
@@ -463,7 +486,8 @@ async function executeNode(input: {
         maxTokens: controlNumber(inputs, 'control.max-tokens', numberConfig(node, 'maxTokens', aiConfig.maxTokens)),
       },
       contextOverflowPolicy: 'reject',
-      }, input.signal)
+      }, input.signal, ...(input.assertResumeSourcesCurrent
+        ? [{ beforeModelDispatch: input.assertResumeSourcesCurrent }] as const : [] as const))
       variants.push(result.trim())
     }
     return {
@@ -537,7 +561,9 @@ async function adoptIdleAuthoringCandidate(input: Parameters<typeof adoptAuthori
     const choice: NodeFieldAdoptionInputV1 = { scope, flow: input.flow, runId: run.id,
       nodeId: node.id, selectedVariantIndex: candidate.selectedVariantIndex ?? 0, draft: input.output }
     const existing = await readNodeFieldAdoptionProofV1(choice)
+    if (existing.state !== 'committed') await assertAuthoringWorkProductEntryV1(scope)
     if (existing.state === 'unconfirmed') await confirmNodeFieldAdoptionIntentV1(choice)
+    if (existing.state !== 'committed') await assertAuthoringWorkProductEntryV1(scope)
     const business = await commitNodeFieldBusinessV1(choice)
     const terminal = await prepareNodeFieldAdoptionCompletionV1(choice)
     await withAgentRunMutationLockV1(terminal.runId, () => db.transaction('rw', terminal.tables, async () => {
@@ -556,6 +582,7 @@ async function adoptIdleAuthoringCandidate(input: Parameters<typeof adoptAuthori
     return { ...(business.result ?? { written: [], unknown: [], typeErrors: [], fkErrors: [], skipped: [] }),
       recovered: !business.writtenNow }
   }
+  await assertAuthoringWorkProductEntryV1(scope)
   let expectedSignature: AuthoringRunSignature | undefined
   let latestDomain: AuthoringCandidate['domain']
   let selectedRunId: number | undefined
@@ -601,6 +628,7 @@ async function adoptIdleAuthoringCandidate(input: Parameters<typeof adoptAuthori
     return result
   }
   if (latestDomain) {
+    await assertAuthoringWorkProductEntryV1(scope)
     const adopted = await adoptDomainCandidate({
       node,
       domain: latestDomain,
@@ -630,6 +658,7 @@ async function adoptIdleAuthoringCandidate(input: Parameters<typeof adoptAuthori
     if (write.target === 'characters' && recordId == null) {
       throw new Error('角色维度节点需要先绑定一个目标角色，避免把内容写入错误角色。')
     }
+    await assertAuthoringWorkProductEntryV1(scope)
     return confirm(await adopt({
       projectId: input.flow.projectId,
       scope,
@@ -650,6 +679,7 @@ async function adoptIdleAuthoringCandidate(input: Parameters<typeof adoptAuthori
     throw new Error('集合节点的候选必须是合法 JSON；请先编辑为 JSON 后再采纳。')
   }
   if (!data.length) throw new Error('候选没有可采纳的记录。')
+  await assertAuthoringWorkProductEntryV1(scope)
   return confirm(await adopt({
     projectId: input.flow.projectId,
     scope,
@@ -852,34 +882,58 @@ async function publishFieldRecoveryV1(input: {
   })
 }
 
-// The original resume path is retained for other families. For these two
-// producer families, tuple admission and the running transition share a native
-// transaction, before any blocked result is removed from the local map.
-async function beginFieldResumeV1(input: {
-  scope: WorkspaceScope; flowId: number; expected: NodeRunRecord;
+function authoringResumeTables(hasSourceProof: boolean) {
+  // Registered readers may use any workspace-owned table. Legacy Prompt
+  // references also read the existing global template table. Declare this
+  // conservative read set only when a saved prefix actually needs proof.
+  const sourceTables = hasSourceProof ? [...projectScopedTables().map(spec => spec.table), db.promptTemplates] : []
+  return scopeTransactionTables(db.nodeRuns, db.nodeFlows, db.agentRuns, ...sourceTables)
+}
+
+async function readOwnedAuthoringResumeV1(input: {
+  scope: WorkspaceScope; flowId: number; worldGroupId: number | null; runId: number; graphHash: string
+}) {
+  const current = await db.nodeRuns.get(input.runId), flow = await db.nodeFlows.get(input.flowId)
+  if (!current || !flow || current.flowId !== input.flowId
+    || !await assertRecordInScope(input.scope, 'nodeRuns', current, { owner: 'work' })
+    || !await assertRecordInScope(input.scope, 'nodeFlows', flow, { owner: 'work' })
+    || (flow.worldGroupId ?? null) !== input.worldGroupId
+    || !executionGraphMatches(input.graphHash, parseAuthoringGraph(flow.graphJson))) {
+    throw new Error('原断点、节点图或作品已变化；未继续生产。')
+  }
+  return { current, flow }
+}
+
+// Claim the exact saved checkpoint and graph for every resume. Formal field
+// producers also retain their pending-request admission check in this write.
+async function beginAuthoringResumeV1(input: {
+  scope: WorkspaceScope; flowId: number; worldGroupId: number | null; expected: NodeRunRecord;
   ordered: AuthoringNodeInstance[]; plan: AuthoringExecutionPlan; now: number
-}): Promise<boolean> {
+  verifyReusedSources?: (flow: NodeFlow) => Promise<void>
+}): Promise<void> {
   const pendingFields = new Set(input.ordered.filter(fieldProducerNodeV1).map(node => node.id))
-  if (!pendingFields.size) return false
-  await db.transaction('rw', scopeTransactionTables(db.nodeRuns, db.nodeFlows, db.agentRuns), async () => {
-    const current = await db.nodeRuns.get(input.expected.id!), flow = await db.nodeFlows.get(input.flowId)
-    if (!current || !flow || canonicalStringify(current) !== canonicalStringify(input.expected)
-      || !await assertRecordInScope(input.scope, 'nodeRuns', current, { owner: 'work' })
-      || !await assertRecordInScope(input.scope, 'nodeFlows', flow, { owner: 'work' })
-      || !executionGraphMatches(input.plan.graphHash, parseAuthoringGraph(flow.graphJson))) {
+  await db.transaction('rw', authoringResumeTables(Boolean(input.verifyReusedSources)), async () => {
+    const { current, flow } = await readOwnedAuthoringResumeV1({ ...input, runId: input.expected.id!, graphHash: input.plan.graphHash })
+    if (canonicalStringify(current) !== canonicalStringify(input.expected)) {
       throw new Error('原断点、节点图或作品已变化；未继续生产。')
     }
-    const known = new Set(parseAuthoringGraph(current.graphSnapshotJson ?? flow.graphJson).nodes.map(node => node.id))
-    const rows = await db.agentRuns.where('workId').equals(input.scope.workId)
-      .filter(row => row.nodeRunId === current.id).toArray()
-    if (rows.some(row => !row.nodeProducerNodeId || !known.has(row.nodeProducerNodeId)
-      || pendingFields.has(row.nodeProducerNodeId))) {
-      throw new Error('原断点已有候选或未确认请求；请先恢复并核对保存的结果，不能再次发送原请求。')
+    if (pendingFields.size) {
+      const known = new Set(parseAuthoringGraph(current.graphSnapshotJson ?? flow.graphJson).nodes.map(node => node.id))
+      const rows = await db.agentRuns.where('workId').equals(input.scope.workId)
+        .filter(row => row.nodeRunId === current.id).toArray()
+      if (rows.some(row => !row.nodeProducerNodeId || !known.has(row.nodeProducerNodeId)
+        || pendingFields.has(row.nodeProducerNodeId))) {
+        throw new Error('原断点已有候选或未确认请求；请先恢复并核对保存的结果，不能再次发送原请求。')
+      }
     }
+    // The source witness and resume claim share this native transaction. Only
+    // local read/hash work belongs here; provider execution starts after it.
+    // Registered assembly keeps only its own WebCrypto awaits alive; wrapping
+    // the database reads in waitFor would block them behind this transaction.
+    if (input.verifyReusedSources) await input.verifyReusedSources(flow)
     await db.nodeRuns.update(current.id!, { status: 'running', updatedAt: input.now, completedAt: null,
       executionPlanJson: JSON.stringify(input.plan) })
   })
-  return true
 }
 
 async function recoverFieldPrefixesV1(input: { scope: WorkspaceScope; flow: NodeFlow; expected: NodeRunRecord }, lockedNodes: ReadonlySet<string> = new Set()) {
@@ -1028,10 +1082,11 @@ async function reviseIdleAuthoringCandidate(input: Parameters<typeof reviseAutho
     if (original.status === 'running' || frozen.status === 'adopted' || frozen.status === 'rejected') throw new Error('候选不存在、正在执行或已处理。')
     const node = parseAuthoringGraph(original.graphSnapshotJson ?? flow.graphJson).nodes.find(row => row.id === input.nodeId)
     if (!node) throw new Error('修订节点证据缺失。')
+    await assertAuthoringWorkProductEntryV1(scope)
     await rejectQualityAuthoringRevisionV1({ projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null, node, domain: frozen.domain })
   }
   return db.transaction('rw', fieldRead ? scopeTransactionTables(db.nodeRuns, db.nodeFlows,
-    db.agentRuns, db.agentRunEvents, db.agentRunArtifacts, db.agentRunCheckpoints) : [db.nodeRuns], async () => {
+    db.agentRuns, db.agentRunEvents, db.agentRunArtifacts, db.agentRunCheckpoints) : [db.nodeRuns, db.works], async () => {
     if (fieldRead) await fieldRead.assertCurrent()
     const run = await db.nodeRuns.get(input.runId)
     if (!run || run.flowId !== input.flow.id || !await assertRecordInScope(scope, 'nodeRuns', run, { owner: 'work' })) throw new Error('候选运行不存在或不属于当前作品。')
@@ -1053,6 +1108,7 @@ async function reviseIdleAuthoringCandidate(input: Parameters<typeof reviseAutho
       candidates[input.nodeId] = { ...candidate, output: input.output, status: candidateNeedsAuthorRepair(candidate) ? 'blocked' : 'draft', authorEditedAfterArtifact: true }
     }
     const updated = { ...run, nodeResultsJson: JSON.stringify(candidates), updatedAt: Date.now() }
+    await assertAuthoringWorkProductEntryV1(scope)
     await db.nodeRuns.put(updated)
     return updated
   })
@@ -1130,7 +1186,7 @@ export async function persistAdoptedAuthoringCandidate(input: {
 export async function runAuthoringGraph(input: {
   flow: NodeFlow
   targetNodeId?: string | null
-  /** Resume updates the same paused/failed run after graph-signature verification. */
+  /** Resume updates the same run only after graph, owner and reused-input verification. */
   resumeRunId?: number
   /** A stale rerun creates a new run while reusing unchanged upstream evidence. */
   baseRunId?: number
@@ -1157,6 +1213,7 @@ async function runOwnedAuthoringGraph(input: Parameters<typeof runAuthoringGraph
   let ordered = topologicalAuthoringOrder(graph, targetNodeId)
   if (input.runNodeIds) ordered = ordered.filter(node => input.runNodeIds?.has(node.id))
   if (!ordered.length) throw new Error('本次执行计划没有需要运行的节点。')
+  await assertAuthoringWorkProductEntryV1(scope)
   const now = Date.now()
   let plan = buildAuthoringExecutionPlan({
     graph,
@@ -1167,6 +1224,7 @@ async function runOwnedAuthoringGraph(input: Parameters<typeof runAuthoringGraph
   let candidates: AuthoringCandidateMap = {}
   let run: NodeRunRecord
   let runId: number
+  let resumedSourceProof: { before: NodeRunRecord; assertCurrent: () => Promise<void> } | undefined
 
   if (input.resumeRunId != null) {
     const existing = await db.nodeRuns.get(input.resumeRunId)
@@ -1178,7 +1236,9 @@ async function runOwnedAuthoringGraph(input: Parameters<typeof runAuthoringGraph
       throw new Error('只有已暂停或失败的运行可以从断点恢复。')
     }
     const previousPlan = parseAuthoringExecutionPlan(existing.executionPlanJson)
-    if (!previousPlan || !executionGraphMatches(previousPlan.graphHash, graph)) {
+    if (!previousPlan || !executionGraphMatches(previousPlan.graphHash, graph)
+      || !executionGraphMatches(previousPlan.graphHash, parseAuthoringGraph(storedFlow.graphJson))
+      || (storedFlow.worldGroupId ?? null) !== (input.flow.worldGroupId ?? null)) {
       throw new Error('节点图已变化，不能继续旧断点；请开始一次新的运行。')
     }
     ;({ snapshots, candidates } = parseRunMaps(existing))
@@ -1193,18 +1253,48 @@ async function runOwnedAuthoringGraph(input: Parameters<typeof runAuthoringGraph
       .filter((node): node is AuthoringNodeInstance => Boolean(node))
     if (!ordered.length) throw new Error('该运行没有待恢复节点。')
     plan = { ...previousPlan, pendingNodeIds: ordered.map(node => node.id) }
-    const fieldResumed = await beginFieldResumeV1({ scope, flowId: input.flow.id, expected: existing, ordered, plan, now })
+
+    // Check only the saved prefix consumed by the pending branch. Rereading
+    // Canon/Prompt fingerprints is local work; stale history cannot become a
+    // verified input or trigger a new paid upstream run on resume.
+    const pending = new Set(plan.pendingNodeIds)
+    const reused = new Set<string>()
+    for (const node of ordered) {
+      for (const upstream of authoringExecutionSubgraph(graph, node.id).nodes) {
+        if (!pending.has(upstream.id)) reused.add(upstream.id)
+      }
+    }
+    const verifyReusedSources = reused.size ? async (liveFlow: NodeFlow) => {
+      const freshness = await inspectAuthoringGraphFreshness({ flow: liveFlow, scope, snapshots, candidates })
+      for (const node of graph.nodes.filter(item => reused.has(item.id))) {
+        const candidate = candidates[node.id], snapshot = snapshots[node.id], current = freshness[node.id]
+        const sourceNode = node.templateId === 'control.prompt' || (node.binding?.mode === 'live' && node.binding.ref)
+          || AUTHORING_NODE_BY_ID.get(node.templateId)?.capability === 'read-canon'
+        const sourceProofMissing = sourceNode && (!snapshot?.sourceHash
+          || candidate?.signature?.executorVersion !== 'FLOW-3B.2' || candidate.signature.sourceHash !== snapshot.sourceHash)
+        if (!candidate || !snapshot || sourceProofMissing || candidate.status === 'rejected'
+          || candidate.status === 'stale' || candidateNeedsAuthorRepair(candidate) || current?.status !== 'fresh') {
+          throw new Error(`断点上游“${node.title}”的来源、候选或证据已变化；旧断点已保留，请核对资料后开始新的运行。`)
+        }
+      }
+    } : undefined
+    if (verifyReusedSources) await verifyReusedSources(storedFlow)
+    await beginAuthoringResumeV1({ scope, flowId: input.flow.id, worldGroupId: input.flow.worldGroupId ?? null,
+      expected: existing, ordered, plan, now, verifyReusedSources })
+    if (verifyReusedSources) {
+      const identity = { scope, flowId: input.flow.id, worldGroupId: input.flow.worldGroupId ?? null,
+        runId: existing.id!, graphHash: previousPlan.graphHash }
+      resumedSourceProof = { before: existing, assertCurrent: () => db.transaction('r', authoringResumeTables(true), async () => {
+        const { current, flow } = await readOwnedAuthoringResumeV1(identity)
+        if (current.status !== 'running') throw new Error('原断点已停止；未继续生产。')
+        await verifyReusedSources(flow)
+      }) }
+    }
     for (const node of ordered) {
       if (candidates[node.id]?.status === 'blocked') delete candidates[node.id]
     }
     runId = existing.id!
-    run = { ...existing, status: 'running', updatedAt: now, completedAt: null }
-    if (!fieldResumed) await db.nodeRuns.update(runId, {
-      status: 'running',
-      updatedAt: now,
-      completedAt: null,
-      executionPlanJson: JSON.stringify(plan),
-    })
+    run = { ...existing, status: 'running', updatedAt: now, completedAt: null, executionPlanJson: JSON.stringify(plan) }
   } else {
     if (input.baseRunId != null) {
       const base = await db.nodeRuns.get(input.baseRunId)
@@ -1255,6 +1345,26 @@ async function runOwnedAuthoringGraph(input: Parameters<typeof runAuthoringGraph
   }
   const emit = (nextRun: NodeRunRecord) => input.onUpdate?.({ run: nextRun, snapshots: { ...snapshots }, candidates: { ...candidates } })
   emit(run)
+  if (resumedSourceProof) {
+    try { await resumedSourceProof.assertCurrent() }
+    catch (cause) {
+      // Nothing downstream has consumed this claim yet. Restore only our
+      // exact transition; never overwrite a later revision from another owner.
+      const before = resumedSourceProof.before
+      const restored = await db.transaction('rw', scopeTransactionTables(db.nodeRuns), async () => {
+        const current = await db.nodeRuns.get(runId)
+        if (!current || canonicalStringify(current) !== canonicalStringify(run)
+          || !await assertRecordInScope(scope, 'nodeRuns', current, { owner: 'work' })) return false
+        await db.nodeRuns.put(before)
+        return true
+      })
+      if (restored) {
+        ;({ snapshots, candidates } = parseRunMaps(before))
+        emit(before)
+      }
+      throw cause
+    }
+  }
 
   for (const node of ordered) {
     if (input.signal?.aborted) break
@@ -1290,6 +1400,7 @@ async function runOwnedAuthoringGraph(input: Parameters<typeof runAuthoringGraph
         worldGroupId: input.flow.worldGroupId ?? null,
         signal: input.signal,
         nodeRunId: runId,
+        assertResumeSourcesCurrent: resumedSourceProof?.assertCurrent,
       })
       const targetFingerprint = await readAuthoringTargetFingerprint({
         node,
@@ -1334,6 +1445,11 @@ async function runOwnedAuthoringGraph(input: Parameters<typeof runAuthoringGraph
         completedNodeIds: Array.from(new Set([...plan.completedNodeIds, node.id])),
         pendingNodeIds: plan.pendingNodeIds.filter(nodeId => nodeId !== node.id),
       }
+      // Keep the first received artifact and finish through the existing
+      // cancelled/paused path when a repair never left the local process.
+      if (input.signal?.aborted && selectedArtifact?.issues.some(
+        issue => issue.code === CREATIVE_REPAIR_PRE_DISPATCH_CANCELLED_V1,
+      )) break
       if (reliabilityBlocked) {
         const completedAt = Date.now()
         await persistAuthoringRun(runId, 'failed', snapshots, candidates, plan, completedAt)

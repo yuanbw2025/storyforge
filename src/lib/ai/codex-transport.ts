@@ -84,12 +84,48 @@ export async function acknowledgeBoundCodexReceiptV1(input: {
   return value
 }
 
+export class ModelDispatchGuardRejectedV1 extends Error {
+  constructor(readonly cause: unknown) {
+    super(cause instanceof Error ? cause.message : '模型请求未通过本地来源校验，未发送。')
+    this.name = 'ModelDispatchGuardRejectedV1'
+  }
+}
+
+export function modelDispatchWasCancelledV1(result?: ChatResult): boolean {
+  return result?.modelDispatchGuardCancelled === true && result.requestLifecycle?.phase === 'pre-dispatch'
+}
+
+export async function assertModelDispatchGuardV1(result: ChatResult, signal?: AbortSignal): Promise<void> {
+  try {
+    signal?.throwIfAborted()
+    await result.beforeModelDispatch?.()
+    signal?.throwIfAborted()
+  } catch (cause) {
+    if (signal?.aborted || (cause instanceof DOMException && cause.name === 'AbortError')) {
+      result.modelDispatchGuardCancelled = true
+      signal?.throwIfAborted()
+      throw cause
+    }
+    throw new ModelDispatchGuardRejectedV1(cause)
+  }
+}
+
 /** One ID, one submission. Polling reads receipts; it never resubmits inference. */
 export async function* streamCodex(
   messages: ChatMessage[], model: string, signal?: AbortSignal, result?: ChatResult, outputSchema?: Record<string, unknown>, responseFormat?: 'json_object',
 ): AsyncGenerator<string> {
-  if (result) { result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }; delete result.terminalFailure }
-  if (signal?.aborted) throw new DOMException('请求已取消', 'AbortError')
+  if (result) {
+    result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }
+    delete result.terminalFailure
+    delete result.modelDispatchGuardCancelled
+  }
+  if (signal?.aborted) {
+    if (result?.beforeModelDispatch) {
+      result.modelDispatchGuardCancelled = true
+      signal.throwIfAborted()
+    }
+    throw new DOMException('请求已取消', 'AbortError')
+  }
   const status = await codexRequest<CodexStatus>('/status')
   if (status.state !== 'ready') throw new Error(status.message || '请在设置中连接本机 Codex 的 ChatGPT 登录。')
   if (!model.trim()) throw new Error('请先刷新 Codex 模型目录并选择模型。')
@@ -107,6 +143,7 @@ export async function* streamCodex(
   signal?.addEventListener('abort', cancel, { once: true })
   try {
     await onPrepared?.(binding)
+    if (result?.beforeModelDispatch) await assertModelDispatchGuardV1(result, signal)
     if (signal?.aborted) throw new DOMException('请求已取消', 'AbortError')
     // A lost acceptance response is an unknown result, never pre-dispatch safe-to-retry.
     submitted = true

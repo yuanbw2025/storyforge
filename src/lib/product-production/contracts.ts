@@ -1,3 +1,4 @@
+import { parseWorldSourcePurposeProofV1 } from '../world-engine/source-purpose-contract'
 import { parseAvgAssemblyBrief, AVG_ASSEMBLY_GATE_IDS_V1 } from '../avg/assembly-contract'
 import { assertAvgVisualProductionPolicyV2 } from '../avg/media-production-policy'
 import { parseAvgStoredAssemblyBriefV3 } from '../avg/voice-assembly-storage'
@@ -333,7 +334,9 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
   ], 'brief')
   if (row.schema !== 'storyforge.product-production-brief' || row.version !== 3) fail('brief schema/version 无效')
   const source = record(row.source, 'source')
-  exactKeys(source, ['worldReleaseId', 'worldContentHash', 'selection', 'startingPoint'], 'source')
+  const hasSourcePurpose = Object.prototype.hasOwnProperty.call(source, 'sourcePurpose')
+  exactKeys(source, ['worldReleaseId', 'worldContentHash', 'selection', 'startingPoint',
+    ...(hasSourcePurpose ? ['sourcePurpose'] : [])], 'source')
   if (!isSha256Hash(source.worldContentHash)) fail('source.worldContentHash 无效')
   const selection = parseProductWorldSourceSelection(source.selection)
 
@@ -343,6 +346,9 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     'requiredFacts', 'forbiddenChanges', 'contentBoundaries', 'tone',
   ], 'intent')
   const productType = enumValue(intent.productType, PRODUCTION_PRODUCT_KINDS_V1, 'intent.productType')
+  const sourcePurpose = hasSourcePurpose ? parseWorldSourcePurposeProofV1(source.sourcePurpose) : undefined
+  if (sourcePurpose && (sourcePurpose.purpose !== productType ||
+    sourcePurpose.selectedRelease.releaseHash !== source.worldContentHash)) fail('sourcePurpose 与产品或版本不一致')
   if (productType !== selection.productType) fail('intent.productType 与 selection 不一致')
   if (!Array.isArray(row.capabilityRequirements) || row.capabilityRequirements.length > 100) fail('capabilityRequirements 必须是有界数组')
   const capabilityRequirements = row.capabilityRequirements.map(parseCapability)
@@ -375,6 +381,7 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     source: {
       worldReleaseId: positiveId(source.worldReleaseId, 'source.worldReleaseId'),
       worldContentHash: source.worldContentHash,
+      ...(sourcePurpose ? { sourcePurpose } : {}),
       selection,
       startingPoint: parseStartingPoint(source.startingPoint),
     },

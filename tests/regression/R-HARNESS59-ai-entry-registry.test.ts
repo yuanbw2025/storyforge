@@ -63,13 +63,16 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
   it('AST 守卫证明实际 member/alias/wrapper 调用均携带登记 entryId', () => {
     const output = execFileSync(process.execPath, ['scripts/check-ai-entry-registry.mjs'], { encoding: 'utf8' })
     // H17 compression and generation share a governed dispatch site.
-    expect(output).toContain('68 bindings / 71 calls')
-    expect(output).toContain('formal 46, auxiliary 15, evaluation 6, experimental 1')
+    // SFQA-022/044 added the two governed import candidate entries and the
+    // auxiliary private reference analysis entry; every registry row still has
+    // one real AST binding, so the counts move with them.
+    expect(output).toContain('71 bindings / 74 calls')
+    expect(output).toContain('formal 48, auxiliary 16, evaluation 6, experimental 1')
   })
 
   it('唯一注册表严格解析且每项连接 Skill、执行器、候选和调用方', () => {
     expect(registry.version).toBe(2)
-    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(68)
+    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(71)
     for (const retiredId of ['world.setting.lookup.qa', 'world.setting.lookup.extract']) {
       expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.some(entry => entry.entryId === retiredId)).toBe(false)
     }
@@ -107,6 +110,21 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
     expect(() => assertFormalAIEntryCallV1({ formalEntryId: 'ttrpg.open.common-oracle-interpret', category: 'runtime.ttrpg-open.oracle-interpret' })).toThrow(/不允许 category/)
   })
 
+  it('文档导入分块解析的两个正式入口只产出候选，私域参考入口与普通导入分开登记', () => {
+    for (const entryId of ['import.document-chunk.parse', 'import.reference-chunk.parse.private']) {
+      expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.find(entry => entry.entryId === entryId)).toMatchObject({
+        skillId: 'inspiration.document-import-parse', categories: ['import.parse-chunk'],
+        runContractBuilderId: 'document-import-chunk-durable', executionBoundary: 'durable-run',
+        entryKind: 'formal', candidateKind: 'document-import-chunk-candidate', adoptAllowed: false,
+        adoptionTargets: [], allowedCallers: ['src/lib/import/document-parse-durable.ts'],
+      })
+    }
+    expect(() => assertFormalAIEntryCallV1({ formalEntryId: 'import.document-chunk.parse', category: 'chapter.content' })).toThrow(/不允许 category/)
+    // The import transport must stay under the AST gate instead of drifting out of the scan list.
+    expect(readFileSync('scripts/check-ai-entry-registry.mjs', 'utf8'))
+      .toContain("'src/lib/import/document-parse-durable.ts'")
+  })
+
   it('辅助、评测和实验入口由机器权限证明不可采纳', () => {
     const nonFormal = registry.entries.filter(entry => entry.entryKind !== 'formal')
     expect(nonFormal.length).toBeGreaterThan(0)
@@ -119,9 +137,9 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
     expect(() => parseFormalAIEntryRegistryV1(full)).not.toThrow()
     expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.some((entry) => entry.entryId.startsWith('longform.voice'))).toBe(false)
     delete full.limitedTransports
-    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(68)
+    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(71)
     const legacy = { ...full, entries: full.entries.filter((entry: Entry) => !['ttrpg.open.local-voice', 'ttrpg.open.brief', 'ttrpg.open.situation-propose', 'ttrpg.open.public-situation-propose', 'ttrpg.open.entity-propose', 'ttrpg.open.common-oracle-interpret', 'ttrpg.open.authoring-design', 'ttrpg.open.authoring-design.full'].includes(entry.entryId)) }
-    expect(parseFormalAIEntryRegistryV1(legacy).entries).toHaveLength(60)
+    expect(parseFormalAIEntryRegistryV1(legacy).entries).toHaveLength(63)
     expect(legacy.entries.some((entry: Entry) => entry.entryId.startsWith('ttrpg.open.authoring-design'))).toBe(false)
     for (const patch of [{ adoptAllowed: true }, { adoptionTargets: ['chapters'] }, { boundary: 'durable-run' }]) {
       const invalid = JSON.parse(JSON.stringify(registry))

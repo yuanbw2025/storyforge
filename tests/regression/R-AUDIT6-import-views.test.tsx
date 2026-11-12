@@ -45,6 +45,25 @@ const session: ImportSession = {
   updatedAt: 1,
 }
 
+// A presentation fixture. The durable import tests exercise receipt integrity.
+const confirmedChunk: ImportSession['chunks'][number] = {
+  index: 0,
+  startChar: 0,
+  endChar: 100,
+  charCount: 100,
+  status: 'done' as const,
+  attempts: 1,
+  durableParse: {
+    claimKey: 'claim-1',
+    runId: 1,
+    confirmation: { editedHash: '1'.repeat(64), receipt: {
+      version: 1, runId: 1, generation: 1, contractHash: '2'.repeat(64),
+      contextManifestHashes: ['3'.repeat(64)], candidateHashes: ['4'.repeat(64)], adoptionEventIds: [1],
+      postStateHash: '5'.repeat(64), verifierSetVersion: 'test-v1', criteria: [], acceptedAt: 1, receiptHash: '6'.repeat(64),
+    } },
+  },
+}
+
 function ImportPreparationHarness() {
   const preparation = useImportDocumentPreparation()
   return createElement('div', null,
@@ -64,30 +83,66 @@ describe('AUDIT-6 · 文档导入视图', () => {
     expect(host.textContent).toContain('支持的文件格式与大小上限')
   })
 
-  it('复用会话的四个操作只向父级转发', async () => {
+  it('作者确认的会话只有查看/忽略两个常驻操作，其余动作按原落点和原文可用性出现', async () => {
     const onApplyProject = vi.fn()
     const onApplyReference = vi.fn()
     const onIgnore = vi.fn()
+    const onShowReport = vi.fn()
     const host = await mount(createElement(ImportReusableSessionBanner, {
-      session,
+      session: { ...session, chunks: [confirmedChunk], importTarget: 'project' },
       applying: false,
       originalTextAvailable: false,
       onApplyProject,
       onApplyReference,
+      onShowReport,
       onIgnore,
     }))
 
-    const buttons = host.querySelectorAll('button')
-    expect(buttons).toHaveLength(4)
-    await act(async () => buttons[0].click())
-    await act(async () => buttons[1].click())
-    await act(async () => buttons[2].click())
-    await act(async () => buttons[3].click())
-    expect(onApplyProject).toHaveBeenCalledOnce()
-    expect(onApplyReference).toHaveBeenNthCalledWith(1, 'quick')
-    expect(onApplyReference).toHaveBeenNthCalledWith(2, 'deep')
+    // 原落点是当前项目：只有本地图内的“浅层”参考可用，深层需要恢复原文；
+    // 从原项目会话直接灌回设定库会与既有落点重复，因此不提供该按钮。
+    const buttons = Array.from(host.querySelectorAll('button'))
+    expect(buttons.map(button => button.textContent?.trim())).toEqual([
+      '查看导入记录',
+      '保存为项目参考 · 浅层',
+      '忽略',
+    ])
+    for (const button of buttons) await act(async () => button.click())
+    expect(onShowReport).toHaveBeenCalledOnce()
+    expect(onApplyReference).toHaveBeenCalledOnce()
+    expect(onApplyReference).toHaveBeenCalledWith('quick')
+    expect(onApplyProject).not.toHaveBeenCalled()
     expect(onIgnore).toHaveBeenCalledOnce()
-    expect(host.textContent).toContain('原文已不在内存')
+    expect(host.textContent).toContain('深层分析需要恢复原文件')
+  })
+
+  it('原文可恢复时才给出深层参考，参考目标的会话才能采用到当前项目设定库', async () => {
+    const onApplyProject = vi.fn()
+    const onApplyReference = vi.fn()
+    const host = await mount(createElement(ImportReusableSessionBanner, {
+      session: { ...session, chunks: [confirmedChunk], importTarget: 'reference' },
+      applying: false,
+      originalTextAvailable: true,
+      onApplyProject,
+      onApplyReference,
+      onShowReport: vi.fn(),
+      onIgnore: vi.fn(),
+    }))
+    const labels = Array.from(host.querySelectorAll('button')).map(button => button.textContent?.trim())
+    expect(labels).toContain('采用到当前项目设定库')
+    expect(labels).not.toContain('保存为项目参考 · 浅层')
+    await act(async () => Array.from(host.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('采用到当前项目设定库'))!.click())
+    expect(onApplyProject).toHaveBeenCalledOnce()
+
+    const project = await mount(createElement(ImportReusableSessionBanner, {
+      session: { ...session, chunks: [confirmedChunk], importTarget: 'project' },
+      applying: false, originalTextAvailable: true, onApplyProject, onApplyReference,
+      onShowReport: vi.fn(), onIgnore: vi.fn(),
+    }))
+    const deep = Array.from(project.querySelectorAll('button')).find(button => button.textContent?.includes('深层'))!
+    await act(async () => deep.click())
+    expect(onApplyReference).toHaveBeenCalledOnce()
+    expect(onApplyReference).toHaveBeenCalledWith('deep')
   })
 
   it('词条候选审查允许取消、改名和改分类，确认时只交回选中项', async () => {

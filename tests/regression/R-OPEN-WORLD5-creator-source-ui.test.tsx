@@ -33,6 +33,13 @@ const NOVEL_HASH = 'f'.repeat(64)
 const worldScope: WorkspaceScope = { projectId: 11, worldId: 12, workId: 13 }
 const novelScope: WorkspaceScope = { projectId: 21, worldId: 22, workId: 23 }
 
+const NATIVE_PURPOSE = {
+  version: 1, purpose: 'text-open-world',
+  selectedRelease: { releaseUid: 'release.salt-ridge.v3', releaseHash: WORLD_HASH },
+  origin: { kind: 'local-author', authorWorld: { workspaceUid: 'ws.salt-ridge', worldCode: 'world.salt-ridge' } },
+  evidenceHash: 'e'.repeat(64),
+} as const
+
 function worldCandidate(
   overrides: Partial<Pick<TextOpenWorldCreatorWorldSourceCandidateV1, 'readiness' | 'gaps'>> = {},
 ): TextOpenWorldCreatorWorldSourceCandidateV1 {
@@ -40,6 +47,9 @@ function worldCandidate(
     schema: 'storyforge.text-open-world-creator-world-source-candidate',
     version: 1,
     sourceKind: 'world-release',
+    sourceChoiceKey: '71:owned',
+    sourcePurpose: NATIVE_PURPOSE,
+    purposeAllowed: true,
     worldReference: {
       schema: 'storyforge.world-reference',
       version: 1,
@@ -218,6 +228,7 @@ describe('TOW-G5-01 · 创作者双来源 UI', () => {
       scope: worldScope,
       localReleaseRecordId: 71,
       expectedReleaseHash: WORLD_HASH,
+      sourcePurpose: NATIVE_PURPOSE,
     })
     expect(sourceButton.getAttribute('aria-checked')).toBe('true')
     expect(host.textContent).toContain('故事素材')
@@ -300,6 +311,7 @@ describe('TOW-G5-01 · 创作者双来源 UI', () => {
       scope: worldScope,
       localReleaseRecordId: 71,
       expectedReleaseHash: WORLD_HASH,
+      sourcePurpose: NATIVE_PURPOSE,
     })
     expect(host.textContent).toContain('当前阻断')
     expect(host.textContent).toContain('缺少必需来源：核心故事')

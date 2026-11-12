@@ -24,17 +24,17 @@ export function useTtrpgMediaUrls(input: {
     const dispose = () => { objectUrls.forEach(url => URL.revokeObjectURL(url)); resolver?.dispose() }
     void (async () => {
       const urls: Record<string, string> = {}
-      const keys = media.slots.flatMap(slot => slot.status === 'available' && slot.mediaAssetId == null && slot.assetKey ? [slot.assetKey] : [])
+      const keys = media.slots.flatMap(slot => slot.status === 'available' && slot.requestKey == null && slot.assetKey ? [slot.assetKey] : [])
       if (keys.length) {
         resolver = (await resolveProductRuntimeSource({ scope, source })).mediaResolver
         const catalog = await resolver.preload({ assetKeys: [...new Set(keys)], maximumBytes: 100 * 1024 * 1024 })
-        for (const slot of media.slots) if (slot.assetKey && catalog.urls[slot.assetKey]) urls[slot.slotKey] = catalog.urls[slot.assetKey]
+        for (const slot of media.slots) if (slot.requestKey == null && slot.assetKey && catalog.urls[slot.assetKey]) urls[slot.slotKey] = catalog.urls[slot.assetKey]
       }
       for (const slot of media.slots) {
         if (cancelled) return
-        if (slot.status !== 'available' || slot.mediaAssetId == null) continue
+        if (slot.status !== 'available' || !slot.runtimeAsset) continue
         try {
-          const blob = await readTtrpgRuntimeMediaBlobV1({ scope, sessionId, viewerKey, mediaAssetId: slot.mediaAssetId })
+          const blob = await readTtrpgRuntimeMediaBlobV1({ scope, sessionId, viewerKey, runtimeAsset: slot.runtimeAsset })
           const url = URL.createObjectURL(blob)
           objectUrls.push(url); urls[slot.slotKey] = url
         } catch { /* A missing or unauthorized image leaves the text presentation usable. */ }

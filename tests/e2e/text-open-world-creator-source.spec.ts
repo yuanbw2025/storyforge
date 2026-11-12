@@ -402,3 +402,64 @@ test('世界引擎 handoff 按用户选择的冻结 Release ID 与完整 Hash �
     commands: before.commands + 1,
   })
 })
+
+test('SFQA021: 同一冻结版本的两份声明分开选择，只有允许文字开放世界的原声明能开始会谈', async ({ page }) => {
+  test.setTimeout(120_000)
+  await openProductHub(page)
+  const seed = await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const [fixture, workspace, packages, receipts] = await Promise.all([
+      load<typeof import('../helpers/current-product-world')>('/storyforge/tests/helpers/current-product-world.ts'),
+      load<typeof import('../../src/lib/workspace/create-workspace')>('/storyforge/src/lib/workspace/create-workspace.ts'),
+      load<typeof import('../../src/lib/world-engine/world-package')>('/storyforge/src/lib/world-engine/world-package.ts'),
+      load<typeof import('../../src/lib/world-engine/source-receipt')>('/storyforge/src/lib/world-engine/source-receipt.ts'),
+    ])
+    const authored = await fixture.seedCurrentProductWorld('021 浏览器原作者世界')
+    const { scope } = await workspace.createWorkspace({ name: '021 浏览器只读来源', description: '', genres: ['other'],
+      status: 'drafting', targetWordCount: 0 }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
+    const common = { authorName: '021 浏览器合成作者', attribution: '原署名 · 允许声明', license: 'CC-BY-4.0' as const,
+      contentWarnings: ['原警告 · 第一份'], allowedUses: { 'world-remix': false, ttrpg: false, 'character-interaction': false,
+        'ai-town': true, 'text-adventure': false, avg: false, 'text-open-world': true } }
+    const first = await receipts.installWorldSourcePackageV1(scope, await packages.createWorldPackage(authored.release.id!, common))
+    const second = await receipts.installWorldSourcePackageV1(scope, await packages.createWorldPackage(authored.release.id!, {
+      ...common, attribution: '原署名 · 拒绝声明', contentWarnings: ['原警告 · 第二份'],
+      allowedUses: { ...common.allowedUses, 'text-open-world': false },
+    }))
+    return { scope, first, second, hash: authored.release.contentHash }
+  })
+  expect(seed.first.worldReleaseId).toBe(seed.second.worldReleaseId)
+  await page.goto(`./world/versions?project=${seed.scope.projectId}`)
+  const panel = page.getByRole('region', { name: '世界修订、发布与产品交接' })
+  await expect(panel.getByLabel('冻结世界版本')).toHaveValue(String(seed.first.worldReleaseId), { timeout: 30_000 })
+  const before = await readProtectedTableCounts(page)
+  await panel.getByRole('button', { name: '交给文字开放世界', exact: true }).click()
+  const studio = page.getByTestId('text-open-world-creator-studio')
+  const allowed = studio.getByRole('radio', { name: /允许声明/ })
+  const denied = studio.getByRole('radio', { name: /拒绝声明/ })
+  await expect(allowed).toContainText(seed.hash)
+  await expect(denied).toContainText(seed.hash)
+  await expect(denied).toBeDisabled()
+  await expect(allowed).toHaveAttribute('aria-checked', 'false')
+  await expect(studio.getByTestId('creator-source-continue')).toBeDisabled()
+  expect(await readProtectedTableCounts(page)).toEqual(before)
+  await allowed.click()
+  await expect(allowed).toHaveAttribute('aria-checked', 'true')
+  await expect(allowed).toContainText('原警告 · 第一份')
+  await studio.getByTestId('creator-source-continue').click()
+  await expect(page.getByTestId('text-open-world-creator-brief-studio')).toBeVisible()
+  const after = await readProtectedTableCounts(page)
+  expect(after).toEqual({ ...before, productions: before.productions + 1, commands: before.commands + 1 })
+  const binding = await page.evaluate(async scope => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const [{ db }, proof] = await Promise.all([
+      load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts'),
+      load<typeof import('../../src/lib/world-engine/source-purpose')>('/storyforge/src/lib/world-engine/source-purpose.ts'),
+    ])
+    const row = await db.productProductions.where('workId').equals(scope.workId).first()
+    const source = proof.parseWorldSourcePurposeProofV1(JSON.parse(row?.creatorSourceBindingJson ?? '{}').sourcePurpose)
+    if (source.origin.kind !== 'declared') throw new Error('Missing exact original declaration')
+    return { declaration: proof.readWorldSourcePurposeDeclarationV1(source.origin), modelRuns: await db.agentRuns.count() }
+  }, seed.scope)
+  expect(binding.declaration.declarationHash).toBe(seed.first.declarationHash)
+  expect(binding.modelRuns).toBe(0)
+})
