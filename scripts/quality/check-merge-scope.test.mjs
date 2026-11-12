@@ -17,7 +17,7 @@ test('documentation and workflow-only changes avoid dependency installation', ()
 test('changed tests, deleted modules and schema changes have scoped checks', () => {
   const deleted = 'src/lib/old.ts'
   const checks = plan([deleted, 'src/lib/db/schema.ts', 'tests/db/schema.test.ts'], path => path !== deleted)
-  assert.deepEqual(checks.units, ['tests/db/schema.test.ts'])
+  assert.deepEqual(checks.units, ['tests/db/schema.test.ts', 'tests/registry/project-tables.test.ts'])
   assert.ok(checks.typeConfigs.includes('tsconfig.json'))
   assert.deepEqual(checks.scripts, ['check:required-tables'])
   assert.equal(checks.npm, true)
@@ -36,6 +36,8 @@ test('the manual AVG media workflow owns its production harnesses; ordinary prod
   const unit = 'tests/regression/R-AVG-05A-production-assembly.test.ts'
   assert.ok(suites.includes(visual))
   assert.ok(suites.includes('tests/regression/R-AVG-05A-combined-media-stage.test.ts'))
+  assert.ok(suites.includes('tests/regression/R-AVG-04A15-v5-current-assembly.test.ts'))
+  assert.ok(suites.includes('tests/regression/R-AVG-04B-processed-sound-flow.test.ts'))
   assert.equal(suites.length, new Set(suites).size)
   assert.ok(suites.every(file => /^tests\/regression\/R-AVG-[a-zA-Z0-9-]+\.test\.ts$/.test(file) && existsSync(file)))
   assert.deepEqual(plan([...suites, unit], present).units, [unit])

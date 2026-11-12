@@ -75,14 +75,14 @@ describe('R-TTRPGOPEN10 actual E16, licensed upload, recovery and media ownershi
     await expect(confirm(s, review)).rejects.toThrow(/audio storage rollback/); expect(await readProductRuntimeState(s.owner.sessionId)).toEqual(before)
     save.mockRestore()
     const transaction = db.transaction.bind(db)
-    const lost = vi.spyOn(db, 'transaction').mockImplementation(async (...args: Parameters<typeof db.transaction>) => {
-      const result = await transaction(...args)
-      const tables = args[1]
-      if (args[0] === 'rw' && Array.isArray(tables) && tables.includes(db.productRuntimeEvents) && tables.includes(db.productMediaAssets)) {
-        throw new Error('audio committed response lost')
-      }
-      return result
-    })
+    const lost = vi.spyOn(db, 'transaction').mockImplementation((...args) =>
+      transaction(...args).then(result => {
+        const tables = args[1]
+        if (args[0] === 'rw' && Array.isArray(tables) && tables.includes(db.productRuntimeEvents) && tables.includes(db.productMediaAssets)) {
+          throw new Error('audio committed response lost')
+        }
+        return result
+      }))
     await expect(confirm(s, review)).rejects.toThrow(/committed response lost/); lost.mockRestore()
     const result = { sequence: (await readProductRuntimeState(s.owner.sessionId)).lastSequence }
     expect(result.sequence).toBe(before.lastSequence + 1)

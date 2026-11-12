@@ -4,11 +4,12 @@ import { openLongformLeaf } from './helpers/longform-navigation'
 async function prepare(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'folder-picker-e2e')
-    window.showDirectoryPicker = async () => {
+    async function showDirectoryPicker(): Promise<FileSystemDirectoryHandle> {
       const failure = localStorage.getItem('folder-picker-test-failure')
       if (failure) throw new DOMException('合成目录选择失败', failure)
       return (await navigator.storage.getDirectory()).getDirectoryHandle('隔离验收目录', { create: true })
     }
+    Object.assign(window, { showDirectoryPicker })
   })
   const pageErrors: string[] = []
   page.on('pageerror', error => pageErrors.push(error.message))

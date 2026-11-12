@@ -8,6 +8,7 @@ import type { ChatNarrativeProductionSourceV1 } from '../../src/lib/character-in
 import { chatProjectionResourcesV1 } from '../../src/lib/character-interaction/source-projection'
 import { db } from '../../src/lib/db/schema'
 import type { WorkspaceScope } from '../../src/lib/types'
+import type { LocalContextManifestAttemptV1 } from '../../src/lib/types/world-product-contracts'
 import { readProductProductionBuildWorldScopeV1 } from '../../src/lib/product-production/world-binding'
 import { aggregateProductSourceManifestFromExactRuns } from '../../src/lib/product/source-contracts'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
@@ -244,7 +245,7 @@ export async function exerciseSfqa058NativeV1(version: 1 | 2) {
     assert(media && JSON.parse(media.payloadJson).visual.length === 2, 'illustrated media requirements')
     assert(!media.payloadJson.includes(privateAlias), 'author-only source reached media requirements')
   }
-  const pointers = []
+  const pointers: LocalContextManifestAttemptV1[] = []
   for (const artifact of [design, ...(media ? [media] : [])]) {
     const snapshot = await readAgentRunV1(scope, artifact.producerRunId!)
     assert(snapshot.projection.terminalReceiptHash === artifact.producerReceiptHash, 'exact producer receipt')

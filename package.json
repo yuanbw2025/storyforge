@@ -22,7 +22,7 @@
     "check:required-tables": "node scripts/check-required-tables.mjs",
     "check:source-reachability": "node scripts/check-source-reachability.mjs",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
-    "check:dependencies": "npm run check:desktop-runtime && npm audit --omit=dev --audit-level=moderate",
+    "check:dependencies": "npm run check:desktop-runtime && npm audit --omit=dev --audit-level=moderate && npm run check:dev-dependencies",
     "check:desktop-runtime": "node scripts/distribution/check-desktop-runtime.mjs",
     "check:release-metadata": "node scripts/check-release-metadata.mjs",
     "check:docs": "node scripts/check-document-authority.mjs && node scripts/check-independent-creation-plans.mjs && npm run plugins:check-kit",
@@ -82,8 +82,9 @@
     "test:clients": "node --test scripts/desktop/*.test.mjs scripts/distribution/*.test.mjs && vitest run tests/regression/R-CLIENT-native-transport.test.ts tests/regression/R-CLIENT-updates.test.tsx tests/regression/R-CLIENT-save-file.test.ts tests/regression/R-CLIENT-SUPPORT1-feedback-telemetry.test.tsx tests/regression/R-CLIENT-LEGAL1-consent.test.tsx",
     "build:macos": "npm run build:portable && node scripts/distribution/notices.mjs && electron-builder --config electron-builder.config.cjs --mac --publish never --config.directories.output=release/macos",
     "check:engineering": "node scripts/quality/check-engineering.mjs",
-    "test:engineering-gate": "node --test scripts/quality/check-engineering.test.mjs",
-    "check:types:open-world-experience": "tsc --noEmit -p tsconfig.tests.open-world-experience.json"
+    "test:engineering-gate": "node --test scripts/quality/check-engineering.test.mjs scripts/quality/check-dev-dependency-report.test.mjs",
+    "check:types:open-world-experience": "tsc --noEmit -p tsconfig.tests.open-world-experience.json",
+    "check:dev-dependencies": "node scripts/quality/check-dev-dependency-report.mjs"
   },
   "dependencies": {
     "@capacitor/android": "8.5.3",
@@ -130,7 +131,7 @@
     "@types/three": "0.183.1",
     "@types/turndown": "^5.0.5",
     "@vitejs/plugin-react": "^4.3.4",
-    "@vitest/coverage-v8": "^2.1.9",
+    "@vitest/coverage-v8": "4.1.12",
     "autoprefixer": "^10.4.20",
     "electron": "44.10.0",
     "electron-builder": "26.15.3",
@@ -140,7 +141,7 @@
     "fake-indexeddb": "^6.2.6",
     "fountain-js": "1.2.4",
     "globals": "14.0.0",
-    "happy-dom": "^20.10.2",
+    "happy-dom": "21.0.4",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.6.0",
@@ -148,11 +149,15 @@
     "vite": "^6.0.0",
     "vite-plugin-pwa": "^1.2.0",
     "vitepress": "^1.6.4",
-    "vitest": "^2.1.9"
+    "vitest": "4.1.12"
   },
   "overrides": {
     "mammoth": {
       "argparse": "2.0.1"
+    },
+    "vitepress@1.6.4": {
+      ".": "$vitepress",
+      "vite": "6.4.5"
     }
   }
 }
