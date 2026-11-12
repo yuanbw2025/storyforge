@@ -2388,6 +2388,8 @@ Creator Brief确认后的G5-03生产准备页复用全局AI配置、任务路由
 
 作者逐项确认凭证政策、模型绑定、报价预算和媒资边界后，准备页只得到内存中的确认Hash，仍不创建Build、SourcePlan或任何费用。运行时Verifier不把可重算Hash当成外部真实性：确认时必须重新解析当前任务路由、AIConfig和实际凭证来源，并逐字段比对Brief、模型、端点路径Hash、报价、预算与四个精确确认键；设置页往返也携带无密钥的精确会谈、产品和来源身份，目标失效时不得误选“最近会谈”。正式启动在同一原子授权边界重新读取并CAS这些事实，不能把页面内存确认当作durable授权。全局AI日志在create/update/read/format四个出口统一脱敏：日志URL只保留HTTP(S) origin，调用方Key、认证头、常见凭证字段和嵌入式URL敏感部分全部清除；余额、欠费、授权、限流、超时、网络和未知结果只显示安全分类与显式恢复动作，不把原始供应商响应送入页面，也不隐藏重发。
 
+已发生的 Creator Brief 会谈用量按原会话的已核验 Run、Context Manifest、请求与响应观测及原候选证据累计，不依赖原候选 Hash 与最终确认 Hash 相等。作者采纳后编辑、改为人工确认或协议修复不清除已发生的调用；两个候选 Hash 分别验真。无证据的请求、token、时长或价格显示未知，纯人工且已确认没有模型请求时才显示零调用。准备页和刷新只读既有证据，不回写用量账本；按已知价格计算的金额仍是估算，不是提供商账单。
+
 Agnes 官方连接另支持作者明确确认当前账户的本次文本调用免计费。该选择生成 `author-confirmed-account-zero` 报价，保留来源说明、核对日期、精确模型与端点绑定；它是作者的账户说明，不是全平台免费声明，也不能用于其他供应商或中转端点。远程凭证仍为必需项，调用、token、时长、存储及失败恢复保护不变；配置变化清除免计费确认。未选择这项说明的人工双零报价继续被拒绝，现有付费报价和本地零费用合同保持有效。该扩展不新增表，不改变来源、作品或媒资 owner；报价随既有 Creator Start/Brief 的注册生命周期导出导入。
 
 G5-04以下为纠偏前工程实现记录；新生产须先增加 WorldRelease-only 准入并重新验收。作者先选择`author-owned`、`licensed`或`public-domain`权利依据并填写说明；零写入预览把当前Creator Brief确定性投影为不含本地ID的便携Creator SourcePlan、共享scheduler兼容执行Brief和精确动态DAG，显示依赖、并行组、模型、预算、完成条件及Plan Hash。兼容Brief中的`worldReleaseId=1`是非定位占位值，真实读取只允许走专属SourcePlan与注册表治理的locator。正式开始再次核验Production state revision、Creator Brief revision/Hash、真实 WorldRelease 精确版本与资源边界（旧小说版本/边界仅供存量核验）、当前AI任务路由/凭证来源、规范完整route、生成参数、模型绑定、报价、预算、四项确认和预览Plan Hash，并让实际模型调用复用同一份已核对resolution，避免下层二次解析发生TOCTOU。覆盖Production、Brief、Command、Build及来源存储的同一事务写入命令claim/receipt、授权Brief的Creator SourcePlan和Creator Start、不可变Plan与授权Build，再推进Production为`producing`。这个边界不调用provider；相同确定性command ID重放只读取已冻结receipt，不重建授权。Creator Brief仍是作者意图权威，`ProductProductionBriefV3`只是共享scheduler兼容投影，不能反向覆盖Creator Brief。
