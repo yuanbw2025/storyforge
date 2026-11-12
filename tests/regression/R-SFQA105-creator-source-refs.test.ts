@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as npcCompiler from '../../src/lib/open-world/npc-runtime-catalog-production'
 import * as dispatch from '../../src/lib/open-world/creator-artifact-edit-dispatch'
 import { db } from '../../src/lib/db/schema'
@@ -259,21 +259,18 @@ describe('SFQA105 actual governed legacy and fresh candidate replay', () => {
     }
   }, 120_000)
 
-  it('rejects an old compressed-index field catalog, then confirms a fresh candidate by actual hash replay without changing the parent Build', async () => {
-    await db.delete()
-    await db.open()
+  async function seedHistoricalCandidate() {
+    const f = await seedSfqa105GovernedBuild()
+    const actor = f.catalog.actors.find(row => row.key === 'actor.catalog.009')!
+    const wrongActor = f.catalog.actors.find(row => row.key === 'actor.catalog.008')!
+    expect(actor).toBeDefined()
+    expect(wrongActor).toBeDefined()
+    const entityIdentity = `character:${actor.key}`
+    const legacyOwner = `character:${wrongActor.key}`
+    const governance = await readTextOpenWorldArtifactGovernanceV1({ scope: f.scope, productionId: f.productionId })
+    const selection = { scope: f.scope, productionId: f.productionId, buildId: f.buildId,
+      expectedSnapshotHash: governance.snapshotHash, artifactKey, entityIdentity }
     try {
-      const f = await seedSfqa105GovernedBuild()
-      const actor = f.catalog.actors.find(row => row.key === 'actor.catalog.009')!
-      const wrongActor = f.catalog.actors.find(row => row.key === 'actor.catalog.008')!
-      expect(actor).toBeDefined()
-      expect(wrongActor).toBeDefined()
-      const entityIdentity = `character:${actor.key}`
-      const legacyOwner = `character:${wrongActor.key}`
-      const governance = await readTextOpenWorldArtifactGovernanceV1({ scope: f.scope, productionId: f.productionId })
-      const selection = { scope: f.scope, productionId: f.productionId, buildId: f.buildId,
-        expectedSnapshotHash: governance.snapshotHash, artifactKey, entityIdentity }
-
       // Reproduce only the pinned pre-fix domain adapter semantics: the old
       // compacted offset labeled actor008's draft fields as actor009's fields.
       // The public Run/checkpoint/candidate writers and governance remain real.
@@ -303,15 +300,32 @@ describe('SFQA105 actual governed legacy and fresh candidate replay', () => {
       const legacyCatalog: TextOpenWorldNpcRuntimeCatalogV1 = JSON.parse(JSON.stringify(legacy.candidate.rebuiltArtifacts[0].payload))
       expect(legacyCatalog.actors.find(row => row.key === wrongActor.key)?.biography).toBe('旧版错位候选的文字，不得被当前确认采纳。')
       expect(legacyCatalog.actors.find(row => row.key === actor.key)?.biography).toBe(actor.biography)
+      return { f, actor, selection, legacyRunId: legacy.snapshot.run.id }
+    } finally {
       vi.restoreAllMocks()
+    }
+  }
 
+  describe('restoring a persisted candidate from the old field catalog', () => {
+    let historical: Awaited<ReturnType<typeof seedHistoricalCandidate>>
+
+    beforeEach(async () => {
+      await db.delete()
+      await db.open()
+      historical = await seedHistoricalCandidate()
+    }, 120_000)
+
+    afterEach(() => db.close())
+
+    it('rejects an old compressed-index field catalog, then confirms a fresh candidate by actual hash replay without changing the parent Build', async () => {
+      const { f, actor, selection, legacyRunId } = historical
       await expect(confirmTextOpenWorldCreatorArtifactEditIntentV1({
-        selection, runId: legacy.snapshot.run.id, warningAcknowledgementCodes: [],
+        selection, runId: legacyRunId, warningAcknowledgementCodes: [],
       })).rejects.toThrow(/目标字段已变化/)
-      const staleRun = await readAgentRunV1(f.scope, legacy.snapshot.run.id)
+      const staleRun = await readAgentRunV1(f.scope, legacyRunId)
       expect(staleRun.events.some(event => event.type === 'confirmation.recorded')).toBe(false)
       expect(staleRun.projection.terminalReceiptHash).toBeUndefined()
-      await rejectTextOpenWorldCreatorArtifactEditCandidateV1({ selection, runId: legacy.snapshot.run.id })
+      await rejectTextOpenWorldCreatorArtifactEditCandidateV1({ selection, runId: legacyRunId })
 
       const freshContext = await prepareTextOpenWorldCreatorArtifactEditV1(selection)
       const field = freshContext.editableFields.find(value => value.jsonPointer.endsWith('/biography'))!
@@ -333,9 +347,6 @@ describe('SFQA105 actual governed legacy and fresh candidate replay', () => {
       expect(await hashProductProductionValueV2(await db.productBuilds.get(f.buildId))).toBe(f.buildHash)
       expect(await hashProductProductionValueV2(await db.productBuildArtifacts.where('buildId').equals(f.buildId).toArray())).toBe(f.artifactsHash)
       expect(await db.agentRunEvents.where('projectId').equals(f.scope.projectId).filter(row => row.type === 'model.responded').count()).toBe(f.modelResponses)
-    } finally {
-      vi.restoreAllMocks()
-      db.close()
-    }
-  }, 120_000)
+    }, 120_000)
+  })
 })
