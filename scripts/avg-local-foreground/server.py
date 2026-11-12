@@ -12,13 +12,14 @@ import io
 import json
 import os
 import re
-import subprocess
 import threading
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 from scipy.ndimage import binary_dilation, binary_erosion
+
+from runtime_guard import bind_sam_source
 
 MODEL_ID = "sam2.1-hiera-tiny"
 MODEL_REVISION = "2b90b9f5ceec907a1c18123530e92e794ad901a4"
@@ -254,22 +255,20 @@ def validate_source(headers, raw: bytes, require_opaque=False):
     return operation, source_hash, declared_mime, width, height, pixels
 
 
-def verify_model_installation(model_dir: Path, source_dir: Path):
+def verify_model_installation(model_dir: Path):
     checkpoint_candidate = model_dir / "sam2.1_hiera_tiny.pt"
     if checkpoint_candidate.is_symlink() or not checkpoint_candidate.is_file():
         raise RuntimeError("SAM 2.1 tiny 权重缺失或路径不安全")
     checkpoint = checkpoint_candidate.resolve(strict=True)
     if file_sha256(checkpoint) != WEIGHTS_SHA256:
         raise RuntimeError("SAM 2.1 tiny 权重缺失或 SHA-256 不匹配")
-    result = subprocess.run(["git", "-C", str(source_dir), "rev-parse", "HEAD"],
-                            check=True, capture_output=True, text=True)
-    if result.stdout.strip() != MODEL_REVISION:
-        raise RuntimeError("SAM 2 源码不在登记的固定 commit")
     return checkpoint
 
 
 class Sam2MattingEngine:
     def __init__(self, model_dir: Path, source_dir: Path, selected_device: str | None = None):
+        self.checkpoint = verify_model_installation(model_dir)
+        self.code_revision = bind_sam_source(source_dir, MODEL_REVISION)
         if selected_device == "mps" or selected_device is None:
             # SAM 2.1 uses bicubic position interpolation that may require the
             # documented PyTorch CPU fallback on current MPS builds.
@@ -277,7 +276,6 @@ class Sam2MattingEngine:
         import torch
         from sam2.build_sam import build_sam2
         from sam2.sam2_image_predictor import SAM2ImagePredictor
-        self.checkpoint = verify_model_installation(model_dir, source_dir)
         if selected_device is None:
             selected_device = "mps" if torch.backends.mps.is_available() else "cpu"
         if selected_device not in {"cpu", "mps"}:
@@ -449,7 +447,7 @@ class ForegroundRequestHandler(BaseHTTPRequestHandler):
         self._json(200, {"schema": "storyforge.avg.local-foreground-capability", "version": 3 if neutral else 2 if anchored else 1,
                          "ready": True, "algorithm": ALGORITHM_V6 if neutral else ALGORITHM_V5 if anchored else ALGORITHM, "model": MODEL_ID,
                          "modelRevision": MODEL_REVISION, "checkpointSha256": WEIGHTS_SHA256,
-                         "codeRevision": MODEL_REVISION, "device": engine.device,
+                         "codeRevision": engine.code_revision, "device": engine.device,
                          "storage": "none", "networkInference": False,
                          "mattingMethod": MATTING_METHOD_V6 if neutral else MATTING_METHOD,
                          **({"promptStrategy": PROMPT_STRATEGY_V5, "qualityGate": QUALITY_GATE_V6 if neutral else QUALITY_GATE_V5} if anchored else {}),
@@ -535,7 +533,7 @@ class ForegroundRequestHandler(BaseHTTPRequestHandler):
                 "X-SF-Source-Pixel-SHA256": sha256(rgb.tobytes()), "X-SF-Alpha-SHA256": sha256(alpha.tobytes()),
                 "X-SF-Cutout-Pixel-SHA256": sha256(rgba.tobytes()), "X-SF-Result-PNG-SHA256": sha256(mask_bytes),
                 "X-SF-Model-ID": MODEL_ID, "X-SF-Model-Revision": MODEL_REVISION,
-                "X-SF-Checkpoint-SHA256": WEIGHTS_SHA256, "X-SF-Code-Revision": MODEL_REVISION,
+                "X-SF-Checkpoint-SHA256": WEIGHTS_SHA256, "X-SF-Code-Revision": self.server.engine.code_revision,
                 "X-SF-Prompt-SHA256": prompt_hash, "X-SF-Prompt-Strategy": strategy,
                 "X-SF-Model-Score": format(float(score), ".6f"), "X-SF-Alpha-Ratio": format(float(ratio), ".8f"),
                 "X-SF-Matting-Method": matting, "X-SF-Device": self.server.engine.device,
