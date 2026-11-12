@@ -22,6 +22,7 @@ import { canonicalWorldReleaseJsonV1, hashWorldReleaseValueV1 } from './release-
 import { isWorkCode, isWorkspaceUid } from '../memory/identity'
 import { NARRATIVE_DOMAIN_FIELDS_V1 } from '../narrative-domain/codec'
 import Dexie from 'dexie'
+import { readWorldPublicationAuthorityV1 } from './publication-origin'
 import { worldRevisionOriginV1 } from './publication-origin-contract'
 import { captureWorldReleaseInputV4, captureWorldReleaseInputInTransactionV4, narrativeReleaseCaptureTablesV4, type WorldReleaseInputV4 } from './narrative-release-capture'
 import { compileNarrativeReleaseInWorkerV1 } from './narrative-release-worker'
@@ -527,7 +528,6 @@ export async function publishWorldRevision(revisionId: number, label?: string): 
   const revision = await db.worldRevisions.get(revisionId)
   if (!revision) throw new Error('[release] 修订不存在')
   const verified = await verifyWorldReleaseManifestV1({ manifest: revision.manifestJson, expectedContentHash: revision.contentHash })
-  const { readWorldPublicationAuthorityV1 } = await import('./publication-origin')
   return db.transaction('rw', db.worldRevisions, db.worldReleases, db.worlds, db.projects, db.works, async () => {
     const currentRevision = await db.worldRevisions.get(revisionId)
     if (!currentRevision
