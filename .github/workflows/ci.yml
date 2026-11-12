@@ -11,12 +11,17 @@ concurrency:
   group: changed-files-pr-${{ github.event.action == 'labeled' && github.event.label.name != 'run-scoped-check' && github.run_id || github.event.pull_request.number }}
   cancel-in-progress: true
 
+env:
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
 jobs:
-  changed-files:
-    # A skipped job must not satisfy the required check or cancel a real run.
+  scope:
     if: github.event.action != 'labeled' || github.event.label.name == 'run-scoped-check'
-    name: ${{ github.event.action == 'labeled' && github.event.label.name != 'run-scoped-check' && 'Unrelated label' || 'Changed files' }}
+    name: Check changed paths
     runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.check.outputs.shards }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -26,7 +31,58 @@ jobs:
         with:
           node-version: 24
       - name: Check the PR changes on the merge result
+        id: check
+        run: node scripts/quality/check-merge-scope.mjs HEAD^1 --ci
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.shards != '[]'
+        with:
+          name: changed-files-plan
+          path: ${{ runner.temp }}/changed-files-plan.json
+          if-no-files-found: error
+          overwrite: true
+
+  unit:
+    needs: scope
+    if: needs.scope.outputs.shards != '[]' && needs.scope.outputs.shards != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.scope.outputs.shards || '[0]') }}
+    name: Scoped unit tests ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/download-artifact@v4
+        with:
+          name: changed-files-plan
+          path: ${{ runner.temp }}
+      - run: npm ci --no-audit --no-fund
+      - name: Run selected files
         env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-        run: node scripts/quality/check-merge-scope.mjs HEAD^1 --install
+          PART: ${{ matrix.shard }}
+        run: node scripts/quality/check-merge-scope.mjs --run-shard "$RUNNER_TEMP/changed-files-plan.json" "$PART"
+
+  changed-files:
+    # Unrelated labels must never publish the required check or cancel a real run.
+    if: always() && (github.event.action != 'labeled' || github.event.label.name == 'run-scoped-check')
+    name: ${{ github.event.action == 'labeled' && github.event.label.name != 'run-scoped-check' && 'Unrelated label' || 'Changed files' }}
+    needs: [scope, unit]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the plan and every requested shard to pass
+        env:
+          SCOPE: ${{ needs.scope.result }}
+          SHARDS: ${{ needs.scope.outputs.shards }}
+          UNITS: ${{ needs.unit.result }}
+        run: |
+          test "$SCOPE" = success || exit 1
+          case "$SHARDS:$UNITS" in
+            '[]:skipped'|'[0,1]:success'|'[0,1,2]:success'|'[0,1,2,3]:success') exit 0 ;;
+            *) exit 1 ;;
+          esac
