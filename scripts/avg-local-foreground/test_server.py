@@ -34,6 +34,7 @@ def png_bytes(width=40, height=48):
 
 class FakeEngine:
     device = "cpu"
+    code_revision = "f" * 40
 
     def __init__(self):
         self.calls = 0
@@ -112,6 +113,7 @@ class ForegroundServerTests(unittest.TestCase):
             self.assertEqual(response.headers["Access-Control-Allow-Origin"], ORIGIN)
         self.assertTrue(capability["ready"])
         self.assertEqual(capability["model"], MODEL_ID)
+        self.assertEqual(capability["codeRevision"], self.engine.code_revision)
         self.assertFalse(capability["networkInference"])
         self.assertEqual(capability["storage"], "none")
 
@@ -124,6 +126,7 @@ class ForegroundServerTests(unittest.TestCase):
             self.assertEqual(response.headers["Content-Type"], "image/png")
             self.assertEqual(response.headers["Access-Control-Allow-Origin"], ORIGIN)
             self.assertEqual(response.headers["X-SF-Algorithm"], "storyforge.avg.foreground.sam2.1-pymatting.v4")
+            self.assertEqual(response.headers["X-SF-Code-Revision"], self.engine.code_revision)
             self.assertEqual(response.headers["X-SF-Prompt-Strategy"], PROMPT_STRATEGY)
             candidate = Image.open(io.BytesIO(body)).convert("RGBA")
             rgba = np.asarray(candidate, dtype=np.uint8)
@@ -149,6 +152,7 @@ class ForegroundServerTests(unittest.TestCase):
         with urllib.request.urlopen(request) as response:
             capability = json.loads(response.read())
         self.assertEqual(capability["version"], 2)
+        self.assertEqual(capability["codeRevision"], self.engine.code_revision)
         self.assertEqual(capability["algorithm"], ALGORITHM_V5)
         self.assertEqual(capability["promptStrategy"], PROMPT_STRATEGY_V5)
         self.assertEqual(capability["qualityGate"], QUALITY_GATE_V5)
@@ -159,6 +163,7 @@ class ForegroundServerTests(unittest.TestCase):
             response.read()
             candidates = json.loads(response.headers["X-SF-Candidates"])
             self.assertEqual(response.headers["X-SF-Algorithm"], ALGORITHM_V5)
+            self.assertEqual(response.headers["X-SF-Code-Revision"], self.engine.code_revision)
             self.assertEqual(response.headers["X-SF-Quality-Gate"], QUALITY_GATE_V5)
             self.assertEqual(response.headers["X-SF-Selected-Candidate"], "3")
             self.assertEqual(len(candidates), 6)
@@ -186,6 +191,7 @@ class ForegroundServerTests(unittest.TestCase):
         with urllib.request.urlopen(request) as response:
             capability = json.loads(response.read())
         self.assertEqual(capability["version"], 3)
+        self.assertEqual(capability["codeRevision"], self.engine.code_revision)
         self.assertEqual(capability["algorithm"], ALGORITHM_V6)
         self.assertEqual(capability["backgroundRule"], NEUTRAL_BACKGROUND_RULE)
         self.assertEqual(capability["qualityGate"], QUALITY_GATE_V6)
@@ -193,6 +199,7 @@ class ForegroundServerTests(unittest.TestCase):
         with urllib.request.urlopen(self.request(raw=raw, width=32, height=40, path="/v3/segment")) as response:
             pixels = np.asarray(Image.open(io.BytesIO(response.read())).convert("RGBA"))
             self.assertEqual(response.headers["X-SF-Algorithm"], ALGORITHM_V6)
+            self.assertEqual(response.headers["X-SF-Code-Revision"], self.engine.code_revision)
             self.assertEqual(response.headers["X-SF-Matting-Method"], MATTING_METHOD_V6)
             self.assertEqual(response.headers["X-SF-Prompt-Strategy"], PROMPT_STRATEGY_V5)
             evidence = json.loads(response.headers["X-SF-Neutral-Background"])
