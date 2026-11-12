@@ -214,6 +214,14 @@ export async function readTextOpenWorldCreatorDerivedBuildAuthorityV1(input: {
 /** New production operations use the same strict reader, then apply the
  * current source policy. The historical reader above remains byte-compatible
  * for inspection, export and deterministic recovery of existing evidence. */
+export function assertTextOpenWorldCreatorRoleForNewWorkV1(
+  draft: TextOpenWorldCreatorDerivedBuildAuthorityV1['contracts']['creatorBrief']['draft'],
+): void {
+  if (draft.protagonistMode === 'source-character' && !draft.protagonistSourceResourceKey) {
+    throw new Error('[text-open-world-creator-authority] 旧简报未明确选择封存主角。请先停止原制作，再修订并确认简报后开始新的制作。')
+  }
+}
+
 export async function readTextOpenWorldCreatorBuildNewWorkAuthorityV1(input: {
   scope: WorkspaceScope
   buildId: number
@@ -223,5 +231,6 @@ export async function readTextOpenWorldCreatorBuildNewWorkAuthorityV1(input: {
   const authority = await readTextOpenWorldCreatorDerivedBuildAuthorityV1(input)
   assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, input.operation)
   assertTextOpenWorldNewSourceV1(authority.contracts.sourcePlan.sourceKind, input.operation)
+  assertTextOpenWorldCreatorRoleForNewWorkV1(authority.contracts.creatorBrief.draft)
   return authority
 }
