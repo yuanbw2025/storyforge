@@ -183,7 +183,7 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [worldSources, setWorldSources] = useState<TextOpenWorldCreatorWorldSourceCandidateV1[] | null>(null)
-  const [selectedWorldId, setSelectedWorldId] = useState<number | null>(null)
+  const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null)
   const [worldPreview, setWorldPreview] = useState<TextOpenWorldCreatorWorldSourceCandidateV1 | null>(null)
   const requestGeneration = useRef(0)
   const routeIntentKey = useRef(initialIntentKey)
@@ -243,17 +243,19 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
           if (generation !== requestGeneration.current) return
           setWorldSources(sources)
           if (!handoff) return
-          const matched = sources.find(item => (
-            item.worldReference.localReleaseRecordId === handoff.worldReleaseId
-          ))
+          // A legacy handoff carries only R. It may select a verified native source;
+          // an installed declaration must still be explicitly chosen in the picker.
+          const matched = sources.find(item => item.worldReference.localReleaseRecordId === handoff.worldReleaseId
+            && item.sourcePurpose?.origin.kind === 'local-author')
           if (!matched || matched.worldReference.releaseHash !== handoff.worldContentHash) {
             throw new Error('来源交接的世界版本或完整 Hash 已失效，请重新选择。')
           }
-          setSelectedWorldId(handoff.worldReleaseId)
+          setSelectedWorldId(matched.sourceChoiceKey ?? null)
           const inspected = await inspectTextOpenWorldCreatorWorldSourceV1({
             scope: worldScope,
             localReleaseRecordId: handoff.worldReleaseId,
             expectedReleaseHash: handoff.worldContentHash,
+            sourcePurpose: matched.sourcePurpose,
           })
           if (generation !== requestGeneration.current) return
           setWorldPreview(inspected)
@@ -278,9 +280,9 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
   ])
 
   const selectWorld = async (candidate: TextOpenWorldCreatorWorldSourceCandidateV1) => {
-    if (!worldScope) return
+    if (!worldScope || !candidate.sourcePurpose) return
     const generation = ++requestGeneration.current
-    setSelectedWorldId(candidate.worldReference.localReleaseRecordId)
+    setSelectedWorldId(candidate.sourceChoiceKey ?? null)
     setWorldPreview(null)
     setError('')
     setLoading(true)
@@ -289,6 +291,7 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
         scope: worldScope,
         localReleaseRecordId: candidate.worldReference.localReleaseRecordId,
         expectedReleaseHash: candidate.worldReference.releaseHash,
+        sourcePurpose: candidate.sourcePurpose,
       })
       if (generation === requestGeneration.current) setWorldPreview(inspected)
     } catch (cause) {
@@ -403,13 +406,13 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
 
       {worldSources && worldSources.length > 0 && <div className="grid gap-3 md:grid-cols-2" role="radiogroup" aria-label="冻结世界版本">
         {worldSources.map(source => {
-          const selected = source.worldReference.localReleaseRecordId === selectedWorldId
+          const selected = source.sourceChoiceKey === selectedWorldId
           return <button
-            key={source.worldReference.releaseUid}
+            key={source.sourceChoiceKey ?? source.worldReference.releaseUid}
             type="button"
             role="radio"
             aria-checked={selected}
-            disabled={loading}
+            disabled={loading || !source.purposeAllowed}
             className={`rounded-xl border p-4 text-left transition-colors disabled:opacity-60 ${selected
               ? 'border-accent bg-accent/5'
               : 'border-border bg-bg-elevated hover:border-accent/40'}`}
@@ -419,6 +422,10 @@ export function TextOpenWorldCreatorStudio(props: TextOpenWorldCreatorStudioProp
               <span>
                 <small className="block text-[10px] text-text-muted">{source.worldName} · Release v{source.worldReference.releaseVersion}</small>
                 <strong className="mt-1 block text-sm">{source.label}</strong>
+                {source.sourceAuthorName && <small className="block text-[10px] text-text-muted">{source.sourceAuthorName} · {source.sourceLicense}</small>}
+                {source.sourceAttribution && <small className="block text-[10px] text-text-muted">署名：{source.sourceAttribution}</small>}
+                {source.sourceWarnings?.map((warning, index) => <small key={index} className="block text-[10px] text-text-muted">内容提示：{warning}</small>)}
+                {!source.purposeAllowed && <small className="block text-[10px] text-text-muted">用途未核实或声明不允许</small>}
                 {source.workTitle && <small className="mt-1 block text-[10px] text-text-muted">来源作品：{source.workTitle}</small>}
               </span>
               <ReadinessBadge value={source.readiness} />

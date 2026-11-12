@@ -19,6 +19,8 @@ function resolveBuildSha(): string {
 // Actual static replay dependency groups: mechanics -> state -> open -> adapters.
 // Keep adapters separate from their prerequisites to avoid circular chunk loading.
 const TTRPG_REPLAY_CHUNK_MODULES = {
+  // Both the table registry and runtime replay import this dependency-free parser.
+  accounting: ['runtime-media-attempt-accounting'],
   mechanics: [
     'ability-ledger', 'action-economy', 'action-feedback', 'action-requirement',
     'advancement', 'dice', 'world-time', 'open-narrative-envelope',

@@ -1,3 +1,4 @@
+import { bytesToHex } from '@noble/hashes/utils.js'
 import { marked } from 'marked'
 import TurndownService from 'turndown'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
@@ -175,15 +176,65 @@ async function fileAt(root: FileSystemDirectoryHandle, relativePath: string): Pr
   }
 }
 
-async function writeTextAt(root: FileSystemDirectoryHandle, relativePath: string, text: string): Promise<void> {
+async function boundedWorkspaceFileBytes(file: File, relativePath: string): Promise<ArrayBuffer> {
+  if (Number.isFinite(file.size) && file.size > WORKSPACE_FILE_SCAN_MAX_BYTES_V1) {
+    throw new Error(`[memory-workspace] 文件超过单文件扫描上限: ${relativePath}`)
+  }
+  const bytes = await file.arrayBuffer()
+  if (bytes.byteLength > WORKSPACE_FILE_SCAN_MAX_BYTES_V1) {
+    throw new Error(`[memory-workspace] 文件超过单文件扫描上限: ${relativePath}`)
+  }
+  return bytes
+}
+
+async function workspaceByteHash(bytes: ArrayBuffer): Promise<string> {
+  return bytesToHex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)))
+}
+
+async function assertWorkspaceFilePreimage(
+  file: File | null,
+  relativePath: string,
+  expectedByteHash: string | null,
+): Promise<ArrayBuffer | null> {
+  const bytes = file == null ? null : await boundedWorkspaceFileBytes(file, relativePath)
+  if ((bytes == null ? null : await workspaceByteHash(bytes)) !== expectedByteHash) {
+    throw new Error(`[memory-workspace] 硬盘文件已变化，拒绝覆盖，请重新检查: ${relativePath}`)
+  }
+  return bytes
+}
+
+const workspaceUtf8 = new TextDecoder('utf-8', { fatal: true })
+
+async function writeFileAt(
+  root: FileSystemDirectoryHandle,
+  relativePath: string,
+  data: string | ArrayBuffer,
+  expectedByteHash?: string | null,
+): Promise<void> {
   const parts = assertRelativePath(relativePath)
   const directory = await directoryAt(root, parts.slice(0, -1), true)
-  const fileHandle = await directory.getFileHandle(parts[parts.length - 1], { create: true })
+  const fileHandle = await directory.getFileHandle(parts[parts.length - 1], { create: expectedByteHash == null })
   const writable = await fileHandle.createWritable()
   try {
-    await writable.write(text)
-  } finally {
+    if (expectedByteHash !== undefined) {
+      // Opening a writer is asynchronous too. Check the actual target after
+      // that boundary, and discard the staged stream if an outside writer won.
+      await assertWorkspaceFilePreimage(
+        await fileHandle.getFile(), relativePath, expectedByteHash ?? await sha256Text(''),
+      )
+    }
+    await writable.write(data)
+    if (expectedByteHash !== undefined) {
+      // The target is unchanged until close commits the staged bytes. An edit
+      // during write must abort rather than be hidden by that final commit.
+      await assertWorkspaceFilePreimage(
+        await fileHandle.getFile(), relativePath, expectedByteHash ?? await sha256Text(''),
+      )
+    }
     await writable.close()
+  } catch (error) {
+    try { await writable.abort() } catch { /* Retain the original write/guard error. */ }
+    throw error
   }
 }
 
@@ -961,37 +1012,31 @@ async function buildWorkspaceSelfCheckWithChapterSourcesV1(
   for (const document of documents) {
     const file = await fileAt(root, document.binding.relativePath)
     let fileCanonicalHash: string | null = null
+    let fileByteHash: string | null | undefined = file ? undefined : null
     let fileInvalid = false
     const issues: string[] = []
     if (file != null) {
-      const declaredBytes = Number.isFinite(file.size) ? file.size : 0
-      const declaredLastModified = Number.isFinite(file.lastModified) ? file.lastModified : 0
-      if (declaredBytes > WORKSPACE_FILE_SCAN_MAX_BYTES_V1) {
-        fileInvalid = true
-        issues.push(`[memory-workspace] 文件超过单文件扫描上限: ${document.binding.relativePath}`)
-      } else if (
-        declaredBytes > 0
-        && declaredLastModified > 0
-        && document.binding.fileByteLength === declaredBytes
-        && document.binding.fileLastModified === declaredLastModified
-        && document.binding.fileCanonicalHash != null
-      ) {
-        // MEMORY-10 incremental scan: unchanged browser metadata reuses the
-        // previously committed semantic hash. Changed files parse fully.
-        fileCanonicalHash = document.binding.fileCanonicalHash
-      } else {
-        try {
-          const text = await file.text()
-          const actualBytes = declaredBytes || new TextEncoder().encode(text).byteLength
-          scannedBytes += actualBytes
-          if (actualBytes > WORKSPACE_FILE_SCAN_MAX_BYTES_V1 || scannedBytes > WORKSPACE_SCAN_MAX_TOTAL_BYTES_V1) {
-            throw new Error(`[memory-workspace] 工作区本次扫描超过大小上限: ${document.binding.relativePath}`)
-          }
-          fileCanonicalHash = (await parseProjectionDocument(document, text)).canonicalHash
-        } catch (error) {
-          fileInvalid = true
-          issues.push((error as Error).message)
+      try {
+        // This report grants executable actions. Metadata is not content
+        // identity: external editors can preserve both size and lastModified.
+        const declaredBytes = Number.isFinite(file.size) && file.size > 0 ? file.size : 0
+        if (declaredBytes > WORKSPACE_FILE_SCAN_MAX_BYTES_V1) {
+          throw new Error(`[memory-workspace] 文件超过单文件扫描上限: ${document.binding.relativePath}`)
         }
+        if (scannedBytes >= WORKSPACE_SCAN_MAX_TOTAL_BYTES_V1
+          || declaredBytes > WORKSPACE_SCAN_MAX_TOTAL_BYTES_V1 - scannedBytes) {
+          throw new Error(`[memory-workspace] 工作区本次扫描超过大小上限: ${document.binding.relativePath}`)
+        }
+        const bytes = await boundedWorkspaceFileBytes(file, document.binding.relativePath)
+        scannedBytes += Math.max(declaredBytes, bytes.byteLength)
+        if (scannedBytes > WORKSPACE_SCAN_MAX_TOTAL_BYTES_V1) {
+          throw new Error(`[memory-workspace] 工作区本次扫描超过大小上限: ${document.binding.relativePath}`)
+        }
+        fileByteHash = await workspaceByteHash(bytes)
+        fileCanonicalHash = (await parseProjectionDocument(document, workspaceUtf8.decode(bytes))).canonicalHash
+      } catch (error) {
+        fileInvalid = true
+        issues.push((error as Error).message)
       }
     }
     let changeKind = classifyWorkspaceDocumentChangeV1({
@@ -1013,6 +1058,7 @@ async function buildWorkspaceSelfCheckWithChapterSourcesV1(
       baselineCanonicalHash: document.binding.baselineCanonicalHash,
       databaseCanonicalHash: document.canonicalHash,
       fileCanonicalHash,
+      fileByteHash,
       changeKind,
       proposedAction: actionFor(changeKind),
       issues,
@@ -1125,9 +1171,13 @@ export async function buildWorkspaceFileAdoptionCandidatesV1(input: {
     if (!adoptable) continue
     const document = byId.get(item.identity.documentId)
     if (!document) throw new Error(`[memory-workspace] 候选文档 ${item.identity.documentId} 已不存在`)
-    const text = await readTextAt(input.root, document.binding.relativePath)
-    if (text == null) throw new Error(`[memory-workspace] 候选文件 ${document.binding.relativePath} 已不存在`)
-    const parsed = await parseProjectionDocument(document, text)
+    const file = await fileAt(input.root, document.binding.relativePath)
+    if (file == null) throw new Error(`[memory-workspace] 候选文件 ${document.binding.relativePath} 已不存在`)
+    const bytes = await boundedWorkspaceFileBytes(file, document.binding.relativePath)
+    const parsed = await parseProjectionDocument(document, workspaceUtf8.decode(bytes))
+    if (await workspaceByteHash(bytes) !== item.fileByteHash || parsed.canonicalHash !== item.fileCanonicalHash) {
+      throw new Error(`[memory-workspace] 候选文件已变化，请重新检查: ${document.binding.relativePath}`)
+    }
     const normalized = normalizeWorkspaceSemanticV1(document.binding.tableName, parsed.semanticValue)
     const patch = candidatePatchForSemanticChanges(
       document.binding.tableName,
@@ -1345,7 +1395,7 @@ export async function synchronizeProjectChangesToFolderV1(input: {
   assertProjectToFileSafe(currentReport, approvedDatabaseWins, approvedRemovedDocuments, approvedRecoveryDocuments)
   const documents = await buildWorkspaceProjectionV1(input.projectId)
   const byId = new Map(documents.map(document => [document.identity.documentId, document]))
-  await writeTextAt(input.root, '.storyforge/transactions/pending.json', `${JSON.stringify({
+  await writeFileAt(input.root, '.storyforge/transactions/pending.json', `${JSON.stringify({
     version: 1,
     state: 'filesystem-pending',
     plan: currentReport.plan,
@@ -1357,17 +1407,27 @@ export async function synchronizeProjectChangesToFolderV1(input: {
       && !approvedRecoveryDocuments.has(item.identity.documentId)) continue
     const document = byId.get(item.identity.documentId)
     if (!document) throw new Error(`[memory-workspace] 计划文档 ${item.identity.documentId} 已不存在`)
-    const previous = await readTextAt(input.root, document.binding.relativePath)
+    if (document.canonicalHash !== item.databaseCanonicalHash) {
+      throw new Error(`[memory-workspace] 计划中的项目内容已变化，请重新检查: ${document.binding.relativePath}`)
+    }
+    const path = document.binding.relativePath
+    const expectedByteHash = item.fileByteHash
+    if (expectedByteHash === undefined) {
+      throw new Error(`[memory-workspace] 文件未通过实际内容核对，拒绝覆盖: ${path}`)
+    }
+    const previous = await assertWorkspaceFilePreimage(await fileAt(input.root, path), path, expectedByteHash)
     if (previous != null) {
-      await writeTextAt(
+      await writeFileAt(
         input.root,
         `.storyforge/history/${currentReport.plan.planId}/${document.binding.relativePath}`,
         previous,
       )
     }
-    await writeTextAt(input.root, document.binding.relativePath, document.text)
-    const readBack = await readTextAt(input.root, document.binding.relativePath)
-    if (readBack == null || (await parseProjectionDocument(document, readBack)).canonicalHash !== document.canonicalHash) {
+    await writeFileAt(input.root, path, document.text, expectedByteHash)
+    const readBackFile = await fileAt(input.root, document.binding.relativePath)
+    const readBack = readBackFile == null ? null : await boundedWorkspaceFileBytes(readBackFile, path)
+    if (readBack == null || await workspaceByteHash(readBack) !== await sha256Text(document.text)
+      || (await parseProjectionDocument(document, workspaceUtf8.decode(readBack))).canonicalHash !== document.canonicalHash) {
       throw new Error(`[memory-workspace] 写后回读失败: ${document.binding.relativePath}`)
     }
   }
@@ -1398,10 +1458,10 @@ export async function synchronizeProjectChangesToFolderV1(input: {
     schemaVersion: binding.schemaVersion,
     canonicalHash: binding.baselineCanonicalHash,
   }))
-  await writeTextAt(input.root, '.storyforge/bindings.json', `${JSON.stringify(portableBindings, null, 2)}\n`)
+  await writeFileAt(input.root, '.storyforge/bindings.json', `${JSON.stringify(portableBindings, null, 2)}\n`)
   const manifest = await buildManifest(documents, revision)
   // Commit marker is deliberately the final disk write.
-  await writeTextAt(input.root, '.storyforge/manifest.json', `${JSON.stringify(manifest, null, 2)}\n`)
+  await writeFileAt(input.root, '.storyforge/manifest.json', `${JSON.stringify(manifest, null, 2)}\n`)
   await db.workspaceDocuments.bulkPut(nextBindings)
 
   const receiptBody = {
@@ -1518,10 +1578,13 @@ export async function confirmMissingChapterFileDeletionsV1(input: {
   }
   for (const { document } of captured) {
     const trashPath = `.storyforge/trash/${report.plan.planId}/${document.binding.relativePath}`
-    await writeTextAt(root, trashPath, document.text)
+    await writeFileAt(root, trashPath, document.text)
     if (await readTextAt(root, trashPath) !== document.text) {
       throw new Error('[memory-workspace] 回收副本写后核对失败，原章节未删除，请重新检查')
     }
+  }
+  for (const { document } of captured) {
+    await assertWorkspaceFilePreimage(await fileAt(root, document.binding.relativePath), document.binding.relativePath, null)
   }
   await db.transaction('rw', transactionTablesFor('deleteChapters'), async () => {
     for (const target of captured) {
@@ -1996,6 +2059,9 @@ export async function recoverPendingWorkspaceSyncV1(
     plan?: WorkspaceSelfCheckPlanV1
   }
   const pendingItems = new Map((pending?.plan?.items ?? []).map(item => [item.identity.documentId, item]))
+  // A staged write to a previously absent target may leave an empty file if
+  // permission is lost. An arbitrary invalid manuscript cannot prove this origin.
+  const emptyFileHash = await sha256Text('')
   const recoverableInvalidIds = report.plan.items
     .filter(item => item.changeKind === 'invalid')
     .filter(item => {
@@ -2004,8 +2070,13 @@ export async function recoverPendingWorkspaceSyncV1(
         && pending.state === 'filesystem-pending'
         && pending.plan?.projectId === projectId
         && pending.plan.workspaceUid === report.plan.workspaceUid
-        && planned?.databaseCanonicalHash === item.databaseCanonicalHash
-        && ['project-changed', 'file-missing'].includes(planned?.changeKind ?? '')
+        && planned != null
+        && planned.databaseCanonicalHash === item.databaseCanonicalHash
+        && planned.baselineCanonicalHash === item.baselineCanonicalHash
+        && planned.fileCanonicalHash === null
+        && planned.fileByteHash == null
+        && item.fileByteHash === emptyFileHash
+        && ['project-changed', 'file-missing'].includes(planned.changeKind)
     })
     .map(item => item.identity.documentId)
   assertProjectToFileSafe(report, new Set(), new Set(), new Set(recoverableInvalidIds))
@@ -2152,7 +2223,7 @@ function packageDirectoryHandleV1(pkg: WorkspacePackageV1): FileSystemDirectoryH
       if (text == null) throw new DOMException('not found', 'NotFoundError')
       return {
         kind: 'file', name,
-        async getFile() { return { async text() { return text } } as File },
+        async getFile() { return new File([text], name) },
       } as FileSystemFileHandle
     },
     } as FileSystemDirectoryHandle)

@@ -1,3 +1,5 @@
+import { revalidateWorldSourcePurposeV1 } from '../world-engine/source-purpose-actions'
+import { type WorldSourcePurposeProofV1 } from '../world-engine/source-purpose-contract'
 import { db } from '../db/schema'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
 import { byOutlineOrderThenId } from '../outline/canonical-outline-walk'
@@ -852,10 +854,21 @@ async function resolveExpectedWorldReleaseHashV1(input: {
 }
 
 /** Derive the exact catalog descriptor boundary used by Creator SourcePlan. */
+async function authorizeWorldPinPurpose(
+  scope: WorkspaceScope, worldReleaseId: number,
+  purposeAuthorization?: { proof?: WorldSourcePurposeProofV1 },
+) {
+  if (purposeAuthorization) await revalidateWorldSourcePurposeV1({
+    worldReleaseId, expectedProjectId: scope.projectId, expectedWorldId: scope.worldId,
+    purpose: 'text-open-world', proof: purposeAuthorization.proof,
+  })
+}
+
 export async function prepareTextOpenWorldWorldSourceBoundaryV1(input: {
   scope: WorkspaceScope
   localReleaseRecordId: number
   expectedReleaseHash: string
+  purposeAuthorization?: { proof?: WorldSourcePurposeProofV1 }
   selection: TextOpenWorldWorldSourceSelectionV1
 }): Promise<{
   sourceVersionHash: string
@@ -864,6 +877,7 @@ export async function prepareTextOpenWorldWorldSourceBoundaryV1(input: {
 }> {
   const scope = await resolveScope({ scope: input.scope })
   if (!isSha256Hash(input.expectedReleaseHash)) fail('expectedReleaseHash 非法')
+  await authorizeWorldPinPurpose(scope, input.localReleaseRecordId, input.purposeAuthorization)
   const catalog = await openWorldSemanticResourceCatalogV1({
     localReleaseRecordId: input.localReleaseRecordId,
     expectedProjectId: scope.projectId,
@@ -931,6 +945,7 @@ export async function freezeTextOpenWorldWorldReleaseSourceV1(input: {
   /** Exact creator-preview identity. Legacy production calls derive the same
    * witness from their already-authorized Brief. */
   expectedReleaseHash?: string
+  purposeAuthorization?: { proof?: WorldSourcePurposeProofV1 }
   selection: TextOpenWorldWorldSourceSelectionV1
   authorization: TextOpenWorldSourceAuthorizationInputV1
   createdAt?: number
@@ -938,6 +953,7 @@ export async function freezeTextOpenWorldWorldReleaseSourceV1(input: {
   const scope = await resolveScope({ scope: input.scope })
   const createdAt = timestamp(input.createdAt ?? Date.now(), 'createdAt')
   const productInstanceKey = stableKey(input.authorization.productInstanceKey, 'productInstanceKey')
+  await authorizeWorldPinPurpose(scope, input.localReleaseRecordId, input.purposeAuthorization)
   const expectedReleaseHash = await resolveExpectedWorldReleaseHashV1({
     scope,
     localReleaseRecordId: input.localReleaseRecordId,

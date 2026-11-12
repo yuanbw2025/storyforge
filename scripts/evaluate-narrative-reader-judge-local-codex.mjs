@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises'
+import { lstat, readFile, writeFile, mkdir, readdir, realpath } from 'node:fs/promises'
 import { resolve, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
@@ -6,9 +6,12 @@ import { CodexRuntime } from './local-codex/runtime.mjs'
 import { sha256, validateReaderAnswer, readerUsageWithinBudget } from './narrative-reader-contract.mjs'
 import { loadIncompleteReaderJudgeCoverageV1 } from './narrative-reader-judge-coverage.mjs'
 import { JUDGE_ENTRY_ID, judgeOutputSchema, judgeRequest, validateJudgeProtocol, validateJudgeAnswer, judgeUsageWithinBudget,
-  orderJudgeRequests, summarizeJudge, validateJudgeContinuationParent, validatePriorJudgeCall, judgeSummaryName, judgeExecutionCounts } from './narrative-reader-judge-contract.mjs'
+  orderJudgeRequests, summarizeJudge, validatePriorJudgeCall, judgeSummaryName, judgeExecutionCounts } from './narrative-reader-judge-contract.mjs'
+import { assertCanonicalJudgeCalls, assertJudgeRunHasNoClaim, canonicalJudgeRun, findJudgeContinuationChildren,
+  readCanonicalJudgeFile, readJudgeContinuationHistory, reserveJudgeContinuation,
+  verifyJudgeContinuationClaim, verifyJudgeContinuationHistory } from './narrative-reader-judge-continuation.mjs'
 
-const root = fileURLToPath(new URL('../', import.meta.url))
+const root = await realpath(fileURLToPath(new URL('../', import.meta.url)))
 const { values } = parseArgs({ options: { 'reader-report': { type: 'string' }, 'incomplete-reader-diagnostic': { type: 'string' },
   'reader-coverage-policy': { type: 'string' }, protocol: { type: 'string' }, output: { type: 'string' },
   resume: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false }, 'max-calls': { type: 'string' },
@@ -20,8 +23,7 @@ if (Boolean(values['reader-report']) === Boolean(values['incomplete-reader-diagn
 const localPath = path => { const full = resolve(root, path), rel = relative(root, full)
   if (!rel.startsWith('tests/acceptance/narrative-world/') || rel.includes('..')) throw Error('Only repository-owned evaluation artifacts are allowed')
   return full }
-const output = localPath(values.output)
-if (!relative(root, output).startsWith('tests/acceptance/narrative-world/raw/')) throw Error('Judge receipts require a raw evaluation directory')
+const { full: output, path: runIdentity } = canonicalJudgeRun(root, values.output, { allowMissing: !values.resume })
 const sourceHashes = {}
 async function frozenFile(path) {
   const full = localPath(path), bytes = await readFile(full)
@@ -62,7 +64,7 @@ async function assertOfflineEntry() {
 }
 await assertOfflineEntry()
 const runtimePaths = ['scripts/evaluate-narrative-reader-judge-local-codex.mjs', 'scripts/narrative-reader-judge-contract.mjs',
-  'scripts/narrative-reader-contract.mjs', 'scripts/narrative-reader-judge-coverage.mjs', 'scripts/local-codex/runtime.mjs', registryPath]
+  'scripts/narrative-reader-judge-continuation.mjs', 'scripts/narrative-reader-contract.mjs', 'scripts/narrative-reader-judge-coverage.mjs', 'scripts/local-codex/runtime.mjs', registryPath]
 const runtimeHashes = Object.fromEntries(await Promise.all(runtimePaths.map(async path => [path, sha256(await readFile(resolve(root, path)))])))
 const evidence = new Map(), prepared = []
 for (const family of inputs.families) for (const item of family.cases) {
@@ -92,7 +94,7 @@ for (const family of inputs.families) for (const item of family.cases) {
 if (prepared.length !== (incomplete?.coverage.counts.eligible ?? readerManifest.totalCases) || new Set(prepared.map(item => item.id)).size !== prepared.length
   || evidence.size !== (incomplete?.coverage.counts.successfulReaderInputs ?? readerManifest.distinctPrompts)) throw Error('Historical paired matrix is incomplete')
 const unique = orderJudgeRequests(prepared)
-const frozen = { schema: incomplete ? 'storyforge.narrative-reader-incomplete-judge-run' : 'storyforge.narrative-reader-judge-run',
+const frozenBase = { schema: incomplete ? 'storyforge.narrative-reader-incomplete-judge-run' : 'storyforge.narrative-reader-judge-run',
   version: incomplete ? 1 : protocol.version === 2 ? 3 : 1, entryId: JUDGE_ENTRY_ID,
   ...(protocol.version === 2 ? { protocolVersion: 2, failurePolicy: protocol.failurePolicy } : {}),
   provider: protocol.provider, model: protocol.model, readerProvider: readerProtocol.provider, readerModel: readerProtocol.model,
@@ -106,45 +108,74 @@ const frozen = { schema: incomplete ? 'storyforge.narrative-reader-incomplete-ju
     : 'zero; any failed or unknown started call blocks resume; no implicit repair',
   deduplication: 'Identical blinded judge messages share one recorded call; repeated observations are not independent samples.',
   independentHumanReviews: 0, accepted: false, costUsd: null }
-const inherited = new Map()
+/** @type {typeof frozenBase & {continuation?: import('./narrative-reader-judge-continuation.mjs').JudgeContinuation}} */
+const frozen = frozenBase
+let inherited = new Map()
+/** @type {import('./narrative-reader-judge-continuation.mjs').JudgeHistory | null} */
+let history = null
 if (values['continue-unstarted-from']) {
-  const parent = localPath(values['continue-unstarted-from'])
-  if (!relative(root, parent).startsWith('tests/acceptance/narrative-world/raw/') || parent === output) throw Error('Continuation requires a distinct raw run directory')
-  const parentBytes = await frozenFile(relative(root, resolve(parent, 'manifest.json')))
-  validateJudgeContinuationParent(JSON.parse(parentBytes), frozen)
-  const parentFiles = new Set(await readdir(resolve(parent, 'calls')))
-  for (const file of parentFiles) {
-    const match = /^([a-f0-9]{64})\.(request|started|result)\.json$/.exec(file)
-    if (!match || !unique.has(match[1])) throw Error('Unexpected historical judge call artifact')
+  const parent = relative(root, localPath(values['continue-unstarted-from']))
+  const child = runIdentity
+  if (parent === child) throw Error('Continuation requires a distinct raw run directory')
+  history = await readJudgeContinuationHistory(root, parent, frozen, unique, protocol)
+  const children = await findJudgeContinuationChildren(root, parent, history.manifestSha256)
+  if (children.some(existing => existing !== child)) {
+    throw Error('Parent judge batch already has a different continuation; use its latest descendant')
   }
-  for (const [hash, request] of unique) {
-    if (!['request', 'started', 'result'].some(kind => parentFiles.has(`${hash}.${kind}.json`))) continue
-    const prior = {}
-    for (const kind of ['request', 'started', 'result']) {
-      if (parentFiles.has(`${hash}.${kind}.json`)) prior[kind] = JSON.parse(await frozenFile(relative(root, resolve(parent, 'calls', `${hash}.${kind}.json`))))
-    }
-    inherited.set(hash, validatePriorJudgeCall(prior, request, protocol))
+  if (!values.resume) {
+    try {
+      await lstat(output)
+      throw Error('Judge output already exists; use --resume for the same claimed directory')
+    } catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error }
   }
-  frozen.version = incomplete ? 2 : protocol.version === 2 ? 4 : 2
+  const claim = values.resume
+    ? verifyJudgeContinuationClaim(root, parent, history.manifestSha256, child)
+    : await reserveJudgeContinuation(root, parent, history.manifestSha256, child)
+  verifyJudgeContinuationHistory(root, history)
+  inherited = history.results
+  frozen.version += 1
+  Object.assign(sourceHashes, history.files, { [claim.path]: claim.sha256 })
   frozen.sourceHashes = { ...sourceHashes }
-  frozen.continuation = { run: relative(root, parent), manifestSha256: sha256(parentBytes),
+  frozen.continuation = { version: 1, run: parent, manifestSha256: history.manifestSha256, claimPath: claim.path, claimSha256: claim.sha256,
     policy: 'Continue only inputs without any prior request/start/result; never retry or overwrite prior completed, failed or interrupted calls.',
     inheritedPromptHashes: [...inherited.keys()], unresolvedPromptHashes: [...inherited].filter(([, value]) => value.status !== 'completed').map(([hash]) => hash) }
   frozen.retryPolicy = 'zero; inherited failures remain unresolved and excluded; any new failed/unknown call blocks this cohort resume'
 }
+const ownManifestPath = resolve(output, 'manifest.json')
+canonicalJudgeRun(root, runIdentity, { allowMissing: !values.resume })
 if (values.resume) {
-  if (sha256(JSON.parse(await readFile(resolve(output, 'manifest.json'), 'utf8'))) !== sha256(frozen)) throw Error('Resume would change frozen judge inputs, rubric, model or runtime')
+  if (sha256(JSON.parse(readCanonicalJudgeFile(ownManifestPath).toString('utf8'))) !== sha256(frozen)) throw Error('Resume would change frozen judge inputs, rubric, model or runtime')
 } else {
-  await mkdir(output); await mkdir(resolve(output, 'calls'))
-  await writeFile(resolve(output, 'manifest.json'), JSON.stringify(frozen, null, 2) + '\n', { flag: 'wx' })
+  await mkdir(output)
+  canonicalJudgeRun(root, runIdentity)
+  await mkdir(resolve(output, 'calls'))
+  canonicalJudgeRun(root, runIdentity)
+  await writeFile(ownManifestPath, JSON.stringify(frozen, null, 2) + '\n', { flag: 'wx' })
 }
+const ownManifestSha256 = sha256(readCanonicalJudgeFile(ownManifestPath))
+function assertRunStorage() {
+  canonicalJudgeRun(root, runIdentity)
+  assertCanonicalJudgeCalls(output)
+}
+function assertDispatchOwner() {
+  assertRunStorage()
+  if (sha256(readCanonicalJudgeFile(ownManifestPath)) !== ownManifestSha256) throw Error('Judge run manifest changed before dispatch')
+  assertJudgeRunHasNoClaim(root, runIdentity)
+  if (frozen.continuation) {
+    const edge = frozen.continuation
+    const claim = verifyJudgeContinuationClaim(root, edge.run, edge.manifestSha256, runIdentity)
+    if (claim.path !== edge.claimPath || claim.sha256 !== edge.claimSha256) throw Error('Judge continuation claim changed before dispatch')
+  }
+}
+assertRunStorage()
 const files = new Set(await readdir(resolve(output, 'calls'))), results = new Map(inherited)
 for (const [hash, request] of unique) {
   if (inherited.has(hash) && ['request', 'started', 'result'].some(kind => files.has(`${hash}.${kind}.json`))) throw Error('Continuation would repeat a historical call')
   if (files.has(`${hash}.result.json`)) {
+    /** @type {Record<string, unknown>} */
     const prior = {}
     for (const kind of ['request', 'started', 'result']) {
-      if (files.has(`${hash}.${kind}.json`)) prior[kind] = JSON.parse(await readFile(resolve(output, 'calls', `${hash}.${kind}.json`), 'utf8'))
+      if (files.has(`${hash}.${kind}.json`)) prior[kind] = JSON.parse(readCanonicalJudgeFile(resolve(output, 'calls', `${hash}.${kind}.json`)).toString('utf8'))
     }
     const value = validatePriorJudgeCall(prior, request, protocol)
     if (value.status !== 'completed' && !(protocol.version === 2 && value.status === 'invalid-judgment')) throw Error('Prior judge failure blocks automatic resume')
@@ -158,18 +189,30 @@ process.once('SIGINT', interrupt); process.once('SIGTERM', interrupt)
 async function worker() {
   while (!stopped && cursor < pending.length && dispatched < limit) {
     const [hash, request] = pending[cursor++]; dispatched++
+    assertDispatchOwner()
     for (const [path, expected] of Object.entries(runtimeHashes)) if (sha256(await readFile(resolve(root, path))) !== expected) throw Error(`Judge runtime changed: ${path}`)
+    assertDispatchOwner()
     const start = performance.now(), startedAt = new Date().toISOString(), controller = new AbortController()
     const value = { promptHash: hash, provider: protocol.provider, model: protocol.model, cliVersion, startedAt,
       status: 'running', dispatched: false, generationCompleted: false, rawText: '', usage: null, costUsd: null, serverEnforcedOutputTokenLimit: null }
     await writeFile(resolve(output, 'calls', `${hash}.request.json`), JSON.stringify({ promptHash: hash, model: protocol.model,
       messages: request.messages, outputSchema }, null, 2) + '\n', { flag: 'wx' })
+    assertRunStorage()
     await writeFile(resolve(output, 'calls', `${hash}.started.json`), JSON.stringify({ promptHash: hash, startedAt }) + '\n', { flag: 'wx' })
+    // A newly claimed successor either sees these exact receipts or this
+    // former owner stops here. Only the claim's owner may enter the transport.
+    assertDispatchOwner()
     controllers.add(controller); const timer = setTimeout(() => controller.abort(), protocol.budget.timeoutMs)
     try {
       console.log(JSON.stringify({ phase: 'requesting', call: results.size + 1, hash: hash.slice(0, 12) }))
       await runtime.generate({ id: hash, model: protocol.model, messages: request.messages, outputSchema }, update => {
-        if (update.dispatched) value.dispatched = true
+        if (update.dispatched) {
+          // Codex invokes this synchronously after its last account check,
+          // immediately before writing turn/start. A thrown check sends no turn.
+          if (history) verifyJudgeContinuationHistory(root, history)
+          assertDispatchOwner()
+          value.dispatched = true
+        }
         if (update.text !== undefined) value.rawText = update.text
         if (update.usage) { value.usage = update.usage; if (!judgeUsageWithinBudget(update.usage, protocol)) controller.abort() }
       }, controller.signal)
@@ -186,6 +229,7 @@ async function worker() {
       value.codexDiagnostic = error.codexDiagnostic ?? null }
     finally {
       clearTimeout(timer); controllers.delete(controller); value.durationMs = performance.now() - start; value.completedAt = new Date().toISOString()
+      assertRunStorage()
       await writeFile(resolve(output, 'calls', `${hash}.result.json`), JSON.stringify(value, null, 2) + '\n', { flag: 'wx' }); results.set(hash, value)
       console.log(JSON.stringify({ phase: 'recorded', hash: hash.slice(0, 12), status: value.status, durationMs: Math.round(value.durationMs), usage: value.usage }))
     }
@@ -193,8 +237,14 @@ async function worker() {
 }
 try {
   if (!values['dry-run'] && pending.length) {
+    assertDispatchOwner()
+    if ((await findJudgeContinuationChildren(root, runIdentity, ownManifestSha256)).length) {
+      throw Error('This judge run already authorized a continuation; use its latest descendant')
+    }
+    if (history) verifyJudgeContinuationHistory(root, history)
     await runtime.start()
     if ((await runtime.account()).state !== 'ready' || !(await runtime.models()).some(model => model.id === protocol.model)) throw Error('Frozen local judge model is unavailable; no fallback')
+    if (history) verifyJudgeContinuationHistory(root, history)
     cliVersion = runtime.version
     const outcomes = await Promise.allSettled(Array.from({ length: protocol.concurrency }, () => worker().catch(error => { interrupt(); throw error })))
     const failure = outcomes.find(outcome => outcome.status === 'rejected')
@@ -239,7 +289,9 @@ try {
     evidenceBoundary: incomplete
       ? 'Diagnostic independent review of available historical reader answers only. Failed and unknown reader observations remain in planned denominators, never receive a judgment and are never redispatched. Even all eligible judgments cannot complete the original matrix or establish current-code, human, literary, product or performance acceptance.'
       : 'Independent model review of historical frozen synthetic reader answers. Partial pilot is not full evaluation; model judgments and traceable quotes do not establish human, literary, product or performance acceptance.' }
-  await writeFile(resolve(output, judgeSummaryName(await readdir(output), calls.length)), JSON.stringify(summary, null, 2) + '\n', { flag: 'wx' })
+  const summaryName = judgeSummaryName(await readdir(output), calls.length)
+  assertRunStorage()
+  await writeFile(resolve(output, summaryName), JSON.stringify(summary, null, 2) + '\n', { flag: 'wx' })
   console.log(JSON.stringify({ phase: 'summary', actualCalls: executionCounts.dispatchedActualCalls, preDispatchFailures: executionCounts.preDispatchFailures,
     invalidJudgments: executionCounts.invalidJudgmentActualCalls, completedObservations: rows.length, complete, sourceUnchanged: unchanged, stopped }))
 }

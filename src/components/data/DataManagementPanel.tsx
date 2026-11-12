@@ -45,6 +45,7 @@ import {
 import { buildWorkspaceImpactPlanV1 } from '../../lib/memory/workspace-impact'
 import { useProjectStore } from '../../stores/project'
 import { useActiveWork } from '../../hooks/useActiveWork'
+import AutoBackupStatusNotice from '../system/AutoBackupStatusNotice'
 
 type Tab = 'export' | 'backup'
 type ExportStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -71,6 +72,7 @@ export default function DataManagementPanel({ project, onImported, onOpenStorage
       </div>
 
       {/* Tab 切换 */}
+      <AutoBackupStatusNotice project={project} />
       <div className="flex gap-1 bg-bg-elevated rounded-xl p-1 w-fit">
         {TABS.map(tab => {
           const Icon = tab.icon
@@ -712,21 +714,31 @@ function BackupTrustResult({ report }: { report: BackupTrustReport }) {
 
 // ── 版本历史 Tab ─────────────────────────────────────────────
 function BackupTab({ project }: Props) {
-  const { snapshots, loading, loadSnapshots, createSnapshot, deleteSnapshot, restoreSnapshot } = useBackupStore()
+  const { snapshots: storedSnapshots, snapshotsOwner, loading, loadSnapshots, createSnapshot, deleteSnapshot, restoreSnapshot } = useBackupStore()
+  const snapshots = snapshotsOwner !== null && snapshotsOwner.projectId === project.id && snapshotsOwner.workspaceUid === project.workspaceUid ? storedSnapshots : []
   const toast = useToast()
   const dialog = useDialog()
   const [creating, setCreating] = useState(false)
   const [restoring, setRestoring] = useState<number | null>(null)
   const [label, setLabel] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [listError, setListError] = useState('')
 
-  useState(() => { loadSnapshots(project.id!) })
+  useEffect(() => {
+    let active = true
+    setListError('')
+    void loadSnapshots(project.id!).catch(() => {
+      if (active) setListError('快照列表读取失败，请保留原稿，重新打开版本历史后再试。')
+    })
+    return () => { active = false }
+  }, [project.id, project.workspaceUid, loadSnapshots])
 
   const handleCreate = async () => {
     setCreating(true)
     try {
-      await createSnapshot(project.id!, label.trim() || `手动备份 ${new Date().toLocaleString('zh-CN')}`, 'manual')
+      await createSnapshot(project.id!, label.trim() || `手动备份 ${new Date().toLocaleString('zh-CN')}`, 'manual', project.workspaceUid)
       toast.success('快照创建成功')
+      setListError('')
       setLabel(''); setShowForm(false)
     } catch (err) {
       toast.error('快照创建失败: ' + (err as Error).message)
@@ -751,6 +763,7 @@ function BackupTab({ project }: Props) {
   return (
     <div className="space-y-4">
       {/* 新建快照 */}
+      {listError && <p role="alert">{listError}</p>}
       <div className="bg-bg-surface border border-border rounded-lg p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

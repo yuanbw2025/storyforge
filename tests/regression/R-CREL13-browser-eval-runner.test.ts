@@ -1,3 +1,4 @@
+import { installEvalWebLocksFixtureV1 } from '../helpers/eval-web-locks'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
@@ -20,8 +21,11 @@ function storyArc(name: string) {
   }
 }
 
+let restoreEvalWebLocks: (() => void) | undefined
+
 describe.sequential('R-CREL13 · 浏览器真实调用适配器', { timeout: 30_000 }, () => {
   beforeEach(async () => {
+    restoreEvalWebLocks = installEvalWebLocksFixtureV1()
     localStorage.clear()
     sessionStorage.clear()
     await db.delete()
@@ -29,6 +33,7 @@ describe.sequential('R-CREL13 · 浏览器真实调用适配器', { timeout: 30_
   })
 
   afterEach(() => {
+    restoreEvalWebLocks?.()
     vi.unstubAllGlobals()
     db.close()
   })
