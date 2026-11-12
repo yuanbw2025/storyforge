@@ -229,7 +229,6 @@ function extractAdoptionExtensions() {
 // ── ⑤ AI 调用点 category ──
 const AI_META_FORWARDERS = new Set([
   'src/hooks/useAIStream.ts',
-  'src/lib/import/chat-with-abort.ts',
   'src/lib/reference-analysis/pipeline.ts',
 ])
 

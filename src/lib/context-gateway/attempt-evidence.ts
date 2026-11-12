@@ -1,3 +1,4 @@
+import { keepIntegrityReadAlive } from '../db/transaction-integrity'
 import { lookupContextResourceMetadataV1 } from './resource-metadata'
 import { estimateTokens } from '../ai/context-budget'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
@@ -312,7 +313,7 @@ async function readAndVerifyArtifactBodyV1(
   })
   if (ref.role === 'context-packet') {
     try {
-      await assertContextPacketIntegrity(JSON.parse(body) as ContextPacketV1)
+      await keepIntegrityReadAlive(assertContextPacketIntegrity(JSON.parse(body) as ContextPacketV1))
     } catch {
       fail('packet-artifact', 'Context Packet artifact JSON/完整性损坏')
     }
@@ -321,11 +322,11 @@ async function readAndVerifyArtifactBodyV1(
     let parsed: ContextSelectorResultV1
     try {
       parsed = JSON.parse(body) as ContextSelectorResultV1
-      await assertSelectorIntegrity(parsed)
+      await keepIntegrityReadAlive(assertSelectorIntegrity(parsed))
     } catch {
       fail('selector-artifact', 'selector result artifact JSON/完整性损坏')
     }
-    if (await sha256Text(body) !== ref.contentHash) {
+    if (await keepIntegrityReadAlive(sha256Text(body)) !== ref.contentHash) {
       fail('selector-artifact', 'selector result artifact hash 不匹配')
     }
   }
@@ -336,12 +337,12 @@ async function readAndVerifyArtifactBodyV1(
     } catch {
       fail('source-snapshot-artifact', 'source snapshot artifact JSON 损坏')
     }
-    const sourceHash = await sha256Text(exactPayload(parsed.content))
+    const sourceHash = await keepIntegrityReadAlive(sha256Text(exactPayload(parsed.content)))
     if (parsed.version !== 1 || parsed.sourceKey !== (ref.sourceKey ?? null)
       || parsed.resourceKey !== (ref.resourceKey ?? null)
       || parsed.sourceContentHash !== ref.sourceContentHash || sourceHash !== ref.sourceContentHash
       || parsed.sourceRefsHash !== ref.sourceRefsHash || !Array.isArray(parsed.sourceRefs)
-      || await hashCanonicalValue(parsed.sourceRefs) !== ref.sourceRefsHash) {
+      || await keepIntegrityReadAlive(hashCanonicalValue(parsed.sourceRefs)) !== ref.sourceRefsHash) {
       fail('source-snapshot-artifact', 'source snapshot body 与 Manifest 元数据不一致')
     }
   }
@@ -635,7 +636,7 @@ export async function readContextGatewayManifestV3ForAttemptV1(input: {
       fail('manifest-body', 'ContextManifestV3 artifact JSON/合同损坏')
     }
     if (body != null && typeof body === 'object' && 'version' in body && body.version === 2) {
-      if (!await verifyContextManifestIntegrityV2(body)) {
+      if (!await keepIntegrityReadAlive(verifyContextManifestIntegrityV2(body))) {
         fail('manifest-integrity', 'ContextManifestV2 exact body 完整性校验失败')
       }
       baseManifests.push(body as ContextManifestV2)
@@ -651,7 +652,7 @@ export async function readContextGatewayManifestV3ForAttemptV1(input: {
       matching.push({ manifest: parsed, manifestArtifactHash: event.payload.contentHash })
     }
   }
-  if (matching.length !== 1 || !await verifyContextManifestIntegrityV3(matching[0].manifest)) {
+  if (matching.length !== 1 || !await keepIntegrityReadAlive(verifyContextManifestIntegrityV3(matching[0].manifest))) {
     fail('manifest-integrity', '无法找到唯一且完整的 ContextManifestV3 exact body')
   }
   const finalManifest = matching[0].manifest
@@ -717,7 +718,7 @@ export async function verifyContextGatewayCandidateEvidenceV1(input: {
   } catch {
     fail('packet-json', 'Context Packet artifact JSON 损坏')
   }
-  await assertContextPacketIntegrity(packet)
+  await keepIntegrityReadAlive(assertContextPacketIntegrity(packet))
   if (packet.packetHash !== restored.manifest.gateway.contextPacketHash
     || packet.gatewayVersionHash !== restored.manifest.gateway.gatewayVersionHash
     || packet.policyHash !== restored.manifest.gateway.policyHash
@@ -727,7 +728,7 @@ export async function verifyContextGatewayCandidateEvidenceV1(input: {
   }
   const selectorRef = restored.manifest.artifacts.find(ref => ref.role === 'selector-result')!
   const selector = JSON.parse(artifactBodies[`selector-result:${selectorRef.contentHash}`]) as ContextSelectorResultV1
-  await assertSelectorIntegrity(selector)
+  await keepIntegrityReadAlive(assertSelectorIntegrity(selector))
   if (selector.selectorHash !== restored.manifest.gateway.selectorHash
     || selector.inventoryHash !== restored.manifest.gateway.inventoryHash
     || selector.selectorPolicyId !== restored.manifest.gateway.selectorPolicyId
@@ -793,7 +794,7 @@ export async function inspectContextGatewayManifestFreshnessV1(input: {
     resources,
     reasonCodes: [...reasonCodes].sort(),
   }
-  return { ...body, reportHash: await hashCanonicalValue(body) }
+  return { ...body, reportHash: await keepIntegrityReadAlive(hashCanonicalValue(body)) }
 }
 
 export function summarizeContextGatewayManifestForAuthorV1(manifest: ContextManifestV3): {

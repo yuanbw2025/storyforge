@@ -5,6 +5,7 @@ interface Props {
   unfinished: ImportSession
   restoringBlob: boolean
   blobRestored: boolean
+  boundToOriginal: boolean
   /** 当前文本框里是否已经有原文（用于判断兜底续跑按钮是否可点） */
   hasRawText: boolean
   onResume: () => void
@@ -21,6 +22,7 @@ export default function ImportUnfinishedBanner({
   unfinished,
   restoringBlob,
   blobRestored,
+  boundToOriginal,
   hasRawText,
   onResume,
   onResumeWithUploaded,
@@ -37,7 +39,7 @@ export default function ImportUnfinishedBanner({
           发现未完成的解析任务
         </div>
         <div className="text-xs text-text-secondary leading-relaxed">
-          文件「<strong>{unfinished.filename}</strong>」还剩 {remaining} 块未解析
+          文件「<strong>{unfinished.filename}</strong>」还剩 {remaining} 块未处理
           （共 {unfinished.totalChunks} 块 · 状态：{unfinished.status}）。
         </div>
         {restoringBlob && (
@@ -49,23 +51,25 @@ export default function ImportUnfinishedBanner({
         {!restoringBlob && blobRestored && (
           <div className="mt-1.5 text-[11px] text-accent flex items-center gap-1">
             <HardDrive className="w-3 h-3" />
-            已从本地存档恢复原文，可直接续跑
+            已从本地存档恢复原文
           </div>
         )}
         <div className="flex items-center gap-2 mt-2">
-          {blobRestored ? (
+          {!boundToOriginal ? (
+            <span className="text-xs text-text-muted">这份旧任务未保存准确的目标或原文。可查看原记录；继续导入请重新确认文件和目标。</span>
+          ) : blobRestored ? (
             <button
               onClick={onResume}
               className="flex items-center gap-1 px-3 py-1.5 bg-warning text-white text-xs rounded hover:bg-warning/90"
             >
-              <PlayCircle className="w-3.5 h-3.5" /> 立即续跑
+              <PlayCircle className="w-3.5 h-3.5" /> 继续处理
             </button>
           ) : hasRawText ? (
             <button
               onClick={onResumeWithUploaded}
               className="flex items-center gap-1 px-3 py-1.5 bg-warning text-white text-xs rounded hover:bg-warning/90"
             >
-              <PlayCircle className="w-3.5 h-3.5" /> 用当前文件续跑
+              <PlayCircle className="w-3.5 h-3.5" /> 用当前文件继续
             </button>
           ) : !restoringBlob ? (
             <span className="text-xs text-text-muted">

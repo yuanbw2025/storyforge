@@ -132,7 +132,6 @@ for (const dir of UI_DIRS) {
 const AI_META_FORWARDERS = new Set([
   'src/hooks/useAIStream.ts',
   'src/lib/agent/formal-ai-entry.ts',
-  'src/lib/import/chat-with-abort.ts',
   'src/lib/reference-analysis/pipeline.ts',
 ])
 

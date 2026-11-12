@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 173 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 175 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -201,8 +201,10 @@
 | `workAuthoringIntent` | 作者确认的作品意图与文风 | project | L0 | 6000 |
 | `ragSelection` | 作者选择的资料字段 | manual | L0 | 100000 |
 | `manualText` | 用户指定内容 | manual | L0 | 100000 |
+| `documentImportCodexCategories` | 文档导入已登记词条类别目录 | world | L0 | 8000 |
 | `codexExtractionBaseline` | Codex 目标分类与既有词条闭集 | world | L0 | 8000 |
 | `historyAgentBaseline` | 历史 Agent 正式输入基线 | world | L0 | 12000 |
+| `referenceAnalysisPrivateChunk` | 已确认的本机参考分析原文块 | project | L0 | 40000 |
 | `referenceDerivedBaseline` | 参考分析派生 Agent 正式输入基线 | project | L0 | 36000 |
 | `styleLearningBaseline` | 文风学习正式输入基线 | project | L0 | 28000 |
 | `priorOutlineCandidate` | 同批次上一卷章纲候选 | runtime | L1 | 2400 |
@@ -421,20 +423,20 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
-| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:778`<br/>`src/lib/node-authoring/domain-execution.ts:835` |
+| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:796`<br/>`src/lib/node-authoring/domain-execution.ts:855` |
 | `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1880` |
 | `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1858` |
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1848` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
-| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:647` |
+| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:660` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:576` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:190` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:945` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
-| `node.creation` | `src/lib/node-authoring/executor.ts:391` |
+| `node.creation` | `src/lib/node-authoring/executor.ts:395` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:200`<br/>`src/lib/outline/generation-node.ts:61` |
 | `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:666` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:56` |
@@ -443,7 +445,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `outline.workshop.scan` | `src/lib/outline/workshop.ts:442` |
 | `outline.workshop.scenes` | `src/lib/outline/workshop.ts:461` |
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:128` |
-| `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:288` |
+| `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:299` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:457` |
 | `runtime.character.chat-narrative-action` | `src/lib/character-interaction/action-choice-harness.ts:131` |
 | `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:271` |
@@ -458,25 +460,25 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 ### 动态 category 调用
 
 - `src/lib/adventure/harness.ts:396 · chat`
-- `src/lib/agent/character-copilot.ts:515 · chat`
+- `src/lib/agent/character-copilot.ts:518 · chat`
 - `src/lib/agent/character-driven-copilot.ts:505 · chat`
 - `src/lib/agent/character-lifecycle-copilot.ts:448 · chat`
 - `src/lib/agent/character-revision-copilot.ts:796 · chat`
-- `src/lib/agent/character-supplement-copilot.ts:578 · chat`
+- `src/lib/agent/character-supplement-copilot.ts:581 · chat`
 - `src/lib/agent/context-compression.ts:355 · chat`
 - `src/lib/agent/creative-rules-copilot.ts:448 · chat`
 - `src/lib/agent/inspiration-copilot.ts:345 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
 - `src/lib/agent/outline-copilot.ts:521 · chat`
-- `src/lib/agent/outline-copilot.ts:771 · chat`
+- `src/lib/agent/outline-copilot.ts:773 · chat`
 - `src/lib/agent/prose-copilot.ts:704 · chat`
-- `src/lib/agent/prose-copilot.ts:983 · chat`
+- `src/lib/agent/prose-copilot.ts:985 · chat`
 - `src/lib/agent/run/codex-extraction-durable.ts:784 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
 - `src/lib/agent/run/short-novel-durable.ts:195 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1634 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1686 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1659 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1711 · chat`
 - `src/lib/agent/story-core-copilot.ts:579 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:932 · chat`
@@ -488,7 +490,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:22 · ai.start`
 - `src/lib/motion-drama/durable-production.ts:348 · chat`
-- `src/lib/node-authoring/executor.ts:449 · chat`
+- `src/lib/node-authoring/executor.ts:457 · chat`
 - `src/lib/open-world/evolution-harness.ts:251 · chat`
 - `src/lib/open-world/harness.ts:150 · chat`
 - `src/lib/product-production/authoring-consultation.ts:169 · chat`
@@ -499,7 +501,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 68 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio 使用独立冻结音频执行器，文本入口不补默认字段。
+共 71 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio 使用独立冻结音频执行器，文本入口不补默认字段。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
@@ -528,6 +530,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `ai-town.authoring.consult` | `ai-town.consult.v1` | `authoring.ai-town-consult` | auxiliary / durable-run | `ai-town-settings-preview` | 禁止 | `src/lib/ai-town/consultation.ts` |
 | `prose.chapter.generate` | `prose.generate` | `chapter.content` | formal / durable-run | `chapter-draft` | `chapters` | `src/lib/generation/chapter-generation-node.ts` |
 | `prose.chapter.continue` | `prose.continue` | `chapter.continue` | formal / durable-run | `chapter-continuation-draft` | `chapters` | `src/lib/generation/chapter-generation-node.ts` |
+| `reference.analysis.private-chunk` | `inspiration.reference-analysis-private-chunk` | `reference.analysis` | auxiliary / authoring-draft | `private-reference-chunk-report` | 禁止 | `src/lib/reference-analysis/pipeline.ts` |
 | `prose.selection.polish` | `prose.selection-edit` | `chapter.polish` | auxiliary / authoring-draft | `selection-polish-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
 | `prose.selection.expand` | `prose.selection-edit` | `chapter.expand` | auxiliary / authoring-draft | `selection-expand-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
 | `prose.selection.deai` | `prose.selection-edit` | `chapter.deai` | auxiliary / authoring-draft | `selection-rewrite-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
@@ -571,6 +574,8 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `text-open-world.runtime.quest-packaging` | `prose.text-open-world-runtime-quest-packaging` | `runtime.text-open-world.quest-packaging` | formal / product-runtime | `storyforge.text-open-world.runtime-quest-packaging-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
 | `text-open-world.runtime.direction` | `prose.text-open-world-runtime-direction` | `runtime.text-open-world.direction` | formal / product-runtime | `storyforge.text-open-world.runtime-direction-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
 | `text-open-world.runtime.memory` | `prose.text-open-world-runtime-memory` | `runtime.text-open-world.memory` | formal / product-runtime | `storyforge.text-open-world.runtime-memory-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `import.document-chunk.parse` | `inspiration.document-import-parse` | `import.parse-chunk` | formal / durable-run | `document-import-chunk-candidate` | 禁止 | `src/lib/import/document-parse-durable.ts` |
+| `import.reference-chunk.parse.private` | `inspiration.document-import-parse` | `import.parse-chunk` | formal / durable-run | `document-import-chunk-candidate` | 禁止 | `src/lib/import/document-parse-durable.ts` |
 
 ### 文字开放世界：三线职责与人工边界
 

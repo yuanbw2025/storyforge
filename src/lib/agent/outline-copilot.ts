@@ -667,11 +667,13 @@ export async function runOutlineCreativeReliabilityV1(input: {
   prepared: PreparedOutlineCopilot
   budget: AgentTeamBudgetTracker
   qualityMode: CreativeQualityModeV1
+  assertBeforeModelCall?: () => Promise<void>
   validate?: (output: GeneratedOutlineItem[]) => Promise<GenerationGateIssue[]> | GenerationGateIssue[]
 }): Promise<CreativeExecutionResultV1<GeneratedOutlineItem[]>> {
   return runCreativeExecutionV1({
     initialMessages: input.prepared.prepared.messages,
     runRaw: input.prepared.runRaw,
+    assertBeforeModelCall: input.assertBeforeModelCall,
     parse: raw => parseOutlineCreativeOutcomeV1(raw, input.prepared),
     buildRepairMessages: (raw, issues) => buildOutlineRepairMessagesV1(
       raw,

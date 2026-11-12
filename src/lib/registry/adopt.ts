@@ -1,6 +1,6 @@
 /** 当前架构唯一的结构化采纳入口。只接受 FIELD_REGISTRY 的规范字段与规范类型。 */
 import Dexie from 'dexie'
-import type { Table } from 'dexie'
+import type { Table, Transaction } from 'dexie'
 import {assertChatPlanAdoptionV1} from '../character-interaction/consultation-plan'
 import { db } from '../db/schema'
 import {
@@ -63,7 +63,50 @@ async function refreshCanonSourceAfterWrite(
   })
 }
 
-export async function adopt(input: AdoptInput): Promise<AdoptResult> {
+function callerOwnedAdoptionEffectTablesV1(target: string): Table[] {
+  return CANON_SOURCE_TABLES.has(target as CanonAssertionSourceTable) ? [db.temporalFacts] : []
+}
+
+const CALLER_OWNED_ADOPTION_TARGETS_V1 = new Set(['worldviews', 'geographies', 'histories', 'characters', 'outlineNodes'])
+
+interface CallerOwnedAdoptionV1 {
+  /** Strictly opt in to an already active caller-owned write transaction. */
+  transaction: Transaction
+}
+
+function assertCallerAdoptionTransaction(owner: CallerOwnedAdoptionV1 | undefined, tables: readonly Table[] = [], requireAmbient = true) {
+  if (!owner) return
+  const transaction = owner.transaction
+  if (transaction.db !== db || transaction.mode !== 'readwrite' || !transaction.active ||
+    (requireAmbient && Dexie.currentTransaction !== transaction) || tables.some(table => !transaction.storeNames.includes(table.name)))
+    throw new Error('[adopt] 缺少调用方原写入事务或完整注册表闭包。')
+}
+
+function registeredAdoptionTable(owner: CallerOwnedAdoptionV1 | undefined, table: Table): Table {
+  if (!owner) return table
+  assertCallerAdoptionTransaction(owner, [table], false)
+  return owner.transaction.table(table.name)
+}
+
+function awaitCallerAdoptionRead<T>(owner: CallerOwnedAdoptionV1 | undefined, read: () => Promise<T>): Promise<T> {
+  if (!owner) return read()
+  assertCallerAdoptionTransaction(owner)
+  return Dexie.waitFor(read())
+}
+
+function runRegisteredAdoptionTransaction<T>(owner: CallerOwnedAdoptionV1 | undefined, tables: Table[], body: () => Promise<T>): Promise<T> {
+  if (!owner) return db.transaction('rw', tables, body)
+  assertCallerAdoptionTransaction(owner, tables)
+  // A nested rw closes before the caller's next journal/receipt write on some
+  // promise boundaries. Opted-in writers keep the original transaction active.
+  return body()
+}
+
+export async function adopt(input: AdoptInput, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult> {
+  assertCallerAdoptionTransaction(owner, owner ? callerOwnedAdoptionEffectTablesV1(input.target) : [])
+  if (owner && (!CALLER_OWNED_ADOPTION_TARGETS_V1.has(input.target) || input.narrativeCandidate || input.compareAndSet ||
+    ADOPTION_BY_TARGET.get(input.target)?.writePolicy))
+    throw new Error('[adopt] 当前采纳策略未开放调用方事务模式。')
   const result = emptyResult()
   const fieldSpecs = FIELD_BY_TARGET.get(input.target) ?? []
   if (!fieldSpecs.length) {
@@ -101,7 +144,8 @@ export async function adopt(input: AdoptInput): Promise<AdoptResult> {
     if (Array.isArray(input.data) || input.recordId == null || input.mode !== 'replace' || input.compareAndSet) throw new Error('角色聊天方案须通过同事务的指定记录确认写入')
     if (!Dexie.currentTransaction) return db.transaction('rw', scopeTransactionTables(db.chatAuthoringDrafts), () => adopt(input))
   }
-  const scope = await resolveScope(input)
+  const scope = await awaitCallerAdoptionRead(owner, () => resolveScope(input))
+  assertCallerAdoptionTransaction(owner)
   const scopedInput: AdoptInput = { ...input, projectId: scope.projectId, scope }
   if (input.compareAndSet && input.recordId == null) {
     result.skipped.push({ reason: 'compareAndSet 必须指定 recordId', data: input.data })
@@ -118,12 +162,12 @@ export async function adopt(input: AdoptInput): Promise<AdoptResult> {
   }
 
   if (scopedInput.recordId != null) {
-    return adoptCollectionRecord(scopedInput, fieldSpecs, tableSpec, result)
+    return adoptCollectionRecord(scopedInput, fieldSpecs, tableSpec, result, owner)
   }
 
   const isCollection = scopedInput.mode === 'add' || scopedInput.mode === 'add-many' || scopedInput.mode === 'merge-diffs'
-  if (isCollection) return adoptCollection(scopedInput, fieldSpecs, tableSpec, result)
-  return adoptSingleton(scopedInput, fieldSpecs, tableSpec, result)
+  if (isCollection) return adoptCollection(scopedInput, fieldSpecs, tableSpec, result, owner)
+  return adoptSingleton(scopedInput, fieldSpecs, tableSpec, result, owner)
 }
 
 /**
@@ -216,7 +260,9 @@ function emptyResult(): AdoptResult {
 /** A caller-owned transaction can request the complete registered closure.
  * Patch writers include only references that need reads: omitted/null FKs and
  * empty member arrays never revalidate retained historical evidence. */
-export function adoptionTransactionTablesV1(target: string, patch?: Readonly<Record<string, unknown>>): Table[] {
+export function adoptionTransactionTablesV1(
+  target: string, patch?: Readonly<Record<string, unknown>>, options?: { callerOwned?: boolean },
+): Table[] {
   const adoption = ADOPTION_BY_TARGET.get(target)
   const tableSpec = REGISTRY_BY_NAME.get(target)
   if (!tableSpec) throw new Error(`[adopt] target ${target} 未在 PROJECT_TABLES 登记`)
@@ -239,6 +285,7 @@ export function adoptionTransactionTablesV1(target: string, patch?: Readonly<Rec
   }
   // Existing chapter writes also invalidate derived summaries atomically.
   return scopeTransactionTables(...tables,
+    ...(options?.callerOwned ? callerOwnedAdoptionEffectTablesV1(target) : []),
     ...(target === 'chapters' && (patch === undefined || Object.prototype.hasOwnProperty.call(patch, 'content'))
       ? [db.narrativeSummaryNodes] : []))
 }
@@ -287,6 +334,7 @@ async function adoptCollectionRecord(
   fieldSpecs: FieldSpec[],
   tableSpec: TableSpec,
   result: AdoptResult,
+  owner?: CallerOwnedAdoptionV1,
 ): Promise<AdoptResult> {
   if (!ADOPTION_BY_TARGET.has(input.target)) {
     result.skipped.push({ reason: `target ${input.target} 不是已登记的集合写回目标`, data: input.data })
@@ -307,11 +355,11 @@ async function adoptCollectionRecord(
     return adoptChapterMemoryRecordWithCas(input, fieldSpecs, tableSpec, result)
   }
   const normalizedPatch = normalizeAndValidate(data, fieldSpecs, result, { preserveEmptyStrings: input.preserveAuthorText, preserveAuthorText: input.preserveAuthorText })
-  await db.transaction('rw', adoptionTransactionTablesV1(input.target, normalizedPatch ?? {}), async () => {
-    await resolveScope(input)
+  await runRegisteredAdoptionTransaction(owner, adoptionTransactionTablesV1(input.target, normalizedPatch ?? {}), async () => {
+    await awaitCallerAdoptionRead(owner, () => resolveScope(input))
     const adoption = ADOPTION_BY_TARGET.get(input.target)!
-    const target = await tableSpec.table.get(input.recordId!)
-    if (!target || !await assertRecordInScope(input.scope!, input.target, target, { owner: adoption.ownerFrom })) {
+    const target = await registeredAdoptionTable(owner, tableSpec.table).get(input.recordId!)
+    if (!target || !await awaitCallerAdoptionRead(owner, () => assertRecordInScope(input.scope!, input.target, target, { owner: adoption.ownerFrom }))) {
       result.skipped.push({
         reason: `record ${input.recordId} 不存在、不属于当前项目或不属于当前 scope`, data: input.data,
       })
@@ -331,16 +379,16 @@ async function adoptCollectionRecord(
         }
       }
     }
-    if (!await validateReferencePatch(patch, input, adoption, result)) return
+    if (!await awaitCallerAdoptionRead(owner, () => validateReferencePatch(patch, input, adoption, result))) return
     patch.updatedAt = Date.now()
-    await tableSpec.table.update(input.recordId!, patch as any)
+    await registeredAdoptionTable(owner, tableSpec.table).update(input.recordId!, patch as any)
     if (input.target === 'chapters' && Object.prototype.hasOwnProperty.call(patch, 'content')) {
       await markChapterNarrativeSummariesStale(input.scope!, input.recordId!)
     }
     result.written.push({ id: input.recordId!, fields: Object.keys(patch) })
   })
   if (result.written.length) {
-    await refreshCanonSourceAfterWrite(input.target, input.projectId, input.recordId!, result.written[0].fields)
+    await awaitCallerAdoptionRead(owner, () => refreshCanonSourceAfterWrite(input.target, input.projectId, input.recordId!, result.written[0].fields))
   }
   return result
 }
@@ -596,17 +644,18 @@ async function adoptSingleton(
   fieldSpecs: FieldSpec[],
   tableSpec: TableSpec,
   result: AdoptResult,
+  owner?: CallerOwnedAdoptionV1,
 ): Promise<AdoptResult> {
   const data = input.data as Record<string, unknown>
   const patch = normalizeAndValidate(data, fieldSpecs, result)
   if (!patch || Object.keys(patch).length === 0) return result
 
   let updated: { id: number; fields: string[] } | undefined
-  await db.transaction('rw', adoptionTransactionTablesV1(input.target, patch), async () => {
-    await resolveScope(input)
-    const target = await findSingleton(input, tableSpec)
+  await runRegisteredAdoptionTransaction(owner, adoptionTransactionTablesV1(input.target, patch), async () => {
+    await awaitCallerAdoptionRead(owner, () => resolveScope(input))
+    const target = await awaitCallerAdoptionRead(owner, () => findSingleton(input, tableSpec))
     const adoption = ADOPTION_BY_TARGET.get(input.target)
-    if (adoption && !await validateReferencePatch(patch, input, adoption, result, target?.id)) return
+    if (adoption && !await awaitCallerAdoptionRead(owner, () => validateReferencePatch(patch, input, adoption, result, target?.id))) return
     if (input.mode === 'append') {
       for (const [field, val] of Object.entries(patch)) {
         const spec = fieldSpecs.find(f => f.field === field)
@@ -619,7 +668,7 @@ async function adoptSingleton(
 
     const now = Date.now()
     if (target?.id != null) {
-      await tableSpec.table.update(target.id, { ...patch, updatedAt: now } as any)
+      await registeredAdoptionTable(owner, tableSpec.table).update(target.id, { ...patch, updatedAt: now } as any)
       updated = { id: target.id, fields: Object.keys(patch) }
       result.written.push(updated)
     } else {
@@ -634,12 +683,13 @@ async function adoptSingleton(
       if (adoption && !applyRequired(candidate, input.data, adoption, result)) return
       const row = stampNewRecord(input.scope!, input.target, candidate,
         { owner: tableSpec.domainOwner?.defaultOwner === 'world' ? 'world' : 'work' })
-      const id = await tableSpec.table.add(row as any) as number
+      const id = await registeredAdoptionTable(owner, tableSpec.table).add(row as any) as number
       result.written.push({ id, fields: Object.keys(patch) })
     }
   })
-  if (updated) {
-    await refreshCanonSourceAfterWrite(input.target, input.projectId, updated.id, updated.fields)
+  const written = updated
+  if (written) {
+    await awaitCallerAdoptionRead(owner, () => refreshCanonSourceAfterWrite(input.target, input.projectId, written.id, written.fields))
   }
   return result
 }
@@ -649,6 +699,7 @@ async function adoptCollection(
   fieldSpecs: FieldSpec[],
   tableSpec: TableSpec,
   result: AdoptResult,
+  owner?: CallerOwnedAdoptionV1,
 ): Promise<AdoptResult> {
   const adoption = ADOPTION_BY_TARGET.get(input.target)
   if (!adoption) throw new Error(`[adopt] target ${input.target} 是集合写回但未在 ADOPTION_SCHEMAS 登记`)
@@ -671,15 +722,15 @@ async function adoptCollection(
     if (!applyRequired(item, raw, adoption, result)) continue
     const prepared = item
     let updated: { id: number; fields: string[] } | undefined
-    await db.transaction('rw', adoptionTransactionTablesV1(input.target, prepared), async () => {
+    await runRegisteredAdoptionTransaction(owner, adoptionTransactionTablesV1(input.target, prepared), async () => {
       let item = prepared
-      await resolveScope(input)
-      if (!await applyFkChecks(item, raw, adoption, result, input.scope!)) return
-      await applyArrayMemberChecks(item, adoption, result, input.scope!)
+      await awaitCallerAdoptionRead(owner, () => resolveScope(input))
+      if (!await awaitCallerAdoptionRead(owner, () => applyFkChecks(item, raw, adoption, result, input.scope!))) return
+      await awaitCallerAdoptionRead(owner, () => applyArrayMemberChecks(item, adoption, result, input.scope!))
       applyAutoStamps(item, input, tableSpec, adoption)
       item = stampNewRecord(input.scope!, input.target, item, { owner: adoption.ownerFrom })
 
-      const existing = await findExisting(input.scope!, tableSpec, item, adoption)
+      const existing = await awaitCallerAdoptionRead(owner, () => findExisting(input.scope!, tableSpec, item, adoption))
       if (existing?.id != null) {
         if (adoption.duplicatePolicy === 'skip') {
           result.skipped.push({ reason: '重复(skip)', data: raw })
@@ -687,15 +738,15 @@ async function adoptCollection(
           // Null keeps its existing collection-update meaning of "not supplied".
           const patch: Record<string, unknown> = { updatedAt: Date.now() }
           for (const [k, v] of Object.entries(item)) if (v !== null) patch[k] = v
-          if (!await validateTreePatch(patch, input, result, existing.id, raw)) return
-          await tableSpec.table.update(existing.id, patch as any)
+          if (!await awaitCallerAdoptionRead(owner, () => validateTreePatch(patch, input, result, existing.id, raw))) return
+          await registeredAdoptionTable(owner, tableSpec.table).update(existing.id, patch as any)
           updated = { id: existing.id, fields: Object.keys(patch) }
           result.written.push(updated)
         } else if (adoption.duplicatePolicy === 'merge') {
           const patch = mergeByStrategy(existing, item, adoption.mergeStrategy ?? 'overwrite-non-empty')
           patch.updatedAt = Date.now()
-          if (!await validateTreePatch(patch, input, result, existing.id, raw)) return
-          await tableSpec.table.update(existing.id, patch as any)
+          if (!await awaitCallerAdoptionRead(owner, () => validateTreePatch(patch, input, result, existing.id, raw))) return
+          await registeredAdoptionTable(owner, tableSpec.table).update(existing.id, patch as any)
           updated = { id: existing.id, fields: Object.keys(patch) }
           result.written.push(updated)
         } else {
@@ -705,13 +756,14 @@ async function adoptCollection(
         // A partial candidate must not turn creation defaults into an overwrite
         // of an existing row's tags or manuscript.
         item = { ...adoption.createDefaults, ...item }
-        if (!await validateTreePatch(item, input, result, undefined, raw)) return
-        const id = await tableSpec.table.add(item as any) as number
+        if (!await awaitCallerAdoptionRead(owner, () => validateTreePatch(item, input, result, undefined, raw))) return
+        const id = await registeredAdoptionTable(owner, tableSpec.table).add(item as any) as number
         result.written.push({ id, fields: Object.keys(item) })
       }
     })
-    if (updated) {
-      await refreshCanonSourceAfterWrite(input.target, input.projectId, updated.id, updated.fields)
+    const written = updated
+    if (written) {
+      await awaitCallerAdoptionRead(owner, () => refreshCanonSourceAfterWrite(input.target, input.projectId, written.id, written.fields))
     }
   }
   return result

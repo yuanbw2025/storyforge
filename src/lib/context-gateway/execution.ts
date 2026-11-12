@@ -216,6 +216,13 @@ async function collectCatalog(session: ContextGatewayToolSessionV1): Promise<{
         }),
         policy: session.policy,
       })
+      for (const descriptor of raw.items) {
+        if (descriptor.automaticSelectionEnabled === false
+          && session.policy.allowedResourceKinds.includes(descriptor.kind)
+          && isContextGatewayResourceAllowedV1(session, descriptor.resourceKey)) {
+          omitted.push({ resourceKey: descriptor.resourceKey, sourceKey: descriptor.sourceKey, reasonCode: 'author-disabled', tokenEstimate: descriptor.tokenEstimate.index ?? 0 })
+        }
+      }
       for (const descriptor of page.items) {
         if (!isContextGatewayResourceAllowedV1(session, descriptor.resourceKey)) {
           omitted.push({ resourceKey: descriptor.resourceKey, sourceKey: descriptor.sourceKey, reasonCode: 'adapter-resource-boundary', tokenEstimate: descriptor.tokenEstimate.index ?? 0 })
@@ -427,11 +434,14 @@ export async function executeContextGatewayV1(
   })
   const initialHardFailure = hardFailure(selector.sufficiency)
   if (initialHardFailure) {
-    const omission = selector.omitted.find(item => initialHardFailure.id.endsWith(item.resourceKey))
+    const omission = [...selector.omitted, ...catalog.omitted].find(item => initialHardFailure.id.endsWith(item.resourceKey))
     fail('hard-sufficiency', [
       initialHardFailure.id,
       initialHardFailure.reasonCode,
       omission ? `omitted=${omission.reasonCode}` : '',
+      omission?.reasonCode === 'author-disabled'
+        ? '必读资料或其实际依赖已被作者停用；请在“资料与检索库”恢复启用，或明确调整本次任务后重新准备上下文。'
+        : '',
     ].filter(Boolean).join(':'))
   }
 
