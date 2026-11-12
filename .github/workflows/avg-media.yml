@@ -3,6 +3,18 @@ on: workflow_dispatch
 permissions:
   contents: read
 jobs:
+  media-harnesses:
+    name: AVG 图像、声音和配音生产回归
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: xargs node_modules/.bin/vitest run < scripts/quality/avg-media-harnesses.txt
+
   avg-media-experimental:
     name: AVG 媒资实验路径（隔离浏览器）
     runs-on: ubuntu-latest

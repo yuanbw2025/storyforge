@@ -219,9 +219,12 @@ async function mountTown(scope: WorkspaceScope, title: string) {
   return router
 }
 
+function buttonByText(text: string) {
+  return Array.from(host!.querySelectorAll('button')).find(value => value.textContent?.trim() === text)
+}
+
 async function click(text: string) {
-  const button = Array.from(host!.querySelectorAll('button'))
-    .find(value => value.textContent?.trim() === text)
+  const button = buttonByText(text)
   if (!button) throw new Error(`The actual AI Town action is missing: ${text}`)
   await act(async () => { button.click() })
 }
@@ -506,7 +509,10 @@ it('threads actual own World, SourceSelection and Brief revisions through later 
   try {
     await edit(field('住所构想'), '112 own chain home')
     await click('世界引擎')
-    await waitForUi(() => { expect(router.state.location.pathname).toBe('/town/source') })
+    await waitForUi(() => {
+      expect(router.state.location.pathname).toBe('/town/source')
+      expect(buttonByText('选择此版本')?.disabled).toBe(false)
+    })
     expect((await readAiTownDraft(owner.scope)).revision).toBe(1)
     await click('选择此版本')
     await waitForUi(async () => {

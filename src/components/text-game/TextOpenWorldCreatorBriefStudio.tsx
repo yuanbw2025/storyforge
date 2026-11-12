@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_V1, TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from '../../lib/open-world/creator-ending-count'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -170,11 +171,12 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
     return () => { generation.current += 1 }
   }, [props.initialSession, props.selection, readOnly])
 
+  const endingCountReady = draft != null && isTextOpenWorldCreatorEndingCountV1(draft.scale.endings)
   const allAcknowledged = Object.values(acknowledgements).every(Boolean)
   const canConfirm = Boolean(!readOnly && session && draft && !session.sourceIssue
-    && draft.unresolvedQuestions.length === 0 && allAcknowledged && !busy)
+    && endingCountReady && draft.unresolvedQuestions.length === 0 && allAcknowledged && !busy)
   const canContinue = Boolean(!readOnly && session?.confirmedBrief && draft && !busy && !session.sourceIssue
-    && session.production.status === 'brief-ready'
+    && endingCountReady && session.production.status === 'brief-ready'
     && canonicalStringify(draft) === canonicalStringify(session.confirmedBrief.draft))
   const sourceLabel = session?.sourceSummary.label ?? '正在读取来源…'
   const hasAI = isAIConfigReady(aiConfig)
@@ -345,9 +347,14 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
         <RangeField id="tow-locations" label="命名地点" value={draft.scale.namedLocations} onChange={namedLocations => updateScale({ namedLocations })} />
         <RangeField id="tow-mainline" label="主线阶段" value={draft.scale.mainlineStages} onChange={mainlineStages => updateScale({ mainlineStages })} />
         <label className="space-y-1.5 text-xs font-medium" htmlFor="tow-endings">核心结局数量
-          <input id="tow-endings" type="number" min={1} max={12} value={draft.scale.endings}
+          <input id="tow-endings" type="number" min={TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_V1.minimum}
+            max={TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_V1.maximum} value={draft.scale.endings}
+            aria-invalid={!endingCountReady} aria-describedby={endingCountReady ? undefined : 'tow-ending-count-error'}
             className="mt-1 w-full rounded-lg border border-border bg-bg-base px-3 py-2 text-sm"
             onChange={event => updateScale({ endings: Number(event.target.value) })} />
+          {!endingCountReady && <span id="tow-ending-count-error" className="mt-1 block text-text-muted">
+            {TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1}
+          </span>}
         </label>
         <label className="space-y-1.5 text-xs font-medium" htmlFor="tow-threads">重要故事线数量
           <input id="tow-threads" type="number" min={0} max={30} value={draft.scale.significantStorylines}
@@ -379,7 +386,7 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="text-base font-semibold">4. 主 Agent 理解与未决项</h2>
           <p className="mt-1 text-xs text-text-muted">可以反复补充答案；模型候选不会直接写入正式 Brief。</p></div>
-        <button type="button" disabled={readOnly || !hasAI || Boolean(busy) || Boolean(session.sourceIssue)} onClick={consult}
+        <button type="button" disabled={readOnly || !hasAI || !endingCountReady || Boolean(busy) || Boolean(session.sourceIssue)} onClick={consult}
           className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white disabled:opacity-40">
           {busy === 'consulting' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           请求主 Agent
@@ -444,7 +451,7 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs disabled:opacity-40">
           <RotateCcw className="h-4 w-4" />恢复预填
         </button>
-        <button type="button" disabled={readOnly || Boolean(busy) || Boolean(session.sourceIssue)} onClick={saveDraft}
+        <button type="button" disabled={readOnly || !endingCountReady || Boolean(busy) || Boolean(session.sourceIssue)} onClick={saveDraft}
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs disabled:opacity-40">
           {busy === 'saving' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}保存草稿
         </button>

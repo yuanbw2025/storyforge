@@ -10,6 +10,8 @@ const tooling = /^(?:scripts|tools)\/.*\.[cm]?js$/
 const workflow = /^\.github\/workflows\/[^/]+\.ya?ml$/
 const scopeChecker = 'scripts/quality/check-merge-scope.mjs'
 const routingTest = 'scripts/quality/check-merge-scope.test.mjs'
+const mediaList = 'scripts/quality/avg-media-harnesses.txt'
+const manualMedia = new Set(readFileSync(new URL('./avg-media-harnesses.txt', import.meta.url), 'utf8').trim().split(/\r?\n/))
 const tsConfig = /^tsconfig(?:\.[\w.-]+)?\.json$/
 
 /** @param {string} command @param {string[]} args */
@@ -40,7 +42,7 @@ function importedModule(importer, specifier) {
  * @param {(test:string, specifier:string, source:string)=>boolean} affected */
 export function directTests(changed, tests, importsOf, affected = () => true) {
   const modules = new Map(changed.map(path => [moduleName(path), path]))
-  return tests.filter(test => importsOf(test).some(specifier => {
+  return tests.filter(test => !manualMedia.has(test) && importsOf(test).some(specifier => {
     const name = importedModule(test, specifier)
     const source = name && modules.get(name)
     return source && affected(test, specifier, source)
@@ -62,10 +64,10 @@ export function plan(paths, exists = existsSync) {
     const sibling = path.replace(/(\.[cm]?js)$/, '.test$1')
     if (exists(sibling)) nodeTests.add(sibling)
   }
-  if (paths.some(path => workflow.test(path) || path === scopeChecker)) nodeTests.add(routingTest)
+  if (paths.some(path => workflow.test(path) || path === scopeChecker || path === mediaList)) nodeTests.add(routingTest)
   const typeConfigs = present.filter(path => tsConfig.test(path))
   if (source.some(path => !exists(path)) || paths.some(path => ['package.json', 'package-lock.json'].includes(path))) typeConfigs.push('tsconfig.json')
-  const units = present.filter(path => unit.test(path))
+  const units = present.filter(path => unit.test(path) && !manualMedia.has(path))
   if (paths.some(path => ['vitest.config.ts', 'tests/setup.ts'].includes(path))) units.push('tests/registry/project-tables.test.ts')
   if (paths.some(path => ['vite.config.ts', 'vite.adventure-player.config.ts'].includes(path))) scripts.add('build')
   const governance = paths.some(path => ['AGENTS.md', 'CLAUDE.md', 'docs/CONTEXT-ROUTING.md', 'scripts/check-agent-context.mjs'].includes(path))
