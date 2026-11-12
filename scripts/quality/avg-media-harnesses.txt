@@ -1,6 +1,12 @@
+tests/regression/R-AVG-04A22-v5-prototype-release.test.ts
 tests/regression/R-AVG-04A5-visual-planning-harness.test.ts
+tests/regression/R-AVG-04B-audio-processing-harness.test.ts
+tests/regression/R-AVG-04B-audio-v2-formal-flow.test.ts
 tests/regression/R-AVG-04B-sound-planning-harness.test.ts
 tests/regression/R-AVG-04B-sound-production-harness.test.ts
+tests/regression/R-AVG-04B-sound-prototype-release.test.ts
 tests/regression/R-AVG-04B-sound-publisher-harness.test.ts
+tests/regression/R-AVG-04B-sound-stage-inheritance.test.ts
+tests/regression/R-AVG-05A-combined-media-stage.test.ts
 tests/regression/R-AVG-BASE01B-media-harness.test.ts
 tests/regression/R-AVG-BASE02-voice-harness.test.ts

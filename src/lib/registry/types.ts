@@ -618,7 +618,15 @@ export type ContextSourceTransformer = (
   input: ContextSourceTransformInput,
 ) => Promise<ContextSourceTransformResult | undefined>
 
+/** Exact row ranges in the registered audit reader's original rendered text. */
+export interface ConsistencyAuditSourceReadV1 {
+  key: 'canonAssertions' | 'itemLedger'
+  content: string
+  rows: Array<{ id: number; start: number; end: number }>
+}
+
 export interface AssembleContextInput {
+  captureConsistencyAuditSource?: (source: ConsistencyAuditSourceReadV1) => void
   extensionSnapshot?: import('../extensions/types').ExtensionRegistrySnapshot
   projectId: number
   /** Explicit logical read boundary; callers should always provide current WorkspaceScope. */

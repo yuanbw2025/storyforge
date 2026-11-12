@@ -118,6 +118,7 @@ import {
   type TextAdventureSystemsArtifactV1,
 } from '../adventure/production-artifacts'
 import {
+  projectTextAdventureNarrativeDesignModelResultV1,
   parseTextAdventureProductionSupervisionArtifactV1,
   parseTextAdventureCastBibleArtifactV1,
   parseTextAdventureNarrativeArcScenesArtifactV1,
@@ -424,6 +425,7 @@ export type ProductionVisionRunnerV1 = (input: {
   projectId: number
   requirementKey: string
   category: string
+  expectedCapabilityHash?: string
   system: string
   contextText: string
   images: Array<{
@@ -5859,6 +5861,7 @@ async function defaultVisionRunner(input: Parameters<ProductionVisionRunnerV1>[0
       { role: 'user', content: `以下是登记的文字审查上下文，随后图片按 Artifact key/hash 标注：\n<registered-context>\n${input.contextText}\n</registered-context>` },
     ],
     images: input.images,
+    expectedCapabilityHash: input.expectedCapabilityHash,
     maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result,
     responseFormat: 'json_object',
   })
@@ -7096,6 +7099,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
   }
   const response = input.authorDraftJson ? null : await options.runText({
     projectId: input.scope.projectId, requirementKey, category: options.category,
+    expectedCapabilityHash: binding.bindingHash,
     system, contextText: input.contextText,
     ...(openingJsonSchema ? {jsonSchema: openingJsonSchema} : {}),
     maximumOutputTokens: Math.min(openOutputLimit ?? productProductionProviderOutputLimitV1(input.task, input.contextText),
@@ -7281,71 +7285,16 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     if (!options.brief.textAdventure) fail('文字冒险架构任务缺少专用 Brief')
     payload = parseTextAdventureArchitectureArtifactV1(raw, options.brief.textAdventure); kind = 'product-design'
     quality = { fourLevelSpaceVerified: true }
-  } else if (input.task.taskKey === 'content.narrative-arc-scenes') {
-    const storyBible = parseTextAdventureStoryBibleArtifactV1(
-      artifactPayload(input, 'content.story-bible'), options.brief,
-    )
-    const cast = parseTextAdventureCastBibleArtifactV1({
-      value: artifactPayload(input, 'content.cast-bible'),
-      brief: options.brief,
-      allowedResourceKeys: options.brief.source.selection.resourceKeys,
-    })
-    const arcScenes = parseTextAdventureNarrativeArcScenesArtifactV1({
-      value: raw, brief: options.brief, cast, storyBible,
+  } else if (input.task.taskKey === 'content.narrative-arc-scenes'
+    || input.task.taskKey === 'content.narrative-decision-plan'
+    || input.task.taskKey === 'content.ending-route-plan') {
+    const design = projectTextAdventureNarrativeDesignModelResultV1({
+      taskKey: input.task.taskKey, raw, brief: options.brief,
+      readArtifact: artifactKey => artifactPayload(input, artifactKey),
       locationTitles: textAdventureLocationTitles,
     })
-    payload = arcScenes
-    kind = 'product-design'; quality = {
-      narrativeArcScenesVerified: true,
-      sceneCardCount: arcScenes.acts.flatMap(act => act.sceneCards).length,
-      endingCount: arcScenes.endings.length,
-    }
-  } else if (input.task.taskKey === 'content.narrative-decision-plan') {
-    const storyBible = parseTextAdventureStoryBibleArtifactV1(
-      artifactPayload(input, 'content.story-bible'), options.brief,
-    )
-    const cast = parseTextAdventureCastBibleArtifactV1({
-      value: artifactPayload(input, 'content.cast-bible'),
-      brief: options.brief,
-      allowedResourceKeys: options.brief.source.selection.resourceKeys,
-    })
-    const decisionPlan = parseTextAdventureNarrativeDecisionPlanArtifactV1({
-      value: raw, brief: options.brief, cast, storyBible,
-    })
-    payload = decisionPlan
-    kind = 'product-design'; quality = {
-      narrativeDecisionPlanVerified: true,
-      meaningfulDecisionCount: decisionPlan.decisions.length,
-    }
-  } else if (input.task.taskKey === 'content.ending-route-plan') {
-    const storyBible = parseTextAdventureStoryBibleArtifactV1(
-      artifactPayload(input, 'content.story-bible'), options.brief,
-    )
-    const cast = parseTextAdventureCastBibleArtifactV1({
-      value: artifactPayload(input, 'content.cast-bible'),
-      brief: options.brief,
-      allowedResourceKeys: options.brief.source.selection.resourceKeys,
-    })
-    const arcPlan = parseTextAdventureNarrativeArcPlanArtifactV1({
-      value: artifactPayload(input, 'content.narrative-arc-plan'),
-      brief: options.brief,
-      cast,
-      storyBible,
-      locationTitles: textAdventureLocationTitles,
-    })
-    const endingRoutePlan = parseTextAdventureEndingRoutePlanArtifactV1({
-      value: raw,
-      arcPlan,
-      storyBible,
-    })
-    payload = endingRoutePlan
-    kind = 'product-design'; quality = {
-      endingRoutePlanVerified: true,
-      routeCount: endingRoutePlan.routes.length,
-      referencedEffectCount: new Set(
-        endingRoutePlan.routes.flatMap(route => route.requiredEffectKeys),
-      ).size,
-    }
+    payload = design.payload
+    kind = 'product-design'; quality = design.quality
   } else if (input.task.taskKey === 'content.main-quest-plan') {
     const cast = parseTextAdventureCastBibleArtifactV1({
       value: artifactPayload(input, 'content.cast-bible'),
@@ -9283,6 +9232,7 @@ async function executeTextAdventureVisionCapabilityPreflightTask(
     projectId: input.scope.projectId,
     requirementKey,
     category: options.category,
+    expectedCapabilityHash: binding.bindingHash,
     system: '你是图片输入能力验证器。必须实际观察唯一附图的四个纯色色块。' +
       '每个色块只允许使用标签 black、blue、cyan、green、magenta、red、white、yellow；' +
       '四个色块必须选择四个互不重复的标签。' +
@@ -9810,6 +9760,7 @@ async function executeTextAdventureVisualQualityReviewTask(
     try {
       const response = await options.runVision({
         projectId: input.scope.projectId, requirementKey, category: options.category,
+        expectedCapabilityHash: binding.bindingHash,
         system, contextText: input.contextText, images: visionImages,
         maximumOutputTokens: input.task.budgetReservation.outputTokens, signal: input.signal,
       })

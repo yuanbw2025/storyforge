@@ -2,9 +2,9 @@ import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { parseAndVerifyCreationReleaseManifestV1 } from '../creation-release/contracts'
 import { db } from '../db/schema'
 import { readVerifiedMediaBlobV1 } from '../media/blob-store'
-import type { ComicMediaAsset, ComicReleaseManifestV1, ComicReleaseTierV1, CreationReleaseAssetV1, CreationReleaseV1, WorkspaceScope } from '../types'
+import type { ComicReleaseManifestV1, ComicReleaseTierV1, CreationReleaseAssetV1, CreationReleaseV1, WorkspaceScope } from '../types'
 import { resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
-import { inspectComicQualityV1 } from './qa'
+import { comicVisualReleaseAssetsV1, inspectComicQualityV1 } from './qa'
 import { assertComicReleaseManifestV1 } from './release-contracts'
 
 function omitSystem<T extends Record<string, any>>(row: T): Record<string, any> {
@@ -28,10 +28,7 @@ export async function publishComicReleaseV1(input: { scope: WorkspaceScope; expe
   ])
   const pageIds = pages.flatMap(page => page.id == null ? [] : [page.id]); const panels = pageIds.length ? await db.comicPanels.where('pageId').anyOf(pageIds).toArray() : []
   const unitKeyById = new Map(sourceUnits.flatMap(unit => unit.id == null ? [] : [[unit.id, unit.sourceUnitKey] as const])); const pageById = new Map(pages.flatMap(page => page.id == null ? [] : [[page.id, page] as const])); const assetByKey = new Map(allAssets.map(asset => [asset.stableKey, asset]))
-  const selectedPanelAssets = input.tier === 'visual' ? panels.map(panel => assetByKey.get(panel.selectedMediaAssetKey ?? '')).filter(Boolean) as ComicMediaAsset[] : []
-  const selectedSubjectAssets = input.tier === 'visual' ? subjects.map(subject => assetByKey.get(subject.selectedMediaAssetKey ?? '')).filter(Boolean) as ComicMediaAsset[] : []
-  const referencedAssets = input.tier === 'visual' ? selectedPanelAssets.flatMap(asset => asset.referenceAssetKeys.map(key => assetByKey.get(key)).filter(Boolean) as ComicMediaAsset[]) : []
-  const frozenAssets = [...new Map([...selectedPanelAssets, ...selectedSubjectAssets, ...referencedAssets].map(asset => [asset.stableKey, asset])).values()]
+  const frozenAssets = input.tier === 'visual' ? comicVisualReleaseAssetsV1(panels, subjects, assetByKey) : []
   const blobByAsset = new Map<string, Awaited<ReturnType<typeof readVerifiedMediaBlobV1>>>()
   for (const asset of frozenAssets) blobByAsset.set(asset.stableKey, await readVerifiedMediaBlobV1({ scope, blobObjectId: asset.blobObjectId }))
   const createdAt = Date.now()
