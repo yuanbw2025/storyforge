@@ -243,7 +243,7 @@ function parseModelBinding(value: unknown, path: string): LongConsistencyModelBi
   }
 }
 
-function parseBudget(value: unknown, path: string): H4LongConsistencyRunBudgetV1 {
+export function parseH4LongConsistencyRunBudgetV1(value: unknown, path: string): H4LongConsistencyRunBudgetV1 {
   const record = readRecord(value, path)
   const keys = ['maxModelCalls', 'maxInputTokens', 'maxOutputTokens', 'maxDurationMs', 'maxCostUsd'] as const
   assertExactKeys(record, keys, keys, path)
@@ -260,7 +260,7 @@ function parseBudget(value: unknown, path: string): H4LongConsistencyRunBudgetV1
   return budget
 }
 
-function parseUsage(value: unknown, path: string): H4LongConsistencyRunUsageV1 {
+export function parseH4LongConsistencyRunUsageV1(value: unknown, path: string): H4LongConsistencyRunUsageV1 {
   const record = readRecord(value, path)
   const keys = [
     'modelCalls',
@@ -428,13 +428,13 @@ export function parseH4LongConsistencyRunCheckpointV1(value: unknown): H4LongCon
       'checkpoint.maxAttemptsPerFixture',
       { min: 1 },
     ),
-    budget: parseBudget(record.budget, 'checkpoint.budget'),
+    budget: parseH4LongConsistencyRunBudgetV1(record.budget, 'checkpoint.budget'),
     fixtureIds,
     fixtureSetHash: readHash(record.fixtureSetHash, 'checkpoint.fixtureSetHash'),
     attempts,
     completed,
     failures,
-    usage: parseUsage(record.usage, 'checkpoint.usage'),
+    usage: parseH4LongConsistencyRunUsageV1(record.usage, 'checkpoint.usage'),
     checkpointHash: readHash(record.checkpointHash, 'checkpoint.checkpointHash'),
   }
 }
@@ -760,7 +760,7 @@ function resolvedBudget(
   maxAttemptsPerFixture: number,
   override: Partial<H4LongConsistencyRunBudgetV1> | undefined,
 ): H4LongConsistencyRunBudgetV1 {
-  return parseBudget({
+  return parseH4LongConsistencyRunBudgetV1({
     maxModelCalls: override?.maxModelCalls ?? fixtureCount * maxAttemptsPerFixture,
     maxInputTokens: override?.maxInputTokens ?? 2_000_000,
     maxOutputTokens: override?.maxOutputTokens ?? 200_000,

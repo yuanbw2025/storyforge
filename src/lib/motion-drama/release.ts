@@ -2,6 +2,7 @@ import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { parseAndVerifyCreationReleaseManifestV1 } from '../creation-release/contracts'
 import { db } from '../db/schema'
 import { readMediaBlobObjectData } from '../product-production/media-blob-store'
+import { assertStoredRasterImageV1 } from '../media/blob-store'
 import type { CreationReleaseAssetV1, CreationReleaseV1, MotionDramaPromptPackMaturityV1, MotionDramaProviderTargetV1, MotionDramaReleaseManifestV1, WorkspaceScope } from '../types'
 import { resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { verifyMotionDramaPromptPackV1 } from './prompt-pack'
@@ -63,7 +64,8 @@ export async function publishMotionDramaReleaseV1(input: { scope: WorkspaceScope
   for (const item of [...selectedVersions.map(row => ({ id: row.blobObjectId! })), ...selectedReferences.map(row => ({ id: row.blobObjectId! }))]) if (!blobRows.has(item.id)) {
     const blob = await db.mediaBlobObjects.get(item.id)
     if (!blob?.id || blob.workId !== roots.scope.workId) throw new Error('[motion-drama-release] 参考素材不存在或越界')
-    await readMediaBlobObjectData({ scope: roots.scope, blobObjectId: blob.id, expected: { contentHash: blob.contentHash, byteSize: blob.byteSize, mimeType: blob.mimeType } })
+    const data = await readMediaBlobObjectData({ scope: roots.scope, blobObjectId: blob.id, expected: { contentHash: blob.contentHash, byteSize: blob.byteSize, mimeType: blob.mimeType } })
+    if (blob.mimeType.startsWith('image/')) await assertStoredRasterImageV1(data, blob)
     blobRows.set(item.id, blob as import('../types').MediaBlobObjectRecordV1 & { id: number })
   }
   const createdAt = Date.now()

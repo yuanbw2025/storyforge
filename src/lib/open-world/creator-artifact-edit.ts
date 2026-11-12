@@ -1,3 +1,4 @@
+import { readTextOpenWorldObservedTokenPairV1 } from "./production-usage"
 import Dexie from 'dexie'
 import { readTextOpenWorldCreatorBuildNewWorkAuthorityV1 } from './creator-derived-authority'
 import { assertTextOpenWorldProductionNewWorkV1 } from './source-admission'
@@ -589,14 +590,6 @@ function parseModelUsageArtifactV1(value: unknown, label: string): TextOpenWorld
     return fail('model-result', `${label} usage 无效`)
   }
   return usageRecord as unknown as TextOpenWorldCreatorEditModelUsageV1
-}
-
-function safeProviderUsageV1(value: unknown): { inputTokens: number; outputTokens: number } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const usage = value as Record<string, unknown>
-  if (!Number.isSafeInteger(usage.inputTokens) || Number(usage.inputTokens) < 0
-    || !Number.isSafeInteger(usage.outputTokens) || Number(usage.outputTokens) < 0) return null
-  return { inputTokens: Number(usage.inputTokens), outputTokens: Number(usage.outputTokens) }
 }
 
 async function parseModelResultArtifactBody(
@@ -3053,7 +3046,7 @@ async function resolveAgentPatch(input: {
     } catch (cause) {
       const lifecycle = result.requestLifecycle
       const status = lifecycle?.phase === 'response-observed' ? lifecycle.responseStatus : null
-      const providerUsage = safeProviderUsageV1(result.usage)
+      const providerUsage = readTextOpenWorldObservedTokenPairV1(result.usage)
       const retryable = status != null && retryableCreatorEditResponseStatusV1(status)
       const knownFailure = lifecycle?.phase === 'pre-dispatch'
         || (lifecycle?.phase === 'response-observed' && status != null
@@ -3126,7 +3119,7 @@ async function resolveAgentPatch(input: {
       throw cause
     }
     const durationMs = Math.max(0, Date.now() - startedAt)
-    const providerUsage = safeProviderUsageV1(result.usage)
+    const providerUsage = readTextOpenWorldObservedTokenPairV1(result.usage)
     const inputTokens = providerUsage?.inputTokens ?? estimatedPromptTokens
     const outputTokens = providerUsage?.outputTokens ?? estimateTokens(raw)
     const modelUsage: TextOpenWorldCreatorEditModelUsageV1 = {

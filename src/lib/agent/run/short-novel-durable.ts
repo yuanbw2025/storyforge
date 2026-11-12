@@ -1,3 +1,4 @@
+import { parseLegacyModelJsonV1 } from '../../ai/legacy-model-json'
 import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from './creation-response-evidence'
 import { chat, type ChatResult } from '../../ai/client'
 import { assembleContext } from '../../registry/assemble-context'
@@ -91,133 +92,8 @@ const ARTIFACT_CONFIG = {
   'targeted-rewrite': { skillId: 'short.targeted-rewrite', stepId: 'short:targeted-rewrite', category: 'short-novel.targeted-rewrite', verifier: 'short-novel-targeted-rewrite-terminal-v1' },
 } as const
 
-function escapeJsonStringControls(source: string): string {
-  let result = ''
-  let inString = false
-  let escaped = false
-  for (const character of source) {
-    if (!inString) {
-      result += character
-      if (character === '"') inString = true
-      continue
-    }
-    if (escaped) {
-      result += character
-      escaped = false
-      continue
-    }
-    if (character === '\\') {
-      result += character
-      escaped = true
-      continue
-    }
-    if (character === '"') {
-      result += character
-      inString = false
-      continue
-    }
-    if (character === '\n') result += '\\n'
-    else if (character === '\r') result += '\\r'
-    else if (character === '\t') result += '\\t'
-    else if (character.charCodeAt(0) < 0x20) result += `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`
-    else result += character
-  }
-  return result
-}
-
-function escapeLikelyInnerStringQuotes(source: string): string {
-  let result = ''
-  let inString = false
-  let escaped = false
-  for (let index = 0; index < source.length; index++) {
-    const character = source[index]
-    if (!inString) {
-      result += character
-      if (character === '"') inString = true
-      continue
-    }
-    if (escaped) {
-      result += character
-      escaped = false
-      continue
-    }
-    if (character === '\\') {
-      result += character
-      escaped = true
-      continue
-    }
-    if (character !== '"') {
-      result += character
-      continue
-    }
-    let lookahead = index + 1
-    while (lookahead < source.length && /\s/.test(source[lookahead])) lookahead++
-    if (lookahead >= source.length || [':', ',', '}', ']'].includes(source[lookahead])) {
-      result += character
-      inString = false
-    } else {
-      result += '\\"'
-    }
-  }
-  return result
-}
-
-function singleJsonSpan(source: string): string | null {
-  const spans: Array<{ start: number; end: number }> = []
-  const stack: string[] = []
-  let start = -1
-  let inString = false
-  let escaped = false
-  let malformed = false
-  for (let index = 0; index < source.length; index++) {
-    const character = source[index]
-    if (inString) {
-      if (escaped) escaped = false
-      else if (character === '\\') escaped = true
-      else if (character === '"') inString = false
-      continue
-    }
-    if (stack.length > 0 && character === '"') {
-      inString = true
-      continue
-    }
-    if (character === '{' || character === '[') {
-      if (stack.length === 0) start = index
-      stack.push(character)
-      continue
-    }
-    if (character !== '}' && character !== ']') continue
-    if (stack.length === 0) {
-      malformed = true
-      continue
-    }
-    const opening = stack.pop()
-    if ((opening === '{' && character !== '}') || (opening === '[' && character !== ']')) malformed = true
-    if (stack.length === 0 && start >= 0) {
-      spans.push({ start, end: index + 1 })
-      start = -1
-    }
-  }
-  if (malformed || inString || stack.length !== 0 || spans.length !== 1) return null
-  return source.slice(spans[0].start, spans[0].end)
-}
-
 export function parseShortNovelModelJsonV1(raw: string): unknown {
-  const normalized = raw.trim().replace(/^\uFEFF/, '')
-  if (!normalized || normalized.length > 2_000_000) throw new Error('[short-novel-run] 模型输出为空或过长')
-  const candidates = [normalized]
-  const extracted = singleJsonSpan(normalized)
-  if (extracted && extracted !== normalized) candidates.push(extracted)
-  for (const candidate of candidates) {
-    try { return JSON.parse(candidate) } catch { /* try the bounded provider repair below */ }
-    const controlsRepaired = escapeJsonStringControls(candidate)
-    const repairedVariants = [controlsRepaired, escapeLikelyInnerStringQuotes(controlsRepaired)]
-    for (const repaired of repairedVariants) {
-      if (repaired === candidate) continue
-      try { return JSON.parse(repaired) } catch { /* reject ambiguous or structurally invalid output */ }
-    }
-  }
-  throw new Error('[short-novel-run] 模型输出无法解析为唯一 JSON')
+  return parseLegacyModelJsonV1(raw, '[short-novel-run]')
 }
 
 function parsePayload<K extends ShortNovelArtifactKindV1>(kind: K, value: unknown): ShortNovelCandidatePayloadMapV1[K] {

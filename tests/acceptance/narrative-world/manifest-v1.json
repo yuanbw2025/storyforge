@@ -21,18 +21,98 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-import-purpose-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-import-shared-contract-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality021129-integrated-v2.json",
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-post385-v1.json",
         "workPackage": "SFQA-022-044-051",
         "note": "Preserved the measured mainline before integration."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-import-nodes-v1.json",
+        "path": "tests/acceptance/narrative-world/baseline-20261112-import-purpose-v1.json",
         "workPackage": "SFQA-022-044-051",
         "note": "Preserved the measurements from the reviewed change."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality042-integrated-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained source-pinned measurement before SFQA-009 joined the product fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-integrated-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Retained source-pinned measurement before SFQA-009 joined the product fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-quality021129-integrated-v2.json",
+        "workPackage": "NW-1B",
+        "note": "Retained source-pinned measurement before SFQA-009 joined the product fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-sfqa009-integrated-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Retained source-pinned measurement before SFQA-009 joined the product fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-sfqa009-core-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the source-pinned report before SFQA-009 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261112-quality086-integrated-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the source-pinned report before SFQA-009 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261111-sfqa009-core-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the source-pinned report before SFQA-009 integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261110-issue179-main834-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved pre-SFQA009 main receipt. Fixed corpus and historical evidence are unchanged; pure helper extraction has its own source-pinned receipt."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality011-integrated-v1.json",
+        "workPackage": "SFQA-042",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality042-raster-v1.json",
+        "workPackage": "SFQA-042",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality050-integrated-v1.json",
+        "workPackage": "SFQA-011",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality011-production-review-v1.json",
+        "workPackage": "SFQA-011",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality109-integrated-v1.json",
+        "workPackage": "SFQA-050",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-sfqa050-dispatch-v1.json",
+        "workPackage": "SFQA-050",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality021129-integrated-v2.json",
+        "workPackage": "SFQA-109",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality109-isolated-v1.json",
+        "workPackage": "SFQA-109",
+        "note": "Preserved the measurement on the independent fix branch."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-quality020-integrated-v1.json",
@@ -833,6 +913,16 @@
         "note": "Preserve the measured runtime-media receipt before the SFQA-028/032 runtime event admission and continuation owner fixes."
       },
       {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality021129-integrated-v2.json",
+        "workPackage": "SFQA-022-044-051",
+        "note": "Preserved the measured mainline before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-import-nodes-v1.json",
+        "workPackage": "SFQA-022-044-051",
+        "note": "Preserved the measurements from the reviewed change."
+      },
+      {
         "path": "tests/acceptance/narrative-world/baseline-20261112-quality018-integrated-v1.json",
         "workPackage": "SFQA-022-044-051",
         "note": "Preserved the measured mainline before integration."
@@ -1167,6 +1257,14 @@
     "tests/regression/R-WORLD-D-phase-d-closure.test.ts",
     "tests/setup.ts",
     "vitest.config.ts",
+    "src/components/product/TextAdventureMediaReview.tsx",
+    "src/lib/product-production/recovery-policy.ts",
+    "src/lib/adventure/production-artifacts-v2.ts",
+    "src/lib/media/blob-store.ts",
+    "src/lib/media/raster-image.ts",
+    "tests/helpers/raster-decoder-vitest.ts",
+    "src/lib/agent/run/context-manifest.ts",
+    "src/lib/utils/legacy-id-array.ts",
     "src/lib/agent/run/ledger-portability.ts",
     "src/lib/import/document-parse-backup-privacy.ts",
     "src/lib/import/document-parse-binding.ts",

@@ -1,3 +1,5 @@
+import { sha256BinaryV1 } from '../../src/lib/media/blob-store'
+import { encodeFixtureRasterV1, installRasterDecoderForVitestV1 } from '../helpers/raster-decoder-vitest'
 import { CURRENT_BACKUP_VERSION } from '../../src/lib/export/backup-trust'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
@@ -48,12 +50,9 @@ const brief: AdaptationBriefV1 = {
 }
 const EMPTY_DESIGN = { description: '', silhouette: '', facialFeatures: '', hairAndCostume: '', palette: [] as string[], materials: [] as string[], distinguishingMarks: [] as string[], prohibitedChanges: [] as string[] }
 
-function pngBytes(width = 1024, height = 1536): ArrayBuffer {
-  const bytes = new Uint8Array(32)
-  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-  const view = new DataView(bytes.buffer); view.setUint32(16, width); view.setUint32(20, height)
-  return bytes.buffer
-}
+installRasterDecoderForVitestV1()
+
+function pngBytes(width = 1024, height = 1536): ArrayBuffer { return encodeFixtureRasterV1(width, height) }
 
 function base64(data: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(data)))
@@ -233,7 +232,22 @@ describe('COMIC-1/2 · complete comic production workflow', () => {
     expect(importedPanel?.selectedMediaAssetKey).toBe(importedAsset?.stableKey)
     expect(importedAsset?.blobObjectId).toBe(importedBlob?.id)
     expect(importedBlob?.contentHash).toMatch(/^[a-f0-9]{64}$/)
-    expect(importedBlob?.data.byteLength).toBe(32)
+    expect(importedBlob?.data).toEqual(pngBytes())
+
+    const legacy = structuredClone(backup)
+    const bytes = new Uint8Array(32)
+    bytes.set([137, 80, 78, 71, 13, 10, 26, 10])
+    new DataView(bytes.buffer).setUint32(16, 1024)
+    new DataView(bytes.buffer).setUint32(20, 1536)
+    legacy.mediaBlobObjects![0].data = 'data:image/png;base64,' + base64(bytes.buffer)
+    legacy.mediaBlobObjects![0].byteSize = bytes.length
+    legacy.mediaBlobObjects![0].contentHash = await sha256BinaryV1(bytes.buffer)
+    const legacyId = await importProjectJSON(legacy)
+    const oldBlob = (await db.mediaBlobObjects.where('projectId').equals(legacyId).first())!
+    const oldScope = {projectId: oldBlob.projectId, worldId: oldBlob.worldId, workId: oldBlob.workId}
+    const oldAsset = (await db.comicMediaAssets.where('projectId').equals(legacyId).first())!
+    await expect(readComicAssetDataUrlV1({scope: oldScope, assetKey: oldAsset.stableKey})).rejects.toThrow(/图片/u)
+    expect((await db.mediaBlobObjects.get(oldBlob.id!))?.data).toEqual(bytes.buffer)
   })
 
   it('旧手工页格即使选片也不能绕过专业生产与 Release 闸门', async () => {
