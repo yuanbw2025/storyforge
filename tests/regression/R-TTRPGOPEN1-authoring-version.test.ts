@@ -13,7 +13,7 @@ import {
 import { assertTtrpgScriptedAuthoringSettings } from "../../src/lib/ttrpg/authoring-settings";
 import {
   createTtrpgProductionBriefContentV3, createTtrpgProductionBriefV3,
-  hashTtrpgProductionBriefContentV3, parseTtrpgProductionBriefV3,
+  hashTtrpgProductionBriefContentV3, parseTtrpgProductionBriefContentShapeV3, parseTtrpgProductionBriefV3,
 } from "../../src/lib/ttrpg/production-brief-v3";
 import { parseTtrpgProductionBriefV2 } from "../../src/lib/ttrpg/production-brief";
 import { createStoryForgeRulePackV1 } from "../../src/lib/ttrpg/storyforge-rule-pack";
@@ -314,6 +314,16 @@ describe("open Brief V3 冻結合同", () => {
     const fixture = await openBriefFixture();
     const { input, content, brief } = fixture;
     const bytes = JSON.stringify(brief);
+    expect(content.sourcePlan.sourcePurpose?.purpose).toBe("ttrpg");
+    const historical = structuredClone(content);
+    delete historical.sourcePlan.sourcePurpose;
+    expect(parseTtrpgProductionBriefContentShapeV3(historical)).toEqual(historical);
+    expect(() => parseTtrpgProductionBriefContentShapeV3({
+      ...content, sourcePlan: { ...content.sourcePlan, sourcePurpose: { ...content.sourcePlan.sourcePurpose, purpose: "avg" } },
+    })).toThrow();
+    expect(() => parseTtrpgProductionBriefContentShapeV3({
+      ...content, sourcePlan: { ...content.sourcePlan, unexpected: true },
+    })).toThrow(/未知字段/);
     expect(await parseTtrpgProductionBriefV3(bytes)).toEqual(brief);
     expect(brief.rulePackHash).toBe(await hashProductProductionValueV2(input.rulePack));
     expect(brief.settingsRevision).toBe(input.settingsRevision);
