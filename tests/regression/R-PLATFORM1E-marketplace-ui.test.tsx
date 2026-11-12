@@ -497,6 +497,7 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     const firstWrite = deferred<Awaited<ReturnType<typeof service.setSocialEdge>>>()
     service.setSocialEdge.mockImplementationOnce(() => firstWrite.promise)
     await clickSocial('收藏')
+    await waitFor(() => expect(service.setSocialEdge).toHaveBeenCalledTimes(1))
     const id = service.setSocialEdge.mock.calls[0][0].requestId
     await credential(accountB)
     await clickSocial('读取收藏状态')
@@ -508,6 +509,7 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     await clickSocial('读取收藏状态')
     service.setSocialEdge.mockImplementationOnce(async input => { service.save(input); throw new Error('回复未送达') })
     await clickSocial('收藏')
+    await waitFor(() => expect(host.textContent).toContain('回复未送达'))
     expect(service.setSocialEdge.mock.calls[2][0].requestId).toBe(id)
     await clickSocial('刷新')
     await expectFavorite('已收藏')
