@@ -719,10 +719,14 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
       applicationId: 'application.host-ui', postId: post.postId, userId: 'user.player',
       characterPreference: '记者', note: '偏调查', status: 'accepted' as const, createdAt: 1, updatedAt: 2,
     }
+    const profileReply = deferred<void>()
     const community = {
-      upsertProfile: vi.fn().mockResolvedValue({
-        userId: 'user.host', handle: 'host', displayName: '主持人', bio: '', locale: 'zh-CN',
-        timeZone: 'Asia/Shanghai', ageBand: 'adult', status: 'active', createdAt: 1, updatedAt: 1,
+      upsertProfile: vi.fn(async () => {
+        await profileReply.promise
+        return {
+          userId: 'user.host', handle: 'host', displayName: '主持人', bio: '', locale: 'zh-CN',
+          timeZone: 'Asia/Shanghai', ageBand: 'adult', status: 'active', createdAt: 1, updatedAt: 1,
+        }
       }),
       discoverLfg: vi.fn().mockResolvedValue([{ post, accepted: 1, waitlisted: 0, availableSeats: 3 }]),
       myApplications: vi.fn().mockResolvedValue([]), applyToLfg: vi.fn(), createLfg: vi.fn(),
@@ -750,7 +754,16 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
       setInput(labeledInput(host, '显示名称'), '主持人')
     })
     await act(async () => { button(host, '保存社区资料').click(); await settle() })
+    await waitFor(() => expect(community.upsertProfile).toHaveBeenCalledOnce())
+    expect(button(host, '刷新招募').disabled).toBe(true)
     await act(async () => { button(host, '刷新招募').click(); await settle() })
+    expect(community.discoverLfg).not.toHaveBeenCalled()
+    await act(async () => { profileReply.resolve() })
+    await waitFor(() => {
+      expect(host.textContent).toContain('已连接 @host')
+      expect(button(host, '刷新招募').disabled).toBe(false)
+    })
+    await act(async () => button(host, '刷新招募').click())
     await waitFor(() => expect(host.textContent).toContain('主持人周末团'))
     await act(async () => { button(host, '管理申请').click(); await settle() })
     await waitFor(() => expect(host.textContent).toContain('偏调查'))
@@ -759,7 +772,8 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
       setInput(host.querySelector<HTMLInputElement>('[aria-label="交接在线房间 ID"]')!, 'room.hosted')
     })
     await act(async () => { button(host, '分配在线席位').click(); await settle() })
-    await waitFor(() => expect(community.bindRoomHandoffs).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(host.textContent).toContain('已为 1 个正式席位绑定在线房间'))
+    expect(community.bindRoomHandoffs).toHaveBeenCalledTimes(1)
     expect(community.bindRoomHandoffs).toHaveBeenCalledWith(expect.objectContaining({
       accessToken: 'token-community-host-12345', postId: post.postId, roomId: 'room.hosted',
       releaseHash: RELEASE,
