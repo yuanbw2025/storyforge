@@ -20,12 +20,31 @@ import type {
 } from '../../src/lib/types'
 import {
   createConfirmedProductBriefV1,
-  createProductReleaseLineageV1,
+  type createProductReleaseLineageV1,
   productReleaseUidV1,
 } from '../../src/lib/product/source-contracts'
 import { worldReleaseUidV1 } from '../../src/lib/world-engine/releases'
 
 const CREATED_AT = 1_700_000_000_000
+
+/** Construct a stored historical receipt. Portable runtime fixtures have no local world
+ * locator for a new publication; the real manifest reader verifies the five linked contracts. */
+export async function createPortableFixtureLineage(
+  input: Parameters<typeof createProductReleaseLineageV1>[0],
+): Promise<ProductReleaseLineageV1> {
+  const body: Omit<ProductReleaseLineageV1, 'lineageHash'> = {
+    schema: 'storyforge.product-release-lineage', version: 1,
+    productType: input.productType, productInstanceKey: input.productInstanceKey,
+    releaseUid: input.releaseUid, releaseVersion: input.releaseVersion, releaseHash: input.releaseHash,
+    parentRelease: input.parentRelease, worldReferenceHash: input.worldReference.referenceHash,
+    sourcePlanHash: input.sourcePlan.planHash, sourceManifestHash: input.sourceManifest.manifestHash,
+    confirmedBriefHash: input.confirmedBrief.confirmationHash, build: input.build,
+    quality: { passed: true, receiptHashes: [...new Set(input.quality.receiptHashes)].sort() },
+    compatibility: { ...input.compatibility, evidenceHashes: [...new Set(input.compatibility.evidenceHashes)].sort() },
+    createdAt: input.createdAt ?? CREATED_AT,
+  }
+  return { ...body, lineageHash: await hashCanonicalValue(body) }
+}
 
 /**
  * Strict protocol fixture. It creates all five release contracts rather than
@@ -205,7 +224,7 @@ export async function createFixtureProductReleaseManifestV1(
     releaseVersion,
     releaseHash: releaseIdentityHash,
   })
-  const lineage = await createProductReleaseLineageV1({
+  const lineage = await createPortableFixtureLineage({
     productType: runtimePackage.productType,
     productInstanceKey: productionKey,
     releaseUid,

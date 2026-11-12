@@ -515,6 +515,7 @@ export interface ProductProductionBriefV3 {
   source: {
     worldReleaseId: number;
     worldContentHash: string;
+    sourcePurpose?: import("../world-engine/source-purpose-contract").WorldSourcePurposeProofV1;
     selection: import("./product-release").ProductWorldSourceSelection;
     startingPoint: ProductStartingPointV1;
   };

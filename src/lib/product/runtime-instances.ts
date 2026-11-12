@@ -301,8 +301,6 @@ export function createProductInitialStateV1(input: {
 }
 
 async function addInitialNarrativeEvents(input: {
-  scope: WorkspaceScope
-  worldGroupId: number | null
   session: ProductRuntimeSession
   state: ProductRuntimeState
 }): Promise<{ lastSequence: number; projectedState: ProductRuntimeState }> {
@@ -314,8 +312,8 @@ async function addInitialNarrativeEvents(input: {
   if (!entryNodeKey) throw new Error('[instance] 产品叙事初始节点缺失')
   let projected = structuredClone(input.state)
   const started = {
-    projectId: input.scope.projectId,
-    worldGroupId: input.worldGroupId,
+    projectId: input.session.projectId,
+    worldGroupId: input.session.worldGroupId ?? null,
     sessionId: input.session.id!,
     sequence: 1,
     type: 'narrative.started' as const,
@@ -329,8 +327,8 @@ async function addInitialNarrativeEvents(input: {
   }
   projected = applyProductRuntimeEvent(projected, started)
   const entered = {
-    projectId: input.scope.projectId,
-    worldGroupId: input.worldGroupId,
+    projectId: input.session.projectId,
+    worldGroupId: input.session.worldGroupId ?? null,
     sessionId: input.session.id!,
     sequence: 2,
     type: 'narrative.node.entered' as const,
@@ -346,8 +344,8 @@ async function addInitialNarrativeEvents(input: {
   await db.productRuntimeEvents.bulkAdd([started, entered])
   if (projected.narrative?.completed) {
     const ending = {
-      projectId: input.scope.projectId,
-      worldGroupId: input.worldGroupId,
+      projectId: input.session.projectId,
+      worldGroupId: input.session.worldGroupId ?? null,
       sessionId: input.session.id!,
       sequence: 3,
       type: 'narrative.ending.reached' as const,
@@ -615,6 +613,10 @@ export async function createProductRuntimeInstance(
         || currentParent.status !== 'active'
         || currentParent.updatedAt !== continuationParent.updatedAt
         || currentParent.productReleaseId !== continuationParent.productReleaseId
+        || (openContinuation && (currentParent.projectId !== currentScope.projectId
+          || currentParent.worldId !== currentScope.worldId
+          || currentParent.workId !== currentScope.workId
+          || (currentParent.worldGroupId ?? null) !== (continuationParent.worldGroupId ?? null)))
         || currentSequence !== continuation.expectedParentSequence
       ) {
         throw new Error('[instance] 父战役在续团创建期间发生变化')
@@ -627,8 +629,16 @@ export async function createProductRuntimeInstance(
       const duplicate = existing.find(row => JSON.parse(row.initialStateJson).ttrpg?.openRun?.releaseContinuation?.plan.planHash === openContinuation.expectedPlanHash);
       if (duplicate) {
         if (duplicate.productReleaseId !== productRelease!.id) throw new Error('[instance] 此续团确认已绑定另一个发布，请重新预览');
-        return duplicate;
+        if ((duplicate.worldGroupId ?? null) !== (preparedSession.worldGroupId ?? null)) {
+          throw new Error('[instance] 此续团确认已绑定另一个世界组，请重新预览');
+        }
       }
+      // The reviewed plan inherits the parent owner; it does not authorize a
+      // different live world group, even when that group belongs to this World.
+      if ((preparedSession.worldGroupId ?? null) !== (continuationParent.worldGroupId ?? null)) {
+        throw new Error('[instance] 续团未授权改变父团局世界组');
+      }
+      if (duplicate) return duplicate;
     }
     if (productRelease) {
       const current = await db.productReleases.get(productRelease.id!)
@@ -659,12 +669,7 @@ export async function createProductRuntimeInstance(
     await db.productRuntimeSessions.update(session.id!, binding)
     const boundSession = { ...session, ...binding }
     if (upgradeEvent) await db.productRuntimeEvents.add({...upgradeEvent, sessionId: boundSession.id!})
-    else await addInitialNarrativeEvents({
-      scope: currentScope,
-      worldGroupId: input.worldGroupId ?? null,
-      session: boundSession,
-      state: initialState,
-    })
+    else await addInitialNarrativeEvents({ session: boundSession, state: initialState })
     if (runtimePackage.productType === 'ttrpg') {
       if (!runtimePackage.ttrpg) throw new Error('[instance] TTRPG 发布缺少冻结运行内容')
       await installInitialTtrpgParticipantsV2({

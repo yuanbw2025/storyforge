@@ -213,7 +213,7 @@ export default function TtrpgPage() {
     }
   }, [row?.work.id, row?.work.title, row?.draft?.revision, dirty, newOpen, scope]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    void listLocalWorldReferenceChoicesV1()
+    void listLocalWorldReferenceChoicesV1({ purpose: 'ttrpg' })
       .then(setWorlds)
       .catch((e) => setError(String(e)));
   }, [pageId]);
@@ -894,7 +894,7 @@ export default function TtrpgPage() {
                       </Link>
                       {handoffError && <p role="alert">{handoffError}</p>}
                       {worlds.map((w) => (
-                        <article className="avg-source" key={w.id}>
+                        <article className="avg-source" key={w.choiceKey ?? w.id}>
                           <div>
                             <h4>
                               {w.label}
@@ -902,12 +902,12 @@ export default function TtrpgPage() {
                             </h4>
                             <p>
                               {w.worldCode} · v{w.version}
-                            </p>
+                            </p>{w.authorName && <p className="text-xs">{w.authorName} · {w.license}</p>}{w.attribution && <p className="text-xs">{w.attribution}</p>}{w.contentWarnings?.map((warning, index) => <p key={index} className="text-xs">{warning}</p>)}{w.purposeAllowed === false && <p className="text-xs">此来源未允许本产品使用</p>}
                           </div>
                           <button
                             className="lf-action"
                             disabled={
-                              busy ||
+                              w.purposeAllowed === false || busy ||
                               Boolean(row && !row.draft) ||
                               Boolean(handoffError)
                             }
@@ -921,7 +921,7 @@ export default function TtrpgPage() {
                                   worldId: target.work.worldId,
                                 };
                                 const d = await readTtrpgDraft(sc);
-                                await selectTtrpgWorld(sc, d.revision, w.id);
+                                await selectTtrpgWorld(sc, d.revision, w.id, w.sourceDeclarationHash);
                                 navigate(path("source", target));
                                 setNotice("世界版本已选择");
                               })

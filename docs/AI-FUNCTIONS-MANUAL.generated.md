@@ -416,7 +416,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `agent.orchestrator` | `src/lib/agent/orchestrator.ts:858` |
 | `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:966` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
-| `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:430` |
+| `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:433` |
 | `canon.narrative.extract` | `src/lib/agent/run/narrative-annotation-durable.ts:218` |
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
