@@ -1,0 +1,34 @@
+name: Identify scoped audit merge
+on:
+  workflow_call:
+    outputs:
+      scoped:
+        value: ${{ jobs.identify.outputs.scoped }}
+permissions:
+  contents: read
+jobs:
+  identify:
+    runs-on: ubuntu-latest
+    outputs:
+      scoped: ${{ steps.merge.outputs.scoped }}
+    steps:
+      - id: merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import json, os, re, subprocess
+
+          with open(os.environ['GITHUB_EVENT_PATH']) as source:
+              event = json.load(source)
+          head = event['head_commit']
+          owner = re.escape(event['repository']['owner']['login'])
+          subject = head['message'].splitlines()[0]
+          scoped = False
+          if re.fullmatch(rf'Merge pull request #\d+ from {owner}/(?:fix/sfqa-|refactor/sfqa-|fix/quality|feat/quality-audit-)\S+', subject):
+              repo = os.environ['GITHUB_REPOSITORY']
+              commit = json.loads(subprocess.check_output(['gh', 'api', f"repos/{repo}/git/commits/{head['id']}"]))
+              parents = commit['parents']
+              scoped = len(parents) == 2 and parents[0]['sha'] == event['before']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print(f'scoped={str(scoped).lower()}', file=output)
