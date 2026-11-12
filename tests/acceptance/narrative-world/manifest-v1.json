@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-merged422-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-merged424-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -857,6 +857,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-post345-v1.json",
         "workPackage": "SFQA-007",
         "note": "Preserved the mainline receipt measured before the six-fix integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-merged422-v1.json",
+        "workPackage": "SFQA-028-031-032-069-082-083",
+        "note": "Six runtime fixes measured before the manual media tag was added to the Vitest configuration."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
