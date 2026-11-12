@@ -118,6 +118,7 @@ import {
   type TextAdventureSystemsArtifactV1,
 } from '../adventure/production-artifacts'
 import {
+  projectTextAdventureNarrativeDesignModelResultV1,
   parseTextAdventureProductionSupervisionArtifactV1,
   parseTextAdventureCastBibleArtifactV1,
   parseTextAdventureNarrativeArcScenesArtifactV1,
@@ -7284,71 +7285,16 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     if (!options.brief.textAdventure) fail('文字冒险架构任务缺少专用 Brief')
     payload = parseTextAdventureArchitectureArtifactV1(raw, options.brief.textAdventure); kind = 'product-design'
     quality = { fourLevelSpaceVerified: true }
-  } else if (input.task.taskKey === 'content.narrative-arc-scenes') {
-    const storyBible = parseTextAdventureStoryBibleArtifactV1(
-      artifactPayload(input, 'content.story-bible'), options.brief,
-    )
-    const cast = parseTextAdventureCastBibleArtifactV1({
-      value: artifactPayload(input, 'content.cast-bible'),
-      brief: options.brief,
-      allowedResourceKeys: options.brief.source.selection.resourceKeys,
-    })
-    const arcScenes = parseTextAdventureNarrativeArcScenesArtifactV1({
-      value: raw, brief: options.brief, cast, storyBible,
+  } else if (input.task.taskKey === 'content.narrative-arc-scenes'
+    || input.task.taskKey === 'content.narrative-decision-plan'
+    || input.task.taskKey === 'content.ending-route-plan') {
+    const design = projectTextAdventureNarrativeDesignModelResultV1({
+      taskKey: input.task.taskKey, raw, brief: options.brief,
+      readArtifact: artifactKey => artifactPayload(input, artifactKey),
       locationTitles: textAdventureLocationTitles,
     })
-    payload = arcScenes
-    kind = 'product-design'; quality = {
-      narrativeArcScenesVerified: true,
-      sceneCardCount: arcScenes.acts.flatMap(act => act.sceneCards).length,
-      endingCount: arcScenes.endings.length,
-    }
-  } else if (input.task.taskKey === 'content.narrative-decision-plan') {
-    const storyBible = parseTextAdventureStoryBibleArtifactV1(
-      artifactPayload(input, 'content.story-bible'), options.brief,
-    )
-    const cast = parseTextAdventureCastBibleArtifactV1({
-      value: artifactPayload(input, 'content.cast-bible'),
-      brief: options.brief,
-      allowedResourceKeys: options.brief.source.selection.resourceKeys,
-    })
-    const decisionPlan = parseTextAdventureNarrativeDecisionPlanArtifactV1({
-      value: raw, brief: options.brief, cast, storyBible,
-    })
-    payload = decisionPlan
-    kind = 'product-design'; quality = {
-      narrativeDecisionPlanVerified: true,
-      meaningfulDecisionCount: decisionPlan.decisions.length,
-    }
-  } else if (input.task.taskKey === 'content.ending-route-plan') {
-    const storyBible = parseTextAdventureStoryBibleArtifactV1(
-      artifactPayload(input, 'content.story-bible'), options.brief,
-    )
-    const cast = parseTextAdventureCastBibleArtifactV1({
-      value: artifactPayload(input, 'content.cast-bible'),
-      brief: options.brief,
-      allowedResourceKeys: options.brief.source.selection.resourceKeys,
-    })
-    const arcPlan = parseTextAdventureNarrativeArcPlanArtifactV1({
-      value: artifactPayload(input, 'content.narrative-arc-plan'),
-      brief: options.brief,
-      cast,
-      storyBible,
-      locationTitles: textAdventureLocationTitles,
-    })
-    const endingRoutePlan = parseTextAdventureEndingRoutePlanArtifactV1({
-      value: raw,
-      arcPlan,
-      storyBible,
-    })
-    payload = endingRoutePlan
-    kind = 'product-design'; quality = {
-      endingRoutePlanVerified: true,
-      routeCount: endingRoutePlan.routes.length,
-      referencedEffectCount: new Set(
-        endingRoutePlan.routes.flatMap(route => route.requiredEffectKeys),
-      ).size,
-    }
+    payload = design.payload
+    kind = 'product-design'; quality = design.quality
   } else if (input.task.taskKey === 'content.main-quest-plan') {
     const cast = parseTextAdventureCastBibleArtifactV1({
       value: artifactPayload(input, 'content.cast-bible'),
