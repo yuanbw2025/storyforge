@@ -226,12 +226,21 @@ function sameRuntimeMediaRequestMetadataV1(asset: ProductMediaAsset,
   return Object.entries(expected).every(([key, value]) => asset[key as keyof ProductMediaAsset] === value)
 }
 
+function runtimeMediaVersionState(assets: readonly ProductMediaAsset[], contentHash: string, forceLatest?: boolean) {
+  const latest = assets.reduce((max, row) => Math.max(max, row.version), 0)
+  // Ordinary imports retain their first matching version. A request for the
+  // latest version can reuse that version only when its bytes already match.
+  const reusable = assets.find(row => row.contentHash === contentHash && (!forceLatest || row.version === latest))
+  return { latest, reusable }
+}
+
 /** An existing version is evidence, not permission to import another one.
  * Verify its original owner/binding/bytes without reopening a missing Release;
  * the final native read transaction cannot create or repair any record. */
 async function readExactRuntimeMediaDuplicateV1(input: {
   scope: WorkspaceScope; session: ProductRuntimeSession; asset: ProductMediaAsset; data: ArrayBuffer
   evidence: ReturnType<typeof mediaEvidence>; readExact: ExactArtifactReader | undefined
+  forceLatest?: boolean
 }): Promise<ProductMediaAsset> {
   const { scope, session, asset, data, evidence, readExact } = input
   const bindings = await db.productMediaBlobs.where('mediaAssetId').equals(asset.id!).toArray()
@@ -254,9 +263,13 @@ async function readExactRuntimeMediaDuplicateV1(input: {
       db.productRuntimeSessions.get(session.id!), db.productMediaAssets.get(asset.id!),
       db.productMediaBlobs.where('mediaAssetId').equals(asset.id!).toArray(), db.mediaBlobObjects.get(object.id!),
     ])
+    const currentVersions = input.forceLatest ? await db.productMediaAssets
+      .where('productRuntimeSessionId').equals(session.id!)
+      .filter(row => row.ownerKind === 'runtime' && row.assetKey === asset.assetKey).toArray() : []
     if (!owner || stable(owner) !== stable(session) || !current || stable(current) !== stable(asset)
       || currentBindings.length !== 1 || !sameMediaBindingV1(currentBindings[0], binding)
-      || !currentObject || stable(currentObject) !== stable(object) || !sameMediaBytesV1(currentObject.data, object.data)) {
+      || !currentObject || stable(currentObject) !== stable(object) || !sameMediaBytesV1(currentObject.data, object.data)
+      || (input.forceLatest && asset.version !== runtimeMediaVersionState(currentVersions, asset.contentHash, true).latest)) {
       throw new Error('[product-runtime-media] 原媒资或拥有者在只读复用期间已变化')
     }
     if (evidence) assertDuplicateEvidence(current, evidence)
@@ -292,11 +305,11 @@ async function importCapturedRuntimeMedia(input: Parameters<typeof importProduct
   const existing = await db.productMediaAssets
     .where('productRuntimeSessionId').equals(input.productRuntimeSessionId)
     .filter(row => row.ownerKind === 'runtime' && row.assetKey === stableKey).toArray()
-  const duplicate = existing.find(row => row.contentHash === contentHash)
-  const latestVersion = Math.max(0, ...existing.map(row => row.version))
-  if (session.kind === 'text-open-world' && duplicate && (!input.forceLatest || duplicate.version === latestVersion)
+  const { reusable: duplicate } = runtimeMediaVersionState(existing, contentHash, input.forceLatest)
+  if (session.kind === 'text-open-world' && duplicate
     && sameRuntimeMediaRequestMetadataV1(duplicate, input, contentHash, data.byteLength)) {
-    return readExactRuntimeMediaDuplicateV1({ scope, session, asset: duplicate, data, evidence, readExact })
+    return readExactRuntimeMediaDuplicateV1({ scope, session, asset: duplicate, data, evidence, readExact,
+      forceLatest: input.forceLatest })
   }
   // A missing source may be tolerated only by the exact read above. Every
   // genuinely new import/version/metadata choice still verifies real authority.
@@ -312,22 +325,56 @@ async function importCapturedRuntimeMedia(input: Parameters<typeof importProduct
       await runtimeAuthority.assertFormalRuntimeSourceUnchangedV1({ previewSession: session, session: current, frozen })
     }
   }
-  if (duplicate && (!input.forceLatest || duplicate.version === latestVersion)) {
-    if (!evidence && !frozen) return duplicate
-    return db.transaction('rw',scopeTransactionTables(db.productRuntimeSessions,db.productMediaAssets,db.agentRunArtifacts,...sourceTables),async()=>{
-      const current = await db.productMediaAssets.get(duplicate.id!),owner = await db.productRuntimeSessions.get(session.id!)
-      if (!current || stable(current) !== stable(duplicate) || !owner || owner.status === 'archived'
-        || owner.projectId !== scope.projectId || owner.worldId !== scope.worldId || owner.workId !== scope.workId || owner.kind !== session.kind
-        || current.projectId !== scope.projectId || current.worldId !== scope.worldId || current.workId !== scope.workId
-        || current.productType !== session.kind || current.productReleaseId !== null || current.productRuntimeSessionId !== session.id) throw new Error('[product-runtime-media] 原媒资或拥有者在复用期间已变化')
-      if (frozen) await assertCurrentSource()
-      if (evidence) assertDuplicateEvidence(current,evidence)
-      await assertEvidenceAvailable(scope.projectId,evidence,readExact);return current
-    })
+  const bindingTables = scopeTransactionTables(db.productRuntimeSessions, db.productMediaAssets,
+    db.productMediaBlobs, db.mediaBlobObjects, ...sourceTables, ...(evidence ? [db.agentRunArtifacts] : []))
+  const readyObject = async (id: number, mimeType: string) => {
+    const object = await db.mediaBlobObjects.get(id)
+    if (!object || object.projectId !== scope.projectId || object.worldId !== scope.worldId || object.workId !== scope.workId
+      || object.storageState !== 'ready' || object.contentHash !== contentHash || object.mimeType !== mimeType
+      || object.byteSize !== data.byteLength || (object.backend === 'indexeddb' ? !sameMediaBytesV1(object.data, data) : !object.opfsPath)) {
+      throw new Error('[product-runtime-media] 内容寻址对象在绑定前丢失、变更或不属于当前 Work')
+    }
+    return object
+  }
+  const currentVersionState = async (expectedDuplicate?: ProductMediaAsset) => {
+    await resolveScope({ scope })
+    const currentSession = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
+    if (!currentSession || currentSession.workId !== scope.workId || currentSession.worldId !== scope.worldId
+      || currentSession.projectId !== scope.projectId || currentSession.status === 'archived'
+      || currentSession.kind !== session.kind) {
+      throw new Error('[product-runtime-media] 运行实例在媒资绑定前失效')
+    }
+    if (frozen) await assertCurrentSource()
+    if (expectedDuplicate) {
+      const current = await db.productMediaAssets.get(expectedDuplicate.id!)
+      if (!current || stable(current) !== stable(expectedDuplicate)) {
+        throw new Error('[product-runtime-media] 原媒资或拥有者在复用期间已变化')
+      }
+    }
+    const currentAssets = await db.productMediaAssets.where('productRuntimeSessionId').equals(currentSession.id!)
+      .filter(row => row.ownerKind === 'runtime' && row.assetKey === stableKey).toArray()
+    const { latest, reusable } = runtimeMediaVersionState(currentAssets, contentHash, input.forceLatest)
+    if (reusable) {
+      if (reusable.projectId !== scope.projectId || reusable.worldId !== scope.worldId || reusable.workId !== scope.workId
+        || reusable.productType !== currentSession.kind || reusable.productReleaseId !== null) {
+        throw new Error('[product-runtime-media] 并发媒资的原拥有者不一致')
+      }
+      const binding = await db.productMediaBlobs.where('mediaAssetId').equals(reusable.id!).first()
+      if (!binding || binding.projectId !== scope.projectId || binding.worldId !== scope.worldId || binding.workId !== scope.workId
+        || reusable.byteSize !== data.byteLength) throw new Error('[product-runtime-media] 原运行媒资的绑定不完整')
+      await readyObject(binding.blobObjectId, reusable.mimeType.trim().toLowerCase())
+      if (evidence) assertDuplicateEvidence(reusable, evidence)
+    }
+    await assertEvidenceAvailable(scope.projectId, evidence, readExact)
+    return { currentSession, latest, reusable }
+  }
+  if (duplicate) {
+    const current = await db.transaction('rw', bindingTables, async () => (await currentVersionState(duplicate)).reusable)
+    if (current) return current
   }
   await assertEvidenceAvailable(scope.projectId,evidence,readExact)
 
-  const blobObject = await putMediaBlobObject({
+  const prepareObject = () => putMediaBlobObject({
     scope,
     data,
     mimeType: input.blob.type.toLowerCase() || 'application/octet-stream',
@@ -338,35 +385,18 @@ async function importCapturedRuntimeMedia(input: Parameters<typeof importProduct
       assertCurrentInTransaction: assertCurrentSource,
     } } : {}),
   })
-  const version = latestVersion + 1
+  // An OPFS object is journaled before its file is ready. Another importer
+  // of the same bytes must finish preparation after that write closes.
+  // Different hashes and final version transactions remain independent.
+  const locks = typeof navigator.storage?.getDirectory === 'function' ? navigator.locks : undefined
+  const blobObject = locks?.request
+    ? await locks.request(`storyforge:runtime-media-object:${stable([db.name, scope.workId, contentHash])}`, prepareObject)
+    : await prepareObject()
   const now = Date.now()
-  return db.transaction('rw', scopeTransactionTables(
-    db.productRuntimeSessions, db.productMediaAssets, db.productMediaBlobs, db.mediaBlobObjects, ...sourceTables, ...(evidence ? [db.agentRunArtifacts] : []),
-  ), async () => {
-    const currentSession = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
-    if (!currentSession || currentSession.workId !== scope.workId || currentSession.worldId !== scope.worldId
-      || currentSession.projectId !== scope.projectId || currentSession.status === 'archived'
-      || currentSession.kind !== session.kind) {
-      throw new Error('[product-runtime-media] 运行实例在媒资绑定前失效')
-    }
-    if (frozen) await assertCurrentSource()
-    const currentBlobObject = await db.mediaBlobObjects.get(blobObject.id!)
-    if (!currentBlobObject || currentBlobObject.workId !== scope.workId || currentBlobObject.storageState !== 'ready') {
-      throw new Error('[product-runtime-media] 内容寻址对象在绑定前丢失或不可用')
-    }
-    let currentVersion = version
-    if (evidence) {
-      await assertEvidenceAvailable(scope.projectId,evidence,readExact)
-      const currentAssets = await db.productMediaAssets.where('productRuntimeSessionId').equals(session.id!)
-        .filter(row => row.ownerKind === 'runtime' && row.assetKey === stableKey).toArray()
-      const currentDuplicate = currentAssets.find(row => row.contentHash === contentHash),latest = Math.max(0,...currentAssets.map(row => row.version))
-      if (currentDuplicate && (!input.forceLatest || currentDuplicate.version === latest)) {
-        if (currentDuplicate.projectId !== scope.projectId || currentDuplicate.worldId !== scope.worldId || currentDuplicate.workId !== scope.workId
-          || currentDuplicate.productType !== session.kind || currentDuplicate.productReleaseId !== null) throw new Error('[product-runtime-media] 并发媒资的原拥有者不一致')
-        assertDuplicateEvidence(currentDuplicate,evidence);return currentDuplicate
-      }
-      currentVersion = latest + 1
-    }
+  return db.transaction('rw', bindingTables, async () => {
+    const { currentSession, latest, reusable } = await currentVersionState()
+    if (reusable) return reusable
+    const currentBlobObject = await readyObject(blobObject.id!, blobObject.mimeType)
     const row = stampNewRecord(scope, 'productMediaAssets', {
       projectId: scope.projectId,
       worldId: scope.worldId,
@@ -376,10 +406,10 @@ async function importCapturedRuntimeMedia(input: Parameters<typeof importProduct
       productReleaseId: null,
       productRuntimeSessionId: currentSession.id!,
       assetKey: stableKey,
-      version: currentVersion,
+      version: latest + 1,
       kind: input.kind,
       name: input.name.trim(),
-      mimeType: input.blob.type.toLowerCase() || 'application/octet-stream',
+      mimeType: currentBlobObject.mimeType,
       byteSize: data.byteLength,
       width: input.width ?? null,
       height: input.height ?? null,

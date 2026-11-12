@@ -1,6 +1,7 @@
 import { db } from '../db/schema'
 import { canonicalStringify } from '../agent/run/hash'
 import { adopt } from '../registry/adopt'
+import { projectScopedTables } from '../registry/lifecycle'
 import type { ForeshadowType, WorkspaceScope } from '../types'
 import { readOwnedRows, scopeTransactionTables } from '../workspace/scope'
 
@@ -163,8 +164,10 @@ export async function adoptForeshadowSuggestionsAtomicV1(input: {
   worldGroupId: number | null
   baseline: ForeshadowSuggestionBaselineV1
   formalItems: readonly ForeshadowSuggestionFormalItemV1[]
+  assertFrozenUpstream: () => Promise<void>
 }): Promise<void> {
-  await db.transaction('rw', scopeTransactionTables(db.foreshadows), async () => {
+  await db.transaction('rw', scopeTransactionTables(...projectScopedTables().map(spec => spec.table)), async () => {
+    await input.assertFrozenUpstream()
     const current = await readForeshadowSuggestionBaselineV1({
       scope: input.scope,
       worldGroupId: input.worldGroupId,

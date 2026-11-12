@@ -122,12 +122,16 @@ function allSourceKeys(stage: MotionDramaPromptStageV1, payload: MotionDramaCand
 }
 
 export async function setCurrentMotionDramaEpisodeV1(input: { scope: WorkspaceScope; episodeNumber: number; expectedRevision?: number }): Promise<void> {
-  if (!Number.isInteger(input.episodeNumber) || input.episodeNumber < 1 || input.episodeNumber > 200) throw new Error('[motion-drama] 集号非法')
-  const roots = await requireMotionDramaRootsV1(input.scope)
-  const targetSpec = roots.adaptation.targetSpec as import('../types').MotionDramaTargetSpecV1
-  if (input.episodeNumber > targetSpec.episodeCount) throw new Error('[motion-drama] 集号超过目标总集数')
-  if (input.expectedRevision != null && roots.production.revision !== input.expectedRevision) throw new Error('[motion-drama] 生产根已变化，请刷新')
-  await db.motionDramaProductions.update(roots.production.id, { currentEpisodeNumber: input.episodeNumber, revision: roots.production.revision + 1, updatedAt: Date.now() })
+  const { episodeNumber, expectedRevision } = input
+  const scope = { ...input.scope }
+  if (!Number.isInteger(episodeNumber) || episodeNumber < 1 || episodeNumber > 200) throw new Error('[motion-drama] 集号非法')
+  await db.transaction('rw', scopeTransactionTables(db.adaptationProjects, db.motionDramaProductions), async () => {
+    const roots = await requireMotionDramaRootsV1(scope)
+    const targetSpec = roots.adaptation.targetSpec as import('../types').MotionDramaTargetSpecV1
+    if (episodeNumber > targetSpec.episodeCount) throw new Error('[motion-drama] 集号超过目标总集数')
+    if (expectedRevision != null && roots.production.revision !== expectedRevision) throw new Error('[motion-drama] 生产根已变化，请刷新')
+    await db.motionDramaProductions.update(roots.production.id, { currentEpisodeNumber: episodeNumber, revision: roots.production.revision + 1, updatedAt: Date.now() })
+  })
 }
 
 async function clearEpisodeDownstream(adaptationId: number, episodeNumber: number, from: 'outline' | 'script' | 'shots'): Promise<void> {
@@ -223,9 +227,12 @@ export async function adoptMotionDramaCandidateV1(input: { scope: WorkspaceScope
       const shots = await db.motionDramaShots.where('adaptationProjectId').equals(adaptation.id!).filter(row => row.episodeNumber === input.episodeNumber).toArray()
       if (candidates.length !== shots.length) throw new Error('[motion-drama] Prompt IR 必须完整覆盖当前集全部镜头')
       const byKey = new Map(shots.map(row => [row.stableKey, row]))
-      for (const candidate of candidates) {
+      const updates = candidates.map(candidate => {
         const shot = byKey.get(candidate.shotKey)
         if (!shot || shot.revision !== candidate.expectedRevision) throw new Error(`[motion-drama] 镜头 ${candidate.shotKey} 已变化`)
+        return { candidate, shot }
+      })
+      for (const { candidate, shot } of updates) {
         if (input.stage === 'image-prompts') {
           const image = candidate as MotionDramaImagePromptCandidateV1
           await db.motionDramaShots.update(shot.id!, { imagePrompt: image.imagePrompt, negativeImagePrompt: image.negativeImagePrompt, firstFramePrompt: image.firstFramePrompt, keyFramePrompt: image.keyFramePrompt, lastFramePrompt: image.lastFramePrompt, revision: shot.revision + 1, updatedAt: now })

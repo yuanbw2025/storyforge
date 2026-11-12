@@ -125,12 +125,16 @@ function readPromptModuleKeys(sourceFile) {
   return keys
 }
 
-function metrics() {
+function sourceSize() {
   const files = tsSourceFiles()
   const sourceLines = files.reduce((total, file) => {
     const source = fs.readFileSync(file, 'utf8')
     return total + countMatches(source, /\n/g)
   }, 0)
+  return { files: files.length, lines: sourceLines }
+}
+
+function metrics() {
   const schema = read('src/lib/db/schema.ts')
   const schemaVersionMatch = schema.match(/export const STORYFORGE_SCHEMA_VERSION\s*=\s*(\d+)/)
   if (!schemaVersionMatch) throw new Error('无法从 schema.ts 读取 STORYFORGE_SCHEMA_VERSION')
@@ -143,8 +147,6 @@ function metrics() {
     total + countMatches(read(`src/lib/ai/${name}`), /\bmoduleKey:\s*'[^']+'/g), 0)
   return {
     version: JSON.parse(read('package.json')).version,
-    sourceFiles: files.length,
-    sourceLines,
     schemaVersion,
     requiredTables: countMatches(required, /'[^']+'/g),
     projectTables: declaredArrayLength('src/lib/registry/project-tables.ts', 'PROJECT_TABLES'),
@@ -164,7 +166,7 @@ function render(value) {
     '| 当前事实 | 数值 | 单一事实源 |',
     '|---|---:|---|',
     `| 应用语义版本 | \`${value.version}\` | \`package.json\` |`,
-    `| TypeScript 生产源码 | ${value.sourceFiles} 个文件 / ${value.sourceLines} 行 | \`tsconfig.json\` |`,
+    '| TypeScript 生产源码 | 运行 `npm run gen:project-metrics -- --source-size` 查看当前文件数和行数 | `tsconfig.json` |',
     `| IndexedDB schema | v${value.schemaVersion} / ${value.requiredTables} 张 required tables | \`schema.ts\` / \`REQUIRED_TABLES\` |`,
     `| PROJECT_TABLES | ${value.projectTables} 张表 | \`project-tables.ts\` |`,
     `| Prompt 主线 | ${value.promptModuleKeys} 个 moduleKey / ${value.promptTemplates} 条内置模板 | \`PromptModuleKey\` / \`prompt-seeds*.ts\` |`,
@@ -172,6 +174,12 @@ function render(value) {
     `| 写回治理 | ${value.adoptionTargets} 个通用 adopt target / ${value.adoptionExtensions} 个领域扩展 | \`adoption-schema.ts\` |`,
     END,
   ].join('\n')
+}
+
+if (process.argv.includes('--source-size')) {
+  const size = sourceSize()
+  console.log(`TypeScript 生产源码：${size.files} 个文件 / ${size.lines} 行`)
+  process.exit(0)
 }
 
 const source = fs.readFileSync(target, 'utf8')

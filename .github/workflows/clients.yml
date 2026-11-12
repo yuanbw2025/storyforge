@@ -1,25 +1,5 @@
 name: Build Desktop and Android Clients
 on:
-  pull_request:
-    paths:
-      - 'android/**'
-      - 'scripts/desktop/**'
-      - 'scripts/distribution/**'
-      - 'src/lib/platform/**'
-      - 'src/lib/feedback/**'
-      - 'src/lib/diagnostics/**'
-      - 'src/components/shared/FailureFeedbackPanel.tsx'
-      - 'src/components/settings/ClientPrivacyPanel.tsx'
-      - 'src/components/settings/ClientAgreement.tsx'
-      - 'src/main.tsx'
-      - 'src/components/settings/ClientUpdatePanel.tsx'
-      - 'capacitor.config.json'
-      - 'electron-builder.config.cjs'
-      - 'package*.json'
-      - 'playwright.clients.config.ts'
-      - 'tests/e2e/client-support.spec.ts'
-      - 'tests/regression/R-CLIENT-LEGAL1-consent.test.tsx'
-      - '.github/workflows/clients.yml'
   workflow_dispatch:
   workflow_call:
     inputs:
