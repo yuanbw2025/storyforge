@@ -66,7 +66,7 @@ const hashCanonProjection = (value: unknown) => keepCanonDigestAlive(() => hashC
 const hashCanonText = (text: string) => keepCanonDigestAlive(() => sha256Text(text))
 
 const PROVIDER_SOURCE_KEY = 'ragSelection'
-const PROVIDER_VERSION = 'canon-resource-provider-v11'
+const PROVIDER_VERSION = 'canon-resource-provider-v12'
 const NORMALIZATION_VERSION = 'canon-resource-normalization-v1'
 const MAX_PAGE_SIZE = 100
 const MAX_READ_TOKENS = 100_000
@@ -453,6 +453,9 @@ async function worldGroupForRow(
   if (spec.name === 'worldGroupLinks') return fallback
   // Codex 分类 schema 属于整个 World，而不是某个 worldGroup。
   if (spec.name === 'codexCategories') return undefined
+  // Story arcs without a saved group use the default scope, including older rows
+  // whose optional foreign key becomes an explicit null on backup restoration.
+  if (spec.name === 'storyArcs' && row.worldGroupId == null) return null
   if (typeof row.worldGroupId === 'number' || row.worldGroupId === null) return row.worldGroupId as number | null
   if (spec.homeWorldScoped) return (row.homeWorldGroupId as number | null | undefined) ?? null
   let outlineNodeId: number | undefined

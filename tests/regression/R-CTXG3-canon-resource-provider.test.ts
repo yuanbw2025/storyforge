@@ -114,6 +114,7 @@ async function seedSixDomains() {
   const arcIds: number[] = []
   for (let index = 0; index < 3; index++) {
     arcIds.push(await addScoped(scope, 'storyArcs', {
+      worldGroupId: primaryGroupId,
       name: index === 2 ? '最后创建的镜海支线' : `故事线 ${index + 1}`,
       type: index === 0 ? 'main' : 'sub',
       description: `第 ${index + 1} 条故事线`,
@@ -401,6 +402,40 @@ describe('CTXG-3 · Canon resource provider', () => {
     expect(customDescriptor.tokenCap).toBe(2100)
     expect(customDescriptor.policyRevision).toBe(1)
     expect(customDescriptor.sourceRefs[0].field).toBe('fields')
+  })
+
+  it('keeps absent and null story-arc groups in the default scope before and after backup', async () => {
+    const { projectId, scope } = await seedWorkspace('故事线默认组往返')
+    const groupId = await addScoped(scope, 'worldGroups', {
+      name: '镜海', description: '', type: 'parallel', order: 0,
+    }, 'world')
+    const data = { type: 'sub', description: '潮汐', stages: '[]' }
+    const ids = await Promise.all([
+      addScoped(scope, 'storyArcs', { ...data, name: '旧记录缺少组字段' }, 'work'),
+      addScoped(scope, 'storyArcs', { ...data, name: '明确未分组', worldGroupId: null }, 'work'),
+      addScoped(scope, 'storyArcs', { ...data, name: '指定镜海', worldGroupId: groupId }, 'work'),
+    ])
+    const records = await db.storyArcs.bulkGet(ids)
+    const keys = records.map(row => {
+      if (!row || !('ragDocumentId' in row) || typeof row.ragDocumentId !== 'string') {
+        throw new Error('故事线缺少可移植身份')
+      }
+      return `story-arc:${row.ragDocumentId}`
+    })
+    const groupUid = (await db.worldGroups.get(groupId))!.ragDocumentId
+    const verify = async (owner: WorkspaceScope, group: number) => {
+      const arcKeys = async (selectedGroup: number | null) => (await allDescriptors(frozen(owner, selectedGroup)))
+        .map(item => item.resourceKey).filter(key => keys.includes(key)).sort()
+      expect(await arcKeys(null)).toEqual(keys.slice(0, 2).sort())
+      expect(await arcKeys(group)).toEqual([keys[2]])
+    }
+    await verify(scope, groupId)
+    const copyId = await importProjectJSON(await exportProjectJSON(projectId))
+    const copied = await resolveWorkspaceOwnership(copyId)
+    const copiedGroup = await db.worldGroups.where('projectId').equals(copyId)
+      .filter(row => row.ragDocumentId === groupUid).first()
+    expect(copiedGroup?.id).toBeDefined()
+    await verify(copied.scope, copiedGroup!.id!)
   })
 
   it('isolates World/Work/WorldGroup, preserves keys across rename/import, and removes deleted resources', async () => {
