@@ -2,11 +2,6 @@ name: Verify signed Android release upgrade
 on:
   workflow_dispatch:
   workflow_call:
-  pull_request:
-    paths:
-      - '.github/workflows/client-release-upgrade.yml'
-      - 'android/app/src/androidTest/java/com/storyforge/client/ClientUpgradeTest.java'
-      - 'tests/helpers/native-upgrade-fixture.ts'
 permissions:
   contents: read
 env:
