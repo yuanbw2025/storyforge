@@ -150,7 +150,7 @@ test('the actual CI entry retains production checking and reaches engineering se
   assert.match(pkg.scripts.ci, /npm run check:engineering/)
   assert.doesNotMatch(pkg.scripts.ci, /npm run check:types:open-world-experience/)
   assert.equal(pkg.scripts['check:engineering'], 'node scripts/quality/check-engineering.mjs')
-  assert.equal(pkg.scripts['test:engineering-gate'], 'node --test scripts/quality/check-engineering.test.mjs')
+  assert.equal(pkg.scripts['test:engineering-gate'], 'node --test scripts/quality/check-engineering.test.mjs scripts/quality/check-dev-dependency-report.test.mjs')
 })
 
 test('union print order is commutative but members, array binding, anchors and counts stay protected', () => {

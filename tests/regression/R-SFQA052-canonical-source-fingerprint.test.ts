@@ -48,10 +48,10 @@ async function generate(templateId: 'continuity.fact' | 'chapter.organize', opti
 } = {}) {
   const f = await seedCurrentWorkspace('052来源指纹')
   const outlineNodeId = await db.outlineNodes.add(stampNewRecord(f.scope, 'outlineNodes', {
-    parentId: null, type: 'chapter', title, summary: '阿明在港口拾起铜钥匙。', order: 0, createdAt: 1, updatedAt: 1,
+    projectId: f.scope.projectId, parentId: null, type: 'chapter', title, summary: '阿明在港口拾起铜钥匙。', order: 0, createdAt: 1, updatedAt: 1,
   }, { owner: 'work' })) as number
   const chapterId = await db.chapters.add(stampNewRecord(f.scope, 'chapters', {
-    outlineNodeId, title, content: manuscript, status: 'draft', wordCount: 22, order: 0, notes: '', createdAt: 1, updatedAt: 1,
+    projectId: f.scope.projectId, outlineNodeId, title, content: manuscript, status: 'draft', wordCount: 22, order: 0, notes: '', createdAt: 1, updatedAt: 1,
   }, { owner: 'work' })) as number
   const target = node(templateId, { chapterTitle: title })
   const graph = emptyAuthoringGraph()
@@ -72,7 +72,7 @@ async function generate(templateId: 'continuity.fact' | 'chapter.organize', opti
     runNodeIds.add(budget.id)
   }
   const flowId = await db.nodeFlows.add(stampNewRecord(f.scope, 'nodeFlows', {
-    worldGroupId: null, name: '052正式来源', description: '', graphJson: JSON.stringify(graph), createdAt: 1, updatedAt: 1,
+    projectId: f.scope.projectId, worldGroupId: null, name: '052正式来源', description: '', graphJson: JSON.stringify(graph), createdAt: 1, updatedAt: 1,
   }, { owner: 'work' })) as number
   const flow = (await db.nodeFlows.get(flowId))! as NodeFlow
   duringHttp = options.duringHttp ? () => options.duringHttp!(chapterId) : undefined
@@ -121,7 +121,7 @@ it.each(['continuity.fact', 'chapter.organize'] as const)('a changed chapter tit
 it.each([['continuity.fact', 'fresh'], ['chapter.organize', 'stale']] as const)('a new known item only invalidates the node that reads it: %s', async (templateId, expected) => {
   const f = await generate(templateId)
   await db.itemLedger.add(stampNewRecord(f.scope, 'itemLedger', {
-    itemName: '作者新登记的航海图', action: 'gain', quantity: 1, heldByName: '阿明', createdAt: 1,
+    projectId: f.scope.projectId, itemName: '作者新登记的航海图', action: 'gain', quantity: 1, heldByName: '阿明', createdAt: 1,
   }, { owner: 'work' }))
   expect((await freshness(f))[f.target.id].status).toBe(expected)
   expect(fetch).toHaveBeenCalledTimes(1)
@@ -208,7 +208,8 @@ it('source edits while the HTTP result is in flight do not certify the newer man
 it.each(['continuity.fact', 'chapter.organize'] as const)('a newly confirmed Canon fact invalidates the captured %s sources', async templateId => {
   const f = await generate(templateId)
   const adopted = await adoptFactCandidates({ projectId: f.scope.projectId, scope: f.scope,
-    sourceChapterId: f.chapterId, worldGroupId: null, candidates: [{ subjectName: '阿明', predicate: 'healthStatus', value: '受伤', quote: fact.quote }] })
+    sourceChapterId: f.chapterId, worldGroupId: null,
+    candidates: [{ subjectName: '阿明', predicate: 'healthStatus', factKind: 'state', value: '受伤', sourceQuote: fact.quote }] })
   expect(adopted.written).toBe(1)
   const row = (await db.temporalFacts.toArray())[0]
   expect((await confirmFactCandidate(row.id!)).confirmed).toBe(true)
