@@ -116,7 +116,7 @@ function traced(decision: Awaited<ReturnType<typeof selectContextResourcesV1>>['
   }
 }
 
-async function beginAttempt(mixedRefs = false) {
+async function beginAttempt(mixedRefs = false, catalogVersion = CANON_RESOURCE_PROVIDER_V1.providerVersion) {
   const fixture = await seed()
   let snapshot = await createAgentRunV1({ scope: fixture.scope, contract: contract(fixture.projectId), now: NOW + 1 })
   const append = async (type: any, payload: any) => {
@@ -140,7 +140,7 @@ async function beginAttempt(mixedRefs = false) {
   })
   const decision = traced(selected, descriptor, read.tokenCount)
   const trace = await createRetrievalTraceV1({
-    catalogVersion: CANON_RESOURCE_PROVIDER_V1.providerVersion,
+    catalogVersion,
     selectorPolicyId: selector.selectorPolicyId,
     mandatory: [decision], autoSelected: [], agentReads: [],
     omitted: selector.omitted.map(item => ({
@@ -198,8 +198,8 @@ async function beginAttempt(mixedRefs = false) {
   }
 }
 
-async function completeAttempt(mixedRefs = false) {
-  const fixture = await beginAttempt(mixedRefs)
+async function completeAttempt(mixedRefs = false, catalogVersion = CANON_RESOURCE_PROVIDER_V1.providerVersion) {
+  const fixture = await beginAttempt(mixedRefs, catalogVersion)
   const candidateText = '新候选：潮民以星潮评定成年仪式。'
   const candidateHash = await sha256Text(candidateText)
   await fixture.append('model.requested', { stepId: 'races', attempt: 1, bindingHash: fixture.preflight.promptHash })
@@ -224,21 +224,34 @@ describe('CTXG-6 · Manifest V3 and exact attempt evidence', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
 
-  it('SFQA009 freezes the original mixed-ref preflight and Manifest V3 ordering and hashes', async () => {
+  // Frozen before extraction on bc18dc846 (catalog v9) and e6fce3374 (v10).
+  it.each([
+    {
+      catalogVersion: 'canon-resource-provider-v9',
+      preflightHash: '6417c3d533d6e1171c44488b60cbcf919f837e4804ed2ea8fcc1905bb5aad8ef',
+      manifestHash: '470b664e8b123f3fe0c3e344344f1915821d35ac5e6596dc78a490d4afe68179',
+      artifactHash: '2bc41369225a860f546f5b4caaa6336b34168b2d1d6c84d34e92bdf6c3559576',
+    },
+    {
+      catalogVersion: CANON_RESOURCE_PROVIDER_V1.providerVersion,
+      preflightHash: '488681604e3ef84c2af5848585539dbad3a6a76344cc82804ea85d5f99d7662d',
+      manifestHash: '83a34be4118a488e26cd0ed5b339f5a1c4c3d6765645143cf04126c2d41a96b5',
+      artifactHash: 'd7ae7321ce6427ff56212f183734a0880d5a6ecf5c83e070c98cfd4e1a84dfb8',
+    },
+  ])('SFQA009 preserves mixed-ref ordering and exact hashes for $catalogVersion', async expected => {
     const date = vi.spyOn(Date, 'now').mockReturnValue(NOW)
     const random = vi.spyOn(Math, 'random').mockReturnValue(0.125)
     let counter = 0
     const uuid = vi.spyOn(crypto, 'randomUUID').mockImplementation(() =>
       `00000000-0000-4000-8000-${(++counter).toString(16).padStart(12, '0')}`)
     try {
-      const f = await completeAttempt(true)
+      const f = await completeAttempt(true, expected.catalogVersion)
       const projected = (refs: typeof f.preflight.artifacts) => refs.map(ref =>
         [ref.role, ref.sourceKey ?? null, ref.resourceKey ?? null, ref.toolName ?? null, ref.callIndex ?? null])
-      // Captured on bc18dc846 from both unextracted public evidence paths; prior C hashes remain in external evidence.
-      expect(f.preflight.preflightHash).toBe('6417c3d533d6e1171c44488b60cbcf919f837e4804ed2ea8fcc1905bb5aad8ef')
+      expect(f.preflight.preflightHash).toBe(expected.preflightHash)
       const { manifest, manifestArtifactHash } = f.finalized
-      expect(manifest.manifestHash).toBe('470b664e8b123f3fe0c3e344344f1915821d35ac5e6596dc78a490d4afe68179')
-      expect(manifestArtifactHash).toBe('2bc41369225a860f546f5b4caaa6336b34168b2d1d6c84d34e92bdf6c3559576')
+      expect(manifest.manifestHash).toBe(expected.manifestHash)
+      expect(manifestArtifactHash).toBe(expected.artifactHash)
       const preflightOrder = [
         ['context-packet', null, null, null, null],
         ['rendered-request', null, null, null, null],
