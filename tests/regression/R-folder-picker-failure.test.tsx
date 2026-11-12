@@ -6,7 +6,7 @@ import ProjectStorageFolderField from '../../src/components/shared/ProjectStorag
 import ProjectStorageWorkspacePanel from '../../src/components/settings/ProjectStorageWorkspacePanel'
 import type { Project } from '../../src/lib/types'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 const stored = vi.hoisted(() => ({
   load: vi.fn(),

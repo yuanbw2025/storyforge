@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-quality034-039-after341-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-post345-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality034-039-after341-v1.json",
+        "workPackage": "SFQA-007",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-direct-main-v1.json",
+        "workPackage": "SFQA-007",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-quality109-after344-010-v1.json",
         "workPackage": "SFQA-034",
@@ -796,6 +806,11 @@
       {
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality010-production-reader-v1.json",
         "workPackage": "SFQA-010",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality007-dev-audit-v1.json",
+        "workPackage": "SFQA-007",
         "note": "Preserved the measurement on the independent fix branch."
       }
     ],
