@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { CURRENT_BACKUP_VERSION } from '../../src/lib/export/backup-trust'
 import { importProjectJSON } from '../../src/lib/export/json-export'
 import { assertTextOpenWorldBuildNewWorkV1 } from '../../src/lib/open-world/source-admission'
 import { confirmTextOpenWorldCreatorBriefV1, startTextOpenWorldCreatorBriefSessionV1 } from '../../src/lib/open-world/creator-brief'
@@ -225,10 +226,29 @@ it('096 retains the former signed source-mode Start but blocks new work until th
   expect(await db.agentRuns.count()).toBe(before.runs)
 })
 
-it('096 preserves the original future-version archive and rejects its unsupported schema before any writes', async () => {
-  const archive = JSON.parse(gunzipSync(readFileSync('tests/fixtures/text-open-world/quality096-legacy-authorized-source-mode-v1.json.gz')).toString('utf8'))
+function originalV18Archive() {
+  return JSON.parse(gunzipSync(readFileSync('tests/fixtures/text-open-world/quality096-legacy-authorized-source-mode-v1.json.gz')).toString('utf8'))
+}
+
+it('096 restores the original v18 archive and preserves its authorized build and frozen Brief', async () => {
+  const archive = originalV18Archive()
   expect(archive.version).toBe(18)
-  await expect(importProjectJSON(archive)).rejects.toThrow(/备份预检|版本/)
+  const projectId = await importProjectJSON(archive)
+  const production = await db.productProductions.where('projectId').equals(projectId).first()
+  expect(production).toBeDefined()
+  const build = await db.productBuilds.where('productionId').equals(production!.id!).first()
+  const brief = await db.productProductionBriefs.where('[productionId+revision]').equals([production!.id!, build!.briefRevision]).first()
+  const frozen = await readTextOpenWorldCreatorExecutionBriefV1({ briefRow: brief!, planJson: build!.planJson })
+  expect(frozen.creatorBrief.draft.protagonistMode).toBe('source-character')
+  expect(frozen.creatorBrief.draft).not.toHaveProperty('protagonistSourceResourceKey')
+  expect(frozen.executionBrief.intent.protagonistRefs).toEqual([])
+  expect(build!.status).toBe(archive.productBuilds[0].status)
+  expect(brief!.briefHash).toBe(archive.productProductionBriefs[0].briefHash)
+})
+
+it('096 refuses an archive newer than the supported version before any writes', async () => {
+  const archive = originalV18Archive()
+  await expect(importProjectJSON({ ...archive, version: CURRENT_BACKUP_VERSION + 1 })).rejects.toThrow(/备份预检|版本/)
   expect(await db.projects.count()).toBe(0)
   expect(await db.productProductions.count()).toBe(0)
   expect(await db.productBuilds.count()).toBe(0)

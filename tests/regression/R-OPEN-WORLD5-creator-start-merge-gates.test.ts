@@ -12,6 +12,7 @@ import {
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import {
   inspectTextOpenWorldCreatorWorldSourceV1,
+  listTextOpenWorldCreatorProtagonistChoicesV1,
 } from '../../src/lib/open-world/creator-source'
 import {
   textOpenWorldCreatorSourceBindingFromSelectionV1,
@@ -35,17 +36,8 @@ import { useAIConfigStore } from '../../src/stores/ai-config'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
-/** Both release-scoped merges must stay effective inside the single formal
- * Creator start boundary: the #413 ending-count product gate and the #370
- * world source-purpose compare-and-swap witness. This file calls that shared
- * preparation entry directly with a deterministic synthetic Brief row, with
- * no provider transport and no real user data.
- *
- * A Creator Brief normally cannot even be saved with one ending, so the
- * synthetic row below simulates the only remaining producer of that state.
- * It fails the ending gate and nothing else, which makes the source-purpose
- * witness the only other reason a start can fail here. */
-
+// Create a synthetic, historically signed Brief to exercise the formal production
+// start boundary even when current authoring already rejects a single ending.
 const AI_CONFIG: AIConfig = {
   provider: 'deepseek',
   apiKey: 'creator-start-merge-gates-synthetic-key',
@@ -176,6 +168,8 @@ async function seedCreatorStart(input: { endings: number; name: string }) {
     expectedReleaseHash: release.contentHash,
     preview,
   }
+  const [selectedProtagonist] = await listTextOpenWorldCreatorProtagonistChoicesV1(selection)
+  if (!selectedProtagonist) throw new Error('The frozen fixture requires a selectable character')
   const sourceBinding = textOpenWorldCreatorSourceBindingFromSelectionV1(selection)
   const brief = {
     schema: 'storyforge.text-open-world-creator-brief' as const,
@@ -185,7 +179,7 @@ async function seedCreatorStart(input: { endings: number; name: string }) {
     sourceBinding,
     sourceBindingHash: await hashCanonicalValue(sourceBinding),
     sourceSummary: textOpenWorldCreatorSourceSummaryFromSelectionV1(selection),
-    draft: draft(input.endings),
+    draft: { ...draft(input.endings), protagonistSourceResourceKey: selectedProtagonist.resourceKey },
     productBoundary: {
       freedomModel: 'bounded-guided' as const,
       mainlineStructure: 'strict-sequential-with-multiple-endings' as const,
@@ -249,7 +243,7 @@ async function seedCreatorStart(input: { endings: number; name: string }) {
     creatorSourceBindingHash: verified.sourceBindingHash,
   })
   return {
-    scope, release, productionId,
+    scope, release, productionId, selectedProtagonist,
     production: { ...productionBody, id: productionId, creatorSourceBindingHash: verified.sourceBindingHash },
     brief: verified,
   }
@@ -347,6 +341,8 @@ describe('Creator 正式启动 · 结局门与来源用途门同一入口', () =
     const prepared: TextOpenWorldCreatorStartPreparationV1 =
       await createTextOpenWorldCreatorStartPreparationV1(input)
     expect(prepared.start.executionBrief.scale.targetEndingCount).toBe(2)
+    expect(prepared.start.executionBrief.intent.protagonistRefs).toEqual([fixture.selectedProtagonist.resourceKey])
+    expect(prepared.start.executionBrief.source.startingPoint.protagonistRefs).toEqual([fixture.selectedProtagonist.resourceKey])
     expect(prepared.worldSourcePurposeCasWitness).not.toBeNull()
     expect(prepared.worldSourcePurposeCasWitness!.input.worldReleaseId).toBe(fixture.release.id)
     expect(prepared.worldSourcePurposeCasWitness!.input.purpose).toBe('text-open-world')
