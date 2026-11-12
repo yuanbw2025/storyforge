@@ -9,7 +9,6 @@ import {
   readEnum,
   readHash,
   readInteger,
-  readNonNegativeNumber,
   readRecord,
   readString,
 } from '../../agent/run/schema-utils'
