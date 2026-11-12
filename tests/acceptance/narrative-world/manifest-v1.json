@@ -21,18 +21,28 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-runtime-integration-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-runtime-source-plan-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-quality086-integrated-v1.json",
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality018-integrated-v1.json",
         "workPackage": "SFQA-028-031-032-069-082-083",
         "note": "Preserved the measured mainline before integration."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261111-quality028032-runtime-events-v1.json",
+        "path": "tests/acceptance/narrative-world/baseline-20261112-runtime-integration-v1.json",
         "workPackage": "SFQA-028-031-032-069-082-083",
         "note": "Preserved the measurements from the reviewed change."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality086-integrated-v1.json",
+        "workPackage": "SFQA-018",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-sfqa018-standalone-v1.json",
+        "workPackage": "SFQA-018",
+        "note": "Preserved the measurement on the independent fix branch."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-quality020-integrated-v1.json",
@@ -752,6 +762,16 @@
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality019-portable-tree-v1.json",
         "workPackage": "SFQA-019-portable-tree",
         "note": "Preserve the initial independent tree-validation receipt before restoring stable parent-first insertion and measuring the shared portable-tree source."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality086-integrated-v1.json",
+        "workPackage": "SFQA-028-031-032-069-082-083",
+        "note": "Preserved the measured mainline before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality028032-runtime-events-v1.json",
+        "workPackage": "SFQA-028-031-032-069-082-083",
+        "note": "Preserved the measurements from the reviewed change."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
