@@ -3,6 +3,7 @@ import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { seedOpenBrowserProductionV1, runOpenBrowserProductionV1 } from '../helpers/open-ttrpg-production-browser'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import { createMistHarborWorld } from '../../src/lib/world-engine/mist-harbor-preset'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { beginProductProductionEvolutionV1, publishProductProductionV1, recoverImportedProductProductionProofsV1 } from '../../src/lib/product-production/service'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
@@ -42,7 +43,12 @@ describe.each([2, 3] as const)('R-TTRPGOPEN2 restored author evolution retains s
     const sourceRootRunId = JSON.parse(sourceBuild.budgetLedgerJson).rootRunId
     const backup = await exportProjectJSON(source.scope.projectId)
     // Both a clean machine and a copy beside real existing Run IDs must work.
-    if (!keepOriginals) { await db.delete();await db.open() }
+    if (!keepOriginals) {
+      const { scope: sourceWorld } = await createMistHarborWorld()
+      const authorBackup = await exportProjectJSON(sourceWorld.projectId)
+      await db.delete(); await db.open()
+      await importProjectJSON(authorBackup)
+    }
     for (let i = 0; i < 3; i++) await seedCurrentProductWorld(`other machine ${i}`)
     const projectId = await importProjectJSON(backup)
     const production = (await db.productProductions.where('projectId').equals(projectId).toArray()).find(p => p.productionKey === key)!

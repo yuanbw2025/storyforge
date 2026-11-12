@@ -126,7 +126,7 @@ describe('R-DETAILED author save boundary', () => {
     const gate = new Promise<void>(resolve => { release = resolve })
     const waiting = new Promise<void>(resolve => { started = resolve })
     vi.spyOn(scopeModule, 'readOwnedRows').mockImplementation(async (scope, ...rest) => {
-      if (scope.workId === f.scope.workId && scope.projectId === f.scope.projectId) { started(); await gate }
+      if ('workId' in scope && scope.workId === f.scope.workId && scope.projectId === f.scope.projectId) { started(); await gate }
       return original(scope, ...rest)
     })
     const old = useDetailedOutlineStore.getState().loadAll(f.scope)

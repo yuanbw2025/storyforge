@@ -23,6 +23,8 @@ import type {
 } from '../types'
 import { assertRecordInScope, readOwnedRows, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { assertComicReadingOrderV1, assertComicVisualSubjectV1 } from './contracts'
+import { canonicalStringify } from '../agent/run/hash'
+import { comicVisualSubjectReviewSignatureV1, invalidateComicVisualReviewsInTransactionV1 } from './service'
 import {
   assertComicCandidateBatchV1,
   assertComicImageRequestCandidateV1,
@@ -221,9 +223,10 @@ export async function adoptComicPanelPlansV1(input: { scope: WorkspaceScope; exp
 }
 
 export async function adoptComicVisualBibleV1(input: { scope: WorkspaceScope; expectedAdaptationRevision: number; sourceManifestVersion: number; candidate: ComicVisualBibleCandidateV1; allowReplaceExisting?: boolean }): Promise<void> {
+  input = structuredClone(input)
   assertComicVisualBibleCandidateV1(input.candidate)
   const { scope, root } = await requireRoot(input.scope, input.expectedAdaptationRevision); await requireFresh(root)
-  return db.transaction('rw', scopeTransactionTables(db.adaptationProjects, db.adaptationSourceUnits, db.comicVisualSubjects, db.comicPanels, db.comicMediaAssets, db.workCharacterBindings, db.characters, db.geographies), async () => {
+  return db.transaction('rw', scopeTransactionTables(db.adaptationProjects, db.adaptationSourceUnits, db.comicVisualSubjects, db.comicPages, db.comicPanels, db.comicMediaAssets, db.workCharacterBindings, db.characters, db.geographies), async () => {
     assertRootCas(await db.adaptationProjects.get(root.id), root)
     const key = [root.id, input.sourceManifestVersion] as [number, number]
     const [units, existing, workBindings, characters] = await Promise.all([
@@ -274,8 +277,14 @@ export async function adoptComicVisualBibleV1(input: { scope: WorkspaceScope; ex
     })
     const panelRefs = await db.comicPanels.where('workId').equals(scope.workId).toArray(); const subjectKeys = new Set(subjects.map(row => row.stableKey))
     if (panelRefs.some(panel => [...(panel.continuityRefs ?? []), ...(panel.subjectStates ?? [])].some(ref => !subjectKeys.has(ref.subjectKey)))) throw new Error('[comic-production] 视觉圣经没有覆盖 panel 引用的 subject key')
+    const changedSubjectKeys = new Set(subjects.filter(subject => {
+      const previous = existing.find(row => row.stableKey === subject.stableKey)
+      return !previous || comicVisualSubjectReviewSignatureV1(previous) !== comicVisualSubjectReviewSignatureV1(subject)
+    }).map(subject => subject.stableKey))
+    await invalidateComicVisualReviewsInTransactionV1({ scope, adaptationProjectId: root.id, changedSubjectKeys,
+      allPanels: canonicalStringify(root.visualBible) !== canonicalStringify(input.candidate.global)
+        || root.visualBibleSourceManifestVersion !== input.sourceManifestVersion })
     await db.comicVisualSubjects.where('adaptationProjectId').equals(root.id).delete(); await db.comicVisualSubjects.bulkAdd(subjects)
-    await db.comicPanels.where('workId').equals(scope.workId).modify({visualReviewRevision:null,visualReviewBasis:null,visualReviewedAt:null})
     await db.adaptationProjects.update(root.id, { visualBible: structuredClone(input.candidate.global), visualBibleSourceManifestVersion: input.sourceManifestVersion, revision: root.revision + 1, updatedAt: now })
   })
 }

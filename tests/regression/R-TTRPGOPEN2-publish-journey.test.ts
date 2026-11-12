@@ -10,6 +10,7 @@ import { createProductRuntimeInstanceFromSource } from '../../src/lib/product/ru
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import { createMistHarborWorld } from '../../src/lib/world-engine/mist-harbor-preset'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { verifyImportedWorldContextBindingV1 } from '../../src/lib/product/world-context-portability'
@@ -157,6 +158,9 @@ describe.each([2, 3] as const)('R-TTRPGOPEN2 normal author production adoption p
   it('moves the complete author backup across two clean databases with different local IDs and preserves the exact original world-read manifests', async () => {
     const f = await produce(), productionKey = (await db.productProductions.get(f.productionId))!.productionKey
     let backup = await exportProjectJSON(f.scope.projectId)
+    const source = await createMistHarborWorld()
+    expect(source.scope.projectId).not.toBe(f.scope.projectId)
+    let authorWorld = await exportProjectJSON(source.scope.projectId)
     const originalBindings = backup.agentRuns.filter(r => r.portableWorldContextBindingsJson).flatMap(r => JSON.parse(r.portableWorldContextBindingsJson!))
     expect(originalBindings.length).toBeGreaterThan(0)
     for (let round = 0; round < 2; round++) {
@@ -170,6 +174,10 @@ describe.each([2, 3] as const)('R-TTRPGOPEN2 normal author production adoption p
       backup = await exportProjectJSON(projectId)
       const bindings = backup.agentRuns.filter(r => r.portableWorldContextBindingsJson).flatMap(r => JSON.parse(r.portableWorldContextBindingsJson!))
       expect(bindings).toEqual(originalBindings)
+      await expect(publishProductProductionV1(restored)).rejects.toThrow('原作者世界目前不可核实')
+      expect(await db.productReleases.where('projectId').equals(projectId).count()).toBe(0)
+      const sourceProjectId = await importProjectJSON(authorWorld)
+      authorWorld = await exportProjectJSON(sourceProjectId)
       if (round === 1) expect((await publishProductProductionV1(restored)).receipt.releaseVersion).toBe(1)
     }
   })

@@ -20,6 +20,7 @@ import type {
   TextOpenWorldCreatorSourceGapV1,
   TextOpenWorldCreatorSourcePreviewV1,
   TextOpenWorldCreatorSourceReadinessV1,
+  TextOpenWorldCreatorSourceSelectionV1,
   TextOpenWorldCreatorWorldResourceCountsV1,
   TextOpenWorldCreatorWorldSourceCandidateV1,
   TextOpenWorldNovelSourceSnapshotPreviewV1,
@@ -247,6 +248,41 @@ export async function inspectTextOpenWorldCreatorWorldSourceV1(input: {
   })
   return { ...candidate, sourcePurpose }
 
+}
+
+/** List only confirmed character descriptors from this exact frozen source. */
+export async function listTextOpenWorldCreatorProtagonistChoicesV1(
+  selection: TextOpenWorldCreatorSourceSelectionV1,
+): Promise<Array<{ resourceKey: string; label: string }>> {
+  if (selection.sourceKind !== 'world-release') return []
+  const catalog = await openWorldSemanticResourceCatalogV1({
+    localReleaseRecordId: selection.localReleaseRecordId,
+    expectedProjectId: selection.sourceScope.projectId,
+    expectedWorldId: selection.sourceScope.worldId,
+  })
+  if (catalog.description.identity.releaseHash !== selection.expectedReleaseHash ||
+    !sameWorldReference(catalog.description.worldReference, selection.preview.worldReference)) {
+    fail('world-release-drift', '角色目录与已选封存来源不一致')
+  }
+  return catalog.resources
+    .filter(item => item.worldSemantic?.area === 'characters' && item.worldSemantic.resourceKind === 'character')
+    .map(item => ({ resourceKey: item.resourceKey, label: item.title.trim() || item.resourceKey }))
+    .sort((left, right) => left.label.localeCompare(right.label) || left.resourceKey.localeCompare(right.resourceKey))
+}
+
+export async function assertTextOpenWorldCreatorProtagonistSelectionV1(input: {
+  selection: TextOpenWorldCreatorSourceSelectionV1
+  mode: 'source-character' | 'author-defined'
+  resourceKey?: string
+}): Promise<void> {
+  if (input.mode === 'author-defined') {
+    if (input.resourceKey !== undefined) fail('protagonist', '原创主角不能携带来源角色')
+    return
+  }
+  if (!input.resourceKey || input.selection.sourceKind !== 'world-release')
+    fail('protagonist', '请明确选择当前封存世界中的主角')
+  if (!(await listTextOpenWorldCreatorProtagonistChoicesV1(input.selection)).some(item => item.resourceKey === input.resourceKey))
+    fail('protagonist', '主角不属于当前封存来源的已确认角色')
 }
 
 function novelGaps(

@@ -1,6 +1,7 @@
 import { readAgentRunArtifactExactV1 } from '../memory/artifact-store'
 import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import { estimateTokens } from '../ai/context-budget'
+import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from './creator-ending-count'
 import { resolveRequestConfig, type ChatResult } from '../ai/client'
 import { computeKnownCostUsd } from '../ai/usage-log'
 import {
@@ -48,9 +49,11 @@ import type {
 import { assertRecordInScope, readOwnedRows, scopeTransactionTables } from '../workspace/scope'
 import { DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1 } from './product-config'
 import { assertTextOpenWorldNewSourceV1 } from './source-admission'
+import { assertTextOpenWorldCreatorProtagonistSelectionV1 } from './creator-source'
 import {
   createTextOpenWorldCreatorSourceLocatorV1,
   inspectTextOpenWorldCreatorSourceLocatorV1,
+  readTextOpenWorldCreatorProtagonistSourceKeyV1,
   TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1,
   TEXT_OPEN_WORLD_CREATOR_BRIEF_VERIFIER_V1,
   TEXT_OPEN_WORLD_CREATOR_PRODUCT_BOUNDARY_V1,
@@ -204,8 +207,10 @@ function rangeValue(value: unknown, label: string, minimum: number, maximum: num
 
 export function parseTextOpenWorldCreatorBriefDraftV1(value: unknown): TextOpenWorldCreatorBriefDraftV1 {
   const root = record(value, 'creatorBriefDraft')
+  const protagonistSourceResourceKey = readTextOpenWorldCreatorProtagonistSourceKeyV1(root)
   exact(root, [
     'schema', 'version', 'gameTitle', 'playerRole', 'playerFantasy', 'protagonistMode',
+    ...(protagonistSourceResourceKey === undefined ? [] : ['protagonistSourceResourceKey']),
     'protagonistDirective', 'coreGoal', 'primaryConflict', 'openingSituation',
     'experiencePillars', 'toneKeywords', 'mustKeep', 'allowedInferences', 'forbiddenChanges',
     'contentRating', 'contentBoundaries', 'authorNotes', 'unresolvedQuestions',
@@ -247,6 +252,7 @@ export function parseTextOpenWorldCreatorBriefDraftV1(value: unknown): TextOpenW
     playerRole: textValue(root.playerRole, 'playerRole', 2_000),
     playerFantasy: textValue(root.playerFantasy, 'playerFantasy', 2_000),
     protagonistMode,
+    ...(protagonistSourceResourceKey === undefined ? {} : { protagonistSourceResourceKey }),
     protagonistDirective: textValue(root.protagonistDirective, 'protagonistDirective', 2_000),
     coreGoal: textValue(root.coreGoal, 'coreGoal', 2_000),
     primaryConflict: textValue(root.primaryConflict, 'primaryConflict', 2_000),
@@ -657,6 +663,9 @@ export async function saveTextOpenWorldCreatorBriefDraftV1(input: {
   assertTextOpenWorldNewSourceV1(input.session.sourceBinding.kind, '保存制作简报草稿')
   await recheckSelection(requireSessionSelection(input.session))
   const draft = parseTextOpenWorldCreatorBriefDraftV1(input.draft)
+  if (!isTextOpenWorldCreatorEndingCountV1(draft.scale.endings)) {
+    fail('ending-count', TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+  }
   const payload: CreatorBriefDraftEventV1 = {
     schema: 'storyforge.text-open-world-creator-brief-draft-event',
     version: 1,
@@ -1217,6 +1226,9 @@ export async function confirmTextOpenWorldCreatorBriefV1(input: {
   }
   await assertTextOpenWorldCreatorBriefLifecycleV1({ scope: input.session.scope, production, phase: 'revise' })
   const draft = parseTextOpenWorldCreatorBriefDraftV1(input.draft)
+  if (!isTextOpenWorldCreatorEndingCountV1(draft.scale.endings)) {
+    fail('ending-count', TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+  }
   if (draft.unresolvedQuestions.length) fail('unresolved', '仍有未决问题；请回答、删除或转为明确接受的假设')
   if (!input.acknowledgements.sourceIdentityReviewed
     || !input.acknowledgements.productBoundaryReviewed
@@ -1228,6 +1240,8 @@ export async function confirmTextOpenWorldCreatorBriefV1(input: {
   if (await hashCanonicalValue(selectionBinding(selection)) !== input.session.sourceBindingHash) {
     fail('source-stale', '来源已变化，请重新选择并重新会谈')
   }
+  await assertTextOpenWorldCreatorProtagonistSelectionV1({ selection, mode: draft.protagonistMode,
+    resourceKey: draft.protagonistSourceResourceKey })
   assertCurrentProductEntryV1('upper.text-open-world')
   let snapshot: AgentRunSnapshotV1
   let previousCandidateHash: string

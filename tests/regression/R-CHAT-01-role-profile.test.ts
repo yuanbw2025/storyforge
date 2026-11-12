@@ -21,6 +21,7 @@ import {hashProductProductionValueV2} from '../../src/lib/product-production/has
 import {executeProductProductionCommand} from '../../src/lib/product-production/commands'
 import {executeChatSituationDeterministicTaskV1} from '../../src/lib/product-production/chat-situation-tasks'
 import {validateChatNarrativeProductionSourceV1} from '../../src/lib/character-interaction/narrative-production'
+import {freezeWorldSourcePurposeV1} from '../../src/lib/world-engine/source-purpose'
 
 beforeEach(async () => {db.close(); await db.delete(); await db.open()})
 afterEach(() => {vi.restoreAllMocks(); db.close()})
@@ -181,6 +182,11 @@ it('delivers the confirmed profile to the v3 opening situation task and rejects 
   validateChatNarrativeProductionSourceV1(source)
   expect(JSON.stringify(source)).toContain(candidate.traits[0].text)
   expect(result.usage.modelCalls).toBe(0)
-  expect(() => parseProductProductionBriefV3({...brief, intent: {...brief.intent, productType: 'ai-town'}, source: {...brief.source, selection: {...brief.source.selection, productType: 'ai-town'}}, characterChat: undefined})).toThrow('人物整理')
+  const townBrief = {...brief, intent: {...brief.intent, productType: 'ai-town'},
+    source: {...brief.source, selection: {...brief.source.selection, productType: 'ai-town'}}, characterChat: undefined}
+  expect(() => parseProductProductionBriefV3(townBrief)).toThrow('sourcePurpose')
+  const townPurpose = await freezeWorldSourcePurposeV1({worldReleaseId: f.world.release.id!,
+    expectedProjectId: f.world.scope.projectId, expectedWorldId: f.world.scope.worldId, purpose: 'ai-town'})
+  expect(() => parseProductProductionBriefV3({...townBrief, source: {...townBrief.source, sourcePurpose: townPurpose}})).toThrow('人物整理')
   expect(() => parseProductProductionBriefV3({...brief, characterChat: {...brief.characterChat, version: 1, sourceReview: undefined}})).toThrow()
 })
