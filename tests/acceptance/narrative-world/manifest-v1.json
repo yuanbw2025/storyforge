@@ -21,18 +21,28 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-canon-source-compatibility-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261113-world-runtime-audited-tools-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-family-v1.json",
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-after-five-v1.json",
         "workPackage": "SFQA-021-129",
         "note": "Preserved the measured mainline before integration."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261112-world-source-restore-contract-v1.json",
+        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-canon-source-compatibility-v1.json",
         "workPackage": "SFQA-021-129",
         "note": "Preserved the measurements from the reviewed change."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality042-direct-391-077-v1.json",
+        "workPackage": "SFQA-007",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-post345-v1.json",
+        "workPackage": "SFQA-007",
+        "note": "Preserved the measurement on the independent fix branch."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-quality011-direct-391-077-v1.json",
@@ -880,6 +890,26 @@
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality077-citation-v1.json",
         "workPackage": "SFQA-077",
         "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-direct-main-v1.json",
+        "workPackage": "SFQA-007",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality007-dev-audit-v1.json",
+        "workPackage": "SFQA-007",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-family-v1.json",
+        "workPackage": "SFQA-021-129",
+        "note": "Preserved the measured mainline before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-world-source-restore-contract-v1.json",
+        "workPackage": "SFQA-021-129",
+        "note": "Preserved the measurements from the reviewed change."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-runtime-integration-v1.json",

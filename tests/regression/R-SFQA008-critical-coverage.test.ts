@@ -55,7 +55,7 @@ it.each(['critical domains', 'original coverage scope'] as const)(
       ].join('\n'))
       const reports = path.join(fixture, 'reports')
       const run = spawnSync(process.execPath, [path.join(project, 'node_modules/vitest/vitest.mjs'), 'run',
-        '--coverage', '--coverage.reportsDirectory=' + reports, '--maxWorkers=1', '--minWorkers=1'],
+        '--coverage', '--coverage.reportsDirectory=' + reports, '--maxWorkers=1'],
       { cwd: fixture, encoding: 'utf8', timeout: 30_000 })
       expect(run.error).toBeUndefined()
       const output = stripVTControlCharacters(run.stdout + run.stderr)
