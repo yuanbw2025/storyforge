@@ -187,8 +187,21 @@ describe('R-HARNESS28 · H4 verifier runner, recovery and sealed scoring', { tim
       },
     }))
     expect(call).toHaveBeenCalledTimes(2)
-    expect(failures).toHaveLength(1)
+    // Retry checkpoints retain the first failure while recording the next
+    // dispatch and its raw response before local parsing completes.
+    expect(failures.map(value => ({
+      failedAttempts: value.failures.map(failure => failure.attempt),
+      pendingAttempt: value.pendingAttempt?.attempt ?? null,
+      rawResponse: value.pendingAttempt?.response?.rawJudgeOutput ?? null,
+    }))).toEqual([
+      { failedAttempts: [1], pendingAttempt: null, rawResponse: null },
+      { failedAttempts: [1], pendingAttempt: 2, rawResponse: null },
+      { failedAttempts: [1], pendingAttempt: 2, rawResponse: judgeOutput('h4-held-01') },
+    ])
+    expect(failures.map(value => value.failures)).toEqual([checkpoint.failures, checkpoint.failures, checkpoint.failures])
+    expect(await Promise.all(failures.map(verifyH4LongConsistencyRunCheckpointV1))).toEqual([true, true, true])
     expect(failures[0].failures[0]?.code).toBe('invalid_json')
+    expect(failures[0].failures[0]?.rawJudgeOutput).toBe('not-json')
     expect(checkpoint.status).toBe('completed')
     expect(checkpoint.attempts).toEqual([{ fixtureId: 'h4-held-01', count: 2 }])
     expect(checkpoint.failures).toHaveLength(1)
