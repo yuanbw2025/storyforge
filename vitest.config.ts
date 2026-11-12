@@ -1,5 +1,19 @@
 import { defineConfig } from 'vitest/config'
 import path from 'path'
+import criticalCoverage from './scripts/quality/critical-coverage-scopes.json' with { type: 'json' }
+
+const legacyIncludes = [
+  'src/lib/registry/**/*.ts',
+  'src/lib/db/**/*.ts',
+  'src/lib/export/**/*.ts',
+  'src/lib/import/**/*.ts',
+  'src/lib/ai/adapters/**/*.ts',
+  'src/lib/ai/*.ts',
+]
+const globalFloors = { lines: 58, functions: 50, statements: 58, branches: 60 }
+const domainFloors = { lines: 50, functions: 40, statements: 50, branches: 50 }
+const domainScopes = Object.values(criticalCoverage)
+const scopeGlob = (files: string[]) => `{${files.join(',')}}`
 
 /**
  * Vitest 配置
@@ -7,7 +21,7 @@ import path from 'path'
  * - 环境:happy-dom(纯前端项目,需要 DOM API)
  * - IndexedDB:由 tests/setup.ts 加载 fake-indexeddb
  * - 别名:与 vite.config.ts 一致(@ 指向 src)
- * - 覆盖率:v8,目标 60%(关键模块 80%)
+ * - 覆盖率:v8,既有核心层与关键业务入口分别设门槛
  */
 export default defineConfig({
   test: {
@@ -34,17 +48,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],
-      // 覆盖率聚焦【核心业务逻辑层】:数据/注册表/AI 解析与装配。
-      // 排除 UI 层(components/pages/hooks)与纯视觉(world-map 渲染)——
-      // 纯前端 UI 单测成本极高、价值低,业界惯例是对核心逻辑设高门槛、UI 用 E2E 另测。
-      include: [
-        'src/lib/registry/**/*.ts',
-        'src/lib/db/**/*.ts',
-        'src/lib/export/**/*.ts',
-        'src/lib/import/**/*.ts',
-        'src/lib/ai/adapters/**/*.ts',
-        'src/lib/ai/*.ts',
-      ],
+      include: [...legacyIncludes, ...domainScopes.flat()],
       exclude: [
         'src/**/*.test.{ts,tsx}',
         'src/lib/world-map/**',      // 纯视觉地图渲染算法
@@ -55,11 +59,10 @@ export default defineConfig({
         'src/**/*.d.ts',
       ],
       thresholds: {
-        // 静态 Prompt 数据已排除；门槛约束真实 parser/runner/import/registry 运行时代码。
-        lines: 58,
-        functions: 50,
-        statements: 58,
-        branches: 60,
+        ...globalFloors,
+        // Keep the original aggregate gated independently when the denominator grows.
+        [scopeGlob(legacyIncludes)]: globalFloors,
+        ...Object.fromEntries(domainScopes.map(files => [scopeGlob(files), domainFloors])),
         // 注册表是地基(单一事实源),要求更高
         'src/lib/registry/**/*.ts': {
           lines: 75,
