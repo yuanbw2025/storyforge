@@ -36,6 +36,8 @@ test('the manual AVG media workflow owns its production harnesses; ordinary prod
   const unit = 'tests/regression/R-AVG-05A-production-assembly.test.ts'
   assert.ok(suites.includes(visual))
   assert.ok(suites.includes('tests/regression/R-AVG-05A-combined-media-stage.test.ts'))
+  assert.ok(suites.includes('tests/regression/R-AVG-04A15-v5-current-assembly.test.ts'))
+  assert.ok(suites.includes('tests/regression/R-AVG-04B-processed-sound-flow.test.ts'))
   assert.equal(suites.length, new Set(suites).size)
   assert.ok(suites.every(file => /^tests\/regression\/R-AVG-[a-zA-Z0-9-]+\.test\.ts$/.test(file) && existsSync(file)))
   assert.deepEqual(plan([...suites, unit], present).units, [unit])
