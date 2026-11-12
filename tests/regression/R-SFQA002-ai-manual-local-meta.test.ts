@@ -15,13 +15,15 @@ const declaredInputs = [
   'src/lib/ai/prompt-seeds-novel.ts', 'src/lib/registry/context-sources.ts',
   'src/lib/registry/project-tables.ts', 'src/lib/registry/field-registry.ts',
   'src/lib/registry/adoption-schema.ts', 'src/lib/agent/ai-entry-registry.json',
+  'src/lib/character-interaction/source-budgets.ts',
   'src/lib/open-world/responsibility-contract.ts',
 ]
 
 async function scan(source: string): Promise<string> {
   const directory = await mkdtemp(path.join(tmpdir(), 'storyforge-ai-manual-meta-'))
   try {
-    for (const relative of [...declaredInputs, 'scripts/generate-ai-manual.mjs', 'scripts/ai-call-meta.mjs']) {
+    for (const relative of [...declaredInputs, 'scripts/generate-ai-manual.mjs', 'scripts/ai-call-meta.mjs',
+      'scripts/ai-manual-context-sources.mjs', 'scripts/static-guard-bindings.mjs']) {
       const output = path.join(directory, relative)
       await mkdir(path.dirname(output), { recursive: true })
       await writeFile(output, await readFile(path.join(repository, relative)))
