@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-author-policy-combined-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-author-policy-resume-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-author-policy-combined-v1.json",
+        "workPackage": "SFQA-087",
+        "note": "Preserve the author policy measurements before keeping the projected policy digest inside the node resume transaction."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-import-shared-contract-v1.json",
         "workPackage": "SFQA-087",
