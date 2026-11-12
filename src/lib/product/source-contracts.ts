@@ -227,6 +227,13 @@ function readiness(input: {
     : 'ready-with-gaps'
 }
 
+// Keep the serialized readiness rule for historical reads. New V1 execution
+// and publication must also honor conditional requirements under the block policy.
+function isBlockingConditionalV1(plan: ProductSourcePlan, requirement: WorldRequirementResolutionV1): boolean {
+  return plan.version === 1 && plan.missingStrategy === 'block'
+    && requirement.level === 'conditional' && requirement.condition?.active === true
+}
+
 export async function previewWorldRequirementsV1<TGoal>(input: {
   adapter: WorldRequirementAdapterV1<TGoal>
   goal: TGoal
@@ -759,6 +766,10 @@ export async function aggregateProductSourceManifestFromExactRuns(input: {
   const requiredFailure = plan.requirements.some(requirement => requirement.level === 'stable-required'
     && requirementOutcomes.find(item => item.requirementKey === requirement.key)?.status !== 'matched')
   if (requiredFailure) fail('required-source-evidence', '正式发布缺少稳定必读世界资源的真实 run 读取证据')
+  if (plan.requirements.some((requirement, index) =>
+    isBlockingConditionalV1(plan, requirement) && requirementOutcomes[index].status !== 'matched')) {
+    fail('required-source-evidence', '正式发布缺少已激活条件所需的世界资源真实读取证据')
+  }
   const statuses: WorldRequirementStatusV1[] = ['matched', 'missing', 'conflict', 'omitted', 'insufficient']
   const summary = Object.fromEntries(statuses.map(status => [
     status,
@@ -919,6 +930,9 @@ export async function assertFormalProductProductionStartV1(input: {
   await resolveProductSourceReadBoundary(plan)
   const brief = await validateConfirmedProductBriefV1({ brief: input.confirmedBrief, sourcePlan: plan })
   if (plan.readiness === 'blocked') fail('source-plan-blocked', 'SourcePlan 存在未解决的稳定必读缺口')
+  if (plan.requirements.some(requirement => isBlockingConditionalV1(plan, requirement) && requirement.status !== 'matched')) {
+    fail('source-plan-blocked', 'SourcePlan 存在已激活条件的必读缺口')
+  }
   if (brief.authorStartRevision !== input.authorStartRevision) {
     fail('start-stale', '用户开始授权 revision 已变化，必须重新确认 Brief/SourcePlan')
   }

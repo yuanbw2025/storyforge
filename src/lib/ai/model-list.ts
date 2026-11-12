@@ -19,6 +19,7 @@ export async function fetchOpenAIModels({
   try {
     const response = await fetchImpl(buildOpenAIEndpoint(baseUrl, 'models'), {
       method: 'GET',
+      cache: 'no-store',
       signal: controller.signal,
       headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
     })

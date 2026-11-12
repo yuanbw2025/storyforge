@@ -95,6 +95,8 @@ export interface ChapterPlanReconciliation {
   generatedAt: number
   // 用户的对账操作记录
   actions?: Record<string, { action: string; indices: number[] }>
+  /** Immutable item keys within this report, with the plan hash after our own writes. */
+  outlineSync?: { appliedItemKeys: string[]; planSourceHash: string }
 }
 
 /** 章节 */
