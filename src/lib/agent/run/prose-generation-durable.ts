@@ -26,7 +26,8 @@ import {
 } from './event-store'
 import { parseAgentRunEventV1 } from './event-schema'
 import { createVerificationReceiptV1 } from './verification-receipt'
-import { hashCanonicalValue } from './hash'
+import { canonicalStringify, hashCanonicalValue } from './hash'
+import type { TokenUsage } from '../../ai/logger'
 import { createContextManifestFromAssemblyV1, createContextManifestV2FromV1 } from './context-manifest'
 import {
   assertRecordInScope,
@@ -631,6 +632,52 @@ export async function beginProseGenerationGatewayStepV1(input: {
   return { snapshot, attempt: { execution, baseManifest, preflight: recorded.evidence } }
 }
 
+function parseObservedProseUsageV1(value: unknown): TokenUsage | null {
+  if (value == null) return null
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error('正文供应商用量观测格式无效。')
+  const row = value as Record<string, unknown>
+  const { inputTokens, outputTokens, totalTokens } = row
+  if (typeof inputTokens !== 'number' || !Number.isSafeInteger(inputTokens) || inputTokens < 0
+    || typeof outputTokens !== 'number' || !Number.isSafeInteger(outputTokens) || outputTokens < 0
+    || typeof totalTokens !== 'number' || !Number.isSafeInteger(totalTokens) || totalTokens < 0) throw new Error('正文供应商用量必须是完整、非负的实际观测。')
+  return { inputTokens, outputTokens, totalTokens }
+}
+
+/** Read only the original attempt's verified receipt; never infer from global
+ * totals, a newer attempt or UI session state. Historical absent fields stay unknown. */
+export async function readProseGenerationObservedUsageV1(input: {
+  scope: WorkspaceScope; runId: number; attempt: number
+}): Promise<TokenUsage | null> {
+  if (!Number.isSafeInteger(input.attempt) || input.attempt < 1) throw new Error('正文用量读取缺少真实 attempt。')
+  const snapshot = await readAgentRunV1(input.scope, input.runId)
+  if (!snapshot.events.some(event => event.type === 'model.requested'
+    && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1 && event.payload.attempt === input.attempt)) return null
+  const responded = snapshot.events.find(event => event.type === 'model.responded'
+    && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1 && event.payload.attempt === input.attempt)
+  for (const event of [...snapshot.events].reverse()) {
+    if (event.type !== 'evidence.artifact.recorded' || event.payload.stepId !== PROSE_GENERATION_STEP_ID_V1
+      || event.payload.attempt !== input.attempt || event.payload.artifactKind !== 'raw-response') continue
+    const content = await readAgentRunArtifactExactV1({ projectId: input.scope.projectId,
+      artifactKind: 'raw-response', contentHash: event.payload.contentHash })
+    let row: Record<string, unknown>
+    try { row = JSON.parse(content) } catch { continue }
+    if (!row || typeof row !== 'object' || Array.isArray(row)
+      || !['prose-observed-response-v1', 'prose-interrupted-response-v1'].includes(String(row.version))
+      || !Object.prototype.hasOwnProperty.call(row, 'observedUsage')) continue
+    if (row.version === 'prose-observed-response-v1') {
+      // An old unwrapped model JSON body cannot authorize its own metering.
+      if (typeof row.text !== 'string' || responded?.type !== 'model.responded'
+        || responded.payload.outputHash !== await hashCanonicalValue(row.text)) continue
+    } else if (responded || !['failed', 'cancelled', 'unknown'].includes(String(row.completion))) continue
+    const usage = parseObservedProseUsageV1(row.observedUsage)
+    if (row.usageBasis !== (usage ? 'provider-observed' : 'unknown')) throw new Error('正文用量观测来源不一致。')
+    if (row.version === 'prose-interrupted-response-v1' ? row.budgetTokenBasis !== 'reserved'
+      : usage ? row.budgetTokenBasis !== 'provider-observed' : !['estimated', 'not-settled'].includes(String(row.budgetTokenBasis))) throw new Error('正文用量预算依据不一致。')
+    if (usage) return usage
+  }
+  return null
+}
+
 /** Finalize exact response and ContextManifestV3 before candidate.persisted. */
 export async function finalizeProseGenerationGatewayStepV1(input: {
   scope: WorkspaceScope
@@ -639,19 +686,39 @@ export async function finalizeProseGenerationGatewayStepV1(input: {
   output: string
   lengthObservation?: ProseLengthObservationV1
   usedTokens?: number
+  observedUsage?: TokenUsage | null
 }): Promise<{ snapshot: AgentRunSnapshotV1; manifest: ContextManifestV3 }> {
+  const declaresUsage = Object.prototype.hasOwnProperty.call(input, 'observedUsage')
+  const observedUsage = parseObservedProseUsageV1(input.observedUsage)
+  const metering = declaresUsage ? { observedUsage, usageBasis: observedUsage ? 'provider-observed' : 'unknown',
+    budgetTokenBasis: observedUsage ? 'provider-observed' : input.usedTokens != null ? 'estimated' : 'not-settled' } : {}
+  const rawResponse = input.lengthObservation || declaresUsage ? {
+    version: 'prose-observed-response-v1', text: input.output,
+    ...(input.lengthObservation ? { length: parseProseLengthObservationV1(input.lengthObservation) } : {}), ...metering,
+  } : input.output
   const outputHash = await hashCanonicalValue(input.output)
-  let snapshot = await append(input.scope, input.snapshot, 'model.responded', {
+  let snapshot = input.snapshot
+  if (declaresUsage) {
+    const step = snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
+    if (!step || step.status !== 'running' || step.attempt !== 1) throw new Error('正文用量观测不属于正在执行的原始 attempt。')
+    // Retain paid text and metering before subsequent budget/manifest writes.
+    // The gateway below reuses this exact canonical body and existing identity.
+    snapshot = (await recordAgentRunArtifactV1({ scope: input.scope, runId: snapshot.run.id,
+      stepId: PROSE_GENERATION_STEP_ID_V1, attempt: step.attempt, artifactKind: 'raw-response',
+      content: typeof rawResponse === 'string' ? rawResponse : canonicalStringify(rawResponse),
+      expectedLastSequence: snapshot.projection.lastSequence })).snapshot
+  }
+  snapshot = await append(input.scope, snapshot, 'model.responded', {
     stepId: PROSE_GENERATION_STEP_ID_V1,
     attempt: 1,
     outputHash,
   })
-  if (input.usedTokens != null) {
+  if (observedUsage || input.usedTokens != null) {
     snapshot = await append(input.scope, snapshot, 'budget.settled', {
       stepId: PROSE_GENERATION_STEP_ID_V1,
       modelCalls: 1,
       toolCalls: 0,
-      tokens: Math.max(0, Math.floor(input.usedTokens)),
+      tokens: observedUsage?.totalTokens ?? Math.max(0, Math.floor(input.usedTokens!)),
     })
   }
   const finalized = await finalizeContextGatewayAttemptEvidenceV1({
@@ -666,7 +733,7 @@ export async function finalizeProseGenerationGatewayStepV1(input: {
     retrievalTrace: input.attempt.execution.retrievalTrace,
     gatewayVersionHash: input.attempt.execution.contextPacket.gatewayVersionHash,
     policyHash: input.attempt.execution.contextPacket.policyHash,
-    rawResponse: input.lengthObservation ? { version: 'prose-observed-response-v1', text: input.output, length: parseProseLengthObservationV1(input.lengthObservation) } : input.output,
+    rawResponse,
     candidateHash: outputHash,
     expectedLastSequence: snapshot.projection.lastSequence,
   })
@@ -973,6 +1040,11 @@ export interface InterruptedProseGenerationV1 {
   outputText: string
   completion: 'cancelled' | 'failed' | 'unknown'
   message: string
+  /** Missing on historical payloads means not recorded, never zero. */
+  observedUsage?: TokenUsage | null
+  usageBasis?: 'provider-observed' | 'unknown'
+  /** An interruption retains the original reservation, not a final invoice. */
+  budgetTokenBasis?: 'reserved'
 }
 
 /** Keep the received bytes as run evidence. This is never a candidate or an adoption. */
@@ -983,13 +1055,21 @@ export async function recordInterruptedProseGenerationV1(input: {
 }): Promise<AgentRunSnapshotV1> {
   const step = input.snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
   if (!step || step.status !== 'running') throw new Error('中断片段缺少正在执行的正文步骤。')
+  const response = structuredClone(input.response)
+  const declaresUsage = Object.prototype.hasOwnProperty.call(response, 'observedUsage')
+  if (!declaresUsage && (response.usageBasis != null || response.budgetTokenBasis != null)) throw new Error('正文用量依据缺少原始观测字段。')
+  if (declaresUsage) {
+    response.observedUsage = parseObservedProseUsageV1(response.observedUsage)
+    response.usageBasis = response.observedUsage ? 'provider-observed' : 'unknown'
+    response.budgetTokenBasis = 'reserved'
+  }
   const recorded = await recordAgentRunArtifactV1({
     scope: input.scope,
     runId: input.snapshot.run.id,
     stepId: PROSE_GENERATION_STEP_ID_V1,
     attempt: step.attempt,
     artifactKind: 'raw-response',
-    content: JSON.stringify(input.response),
+    content: declaresUsage ? canonicalStringify(response) : JSON.stringify(response),
     expectedLastSequence: input.snapshot.projection.lastSequence,
   })
   return recorded.snapshot
@@ -1015,13 +1095,20 @@ export async function readLatestInterruptedProseGenerationV1(input: {
   const snapshot = await readAgentRunV1(input.scope, latest.id)
   if (snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]?.status !== 'failed') return null
   const evidence = [...snapshot.events].reverse().find(event => event.type === 'evidence.artifact.recorded'
-    && event.payload.artifactKind === 'raw-response' && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1)
+    && event.payload.artifactKind === 'raw-response' && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1
+    && event.payload.attempt === snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]?.attempt)
   if (!evidence || evidence.type !== 'evidence.artifact.recorded') return null
   const content = await readAgentRunArtifactExactV1({ projectId: input.scope.projectId, artifactKind: 'raw-response', contentHash: evidence.payload.contentHash })
   let row: InterruptedProseGenerationV1
   try { row = JSON.parse(content) } catch { return null }
   if (!row || row.version !== 'prose-interrupted-response-v1' || typeof row.outputText !== 'string'
     || !['cancelled', 'failed', 'unknown'].includes(row.completion) || typeof row.message !== 'string') return null
+  if (Object.prototype.hasOwnProperty.call(row, 'observedUsage')) {
+    if (snapshot.events.some(event => event.type === 'model.responded'
+      && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1 && event.payload.attempt === evidence.payload.attempt)) return null
+    row.observedUsage = parseObservedProseUsageV1(row.observedUsage)
+    if (row.usageBasis !== (row.observedUsage ? 'provider-observed' : 'unknown') || row.budgetTokenBasis !== 'reserved') throw new Error('中断正文用量观测的来源或预算依据不一致。')
+  } else if (row.usageBasis != null || row.budgetTokenBasis != null) throw new Error('中断正文用量依据缺少原始观测字段。')
   return { ...row, operation: snapshot.contract.objective.startsWith('续写') ? 'continue' : 'generate' }
 }
 

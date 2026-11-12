@@ -10,7 +10,7 @@ import {parseChatComposerDraftV1} from '../character-interaction/composer-draft-
  * 注册表派生的项目导入引擎(AUDIT-1)
  *
  * 取代 json-export.ts 中手写的逐表导入:按表依赖拓扑排序(被引用表先于引用方)遍历
- * exportable 表,树表内再按 _parentExportId 拓扑排序,逐行把导出序号外键重映射回新 db id。
+ * exportable 表,树表内按登记的便携父引用拓扑排序,逐行把导出序号外键重映射回新 db id。
  * 加新表只需在注册表登记一行,自动进出导入。
  *
  * 必填外键(onUnmapped: 'require')缺失映射 → 抛错整体回滚(完整性保护);孤儿(onUnmapped:
@@ -23,6 +23,7 @@ import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
 import { assertProductRuntimeSourceSnapshotV3 } from '../product/runtime-source-branch'
 import { remapWorldPortalTargets } from '../utils/world-portals'
 import { transactionTablesFor } from '../registry/lifecycle'
+import { inspectPortableTableStructure, orderPortableTreeRows } from './portable-table-structure'
 import type { ExportRefRemap, TableSpec } from '../registry/types'
 import type { ProjectExportData, ProjectImportOptionsV1 } from './json-export'
 import { CURRENT_BACKUP_VERSION, normalizeProjectBackup } from './backup-trust'
@@ -924,11 +925,16 @@ function strictOwnerShadow(spec: TableSpec, row: Record<string, any>): {
   return null
 }
 
-async function validateCurrentBackup(data: ProjectExportData): Promise<void> {
+async function validateCurrentBackup(data: Record<string, unknown>): Promise<void> {
   if (data.version !== CURRENT_BACKUP_VERSION) {
     throw new Error(`[deriveImport] 只接受当前备份版本 v${CURRENT_BACKUP_VERSION}`)
   }
   const value = data as unknown as Record<string, any>
+  for (const spec of PROJECT_TABLES) {
+    if (!spec.exportable || !Array.isArray(value[spec.name])) continue
+    const errors = inspectPortableTableStructure(spec, value[spec.name])
+    if (errors.length) throw new Error(`[deriveImport] ${errors.join('；')}`)
+  }
   if (!Array.isArray(value.worlds) || !value.worlds.length || !Array.isArray(value.works) || !value.works.length) {
     throw new Error('[deriveImport] 当前备份缺少 World/Work 根')
   }
@@ -1582,27 +1588,6 @@ function deriveImportOrder(specs: TableSpec[]): TableSpec[] {
   return order
 }
 
-/** 树表行级拓扑排序:_parentExportId 为空或父已就位的行优先,保证 parent 先于 child 落库 */
-function topoSortTreeRows(rows: any[]): any[] {
-  const sorted: any[] = []
-  const placed = new Set<number>()
-  let guard = 0
-  while (sorted.length < rows.length) {
-    if (guard++ > rows.length + 2) {
-      for (const r of rows) if (!placed.has(r._exportId)) sorted.push(r) // 防环兜底
-      break
-    }
-    for (const r of rows) {
-      if (placed.has(r._exportId)) continue
-      if (r._parentExportId == null || placed.has(r._parentExportId)) {
-        sorted.push(r)
-        placed.add(r._exportId)
-      }
-    }
-  }
-  return sorted
-}
-
 function patchSelfIdPaths(obj: Record<string, any>, paths: string[], newId: number): Record<string, unknown> {
   const patch: Record<string, unknown> = {}
   for (const path of paths) {
@@ -1668,15 +1653,29 @@ async function restorePortableSharedMediaObject(
  * 派生导入:把 ProjectExportData 写成一个新项目,返回新项目 id。
  * 与手写 importProjectJSON 行为一致(往返完整性由 R-export-fullcoverage 锁死)。
  */
-export async function deriveImportProjectJSON(data: ProjectExportData, options: ProjectImportOptionsV1 = {}): Promise<number> {
+export async function deriveImportProjectJSON(input: unknown, options: ProjectImportOptionsV1 = {}): Promise<number> {
+  // Direct callers receive the same immutable input boundary as the facade.
+  input = structuredClone(input)
   const finalizeInTransaction = options.finalizeInTransaction
-  if (!data.project) throw new Error('无效的导出文件格式')
-  data = normalizeProjectBackup(data)
-  await validateCurrentBackup(data)
+  const normalized = normalizeProjectBackup(input)
+  if (!normalized.project) throw new Error('无效的导出文件格式')
+  await validateCurrentBackup(normalized)
+  const revisionOrigins = PROJECT_TABLES.some(spec => spec.portableData?.kind === 'world-revision-origin')
+    ? await (await import('../world-engine/publication-origin')).preparePortableWorldRevisionOriginsV1(normalized)
+    : new Map()
+  if (PROJECT_TABLES.some(spec => spec.portableData?.kind === 'world-source-receipt')) {
+    const { assertWorldSourceReceiptRowsV1 } = await import('../world-engine/source-receipt')
+    const portable = normalized
+    await assertWorldSourceReceiptRowsV1(new Map(PROJECT_TABLES.filter(spec => spec.exportable)
+      .map(spec => [spec.name, (Array.isArray(portable[spec.name]) ? portable[spec.name] : []) as Record<string, unknown>[]])), 'portable')
+  }
   await assertNarrativeLineageRowsV1(new Map([
-    ['worlds', data.worlds as unknown as Record<string, unknown>[]],
-    ['worldDerivations', data.worldDerivations as unknown as Record<string, unknown>[]],
+    ['worlds', normalized.worlds as Record<string, unknown>[]],
+    ['worldDerivations', normalized.worldDerivations as Record<string, unknown>[]],
   ]), 'portable')
+  // Only after all current-contract, raw-wire and lineage validation does the
+  // detached normalized structure become the current import DTO.
+  const data = normalized as unknown as ProjectExportData
   const now = Date.now()
   const specs = PROJECT_TABLES.filter(s => s.exportable && s.name !== 'projects')
   const order = deriveImportOrder(specs)
@@ -1725,7 +1724,7 @@ export async function deriveImportProjectJSON(data: ProjectExportData, options: 
     for (const spec of order) {
       const rawRows: any[] = (data as any)[spec.name]
       if (!Array.isArray(rawRows)) throw new Error(`[deriveImport] 当前备份缺少 ${spec.name}`)
-      const rows = spec.tree ? topoSortTreeRows(rawRows) : rawRows
+      const rows = spec.tree ? orderPortableTreeRows(spec, rawRows) : rawRows
       const newIdMap = new Map<number, number>()
       const pendingRefRemap: Array<{ newId: number; stashed: Record<string, any> }> = []
 
@@ -1810,6 +1809,10 @@ export async function deriveImportProjectJSON(data: ProjectExportData, options: 
         }
 
         if (spec.owner === 'project') obj.projectId = newProjectId
+        if (spec.portableData?.kind === 'world-revision-origin') {
+          const origin = revisionOrigins.get(exportId)
+          if (origin) obj.publicationOrigin = origin
+        }
         if (spec.portableData?.kind === 'exact-run-artifact') {
           await Dexie.waitFor(assertAgentRunArtifactRecordIntegrityV1(obj))
         }

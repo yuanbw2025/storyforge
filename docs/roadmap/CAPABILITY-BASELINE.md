@@ -15,8 +15,8 @@
 | ID | 状态 | 当前事实与证据 | 缺口 |
 |---|---|---|---|
 | A-GOV-01 | implemented | 总纲、WPS 完整归档、唯一现行文档白名单和当前架构审计已建立 | 后续正常功能分支按协作流程短期存在，不重新解释为长期架构分叉 |
-| A-GOV-02 | implemented | 身份/派生、纯语义 WorldRelease、`S1 世界封存 → S2 产品定向 → S3 产品执行`闸门、五项逻辑契约、中立网关、当前产品适配器、节点同源与能力/成熟度门均已机器化；schema v11 与静态门只允许当前产品身份和运行入口 | 后续产品仍须逐项完成专项功能；治理完成不代表这些产品已经完成 |
-| BASE-DATA-01 | implemented | Dexie 当前 schema v11；保留 v1～v10 的加表/索引升级（含 Brief hash 索引调整与聊天草稿兼容桥）；`npm run check:required-tables` 本轮验证 128 张 required/project tables；备份 v16，v14/v15 严格校验后可沿显式版本链转换；旧字段和其他不支持版本拒绝 | 新表仍必须先登记；后续 schema 演进继续明确支持窗口并补迁移、回滚和生命周期反例 |
+| A-GOV-02 | implemented | 身份/派生、纯语义 WorldRelease、`S1 世界封存 → S2 产品定向 → S3 产品执行`闸门、五项逻辑契约、中立网关、当前产品适配器、节点同源与能力/成熟度门均已机器化；[现行 schema](../DATA-GOVERNANCE.md#7-schema-支持窗口与演进门) 与静态门只允许当前产品身份和运行入口 | 后续产品仍须逐项完成专项功能；治理完成不代表这些产品已经完成 |
+| BASE-DATA-01 | implemented | 当前 schema/表集合见[生成工程指标](../ARCHITECTURE.md#3-当前工程指标)（[`STORYFORGE_SCHEMA_VERSION`](../../src/lib/db/schema.ts)、[`REQUIRED_TABLES`](../../src/lib/db/ensure-schema.ts)、[`PROJECT_TABLES`](../../src/lib/registry/project-tables.ts)）；备份格式以 [`CURRENT_BACKUP_VERSION`](../../src/lib/export/backup-trust.ts) 为准；既有加表/索引升级、严格转换与拒绝边界见[数据治理 §7](../DATA-GOVERNANCE.md#7-schema-支持窗口与演进门) | 新表仍必须先登记；后续 schema 演进继续明确支持窗口并补迁移、回滚和生命周期反例 |
 | BASE-REG-01 | implemented | Context、Field/Adoption、Project Tables 三注册表与架构检查器存在；Project 仅为 Workspace 壳，World/Work 身份、作品数据和上层产品读取边界已分离 | 后续新入口必须先登记，不得恢复组件私有清单、Project/Work 镜像或物理世界表读取 |
 | BASE-AI-01 | implemented | AI 入口注册表与自动生成手册区分 formal/auxiliary/evaluation/experimental | 登记证明边界，不证明所有 formal UI 纵切面完成 |
 | BASE-HARNESS-01 | implemented | Run contract、ledger、checkpoint、candidate/stale、receipt 及多个 durable use case | 并非所有旧按钮都统一到同样成熟度 |

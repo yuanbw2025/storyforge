@@ -238,10 +238,11 @@ export async function retryDefeatedTextOpenWorldCombatV1(input: {
 export async function branchTextOpenWorldSessionFromCheckpointV1(input: { checkpointId: number; title: string; seed?: string }): Promise<ProductRuntimeSession> {
   const inspection = await inspectTextOpenWorldCheckpointV1(input.checkpointId)
   if (!inspection.valid || inspection.sessionId == null || inspection.throughSequence == null) fail(`检查点不可用于分支:${inspection.code}`)
-  const parentEventCount = await db.productRuntimeEvents.where('sessionId').equals(inspection.sessionId).count()
   const child = await branchProductRuntimeSession({ parentSessionId: inspection.sessionId, throughSequence: inspection.throughSequence, title: input.title, seed: input.seed })
+  // The shared transaction verifies the frozen parent prefix and commits this
+  // child's lineage atomically. Another page may append a valid parent suffix
+  // after that commit; the global event count cannot attribute it to this fork.
   const childState = parseProductRuntimeState(child.initialStateJson)
   if (!childState.textOpenWorld || childState.lastSequence !== 0 || childState.textOpenWorld.lastEventSequence !== 0 || childState.textOpenWorld.protocol.pendingCommandId) fail('子分支vNext初态没有正确重基线')
-  if (await db.productRuntimeEvents.where('sessionId').equals(inspection.sessionId).count() !== parentEventCount) fail('创建分支意外修改父Session事件')
   return child
 }
