@@ -119,6 +119,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
   const catalog = useMemo(() => currentPlayerReleases(store.releases), [store.releases])
   const catalogRelease = catalog.find(item => item.release.id === catalogReleaseId) ?? null
   const nativeReading = store.runtimeState.avgReading
+  const autoDelayMs = prefs.autoDelayMs ?? nativeReading?.plan.autoDelayMs ?? 650
   const nativeModule=store.selectedManifest?avgExecutableModule(store.selectedManifest):null
   const pausedTransport = !!nativeModule && (!!panel || settingsOpen || !foreground || store.loading || store.selectedSourceSessionId !== store.selectedSessionId)
   const voiceReady = avgVoiceReadyV1(store.runtimeState)
@@ -258,9 +259,9 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
   }
   useEffect(() => {
     if (pausedTransport || !voiceReady || panel || !prefs.auto || !currentBeat || store.busy || !textComplete || finishingBeat || !cueWaitComplete) return
-    const timer = window.setTimeout(() => advance(true), 650)
+    const timer = window.setTimeout(() => advance(true), autoDelayMs)
     return () => window.clearTimeout(timer)
-  }, [pausedTransport, voiceReady, panel, prefs.auto, prefs.autoDelayMs, beatIdentity, store.busy, textComplete, finishingBeat, cueWaitComplete]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pausedTransport, voiceReady, panel, prefs.auto, autoDelayMs, beatIdentity, store.busy, textComplete, finishingBeat, cueWaitComplete]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (pausedTransport || panel || !prefs.fast || !currentBeat || store.busy || finishingBeat || !cueWaitComplete) return
     if (!presentation?.readBeatKeys.includes(currentBeat.beatKey)) { setPrefs(value => ({ ...value, fast: false })); return }
@@ -360,7 +361,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
               <button onClick={() => setPrefs(value => ({ ...value, muted: !value.muted }))}>{prefs.muted ? <VolumeX /> : <Volume2 />}声音</button>
               <label className="avg-volume">音量<input aria-label="音量" type="range" min="0" max="1" step="0.05" value={prefs.volume} onChange={event => setPrefs(value => ({ ...value, volume: Number(event.target.value) }))} /></label>
               {(['bgmVolume','ambienceVolume','sfxVolume','voiceVolume'] as const).map((key,index) => <label className="avg-volume" key={key}>{['音乐','环境','音效','配音'][index]}<input type="range" min="0" max="1" step="0.05" aria-label={`${['音乐','环境','音效','配音'][index]}音量`} value={prefs[key]} onChange={event => setPrefs(value => ({ ...value, [key]: Number(event.target.value) }))} /></label>)}
-              <label className="avg-volume">阅读余量<input type="range" min="0" max="5000" step="100" aria-label="自动阅读余量" value={prefs.autoDelayMs ?? nativeReading?.plan.autoDelayMs ?? 650} onChange={event => setPrefs(value => ({ ...value, autoDelayMs: Number(event.target.value) }))} /></label>
+              <label className="avg-volume">阅读余量<input type="range" min="0" max="5000" step="100" aria-label="自动阅读余量" value={autoDelayMs} onChange={event => setPrefs(value => ({ ...value, autoDelayMs: Number(event.target.value) }))} /></label>
               <button onClick={() => setPrefs(value => ({ ...value, reducedMotion: !value.reducedMotion }))}><Gauge />减少动态</button>
               <button onClick={() => setPrefs(value => ({ ...value, textSpeed: value.textSpeed === 35 ? 80 : 35 }))}>文字速度 {prefs.textSpeed === 35 ? '标准' : '快速'}</button>
               <button onClick={() => setUiHidden(true)}><EyeOff />隐藏界面</button>
