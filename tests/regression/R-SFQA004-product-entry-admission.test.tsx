@@ -693,124 +693,116 @@ describe('SFQA004 · real authoring and production boundaries', () => {
     return { ...f, selection, context, field, operations, raw }
   }
 
-  it('Creator edit fresh direct/opaque/formal requests are denied under production maturity', async () => {
-    sfqa004ChannelV1('local-development')
-    const f = await creatorEditFixture()
-    const before = await db.agentRuns.toArray()
-    const runAI = vi.fn(async () => f.raw)
-    sfqa004ChannelV1('production', true)
-    await expect(generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })).rejects.toThrow('product-catalog')
-    await expect(generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'agent', authorInstruction: '004 change biography', runAI })).rejects.toThrow('product-catalog')
-    await expect(generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'agent', authorInstruction: '004 change biography', aiConfig: SFQA050_CONFIG_A })).rejects.toThrow('product-catalog')
-    expect(await db.agentRuns.toArray()).toEqual(before)
-    expect(runAI).not.toHaveBeenCalled()
-    expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+  describe('Creator edits against a restored governed Build', () => {
+    let f: Awaited<ReturnType<typeof creatorEditFixture>>
 
-  it('Creator edit keeps an original candidate and no-change revision in production', async () => {
-    sfqa004ChannelV1('local-development')
-    const f = await creatorEditFixture()
-    sfqa004ChannelV1('local-development')
-    const candidate = await generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })
-    const confirm = { selection: f.selection, runId: candidate.snapshot.run.id, warningAcknowledgementCodes: [] }
-    sfqa004ChannelV1('production')
-    const historical = await readLatestTextOpenWorldCreatorArtifactEditStateV1(f.selection)
-    if (!historical || 'kind' in historical) throw new Error('004 expected original candidate')
-    expect(historical.candidate.candidateHash).toBe(candidate.candidate.candidateHash)
-    expect((await generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })).candidate.candidateHash).toBe(candidate.candidate.candidateHash)
-    expect((await reviseTextOpenWorldCreatorArtifactEditCandidateV1({ ...confirm, operations: f.operations })).candidate.candidateHash).toBe(candidate.candidate.candidateHash)
-    expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+    beforeEach(async () => {
+      sfqa004ChannelV1('local-development')
+      f = await creatorEditFixture()
+    }, 30_000)
 
-  it('Creator edit rejects a new revision or first intent for a historical candidate in production', async () => {
-    sfqa004ChannelV1('local-development')
-    const f = await creatorEditFixture()
-    const candidate = await generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })
-    const confirm = { selection: f.selection, runId: candidate.snapshot.run.id, warningAcknowledgementCodes: [] }
-    const revised = await createTextOpenWorldCreatorDirectEditOperationsV1({ context: f.context, values: { [f.field.fieldId]: '004 later fresh biography' } })
-    sfqa004ChannelV1('production')
-    await expect(reviseTextOpenWorldCreatorArtifactEditCandidateV1({ ...confirm, operations: revised })).rejects.toThrow('product-catalog')
-    await expect(confirmTextOpenWorldCreatorArtifactEditIntentV1(confirm)).rejects.toThrow('product-catalog')
-    expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+    it('Creator edit fresh direct/opaque/formal requests are denied under production maturity', async () => {
+      const before = await db.agentRuns.toArray()
+      const runAI = vi.fn(async () => f.raw)
+      sfqa004ChannelV1('production', true)
+      await expect(generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })).rejects.toThrow('product-catalog')
+      await expect(generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'agent', authorInstruction: '004 change biography', runAI })).rejects.toThrow('product-catalog')
+      await expect(generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'agent', authorInstruction: '004 change biography', aiConfig: SFQA050_CONFIG_A })).rejects.toThrow('product-catalog')
+      expect(await db.agentRuns.toArray()).toEqual(before)
+      expect(runAI).not.toHaveBeenCalled()
+      expect(fetch).not.toHaveBeenCalled()
+    }, 30_000)
 
-  it('Creator edit replays an already committed terminal receipt under production maturity', async () => {
-    sfqa004ChannelV1('local-development')
-    const f = await creatorEditFixture()
-    const candidate = await generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })
-    const confirm = { selection: f.selection, runId: candidate.snapshot.run.id, warningAcknowledgementCodes: [] }
-    const accepted = await confirmTextOpenWorldCreatorArtifactEditIntentV1(confirm)
-    sfqa004ChannelV1('production')
-    expect((await confirmTextOpenWorldCreatorArtifactEditIntentV1(confirm)).snapshot.projection.terminalReceiptHash).toBe(accepted.snapshot.projection.terminalReceiptHash)
-    expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+    it('Creator edit keeps an original candidate and no-change revision in production', async () => {
+      const candidate = await generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })
+      const confirm = { selection: f.selection, runId: candidate.snapshot.run.id, warningAcknowledgementCodes: [] }
+      sfqa004ChannelV1('production')
+      const historical = await readLatestTextOpenWorldCreatorArtifactEditStateV1(f.selection)
+      if (!historical || 'kind' in historical) throw new Error('004 expected original candidate')
+      expect(historical.candidate.candidateHash).toBe(candidate.candidate.candidateHash)
+      expect((await generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })).candidate.candidateHash).toBe(candidate.candidate.candidateHash)
+      expect((await reviseTextOpenWorldCreatorArtifactEditCandidateV1({ ...confirm, operations: f.operations })).candidate.candidateHash).toBe(candidate.candidate.candidateHash)
+      expect(fetch).not.toHaveBeenCalled()
+    }, 30_000)
 
-  it('Creator edit checks after model.requested and settles a known pre-dispatch failure without unknown outcome', async () => {
-    sfqa004ChannelV1('local-development')
-    const f = await creatorEditFixture()
-    const runAI = vi.fn(async () => f.raw)
-    let runId = 0
-    await expect(generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'agent', authorInstruction: '004 late model boundary', runAI,
-      onDurableBoundary: (boundary, snapshot) => { if (boundary === 'model.requested') { runId = snapshot.run.id; sfqa004ChannelV1('production') } },
-    })).rejects.toThrow('product-catalog')
-    const run = await readAgentRunV1(f.scope, runId)
-    expect(run.projection.state).toBe('failed')
-    expect(run.events.some(event => event.type === 'run.paused' || event.type === 'model.responded')).toBe(false)
-    const result = run.events.find(event => event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'tool-result')!
-    if (result.type !== 'evidence.artifact.recorded') throw new Error('004 missing known model failure')
-    const failure = JSON.parse(await readAgentRunArtifactExactV1({ projectId: f.scope.projectId, artifactKind: 'tool-result', contentHash: result.payload.contentHash }))
-    expect(failure).toMatchObject({ phase: 'pre-dispatch', responseStatus: null, failureCode: 'creator-edit-model-not-dispatched', retryable: false, usage: null })
-    expect(runAI).not.toHaveBeenCalled()
-    expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+    it('Creator edit rejects a new revision or first intent for a historical candidate in production', async () => {
+      const candidate = await generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })
+      const confirm = { selection: f.selection, runId: candidate.snapshot.run.id, warningAcknowledgementCodes: [] }
+      const revised = await createTextOpenWorldCreatorDirectEditOperationsV1({ context: f.context, values: { [f.field.fieldId]: '004 later fresh biography' } })
+      sfqa004ChannelV1('production')
+      await expect(reviseTextOpenWorldCreatorArtifactEditCandidateV1({ ...confirm, operations: revised })).rejects.toThrow('product-catalog')
+      await expect(confirmTextOpenWorldCreatorArtifactEditIntentV1(confirm)).rejects.toThrow('product-catalog')
+      expect(fetch).not.toHaveBeenCalled()
+    }, 30_000)
 
-  it('Creator edit restores an already retained paid result after maturity changes with zero redispatch', async () => {
-    sfqa004ChannelV1('local-development')
-    const f = await creatorEditFixture()
-    let runId = 0
-    const runAI = vi.fn(async () => f.raw)
-    await expect(generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'agent', authorInstruction: '004 keep paid raw', runAI,
-      onDurableBoundary: (boundary, snapshot) => { if (boundary === 'model-result.recorded') { runId = snapshot.run.id; sfqa004ChannelV1('production'); throw new Error('004 controlled paid-result interruption') } },
-    })).rejects.toThrow('004 controlled paid-result interruption')
-    const restored = await readLatestTextOpenWorldCreatorArtifactEditStateV1(f.selection)
-    if (!restored || 'kind' in restored) throw new Error('004 expected restored paid candidate')
-    expect(restored.candidate.modelUsage.modelCalls).toBe(1)
-    expect(restored.snapshot.run.id).toBe(runId)
-    expect(restored.candidate.patch.operations).toEqual(f.operations)
-    const snapshot = await readAgentRunV1(f.scope, runId)
-    const raw = snapshot.events.find(event => event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'raw-response')!
-    if (raw.type !== 'evidence.artifact.recorded') throw new Error('004 missing retained raw')
-    expect(await readAgentRunArtifactExactV1({ projectId: f.scope.projectId, artifactKind: 'raw-response', contentHash: raw.payload.contentHash })).toBe(f.raw)
-    expect(runAI).toHaveBeenCalledOnce()
-    expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+    it('Creator edit replays an already committed terminal receipt under production maturity', async () => {
+      const candidate = await generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })
+      const confirm = { selection: f.selection, runId: candidate.snapshot.run.id, warningAcknowledgementCodes: [] }
+      const accepted = await confirmTextOpenWorldCreatorArtifactEditIntentV1(confirm)
+      sfqa004ChannelV1('production')
+      expect((await confirmTextOpenWorldCreatorArtifactEditIntentV1(confirm)).snapshot.projection.terminalReceiptHash).toBe(accepted.snapshot.projection.terminalReceiptHash)
+      expect(fetch).not.toHaveBeenCalled()
+    }, 30_000)
 
-  it('Creator edit resumes a previously frozen intent and terminal verification in production', async () => {
-    sfqa004ChannelV1('local-development')
-    const f = await creatorEditFixture()
-    const direct = await generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })
-    const confirm = { selection: f.selection, runId: direct.snapshot.run.id, warningAcknowledgementCodes: [] }
-    await expect(confirmTextOpenWorldCreatorArtifactEditIntentV1({ ...confirm, onDurableBoundary: boundary => {
-      if (boundary === 'intent.checkpoint') { sfqa004ChannelV1('production'); throw new Error('004 frozen intent interruption') }
-    } })).rejects.toMatchObject({ name: 'CreatorEditDurableBoundaryInterruptionV1', cause: { message: '004 frozen intent interruption' } })
-    expect((await confirmTextOpenWorldCreatorArtifactEditIntentV1(confirm)).snapshot.projection.state).toBe('completed')
-    expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+    it('Creator edit checks after model.requested and settles a known pre-dispatch failure without unknown outcome', async () => {
+      const runAI = vi.fn(async () => f.raw)
+      let runId = 0
+      await expect(generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'agent', authorInstruction: '004 late model boundary', runAI,
+        onDurableBoundary: (boundary, snapshot) => { if (boundary === 'model.requested') { runId = snapshot.run.id; sfqa004ChannelV1('production') } },
+      })).rejects.toThrow('product-catalog')
+      const run = await readAgentRunV1(f.scope, runId)
+      expect(run.projection.state).toBe('failed')
+      expect(run.events.some(event => event.type === 'run.paused' || event.type === 'model.responded')).toBe(false)
+      const result = run.events.find(event => event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'tool-result')!
+      if (result.type !== 'evidence.artifact.recorded') throw new Error('004 missing known model failure')
+      const failure = JSON.parse(await readAgentRunArtifactExactV1({ projectId: f.scope.projectId, artifactKind: 'tool-result', contentHash: result.payload.contentHash }))
+      expect(failure).toMatchObject({ phase: 'pre-dispatch', responseStatus: null, failureCode: 'creator-edit-model-not-dispatched', retryable: false, usage: null })
+      expect(runAI).not.toHaveBeenCalled()
+      expect(fetch).not.toHaveBeenCalled()
+    }, 30_000)
 
-  it('Creator edit explicit pre-request intake resume denies new execution while cancel stays available', async () => {
-    sfqa004ChannelV1('local-development')
-    const f = await creatorEditFixture()
-    let runId = 0
-    const runAI = vi.fn(async () => f.raw)
-    await expect(generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'agent', authorInstruction: '004 unstarted intake', runAI,
-      onDurableBoundary: (boundary, snapshot) => { if (boundary === 'intake.checkpoint') { runId = snapshot.run.id; throw new Error('004 intake interruption') } },
-    })).rejects.toMatchObject({ name: 'CreatorEditDurableBoundaryInterruptionV1', cause: { message: '004 intake interruption' } })
-    sfqa004ChannelV1('production')
-    await expect(resumeTextOpenWorldCreatorArtifactEditIntakeV1({ selection: f.selection, runId, runAI })).rejects.toThrow('product-catalog')
-    expect((await cancelTextOpenWorldCreatorArtifactEditIntakeV1({ selection: f.selection, runId })).projection.state).toBe('cancelled')
-    expect(runAI).not.toHaveBeenCalled()
-    expect(fetch).not.toHaveBeenCalled()
-  }, 30_000)
+    it('Creator edit restores an already retained paid result after maturity changes with zero redispatch', async () => {
+      let runId = 0
+      const runAI = vi.fn(async () => f.raw)
+      await expect(generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'agent', authorInstruction: '004 keep paid raw', runAI,
+        onDurableBoundary: (boundary, snapshot) => { if (boundary === 'model-result.recorded') { runId = snapshot.run.id; sfqa004ChannelV1('production'); throw new Error('004 controlled paid-result interruption') } },
+      })).rejects.toThrow('004 controlled paid-result interruption')
+      const restored = await readLatestTextOpenWorldCreatorArtifactEditStateV1(f.selection)
+      if (!restored || 'kind' in restored) throw new Error('004 expected restored paid candidate')
+      expect(restored.candidate.modelUsage.modelCalls).toBe(1)
+      expect(restored.snapshot.run.id).toBe(runId)
+      expect(restored.candidate.patch.operations).toEqual(f.operations)
+      const snapshot = await readAgentRunV1(f.scope, runId)
+      const raw = snapshot.events.find(event => event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'raw-response')!
+      if (raw.type !== 'evidence.artifact.recorded') throw new Error('004 missing retained raw')
+      expect(await readAgentRunArtifactExactV1({ projectId: f.scope.projectId, artifactKind: 'raw-response', contentHash: raw.payload.contentHash })).toBe(f.raw)
+      expect(runAI).toHaveBeenCalledOnce()
+      expect(fetch).not.toHaveBeenCalled()
+    }, 30_000)
+
+    it('Creator edit resumes a previously frozen intent and terminal verification in production', async () => {
+      const direct = await generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })
+      const confirm = { selection: f.selection, runId: direct.snapshot.run.id, warningAcknowledgementCodes: [] }
+      await expect(confirmTextOpenWorldCreatorArtifactEditIntentV1({ ...confirm, onDurableBoundary: boundary => {
+        if (boundary === 'intent.checkpoint') { sfqa004ChannelV1('production'); throw new Error('004 frozen intent interruption') }
+      } })).rejects.toMatchObject({ name: 'CreatorEditDurableBoundaryInterruptionV1', cause: { message: '004 frozen intent interruption' } })
+      expect((await confirmTextOpenWorldCreatorArtifactEditIntentV1(confirm)).snapshot.projection.state).toBe('completed')
+      expect(fetch).not.toHaveBeenCalled()
+    }, 30_000)
+
+    it('Creator edit explicit pre-request intake resume denies new execution while cancel stays available', async () => {
+      let runId = 0
+      const runAI = vi.fn(async () => f.raw)
+      await expect(generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'agent', authorInstruction: '004 unstarted intake', runAI,
+        onDurableBoundary: (boundary, snapshot) => { if (boundary === 'intake.checkpoint') { runId = snapshot.run.id; throw new Error('004 intake interruption') } },
+      })).rejects.toMatchObject({ name: 'CreatorEditDurableBoundaryInterruptionV1', cause: { message: '004 intake interruption' } })
+      sfqa004ChannelV1('production')
+      await expect(resumeTextOpenWorldCreatorArtifactEditIntakeV1({ selection: f.selection, runId, runAI })).rejects.toThrow('product-catalog')
+      expect((await cancelTextOpenWorldCreatorArtifactEditIntakeV1({ selection: f.selection, runId })).projection.state).toBe('cancelled')
+      expect(runAI).not.toHaveBeenCalled()
+      expect(fetch).not.toHaveBeenCalled()
+    }, 30_000)
+  })
 
   async function waitForRenderedPage(assertion: () => void) {
     const deadline = Date.now() + 4000

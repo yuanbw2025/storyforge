@@ -133,6 +133,16 @@ describe('AUDIT-6 · 文档导入视图', () => {
     await act(async () => Array.from(host.querySelectorAll('button'))
       .find(button => button.textContent?.includes('采用到当前项目设定库'))!.click())
     expect(onApplyProject).toHaveBeenCalledOnce()
+
+    const project = await mount(createElement(ImportReusableSessionBanner, {
+      session: { ...session, chunks: [confirmedChunk], importTarget: 'project' },
+      applying: false, originalTextAvailable: true, onApplyProject, onApplyReference,
+      onShowReport: vi.fn(), onIgnore: vi.fn(),
+    }))
+    const deep = Array.from(project.querySelectorAll('button')).find(button => button.textContent?.includes('深层'))!
+    await act(async () => deep.click())
+    expect(onApplyReference).toHaveBeenCalledOnce()
+    expect(onApplyReference).toHaveBeenCalledWith('deep')
   })
 
   it('词条候选审查允许取消、改名和改分类，确认时只交回选中项', async () => {
