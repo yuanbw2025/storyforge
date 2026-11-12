@@ -97,7 +97,15 @@ jobs:
     secrets: inherit
   build:
     needs: release-checks
-    if: ${{ !cancelled() && (github.event_name == 'pull_request' || needs.release-checks.result == 'success') }}
+    if: >-
+      !cancelled() &&
+      (github.event_name == 'pull_request' || needs.release-checks.result == 'success') &&
+      !(github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       (startsWith(github.head_ref, 'fix/sfqa-') ||
+        startsWith(github.head_ref, 'refactor/sfqa-') ||
+        startsWith(github.head_ref, 'fix/quality') ||
+        startsWith(github.head_ref, 'feat/quality-audit-')))
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}

@@ -1,8 +1,7 @@
 name: CI
 
 # StoryForge CI(Phase 3.3)
-# 在 push / PR 时跑全套守护:架构铁律 + 注册表完整性 + 文档一致性 + 类型 + 测试 + 构建。
-# 任何一项失败则红,阻止"屎山复发"与回归。
+# 本轮 SFQA 整改在各修复 PR 记录定向验证，普通合并使用 GitHub 默认标题。
 
 on:
   push:
@@ -14,7 +13,20 @@ permissions:
   contents: read
 
 jobs:
+  push-scope:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/sfqa-merge-scope.yml
+
   checks:
+    needs: push-scope
+    if: >-
+      !cancelled() && needs.push-scope.outputs.scoped != 'true' &&
+      !(github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        (startsWith(github.head_ref, 'fix/sfqa-') ||
+         startsWith(github.head_ref, 'refactor/sfqa-') ||
+         startsWith(github.head_ref, 'fix/quality') ||
+         startsWith(github.head_ref, 'feat/quality-audit-')))
     name: Full checks / ${{ matrix.id }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
@@ -75,7 +87,13 @@ jobs:
 
   avg-media-experimental:
     name: AVG 媒资实验路径（隔离浏览器）
-    if: github.event_name == 'pull_request'
+    if: >-
+      github.event_name == 'pull_request' &&
+      !(github.event.pull_request.head.repo.full_name == github.repository &&
+       (startsWith(github.head_ref, 'fix/sfqa-') ||
+        startsWith(github.head_ref, 'refactor/sfqa-') ||
+        startsWith(github.head_ref, 'fix/quality') ||
+        startsWith(github.head_ref, 'feat/quality-audit-')))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -239,7 +257,7 @@ jobs:
           retention-days: 7
 
   verify:
-    if: ${{ always() }}
+    if: always() && (needs.checks.result != 'skipped' || needs.avg-media-experimental.result != 'skipped')
     needs: [checks, avg-media-experimental]
     runs-on: ubuntu-latest
     timeout-minutes: 5
