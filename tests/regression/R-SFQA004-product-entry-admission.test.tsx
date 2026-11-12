@@ -724,15 +724,20 @@ describe('SFQA004 · real authoring and production boundaries', () => {
         confirm = { selection: f.selection, runId: candidate.snapshot.run.id, warningAcknowledgementCodes: [] }
       }, 30_000)
 
-      it('Creator edit keeps an original candidate and no-change revision in production', async () => {
-        sfqa004ChannelV1('production')
-        const historical = await readLatestTextOpenWorldCreatorArtifactEditStateV1(f.selection)
-        if (!historical || 'kind' in historical) throw new Error('004 expected original candidate')
-        expect(historical.candidate.candidateHash).toBe(candidate.candidate.candidateHash)
-        expect((await generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })).candidate.candidateHash).toBe(candidate.candidate.candidateHash)
-        expect((await reviseTextOpenWorldCreatorArtifactEditCandidateV1({ ...confirm, operations: f.operations })).candidate.candidateHash).toBe(candidate.candidate.candidateHash)
-        expect(fetch).not.toHaveBeenCalled()
-      }, 30_000)
+      describe('after reopening the original candidate in production', () => {
+        beforeEach(async () => {
+          sfqa004ChannelV1('production')
+          const historical = await readLatestTextOpenWorldCreatorArtifactEditStateV1(f.selection)
+          if (!historical || 'kind' in historical) throw new Error('004 expected original candidate')
+          expect(historical.candidate.candidateHash).toBe(candidate.candidate.candidateHash)
+        }, 30_000)
+
+        it('Creator edit keeps an original candidate and no-change revision in production', async () => {
+          expect((await generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection: f.selection, mode: 'direct', operations: f.operations })).candidate.candidateHash).toBe(candidate.candidate.candidateHash)
+          expect((await reviseTextOpenWorldCreatorArtifactEditCandidateV1({ ...confirm, operations: f.operations })).candidate.candidateHash).toBe(candidate.candidate.candidateHash)
+          expect(fetch).not.toHaveBeenCalled()
+        }, 30_000)
+      })
 
       it('Creator edit rejects a new revision or first intent for a historical candidate in production', async () => {
         const revised = await createTextOpenWorldCreatorDirectEditOperationsV1({ context: f.context, values: { [f.field.fieldId]: '004 later fresh biography' } })
