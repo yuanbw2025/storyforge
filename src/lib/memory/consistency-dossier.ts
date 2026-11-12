@@ -18,6 +18,7 @@ import type { KnowledgeLedgerEntry } from '../types/knowledge-ledger'
 import type { RetrievalChunk } from '../types/retrieval-chunk'
 import type { StoryTimelineEvent } from '../types/story-timeline'
 import type { Chapter, OutlineNode } from '../types'
+import type { RagDocumentMetadata } from '../types/rag-library'
 import {
   assertRecordInScope,
   readOwnedRows,
@@ -27,6 +28,13 @@ import {
 
 const DEFAULT_DOSSIER_TOKEN_LIMIT = 6_000
 const STALE_STATUSES = new Set(['stale', 'source-missing', 'invalid-range'])
+
+export interface ConsistencyDossierSourcePolicyV1 {
+  table: string
+  row: { id?: number; projectId: number } & RagDocumentMetadata
+  fields: readonly string[]
+  required: boolean
+}
 
 function termsFrom(text: string): string[] {
   return [...new Set(text
@@ -106,6 +114,9 @@ export async function buildLongTermConsistencyDossierV1(input: {
   /** undefined 为作者审计全体；null 不读角色私有认知；数字只读该视角。 */
   perspectiveCharacterId?: number | null
   authorizeGenerativeReview?: boolean
+  /** The automatic caller records every actual policy dependency. False can
+   * exclude optional keyword evidence; required state is never pruned here. */
+  inspectSourcePolicy?: (source: ConsistencyDossierSourcePolicyV1) => boolean
 }): Promise<LongTermConsistencyDossierV1> {
   const scope = await resolveReadScopeLike(input.scope)
   const [project, world, work, boundary] = await Promise.all([
@@ -165,7 +176,9 @@ export async function buildLongTermConsistencyDossierV1(input: {
     .filter(row => beforeOrAt(orderOf, row.chapterId, boundaryOrder))
     .sort((a, b) => a.order - b.order)
 
-  const query = [input.query, boundary.title, boundaryOutline?.summary]
+  const boundaryTitleAllowed = input.inspectSourcePolicy?.({ table: 'chapters', row: boundary, fields: ['title'], required: false }) !== false
+  const outlineSummaryAllowed = !boundaryOutline || input.inspectSourcePolicy?.({ table: 'outlineNodes', row: boundaryOutline, fields: ['summary'], required: false }) !== false
+  const query = [input.query, boundaryTitleAllowed ? boundary.title : '', outlineSummaryAllowed ? boundaryOutline?.summary : '']
     .filter(Boolean).join(' ')
   const queryTerms = termsFrom(query)
   const historicalChapterIds = new Set(sequence.slice(0, boundaryOrder).map(entry => entry.chapter.id).filter((id): id is number => id != null))
@@ -178,6 +191,9 @@ export async function buildLongTermConsistencyDossierV1(input: {
     if (queryTerms.length && !queryTerms.some(term => lowerText.includes(term) || keywords.some(keyword => keyword.includes(term)))) continue
     const chapter = currentChapterById.get(chunk.sourceChapterId)
     if (!chapter || chunk.sourceTextHash !== await keepIntegrityReadAlive(hashChapterText(chapter.content ?? ''))) continue
+    const chunkAllowed = input.inspectSourcePolicy?.({ table: 'retrievalChunks', row: chunk, fields: ['text', 'keywords'], required: false }) !== false
+    const chapterAllowed = input.inspectSourcePolicy?.({ table: 'chapters', row: chapter, fields: ['content'], required: false }) !== false
+    if (!chunkAllowed || !chapterAllowed) continue
     keywordChunks.push(chunk)
     if (keywordChunks.length >= 12) break
   }
@@ -196,6 +212,15 @@ export async function buildLongTermConsistencyDossierV1(input: {
     .map(row => `${row.heldByName}｜${row.itemName}=${row.quantity}`)
   const timelineLines = relevantTimeline.map(row => `${row.storyTime || `序号${row.order}`}｜${row.title}`)
   const keywordEvidence = keywordChunks.map(row => `章节#${row.sourceChapterId}｜${row.text.slice(0, 360)}`)
+
+  // These sections are the required deterministic consistency contract. A
+  // closed dependency must block the aggregate at its caller, not erase a fact,
+  // state or warning and certify the remaining fragment as sufficient.
+  for (const row of relevantFacts) input.inspectSourcePolicy?.({ table: 'temporalFacts', row, fields: STALE_STATUSES.has(row.status) ? ['status'] : ['subjectName', 'predicate', 'value', 'status'], required: true })
+  for (const row of relevantKnowledge) input.inspectSourcePolicy?.({ table: 'knowledgeLedger', row, fields: row.status === 'confirmed' ? ['characterName', 'action', 'knowledgeKey', row.belief ? 'belief' : 'statement', 'status'] : ['status'], required: true })
+  for (const row of relevantStates) input.inspectSourcePolicy?.({ table: 'stateCards', row, fields: ['category', 'entityName', 'fields'], required: true })
+  for (const row of relevantItems) input.inspectSourcePolicy?.({ table: 'itemLedger', row, fields: ['heldByName', 'itemName', 'quantity', 'action'], required: true })
+  for (const row of relevantTimeline) input.inspectSourcePolicy?.({ table: 'storyTimelineEvents', row, fields: [row.storyTime ? 'storyTime' : 'order', 'title'], required: true })
 
   const sourceRows: Array<[string, Array<{ id?: number; status?: string }>, ConsistencyDossierSourceRefV1['authority']]> = [
     ['temporalFacts', relevantFacts, 'author-confirmed'],

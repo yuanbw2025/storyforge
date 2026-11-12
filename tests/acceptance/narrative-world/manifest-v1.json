@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-import-shared-contract-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-author-policy-combined-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-import-shared-contract-v1.json",
+        "workPackage": "SFQA-087",
+        "note": "Preserved the measured mainline before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality087-author-policy-v1.json",
+        "workPackage": "SFQA-087",
+        "note": "Preserved the measurements from the reviewed change."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-sfqa009-post385-v1.json",
         "workPackage": "SFQA-022-044-051",
@@ -949,6 +959,11 @@
         "implementationCommit": "bc18dc8466f2e6661b6ce9a17131981f41992844",
         "workPackage": "NW-0B",
         "note": "Preserved the mainline source fingerprints before transaction-safe local rechecks of frozen node sources."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserve the prior receipt before measuring the updated SFQA-086 continuity evidence inputs."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -1054,6 +1069,7 @@
     "src/lib/registry/project-tables.ts",
     "src/lib/registry/types.ts",
     "src/lib/retrieval/narrative-target-state.ts",
+    "src/lib/retrieval/rag-policy.ts",
     "src/lib/types/narrative-blueprint.ts",
     "src/lib/types/narrative-domain-registry.ts",
     "src/lib/types/narrative-domain.ts",
