@@ -19,6 +19,43 @@ StoryForge ist ein quelloffenes, lokal orientiertes Werkzeug für KI-gestütztes
 
 **Ohne Entwicklungsumgebung starten:** [Neueste portable Version herunterladen](https://github.com/yuanbw2025/storyforge/releases/latest), ZIP für Windows x64, Apple-Silicon-/Intel-Mac oder Linux x64 vollständig entpacken und `Start-StoryForge` starten. Anwendung, Medien und Node.js sind enthalten; keine npm-Installation nötig. KI erfordert einen eigenen Anbieter; Vorschaufunktionen behalten ihre Kennzeichnung.
 
+## Zum ersten Mal hier? Download wählen und lokale KI bei der Installation nutzen
+
+**Wählen Sie eine der beiden Möglichkeiten.**
+
+- **Installer oder portables Paket** — das passende Programm aus den offiziellen Releases herunterladen und installieren oder entpacken.
+- **Quellcode über Git** — praktisch für Aktualisierungen, Code-Einsicht, Fehlerbehebung und eigene Funktionen.
+
+Ein Desktop-Agent wie ByteDance Trae, Tencent WorkBuddy, Alibaba Tongyi Lingma oder Google Antigravity kann helfen. Für übliche Installationen, die Prüfung des Betriebs und einfache Fehlersuche können Sie zunächst eine kostenlose Version oder ein kostenloses Kontingent nutzen. **Gerät und Ordner eintragen und den passenden Auftrag kopieren.**
+
+### Möglichkeit 1 — Repository mit Git herunterladen
+
+> Ich möchte **den StoryForge-Quellcode über Git herunterladen und lokal ausführen**. Das Repository ist https://github.com/yuanbw2025/storyforge und der Zielordner „eigener Ordnerpfad“. Prüfe die Umgebung, installiere bei Bedarf Git, lies README und Entwicklungshinweise, installiere die benötigte Laufzeit und Abhängigkeiten, starte das Projekt und zeige mir, wo ich es öffnen kann. **Prüfe zuerst vorhandene Dateien und bewahre meine Werke, Einstellungen und lokalen Änderungen.** Erkläre anschließend die Aktualisierung.
+
+### Möglichkeit 2 — Offizielles Release-Paket herunterladen
+
+> Ich möchte **ein fertiges StoryForge-Programm aus den offiziellen Releases herunterladen**, für „Windows, macOS, Linux oder Android“, nach „Ordnerpfad“. Die Release-Seite ist https://github.com/yuanbw2025/storyforge/releases/latest . Prüfe das neueste offizielle stabile Release, wähle Installer oder portables Paket passend zu Betriebssystem und Prozessorarchitektur, prüfe die bereitgestellten Prüfsummen und hilf bei Installation oder Entpacken und Start. Erkläre bei einem Handy-Paket die Übertragung und Installation. **Ist StoryForge bereits installiert, hilf zuerst beim Sichern meiner Werke und Einstellungen und aktualisiere dann nach offizieller Anleitung.** Zeige die verfügbaren Möglichkeiten, falls kein Paket passt.
+
+**Anleitungen sowie Meldungen zu Fehlern, Funktionswünschen und Dokumentationsproblemen finden Sie in der [offiziellen Wissensdatenbank](https://docs.storyforge-lab.com/en/).**
+
+**Mit einem Star oben rechts im Repository finden Sie das Projekt wieder und verfolgen Aktualisierungen.**
+
+---
+
+## Wichtig — Lokale KI zur Fehlersuche und direkten Fehlermeldung nutzen
+
+StoryForge befindet sich in Entwicklung und wird **von einer Person entwickelt und gepflegt**. Bei den vielen Funktionen können Fehler auftreten. Rückmeldungen sind willkommen.
+
+**Ein lokaler Desktop-Agent hilft sowohl bei Git-Quellcode als auch beim heruntergeladenen Client.** Öffnet sich ein Kapitel nicht, scheitern Generierung oder Speichern oder beendet sich die App, kann er Fehler und verfügbare Diagnosen prüfen und direkt melden. **Kopieren Sie diesen Auftrag mit Ihrer Problembeschreibung.**
+
+> Mein StoryForge hat folgendes Problem: „Beschreibung“. Prüfe aktuelle Version, Fehlermeldungen und relevante Diagnosen. Stelle Reproduktionsschritte, erwartetes und tatsächliches Ergebnis sowie relevante Protokolle zusammen und **reiche direkt über den offiziellen Feedback-Einstieg des Projekts einen Fehlerbericht ein**. Ergänze bei einem bereits bekannten Problem den vorhandenen Bericht. Entferne vor dem Senden API-Schlüssel, Kontoinformationen und private Manuskripte und gib mir anschließend Kennung oder Link des Berichts. **Bewahre meine Werke, Einstellungen und lokalen Änderungen, untersuche das Problem weiter und schlage eine Reparatur vor.**
+
+Der Agent kann Untersuchung, Aufbereitung und Versand gemeinsam übernehmen und dem Maintainer die nötigen Informationen liefern. Bei einfachen Problemen kann er auch bei der Reparatur helfen, während Sie weiterarbeiten und auf Updates warten. **Vor Datenoperationen sichern und vor Änderungen Originaldateien und eigene Werke bewahren.**
+
+Mit einem lokalen Agent können Sie auch Funktionen entwickeln, ein eigenes Projekt erstellen oder Verbesserungen per PR zu StoryForge beitragen.
+
+---
+
 ## Offizielle Website, Vorschau und Wissensdatenbank
 
 Lernen Sie das Projekt auf der Website kennen, erkunden Sie die echte Oberfläche in der isolierten Vorschau und laden Sie für die vollständige Arbeit den Quellcode herunter.
