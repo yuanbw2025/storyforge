@@ -1,3 +1,4 @@
+import { parseLegacyIdArray } from "../utils/legacy-id-array"
 import { assertFrozenRuntimePackageSessionV1, parseProductRuntimeState } from '../product/runtime-core'
 import type { AnyProductBuildPreviewManifest } from '../types'
 import { avgExecutableModule } from '../avg/executable-module'
@@ -485,7 +486,7 @@ function toExportRow(
       obj[rr.field] = remapWorldPortalTargets(obj[rr.field], (targetId: number) => map?.get(targetId))
     } else if (rr.kind === 'id-array') {
       const map = idMaps.get(rr.remapVia)
-      const raw = parseIdArray(obj[rr.field])
+      const raw = parseLegacyIdArray(obj[rr.field])
       const mapped = raw.map(id => map?.get(id))
       if (rr.onUnmapped === 'require' && mapped.some(id => id == null)) {
         throw new Error(`[deriveExport] ${spec.name}.${rr.field} 缺少必填引用映射`)
@@ -692,17 +693,6 @@ function parseObjectArray(value: unknown): Array<Record<string, unknown>> {
   return Array.isArray(parsed)
     ? parsed.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item))
     : []
-}
-
-function parseIdArray(value: unknown): number[] {
-  if (Array.isArray(value)) return value.filter((id): id is number => typeof id === 'number')
-  if (typeof value !== 'string') return []
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed.filter((id): id is number => typeof id === 'number') : []
-  } catch {
-    return []
-  }
 }
 
 /** 派生当前架构的完整、严格便携备份。 */

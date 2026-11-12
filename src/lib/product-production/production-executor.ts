@@ -25,6 +25,7 @@ import { TTRPG_COMPATIBLE_OPENING_AUTHORED_TASKS_V1 } from '../ttrpg/open-compat
 import { produceTtrpgCompatibleOpeningArtifactV1 } from '../ttrpg/open-compatible-opening-production';
 
 import { parseTextAdventureQuestScriptArtifact, textAdventureQuestRecipientsV3 } from '../adventure/quest-settlement'
+import { assertAdventureRuntimeDiceSupportV1 } from '../adventure/runtime'
 import { createAvgAssemblyExecutorV1 } from '../avg/assembly-executor'
 import { parseProductionModelJsonObjectV1 } from './model-json-object'
 import { avgVisualPlanningExecutionReadyV4 } from '../avg/visual-planning-brief'
@@ -204,6 +205,21 @@ const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const COLOR = /^#[0-9a-fA-F]{6}$/
 
 type JsonRecord = Record<string, unknown>
+
+function indexTextAdventureNestedKeys(
+  rows: JsonRecord[],
+  listKey: 'options' | 'alternatives',
+): Record<string, string[]> {
+  return Object.fromEntries(rows.flatMap(row => {
+    if (typeof row.key !== 'string') return []
+    const entries = row[listKey]
+    return [[row.key, (Array.isArray(entries) ? entries : []).flatMap((entry: unknown) => (
+          entry && typeof entry === 'object' && !Array.isArray(entry)
+            && typeof (entry as JsonRecord).key === 'string'
+            ? [(entry as JsonRecord).key as string] : []
+        ))]]
+  }))
+}
 
 /**
  * A Plan reservation is the billable receipt ceiling and can therefore include
@@ -5923,14 +5939,7 @@ function textAdventureQualityReferenceEvidenceV1(
         typeof decision.key === 'string' && typeof decision.sceneKey === 'string'
           ? [[decision.key, decision.sceneKey]] : []
       ))),
-      decisionOptionKeysByKey: Object.fromEntries(decisionRows.flatMap(decision => (
-        typeof decision.key === 'string'
-          ? [[decision.key, (Array.isArray(decision.options) ? decision.options : []).flatMap(option => (
-              option && typeof option === 'object' && !Array.isArray(option)
-                && typeof (option as JsonRecord).key === 'string'
-                ? [(option as JsonRecord).key as string] : []
-            ))]] : []
-      ))),
+      decisionOptionKeysByKey: indexTextAdventureNestedKeys(decisionRows, 'options'),
       optionKeys: decisionRows.flatMap(decision => (
         Array.isArray(decision.options) ? decision.options : []
       )).flatMap(option => (
@@ -5955,15 +5964,7 @@ function textAdventureQualityReferenceEvidenceV1(
           && typeof objective.sceneKeys[0] === 'string'
           ? [[objective.key, objective.sceneKeys[0]]] : []
       ))),
-      objectiveAlternativeKeysByKey: Object.fromEntries(objectiveRows.flatMap(objective => (
-        typeof objective.key === 'string'
-          ? [[objective.key, (Array.isArray(objective.alternatives) ? objective.alternatives : [])
-              .flatMap(alternative => (
-                alternative && typeof alternative === 'object' && !Array.isArray(alternative)
-                  && typeof (alternative as JsonRecord).key === 'string'
-                  ? [(alternative as JsonRecord).key as string] : []
-              ))]] : []
-      ))),
+      objectiveAlternativeKeysByKey: indexTextAdventureNestedKeys(objectiveRows, 'alternatives'),
       alternativeKeys: objectiveRows.flatMap(objective => (
         Array.isArray(objective.alternatives) ? objective.alternatives : []
       )).flatMap(alternative => (
@@ -7759,14 +7760,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
         typeof decision.key === 'string' && typeof decision.sceneKey === 'string'
           ? [[decision.key, decision.sceneKey]] : []
       ))),
-      decisionOptionKeysByKey: Object.fromEntries(decisionRows.flatMap(decision => (
-        typeof decision.key === 'string'
-          ? [[decision.key, (Array.isArray(decision.options) ? decision.options : []).flatMap(option => (
-              option && typeof option === 'object' && !Array.isArray(option)
-                && typeof (option as JsonRecord).key === 'string'
-                ? [(option as JsonRecord).key as string] : []
-            ))]] : []
-      ))),
+      decisionOptionKeysByKey: indexTextAdventureNestedKeys(decisionRows, 'options'),
       optionKeys: decisionRows.flatMap(decision => (
         Array.isArray(decision.options) ? decision.options : []
       )).flatMap(option => (
@@ -7791,15 +7785,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
           && typeof objective.sceneKeys[0] === 'string'
           ? [[objective.key, objective.sceneKeys[0]]] : []
       ))),
-      objectiveAlternativeKeysByKey: Object.fromEntries(objectiveRows.flatMap(objective => (
-        typeof objective.key === 'string'
-          ? [[objective.key, (Array.isArray(objective.alternatives) ? objective.alternatives : [])
-              .flatMap(alternative => (
-                alternative && typeof alternative === 'object' && !Array.isArray(alternative)
-                  && typeof (alternative as JsonRecord).key === 'string'
-                  ? [(alternative as JsonRecord).key as string] : []
-              ))]] : []
-      ))),
+      objectiveAlternativeKeysByKey: indexTextAdventureNestedKeys(objectiveRows, 'alternatives'),
       alternativeKeys: objectiveRows.flatMap(objective => (
         Array.isArray(objective.alternatives) ? objective.alternatives : []
       )).flatMap(alternative => (
@@ -10420,6 +10406,7 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
     runtimePackage.definition.enabledCapabilities.push('presentation')
   } else if (assets.length > 0) fail('当前产品 adapter 不能把媒资接入 RuntimePackage')
   const parsed = parseProductRuntimePackageV1(runtimePackage)
+  if (parsed.productType === 'text-adventure' && parsed.adventure) assertAdventureRuntimeDiceSupportV1(parsed.adventure)
   const ttrpgArtifacts: ProductProductionTaskArtifactV1[] = parsed.ttrpg ? [
     {
       artifactKey: 'ttrpg.rule-pack', kind: 'rule-pack', payload: parsed.ttrpg.rulePack.content,

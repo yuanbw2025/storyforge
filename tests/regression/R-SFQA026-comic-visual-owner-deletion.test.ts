@@ -42,7 +42,9 @@ async function protectedWorkBytes(scope: WorkspaceScope) {
   )])), binaryJson)
 }
 async function referencedPage(item: Awaited<ReturnType<typeof fixture>>, continuity = true, states = true) {
-  let root = await saveAdaptationBriefDraft({ adaptationProjectId: item.adaptation.id!, expectedRevision: item.adaptation.revision,
+  const currentRoot = await db.adaptationProjects.get(item.adaptation.id!)
+  if (!currentRoot) throw new Error('Q026 fixture adaptation root missing')
+  let root = await saveAdaptationBriefDraft({ adaptationProjectId: currentRoot.id!, expectedRevision: currentRoot.revision,
     brief: { version: 1, coreTheme: '选择与代价', dominantEmotion: '克制', mustKeep: ['车票'], mayCut: [], mayMerge: [], mayReorder: [], allowedAdditions: [],
       audience: '大众', rating: 'PG-13', targetScale: '一页', narrativePerspective: '林岚', timeBudget: '', costLimit: '', deviationNotes: '', unresolvedQuestions: [], assumptions: [] } })
   root = await confirmAdaptationBrief({ adaptationProjectId: root.id!, expectedRevision: root.revision })

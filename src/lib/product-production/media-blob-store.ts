@@ -2,7 +2,7 @@ import Dexie, { type Table } from 'dexie'
 import { db } from '../db/schema'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import type { MediaBlobObjectRecordV1, ProductMediaBlob, WorkspaceScope } from '../types'
-import { assertRecordInScope, resolveScope, stampNewRecord } from '../workspace/scope'
+import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 
 const INDEXED_DB_MAXIMUM_BYTES = 8 * 1024 * 1024
 const SINGLE_OBJECT_MAXIMUM_BYTES = 100 * 1024 * 1024
@@ -81,16 +81,94 @@ async function assertStorageBudget(byteSize: number): Promise<void> {
   }
 }
 
-/** Registry export and media resolvers share this single physical-byte verifier. */
-export async function readVerifiedMediaBlobObjectData(row: MediaBlobObjectRecordV1): Promise<ArrayBuffer> {
-  if (row.storageState !== 'ready') throw new Error('[product-production] 共享媒资尚未 ready')
+class MediaBlobIntegrityError extends Error {}
+
+async function readPhysicalMediaBlobObjectData(row: MediaBlobObjectRecordV1): Promise<ArrayBuffer> {
   const data = row.backend === 'indexeddb'
     ? row.data
     : row.opfsPath ? await readOpfsData(row.opfsPath) : null
   if (!data) throw new Error('[product-production] 共享媒资物理数据缺失')
-  if (data.byteLength !== row.byteSize) throw new Error('[product-production] 共享媒资大小不匹配')
-  if (await sha256MediaData(data) !== row.contentHash) throw new Error('[product-production] 共享媒资哈希不匹配')
+  if (data.byteLength !== row.byteSize) throw new MediaBlobIntegrityError('[product-production] 共享媒资大小不匹配')
+  if (await sha256MediaData(data) !== row.contentHash) throw new MediaBlobIntegrityError('[product-production] 共享媒资哈希不匹配')
   return data
+}
+
+/** Registry export and media resolvers remain read-only and require ready bytes. */
+export async function readVerifiedMediaBlobObjectData(row: MediaBlobObjectRecordV1): Promise<ArrayBuffer> {
+  if (row.storageState !== 'ready') throw new Error('[product-production] 共享媒资尚未 ready')
+  return readPhysicalMediaBlobObjectData(row)
+}
+
+const MEDIA_READ_VERSION_FIELDS = [
+  'id', 'projectId', 'worldId', 'workId', 'contentHash', 'mimeType', 'byteSize',
+  'backend', 'opfsPath', 'storageState', 'createdAt', 'lastVerifiedAt',
+  'width', 'height', 'disposition', 'deleteRequestedAt', 'deleteReceiptHash',
+] as const satisfies readonly (keyof MediaBlobObjectRecordV1)[]
+
+function sameMediaReadVersion(before: MediaBlobObjectRecordV1, current: MediaBlobObjectRecordV1): boolean {
+  if (!MEDIA_READ_VERSION_FIELDS.every(field => before[field] === current[field])) return false
+  // Same-Work preview readers may renew or release their shared lease while
+  // IO is pending. That changes the row clock without replacing any bytes or
+  // health/deletion metadata; an unrelated version change still fails closed.
+  if (before.updatedAt !== current.updatedAt && before.leaseOwner === current.leaseOwner
+    && before.leaseExpiresAt === current.leaseExpiresAt) return false
+  if (before.backend !== 'indexeddb') return true
+  if (!before.data || !current.data) return before.data === current.data
+  const currentBytes = new Uint8Array(current.data)
+  return before.data.byteLength === current.data.byteLength
+    && new Uint8Array(before.data).every((byte, index) => byte === currentBytes[index])
+}
+
+/** Filesystem IO and hashing precede this transaction. Only the exact version
+ * that was read may change health; references, deletion receipts and bytes stay put. */
+async function finishScopedMediaRead(
+  scope: WorkspaceScope,
+  before: MediaBlobObjectRecordV1,
+  verified: boolean,
+  guard?: MediaBlobCommitGuardV1,
+): Promise<MediaBlobObjectRecordV1> {
+  return db.transaction('rw', scopeTransactionTables(db.mediaBlobObjects, ...(guard?.transactionTables ?? [])), async () => {
+    await guard?.assertCurrentInTransaction()
+    await resolveScope({ scope })
+    const current = before.id == null ? undefined : await db.mediaBlobObjects.get(before.id)
+    if (!current || !sameMediaReadVersion(before, current)
+      || !await assertRecordInScope(scope, 'mediaBlobObjects', current, { owner: 'work' })) {
+      throw new Error('[product-production] 共享媒资读取期间已变化，请重新读取')
+    }
+    if ((verified && current.storageState === 'corrupt') || (!verified && current.storageState === 'ready')) {
+      const now = Date.now()
+      const changes = verified
+        ? { storageState: 'ready' as const, lastVerifiedAt: now, updatedAt: now }
+        : { storageState: 'corrupt' as const, updatedAt: now }
+      await db.mediaBlobObjects.update(current.id!, changes)
+      return { ...current, ...changes }
+    }
+    return current
+  })
+}
+
+async function readScopedMediaBlobObject(
+  scope: WorkspaceScope,
+  row: MediaBlobObjectRecordV1,
+  guard?: MediaBlobCommitGuardV1,
+): Promise<{ row: MediaBlobObjectRecordV1; data: ArrayBuffer }> {
+  if (row.storageState !== 'ready' && row.storageState !== 'corrupt') {
+    throw new Error('[product-production] 共享媒资尚未 ready')
+  }
+  if (row.storageState === 'corrupt' && (row.disposition === 'pending-delete'
+    || row.deleteRequestedAt != null || row.deleteReceiptHash != null)) {
+    throw new Error('[product-production] 共享媒资正在删除，不能恢复')
+  }
+  let data: ArrayBuffer
+  try {
+    // One physical attempt per explicit call. Unknown IO/permission failures
+    // retain both their original cause and the existing health metadata.
+    data = await readPhysicalMediaBlobObjectData(row)
+  } catch (cause) {
+    if (cause instanceof MediaBlobIntegrityError) await finishScopedMediaRead(scope, row, false, guard)
+    throw cause
+  }
+  return { data, row: await finishScopedMediaRead(scope, row, true, guard) }
 }
 
 export async function readMediaBlobObjectData(input: {
@@ -98,6 +176,7 @@ export async function readMediaBlobObjectData(input: {
   blobObjectId: number
   expected?: { contentHash: string; byteSize: number; mimeType: string }
 }): Promise<ArrayBuffer> {
+  input = structuredClone(input)
   const scope = await resolveScope({ scope: input.scope })
   const row = await db.mediaBlobObjects.get(input.blobObjectId)
   if (!row || !await assertRecordInScope(scope, 'mediaBlobObjects', row, { owner: 'work' })) {
@@ -107,14 +186,7 @@ export async function readMediaBlobObjectData(input: {
     || row.byteSize !== input.expected.byteSize || row.mimeType !== input.expected.mimeType)) {
     throw new Error('[product-production] 共享媒资元数据与冻结引用不匹配')
   }
-  try {
-    return await readVerifiedMediaBlobObjectData(row)
-  } catch (cause) {
-    if (row.id != null) {
-      await db.mediaBlobObjects.update(row.id, { storageState: 'corrupt', updatedAt: Date.now() })
-    }
-    throw cause
-  }
+  return (await readScopedMediaBlobObject(scope, row)).data
 }
 
 /** Resolve a product-owned media binding through the content-addressed object. */
@@ -150,6 +222,10 @@ export async function putMediaBlobObject(input: {
   const guard = input.commitGuard
   const assertGuardCurrent = guard?.assertCurrentInTransaction
   const guardTables = guard ? [...guard.transactionTables] : []
+  const readGuard: MediaBlobCommitGuardV1 | undefined = guard ? {
+    transactionTables: guardTables,
+    assertCurrentInTransaction: () => assertGuardCurrent!.call(guard),
+  } : undefined
   // Detach only request data. Guard/table objects keep their original opaque
   // identities, and the original method keeps its receiver across all awaits.
   input = { ...input, scope: structuredClone(input.scope), data: input.data.slice(0) }
@@ -159,9 +235,6 @@ export async function putMediaBlobObject(input: {
         return write()
       })
     : write()
-  const assertExistingReadCurrent = () => guard
-    ? db.transaction('r', [db.mediaBlobObjects, ...guardTables], () => assertGuardCurrent!.call(guard))
-    : Promise.resolve()
   const scope = await resolveScope({ scope: input.scope })
   const data = input.data
   if (data.byteLength < 1 || data.byteLength > SINGLE_OBJECT_MAXIMUM_BYTES) {
@@ -181,9 +254,7 @@ export async function putMediaBlobObject(input: {
       || existing.mimeType !== mimeType || existing.byteSize !== data.byteLength) {
       throw new Error('[product-production] 相同 contentHash 的共享媒资元数据冲突')
     }
-    await readVerifiedMediaBlobObjectData(existing)
-    await assertExistingReadCurrent()
-    return existing
+    return (await readScopedMediaBlobObject(scope, existing, readGuard)).row
   }
 
   const supportsOpfs = typeof navigator.storage?.getDirectory === 'function'
@@ -235,9 +306,7 @@ export async function putMediaBlobObject(input: {
       || raced.mimeType !== mimeType || raced.byteSize !== data.byteLength) {
       throw new Error('[product-production] 相同 contentHash 的共享媒资元数据冲突')
     }
-    await readVerifiedMediaBlobObjectData(raced)
-    await assertExistingReadCurrent()
-    return raced
+    return (await readScopedMediaBlobObject(scope, raced, readGuard)).row
   }
   if (backend === 'indexeddb') return { ...pending, id }
 
@@ -270,6 +339,7 @@ export async function acquireMediaBlobLease(input: {
   durationMs?: number
   owner?: string
 }): Promise<MediaBlobLeaseV1> {
+  input = structuredClone(input)
   const scope = await resolveScope({ scope: input.scope })
   const durationMs = input.durationMs ?? 60_000
   if (!Number.isInteger(durationMs) || durationMs < 1_000 || durationMs > MAXIMUM_LEASE_MS) {
@@ -277,6 +347,12 @@ export async function acquireMediaBlobLease(input: {
   }
   const owner = input.owner?.trim() || crypto.randomUUID()
   if (owner.length > 200) throw new Error('[product-production] 媒资 lease owner 无效')
+  // Preview consumers acquire before reading. Revalidate a legacy health
+  // marker first; only the unchanged ready-only transaction can grant a lease.
+  const candidate = await db.mediaBlobObjects.get(input.blobObjectId)
+  if (candidate?.storageState === 'corrupt') {
+    await readMediaBlobObjectData({ scope, blobObjectId: input.blobObjectId })
+  }
   const expiresAt = Date.now() + durationMs
   await db.transaction('rw', db.mediaBlobObjects, async () => {
     const row = await db.mediaBlobObjects.get(input.blobObjectId)

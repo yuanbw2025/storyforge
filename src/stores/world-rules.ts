@@ -1,8 +1,9 @@
 /**
- * Phase 32 — 世界规则 Store（按 projectId + worldGroupId 维护 profile）
+ * 世界规则由 World 拥有，按 worldGroupId 区分同一世界的规则记录。
  */
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
+import type { WorkspaceScope } from '../lib/types'
 import type {
   WorldRulesProfile,
   WorldRuleEntry,
@@ -10,18 +11,45 @@ import type {
   ConflictPriority,
 } from '../lib/types/world-rules'
 import { createEmptyEntry, isEntryEmpty, countFilledEntries } from '../lib/types/world-rules'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { assertRecordInScope, getTableSpec, readOwnedRows, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { isPortableResourceUidV1 } from '../lib/context-gateway/resource-uid'
+import { acknowledgePendingEditFailureV1, capturePendingEditFailureV1, coordinatePendingEditV1, type PendingEditFailureTokenV1 } from '../lib/authoring/pending-edit-coordinator'
+
+let profileReadRequest = 0
+let profileEditRevision = 0
+// The store edits one loaded record. Advance this witness only when its transaction commits.
+let lastSavedContent: string | undefined
+
+function ruleContent(profile: Pick<WorldRulesProfile, 'entries' | 'customNodes' | 'globalNote'>) {
+  return JSON.stringify({ entries: profile.entries, customNodes: profile.customNodes, globalNote: profile.globalNote })
+}
+
+const sameScope = (a: WorkspaceScope | null, b: WorkspaceScope) => a?.projectId === b.projectId && a.worldId === b.worldId && a.workId === b.workId
+
+async function verifyWorldGroup(scope: WorkspaceScope, groupId?: number | null) {
+  if (groupId == null) return
+  const group = await db.worldGroups.get(groupId)
+  if (!await assertRecordInScope(scope, 'worldGroups', group, { owner: 'world' })) {
+    throw new Error('规则所属的世界组已删除或归属变化，请重新选择世界组。')
+  }
+}
 
 interface WorldRulesState {
   profile: WorldRulesProfile | null
   activeWorldGroupId: number | null
   loading: boolean
+  loadedScope: WorkspaceScope | null
+  pendingSaves: number
+  dirty: boolean
+  saveError: string
+  failureToken: PendingEditFailureTokenV1 | null
 
   /** 加载项目的世界规则 */
   loadProfile: (scope: WorkspaceScopeLike, worldGroupId?: number | null) => Promise<void>
 
   /** 保存整个 profile（内部使用） */
-  _persist: () => Promise<void>
+  _persist: (profile?: WorldRulesProfile | null, scope?: WorkspaceScope | null) => Promise<void>
+  discardDraft: () => void
 
   /** 获取某节点的 entry（不存在则返回 undefined） */
   getEntry: (nodeId: string) => WorldRuleEntry | undefined
@@ -52,13 +80,22 @@ export const useWorldRulesStore = create<WorldRulesState>((set, get) => ({
   profile: null,
   activeWorldGroupId: null,
   loading: false,
+  loadedScope: null,
+  pendingSaves: 0,
+  dirty: false,
+  saveError: '',
+  failureToken: null,
 
   loadProfile: async (scopeInput: WorkspaceScopeLike, worldGroupId: number | null = null) => {
+    if (get().dirty || get().pendingSaves) throw new Error('当前规则草稿尚未保存，请先重试或导出并放弃未保存输入。')
+    const request = ++profileReadRequest
     set({ loading: true })
     try {
       const targetWorldGroupId = worldGroupId ?? null
       const scope = await resolveScopeLike(scopeInput)
-      const profile = await db.transaction('rw', db.worldRulesProfiles, async () => {
+      const profile = await db.transaction('rw', scopeTransactionTables(db.worldRulesProfiles, db.worldGroups), async () => {
+        await resolveScopeLike(scope)
+        await verifyWorldGroup(scope, targetWorldGroupId)
         const profiles = await readOwnedRows<WorldRulesProfile>(scope, 'worldRulesProfiles', { owner: 'world' })
         const existing = profiles.find(p => (p.worldGroupId ?? null) === targetWorldGroupId)
         if (existing) return existing
@@ -77,23 +114,75 @@ export const useWorldRulesStore = create<WorldRulesState>((set, get) => ({
         return await db.worldRulesProfiles.get(id) ?? null
       })
 
-      set({ profile: profile || null, activeWorldGroupId: targetWorldGroupId })
+      if (request !== profileReadRequest) return
+      if (get().dirty || get().pendingSaves) throw new Error('规则加载期间又有作者输入，已保留原编辑目标和草稿。')
+      lastSavedContent = profile ? ruleContent(profile) : undefined
+      set({ profile: profile || null, loadedScope: scope, activeWorldGroupId: targetWorldGroupId, dirty: false, saveError: '', failureToken: null })
     } finally {
-      set({ loading: false })
+      if (request === profileReadRequest) set({ loading: false })
     }
   },
 
-  _persist: async () => {
-    const { profile } = get()
-    if (!profile?.id) return
-    const scope = await resolveScopeLike(profile.projectId)
-    if (!await assertRecordInScope(scope, 'worldRulesProfiles', profile, { owner: 'world' })) return
-    await db.worldRulesProfiles.update(profile.id, {
-      entries: profile.entries,
-      customNodes: profile.customNodes,
-      globalNote: profile.globalNote,
-      updatedAt: Date.now(),
-    })
+  _persist: async (profile = get().profile, frozenScope = get().loadedScope) => {
+    if (!profile?.id || !frozenScope) {
+      const error = new Error('规则编辑目标尚未加载，输入未保存。')
+      set({ saveError: error.message, dirty: profile != null })
+      throw error
+    }
+    const scope = { ...frozenScope }, id = profile.id
+    const revision = ++profileEditRevision
+    const identity = getTableSpec('worldRulesProfiles').resourceIdentity!
+    const uid = Reflect.get(profile, identity.field)
+    set({ pendingSaves: get().pendingSaves + 1, dirty: true, saveError: '' })
+    try {
+      const snapshot = structuredClone(profile)
+      await coordinatePendingEditV1({
+        key: `world-rules:${scope.projectId}:${scope.worldId}:${id}:${String(uid)}`,
+        persist: async () => {
+          const savedContent = await db.transaction('rw', scopeTransactionTables(db.worldRulesProfiles, db.worldGroups), async () => {
+            await resolveScopeLike(scope)
+            const current = await db.worldRulesProfiles.get(id)
+            if (!current) throw new Error('规则目标已删除，输入已保留；请导出草稿，不能自动重建已删除目标。')
+            if (snapshot.projectId !== scope.projectId || !await assertRecordInScope(scope, 'worldRulesProfiles', current, { owner: 'world' })
+              || (current.worldGroupId ?? null) !== (snapshot.worldGroupId ?? null)) {
+              throw new Error('规则目标的归属已变化，输入已保留，未写入其他世界。')
+            }
+            if (!isPortableResourceUidV1(uid, identity.resourceKind) || Reflect.get(current, identity.field) !== uid) {
+              throw new Error('规则目标的身份已变化，输入已保留，请检查原规则。')
+            }
+            await verifyWorldGroup(scope, snapshot.worldGroupId)
+            if (ruleContent(current) !== lastSavedContent) {
+              throw new Error('其他页面已修改这份规则，本页输入已保留。请导出草稿，重新打开后核对修改。')
+            }
+            const patch = { entries: snapshot.entries, customNodes: snapshot.customNodes, globalNote: snapshot.globalNote, updatedAt: Date.now() }
+            if (await db.worldRulesProfiles.update(id, patch) !== 1) throw new Error('规则目标已删除或未更新，输入已保留。')
+            const saved = await db.worldRulesProfiles.get(id)
+            if (!saved || ruleContent(saved) !== ruleContent(patch)) {
+              throw new Error('规则保存回读未通过，输入已保留，请重试。')
+            }
+            return ruleContent(saved)
+          })
+          lastSavedContent = savedContent
+        },
+      })
+      if (revision === profileEditRevision && get().profile?.id === id && sameScope(get().loadedScope, scope)) {
+        set({ dirty: false, saveError: '', failureToken: null })
+      }
+    } catch (cause) {
+      if (revision === profileEditRevision && get().profile?.id === id && sameScope(get().loadedScope, scope)) {
+        set({ dirty: true, saveError: cause instanceof Error ? cause.message : '规则保存失败，输入已保留。', failureToken: capturePendingEditFailureV1(cause) ?? null })
+      }
+      throw cause
+    } finally { set({ pendingSaves: Math.max(0, get().pendingSaves - 1) }) }
+  },
+
+  discardDraft: () => {
+    if (get().pendingSaves) throw new Error('规则仍在保存，请等待保存结束后再处理草稿。')
+    const token = get().failureToken
+    if (token) acknowledgePendingEditFailureV1({ token, decision: 'abandon-command' })
+    profileReadRequest++; profileEditRevision++
+    lastSavedContent = undefined
+    set({ profile: null, loadedScope: null, dirty: false, saveError: '', failureToken: null, loading: false })
   },
 
   getEntry: (nodeId: string) => {
@@ -101,8 +190,8 @@ export const useWorldRulesStore = create<WorldRulesState>((set, get) => ({
   },
 
   updateEntry: async (nodeId, field, value) => {
-    const { profile, _persist } = get()
-    if (!profile) return
+    const { profile, loadedScope, _persist } = get()
+    if (!profile) throw new Error('规则尚未加载，输入未保存。')
 
     const existing = profile.entries[nodeId] || createEmptyEntry()
     const updated = { ...existing, [field]: value }
@@ -115,53 +204,58 @@ export const useWorldRulesStore = create<WorldRulesState>((set, get) => ({
       entries[nodeId] = updated
     }
 
-    set({ profile: { ...profile, entries } })
-    await _persist()
+    const next = { ...profile, entries }
+    set({ profile: next, dirty: true })
+    await _persist(next, loadedScope)
   },
 
   deleteEntry: async (nodeId) => {
-    const { profile, _persist } = get()
-    if (!profile) return
+    const { profile, loadedScope, _persist } = get()
+    if (!profile) throw new Error('规则尚未加载，输入未保存。')
 
     const entries = { ...profile.entries }
     delete entries[nodeId]
-    set({ profile: { ...profile, entries } })
-    await _persist()
+    const next = { ...profile, entries }
+    set({ profile: next, dirty: true })
+    await _persist(next, loadedScope)
   },
 
   updateGlobalNote: async (note) => {
-    const { profile, _persist } = get()
-    if (!profile) return
-    set({ profile: { ...profile, globalNote: note } })
-    await _persist()
+    const { profile, loadedScope, _persist } = get()
+    if (!profile) throw new Error('规则尚未加载，输入未保存。')
+    const next = { ...profile, globalNote: note }
+    set({ profile: next, dirty: true })
+    await _persist(next, loadedScope)
   },
 
   addCustomNode: async (nodeData) => {
-    const { profile, _persist } = get()
-    if (!profile) return ''
+    const { profile, loadedScope, _persist } = get()
+    if (!profile) throw new Error('规则尚未加载，输入未保存。')
 
     const id = `custom_${Date.now()}`
     const node: CustomWorldRuleNode = { ...nodeData, id }
     const customNodes = [...profile.customNodes, node]
-    set({ profile: { ...profile, customNodes } })
-    await _persist()
+    const next = { ...profile, customNodes }
+    set({ profile: next, dirty: true })
+    await _persist(next, loadedScope)
     return id
   },
 
   updateCustomNode: async (id, updates) => {
-    const { profile, _persist } = get()
-    if (!profile) return
+    const { profile, loadedScope, _persist } = get()
+    if (!profile) throw new Error('规则尚未加载，输入未保存。')
 
     const customNodes = profile.customNodes.map(n =>
       n.id === id ? { ...n, ...updates } : n
     )
-    set({ profile: { ...profile, customNodes } })
-    await _persist()
+    const next = { ...profile, customNodes }
+    set({ profile: next, dirty: true })
+    await _persist(next, loadedScope)
   },
 
   deleteCustomNode: async (id) => {
-    const { profile, _persist } = get()
-    if (!profile) return
+    const { profile, loadedScope, _persist } = get()
+    if (!profile) throw new Error('规则尚未加载，输入未保存。')
 
     // 删除节点本身 + 所有以它为 parent 的子节点
     const toDelete = new Set<string>([id])
@@ -178,8 +272,9 @@ export const useWorldRulesStore = create<WorldRulesState>((set, get) => ({
       delete entries[nid]
     }
 
-    set({ profile: { ...profile, customNodes, entries } })
-    await _persist()
+    const next = { ...profile, customNodes, entries }
+    set({ profile: next, dirty: true })
+    await _persist(next, loadedScope)
   },
 
   filledCount: () => {

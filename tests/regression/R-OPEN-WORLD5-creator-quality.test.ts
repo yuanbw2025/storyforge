@@ -657,7 +657,7 @@ describe('TOW-G5-09 · Creator质量、灰盒和问题回执', () => {
 
   it('只从当前Build的可重放事件、状态头和检查点生成完整灰盒凭据', async () => {
     const seeded = await fixture({ advisories: false })
-    const now = Date.now()
+    const now = 1_787_700_000_000
     const initialState = {
       version: 1, clock: 0, entities: {}, memories: [], narratives: [],
       ttrpg: null, interaction: null, narrative: null, adventure: null,
@@ -731,7 +731,7 @@ describe('TOW-G5-09 · Creator质量、灰盒和问题回执', () => {
       [...TEXT_OPEN_WORLD_CREATOR_GRAYBOX_COVERAGE_KEYS_V1].sort(),
     )
     expect(receipt.evidence.sessions[0]).not.toHaveProperty('sessionId')
-    expect(receipt.evidence.sessions[0]?.eventStreamHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(receipt.evidence.sessions[0]?.eventStreamHash).toBe('465b64788fa7c7c771eb107d287a7e85e790b0a248a4a7d991aef1c3f6aa1147')
     const workspace = await readTextOpenWorldCreatorQualityWorkspaceV1({
       scope: seeded.scope, productionId: seeded.productionId, expectedBuildId: seeded.buildId,
     })

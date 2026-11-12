@@ -1,0 +1,13 @@
+{
+  "finding": "SFQA-132",
+  "baselineCommit": "5a394e51a87952416e95860bf2913927a12b39cd",
+  "origin": "Isolated fake IndexedDB on the exact baseline. Called public saltRidgeShowcase.install() (authorization, scheduler, publish), then public createTextOpenWorldInstance() for the old saved journey. No release, manifest, signature or save was edited.",
+  "fixture": "Complete nonempty table rows from that one synthetic test-owned database, with local primary keys preserved for direct old-install upgrade. This is not a backup import or an ID-remapping fixture.",
+  "networkOrModelCalls": 0,
+  "realUserData": false,
+  "publishedReleaseCount": 1,
+  "savedSessionCount": 1,
+  "compressedSHA256": "7641f0163e190b8efe5f745c725996225be05a4b8416baa6968eab129989fdd3",
+  "uncompressedSHA256": "ba04507d912a058110f00f50f24b8290724ccfe92195b76094db3eae4537ceec",
+  "originalManifestSHA256": "de5c49b771d1fe3da11a407398ab614bea0792be71a1fe5e251d9c4a75829b23"
+}

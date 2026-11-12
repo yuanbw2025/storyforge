@@ -12,6 +12,7 @@ import { estimateTtrpgOpenProductionTextV3, estimateTtrpgOpenProductionWireV3,
   TTRPG_OPEN_WIRE_ESTIMATION_V3, TTRPG_OPEN_WIRE_OVERHEAD_RESERVE_V3 } from '../ttrpg/open-production-wire-budget'
 import { renderTtrpgOpenProductionWorldReadsV2 } from '../ttrpg/open-world-reads'
 import { estimateTokens } from '../ai/context-budget'
+import Dexie from 'dexie'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { verifiedHumanImportCarryProofsV1 } from './text-adventure-artifact-store'
 import { isTextAdventureClockCapacityRevisionV1 } from './clock-capacity-revision'
@@ -22,11 +23,16 @@ import { getAgentSkillV1 } from '../agent/skill-registry'
 import { classifyHarnessFailureV1 } from '../agent/run/harness-failure'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
 import {
+  agentRunScopeTransactionTablesV1,
+  appendAgentRunEventWithSettlementInTransactionV1,
   appendAgentRunEventV1,
   createAgentRunV1,
   readAgentRunV1,
+  readVerifiedAgentRunInTransactionV1,
+  withAgentRunMutationLockV1,
   type AgentRunSnapshotV1,
 } from '../agent/run/event-store'
+import { parseAgentRunEventV1 } from '../agent/run/event-schema'
 import {
   createContextManifestFromAssemblyV1,
   createContextManifestV2FromV1,
@@ -72,7 +78,7 @@ import { parseProductBuildQualityReportV1 } from './adoption'
 import { avgRuntimeStage } from '../avg/executable-module'
 import { createProductBuildCompatibilityReportV1 } from './compatibility'
 import { resolveProductBuildCompatibilityPackageV1 } from './compatibility-baseline'
-import { parseProductProductionBriefV3 } from './contracts'
+import { parseProductProductionBriefV3, productProductionTaskUsageBudgetViolationsV1 } from './contracts'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, hashProductProductionTaskInputV1, isSha256Hash } from './hash'
 import {
   createProductProductionPlanV3,
@@ -81,7 +87,7 @@ import {
   textAdventureQualityReviewBatchTaskKeysV1,
   textAdventureQualityReviewScopeFromTaskKeyV1,
 } from './plan'
-import { createProductBuildPreviewManifestV1 } from './preview-manifest'
+import { createProductBuildPreviewManifestV1, verifyRestoredProductBuildPreviewManifestV1 } from './preview-manifest'
 import { createProductBuildRootTerminalReceiptV1 } from './receipts'
 import { verifyImportedPublishedRootOriginV1 } from './published-root-origin'
 import { readMediaBlobObjectData } from './media-blob-store'
@@ -98,7 +104,7 @@ import {
 } from './source-contracts'
 import { assertFormalProductProductionStartV1 } from '../product/source-contracts'
 import { preserveProductProductionContextV1, ProductProductionContextBudgetErrorV1, validateProductProductionRecoveryDirectiveV1 } from './context'
-import { recordAgentRunArtifactV1 } from '../memory/artifact-store'
+import { readAgentRunArtifactExactV1, recordAgentRunArtifactV1 } from '../memory/artifact-store'
 import {CHAT_OPENING_REPAIR_GATE_V1} from '../character-interaction/opening-repair'
 import {CHAT_OPENING_REPAIR_GATE_V2} from '../character-interaction/opening-repair-patch'
 import { assertExactRunArtifactBodySafeV1 } from '../memory/evidence-policy'
@@ -431,12 +437,15 @@ export async function prepareLegacyPausedProductBuildV1<T extends ProductBuildRe
     if (task.executionMode !== 'model' && task.executionMode !== 'deterministic') {
       throw new Error('[product-production-scheduler] 旧媒资暂停需独立核对 provider 证据')
     }
+    const observed = observedTaskClaimUsageV1(entry) ?? await readObservedTaskUsageV1({ scope, snapshot, taskKey, attempt: actualAttempt,
+      controlEpoch: binding.controlEpoch, idempotencyKey: entry.idempotencyKey })
     ledger.attempts.push({
       taskKey, runId: entry.runId, attempt: actualAttempt,
       controlEpoch: binding.controlEpoch, idempotencyKey: entry.idempotencyKey,
-      outcome: 'failed', usage: requested ? reservationUsage(task.budgetReservation) : zeroUsage(),
-      usageKnown: !requested, errorCode: requested ? 'provider-result-unknown' : 'author-paused-before-dispatch',
-      ...(!requested ? { resolution: 'system-released-before-dispatch' as const } : {}),
+      outcome: 'failed', usage: observed ?? (requested ? reservationUsage(task.budgetReservation) : zeroUsage()),
+      usageKnown: observed != null || !requested, errorCode: observed != null ? 'task-stopped-before-admission'
+        : requested ? 'provider-result-unknown' : 'author-paused-before-dispatch',
+      ...(!requested && observed == null ? { resolution: 'system-released-before-dispatch' as const } : {}),
     })
     onVerifiedRun?.(snapshot.run)
   }
@@ -946,34 +955,9 @@ function permitsAutomaticTaskRetry(failureCode: string | undefined): boolean {
 }
 
 function boundedUsage(usage: ProductProductionTaskUsageV1, reservation: ProductTaskBudgetReservationV1): void {
-  // OpenAI-compatible providers can include hidden reasoning and protocol
-  // framing in completion_tokens, so the receipt may exceed the maxTokens sent
-  // on the wire by a very small accounting delta. Accept at most 2%/128 tokens
-  // for normal-sized model tasks, retain the real receipt in the append-only
-  // ledger, and let the author-approved Build lifetime budget remain the hard
-  // aggregate ceiling. Tiny reservations get no tolerance, keeping budget
-  // boundary tests and deliberately narrow contracts exact.
-  const outputAccountingTolerance = reservation.outputTokens >= 1_000 && usage.modelCalls > 0
-    ? Math.min(128, Math.ceil(reservation.outputTokens * 0.02))
-    : 0
-  const integers = [usage.modelCalls, usage.inputTokens, usage.outputTokens, usage.mediaCalls, usage.durationMs, usage.storageBytes]
-  const invalid = integers.some(value => !Number.isInteger(value) || value < 0)
-    || (usage.costUsd != null && (!Number.isFinite(usage.costUsd) || usage.costUsd < 0))
-  const exceeded = [
-    ['modelCalls', usage.modelCalls, reservation.modelCalls],
-    ['inputTokens', usage.inputTokens, reservation.inputTokens],
-    ['outputTokens', usage.outputTokens, reservation.outputTokens + outputAccountingTolerance],
-    ['mediaCalls', usage.mediaCalls, reservation.mediaCalls],
-    ['durationMs', usage.durationMs, reservation.durationMs],
-    ['storageBytes', usage.storageBytes, reservation.storageBytes],
-    ...(reservation.maximumCostUsd == null
-      ? [] : [['costUsd', usage.costUsd ?? 0, reservation.maximumCostUsd] as const]),
-  ].filter(([, actual, maximum]) => actual > maximum)
-    .map(([field, actual, maximum]) => `${field}=${actual}/${maximum}`)
-  if (invalid || exceeded.length > 0) {
-    throw new Error(`[product-production-scheduler] task usage 超出 Plan 预算预留${
-      invalid ? ':usage-invalid' : `:${exceeded.join(',')}`
-    }`)
+  const violations = productProductionTaskUsageBudgetViolationsV1(usage, reservation)
+  if (violations.length > 0) {
+    throw new Error(`[product-production-scheduler] task usage 超出 Plan 预算预留:${violations.join(',')}`)
   }
 }
 
@@ -1050,8 +1034,10 @@ async function assertBuildLifetimeBudgetCapacity(input: {
     taskKey: string
     runId: number
     attempt: number
+    idempotencyKey: string
     reservation: ProductTaskBudgetReservationV1
   }
+  measuredUsage?: ProductProductionTaskUsageV1
 }): Promise<void> {
   const current = await currentProductionBuild(input.scope, input.productionId)
   if (current.build.id !== input.buildId || current.build.controlEpoch !== input.controlEpoch) {
@@ -1060,56 +1046,72 @@ async function assertBuildLifetimeBudgetCapacity(input: {
   const plan = parseProductProductionPlanV3(
     current.build.planJson, current.brief, current.briefRow.briefHash,
   )
-  const ledger = parseLedger(current.build.budgetLedgerJson)
-  const executing = ledger.tasks[input.executingAttempt.taskKey]
-  if (executing?.status !== 'claimed' || executing.runId !== input.executingAttempt.runId
-    || executing.attempt !== input.executingAttempt.attempt) {
-    throw new Error('[product-production-scheduler] Build lifetime budget 执行 attempt 已过期')
-  }
-  const planTaskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))
-  const charged = ledger.attempts.flatMap(attempt => {
-    if (!attempt.usage) return []
-    const task = planTaskByKey.get(attempt.taskKey)
-    return [{
-      ...attempt.usage,
-      costUsd: task
-        ? proportionalTaskCostUpperBoundV1(task.budgetReservation, attempt.usage)
-        : attempt.usage.costUsd,
-    }]
-  })
-  const inFlight = Object.entries(ledger.tasks).flatMap(([taskKey, entry]) => {
-    if (entry.status !== 'claimed') return []
-    // Use the same authority-checked reservation as this exact execution.
-    // Other concurrent claims retain their conservative Plan reservation;
-    // historical known usage and unknown-result holds above never change.
-    if (taskKey === input.executingAttempt.taskKey) {
-      return [reservationUsage(input.executingAttempt.reservation)]
+  const check = (build: ProductBuildRecordV1) => {
+    const ledger = parseLedger(build.budgetLedgerJson)
+    const executing = ledger.tasks[input.executingAttempt.taskKey]
+    if (executing?.status !== 'claimed' || executing.runId !== input.executingAttempt.runId
+      || executing.attempt !== input.executingAttempt.attempt
+      || executing.idempotencyKey !== input.executingAttempt.idempotencyKey) {
+      throw new Error('[product-production-scheduler] Build lifetime budget 执行 attempt 已过期')
     }
-    const task = planTaskByKey.get(taskKey)
-    return task ? [reservationUsage(remainingTaskAttemptBudgetV1({
-      task,
-      ledger,
-      controlEpoch: current.build.controlEpoch,
-    }))] : []
-  })
-  const usage = sumTaskUsage([...charged, ...inFlight])
-  const limits = current.brief.productionBudget
-  const exceeded = [
-    ['modelCalls', usage.modelCalls, limits.maximumModelCalls],
-    ['inputTokens', usage.inputTokens, limits.maximumInputTokens],
-    ['outputTokens', usage.outputTokens, limits.maximumOutputTokens],
-    ['mediaCalls', usage.mediaCalls, limits.maximumMediaCalls],
-    ['durationMs', usage.durationMs, limits.maximumDurationMs],
-    ['storageBytes', usage.storageBytes, limits.maximumStorageBytes],
-  ].filter(([, actual, maximum]) => actual > maximum)
-    .map(([field, actual, maximum]) => `${field}=${actual}/${maximum}`)
-  if (limits.maximumCostUsd != null
-    && (usage.costUsd == null || usage.costUsd > limits.maximumCostUsd)) {
-    exceeded.push(`costUsd=${usage.costUsd ?? 'unknown'}/${limits.maximumCostUsd}`)
+    const exceeded = buildLifetimeBudgetExceededFieldsV1({ ledger, plan, brief: current.brief,
+      controlEpoch: build.controlEpoch, currentClaim: input.executingAttempt })
+    return { ledger, executing, exceeded }
   }
+  const measured = input.measuredUsage
+  const exceeded = measured == null ? check(current.build).exceeded
+    : await db.transaction('rw', db.productBuilds, db.productProductions, async () => {
+      const build = await db.productBuilds.get(input.buildId)
+      const production = await db.productProductions.get(input.productionId)
+      if (!build || build.controlEpoch !== input.controlEpoch || build.planHash !== current.build.planHash
+        || build.briefHash !== current.build.briefHash || build.status !== 'building'
+        || build.productionId !== input.productionId || production?.controlEpoch !== input.controlEpoch
+        || production.status !== 'producing') {
+        throw new Error('[product-production-scheduler] Build lifetime budget 复验授权已停止')
+      }
+      const checked = check(build)
+      const usage = parseLedgerUsage(measured, 'measured-output-claim')
+      const previous = observedTaskClaimUsageV1(checked.executing)
+      if (previous && canonicalProductProductionJsonV2(previous) !== canonicalProductProductionJsonV2(usage)) {
+        throw new Error('[product-production-scheduler] Build lifetime budget 不可覆写原 attempt 计量')
+      }
+      // Publish this measurement before a sibling can check the same space.
+      // A rejected response is still billed. Final disposition moves this one
+      // attempt to history without charging the claimed usage twice.
+      if (!previous || checked.exceeded.length > 0) {
+        checked.ledger.tasks[input.executingAttempt.taskKey] = { ...checked.executing, usage }
+        const updatedAt = Date.now()
+        const task = plan.tasks.find(value => value.taskKey === input.executingAttempt.taskKey)
+        if (!task) throw new Error('[product-production-scheduler] 计量缺少原 Plan task')
+        const failedStatus = task.failurePolicy === 'fail-build' ? 'failed' : 'recovery-required'
+        const over = checked.exceeded.length > 0
+        await db.productBuilds.update(input.buildId, {
+          budgetLedgerJson: canonicalProductProductionJsonV2(checked.ledger), updatedAt,
+          // Revoke admission in this same write. A sibling that has received
+          // its response but has not committed an Artifact cannot slip in
+          // while the over-budget callback is still writing its Run events.
+          ...(over ? { status: failedStatus, failureJson: canonicalProductProductionJsonV2(taskFailureEnvelope(build.failureJson, {
+            taskKey: task.taskKey, attempt: input.executingAttempt.attempt, code: 'task-budget-exceeded',
+            detail: `[product-production-scheduler] Build lifetime budget 不足:${checked.exceeded.join(',')}`,
+            failureProvenance: { runId: input.executingAttempt.runId, rootRunId: checked.ledger.rootRunId,
+              planHash: build.planHash, controlEpoch: input.controlEpoch, attempt: input.executingAttempt.attempt },
+          })) } : {}),
+        })
+        if (over && failedStatus === 'failed') await db.productProductions.update(input.productionId, {
+          status: 'failed', stateRevision: production.stateRevision + 1, updatedAt,
+        })
+      }
+      return checked.exceeded
+    })
   if (exceeded.length > 0) {
     throw new Error(`[product-production-scheduler] Build lifetime budget 不足:${exceeded.join(',')}`)
   }
+}
+
+function observedTaskClaimUsageV1(entry: LedgerTaskV1 | undefined): ProductProductionTaskUsageV1 | null {
+  // The unreturned claim has zero usage. A positive claimed output is a
+  // measurement awaiting admission or cancellation, not a second attempt.
+  return entry?.status === 'claimed' && (entry.usage?.outputTokens ?? 0) > 0 ? entry.usage : null
 }
 
 function normalizedBindings(
@@ -1491,6 +1493,25 @@ async function cancelNonTerminalBuildRunsAfterStopV1(input: {
   buildId: number
   controlEpoch: number
 }): Promise<boolean> {
+  const before = await db.productBuilds.get(input.buildId)
+  if (before && Number(parsedObject(before.planJson).controlEpoch) <= input.controlEpoch) {
+    const prepared = await prepareStoppedClaimAccountingV1(input.scope, before)
+    if (prepared.ledger.attempts.length > parseLedger(before.budgetLedgerJson).attempts.length) {
+      const committed = await db.transaction('rw', db.productBuilds, db.agentRuns, async () => {
+        const current = await db.productBuilds.get(input.buildId)
+        if (!current || current.controlEpoch !== before.controlEpoch || current.planHash !== before.planHash
+          || current.budgetLedgerJson !== before.budgetLedgerJson
+          || !await stoppedClaimWitnessesCurrentV1(prepared.witnesses)) return false
+        await db.productBuilds.update(input.buildId, {
+          budgetLedgerJson: canonicalProductProductionJsonV2(prepared.ledger), updatedAt: Date.now(),
+        })
+        return true
+      })
+      // A concurrent provider settlement or Run advance won the read set.
+      // Leave its Run intact; a later cycle can retry cleanup without a call.
+      if (!committed) return false
+    }
+  }
   const rows = await db.agentRuns.where('productBuildId').equals(input.buildId).toArray()
   let retiredRun = false
   for (const row of rows) {
@@ -2790,22 +2811,26 @@ async function ensurePlan(input: {
       }
     }
   }
-  const commitPlan = () => db.transaction('rw', scopeTransactionTables(db.productBuilds, db.productBuildArtifacts, db.productProductions, db.productProductionBriefs), async () => {
+  const outgoing = await db.productBuilds.get(state.build.id!)
+  if (!outgoing) throw new Error('[product-production-scheduler] Plan 提交前 Build 不存在')
+  const claimAccounting = await prepareStoppedClaimAccountingV1(input.scope, outgoing)
+  const commitPlan = () => db.transaction('rw', scopeTransactionTables(db.productBuilds, db.productBuildArtifacts, db.productProductions, db.productProductionBriefs, db.agentRuns), async () => {
     const build = await db.productBuilds.get(state.build.id!)
-    if (!build || build.controlEpoch !== state.build.controlEpoch || build.stateRevision !== state.build.stateRevision) {
+    if (!build || build.controlEpoch !== state.build.controlEpoch || build.stateRevision !== state.build.stateRevision
+      || build.planHash !== outgoing.planHash || build.budgetLedgerJson !== outgoing.budgetLedgerJson
+      || !await stoppedClaimWitnessesCurrentV1(claimAccounting.witnesses)) {
       throw new Error('[product-production-scheduler] Plan CAS 已过期')
     }
     await assertOpenWorldSchedulingSourceInTransactionV1(build)
     await db.productBuildArtifacts.where('buildId').equals(build.id!).filter(row => (
       row.controlEpoch !== build.controlEpoch && (row.status === 'accepted' || row.status === 'carried-forward')
     )).modify({ status: 'invalid', updatedAt: Date.now() })
-    const priorLedger = parseLedger(build.budgetLedgerJson)
     await db.productBuilds.update(build.id!, {
       status: 'building', planRevision: build.planRevision + 1,
       planJson: canonicalProductProductionJsonV2(plan), planHash,
       // A recovery epoch owns a fresh root/task projection, but paid attempts
       // remain append-only for the entire Build lifetime.
-      budgetLedgerJson: canonicalProductProductionJsonV2(emptyLedger(priorLedger.attempts)),
+      budgetLedgerJson: canonicalProductProductionJsonV2(emptyLedger(claimAccounting.ledger.attempts)),
       stateRevision: build.stateRevision + 1, startedAt: build.startedAt ?? Date.now(), updatedAt: Date.now(),
     })
   })
@@ -4125,7 +4150,8 @@ export async function recoveryInvalidatedTaskKeys(input: {
   const reviewEvidenceInvalid = textAdventureQualityReviewAuthorityViolationsV1(
     reviewPayload.issues,
   ).length > 0 || textAdventureQualityReviewScopeViolationsV1(reviewPayload.issues).length > 0
-  const reviewedEvidenceRows = (await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray())
+  const reviewedEpochRows = await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray()
+  const reviewedEvidenceRows = reviewedEpochRows
     .filter(row => (row.artifactKey === 'content.narrative-arc-plan'
       || row.artifactKey === 'content.narrative'
       || row.artifactKey === 'content.cast-bible'
@@ -4139,16 +4165,44 @@ export async function recoveryInvalidatedTaskKeys(input: {
   const reviewedNarrativeRow = reviewedEvidence('content.narrative')
   const reviewedCastRow = reviewedEvidence('content.cast-bible')
   const reviewedArchitectureRow = reviewedEvidence('content.adventure-architecture')
-  const reviewedMainQuestPlanRow = reviewedEvidence('content.main-quest-plan')
   const reviewedArcPlan = reviewedArcPlanRow ? parsedObject(reviewedArcPlanRow.payloadJson) : null
   const reviewedNarrative = reviewedNarrativeRow ? parsedObject(reviewedNarrativeRow.payloadJson) : null
   const reviewedCast = reviewedCastRow ? parsedObject(reviewedCastRow.payloadJson) : null
   const reviewedArchitecture = reviewedArchitectureRow
     ? parsedObject(reviewedArchitectureRow.payloadJson) : null
-  const reviewedMainQuestPlan = reviewedMainQuestPlanRow
-    ? parsedObject(reviewedMainQuestPlanRow.payloadJson) : null
-  const reviewedLocationTitles = (Array.isArray(reviewedArchitecture?.regions)
-    ? reviewedArchitecture.regions : []).flatMap(regionValue => {
+  // A location finding in the aggregate must be recomputed from the inputs it
+  // actually reviewed. An older quest/map, an unaccepted row or a damaged
+  // payload cannot turn a known conflict into a review-only retry.
+  const recordedQuestLocationIssues = Array.isArray(reviewPayload.issues)
+    ? reviewPayload.issues.filter(issue => issue?.severity === 'blocking'
+        && issue.artifactKey === 'content.main-quest-plan'
+        && typeof issue.detail === 'string' && issue.detail.includes('冻结地点为「'))
+    : []
+  const build = recordedQuestLocationIssues.length > 0 ? await db.productBuilds.get(input.buildId) : null
+  const readQuestLocationEvidence = async (artifactKey: string) => {
+    const rows = reviewedEpochRows.filter(row => row.artifactKey === artifactKey
+      && row.controlEpoch === failedQualityReview.controlEpoch)
+    const row = rows.length === 1 ? rows[0] : null
+    if (!row || !build || row.projectId !== build.projectId || row.worldId !== build.worldId
+      || row.workId !== build.workId
+      || !['accepted', 'carried-forward', 'invalid'].includes(row.status)
+      || !isSha256Hash(row.producerReceiptHash ?? '') || !isSha256Hash(row.contentHash)) {
+      throw new Error(`文字冒险主线地点返修证据缺失或无效:${artifactKey}`)
+    }
+    const payload = parsedObject(row.payloadJson)
+    if (await hashProductProductionValueV2(payload) !== row.contentHash) {
+      throw new Error(`文字冒险主线地点返修工件哈希不符:${artifactKey}`)
+    }
+    return payload
+  }
+  const [reviewedMainQuestPlan, questLocationArchitecture] = recordedQuestLocationIssues.length > 0
+    ? await Promise.all([
+        readQuestLocationEvidence('content.main-quest-plan'),
+        readQuestLocationEvidence('content.adventure-architecture'),
+      ])
+    : [null, null]
+  const reviewedLocationTitles = (Array.isArray(questLocationArchitecture?.regions)
+    ? questLocationArchitecture.regions : []).flatMap(regionValue => {
     if (!regionValue || typeof regionValue !== 'object' || Array.isArray(regionValue)) return []
     const region = regionValue as Record<string, unknown>
     return (Array.isArray(region.areas) ? region.areas : []).flatMap(areaValue => {
@@ -4161,6 +4215,12 @@ export async function recoveryInvalidatedTaskKeys(input: {
       })
     })
   })
+  const questLocationIssues = textAdventureQuestLocationAuthorityIssuesV1(
+    reviewedMainQuestPlan, reviewedLocationTitles,
+  )
+  if (recordedQuestLocationIssues.some(recorded => !questLocationIssues.some(issue => issue.detail === recorded.detail))) {
+    throw new Error('文字冒险主线地点返修证据无法重现已签收的冲突')
+  }
   const providerBlockingIssues = !reviewEvidenceInvalid && Array.isArray(reviewPayload.issues)
     ? reviewPayload.issues.flatMap(value => {
         const issue = value && typeof value === 'object' && !Array.isArray(value)
@@ -4183,7 +4243,7 @@ export async function recoveryInvalidatedTaskKeys(input: {
     ...textAdventureUnauthorizedKinshipIssuesV1(reviewedNarrative, reviewedCast),
     ...textAdventureDialogueAttributionIssuesV1(reviewedNarrative, reviewedCast),
     ...textAdventureSceneSpeakerAuthorityIssuesV1(reviewedNarrative, reviewedArcPlan, reviewedCast),
-    ...textAdventureQuestLocationAuthorityIssuesV1(reviewedMainQuestPlan, reviewedLocationTitles),
+    ...questLocationIssues,
   ].map(issue => [
     `${issue.artifactKey}\n${issue.detail}\n${issue.recommendation}`, issue,
   ] as const)).values()]
@@ -4371,6 +4431,16 @@ export async function recoveryInvalidatedTaskKeys(input: {
         const taskKey = taskByArtifactKey.get(artifactKey)
         return taskKey ? sceneScriptPartKeys(taskKey) : []
       }))
+  if (questLocationIssues.length > 0 && !invalidated.has('content.main-quest-plan')) {
+    throw new Error('文字冒险主线地点返修缺少已登记的主线任务')
+  }
+  // The recomputed fix changes objective copy while keeping the frozen
+  // locations and scene keys. Keep the existing visual plan when no other
+  // blocking issue requires media to be rebuilt.
+  const preserveQuestLocationMedia = questLocationIssues.length > 0
+    && !reviewEvidenceInvalid
+    && blockingIssues.every(issue => questLocationIssues.some(locationIssue => locationIssue === issue)
+      || textAdventureNarrativeRepairPreservesFrozenMediaV1([issue]))
   if (invalidated.size === 0) {
     for (const taskKey of textAdventureQualityReviewRerunTaskKeysV1(input.plan)) {
       invalidated.add(taskKey)
@@ -4381,7 +4451,7 @@ export async function recoveryInvalidatedTaskKeys(input: {
     expanded = false
     for (const task of input.plan.tasks) {
       if (invalidated.has(task.taskKey) || !task.dependsOn.some(key => invalidated.has(key))) continue
-      if (preserveFrozenMedia && task.taskKey === 'media.requirements') continue
+      if ((preserveFrozenMedia || preserveQuestLocationMedia) && task.taskKey === 'media.requirements') continue
       invalidated.add(task.taskKey)
       expanded = true
     }
@@ -4769,9 +4839,12 @@ function recordLedgerEntryV2(
   taskKey: string,
   entry: LedgerTaskV1,
   unknownUsageHold: ProductProductionTaskUsageV1 | null = null,
+  updateTaskProjection = true,
 ): void {
-  ledger.tasks[taskKey] = entry
-  if (entry.status === 'claimed') return
+  if (entry.status === 'claimed') {
+    if (updateTaskProjection) ledger.tasks[taskKey] = entry
+    return
+  }
   const identity = `${controlEpoch}:${entry.runId}:${entry.attempt}`
   const existing = ledger.attempts.find(attempt => (
     `${attempt.controlEpoch}:${attempt.runId}:${attempt.attempt}` === identity
@@ -4790,6 +4863,25 @@ function recordLedgerEntryV2(
     errorCode: entry.errorCode,
   }
   if (existing) {
+    const sameFailedAttempt = entry.status === 'failed' && existing.outcome === 'failed'
+      && existing.taskKey === taskKey && existing.idempotencyKey === entry.idempotencyKey
+    // Stopping an in-flight Run conservatively freezes its original hold.
+    // A received result may resolve only that same unknown attempt; it cannot
+    // replace known charges, author dispositions or another epoch's task.
+    const lateLocalMeasurement = existing.errorCode === 'task-stopped-before-dispatch' && existing.usage != null
+      && canonicalProductProductionJsonV2(existing.usage) === canonicalProductProductionJsonV2(zeroUsage())
+      && entry.usage?.modelCalls === 0 && entry.usage.mediaCalls === 0 && entry.usage.costUsd === 0
+      && entry.usage.inputTokens === 0 && entry.usage.outputTokens === 0
+    if (!existing.resolution && (!existing.usageKnown || lateLocalMeasurement) && entry.usage != null && sameFailedAttempt) {
+      existing.usage = structuredClone(entry.usage)
+      existing.usageKnown = true
+      if (updateTaskProjection) ledger.tasks[taskKey] = { ...entry, errorCode: existing.errorCode }
+      return
+    }
+    // A later callback without measured usage cannot weaken an existing hold
+    // or charge. The same exact measurement is also an idempotent replay.
+    if (sameFailedAttempt && (entry.usage == null || existing.usageKnown
+      && canonicalProductProductionJsonV2(entry.usage) === canonicalProductProductionJsonV2(existing.usage))) return
     if (canonicalProductProductionJsonV2(existing) !== canonicalProductProductionJsonV2(attempt)) {
       throw new Error(
         `[product-production-scheduler] budget ledger attempt 不可覆写:${identity}:` +
@@ -4797,9 +4889,11 @@ function recordLedgerEntryV2(
         `${existing.idempotencyKey !== attempt.idempotencyKey ? 'idempotency-key-mismatch' : 'receipt-mismatch'}`,
       )
     }
+    if (updateTaskProjection) ledger.tasks[taskKey] = entry
     return
   }
   ledger.attempts.push(attempt)
+  if (updateTaskProjection) ledger.tasks[taskKey] = entry
 }
 
 async function settleLedger(input: {
@@ -4808,16 +4902,135 @@ async function settleLedger(input: {
   taskKey: string
   entry: LedgerTaskV1
   unknownUsageHold?: ProductProductionTaskUsageV1 | null
+  requireOriginalAttempt?: boolean
 }): Promise<void> {
   await db.transaction('rw', db.productBuilds, async () => {
     const build = await db.productBuilds.get(input.buildId)
-    if (!build || build.controlEpoch !== input.controlEpoch) throw new Error('[product-production-scheduler] ledger epoch 已过期')
+    if (!build || build.controlEpoch < input.controlEpoch) throw new Error('[product-production-scheduler] ledger epoch 已过期')
     const ledger = parseLedger(build.budgetLedgerJson)
+    const historical = build.controlEpoch !== input.controlEpoch
+    const originalClaim = ledger.tasks[input.taskKey]
+    const retainsOriginalClaim = originalClaim?.status === 'claimed' && originalClaim.runId === input.entry.runId
+      && originalClaim.attempt === input.entry.attempt && originalClaim.idempotencyKey === input.entry.idempotencyKey
+      && (!historical || parsedObject(build.planJson).controlEpoch === input.controlEpoch)
+    const originalAttempt = ledger.attempts.find(attempt => (
+      attempt.controlEpoch === input.controlEpoch && attempt.taskKey === input.taskKey
+      && attempt.runId === input.entry.runId && attempt.attempt === input.entry.attempt
+      && attempt.idempotencyKey === input.entry.idempotencyKey
+    ))
+    if (historical && (input.entry.status !== 'failed' || !retainsOriginalClaim && !originalAttempt)) {
+      throw new Error('[product-production-scheduler] historical ledger 缺少原 attempt 封账')
+    }
+    if (input.requireOriginalAttempt && !retainsOriginalClaim && !originalAttempt) {
+      throw new Error('[product-production-scheduler] late ledger 缺少匹配的原 attempt')
+    }
+    if (input.entry.status === 'failed' && build.rootTerminalReceiptHash
+      && ['preview-ready', 'release-ready', 'released', 'archived'].includes(build.status)) {
+      // A terminal receipt already binds the original charge or conservative
+      // hold. A late callback cannot mutate those published receipt bytes.
+      if (!originalAttempt) throw new Error('[product-production-scheduler] sealed ledger 缺少原 attempt 封账')
+      return
+    }
+    const laterClaim = input.entry.status === 'failed' && originalClaim != null
+      && (originalClaim.runId !== input.entry.runId || originalClaim.attempt > input.entry.attempt)
     recordLedgerEntryV2(
-      ledger, input.controlEpoch, input.taskKey, input.entry, input.unknownUsageHold ?? null,
+      ledger, input.controlEpoch, input.taskKey, input.entry, input.unknownUsageHold ?? null, !historical && !laterClaim,
     )
-    await db.productBuilds.update(build.id!, { budgetLedgerJson: canonicalProductProductionJsonV2(ledger), updatedAt: Date.now() })
+    const budgetLedgerJson = canonicalProductProductionJsonV2(ledger)
+    if (budgetLedgerJson !== build.budgetLedgerJson) {
+      await db.productBuilds.update(build.id!, { budgetLedgerJson, updatedAt: Date.now() })
+    }
   })
+}
+
+const OBSERVED_TASK_USAGE_SCHEMA = 'storyforge.product-production-observed-task-usage'
+
+async function readObservedTaskUsageV1(input: {
+  scope: WorkspaceScope
+  snapshot: AgentRunSnapshotV1
+  taskKey: string
+  attempt: number
+  controlEpoch: number
+  idempotencyKey: string
+}): Promise<ProductProductionTaskUsageV1 | null> {
+  for (const event of [...input.snapshot.events].reverse()) {
+    if (event.type !== 'evidence.artifact.recorded' || event.payload.artifactKind !== 'tool-result'
+      || event.payload.stepId !== input.taskKey || event.payload.attempt !== input.attempt) continue
+    const evidence = parsedObject(await readAgentRunArtifactExactV1({
+      projectId: input.scope.projectId, artifactKind: 'tool-result', contentHash: event.payload.contentHash,
+    }))
+    if (evidence.schema !== OBSERVED_TASK_USAGE_SCHEMA) continue
+    exactLedgerKeys(evidence, ['schema', 'version', 'taskKey', 'attempt', 'controlEpoch', 'idempotencyKey', 'usage'], 'observed-task-usage')
+    if (evidence.version !== 1 || evidence.taskKey !== input.taskKey || evidence.attempt !== input.attempt
+      || evidence.controlEpoch !== input.controlEpoch || evidence.idempotencyKey !== input.idempotencyKey) {
+      throw new Error('[product-production-scheduler] observed usage 与原 attempt 不一致')
+    }
+    return parseLedgerUsage(evidence.usage, 'observed-task-usage')
+  }
+  return null
+}
+
+/** Close started claims against the exact outgoing Plan/Run before clearing
+ * their task projection. A verified measured response wins over a hold;
+ * dispatch without measurement keeps the original conservative reservation. */
+async function prepareStoppedClaimAccountingV1(scope: WorkspaceScope, build: ProductBuildRecordV1) {
+  const ledger = parseLedger(build.budgetLedgerJson)
+  const claims = Object.entries(ledger.tasks).filter(([, entry]) => entry.status === 'claimed')
+  const witnesses: AgentRunSnapshotV1['run'][] = []
+  if (claims.length === 0) return { ledger, witnesses }
+  const plan = parseProductProductionPlanV3(build.planJson)
+  if (await hashProductProductionValueV2(plan) !== build.planHash) {
+    throw new Error('[product-production-scheduler] 停止任务的原 Plan 预算 hash 不一致')
+  }
+  for (const [taskKey, entry] of claims) {
+    if (ledger.attempts.some(row => row.controlEpoch === plan.controlEpoch && row.taskKey === taskKey
+      && row.runId === entry.runId && row.attempt === entry.attempt && row.idempotencyKey === entry.idempotencyKey)) continue
+    const task = plan.tasks.find(value => value.taskKey === taskKey)
+    const snapshot = await readAgentRunV1(scope, entry.runId)
+    const boundary = snapshot.contract.scope.productProduction
+    if (!task || !boundary || boundary.taskKey !== taskKey || boundary.productBuildId !== build.id
+      || boundary.buildNumber !== build.buildNumber || boundary.planHash !== build.planHash
+      || boundary.controlEpoch !== plan.controlEpoch || snapshot.run.productBuildId !== build.id
+      || snapshot.run.parentRunId !== ledger.rootRunId) {
+      throw new Error('[product-production-scheduler] 停止任务的 claim 与原 Run/Plan 不一致')
+    }
+    witnesses.push(snapshot.run)
+    const attempt = snapshot.projection.steps[taskKey]?.attempt ?? 0
+    if (entry.attempt !== 0 && entry.attempt !== attempt) {
+      throw new Error('[product-production-scheduler] 停止任务的 claim attempt 不一致')
+    }
+    if (attempt === 0) continue
+    const start = snapshot.events.find(event => event.type === 'step.started'
+      && event.payload.stepId === taskKey && event.payload.attempt === attempt)
+    if (!start) throw new Error('[product-production-scheduler] 停止任务缺少原 attempt 开始证据')
+    const dispatched = costBearing(task) && snapshot.events.some(event => event.sequence > start.sequence
+      && (event.type === 'model.requested' || event.type === 'tool.called' && event.payload.toolName === 'game-media-provider'))
+    const measured = observedTaskClaimUsageV1(entry) ?? await readObservedTaskUsageV1({ scope, snapshot, taskKey, attempt,
+      controlEpoch: plan.controlEpoch, idempotencyKey: entry.idempotencyKey })
+    const checkpoint = measured == null ? await readLatestVerifiedAgentRunCheckpointV1(scope, entry.runId) : null
+    const payload = checkpoint?.resumePayload as Partial<ResumeCandidateV1> | undefined
+    const retained = payload?.schema !== 'storyforge.product-production-task-candidate' ? null
+      : parseResumeCandidate(payload, task, plan.controlEpoch)
+    const observed = measured ?? (retained?.attempt === attempt && retained.inputHash === entry.idempotencyKey
+      ? retained.result.usage : null)
+    const usage = observed ?? (dispatched ? null : zeroUsage())
+    recordLedgerEntryV2(ledger, plan.controlEpoch, taskKey, {
+      ...entry, attempt, status: 'failed', usage, errorCode: observed != null
+        ? 'task-stopped-before-admission' : dispatched ? 'provider-result-unknown' : 'task-stopped-before-dispatch',
+    }, usage == null ? reservationUsage(remainingTaskAttemptBudgetV1({
+      task, ledger, controlEpoch: plan.controlEpoch,
+    })) : null)
+  }
+  return { ledger, witnesses }
+}
+
+async function stoppedClaimWitnessesCurrentV1(witnesses: AgentRunSnapshotV1['run'][]): Promise<boolean> {
+  for (const expected of witnesses) {
+    const current = await db.agentRuns.get(expected.id!)
+    if (current?.lastSequence !== expected.lastSequence || current.contractHash !== expected.contractHash
+      || current.productBuildId !== expected.productBuildId) return false
+  }
+  return true
 }
 
 async function acceptCandidate(input: {
@@ -5437,7 +5650,7 @@ async function runClaimedTaskCore(input: {
     buildId: input.build.id,
     controlEpoch: input.build.controlEpoch,
     executingAttempt: {
-      taskKey: input.task.taskKey, runId: snapshot.run.id, attempt,
+      taskKey: input.task.taskKey, runId: snapshot.run.id, attempt, idempotencyKey: inputHash,
       reservation: attemptBudgetReservation,
     },
   })
@@ -5480,7 +5693,30 @@ async function runClaimedTaskCore(input: {
   }
   let result: ProductProductionTaskExecutionResultV1 | undefined
   let timedOut = false
-  const refreshExecutionAttemptAuthority = async (): Promise<boolean> => {
+  const taskRunId = snapshot.run.id
+  const settleDiscardedUsage = (usage: ProductProductionTaskUsageV1, errorCode: string) => settleLedger({
+    buildId: input.build.id, controlEpoch: input.build.controlEpoch, taskKey: input.task.taskKey, requireOriginalAttempt: true,
+    entry: { runId: taskRunId, attempt, status: 'failed', idempotencyKey: inputHash,
+      candidateHash: null, terminalReceiptHash: null, passedGateIds: [], usage, errorCode },
+  })
+  let closeAttempt!: () => void
+  const attemptClosed = new Promise<void>(resolve => { closeAttempt = resolve })
+  const retainTimedOutUsage = async (reported: unknown): Promise<void> => {
+    if (!timedOut || reported == null) return
+    // The original scheduler first seals the unknown reservation. A late
+    // transport receipt can then reconcile that attempt without reviving its
+    // Run or writing any of its candidate content.
+    try {
+      const usage = parseLedgerUsage(reported, 'late-timeout-usage')
+      await attemptClosed
+      await settleDiscardedUsage(usage, 'task-result-unknown')
+    } catch (error) {
+      // The conservative hold remains durable if the late receipt cannot be
+      // matched. Do not retry the provider or alter a sealed Build.
+      console.error('[product-production-scheduler] late timeout accounting:', safeExecutorError(error))
+    }
+  }
+  const refreshExecutionAttemptAuthority = async (boundary: 'executor' | 'provider'): Promise<boolean> => {
     snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
     const step = snapshot.projection.steps[input.task.taskKey]
     if (snapshot.projection.state !== 'running'
@@ -5490,10 +5726,30 @@ async function runClaimedTaskCore(input: {
       db.productBuilds.get(input.build.id),
       db.productProductions.get(input.productionId),
     ])
-    return !!currentBuild && !!currentProduction
-      && currentBuild.controlEpoch === input.build.controlEpoch
-      && currentProduction.controlEpoch === input.build.controlEpoch
-      && currentBuild.status === 'building'
+    if (!currentBuild || !currentProduction
+      || currentBuild.controlEpoch !== input.build.controlEpoch
+      || currentProduction.controlEpoch !== input.build.controlEpoch) return false
+    // A plain resume rebinds the frozen Plan and carries over the authored bytes.
+    // The preview stays available while the new epoch rebuilds its local proofs.
+    if (boundary === 'executor' && currentProduction.productType === 'ttrpg'
+      && currentProduction.status === 'preview-ready' && currentBuild.status === 'building'
+      && currentBuild.rootTerminalReceiptHash && currentBuild.releasedProductReleaseId === null
+      && currentBuild.planHash === input.build.planHash && input.task.executionMode === 'deterministic'
+      && ['ttrpg.open.media-plan', 'ttrpg.open.integration', 'ttrpg.open.quality'].includes(input.task.taskKey)
+      && input.task.budgetReservation.modelCalls === 0 && input.task.budgetReservation.mediaCalls === 0
+      && input.task.budgetReservation.maximumCostUsd === 0) {
+      const resume = parsedObject(currentBuild.failureJson)
+      const pause = resume.pauseReceipt
+      return resume.code === 'user-resumed' && resume.resumedFromControlEpoch === currentBuild.controlEpoch - 1
+        && !!pause && typeof pause === 'object' && 'code' in pause && pause.code === 'user-paused'
+        && 'pausedFromControlEpoch' in pause && pause.pausedFromControlEpoch === currentBuild.controlEpoch - 2
+    }
+    return (currentBuild.status === 'building'
+        // Confirmed AVG author inputs advance the two zero-provider assembly
+        // tasks to integrating before dispatch; this is still active execution.
+        || currentBuild.status === 'integrating' && currentProduction.productType === 'avg'
+          && input.task.executionMode === 'deterministic'
+          && ['avg.assembly.integrate', 'avg.assembly.verify'].includes(input.task.taskKey))
       && currentProduction.status === 'producing'
   }
   const executionController = new AbortController()
@@ -5502,7 +5758,7 @@ async function runClaimedTaskCore(input: {
   else input.signal.addEventListener('abort', abortFromParent, { once: true })
   let timeoutHandle: ReturnType<typeof globalThis.setTimeout> | null = null
   const recordRawOutput = async (output: string): Promise<void | 'discarded-stale'> => {
-    if (!await refreshExecutionAttemptAuthority()) return 'discarded-stale'
+    if (!await refreshExecutionAttemptAuthority('provider')) return 'discarded-stale'
     const recorded = await recordAgentRunArtifactV1({
       scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
       artifactKind: 'raw-response', content: output,
@@ -5510,7 +5766,7 @@ async function runClaimedTaskCore(input: {
     })
     snapshot = recorded.snapshot
   }
-  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+  const startTimeout = () => new Promise<never>((_resolve, reject) => {
     timeoutHandle = globalThis.setTimeout(() => {
       timedOut = true
       const timeoutError = new Error(
@@ -5526,6 +5782,11 @@ async function runClaimedTaskCore(input: {
       ? Math.min(input.task.timeoutMs, attemptBudgetReservation.durationMs) : input.task.timeoutMs)
   })
   try {
+    if (!authorizedDirectResult && (!await refreshExecutionAttemptAuthority('executor') || executionController.signal.aborted)) {
+      // A stop can win after the durable request boundary but before the
+      // executor is entered. No provider was invoked by this callback.
+      throw Object.assign(new DOMException('原执行授权已停止', 'AbortError'), { productProductionUsage: zeroUsage() })
+    }
     result = authorizedDirectResult?.result ?? await Promise.race([
       input.executor({
         scope: input.scope, productionId: input.productionId, buildId: input.build.id,
@@ -5540,30 +5801,39 @@ async function runClaimedTaskCore(input: {
         inputArtifacts: artifacts, capabilityBindings: bindings, authorResolution,
         signal: executionController.signal,
         beforeAdditionalModelRequest: async () => {
-          if (!await refreshExecutionAttemptAuthority()) return 'discarded-stale'
+          if (!await refreshExecutionAttemptAuthority('provider')) return 'discarded-stale'
         },
         onModelOutput: recordRawOutput,
         ...(input.task.executionMode === 'media-provider' ? { onMediaOutput: recordRawOutput } : {}),
+      }).then(async response => {
+        await retainTimedOutUsage(response?.usage)
+        return response
+      }, async error => {
+        await retainTimedOutUsage(paidUsageFromExecutorError(error))
+        throw error
       }),
-      timeoutPromise,
+      startTimeout(),
     ])
     validateExecutionResult(input.task, result, attemptBudgetReservation)
+    if (result.usage.outputTokens > attemptBudgetReservation.outputTokens) {
+      // The task's billing delta is not a new Build authorization. Before
+      // using this candidate, recheck the hard cap with its measured output
+      // and the still-live reservations of any siblings.
+      await assertBuildLifetimeBudgetCapacity({
+        scope: input.scope, productionId: input.productionId, buildId: input.build.id,
+        controlEpoch: input.build.controlEpoch, executingAttempt: {
+          taskKey: input.task.taskKey, runId: snapshot.run.id, attempt, idempotencyKey: inputHash,
+          reservation: { ...attemptBudgetReservation, outputTokens: result.usage.outputTokens },
+        },
+        measuredUsage: result.usage,
+      })
+    }
   } catch (error) {
     // Dedicated executors such as P1/P9 persist nested durable child-step
     // evidence on this same Run. Rebase the outer snapshot before writing the
     // failure envelope so their legitimate sequence advancement is preserved.
     snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
     const classifiedFailure = await classifyHarnessFailureV1(error)
-    const recordedFailure = await recordAgentRunArtifactV1({
-      scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
-      artifactKind: 'tool-result',
-      content: canonicalProductProductionJsonV2({
-        schema: 'storyforge.product-task-failure', version: 1,
-        taskKey: input.task.taskKey, detail: safeExecutorError(error),
-      }),
-      expectedLastSequence: snapshot.projection.lastSequence,
-    })
-    snapshot = recordedFailure.snapshot
     const paidUsage = result?.usage
       ?? (error instanceof ProductProductionDraftRejectedErrorV1
         || error instanceof ProductProductionRetryableExecutionErrorV1
@@ -5603,7 +5873,8 @@ async function runClaimedTaskCore(input: {
       : error instanceof Error && error.message.includes('provider-safety-refusal')
         ? 'provider-safety-refusal'
         : paidUsageBudgetExceeded
-          || (error instanceof Error && error.message.includes('task usage 超出 Plan 预算预留'))
+          || (error instanceof Error && (error.message.includes('task usage 超出 Plan 预算预留')
+            || error.message.includes('Build lifetime budget')))
           ? 'task-budget-exceeded'
           : !classifiedFailure.retryable ? 'task-executor-nonretryable' : 'task-executor-failed'
     const retryable = permitsAutomaticTaskRetry(code)
@@ -5612,14 +5883,6 @@ async function runClaimedTaskCore(input: {
       && !['task-aborted', 'task-draft-rejected', 'task-executor-nonretryable'].includes(code)
       && classifiedFailure.retryable
       && attempt < input.task.maxAttempts
-    snapshot = await append(input.scope, snapshot, 'step.failed', {
-      stepId: input.task.taskKey, attempt, code,
-      retryable,
-      category: code === 'task-aborted' ? 'cancelled'
-        : code === 'task-timeout' ? 'transient'
-        : code === 'provider-safety-refusal' || code === 'task-budget-exceeded' ? 'deterministic' : 'unknown',
-      action: retryable ? 'retry' : 'fail',
-    })
     const failure = {
       taskKey: input.task.taskKey, code, attempt, detail: safeExecutorError(error),
       failureProvenance: {
@@ -5633,28 +5896,41 @@ async function runClaimedTaskCore(input: {
     const cancellationReason = (reason: string) => (
       `${reason};code=${code};detail=${failure.detail}`.slice(0, 1_000)
     )
+    // Financial settlement must survive even when the old Run is already
+    // cancelled. Record it before mutating the Run or its Build disposition.
+    await settleLedger({
+      buildId: input.build.id, controlEpoch: input.build.controlEpoch, taskKey: input.task.taskKey,
+      unknownUsageHold: paidUsage == null && costBearing(input.task)
+        ? reservationUsage(attemptBudgetReservation) : null,
+      entry: {
+        runId: snapshot.run.id, attempt, status: 'failed', idempotencyKey: inputHash,
+        candidateHash: null, terminalReceiptHash: null, passedGateIds: [],
+        usage: paidUsage, errorCode: code,
+      },
+    })
     try {
-      // A sibling may already have stopped the Build, but this paid attempt
-      // still belongs to the same immutable Build epoch and must be settled.
-      await settleLedger({
-        buildId: input.build.id, controlEpoch: input.build.controlEpoch, taskKey: input.task.taskKey,
-        unknownUsageHold: paidUsage == null && costBearing(input.task)
-          ? reservationUsage(attemptBudgetReservation) : null,
-        entry: {
-          runId: snapshot.run.id, attempt, status: 'failed', idempotencyKey: inputHash,
-          candidateHash: null, terminalReceiptHash: null, passedGateIds: [],
-          usage: paidUsage, errorCode: code,
-        },
+      snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
+      if (snapshot.projection.state !== 'running') return
+      snapshot = (await recordAgentRunArtifactV1({
+        scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
+        artifactKind: 'tool-result',
+        content: canonicalProductProductionJsonV2({
+          schema: 'storyforge.product-task-failure', version: 1,
+          taskKey: input.task.taskKey, detail: safeExecutorError(error),
+        }),
+        expectedLastSequence: snapshot.projection.lastSequence,
+      })).snapshot
+      snapshot = await append(input.scope, snapshot, 'step.failed', {
+        stepId: input.task.taskKey, attempt, code, retryable,
+        category: code === 'task-aborted' ? 'cancelled'
+          : code === 'task-timeout' ? 'transient'
+          : code === 'provider-safety-refusal' || code === 'task-budget-exceeded' ? 'deterministic' : 'unknown',
+        action: retryable ? 'retry' : 'fail',
       })
-    } catch (ledgerError) {
-      const current = await db.productBuilds.get(input.build.id)
-      if (!current || current.controlEpoch !== input.build.controlEpoch) {
-        await append(input.scope, snapshot, 'run.cancelled', {
-          reason: cancellationReason('task-failed-after-control-epoch-change'),
-        })
-        return
-      }
-      throw ledgerError
+    } catch (runError) {
+      snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
+      if (snapshot.projection.state !== 'running') return
+      throw runError
     }
 
     const disposition = await db.transaction(
@@ -5707,11 +5983,47 @@ async function runClaimedTaskCore(input: {
   } finally {
     if (timeoutHandle != null) globalThis.clearTimeout(timeoutHandle)
     input.signal.removeEventListener('abort', abortFromParent)
+    closeAttempt()
   }
   if (!result) throw new Error('[product-production-scheduler] executor 未返回结果')
+  const paidUsage = result.usage
+  const discardStoppedResult = async (): Promise<boolean> => {
+    if (await refreshExecutionAttemptAuthority('executor')) return false
+    const current = await db.productBuilds.get(input.build.id)
+    if (!current) return true
+    // Book first: cancellation and candidate authority are independent from
+    // the cost of this exact, already dispatched attempt.
+    await settleDiscardedUsage(paidUsage, 'late-result-after-build-stop')
+    snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
+    if (snapshot.projection.state === 'running') {
+      snapshot = await append(input.scope, snapshot, 'budget.settled', {
+        stepId: input.task.taskKey, modelCalls: paidUsage.modelCalls, toolCalls: paidUsage.mediaCalls,
+        tokens: paidUsage.inputTokens + paidUsage.outputTokens,
+      })
+      await append(input.scope, snapshot, 'run.cancelled', { reason: 'late-result-after-control-epoch-change' })
+    }
+    return true
+  }
   // The executor may own nested model/tool boundaries on the same durable
   // Run. Always append the outer response/candidate from the latest sequence.
   snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
+  if (await discardStoppedResult()) return
+  if (costBearing(input.task)) {
+    try {
+      snapshot = (await recordAgentRunArtifactV1({
+        scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
+        artifactKind: 'tool-result', expectedLastSequence: snapshot.projection.lastSequence,
+        content: canonicalProductProductionJsonV2({
+          schema: OBSERVED_TASK_USAGE_SCHEMA, version: 1, taskKey: input.task.taskKey, attempt,
+          controlEpoch: input.build.controlEpoch, idempotencyKey: inputHash, usage: paidUsage,
+        }),
+      })).snapshot
+    } catch (error) {
+      snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
+      if (await discardStoppedResult()) return
+      throw error
+    }
+  }
   const candidateHash = await hashProductProductionValueV2(result)
   if (authorizedDirectResult) {
     snapshot = await append(input.scope, snapshot, 'tool.returned', {
@@ -5762,19 +6074,12 @@ async function runClaimedTaskCore(input: {
     })
     snapshot = finalized.snapshot
   }
-  await input.onDurableBoundary?.('provider.responded', snapshot)
-  const current = await db.productBuilds.get(input.build.id)
-  if (!current || current.controlEpoch !== input.build.controlEpoch
-    || ['paused', 'cancelled', 'failed', 'recovery-required', 'archived', 'released'].includes(current.status)) {
-    snapshot = await append(input.scope, snapshot, 'budget.settled', {
-      stepId: input.task.taskKey,
-      modelCalls: result.usage.modelCalls,
-      toolCalls: result.usage.mediaCalls,
-      tokens: result.usage.inputTokens + result.usage.outputTokens,
-    })
-    await append(input.scope, snapshot, 'run.cancelled', { reason: 'late-result-after-control-epoch-change' })
-    return
+  try {
+    await input.onDurableBoundary?.('provider.responded', snapshot)
+  } catch (error) {
+    throw new ProductProductionDurableBoundaryInterruptionV1(error)
   }
+  if (await discardStoppedResult()) return
   snapshot = await append(input.scope, snapshot, 'candidate.persisted', {
     stepId: input.task.taskKey, attempt, candidateHash, requiresConfirmation: false,
   })
@@ -5823,9 +6128,27 @@ async function settleEscapedClaimedTaskFailure(input: {
   if (checkpoint?.resumePayload || step.candidateHash) throw error
 
   const current = await db.productBuilds.get(input.build.id)
+  const ledger = current == null ? null : parseLedger(current.budgetLedgerJson)
+  const claimed = ledger?.tasks[input.task.taskKey]
+  const attempt = Math.max(1, step.attempt)
+  const previous = ledger?.attempts.find(entry => entry.controlEpoch === input.build.controlEpoch
+    && entry.taskKey === input.task.taskKey && entry.runId === snapshot.run.id && entry.attempt === attempt)
+  const idempotencyKey = previous?.idempotencyKey
+    ?? (claimed?.runId === snapshot.run.id && claimed.attempt === attempt ? claimed.idempotencyKey : '')
+  const measured = (claimed?.runId === snapshot.run.id && claimed.attempt === attempt
+    ? observedTaskClaimUsageV1(claimed) : null) ?? await readObservedTaskUsageV1({ scope: input.scope, snapshot, taskKey: input.task.taskKey,
+    attempt, controlEpoch: input.build.controlEpoch, idempotencyKey })
   if (!current || current.controlEpoch !== input.build.controlEpoch
     || ['paused', 'cancelled', 'failed', 'recovery-required', 'archived', 'released'].includes(current.status)) {
-    await append(input.scope, snapshot, 'run.cancelled', { reason: 'task-error-after-control-epoch-change' })
+    if (current && measured != null) await settleLedger({
+      buildId: input.build.id, controlEpoch: input.build.controlEpoch, taskKey: input.task.taskKey,
+      entry: { runId: snapshot.run.id, attempt, status: 'failed', idempotencyKey,
+        candidateHash: null, terminalReceiptHash: null, passedGateIds: [], usage: measured,
+        errorCode: 'task-finalization-failed' },
+    })
+    if (snapshot.projection.state === 'running') {
+      await append(input.scope, snapshot, 'run.cancelled', { reason: 'task-error-after-control-epoch-change' })
+    }
     return
   }
 
@@ -5855,6 +6178,23 @@ async function settleEscapedClaimedTaskFailure(input: {
       attempt: Math.max(1, step.attempt),
     },
   }
+  await settleLedger({
+    buildId: input.build.id,
+    controlEpoch: input.build.controlEpoch,
+    taskKey: input.task.taskKey,
+    unknownUsageHold: providerRequested && measured == null ? reservationUsage(input.task.budgetReservation) : null,
+    entry: {
+      runId: snapshot.run.id,
+      attempt: failure.attempt,
+      status: 'failed',
+      idempotencyKey,
+      candidateHash: null,
+      terminalReceiptHash: null,
+      passedGateIds: [],
+      usage: measured ?? (providerRequested ? null : zeroUsage()),
+      errorCode: code,
+    },
+  })
   snapshot = await append(input.scope, snapshot, 'step.failed', {
     stepId: input.task.taskKey,
     attempt: failure.attempt,
@@ -5863,24 +6203,7 @@ async function settleEscapedClaimedTaskFailure(input: {
     category: providerRequested ? 'unknown' : 'deterministic',
     action: 'fail',
   })
-  snapshot = await append(input.scope, snapshot, 'run.failed', { code, retryable: false })
-  await settleLedger({
-    buildId: input.build.id,
-    controlEpoch: input.build.controlEpoch,
-    taskKey: input.task.taskKey,
-    unknownUsageHold: providerRequested ? reservationUsage(input.task.budgetReservation) : null,
-    entry: {
-      runId: snapshot.run.id,
-      attempt: failure.attempt,
-      status: 'failed',
-      idempotencyKey: '',
-      candidateHash: null,
-      terminalReceiptHash: null,
-      passedGateIds: [],
-      usage: providerRequested ? null : zeroUsage(),
-      errorCode: code,
-    },
-  })
+  await append(input.scope, snapshot, 'run.failed', { code, retryable: false })
   await db.transaction('rw', scopeTransactionTables(db.productBuilds, db.productProductions), async () => {
     const build = await db.productBuilds.get(input.build.id)
     const production = await db.productProductions.get(input.productionId)
@@ -6026,8 +6349,11 @@ async function reconcileAbandonedTaskRunsV1(input: {
     const claimed = ledger.tasks[task.taskKey]
     const idempotencyKey = claimed?.runId === snapshot.run.id
       && claimed.attempt === attempt ? claimed.idempotencyKey : ''
+    const measured = (claimed?.runId === snapshot.run.id && claimed.attempt === attempt
+      ? observedTaskClaimUsageV1(claimed) : null) ?? await readObservedTaskUsageV1({ scope: input.scope, snapshot, taskKey: task.taskKey,
+      attempt, controlEpoch: input.build.controlEpoch, idempotencyKey })
 
-    if (attemptBoundaryKnown && !providerRequested && !providerResponded && !candidatePersisted) {
+    if (measured == null && attemptBoundaryKnown && !providerRequested && !providerResponded && !candidatePersisted) {
       const code = 'task-timeout-before-dispatch'
       const retryable = attempt < task.maxAttempts
       snapshot = await append(input.scope, snapshot, 'step.failed', {
@@ -6052,25 +6378,25 @@ async function reconcileAbandonedTaskRunsV1(input: {
       continue
     }
 
-    const code = pendingProviderRequest
+    const code = measured == null && pendingProviderRequest
       ? 'provider-result-unknown' : 'task-finalization-failed'
     const detail = code === 'provider-result-unknown'
       ? '调度进程在 provider 请求后中断；结果与实际用量均未知，禁止自动重复调用，必须由作者显式确认重试。'
       : 'provider 已返回或候选 hash 已记录，但缺少可验证的候选检查点 payload；禁止自动重复调用，必须由作者显式确认重试。'
+    await settleLedger({
+      buildId: input.build.id, controlEpoch: input.build.controlEpoch, taskKey: task.taskKey,
+      unknownUsageHold: measured == null && costBearing(task) ? reservationUsage(task.budgetReservation) : null,
+      entry: {
+        runId: snapshot.run.id, attempt, status: 'failed', idempotencyKey,
+        candidateHash: null, terminalReceiptHash: null, passedGateIds: [],
+        usage: measured, errorCode: code,
+      },
+    })
     snapshot = await append(input.scope, snapshot, 'step.failed', {
       stepId: task.taskKey, attempt, code, retryable: false,
       category: 'unknown', action: 'fail',
     })
-    snapshot = await append(input.scope, snapshot, 'run.failed', { code, retryable: false })
-    await settleLedger({
-      buildId: input.build.id, controlEpoch: input.build.controlEpoch, taskKey: task.taskKey,
-      unknownUsageHold: costBearing(task) ? reservationUsage(task.budgetReservation) : null,
-      entry: {
-        runId: snapshot.run.id, attempt, status: 'failed', idempotencyKey,
-        candidateHash: null, terminalReceiptHash: null, passedGateIds: [],
-        usage: null, errorCode: code,
-      },
-    })
+    await append(input.scope, snapshot, 'run.failed', { code, retryable: false })
     blockers.push({ taskKey: task.taskKey, code, attempt, detail, failureProvenance })
   }
 
@@ -6178,6 +6504,11 @@ async function compileTerminalBuild(input: {
     throw new Error('[product-production-scheduler] quality Artifact/package hash 不一致')
   }
   const ledger = parseLedger(build.budgetLedgerJson)
+  if (!input.restoreImportedProofs) {
+    const exceeded = buildLifetimeBudgetExceededFieldsV1({ ledger, plan: input.plan,
+      brief: input.brief, controlEpoch: build.controlEpoch })
+    if (exceeded.length > 0) throw new Error(`[product-production-scheduler] Build lifetime budget 不足:${exceeded.join(',')}`)
+  }
   const children = await childSnapshots(input.scope, build.id!, input.root.run.id)
   const taskReceipts = input.plan.tasks.map(task => {
     const child = children.get(task.taskKey)
@@ -6220,7 +6551,9 @@ async function compileTerminalBuild(input: {
     buildManifestHash: manifestHash, mediaBindings, fallbackSummary,
   }
   const preview = runtimePackage.version === 1
-    ? await createProductBuildPreviewManifestV1({ ...previewInput, runtimePackage }, { ttrpgProtocol: 2 })
+    ? input.restoreImportedProofs
+      ? await verifyRestoredProductBuildPreviewManifestV1(build.previewManifestJson, { ...previewInput, runtimePackage }, { ttrpgProtocol: 2 })
+      : await createProductBuildPreviewManifestV1({ ...previewInput, runtimePackage }, { ttrpgProtocol: 2 })
     : await createProductBuildPreviewManifestV2({ ...previewInput, runtimePackage })
   if (input.restoreImportedProofs && (manifestHash !== build.manifestHash
     || packageHash !== build.packageHash || preview.previewHash !== build.previewHash
@@ -6244,40 +6577,43 @@ async function compileTerminalBuild(input: {
     : input.plan.productType === 'text-open-world'
       ? await createProductBuildRootBudgetEvidenceV1({ ...rootReceiptInput, expectedReceiptHash: rootTerminalReceiptHash })
       : undefined
-  let root = input.root
-  const importedRootReceipt = importedScopeReboundReceiptV1(root)
-  if (importedPublishedOrigin && root.projection.state === 'verifying') {
-    // A previous import verification may have committed its start before its
-    // caller disappeared. The complete original proof was rechecked above;
-    // finish that same verification, without another start or producer call.
-    root = await append(input.scope, root, 'verification.accepted', {
-      receiptHash: rootTerminalReceiptHash,
-    })
-  } else if (importedRootReceipt) {
-    const rootStep = root.projection.steps[ROOT_STEP_ID]
-    if (rootStep?.status !== 'succeeded' || importedRootReceipt !== build.rootTerminalReceiptHash) {
-      throw new Error('[product-production-scheduler] 导入 root 完成证据无法在新 scope 复验')
+  const importedRootReceipt = importedScopeReboundReceiptV1(input.root)
+  const rootStepOutputHash = !importedRootReceipt && input.root.projection.state !== 'completed'
+    ? await hashProductProductionValueV2({ manifestHash, taskReceipts }) : null
+  const finishRoot = async (initial: AgentRunSnapshotV1, appendEvent: typeof append) => {
+    let root = initial
+    if (importedPublishedOrigin && root.projection.state === 'verifying') {
+      // An interrupted import may have already committed its verification start.
+      root = await appendEvent(input.scope, root, 'verification.accepted', { receiptHash: rootTerminalReceiptHash })
+    } else if (importedRootReceipt) {
+      const rootStep = root.projection.steps[ROOT_STEP_ID]
+      if (rootStep?.status !== 'succeeded' || importedRootReceipt !== build.rootTerminalReceiptHash) {
+        throw new Error('[product-production-scheduler] 导入 root 完成证据无法在新 scope 复验')
+      }
+      root = await appendEvent(input.scope, root, 'verification.started', {
+        verifierSetVersion: importedPublishedOrigin ? 'product-production-root-published-origin-rebind-v1' : 'product-production-root-import-rebind-v1',
+      })
+      root = await appendEvent(input.scope, root, 'verification.accepted', { receiptHash: rootTerminalReceiptHash })
+    } else if (root.projection.state !== 'completed') {
+      root = await appendEvent(input.scope, root, 'step.succeeded', { stepId: ROOT_STEP_ID, attempt: 1, outputHash: rootStepOutputHash! })
+      root = await appendEvent(input.scope, root, 'verification.started', { verifierSetVersion: 'product-production-root-v1' })
+      root = await appendEvent(input.scope, root, 'verification.accepted', { receiptHash: rootTerminalReceiptHash })
+    } else if (root.projection.terminalReceiptHash !== rootTerminalReceiptHash) {
+      throw new Error('[product-production-scheduler] root Run terminal receipt 与 Build join 不一致')
     }
-    root = await append(input.scope, root, 'verification.started', {
-      verifierSetVersion: importedPublishedOrigin ? 'product-production-root-published-origin-rebind-v1' : 'product-production-root-import-rebind-v1',
-    })
-    root = await append(input.scope, root, 'verification.accepted', {
-      receiptHash: rootTerminalReceiptHash,
-    })
-  } else if (root.projection.state !== 'completed') {
-    root = await append(input.scope, root, 'step.succeeded', {
-      stepId: ROOT_STEP_ID, attempt: 1,
-      outputHash: await hashProductProductionValueV2({ manifestHash, taskReceipts }),
-    })
-    root = await append(input.scope, root, 'verification.started', { verifierSetVersion: 'product-production-root-v1' })
-    root = await append(input.scope, root, 'verification.accepted', { receiptHash: rootTerminalReceiptHash })
-  } else if (root.projection.terminalReceiptHash !== rootTerminalReceiptHash) {
-    throw new Error('[product-production-scheduler] root Run terminal receipt 与 Build join 不一致')
+    return root
   }
-  await db.transaction('rw', scopeTransactionTables(db.productBuilds, db.productProductions, db.productBuildArtifacts), async () => {
+  // Rebinding an existing imported seal retains its recoverable verification
+  // checkpoints and original receipt. Only a new seal joins mutable fees.
+  if (input.restoreImportedProofs) await finishRoot(input.root, append)
+  const commit = () => db.transaction('rw', input.restoreImportedProofs
+    ? scopeTransactionTables(db.productBuilds, db.productProductions, db.productBuildArtifacts)
+    : agentRunScopeTransactionTablesV1(input.root.run.id, db.productBuilds, db.productProductions, db.productBuildArtifacts,
+        db.agentRuns, db.agentRunEvents, db.worlds, db.works), async () => {
     const current = await db.productBuilds.get(build.id!)
     const currentProduction = await db.productProductions.get(production.id!)
-    if (!current || !currentProduction || current.controlEpoch !== build.controlEpoch || current.planHash !== build.planHash) {
+    if (!current || !currentProduction || current.controlEpoch !== build.controlEpoch || current.planHash !== build.planHash
+      || current.budgetLedgerJson !== build.budgetLedgerJson) {
       throw new Error('[product-production-scheduler] terminal commit CAS 已过期')
     }
     // The comparison was read outside this transaction. A stopped/changed
@@ -6305,6 +6641,27 @@ async function compileTerminalBuild(input: {
     const currentArtifacts = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
       .filter(row => row.controlEpoch === build.controlEpoch && (row.status === 'accepted' || row.status === 'carried-forward'))
     if (currentArtifacts.length !== artifacts.length) throw new Error('[product-production-scheduler] terminal commit Artifact 集合变化')
+    if (!input.restoreImportedProofs) {
+      // The new root events and Build seal share one IndexedDB transaction.
+      // A late charge that invalidates this read set commits neither half.
+      const root = await Dexie.Promise.resolve(readVerifiedAgentRunInTransactionV1(input.scope, input.root.run.id))
+      if (root.projection.lastSequence !== input.root.projection.lastSequence
+        || root.run.contractHash !== input.root.run.contractHash || root.run.productBuildId !== build.id) {
+        throw new Error('[product-production-scheduler] terminal root Run CAS 已过期')
+      }
+      const appendAtomic: typeof append = (scope, snapshot, type, payload) => (
+        Dexie.Promise.resolve(appendAgentRunEventWithSettlementInTransactionV1({
+          scope, snapshot, workspaceDirty: true,
+          event: parseAgentRunEventV1({
+            version: 1, runId: snapshot.run.id, sequence: snapshot.projection.lastSequence + 1,
+            generation: snapshot.projection.generation, projectId: snapshot.run.projectId,
+            worldGroupId: snapshot.run.worldGroupId ?? null, contractHash: snapshot.run.contractHash,
+            type, payload, createdAt: Date.now(),
+          }),
+        }))
+      )
+      await Dexie.Promise.resolve(finishRoot(root, appendAtomic))
+    }
     // TTRPG preserves its published Build envelope during proof recovery.
     // Other products retain their existing receipt-rebinding lifecycle.
     if (current.status === 'released' && production.productType === 'ttrpg') {
@@ -6344,6 +6701,8 @@ async function compileTerminalBuild(input: {
       stateRevision: currentProduction.stateRevision + 1, updatedAt: Date.now(),
     })
   })
+  if (input.restoreImportedProofs) await commit()
+  else await withAgentRunMutationLockV1(input.root.run.id, commit)
   return rootTerminalReceiptHash
 }
 
@@ -7324,6 +7683,9 @@ export async function runProductProductionSchedulerCycleV1(input: {
     return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
   }
   assertTextOpenWorldProductionNewWorkV1(current.production, current.briefRow, '继续制作调度')
+  if (current.production.productType === 'text-open-world') await assertTextOpenWorldBuildNewWorkV1({
+    scope, productionId: input.productionId, buildId: current.build.id!, operation: '开始制作调度',
+  })
   const state = await ensureRootRun({ scope, productionId: input.productionId, suppliedPlan: input.suppliedPlan })
   await invalidateStaleCarriedTextAdventureVisionClosureV1({
     scope,
@@ -7578,7 +7940,7 @@ export async function runProductProductionUntilBlockedV1(input: {
 }
 
 function buildLifetimeBudgetExceededFieldsV1(input: { ledger: SchedulerLedgerV2; plan: ProductProductionPlanV3; brief: ProductProductionBriefV3; controlEpoch: number
-  currentAuthorClaim?: { taskKey: string; runId: number; attempt: number; idempotencyKey: string; reservation: ProductTaskBudgetReservationV1 }
+  currentClaim?: { taskKey: string; runId: number; attempt: number; idempotencyKey: string; reservation: ProductTaskBudgetReservationV1 }
 }): string[] {
   const { ledger, plan } = input
   const planTaskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))
@@ -7595,14 +7957,18 @@ function buildLifetimeBudgetExceededFieldsV1(input: { ledger: SchedulerLedgerV2;
   const inFlight = Object.entries(ledger.tasks).flatMap(([taskKey, entry]) => {
     if (entry.status !== 'claimed') return []
     const task = planTaskByKey.get(taskKey)
-    const author = input.currentAuthorClaim
-    if (author && author.taskKey === taskKey && entry.runId === author.runId && entry.attempt === author.attempt
-      && entry.idempotencyKey === author.idempotencyKey) return [reservationUsage(author.reservation)]
-    return task ? [reservationUsage(remainingTaskAttemptBudgetV1({
+    // Only this exact claim can substitute a verified reservation or measured
+    // output; every sibling still occupies its conservative allowance.
+    const claim = input.currentClaim
+    if (claim && claim.taskKey === taskKey && entry.runId === claim.runId && entry.attempt === claim.attempt
+      && entry.idempotencyKey === claim.idempotencyKey) return [reservationUsage(claim.reservation)]
+    if (!task) return []
+    const reserved = reservationUsage(remainingTaskAttemptBudgetV1({
       task,
       ledger,
       controlEpoch: input.controlEpoch,
-    }))] : []
+    }))
+    return [{ ...reserved, outputTokens: Math.max(reserved.outputTokens, observedTaskClaimUsageV1(entry)?.outputTokens ?? 0) }]
   })
   const usage = sumTaskUsage([...charged, ...inFlight])
   const limits = input.brief.productionBudget
