@@ -228,6 +228,18 @@ export async function verifyWorkspaceContentRevisionV1(
   return verifyRevision(frozen, input)
 }
 
+/** Master recovery has already verified the original author intent and exact
+ * occupied target slots. Compare the original vector with only those rows removed. */
+export async function assertWorkspaceContentRevisionAfterOutlineAppendV1(
+  frozen: WorkspaceContentRevisionVectorV1,
+  input: { scope: WorkspaceScope; worldGroupId: number | null; additions: OutlineBatchAppendEvidenceV1['additions'] },
+): Promise<void> {
+  const result = await verifyRevision(frozen, input, input.additions)
+  if (!result.fresh) {
+    throw new Error(`候选生成后项目内容已变化，必须重新审查。变化表：${result.changedTables.join('、') || '未知'}`)
+  }
+}
+
 interface OutlineBatchRevisionContextV1 {
   snapshot: AgentRunSnapshotV1
   candidateHash: string
