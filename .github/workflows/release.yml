@@ -3,17 +3,6 @@ name: Release Current Local Package
 on:
   push:
     tags: ['v*']
-  pull_request:
-    paths:
-      - 'scripts/distribution/**'
-      - 'scripts/local-codex/**'
-      - 'vite.config.ts'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'src/lib/ai/proxy-endpoints.ts'
-      - 'src/components/settings/AIConfigPanel.tsx'
-      - 'src/components/settings/EmbeddingConfigCard.tsx'
-      - '.github/workflows/release.yml'
   workflow_dispatch:
     inputs:
       tag:
@@ -43,7 +32,6 @@ concurrency:
 
 jobs:
   release-checks:
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -90,22 +78,12 @@ jobs:
   clients:
     permissions:
       contents: write
-    if: github.event_name != 'pull_request'
     uses: ./.github/workflows/clients.yml
     with:
       release: true
     secrets: inherit
   build:
     needs: release-checks
-    if: >-
-      !cancelled() &&
-      (github.event_name == 'pull_request' || needs.release-checks.result == 'success') &&
-      !(github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       (startsWith(github.head_ref, 'fix/sfqa-') ||
-        startsWith(github.head_ref, 'refactor/sfqa-') ||
-        startsWith(github.head_ref, 'fix/quality') ||
-        startsWith(github.head_ref, 'feat/quality-audit-')))
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -119,7 +97,6 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Verify release metadata
-        if: github.event_name != 'pull_request'
         run: npm run check:release-metadata -- "${RELEASE_TAG}"
       - run: npm run test:distribution
       - name: Build local portable channel
@@ -181,7 +158,6 @@ jobs:
           retention-days: 5
 
   publish:
-    if: github.event_name != 'pull_request'
     needs: [package, clients, signed-upgrade]
     runs-on: ubuntu-latest
     permissions:
@@ -237,6 +213,5 @@ jobs:
   signed-upgrade:
     permissions:
       contents: write
-    if: github.event_name != 'pull_request'
     needs: clients
     uses: ./.github/workflows/client-release-upgrade.yml
