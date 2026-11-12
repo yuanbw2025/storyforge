@@ -21,8 +21,9 @@ export class CommercialCommunityReleasePolicyV1 implements CommunityReleasePolic
     creator: boolean
   }> {
     const principal = { userId, permissions: [] }
+    const entitlement = this.commercial.entitlementFor({ principal, releaseHash })
     return {
-      entitled: this.commercial.entitlementFor({ principal, releaseHash })?.status === 'active',
+      entitled: entitlement?.status === 'active' && entitlement.hostedAccess,
       creator: this.commercial.canRegisterRelease({ principal, releaseHash }),
     }
   }
