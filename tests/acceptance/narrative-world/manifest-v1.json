@@ -21,9 +21,24 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-quality137-integrated-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality137-judge-continuation-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the independently measured reader judge continuation changes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality134-static-bindings-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the integrated mainline before reader judge continuation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the previous baseline before tracking the updated architecture checker and its static binding analysis."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
         "workPackage": "NW-0B",
@@ -684,7 +699,9 @@
     "eslint.config.mjs",
     "package-lock.json",
     "package.json",
+    "scripts/ai-call-meta.mjs",
     "scripts/check-architecture.mjs",
+    "scripts/static-guard-bindings.mjs",
     "scripts/check-narrative-world-baseline.mjs",
     "scripts/evaluate-narrative-author-quality-local-codex.mjs",
     "scripts/evaluate-narrative-candidates-local-codex.mjs",
@@ -707,6 +724,8 @@
     "scripts/narrative-reader-contract.mjs",
     "scripts/narrative-reader-contract.test.mjs",
     "scripts/narrative-reader-judge-content.test.mjs",
+    "scripts/narrative-reader-judge-continuation.mjs",
+    "scripts/narrative-reader-judge-continuation.test.mjs",
     "scripts/narrative-reader-judge-contract.mjs",
     "scripts/narrative-reader-judge-contract.test.mjs",
     "scripts/narrative-reader-judge-coverage.mjs",
