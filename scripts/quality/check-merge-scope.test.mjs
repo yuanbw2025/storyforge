@@ -46,7 +46,11 @@ test('the manual AVG media workflow owns its production harnesses; ordinary prod
   assert.deepEqual(directTests(['src/lib/product-production/plan.ts'], [...suites, unit],
     () => ['../../src/lib/product-production/plan']), [unit])
   assert.ok(plan([list], present).nodeTests.includes('scripts/quality/check-merge-scope.test.mjs'))
-  assert.ok(readFileSync('.github/workflows/avg-media.yml', 'utf8').includes('vitest run < ' + list))
+  const manualWorkflow = readFileSync('.github/workflows/avg-media.yml', 'utf8')
+  assert.ok(manualWorkflow.includes('vitest run < ' + list))
+  const mixed = 'tests/regression/R-OPEN-WORLD3-experience-design.test.ts'
+  assert.deepEqual(plan([mixed], present).units, [mixed])
+  assert.ok(manualWorkflow.includes('vitest run --tagsFilter manual-media ' + mixed))
 })
 
 test('ordinary PRs only trigger the scoped check and releases retain their tagged entry', () => {
