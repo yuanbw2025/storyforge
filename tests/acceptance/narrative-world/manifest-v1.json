@@ -21,9 +21,39 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-quality008-main416-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-quality034-039-after341-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality109-after344-010-v1.json",
+        "workPackage": "SFQA-034",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality034039-isolated-v1.json",
+        "workPackage": "SFQA-034",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality010-post344-v1.json",
+        "workPackage": "SFQA-109",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality109-isolated-v1.json",
+        "workPackage": "SFQA-109",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality008-main416-v1.json",
+        "workPackage": "SFQA-010",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality010-main416-v1.json",
+        "workPackage": "SFQA-010",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-quality018-integrated-v1.json",
         "workPackage": "SFQA-008",
@@ -762,6 +792,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality019-portable-tree-v1.json",
         "workPackage": "SFQA-019-portable-tree",
         "note": "Preserve the initial independent tree-validation receipt before restoring stable parent-first insertion and measuring the shared portable-tree source."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality010-production-reader-v1.json",
+        "workPackage": "SFQA-010",
+        "note": "Preserved the measurement on the independent fix branch."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -1061,7 +1096,10 @@
     "tests/regression/R-NW-2E-numeric-runs.test.ts",
     "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
     "src/lib/types/state-card.ts",
-    "scripts/quality/critical-coverage-scopes.json"
+    "scripts/quality/critical-coverage-scopes.json",
+    "src/lib/product-production/original-response-author-source.ts",
+    "src/lib/product-production/original-response-booking.ts",
+    "src/lib/product-production/read-details.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",
