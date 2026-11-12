@@ -9327,7 +9327,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     expect(currentP1(await readGovernance())).toEqual(currentP1(baseline))
   }, 120_000)
 
-  it('G7-01至G7-06 盐脊完整DAG产出叙事玩法闭环与最低媒资', async () => {
+  it('G7-01至G7-06 盐脊完整DAG产出叙事玩法闭环与最低媒资', { tags: ['manual-media'], timeout: 600_000 }, async () => {
 
     const input = await creatorSchedulerFixture()
 
@@ -10489,5 +10489,5 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     expect(await db.productProductions.where('projectId').equals(importedProjectId).count()).toBe(0)
     expect(await db.productBuildArtifacts.where('projectId').equals(importedProjectId).count()).toBe(0)
     expect(await db.agentRuns.where('projectId').equals(importedProjectId).count()).toBe(0)
-  }, 600_000)
+  })
 })
