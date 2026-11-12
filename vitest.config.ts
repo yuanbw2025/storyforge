@@ -28,6 +28,7 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     setupFiles: ['./tests/setup.ts'],
+    tags: [{ name: 'manual-media', description: '完整生产与媒资验收，由手动工作流或发行执行' }],
     // GitHub's shared runner is materially slower than local development under
     // the instrumented coverage workload. Preserve the fast local feedback budget,
     // while giving ordinary deterministic DB tests enough room in CI before a

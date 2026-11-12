@@ -15,6 +15,18 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: xargs node_modules/.bin/vitest run < scripts/quality/avg-media-harnesses.txt
 
+  open-world-media:
+    name: 盐脊开放世界完整生产与媒资
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: node_modules/.bin/vitest run --tagsFilter manual-media tests/regression/R-OPEN-WORLD3-experience-design.test.ts
+
   avg-media-experimental:
     name: AVG 媒资实验路径（隔离浏览器）
     runs-on: ubuntu-latest
