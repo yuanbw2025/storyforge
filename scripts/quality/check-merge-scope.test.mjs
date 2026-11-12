@@ -33,10 +33,11 @@ test('the manual AVG media workflow owns its production harnesses; ordinary prod
   const list = 'scripts/quality/avg-media-harnesses.txt'
   const suites = readFileSync(list, 'utf8').trim().split(/\r?\n/)
   const visual = 'tests/regression/R-AVG-04A5-visual-planning-harness.test.ts'
-  const unit = 'tests/regression/R-SFQA097-creator-ending-count.test.ts'
+  const unit = 'tests/regression/R-AVG-05A-production-assembly.test.ts'
   assert.ok(suites.includes(visual))
+  assert.ok(suites.includes('tests/regression/R-AVG-05A-combined-media-stage.test.ts'))
   assert.equal(suites.length, new Set(suites).size)
-  assert.ok(suites.every(file => /^tests\/regression\/R-AVG-.*-harness\.test\.ts$/.test(file) && existsSync(file)))
+  assert.ok(suites.every(file => /^tests\/regression\/R-AVG-[a-zA-Z0-9-]+\.test\.ts$/.test(file) && existsSync(file)))
   assert.deepEqual(plan([...suites, unit], present).units, [unit])
   assert.deepEqual(directTests(['src/lib/product-production/plan.ts'], [...suites, unit],
     () => ['../../src/lib/product-production/plan']), [unit])
