@@ -41,16 +41,17 @@ export default function SaltRidgePage() {
     let cancelled = false
     void (async () => {
       try {
-        const installed = await saltRidgeShowcase.findInstalled()
-        if (!installed || cancelled) return
+        const releaseIds = await saltRidgeShowcase.listInstalledReleaseIds()
+        if (!releaseIds.length || cancelled) return
         const sessions = await db.productRuntimeSessions
           .where('productReleaseId')
-          .equals(installed.releaseId)
+          .anyOf(releaseIds)
           .toArray()
         const latest = sessions
           .filter(row => row.status !== 'archived')
           .sort((left, right) => right.updatedAt - left.updatedAt)[0]
-        if (!cancelled) {
+        const installed = await saltRidgeShowcase.findInstalled(latest?.productReleaseId ?? undefined)
+        if (installed && !cancelled) {
           setResumeId(latest?.id ?? null)
           setWorkspaceProjectId(installed.scope.projectId)
         }
@@ -67,15 +68,19 @@ export default function SaltRidgePage() {
     setError('')
     setProgress('正在准备盐脊…')
     try {
-      const installed = await saltRidgeShowcase.install(setProgress)
+      const saved = resume && resumeId != null ? await db.productRuntimeSessions.get(resumeId) : null
+      if (resume && (!saved || saved.productReleaseId == null || saved.status === 'archived')) {
+        throw new Error('原盐脊存档已不可用，请重试。')
+      }
+      const installed = saved?.productReleaseId != null
+        ? await saltRidgeShowcase.findInstalled(saved.productReleaseId)
+        : await saltRidgeShowcase.install(setProgress)
+      if (!installed || (saved && (saved.projectId !== installed.scope.projectId
+        || saved.worldId !== installed.scope.worldId || saved.workId !== installed.scope.workId))) {
+        throw new Error('存档与其冻结的盐脊版本不匹配。')
+      }
       const project = await db.projects.get(installed.scope.projectId)
       if (!project) throw new Error('盐脊工作区不存在，请重试。')
-      const saved = resume && resumeId != null
-        ? await db.productRuntimeSessions.get(resumeId)
-        : null
-      if (saved && saved.productReleaseId !== installed.releaseId) {
-        throw new Error('存档与当前盐脊版本不匹配。')
-      }
       const session = saved ?? await createTextOpenWorldInstance({
         scope: installed.scope,
         productReleaseId: installed.releaseId,
