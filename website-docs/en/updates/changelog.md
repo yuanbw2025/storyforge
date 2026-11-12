@@ -2,6 +2,13 @@
 
 
 
+
+## November 11, 2026 · Outline review, batch details and optional diagnostics
+
+[PR #303](https://github.com/yuanbw2025/storyforge/pull/303) merged as `5420f854`. Outline diagnosis displays empty-response, invalid-report and call errors while retaining raw responses. Selective rewriting checks the real source, preview and final patch, preserving unselected content verbatim. See [outlines and prose](/en/features/longform/writing).
+
+[PR #301](https://github.com/yuanbw2025/storyforge/pull/301) merged as `bc18dc84`, integrating history-bound deletion protection, explicit batch-outline adoption, desktop model connections, new Doubao defaults/retirement notices and the empty-save TTRPG selection-loop repair. General settings add an optional recent-operation trace that defaults to off. See [troubleshooting](/en/guides/troubleshooting) for preview, controls and basic-summary fallback. Formal installers and pending branches are tracked in [compatibility](/en/updates/compatibility) and [development status](/en/updates/development-status).
+
 ## November 10, 2026 · Community submissions and quality repairs
 
 Community sharing [#234](https://github.com/yuanbw2025/storyforge/pull/234) merged as `b1a4bf65`. Select novel or existing work-analysis content, inspect the exact public preview, confirm rights and submit. See [sharing steps](/en/features/longform/references#sharing-novels-and-book-analysis-publicly) for review status, withdrawal and appeals.

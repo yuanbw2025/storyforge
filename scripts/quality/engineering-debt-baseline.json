@@ -2408,66 +2408,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS2339\",\"Property 'initializer' does not exist on type 'ObjectLiteralElementLike'.\\n  Property 'initializer' does not exist on type 'MethodDeclaration'.\",\"49bdb933ff3a43fad72765aeeab74a5d94f17c9ad1af9e1335330469693337dd\",20,11]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS2339",
-        "message": "Property 'initializer' does not exist on type 'ObjectLiteralElementLike'.\n  Property 'initializer' does not exist on type 'MethodDeclaration'.",
-        "anchor": "49bdb933ff3a43fad72765aeeab74a5d94f17c9ad1af9e1335330469693337dd",
-        "line": 63,
-        "column": 20,
-        "start": 2798,
-        "length": 11
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7005\",\"Variable 'calls' implicitly has an 'any[]' type.\",\"935903801e11857a1e71b20e7c2d7eee9c4053fea1a2dfd2ae77181af207777c\",12,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7005",
-        "message": "Variable 'calls' implicitly has an 'any[]' type.",
-        "anchor": "935903801e11857a1e71b20e7c2d7eee9c4053fea1a2dfd2ae77181af207777c",
-        "line": 220,
-        "column": 12,
-        "start": 11066,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7005\",\"Variable 'transports' implicitly has an 'any[]' type.\",\"935903801e11857a1e71b20e7c2d7eee9c4053fea1a2dfd2ae77181af207777c\",19,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7005",
-        "message": "Variable 'transports' implicitly has an 'any[]' type.",
-        "anchor": "935903801e11857a1e71b20e7c2d7eee9c4053fea1a2dfd2ae77181af207777c",
-        "line": 220,
-        "column": 19,
-        "start": 11073,
-        "length": 10
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7005\",\"Variable 'violations' implicitly has an 'any[]' type.\",\"935903801e11857a1e71b20e7c2d7eee9c4053fea1a2dfd2ae77181af207777c\",31,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7005",
-        "message": "Variable 'violations' implicitly has an 'any[]' type.",
-        "anchor": "935903801e11857a1e71b20e7c2d7eee9c4053fea1a2dfd2ae77181af207777c",
-        "line": 220,
-        "column": 31,
-        "start": 11085,
-        "length": 10
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'acc' implicitly has an 'any[]' type.\",\"76e427f4fcb1d97a4d832d4c94dcd8691fb5075354ea764ae1a3fa710b8e8cec\",20,8]",
       "count": 1,
       "diagnostic": {
@@ -2513,21 +2453,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'callerNode' implicitly has an 'any' type.\",\"4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe\",60,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'callerNode' implicitly has an 'any' type.",
-        "anchor": "4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe",
-        "line": 154,
-        "column": 60,
-        "start": 7634,
-        "length": 10
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'dir' implicitly has an 'any' type.\",\"76e427f4fcb1d97a4d832d4c94dcd8691fb5075354ea764ae1a3fa710b8e8cec\",15,3]",
       "count": 1,
       "diagnostic": {
@@ -2543,141 +2468,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'entryNode' implicitly has an 'any' type.\",\"4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe\",39,9]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'entryNode' implicitly has an 'any' type.",
-        "anchor": "4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe",
-        "line": 154,
-        "column": 39,
-        "start": 7613,
-        "length": 9
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'expression' implicitly has an 'any' type.\",\"35a2cd2440e6591b0cb14b2163257847352171f9589f22bd1e73781736b6feb0\",26,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'expression' implicitly has an 'any' type.",
-        "anchor": "35a2cd2440e6591b0cb14b2163257847352171f9589f22bd1e73781736b6feb0",
-        "line": 130,
-        "column": 26,
-        "start": 6209,
-        "length": 10
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'metaNode' implicitly has an 'any' type.\",\"4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe\",50,8]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'metaNode' implicitly has an 'any' type.",
-        "anchor": "4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe",
-        "line": 154,
-        "column": 50,
-        "start": 7624,
-        "length": 8
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'name' implicitly has an 'any' type.\",\"c450f0b2107fb6503d670f3deacbc4adfc43915a3cd3eb1e4cd5c7b416eefe14\",31,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'name' implicitly has an 'any' type.",
-        "anchor": "c450f0b2107fb6503d670f3deacbc4adfc43915a3cd3eb1e4cd5c7b416eefe14",
-        "line": 58,
-        "column": 31,
-        "start": 2577,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"339e65a19ec92deefec3184a3c5e5513951750def3c382eef8223d0325de6e9c\",28,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "339e65a19ec92deefec3184a3c5e5513951750def3c382eef8223d0325de6e9c",
-        "line": 137,
-        "column": 28,
-        "start": 6753,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe\",33,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe",
-        "line": 154,
-        "column": 33,
-        "start": 7607,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"82bda48aaeb74a3922ad8f5ed00c161f5fd5cbd03338e481a3aae43fd66a1bab\",23,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "82bda48aaeb74a3922ad8f5ed00c161f5fd5cbd03338e481a3aae43fd66a1bab",
-        "line": 44,
-        "column": 23,
-        "start": 2196,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"bfd60a2bbd849efb4c657cb955c71f8882ff9a4095d4f4ff44ba0f6b110974ce\",25,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "bfd60a2bbd849efb4c657cb955c71f8882ff9a4095d4f4ff44ba0f6b110974ce",
-        "line": 49,
-        "column": 25,
-        "start": 2319,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"c450f0b2107fb6503d670f3deacbc4adfc43915a3cd3eb1e4cd5c7b416eefe14\",25,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "c450f0b2107fb6503d670f3deacbc4adfc43915a3cd3eb1e4cd5c7b416eefe14",
-        "line": 58,
-        "column": 25,
-        "start": 2571,
-        "length": 4
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"cf36b4acdf03a9fd482367a1ff8cb8e22aa269576ac97b3c6ff9fe6891f5e138\",22,4]",
       "count": 1,
       "diagnostic": {
@@ -2690,96 +2480,6 @@
         "column": 22,
         "start": 2834,
         "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"ef449c7856d3b451dfb119272efa8f60d94c163a8f5104ede18278710dd49475\",18,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "ef449c7856d3b451dfb119272efa8f60d94c163a8f5104ede18278710dd49475",
-        "line": 177,
-        "column": 18,
-        "start": 8497,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'source' implicitly has an 'any' type.\",\"ca8fa14a4a66c96cdb96c65a101a98bea1edace0c47d8dc22fe92dc0fa087ebe\",38,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'source' implicitly has an 'any' type.",
-        "anchor": "ca8fa14a4a66c96cdb96c65a101a98bea1edace0c47d8dc22fe92dc0fa087ebe",
-        "line": 70,
-        "column": 38,
-        "start": 2954,
-        "length": 6
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7023\",\"'literalStrings' implicitly has return type 'any' because it does not have a return type annotation and is referenced directly or indirectly in one of its return expressions.\",\"bfd60a2bbd849efb4c657cb955c71f8882ff9a4095d4f4ff44ba0f6b110974ce\",10,14]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7023",
-        "message": "'literalStrings' implicitly has return type 'any' because it does not have a return type annotation and is referenced directly or indirectly in one of its return expressions.",
-        "anchor": "bfd60a2bbd849efb4c657cb955c71f8882ff9a4095d4f4ff44ba0f6b110974ce",
-        "line": 49,
-        "column": 10,
-        "start": 2304,
-        "length": 14
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7034\",\"Variable 'calls' implicitly has type 'any[]' in some locations where its type cannot be determined.\",\"351ffc390108cabff75d882504e6a25084b07d849b4195ae2c7bdd1fcdd5bfe4\",9,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7034",
-        "message": "Variable 'calls' implicitly has type 'any[]' in some locations where its type cannot be determined.",
-        "anchor": "351ffc390108cabff75d882504e6a25084b07d849b4195ae2c7bdd1fcdd5bfe4",
-        "line": 85,
-        "column": 9,
-        "start": 3749,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7034\",\"Variable 'transports' implicitly has type 'any[]' in some locations where its type cannot be determined.\",\"3075e2f11750ef4154f6d231b7da8c485e38352dcadb7e7dd1c2fcb99c556aa7\",9,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7034",
-        "message": "Variable 'transports' implicitly has type 'any[]' in some locations where its type cannot be determined.",
-        "anchor": "3075e2f11750ef4154f6d231b7da8c485e38352dcadb7e7dd1c2fcb99c556aa7",
-        "line": 84,
-        "column": 9,
-        "start": 3725,
-        "length": 10
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7034\",\"Variable 'violations' implicitly has type 'any[]' in some locations where its type cannot be determined.\",\"0ea24082ffe4566e811b8210574cb33bf5e13beb038a01c7962d360df3fe7535\",9,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7034",
-        "message": "Variable 'violations' implicitly has type 'any[]' in some locations where its type cannot be determined.",
-        "anchor": "0ea24082ffe4566e811b8210574cb33bf5e13beb038a01c7962d360df3fe7535",
-        "line": 86,
-        "column": 9,
-        "start": 3768,
-        "length": 10
       }
     },
     {
@@ -2918,21 +2618,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7005\",\"Variable 'writes' implicitly has an 'any[]' type.\",\"e656d350e2fe2977b6cd002095b1478f94bb88b5dd3287f8c2165841a4b84fc7\",10,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-architecture.mjs",
-        "code": "TS7005",
-        "message": "Variable 'writes' implicitly has an 'any[]' type.",
-        "anchor": "e656d350e2fe2977b6cd002095b1478f94bb88b5dd3287f8c2165841a4b84fc7",
-        "line": 315,
-        "column": 10,
-        "start": 12231,
-        "length": 6
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'acc' implicitly has an 'any[]' type.\",\"76e427f4fcb1d97a4d832d4c94dcd8691fb5075354ea764ae1a3fa710b8e8cec\",20,8]",
       "count": 1,
       "diagnostic": {
@@ -2975,21 +2660,6 @@
         "column": 22,
         "start": 2157,
         "length": 8
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'callee' implicitly has an 'any' type.\",\"179c36c35c85e9755b42125e160c3c3c144d869200fad52ec9fc9f00708f35a1\",30,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-architecture.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'callee' implicitly has an 'any' type.",
-        "anchor": "179c36c35c85e9755b42125e160c3c3c144d869200fad52ec9fc9f00708f35a1",
-        "line": 138,
-        "column": 30,
-        "start": 4851,
-        "length": 6
       }
     },
     {
@@ -3068,21 +2738,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"0347497a450fdc3f02d1cf4c7fe870223bdc052d96b0d39b006849680343844d\",32,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-architecture.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "0347497a450fdc3f02d1cf4c7fe870223bdc052d96b0d39b006849680343844d",
-        "line": 292,
-        "column": 32,
-        "start": 11414,
-        "length": 4
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"2031e203207231ba9307c2e8d1224e9311f740e8dbbe8ff1a4e005d52f955388\",22,4]",
       "count": 1,
       "diagnostic": {
@@ -3144,7 +2799,7 @@
     },
     {
       "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"875fa36f030ac32730330297d8e042f3b34ce90cfbf96d60c9519c7042b63d44\",21,4]",
-      "count": 3,
+      "count": 2,
       "diagnostic": {
         "kind": "typescript",
         "file": "scripts/check-architecture.mjs",
@@ -3263,21 +2918,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'sourceFile' implicitly has an 'any' type.\",\"2c8f201b391165772c0b54ff0420c9614474c1508eb3e3c67d59d081ba3233df\",23,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-architecture.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'sourceFile' implicitly has an 'any' type.",
-        "anchor": "2c8f201b391165772c0b54ff0420c9614474c1508eb3e3c67d59d081ba3233df",
-        "line": 301,
-        "column": 23,
-        "start": 11736,
-        "length": 10
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'sourceFile' implicitly has an 'any' type.\",\"b130792c4cffad712ea986a95337161f0360b0ac05326177c6e61747c5c42eee\",33,10]",
       "count": 1,
       "diagnostic": {
@@ -3308,21 +2948,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'src' implicitly has an 'any' type.\",\"179c36c35c85e9755b42125e160c3c3c144d869200fad52ec9fc9f00708f35a1\",25,3]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-architecture.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'src' implicitly has an 'any' type.",
-        "anchor": "179c36c35c85e9755b42125e160c3c3c144d869200fad52ec9fc9f00708f35a1",
-        "line": 138,
-        "column": 25,
-        "start": 4846,
-        "length": 3
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7034\",\"Variable 'calls' implicitly has type 'any[]' in some locations where its type cannot be determined.\",\"351ffc390108cabff75d882504e6a25084b07d849b4195ae2c7bdd1fcdd5bfe4\",9,5]",
       "count": 1,
       "diagnostic": {
@@ -3335,21 +2960,6 @@
         "column": 9,
         "start": 13100,
         "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7034\",\"Variable 'writes' implicitly has type 'any[]' in some locations where its type cannot be determined.\",\"b4d6d85293584a37d3205055a65523dce821b145b4130fc5dd275a06b1099782\",9,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-architecture.mjs",
-        "code": "TS7034",
-        "message": "Variable 'writes' implicitly has type 'any[]' in some locations where its type cannot be determined.",
-        "anchor": "b4d6d85293584a37d3205055a65523dce821b145b4130fc5dd275a06b1099782",
-        "line": 302,
-        "column": 9,
-        "start": 11758,
-        "length": 6
       }
     },
     {
@@ -10838,21 +10448,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7005\",\"Variable 'out' implicitly has an 'any[]' type.\",\"c542066d0ae2b62c73d3f34c1e87c916dfa75c74f91267f432f15c7052e3fe9c\",10,3]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/generate-ai-manual.mjs",
-        "code": "TS7005",
-        "message": "Variable 'out' implicitly has an 'any[]' type.",
-        "anchor": "c542066d0ae2b62c73d3f34c1e87c916dfa75c74f91267f432f15c7052e3fe9c",
-        "line": 165,
-        "column": 10,
-        "start": 6655,
-        "length": 3
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7005\",\"Variable 'seeds' implicitly has an 'any[]' type.\",\"fe5f46092485bffbfa8d159f76f1c6a3ca1f41b2586e25b77748fa9001fca20e\",10,5]",
       "count": 1,
       "diagnostic": {
@@ -11048,21 +10643,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"0aa7ee17bfcb15e592b87902ce6c2c440810409a47d93542bc19f63263469495\",22,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/generate-ai-manual.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "0aa7ee17bfcb15e592b87902ce6c2c440810409a47d93542bc19f63263469495",
-        "line": 73,
-        "column": 22,
-        "start": 2414,
-        "length": 4
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"2031e203207231ba9307c2e8d1224e9311f740e8dbbe8ff1a4e005d52f955388\",22,4]",
       "count": 1,
       "diagnostic": {
@@ -11124,7 +10704,7 @@
     },
     {
       "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"875fa36f030ac32730330297d8e042f3b34ce90cfbf96d60c9519c7042b63d44\",21,4]",
-      "count": 6,
+      "count": 5,
       "diagnostic": {
         "kind": "typescript",
         "file": "scripts/generate-ai-manual.mjs",
@@ -11303,21 +10883,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'sourceFile' implicitly has an 'any' type.\",\"0aa7ee17bfcb15e592b87902ce6c2c440810409a47d93542bc19f63263469495\",28,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/generate-ai-manual.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'sourceFile' implicitly has an 'any' type.",
-        "anchor": "0aa7ee17bfcb15e592b87902ce6c2c440810409a47d93542bc19f63263469495",
-        "line": 73,
-        "column": 28,
-        "start": 2420,
-        "length": 10
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'sourceFile' implicitly has an 'any' type.\",\"b45c40c05ce843b4ed2731ed6382a2aa7daad8f4fcf1026f4d4857c74c2078ca\",31,10]",
       "count": 1,
       "diagnostic": {
@@ -11405,21 +10970,6 @@
         "column": 7,
         "start": 6856,
         "length": 8
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7034\",\"Variable 'out' implicitly has type 'any[]' in some locations where its type cannot be determined.\",\"6d67a14cb7dabd88896a15deaa615970b1c6a547b6351e595f4bc8a4f84ad0fb\",9,3]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/generate-ai-manual.mjs",
-        "code": "TS7034",
-        "message": "Variable 'out' implicitly has type 'any[]' in some locations where its type cannot be determined.",
-        "anchor": "6d67a14cb7dabd88896a15deaa615970b1c6a547b6351e595f4bc8a4f84ad0fb",
-        "line": 150,
-        "column": 9,
-        "start": 5984,
-        "length": 3
       }
     },
     {

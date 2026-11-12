@@ -1,4 +1,5 @@
 import ts from 'typescript'
+import { staticPropertyKey } from './static-guard-bindings.mjs'
 
 // Resolve only a direct local const metadata object in this very function.
 // The compiler binder handles shadow parameters/blocks. No alias, import,
@@ -27,16 +28,6 @@ export function localChatMetaCategoryPositions(rel, src) {
   const positions = new Set()
   /**
    * @param {import('typescript').Node} node
-   * @returns {import('typescript').SignatureDeclaration | null}
-   */
-  const owner = node => {
-    for (let parent = node.parent; parent; parent = parent.parent) {
-      if (ts.isFunctionLike(parent)) return parent
-    }
-    return null
-  }
-  /**
-   * @param {import('typescript').Node} node
    * @returns {void}
    */
   const walk = node => {
@@ -49,20 +40,39 @@ export function localChatMetaCategoryPositions(rel, src) {
    */
   const inspect = node => {
     if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression) || node.expression.text !== 'chat') return
-    const meta = node.arguments[2]
-    if (!meta || !ts.isIdentifier(meta)) return
-    const declarations = checker.getSymbolAtLocation(meta)?.declarations ?? []
-    const declaration = declarations.length === 1 ? declarations[0] : undefined
-    if (!declaration || !ts.isVariableDeclaration(declaration)
-      || !ts.isVariableDeclarationList(declaration.parent) || !(declaration.parent.flags & ts.NodeFlags.Const)
-      || owner(declaration) !== owner(node) || owner(node) === null
-      || declaration.end >= node.getStart(source) || !declaration.initializer
-      || !ts.isObjectLiteralExpression(declaration.initializer)
-      || !declaration.initializer.properties.some(property => ts.isPropertyAssignment(property)
-        && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))
-        && property.name.text === 'category')) return
+    if (!localConstChatMetaHasCategory(node, node.arguments[2], name => {
+      const declarations = checker.getSymbolAtLocation(name)?.declarations ?? []
+      return declarations.length === 1 ? declarations[0] : null
+    })) return
     positions.add(node.expression.getStart(source))
   }
   walk(source)
   return positions
+}
+
+
+// The existing narrow exception: a prior const object in this very function.
+// Both the manual scanner and the source guard use the same lexical rule.
+/**
+ * @param {ts.CallExpression} call
+ * @param {ts.Node | undefined} meta
+ * @param {(name: ts.Identifier) => ts.Declaration | null | undefined} resolveDeclaration
+ */
+export function localConstChatMetaHasCategory(call, meta, resolveDeclaration) {
+  if (!meta || !ts.isIdentifier(meta)) return false
+  /** @param {ts.Node} node */
+  const owner = node => {
+    for (let parent = node.parent; parent; parent = parent.parent) {
+      if (ts.isFunctionLike(parent)) return parent
+    }
+    return null
+  }
+  const declaration = resolveDeclaration(meta)
+  const scope = owner(call)
+  return !!declaration && ts.isVariableDeclaration(declaration)
+    && ts.isVariableDeclarationList(declaration.parent) && !!(declaration.parent.flags & ts.NodeFlags.Const)
+    && scope !== null && owner(declaration) === scope && declaration.end < call.getStart()
+    && !!declaration.initializer && ts.isObjectLiteralExpression(declaration.initializer)
+    && declaration.initializer.properties.some(property => ts.isPropertyAssignment(property)
+      && staticPropertyKey(property.name) === 'category')
 }
