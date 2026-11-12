@@ -215,6 +215,7 @@ import {
   recoverProseGenerationCandidateV1,
   recordInterruptedProseGenerationV1,
   readLatestInterruptedProseGenerationV1,
+  readProseGenerationObservedUsageV1,
   resolveProseGenerationExecutionBindingV2,
   PROSE_GENERATION_STEP_ID_V1,
   type ProseGenerationCandidateV1,
@@ -683,14 +684,17 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       const recovered = candidate ? await recoverProseGenerationCandidateV1({ scope, candidate }) : null
       if (!active) return
       if (candidate && recovered?.projection.state === 'awaiting_confirmation') {
+        const tokenUsage = await readProseGenerationObservedUsageV1({ scope, runId: candidate.durable.runId, attempt: candidate.durable.attempt })
+        if (!active || editorChapterIdRef.current !== chapterId) return
         setProseCandidate(candidate)
         proseCandidateRef.current = candidate
-        restoreAI({ output: candidate.outputText, operation: candidate.operation })
+        restoreAI({ output: candidate.outputText, operation: candidate.operation, tokenUsage })
         proseSnapshotRef.current = recovered
         return
       }
       const interrupted = await readLatestInterruptedProseGenerationV1({ scope, chapterId })
-      if (active && interrupted) restoreAI({ output: interrupted.outputText, operation: interrupted.operation, error: interrupted.message })
+      if (active && editorChapterIdRef.current === chapterId && interrupted) restoreAI({ output: interrupted.outputText,
+        operation: interrupted.operation, error: interrupted.message, tokenUsage: interrupted.observedUsage ?? null })
     })().catch(error => {
       if (active) console.warn('[ProseGeneration] durable candidate 恢复失败:', error)
     })
@@ -1519,7 +1523,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             attempt: gatewayAttempt,
             output: String(output ?? ''),
             lengthObservation: observeProseLengthV1(String(output ?? ''), proseLengthExpectationV1(customInstruction), streamResult.finishReason ?? null),
-            usedTokens: generationReservation.estimatedInputTokens + estimateTokens(String(output ?? '')),
+            usedTokens: streamResult.usage?.totalTokens ?? generationReservation.estimatedInputTokens + estimateTokens(String(output ?? '')),
+            observedUsage: streamResult.usage ? { ...streamResult.usage } : null,
           })
           snapshot = finalized.snapshot
           gatewayManifestHash = finalized.manifest.manifestHash
@@ -1578,14 +1583,15 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           persistedCandidate = candidate
           setProseCandidate(candidate)
           proseCandidateRef.current = candidate
-          restoreAI({ output: outputText, operation: input.operation })
+          restoreAI({ output: outputText, operation: input.operation, tokenUsage: streamResult.usage ? { ...streamResult.usage } : null })
         },
         stepSucceeded: async () => {},
         stepFailed: async failure => {
           if (failure.error instanceof InterruptedChapterGenerationErrorV1) {
             snapshot = await recordInterruptedProseGenerationV1({
               scope, snapshot,
-              response: { version: 'prose-interrupted-response-v1', outputText: failure.error.output, completion: failure.error.completion, message: failure.error.message },
+              response: { version: 'prose-interrupted-response-v1', outputText: failure.error.output, completion: failure.error.completion,
+                message: failure.error.message, observedUsage: streamResult.usage ? { ...streamResult.usage } : null },
             })
           }
           snapshot = await failProseGenerationStepV1({
@@ -1596,7 +1602,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           })
           proseSnapshotRef.current = snapshot
           if (failure.error instanceof InterruptedChapterGenerationErrorV1 && failure.error.completion !== 'failed') {
-            restoreAI({ output: failure.error.output, operation: input.operation, error: failure.error.message })
+            restoreAI({ output: failure.error.output, operation: input.operation, error: failure.error.message,
+              tokenUsage: streamResult.usage ? { ...streamResult.usage } : null })
           }
         },
         onTraceError: error => { traceError = error },
@@ -2908,14 +2915,33 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     })
   }
 
+  const handleKeepSeparatedProse = async () => {
+    const candidate = proseCandidate
+    const output = ai.output
+    const frame = observeSeparatedProseFrameV1(output)
+    if (!candidate || !frame) return
+    try {
+      const scope = await resolveScopeLike(project.id!)
+      const tokenUsage = await readProseGenerationObservedUsageV1({ scope, runId: candidate.durable.runId, attempt: candidate.durable.attempt })
+      if (editorChapterIdRef.current !== candidate.chapterId || proseCandidateRef.current?.durable.runId !== candidate.durable.runId) return
+      restoreAI({ output: output.slice(frame.afterSeparator).trim(), operation: candidate.operation, tokenUsage })
+    } catch (error) {
+      if (editorChapterIdRef.current === candidate.chapterId && proseCandidateRef.current?.durable.runId === candidate.durable.runId) setProseGenerationError(error instanceof Error ? error.message : '原正文用量证据无法读取，候选仍已保留。')
+    }
+  }
+
   const handleSaveProseCandidateDraft = async (text: string) => {
     const candidate = proseCandidate
     if (!candidate || candidate.semanticReview) throw new Error('当前结果不能保存为正文候选，请重新打开对应章节。')
+    const expectedChapterId = candidate.chapterId
     const scope = await resolveScopeLike(project.id!)
+    const tokenUsage = await readProseGenerationObservedUsageV1({ scope, runId: candidate.durable.runId, attempt: candidate.durable.attempt })
+    if (editorChapterIdRef.current !== expectedChapterId || proseCandidateRef.current?.durable.runId !== candidate.durable.runId) throw new Error('章节已切换，原候选与用量仍保留在原运行。')
     const revised = await reviseProseGenerationCandidateV1({ scope, candidate, outputText: text })
+    if (editorChapterIdRef.current !== expectedChapterId || proseCandidateRef.current?.durable.runId !== candidate.durable.runId) return
     setProseCandidate(revised)
     proseCandidateRef.current = revised
-    restoreAI({ output: revised.outputText, operation: revised.operation })
+    restoreAI({ output: revised.outputText, operation: revised.operation, tokenUsage })
   }
 
   const handleAcceptAI = async (text: string) => {
@@ -3480,10 +3506,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         <div className="mb-3">
           {!ai.isStreaming && proseCandidate && (ai.operation === 'generate' || ai.operation === 'continue') && observeSeparatedProseFrameV1(ai.output) && <div role="alert" className="mb-2 rounded border border-warning/30 bg-warning/5 p-3 text-xs text-text-secondary">
             <p>{observeSeparatedProseFrameV1(ai.output)!.message}</p>
-            <button type="button" className="mt-2 rounded border border-border px-2 py-1" onClick={() => {
-              const frame = observeSeparatedProseFrameV1(ai.output)
-              if (frame) restoreAI({ output: ai.output.slice(frame.afterSeparator).trim(), operation: ai.operation })
-            }}>保留分隔后的正文供核对</button>
+            <button type="button" className="mt-2 rounded border border-border px-2 py-1" onClick={() => { void handleKeepSeparatedProse() }}>保留分隔后的正文供核对</button>
           </div>}
           {proseCandidate?.lengthObservation?.message && <p role="status" className="mb-2 rounded border border-warning/30 bg-warning/5 p-3 text-xs text-text-secondary">生成时：{proseCandidate.lengthObservation.message}</p>}
           <AIStreamOutput key={proseCandidate?.durable.runId ?? 'active-prose-output'} output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
