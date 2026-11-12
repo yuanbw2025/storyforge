@@ -12,10 +12,19 @@ test('changed helpers select their callers, independent named imports retain the
     ["import { fixture as setup } from './helpers'", true],
     ["import { read, fixture } from './helpers'", false],
     ["import * as helpers from './helpers'", false],
-    ["import type { Shape } from './helpers'", false],
+    ["import type { Shape } from './helpers'", true],
     ["import {fixture} from './helpers'; vi.mock('./helpers')", false],
     ["import {fixture} from './helpers'; import('./helpers')", false],
   ]) assert.equal(onlyUnchangedImports('test.ts', String(code), './helpers', same), expected)
+})
+
+test('explicitly erased type imports do not run modules; value, side-effect and mock imports still do', () => {
+  const unchanged = new Set()
+  const type = "import type { Shape } from './helpers'"
+  assert.equal(onlyUnchangedImports('test.ts', type, './helpers', unchanged), true)
+  for (const executable of ["import './helpers'", "import { read } from './helpers'", "vi.mock('./helpers')"]) {
+    assert.equal(onlyUnchangedImports('test.ts', type + '\n' + executable, './helpers', unchanged), false)
+  }
 })
 
 test('changed initialization or externally modified bindings keep their direct consumers', () => {

@@ -97,7 +97,6 @@ export function unchangedFunctions(path, before, after, dependencyChanged = () =
  * namespace/default imports, module mocks and re-exports keep the test selected.
  * @param {string} path @param {string} text @param {string} specifier @param {Set<string>} unchanged */
 export function onlyUnchangedImports(path, text, specifier, unchanged) {
-  if (!unchanged.size) return false
   const file = parse(path, text)
   let seen = false, opaque = false
   /** @param {import('typescript').Node} node */
@@ -106,6 +105,7 @@ export function onlyUnchangedImports(path, text, specifier, unchanged) {
       const parent = node.parent
       if (!ts.isImportDeclaration(parent) || parent.moduleSpecifier !== node) { opaque = true; return }
       const clause = parent.importClause, bindings = clause?.namedBindings
+      if (clause?.isTypeOnly) { seen = true; return }
       if (clause?.name || !bindings || !ts.isNamedImports(bindings) || !bindings.elements.length) { opaque = true; return }
       seen = true
       if (bindings.elements.some(part => !unchanged.has((part.propertyName ?? part.name).text))) opaque = true
