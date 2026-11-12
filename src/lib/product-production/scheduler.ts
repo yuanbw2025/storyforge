@@ -5671,7 +5671,7 @@ async function runClaimedTaskCore(input: {
       console.error('[product-production-scheduler] late timeout accounting:', safeExecutorError(error))
     }
   }
-  const refreshExecutionAttemptAuthority = async (): Promise<boolean> => {
+  const refreshExecutionAttemptAuthority = async (boundary: 'executor' | 'provider'): Promise<boolean> => {
     snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
     const step = snapshot.projection.steps[input.task.taskKey]
     if (snapshot.projection.state !== 'running'
@@ -5681,10 +5681,25 @@ async function runClaimedTaskCore(input: {
       db.productBuilds.get(input.build.id),
       db.productProductions.get(input.productionId),
     ])
-    return !!currentBuild && !!currentProduction
-      && currentBuild.controlEpoch === input.build.controlEpoch
-      && currentProduction.controlEpoch === input.build.controlEpoch
-      && (currentBuild.status === 'building'
+    if (!currentBuild || !currentProduction
+      || currentBuild.controlEpoch !== input.build.controlEpoch
+      || currentProduction.controlEpoch !== input.build.controlEpoch) return false
+    // A plain resume rebinds the frozen Plan and carries over the authored bytes.
+    // The preview stays available while the new epoch rebuilds its local proofs.
+    if (boundary === 'executor' && currentProduction.productType === 'ttrpg'
+      && currentProduction.status === 'preview-ready' && currentBuild.status === 'building'
+      && currentBuild.rootTerminalReceiptHash && currentBuild.releasedProductReleaseId === null
+      && currentBuild.planHash === input.build.planHash && input.task.executionMode === 'deterministic'
+      && ['ttrpg.open.media-plan', 'ttrpg.open.integration', 'ttrpg.open.quality'].includes(input.task.taskKey)
+      && input.task.budgetReservation.modelCalls === 0 && input.task.budgetReservation.mediaCalls === 0
+      && input.task.budgetReservation.maximumCostUsd === 0) {
+      const resume = parsedObject(currentBuild.failureJson)
+      const pause = resume.pauseReceipt
+      return resume.code === 'user-resumed' && resume.resumedFromControlEpoch === currentBuild.controlEpoch - 1
+        && !!pause && typeof pause === 'object' && 'code' in pause && pause.code === 'user-paused'
+        && 'pausedFromControlEpoch' in pause && pause.pausedFromControlEpoch === currentBuild.controlEpoch - 2
+    }
+    return (currentBuild.status === 'building'
         // Confirmed AVG author inputs advance the two zero-provider assembly
         // tasks to integrating before dispatch; this is still active execution.
         || currentBuild.status === 'integrating' && currentProduction.productType === 'avg'
@@ -5698,7 +5713,7 @@ async function runClaimedTaskCore(input: {
   else input.signal.addEventListener('abort', abortFromParent, { once: true })
   let timeoutHandle: ReturnType<typeof globalThis.setTimeout> | null = null
   const recordRawOutput = async (output: string): Promise<void | 'discarded-stale'> => {
-    if (!await refreshExecutionAttemptAuthority()) return 'discarded-stale'
+    if (!await refreshExecutionAttemptAuthority('provider')) return 'discarded-stale'
     const recorded = await recordAgentRunArtifactV1({
       scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
       artifactKind: 'raw-response', content: output,
@@ -5722,7 +5737,7 @@ async function runClaimedTaskCore(input: {
       ? Math.min(input.task.timeoutMs, attemptBudgetReservation.durationMs) : input.task.timeoutMs)
   })
   try {
-    if (!authorizedDirectResult && (!await refreshExecutionAttemptAuthority() || executionController.signal.aborted)) {
+    if (!authorizedDirectResult && (!await refreshExecutionAttemptAuthority('executor') || executionController.signal.aborted)) {
       // A stop can win after the durable request boundary but before the
       // executor is entered. No provider was invoked by this callback.
       throw Object.assign(new DOMException('原执行授权已停止', 'AbortError'), { productProductionUsage: zeroUsage() })
@@ -5741,7 +5756,7 @@ async function runClaimedTaskCore(input: {
         inputArtifacts: artifacts, capabilityBindings: bindings, authorResolution,
         signal: executionController.signal,
         beforeAdditionalModelRequest: async () => {
-          if (!await refreshExecutionAttemptAuthority()) return 'discarded-stale'
+          if (!await refreshExecutionAttemptAuthority('provider')) return 'discarded-stale'
         },
         onModelOutput: recordRawOutput,
         ...(input.task.executionMode === 'media-provider' ? { onMediaOutput: recordRawOutput } : {}),
@@ -5928,7 +5943,7 @@ async function runClaimedTaskCore(input: {
   if (!result) throw new Error('[product-production-scheduler] executor 未返回结果')
   const paidUsage = result.usage
   const discardStoppedResult = async (): Promise<boolean> => {
-    if (await refreshExecutionAttemptAuthority()) return false
+    if (await refreshExecutionAttemptAuthority('executor')) return false
     const current = await db.productBuilds.get(input.build.id)
     if (!current) return true
     // Book first: cancellation and candidate authority are independent from
