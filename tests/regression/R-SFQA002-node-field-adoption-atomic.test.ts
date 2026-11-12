@@ -677,8 +677,9 @@ describe.sequential('D4a native first intent and attributable field write', () =
     const context = new AsyncLocalStorage<boolean>(), original = scopeStore.readOwnedRows
     let actor: Promise<void> | null = null, targetReadReached = false, actorCommitted = false
     let readonlyStores: string[] | null = null
-    const controlled: typeof original = async <T>(scope: WorkspaceScope, table: string, options: scopeStore.ScopeReadOptions = {}) => {
-      if (!context.getStore() || table !== 'worldviews' || targetReadReached) return original<T>(scope, table, options)
+    const controlled = async <T>(...args: Parameters<typeof original>) => {
+      const [, table] = args
+      if (!context.getStore() || table !== 'worldviews' || targetReadReached) return original<T>(...args)
       targetReadReached = true
       const tx = Dexie.currentTransaction
       const readonlyFence = Boolean(tx?.active && tx.idbtrans?.mode === 'readonly')
@@ -695,7 +696,7 @@ describe.sequential('D4a native first intent and attributable field write', () =
       // read. Under a real readonly fence it must queue; never await that
       // conflicting writer inside the read transaction.
       if (!readonlyFence) await actor
-      return original<T>(scope, table, options)
+      return original<T>(...args)
     }
     const spy = vi.spyOn(scopeStore, 'readOwnedRows').mockImplementation(controlled)
     let result: Awaited<ReturnType<typeof readNodeFieldAdoptionProofV1>> | null = null, error: unknown = null
