@@ -12,6 +12,7 @@ const scopeChecker = 'scripts/quality/check-merge-scope.mjs'
 const routingTest = 'scripts/quality/check-merge-scope.test.mjs'
 const databaseSchema = 'src/lib/db/schema.ts'
 const mediaList = 'scripts/quality/avg-media-harnesses.txt'
+const ordinaryVitest = ['run', '--tagsFilter', '!manual-media']
 const manualMedia = new Set(readFileSync(new URL('./avg-media-harnesses.txt', import.meta.url), 'utf8').trim().split(/\r?\n/))
 const tsConfig = /^tsconfig(?:\.[\w.-]+)?\.json$/
 
@@ -124,7 +125,7 @@ function runOrShareUnits(units) {
   if (!GITHUB_OUTPUT || !RUNNER_TEMP) throw new Error('GitHub output and temporary directory required')
   const groups = partitionUnits([...units])
   if (groups.length === 1) {
-    if (groups[0].length) run('node_modules/.bin/vitest', ['run', ...groups[0]])
+    if (groups[0].length) run('node_modules/.bin/vitest', [...ordinaryVitest, ...groups[0]])
     appendFileSync(GITHUB_OUTPUT, 'shards=[]\n')
     return
   }
@@ -138,7 +139,7 @@ async function main() {
   const [base, option, index] = process.argv.slice(2)
   if (base === '--run-shard' && option && index !== undefined) {
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
-    run('node_modules/.bin/vitest', ['run', '--maxWorkers=2', ...readUnitShard(option, index, head)])
+    run('node_modules/.bin/vitest', [...ordinaryVitest, '--maxWorkers=2', ...readUnitShard(option, index, head)])
     return
   }
   if (!base || base.startsWith('-') || index !== undefined || (option && !['--install', '--ci'].includes(option))) {
@@ -201,7 +202,7 @@ async function main() {
   }
   for (const config of new Set(checks.typeConfigs)) run('node_modules/.bin/tsc', ['--noEmit', '-p', config])
   if (option === '--ci') runOrShareUnits(units)
-  else if (units.size) run('node_modules/.bin/vitest', ['run', ...units])
+  else if (units.size) run('node_modules/.bin/vitest', [...ordinaryVitest, ...units])
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main()
