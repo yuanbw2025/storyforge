@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-quality018-integrated-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-import-nodes-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality018-integrated-v1.json",
+        "workPackage": "SFQA-022-044-051",
+        "note": "Preserved the measured mainline before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality022-formal-import-v1.json",
+        "workPackage": "SFQA-022-044-051",
+        "note": "Preserved the measurements from the reviewed change."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-quality086-integrated-v1.json",
         "workPackage": "SFQA-018",
@@ -752,6 +762,24 @@
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality019-portable-tree-v1.json",
         "workPackage": "SFQA-019-portable-tree",
         "note": "Preserve the initial independent tree-validation receipt before restoring stable parent-first insertion and measuring the shared portable-tree source."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality044-private-reference-v1.json",
+        "implementationCommit": "1f60bb587d086f82a5a576e22b843693914b6ea1",
+        "workPackage": "NW-0B",
+        "note": "Preserved the reference privacy receipt before the actual document-import candidate and author-adoption integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality051-node-resume-v1.json",
+        "implementationCommit": "b92975c6fcfafe17bcd800a811ebde9d01e805d7",
+        "workPackage": "NW-0B",
+        "note": "Preserved the previous frozen receipt before the reference execution backup boundary changed."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+        "implementationCommit": "bc18dc8466f2e6661b6ce9a17131981f41992844",
+        "workPackage": "NW-0B",
+        "note": "Preserved the mainline source fingerprints before transaction-safe local rechecks of frozen node sources."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -830,6 +858,7 @@
     "src/lib/context-gateway/world-release-provider.ts",
     "src/lib/context-gateway/world-release-query-provider.ts",
     "src/lib/db/schema.ts",
+    "src/lib/db/transaction-integrity.ts",
     "src/lib/export/registry-export.ts",
     "src/lib/export/registry-import.ts",
     "src/lib/export/portable-table-structure.ts",
@@ -1050,7 +1079,19 @@
     "tests/regression/R-NW-2E-byte-sink.test.ts",
     "tests/regression/R-NW-2E-numeric-runs.test.ts",
     "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
-    "src/lib/types/state-card.ts"
+    "src/lib/types/state-card.ts",
+    "src/lib/agent/run/ledger-portability.ts",
+    "src/lib/import/document-parse-backup-privacy.ts",
+    "src/lib/import/document-parse-binding.ts",
+    "src/lib/import/document-parse-durable.ts",
+    "src/lib/import/document-parse-adoption.ts",
+    "src/lib/import/pipeline.ts",
+    "src/lib/registry/adopt.ts",
+    "src/lib/registry/context-sources.ts",
+    "src/lib/agent/ai-entry-registry.json",
+    "src/lib/agent/skill-registry.ts",
+    "src/stores/import-session.ts",
+    "src/lib/types/import-session.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

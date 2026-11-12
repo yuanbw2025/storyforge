@@ -452,6 +452,12 @@ function verifyQualityRevisionDurableEvidence(snapshot: AgentRunSnapshotV1, cand
     && snapshot.events.some(event => event.type === 'context.assembled' && event.payload.stepId === QUALITY_RECHECK_STEP_V1 && event.payload.manifestHash === evidence.recheckManifestHash)
 }
 
+// These integrity promises consume bytes already read from the caller's
+// snapshot. Gateway and database reads must remain outside the keep-alive.
+function keepProseIntegrityAlive<T>(pending: Promise<T>): Promise<T> {
+  return Dexie.currentTransaction?.db === db ? Dexie.waitFor(pending) : pending
+}
+
 async function verifyQualityRevisionGatewayEvidence(scope: WorkspaceScope, candidate: ProseGenerationCandidateV1): Promise<boolean> {
   try {
     const metadata = candidate.qualityRevision!
@@ -462,8 +468,8 @@ async function verifyQualityRevisionGatewayEvidence(scope: WorkspaceScope, candi
     const raw = JSON.parse(await readAgentRunArtifactExactV1({ projectId: scope.projectId, artifactKind: 'raw-response', contentHash: rawRef.contentHash }))
     const request = JSON.parse(await readAgentRunArtifactExactV1({ projectId: scope.projectId, artifactKind: 'rendered-request', contentHash: requestRef.contentHash }))
     if (raw.version !== 'quality-recheck-response-v1' || raw.recheck.artifactHash !== metadata.recheck.artifactHash
-      || await hashCanonicalValue(request.messages) !== await hashCanonicalValue(metadata.recheckMessages)) return false
-    const parsed = await parseQualityRecheckV1({ raw: raw.raw, plan: metadata.plan, candidateText: candidate.outputText, messages: request.messages, settings: request.settings, completion: 'complete', createdAt: metadata.recheck.review.createdAt })
+      || await keepProseIntegrityAlive(hashCanonicalValue(request.messages)) !== await keepProseIntegrityAlive(hashCanonicalValue(metadata.recheckMessages))) return false
+    const parsed = await keepProseIntegrityAlive(parseQualityRecheckV1({ raw: raw.raw, plan: metadata.plan, candidateText: candidate.outputText, messages: request.messages, settings: request.settings, completion: 'complete', createdAt: metadata.recheck.review.createdAt }))
     return parsed.artifactHash === metadata.recheck.artifactHash
   } catch { return false }
 }
@@ -1186,12 +1192,12 @@ export async function isProseGenerationCandidateCurrentV1(
   candidate: ProseGenerationCandidateV1,
 ): Promise<boolean> {
   const chapter = await db.chapters.get(candidate.chapterId)
-  if (!chapter || await hashChapterText(chapter.content ?? '') !== candidate.sourceTextHash) return false
+  if (!chapter || await keepProseIntegrityAlive(hashChapterText(chapter.content ?? '')) !== candidate.sourceTextHash) return false
   if (candidate.operation === 'quality-revise' && (!candidate.qualityRevision
-    || candidate.qualityRevision.sourceHtmlHash !== await sha256Text(chapter.content ?? '')
-    || !await verifyQualityRevisionEvidenceV1(candidate.qualityRevision, candidate.outputText))) return false
+    || candidate.qualityRevision.sourceHtmlHash !== await keepProseIntegrityAlive(sha256Text(chapter.content ?? ''))
+    || !await keepProseIntegrityAlive(verifyQualityRevisionEvidenceV1(candidate.qualityRevision, candidate.outputText)))) return false
   const { durable, ...candidateBody } = candidate
-  if (await hashProseGenerationCandidateV1(candidateBody) !== durable.candidateHash) return false
+  if (await keepProseIntegrityAlive(hashProseGenerationCandidateV1(candidateBody)) !== durable.candidateHash) return false
   if (candidate.semanticReview && !await verifySemanticReviewEvidence(candidate)) return false
   let scope: WorkspaceScope
   try {

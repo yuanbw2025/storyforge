@@ -634,6 +634,7 @@ export interface AssembleContextInput {
   /** HARNESS-74: trusted version target for reference summary/character derivation. */
   referenceDerivedMode?: 'summary' | 'characters'
   referenceAnalysisRunId?: number
+  referenceAnalysisChunkIndex?: number
   /** HARNESS-76: trusted chapter selection for the registered style-learning baseline. */
   styleLearningChapterIds?: number[]
   /** HARNESS-79: trusted existing story-timeline event for single-record impact remediation. */
@@ -658,6 +659,8 @@ export interface AssembleContextInput {
   extraStateIds?: number[]
   /** 手动输入/当前字段内容，供“内容反推结构化设定”类动作走注册表。 */
   manualSourceText?: string
+  /** SFQA-022: session selector for the already-frozen project-import category catalog. */
+  documentImportSessionId?: number
   /** HARNESS-11: 同一批量章纲任务中，上一卷尚未采纳的结构化候选。 */
   priorOutlineCandidateText?: string
   /** C2 反向哺喂：以某角色为主体，召回剧情里关于 TA 的事实/正文证据（characterFacts/characterPassages 源用）。 */
