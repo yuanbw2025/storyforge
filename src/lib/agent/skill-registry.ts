@@ -5118,7 +5118,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 10_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-27',
+    lastVerifiedAt: '2026-11-12',
     regressionTests: ['R-TEXTADV-source-depth', 'R-TEXTADV3-agent-team'],
   },
   {
@@ -5163,7 +5163,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 14_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-27',
+    lastVerifiedAt: '2026-11-12',
     regressionTests: ['R-PRODUCTPROD1F-production-executor', 'R-TEXTADV-source-depth', 'R-TEXTADV3-agent-team', 'R-TEXTADV3-production-artifacts'],
   },
   {
@@ -5230,7 +5230,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-27',
+    lastVerifiedAt: '2026-11-12',
     regressionTests: ['R-PRODUCTPROD1F-production-executor', 'R-TEXTADV-source-depth', 'R-TEXTADV3-agent-team'],
   },
   {
@@ -5398,7 +5398,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-27',
+    lastVerifiedAt: '2026-11-12',
     regressionTests: ['R-TEXTADV-source-depth', 'R-TEXTADV2-production'],
   },
   {
@@ -5422,7 +5422,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 32_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-27',
+    lastVerifiedAt: '2026-11-12',
     regressionTests: ['R-TEXTADV2-production'],
   },
   {
