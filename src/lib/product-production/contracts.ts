@@ -29,6 +29,7 @@ import type {
   ProductProductionFallbackPolicyV1,
   ProductProductionMediaProfileV1,
   ProductProductionScaleV1,
+  ProductTaskBudgetReservationV1,
   ProductEvolutionAffectedLaneV1,
   ProductEvolutionBaseV1,
   ProductEvolutionImpactV1,
@@ -48,6 +49,32 @@ import {
 } from '../open-world/creator-brief-persistence'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
+
+/** One frozen task accounting policy for dispatch, producer proof and recovery.
+ * This delta never enlarges the author-approved aggregate Build budget. Keep
+ * measured usage unchanged in candidates, receipts and the lifetime ledger. */
+export function productProductionTaskUsageBudgetViolationsV1(
+  usage: Omit<ProductTaskBudgetReservationV1, 'maximumCostUsd'> & { costUsd: number | null },
+  reservation: ProductTaskBudgetReservationV1,
+): string[] {
+  const integerFields = ['modelCalls', 'inputTokens', 'outputTokens', 'mediaCalls', 'durationMs', 'storageBytes'] as const
+  if (integerFields.some(field => !Number.isSafeInteger(usage[field]) || usage[field] < 0)
+    || usage.costUsd != null && (!Number.isFinite(usage.costUsd) || usage.costUsd < 0)) return ['usage-invalid']
+  // Compatible providers may bill hidden reasoning/framing beyond maxTokens.
+  // Tiny/non-model reservations remain exact; normal model tasks allow 2%/128.
+  const outputDelta = reservation.outputTokens >= 1_000 && usage.modelCalls > 0
+    ? Math.min(128, Math.ceil(reservation.outputTokens * .02)) : 0
+  return [
+    ['modelCalls', usage.modelCalls, reservation.modelCalls],
+    ['inputTokens', usage.inputTokens, reservation.inputTokens],
+    ['outputTokens', usage.outputTokens, reservation.outputTokens + outputDelta],
+    ['mediaCalls', usage.mediaCalls, reservation.mediaCalls],
+    ['durationMs', usage.durationMs, reservation.durationMs],
+    ['storageBytes', usage.storageBytes, reservation.storageBytes],
+    ...(reservation.maximumCostUsd == null ? [] : [['costUsd', usage.costUsd ?? 0, reservation.maximumCostUsd] as const]),
+  ].filter(([, actual, maximum]) => actual > maximum)
+    .map(([field, actual, maximum]) => `${field}=${actual}/${maximum}`)
+}
 
 function fail(message: string): never {
   throw new Error(`[product-production-contract] ${message}`)

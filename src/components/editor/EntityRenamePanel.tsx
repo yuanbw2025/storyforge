@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { liveQuery } from 'dexie'
+import { db } from '../../lib/db/schema'
+import type { Project, WorkspaceScope } from '../../lib/types'
 import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import { AlertTriangle, CheckCircle2, Eye, RotateCcw, ShieldCheck } from 'lucide-react'
 import { useBackupStore } from '../../stores/backup'
@@ -50,79 +53,125 @@ function parseEntityKey(value: string): EntityRenameTarget | null {
 
 export default function EntityRenamePanel({ projectId, onSelectOutlineNode }: Props) {
   const dialog = useDialog()
-  const toast = useToast()
+  const { toast } = useToast()
   const createSnapshot = useBackupStore(state => state.createSnapshot)
   const loadChapters = useChapterStore(state => state.loadAll)
   const loadCharacters = useCharacterStore(state => state.loadAll)
   const loadLocations = useLocationStore(state => state.loadAll)
   const loadCodex = useCodexStore(state => state.loadExisting)
   const loadStateCards = useStateCardStore(state => state.loadAll)
+  const [roots, setRoots] = useState<Project>()
+  useEffect(() => {
+    setRoots(undefined)
+    const subscription = liveQuery(async () => await db.projects.get(projectId)).subscribe({
+      next: setRoots,
+      error: cause => { setRoots(undefined); toast('error', `改名作用域读取失败：${String(cause)}`) },
+    })
+    return () => subscription.unsubscribe()
+  }, [projectId, toast])
+  const scope = useMemo<WorkspaceScope | null>(() => roots?.id === projectId && roots.activeWorldId != null && roots.activeWorkId != null
+    ? { projectId, worldId: roots.activeWorldId, workId: roots.activeWorkId } : null,
+  [projectId, roots?.id, roots?.activeWorldId, roots?.activeWorkId])
+  const requestVersion = useRef(0)
+  const invalidateRequest = () => { requestVersion.current++ }
+  const currentScopeRef = useRef(scope)
+  currentScopeRef.current = scope
+  const isCurrent = (owner: WorkspaceScope) => {
+    const current = currentScopeRef.current
+    return current?.projectId === owner.projectId && current.worldId === owner.worldId && current.workId === owner.workId
+  }
 
   const [entities, setEntities] = useState<RenamableEntity[]>([])
   const [selectedKey, setSelectedKey] = useState('')
   const [newName, setNewName] = useState('')
   const [preview, setPreview] = useState<EntityRenamePreview | null>(null)
   const [undoPatch, setUndoPatch] = useState<EntityRenameUndoPatch | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [activity, setActivity] = useState<'preview' | 'write' | null>(null)
+  const busy = activity !== null
 
   const selected = useMemo(
     () => entities.find(entity => entityKey(entity) === selectedKey) ?? null,
     [entities, selectedKey],
   )
 
-  const refreshEntities = async () => {
-    const next = await listRenamableEntities(projectId)
-    setEntities(next)
+  const refreshEntities = async (owner: WorkspaceScope) => {
+    const next = await listRenamableEntities(owner)
+    if (isCurrent(owner)) setEntities(next)
     return next
   }
 
-  const refreshProjectStores = async () => {
+  const refreshProjectStores = async (owner: WorkspaceScope) => {
+    if (!isCurrent(owner)) return
     await Promise.all([
-      loadChapters(projectId),
-      loadCharacters(projectId),
-      loadLocations(projectId),
-      loadCodex(projectId),
-      loadStateCards(projectId),
+      loadChapters(owner),
+      loadCharacters(owner),
+      loadLocations(owner),
+      loadCodex(owner),
+      loadStateCards(owner),
     ])
   }
 
   useEffect(() => {
     let active = true
-    void listRenamableEntities(projectId)
+    setEntities([])
+    setNewName('')
+    setSelectedKey('')
+    setPreview(null)
+    setActivity(null)
+    if (!scope) return
+    void listRenamableEntities(scope)
       .then(items => {
         if (active) setEntities(items)
       })
       .catch(error => {
-        if (active) toast.error(`实体加载失败：${error instanceof Error ? error.message : String(error)}`)
+        if (active) toast('error', `实体加载失败：${error instanceof Error ? error.message : String(error)}`)
       })
     return () => {
       active = false
+      invalidateRequest()
     }
-  }, [projectId, toast])
+  }, [scope, toast])
+
+  // Scope switches and edits supersede pending previews and confirmations.
+  const beginRequest = () => {
+    const version = ++requestVersion.current
+    return () => version === requestVersion.current
+  }
+
+  const invalidatePreview = () => {
+    invalidateRequest()
+    setPreview(null)
+    setActivity(null)
+  }
 
   const buildPreview = async () => {
+    if (!scope) return
+    const owner = scope
     const target = parseEntityKey(selectedKey)
     if (!target) {
-      toast.error('请先选择要改名的实体')
+      toast('error', '请先选择要改名的实体')
       return
     }
     if (!newName.trim()) {
-      toast.error('请输入新名称')
+      toast('error', '请输入新名称')
       return
     }
-    setBusy(true)
+    const current = beginRequest()
+    setActivity('preview')
     try {
       await flushPendingEditsV1()
-      setPreview(await buildEntityRenamePreview(projectId, target, newName))
+      const next = await buildEntityRenamePreview(owner, target, newName)
+      if (current() && isCurrent(owner)) setPreview(next)
     } catch (error) {
-      toast.error(`预览失败：${error instanceof Error ? error.message : String(error)}`)
+      if (current()) toast('error', `预览失败：${error instanceof Error ? error.message : String(error)}`)
     } finally {
-      setBusy(false)
+      if (current()) setActivity(null)
     }
   }
 
   const applyRename = async () => {
-    if (!preview || preview.blockers.length) return
+    if (!preview || preview.blockers.length || !isCurrent(preview.scope)) return
+    const current = beginRequest()
     const ok = await dialog.confirm({
       title: `确认将「${preview.entity.name}」改为「${preview.newName}」？`,
       message: [
@@ -134,38 +183,43 @@ export default function EntityRenamePanel({ projectId, onSelectOutlineNode }: Pr
       cancelText: '取消',
       tone: 'danger',
     })
-    if (!ok) return
+    if (!ok || !current()) return
 
-    setBusy(true)
+    setActivity('write')
     try {
       await flushPendingEditsV1()
+      if (!current()) return
       const result = await executeEntityRename({
         projectId,
+        scope: preview.scope,
         entity: { kind: preview.entity.kind, id: preview.entity.id },
         newName: preview.newName,
         expectedBaseline: preview.baseline,
         createSnapshot,
         label: `实体改名前自动快照 ${formatTime(Date.now())}`,
       })
+      if (!current() || !isCurrent(preview.scope)) return
       setUndoPatch(result.undoPatch)
-      await refreshProjectStores()
-      const next = await refreshEntities()
+      await refreshProjectStores(preview.scope)
+      const next = await refreshEntities(preview.scope)
+      if (!current() || !isCurrent(preview.scope)) return
       const renamed = next.find(entity =>
         entity.kind === preview.entity.kind && entity.id === preview.entity.id,
       )
       setSelectedKey(renamed ? entityKey(renamed) : '')
       setNewName('')
       setPreview(null)
-      toast.success(`改名完成：同步 ${result.changedRecords} 条记录，正文替换 ${result.chapterReplacements} 处`)
+      toast('success', `改名完成：同步 ${result.changedRecords} 条记录，正文替换 ${result.chapterReplacements} 处`)
     } catch (error) {
-      toast.error(`改名失败：${error instanceof Error ? error.message : String(error)}`)
+      if (current()) toast('error', `改名失败：${error instanceof Error ? error.message : String(error)}`)
     } finally {
-      setBusy(false)
+      if (current()) setActivity(null)
     }
   }
 
   const undoRename = async () => {
-    if (!undoPatch) return
+    if (!undoPatch || !isCurrent(undoPatch.scope)) return
+    const current = beginRequest()
     const ok = await dialog.confirm({
       title: '撤销上次实体改名？',
       message: [
@@ -176,22 +230,25 @@ export default function EntityRenamePanel({ projectId, onSelectOutlineNode }: Pr
       cancelText: '取消',
       tone: 'danger',
     })
-    if (!ok) return
-    setBusy(true)
+    if (!ok || !current()) return
+    setActivity('write')
     try {
       await flushPendingEditsV1()
+      if (!current()) return
       await undoEntityRename(undoPatch)
-      await refreshProjectStores()
-      await refreshEntities()
+      if (!current() || !isCurrent(undoPatch.scope)) return
+      await refreshProjectStores(undoPatch.scope)
+      await refreshEntities(undoPatch.scope)
+      if (!current() || !isCurrent(undoPatch.scope)) return
       setSelectedKey('')
       setNewName('')
       setPreview(null)
       setUndoPatch(null)
-      toast.success('已撤销上次实体改名')
+      toast('success', '已撤销上次实体改名')
     } catch (error) {
-      toast.error(`撤销失败：${error instanceof Error ? error.message : String(error)}`)
+      if (current()) toast('error', `撤销失败：${error instanceof Error ? error.message : String(error)}`)
     } finally {
-      setBusy(false)
+      if (current()) setActivity(null)
     }
   }
 
@@ -203,10 +260,11 @@ export default function EntityRenamePanel({ projectId, onSelectOutlineNode }: Pr
             <span className="text-[11px] text-text-muted">选择稳定实体</span>
             <select
               value={selectedKey}
+              disabled={activity === 'write'}
               onChange={event => {
                 setSelectedKey(event.target.value)
                 setNewName('')
-                setPreview(null)
+                invalidatePreview()
               }}
               className="w-full rounded-md border border-border bg-bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
             >
@@ -224,10 +282,10 @@ export default function EntityRenamePanel({ projectId, onSelectOutlineNode }: Pr
               value={newName}
               onChange={event => {
                 setNewName(event.target.value)
-                setPreview(null)
+                invalidatePreview()
               }}
               placeholder={selected ? `将「${selected.name}」改为…` : '先选择实体'}
-              disabled={!selected}
+              disabled={!selected || activity === 'write'}
               className="w-full rounded-md border border-border bg-bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent disabled:opacity-50"
             />
           </label>
@@ -236,7 +294,7 @@ export default function EntityRenamePanel({ projectId, onSelectOutlineNode }: Pr
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => void buildPreview()}
-            disabled={busy || !selected || !newName.trim()}
+            disabled={busy || !scope || !selected || !newName.trim()}
             className="inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-elevated px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50"
           >
             <Eye className="h-3.5 w-3.5" /> 预览影响范围
@@ -244,7 +302,7 @@ export default function EntityRenamePanel({ projectId, onSelectOutlineNode }: Pr
           {preview && !preview.blockers.length && (
             <button
               onClick={() => void applyRename()}
-              disabled={busy}
+              disabled={busy || !isCurrent(preview.scope)}
               className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               <ShieldCheck className="h-3.5 w-3.5" /> 创建快照并改名
@@ -253,7 +311,7 @@ export default function EntityRenamePanel({ projectId, onSelectOutlineNode }: Pr
           {undoPatch && (
             <button
               onClick={() => void undoRename()}
-              disabled={busy}
+              disabled={busy || !isCurrent(undoPatch.scope)}
               className="inline-flex items-center gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs text-warning hover:bg-warning/20 disabled:opacity-50"
             >
               <RotateCcw className="h-3.5 w-3.5" /> 撤销上次实体改名

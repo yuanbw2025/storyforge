@@ -5,6 +5,7 @@ vi.mock('../../src/lib/ai/client', () => ({
 }))
 import { db } from '../../src/lib/db/schema'
 import { adopt } from '../../src/lib/registry/adopt'
+import { chat } from '../../src/lib/ai/client'
 import { adoptChapterOutlineWorkshopResult } from '../../src/lib/outline/adopt-workshop'
 import { batchGenerateDetails } from '../../src/lib/ai/batch-detail-runner'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
@@ -22,9 +23,11 @@ import {
   detailedOutlineBatchStepIdV1,
   hashDetailedOutlineBatchCandidateV1,
   persistDetailedOutlineBatchCandidateV1,
+  pauseDetailedOutlineBatchRunV1,
   readLatestDetailedOutlineBatchCandidatesV1,
   recordDetailedOutlineBatchCandidateV1,
   recordDetailedOutlineBatchModelOutputV1,
+  rejectDetailedOutlineBatchCandidateV1,
   verifyDetailedOutlineBatchRunV1,
   type DetailedOutlineBatchCandidateV1,
 } from '../../src/lib/agent/run/detailed-outline-batch-durable'
@@ -242,6 +245,35 @@ describe.sequential('R-HARNESS10 · 批量细纲 durable run', { timeout: 20_000
     expect(restored[0]?.durable.candidateHash).toBe(pending.candidate.durable.candidateHash)
     expect((await db.agentRunEvents.where('runId').equals(snapshot.run.id).toArray())
       .filter(event => event.type === 'candidate.persisted')).toHaveLength(1)
+  })
+
+  for (const decision of ['adopt', 'reject'] as const) it(`SFQA063 · paused candidate resumes for explicit ${decision} without a model replay`, async () => {
+    const fixture = await createWorkspace()
+    const initial = await createDetailedOutlineBatchDurableRunV1({ scope: fixture.scope, worldGroupId: fixture.worldGroupId, outlineNodeIds: fixture.outlineNodeIds })
+    const pending = await createCandidate({ fixture, snapshot: initial, outlineNodeId: fixture.outlineNodeIds[0] })
+    const paused = await pauseDetailedOutlineBatchRunV1({ scope: fixture.scope, snapshot: pending.snapshot, reason: '作者暂停' })
+    expect(paused.projection.state).toBe('paused')
+    expect(await db.detailedOutlines.count()).toBe(0)
+    const calls = vi.mocked(chat).mock.calls.length
+    if (decision === 'reject') {
+      await rejectDetailedOutlineBatchCandidateV1({ scope: fixture.scope, runId: initial.run.id, candidate: pending.candidate })
+      expect(await db.detailedOutlines.count()).toBe(0)
+    } else {
+      await commitDetailedOutlineBatchCandidateV1({
+        scope: fixture.scope, runId: initial.run.id, candidate: pending.candidate, output: pending.candidate.output,
+        currentSourceSummaryHash: async () => pending.candidate.sourceSummaryHash,
+        adopt: async () => {
+          const result = await adoptChapterOutlineWorkshopResult({ raw: pending.candidate.output, projectId: fixture.scope.projectId, scope: fixture.scope, outlineNodeId: pending.candidate.outlineNodeId, chapterSummary: '守灯人抵达潮门。', validCharacterIds: new Set(), validForeshadowIds: new Set() })
+          if (!result.ok) throw new Error(result.reason)
+        },
+        postState: () => db.detailedOutlines.where('outlineNodeId').equals(pending.candidate.outlineNodeId).first(),
+      })
+      expect(await db.detailedOutlines.count()).toBe(1)
+    }
+    const events = await db.agentRunEvents.where('runId').equals(initial.run.id).toArray()
+    expect(events.filter(event => event.type === 'confirmation.recorded')).toHaveLength(1)
+    expect(events.filter(event => event.type === 'recovery.completed')).toHaveLength(1)
+    expect(vi.mocked(chat).mock.calls).toHaveLength(calls)
   })
 
   it('真实批量 runner 在作者确认前不写正式细纲，确认后才完成父任务', async () => {

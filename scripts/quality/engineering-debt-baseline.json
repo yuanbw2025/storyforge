@@ -79,7 +79,7 @@
       "tsconfig.tests.open-world-experience.json": "7596a50c2d283b59660b6402b2c2a421c73b6d6482eb2b7a7a1612006622db31",
       "tsconfig.tooling.json": "2f8f44cd11e5314602f6a753d8898590d0e8b75f227de3cf4b0394f7df54761a"
     },
-    "lockfileHash": "3277ba3c65af7184bc07cd0a083e5b9c7b0526acfd654316b338ea548fb437be"
+    "lockfileHash": "6b540079d449ad001381a79a5259d86470914f24134934db8edd537f07ebcc0d"
   },
   "entries": [
     {
@@ -2408,66 +2408,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS2339\",\"Property 'initializer' does not exist on type 'ObjectLiteralElementLike'.\\n  Property 'initializer' does not exist on type 'MethodDeclaration'.\",\"49bdb933ff3a43fad72765aeeab74a5d94f17c9ad1af9e1335330469693337dd\",20,11]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS2339",
-        "message": "Property 'initializer' does not exist on type 'ObjectLiteralElementLike'.\n  Property 'initializer' does not exist on type 'MethodDeclaration'.",
-        "anchor": "49bdb933ff3a43fad72765aeeab74a5d94f17c9ad1af9e1335330469693337dd",
-        "line": 63,
-        "column": 20,
-        "start": 2798,
-        "length": 11
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7005\",\"Variable 'calls' implicitly has an 'any[]' type.\",\"935903801e11857a1e71b20e7c2d7eee9c4053fea1a2dfd2ae77181af207777c\",12,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7005",
-        "message": "Variable 'calls' implicitly has an 'any[]' type.",
-        "anchor": "935903801e11857a1e71b20e7c2d7eee9c4053fea1a2dfd2ae77181af207777c",
-        "line": 220,
-        "column": 12,
-        "start": 11066,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7005\",\"Variable 'transports' implicitly has an 'any[]' type.\",\"935903801e11857a1e71b20e7c2d7eee9c4053fea1a2dfd2ae77181af207777c\",19,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7005",
-        "message": "Variable 'transports' implicitly has an 'any[]' type.",
-        "anchor": "935903801e11857a1e71b20e7c2d7eee9c4053fea1a2dfd2ae77181af207777c",
-        "line": 220,
-        "column": 19,
-        "start": 11073,
-        "length": 10
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7005\",\"Variable 'violations' implicitly has an 'any[]' type.\",\"935903801e11857a1e71b20e7c2d7eee9c4053fea1a2dfd2ae77181af207777c\",31,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7005",
-        "message": "Variable 'violations' implicitly has an 'any[]' type.",
-        "anchor": "935903801e11857a1e71b20e7c2d7eee9c4053fea1a2dfd2ae77181af207777c",
-        "line": 220,
-        "column": 31,
-        "start": 11085,
-        "length": 10
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'acc' implicitly has an 'any[]' type.\",\"76e427f4fcb1d97a4d832d4c94dcd8691fb5075354ea764ae1a3fa710b8e8cec\",20,8]",
       "count": 1,
       "diagnostic": {
@@ -2513,21 +2453,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'callerNode' implicitly has an 'any' type.\",\"4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe\",60,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'callerNode' implicitly has an 'any' type.",
-        "anchor": "4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe",
-        "line": 154,
-        "column": 60,
-        "start": 7634,
-        "length": 10
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'dir' implicitly has an 'any' type.\",\"76e427f4fcb1d97a4d832d4c94dcd8691fb5075354ea764ae1a3fa710b8e8cec\",15,3]",
       "count": 1,
       "diagnostic": {
@@ -2543,141 +2468,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'entryNode' implicitly has an 'any' type.\",\"4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe\",39,9]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'entryNode' implicitly has an 'any' type.",
-        "anchor": "4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe",
-        "line": 154,
-        "column": 39,
-        "start": 7613,
-        "length": 9
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'expression' implicitly has an 'any' type.\",\"35a2cd2440e6591b0cb14b2163257847352171f9589f22bd1e73781736b6feb0\",26,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'expression' implicitly has an 'any' type.",
-        "anchor": "35a2cd2440e6591b0cb14b2163257847352171f9589f22bd1e73781736b6feb0",
-        "line": 130,
-        "column": 26,
-        "start": 6209,
-        "length": 10
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'metaNode' implicitly has an 'any' type.\",\"4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe\",50,8]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'metaNode' implicitly has an 'any' type.",
-        "anchor": "4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe",
-        "line": 154,
-        "column": 50,
-        "start": 7624,
-        "length": 8
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'name' implicitly has an 'any' type.\",\"c450f0b2107fb6503d670f3deacbc4adfc43915a3cd3eb1e4cd5c7b416eefe14\",31,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'name' implicitly has an 'any' type.",
-        "anchor": "c450f0b2107fb6503d670f3deacbc4adfc43915a3cd3eb1e4cd5c7b416eefe14",
-        "line": 58,
-        "column": 31,
-        "start": 2577,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"339e65a19ec92deefec3184a3c5e5513951750def3c382eef8223d0325de6e9c\",28,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "339e65a19ec92deefec3184a3c5e5513951750def3c382eef8223d0325de6e9c",
-        "line": 137,
-        "column": 28,
-        "start": 6753,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe\",33,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "4bf577c316f38e0d6cfb633284d8c2642b4a330b2613164370c7d37805823bfe",
-        "line": 154,
-        "column": 33,
-        "start": 7607,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"82bda48aaeb74a3922ad8f5ed00c161f5fd5cbd03338e481a3aae43fd66a1bab\",23,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "82bda48aaeb74a3922ad8f5ed00c161f5fd5cbd03338e481a3aae43fd66a1bab",
-        "line": 44,
-        "column": 23,
-        "start": 2196,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"bfd60a2bbd849efb4c657cb955c71f8882ff9a4095d4f4ff44ba0f6b110974ce\",25,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "bfd60a2bbd849efb4c657cb955c71f8882ff9a4095d4f4ff44ba0f6b110974ce",
-        "line": 49,
-        "column": 25,
-        "start": 2319,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"c450f0b2107fb6503d670f3deacbc4adfc43915a3cd3eb1e4cd5c7b416eefe14\",25,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "c450f0b2107fb6503d670f3deacbc4adfc43915a3cd3eb1e4cd5c7b416eefe14",
-        "line": 58,
-        "column": 25,
-        "start": 2571,
-        "length": 4
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"cf36b4acdf03a9fd482367a1ff8cb8e22aa269576ac97b3c6ff9fe6891f5e138\",22,4]",
       "count": 1,
       "diagnostic": {
@@ -2690,96 +2480,6 @@
         "column": 22,
         "start": 2834,
         "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"ef449c7856d3b451dfb119272efa8f60d94c163a8f5104ede18278710dd49475\",18,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "ef449c7856d3b451dfb119272efa8f60d94c163a8f5104ede18278710dd49475",
-        "line": 177,
-        "column": 18,
-        "start": 8497,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7006\",\"Parameter 'source' implicitly has an 'any' type.\",\"ca8fa14a4a66c96cdb96c65a101a98bea1edace0c47d8dc22fe92dc0fa087ebe\",38,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'source' implicitly has an 'any' type.",
-        "anchor": "ca8fa14a4a66c96cdb96c65a101a98bea1edace0c47d8dc22fe92dc0fa087ebe",
-        "line": 70,
-        "column": 38,
-        "start": 2954,
-        "length": 6
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7023\",\"'literalStrings' implicitly has return type 'any' because it does not have a return type annotation and is referenced directly or indirectly in one of its return expressions.\",\"bfd60a2bbd849efb4c657cb955c71f8882ff9a4095d4f4ff44ba0f6b110974ce\",10,14]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7023",
-        "message": "'literalStrings' implicitly has return type 'any' because it does not have a return type annotation and is referenced directly or indirectly in one of its return expressions.",
-        "anchor": "bfd60a2bbd849efb4c657cb955c71f8882ff9a4095d4f4ff44ba0f6b110974ce",
-        "line": 49,
-        "column": 10,
-        "start": 2304,
-        "length": 14
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7034\",\"Variable 'calls' implicitly has type 'any[]' in some locations where its type cannot be determined.\",\"351ffc390108cabff75d882504e6a25084b07d849b4195ae2c7bdd1fcdd5bfe4\",9,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7034",
-        "message": "Variable 'calls' implicitly has type 'any[]' in some locations where its type cannot be determined.",
-        "anchor": "351ffc390108cabff75d882504e6a25084b07d849b4195ae2c7bdd1fcdd5bfe4",
-        "line": 85,
-        "column": 9,
-        "start": 3749,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7034\",\"Variable 'transports' implicitly has type 'any[]' in some locations where its type cannot be determined.\",\"3075e2f11750ef4154f6d231b7da8c485e38352dcadb7e7dd1c2fcb99c556aa7\",9,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7034",
-        "message": "Variable 'transports' implicitly has type 'any[]' in some locations where its type cannot be determined.",
-        "anchor": "3075e2f11750ef4154f6d231b7da8c485e38352dcadb7e7dd1c2fcb99c556aa7",
-        "line": 84,
-        "column": 9,
-        "start": 3725,
-        "length": 10
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-ai-entry-registry.mjs\",\"TS7034\",\"Variable 'violations' implicitly has type 'any[]' in some locations where its type cannot be determined.\",\"0ea24082ffe4566e811b8210574cb33bf5e13beb038a01c7962d360df3fe7535\",9,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-ai-entry-registry.mjs",
-        "code": "TS7034",
-        "message": "Variable 'violations' implicitly has type 'any[]' in some locations where its type cannot be determined.",
-        "anchor": "0ea24082ffe4566e811b8210574cb33bf5e13beb038a01c7962d360df3fe7535",
-        "line": 86,
-        "column": 9,
-        "start": 3768,
-        "length": 10
       }
     },
     {
@@ -2918,21 +2618,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7005\",\"Variable 'writes' implicitly has an 'any[]' type.\",\"e656d350e2fe2977b6cd002095b1478f94bb88b5dd3287f8c2165841a4b84fc7\",10,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-architecture.mjs",
-        "code": "TS7005",
-        "message": "Variable 'writes' implicitly has an 'any[]' type.",
-        "anchor": "e656d350e2fe2977b6cd002095b1478f94bb88b5dd3287f8c2165841a4b84fc7",
-        "line": 315,
-        "column": 10,
-        "start": 12231,
-        "length": 6
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'acc' implicitly has an 'any[]' type.\",\"76e427f4fcb1d97a4d832d4c94dcd8691fb5075354ea764ae1a3fa710b8e8cec\",20,8]",
       "count": 1,
       "diagnostic": {
@@ -2975,21 +2660,6 @@
         "column": 22,
         "start": 2157,
         "length": 8
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'callee' implicitly has an 'any' type.\",\"179c36c35c85e9755b42125e160c3c3c144d869200fad52ec9fc9f00708f35a1\",30,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-architecture.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'callee' implicitly has an 'any' type.",
-        "anchor": "179c36c35c85e9755b42125e160c3c3c144d869200fad52ec9fc9f00708f35a1",
-        "line": 138,
-        "column": 30,
-        "start": 4851,
-        "length": 6
       }
     },
     {
@@ -3068,21 +2738,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"0347497a450fdc3f02d1cf4c7fe870223bdc052d96b0d39b006849680343844d\",32,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-architecture.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "0347497a450fdc3f02d1cf4c7fe870223bdc052d96b0d39b006849680343844d",
-        "line": 292,
-        "column": 32,
-        "start": 11414,
-        "length": 4
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"2031e203207231ba9307c2e8d1224e9311f740e8dbbe8ff1a4e005d52f955388\",22,4]",
       "count": 1,
       "diagnostic": {
@@ -3144,7 +2799,7 @@
     },
     {
       "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"875fa36f030ac32730330297d8e042f3b34ce90cfbf96d60c9519c7042b63d44\",21,4]",
-      "count": 3,
+      "count": 2,
       "diagnostic": {
         "kind": "typescript",
         "file": "scripts/check-architecture.mjs",
@@ -3263,21 +2918,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'sourceFile' implicitly has an 'any' type.\",\"2c8f201b391165772c0b54ff0420c9614474c1508eb3e3c67d59d081ba3233df\",23,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-architecture.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'sourceFile' implicitly has an 'any' type.",
-        "anchor": "2c8f201b391165772c0b54ff0420c9614474c1508eb3e3c67d59d081ba3233df",
-        "line": 301,
-        "column": 23,
-        "start": 11736,
-        "length": 10
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'sourceFile' implicitly has an 'any' type.\",\"b130792c4cffad712ea986a95337161f0360b0ac05326177c6e61747c5c42eee\",33,10]",
       "count": 1,
       "diagnostic": {
@@ -3308,21 +2948,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7006\",\"Parameter 'src' implicitly has an 'any' type.\",\"179c36c35c85e9755b42125e160c3c3c144d869200fad52ec9fc9f00708f35a1\",25,3]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-architecture.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'src' implicitly has an 'any' type.",
-        "anchor": "179c36c35c85e9755b42125e160c3c3c144d869200fad52ec9fc9f00708f35a1",
-        "line": 138,
-        "column": 25,
-        "start": 4846,
-        "length": 3
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7034\",\"Variable 'calls' implicitly has type 'any[]' in some locations where its type cannot be determined.\",\"351ffc390108cabff75d882504e6a25084b07d849b4195ae2c7bdd1fcdd5bfe4\",9,5]",
       "count": 1,
       "diagnostic": {
@@ -3335,21 +2960,6 @@
         "column": 9,
         "start": 13100,
         "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/check-architecture.mjs\",\"TS7034\",\"Variable 'writes' implicitly has type 'any[]' in some locations where its type cannot be determined.\",\"b4d6d85293584a37d3205055a65523dce821b145b4130fc5dd275a06b1099782\",9,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/check-architecture.mjs",
-        "code": "TS7034",
-        "message": "Variable 'writes' implicitly has type 'any[]' in some locations where its type cannot be determined.",
-        "anchor": "b4d6d85293584a37d3205055a65523dce821b145b4130fc5dd275a06b1099782",
-        "line": 302,
-        "column": 9,
-        "start": 11758,
-        "length": 6
       }
     },
     {
@@ -9638,51 +9248,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/evaluate-narrative-reader-judge-local-codex.mjs\",\"TS2339\",\"Property 'continuation' does not exist on type '{ distinctPrompts: number; cases: { judgePromptHash: string; inputBytes: number; estimatedInputTokens: number; readerReportedStatus?: any; id: any; familyId: any; questionId: any; condition: any; split: any; operation: any; readerPromptHash: any; }[]; ... 20 more ...; entryId: string; }'.\",\"83a8be97d286cda873a18e5a43d229c054e4c2e2aad901699c0092641a725139\",16,12]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/evaluate-narrative-reader-judge-local-codex.mjs",
-        "code": "TS2339",
-        "message": "Property 'continuation' does not exist on type '{ distinctPrompts: number; cases: { judgePromptHash: string; inputBytes: number; estimatedInputTokens: number; readerReportedStatus?: any; id: any; familyId: any; questionId: any; condition: any; split: any; operation: any; readerPromptHash: any; }[]; ... 20 more ...; entryId: string; }'.",
-        "anchor": "83a8be97d286cda873a18e5a43d229c054e4c2e2aad901699c0092641a725139",
-        "line": 232,
-        "column": 16,
-        "start": 19259,
-        "length": 12
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/evaluate-narrative-reader-judge-local-codex.mjs\",\"TS2339\",\"Property 'continuation' does not exist on type '{ distinctPrompts: number; cases: { judgePromptHash: string; inputBytes: number; estimatedInputTokens: number; readerReportedStatus?: any; id: any; familyId: any; questionId: any; condition: any; split: any; operation: any; readerPromptHash: any; }[]; ... 20 more ...; entryId: string; }'.\",\"83a8be97d286cda873a18e5a43d229c054e4c2e2aad901699c0092641a725139\",54,12]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/evaluate-narrative-reader-judge-local-codex.mjs",
-        "code": "TS2339",
-        "message": "Property 'continuation' does not exist on type '{ distinctPrompts: number; cases: { judgePromptHash: string; inputBytes: number; estimatedInputTokens: number; readerReportedStatus?: any; id: any; familyId: any; questionId: any; condition: any; split: any; operation: any; readerPromptHash: any; }[]; ... 20 more ...; entryId: string; }'.",
-        "anchor": "83a8be97d286cda873a18e5a43d229c054e4c2e2aad901699c0092641a725139",
-        "line": 232,
-        "column": 54,
-        "start": 19297,
-        "length": 12
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/evaluate-narrative-reader-judge-local-codex.mjs\",\"TS2339\",\"Property 'continuation' does not exist on type '{ distinctPrompts: number; cases: { judgePromptHash: string; inputBytes: number; estimatedInputTokens: number; readerReportedStatus?: any; id: any; familyId: any; questionId: any; condition: any; split: any; operation: any; readerPromptHash: any; }[]; ... 20 more ...; entryId: string; }'.\",\"ef73703d165c86165b92dcc474ab00d70fd81940a4011ab33c4579cc94db3b8c\",10,12]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/evaluate-narrative-reader-judge-local-codex.mjs",
-        "code": "TS2339",
-        "message": "Property 'continuation' does not exist on type '{ distinctPrompts: number; cases: { judgePromptHash: string; inputBytes: number; estimatedInputTokens: number; readerReportedStatus?: any; id: any; familyId: any; questionId: any; condition: any; split: any; operation: any; readerPromptHash: any; }[]; ... 20 more ...; entryId: string; }'.",
-        "anchor": "ef73703d165c86165b92dcc474ab00d70fd81940a4011ab33c4579cc94db3b8c",
-        "line": 130,
-        "column": 10,
-        "start": 10823,
-        "length": 12
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/evaluate-narrative-reader-judge-local-codex.mjs\",\"TS2339\",\"Property 'durationMs' does not exist on type '{ promptHash: any; provider: any; model: any; cliVersion: any; startedAt: string; status: string; dispatched: boolean; generationCompleted: boolean; rawText: string; usage: null; costUsd: null; serverEnforcedOutputTokenLimit: null; }'.\",\"48abc611b25be406133862e419aa55f3a6868d3e202fc4d958342184b48d420d\",66,10]",
       "count": 1,
       "diagnostic": {
@@ -9845,36 +9410,6 @@
         "column": 85,
         "start": 3510,
         "length": 10
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/evaluate-narrative-reader-judge-local-codex.mjs\",\"TS2345\",\"Argument of type 'NonSharedBuffer' is not assignable to parameter of type 'string'.\",\"fbf42a6f9c0b5a41f21d6a496b676c82f84acd095573a2309748d5ed321d7c87\",46,11]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/evaluate-narrative-reader-judge-local-codex.mjs",
-        "code": "TS2345",
-        "message": "Argument of type 'NonSharedBuffer' is not assignable to parameter of type 'string'.",
-        "anchor": "fbf42a6f9c0b5a41f21d6a496b676c82f84acd095573a2309748d5ed321d7c87",
-        "line": 114,
-        "column": 46,
-        "start": 9920,
-        "length": 11
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/evaluate-narrative-reader-judge-local-codex.mjs\",\"TS2345\",\"Argument of type 'NonSharedBuffer' is not assignable to parameter of type 'string'.\",\"fc1370001af9992f58155d9921ba372cf85ec1a9b6f87910f78bdaa16a04dc1e\",77,82]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/evaluate-narrative-reader-judge-local-codex.mjs",
-        "code": "TS2345",
-        "message": "Argument of type 'NonSharedBuffer' is not assignable to parameter of type 'string'.",
-        "anchor": "fc1370001af9992f58155d9921ba372cf85ec1a9b6f87910f78bdaa16a04dc1e",
-        "line": 124,
-        "column": 77,
-        "start": 10535,
-        "length": 82
       }
     },
     {
@@ -10073,21 +9608,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/evaluate-narrative-reader-judge-local-codex.mjs\",\"TS7053\",\"Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{}'.\\n  No index signature with a parameter of type 'string' was found on type '{}'.\",\"422276c96eda76ddc36fa3cbabbf5bb39053fc3ec3705eb3265af56a5030f8cc\",46,11]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/evaluate-narrative-reader-judge-local-codex.mjs",
-        "code": "TS7053",
-        "message": "Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{}'.\n  No index signature with a parameter of type 'string' was found on type '{}'.",
-        "anchor": "422276c96eda76ddc36fa3cbabbf5bb39053fc3ec3705eb3265af56a5030f8cc",
-        "line": 147,
-        "column": 46,
-        "start": 12211,
-        "length": 11
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/evaluate-narrative-reader-judge-local-codex.mjs\",\"TS7053\",\"Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{}'.\\n  No index signature with a parameter of type 'string' was found on type '{}'.\",\"f257ba4bdf7e0d67e9736c7617bdb815dedc509e5a75220dc37fb1023aa4d2ec\",10,41]",
       "count": 1,
       "diagnostic": {
@@ -10115,21 +9635,6 @@
         "column": 56,
         "start": 6192,
         "length": 40
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/evaluate-narrative-reader-judge-local-codex.mjs\",\"TS7053\",\"Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{}'.\\n  No index signature with a parameter of type 'string' was found on type '{}'.\",\"fc1370001af9992f58155d9921ba372cf85ec1a9b6f87910f78bdaa16a04dc1e\",52,11]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/evaluate-narrative-reader-judge-local-codex.mjs",
-        "code": "TS7053",
-        "message": "Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{}'.\n  No index signature with a parameter of type 'string' was found on type '{}'.",
-        "anchor": "fc1370001af9992f58155d9921ba372cf85ec1a9b6f87910f78bdaa16a04dc1e",
-        "line": 124,
-        "column": 52,
-        "start": 10510,
-        "length": 11
       }
     },
     {
@@ -10838,21 +10343,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7005\",\"Variable 'out' implicitly has an 'any[]' type.\",\"c542066d0ae2b62c73d3f34c1e87c916dfa75c74f91267f432f15c7052e3fe9c\",10,3]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/generate-ai-manual.mjs",
-        "code": "TS7005",
-        "message": "Variable 'out' implicitly has an 'any[]' type.",
-        "anchor": "c542066d0ae2b62c73d3f34c1e87c916dfa75c74f91267f432f15c7052e3fe9c",
-        "line": 165,
-        "column": 10,
-        "start": 6655,
-        "length": 3
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7005\",\"Variable 'seeds' implicitly has an 'any[]' type.\",\"fe5f46092485bffbfa8d159f76f1c6a3ca1f41b2586e25b77748fa9001fca20e\",10,5]",
       "count": 1,
       "diagnostic": {
@@ -11048,21 +10538,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"0aa7ee17bfcb15e592b87902ce6c2c440810409a47d93542bc19f63263469495\",22,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/generate-ai-manual.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'node' implicitly has an 'any' type.",
-        "anchor": "0aa7ee17bfcb15e592b87902ce6c2c440810409a47d93542bc19f63263469495",
-        "line": 73,
-        "column": 22,
-        "start": 2414,
-        "length": 4
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"2031e203207231ba9307c2e8d1224e9311f740e8dbbe8ff1a4e005d52f955388\",22,4]",
       "count": 1,
       "diagnostic": {
@@ -11124,7 +10599,7 @@
     },
     {
       "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'node' implicitly has an 'any' type.\",\"875fa36f030ac32730330297d8e042f3b34ce90cfbf96d60c9519c7042b63d44\",21,4]",
-      "count": 6,
+      "count": 5,
       "diagnostic": {
         "kind": "typescript",
         "file": "scripts/generate-ai-manual.mjs",
@@ -11303,21 +10778,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'sourceFile' implicitly has an 'any' type.\",\"0aa7ee17bfcb15e592b87902ce6c2c440810409a47d93542bc19f63263469495\",28,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/generate-ai-manual.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'sourceFile' implicitly has an 'any' type.",
-        "anchor": "0aa7ee17bfcb15e592b87902ce6c2c440810409a47d93542bc19f63263469495",
-        "line": 73,
-        "column": 28,
-        "start": 2420,
-        "length": 10
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7006\",\"Parameter 'sourceFile' implicitly has an 'any' type.\",\"b45c40c05ce843b4ed2731ed6382a2aa7daad8f4fcf1026f4d4857c74c2078ca\",31,10]",
       "count": 1,
       "diagnostic": {
@@ -11405,21 +10865,6 @@
         "column": 7,
         "start": 6856,
         "length": 8
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/generate-ai-manual.mjs\",\"TS7034\",\"Variable 'out' implicitly has type 'any[]' in some locations where its type cannot be determined.\",\"6d67a14cb7dabd88896a15deaa615970b1c6a547b6351e595f4bc8a4f84ad0fb\",9,3]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/generate-ai-manual.mjs",
-        "code": "TS7034",
-        "message": "Variable 'out' implicitly has type 'any[]' in some locations where its type cannot be determined.",
-        "anchor": "6d67a14cb7dabd88896a15deaa615970b1c6a547b6351e595f4bc8a4f84ad0fb",
-        "line": 150,
-        "column": 9,
-        "start": 5984,
-        "length": 3
       }
     },
     {
@@ -36068,21 +35513,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-chapter-context-preview.test.tsx\",\"TS7017\",\"Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.\",\"1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee\",12,24]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AUDIT6-chapter-context-preview.test.tsx",
-        "code": "TS7017",
-        "message": "Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.",
-        "anchor": "1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee",
-        "line": 7,
-        "column": 12,
-        "start": 301,
-        "length": 24
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-AUDIT6-chapter-editor-header.test.tsx\",\"TS7017\",\"Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.\",\"1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee\",12,24]",
       "count": 1,
       "diagnostic": {
@@ -47993,36 +47423,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts\",\"TS2345\",\"Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\\\"chapter\\\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\\n  Types of property 'kinds' are incompatible.\\n    The type 'readonly [\\\"chapter\\\"]' is 'readonly' and cannot be assigned to the mutable type '(\\\"world\\\" | \\\"reference\\\" | \\\"character\\\" | \\\"location\\\" | \\\"codex-entry\\\" | \\\"foreshadow\\\" | \\\"character-relation\\\" | \\\"story-arc\\\" | \\\"storyline-progress\\\" | \\\"chapter\\\" | \\\"worldview-field\\\" | ... 6 more ... | \\\"narrative-blueprint\\\")[]'.\",\"6108da874eca93a74340081bf05c12f1d39ae014ef950bf1785fc9690b806d06\",49,11]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\"chapter\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\n  Types of property 'kinds' are incompatible.\n    The type 'readonly [\"chapter\"]' is 'readonly' and cannot be assigned to the mutable type '(\"world\" | \"reference\" | \"character\" | \"location\" | \"codex-entry\" | \"foreshadow\" | \"character-relation\" | \"story-arc\" | \"storyline-progress\" | \"chapter\" | \"worldview-field\" | ... 6 more ... | \"narrative-blueprint\")[]'.",
-        "anchor": "6108da874eca93a74340081bf05c12f1d39ae014ef950bf1785fc9690b806d06",
-        "line": 146,
-        "column": 49,
-        "start": 5156,
-        "length": 11
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts\",\"TS2345\",\"Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\\\"chapter\\\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\\n  Types of property 'kinds' are incompatible.\\n    The type 'readonly [\\\"chapter\\\"]' is 'readonly' and cannot be assigned to the mutable type '(\\\"world\\\" | \\\"reference\\\" | \\\"character\\\" | \\\"location\\\" | \\\"codex-entry\\\" | \\\"foreshadow\\\" | \\\"character-relation\\\" | \\\"story-arc\\\" | \\\"storyline-progress\\\" | \\\"chapter\\\" | \\\"worldview-field\\\" | ... 6 more ... | \\\"narrative-blueprint\\\")[]'.\",\"a49ff1075618d6cabff5a9955633161f7363525c8852fdd4bcc95542a6f7e7ff\",39,11]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ scope: { projectId: number; worldId: number; workId: number; worldGroupId: null; }; kinds: readonly [\"chapter\"]; limit: number; }' is not assignable to parameter of type 'ResourceListInputV1'.\n  Types of property 'kinds' are incompatible.\n    The type 'readonly [\"chapter\"]' is 'readonly' and cannot be assigned to the mutable type '(\"world\" | \"reference\" | \"character\" | \"location\" | \"codex-entry\" | \"foreshadow\" | \"character-relation\" | \"story-arc\" | \"storyline-progress\" | \"chapter\" | \"worldview-field\" | ... 6 more ... | \"narrative-blueprint\")[]'.",
-        "anchor": "a49ff1075618d6cabff5a9955633161f7363525c8852fdd4bcc95542a6f7e7ff",
-        "line": 148,
-        "column": 39,
-        "start": 5254,
-        "length": 11
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts\",\"TS7006\",\"Parameter 'request' implicitly has an 'any' type.\",\"601286e2833b0c6c18a6d0af7ef7169a6f55c7cb5b8a4548fd25d9b5dc4eee44\",25,7]",
       "count": 1,
       "diagnostic": {
@@ -55898,51 +55298,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD5-creator-quality.test.ts\",\"TS2322\",\"Type '\\\"ending.fixture\\\"' is not assignable to type 'null'.\",\"0186a1e24fb6909c8ceb73582498cd9523a523069c7c713a3201d318bb213da2\",5,51]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-OPEN-WORLD5-creator-quality.test.ts",
-        "code": "TS2322",
-        "message": "Type '\"ending.fixture\"' is not assignable to type 'null'.",
-        "anchor": "0186a1e24fb6909c8ceb73582498cd9523a523069c7c713a3201d318bb213da2",
-        "line": 677,
-        "column": 5,
-        "start": 35957,
-        "length": 51
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD5-creator-quality.test.ts\",\"TS2322\",\"Type 'string' is not assignable to type 'null'.\",\"1e00d430bd34e05de12e75e547eda97b940c525f298e5a8f4fce473ad01e8446\",3,51]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-OPEN-WORLD5-creator-quality.test.ts",
-        "code": "TS2322",
-        "message": "Type 'string' is not assignable to type 'null'.",
-        "anchor": "1e00d430bd34e05de12e75e547eda97b940c525f298e5a8f4fce473ad01e8446",
-        "line": 437,
-        "column": 3,
-        "start": 23461,
-        "length": 51
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD5-creator-quality.test.ts\",\"TS2550\",\"Property 'at' does not exist on type 'string[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.\",\"fe7dc3e1dd039b872a90e251a80816d2bc19e73b6782d79fa5cd08ed0f68b00b\",69,2]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-OPEN-WORLD5-creator-quality.test.ts",
-        "code": "TS2550",
-        "message": "Property 'at' does not exist on type 'string[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
-        "anchor": "fe7dc3e1dd039b872a90e251a80816d2bc19e73b6782d79fa5cd08ed0f68b00b",
-        "line": 980,
-        "column": 69,
-        "start": 52013,
-        "length": 2
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD5-creator-release-ui.test.tsx\",\"TS7017\",\"Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.\",\"1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee\",12,24]",
       "count": 1,
       "diagnostic": {
@@ -62255,21 +61610,6 @@
         "column": 12,
         "start": 481,
         "length": 24
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN10-audio-runtime.test.ts\",\"TS2345\",\"Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => PromiseExtended<...>'.\\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.\",\"cf12f695726069a78719a2255e52041534491d7ef42d9c6472a71f26cb641ee1\",69,55]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN10-audio-runtime.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => PromiseExtended<...>'.\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.",
-        "anchor": "cf12f695726069a78719a2255e52041534491d7ef42d9c6472a71f26cb641ee1",
-        "line": 78,
-        "column": 69,
-        "start": 7302,
-        "length": 55
       }
     },
     {
@@ -87933,7 +87273,6 @@
       "tests/e2e/avg-visual-prototype-read.spec.ts",
       "tests/e2e/avg-voice-production.spec.ts",
       "tests/e2e/avg-voice-workbench.spec.ts",
-      "tests/e2e/batch-detail-confirmation.spec.ts",
       "tests/e2e/bootstrap-module-recovery.spec.ts",
       "tests/e2e/brand-icon.spec.ts",
       "tests/e2e/builtin-games-catalog.spec.ts",
@@ -88014,14 +87353,11 @@
       "tests/e2e/codex-reference-read.spec.ts",
       "tests/e2e/comic-motion-showcase.spec.ts",
       "tests/e2e/comic-production.spec.ts",
-      "tests/e2e/community-works-share.spec.ts",
       "tests/e2e/compact-workspaces.spec.ts",
       "tests/e2e/context-compression-transport.spec.ts",
       "tests/e2e/context-owner-exact-transaction.spec.ts",
       "tests/e2e/core-workflow.spec.ts",
-      "tests/e2e/diagnostic-context.spec.ts",
       "tests/e2e/docx-import-compat.spec.ts",
-      "tests/e2e/doubao-model-lifecycle.spec.ts",
       "tests/e2e/example-library.spec.ts",
       "tests/e2e/failure-reporting.spec.ts",
       "tests/e2e/feedback-fixes.spec.ts",
@@ -88102,8 +87438,6 @@
       "tests/e2e/provider-model-lifecycle.spec.ts",
       "tests/e2e/provider-output-accounting.spec.ts",
       "tests/e2e/quality001016-creation-task-recovery.spec.ts",
-      "tests/e2e/quality002-node-field-adoption.spec.ts",
-      "tests/e2e/quality002-node-prefix-recovery.spec.ts",
       "tests/e2e/quality013-import-lifecycle.spec.ts",
       "tests/e2e/quality026-comic-visual-deletion.spec.ts",
       "tests/e2e/quality027-root-chapter-export.spec.ts",
@@ -88112,18 +87446,12 @@
       "tests/e2e/quality049-codex-category-delete.spec.ts",
       "tests/e2e/quality053-102-credential-ownership.spec.ts",
       "tests/e2e/quality059060-inspiration-writes.spec.ts",
-      "tests/e2e/quality078-embedding-response.spec.ts",
       "tests/e2e/quality080-safe-presentation.spec.ts",
       "tests/e2e/quality093-missing-chapter-delete.spec.ts",
       "tests/e2e/quality100-backup-dialog-consent.spec.ts",
       "tests/e2e/quality106108-prompt-library.spec.ts",
       "tests/e2e/quality107-prompt-example-late-edit.spec.ts",
       "tests/e2e/quality112-ai-town-draft-conflict.spec.ts",
-      "tests/e2e/quality114-http-body-lifetime.spec.ts",
-      "tests/e2e/quality115-room-rejection.spec.ts",
-      "tests/e2e/quality125-history-retry.spec.ts",
-      "tests/e2e/quality130-home-menu.spec.ts",
-      "tests/e2e/run-scope-deletion-safety.spec.ts",
       "tests/e2e/salt-ridge-showcase.spec.ts",
       "tests/e2e/screenplay-integration.spec.ts",
       "tests/e2e/screenplay-production.spec.ts",
@@ -88159,7 +87487,6 @@
       "tests/e2e/ttrpg-author-draft-conflict.spec.ts",
       "tests/e2e/ttrpg-authoring-ui.spec.ts",
       "tests/e2e/ttrpg-community-recovery.spec.ts",
-      "tests/e2e/ttrpg-empty-session-stability.spec.ts",
       "tests/e2e/ttrpg-memory-receipt.spec.ts",
       "tests/e2e/ttrpg-memory-storage-migration.spec.ts",
       "tests/e2e/ttrpg-open-audio.spec.ts",
@@ -88420,16 +87747,6 @@
       "tests/helpers/product-release-v1.ts",
       "tests/helpers/production-canonical-key-fixture.ts",
       "tests/helpers/quality001016-creation-fixtures.ts",
-      "tests/helpers/quality002-node-field.ts",
-      "tests/helpers/quality005-legacy-attempts.ts",
-      "tests/helpers/quality005-legacy-chapter-brief.ts",
-      "tests/helpers/quality005-legacy-choice.ts",
-      "tests/helpers/quality005-legacy-hybrid.ts",
-      "tests/helpers/quality005-legacy-interaction-candidate.ts",
-      "tests/helpers/quality005-legacy-large-source.ts",
-      "tests/helpers/quality005-legacy-media-branch.ts",
-      "tests/helpers/quality005-legacy-novel.ts",
-      "tests/helpers/quality005-own-runtime-recovery.ts",
       "tests/helpers/ready-ttrpg-session.ts",
       "tests/helpers/salt-ridge-world.ts",
       "tests/helpers/seed-full-project.ts",
@@ -88967,7 +88284,6 @@
       "tests/regression/R-CI-coverage-completion.test.ts",
       "tests/regression/R-CLIENT-LEGAL1-consent.test.tsx",
       "tests/regression/R-CLIENT-SUPPORT1-feedback-telemetry.test.tsx",
-      "tests/regression/R-CLIENT-desktop-transport.test.ts",
       "tests/regression/R-CLIENT-native-transport.test.ts",
       "tests/regression/R-CLIENT-save-file.test.ts",
       "tests/regression/R-CLIENT-signed-upgrade-fixture.test.ts",
@@ -88991,11 +88307,6 @@
       "tests/regression/R-COMMUNITY1-authority.test.ts",
       "tests/regression/R-COMMUNITY1-collaboration.test.ts",
       "tests/regression/R-COMMUNITY1-gateway.test.ts",
-      "tests/regression/R-COMMUNITY1-public-snapshot.test.ts",
-      "tests/regression/R-COMMUNITY2-local-preview.test.ts",
-      "tests/regression/R-COMMUNITY3-snapshot-seal.test.ts",
-      "tests/regression/R-COMMUNITY4-client-upload.test.ts",
-      "tests/regression/R-COMMUNITY5-share-ui.test.tsx",
       "tests/regression/R-CONSISTENCY1-held-items.test.ts",
       "tests/regression/R-CONSISTENCY2-knowledge-ledger.test.ts",
       "tests/regression/R-CONSISTENCY2-knowledge-ui.test.tsx",
@@ -89022,7 +88333,6 @@
       "tests/regression/R-CTXG4-context-gateway-tools.test.ts",
       "tests/regression/R-CTXG5-context-selector.test.ts",
       "tests/regression/R-CTXG6-context-evidence.test.ts",
-      "tests/regression/R-CTXG6-manifest-base-reader.test.ts",
       "tests/regression/R-CTXG7-gateway-execution.test.ts",
       "tests/regression/R-CTXG8-owner-read-session.test.ts",
       "tests/regression/R-CTXG8-provider-cache-large-retrieval.test.ts",
@@ -89032,8 +88342,6 @@
       "tests/regression/R-DETAILED-author-save-boundary.test.ts",
       "tests/regression/R-DEXIE-PREMATURE-COMMIT.test.ts",
       "tests/regression/R-DIAGNOSTICS1-failure-reporting.test.tsx",
-      "tests/regression/R-DIAGNOSTICS2-context.test.ts",
-      "tests/regression/R-DIAGNOSTICS2-wire.test.ts",
       "tests/regression/R-E-group-ui-and-divine.test.ts",
       "tests/regression/R-EDITOR1-find-replace.test.ts",
       "tests/regression/R-EDITOR3-compare-polish.test.ts",
@@ -89057,7 +88365,6 @@
       "tests/regression/R-FEEDBACK101-production-proxy.test.tsx",
       "tests/regression/R-FEEDBACK102-context-resources.test.ts",
       "tests/regression/R-FEEDBACK116-unnamed-canon.test.ts",
-      "tests/regression/R-FEEDBACK179-run-scope-deletion.test.ts",
       "tests/regression/R-FEEDBACK19-connection-guidance.test.tsx",
       "tests/regression/R-FEEDBACK225-codex-reference-read.test.ts",
       "tests/regression/R-FEEDBACK54-outline-scroll.test.tsx",
@@ -89663,22 +88970,6 @@
       "tests/regression/R-PROSE1-gateway-prose.test.ts",
       "tests/regression/R-PROTOTYPE1-community-catalog.test.ts",
       "tests/regression/R-QUALITY-agent-freshness-legacy-chat.test.ts",
-      "tests/regression/R-QUALITY005-direct-executor-admission.test.ts",
-      "tests/regression/R-QUALITY005-formal-source-capture.test.ts",
-      "tests/regression/R-QUALITY005-legacy-artifact-admission.test.ts",
-      "tests/regression/R-QUALITY005-legacy-paid-unknown.test.ts",
-      "tests/regression/R-QUALITY005-legacy-portable-readers.test.ts",
-      "tests/regression/R-QUALITY005-legacy-production-admission.test.ts",
-      "tests/regression/R-QUALITY005-legacy-readonly-ui.test.tsx",
-      "tests/regression/R-QUALITY005-legacy-runtime-admission.test.ts",
-      "tests/regression/R-QUALITY005-legacy-shared-command-admission.test.ts",
-      "tests/regression/R-QUALITY005-media-commit-guard.test.ts",
-      "tests/regression/R-QUALITY005-media-source-admission.test.ts",
-      "tests/regression/R-QUALITY005-novel-world-derivation.test.ts",
-      "tests/regression/R-QUALITY005-own-runtime-recovery.test.ts",
-      "tests/regression/R-QUALITY005-runtime-media-admission.test.ts",
-      "tests/regression/R-QUALITY005-studio-first-production-refresh.test.tsx",
-      "tests/regression/R-QUALITY005-world-source-admission.test.ts",
       "tests/regression/R-QUALITY015-source-capabilities.test.ts",
       "tests/regression/R-QUALITY017-screenplay-frozen-intent.test.ts",
       "tests/regression/R-QUALITY080-safe-theater-privacy.test.tsx",
@@ -89704,22 +88995,6 @@
       "tests/regression/R-SCREEN5-planning-refresh.test.tsx",
       "tests/regression/R-SFQA001016-creation-task-state.test.ts",
       "tests/regression/R-SFQA001016-creation-task-ui.test.tsx",
-      "tests/regression/R-SFQA002-ai-manual-local-meta.test.ts",
-      "tests/regression/R-SFQA002-avg-exact-response.test.ts",
-      "tests/regression/R-SFQA002-creation-raw-response.test.ts",
-      "tests/regression/R-SFQA002-impact-rebuild-raw-response.test.ts",
-      "tests/regression/R-SFQA002-master-raw-response.test.ts",
-      "tests/regression/R-SFQA002-node-field-adoption-atomic.test.ts",
-      "tests/regression/R-SFQA002-node-field-adoption-lifecycle.test.ts",
-      "tests/regression/R-SFQA002-node-field-adoption-ui.test.tsx",
-      "tests/regression/R-SFQA002-node-field-prefix-recovery.test.ts",
-      "tests/regression/R-SFQA002-node-field-raw-response.test.ts",
-      "tests/regression/R-SFQA002-node-prefix-recovery-ui.test.tsx",
-      "tests/regression/R-SFQA002-node-producer-lifecycle.test.ts",
-      "tests/regression/R-SFQA002-node-public-memory-interop.test.ts",
-      "tests/regression/R-SFQA002-prose-semantic-raw-response.test.ts",
-      "tests/regression/R-SFQA002-runtime-raw-response.test.ts",
-      "tests/regression/R-SFQA008-critical-coverage.test.ts",
       "tests/regression/R-SFQA013-import-session-interruption.test.tsx",
       "tests/regression/R-SFQA013-import-session-lifecycle.test.ts",
       "tests/regression/R-SFQA014-owner-primary-key.test.ts",
@@ -89727,7 +89002,6 @@
       "tests/regression/R-SFQA027-root-chapter-list.test.tsx",
       "tests/regression/R-SFQA027-root-chapter-text-export.test.ts",
       "tests/regression/R-SFQA035-adoption-reference-validation.test.ts",
-      "tests/regression/R-SFQA036-brief-atomic-recovery.test.tsx",
       "tests/regression/R-SFQA047-location-hierarchy-ui.test.tsx",
       "tests/regression/R-SFQA047-location-hierarchy.test.ts",
       "tests/regression/R-SFQA047-location-input-snapshot.test.ts",
@@ -89738,24 +89012,12 @@
       "tests/regression/R-SFQA053-102-provider-credential-identity.test.tsx",
       "tests/regression/R-SFQA059060-inspiration-hook.test.tsx",
       "tests/regression/R-SFQA059060-inspiration-writes.test.ts",
-      "tests/regression/R-SFQA061-quality-repair-integrity.test.ts",
-      "tests/regression/R-SFQA074075076-scripted-runtime.test.ts",
-      "tests/regression/R-SFQA078-embedding-response.test.ts",
-      "tests/regression/R-SFQA079-open-seat-start.test.ts",
-      "tests/regression/R-SFQA091-runtime-media-visibility.test.ts",
       "tests/regression/R-SFQA093-missing-chapter-delete-cas.test.ts",
       "tests/regression/R-SFQA100-backup-dialog-consent.test.tsx",
-      "tests/regression/R-SFQA101-brief-finish.test.tsx",
       "tests/regression/R-SFQA106108-prompt-library.test.tsx",
       "tests/regression/R-SFQA107-prompt-example-late-edit.test.tsx",
-      "tests/regression/R-SFQA110-room-mutation-recovery.test.ts",
       "tests/regression/R-SFQA112-ai-town-draft-basis.test.tsx",
       "tests/regression/R-SFQA113-overlapping-evidence.test.ts",
-      "tests/regression/R-SFQA114-http-body-lifetime.test.ts",
-      "tests/regression/R-SFQA115-client-rejections.test.ts",
-      "tests/regression/R-SFQA115-room-rejection-ui.test.tsx",
-      "tests/regression/R-SFQA119-nation-expansion-precision.test.ts",
-      "tests/regression/R-SFQA125-history-retry.test.tsx",
       "tests/regression/R-SHORT1-workflow-prompt-template.test.ts",
       "tests/regression/R-SHORT2-professional-production.test.ts",
       "tests/regression/R-SHORT3-showcase-placement.test.tsx",
@@ -90155,8 +89417,6 @@
       "tests/regression/R-issue214-provider-lifecycle.test.ts",
       "tests/regression/R-issue218-provider-output-accounting.test.ts",
       "tests/regression/R-issue23-ai-config-readiness.test.ts",
-      "tests/regression/R-issue242-ttrpg-empty-selection.test.tsx",
-      "tests/regression/R-issue243-doubao-lifecycle.test.ts",
       "tests/regression/R-open-truncation.test.ts",
       "tests/regression/R-opencode-provider.test.ts",
       "tests/regression/R-project-json-file.test.ts",
@@ -90178,7 +89438,6 @@
       "playwright.config.ts",
       "playwright.showcase.config.ts",
       "postcss.config.js",
-      "scripts/ai-call-meta.mjs",
       "scripts/avg-audio-input-contract.mjs",
       "scripts/build-adventure-player.mjs",
       "scripts/check-agent-context.mjs",
@@ -90208,16 +89467,12 @@
       "scripts/check-text-open-world-stress.mjs",
       "scripts/desktop/build-upgrade-fixture.mjs",
       "scripts/desktop/build-upgrade-fixture.test.mjs",
-      "scripts/desktop/diagnostic-smoke.mjs",
       "scripts/desktop/diagnostics.mjs",
       "scripts/desktop/diagnostics.test.mjs",
-      "scripts/desktop/http-transport.mjs",
-      "scripts/desktop/http-transport.test.mjs",
       "scripts/desktop/mac-updater.mjs",
       "scripts/desktop/mac-updater.test.mjs",
       "scripts/desktop/main.mjs",
       "scripts/desktop/preload.cjs",
-      "scripts/desktop/relay-smoke.mjs",
       "scripts/desktop/smoke.mjs",
       "scripts/desktop/updater.mjs",
       "scripts/desktop/updater.test.mjs",
@@ -90281,8 +89536,6 @@
       "scripts/narrative-world-baseline-contract.mjs",
       "scripts/quality-evals/longform-author-repair.mjs",
       "scripts/quality-evals/longform-choice-questionnaire.mjs",
-      "scripts/quality/check-dev-dependency-report.mjs",
-      "scripts/quality/check-dev-dependency-report.test.mjs",
       "scripts/quality/check-engineering.mjs",
       "scripts/quality/check-engineering.test.mjs",
       "scripts/report-narrative-reader.mjs",
@@ -90346,8 +89599,6 @@
     "zeroDebtFiles": [
       "scripts/quality/check-engineering.mjs",
       "scripts/quality/check-engineering.test.mjs",
-      "scripts/quality/check-dev-dependency-report.mjs",
-      "scripts/quality/check-dev-dependency-report.test.mjs",
       "eslint.tooling.config.mjs",
       "tests/regression/R-OPEN-WORLD3-experience-design.test.ts",
       "tests/helpers/text-open-world-delivery-recognition-assertions.ts"

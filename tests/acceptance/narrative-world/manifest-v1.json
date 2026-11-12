@@ -21,9 +21,94 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261111-quality007-dev-audit-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-direct-main-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality008-main416-v1.json",
+        "workPackage": "SFQA-007",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality007-dev-audit-v1.json",
+        "workPackage": "SFQA-007",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality018-integrated-v1.json",
+        "workPackage": "SFQA-008",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality008-critical-coverage-v1.json",
+        "workPackage": "SFQA-008",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality086-integrated-v1.json",
+        "workPackage": "SFQA-018",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-sfqa018-standalone-v1.json",
+        "workPackage": "SFQA-018",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality020-integrated-v1.json",
+        "workPackage": "SFQA-086",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality086-continuity-v1.json",
+        "workPackage": "SFQA-086",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality029-integrated-v1.json",
+        "workPackage": "SFQA-020",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality020-independent-v1.json",
+        "workPackage": "SFQA-020",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality019-integrated-v1.json",
+        "workPackage": "SFQA-029",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality029-independent-v1.json",
+        "workPackage": "SFQA-029",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality137-integrated-v1.json",
+        "workPackage": "SFQA-019",
+        "note": "Preserved the mainline measurement before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality019-stable-recovery-v1.json",
+        "workPackage": "SFQA-019",
+        "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality137-judge-continuation-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the independently measured reader judge continuation changes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality134-static-bindings-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the integrated mainline before reader judge continuation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
+        "workPackage": "NW-0B",
+        "note": "Preserved the previous baseline before tracking the updated architecture checker and its static binding analysis."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
         "workPackage": "NW-0B",
@@ -679,13 +764,14 @@
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
-        "workPackage": "NW-0B",
-        "note": "Preserved before registering the critical coverage scopes imported by the Vitest configuration."
+        "implementationCommit": "bc18dc8466f2e6661b6ce9a17131981f41992844",
+        "workPackage": "pre-quality019-portable-tree",
+        "note": "Preserved the main receipt before validating portable tree imports for SFQA-019."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261111-quality008-critical-coverage-v1.json",
-        "workPackage": "NW-0B",
-        "note": "Preserved before upgrading the audited development toolchain and adapting the coverage runner to Vitest 4."
+        "path": "tests/acceptance/narrative-world/baseline-20261111-quality019-portable-tree-v1.json",
+        "workPackage": "SFQA-019-portable-tree",
+        "note": "Preserve the initial independent tree-validation receipt before restoring stable parent-first insertion and measuring the shared portable-tree source."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -694,7 +780,9 @@
     "eslint.config.mjs",
     "package-lock.json",
     "package.json",
+    "scripts/ai-call-meta.mjs",
     "scripts/check-architecture.mjs",
+    "scripts/static-guard-bindings.mjs",
     "scripts/check-narrative-world-baseline.mjs",
     "scripts/evaluate-narrative-author-quality-local-codex.mjs",
     "scripts/evaluate-narrative-candidates-local-codex.mjs",
@@ -717,6 +805,8 @@
     "scripts/narrative-reader-contract.mjs",
     "scripts/narrative-reader-contract.test.mjs",
     "scripts/narrative-reader-judge-content.test.mjs",
+    "scripts/narrative-reader-judge-continuation.mjs",
+    "scripts/narrative-reader-judge-continuation.test.mjs",
     "scripts/narrative-reader-judge-contract.mjs",
     "scripts/narrative-reader-judge-contract.test.mjs",
     "scripts/narrative-reader-judge-coverage.mjs",
@@ -762,6 +852,7 @@
     "src/lib/db/schema.ts",
     "src/lib/export/registry-export.ts",
     "src/lib/export/registry-import.ts",
+    "src/lib/export/portable-table-structure.ts",
     "src/lib/narrative-domain/codec.ts",
     "src/lib/narrative-domain/integrity.ts",
     "src/lib/narrative-domain/json.ts",
@@ -970,7 +1061,6 @@
     "tests/regression/R-STORY1-story-intent-projection.test.ts",
     "tests/regression/R-WORLD-D-phase-d-closure.test.ts",
     "tests/setup.ts",
-    "scripts/quality/critical-coverage-scopes.json",
     "vitest.config.ts",
     "tests/regression/R-NW-2E-posting-ownership.test.ts",
     "tests/regression/R-NW-2E-fused-freeze-hash.test.ts",
@@ -980,7 +1070,8 @@
     "tests/regression/R-NW-2E-byte-sink.test.ts",
     "tests/regression/R-NW-2E-numeric-runs.test.ts",
     "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
-    "src/lib/types/state-card.ts"
+    "src/lib/types/state-card.ts",
+    "scripts/quality/critical-coverage-scopes.json"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

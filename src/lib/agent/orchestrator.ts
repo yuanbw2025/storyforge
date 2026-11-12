@@ -28,7 +28,6 @@ import {
   latestInspirationVersion,
   MAX_INSPIRATION_FRAGMENTS,
 } from '../inspiration/workspace'
-import { adopt } from '../registry/adopt'
 import {
   parseAgentEventPayload,
   type AgentEvent,
@@ -38,6 +37,7 @@ import {
   type WorkspaceScope,
 } from '../types'
 import {
+  adoptCharacterCopilotCandidate,
   parseCharacterCandidateDraft,
   prepareCharacterCopilot,
   type CharacterCopilotCandidate,
@@ -2259,7 +2259,9 @@ export async function adoptMasterCandidate(input: {
       mutation: input.payload.storyArcMutationRequest,
     })
   } else if (input.runtime) {
-    const output = input.payload.skillId === 'world-origin.worldview-field'
+    const output = input.payload.skillId === 'outline.details'
+      ? input.draft
+      : input.payload.skillId === 'world-origin.worldview-field'
       ? parseWorldviewFieldCandidateDraft(input.draft)
       : input.payload.skillId === 'world-origin.story-core'
       ? parseStoryCoreCandidateDraft(input.draft)
@@ -2341,13 +2343,12 @@ export async function adoptMasterCandidate(input: {
       const candidate = parseCharacterCandidateDraft(input.draft)
       const normalized = candidate.name.normalize('NFKC').trim().toLocaleLowerCase('zh-CN')
       if (current.visibleNames.includes(normalized)) throw new Error(`当前世界已存在角色“${candidate.name}”。`)
-      await adopt({
+      await adoptCharacterCopilotCandidate({
         projectId: input.projectId,
         scope,
         worldGroupId: input.worldGroupId,
-        target: 'characters',
-        mode: 'add',
-        data: { ...candidate, isCrossWorld: false },
+        snapshot: base,
+        candidate,
       })
     }
   } else if (input.payload.agentId === 'inspiration') {

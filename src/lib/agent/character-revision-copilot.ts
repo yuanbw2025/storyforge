@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { usePromptStore } from '../../stores/prompt'
 import { chat, resolveRequestConfig } from '../ai/client'
@@ -12,6 +13,7 @@ import type {
 import { prepareGenerationNode } from '../generation/generation-node'
 import { adopt } from '../registry/adopt'
 import { assembleContext } from '../registry/assemble-context'
+import { canonicalStringify, hashCanonicalValue } from './run/hash'
 import {
   buildCharacterRevisionSnapshot,
   effectiveProtectedThrough,
@@ -25,6 +27,7 @@ import {
 import type {
   AIConfig,
   Character,
+  Chapter,
   CharacterDrivenPlan,
   ChatMessage,
   WorkspaceScope,
@@ -83,6 +86,7 @@ export interface CharacterRevisionCopilotSnapshotV1 {
   revision: CharacterRevisionSnapshot
   request: CharacterRevisionTaskInputV1
   planId: number | null
+  recoveryEvidenceHash?: string
 }
 
 interface CharacterRevisionCopilotInputV1 {
@@ -507,12 +511,38 @@ function selectedPatches(candidate: CharacterRevisionCandidateV1) {
   return patches
 }
 
+async function recoveryEvidenceHash(
+  scope: WorkspaceScope,
+  worldGroupId: number | null,
+  snapshot: CharacterRevisionSnapshot,
+): Promise<string> {
+  const skill = resolveAgentSkillV1('outline', 'outline.character-revision')
+  const writtenIds = new Set(snapshot.chapters.filter(chapter => chapter.written).map(chapter => chapter.chapterId))
+  const [context, chapters] = await Promise.all([
+    assembleContext({
+      scope, projectId: scope.projectId, worldGroupId, chapterId: snapshot.lastWrittenChapterId,
+      sourceKeys: skill.contextSourceKeys.filter(key => key !== 'manualText'),
+    }),
+    readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
+  ])
+  const written = chapters.filter(chapter => writtenIds.has(chapter.id ?? null))
+    .sort((left, right) => left.id! - right.id!)
+    .map(({ id, content, summary, continuityHandoff }) => ({ id, content, summary, continuityHandoff }))
+  const hash = hashCanonicalValue({
+    context: context.sourceEvidence,
+    segments: context.segments.map(({ label, content }) => ({ label, content })),
+    written,
+  })
+  return Dexie.currentTransaction ? Dexie.waitFor(hash) : hash
+}
+
 async function applyCandidate(input: {
   projectId: number
   scope?: WorkspaceScope
   snapshot: CharacterRevisionCopilotSnapshotV1
   candidate: CharacterRevisionCandidateV1
   recovery: boolean
+  worldGroupId?: number | null
 }): Promise<{ appliedOutlineNodeIds: number[]; alreadyAppliedOutlineNodeIds: number[] }> {
   const patches = selectedPatches(input.candidate)
   const fresh = await buildCharacterRevisionSnapshot(input.scope ?? input.projectId)
@@ -536,6 +566,38 @@ async function applyCandidate(input: {
     }
     if (current.title !== patch.currentTitle || current.summary !== patch.currentSummary) {
       throw new CharacterRevisionCopilotStaleError()
+    }
+  }
+  if (input.recovery) {
+    const scope = input.scope ?? await resolveReadScopeLike(input.projectId)
+    const current = (await readSnapshot({ projectId: input.projectId, scope, request: input.snapshot.request })).snapshot
+    const originalByNode = new Map(input.snapshot.revision.chapters.map(chapter => [chapter.outlineNodeId, chapter]))
+    const writtenByThisIntent = new Set(alreadyAppliedOutlineNodeIds)
+    const projected = {
+      ...current.revision,
+      chapters: current.revision.chapters.map(chapter => {
+        const original = originalByNode.get(chapter.outlineNodeId)
+        return original && writtenByThisIntent.has(chapter.outlineNodeId)
+          ? { ...chapter, title: original.title, summary: original.summary, outlineUpdatedAt: original.outlineUpdatedAt }
+          : chapter
+      }),
+    }
+    const expected = JSON.parse(input.snapshot.serialized)
+    const actual = { ...JSON.parse(current.serialized), revision: projected }
+    if (canonicalStringify(actual) !== canonicalStringify(expected)
+      || !input.snapshot.recoveryEvidenceHash
+      || await recoveryEvidenceHash(scope, input.worldGroupId ?? null, current.revision) !== input.snapshot.recoveryEvidenceHash) {
+      throw new CharacterRevisionCopilotStaleError()
+    }
+    // Check all linked titles before writing any outline row.
+    for (const patch of patches) {
+      const chapterId = currentByNode.get(patch.outlineNodeId)?.chapterId
+      if (chapterId == null || patch.proposedTitle === patch.currentTitle) continue
+      const chapter = await db.chapters.get(chapterId)
+      if (!chapter || !await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })
+        || (chapter.title !== patch.currentTitle && chapter.title !== patch.proposedTitle)) {
+        throw new CharacterRevisionCopilotStaleError()
+      }
     }
   }
   const appliedOutlineNodeIds: number[] = []
@@ -592,6 +654,7 @@ export async function adoptRestoredCharacterRevisionCandidateV1(input: {
 export async function repairPartialCharacterRevisionAdoptionV1(input: {
   projectId: number
   scope?: WorkspaceScope
+  worldGroupId?: number | null
   snapshot: CharacterRevisionCopilotSnapshotV1
   draft: string
 }) {
@@ -671,6 +734,8 @@ export async function prepareCharacterRevisionCopilotV1(
         runtime: input.contextCompressionRuntime,
       })
     : undefined
+  const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
+  const frozenRecoveryEvidence = await recoveryEvidenceHash(scope, worldGroupId, before.snapshot.revision)
   const assembled = await assembleContext({
     projectId: input.projectId,
     scope,
@@ -686,7 +751,11 @@ export async function prepareCharacterRevisionCopilotV1(
     sourceTransformer: compression?.sourceTransformer,
   })
   const after = await readSnapshot({ projectId: input.projectId, scope, request: before.snapshot.request })
-  if (before.snapshot.serialized !== after.snapshot.serialized) throw new CharacterRevisionCopilotStaleError()
+  const verifiedRecoveryEvidence = await recoveryEvidenceHash(scope, worldGroupId, after.snapshot.revision)
+  if (before.snapshot.serialized !== after.snapshot.serialized || frozenRecoveryEvidence !== verifiedRecoveryEvidence) {
+    throw new CharacterRevisionCopilotStaleError()
+  }
+  after.snapshot.recoveryEvidenceHash = verifiedRecoveryEvidence
   const inputState = resolveAgentSkillInputStateV1(skill, [assembled])
   const contextEvidence = attachAgentContextInputStateV1(
     mergeContextEvidence(contextProfile, [assembled]),
