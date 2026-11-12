@@ -59,7 +59,7 @@ async function createBase(fixtureIds: readonly string[]): Promise<H4LongConsiste
     },
     call: async (input: H4LongConsistencyVerifierCallInputV1) => ({
       output: judgeOutput(input.fixture.id),
-      usage: { inputTokens: 100, outputTokens: 10, durationMs: 5, costUsd: 0.001 },
+      usage: { inputTokens: 100, outputTokens: 10, durationMs: 5, costUsd: 0.001, provenance: { input: 'provider' as const, output: 'provider' as const, providerTotalTokens: 110, cost: 'fallback-estimate' as const } },
     }),
     maxAttemptsPerFixture: 2,
     now: () => 0,
@@ -135,7 +135,8 @@ describe('R-HARNESS85 · verified evidence pair subtype adjudication', () => {
       : 'duration-contradiction'
     const call = vi.fn(async (input: H4SubtypeAdjudicationCallInputV1) => ({
       output: adjudicationOutput(input.fixture.id, replacement),
-      usage: { inputTokens: 40, outputTokens: 4, durationMs: 3, costUsd: 0.0004 },
+      usage: { inputTokens: 40, outputTokens: 4, durationMs: 3, costUsd: 0.0004,
+        provenance: { input: 'provider' as const, output: 'provider' as const, providerTotalTokens: 44, cost: 'fallback-estimate' as const } },
     }))
     const checkpoint = await runH4SubtypeAdjudicationV1({
       runId: 'h85-one-call-test',
@@ -385,7 +386,7 @@ describe('R-HARNESS85 · verified evidence pair subtype adjudication', () => {
       adjudicator: adjudicatorBinding(),
       call: async input => ({
         output: adjudicationOutput(input.fixture.id),
-        usage: { inputTokens: 20, outputTokens: 2, durationMs: 3, costUsd: 0.0002 },
+        usage: { inputTokens: 20, outputTokens: 2, durationMs: 3, costUsd: 0.0002, provenance: { input: 'provider' as const, output: 'provider' as const, providerTotalTokens: 22, cost: 'fallback-estimate' as const } },
       }),
       now: () => 0,
     })
