@@ -1,3 +1,7 @@
+import {
+  TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1,
+  textOpenWorldRuntimeDialogueRecordLimitV1,
+} from './runtime-dialogue-window'
 import { assertTextOpenWorldSessionNewWorkV1 } from './source-admission'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { createAgentRunCheckpointV1 } from '../agent/run/checkpoint'
@@ -50,7 +54,7 @@ import {
 } from './session-projection'
 
 export const TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_STEP_ID_V1 = 'text-open-world-runtime-ai:dialogue' as const
-export const TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_HISTORY_LIMIT_V1 = 12 as const
+export const TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_HISTORY_LIMIT_V1 = TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1.records
 
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 
@@ -202,7 +206,7 @@ function parseDraft(output: string): RuntimeDialogueDraftV1 {
   return {
     kind: 'npc-dialogue',
     actorKey: source.actorKey,
-    replyText: normalizedText(source.replyText, 'replyText', 4_000)!,
+    replyText: normalizedText(source.replyText, 'replyText', TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1.npcChars)!,
     tone: source.tone as RuntimeDialogueDraftV1['tone'],
     citedKnowledgeKeys: stableKeys(source.citedKnowledgeKeys, 'citedKnowledgeKeys', 32),
     recommendedActionKeys: stableKeys(source.recommendedActionKeys, 'recommendedActionKeys', 16),
@@ -217,7 +221,7 @@ function normalizeHistory(
 ): TextOpenWorldRuntimeDialogueHistoryTurnV1[] {
   if (!value) return []
   if (!Array.isArray(value) || value.length > TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_HISTORY_LIMIT_V1) {
-    fail('history', `当前场景临时对白最多${TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_HISTORY_LIMIT_V1}轮记录`)
+    fail('history', `当前场景临时对白最多${TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_HISTORY_LIMIT_V1}条记录`)
   }
   let total = 0
   return value.map((turn, index) => {
@@ -229,9 +233,10 @@ function normalizeHistory(
       || (speaker === 'npc' && source.actorKey !== actorKey)) {
       fail('history', `recentDialogue[${index}]越过当前角色边界`)
     }
-    const turnText = normalizedText(source.text, `recentDialogue[${index}].text`, 1_000)!
+    const turnText = normalizedText(source.text, `recentDialogue[${index}].text`, textOpenWorldRuntimeDialogueRecordLimitV1(speaker))!
     total += turnText.length
-    if (total > 6_000) fail('history', '当前场景临时对白超过6000字符')
+    const { totalChars } = TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1
+    if (total > totalChars) fail('history', `当前场景临时对白超过${totalChars}字符`)
     return { speaker, actorKey: source.actorKey as string | null, text: turnText }
   })
 }
@@ -416,7 +421,8 @@ export async function generateTextOpenWorldRuntimeDialogueV1(input: {
   input = { ...input, scope: structuredClone(input.scope), ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }), ...(input.recentDialogue === undefined ? {} : { recentDialogue: structuredClone(input.recentDialogue) }) }
   await assertTextOpenWorldSessionNewWorkV1({ scope: input.scope, sessionId: input.productRuntimeSessionId, operation: '新运行模型请求' })
   const utterance = input.utterance.normalize('NFC').trim()
-  if (!utterance || utterance.length > 1_000) fail('input', '玩家输入必须为1到1000字符')
+  const { playerChars } = TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1
+  if (!utterance || utterance.length > playerChars) fail('input', `玩家输入必须为1到${playerChars}字符`)
   if (!STABLE_KEY.test(input.selectedSceneKey)) fail('scene', 'selectedSceneKey无效')
   if (!input.runAI && !input.aiConfig) fail('provider', '缺少AI配置')
 

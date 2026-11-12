@@ -80,7 +80,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [pendingNodeIds, setPendingNodeIds] = useState<ReadonlySet<number>>(new Set())
   const [pendingReadError, setPendingReadError] = useState<string | null>(null)
-  const batchDecisionRef = useRef<((decision: 'adopt' | 'reject') => void) | null>(null)
+  const batchDecisionRef = useRef<((decision: 'adopt' | 'reject' | 'pause') => void) | null>(null)
 
   useEffect(() => {
     let active = true
@@ -370,6 +370,15 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null)
   const batchAbortRef = useRef<AbortController | null>(null)
 
+  useEffect(() => () => {
+    batchAbortRef.current?.abort()
+    const decide = batchDecisionRef.current
+    if (decide) {
+      batchDecisionRef.current = null
+      decide('pause')
+    }
+  }, [])
+
   const handleBatchDetail = useCallback(async () => {
     if (batchProgress) return // 已在运行
     const readFailure = loadError || useDetailedOutlineStore.getState().loadError
@@ -425,11 +434,9 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
     const decide = batchDecisionRef.current
     if (decide) {
       batchDecisionRef.current = null
-      setPendingBatchCandidate(null)
-      enhanceAI.reset()
-      decide('reject')
+      decide('pause')
     }
-  }, [enhanceAI])
+  }, [])
 
   return (
     <div className="h-full flex flex-col md:flex-row">

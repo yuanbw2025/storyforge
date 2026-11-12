@@ -6,6 +6,7 @@ import type {
   WorkspaceScope,
 } from '../types'
 import type { ProductProductionTaskExecutionInputV1 } from '../product-production/scheduler'
+import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from './creator-ending-count'
 
 /** A task's plain execution data is fixed before admission yields. Signal
  * and durable output callbacks retain their original capability identities. */
@@ -193,5 +194,8 @@ export async function assertTextOpenWorldBuildNewWorkV1(input: {
     const authority = await readTextOpenWorldCreatorBuildNewWorkAuthorityV1({ scope: input.scope,
       buildId: input.buildId, operation: input.operation })
     if (authority.production.id !== input.productionId) throw new Error('[text-open-world-source-admission] 冻结制作身份不一致。')
+    if (!isTextOpenWorldCreatorEndingCountV1(authority.contracts.creatorBrief.draft.scale.endings)) {
+      throw new Error('[text-open-world-source-admission] ' + TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+    }
   }
 }

@@ -2,7 +2,7 @@
 import { db } from '../db/schema'
 import type { WorkspaceScope, ProductProductionCommandV1, ProductProductionCommandRecordV1,
   ProductProductionRecordV1, ProductBuildRecordV1, AgentRunRecord, AgentRunArtifactRecordV1 } from '../types'
-import { readProductProductionDetailsV1 } from './service'
+import { readProductProductionDetailsV1 } from './read-details'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import { readAgentRunV1 } from '../agent/run/event-store'
 import { readAgentRunArtifactExactV1 } from '../memory/artifact-store'

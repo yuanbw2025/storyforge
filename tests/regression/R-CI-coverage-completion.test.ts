@@ -4,6 +4,8 @@ import { spawnSync } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
 
+import criticalScopes from '../../scripts/quality/critical-coverage-scopes.json'
+
 const runner = path.resolve('scripts/run-isolated-coverage.mjs')
 const ownedDirectories: string[] = []
 
@@ -12,7 +14,7 @@ afterEach(() => {
 })
 
 describe('isolated coverage completion receipts', () => {
-  it.each(['missing-coverage', 'missing-tests', 'failed-report', 'complete', 'exit-seven'])(
+  it.each(['missing-coverage', 'missing-tests', 'failed-report', 'missing-total', 'missing-entry', 'empty-domain', 'complete', 'exit-seven'])(
     'preserves the real child outcome and rejects incomplete success: %s', mode => {
       const fixture = mkdtempSync(path.join(os.tmpdir(), 'storyforge-coverage-fixture-'))
       ownedDirectories.push(fixture)
@@ -26,7 +28,16 @@ describe('isolated coverage completion receipts', () => {
         if (mode === 'exit-seven') process.exit(7);
         const reports = args.find(a => a.startsWith('--coverage.reportsDirectory=')).split('=').slice(1).join('=');
         const output = args.find(a => a.startsWith('--outputFile=')).split('=').slice(1).join('=');
-        if (mode !== 'missing-coverage') fs.writeFileSync(path.join(reports, 'coverage-summary.json'), '{}');
+        const scopes = ${JSON.stringify(criticalScopes)};
+        const entries = mode === 'missing-total' ? {} : {total: {statements: {total: 20}}};
+        for (const [domain, files] of Object.entries(scopes)) {
+          for (const file of files) {
+            if (mode === 'missing-entry' && file === scopes.harness[0]) continue;
+            entries[path.resolve(file)] = Object.fromEntries(['lines','functions','statements','branches']
+              .map(metric => [metric, {total: mode === 'empty-domain' && domain === 'runtime' && metric === 'branches' ? 0 : 1}]));
+          }
+        }
+        if (mode !== 'missing-coverage') fs.writeFileSync(path.join(reports, 'coverage-summary.json'), JSON.stringify(entries));
         if (mode !== 'missing-tests') fs.writeFileSync(output, JSON.stringify({
           success: mode !== 'failed-report', numTotalTests: 1, numFailedTests: 0,
           numFailedTestSuites: 0, testResults: [{ status: 'passed' }]
@@ -40,7 +51,10 @@ describe('isolated coverage completion receipts', () => {
       if (reports && path.dirname(reports) === os.tmpdir()
         && path.basename(reports).startsWith('storyforge-coverage-')) ownedDirectories.push(reports)
       expect(result.status).toBe(mode === 'complete' ? 0 : mode === 'exit-seven' ? 7 : 1)
-      if (mode.startsWith('missing-')) expect(result.stderr).toContain('the run is incomplete')
+      if (mode === 'missing-tests' || mode === 'missing-coverage') expect(result.stderr).toContain('the run is incomplete')
+      if (mode === 'missing-total') expect(result.stderr).toContain('Missing aggregate coverage summary')
+      if (mode === 'missing-entry') expect(result.stderr).toContain('Missing executable coverage in harness')
+      if (mode === 'empty-domain') expect(result.stderr).toContain('Empty branches denominator in runtime')
       if (mode === 'failed-report') expect(result.stderr).toContain('does not establish a successful test run')
       if (mode === 'complete') expect(result.stdout).toContain('completed: 1 files, 1 tests')
     },

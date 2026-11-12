@@ -80,7 +80,7 @@ export default function WorldSharingPanel({ project, worldReleaseRevision = 0, o
         authorName,
         license,
         allowedUses,
-        contentWarnings: warnings.split(/[，,\n]/),
+        contentWarnings: warnings ? warnings.split(/[，,\n]/) : [],
       }
       if (!latestRelease?.id) throw new Error('请先在世界引擎封存一个纯语义 WorldRelease。')
       const pkg = await createWorldPackage(latestRelease.id, options)
@@ -136,6 +136,7 @@ export default function WorldSharingPanel({ project, worldReleaseRevision = 0, o
           <label className="sf-sharing-label">许可<select value={license} onChange={event => setLicense(event.target.value as CommunityWorldLicense)}>{LICENSE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
           <fieldset className="sf-sharing-fieldset"><legend>允许的二创用途</legend><div className="sf-sharing-checks">{USE_OPTIONS.map(option => <label key={option.id}><input type="checkbox" checked={allowedUses[option.id]} onChange={event => setAllowedUses(previous => ({ ...previous, [option.id]: event.target.checked }))} />{option.label}</label>)}</div></fieldset>
           <label className="sf-sharing-label">内容警告（可选）<input value={warnings} onChange={event => setWarnings(event.target.value)} placeholder="逗号分隔，例如：战争、灾难" /></label>
+          <p>最多 12 条，每条最多 200 字；超出时会保留输入并提示，不生成文件。</p>
           <button className="sf-button sf-button-primary" onClick={() => void publish()} disabled={busy || !project?.id || !latestRelease?.id || !authorName.trim()}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}下载世界分享包
           </button>

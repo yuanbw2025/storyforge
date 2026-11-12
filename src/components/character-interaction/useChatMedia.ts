@@ -90,8 +90,9 @@ export function useChatMedia(input: {scope?: WorkspaceScope; session: ProductRun
         const latest = latestChatVisualJobsV1(jobs)
         for (const request of current.requests) {
           const job = latest.get(request.key)
+          if (job?.issue) currentIssue ||= job.issue
           if (job && job.status !== 'available') {
-            currentIssue ||= job.issue || '有图片请求的结果尚未确认；没有自动重发。'
+            currentIssue ||= '有图片请求的结果尚未确认；没有自动重发。'
             canRetry ||= job.status === 'failed' && jobs.filter(item => item.request.key === request.key).length < 3 && count < design.runtime.maximumImages
           }
           if (!job?.asset || job.status !== 'available') continue
