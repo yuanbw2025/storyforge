@@ -2,6 +2,11 @@
 
 
 
+
+## Mainline repairs reviewed November 11
+
+Reviewed from successful maintenance baseline `834718d1` to `5420f854`. Desktop connections, enhanced diagnostics and related fixes in #301, plus outline review in #303, are merged into main. The formal release remains the fixed v4.0.5 listed below. Deployment of the enhanced-diagnostic backend protocol requires its own live-service verification.
+
 ## Main after v4.0.5
 
 The formal stable release remains v4.0.5. Quality repairs #255/#256 and community sharing #234 are merged into main after the v4.0.5 tag `4dd8a4a1`. Database v13 and complete backup v17 still apply. The v4.0.6 release candidate [#268](https://github.com/yuanbw2025/storyforge/pull/268) remains pending merge. Publication dates follow actual formal releases.
