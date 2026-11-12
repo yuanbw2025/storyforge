@@ -21,9 +21,19 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa004-toolchain-delivery-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa-remaining20-main424-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa004-toolchain-delivery-v1.json",
+        "workPackage": "SFQA-004-009-021-030-remaining-20",
+        "note": "Preserved the measured mainline before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-merged424-v1.json",
+        "workPackage": "SFQA-004-009-021-030-remaining-20",
+        "note": "Preserved the measurements from the reviewed change."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261112-runtime-main344-v1.json",
         "workPackage": "SFQA-021-129",
@@ -1240,6 +1250,36 @@
         "path": "tests/acceptance/narrative-world/baseline-20261113-world-runtime-audited-tools-v1.json",
         "workPackage": "NW-0B",
         "note": "Retained the measured parent receipt before checking combined product admission on the updated test toolchain."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-runtime-main344-v1.json",
+        "workPackage": "SFQA-028-032",
+        "note": "Preserved the measured independent runtime and comic contract evidence before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality034-039-after341-v1.json",
+        "workPackage": "SFQA-028-032",
+        "note": "Preserved the measured independent runtime and comic contract evidence before integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-main345-v1.json",
+        "workPackage": "SFQA-028-031-032-069-082-083",
+        "note": "Preserved the measured six-fix branch receipt before merging current main; its observations are unchanged by the merge."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-post345-v1.json",
+        "workPackage": "SFQA-007",
+        "note": "Preserved the mainline receipt measured before the six-fix integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-merged422-v1.json",
+        "workPackage": "SFQA-028-031-032-069-082-083",
+        "note": "Six runtime fixes measured before the manual media tag was added to the Vitest configuration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/domain-projection-20261113-runtime-merged422-v1.json",
+        "workPackage": "NW-1B",
+        "note": "Preserved the measured projection before integrating the current scope and historical backup repairs."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
