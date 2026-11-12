@@ -586,4 +586,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `9b5ebadb4`
+生成时间基准:commit `c0dda9c78`
