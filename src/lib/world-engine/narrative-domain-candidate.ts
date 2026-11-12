@@ -136,7 +136,7 @@ export async function matchesSavedNarrativeBaselineV1(prepared: PreparedNarrativ
     const row = findNarrativeCandidateSourceV1(prepared.capture, field.table, field.sourceUid)
     const prefix = field.sourceUid + '::'
     if (!field.key.startsWith(prefix)) narrativeFail('candidate-selection', '选定原文的身份和字段不匹配')
-    return { ...field, policyHash: await historicalCanonFieldPolicyHashV1(row, field.key.slice(prefix.length)) }
+    return { ...field, policyHash: await historicalCanonFieldPolicyHashV1(row, decodeURIComponent(field.key.slice(prefix.length))) }
   }))
   return await hashNarrativeValueV1({ ...prepared.baseline, originalFields }) === savedHash
 }
