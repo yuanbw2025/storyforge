@@ -290,40 +290,40 @@ describe.sequential('R-HARNESS63 · 物品栏 durable 分块提取与原子替�
     expect(await db.itemLedger.count()).toBe(0)
   })
 
-  it('采纳八个持久化边界逐一中断均收敛到同一 Run 与同一冻结替换结果', async () => {
-    const boundaries: InventoryExtractionAdoptionBoundaryV1[] = [
-      'intent.checkpoint', 'confirmation.recorded', 'adoption.started', 'formal.chapter',
-      'adoption.committed', 'step.succeeded', 'verification.started', 'verification.accepted',
-    ]
-    for (const boundary of boundaries) {
-      await db.delete()
-      await db.open()
-      const fixture = await seed()
-      const generated = await generateInventoryExtractionCandidateV1({
-        scope: fixture.scope, request: { mode: 'all' },
-        runAI: async (_messages, callIndex) => callIndex === 0 ? response(item()) : response(),
-      })
-      await expect(adoptInventoryExtractionCandidateV1({
-        scope: fixture.scope, runId: generated.snapshot.run.id, selectedIndexes: [0],
-        onDurableBoundary: reached => {
-          if (reached === boundary) throw new Error(`interrupt:${boundary}`)
-        },
-      })).rejects.toThrow(`interrupt:${boundary}`)
-      const recovered = await readPendingInventoryExtractionCandidateV1({ scope: fixture.scope })
-      if (boundary === 'verification.accepted') expect(recovered).toBeNull()
-      else {
-        expect(recovered?.snapshot.run.id, boundary).toBe(generated.snapshot.run.id)
-        expect(recovered?.selectedIndexes, boundary).toEqual([0])
-      }
-      const completed = await adoptInventoryExtractionCandidateV1({
-        scope: fixture.scope, runId: generated.snapshot.run.id, selectedIndexes: [0],
-      })
-      expect(completed.snapshot.projection.state, boundary).toBe('completed')
-      const rows = await db.itemLedger.where('projectId').equals(fixture.projectId).toArray()
-      expect(rows.map(row => row.itemName), boundary).toEqual(['潮汐令'])
-      expect((await db.agentRuns.where('projectId').equals(fixture.projectId).toArray())
-        .filter(run => run.contractJson.includes('prose.inventory-extraction')), boundary).toHaveLength(1)
+  const adoptionBoundaries: InventoryExtractionAdoptionBoundaryV1[] = [
+    'intent.checkpoint', 'confirmation.recorded', 'adoption.started', 'formal.chapter',
+    'adoption.committed', 'step.succeeded', 'verification.started', 'verification.accepted',
+  ]
+
+  it.each(adoptionBoundaries)('采纳在 %s 中断后从同一 Run 恢复同一冻结替换结果', async boundary => {
+    const fixture = await seed()
+    const generated = await generateInventoryExtractionCandidateV1({
+      scope: fixture.scope, request: { mode: 'all' },
+      runAI: async (_messages, callIndex) => callIndex === 0 ? response(item()) : response(),
+    })
+    await expect(adoptInventoryExtractionCandidateV1({
+      scope: fixture.scope, runId: generated.snapshot.run.id, selectedIndexes: [0],
+      onDurableBoundary: reached => {
+        if (reached === boundary) throw new Error(`interrupt:${boundary}`)
+      },
+    })).rejects.toThrow(`interrupt:${boundary}`)
+    const recovered = await readPendingInventoryExtractionCandidateV1({ scope: fixture.scope })
+    if (boundary === 'verification.accepted') expect(recovered).toBeNull()
+    else {
+      expect(recovered?.snapshot.run.id).toBe(generated.snapshot.run.id)
+      expect(recovered?.selectedIndexes).toEqual([0])
     }
+    const completed = await adoptInventoryExtractionCandidateV1({
+      scope: fixture.scope, runId: generated.snapshot.run.id, selectedIndexes: [0],
+    })
+    expect(completed.snapshot.projection.state).toBe('completed')
+    expect(completed.snapshot.events.filter(event => event.type.startsWith('model.')))
+      .toEqual(generated.snapshot.events.filter(event => event.type.startsWith('model.')))
+    expect(completed.snapshot.events.filter(event => event.type === 'confirmation.recorded')).toHaveLength(1)
+    const rows = await db.itemLedger.where('projectId').equals(fixture.projectId).toArray()
+    expect(rows.map(row => row.itemName)).toEqual(['潮汐令'])
+    expect((await db.agentRuns.where('projectId').equals(fixture.projectId).toArray())
+      .filter(run => run.contractJson.includes('prose.inventory-extraction'))).toHaveLength(1)
   })
 
   it('不可移植的范围、分块进度和候选在导入后明确取消', async () => {
