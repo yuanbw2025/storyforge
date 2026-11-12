@@ -1,6 +1,7 @@
 import JSZip from 'jszip'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { installRasterDecoderForVitestV1 } from '../helpers/raster-decoder-vitest'
 import { assertMotionDramaPromptPackManifestV1 } from '../../src/lib/motion-drama/prompt-pack-contracts'
 import { publishMotionDramaReleaseV1, readMotionDramaReleaseManifestV1 } from '../../src/lib/motion-drama/release'
 import { exportMotionMaterialBundle } from '../../src/lib/motion-drama/delivery'
@@ -11,6 +12,7 @@ async function expectBundleRejected(f: Awaited<ReturnType<typeof createMotionDra
 }
 
 describe('SFQA-025 · 冻结素材包引用完整性', () => {
+  installRasterDecoderForVitestV1()
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
 
