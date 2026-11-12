@@ -191,8 +191,12 @@ interface GovernedCapture {
 
 type GovernedCaptureEnvelope = { encoding: string; entry: string; rawBytes: number; sha256: string; data: string }
 
-export async function readSfqa105GovernedCapture(kind: 'legacy' | 'authorized' = 'legacy'): Promise<GovernedCapture> {
-  const envelope: GovernedCaptureEnvelope = kind === 'legacy' ? captured.governedCapture : authorizedCapture
+type CaptureSource = 'legacy' | 'authorized' | GovernedCaptureEnvelope
+
+export async function readSfqa105GovernedCapture(source: CaptureSource = 'legacy'): Promise<GovernedCapture> {
+  const envelope = typeof source === 'string'
+    ? { legacy: captured.governedCapture, authorized: authorizedCapture }[source]
+    : source
   if (!envelope || envelope.encoding !== 'zip-base64') throw new Error('SFQA105 governed fixture envelope is missing')
   const archive = await JSZip.loadAsync(envelope.data, { base64: true, checkCRC32: true })
   const file = archive.file(envelope.entry)
@@ -208,7 +212,7 @@ export async function readSfqa105GovernedCapture(kind: 'legacy' | 'authorized' =
   return fixture
 }
 
-export async function seedSfqa105GovernedBuild(options: { includeComparisonHashes?: boolean; capture?: 'legacy' | 'authorized' } = {}) {
+export async function seedSfqa105GovernedBuild(options: { includeComparisonHashes?: boolean; capture?: CaptureSource } = {}) {
   // The archived v17 Build predates explicit source-character selection.
   // A separate, author-confirmed Build exercises current candidate production.
   const fixture = await readSfqa105GovernedCapture(options.capture ?? 'authorized')
@@ -235,7 +239,7 @@ export async function seedSfqa105GovernedBuild(options: { includeComparisonHashe
     throw new Error('SFQA105 native target differs from its real producer fixture')
   }
   return {
-    ...fixture.native, scope, productionId: production.id, buildId: build.id, buildNumber: build.buildNumber,
+    ...fixture.native, backupVersion: fixture.governed.version, scope, productionId: production.id, buildId: build.id, buildNumber: build.buildNumber,
     // This snapshot was actually verified above after imported proof recovery.
     // Consumers preparing an edit still perform their own current-state checks.
     governanceSnapshotHash: governance.snapshotHash,

@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa-remaining20-main424-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa307-with-five-runtime-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -1280,6 +1280,21 @@
         "path": "tests/acceptance/narrative-world/domain-projection-20261113-runtime-merged422-v1.json",
         "workPackage": "NW-1B",
         "note": "Preserved the measured projection before integrating the current scope and historical backup repairs."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-five-repairs-424-v1.json",
+        "workPackage": "SFQA-009/011/028-032/042/050/077",
+        "note": "Preserved the independent measurement before integrating five product repairs and six runtime repairs."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa-remaining20-main424-v1.json",
+        "workPackage": "SFQA-004/009/011/028-032/042/050/077",
+        "note": "Retained the current signed-off input and observations before incorporating the independent five-repair evidence."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-five-repairs-runtime-424-v1.json",
+        "workPackage": "SFQA-004/009/011/028-032/042/050/077",
+        "note": "Retained the current signed-off input and observations before incorporating the independent five-repair evidence."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
