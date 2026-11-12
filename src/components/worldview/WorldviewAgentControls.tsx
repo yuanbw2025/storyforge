@@ -47,6 +47,8 @@ export default function WorldviewAgentControls({
   const [mode, setMode] = useState<FieldGenerationMode>('expand')
   const [lengthMode, setLengthMode] = useState<'default' | 'custom'>('default')
   const [customOutputTokens, setCustomOutputTokens] = useState(WORLDVIEW_FIELD_DEFAULT_OUTPUT_TOKENS_V1)
+  const candidateEventId = candidate?.event.id
+  const visibleDraft = copilot.readVisibleCandidateDraft(candidateEventId)
   const aiConfig = useAIConfigStore(state => state.config)
   const modelCap = getModelPreset(aiConfig.provider, aiConfig.model).maxOutput
   const configuredCap = aiConfig.maxTokens > 0 ? aiConfig.maxTokens : modelCap
@@ -204,11 +206,27 @@ export default function WorldviewAgentControls({
           </div>
           <WorldviewFieldCandidateReview
             candidate={candidate}
-            busy={copilot.busy}
-            onUpdate={content => {
-              void copilot.updateCandidate(candidate.event.id!, content)
+            busy={copilot.busy || visibleDraft?.status === 'discarding'}
+            visibleDraft={visibleDraft}
+            onUpdate={(content, rawValue) => {
+              if (candidateEventId != null) void copilot.updateCandidate(candidateEventId, content, { rawValue })
+            }}
+            onInvalidEdit={(rawValue, error) => {
+              if (candidateEventId != null) void copilot.updateCandidate(candidateEventId, rawValue, { rawValue, error })
             }}
           />
+          {visibleDraft && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <p role={visibleDraft.error ? 'alert' : 'status'} className={visibleDraft.error ? 'text-error' : 'text-text-muted'}>
+                {visibleDraft.error ?? (visibleDraft.status === 'discarding' ? '正在读取已保存候选…' : '正在保存当前候选编辑…')}
+              </p>
+              <button type="button" className="text-text-secondary underline disabled:opacity-50"
+                disabled={copilot.busy || visibleDraft.status === 'discarding'}
+                onClick={() => { if (candidateEventId != null) void copilot.discardVisibleCandidateDraft(candidateEventId) }}>
+                放弃未保存修改
+              </button>
+            </div>
+          )}
           <HarnessEvidencePanel
             contextEvidence={candidate.payload.contextEvidence}
             lifecycle={candidate.lifecycle}
@@ -226,7 +244,7 @@ export default function WorldviewAgentControls({
             </button>
             <button
               type="button"
-              disabled={copilot.busy}
+              disabled={copilot.busy || Boolean(visibleDraft)}
               onClick={() => { void onAdopted(candidate) }}
               className="flex items-center gap-1 bg-accent px-3 py-1.5 text-xs text-white hover:opacity-90 rounded disabled:opacity-50"
             >

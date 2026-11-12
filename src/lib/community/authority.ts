@@ -213,12 +213,23 @@ export class CommunityAuthorityErrorV1 extends Error {
 
 function fail(code: string, message: string): never { throw new CommunityAuthorityErrorV1(code, message) }
 function clone<T>(value: T): T { return structuredClone(value) }
-function key(value: unknown, label: string, maximum = 200): string {
-  if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value) || value.length > maximum) {
+function validKey(value: unknown, maximum = 200): value is string {
+  return typeof value === 'string' && value.length <= maximum && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value)
+}
+function key(value: unknown, label: string, maximum?: number): string {
+  if (!validKey(value, maximum)) {
     fail('protocol', `${label} 无效`)
   }
   return value
 }
+// Older panels appended a UUID to a payload-derived key. ASCII text in those
+// keys could pass the protocol and still include a private report or response.
+const legacyFormRequest = /^(?:review|respond|report|appeal|profile|create|bind):.*\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+export function communityRequestIdForAuditV1(value: unknown): string | null {
+  return validKey(value) && !legacyFormRequest.test(value) ? value : null
+}
+
 function text(value: unknown, label: string, maximum: number, allowEmpty = false): string {
   if (typeof value !== 'string') fail('protocol', `${label} 无效`)
   const result = value.trim().normalize('NFC')
