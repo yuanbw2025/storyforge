@@ -11,8 +11,9 @@
 
 import { create } from 'zustand'
 import type { Table, UpdateSpec } from 'dexie'
+import type { WorkspaceScope } from '../lib/types'
 import { db } from '../lib/db/schema'
-import { getTableSpec, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { assertRecordInScope, getTableSpec, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
 const now = () => Date.now()
@@ -40,6 +41,8 @@ type DbTableKey = {
  */
 export type ProjectSingletonStore<K extends string, T extends ProjectScopedRecord> = {
   loading: boolean
+  loadError: string | null
+  loadedScope: WorkspaceScope | null
   /** 当前加载的世界组（null = 单世界 / 未指定，Phase 25.4） */
   activeWorldGroupId: number | null
   loadAll: (scope: WorkspaceScopeLike, worldGroupId?: number | null) => Promise<void>
@@ -76,9 +79,14 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
   type State = ProjectSingletonStore<K, T>
 
   return create<State>((set, get) => {
+    let loadRequest = 0
+    const sameScope = (left: WorkspaceScope | null, right: WorkspaceScope) =>
+      left?.projectId === right.projectId && left.worldId === right.worldId && left.workId === right.workId
     const initialState = {
       [key]: null,
       loading: false,
+      loadError: null,
+      loadedScope: null,
       activeWorldGroupId: null,
     } as unknown as State
 
@@ -86,38 +94,59 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
       ...initialState,
 
       loadAll: async (scopeInput: WorkspaceScopeLike, worldGroupId: number | null = null) => {
-        set({ loading: true, activeWorldGroupId: worldGroupId } as unknown as Partial<State> as State)
-        const scope = await resolveScopeLike(scopeInput)
-        const owner = getTableSpec(String(table)).domainOwner?.defaultOwner
-        const scopedRows = await readOwnedRows<T>(scope, String(table), {
-          owner: owner === 'world' || owner === 'work' ? owner : undefined,
-        })
-        let record: T | undefined
-        if (worldGroupId == null) {
-          // 单世界 / 未指定：取第一条
-          record = scopedRows[0]
-        } else {
-          // 多世界：取匹配该世界组的记录
-          record = scopedRows.find(r => (r as { worldGroupId?: number | null }).worldGroupId === worldGroupId)
+        const request = ++loadRequest
+        set({ loading: true, loadError: null, loadedScope: null, activeWorldGroupId: worldGroupId } as Partial<State> as State)
+        try {
+          const scope = await resolveScopeLike(scopeInput)
+          const owner = getTableSpec(String(table)).domainOwner?.defaultOwner
+          const scopedRows = await readOwnedRows<T>(scope, String(table), {
+            owner: owner === 'world' || owner === 'work' ? owner : undefined,
+          })
+          // Retain the existing single-world first-row selection contract.
+          const record = worldGroupId == null ? scopedRows[0]
+            : scopedRows.find(r => (r as { worldGroupId?: number | null }).worldGroupId === worldGroupId)
+          if (request === loadRequest) set({ [key]: record ?? null, loadedScope: scope } as unknown as Partial<State> as State)
+        } catch (cause) {
+          if (request === loadRequest) set({ loadError: cause instanceof Error ? cause.message : String(cause) } as Partial<State> as State)
+          throw cause
+        } finally {
+          if (request === loadRequest) set({ loading: false } as Partial<State> as State)
         }
-        set({ [key]: record ?? null, loading: false } as unknown as Partial<State> as State)
       },
 
-      save: async (data: Partial<T>, targetScope?: WorkspaceScopeLike) => {
+      save: async (input: Partial<T>, targetScope?: WorkspaceScopeLike) => {
+        const data = { ...input }
         const state = get()
         const memoryCurrent = (state as unknown as Record<string, T | null>)[key]
-        const activeWorldGroupId = (state as unknown as { activeWorldGroupId: number | null }).activeWorldGroupId
+        const spec = getTableSpec(String(table))
+        const suppliedGroup = (data as { worldGroupId?: number | null }).worldGroupId
+        const groupId = spec.worldScoped ? (suppliedGroup !== undefined ? suppliedGroup : state.activeWorldGroupId) : null
         const pendingProjectId = data.projectId ?? (memoryCurrent as { projectId?: number } | null)?.projectId
-        await coordinatePendingEditV1({
-          key: `project-singleton:${String(table)}:${pendingProjectId ?? 'unknown'}:${activeWorldGroupId ?? 'default'}`,
+        if (pendingProjectId == null) throw new Error('单例保存缺少工作区')
+        // Start scope resolution before queue admission, never after a later owner switch.
+        const scopeInput = typeof targetScope === 'object' ? { ...targetScope } : targetScope ?? pendingProjectId
+        const scopePromise = resolveScopeLike(scopeInput)
+        void scopePromise.catch(() => undefined)
+        const request = loadRequest
+        const owner = spec.domainOwner?.defaultOwner
+        const ownerField = owner === 'world' ? 'worldId' : owner === 'work' ? 'workId' : 'projectId'
+        const writeForOwner = (target: WorkspaceScope) => coordinatePendingEditV1({
+          key: `project-singleton:${String(table)}:${pendingProjectId}:${target[ownerField]}:${groupId ?? 'default'}`,
           persist: async () => {
             const projectId = pendingProjectId
-            if (projectId == null) return
-            const scope = await resolveScopeLike(targetScope ?? projectId)
+            const scope = await scopePromise
             if (scope.projectId !== projectId) throw new Error('单例保存目标与工作区作用域不一致')
-            const spec = getTableSpec(String(table))
-            const owner = spec.domainOwner?.defaultOwner
-            const groupId = spec.worldScoped ? activeWorldGroupId : null
+            if (groupId != null && !await assertRecordInScope(scope, 'worldGroups', await db.worldGroups.get(groupId), { owner: 'world' })) {
+              throw new Error('单例保存世界组不属于指定作用域')
+            }
+            const publish = (record: T) => {
+              const current = get()
+              if (request === loadRequest && !current.loading && sameScope(current.loadedScope, scope)
+                && (current.activeWorldGroupId === groupId
+                  || (current.activeWorldGroupId == null && memoryCurrent?.id === record.id))) {
+                set({ [key]: record } as unknown as Partial<State> as State)
+              }
+            }
             // 缓存只能供界面展示；每次写入都从指定 owner 作用域定位真实单例。
             const all = await readOwnedRows<T>(scope, String(table), {
               owner: owner === 'world' || owner === 'work' ? owner : undefined,
@@ -128,8 +157,7 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
             if (data.id != null && data.id !== current?.id) {
               throw new Error('单例保存记录不属于指定作用域')
             }
-            const ownerField = owner === 'world' ? 'worldId' : owner === 'work' ? 'workId' : null
-            if (ownerField) {
+            if (ownerField !== 'projectId') {
               const supplied = (data as Record<string, unknown>)[ownerField]
               if (supplied != null && supplied !== scope[ownerField]) {
                 throw new Error('单例保存不能更改数据 owner')
@@ -138,13 +166,12 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
 
             if (current?.id) {
               const ts = now()
-              await getTable().update(
+              const written = await getTable().update(
                 current.id,
                 { ...data, updatedAt: ts } as UpdateSpec<T>,
               )
-              set({
-                [key]: { ...current, ...data, updatedAt: ts },
-              } as unknown as Partial<State> as State)
+              if (!written) throw new Error('单例保存目标已不存在，请重新读取')
+              publish({ ...current, ...data, updatedAt: ts })
               return
             }
 
@@ -159,15 +186,20 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
                 updatedAt: ts,
                 ...data,
               } as T, {
-                owner: getTableSpec(String(table)).domainOwner?.defaultOwner === 'world' ? 'world' : 'work',
+                owner: owner === 'world' ? 'world' : 'work',
               })
               const id = (await getTable().add(toInsert)) as number
-              set({
-                [key]: { ...toInsert, id },
-              } as unknown as Partial<State> as State)
+              publish({ ...toInsert, id })
             }
           },
         })
+        // Admit in call order even when a numeric project must first read its active pointers.
+        // The lookup slot only awaits registration. Actual write failures belong to the owner slot.
+        const admitted = await coordinatePendingEditV1({
+          key: `project-singleton-lookup:${String(table)}:${pendingProjectId}`,
+          persist: async () => ({ write: writeForOwner(typeof scopeInput === 'number' ? await scopePromise : scopeInput) }),
+        })
+        await admitted.write
       },
     }
   })

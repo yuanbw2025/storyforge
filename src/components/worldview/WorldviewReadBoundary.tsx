@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { useWorldviewStore } from '../../stores/worldview'
 
 /** Preserve the previous readback while an explicit retry verifies current data. */
-export default function WorldviewReadBoundary({ onRetry, children }: { onRetry: () => Promise<void>; children: ReactNode }) {
+export default function WorldviewReadBoundary({ onRetry, children, ready = true }: { onRetry: () => Promise<void>; children: ReactNode; ready?: boolean }) {
   const { loading, loadError: error } = useWorldviewStore()
   const [retrying, setRetrying] = useState(false)
   const retry = async () => {
@@ -17,6 +17,6 @@ export default function WorldviewReadBoundary({ onRetry, children }: { onRetry: 
       设定读取未完成：{error}。已有内容未被改写，请重新读取后继续编辑。
       <button type="button" disabled={loading || retrying} className="ml-3 underline disabled:opacity-50" onClick={() => { void retry() }}>重新读取设定</button>
     </div>}
-    <fieldset aria-label="设定读取保护" disabled={loading || !!error} inert={loading || !!error} className="contents">{children}</fieldset>
+    <fieldset aria-label="设定读取保护" disabled={!ready || loading || !!error} inert={!ready || loading || !!error} className="contents">{children}</fieldset>
   </>
 }

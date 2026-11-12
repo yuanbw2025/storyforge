@@ -16,6 +16,7 @@ import { STORY_IMPORTANCE_LABELS } from '../../lib/types/story-timeline'
 import type { Project } from '../../lib/types'
 import { resolveScopeLike } from '../../lib/workspace/scope'
 import ExtractionReviewPanel from '../shared/ExtractionReviewPanel'
+import { readExtractionPanelRecovery } from '../shared/readExtractionPanelRecovery'
 import {
   abandonStoryTimelineExtractionV1,
   adoptStoryTimelineExtractionCandidateV1,
@@ -76,27 +77,18 @@ export default function StoryTimelinePanel({ project, onOpenChapter, initialEven
     setSelectedCandidates(new Set())
     setSelectionFrozen(false)
     setAdoptionStarted(false)
-    void resolveScopeLike(project.id!).then(async scope => {
-      const pending = await readPendingStoryTimelineExtractionCandidateV1({ scope })
-      if (pending) return { pending, recoverable: null }
-      return { pending: null, recoverable: await readRecoverableStoryTimelineExtractionV1({ scope }) }
-    }).then(result => {
+    void readExtractionPanelRecovery(
+      project.id!, readPendingStoryTimelineExtractionCandidateV1, readRecoverableStoryTimelineExtractionV1,
+    ).then(result => {
       if (!active) return
       if (result.pending) {
-        setExtractRunId(result.pending.snapshot.run.id)
-        setCandidates(result.pending.candidate.events)
-        setSelectedCandidates(new Set(
-          result.pending.selectedIndexes ?? result.pending.candidate.events.map((_, index) => index),
-        ))
-        setSelectionFrozen(result.pending.selectedIndexes != null)
+        setExtractRunId(result.pending.runId)
+        setCandidates(result.pending.events)
+        setSelectedCandidates(result.pending.selectedCandidates)
+        setSelectionFrozen(result.pending.selectionFrozen)
         setAdoptionStarted(result.pending.adoptionStarted)
       } else if (result.recoverable) {
-        setRecoverable({
-          runId: result.recoverable.snapshot.run.id,
-          nextCallIndex: result.recoverable.nextCallIndex,
-          totalCalls: result.recoverable.totalCalls,
-          safeToResume: result.recoverable.safeToResume,
-        })
+        setRecoverable(result.recoverable)
       }
     }).catch(recoveryError => {
       if (active) setError(recoveryError instanceof Error ? recoveryError.message : '故事年表提取运行恢复失败')
