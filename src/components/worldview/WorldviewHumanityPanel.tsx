@@ -1,3 +1,4 @@
+import ScopedWorldAuthoringBoundary from '../world-group/ScopedWorldAuthoringBoundary'
 import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
 import WorldviewReadBoundary from './WorldviewReadBoundary'
 import { useState, useEffect } from 'react'
@@ -60,9 +61,18 @@ interface Props {
 }
 
 export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props) {
-  const { worldview, saveWorldview } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
+  return <ScopedWorldAuthoringBoundary project={project} activeGroupId={activeGroupId}>
+    {view => <ScopedHumanityPanel {...view} onOpenHistory={onOpenHistory} />}
+  </ScopedWorldAuthoringBoundary>
+}
+
+function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory }: Props & { activeGroupId: number | null }) {
+  const { worldview, saveWorldview, loadedScope, activeWorldGroupId, loading, loadError } = useWorldviewStore()
   const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
+  const readReady = !loading && !loadError && loadedScope?.projectId === authorScope.projectId
+    && loadedScope.worldId === authorScope.worldId && loadedScope.workId === authorScope.workId
+    && activeWorldGroupId === (project.enableMultiWorld ? activeGroupId : null)
   const targetWorldGroupId = project.enableMultiWorld ? activeGroupId : (worldview?.worldGroupId ?? null)
   const codex = useCodexStore()
   const [legacyHistoryFocus, setLegacyHistoryFocus] = useState('humEra')
@@ -82,18 +92,18 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
   const [runningField, setRunningField] = useState<WorldviewAgentField | null>(null)
 
   useEffect(() => {
-    if (!worldview) return
+    if (!readReady) return
     setValues({
-      races:     worldview.races ?? '',
-      factions:  worldview.factionLayout ?? '',
-      cities:    worldview.regionDimensions ?? '',
-      politics: worldview.politicsOverview ?? '',
-      economy: worldview.economyOverview ?? '',
-      culture: worldview.cultureOverview ?? '',
-      conflicts: worldview.internalConflicts ?? '',
-      items:     worldview.itemDesign ?? '',
+      races:     worldview?.races ?? '',
+      factions:  worldview?.factionLayout ?? '',
+      cities:    worldview?.regionDimensions ?? '',
+      politics: worldview?.politicsOverview ?? '',
+      economy: worldview?.economyOverview ?? '',
+      culture: worldview?.cultureOverview ?? '',
+      conflicts: worldview?.internalConflicts ?? '',
+      items:     worldview?.itemDesign ?? '',
     })
-  }, [worldview])
+  }, [worldview, readReady])
 
   const save = (fieldName: string, v: string) =>
     saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, [fieldName]: v }, authorScope)
@@ -115,7 +125,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
   }, [pendingPanelKey])
 
   return (
-    <WorldviewReadBoundary onRetry={reloadCurrent}>
+    <WorldviewReadBoundary onRetry={reloadCurrent} ready={readReady}>
     <div className="flex flex-col w-full h-full space-y-4">
       {/* 顶部 */}
       <div className="pb-4 border-b border-border/40 px-6 pt-4 shrink-0">

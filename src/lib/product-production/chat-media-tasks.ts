@@ -20,7 +20,7 @@ export async function compileChatMediaContent(input: ProductProductionTaskExecut
   const chat = await verifyChatNarrativeShellV1(input)
   const worldScope = await readProductProductionBuildWorldScopeV1({...input, brief})
   const sourceCatalog = await loadProductProductionWorldSourceCatalogV2({scope: input.scope,
-    worldReleaseId: worldScope.worldReleaseId, selection: brief.source.selection,
+    worldReleaseId: worldScope.worldReleaseId, selection: brief.source.selection, sourcePlan: worldScope.sourcePlan,
     chatPrivateCharacters: brief.characterChat?.version === 3 ? brief.characterChat.privateCharacters : undefined})
   if (sourceCatalog.release.contentHash !== brief.source.worldContentHash) fail('冻结世界来源已变化')
   return {interaction: compileInteractionModulesV1({brief, narrative: chat.shell, sourceCatalog, chatNarrative: chat.content}),
