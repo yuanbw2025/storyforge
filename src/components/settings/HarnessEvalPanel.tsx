@@ -1,10 +1,9 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { ClipboardCopy, Download, FileJson, LoaderCircle, Play, RotateCcw, ShieldCheck, Upload } from 'lucide-react'
+import { classifyEvalTransportErrorV1, H4CheckpointWriteErrorV1 } from '../../lib/evals/long-consistency/h4-runner'
 import { type ChatResult } from '../../lib/ai/client'
 import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
-import { estimateTokens } from '../../lib/ai/context-budget'
-import { computeCostUsd } from '../../lib/ai/usage-log'
 import {
   evaluateContextCompressionNonInferiorityV1,
   H17_CONTEXT_COMPRESSION_RESULTS_STORAGE_KEY,
@@ -36,6 +35,7 @@ import {
   type H4SubtypeAdjudicationCheckpointV1,
   type H4SubtypeAdjudicationSealedScoreV1,
 } from '../../lib/evals/long-consistency'
+import { measureLongConsistencyProviderUsageV1, PROVIDER_USAGE_POLICY_V1 } from '../../lib/evals/long-consistency/model-usage'
 import { getFixtures } from '../../lib/evals/long-consistency/fixtures'
 import type { EvalSplit } from '../../lib/evals/long-consistency/types'
 import type { AIConfig, ChatMessage } from '../../lib/types'
@@ -108,40 +108,68 @@ function readContextCompressionRecords(): ContextCompressionEvalRecordV1[] {
   }
 }
 
+type H17AttemptEvidence = {
+  phase: 'compression' | 'generation'
+  attempt: number
+  state: 'prepared' | 'returned' | 'unknown' | 'rejected' | 'retryable' | 'not-sent'
+  httpStatus: number | null
+  raw?: string
+  usage?: ChatResult['usage']
+}
+
+const H17_LAST_ATTEMPT_KEY = 'storyforge.h17.last-attempt-run'
+
+function readLastH17Attempt(): H17AttemptEvidence['state'] | null {
+  try {
+    const key = localStorage.getItem(H17_LAST_ATTEMPT_KEY)
+    if (!key?.startsWith('storyforge.h17.attempts.')) return null
+    const record = JSON.parse(localStorage.getItem(key) ?? 'null') as { attempts?: H17AttemptEvidence[] } | null
+    return record?.attempts?.[record.attempts.length - 1]?.state ?? null
+  } catch { return null }
+}
+
+function saveH17Evidence(key: string, text: string) {
+  localStorage.setItem(key, text)
+  localStorage.setItem(H17_LAST_ATTEMPT_KEY, key)
+}
+
 async function evalChatWithRetry(
   messages: ChatMessage[],
   config: AIConfig,
   category: 'eval.h17.compression' | 'eval.h17.generation',
+  save: (observation: H17AttemptEvidence) => void,
 ) {
-  let lastError: unknown
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  const phase = category === 'eval.h17.compression' ? 'compression' : 'generation'
+  const maxAttempts = 2
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const base = { phase, attempt } as const
+    save({ ...base, state: 'prepared', httpStatus: null })
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 180_000)
+    let output: string
+    const result: ChatResult = {}
     try {
-      const result: ChatResult = {}
-      const output = category === 'eval.h17.compression'
-        ? await executeRegisteredAIEntryV1(
-          'eval.context-compression', messages, config,
-          { category: 'eval.h17.compression' }, controller.signal, result,
-        )
-        : await executeRegisteredAIEntryV1(
-          'eval.context-compression', messages, config,
-          { category: 'eval.h17.generation' }, controller.signal, result,
-        )
-      return { output, usage: result.usage }
+      output = await executeRegisteredAIEntryV1(
+        'eval.context-compression', messages, config, { category: category === 'eval.h17.compression'
+          ? 'eval.h17.compression' : 'eval.h17.generation' }, controller.signal, result,
+      )
     } catch (error) {
-      lastError = error
-      const status = typeof error === 'object' && error && 'status' in error
-        ? Number((error as { status?: unknown }).status)
-        : 0
-      const retryable = status >= 500 || status === 429 || status === 0
-      if (!retryable || attempt === 2) throw error
-      await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 1_500))
+      const failure = classifyEvalTransportErrorV1(error, result)
+      save({ ...base, state: failure.outcome, httpStatus: failure.status,
+        ...(result.usage ? { usage: result.usage } : {}) })
+      if (failure.outcome !== 'retryable' || attempt === maxAttempts) throw failure
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      continue
     } finally {
       clearTimeout(timeout)
     }
+    // Persist the returned text before scoring. A write failure never enters
+    // the dispatch retry branch.
+    save({ ...base, state: 'returned', httpStatus: result.requestLifecycle?.responseStatus ?? null,
+      raw: output, ...(result.usage ? { usage: result.usage } : {}) })
+    return { output, usage: result.usage }
   }
-  throw lastError
+  throw new Error('H17 已用尽明确限流重试额度')
 }
 
 async function callH4Verifier(
@@ -154,8 +182,8 @@ async function callH4Verifier(
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 180_000)
   const startedAt = performance.now()
+  const result: ChatResult = { captureProviderTokenUsage: true }
   try {
-    const result: ChatResult = {}
     const output = await executeRegisteredAIEntryV1(
       'eval.long-consistency.verifier',
       input.messages,
@@ -167,18 +195,12 @@ async function callH4Verifier(
         ? { responseFormat: 'json_object' }
         : undefined,
     )
-    const inputTokens = result.usage?.inputTokens
-      ?? input.messages.reduce((sum, message) => sum + estimateTokens(message.content), 0)
-    const outputTokens = result.usage?.outputTokens ?? estimateTokens(output)
-    return {
-      output,
-      usage: {
-        inputTokens,
-        outputTokens,
-        durationMs: Math.round(performance.now() - startedAt),
-        costUsd: computeCostUsd(config.model, inputTokens, outputTokens),
-      },
-    }
+    return { output, usage: measureLongConsistencyProviderUsageV1({
+      tokens: result.providerTokenUsage, config, messages: input.messages,
+      output, durationMs: Math.round(performance.now() - startedAt),
+    }) }
+  } catch (cause) {
+    throw classifyEvalTransportErrorV1(cause, result)
   } finally {
     clearTimeout(timeout)
   }
@@ -195,7 +217,7 @@ async function callH4SubtypeAdjudicator(
   const timeout = setTimeout(() => controller.abort(), 180_000)
   const startedAt = performance.now()
   try {
-    const result: ChatResult = {}
+    const result: ChatResult = { captureProviderTokenUsage: true }
     const output = await executeRegisteredAIEntryV1(
       'eval.long-consistency.adjudicator',
       input.messages,
@@ -205,18 +227,10 @@ async function callH4SubtypeAdjudicator(
       result,
       { responseFormat: 'json_object' },
     )
-    const inputTokens = result.usage?.inputTokens
-      ?? input.messages.reduce((sum, message) => sum + estimateTokens(message.content), 0)
-    const outputTokens = result.usage?.outputTokens ?? estimateTokens(output)
-    return {
-      output,
-      usage: {
-        inputTokens,
-        outputTokens,
-        durationMs: Math.round(performance.now() - startedAt),
-        costUsd: computeCostUsd(config.model, inputTokens, outputTokens),
-      },
-    }
+    return { output, usage: measureLongConsistencyProviderUsageV1({
+      tokens: result.providerTokenUsage, config, messages: input.messages,
+      output, durationMs: Math.round(performance.now() - startedAt),
+    }) }
   } finally {
     clearTimeout(timeout)
   }
@@ -357,6 +371,7 @@ export default function HarnessEvalPanel() {
       const score = await scoreH4LongConsistencyCheckpointV1({ checkpoint })
       updateSplit(split, checkpoint, score)
     } catch (cause) {
+      if (cause instanceof H4CheckpointWriteErrorV1) updateSplit(split, cause.checkpoint)
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
       setRunningSplit(null)
@@ -546,10 +561,40 @@ export default function HarnessEvalPanel() {
     }
   }
 
+  const unsavedCompressionEvidence = useRef<{ key: string; text: string } | null>(null)
+  const [compressionSaveBlocked, setCompressionSaveBlocked] = useState(false)
+  const [lastCompressionAttempt, setLastCompressionAttempt] = useState(readLastH17Attempt)
+  const retryCompressionEvidenceSave = () => {
+    const pending = unsavedCompressionEvidence.current
+    if (!pending) return
+    try {
+      saveH17Evidence(pending.key, pending.text)
+      setLastCompressionAttempt(readLastH17Attempt())
+      unsavedCompressionEvidence.current = null
+      setCompressionSaveBlocked(false)
+      setError('评测证据已保存。原请求没有重新发送。')
+    } catch {
+      setError('仍无法保存评测证据，请在此页重试保存。')
+    }
+  }
   const runCompressionMatrix = async () => {
+    if (unsavedCompressionEvidence.current) return
     setCompressionRunning(true)
     setError('')
     setProgress('0/3 组')
+    const key = `storyforge.h17.attempts.${crypto.randomUUID()}`
+    const evidence: H17AttemptEvidence[] = []
+    const save = (entry: H17AttemptEvidence) => {
+      evidence.push(entry)
+      const text = JSON.stringify({ version: 1, provider: config.provider, model: config.model, attempts: evidence })
+      try { saveH17Evidence(key, text); setLastCompressionAttempt(entry.state) }
+      catch {
+        unsavedCompressionEvidence.current = { key, text }
+        setCompressionSaveBlocked(true)
+        throw new Error('评测证据保存失败。请先重存证据，系统不会重新发送原请求。')
+      }
+      if (entry.state === 'retryable') setProgress('服务限流，按上限等待一次重试')
+    }
     try {
       const records = await runContextCompressionEvalMatrixV1({
         fixtures: getFixtures('development').slice(0, 3),
@@ -558,9 +603,7 @@ export default function HarnessEvalPanel() {
         generationMaxTokens: 1_200,
         config,
         call: async (messages, runConfig, phase) => evalChatWithRetry(
-          messages,
-          runConfig,
-          phase === 'compression' ? 'eval.h17.compression' : 'eval.h17.generation',
+          messages, runConfig, phase === 'compression' ? 'eval.h17.compression' : 'eval.h17.generation', save,
         ),
         onVariantComplete: (_record, completed, total) => setProgress(`${completed}/${total} 组`),
         onCaseProgress: (variantIndex, variantTotal, completed, total) => {
@@ -585,8 +628,10 @@ export default function HarnessEvalPanel() {
         })
       : null
   ), [fullCompressionRecord, semanticCompressionRecord])
-  const adjudicationDevelopmentPassed = adjudicationSplits.development.score?.gate.passed === true
-  const developmentPassed = splits.development.score?.gate.passed === true || adjudicationDevelopmentPassed
+  const adjudicationDevelopmentPassed = adjudicationSplits.development.score?.usagePolicy === PROVIDER_USAGE_POLICY_V1
+    && adjudicationSplits.development.score.gate.passed
+  const developmentPassed = (splits.development.score?.usagePolicy === PROVIDER_USAGE_POLICY_V1
+    && splits.development.score.gate.passed) || adjudicationDevelopmentPassed
   const busy = runningSplit != null || runningAdjudicationSplit != null || compressionRunning
 
   const renderSplit = (split: EvalSplit, label: string) => {
@@ -714,10 +759,14 @@ export default function HarnessEvalPanel() {
             <span>高严重度精确率 {formatRate(score.highSeverityHard.precision.estimate)}</span>
             <span>高严重度召回率 {formatRate(score.highSeverityHard.recall.estimate)}</span>
             <span>证据回查 {formatRate(score.evidence.verificationRate.estimate)}</span>
-            <span className={score.gate.passed ? 'text-success' : 'text-error'}>
-              {score.gate.passed ? '门禁 PASS' : `门禁 FAIL · ${score.gate.failures.join(', ')}`}
+            <span className={score.usagePolicy !== PROVIDER_USAGE_POLICY_V1 ? 'text-text-muted' : score.gate.passed ? 'text-success' : 'text-error'}>
+              {score.usagePolicy !== PROVIDER_USAGE_POLICY_V1 ? '历史评分 · 无法验证实测用量'
+                : score.gate.passed ? '门禁 PASS' : `门禁 FAIL · ${score.gate.failures.join(', ')}`}
             </span>
             <span>验证调用 {score.usage.modelCalls}</span>
+            {score.usagePolicy === PROVIDER_USAGE_POLICY_V1 && (
+              <span>实测 {score.usage.meteredModelCalls} · 缺完整实测 {score.usage.unmeteredModelCalls}</span>
+            )}
             <span>验证输入 {score.usage.inputTokens} tokens</span>
             <span>验证输出 {score.usage.outputTokens} tokens</span>
             <span>验证估算成本 ${score.usage.costUsd.toFixed(4)}</span>
@@ -844,11 +893,15 @@ export default function HarnessEvalPanel() {
             <span>高严重度精确率 {formatRate(score.highSeverityHard.precision.estimate)}</span>
             <span>高严重度召回率 {formatRate(score.highSeverityHard.recall.estimate)}</span>
             <span>证据回查 {formatRate(score.evidence.verificationRate.estimate)}</span>
-            <span className={score.gate.passed ? 'text-success' : 'text-error'}>
-              {score.gate.passed ? '门禁 PASS' : `门禁 FAIL · ${score.gate.failures.join(', ')}`}
+            <span className={score.usagePolicy !== PROVIDER_USAGE_POLICY_V1 ? 'text-text-muted' : score.gate.passed ? 'text-success' : 'text-error'}>
+              {score.usagePolicy !== PROVIDER_USAGE_POLICY_V1 ? '历史评分 · 无法验证实测用量'
+                : score.gate.passed ? '门禁 PASS' : `门禁 FAIL · ${score.gate.failures.join(', ')}`}
             </span>
             <span>发现调用 {score.usage.discovery.modelCalls}</span>
             <span>判类调用 {score.usage.adjudication.modelCalls}</span>
+            {score.usagePolicy === PROVIDER_USAGE_POLICY_V1 && (
+              <span>实测 {score.usage.total.meteredModelCalls} · 缺完整实测 {score.usage.total.unmeteredModelCalls}</span>
+            )}
             <span>总输入 {score.usage.total.inputTokens} tokens</span>
             <span>总输出 {score.usage.total.outputTokens} tokens</span>
             <span>总估算成本 ${score.usage.total.costUsd.toFixed(4)}</span>
@@ -905,7 +958,7 @@ export default function HarnessEvalPanel() {
           <button
             type="button"
             onClick={() => { void runCompressionMatrix() }}
-            disabled={busy || !isAIConfigReady(config)}
+            disabled={busy || compressionSaveBlocked || !isAIConfigReady(config)}
             className="inline-flex items-center gap-1.5 rounded-md bg-sky-500/10 px-2.5 py-1.5 text-xs text-sky-400 hover:bg-sky-500/20 disabled:opacity-40"
           >
             {compressionRunning
@@ -914,6 +967,9 @@ export default function HarnessEvalPanel() {
             {compressionRunning ? progress : '运行'}
           </button>
         </div>
+        {!compressionRunning && (lastCompressionAttempt === 'unknown' || lastCompressionAttempt === 'prepared') &&
+          <p role="status">上次评测请求结果未知，已保留本地证据。再次运行会开始新评测。</p>}
+        {compressionSaveBlocked && <button type="button" onClick={retryCompressionEvidenceSave}>重存评测证据</button>}
         {compressionRecords.length > 0 && (
           <div data-testid="h17-context-compression-result" className="mt-3 overflow-x-auto">
             <table className="w-full text-[11px] text-text-secondary">
