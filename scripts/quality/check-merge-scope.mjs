@@ -10,6 +10,7 @@ const tooling = /^(?:scripts|tools)\/.*\.[cm]?js$/
 const workflow = /^\.github\/workflows\/[^/]+\.ya?ml$/
 const scopeChecker = 'scripts/quality/check-merge-scope.mjs'
 const routingTest = 'scripts/quality/check-merge-scope.test.mjs'
+const databaseSchema = 'src/lib/db/schema.ts'
 const mediaList = 'scripts/quality/avg-media-harnesses.txt'
 const manualMedia = new Set(readFileSync(new URL('./avg-media-harnesses.txt', import.meta.url), 'utf8').trim().split(/\r?\n/))
 const tsConfig = /^tsconfig(?:\.[\w.-]+)?\.json$/
@@ -68,6 +69,10 @@ export function plan(paths, exists = existsSync) {
   const typeConfigs = present.filter(path => tsConfig.test(path))
   if (source.some(path => !exists(path)) || paths.some(path => ['package.json', 'package-lock.json'].includes(path))) typeConfigs.push('tsconfig.json')
   const units = present.filter(path => unit.test(path) && !manualMedia.has(path))
+  if (paths.includes(databaseSchema)) {
+    typeConfigs.push('tsconfig.json')
+    units.push('tests/registry/project-tables.test.ts')
+  }
   if (paths.some(path => ['vitest.config.ts', 'tests/setup.ts'].includes(path))) units.push('tests/registry/project-tables.test.ts')
   if (paths.some(path => ['vite.config.ts', 'vite.adventure-player.config.ts'].includes(path))) scripts.add('build')
   const governance = paths.some(path => ['AGENTS.md', 'CLAUDE.md', 'docs/CONTEXT-ROUTING.md', 'scripts/check-agent-context.mjs'].includes(path))
@@ -109,6 +114,9 @@ async function main() {
     const { default: ts } = await import('typescript')
     const tests = names(['ls-files', '-z', '--', 'src', 'tests']).filter(path => unit.test(path) && existsSync(path))
     const { unchangedFunctions, onlyUnchangedImports, inertModule } = await import('./affected-exports.mjs')
+    const { additiveStoreChange, usesOnlyExistingStores } = await import('./additive-store-consumers.mjs')
+    /** @type {ReturnType<typeof additiveStoreChange>} */
+    let additiveSchema
     const changedModules = new Set(paths.map(moduleName))
     const priorPaths = new Set(names(['ls-tree', '-rz', '--name-only', sha, '--', 'src', 'tests']))
     /** @type {Map<string, Set<string>>} */
@@ -116,6 +124,7 @@ async function main() {
     for (const file of checks.related.filter(f => app.test(f) && priorPaths.has(f) && existsSync(f))) {
       const before = execFileSync('git', ['show', sha + ':' + file], { encoding: 'utf8' })
       const after = readFileSync(file, 'utf8')
+      if (file === databaseSchema) additiveSchema = additiveStoreChange(before, after)
       stable.set(file, unchangedFunctions(file, before, after,
         specifier => changedModules.has(importedModule(file, specifier) ?? ''),
         specifier => {
@@ -129,7 +138,10 @@ async function main() {
     const matches = directTests(checks.related, tests, test => {
       contents = readFileSync(test, 'utf8')
       return ts.preProcessFile(contents, true, true).importedFiles.map(file => file.fileName)
-    }, (test, specifier, source) => !onlyUnchangedImports(test, contents, specifier, stable.get(source) ?? new Set()))
+    }, (test, specifier, source) => {
+      if (source === databaseSchema && additiveSchema && usesOnlyExistingStores(test, contents, specifier, additiveSchema)) return false
+      return !onlyUnchangedImports(test, contents, specifier, stable.get(source) ?? new Set())
+    })
     for (const file of matches) units.add(file)
     if (!units.size && checks.related.some(path => app.test(path))) checks.typeConfigs.push('tsconfig.json')
   }

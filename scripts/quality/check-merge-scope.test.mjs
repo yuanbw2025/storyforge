@@ -17,7 +17,7 @@ test('documentation and workflow-only changes avoid dependency installation', ()
 test('changed tests, deleted modules and schema changes have scoped checks', () => {
   const deleted = 'src/lib/old.ts'
   const checks = plan([deleted, 'src/lib/db/schema.ts', 'tests/db/schema.test.ts'], path => path !== deleted)
-  assert.deepEqual(checks.units, ['tests/db/schema.test.ts'])
+  assert.deepEqual(checks.units, ['tests/db/schema.test.ts', 'tests/registry/project-tables.test.ts'])
   assert.ok(checks.typeConfigs.includes('tsconfig.json'))
   assert.deepEqual(checks.scripts, ['check:required-tables'])
   assert.equal(checks.npm, true)
