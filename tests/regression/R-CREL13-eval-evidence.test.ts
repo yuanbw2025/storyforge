@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { installEvalWebLocksFixtureV1 } from '../helpers/eval-web-locks'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import {
   CREATIVE_RELIABILITY_DEVELOPMENT_FIXTURES_V1,
@@ -264,7 +265,12 @@ async function humanReviews(): Promise<Record<string, CreativeReliabilityHumanRe
 }
 
 describe('CREL-13 · 新 development / sealed holdout 与可验签门槛', () => {
-  beforeEach(() => localStorage.clear())
+  let restoreEvalWebLocks: (() => void) | undefined
+  beforeEach(() => {
+    restoreEvalWebLocks = installEvalWebLocksFixtureV1()
+    localStorage.clear()
+  })
+  afterEach(() => { restoreEvalWebLocks?.() })
 
   it('冻结两个不重叠的六样例集合，覆盖部分输入而不复用 H86 ID', () => {
     expect(CREATIVE_RELIABILITY_DEVELOPMENT_FIXTURES_V1).toHaveLength(6)

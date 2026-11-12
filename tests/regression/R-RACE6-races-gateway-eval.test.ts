@@ -1,3 +1,4 @@
+import { installEvalWebLocksFixtureV1 } from '../helpers/eval-web-locks'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
@@ -75,7 +76,10 @@ function preflightEvidence(provider: string, model: string, promptVersion: strin
   }
 }
 
+let restoreEvalWebLocks: (() => void) | undefined
+
 beforeEach(async () => {
+  restoreEvalWebLocks = installEvalWebLocksFixtureV1()
   await db.delete()
   await db.open()
   localStorage.clear()
@@ -88,6 +92,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  restoreEvalWebLocks?.()
   vi.unstubAllGlobals()
   await db.delete()
 })

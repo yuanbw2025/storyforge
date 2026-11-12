@@ -2,6 +2,116 @@
 
 
 
+
+## November 11, 2026 · Merged repairs and development deltas
+
+Reviewed main `5420f854` from `834718d1`. Enumerated 317 local branches and 89 registered worktrees including detached checkouts. 285 heads are outside main, with working-file entries in 72 worktrees. PR #301 is merged, incorporating the original #240/#275/#245 heads. Independent outline-review PR #303 is also merged. Older sections retain their dated snapshots.
+
+### New or updated pending PRs
+
+All rows below are open and unmerged. Paths identify observed source areas rather than completion or acceptance. Inherited integration changes are deduplicated using ancestry, identical heads and stable patch comparison. The remaining open PRs keep their preceding snapshot.
+
+| PR / head | Observed source areas |
+| --- | --- |
+| [#391](https://github.com/yuanbw2025/storyforge/pull/391) · `e038588b` | `src/components/text-game/TextOpenWorldCreatorProductionStart.tsx`, `src/lib/agent/creative-execution.ts` |
+| [#390](https://github.com/yuanbw2025/storyforge/pull/390) · `19002292` | `src/components/comic/ComicSource.tsx`, `src/components/geography/LocationTreeMap.tsx` |
+| [#389](https://github.com/yuanbw2025/storyforge/pull/389) · `c1775938` | `src/components/editor/ChapterEditor.tsx`, `src/components/editor/ChapterPostAdoptionSettingsPanel.tsx` |
+| [#388](https://github.com/yuanbw2025/storyforge/pull/388) · `ecd0ba53` | `scripts/ai-call-meta.mjs`, `scripts/check-ai-entry-registry.mjs` |
+| [#387](https://github.com/yuanbw2025/storyforge/pull/387) · `1374cc2f` | `src/components/product/ProductProductionStudio.tsx`, `src/components/product/TextAdventureMediaReview.tsx` |
+| [#386](https://github.com/yuanbw2025/storyforge/pull/386) · `cec18d69` | `src/components/system/ImportDocPanel.tsx`, `src/components/system/import/ImportConfirmModal.tsx` |
+| [#385](https://github.com/yuanbw2025/storyforge/pull/385) · `5c6b262e` | `src/lib/comic/qa.ts`, `src/lib/comic/release.ts` |
+| [#384](https://github.com/yuanbw2025/storyforge/pull/384) · `bd7bdf92` | `src/lib/product-production/scheduler.ts` |
+| [#383](https://github.com/yuanbw2025/storyforge/pull/383) · `b706f4f1` | `src/components/editor/ReviewPanel.tsx`, `src/lib/agent/consistency-agent.ts` |
+| [#382](https://github.com/yuanbw2025/storyforge/pull/382) · `05860d6e` | `.github/workflows/deploy-docs.yml`, `scripts/deploy/verify-docs-ssh-host-key.mjs` |
+| [#381](https://github.com/yuanbw2025/storyforge/pull/381) · `d2843b0e` | `src/lib/product-production/chat-media-tasks.ts`, `src/lib/product-production/chat-situation-tasks.ts` |
+| [#380](https://github.com/yuanbw2025/storyforge/pull/380) · `66e08051` | `src/components/facts/FactLibraryPanel.tsx`, `src/lib/consistency/lifecycle-boundary.ts` |
+| [#379](https://github.com/yuanbw2025/storyforge/pull/379) · `1cde5ac9` | `scripts/evaluate-narrative-reader-judge-local-codex.mjs`, `scripts/narrative-reader-judge-continuation.mjs` |
+| [#378](https://github.com/yuanbw2025/storyforge/pull/378) · `f2ec7acf` | `src/components/comic/ComicSourcePanel.tsx`, `src/components/comic/ComicStudio.tsx` |
+| [#377](https://github.com/yuanbw2025/storyforge/pull/377) · `3362bad5` | `src/lib/product/source-contracts.ts` |
+| [#376](https://github.com/yuanbw2025/storyforge/pull/376) · `d46eb0c7` | `src/components/text-game/TextOpenWorldCreatorBriefStudio.tsx`, `src/lib/open-world/creator-brief-persistence.ts` |
+| [#375](https://github.com/yuanbw2025/storyforge/pull/375) · `dfb6c61b` | `src/lib/salt-ridge/production.ts`, `src/pages/SaltRidgePage.tsx` |
+| [#374](https://github.com/yuanbw2025/storyforge/pull/374) · `94e65980` | `src/components/editor/ChapterEditor.tsx`, `src/components/editor/ReconciliationTable.tsx` |
+| [#373](https://github.com/yuanbw2025/storyforge/pull/373) · `772584c9` | `src/components/editor/ChapterContextPreview.tsx`, `src/components/editor/ChapterEditor.tsx` |
+| [#372](https://github.com/yuanbw2025/storyforge/pull/372) · `32792ad7` | `src/components/text-game/TextOpenWorldCreatorProductionReadiness.tsx`, `src/lib/open-world/creator-brief.ts` |
+| [#371](https://github.com/yuanbw2025/storyforge/pull/371) · `46e9ab7f` | `src/components/data/DataManagementPanel.tsx`, `src/components/home/HomeTools.tsx` |
+| [#370](https://github.com/yuanbw2025/storyforge/pull/370) · `a1cccb2d` | `src/components/location/LocationPanel.tsx`, `src/components/location/LocationTreeView.tsx` |
+| [#369](https://github.com/yuanbw2025/storyforge/pull/369) · `da90513e` | `src/components/node-authoring/NodeAuthoringWorkspace.tsx` |
+| [#368](https://github.com/yuanbw2025/storyforge/pull/368) · `544078d4` | `src/components/character-interaction/useChatMedia.ts`, `src/lib/character-interaction/runtime-visuals.ts` |
+| [#367](https://github.com/yuanbw2025/storyforge/pull/367) · `a92bec3c` | `src/components/worldview/WorldRulesPanel.tsx`, `src/stores/world-rules.ts` |
+| [#366](https://github.com/yuanbw2025/storyforge/pull/366) · `d41da09c` | `src/components/settings/HarnessEvalPanel.tsx`, `src/lib/ai/client.ts` |
+| [#365](https://github.com/yuanbw2025/storyforge/pull/365) · `54f04267` | `src/components/outline/OutlinePanel.tsx`, `src/components/outline/OutlineVolumeSidebar.tsx` |
+| [#364](https://github.com/yuanbw2025/storyforge/pull/364) · `2a4d6997` | `src/components/text-game/TextOpenWorldScenePanel.tsx`, `src/components/text-game/TextOpenWorldVNextPlayer.tsx` |
+| [#363](https://github.com/yuanbw2025/storyforge/pull/363) · `8d6416e6` | `src/components/text-game/TextOpenWorldCreatorBriefStudio.tsx`, `src/lib/open-world/creator-brief.ts` |
+| [#362](https://github.com/yuanbw2025/storyforge/pull/362) · `c071628b` | `src/components/text-game/AdventureGamePlayer.tsx`, `src/lib/adventure/harness.ts` |
+| [#361](https://github.com/yuanbw2025/storyforge/pull/361) · `0238c7dd` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#360](https://github.com/yuanbw2025/storyforge/pull/360) · `27278756` | `src/components/settings/HarnessEvalPanel.tsx`, `src/lib/ai/client.ts` |
+| [#359](https://github.com/yuanbw2025/storyforge/pull/359) · `b92975c6` | `src/lib/agent/character-copilot.ts`, `src/lib/agent/character-supplement-copilot.ts` |
+| [#358](https://github.com/yuanbw2025/storyforge/pull/358) · `c7229971` | `src/lib/product-production/capabilities.ts`, `src/lib/product-production/production-executor.ts` |
+| [#357](https://github.com/yuanbw2025/storyforge/pull/357) · `eefb698e` | `src/lib/agent/run/extraction-adoption.ts`, `src/lib/agent/run/inventory-extraction-durable.ts` |
+| [#356](https://github.com/yuanbw2025/storyforge/pull/356) · `90c11cb3` | `src/lib/product/runtime-media-library.ts` |
+| [#355](https://github.com/yuanbw2025/storyforge/pull/355) · `5fd27635` | `src/lib/node-authoring/bindings.ts`, `src/lib/node-authoring/chapter-source.ts` |
+| [#354](https://github.com/yuanbw2025/storyforge/pull/354) · `1b6fdc02` | `src/lib/open-world/action-executor.ts`, `src/lib/open-world/runtime-intent-recovery.ts` |
+| [#353](https://github.com/yuanbw2025/storyforge/pull/353) · `860a7ab6` | `src/components/agent/useMasterCopilot.ts`, `src/components/worldview/WorldviewAgentControls.tsx` |
+| [#352](https://github.com/yuanbw2025/storyforge/pull/352) · `6aa9ada8` | `src/components/editor/EntityRenamePanel.tsx`, `src/lib/editor/entity-rename.ts` |
+| [#351](https://github.com/yuanbw2025/storyforge/pull/351) · `eebed79b` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#350](https://github.com/yuanbw2025/storyforge/pull/350) · `6c480363` | `src/components/facts/FactLibraryPanel.tsx`, `src/lib/consistency/lifecycle-boundary.ts` |
+| [#349](https://github.com/yuanbw2025/storyforge/pull/349) · `81cf761f` | `src/components/location/LocationPanel.tsx`, `src/components/location/LocationTreeView.tsx` |
+| [#348](https://github.com/yuanbw2025/storyforge/pull/348) · `d618de1f` | `docs/ENGINEERING-QUALITY-STANDARD.md`, `package-lock.json` |
+| [#347](https://github.com/yuanbw2025/storyforge/pull/347) · `0e59e8f9` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#346](https://github.com/yuanbw2025/storyforge/pull/346) · `1b4daada` | `src/lib/agent/orchestrator.ts` |
+| [#345](https://github.com/yuanbw2025/storyforge/pull/345) · `0e22b609` | `src/components/comic/ComicStudio.tsx`, `src/components/comic/ComicVisualPanel.tsx` |
+| [#344](https://github.com/yuanbw2025/storyforge/pull/344) · `84dd2c81` | `docs/ENGINEERING-QUALITY-STANDARD.md`, `scripts/quality/critical-coverage-scopes.json` |
+| [#343](https://github.com/yuanbw2025/storyforge/pull/343) · `59e39ba1` | `scripts/avg-local-foreground/README.md`, `scripts/avg-local-foreground/runtime_guard.py` |
+| [#342](https://github.com/yuanbw2025/storyforge/pull/342) · `2ac13a9e` | `src/lib/aphelion/scene.ts`, `src/lib/tidemark/scene.ts` |
+| [#341](https://github.com/yuanbw2025/storyforge/pull/341) · `2801f1bc` | `src/lib/adventure/runtime.ts`, `src/lib/product-production/preview-manifest.ts` |
+| [#340](https://github.com/yuanbw2025/storyforge/pull/340) · `63e283b8` | `src/components/settings/AIConfigPanel.tsx`, `src/lib/ai/model-list.ts` |
+| [#339](https://github.com/yuanbw2025/storyforge/pull/339) · `85f9dbbd` | `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/ai-manual-context-sources.mjs` |
+| [#338](https://github.com/yuanbw2025/storyforge/pull/338) · `56de9ba8` | `src/components/community/CommunityReviewPanel.tsx`, `src/components/community/CommunitySafetyPanel.tsx` |
+| [#337](https://github.com/yuanbw2025/storyforge/pull/337) · `7d65daa9` | `src/components/text-game/AvgGamePlayer.tsx` |
+| [#336](https://github.com/yuanbw2025/storyforge/pull/336) · `4c8f7520` | `src/components/character/CharacterDetailCard.tsx`, `src/components/character/CharacterStatusPanel.tsx` |
+| [#335](https://github.com/yuanbw2025/storyforge/pull/335) · `aeda7d16` | `src/components/settings/CreativeReliabilityEvalPanel.tsx`, `src/components/settings/H86StoryArcEvalPanel.tsx` |
+| [#334](https://github.com/yuanbw2025/storyforge/pull/334) · `a118cc01` | `src/lib/product-production/original-response-author-source.ts`, `src/lib/product-production/original-response-booking.ts` |
+| [#333](https://github.com/yuanbw2025/storyforge/pull/333) · `29ba9061` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#332](https://github.com/yuanbw2025/storyforge/pull/332) · `c1994b1e` | `src/components/geography/GeographyPanel.tsx`, `src/components/world-group/ScopedWorldAuthoringBoundary.tsx` |
+| [#331](https://github.com/yuanbw2025/storyforge/pull/331) · `9f93e983` | `src/components/outline/DetailedOutlinePanel.tsx`, `src/lib/agent/run/detailed-outline-batch-durable.ts` |
+| [#330](https://github.com/yuanbw2025/storyforge/pull/330) · `e15540e9` | `src/lib/memory/workspace-projection.ts`, `src/lib/types/memory-engineering.ts` |
+| [#329](https://github.com/yuanbw2025/storyforge/pull/329) · `12b3096c` | `src/components/location/LocationPanel.tsx`, `src/components/location/LocationTreeView.tsx` |
+| [#328](https://github.com/yuanbw2025/storyforge/pull/328) · `fe69aa11` | `src/App.tsx`, `src/components/data/DataManagementPanel.tsx` |
+| [#327](https://github.com/yuanbw2025/storyforge/pull/327) · `848c637c` | `src/components/product/WorldSharingPanel.tsx`, `src/lib/db/ensure-schema.ts` |
+| [#326](https://github.com/yuanbw2025/storyforge/pull/326) · `9baf6e83` | `src/components/ttrpg/TtrpgRuntimeMediaPanel.tsx`, `src/lib/open-world/checkpoints.ts` |
+| [#325](https://github.com/yuanbw2025/storyforge/pull/325) · `f84f28b3` | `src/components/product/WorldSharingPanel.tsx`, `src/lib/editor/find-replace.ts` |
+| [#324](https://github.com/yuanbw2025/storyforge/pull/324) · `fdc4a38c` | `src/lib/extensions/domain.ts`, `src/lib/types/world-ownership.ts` |
+| [#323](https://github.com/yuanbw2025/storyforge/pull/323) · `c10f3791` | `src/components/outline/OutlinePanel.tsx`, `src/components/outline/OutlineVolumeSidebar.tsx` |
+| [#322](https://github.com/yuanbw2025/storyforge/pull/322) · `43c622ae` | `src/lib/product-production/media-blob-store.ts` |
+| [#321](https://github.com/yuanbw2025/storyforge/pull/321) · `5ded129f` | `src/components/ttrpg/TtrpgRuntimeMediaPanel.tsx`, `src/lib/open-world/checkpoints.ts` |
+| [#320](https://github.com/yuanbw2025/storyforge/pull/320) · `fd8c3052` | `src/lib/product-production/artifact-store.ts`, `src/lib/product-production/contracts.ts` |
+| [#319](https://github.com/yuanbw2025/storyforge/pull/319) · `51ae322a` | `CLAUDE.md`, `docs/ARCHITECTURE.md` |
+| [#318](https://github.com/yuanbw2025/storyforge/pull/318) · `39fe5b69` | `src/lib/editor/find-replace.ts` |
+| [#317](https://github.com/yuanbw2025/storyforge/pull/317) · `03d235e5` | `src/lib/screenplay/renderers.ts` |
+| [#316](https://github.com/yuanbw2025/storyforge/pull/316) · `0b79f7b2` | `src/lib/open-world/checkpoints.ts`, `src/lib/product/runtime-branch-lineage.ts` |
+| [#315](https://github.com/yuanbw2025/storyforge/pull/315) · `dabb50eb` | `src/lib/open-world/player-preferences.ts` |
+| [#314](https://github.com/yuanbw2025/storyforge/pull/314) · `ecc99701` | `src/components/editor/ChapterEditor.tsx`, `src/hooks/useAIStream.ts` |
+| [#313](https://github.com/yuanbw2025/storyforge/pull/313) · `20f8fa0a` | `src/lib/commercial/authority.ts`, `src/lib/community/commercial-release-policy.ts` |
+| [#312](https://github.com/yuanbw2025/storyforge/pull/312) · `9dbf6ad2` | `src/lib/motion-drama/contracts.ts`, `src/lib/motion-drama/delivery.ts` |
+| [#311](https://github.com/yuanbw2025/storyforge/pull/311) · `5703deea` | `.github/workflows/traffic-archive.yml`, `data/traffic/README.md` |
+| [#310](https://github.com/yuanbw2025/storyforge/pull/310) · `a1c42b7e` | `src/lib/context-gateway/canon-provider.ts` |
+| [#309](https://github.com/yuanbw2025/storyforge/pull/309) · `765a4906` | `src/lib/open-world/runtime-ai-context-provider.ts`, `src/lib/registry/assemble-context.ts` |
+| [#308](https://github.com/yuanbw2025/storyforge/pull/308) · `8371513e` | `src/lib/open-world/creator-artifact-edit-dispatch.ts`, `src/lib/open-world/creator-artifact-edit.ts` |
+| [#307](https://github.com/yuanbw2025/storyforge/pull/307) · `d4d42acf` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#306](https://github.com/yuanbw2025/storyforge/pull/306) · `8103cc53` | `src/components/comic/ComicSourcePanel.tsx`, `src/lib/comic/production.ts` |
+| [#305](https://github.com/yuanbw2025/storyforge/pull/305) · `0bef1578` | `src/components/product/WorldSharingPanel.tsx`, `src/lib/world-engine/world-package.ts` |
+| [#304](https://github.com/yuanbw2025/storyforge/pull/304) · `23a32a5a` | `src/lib/export/backup-trust.ts`, `src/lib/export/portable-table-structure.ts` |
+| [#302](https://github.com/yuanbw2025/storyforge/pull/302) · `57945be8` | `src/lib/editor/find-replace.ts` |
+| [#295](https://github.com/yuanbw2025/storyforge/pull/295) · `5145a169` | `src/App.tsx`, `src/components/agent/useMasterCopilot.ts` |
+
+### Changed uncommitted observations
+
+- `quality-secondline-closeout-20261111` · `fix/quality021-purpose-on-foundation-20261111` · 49 working/staged entries · `src/components/product/ProductProductionStudio.tsx`, `src/components/text-game/TextOpenWorldCreatorStudio.tsx`, `src/components/ttrpg/AuthorProposal.tsx`
+- `quality028032021-final-20261104` · `fix/quality-shared-regression-closure-20261104` · 1 working/staged entries · `tests/e2e/quality004-product-entry-admission.spec.ts`
+- `quality098099-split-20261111` · `fix/quality129-independent-20261111` · 19 working/staged entries · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `docs/ARCHITECTURE.md`, `docs/DATA-GOVERNANCE.md`
+
+The earlier 11 unique unpushed non-merge commits retain their local differences. Three newly observed unpushed commits are merge-only history. Other working-file entries retain the preceding recorded scope. Full branch/worktree paths, changes and ancestry proofs remain in private evidence. These observations do not establish completed product delivery.
+
 ## November 10, 2026 · Current integration snapshot
 
 Reviewed main `1304d29a` from successful baseline `79c022c5`. Enumerated 220 local branches and 79 registered worktrees including detached checkouts. 193 heads are outside main. #255 and #256 are merged, carrying #250–#254 and their original heads. #234 is merged. Old dated sections retain their snapshots.

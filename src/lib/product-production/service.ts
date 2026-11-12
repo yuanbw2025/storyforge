@@ -1,3 +1,4 @@
+import { revalidateWorldSourcePurposeV1 } from '../world-engine/source-purpose-actions'
 import { canonicalProductProductionJsonV2 } from './hash'
 import { deriveAvgAssemblyRecoveryBaseV1 } from '../avg/assembly-recovery'
 import { AVG_VISUAL_TEXT_CAPABILITY_V4 } from '../avg/visual-planning-roles'
@@ -1181,6 +1182,13 @@ export async function createProductProductionWithBriefV1(input: {
 }): Promise<number> {
   const title = input.title.trim()
   if (!title) throw new Error('[product-production-service] 游戏标题不能为空')
+  if (input.worldReleaseId !== input.brief.source.worldReleaseId) {
+    throw new Error('[product-production-service] Brief 与所选冻结来源不一致')
+  }
+  await revalidateWorldSourcePurposeV1({
+    worldReleaseId: input.worldReleaseId, expectedProjectId: input.scope.projectId, expectedWorldId: input.scope.worldId,
+    purpose: input.brief.intent.productType, proof: input.brief.source.sourcePurpose,
+  })
   const productionKey = `productprod.${Date.now().toString(36)}.${crypto.randomUUID().slice(0, 8)}`
   const created = await executeProductProductionCommand({
     scope: input.scope,

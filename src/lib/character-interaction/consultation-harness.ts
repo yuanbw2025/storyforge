@@ -21,6 +21,7 @@ const harness = createChatSourceRunHarnessV1<ReturnType<typeof createChatPlanArt
   verifier: VERIFIER, lockKey: 'chat-consultation', prompt: CHAT_CONSULTATION_PROMPT_V2, objective: '根据作者问题与本次选中资料，起草可逐项确认的角色聊天方案；不开始制作、不改世界或知情权限',
   criterion: CRITERION, confirmationCriteria: CONFIRMATION, writeTargets: [{table: 'chatAuthoringDrafts', fields: ['settingsJson'], mode: 'author-confirmed'}],
   source: {key: 'chat.consultation', options: request => ({chatConsultationRequest: request}), read: readChatConsultationContextV2, validateRequest: validateChatConsultationRequestV2},
+  requiresWorldSource: request => request.source !== null,
   createArtifact: createChatPlanArtifactV2, hasCandidate: result => !!result.candidate,
   runModel: ({formalEntry, skill, messages, resolved, scope, signal, result}) => executeFrozenFormalAIEntryV1('chat.consultation', formalEntry, skill,
     'src/lib/character-interaction/consultation-harness.ts', messages, resolved.config,
