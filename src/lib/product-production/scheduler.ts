@@ -136,7 +136,7 @@ import {
   type TextAdventureQualityReferenceIndexV1,
   type TextAdventureQualityReviewBatchCoverageV1,
 } from './text-adventure-quality'
-import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../open-world/creator-derived-authority'
+import { assertTextOpenWorldCreatorRoleForNewWorkV1, readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../open-world/creator-derived-authority'
 import {
   resolveTextOpenWorldCreatorRepairTaskResultV1,
   type TextOpenWorldCreatorRepairExecutionAuthorityV1,
@@ -2425,6 +2425,7 @@ async function ensurePlan(input: {
   if (['paused', 'cancelled', 'failed', 'recovery-required', 'archived', 'released'].includes(state.build.status)) {
     throw new Error(`[product-production-scheduler] Build 状态 ${state.build.status} 不允许调度`)
   }
+  if (state.creatorContracts) assertTextOpenWorldCreatorRoleForNewWorkV1(state.creatorContracts.creatorBrief.draft)
   let currentPlan: ProductProductionPlanV3 | null = null
   try {
     currentPlan = parseProductProductionPlanV3(state.build.planJson, state.brief, state.briefRow.briefHash)

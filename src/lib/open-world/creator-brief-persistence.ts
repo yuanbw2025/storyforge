@@ -54,6 +54,17 @@ function text(value: unknown, label: string, maximum = 8_000, allowEmpty = false
   return normalized
 }
 
+export function readTextOpenWorldCreatorProtagonistSourceKeyV1(
+  row: Record<string, unknown>,
+): string | undefined {
+  if (!Object.prototype.hasOwnProperty.call(row, 'protagonistSourceResourceKey')) return undefined
+  const key = row.protagonistSourceResourceKey
+  if (row.protagonistMode !== 'source-character' || typeof key !== 'string' || !STABLE_KEY.test(key)) {
+    fail('protagonist', '仅来源型主角可以携带准确的封存角色标识')
+  }
+  return key
+}
+
 function hash(value: unknown, label: string): string {
   if (typeof value !== 'string' || !HASH.test(value)) fail('protocol', `${label} 必须是 SHA-256`)
   return value
@@ -285,8 +296,10 @@ export const TEXT_OPEN_WORLD_CREATOR_PRODUCT_BOUNDARY_V1: TextOpenWorldCreatorPr
 
 function assertDraft(value: unknown): asserts value is TextOpenWorldCreatorBriefDraftV1 {
   const row = record(value, 'brief.draft')
+  const protagonistSourceKey = readTextOpenWorldCreatorProtagonistSourceKeyV1(row)
   exact(row, [
     'schema', 'version', 'gameTitle', 'playerRole', 'playerFantasy', 'protagonistMode',
+    ...(protagonistSourceKey === undefined ? [] : ['protagonistSourceResourceKey']),
     'protagonistDirective', 'coreGoal', 'primaryConflict', 'openingSituation',
     'experiencePillars', 'toneKeywords', 'mustKeep', 'allowedInferences', 'forbiddenChanges',
     'contentRating', 'contentBoundaries', 'authorNotes', 'unresolvedQuestions',
