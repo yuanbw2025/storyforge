@@ -24,7 +24,7 @@ import {
 } from '../../lib/consistency/impact-handoff'
 import { runChapterMemoryTask } from '../../lib/ai/chapter-memory/run-chapter-memory'
 import { prepareContinuityContext } from '../../lib/ai/chapter-memory/continuity-context'
-import { isPlanReconciliationCurrent } from '../../lib/ai/chapter-memory/plan-reconciliation'
+import { isPlanReconciliationReviewCurrent, saveChapterPlanReconciliationReview } from '../../lib/ai/chapter-memory/plan-reconciliation'
 import { findNextCanonicalChapter, findPreviousCanonicalChapter } from '../../lib/ai/chapter-memory/canonical-chapter-sequence'
 import { resolveRequestConfig, describeResolvedAIRequestSettingsV1, type AIRequestConfigResolution, type StreamResult } from '../../lib/ai/client'
 import { observeProseLengthV1, proseLengthExpectationV1 } from '../../lib/prose/length-observation'
@@ -88,6 +88,7 @@ import { buildEditorEntityReferences } from '../../lib/editor/entity-reference'
 import type {
   AgentSkillExecutionBindingV2,
   ChatMessage,
+  Chapter,
   ChapterStatus,
   Project,
   StateDiffItem,
@@ -287,7 +288,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const currentChapter = storeChapter && storeChapter.projectId === project.id
     && (outlineNodeId == null || storeChapter.outlineNodeId === outlineNodeId)
     ? storeChapter : null
-  const { nodes, updateNode, loadAll: loadOutlineNodes } = useOutlineStore()
+  const { nodes, loadAll: loadOutlineNodes } = useOutlineStore()
   const { cards: stateCards, loadAll: loadStateCards, buildStateContext, buildSelectiveStateContext, applyDiffs } = useStateCardStore()
   const { characters, loadAll: loadCharacters } = useCharacterStore()
   const { creativeRules } = useCreativeRulesStore()
@@ -982,17 +983,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setCompareSourceHtml(null)
   }, [currentChapter?.id])
 
-  useEffect(() => {
-    let cancelled = false
-    if (!currentChapter?.planReconciliation) {
-      setPlanReconciliationCurrent(false)
-      return
-    }
-    isPlanReconciliationCurrent(project.id!, currentChapter).then(current => {
-      if (!cancelled) setPlanReconciliationCurrent(current)
-    })
-    return () => { cancelled = true }
-  }, [project.id, currentChapter])
 
   // 自动保存
   // Debounce only author-staged buffers. A cleanup's older React value must
@@ -1002,6 +992,17 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }, [flushChapterDrafts]))
 
   const outlineNode = currentChapter ? nodes.find(n => n.id === currentChapter.outlineNodeId) : null
+  useEffect(() => {
+    let cancelled = false
+    if (!currentChapter?.planReconciliation) {
+      setPlanReconciliationCurrent(false)
+      return
+    }
+    isPlanReconciliationReviewCurrent(project.id!, currentChapter).then(current => {
+      if (!cancelled) setPlanReconciliationCurrent(current)
+    }).catch(() => { if (!cancelled) setPlanReconciliationCurrent(false) })
+    return () => { cancelled = true }
+  }, [project.id, currentChapter, outlineNode?.updatedAt])
   const chapterDisplay = useMemo(() => {
     return currentChapter ? resolveChapterDisplayMeta(currentChapter, nodes) : null
   }, [currentChapter, nodes])
@@ -2728,61 +2729,37 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleSaveReconciliation = async (actions: ReconciliationActionMap) => {
-    if (!currentChapter?.id || !currentChapter.planReconciliation) return
-
-    const reconciliation = currentChapter.planReconciliation
-    const actionValues = Object.values(actions)
-    const hasApplyActions = actionValues.some(action => action.action === 'apply')
-    const hasAcceptedActions = actionValues.some(action => action.action === 'confirm' || action.action === 'foreshadow')
-    const reviewStatus = hasApplyActions
-      ? 'applied-outline' as const
-      : hasAcceptedActions
-        ? 'confirmed-constraint' as const
-        : 'dismissed' as const
-
-    const updatedReconciliation = {
-      ...reconciliation,
+    const chapter = currentChapter
+    const owner = useOutlineStore.getState().loadedScope
+    if (!chapter?.id || !chapter.planReconciliation || !outlineNode?.id || !owner
+      || owner.projectId !== chapter.projectId || !('workId' in chapter) || chapter.workId !== owner.workId) {
+      throw new Error('原章节或章纲归属已变化，对账未保存。')
+    }
+    const scope = { ...owner }
+    const saved = await saveChapterPlanReconciliationReview({
+      scope,
+      expected: chapter.planReconciliation,
+      outline: { id: outlineNode.id, summary: outlineNode.summary, updatedAt: outlineNode.updatedAt },
       actions,
-      reviewStatus,
-      reviewedAt: Date.now(),
-    }
-
-    await updateChapter(currentChapter.id, {
-      planReconciliation: updatedReconciliation,
     })
-
-    // “同步”是作者明确动作，因此在保存时更新章纲；AI 候选本身仍未绕过采纳。
-    if (outlineNode?.id) {
-      const itemsToAdd: string[] = []
-
-      Object.entries(actions).forEach(([actionKey, action]) => {
-        if (action.action === 'apply') {
-          const sectionKey = actionKey.split(':')[0]
-          const items = reconciliation[sectionKey as keyof typeof reconciliation] as Array<{ text: string }> | undefined
-          if (Array.isArray(items)) {
-            action.indices.forEach(index => {
-              if (items[index]) {
-                const prefix = sectionKey === 'unfinishedGoals' ? '[待完成]' :
-                              sectionKey === 'deviations' ? '[补充]' :
-                              sectionKey === 'newConstraints' ? '[新约束]' : '[更新]'
-                itemsToAdd.push(`${prefix} ${items[index].text}`)
-              }
-            })
-          }
-        }
-      })
-
-      if (itemsToAdd.length > 0) {
-        const currentSummary = outlineNode.summary || ''
-        const additions = itemsToAdd.join('\n')
-        const newSummary = currentSummary
-          ? `${currentSummary}\n\n[基于对账更新]\n${additions}`
-          : additions
-        await updateNode(outlineNode.id, { summary: newSummary })
-      }
-    }
-
-    console.log('[Reconciliation] Saved actions:', actions)
+    // Publish only the metadata this transaction changed; preserve any
+    // concurrently staged or saved body and any later outline revision.
+    const updateCachedChapter = (cached: Chapter) => cached.id === chapter.id
+      && cached.projectId === scope.projectId && 'workId' in cached && cached.workId === scope.workId
+      && cached.updatedAt <= saved.chapter.updatedAt
+      ? { ...cached, planReconciliation: saved.chapter.planReconciliation, updatedAt: saved.chapter.updatedAt }
+      : cached
+    useChapterStore.setState(state => ({
+      chapters: state.chapters.map(updateCachedChapter),
+      currentChapter: state.currentChapter ? updateCachedChapter(state.currentChapter) : null,
+    }))
+    useOutlineStore.setState(state => {
+      const owner = state.loadedScope
+      if (owner?.projectId !== scope.projectId || owner.worldId !== scope.worldId || owner.workId !== scope.workId) return state
+      return { nodes: state.nodes.map(node => node.id === saved.outline.id && node.updatedAt <= saved.outline.updatedAt
+        ? { ...node, summary: saved.outline.summary, updatedAt: saved.outline.updatedAt }
+        : node) }
+    })
   }
 
   const handleForeshadowReconciliation = async (item: { section: string; index: number; text: string }) => {
