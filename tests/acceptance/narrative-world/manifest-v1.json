@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-main345-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-merged422-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -847,6 +847,16 @@
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality007-dev-audit-v1.json",
         "workPackage": "SFQA-007",
         "note": "Preserved the measurement on the independent fix branch."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-main345-v1.json",
+        "workPackage": "SFQA-028-031-032-069-082-083",
+        "note": "Preserved the measured six-fix branch receipt before merging current main; its observations are unchanged by the merge."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality007-post345-v1.json",
+        "workPackage": "SFQA-007",
+        "note": "Preserved the mainline receipt measured before the six-fix integration."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
