@@ -238,6 +238,27 @@ describe('SFQA105 target binding and compatibility controls', () => {
 })
 
 describe('SFQA105 actual governed legacy and fresh candidate replay', () => {
+  it('keeps the original v17 Build readable and refuses a new edit until the author selects a frozen protagonist', async () => {
+    await db.delete()
+    await db.open()
+    try {
+      const f = await seedSfqa105GovernedBuild({ capture: 'legacy', includeComparisonHashes: false })
+      const selection = { scope: f.scope, productionId: f.productionId, buildId: f.buildId,
+        expectedSnapshotHash: f.governanceSnapshotHash, artifactKey, entityIdentity: f.entityIdentity }
+      const context = await prepareTextOpenWorldCreatorArtifactEditV1(selection)
+      const field = context.editableFields.find(value => value.jsonPointer.endsWith('/biography'))!
+      const operations = await createTextOpenWorldCreatorDirectEditOperationsV1({
+        context, values: { [field.fieldId]: '旧简报缺少作者明确选择的封存主角。' },
+      })
+      const before = await db.agentRuns.where('projectId').equals(f.scope.projectId).count()
+      await expect(generateTextOpenWorldCreatorArtifactEditCandidateV1({ selection, mode: 'direct', operations }))
+        .rejects.toThrow(/旧简报未明确选择封存主角/)
+      expect(await db.agentRuns.where('projectId').equals(f.scope.projectId).count()).toBe(before)
+    } finally {
+      db.close()
+    }
+  }, 120_000)
+
   it('rejects an old compressed-index field catalog, then confirms a fresh candidate by actual hash replay without changing the parent Build', async () => {
     await db.delete()
     await db.open()
