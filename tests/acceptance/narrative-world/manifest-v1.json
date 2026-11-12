@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261112-quality030037-post380-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261112-quality030037-resume-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -76,8 +76,9 @@
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
-        "workPackage": "NW-0B",
-        "note": "Preserved the previous baseline before tracking the updated architecture checker and its static binding analysis."
+        "implementationCommit": "bc18dc8466f2e6661b6ce9a17131981f41992844",
+        "workPackage": "pre-quality019-portable-tree",
+        "note": "Preserved the main receipt before validating portable tree imports for SFQA-019."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261102-quality-independent-01.json",
@@ -717,12 +718,6 @@
         "note": "Preserved measured Issue179/main834 receipt before precise shared fixture types and diagnostic/relay aggregation; semantic observations unchanged."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261110-owned-aggregate-v1.json",
-        "implementationCommit": "bc18dc8466f2e6661b6ce9a17131981f41992844",
-        "workPackage": "pre-quality019-portable-tree",
-        "note": "Preserved the main receipt before validating portable tree imports for SFQA-019."
-      },
-      {
         "path": "tests/acceptance/narrative-world/baseline-20261111-quality019-portable-tree-v1.json",
         "workPackage": "SFQA-019-portable-tree",
         "note": "Preserve the initial independent tree-validation receipt before restoring stable parent-first insertion and measuring the shared portable-tree source."
@@ -963,6 +958,16 @@
         "implementationCommit": "b92975c6fcfafe17bcd800a811ebde9d01e805d7",
         "workPackage": "NW-0B",
         "note": "Preserved the previous frozen receipt before the reference execution backup boundary changed."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-quality030037-post380-v1.json",
+        "workPackage": "SFQA-030-037",
+        "note": "Preserved the measured backup and node-resume parent before combining their validated changes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261112-author-policy-resume-v1.json",
+        "workPackage": "SFQA-030-037",
+        "note": "Preserved the measured backup and node-resume parent before combining their validated changes."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
