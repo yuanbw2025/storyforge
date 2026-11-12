@@ -121,6 +121,9 @@ export interface StreamResult {
 /** 可变容器，chat 写入非流式调用返回的真实 token 用量。 */
 export interface ChatResult {
   usage?: TokenUsage
+  /** Opt in to exact field presence from an ordinary non-streaming provider response. */
+  captureProviderTokenUsage?: boolean
+  providerTokenUsage?: Partial<TokenUsage>
   /** Optional durable caller hook. Must finish saving the exact local request
    * reference before its single POST. Failure prevents dispatch; no retry.
    * Opt-in receipts are held until this owner saves and acknowledges them.
@@ -518,6 +521,7 @@ export async function chat(
   options?: ChatRequestOptions,
   frozenResolution?: AIRequestConfigResolution,
 ): Promise<string> {
+  if (result?.captureProviderTokenUsage) result.providerTokenUsage = {}
   assertGenerationAvailable()
   if (result) {
     result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }
@@ -586,6 +590,16 @@ export async function chat(
     }
     const responseSummary = inspectCompletionResponseV1(json).summary
     updateLog(log.id, { statusCode: response.status, responseSummary })
+    if (result?.captureProviderTokenUsage && json?.usage && typeof json.usage === 'object' && !Array.isArray(json.usage)) {
+      const reported = result.providerTokenUsage!
+      for (const [wireKey, tokenKey] of [
+        ['prompt_tokens', 'inputTokens'], ['completion_tokens', 'outputTokens'], ['total_tokens', 'totalTokens'],
+      ] as const) {
+        const value: unknown = json.usage[wireKey]
+        if (Object.prototype.hasOwnProperty.call(json.usage, wireKey)
+          && typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) reported[tokenKey] = value
+      }
+    }
     if (json?.usage) {
       const usage = {
         inputTokens: json.usage.prompt_tokens ?? 0,
