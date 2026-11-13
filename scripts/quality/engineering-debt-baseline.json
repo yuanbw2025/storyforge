@@ -31448,21 +31448,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/helpers/narrative-world-evaluation.ts\",\"TS2353\",\"Object literal may only specify known properties, and 'schema' does not exist in type 'Pick<ProductWorldSourceSelection, \\\"resourceKeys\\\">'.\",\"e665cf58f2d234d1809e71a9b7173b9b45c5c1a6bb5230738c18f93b85372d1f\",20,6]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/helpers/narrative-world-evaluation.ts",
-        "code": "TS2353",
-        "message": "Object literal may only specify known properties, and 'schema' does not exist in type 'Pick<ProductWorldSourceSelection, \"resourceKeys\">'.",
-        "anchor": "e665cf58f2d234d1809e71a9b7173b9b45c5c1a6bb5230738c18f93b85372d1f",
-        "line": 399,
-        "column": 20,
-        "start": 29130,
-        "length": 6
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/helpers/open-audio-runtime.ts\",\"TS2339\",\"Property 'runtimePolicy' does not exist on type 'TtrpgCampaignContentV1 | TtrpgCampaignContentV2'.\\n  Property 'runtimePolicy' does not exist on type 'TtrpgCampaignContentV1'.\",\"9367988608d94b95b6970b428a2ca091c72a1433ec964ef51d3ca151626a945a\",44,13]",
       "count": 1,
       "diagnostic": {

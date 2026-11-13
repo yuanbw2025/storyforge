@@ -400,8 +400,7 @@ export async function evaluateAdapterBaselines(family: NarrativeFamily) {
       expected: { minimumSelectedCount: selected.length }, observed: { mandatoryCount: countOnlyBoundary.mandatoryResourceKeys.length },
       evidence: [family.queries[3]!.evidence[0]!.spanHash], issue: sufficient ? null : 'NW-G06' })
     const compilation = resolveProductProductionWorldCompilationDescriptorsV2({ descriptors: fixture.descriptors as any,
-      selection: { schema: 'storyforge.product-world-source-selection', version: 1, productType,
-        worldReferenceHash: fixture.reference.referenceHash, resourceKeys: selected, roleBindings: {} } })
+      selection: { resourceKeys: selected } })
     const compiled = fixture.logicalKeys(compilation)
     check(equalSet(compiled, expected), 'existing stronger compilation closure lost a selected resource')
     observations.push({ id: `adapter:${productType}:compilation`, family: family.id, split: family.split,
