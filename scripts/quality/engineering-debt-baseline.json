@@ -36758,21 +36758,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-04A12-v5-portable-images.test.ts\",\"TS2339\",\"Property 'responseEvidenceHash' does not exist on type '{ schema: \\\"storyforge.avg.visual-image-producer-proof\\\"; version: 4; buildNumber: number; briefHash: string; planHash: string; controlEpoch: number; taskKey: string; artifactKey: string; ... 6 more ...; proofHash: string; } | AvgRetainedRawProofV1 | (Omit<...> & { ...; }) | (Omit<...> & { ...; })'.\\n  Property 'responseEvidenceHash' does not exist on type 'AvgRetainedRawProofV1'.\",\"ecdf0411d399321a35a3baf590fc8cf078e3c3cea8c8ce915ae79664d48e2f21\",157,20]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-04A12-v5-portable-images.test.ts",
-        "code": "TS2339",
-        "message": "Property 'responseEvidenceHash' does not exist on type '{ schema: \"storyforge.avg.visual-image-producer-proof\"; version: 4; buildNumber: number; briefHash: string; planHash: string; controlEpoch: number; taskKey: string; artifactKey: string; ... 6 more ...; proofHash: string; } | AvgRetainedRawProofV1 | (Omit<...> & { ...; }) | (Omit<...> & { ...; })'.\n  Property 'responseEvidenceHash' does not exist on type 'AvgRetainedRawProofV1'.",
-        "anchor": "ecdf0411d399321a35a3baf590fc8cf078e3c3cea8c8ce915ae79664d48e2f21",
-        "line": 151,
-        "column": 157,
-        "start": 13202,
-        "length": 20
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-AVG-04A15-v5-current-assembly.test.ts\",\"TS18047\",\"'preview' is possibly 'null'.\",\"4b897314466eec425d23766b851e6228143f5d7e7a7427e66f2d6bf1b8797c9e\",76,7]",
       "count": 1,
       "diagnostic": {
@@ -37625,21 +37610,6 @@
         "column": 97,
         "start": 114003,
         "length": 7
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-visual-planning-harness.test.ts\",\"TS2339\",\"Property 'processing' does not exist on type 'AvgGeneratedReferenceSourceV2 | AvgGeneratedReferenceSourceV1 | AvgGeneratedReferenceSourceV3 | ... 5 more ... | AvgGeneratedReferenceSourceV9'.\\n  Property 'processing' does not exist on type 'AvgGeneratedReferenceSourceV7'.\",\"51693bfe9ef95aa4ce55fdbfa6f77a36f93c84fc5d639dae3a6da3c33e0ef572\",104,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-04A5-visual-planning-harness.test.ts",
-        "code": "TS2339",
-        "message": "Property 'processing' does not exist on type 'AvgGeneratedReferenceSourceV2 | AvgGeneratedReferenceSourceV1 | AvgGeneratedReferenceSourceV3 | ... 5 more ... | AvgGeneratedReferenceSourceV9'.\n  Property 'processing' does not exist on type 'AvgGeneratedReferenceSourceV7'.",
-        "anchor": "51693bfe9ef95aa4ce55fdbfa6f77a36f93c84fc5d639dae3a6da3c33e0ef572",
-        "line": 1506,
-        "column": 104,
-        "start": 137285,
-        "length": 10
       }
     },
     {
@@ -49043,21 +49013,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS3-master-impact-report.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"9fc1d66c730ea0f1bd224655a77baefe5d979b50b499296b6ec3250fe0a3d664\",49,91]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS3-master-impact-report.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type",
-        "anchor": "9fc1d66c730ea0f1bd224655a77baefe5d979b50b499296b6ec3250fe0a3d664",
-        "line": 22,
-        "column": 49,
-        "start": 1134,
-        "length": 91
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-HARNESS30-story-arc-agent.test.ts\",\"TS2493\",\"Tuple type '[]' of length '0' has no element at index '0'.\",\"2e992128e35e3e0a9ea170622eeb31cd1f4bc2bec41c25505563892372a871e5\",32,1]",
       "count": 1,
       "diagnostic": {
@@ -49748,51 +49703,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS42-post-adoption-resume-plan.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9\",49,68]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS42-post-adoption-resume-plan.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type",
-        "anchor": "502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9",
-        "line": 21,
-        "column": 49,
-        "start": 1028,
-        "length": 68
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS44-impact-patch-durable.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9\",49,68]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS44-impact-patch-durable.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type",
-        "anchor": "502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9",
-        "line": 21,
-        "column": 49,
-        "start": 779,
-        "length": 68
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS47-impact-remediation-durable.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9\",49,68]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS47-impact-remediation-durable.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type",
-        "anchor": "502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9",
-        "line": 13,
-        "column": 49,
-        "start": 821,
-        "length": 68
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-HARNESS49-impact-remediation-replan.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9\",49,68]",
       "count": 1,
       "diagnostic": {
@@ -49835,36 +49745,6 @@
         "column": 7,
         "start": 8729,
         "length": 7
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS50-impact-review-durable.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9\",49,68]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS50-impact-review-durable.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type",
-        "anchor": "502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9",
-        "line": 17,
-        "column": 49,
-        "start": 889,
-        "length": 68
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS54-impact-handoff-validation.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9\",49,68]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS54-impact-handoff-validation.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type",
-        "anchor": "502fb50d23b5ff31c2a0cdc5a1f521ccaca21d3e4a0460af4b40e1a8ffe28be9",
-        "line": 20,
-        "column": 49,
-        "start": 1021,
-        "length": 68
       }
     },
     {
@@ -50675,21 +50555,6 @@
         "column": 71,
         "start": 8498,
         "length": 20
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-HARNESS8-detailed-outline-generation-durable.test.ts\",\"TS2345\",\"Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type\",\"9fc1d66c730ea0f1bd224655a77baefe5d979b50b499296b6ec3250fe0a3d664\",49,91]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-HARNESS8-detailed-outline-generation-durable.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is not assignable to parameter of type 'WorldGroup'.\n  Type '{ projectId: number; name: string; order: number; createdAt: number; updatedAt: number; }' is missing the following properties from type 'WorldGroup': description, type",
-        "anchor": "9fc1d66c730ea0f1bd224655a77baefe5d979b50b499296b6ec3250fe0a3d664",
-        "line": 36,
-        "column": 49,
-        "start": 1724,
-        "length": 91
       }
     },
     {
@@ -57623,36 +57488,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1F-production-executor.test.ts\",\"TS2367\",\"This comparison appears to be unintentional because the types '\\\"media.requirements\\\" | \\\"content.story-bible\\\" | \\\"content.cast-bible\\\" | \\\"content.adventure-architecture\\\" | \\\"content.narrative-arc-plan\\\" | \\\"content.ending-route-plan\\\" | \\\"content.main-quest-plan\\\" | ... 12 more ... | \\\"qa.playtest-strategy\\\"' and '\\\"content.adventure-quality-review.act-1\\\"' have no overlap.\",\"653950a761dbb5991f5d2d1058803e77ab97188fce2891922968b418839c04d5\",81,52]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-PRODUCTPROD1F-production-executor.test.ts",
-        "code": "TS2367",
-        "message": "This comparison appears to be unintentional because the types '\"media.requirements\" | \"content.story-bible\" | \"content.cast-bible\" | \"content.adventure-architecture\" | \"content.narrative-arc-plan\" | \"content.ending-route-plan\" | \"content.main-quest-plan\" | ... 12 more ... | \"qa.playtest-strategy\"' and '\"content.adventure-quality-review.act-1\"' have no overlap.",
-        "anchor": "653950a761dbb5991f5d2d1058803e77ab97188fce2891922968b418839c04d5",
-        "line": 8412,
-        "column": 81,
-        "start": 436662,
-        "length": 52
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1F-production-executor.test.ts\",\"TS2367\",\"This comparison appears to be unintentional because the types '\\\"media.requirements\\\" | \\\"content.story-bible\\\" | \\\"content.cast-bible\\\" | \\\"content.adventure-architecture\\\" | \\\"content.narrative-arc-plan\\\" | \\\"content.ending-route-plan\\\" | \\\"content.main-quest-plan\\\" | ... 12 more ... | \\\"qa.playtest-strategy\\\"' and '\\\"content.adventure-quality-review.act-2\\\"' have no overlap.\",\"1d24477c0c2462039b92759e16cba5bcf5b4158566d8a31718b5a5eae125df8b\",82,52]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-PRODUCTPROD1F-production-executor.test.ts",
-        "code": "TS2367",
-        "message": "This comparison appears to be unintentional because the types '\"media.requirements\" | \"content.story-bible\" | \"content.cast-bible\" | \"content.adventure-architecture\" | \"content.narrative-arc-plan\" | \"content.ending-route-plan\" | \"content.main-quest-plan\" | ... 12 more ... | \"qa.playtest-strategy\"' and '\"content.adventure-quality-review.act-2\"' have no overlap.",
-        "anchor": "1d24477c0c2462039b92759e16cba5bcf5b4158566d8a31718b5a5eae125df8b",
-        "line": 8398,
-        "column": 82,
-        "start": 435778,
-        "length": 52
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1F-production-executor.test.ts\",\"TS2540\",\"Cannot assign to 'characterAnchorRefs' because it is a read-only property.\",\"57a94486a6ce86a47e1e1321d1412a05e4100f9c465206d56e5b78f530be56f8\",29,19]",
       "count": 1,
       "diagnostic": {
@@ -57923,21 +57758,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1F-production-executor.test.ts\",\"TS2698\",\"Spread types may only be created from object types.\",\"875875d13882d846bf724ea2ff0773a9994d8697023cbf94c23e6656b44c792f\",20,19]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-PRODUCTPROD1F-production-executor.test.ts",
-        "code": "TS2698",
-        "message": "Spread types may only be created from object types.",
-        "anchor": "875875d13882d846bf724ea2ff0773a9994d8697023cbf94c23e6656b44c792f",
-        "line": 8413,
-        "column": 20,
-        "start": 436737,
-        "length": 19
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1F-production-executor.test.ts\",\"TS7006\",\"Parameter 'act' implicitly has an 'any' type.\",\"d6dba32c9d6a922891f020764c5e244dab2f7839b0ab50f5897376d371951506\",58,3]",
       "count": 1,
       "diagnostic": {
@@ -58043,21 +57863,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1G-product-adapters.test.ts\",\"TS2322\",\"Type '{ productType: \\\"ttrpg\\\"; schema: \\\"storyforge.product-world-source-selection\\\"; version: 1; worldReferenceHash: string; resourceKeys: string[]; roleBindings: Record<string, string[]>; } | { ...; }' is not assignable to type 'ProductWorldSourceSelection'.\\n  Type '{ productType: \\\"ttrpg\\\"; version: 2; schema: \\\"storyforge.product-world-source-selection\\\"; worldReferenceHash: string; resourceKeys: string[]; roleBindings: Record<string, string[]>; }' is not assignable to type 'ProductWorldSourceSelection'.\\n    Type '{ productType: \\\"ttrpg\\\"; version: 2; schema: \\\"storyforge.product-world-source-selection\\\"; worldReferenceHash: string; resourceKeys: string[]; roleBindings: Record<string, string[]>; }' is not assignable to type 'ProductWorldSourceSelectionV1'.\\n      Types of property 'version' are incompatible.\\n        Type '2' is not assignable to type '1'.\",\"211eae162dc170adc496e91895d2248fc76241cc196cfbff2b8ff41a32a795df\",11,9]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-PRODUCTPROD1G-product-adapters.test.ts",
-        "code": "TS2322",
-        "message": "Type '{ productType: \"ttrpg\"; schema: \"storyforge.product-world-source-selection\"; version: 1; worldReferenceHash: string; resourceKeys: string[]; roleBindings: Record<string, string[]>; } | { ...; }' is not assignable to type 'ProductWorldSourceSelection'.\n  Type '{ productType: \"ttrpg\"; version: 2; schema: \"storyforge.product-world-source-selection\"; worldReferenceHash: string; resourceKeys: string[]; roleBindings: Record<string, string[]>; }' is not assignable to type 'ProductWorldSourceSelection'.\n    Type '{ productType: \"ttrpg\"; version: 2; schema: \"storyforge.product-world-source-selection\"; worldReferenceHash: string; resourceKeys: string[]; roleBindings: Record<string, string[]>; }' is not assignable to type 'ProductWorldSourceSelectionV1'.\n      Types of property 'version' are incompatible.\n        Type '2' is not assignable to type '1'.",
-        "anchor": "211eae162dc170adc496e91895d2248fc76241cc196cfbff2b8ff41a32a795df",
-        "line": 297,
-        "column": 11,
-        "start": 15295,
-        "length": 9
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1G-product-adapters.test.ts\",\"TS2552\",\"Cannot find name 'ProductProductionRecordV1'. Did you mean 'ProductProductionBriefV3'?\",\"33b533db31d151f141930378f232de3eb7e960f1477d0c367b5d62c4d6f5e222\",25,25]",
       "count": 1,
       "diagnostic": {
@@ -58073,66 +57878,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1G-product-adapters.test.ts\",\"TS2739\",\"Type '{ characters: ProductProductionWorldSourceItemV2[]; storyArcs: (ProductProductionWorldSourceItemV2 & { ...; })[]; locations: ProductProductionWorldSourceItemV2[]; artifacts: ProductProductionWorldSourceItemV2[]; loreEntries: ProductProductionWorldSourceItemV2[]; }' is missing the following properties from type 'Pick<ProductProductionWorldSourceCatalogV2, \\\"characters\\\" | \\\"storyArcs\\\" | \\\"relationships\\\" | \\\"locations\\\" | \\\"artifacts\\\" | \\\"storySources\\\" | \\\"loreEntries\\\" | \\\"chatSourceProjection\\\">': relationships, storySources\",\"5174efb758b4e82cd9c5a84dc770ddb155438a873655a60e96c55f776724f308\",7,13]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-PRODUCTPROD1G-product-adapters.test.ts",
-        "code": "TS2739",
-        "message": "Type '{ characters: ProductProductionWorldSourceItemV2[]; storyArcs: (ProductProductionWorldSourceItemV2 & { ...; })[]; locations: ProductProductionWorldSourceItemV2[]; artifacts: ProductProductionWorldSourceItemV2[]; loreEntries: ProductProductionWorldSourceItemV2[]; }' is missing the following properties from type 'Pick<ProductProductionWorldSourceCatalogV2, \"characters\" | \"storyArcs\" | \"relationships\" | \"locations\" | \"artifacts\" | \"storySources\" | \"loreEntries\" | \"chatSourceProjection\">': relationships, storySources",
-        "anchor": "5174efb758b4e82cd9c5a84dc770ddb155438a873655a60e96c55f776724f308",
-        "line": 310,
-        "column": 7,
-        "start": 15760,
-        "length": 13
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1G-product-adapters.test.ts\",\"TS2739\",\"Type 'Pick<ProductProductionWorldSourceCatalogV2, \\\"characters\\\" | \\\"storyArcs\\\" | \\\"locations\\\" | \\\"artifacts\\\" | \\\"loreEntries\\\">' is missing the following properties from type 'Pick<ProductProductionWorldSourceCatalogV2, \\\"characters\\\" | \\\"storyArcs\\\" | \\\"relationships\\\" | \\\"locations\\\" | \\\"artifacts\\\" | \\\"storySources\\\" | \\\"loreEntries\\\" | \\\"chatSourceProjection\\\">': relationships, storySources\",\"06e737a018695c0fb261dd5f21864f55e9dbddbf8dacd29753641d257c143066\",7,13]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-PRODUCTPROD1G-product-adapters.test.ts",
-        "code": "TS2739",
-        "message": "Type 'Pick<ProductProductionWorldSourceCatalogV2, \"characters\" | \"storyArcs\" | \"locations\" | \"artifacts\" | \"loreEntries\">' is missing the following properties from type 'Pick<ProductProductionWorldSourceCatalogV2, \"characters\" | \"storyArcs\" | \"relationships\" | \"locations\" | \"artifacts\" | \"storySources\" | \"loreEntries\" | \"chatSourceProjection\">': relationships, storySources",
-        "anchor": "06e737a018695c0fb261dd5f21864f55e9dbddbf8dacd29753641d257c143066",
-        "line": 218,
-        "column": 7,
-        "start": 11085,
-        "length": 13
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1G-product-adapters.test.ts\",\"TS2739\",\"Type 'Pick<ProductProductionWorldSourceCatalogV2, \\\"characters\\\" | \\\"storyArcs\\\" | \\\"locations\\\" | \\\"artifacts\\\" | \\\"loreEntries\\\">' is missing the following properties from type 'Pick<ProductProductionWorldSourceCatalogV2, \\\"characters\\\" | \\\"storyArcs\\\" | \\\"relationships\\\" | \\\"locations\\\" | \\\"artifacts\\\" | \\\"storySources\\\" | \\\"loreEntries\\\" | \\\"chatSourceProjection\\\">': relationships, storySources\",\"17e711c6923bc72ae9f5b524f76f1c4a306916cb8c976d9df69ebd089fb1b509\",59,13]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-PRODUCTPROD1G-product-adapters.test.ts",
-        "code": "TS2739",
-        "message": "Type 'Pick<ProductProductionWorldSourceCatalogV2, \"characters\" | \"storyArcs\" | \"locations\" | \"artifacts\" | \"loreEntries\">' is missing the following properties from type 'Pick<ProductProductionWorldSourceCatalogV2, \"characters\" | \"storyArcs\" | \"relationships\" | \"locations\" | \"artifacts\" | \"storySources\" | \"loreEntries\" | \"chatSourceProjection\">': relationships, storySources",
-        "anchor": "17e711c6923bc72ae9f5b524f76f1c4a306916cb8c976d9df69ebd089fb1b509",
-        "line": 236,
-        "column": 59,
-        "start": 12114,
-        "length": 13
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1G-product-adapters.test.ts\",\"TS2739\",\"Type 'Pick<ProductProductionWorldSourceCatalogV2, \\\"characters\\\" | \\\"storyArcs\\\" | \\\"locations\\\" | \\\"artifacts\\\" | \\\"loreEntries\\\">' is missing the following properties from type 'Pick<ProductProductionWorldSourceCatalogV2, \\\"characters\\\" | \\\"storyArcs\\\" | \\\"relationships\\\" | \\\"locations\\\" | \\\"artifacts\\\" | \\\"storySources\\\" | \\\"loreEntries\\\" | \\\"chatSourceProjection\\\">': relationships, storySources\",\"c285d781290668d6918b84f951bc77c5f38c3207b57da03ff6d0f0896650a9a7\",55,13]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-PRODUCTPROD1G-product-adapters.test.ts",
-        "code": "TS2739",
-        "message": "Type 'Pick<ProductProductionWorldSourceCatalogV2, \"characters\" | \"storyArcs\" | \"locations\" | \"artifacts\" | \"loreEntries\">' is missing the following properties from type 'Pick<ProductProductionWorldSourceCatalogV2, \"characters\" | \"storyArcs\" | \"relationships\" | \"locations\" | \"artifacts\" | \"storySources\" | \"loreEntries\" | \"chatSourceProjection\">': relationships, storySources",
-        "anchor": "c285d781290668d6918b84f951bc77c5f38c3207b57da03ff6d0f0896650a9a7",
-        "line": 137,
-        "column": 55,
-        "start": 6775,
-        "length": 13
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1G-product-quality.test.ts\",\"TS2345\",\"Argument of type '{ participants: \\\"world-release:character:1\\\"[]; context: (\\\"world-release:story-core:1\\\" | \\\"world-release:story-arc:1\\\")[]; characters?: undefined; locations?: undefined; items?: undefined; quests?: undefined; story?: undefined; regions?: undefined; factions?: undefined; } | { ...; } | { ...; } | { ...; }' is not assignable to parameter of type 'Record<string, string[]> | undefined'.\\n  Type '{ participants: \\\"world-release:character:1\\\"[]; context: (\\\"world-release:story-core:1\\\" | \\\"world-release:story-arc:1\\\")[]; characters?: undefined; locations?: undefined; items?: undefined; quests?: undefined; story?: undefined; regions?: undefined; factions?: undefined; }' is not assignable to type 'Record<string, string[]>'.\\n    Property 'characters' is incompatible with index signature.\\n      Type 'undefined' is not assignable to type 'string[]'.\",\"8f85b3e6d1fb0128131afed8c45d235ba74611a92651a1637186eafdf40e2f63\",55,12]",
       "count": 1,
       "diagnostic": {
@@ -58145,21 +57890,6 @@
         "column": 55,
         "start": 2222,
         "length": 12
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-PRODUCTPROD1G-product-quality.test.ts\",\"TS2739\",\"Type 'Pick<ProductProductionWorldSourceCatalogV2, \\\"characters\\\" | \\\"storyArcs\\\" | \\\"locations\\\" | \\\"artifacts\\\" | \\\"loreEntries\\\">' is missing the following properties from type 'Pick<ProductProductionWorldSourceCatalogV2, \\\"characters\\\" | \\\"storyArcs\\\" | \\\"relationships\\\" | \\\"locations\\\" | \\\"artifacts\\\" | \\\"storySources\\\" | \\\"loreEntries\\\" | \\\"chatSourceProjection\\\">': relationships, storySources\",\"c285d781290668d6918b84f951bc77c5f38c3207b57da03ff6d0f0896650a9a7\",55,13]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-PRODUCTPROD1G-product-quality.test.ts",
-        "code": "TS2739",
-        "message": "Type 'Pick<ProductProductionWorldSourceCatalogV2, \"characters\" | \"storyArcs\" | \"locations\" | \"artifacts\" | \"loreEntries\">' is missing the following properties from type 'Pick<ProductProductionWorldSourceCatalogV2, \"characters\" | \"storyArcs\" | \"relationships\" | \"locations\" | \"artifacts\" | \"storySources\" | \"loreEntries\" | \"chatSourceProjection\">': relationships, storySources",
-        "anchor": "c285d781290668d6918b84f951bc77c5f38c3207b57da03ff6d0f0896650a9a7",
-        "line": 87,
-        "column": 55,
-        "start": 6045,
-        "length": 13
       }
     },
     {
@@ -82883,21 +82613,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN5-per-turn-settlement.test.ts\",\"TS2345\",\"Argument of type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' is not assignable to parameter of type 'ProjectExportData'.\\n  Property 'ttrpgNarrativeMemories' is missing in type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' but required in type 'ProjectExportData'.\",\"9e41cace2a24718bdc176dc218123ba58a837d4006bff4510f83513227c3d940\",47,18]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN5-per-turn-settlement.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' is not assignable to parameter of type 'ProjectExportData'.\n  Property 'ttrpgNarrativeMemories' is missing in type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' but required in type 'ProjectExportData'.",
-        "anchor": "9e41cace2a24718bdc176dc218123ba58a837d4006bff4510f83513227c3d940",
-        "line": 92,
-        "column": 47,
-        "start": 8004,
-        "length": 18
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN5-pressure-journal.test.ts\",\"TS2339\",\"Property 'autoAdvance' does not exist on type 'TtrpgCampaignClockV1 | TtrpgOpenCampaignClockV1'.\\n  Property 'autoAdvance' does not exist on type 'TtrpgCampaignClockV1'.\",\"5e6a6c7467a52429dfdfad2f0b47b07ec590cd50e2926965fefae57d0f5eb9d4\",37,11]",
       "count": 1,
       "diagnostic": {
@@ -84203,36 +83918,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN7-legacy-context.test.ts\",\"TS2345\",\"Argument of type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' is not assignable to parameter of type 'ProjectExportData'.\\n  Property 'ttrpgNarrativeMemories' is missing in type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' but required in type 'ProjectExportData'.\",\"4a62ea03d01c764e379f931d6f7cca9ab3e9ce44e6b2859606af9a5ab5c6c7a4\",47,13]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN7-legacy-context.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' is not assignable to parameter of type 'ProjectExportData'.\n  Property 'ttrpgNarrativeMemories' is missing in type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' but required in type 'ProjectExportData'.",
-        "anchor": "4a62ea03d01c764e379f931d6f7cca9ab3e9ce44e6b2859606af9a5ab5c6c7a4",
-        "line": 29,
-        "column": 47,
-        "start": 2426,
-        "length": 13
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN7-legacy-context.test.ts\",\"TS2345\",\"Argument of type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' is not assignable to parameter of type 'ProjectExportData'.\\n  Property 'ttrpgNarrativeMemories' is missing in type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' but required in type 'ProjectExportData'.\",\"9466c85555847e267535abae190517bc2ed93d676125744af5622a2ed6c4122c\",47,13]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN7-legacy-context.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' is not assignable to parameter of type 'ProjectExportData'.\n  Property 'ttrpgNarrativeMemories' is missing in type '{ version: number; exportedAt: number; project: { workspaceUid: string; workspacePurpose: string; name: string; enableMultiWorld: boolean; createdAt: number; updatedAt: number; _activeWorldExportId: number; _activeWorkExportId: number; }; ... 113 more ...; ownership: { ...; }; }' but required in type 'ProjectExportData'.",
-        "anchor": "9466c85555847e267535abae190517bc2ed93d676125744af5622a2ed6c4122c",
-        "line": 17,
-        "column": 47,
-        "start": 1249,
-        "length": 13
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN8-brief-adoption.test.ts\",\"TS2339\",\"Property 'knowledge' does not exist on type '{}'.\",\"9a2713b67f1bc68578c3be43c51ccdfedac7133f12f474f4e2fa359f8523e230\",34,9]",
       "count": 1,
       "diagnostic": {
@@ -85265,21 +84950,6 @@
         "column": 12,
         "start": 779,
         "length": 24
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN9-identity-knowledge.test.ts\",\"TS2345\",\"Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => PromiseExtended<...>'.\\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.\",\"cde9ec88292dfd6f4706f7ec8d41956339b7a5b898d716acc57f5a5d4afde300\",108,55]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN9-identity-knowledge.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => Promise<...>' is not assignable to parameter of type '(mode: TransactionMode, table: string | Table<any, any, any>, table2: string | Table<any, any, any>, table3: string | Table<any, any, any>, table4: string | Table<...>, table5: string | Table<...>, scope: (trans: Transaction & { ...; }) => unknown) => PromiseExtended<...>'.\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<unknown>'.",
-        "anchor": "cde9ec88292dfd6f4706f7ec8d41956339b7a5b898d716acc57f5a5d4afde300",
-        "line": 79,
-        "column": 108,
-        "start": 8006,
-        "length": 55
       }
     },
     {
