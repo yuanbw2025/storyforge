@@ -10,7 +10,7 @@ on:
 permissions:
   contents: read
 env:
-  PREVIOUS_CLIENT_VERSION: 4.0.4
+  PREVIOUS_CLIENT_VERSION: 4.0.5
 jobs:
   signed-apk-upgrade:
     permissions:
