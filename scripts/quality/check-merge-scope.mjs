@@ -131,11 +131,17 @@ export function runnerBatches(files) {
   return others.length ? [[editAdmissionSuite], others] : [[editAdmissionSuite]]
 }
 
-/** @param {string[]} files @param {string[]} [options] */
-function runUnits(files, options = []) {
+/** @param {string[]} files @param {string[]} [options] @param {typeof run} [execute] */
+export function runUnits(files, options = [], execute = run) {
+  const failures = []
   for (const batch of runnerBatches(files)) {
-    run('node_modules/.bin/vitest', [...ordinaryVitest, ...options, ...batch])
+    try {
+      execute('node_modules/.bin/vitest', [...ordinaryVitest, ...options, ...batch])
+    } catch (error) {
+      failures.push(error)
+    }
   }
+  if (failures.length) throw new AggregateError(failures, 'Selected unit tests failed')
 }
 
 /** @param {Set<string>} units */
