@@ -417,14 +417,40 @@ test('native original sound plan, actual continuous audition, independent author
   // do not let a failed earlier attempt supply the next closed-build test.
   const exportPath = process.env.AVG_SOUND_RELEASE_BACKUP_FILE ?? info.outputPath('original-sound-native-release.json')
   await mkdir(dirname(exportPath), { recursive: true })
+  // A frozen product backup preserves historical playback, but cannot grant
+  // new production authority for a different author's local World. Transport
+  // that actual author's complete project separately, without changing the
+  // product backup, source proof, frozen R or sound bytes above.
+  const authorSource = await page.evaluate(async scope => {
+    const load = new Function('p', 'return import(p)') as (p: string) => Promise<any>
+    const [{ db }, { readOriginalAuthorWorld }, files] = await Promise.all([
+      load('/storyforge/src/lib/db/schema.ts'), load('/storyforge/tests/helpers/product-author-world-backup.ts'),
+      load('/storyforge/src/lib/export/json-export.ts'),
+    ])
+    const draft = await db.avgAuthoringDrafts.where('workId').equals(scope.workId).first()
+    const author = await readOriginalAuthorWorld(draft.sourcePurpose, scope.projectId)
+    return { backup: await files.exportProjectJSON(author.projectId), sourcePurpose: draft.sourcePurpose, worldManifestJson: author.manifestJson }
+  }, s.scope)
+  const productBackupSHA256 = createHash('sha256').update(JSON.stringify(exported.backup)).digest('hex')
+  await writeFile(`${exportPath}.author-source.json`, JSON.stringify({ schema: 'storyforge.avg.sound-author-source-native-test-export', version: 1,
+    ...authorSource, productBackupSHA256, backupSHA256: createHash('sha256').update(JSON.stringify(authorSource.backup)).digest('hex') }), { flag: 'wx' })
   await writeFile(exportPath, JSON.stringify({ schema: 'storyforge.avg.sound-release-native-test-export', version: 1, ...exported,
-    backupSHA256: createHash('sha256').update(JSON.stringify(exported.backup)).digest('hex') }), { flag: 'wx' })
+    backupSHA256: productBackupSHA256 }), { flag: 'wx' })
 })
 
 test('native explicit sound inheritance creates a separately adopted revision and release with original audio and no generation requests', async ({ page }, info) => {
   test.skip(!process.env.AVG_SOUND_RELEASE_BACKUP_FILE, 'Requires the preceding actual native publication export')
   const sourceBytes = await readFile(process.env.AVG_SOUND_RELEASE_BACKUP_FILE!), exported = JSON.parse(sourceBytes.toString())
   expect(createHash('sha256').update(JSON.stringify(exported.backup)).digest('hex')).toBe(exported.backupSHA256)
+  const authorSourcePath = `${process.env.AVG_SOUND_RELEASE_BACKUP_FILE!}.author-source.json`
+  const authorBytes = await readFile(authorSourcePath), authorSource = JSON.parse(authorBytes.toString())
+  expect(authorSource.schema).toBe('storyforge.avg.sound-author-source-native-test-export')
+  expect(authorSource.version).toBe(1)
+  expect(authorSource.productBackupSHA256).toBe(exported.backupSHA256)
+  expect(createHash('sha256').update(JSON.stringify(authorSource.backup)).digest('hex')).toBe(authorSource.backupSHA256)
+  expect(authorSource.sourcePurpose).toEqual(exported.backup.avgAuthoringDrafts[0].sourcePurpose)
+  expect(authorSource.sourcePurpose.origin.kind).toBe('local-author')
+  expect(authorSource.backup.project.workspaceUid).toBe(authorSource.sourcePurpose.origin.authorWorld.workspaceUid)
   const requests: string[] = []
   await page.route('**/*', route => {
     const u = new URL(route.request().url())
@@ -449,6 +475,23 @@ test('native explicit sound inheritance creates a separately adopted revision an
   await tab(page, '制作与试玩')
   await page.getByRole('button', { name: '复验导入声音证明', exact: true }).click()
   await expect(page.getByRole('button', { name: '试玩此预览', exact: true })).toBeEnabled()
+  // The old Release remains usable in isolation before its author's project
+  // is restored. This historical read does not authorize a new Brief/Build.
+  await page.getByRole('region', { name: '本地原型版本验收', exact: true })
+    .getByRole('button', { name: '从此版本开始新存档', exact: true }).click()
+  await expect.poll(async () => page.locator('audio[data-channel="bgm"]').evaluateAll(rows => rows.some(a => !(a as HTMLAudioElement).paused && (a as HTMLAudioElement).currentTime > .1)), { timeout: 30_000 }).toBe(true)
+  const historicalSessionId = Number(new URL(page.url()).searchParams.get('session'))
+  const historical = await page.evaluate(async ({ sessionId, releaseId, workspaceUid }) => {
+    const load = new Function('p', 'return import(p)') as (p: string) => Promise<any>
+    const { db } = await load('/storyforge/src/lib/db/schema.ts')
+    return { session: await db.productRuntimeSessions.get(sessionId), release: await db.productReleases.get(releaseId),
+      authorCount: await db.projects.where('workspaceUid').equals(workspaceUid).count() }
+  }, { sessionId: historicalSessionId, releaseId: saved.oldRelease.id, workspaceUid: authorSource.sourcePurpose.origin.authorWorld.workspaceUid })
+  expect(historical.session.productReleaseId).toBe(saved.oldRelease.id); expect(historical.session.productBuildId).toBeNull()
+  expect(historical.release.manifestJson).toBe(saved.oldRelease.manifestJson)
+  expect(historical.authorCount).toBe(0); expect(requests).toEqual([])
+  await page.goto(`./avg/production?project=${saved.scope.projectId}&work=${saved.scope.workId}&assembly=1`)
+  await tab(page, '制作与试玩')
   await page.getByRole('button', { name: '以此预览开始修订', exact: true }).click()
   await page.getByRole('button', { name: '保存编辑草稿', exact: true }).click()
   await tab(page, '素材')
@@ -459,7 +502,49 @@ test('native explicit sound inheritance creates a separately adopted revision an
   await text.fill((await text.inputValue()) + ' 修订仅调整对白，保持原声音用途。')
   await page.getByRole('button', { name: '保存编辑草稿', exact: true }).click()
   await tab(page, '制作与试玩')
+  const readProductionState = () => page.evaluate(async scope => {
+    const load = new Function('p', 'return import(p)') as (p: string) => Promise<any>
+    const { db } = await load('/storyforge/src/lib/db/schema.ts')
+    return { draft: await db.avgAuthoringDrafts.where('workId').equals(scope.workId).first(),
+      productions: await db.productProductions.where('workId').equals(scope.workId).toArray(),
+      briefs: await db.productProductionBriefs.where('workId').equals(scope.workId).toArray(),
+      builds: await db.productBuilds.where('workId').equals(scope.workId).toArray(),
+      commands: await db.productProductionCommands.where('workId').equals(scope.workId).toArray(),
+      runs: await db.agentRuns.where('workId').equals(scope.workId).toArray(),
+      artifacts: await db.productBuildArtifacts.where('workId').equals(scope.workId).toArray(),
+      receipts: await db.productQualityGateReceipts.where('workId').equals(scope.workId).toArray(),
+      releases: await db.productReleases.where('workId').equals(scope.workId).toArray() }
+  }, saved.scope)
+  const beforeMissingAuthor = await readProductionState()
   await page.getByRole('button', { name: '准备新版本方案', exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveText('[world-source-purpose] 已明确选择的原作者世界目前不可核实。')
+  await expect(page.getByRole('button', { name: '确认方案并开始组装', exact: true })).toBeDisabled()
+  expect(await readProductionState()).toEqual(beforeMissingAuthor)
+  expect(requests).toEqual([])
+
+  // Restore the real companion with the public full-project importer. Never
+  // synthesize authority, rewrite the frozen proof, or swap the cached R.
+  const restoredAuthor = await page.evaluate(async ({ backup, proof, scope }) => {
+    const load = new Function('p', 'return import(p)') as (p: string) => Promise<any>
+    const [files, { db }, { readOriginalAuthorWorld }] = await Promise.all([
+      load('/storyforge/src/lib/export/json-export.ts'), load('/storyforge/src/lib/db/schema.ts'),
+      load('/storyforge/tests/helpers/product-author-world-backup.ts'),
+    ])
+    const importedId = await files.importProjectJSON(backup)
+    const author = await readOriginalAuthorWorld(proof, scope.projectId)
+    if (author.projectId !== importedId) throw new Error('The imported backup did not restore the named author')
+    const draft = await db.avgAuthoringDrafts.where('workId').equals(scope.workId).first()
+    return { ...author, worldManifestJson: author.manifestJson, sourcePurpose: draft.sourcePurpose, cachedReleaseId: draft.worldReleaseId }
+  }, { backup: authorSource.backup, proof: authorSource.sourcePurpose, scope: saved.scope })
+  expect(restoredAuthor.projectId).not.toBe(saved.scope.projectId)
+  expect(restoredAuthor.workspaceUid).toBe(authorSource.sourcePurpose.origin.authorWorld.workspaceUid)
+  expect(restoredAuthor.worldCode).toBe(authorSource.sourcePurpose.origin.authorWorld.worldCode)
+  expect(restoredAuthor.worldManifestJson).toBe(authorSource.worldManifestJson)
+  expect(restoredAuthor.sourcePurpose).toEqual(beforeMissingAuthor.draft.sourcePurpose)
+  expect(restoredAuthor.cachedReleaseId).toBe(beforeMissingAuthor.draft.worldReleaseId)
+  expect(await readProductionState()).toEqual(beforeMissingAuthor)
+  await page.getByRole('button', { name: '准备新版本方案', exact: true }).click()
+  await expect(page.getByRole('button', { name: '确认方案并开始组装', exact: true })).toBeEnabled()
   await page.getByRole('button', { name: '确认方案并开始组装', exact: true }).click()
   await adopt(page, '系统规则')
   const sceneLabels = await page.getByRole('article', { name: /^作者确认：场景：/ }).getByRole('heading').allTextContents()
@@ -521,6 +606,7 @@ test('native explicit sound inheritance creates a separately adopted revision an
   await writeFile(info.outputPath('retained-sound-native-release.json'), JSON.stringify({ schema: 'storyforge.avg.sound-release-native-test-export', version: 1,
     backup: actual.backup, expected: actual.expected, backupSHA256: createHash('sha256').update(JSON.stringify(actual.backup)).digest('hex') }), { flag: 'wx' })
   expect(createHash('sha256').update(await readFile(process.env.AVG_SOUND_RELEASE_BACKUP_FILE!)).digest('hex')).toBe(createHash('sha256').update(sourceBytes).digest('hex'))
+  expect(createHash('sha256').update(await readFile(authorSourcePath)).digest('hex')).toBe(createHash('sha256').update(authorBytes).digest('hex'))
 })
 
 test('native loop boundary failure survives interruption and refresh as blocking evidence, with no selection or duplicate dispatch', async ({ page }) => {
