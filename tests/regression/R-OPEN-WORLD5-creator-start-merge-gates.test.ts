@@ -68,7 +68,7 @@ async function productionFootprint() {
   }
 }
 
-function draft(overridesEndings: number) {
+function draft(overridesEndings: number): TextOpenWorldCreatorBriefV1['draft'] {
   return {
     schema: 'storyforge.text-open-world-creator-brief-draft' as const,
     version: 1 as const,
@@ -208,7 +208,7 @@ async function seedCreatorStart(input: { endings: number; name: string }) {
   const { briefHash: _empty, ...body } = brief
   void _empty
   const verified: TextOpenWorldCreatorBriefV1 = {
-    ...(body as TextOpenWorldCreatorBriefV1),
+    ...body,
     briefHash: await hashCanonicalValue(body),
   }
   await db.productProductionBriefs.add(stampNewRecord(scope, 'productProductionBriefs', {
@@ -261,7 +261,7 @@ async function startInput(fixture: Awaited<ReturnType<typeof seedCreatorStart>>)
     acknowledgement: PREFLIGHT_ACKNOWLEDGEMENT, confirmedAt: baseTime,
   })
   const sourcePurpose = fixture.brief.sourceBinding.kind === 'world-release'
-    ? (fixture.brief.sourceBinding as { sourcePurpose?: unknown }).sourcePurpose
+    ? fixture.brief.sourceBinding.sourcePurpose
     : undefined
   return {
     scope: fixture.scope,

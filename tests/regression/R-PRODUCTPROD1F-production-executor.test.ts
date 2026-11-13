@@ -8367,7 +8367,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     )
     const professional = productType === 'text-adventure'
       ? professionalTextAdventurePlanningOutputs(owned.brief) : null
-    const outputs = {
+    const outputs: typeof baseOutputs & Record<string, Record<string, unknown>> = {
       ...baseOutputs,
       ...(professional ?? {}),
       ...(professional ? professionalTextAdventureSceneScriptOutputs(

@@ -25,7 +25,9 @@ export const CURRENT_PRODUCT_RESOURCE_KEYS = {
 } as const
 
 export const CURRENT_PRODUCT_SOURCE_CATALOG: Pick<ProductProductionWorldSourceCatalogV2,
-  'characters' | 'locations' | 'artifacts' | 'loreEntries' | 'storyArcs'> = {
+  'characters' | 'locations' | 'artifacts' | 'loreEntries' | 'storyArcs' | 'relationships' | 'storySources'> = {
+  relationships: [],
+  storySources: [],
   characters: [{
     resourceKey: CURRENT_PRODUCT_RESOURCE_KEYS.character,
     name: '林舟',

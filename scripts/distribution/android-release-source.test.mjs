@@ -11,6 +11,7 @@ const checker = fileURLToPath(new URL('./verify-android-source.py', import.meta.
 
 async function fixture() {
   const root = mkdtempSync(path.join(tmpdir(), 'storyforge-apk-source-'))
+  /** @param {...string} args */
   const git = (...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim()
   git('init', '-q'); git('config', 'user.name', 'isolated test'); git('config', 'user.email', 'test@example.invalid')
   writeFileSync(path.join(root, '.gitignore'), 'web/\n*.apk\n*.json.tmp\nphases/\n')
@@ -29,6 +30,7 @@ async function fixture() {
   return { root, web, git, info }
 }
 
+/** @param {Awaited<ReturnType<typeof fixture>>} f */
 function apk(f, mutation = '') {
   const destination = path.join(f.root, 'candidate.apk')
   const code = `import pathlib,zipfile,json,sys
@@ -43,6 +45,9 @@ with zipfile.ZipFile(target,'w',zipfile.ZIP_DEFLATED) as z:
   return destination
 }
 
+/** @param {Awaited<ReturnType<typeof fixture>>} f
+ * @param {string} [operation]
+ * @param {string[]} [extra] */
 function run(f, operation = 'verify', extra = []) {
   return spawnSync('python3', [checker, operation, path.join(f.root, 'candidate.apk'), '--commit', f.info.sourceCommit,
     '--tree', f.info.sourceTree, '--version', '4.0.6', ...extra], { encoding: 'utf8' })

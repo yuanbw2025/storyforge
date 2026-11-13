@@ -1503,7 +1503,8 @@ describe('AVG V4 actual visual planning Harness and explicit author boundary', (
         {...selected.source,review:{...selected.source.review,authorReceiptHash:'f'.repeat(64)}},
         {...selected.source,choice:{...selected.source.choice,contentHash:'f'.repeat(64)}}]
       for(const source of tampered)await expect(readAvgAdoptedGeneratedImageV2({scope:child.scope,source})).rejects.toThrow()
-      expect(()=>parseAvgGeneratedReferenceSourceV4({...selected.source,processing:{...selected.source.processing,noProviderRequest:false}})).toThrow()
+      const processedSource=selected.source
+      expect(()=>parseAvgGeneratedReferenceSourceV4({...processedSource,processing:{...processedSource.processing,noProviderRequest:false}})).toThrow()
       expect(()=>parseAvgGeneratedReferenceSourceV4({...selected.source,original:selected.source})).toThrow()
       const derivativeBlob=(await db.mediaBlobObjects.get(processed!.blobObjectId!))!,damaged=new Uint8Array(derivativeBlob.data.slice(0));damaged[damaged.length-1]^=1
       await db.mediaBlobObjects.update(derivativeBlob.id!,{data:damaged.buffer})

@@ -6,6 +6,7 @@ import path from 'node:path'
 export const sourceFile = 'storyforge/build-source.json'
 
 export async function assertCleanAndroidBuildSource(root = process.cwd(), web = path.join(root, 'dist-android')) {
+  /** @param {...string} args */
   const git = (...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim()
   const info = JSON.parse(await readFile(path.join(web, sourceFile), 'utf8'))
   const { version } = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
@@ -20,6 +21,7 @@ export async function assertCleanAndroidBuildSource(root = process.cwd(), web = 
 
 /** Build evidence only; contains no machine paths, credentials or author data. */
 export async function writeAndroidBuildSource(root = process.cwd(), web = path.join(root, 'dist-android')) {
+  /** @param {...string} args */
   const git = (...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim()
   const sourceCommit = process.env.STORYFORGE_ANDROID_SOURCE_SHA || git('rev-parse', 'HEAD')
   if (!/^[a-f0-9]{40}$/.test(sourceCommit)) throw new Error('Android build source must be an exact commit')
@@ -27,7 +29,9 @@ export async function writeAndroidBuildSource(root = process.cwd(), web = path.j
   if (sourceTree !== git('rev-parse', 'HEAD^{tree}')) throw new Error('Android build source differs from checkout tree')
   const dirty = Boolean(git('status', '--porcelain'))
   const { version: packageVersion } = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
+  /** @type {{path: string, bytes: number, sha256: string}[]} */
   const files = []
+  /** @param {string} directory */
   async function walk(directory, prefix = '') {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const relative = prefix + entry.name
