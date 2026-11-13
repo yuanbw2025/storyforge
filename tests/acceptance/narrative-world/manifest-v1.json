@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261113-client-release407-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261113-client-release407-regressions-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -1325,6 +1325,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261113-backup-tree-order-v1.json",
         "workPackage": "release-4.0.7",
         "note": "Preserves the previous measurement before updating the package and lockfile version for release."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-client-release407-v1.json",
+        "workPackage": "release-4.0.7-verification",
+        "note": "Preserves the first v4.0.7 measurement before the product adapter fixture was updated to construct the actual source selection type."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
