@@ -401,6 +401,7 @@ export default function TtrpgPage() {
       <p>可以继续填写和保存配置。正式制作前，请选择一个已封存的世界版本。</p>
       <button
         className="lf-action lf-action-primary"
+        disabled={busy}
         onClick={() => go("source")}
       >
         选择世界引擎
@@ -479,7 +480,7 @@ export default function TtrpgPage() {
         <small>TABLETOP ROLEPLAY</small>
         <h1>跑团</h1>
         <p>让想象，聚在同一张桌上。</p>
-        <button className="lf-current" onClick={() => go("library")}>
+        <button className="lf-current" disabled={busy} onClick={() => go("library")}>
           <BookOpen />
           {row?.work.title ?? "选择或新建战役"}
         </button>
@@ -488,12 +489,14 @@ export default function TtrpgPage() {
             <button
               key={id}
               aria-current={primary === id ? "page" : undefined}
+              disabled={busy}
               onClick={() => go(entry)}
             >
               {label}
             </button>
           ))}
           <button
+            disabled={busy}
             onClick={() =>
               void run(async () => {
                 await flushPendingEditsV1();
@@ -521,7 +524,7 @@ export default function TtrpgPage() {
                   ["vision", "S2 · 产品定向"],
                   ["production", "S3 · 产品执行"],
                 ].map(([id, label]) => (
-                  <button key={id} onClick={() => go(id)}>
+                  <button key={id} disabled={busy} onClick={() => go(id)}>
                     {label}
                   </button>
                 ))}
@@ -574,6 +577,7 @@ export default function TtrpgPage() {
                       <button
                         key={id}
                         aria-current={page[0] === id ? "page" : undefined}
+                        disabled={busy}
                         onClick={() => go(id)}
                       >
                         {label}
@@ -861,6 +865,7 @@ export default function TtrpgPage() {
                       {row && !row.draft && (
                         <button
                           className="lf-action"
+                          disabled={busy}
                           onClick={() => go("production")}
                         >
                           继续已有制作记录
@@ -877,12 +882,14 @@ export default function TtrpgPage() {
                         </p>
                         <button
                           className="lf-action"
+                          disabled={busy}
                           onClick={() => go("agent")}
                         >
                           比较战役提案
                         </button>
                         <button
                           className="lf-action"
+                          disabled={busy}
                           onClick={() => go("production")}
                         >
                           打开制作流程
@@ -1051,6 +1058,7 @@ export default function TtrpgPage() {
                       </p>
                       <button
                         className="lf-action"
+                        disabled={busy}
                         onClick={() => go("instruction")}
                       >
                         填写创作指令
@@ -1075,6 +1083,7 @@ export default function TtrpgPage() {
                             )}
                           <button
                             className="lf-action"
+                            disabled={busy}
                             onClick={() => go("confirm")}
                           >
                             回到方案确认
@@ -1129,6 +1138,7 @@ export default function TtrpgPage() {
                         <p>这里将显示实际制作步骤、质量检查与发布版本。</p>
                         <button
                           className="lf-action"
+                          disabled={busy}
                           onClick={() => go("confirm")}
                         >
                           确认制作方案
@@ -1175,6 +1185,7 @@ export default function TtrpgPage() {
                       </p>
                       <button
                         className="lf-action"
+                        disabled={busy}
                         onClick={() => go("release")}
                       >
                         我的发布与版本

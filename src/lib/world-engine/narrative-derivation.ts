@@ -17,11 +17,11 @@ import { CURRENT_NARRATIVE_DOMAIN_COMPILER_V4 } from '../types/narrative-release
 import { canonicalNarrativeJsonV1, hashNarrativeValueV1 } from './narrative-json'
 import { prepareNarrativeDomainConfirmationV1 } from './narrative-domain-authoring'
 import { createNarrativeLineageV1 } from './narrative-lineage'
-import { materializeWorldReleaseBackupV1 } from './semantic-snapshot'
+import { prepareNarrativeDerivationBackupV4, reconcileNarrativeDerivationBackupV4 } from './narrative-derivation-portability'
 import { worldReleaseUidV1 } from './releases'
 import { captureFrozenNarrativeSourcesV4, verifyWorldReleaseContentV4 } from './narrative-release-v4'
 import { compileNarrativeReleaseInWorkerV1 } from './narrative-release-worker'
-import { captureWorldReleaseInputInTransactionV4, type WorldReleaseInputV4 } from './narrative-release-capture'
+import { captureWorldReleaseSourceInTransactionV4, type WorldReleaseInputV4 } from './narrative-release-capture'
 
 async function captureIndependent(scope: WorkspaceScope, selectedTables?: readonly string[]) {
   return db.transaction('r', narrativeDomainCaptureTablesV1(), async () => {
@@ -106,8 +106,13 @@ export async function deriveNarrativeNovelToWorldV4(input: DeriveNovelToWorldInp
     || canonicalNarrativeJsonV1(compiled.manifest) !== compiled.manifestJson) throw Error('[derivation] 编译结果与准备来源不一致')
   await verifyWorldReleaseContentV4({ manifest: compiled.manifest, expectedContentHash: compiled.contentHash, index: compiled.index })
 
+  const { backup, bindings } = prepareNarrativeDerivationBackupV4(transfer, source.exportIds)
+  const frozenConfirmations = new Set(compiled.manifest.narrative.bundle.records.flatMap(record => {
+    const confirmation = record.provenance.manualDeclarationRef ?? record.provenance.adoptionReceiptRef
+    return confirmation === null ? [] : [JSON.stringify([record.provenance.sourceResourceKey, confirmation])]
+  }))
   let result: DerivedNovelWorldResult | undefined
-  await importProjectJSON(materializeWorldReleaseBackupV1(transfer), { finalizeInTransaction: async targetProjectId => {
+  await importProjectJSON(backup, { finalizeInTransaction: async targetProjectId => {
     // Source read and every target write share the registered import transaction.
     // No Worker, network or whole-release verification holds this transaction.
     if (sourceState(await captureIndependent(sourceScope, request.selectedTables)) !== sourceJson) {
@@ -130,9 +135,11 @@ export async function deriveNarrativeNovelToWorldV4(input: DeriveNovelToWorldInp
       selectedResourceIdsJson: canonicalNarrativeJsonV1(projection.coverage.eligibleSelected), sourceContentHash,
       narrativeLineageJson: canonicalNarrativeJsonV1(lineage), targetRevisionId: null, targetReleaseId: null, createdAt: now }
     const id = await db.worldDerivations.add(row) as number
-    const current = await Dexie.Promise.resolve(captureWorldReleaseInputInTransactionV4({ scope: targetScope,
+    const current = await Dexie.Promise.resolve(captureWorldReleaseSourceInTransactionV4({ scope: targetScope,
       includeWorkSources: true, selectedTables: transfer.selectedTables, compilerVersion: capturedInput.compilerVersion }))
-    if (canonicalNarrativeJsonV1(current) !== inputJson) throw Error('[derivation] 导入后的来源与已验证编译不一致')
+    await Dexie.Promise.resolve(reconcileNarrativeDerivationBackupV4({ scope: targetScope, current: current.input,
+      targetIds: current.exportIds, bindings, frozenContentHash: compiled.contentHash, frozenConfirmations }))
+    if (canonicalNarrativeJsonV1(current.input) !== inputJson) throw Error('[derivation] 导入后的来源与已验证编译不一致')
     const revision: WorldRevision = { projectId: targetProjectId, worldId: targetScope.worldId, parentRevisionId: null,
       revision: 1, label: `源自《${source.work.title}》的叙事世界快照`, manifestJson: compiled.manifestJson,
       contentHash: compiled.contentHash, createdAt: now, updatedAt: now }
