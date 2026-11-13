@@ -3813,7 +3813,9 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
 
   await expect(page.getByRole('heading', { name: '事实库（NS-4 长期一致性）', exact: true })).toBeVisible()
   await expect(page.getByText('潮门', { exact: true })).toBeVisible()
-  await page.getByTitle('确认为权威事实（Canon）').click()
+  // The new manuscript explicitly contradicts the old fact's source quotation.
+  await page.getByTitle('否决', { exact: true }).click()
+  await expect(page.getByTitle('否决', { exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: '验证已保存修正', exact: true }).click()
   await expect(page.getByText('修正已验证并重新规划', { exact: true })).toBeVisible({ timeout: 20_000 })
   await page.getByRole('button', { name: '返回来源章节', exact: true }).click()
