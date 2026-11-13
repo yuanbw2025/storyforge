@@ -155,6 +155,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -168,6 +170,8 @@ jobs:
           packages: 'platform-tools platforms;android-36 build-tools;35.0.0'
       - run: npm ci
       - run: npm run build:android:web
+        env:
+          STORYFORGE_ANDROID_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Build isolated debug APK
         if: ${{ !inputs.release }}
         run: node scripts/distribution/build-android.mjs
@@ -196,6 +200,13 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
           chmod 600 "$ANDROID_KEYSTORE_PATH"
           node scripts/distribution/build-android.mjs --release
+      - name: Verify the signed APK source and complete current web payload
+        if: ${{ inputs.release }}
+        env:
+          RELEASE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          python3 scripts/distribution/verify-android-source.py verify "release/android/StoryForge-$version-android.apk" --commit "$RELEASE_SOURCE_SHA" --tree "$(git rev-parse HEAD^{tree})" --version "$version" --web dist-android
       - uses: actions/upload-artifact@v4
         with:
           name: client-android

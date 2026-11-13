@@ -7,7 +7,7 @@ import { execSync } from 'node:child_process'
 import { providerProxies } from './scripts/distribution/proxies.mjs'
 
 function resolveBuildSha(): string {
-  const envSha = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA
+  const envSha = process.env.STORYFORGE_ANDROID_SOURCE_SHA || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA
   if (envSha) return envSha.slice(0, 7)
   try {
     return execSync('git rev-parse --short=7 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
