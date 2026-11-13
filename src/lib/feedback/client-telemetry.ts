@@ -157,21 +157,38 @@ export async function deleteClientTelemetry(): Promise<void> {
   if (!saved) throw new Error('服务器明细已删除，但本机无法保存关闭选择。当前会话已停止自动上传；重启后请检查设置。')
 }
 let started = false
+let stopTelemetry: (() => void) | undefined
+export function stopClientTelemetry() { stopTelemetry?.(); stopTelemetry = undefined }
 export function installClientTelemetry(allowed: boolean) {
-  if (started || !allowed || import.meta.env.DEV || !['portable', 'android'].includes(import.meta.env.MODE)) return
+  const mode = import.meta.env.MODE
+  if (started || navigator.webdriver || ['test', 'showcase', 'adventure-player'].includes(mode)) return
+  const source = !window.storyforgeClient && !['portable', 'android'].includes(mode)
+  if (!source && (!allowed || import.meta.env.DEV || !['portable', 'android'].includes(mode))) return
+  // Source runs record only bounded activity metadata. Keep any previously
+  // saved disabled choice, including a successful deletion, across restarts.
+  if (source && !read()?.decided && !setTelemetryPreferences(true, false)) return
   started = true
   available = true; notify()
   const tick = () => { recordClientActivity(); void flushClientTelemetry() }
-  subscribeRuntimeDiagnostics(recordClientError)
-  subscribeTelemetryPreferences(tick)
+  const unsubscribeErrors = source ? () => {} : subscribeRuntimeDiagnostics(recordClientError)
+  const unsubscribePreferences = subscribeTelemetryPreferences(tick)
   window.addEventListener('online', tick)
   document.addEventListener('visibilitychange', tick)
-  window.addEventListener('storage', event => { if (event.key === TELEMETRY_KEY || event.key === CLIENT_AGREEMENT_KEY || event.key === null) { inflight?.abort(); notify() } })
-  window.addEventListener('diagnostic-context-change', () => {
+  const storage = (event: StorageEvent) => { if (event.key === TELEMETRY_KEY || event.key === CLIENT_AGREEMENT_KEY || event.key === null) { inflight?.abort(); notify() } }
+  const diagnosticChange = () => {
     inflight?.abort()
     const state = read()
     if (state) { state.queue = state.queue.map(row => row.error ? { ...row, error: diagnosticWireError(row.error, false), extended: false } : row); state.nativeSeen = state.nativeSeen.map(row => diagnosticWireError(row, false)); write(state) }
-  })
-  setInterval(tick, 60_000)
+  }
+  window.addEventListener('storage', storage)
+  window.addEventListener('diagnostic-context-change', diagnosticChange)
+  const interval = setInterval(tick, 60_000)
+  stopTelemetry = () => {
+    clearInterval(interval); unsubscribeErrors(); unsubscribePreferences()
+    window.removeEventListener('online', tick); document.removeEventListener('visibilitychange', tick)
+    window.removeEventListener('storage', storage); window.removeEventListener('diagnostic-context-change', diagnosticChange)
+    inflight?.abort(); started = false; available = false
+  }
   tick()
 }
+if (import.meta.hot) import.meta.hot.dispose(stopClientTelemetry)
