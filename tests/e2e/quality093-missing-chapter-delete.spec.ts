@@ -148,7 +148,13 @@ test('actual missing-file delete keeps exact OPFS trash and other authored scope
   const after = await read(page)
   expect(after.chapters).toEqual(before.chapters.filter(row => row.id !== f.chapterId))
   expect(after.bindings.some(row => row.id === f.binding.id)).toBe(false)
-  expect(after.notes).toEqual(before.notes)
+  const originalNote = before.notes.find(row => row.id === f.noteId)!
+  const detachedNote = after.notes.find(row => row.id === f.noteId)!
+  expect(originalNote.chapterId).toBe(f.chapterId)
+  expect(detachedNote.updatedAt).toBeGreaterThan(originalNote.updatedAt)
+  expect(after.notes).toEqual(before.notes.map(row => row.id === f.noteId
+    ? { ...row, chapterId: null, updatedAt: detachedNote.updatedAt }
+    : row))
   expect(after.works).toEqual(before.works); expect(after.worlds).toEqual(before.worlds)
   expect(after.outlines).toEqual(before.outlines)
   expect(after.releases).toEqual(before.releases); expect(after.revisions).toEqual(before.revisions)

@@ -1,5 +1,5 @@
 import Dexie from 'dexie'
-import { StoryForgeDB, STORYFORGE_STORES_V11 } from '../../src/lib/db/schema'
+import { StoryForgeDB, STORYFORGE_SCHEMA_VERSION, STORYFORGE_STORES_V11 } from '../../src/lib/db/schema'
 
 /** Isolated real-IDB failure/retry fixture. Never opens the author's database. */
 export async function ttrpgMemorySchemaFailureFixtureV1() {
@@ -25,6 +25,7 @@ export async function ttrpgMemorySchemaFailureFixtureV1() {
     old.close()
     await current.open()
     return { failed, beforeRetry, afterRetry: await current.works.get(id as number),
-      version: current.verno, memoryCount: await current.ttrpgNarrativeMemories.count(), original: { ...original, id } }
+      version: current.verno, expectedVersion: STORYFORGE_SCHEMA_VERSION,
+      memoryCount: await current.ttrpgNarrativeMemories.count(), original: { ...original, id } }
   } finally { old.close(); current.close(); await Dexie.delete(name) }
 }
