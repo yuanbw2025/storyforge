@@ -5,6 +5,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/check-dev-checkout.mjs",
     "dev": "vite",
     "avg:local-foreground": "bash scripts/avg-local-foreground/start.sh",
     "docs:dev": "vitepress dev website-docs",
