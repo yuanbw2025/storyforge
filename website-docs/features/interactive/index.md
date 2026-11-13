@@ -22,4 +22,4 @@
 
 想先体验成品，可读[内置作品与示例](/guides/examples)。
 
-文字开放世界的小说来源按其专属[制作指南](/features/interactive/open-world)选择并冻结，不要求把原小说先变成共享世界；原作品 owner 保持不变。
+文字开放世界从小说开始时，按其专属[制作指南](/features/interactive/open-world)由作者显式派生独立世界草稿，检查并封存后进入产品定向；原作品 owner 保持不变。

@@ -2,6 +2,7 @@
 
 ## 2026-11-13 · 创作采纳、备份与互动恢复集中修复
 
+- 本地文件同步会核对实际内容，保留外部稿再写回；内置作品补齐低帧率移动与资源核验说明。见[工作区](/features/memory-workspace)、[内置作品](/guides/examples)和[导入](/guides/import)。
 - 长篇与节点：细纲和角色候选保存后采纳，章节对账不重复追加，切章立即隔离旧修订入口，emoji 零宽查找可继续前进。见[正文](/features/longform/writing)、[连续性](/features/longform/continuity)、[节点](/features/nodes)。
 - 数据与世界来源：补齐严格备份导入、前向父引用恢复、同名工作区快照隔离、自动备份失败提示；参考解析保留原尝试并由作者确认，世界来源与关闭资料按实际用途读取。见[备份](/guides/backup-restore)、[参考分析](/features/longform/references)、[世界引擎](/features/world-engine)。
 - 漫画与漫剧：损坏图片解码阻断、视觉设定变化后重新审图、逐镜提示词完整覆盖、并发切集保护和冻结素材包核验。见[漫画](/features/comic)、[漫剧](/features/motion-drama)。

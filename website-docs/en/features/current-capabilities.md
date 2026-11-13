@@ -2,6 +2,8 @@
 
 ## November 13: current capability review
 
+Explicitly enabled local experimental community/commercial entries retain their original admission settings. Switching accounts/services reads the current relationship before acting; late favorite states cannot submit for another account. Retried long/Chinese forms reuse their original submission ID. Repurchases after refunds use the current valid entitlement while retaining refund history. These remain default-hidden experimental capabilities with no catalog maturity promotion. Sources: [#313](https://github.com/yuanbw2025/storyforge/pull/313), [#338](https://github.com/yuanbw2025/storyforge/pull/338).
+
 This review reaches `c101170c`. Product maturity has not been promoted merely because many repairs merged. Corresponding guides now cover saving, adoption and recovery across longform/nodes, references, world sources, backups, comics/motion drama, interactive products and model configuration. Model content quality, long-running behavior and per-work human review remain separate checks. Entries follow the product catalog's current channel/experimental settings; manual navigation does not bypass source, author-confirmation or budget requirements.
 
 

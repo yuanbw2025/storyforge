@@ -2,6 +2,7 @@
 
 ## November 13, 2026 · Adoption, backup and interactive recovery repairs
 
+- Local-file synchronization checks actual content and retains external bytes before writing back. Bundled examples cover low-frame-rate movement and resource checks. See [workspace](/en/features/memory-workspace), [examples](/en/guides/examples) and [import](/en/guides/import).
 - Longform/nodes: saved detailed-outline and character adoption, no repeated outline appends during reconciliation, immediate isolation of old revision actions on chapter switches, and safe zero-width search through emoji. See [writing](/en/features/longform/writing), [continuity](/en/features/longform/continuity), [nodes](/en/features/nodes).
 - Data/world sources: strict backup import, forward-parent recovery, same-name workspace snapshot isolation and visible automatic-backup failures. Reference parsing restores original attempts and requires author adoption; world sources and disabled material follow their actual intended use. See [backup](/en/guides/backup-restore), [references](/en/features/longform/references), [world engine](/en/features/world-engine).
 - Comics/motion drama: damaged-image decoding checks, repeated visual review after substantive setting edits, complete shot-prompt coverage, concurrent episode protection and frozen reference-package validation. See [comics](/en/features/comic), [motion drama](/en/features/motion-drama).
