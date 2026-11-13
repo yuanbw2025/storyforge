@@ -497,7 +497,8 @@ it.each(['go', 'leave', 'compile'] as const)('rejects a stale real %s entry befo
   } finally { router.dispose() }
 })
 
-it('threads actual own World, SourceSelection and Brief revisions through later settings and dirty source saves', async () => {
+it.each(['before-commit', 'after-commit'] as const)(
+  'threads actual own World, SourceSelection and Brief revisions through later settings and dirty source saves (%s)', async timing => {
   const { seedCurrentProductWorld } = await import('../helpers/current-product-world')
   const source = await seedCurrentProductWorld('112 actual frozen source', { minimumCharacters: 4 })
   const sourceRelease = await db.worldReleases.get(source.release.id!)
@@ -543,23 +544,33 @@ it('threads actual own World, SourceSelection and Brief revisions through later 
     await waitForUi(async () => { expect((await readAiTownDraft(owner.scope)).revision).toBe(6) })
     await recordNativeControl('own-source-brief-normal-chain-completed', router)
     await click('确认制作方案')
+    await waitForUi(() => { expect(buttonByText('生成或更新审查方案')?.disabled).toBe(false) })
     const nativePrepare = townService.prepareAiTownBrief
-    let prepareStarted = false
+    let waitingForEdit = false
     let allowPrepare!: () => void
     const sourceEdited = new Promise<void>(resolve => { allowPrepare = resolve })
     const observer = vi.spyOn(townService, 'prepareAiTownBrief').mockImplementation(async (...args) => {
-      prepareStarted = true
+      if (timing === 'after-commit') {
+        const result = await nativePrepare(...args)
+        waitingForEdit = true
+        await sourceEdited
+        return result
+      }
+      waitingForEdit = true
       await sourceEdited
       return nativePrepare(...args)
     })
     restorePrepare = () => { allowPrepare(); observer.mockRestore() }
     await click('生成或更新审查方案')
-    await waitForUi(() => { expect(prepareStarted).toBe(true) })
+    await waitForUi(() => { expect(waitingForEdit).toBe(true) })
+    expect((await readAiTownDraft(owner.scope)).revision).toBe(timing === 'after-commit' ? 7 : 6)
     await act(async () => {
       await router.navigate('/town/source?project=' + owner.scope.projectId + '&work=' + owner.scope.workId)
     })
     await waitForUi(() => { expect(sourceCheckbox()).not.toBeNull() })
+    const wasChecked = sourceCheckbox().checked
     await act(async () => { sourceCheckbox().click() })
+    expect(sourceCheckbox().checked).toBe(!wasChecked)
     // Deliver the actual preparation result after the author changes the still-editable selection.
     allowPrepare()
     await waitForUi(async () => {
