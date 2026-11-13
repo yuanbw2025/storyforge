@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useCodexStore } from '../../src/stores/codex'
@@ -136,10 +137,8 @@ describe('Codex author persistence acknowledgement', () => {
     const a = await fixture('A'), b = await fixture('B')
     const get = db.projects.get.bind(db.projects)
     let release!: () => void
-    vi.spyOn(db.projects, 'get').mockImplementationOnce(async key => {
-      await new Promise<void>(resolve => { release = resolve })
-      return get(key)
-    })
+    const delayedRead = new Dexie.Promise<void>(resolve => { release = resolve })
+    vi.spyOn(db.projects, 'get').mockImplementationOnce(key => delayedRead.then(() => get(key)))
     const old = useCodexStore.getState().loadAll(a.scope)
     await useCodexStore.getState().loadAll(b.scope)
     release(); await old
