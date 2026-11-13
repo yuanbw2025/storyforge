@@ -164,7 +164,10 @@ describe.sequential('R-HARNESS21 · 正文 Run 与章后处理 Run 的父子 lin
       parent: { runId: parent.snapshot.run.id, receiptHash: '2'.repeat(64), artifactHash: parent.artifactHash },
     })
     await completeChild(fixture, child.run.id)
-    const importedProjectId = await importProjectJSON(await exportProjectJSON(fixture.scope.projectId))
+    const backup = await exportProjectJSON(fixture.scope.projectId)
+    // Contracts and ledger events must still bind the original parent when the child is read first.
+    backup.agentRuns.reverse()
+    const importedProjectId = await importProjectJSON(backup)
     const importedScope = {
       projectId: importedProjectId,
       worldId: (await db.worlds.where('projectId').equals(importedProjectId).first())!.id!,

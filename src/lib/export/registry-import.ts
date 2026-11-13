@@ -10,7 +10,7 @@ import {parseChatComposerDraftV1} from '../character-interaction/composer-draft-
  * 注册表派生的项目导入引擎(AUDIT-1)
  *
  * 取代 json-export.ts 中手写的逐表导入:按表依赖拓扑排序(被引用表先于引用方)遍历
- * exportable 表,树表内按登记的便携父引用拓扑排序,逐行把导出序号外键重映射回新 db id。
+ * exportable 表。树父链先完整校验,再按原便携行顺序分配新 id,前向父键在事务内回填。
  * 加新表只需在注册表登记一行,自动进出导入。
  *
  * 必填外键(onUnmapped: 'require')缺失映射 → 抛错整体回滚(完整性保护);孤儿(onUnmapped:
@@ -23,7 +23,7 @@ import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
 import { assertProductRuntimeSourceSnapshotV3 } from '../product/runtime-source-branch'
 import { remapWorldPortalTargets } from '../utils/world-portals'
 import { transactionTablesFor } from '../registry/lifecycle'
-import { inspectPortableTableStructure, orderPortableTreeRows, readPortableOwnerShadowV1 } from './portable-table-structure'
+import { inspectPortableTableStructure, readPortableOwnerShadowV1 } from './portable-table-structure'
 import type { ExportRefRemap, TableSpec } from '../registry/types'
 import type { ProjectExportData, ProjectImportOptionsV1 } from './json-export'
 import { stampNewRecord } from '../workspace/scope'
@@ -1677,7 +1677,7 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
     } as any) as number
 
     const newIdMaps = new Map<string, Map<number, number>>()
-    const deferredForeignKeys: Array<{ table: any; id: number; field: string; target: string; exportId: number }> = []
+    const deferredForeignKeys: Array<{ table: any; id: number; field: string; target: string; exportId: number; mustResolve?: true }> = []
     const deferredNarrativeRefs: Array<{
       table: TableSpec['table']; id: number
       remap: Extract<ExportRefRemap, { kind: 'narrative-source-refs-v1' }>
@@ -1692,11 +1692,14 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
     }> = []
 
     for (const spec of order) {
-      const rawRows: any[] = (data as any)[spec.name]
-      if (!Array.isArray(rawRows)) throw new Error(`[deriveImport] 当前备份缺少 ${spec.name}`)
-      const rows = spec.tree ? orderPortableTreeRows(spec, rawRows) : rawRows
+      const rows: any[] = (data as any)[spec.name]
+      if (!Array.isArray(rows)) throw new Error(`[deriveImport] 当前备份缺少 ${spec.name}`)
+      // Preflight validated every parent chain. Retain the portable row order when
+      // allocating local IDs. Reordering several valid roots changes the next
+      // export's coordinates and every registered reference to those rows.
       const newIdMap = new Map<number, number>()
       const pendingRefRemap: Array<{ newId: number; stashed: Record<string, any> }> = []
+      const pendingRunContracts: Array<{ id: number; contractJson: unknown; contractHash: unknown }> = []
 
       let exportIndex = -1
       for (const row of rows) {
@@ -1710,7 +1713,7 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
         let hasUnmappedKnowledgeRef = false
         let hasUnmappedTemporalSourceRef = false
         let hasUnmappedCultivationProgressRef = false
-        const rowDeferredForeignKeys: Array<{ field: string; target: string; exportId: number }> = []
+        const rowDeferredForeignKeys: Array<{ field: string; target: string; exportId: number; mustResolve?: true }> = []
         for (const rm of spec.exportRemap ?? []) {
           const exportVal = obj[rm.exportAs]
           delete obj[rm.exportAs]
@@ -1725,17 +1728,24 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
             const m = rm.selfTree ? newIdMap : newIdMaps.get(rm.remapVia)
             const got = m?.get(exportVal)
             if (got == null) {
-              if (spec.name === 'knowledgeLedger') hasUnmappedKnowledgeRef = true
-              if (spec.name === 'cultivationProgress') hasUnmappedCultivationProgressRef = true
-              if (spec.name === 'temporalFacts' && rm.field.startsWith('source')) {
-                hasUnmappedTemporalSourceRef = true
-              }
-              if (rm.onUnmapped === 'drop') { dropRow = true; break }
-              if (rm.onUnmapped === 'require' || rm.requiredOnImport) {
-                throw new Error(`[deriveImport] 缺失必填外键映射:${spec.name}.${rm.field}=${exportVal}`)
-              }
-              if (!rm.selfTree) {
-                rowDeferredForeignKeys.push({ field: rm.field, target: rm.remapVia, exportId: exportVal })
+              const forwardTreeParent = rm.selfTree && spec.tree?.parentField === rm.field
+              if (forwardTreeParent) {
+                // The complete tree was validated above. Resolve a later
+                // parent in the same native transaction, never as a null root.
+                rowDeferredForeignKeys.push({ field: rm.field, target: spec.name, exportId: exportVal, mustResolve: true })
+              } else {
+                if (spec.name === 'knowledgeLedger') hasUnmappedKnowledgeRef = true
+                if (spec.name === 'cultivationProgress') hasUnmappedCultivationProgressRef = true
+                if (spec.name === 'temporalFacts' && rm.field.startsWith('source')) {
+                  hasUnmappedTemporalSourceRef = true
+                }
+                if (rm.onUnmapped === 'drop') { dropRow = true; break }
+                if (rm.onUnmapped === 'require' || rm.requiredOnImport) {
+                  throw new Error(`[deriveImport] 缺失必填外键映射:${spec.name}.${rm.field}=${exportVal}`)
+                }
+                if (!rm.selfTree) {
+                  rowDeferredForeignKeys.push({ field: rm.field, target: rm.remapVia, exportId: exportVal })
+                }
               }
             }
             mappedId = got ?? null
@@ -1795,21 +1805,6 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
         if (spec.portableData?.kind === 'shared-media-object') {
           await restorePortableSharedMediaObject(spec, obj)
         }
-        if (spec.portableData?.kind === 'agent-run-root') {
-          const contractIdMaps = new Map(newIdMaps)
-          // Agent runs are a lineage tree. A child contract may reference the
-          // already-imported parent in this same table before the table map is
-          // published after the row loop.
-          contractIdMaps.set(spec.name, newIdMap)
-          const rebound = await Dexie.waitFor(rebindPortableAgentRunContractV1({
-            contractJson: obj[spec.portableData.contractField],
-            contractHash: obj[spec.portableData.contractHashField],
-            projectId: newProjectId,
-            idMaps: contractIdMaps,
-          }))
-          obj[spec.portableData.contractField] = rebound.contractJson
-          obj[spec.portableData.contractHashField] = rebound.contractHash
-        }
         if (spec.name === 'characters' && !isCompleteCharacterAxes(obj)) {
           throw new Error(`[deriveImport] 角色「${String(obj.name ?? '')}」缺少当前三轴分类`)
         }
@@ -1830,6 +1825,10 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
         }
 
         const newId = await (db as any)[spec.name].add(obj) as number
+        if (spec.portableData?.kind === 'agent-run-root') {
+          pendingRunContracts.push({ id: newId, contractJson: obj[spec.portableData.contractField],
+            contractHash: obj[spec.portableData.contractHashField] })
+        }
         for (const deferred of rowDeferredForeignKeys) {
           deferredForeignKeys.push({ table: (db as any)[spec.name], id: newId, ...deferred })
         }
@@ -1842,6 +1841,24 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
         const key = spec.exportIdField ? exportId : exportIndex
         if (key != null) newIdMap.set(key, newId)
         if (stashed) pendingRefRemap.push({ newId, stashed })
+      }
+
+      if (spec.portableData?.kind === 'agent-run-root') {
+        // Rebind only after this table's complete ID map exists, including a
+        // parent appearing later in the portable array. Nothing commits until
+        // the original contract/hash verifier and ledger finalizer succeed.
+        const contractIdMaps = new Map(newIdMaps)
+        contractIdMaps.set(spec.name, newIdMap)
+        for (const pending of pendingRunContracts) {
+          const rebound = await Dexie.waitFor(rebindPortableAgentRunContractV1({
+            contractJson: pending.contractJson, contractHash: pending.contractHash,
+            projectId: newProjectId, idMaps: contractIdMaps,
+          }))
+          await (db as any)[spec.name].update(pending.id, {
+            [spec.portableData.contractField]: rebound.contractJson,
+            [spec.portableData.contractHashField]: rebound.contractHash,
+          })
+        }
       }
 
       // 两阶段:JSON 引用重映射(portals 自引用,需本表 newIdMap 已全)
@@ -1926,6 +1943,9 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
     }
     for (const deferred of deferredForeignKeys) {
       const mapped = newIdMaps.get(deferred.target)?.get(deferred.exportId)
+      if (mapped == null && deferred.mustResolve) {
+        throw new Error(`[deriveImport] 缺失树父引用映射:${deferred.target}.${deferred.field}=${deferred.exportId}`)
+      }
       if (mapped != null) await deferred.table.update(deferred.id, { [deferred.field]: mapped })
     }
     for (const deferred of deferredJsonIdPaths) {
