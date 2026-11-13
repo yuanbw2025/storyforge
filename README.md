@@ -222,13 +222,15 @@ Agent 可以把排查、整理和提交反馈一起完成，维护者也能根�
 推荐 **Node.js 24**（与 CI 一致）和 npm。Windows、macOS、Linux 都可通过源码运行。
 
 ```bash
-git clone https://github.com/yuanbw2025/storyforge.git
+git clone -c core.longpaths=true https://github.com/yuanbw2025/storyforge.git
 cd storyforge
 npm ci
 npm run dev
 ```
 
-打开终端显示的地址，应用路径为 `/storyforge/`。例如默认端口可用时是 `http://localhost:5173/storyforge/`；端口被占用时以终端输出为准。使用期间保持终端运行，退出时按 `Ctrl+C`。
+Windows 请使用 Git for Windows，并选择较短的目录路径。上述克隆命令在检出前为本仓库启用长路径。若出现 `Filename too long` 或 fatal 检出错误，先停止，不要继续运行 npm。保留不完整目录及其中的本地修改，另选新目录克隆，避免覆盖文件。`npm run dev` 现在会在关键源码或配置缺失时拒绝启动 Vite；这项检查不能保证全部文件完整。参见 [Git 克隆配置说明](https://git-scm.com/docs/git-clone#Documentation/git-clone.txt--ckeyvalue)。
+
+打开终端显示的地址，应用路径为 `/storyforge/`。默认配置使用 `http://localhost:1111/storyforge/`；启动失败时先检查终端错误。使用期间保持终端运行，退出时按 `Ctrl+C`。
 
 **不想安装开发环境：**打开[最新版本下载页](https://github.com/yuanbw2025/storyforge/releases/latest)，选择对应电脑的最新便携 ZIP，解压整个文件夹后启动 `Start-StoryForge`。包内已包含当前界面、内置媒资和 Node.js，无需安装 npm 依赖。Windows 双击 `.cmd`，Mac 双击 `.command`，Linux 运行 `.sh`；详细步骤见[安装指南](https://docs.storyforge-lab.com/getting-started/install)。AI 创作需要自行配置模型服务，预览产品仍保留预览标记。
 

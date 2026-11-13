@@ -46,11 +46,13 @@ The release attachment `SHA256SUMS.txt` lets you verify ZIP integrity. The inclu
 Use Node.js 24 and npm, matching project CI:
 
 ```bash
-git clone https://github.com/yuanbw2025/storyforge.git
+git clone -c core.longpaths=true https://github.com/yuanbw2025/storyforge.git
 cd storyforge
 npm ci
 npm run dev
 ```
+
+On Windows, use Git for Windows and a short folder path. The clone command enables long paths in this repository before checkout. If Git reports `Filename too long` or a fatal checkout error, stop before running npm. Keep the incomplete folder and any local edits; clone into a new folder instead of overwriting files. `npm run dev` now stops before Vite when essential source/configuration files are missing. This check does not certify every file in the checkout. See [Git clone configuration](https://git-scm.com/docs/git-clone#Documentation/git-clone.txt--ckeyvalue).
 
 Without Git, download the [latest main source ZIP](https://github.com/yuanbw2025/storyforge/archive/refs/heads/main.zip), extract it and run the same `npm ci` and `npm run dev` commands. To get a fixed source version, use `Source code (zip)` on a release page.
 

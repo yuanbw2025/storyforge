@@ -166,11 +166,13 @@ Open the [web app](https://yuanbw.vercel.app/storyforge/) or run the source loca
 Use **Node.js 24** and npm, matching CI:
 
 ```bash
-git clone https://github.com/yuanbw2025/storyforge.git
+git clone -c core.longpaths=true https://github.com/yuanbw2025/storyforge.git
 cd storyforge
 npm ci
 npm run dev
 ```
+
+On Windows, use Git for Windows and a short folder path. The clone command enables long paths in this repository before checkout. If Git reports `Filename too long` or a fatal checkout error, stop before running npm. Keep the incomplete folder and any local edits; clone into a new folder instead of overwriting files. `npm run dev` now stops before Vite when essential source/configuration files are missing. This check does not certify every file in the checkout. See [Git clone configuration](https://git-scm.com/docs/git-clone#Documentation/git-clone.txt--ckeyvalue).
 
 Open the address printed by Vite, with the `/storyforge/` path. Keep the terminal running while using the app. A downloaded source ZIP needs the same commands after extraction; it is not a desktop installer.
 
