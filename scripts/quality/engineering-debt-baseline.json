@@ -46673,21 +46673,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-CODEX-AUTHOR-SAVE.test.ts\",\"TS2345\",\"Argument of type '(key: { [key: string]: any; }) => Promise<Project | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<Project | undefined, unknown>) => PromiseExtended<unknown>'.\\n  Property 'timeout' is missing in type 'Promise<Project | undefined>' but required in type 'PromiseExtended<unknown>'.\",\"76da6f4b3695709556f0da03d27c35375543542e748f4aab5b72a7eff01d1d05\",57,14]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CODEX-AUTHOR-SAVE.test.ts",
-        "code": "TS2345",
-        "message": "Argument of type '(key: { [key: string]: any; }) => Promise<Project | undefined>' is not assignable to parameter of type '(equalityCriterias: { [key: string]: any; }, thenShortcut: ThenShortcut<Project | undefined, unknown>) => PromiseExtended<unknown>'.\n  Property 'timeout' is missing in type 'Promise<Project | undefined>' but required in type 'PromiseExtended<unknown>'.",
-        "anchor": "76da6f4b3695709556f0da03d27c35375543542e748f4aab5b72a7eff01d1d05",
-        "line": 132,
-        "column": 57,
-        "start": 9310,
-        "length": 14
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-CODEX-provider.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 0.\",\"496bad08908c48870ffb4538c295c4eba0a6eaea5be763ca89aedaf1474c79b6\",45,6]",
       "count": 1,
       "diagnostic": {
@@ -55384,21 +55369,6 @@
         "line": 7,
         "column": 12,
         "start": 327,
-        "length": 24
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-OPEN-WORLD5-preview-navigation-ui.test.tsx\",\"TS7017\",\"Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.\",\"1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee\",12,24]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-OPEN-WORLD5-preview-navigation-ui.test.tsx",
-        "code": "TS7017",
-        "message": "Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.",
-        "anchor": "1f00af7d80c4a6011d464872eb219f08179cce18a4270326a8a87e701f6344ee",
-        "line": 51,
-        "column": 12,
-        "start": 2629,
         "length": 24
       }
     },
