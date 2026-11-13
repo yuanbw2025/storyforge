@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TextOpenWorldCreatorBriefStudio from '../../src/components/text-game/TextOpenWorldCreatorBriefStudio'
 import { db } from '../../src/lib/db/schema'
+import { readTextOpenWorldCreatorBuildNewWorkAuthorityV1 } from '../../src/lib/open-world/creator-derived-authority'
 import { importProjectJSON } from '../../src/lib/export/json-export'
 import {
   confirmTextOpenWorldCreatorBriefV1,
@@ -232,6 +233,9 @@ describe('SFQA097 · Creator 结局数量准入', () => {
     expect(frozen.start.startHash).toBe(archive.productProductionBriefs[0].confirmedBriefHash)
     expect(frozen.creatorBrief.briefHash).toBe(archive.productProductionBriefs[0].briefHash)
     const before = await productionFootprint()
+    await expect(readTextOpenWorldCreatorBuildNewWorkAuthorityV1({
+      scope, buildId: build.id!, operation: '规划下一次制作',
+    })).rejects.toThrow(/2 至 12 个合规结局/)
     await expect(createTextOpenWorldCreatorProductionPreflightV1({
       brief: frozen.creatorBrief, projectId, aiConfig, rememberApiKey: false, pricing: { mode: 'catalog' },
     })).rejects.toThrow(/2 至 12 个合规结局/)

@@ -61,7 +61,7 @@ import {
   inspectTextOpenWorldRuntimeHeadV1,
 } from './checkpoints'
 import { readTextOpenWorldArtifactGovernanceV1 } from './creator-artifact-governance'
-import { assertTextOpenWorldCreatorRoleForNewWorkV1, readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
+import { assertTextOpenWorldCreatorDraftForNewWorkV1, readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
 import {
   assertTextOpenWorldCalibrationLineageUnchangedV1,
   readTextOpenWorldCalibrationLineageV1,
@@ -362,7 +362,7 @@ async function calibrationReadiness(authority: BuildAuthorityV1, requiresNewRevi
   const derived = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
     scope: authority.scope, buildId: authority.build.id,
   })
-  if (requiresNewReview) assertTextOpenWorldCreatorRoleForNewWorkV1(derived.contracts.creatorBrief.draft)
+  if (requiresNewReview) assertTextOpenWorldCreatorDraftForNewWorkV1(derived.contracts.creatorBrief.draft)
   const generator = derived.contracts.start.preflight.providerBinding
   const aiState = useAIConfigStore.getState()
   const resolved = resolveRequestConfig(aiState.config, {
