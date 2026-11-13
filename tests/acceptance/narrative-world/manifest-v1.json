@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261113-creation-recovery-input-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-integrity-creation-recovery-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -1303,8 +1303,18 @@
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261113-pr43-world-derivation-v1.json",
-        "workPackage": "PR-429",
-        "note": "Preserves the verified pre-change world derivation inputs."
+        "workPackage": "SFQA-011",
+        "note": "Retains the verified baseline before the runtime export validator moved to its own module."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-runtime-export-integrity-v1.json",
+        "workPackage": "PR-430/432",
+        "note": "Measured independently before the runtime export validator and creation recovery fixtures shared this input."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-creation-recovery-input-v1.json",
+        "workPackage": "PR-430/432",
+        "note": "Measured independently before the runtime export validator and creation recovery fixtures shared this input."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -1384,6 +1394,7 @@
     "src/lib/context-gateway/world-release-query-provider.ts",
     "src/lib/db/schema.ts",
     "src/lib/export/registry-export.ts",
+    "src/lib/export/runtime-export-integrity.ts",
     "src/lib/export/registry-import.ts",
     "src/lib/export/portable-table-structure.ts",
     "src/lib/narrative-domain/codec.ts",

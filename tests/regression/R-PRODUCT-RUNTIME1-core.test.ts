@@ -143,7 +143,7 @@ describe('PRODUCT-RUNTIME-1A · 上层产品运行时核心', () => {
   })
 
   it('检查点可验真，分支冻结目标序号且父子后续互不影响', async () => {
-    const { session: parent } = await seedProject()
+    const { project, session: parent } = await seedProject()
     await addCharacter(parent.id!)
     await appendProductRuntimeEvent({
       sessionId: parent.id!,
@@ -177,6 +177,7 @@ describe('PRODUCT-RUNTIME-1A · 上层产品运行时核心', () => {
 
     await db.productRuntimeCheckpoints.update(checkpoint.id!, { stateJson: '{"tampered":true}' })
     expect(await verifyProductRuntimeCheckpoint(checkpoint.id!)).toBe(false)
+    await expect(exportProjectJSON(project.id!)).rejects.toThrow(/ProductRuntimeCheckpoint/)
     await deleteProductRuntimeSession(parent.id!)
     expect(await db.productRuntimeSessions.get(parent.id!)).toBeUndefined()
     expect(await db.productRuntimeSessions.get(child.id!)).toMatchObject({
