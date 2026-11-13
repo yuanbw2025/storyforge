@@ -36,7 +36,7 @@ import {
   formatLongTermConsistencyDossierV1,
 } from '../memory/consistency-dossier'
 import { htmlToPlainText } from '../utils/html'
-import { assertRecordInScope, resolveScope } from '../workspace/scope'
+import { assertRecordInScope, resolveScope, scopeTransactionTables } from '../workspace/scope'
 import { isPortableResourceUidV1 } from './resource-uid'
 import {
   narrativePlanMatchesSourceRefsV1,
@@ -44,6 +44,7 @@ import {
 } from './narrative-retrieval'
 import {
   contextGatewayCacheEpochV1,
+  contextGatewayTableMutationEpochV1,
   createCachedContextResourceProviderV1,
 } from './provider-cache'
 
@@ -1319,7 +1320,10 @@ async function catalogPage(input: ResourceListInputV1 | ResourceSearchInputV1): 
   const storyArcKeys = 'query' in input ? normalizedResourceKeys(input.storyArcKeys, 'storyArcKeys') : []
   const timeRange = 'query' in input ? input.timeRange : undefined
   assertTimeRangeFilter(timeRange)
-  const catalogEpoch = contextGatewayCacheEpochV1()
+  const specs = resourceSpecs()
+  const catalogTables = scopeTransactionTables(...specs.map(spec => spec.table), db.retrievalChunks, db.narrativeSummaryNodes)
+  const catalogTableNames = catalogTables.map(table => table.name)
+  const catalogEpoch = contextGatewayTableMutationEpochV1(catalogTableNames)
   const requestHash = await hashCanonProjection({
     version: 1, scopeFingerprint, catalogEpoch, requestedKinds, query, entityKeys, storyArcKeys, timeRange: timeRange ?? null,
   })
@@ -1330,7 +1334,6 @@ async function catalogPage(input: ResourceListInputV1 | ResourceSearchInputV1): 
   const narrativePlan = query
     ? await planNarrativeRetrievalV1({ scope: input.scope, query, timeRange })
     : null
-  const specs = resourceSpecs()
   const found: LocatedProjectionV1[] = []
   outer: for (let tableIndex = cursor?.tableIndex ?? 0; tableIndex < specs.length; tableIndex++) {
     const spec = specs[tableIndex]
@@ -1370,7 +1373,7 @@ async function catalogPage(input: ResourceListInputV1 | ResourceSearchInputV1): 
   }
   const pageItems = found.slice(0, input.limit)
   const last = pageItems[pageItems.length - 1]
-  if (catalogEpoch !== contextGatewayCacheEpochV1()) {
+  if (catalogEpoch !== contextGatewayTableMutationEpochV1(catalogTableNames)) {
     fail('catalog-mutated', '目录读取期间 Canon 已变化，请从第一页重新读取')
   }
   return {

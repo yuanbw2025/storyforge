@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa307-with-five-runtime-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261113-pr43-world-derivation-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -1295,6 +1295,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261113-five-repairs-runtime-424-v1.json",
         "workPackage": "SFQA-004/009/011/028-032/042/050/077",
         "note": "Retained the current signed-off input and observations before incorporating the independent five-repair evidence."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261113-sfqa307-with-five-runtime-v1.json",
+        "workPackage": "SFQA-037 / old PR #295",
+        "note": "Retains the observations before restoring verified derivation coordinates in independently copied worlds."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -1427,6 +1432,7 @@
     "src/lib/world-engine/mist-harbor-preset.ts",
     "src/lib/world-engine/narrative-compilation-task.ts",
     "src/lib/world-engine/narrative-derivation.ts",
+    "src/lib/world-engine/narrative-derivation-portability.ts",
     "src/lib/world-engine/narrative-domain-authoring.ts",
     "src/lib/world-engine/narrative-domain-candidate.ts",
     "src/lib/world-engine/narrative-domain-capture.ts",
@@ -1434,6 +1440,7 @@
     "src/lib/world-engine/narrative-domain-evidence.ts",
     "src/lib/world-engine/narrative-domain-projection.ts",
     "src/lib/world-engine/narrative-domain-registry.ts",
+    "src/lib/narrative-domain/semantic-export-references.ts",
     "src/lib/world-engine/narrative-identity.ts",
     "src/lib/world-engine/narrative-incremental.ts",
     "src/lib/world-engine/narrative-index-cache.ts",
