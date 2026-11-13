@@ -37,7 +37,7 @@ describe('R-TTRPGOPEN3 deterministic replay does not eagerly load model/producti
     let expression = declaration.initializer!
     if (ts.isAsExpression(expression)) expression = expression.expression
     if (!ts.isObjectLiteralExpression(expression)) throw new Error('missing actual replay chunk groups')
-    const groups = new Map<string, number>(), ranks: Record<string, number> = { mechanics: 0, state: 1, open: 2, adapters: 3 }
+    const groups = new Map<string, number>(), ranks: Record<string, number> = { accounting: -1, mechanics: 0, state: 1, open: 2, adapters: 3 }
     for (const property of expression.properties) {
       if (!ts.isPropertyAssignment(property) || !ts.isIdentifier(property.name) || !ts.isArrayLiteralExpression(property.initializer)) throw new Error('invalid replay chunk metadata')
       const rank = ranks[property.name.text]
