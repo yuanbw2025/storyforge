@@ -1,9 +1,14 @@
 ---
 productId: authoring.nodes
 status: preview
-lastVerified: 2026-10-19
+lastVerified: 2026-11-13
 ---
 # Node authoring
+
+## November 13: saving, recovery and usage checks
+
+Domain candidates in nodes still require explicit author adoption; reload/interruption recovery does not replace confirmation. Facts, post-chapter organization and chapter source checks share the actual source fingerprint. Changed text or source versions pause old operations for review instead of bypassing checks at a checkpoint. Nodes and step mode continue sharing work data. Sources: [#355](https://github.com/yuanbw2025/storyforge/pull/355), [#369](https://github.com/yuanbw2025/storyforge/pull/369), [#307](https://github.com/yuanbw2025/storyforge/pull/307).
+
 
 > Preview. Full cross-mode interoperability and real user paths are still being validated.
 

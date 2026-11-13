@@ -1,9 +1,14 @@
 ---
 productId: upper.text-adventure
 status: preview
-lastVerified: 2026-10-28
+lastVerified: 2026-11-13
 ---
 # Text adventure
+
+## November 13: saving, recovery and usage checks
+
+If an action starts in save A before switching to B, its late intent remains owned by A and neither switches the view back nor clears B's input. Main-location conflicts recover within the correct original task/scope; review saved characters/locations before continuing. Usage already observed after stopping production or changing rounds remains charged to the original task. Unknown outcomes stay pending rather than automatically resending. Preference-save failures retain the current selection. Sources: [#315](https://github.com/yuanbw2025/storyforge/pull/315), [#320](https://github.com/yuanbw2025/storyforge/pull/320), [#362](https://github.com/yuanbw2025/storyforge/pull/362), [#384](https://github.com/yuanbw2025/storyforge/pull/384).
+
 
 > Preview. Professional production, asset review, publishing, and deterministic runtime are implemented; real-model content quality, human playtesting, and the first community-recommended finished work still require dedicated acceptance.
 

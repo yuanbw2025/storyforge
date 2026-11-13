@@ -1,5 +1,10 @@
 # Multiple worlds, locations, and maps
 
+## November 13: saving, recovery and usage checks
+
+Wait for worldview/geography drafts to save before switching worlds, works or groups. Failures retain the draft and offer retry; another group's successful save does not clear this draft's error. Empty groups do not show the preceding group's locations. Concept-map preview failures can retry local decoding without replacing the original image. World-rule save failures retain their current draft. Sources: [#332](https://github.com/yuanbw2025/storyforge/pull/332), [#367](https://github.com/yuanbw2025/storyforge/pull/367).
+
+
 Longform settings serve the current work; independent worlds in the world engine support sealing and reuse. Editing longform settings does not require converting the novel into a separate world.
 
 ## When multiple worlds help

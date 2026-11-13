@@ -1,5 +1,10 @@
 # Longform: outlines, scene beats, and prose
 
+## November 13: saving, recovery and usage checks
+
+Zero-width search advances safely through prose containing emoji. After recovering a review/revision candidate, switching chapters or workspaces immediately hides the previous chapter's prose, candidate and adopt/finish actions. Return to its original chapter to continue the saved candidate. Review input remains chapter-owned and late results do not refresh another chapter. Context preview shows the actual content fixed for this operation. Sources: [#302](https://github.com/yuanbw2025/storyforge/pull/302), [#404](https://github.com/yuanbw2025/storyforge/pull/404), [#442](https://github.com/yuanbw2025/storyforge/pull/442).
+
+
 
 
 ## Outline diagnosis and selective rewriting

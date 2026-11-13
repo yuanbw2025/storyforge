@@ -1,6 +1,11 @@
 # 当前产品能力与成熟度
 
-> 核对日期：2026-10-28 · main 基线：46a90c0b。正式 Release、当前 main 和在线部署可能不同，见[版本说明](/updates/compatibility)。
+## 11月13日：当前能力核对
+
+本轮核对至 `c101170c`：产品目录的成熟度未因集中修复升级。长篇/节点、参考导入、世界来源、备份、漫画/漫剧、互动产品与模型配置的保存、采纳和恢复已同步到对应指南；模型内容质量、长跑表现和逐作品人工验收仍分别核对。入口按产品目录的当前渠道与实验开关准入，手工跳转不能绕过来源、作者确认或预算要求。
+
+
+> 核对日期：2026-11-13 · main 基线：c101170c。正式 Release、当前 main 和在线部署可能不同，见[版本说明](/updates/compatibility)。
 
 “已发布”沿用当前产品目录的状态，表示产品可进入已声明的主流程，不表示有新的语义版本号，也不保证模型质量。“预览”有可用实现但完整体验仍待验证。“实验性”不作为日常使用承诺。
 
@@ -32,6 +37,6 @@
 - 世界与作品的引用有明确版本，后续变化不会自动到处同步。
 - 当前不承诺 AI 永不遗忘、作品永无矛盾或自动完成商业级成品。
 
-工程依据：[产品目录](https://github.com/yuanbw2025/storyforge/blob/46a90c0b/src/lib/product/product-catalog.ts) · [能力基线](https://github.com/yuanbw2025/storyforge/blob/46a90c0b/docs/roadmap/CAPABILITY-BASELINE.md)。
+工程依据：[产品目录](https://github.com/yuanbw2025/storyforge/blob/c101170c/src/lib/product/product-catalog.ts) · [能力基线](https://github.com/yuanbw2025/storyforge/blob/c101170c/docs/roadmap/CAPABILITY-BASELINE.md)。
 
 本轮另核对了所有本地分支；尚未合并、仅本地保存或历史等价性待核对的内容见[待合并开发记录](/updates/development-status)，不计入以上主干能力。

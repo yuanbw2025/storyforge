@@ -1,5 +1,16 @@
 # 更新日志
 
+## 2026-11-13 · 创作采纳、备份与互动恢复集中修复
+
+- 长篇与节点：细纲和角色候选保存后采纳，章节对账不重复追加，切章立即隔离旧修订入口，emoji 零宽查找可继续前进。见[正文](/features/longform/writing)、[连续性](/features/longform/continuity)、[节点](/features/nodes)。
+- 数据与世界来源：补齐严格备份导入、前向父引用恢复、同名工作区快照隔离、自动备份失败提示；参考解析保留原尝试并由作者确认，世界来源与关闭资料按实际用途读取。见[备份](/guides/backup-restore)、[参考分析](/features/longform/references)、[世界引擎](/features/world-engine)。
+- 漫画与漫剧：损坏图片解码阻断、视觉设定变化后重新审图、逐镜提示词完整覆盖、并发切集保护和冻结素材包核验。见[漫画](/features/comic)、[漫剧](/features/motion-drama)。
+- 互动制作与运行：保存过的聊天图片可补齐确认，长角色回复与迟到记忆保留原存档；制作主角/NPC目标/结局数量检查、续团归属、暂停恢复及实际用量保留。见[开放世界](/features/interactive/open-world)、[角色聊天](/features/interactive/character-chat)、[跑团](/features/interactive/ttrpg)、[文字冒险](/features/interactive/text-adventure)。
+- Fountain 对白导出、AVG 检查点保存、世界草稿切换、模型目录迟到响应及实测/估算用量也已补齐操作说明。数据库与备份版本见[兼容说明](/updates/compatibility)，本地未提交整合残留见[开发记录](/updates/development-status)。
+
+本轮按主干 `66dc20d7…c101170c` 的实际产品改动核对；各指南列出对应合并 PR，历史正文保留。
+
+
 
 
 

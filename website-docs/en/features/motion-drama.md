@@ -1,9 +1,14 @@
 ---
 productId: independent.motion-drama
 status: released
-lastVerified: 2026-09-20
+lastVerified: 2026-11-13
 ---
 # Motion-comic materials and preproduction
+
+## November 13: saving, recovery and usage checks
+
+Before adopting shot prompts, verify coverage of every shot in the current episode; duplicate numbers cannot stand in for a complete list. Version conflicts during rapid episode changes preserve the newer selection. Reference-package export verifies the actual selected images, voice assets and other files against that version and original bytes; missing files stop export. It does not silently substitute current drafts, and prompt-only editions do not include media. Sources: [#312](https://github.com/yuanbw2025/storyforge/pull/312), [#385](https://github.com/yuanbw2025/storyforge/pull/385).
+
 
 Start with a sentence, local novel, or imported source to prepare a series bible, episode scripts, assets, storyboards, and Prompts for external video production. Entry: Motion-comic materials → Library → Production workbench (漫剧素材 → 作品库 → 漫剧制作台).
 

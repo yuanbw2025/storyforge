@@ -1,5 +1,10 @@
 # Project references, work analysis, and retrieval
 
+## November 13: saving, recovery and usage checks
+
+Document parsing first saves a recoverable candidate; only author confirmation writes to its original work. Replacing a file, changing its source or switching works prevents old results from overwriting a new target. Reference analysis keeps private sources separate and does not automatically merge existing characters. Reloading/continuing a failed task restores its original attempt, raw reply and usage; insufficient balance or an unknown outcome does not trigger another paid send. Sources: [#307](https://github.com/yuanbw2025/storyforge/pull/307), [#386](https://github.com/yuanbw2025/storyforge/pull/386), [#403](https://github.com/yuanbw2025/storyforge/pull/403).
+
+
 Entry: Longform workbench → Inspiration and references → Project references and analysis (灵感与参考 → 项目参考与分析). References support learning and evidence; uploading a file does not make it an official setting of your work.
 
 

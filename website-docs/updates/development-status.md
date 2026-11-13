@@ -1,5 +1,57 @@
 # 待合并开发记录与分支核对
 
+## 2026-11-13 · 当前合并状态与本地保留工作
+
+从上次成功交付的 `66dc20d7` 核对至 `c101170c`，完整枚举 **442 个本地分支、102 个工作区（含 detached）、78 个有工作文件状态的工作区**。236 个分支 head 尚非 main 祖先，包含历史/试验/整合分支，不能直接解释为未交付功能。快照时没有开放 PR。集中修复的实际主干行为已同步各指南，旧日期段落是当时记录，下面的当前状态优先。
+
+### 工作区增量与保留事项
+
+以下只登记观察范围，均未代替作者提交、推送、合并或清理：
+
+| 分支/位置 | 观察到的内容 | 去重与当前状态 |
+| --- | --- | --- |
+| 作者主工作区 `main` | 本地 `.worktrees/` 子检出和独立质量检查检出目录 | 是其他检出的目录入口，不计新功能 |
+| `fix/sfqa-058-chat-frozen-source-plan-standalone` | README、来源/生产与测试等 35 个状态项 | head 已在 main；存在合并中的暂存残留，待原作者检查 |
+| `fix/sfqa-077-consistency-evidence-dsh` | 一致性、修订与测试等 21 项，含冲突 | head 已在 main；保留冲突现场，不重算为一份新修复 |
+| `fix/sfqa307-import-registry-migration` | 备份校验、表注册与导入测试等 9 项 | head 已在 main；未提交修改仅记录范围 |
+| `fix/sfqa-007008-acp-integrate-20261112` | 工作流及继承的源码/测试等 859 项 | head 已在 main；合并暂存不是 859 个新增功能 |
+| `fix/sfqa-007008-coverage-audit-20261112` | 工程文档、依赖、检查器等 17 项 | 尚有一个非 main 祖先提交和合并状态，需原作者核对；不处理这些开发内容 |
+
+### 未推送提交的补丁核对
+
+发现 27 个唯一未推送非 merge 提交，其中 **11 个与已核主干提交的稳定补丁完全等价**，不作为遗漏功能。其余 16 个含历史源码整合变体、恢复探针、回归夹具及回执；补丁不相同并不能证明产品能力缺失，按下表保留具体分支/提交，待作者核对。多个分支承载同一提交只列一次。其他工作区沿用既有观察，不重复声称有新增未交付开发。
+
+| 保留分支示例 | 提交 | 状态 |
+| --- | --- | --- |
+| `fix/sfqa-096-join-gates-witness-20261112` | `0b49904e0` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/sfqa307-harness-world-fixtures-20261113` | `0d24fdd6e` | 与 main 稳定补丁等价 |
+| `fix/sfqa307-gateway-paging-20261113` | `16406a3dc` | 与 main 稳定补丁等价 |
+| `fix/sfqa-034039-standalone370-acp` | `20f5c8ccc` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/sfqa-backup-lifecycle-final-contract` | `28268294e` | 与 main 稳定补丁等价 |
+| `fix/sfqa-096-097-021-integration-with-417` | `28f634aaf` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/quality-037-canon-read-prep-20261031` | `459ff25f0` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/quality-037-canon-read-prep-20261031` | `57acec982` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/sfqa-025-real-decoder-20261113` | `648c49cb4` | 与 main 稳定补丁等价 |
+| `fix/quality-002-node-producers-20261031` | `6759f5544` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/quality-002-node-producers-20261031` | `695e38e38` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/sfqa021-world-publish-transaction-20261112` | `72816a85f` | 与 main 稳定补丁等价 |
+| `fix/sfqa030-product-foreign-key-evidence-20261113` | `8c30bd0b1` | 与 main 稳定补丁等价 |
+| `fix/quality-002-node-producers-20261031` | `9de2e88d7` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/sfqa-096-021-shared-validation-patch` | `a1fe9c023` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/sfqa370-downstream-contracts-20261112` | `aa09d8812` | 与 main 稳定补丁等价 |
+| `fix/quality-linked34-runtime-media-red-tests-20261103` | `ab91d556a` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/sfqa-096-097-021-integration-with-417` | `ad7881834` | 与 main 稳定补丁等价 |
+| `fix/sfqa370-domain-lifecycle-integration-20261112` | `b4af8f462` | 与 main 稳定补丁等价 |
+| `fix/quality-linked34-runtime-media-20261103` | `c0e3eadc5` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/quality-002-node-producers-20261031` | `c884b475b` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/sfqa-010-merged-tree-20261112-independent370` | `cf6c54678` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/quality-002-node-producers-20261031` | `d0bf498dd` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/sfqa307-inventory-boundaries-20261113` | `d767d8467` | 与 main 稳定补丁等价 |
+| `fix/quality-002-node-producers-20261031` | `e2c46b906` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+| `fix/sfqa307-canon-evidence-20261113` | `ea0a44325` | 与 main 稳定补丁等价 |
+| `fix/quality-037-history-delete-feedback-20261031` | `ed364a1ad` | 本地变体/探针/回执，未推送，待核对；不计作已完成 |
+
+
 
 
 

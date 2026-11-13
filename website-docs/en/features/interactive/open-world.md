@@ -1,9 +1,14 @@
 ---
 productId: upper.text-open-world
 status: preview
-lastVerified: 2026-11-10
+lastVerified: 2026-11-13
 ---
 # Text open world
+
+## November 13: saving, recovery and usage checks
+
+Before formal production, check the selected sealed protagonist and ending count. Old single-ending plans remain readable/exportable and their existing tasks can be stopped. New editing, budget or media operations require the current 2–12 endings and explicit reconfirmation. NPC edits match original demand identities rather than list positions; ambiguous mappings are rejected. Long character replies remain available to the next dialogue and explicit memory saves. Late results after switching saves do not interrupt the new save's input. Interrupted confirmed commands recover within their original save. Sources: [#308](https://github.com/yuanbw2025/storyforge/pull/308), [#354](https://github.com/yuanbw2025/storyforge/pull/354), [#364](https://github.com/yuanbw2025/storyforge/pull/364), [#417](https://github.com/yuanbw2025/storyforge/pull/417), [#431](https://github.com/yuanbw2025/storyforge/pull/431).
+
 
 > Preview. Dedicated production, player UI, and runtime AI are connected; general production still requires real-provider calibration and human acceptance of both ending paths.
 

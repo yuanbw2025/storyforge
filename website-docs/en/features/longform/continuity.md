@@ -1,5 +1,10 @@
 # Longform: continuity, post-chapter review, and revision
 
+## November 13: saving, recovery and usage checks
+
+Re-saving chapter reconciliation no longer appends entries already synchronized to the outline. Reload to continue remaining choices; changed prose, outline or report requires another review. Consistency citations are checked against original content, position and source; repeated or untraceable quotations cannot confirm a finding. Recovered character/setting/inventory adoption uses the existing candidate and saved receipt. Changed sources pause for review instead of resending an old request. Sources: [#374](https://github.com/yuanbw2025/storyforge/pull/374), [#385](https://github.com/yuanbw2025/storyforge/pull/385), [#405](https://github.com/yuanbw2025/storyforge/pull/405).
+
+
 
 ## When a continuity report cannot locate a quote uniquely
 

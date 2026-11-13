@@ -1,9 +1,14 @@
 ---
 productId: upper.avg
 status: preview
-lastVerified: 2026-10-28
+lastVerified: 2026-11-13
 ---
 # AVG 与视觉小说
+
+## 11月13日：保存、恢复与使用核对
+
+快速存档在检查点实际写入后才提示完成，声音状态更新期间仍可保存。恢复或继续原任务不重新生成已保存结果；修改素材后按原版本重新校验。前景本地处理需核对实际安装的工具与处理结果；没有有效处理结果时不能把旧图或占位内容当作完成。依据 [#320](https://github.com/yuanbw2025/storyforge/pull/320)、[#401](https://github.com/yuanbw2025/storyforge/pull/401)、[#429](https://github.com/yuanbw2025/storyforge/pull/429)。
+
 
 > 预览：已接入作者工作台、制作修订、发布和玩家存档。通用生成的文学及视听质量仍需逐作品验收。
 

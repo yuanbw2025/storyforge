@@ -1,5 +1,10 @@
 # 模型与 API 配置
 
+## 11月13日：保存、恢复与使用核对
+
+修改服务地址后，旧地址迟到返回的模型目录不会覆盖当前目录；重新读取时核对当前地址、模型及能力。文本和视觉任务按本次实际授权的服务商与配置派发。流式生成中断或停止后，已观测用量保留；缺少服务商实测值时区分估算，不把未知用量显示成已验证的零费用。依据 [#340](https://github.com/yuanbw2025/storyforge/pull/340)、[#358](https://github.com/yuanbw2025/storyforge/pull/358)、[#402](https://github.com/yuanbw2025/storyforge/pull/402)、[#314](https://github.com/yuanbw2025/storyforge/pull/314)。
+
+
 AI 生成需要你自己的模型服务。手工创作与免 API 的内置作品可以先使用。
 
 

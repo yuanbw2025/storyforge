@@ -1,9 +1,14 @@
 ---
 productId: independent.comic
 status: released
-lastVerified: 2026-09-20
+lastVerified: 2026-11-13
 ---
 # 小说转漫画
+
+## 11月13日：保存、恢复与使用核对
+
+导入和发布所选图片时会核验真实可解码内容及原始字节，只有文件头或损坏的图片不能作为可用成图。没有选入版本的旧坏图不会阻塞其余可用内容。角色/地点显示名可修改，稳定身份保持；改变外观、绑定或视觉设定后，相关页格需重新审图，仅改显示名保留原审图。切换来源或重新解析时，保存中的作者草稿保持原归属。依据 [#306](https://github.com/yuanbw2025/storyforge/pull/306)、[#345](https://github.com/yuanbw2025/storyforge/pull/345)、[#385](https://github.com/yuanbw2025/storyforge/pull/385)。
+
 
 把小说逐步转成漫画脚本、分页、页格、画面与排字。入口：“漫画 → 作品库”，选择或创建改编作品，再进入“漫画制作台”。
 

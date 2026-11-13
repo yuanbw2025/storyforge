@@ -1,9 +1,14 @@
 ---
 productId: authoring.nodes
 status: preview
-lastVerified: 2026-10-19
+lastVerified: 2026-11-13
 ---
 # 节点创作
+
+## 11月13日：保存、恢复与使用核对
+
+节点中的领域候选仍由作者明确确认后采纳；刷新或中断恢复不代替作者确认。事实、章后整理和章节来源核对共用实际来源指纹。原文或来源版本变化时暂停旧操作，先查看新内容，不绕过校验继续旧断点。节点与分步骤继续共享作品数据。依据 [#355](https://github.com/yuanbw2025/storyforge/pull/355)、[#369](https://github.com/yuanbw2025/storyforge/pull/369)、[#307](https://github.com/yuanbw2025/storyforge/pull/307)。
+
 
 > 当前为预览。完整跨模式互操作和真实用户路径仍在验证。
 

@@ -1,9 +1,14 @@
 ---
 productId: upper.ai-town
 status: preview
-lastVerified: 2026-09-20
+lastVerified: 2026-11-13
 ---
 # 后日谈 AI 小镇
+
+## 11月13日：保存、恢复与使用核对
+
+居民移动等运行操作继续从产品自己的可用动作入口执行，目的地、权限和当前版本不匹配时明确拒绝。通用事件入口不能代替这些检查。运行分支保存以完整事件和原会话归属为准，迟到结果不会写进另一个存档。依据 [#316](https://github.com/yuanbw2025/storyforge/pull/316)、[#326](https://github.com/yuanbw2025/storyforge/pull/326)。
+
 
 > 预览：已有日程、居民关系、事件、检查点与回放链路。真实模型的长期表现、媒资质量与成本仍需专项验证。
 

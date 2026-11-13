@@ -1,5 +1,12 @@
 # Versions, upgrades, and data compatibility
 
+## November 13: released versions and current data formats
+
+Reviewed source is `c101170c`, package metadata 4.0.7, database v14 and complete backup v18. The latest public stable release remains **v4.0.5 (October 30, 2026, 13:15 UTC)** with tag `4dd8a4a1`. Both v4.0.6 and v4.0.7 were unpublished drafts at this review, with no formal publication date. Release preparation/validation [#427](https://github.com/yuanbw2025/storyforge/pull/427), [#441](https://github.com/yuanbw2025/storyforge/pull/441), [#443](https://github.com/yuanbw2025/storyforge/pull/443) has merged; public assets follow the actual release page. Old #268 is closed, not a pending release branch.
+
+Mainline backup import validates v14–v18 and exports v18. Database upgrades and backup import are separate checks. Export and retain an original complete backup before updating. Do not open an upgraded v14 database directly with older software; verify rollback with a compatible backup in an isolated copy.
+
+
 
 
 

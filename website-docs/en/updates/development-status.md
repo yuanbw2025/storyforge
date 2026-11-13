@@ -1,5 +1,57 @@
 # Pending development and branch audit
 
+## November 13, 2026 · Current merges and retained local work
+
+Review from the last successfully delivered `66dc20d7` through `c101170c` enumerated **442 local branches, 102 worktrees (including detached), and 78 worktrees with working-file status**. 236 branch heads are outside main ancestry, including historical/experimental/integration branches; this is not a count of undelivered features. No PRs were open at the snapshot. Product guides now describe actual merged behavior. Older dated sections are historical snapshots; this current section takes precedence.
+
+### Worktree deltas and retained work
+
+These are observations only. No author development was committed, pushed, merged or cleaned:
+
+| Branch/location | Observed scope | Deduplication/status |
+| --- | --- | --- |
+| Author checkout `main` | Nested `.worktrees/` and a separate quality checkout directory | Other-checkout entries, not new features |
+| `fix/sfqa-058-chat-frozen-source-plan-standalone` | 35 README/source/production/test status entries | Head already in main; retained in-progress merge staging for its author |
+| `fix/sfqa-077-consistency-evidence-dsh` | 21 consistency/revision/test entries, including conflicts | Head already in main; conflicts retained, not a second delivered repair |
+| `fix/sfqa307-import-registry-migration` | 9 backup/registry/import-test entries | Head already in main; uncommitted scope only |
+| `fix/sfqa-007008-acp-integrate-20261112` | 859 workflow/inherited source/test entries | Head already in main; merge staging is not 859 new features |
+| `fix/sfqa-007008-coverage-audit-20261112` | 17 engineering/dependency/checker entries | One commit remains outside main ancestry plus an in-progress merge; its author must review |
+
+### Unpushed patch review
+
+There are 27 unique unpushed non-merge commits; **11 have exactly equivalent stable patches in reviewed main** and are not missing features. The remaining 16 include historical implementation variants, recovery probes, fixtures and receipts. Different patches alone do not prove missing product behavior. Concrete retained branches/commits follow for author review, with shared commits listed once. Other worktrees retain earlier observations without repeated claims of new development.
+
+| Example retained branch | Commit | Status |
+| --- | --- | --- |
+| `fix/sfqa-096-join-gates-witness-20261112` | `0b49904e0` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa307-harness-world-fixtures-20261113` | `0d24fdd6e` | Stable-patch equivalent in main |
+| `fix/sfqa307-gateway-paging-20261113` | `16406a3dc` | Stable-patch equivalent in main |
+| `fix/sfqa-034039-standalone370-acp` | `20f5c8ccc` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa-backup-lifecycle-final-contract` | `28268294e` | Stable-patch equivalent in main |
+| `fix/sfqa-096-097-021-integration-with-417` | `28f634aaf` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/quality-037-canon-read-prep-20261031` | `459ff25f0` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/quality-037-canon-read-prep-20261031` | `57acec982` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa-025-real-decoder-20261113` | `648c49cb4` | Stable-patch equivalent in main |
+| `fix/quality-002-node-producers-20261031` | `6759f5544` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/quality-002-node-producers-20261031` | `695e38e38` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa021-world-publish-transaction-20261112` | `72816a85f` | Stable-patch equivalent in main |
+| `fix/sfqa030-product-foreign-key-evidence-20261113` | `8c30bd0b1` | Stable-patch equivalent in main |
+| `fix/quality-002-node-producers-20261031` | `9de2e88d7` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa-096-021-shared-validation-patch` | `a1fe9c023` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa370-downstream-contracts-20261112` | `aa09d8812` | Stable-patch equivalent in main |
+| `fix/quality-linked34-runtime-media-red-tests-20261103` | `ab91d556a` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa-096-097-021-integration-with-417` | `ad7881834` | Stable-patch equivalent in main |
+| `fix/sfqa370-domain-lifecycle-integration-20261112` | `b4af8f462` | Stable-patch equivalent in main |
+| `fix/quality-linked34-runtime-media-20261103` | `c0e3eadc5` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/quality-002-node-producers-20261031` | `c884b475b` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa-010-merged-tree-20261112-independent370` | `cf6c54678` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/quality-002-node-producers-20261031` | `d0bf498dd` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa307-inventory-boundaries-20261113` | `d767d8467` | Stable-patch equivalent in main |
+| `fix/quality-002-node-producers-20261031` | `e2c46b906` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa307-canon-evidence-20261113` | `ea0a44325` | Stable-patch equivalent in main |
+| `fix/quality-037-history-delete-feedback-20261031` | `ed364a1ad` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+
+
 
 
 

@@ -1,9 +1,14 @@
 ---
 productId: upper.ttrpg
 status: preview
-lastVerified: 2026-10-28
+lastVerified: 2026-11-13
 ---
 # TTRPGs and AI game mastering
+
+## November 13: saving, recovery and usage checks
+
+A continuation session inherits its parent campaign's workspace and world group; different groups cannot be mixed. Repeated/concurrent confirmation creates one valid child save, and failure to save initial events rolls back the operation. Wait for save confirmation before leaving; the leave action stays unavailable during saving. Resuming paused production retains completed results rather than resending old requests. Sources: [#326](https://github.com/yuanbw2025/storyforge/pull/326), [#320](https://github.com/yuanbw2025/storyforge/pull/320), [#429](https://github.com/yuanbw2025/storyforge/pull/429).
+
 
 > Preview: production, rule adjudication, AI hosting, and saves exist. The complete multiplayer experience is unfinished; public online multiplayer is not deployed.
 

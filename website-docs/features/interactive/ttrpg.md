@@ -1,9 +1,14 @@
 ---
 productId: upper.ttrpg
 status: preview
-lastVerified: 2026-10-28
+lastVerified: 2026-11-13
 ---
 # 跑团与 AI KP
+
+## 11月13日：保存、恢复与使用核对
+
+从旧团局创建续团时，新团局继承父团局的工作区和世界分组；不同分组不能混用。重复或并发确认只创建一份有效子存档，初始事件保存失败则整次回滚。离开团局前等待保存确认，按钮在保存期间保持不可用。暂停后恢复制作会保留原有已完成结果；旧请求不因恢复再发送。依据 [#326](https://github.com/yuanbw2025/storyforge/pull/326)、[#320](https://github.com/yuanbw2025/storyforge/pull/320)、[#429](https://github.com/yuanbw2025/storyforge/pull/429)。
+
 
 > 预览：已有制作、规则判定、AI 主持与存档路径，完整多人体验尚未封板，公共联网多人未部署。
 
