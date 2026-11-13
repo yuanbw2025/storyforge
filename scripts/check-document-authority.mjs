@@ -105,6 +105,8 @@ const activeDocs = [
   'docs/roadmap/MOTION-DRAMA-PLAN-AUDIT.md',
   'docs/roadmap/COMPLETED.md',
   'docs/audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md',
+  'docs/audits/PROJECT-QUALITY-AUDIT-20261029-ARCHIVE.md',
+  'docs/audits/evidence/quality-audit-20261029/original-task-plan.json',
   'docs/audits/NOVEL-PROMPT-CRAFT-20260927.md',
   'docs/audits/SYSTEM-FICTION-Q01-BASELINE.md',
   'docs/audits/SYSTEM-FICTION-Q02-TECHNIQUE-CARDS.md',

@@ -103,6 +103,7 @@
 - `docs/audits/SYSTEM-FICTION-Q01-BASELINE.md`：系统文 Q01 原创样本、模型与预算、评价锚点、实际请求和完成门；是实验协议与证据，不替代真人文学或平台验收。
 - `docs/audits/SYSTEM-FICTION-Q02-TECHNIQUE-CARDS.md`：七类系统文技法、原创正反例、阶段映射与小样本校准；不替代真人质量验收。
 - `docs/audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md`：当前代码树的项目级架构闭环审计；不替代具体产品方案和质量认证。
+- `docs/audits/PROJECT-QUALITY-AUDIT-20261029-ARCHIVE.md` 和 `docs/audits/evidence/quality-audit-20261029/original-task-plan.json`：L4 固定基线审查档案、144 项原始计划与后续合并索引，用于回查对应日期的证据。
 - `docs/roadmap/INDEPENDENT-CREATION-PLAN-AUDIT.md`：三份独立创作专项方案的边界、共享底座和分支隔离审查证据；不替代专项方案。
 - `docs/roadmap/MOTION-DRAMA-PLAN-AUDIT.md`：漫剧前期生产方案对当前行业流程的交叉审查与修订证据。
 - `docs/audits/TEXT-OPEN-WORLD-CAPABILITY-AUDIT-20260906.md`：文字开放世界开工时的能力审计快照；只作实施证据，当前实现以代码、测试与能力基线为准。

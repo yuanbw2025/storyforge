@@ -180,6 +180,15 @@ jobs:
           pattern: client-*
           path: release-assets/
           merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-android-release-input
+          path: verified-android-release-input/
+      - name: Require the exact Android APK accepted by all four upgrade phases
+        run: |
+          version=$(node -p "require('./package.json').version")
+          python3 scripts/distribution/verify-android-source.py check-tested "release-assets/StoryForge-$version-android.apk" --commit "$(git rev-parse HEAD)" --tree "$(git rev-parse HEAD^{tree})" --version "$version" --receipt verified-android-release-input/tested-release.json --phases verified-android-release-input
+          cmp "release-assets/StoryForge-$version-android.apk" verified-android-release-input/upgrade-test-new.apk
       - name: Publish only after all target packages pass
         run: |
           git fetch origin main
@@ -215,3 +224,5 @@ jobs:
       contents: write
     needs: clients
     uses: ./.github/workflows/client-release-upgrade.yml
+    with:
+      client-artifact: true

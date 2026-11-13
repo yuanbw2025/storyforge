@@ -122,15 +122,21 @@ Windows 只保存固定枚举的进程异常摘要；主进程原生硬崩溃未
 
 `npm run build:macos -- --arm64` 或 `--x64` 生成对应 DMG；应用使用同一桌面入口、固定 origin 和 `~/Library/Application Support/StoryForge`。当前采用 ad-hoc 签名，不是 Developer ID 签名或 Apple 公证。macOS 更新固定读取官方仓库最新稳定版，选择当前 CPU 的精确文件名，验证大小与 GitHub SHA-256；用户确认后再次验 hash、打开 DMG 并退出，由用户拖入“应用程序”替换，不假装完成无人值守安装。
 
-`upgrade-smoke.mjs` 在隔离目录运行既有正式版本和本次候选，旧源码 SHA 与版本由客户端工作流的 `PREVIOUS_CLIENT_REF` / `PREVIOUS_CLIENT_VERSION` 一起指定；探针必须传入旧版号并核对实际应用版本，不能沿用固定旧值。v4.0.5 候选从正式 v4.0.4 验证覆盖升级；每次发行都必须同步两个工作流的旧版号与精确源码基线。Windows 实际运行两个 NSIS 安装器，Mac 从新 DMG 替换应用。生产 `createWorkspace()`、注册表派生的完整导出/导入是测试唯一作品入口；比较完整导出，验证正文、封面、OPFS 探针、非法备份零写入与恢复后重启。此证据不代替全部产品媒资/游戏存档或真人移动布局验收。
+`upgrade-smoke.mjs` 在隔离目录运行既有正式版本和本次候选，旧源码 SHA 与版本由客户端工作流的 `PREVIOUS_CLIENT_REF` / `PREVIOUS_CLIENT_VERSION` 一起指定；探针必须传入旧版号并核对实际应用版本，不能沿用固定旧值。v4.0.6 候选从正式 v4.0.5 验证覆盖升级；每次发行都必须同步两个工作流的旧版号与精确源码基线。Windows 实际运行两个 NSIS 安装器，Mac 从新 DMG 替换应用。生产 `createWorkspace()`、注册表派生的完整导出/导入是测试唯一作品入口；比较完整导出，验证正文、封面、OPFS 探针、非法备份零写入与恢复后重启。此证据不代替全部产品媒资/游戏存档或真人移动布局验收。
 
 原生升级用的测试脚本由 `build-upgrade-fixture.mjs` 单独打包，须沿用生产代码的 `?raw` 文本导入语义，准确内嵌源码而非把其当模块执行。该支持只用于测试包构建，不改生产导入导出流程，保留完整旧数据比较和安装替换断言；测试包编译通过仍须继续实际 Windows/Mac 升级与恢复验证。
 
 旧版造数与替换前重启必须使用 `PREVIOUS_CLIENT_REF` 对应的生产代码。构建器显式接收源码目录、输出路径与期望版本，分别生成 `native-upgrade-old.js` 和 `native-upgrade.js`；每阶段核对实际应用版本与脚本来源版本。不得把新版脚本注入旧版，提前升级旧库来绕过真实迁移。新版本只通过现有只读备份转换器补齐注册表声明的新增空表和格式版本，再逐值比较完整旧数据；不忽略差异、丢行或改写旧备份。Android 测试 runner 同时携带两份脚本，正式应用不包含测试脚本。
 
-Android 正式验证用永久密钥在本机签署测试 runner；新正式 APK 与测试 runner 暂存于 Release 草稿，CI 只接收签名后的 APK，不接收密钥。升级工作流从既有正式发行下载旧 APK，从本次草稿下载实际将发布的新 APK，避免另一份同版本测试包替代正式包验收。分别安装旧 APK、执行 seed、`adb install -r` 新 APK、执行恢复和重启校验。旧版号在升级工作流的 `PREVIOUS_CLIENT_VERSION` 指定，与桌面旧版基线一致。测试 JS 只进入 androidTest 的 assets，不进入公开应用。发布前删除临时 `upgrade-test-*.apk` 附件。
+Android 正式验证用永久密钥在本机签署测试 runner；新正式 APK 与测试 runner 暂存于 Release 草稿，CI 只接收签名后的 APK，不接收密钥。手动升级检查从本次草稿取得新 APK；正式 release 调用升级检查时使用本轮 `client-android` 不可变 artifact，覆盖本机签名回退和 CI 密钥签名两种生产路径，避免重新读取可变草稿或重建另一份包替代验收。旧 APK 从既有正式发行下载。分别安装旧 APK、执行 seed、`adb install -r` 新 APK、执行恢复和重启校验。旧版号在升级工作流的 `PREVIOUS_CLIENT_VERSION` 指定，与桌面旧版基线一致。测试 JS 只进入 androidTest 的 assets，不进入公开应用。发布前删除临时 `upgrade-test-*.apk` 附件。
 
 没有 Actions 签名 Secrets 时，正式发布工作流读取草稿中维护者已上传的同版本 APK，校验正式应用 ID、版本和固定证书指纹。未提供正式 APK 则发布失败；不会退回 debug 包。Windows/macOS 仍由 GitHub 自动构建。iOS 本次暂缓。
+
+Android 构建还在包内携带 `storyforge/build-source.json`：精确源码 commit/tree、版本、是否存在未提交内容及全部应用 Web 文件的大小/SHA-256，不包含机器路径、作者数据或凭据。PR 的合成检出与候选 head 可有不同 SHA，但必须同 tree；Android 构建的可见 build ID 与声明都绑定实际候选 head。正式消费只接受 clean 来源；旧同版本包、缺声明或载荷增删改均拒绝。客户端 job 同时对照当前源码独立构建的完整 Web 文件，包名/版本/原证书检查仍保留。此声明和逐文件比较不是对未知原生字节码的独立反编译证明，原生启动与升级门仍须实际通过。
+
+正式四阶段升级前保存新 APK 的来源与摘要，四阶段全部成功后再次核对原摘要并生成不可变 run artifact。publish 在任何 tag/Release 写入前，逐项验证四阶段日志摘要、源码、版本及最终客户端 APK 与已测 APK 的完整字节相同；不同则失败，不重新从同名草稿取另一份作为测试凭据。公开旧 Release 不回填新声明或覆盖资产。
+
+已公开 v4.0.5 Android 的已核验原始输入属于 `372af8bdba34f2ea3b3e3cf2020d0815d0072ce4`，与正式 tag `4dd8a4a1c9b6ef49924520c65cff5fb652f123c5` 的来源范围不同。验证该旧 APK 时，旧 Android 造数脚本应从实际 372 源编译并另存证明；不能直接套用桌面 `PREVIOUS_CLIENT_REF` 后声称准确旧库验收。新版本仍使用固定永久证书、应用 ID 和存储 origin，不卸载或清库绕过。
 
 ## 模块加载失败的明确恢复
 
