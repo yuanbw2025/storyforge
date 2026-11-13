@@ -111,10 +111,17 @@ describe('Codex author persistence acknowledgement', () => {
     }))
     const pending = useCodexStore.getState().addEntry({ projectId: a.scope.projectId, categoryId: a.categoryId, name: '迟到的新词条', summary: '', description: '', fields: '{}', refs: '{}', order: 1 })
     await committedWrite
-    expect((await db.codexEntries.toArray()).some(row => row.name === '迟到的新词条' && row.projectId === a.scope.projectId)).toBe(true)
+    const created = await db.codexEntries.where('projectId').equals(a.scope.projectId)
+      .filter(row => row.name === '迟到的新词条').first()
+    if (!created?.id) throw new Error('A 的新增词条应在确认返回前已实际提交')
+    expect(created).toMatchObject({ projectId: a.scope.projectId, worldId: a.scope.worldId, categoryId: a.categoryId })
     const b = await fixture('B')
+    expect(useCodexStore.getState().loadedScope).toEqual(b.scope)
+    expect(useCodexStore.getState().entries.map(row => row.id)).toEqual([b.id])
+    expect(await db.codexEntries.get(created.id)).toEqual(created)
     release(); const id = await pending
-    expect((await db.codexEntries.get(id))!.projectId).toBe(a.scope.projectId)
+    expect(id).toBe(created.id)
+    expect(await db.codexEntries.get(id)).toEqual(created)
     expect(useCodexStore.getState().entries.map(row => row.id)).toEqual([b.id])
   })
   it('keeps a read failure visible with the last canonical data, then clears it on retry', async () => {
