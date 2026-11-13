@@ -34,6 +34,7 @@ import type { AnyProductReleaseManifest, ProductRuntimeEvent } from '../types'
 import { mapNarrativeDomainReferencesV1 } from '../narrative-domain/codec'
 import { narrativeDomainReferenceTargetV1 } from '../narrative-domain/references'
 import { canonicalNarrativeJsonV1, compareUnicodeCodePointsV1 } from '../narrative-domain/json'
+import { narrativeSemanticExportReferencesV1 } from '../narrative-domain/semantic-export-references'
 import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
 
 /** 当前完整便携备份契约。 */
@@ -97,7 +98,8 @@ export function deriveRegisteredSemanticRowsV1(input: {
     return value
   }
   for (const [table, rows] of ordered) {
-    const spec = REGISTRY_BY_NAME.get(table)!
+    const registered = REGISTRY_BY_NAME.get(table)!
+    const spec = { ...registered, ...narrativeSemanticExportReferencesV1(registered) }
     records[table] = rows.map((row, index) => {
       for (const ref of spec.exportRemap ?? []) {
         const id = row[ref.field]
