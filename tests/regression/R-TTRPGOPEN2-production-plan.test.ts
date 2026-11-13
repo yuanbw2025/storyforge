@@ -48,6 +48,9 @@ describe('R-TTRPGOPEN2 budgeted production envelope and distinct authoring DAG',
     expect(() => parseProductProductionBriefV3({ ...brief, ttrpg: scripted.ttrpg })).toThrow(/只能/)
     const wrongWorld = { ...brief.source, worldContentHash: 'f'.repeat(64) }
     expect(() => parseProductProductionBriefV3({ ...brief, source: wrongWorld })).toThrow(/sourcePurpose/)
+    const wrongLocator = { ...brief.source, worldReleaseId: brief.source.worldReleaseId + 1 }
+    expect(() => parseProductProductionBriefV3({ ...brief, source: wrongLocator }))
+      .toThrow('open 跑团方向/来源与共同制作合同不一致')
     const legacySource = { ...wrongWorld }
     delete legacySource.sourcePurpose
     expect(() => parseProductProductionBriefV3({ ...brief, source: legacySource })).toThrow(/来源/)
