@@ -1,9 +1,14 @@
 ---
 productId: upper.text-open-world
 status: preview
-lastVerified: 2026-11-10
+lastVerified: 2026-11-13
 ---
 # 文字开放世界
+
+## 11月13日：保存、恢复与使用核对
+
+正式制作前核对作者选定的封存主角与结局数量。旧版单结局方案仍可读取、导出和停止旧任务；发起新的编辑、预算或媒资操作前，先补足当前要求的 2～12 个结局并重新确认。NPC 编辑按原始需求身份匹配目标，不按列表位置猜角色；不明确的映射会拒绝保存。长角色回复可进入下一轮对话及明确保存记忆；切存档后的迟到结果不打断新存档输入。已确认指令中断后按原存档恢复。依据 [#308](https://github.com/yuanbw2025/storyforge/pull/308)、[#354](https://github.com/yuanbw2025/storyforge/pull/354)、[#364](https://github.com/yuanbw2025/storyforge/pull/364)、[#417](https://github.com/yuanbw2025/storyforge/pull/417)、[#431](https://github.com/yuanbw2025/storyforge/pull/431)。
+
 
 > 当前为预览。已贯通专属制作流程、玩家界面和运行时 AI；通用生产仍需真实模型校准和真人双结局验收。
 

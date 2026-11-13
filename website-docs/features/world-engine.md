@@ -1,9 +1,14 @@
 ---
 productId: world-engine
 status: released
-lastVerified: 2026-10-26
+lastVerified: 2026-11-13
 ---
 # 世界引擎
+
+## 11月13日：保存、恢复与使用核对
+
+从小说派生世界时，只有能证明属于同一作品和作用域的章节关联会在新工作区重新绑定；不确定引用保留原值及复核说明。历史封存不随派生改变。来源库中的只读世界缓存不等同于当前作者的本地封存：正式制作前核对来源用途、版本和必需资料，资料不足或不匹配时按提示处理。作者关闭的资料不会继续进入正式上下文。依据 [#307](https://github.com/yuanbw2025/storyforge/pull/307)、[#377](https://github.com/yuanbw2025/storyforge/pull/377)、[#380](https://github.com/yuanbw2025/storyforge/pull/380)、[#429](https://github.com/yuanbw2025/storyforge/pull/429)。
+
 
 用于建立可复用的设定、人物、关系与规则，封存为确定版本供其他产品引用。入口：“世界引擎 → 我的世界 → 新建世界”。
 

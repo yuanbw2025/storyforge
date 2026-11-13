@@ -1,5 +1,10 @@
 # Models and APIs
 
+## November 13: saving, recovery and usage checks
+
+After changing a service endpoint, a late model list from the old endpoint does not overwrite the current catalog. Check the current endpoint, model and capabilities when refreshing. Text and vision tasks use the provider/configuration actually authorized for that operation. Observed usage remains after interrupted/stopped streaming; estimates stay separate from provider measurements, and unknown usage is not shown as verified zero cost. Sources: [#340](https://github.com/yuanbw2025/storyforge/pull/340), [#358](https://github.com/yuanbw2025/storyforge/pull/358), [#402](https://github.com/yuanbw2025/storyforge/pull/402), [#314](https://github.com/yuanbw2025/storyforge/pull/314).
+
+
 AI generation requires your own model service. You can begin with manual writing and built-in works that need no API.
 
 

@@ -1,5 +1,10 @@
 # Built-in works and examples
 
+## Movement and resources in bundled examples
+
+Movement in Tide Marks and Aphelion uses actual elapsed time, avoiding the former per-frame cap at low frame rates. Keyboard, touch joystick and click navigation retain collision checks. Salt Ridge checks individual published resource hashes and preserves the version of existing journeys. Retain saves and actual errors when investigating stalls or missing resources rather than clearing browser data. Sources: [#342](https://github.com/yuanbw2025/storyforge/pull/342), [#375](https://github.com/yuanbw2025/storyforge/pull/375).
+
+
 Enter through Home → Example works (首页 → 示例作品) or the product library. Examples demonstrate real outputs, reading, and interaction; they do not mean every model automatically produces the same result.
 
 ## Fog Harbor: The Lost-Tide Bells (雾港：失潮钟声)

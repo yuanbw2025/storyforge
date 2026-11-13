@@ -1,5 +1,12 @@
 # Saving, backup, and recovery
 
+## November 13: saving, recovery and usage checks
+
+Current main uses database **v14** and complete project backup **v18**; fixed v4.0.5's v13/v17 details remain in [compatibility](/en/updates/compatibility). Imports strictly validate legacy v14–v17 formats and current v18; do not edit version numbers manually. Damaged trees, missing required references or source conflicts reject the whole import while preserving the original file. After recovery, check outline order, parent relationships, original tasks and images. Moved old outline nodes and forward parent-task references restore through the complete mapping.
+
+External-folder snapshots distinguish stable workspace identities, preventing same-name workspaces from overwriting one another. Snapshot failures retain drafts and show retry information; permission/device errors are distinct from deliberate cancellation. If export reports uncertain local references, review the explanation rather than deleting history to obtain a file. Private/reference material remains within its own scope rather than entering other works. Sources: [#307](https://github.com/yuanbw2025/storyforge/pull/307), [#328](https://github.com/yuanbw2025/storyforge/pull/328), [#395](https://github.com/yuanbw2025/storyforge/pull/395), [#439](https://github.com/yuanbw2025/storyforge/pull/439)。
+
+
 Works are primarily stored in the current browser's local database for the current site. Autosave helps daily editing but cannot replace an independent backup.
 
 
@@ -58,7 +65,7 @@ Keep the original backup and folder; do not delete the old environment before ve
 
 Workspace import rebinds identities of local objects. Some historical run receipts may consequently become “Needs review.” This explicitly signals changed references; it does not mean historical evidence was deleted. Do not treat an old success status as current-project verification.
 
-Current main uses complete project backup format **17** and database **v13**. Import strictly validates v14, v15, both historical v16 shapes, and current v17 before registered conversion. Conversion only adds missing new-table empty collections; it does not invent memories or author confirmation. Arbitrary old JSON is not supported. Preserve rejected originals and error details; see [compatibility](/en/updates/compatibility). Do not alter versions, add empty tables, or remove fields manually to force import.
+Current main uses complete project backup format **18** and database **v14**. Import strictly validates v14, v15, both historical v16 shapes, v17, and current v18 before registered conversion. Conversion only adds missing new-table empty collections; it does not invent memories or author confirmation. Arbitrary old JSON is not supported. Preserve rejected originals and error details; see [compatibility](/en/updates/compatibility). Do not alter versions, add empty tables, or remove fields manually to force import.
 
 ## Changing browser, device, or address
 
