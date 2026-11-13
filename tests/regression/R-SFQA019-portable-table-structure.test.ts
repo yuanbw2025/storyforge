@@ -82,6 +82,21 @@ describe('SFQA-019 · both actual import boundaries preserve isolated database c
     expect(await db.projects.get(fixture.scope.projectId)).toEqual(fixture.project)
   })
 
+  it('preserves portable coordinates when an author moves an existing outline under a newer volume', async () => {
+    const { scope } = await seedCurrentWorkspace('移动已有大纲后备份')
+    const add = (title: string, type: OutlineNode['type'], order: number) => db.outlineNodes.add(stampNewRecord(scope,
+      'outlineNodes', { title, type, order, parentId: null, summary: title, createdAt: 1, updatedAt: 1 },
+      { owner: 'work' }) as OutlineNode)
+    const childId = await add('已写章节', 'storyBlock', 0)
+    await add('独立卷', 'volume', 1)
+    const parentId = await add('后来新建的卷', 'volume', 2)
+    await db.outlineNodes.update(childId, { parentId })
+    const backup = await exportProjectJSON(scope.projectId)
+    expect(backup.outlineNodes.map(row => row.title)).toEqual(['已写章节', '独立卷', '后来新建的卷'])
+    const restored = await importProjectJSON(backup)
+    expect((await exportProjectJSON(restored)).outlineNodes).toEqual(backup.outlineNodes)
+  })
+
   it('round-trips a valid shuffled long outline in the same and empty databases and keeps the other workspace', async () => {
     const fixture = await seedCurrentWorkspace('非连续编号长链')
     const other = await seedCurrentWorkspace('不得改动的外域')
