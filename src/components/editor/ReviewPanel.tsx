@@ -128,8 +128,10 @@ export default function ReviewPanel(props: Props) {
   const [selectedIssues, setSelectedIssues] = useState<string[]>([])
   const [extraParagraphs, setExtraParagraphs] = useState<number[]>([])
   const [protectedText, setProtectedText] = useState('')
-  const [revisionView, setRevisionView] = useState<QualityRevisionViewV1 | null>(null)
-  const [revisionRecovery, setRevisionRecovery] = useState<QualityRevisionRecoveryV1 | null>(null)
+  const [revisionRead, setRevisionRead] = useState<{ target: string; view: QualityRevisionViewV1 | null; recovery: QualityRevisionRecoveryV1 | null } | null>(null)
+  // A pending read for another chapter must never expose the previous target's actions.
+  const revisionView = revisionRead?.target === qualityTarget.current ? revisionRead.view : null
+  const revisionRecovery = revisionRead?.target === qualityTarget.current ? revisionRead.recovery : null
   const [revisionBusy, setRevisionBusy] = useState(false)
   const [revisionError, setRevisionError] = useState('')
   const selectedReportHash = qualityReports[mode]?.report.artifactHash
@@ -140,8 +142,9 @@ export default function ReviewPanel(props: Props) {
   useEffect(() => {
     if (revisionBusy) return
     let active = true
+    const target = qualityTarget.current
     void resolveScopeLike(projectId).then(scope => Promise.all([readLatestQualityRevisionV1({ scope, chapterId }), readLatestUnfinishedQualityRevisionV1({ scope, chapterId })]))
-      .then(([view, recovery]) => { if (active) { setRevisionView(view); setRevisionRecovery(recovery) } })
+      .then(([view, recovery]) => { if (active) setRevisionRead({ target, view, recovery }) })
       .catch(error => { if (active) setRevisionError(error instanceof Error ? error.message : '修订记录恢复失败。') })
     return () => { active = false }
   }, [projectId, chapterId, chapterContent, revisionHash, revisionBusy])
@@ -260,7 +263,7 @@ export default function ReviewPanel(props: Props) {
         revise: createQualityRevisionCallV1(projectId, 'revision', controller.signal),
         recheck: createQualityRevisionCallV1(projectId, 'recheck', controller.signal),
       })
-      if (qualityTarget.current === target) setRevisionView(view)
+      if (qualityTarget.current === target) setRevisionRead({ target, view, recovery: null })
     } catch (error) { if (qualityTarget.current === target) setRevisionError(error instanceof Error ? error.message : '范围修订未完成。') }
     finally { if (qualityAbort.current === controller) qualityAbort.current = null; setRevisionBusy(false) }
   }
@@ -268,14 +271,20 @@ export default function ReviewPanel(props: Props) {
   const decideRevision = async (adopt: boolean) => {
     const candidate = revisionView?.candidate
     if (!candidate || revisionBusy) return
+    const target = qualityTarget.current
     setRevisionBusy(true); setRevisionError('')
     try {
       await props.onBeforeConsistencyRun?.()
+      if (qualityTarget.current !== target) return
       const scope = await resolveScopeLike(projectId)
-      if (adopt) { await adoptQualityRevisionV1({ scope, candidate }); await props.onQualityRevisionAdopted?.() }
-      else await rejectQualityRevisionV1({ scope, candidate })
-      setRevisionView(await readLatestQualityRevisionV1({ scope, chapterId }))
-    } catch (error) { setRevisionError(error instanceof Error ? error.message : '作者决定未保存。') }
+      if (qualityTarget.current !== target) return
+      if (adopt) {
+        await adoptQualityRevisionV1({ scope, candidate })
+        if (qualityTarget.current === target) await props.onQualityRevisionAdopted?.()
+      } else await rejectQualityRevisionV1({ scope, candidate })
+      const view = await readLatestQualityRevisionV1({ scope, chapterId })
+      if (qualityTarget.current === target) setRevisionRead({ target, view, recovery: null })
+    } catch (error) { if (qualityTarget.current === target) setRevisionError(error instanceof Error ? error.message : '作者决定未保存。') }
     finally { setRevisionBusy(false) }
   }
 
@@ -288,7 +297,7 @@ export default function ReviewPanel(props: Props) {
       if (qualityTarget.current !== target) return
       await abandonQualityRevisionV1({ scope, chapterId, runId })
       const [view, recovery] = await Promise.all([readLatestQualityRevisionV1({ scope, chapterId }), readLatestUnfinishedQualityRevisionV1({ scope, chapterId })])
-      if (qualityTarget.current === target) { setRevisionView(view); setRevisionRecovery(recovery) }
+      if (qualityTarget.current === target) setRevisionRead({ target, view, recovery })
     } catch (error) { if (qualityTarget.current === target) setRevisionError(error instanceof Error ? error.message : '运行未能结束。') }
     finally { setRevisionBusy(false) }
   }
