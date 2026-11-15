@@ -1,5 +1,11 @@
 # Changelog
 
+## November 15, 2026 · v4.0.7 downloads and source startup checks
+
+- v4.0.7 was published on November 13. The installation guide now lists current Windows, Mac and Android filenames and upgrade steps. See [compatibility](/en/updates/compatibility) for database v14, backup v18 and the fixed source revision.
+- On Windows, use `git clone -c core.longpaths=true` to enable repository long paths before checkout. If key configuration or entry files are missing, `npm run dev` stops and lists them. Retain the original folder and local edits, then download into a new short-path directory. Complete source ZIPs require no `.git`. See [installation](/en/getting-started/install), based on [#448](https://github.com/yuanbw2025/storyforge/pull/448).
+- This review covers `ff30400a` through `7ccc1d10`. #447/#449 adjust release regression checks; #450/#451 archive traffic. They are not additional product capabilities. See [development status](/en/updates/development-status) for retained local branches.
+
 ## November 13, 2026 · Adoption, backup and interactive recovery repairs
 
 - Local-file synchronization checks actual content and retains external bytes before writing back. Bundled examples cover low-frame-rate movement and resource checks. See [workspace](/en/features/memory-workspace), [examples](/en/guides/examples) and [import](/en/guides/import).
