@@ -1,5 +1,15 @@
 # 版本、升级与数据兼容
 
+## 2026-11-15 · 正式 v4.0.7
+
+[**v4.0.7**](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.7) 于 **2026-11-13 13:49 UTC（北京时间 21:49）**正式发布，标签固定源码 `869a9ba79457da10d787c78165173b95e71d2825`。数据库为 **v14**，完整备份为 **v18**。发行页有 Windows 安装器、两种芯片的 Mac DMG、Android APK、四平台便携 ZIP，以及更新元数据、blockmap 和 `SHA256SUMS.txt`，共 11 项附件；v4.0.6 仍为未公开草稿。
+
+本版包含长篇保存与资料读取、小说派生世界的章节引用、Fountain 对白导出、备份目录恢复、社区投稿预览与可选故障诊断等已合并改进。[独立发行检查](https://github.com/yuanbw2025/storyforge/actions/runs/43395169912)的 CLI、浏览器、客户端、签名 APK 升级、四平台便携与发布任务均成功。本轮只读取发行记录，没有重新运行产品验收。
+
+从 v4.0.5 升级前，保存编辑并导出完整 JSON 备份。Windows、Android 覆盖安装；Mac 使用对应芯片的 DMG 替换应用并保留用户目录。不要卸载清库。旧版程序不要直接打开已升级的 v14 数据库；回退先在隔离副本中核对兼容备份。详见[安装说明](/getting-started/install)与[备份恢复](/guides/backup-restore)。
+
+本轮源码核对至 `7ccc1d10`。[#448](https://github.com/yuanbw2025/storyforge/pull/448) 的不完整源码启动保护已合入，并包含于此发行固定源码；这不等于已经解决所有 Windows 长路径问题。下方日期段落保留当时版本快照。
+
 ## 11月13日：正式版本与当前数据格式
 
 当前已核对源码为 `c101170c`，包元数据为 4.0.7，数据库 v14、完整备份 v18。公开最新稳定版仍为 **v4.0.5（2026-10-30 13:15 UTC）**，固定标签 `4dd8a4a1`；v4.0.6 和 v4.0.7 在本轮核对时均是未公开草稿，没有正式发布日期。[#427](https://github.com/yuanbw2025/storyforge/pull/427)、[#441](https://github.com/yuanbw2025/storyforge/pull/441)、[#443](https://github.com/yuanbw2025/storyforge/pull/443) 的发行准备/校验已经合并，公开附件仍以正式发行页为准。旧 #268 已关闭，并非仍待合并的发行分支。

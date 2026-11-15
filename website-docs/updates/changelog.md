@@ -1,5 +1,11 @@
 # 更新日志
 
+## 2026-11-15 · v4.0.7 下载与源码启动检查
+
+- 正式 v4.0.7 已于 11 月 13 日发布。安装指南更新 Windows、Mac、Android 文件名及升级步骤；数据库 v14、完整备份 v18 和固定源码见[版本兼容](/updates/compatibility)。
+- Windows 源码下载使用 `git clone -c core.longpaths=true` 在检出前启用仓库长路径。若关键配置或入口缺失，`npm run dev` 会提前显示缺失项；保留原目录和本地修改，在新的短路径目录重新获取。完整源码 ZIP 无需 `.git`。操作见[安装与启动](/getting-started/install)，依据 [#448](https://github.com/yuanbw2025/storyforge/pull/448)。
+- 本轮从 `ff30400a` 核对到 `7ccc1d10`；#447/#449 是发行回归检查调整，#450/#451 是流量归档，没有另计新增产品能力。本地分支保留状态见[开发记录](/updates/development-status)。
+
 ## 2026-11-13 · 创作采纳、备份与互动恢复集中修复
 
 - 本地文件同步会核对实际内容，保留外部稿再写回；内置作品补齐低帧率移动与资源核验说明。见[工作区](/features/memory-workspace)、[内置作品](/guides/examples)和[导入](/guides/import)。

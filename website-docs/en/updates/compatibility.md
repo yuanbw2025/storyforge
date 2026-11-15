@@ -1,5 +1,15 @@
 # Versions, upgrades, and data compatibility
 
+## November 15, 2026 · Released v4.0.7
+
+[**v4.0.7**](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.7) was published on **November 13, 2026 at 13:49 UTC (21:49 Beijing time)**, with tagged source `869a9ba79457da10d787c78165173b95e71d2825`. It uses **database v14** and **complete backup v18**. The 11 release assets include the Windows installer, Apple Silicon and Intel Mac DMGs, Android APK, four portable ZIPs, update metadata, blockmap and `SHA256SUMS.txt`. v4.0.6 remains an unpublished draft.
+
+This release includes merged improvements to longform saving and reference reading, chapter references in novel-derived worlds, Fountain dialogue exports, restored folder positions, community submission previews and optional fault diagnostics. The [independent release run](https://github.com/yuanbw2025/storyforge/actions/runs/43395169912) succeeded for CLI, browser, clients, signed APK upgrades, four portable targets and publication. This maintenance read those records without rerunning product acceptance.
+
+Before upgrading from v4.0.5, save edits and export a complete JSON backup. Install over the existing Windows or Android app; on Mac, choose the DMG for your chip and replace the app while retaining its user directory. Do not uninstall or clear data. Older programs must not directly open the upgraded v14 database; verify compatible backups in an isolated copy before reverting. See [installation](/en/getting-started/install) and [backup and restore](/en/guides/backup-restore).
+
+This review covers source through `7ccc1d10`. Incomplete-checkout startup protection in [#448](https://github.com/yuanbw2025/storyforge/pull/448) is merged and included in this tagged source; it does not establish that all Windows long-path issues are solved. Older dated sections below retain their historical version snapshots.
+
 ## November 13: released versions and current data formats
 
 Reviewed source is `c101170c`, package metadata 4.0.7, database v14 and complete backup v18. The latest public stable release remains **v4.0.5 (October 30, 2026, 13:15 UTC)** with tag `4dd8a4a1`. Both v4.0.6 and v4.0.7 were unpublished drafts at this review, with no formal publication date. Release preparation/validation [#427](https://github.com/yuanbw2025/storyforge/pull/427), [#441](https://github.com/yuanbw2025/storyforge/pull/441), [#443](https://github.com/yuanbw2025/storyforge/pull/443) has merged; public assets follow the actual release page. Old #268 is closed, not a pending release branch.

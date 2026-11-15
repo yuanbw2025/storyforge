@@ -1,5 +1,14 @@
 # Pending development and branch audit
 
+## November 15, 2026 · Release completion and local-state review
+
+Review from successful baseline `ff30400a` through `7ccc1d10` enumerated **444 local branches, 9 currently registered worktrees (including detached), and 1 worktree with uncommitted status**; 236 heads remain outside main ancestry. Remote references were refreshed and no PRs were open at the snapshot. Current registration counts do not prove that historical directories absent from this list were safely cleaned.
+
+- `869a9ba7` on `fix/client-release-407-browser-20261113` is a main ancestor and the formal v4.0.7 tag. `8e823201` on `fix/client-release-407-regressions-20261113` is also merged. They are revisions in one release chain, not two new capabilities. v4.0.7 is public; see [compatibility](/en/updates/compatibility).
+- The `feat/community-works-library-20261029` worktree has only two observed untracked entries: `supabase/.temp/cli-latest` and `supabase/.temp/linked-project.json`. These are tool temporary/local connection metadata, not new product features. Their contents were not published, committed, uploaded or cleaned.
+- The same 27 unique unpushed non-merge commits remain, with no newly unpushed development commit. Ancestry, file differences and stable-patch evidence were reviewed again. Equivalent patches are not reported as missing features; historical variants, probes and receipts remain for their authors to review without automatic merging.
+- The author checkout retains its original branch and commit. This task uses a separate documentation branch. Older dated sections are historical snapshots, not assertions that their merge conflicts persist in currently registered worktrees.
+
 ## November 13, 2026 · Current merges and retained local work
 
 Review from the last successfully delivered `66dc20d7` through `c101170c` enumerated **442 local branches, 102 worktrees (including detached), and 78 worktrees with working-file status**. 236 branch heads are outside main ancestry, including historical/experimental/integration branches; this is not a count of undelivered features. No PRs were open at the snapshot. Product guides now describe actual merged behavior. Older dated sections are historical snapshots; this current section takes precedence.

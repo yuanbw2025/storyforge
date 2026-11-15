@@ -4,14 +4,14 @@ Choose an installer or portable ZIP from the [latest release page](https://githu
 
 ## Windows / macOS / Android clients {#windows-android-clients-in-development}
 
-[v4.0.2](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2), published on October 16, 2026, provides desktop installers, an Android APK, and four portable ZIP targets. iOS is deferred.
+[v4.0.7](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.7), published on November 13, 2026, provides desktop installers, an Android APK, and four portable ZIP targets. iOS is deferred. Before upgrading from v4.0.5, save edits and export a complete backup; see [version compatibility](/en/updates/compatibility).
 
 | Device | File | Installation |
 |---|---|---|
-| Windows x64 | `StoryForge-4.0.2-windows-x64-setup.exe` | Run the installer |
-| Apple Silicon Mac | `StoryForge-4.0.2-macos-arm64.dmg` | Drag StoryForge into Applications |
-| Intel Mac | `StoryForge-4.0.2-macos-x64.dmg` | Drag StoryForge into Applications |
-| Android | `StoryForge-4.0.2-android.apk` | Allow installation from the download source and confirm |
+| Windows x64 | `StoryForge-4.0.7-windows-x64-setup.exe` | Run the installer |
+| Apple Silicon Mac | `StoryForge-4.0.7-macos-arm64.dmg` | Drag StoryForge into Applications |
+| Intel Mac | `StoryForge-4.0.7-macos-x64.dmg` | Drag StoryForge into Applications |
+| Android | `StoryForge-4.0.7-android.apk` | Allow installation from the download source and confirm |
 
 The Windows installer has no publisher certificate; macOS uses an ad-hoc signature without Apple notarization. The operating system may ask you to explicitly allow opening. Obtain the package from the official release and verify its checksum first; do not disable system-wide protections.
 
