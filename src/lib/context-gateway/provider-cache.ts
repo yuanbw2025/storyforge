@@ -41,6 +41,8 @@ export interface ContextGatewayCacheDiagnosticsV1 {
 }
 
 let cacheEpoch = 0
+let explicitMutationFence = 0
+const tableMutationEpochs = new Map<string, number>()
 let cacheReliable = true
 let unreliableReason: string | null = null
 const states = new Set<ProviderCacheStateV1>()
@@ -64,11 +66,13 @@ export function markContextGatewayCacheUncertainV1(reason: string): void {
   cacheReliable = false
   unreliableReason = reason || 'unknown-cache-invalidation-state'
   cacheEpoch += 1
+  explicitMutationFence += 1
   for (const state of states) clearState(state)
 }
 
 export function restoreContextGatewayCacheReliabilityV1(): void {
   cacheEpoch += 1
+  explicitMutationFence += 1
   cacheReliable = true
   unreliableReason = null
   for (const state of states) clearState(state)
@@ -76,19 +80,34 @@ export function restoreContextGatewayCacheReliabilityV1(): void {
 
 export function invalidateContextGatewayCacheV1(_reason = 'explicit-invalidation'): void {
   cacheEpoch += 1
+  explicitMutationFence += 1
   for (const state of states) clearState(state)
 }
 
-/** Used only to invalidate in-flight catalog cursors; it is not a Canon revision. */
+/** Broad, disposable cache/locator generation; it is not a Canon revision. */
 export function contextGatewayCacheEpochV1(): number {
   return cacheEpoch
 }
 
+/** Observed mutations of a provider's real read dependencies, not a Canon revision.
+ * Explicit/uncertain invalidation still fences every dependency set. */
+export function contextGatewayTableMutationEpochV1(tableNames: readonly string[]): number {
+  return explicitMutationFence + [...new Set(tableNames)].reduce((sum, name) => sum + (tableMutationEpochs.get(name) ?? 0), 0)
+}
+
 function onStorageMutated(parts: ObservabilitySet): void {
   try {
-    if (Object.keys(parts).some(part => part.startsWith(STORYFORGE_STORAGE_PREFIX))) {
-      invalidateContextGatewayCacheV1('dexie-storagemutated')
+    const changed = Object.keys(parts).filter(part => part.startsWith(STORYFORGE_STORAGE_PREFIX))
+    if (!changed.length) return
+    const tables = new Set(changed.map(part => part.slice(STORYFORGE_STORAGE_PREFIX.length).split('/')[0]))
+    for (const table of tables) {
+      if (!table) explicitMutationFence += 1
+      else tableMutationEpochs.set(table, (tableMutationEpochs.get(table) ?? 0) + 1)
     }
+    // Broad cache eviction is unchanged. Only catalog consistency distinguishes
+    // Canon dependencies from unrelated Run/usage commits in the same database.
+    cacheEpoch += 1
+    for (const state of states) clearState(state)
   } catch (error) {
     markContextGatewayCacheUncertainV1(error instanceof Error ? error.message : 'storagemutated-handler-failed')
   }

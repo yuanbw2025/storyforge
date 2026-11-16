@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"]
+  },
+  "files": [],
+  "include": [
+    "scripts/**/*.js", "scripts/**/*.mjs", "scripts/**/*.cjs", "scripts/**/*.ts",
+    "tools/**/*.js", "tools/**/*.mjs", "tools/**/*.cjs", "tools/**/*.ts",
+    "*.config.ts", "*.config.js", "*.config.mjs", "*.config.cjs",
+    "tests/helpers/**/*.mjs", "tests/helpers/**/*.cjs", "tests/helpers/**/*.js",
+    "website-docs/.vitepress/*.mjs", "website-docs/.vitepress/config.ts",
+    "ui-preview/vite.config.ts"
+  ]
+}

@@ -12,12 +12,19 @@ export type WorldReleaseInputV4 = Omit<WorldReleaseSemanticContentV4, 'narrative
 
 export function narrativeReleaseCaptureTablesV4() { return [...narrativeDomainCaptureTablesV1(), db.worldDerivations] }
 
-/** Semantic-only capture. Product/media state is never read into the snapshot.
- * Reused inside the final write transaction for a source compare-and-swap. */
-export function captureWorldReleaseInputInTransactionV4(input: {
+type WorldReleaseCaptureRequestV4 = {
   scope: WorkspaceScope; selectedTables?: readonly string[]; includeWorkSources?: boolean
   compilerVersion?: NarrativeDomainCompilerV4
-}): Promise<WorldReleaseInputV4> {
+}
+
+/** Semantic-only capture. Product/media state is never read into the snapshot.
+ * Reused inside the final write transaction for a source compare-and-swap. */
+export function captureWorldReleaseInputInTransactionV4(input: WorldReleaseCaptureRequestV4): Promise<WorldReleaseInputV4> {
+  return captureWorldReleaseSourceInTransactionV4(input).then(captured => captured.input)
+}
+
+/** These indexes prove local restoration during derivation, outside the wire. */
+export function captureWorldReleaseSourceInTransactionV4(input: WorldReleaseCaptureRequestV4) {
   if (input.compilerVersion !== undefined && !NARRATIVE_DOMAIN_COMPILERS_V4.includes(input.compilerVersion)) {
     narrativeFail('compiler-version', '叙事封存编译器版本不受支持')
   }
@@ -37,16 +44,17 @@ export function captureWorldReleaseInputInTransactionV4(input: {
     const sourceWorkCode = input.includeWorkSources ? work.code : lineage?.sourceOwner.kind === 'work' ? lineage.sourceOwner.workCode : null
     return Dexie.Promise.resolve(captureNarrativeDomainInTransactionV1({ scope: input.scope,
       owner: { kind: 'world', worldCode: world.code, sourceWorkCode: input.includeWorkSources ? work.code : null } })).then(captured => {
-      const { transfer } = deriveNarrativeSemanticTransferV1({ capture: captured, project, world, work, selectedTables: input.selectedTables })
+      const { transfer, exportIds } = deriveNarrativeSemanticTransferV1({ capture: captured, project, world, work, selectedTables: input.selectedTables })
       // Fixed neutral roots support import without transporting a product workflow.
       // The source Work is a local locator, never the owner of frozen world records.
-      return {
+      const releaseInput: WorldReleaseInputV4 = {
         schema: 'storyforge.world-release', version: 4, semanticContract: 4,
         registryVersion: 'world-semantic-v4', compilerVersion: input.compilerVersion ?? CURRENT_NARRATIVE_DOMAIN_COMPILER_V4,
         worldCode: world.code, worldName: world.name, ...transfer,
         sourceManifest: { sourceKind: 'world-draft', sourceWorkspaceUid: project.workspaceUid,
           sourceWorldCode: world.code, sourceWorkCode, ...(lineage ? { lineage } : {}) },
-      } satisfies WorldReleaseInputV4
+      }
+      return { input: releaseInput, exportIds }
     })
   })
 }

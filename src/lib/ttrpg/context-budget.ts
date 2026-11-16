@@ -337,15 +337,17 @@ export function parseTtrpgContextBudgetReceiptV1(value: unknown): TtrpgContextBu
   if (tiers.reduce((sum, tier) => sum + tier.includedTokens, 0) !== totalTokens) {
     fail('contextBudgetReceipt.totalTokens 与 tiers.includedTokens 不一致')
   }
-  const demotedTiers = tiers.filter(tier => tier.demoted)
-  let lastDemotionIndex = -1
-  for (const tier of demotedTiers) {
-    const demotionIndex = DEMOTION_ORDER.indexOf(tier.tierKey)
-    if (demotionIndex === -1 || demotionIndex <= lastDemotionIndex) {
-      fail('contextBudgetReceipt.demoted 层不符合固定降级顺序')
+  // The receipt is a canonical tier summary, not a chronological log. The
+  // assembler applies DEMOTION_ORDER; its demoted flags are a set in this view.
+  let lastTierIndex = -1
+  for (const tier of tiers) {
+    const index = TTRPG_CONTEXT_TIER_KEYS_V1.indexOf(tier.tierKey)
+    if (index <= lastTierIndex) {
+      fail('contextBudgetReceipt.tiers 必须采用规范层序，不能作为固定降级顺序记录')
     }
-    lastDemotionIndex = demotionIndex
+    lastTierIndex = index
   }
+  const demotedTiers = tiers.filter(tier => tier.demoted)
   if (demotedTiers.length > 0 && !overflowHandled) {
     fail('发生降级时必须标记 overflowHandled')
   }

@@ -131,6 +131,7 @@ export const REQUIRED_TABLES = [
   'worldNodes',
   'worldReleases',
   'worldRevisions',
+  'worldSourceReceipts',
   'worldRulesProfiles',
   'worlds',
   'worldviews',

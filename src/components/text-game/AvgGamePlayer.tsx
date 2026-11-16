@@ -92,6 +92,22 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
   const typingLine=useRef<{beat:string;text:string}|null>(null)
   const [sceneTitleVisible, setSceneTitleVisible] = useState(false)
   const [notice, setNotice] = useState('')
+  const [savingCheckpoint, setSavingCheckpoint] = useState(false)
+  const checkpointRequest = useRef<object | null>(null)
+  const noticeTimer = useRef<number | null>(null)
+  const checkpointReady = store.selectedSessionId != null && avgPlayerSourceMatchesV1({
+    scope: props.scope, worldGroupId: props.worldGroupId, sessionId: store.selectedSessionId,
+  }, store)
+  useEffect(() => {
+    checkpointRequest.current = null
+    setSavingCheckpoint(false); setNotice('')
+    if (noticeTimer.current != null) window.clearTimeout(noticeTimer.current)
+    noticeTimer.current = null
+    return () => {
+      checkpointRequest.current = null
+      if (noticeTimer.current != null) window.clearTimeout(noticeTimer.current)
+    }
+  }, [props.scope.projectId, props.scope.worldId, props.scope.workId, props.worldGroupId, store.selectedSessionId, store.selectedSourceSessionId])
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null)
   const mediaVerificationKeys = useRef(new Set<string>())
   const stageRef=useRef<HTMLDivElement>(null)
@@ -119,6 +135,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
   const catalog = useMemo(() => currentPlayerReleases(store.releases), [store.releases])
   const catalogRelease = catalog.find(item => item.release.id === catalogReleaseId) ?? null
   const nativeReading = store.runtimeState.avgReading
+  const autoDelayMs = prefs.autoDelayMs ?? nativeReading?.plan.autoDelayMs ?? 650
   const nativeModule=store.selectedManifest?avgExecutableModule(store.selectedManifest):null
   const pausedTransport = !!nativeModule && (!!panel || settingsOpen || !foreground || store.loading || store.selectedSourceSessionId !== store.selectedSessionId)
   const voiceReady = avgVoiceReadyV1(store.runtimeState)
@@ -258,9 +275,9 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
   }
   useEffect(() => {
     if (pausedTransport || !voiceReady || panel || !prefs.auto || !currentBeat || store.busy || !textComplete || finishingBeat || !cueWaitComplete) return
-    const timer = window.setTimeout(() => advance(true), 650)
+    const timer = window.setTimeout(() => advance(true), autoDelayMs)
     return () => window.clearTimeout(timer)
-  }, [pausedTransport, voiceReady, panel, prefs.auto, prefs.autoDelayMs, beatIdentity, store.busy, textComplete, finishingBeat, cueWaitComplete]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pausedTransport, voiceReady, panel, prefs.auto, autoDelayMs, beatIdentity, store.busy, textComplete, finishingBeat, cueWaitComplete]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (pausedTransport || panel || !prefs.fast || !currentBeat || store.busy || finishingBeat || !cueWaitComplete) return
     if (!presentation?.readBeatKeys.includes(currentBeat.beatKey)) { setPrefs(value => ({ ...value, fast: false })); return }
@@ -290,11 +307,26 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
     if (target instanceof HTMLElement && target.requestFullscreen) void target.requestFullscreen()
   }
   const quickSave = async () => {
+    const current = useAvgGamePlayerStore.getState()
+    if (checkpointRequest.current || store.selectedSessionId == null) return
+    const expected = { scope: { ...props.scope }, worldGroupId: props.worldGroupId, sessionId: store.selectedSessionId }
+    if (!avgPlayerSourceMatchesV1(expected, current)) return
+    const request = {}
+    checkpointRequest.current = request
+    setSavingCheckpoint(true); setNotice('')
+    if (noticeTimer.current != null) window.clearTimeout(noticeTimer.current)
     try {
-      await store.saveCheckpoint(`快速存档 · ${node?.title ?? ''}`)
+      await current.saveCheckpoint(`快速存档 · ${node?.title ?? ''}`)
+      if (checkpointRequest.current !== request || !avgPlayerSourceMatchesV1(expected, useAvgGamePlayerStore.getState())) return
       setNotice('已快速存档')
-      window.setTimeout(() => setNotice(''), 1500)
+      noticeTimer.current = window.setTimeout(() => { setNotice(''); noticeTimer.current = null }, 1500)
     } catch { /* store exposes error */ }
+    finally {
+      if (checkpointRequest.current === request) {
+        checkpointRequest.current = null
+        setSavingCheckpoint(false)
+      }
+    }
   }
   const leaveToTitle = () => {
     setPanel(null)
@@ -349,7 +381,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
           {inventory.enabled && <button title="物品与证据" aria-label="物品与证据" onClick={() => setPanel(panel === 'inventory' ? null : 'inventory')}><BriefcaseBusiness /><span>物件</span></button>}
           <button title="历史" aria-label="历史" onClick={() => setPanel(panel === 'history' ? null : 'history')}><History /><span>历史</span></button>
           <button title="存读档" aria-label="存读档" onClick={() => setPanel(panel === 'saves' ? null : 'saves')}><Save /><span>存读档</span></button>
-          <button title="快速存档" aria-label="快速存档" disabled={store.busy} onClick={() => void quickSave()}><Save /><span>快速存档</span></button>
+          <button title="快速存档" aria-label="快速存档" disabled={!checkpointReady || savingCheckpoint} onClick={() => void quickSave()}><Save /><span>快速存档</span></button>
           <button title="自动播放" aria-label="自动播放" aria-pressed={prefs.auto} onClick={() => setPrefs(value => ({ ...value, auto: !value.auto, fast: false }))}><Play /><span>自动</span></button>
           <button title="快进已读" aria-label="快进已读" aria-pressed={prefs.fast} disabled={!currentBeat || !presentation?.readBeatKeys.includes(currentBeat.beatKey)} onClick={() => setPrefs(value => ({ ...value, fast: !value.fast, auto: false }))}><FastForward /><span>快进</span></button>
           <button title="全屏" aria-label="全屏" onClick={fullscreen}><Maximize2 /><span>全屏</span></button>
@@ -360,7 +392,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
               <button onClick={() => setPrefs(value => ({ ...value, muted: !value.muted }))}>{prefs.muted ? <VolumeX /> : <Volume2 />}声音</button>
               <label className="avg-volume">音量<input aria-label="音量" type="range" min="0" max="1" step="0.05" value={prefs.volume} onChange={event => setPrefs(value => ({ ...value, volume: Number(event.target.value) }))} /></label>
               {(['bgmVolume','ambienceVolume','sfxVolume','voiceVolume'] as const).map((key,index) => <label className="avg-volume" key={key}>{['音乐','环境','音效','配音'][index]}<input type="range" min="0" max="1" step="0.05" aria-label={`${['音乐','环境','音效','配音'][index]}音量`} value={prefs[key]} onChange={event => setPrefs(value => ({ ...value, [key]: Number(event.target.value) }))} /></label>)}
-              <label className="avg-volume">阅读余量<input type="range" min="0" max="5000" step="100" aria-label="自动阅读余量" value={prefs.autoDelayMs ?? nativeReading?.plan.autoDelayMs ?? 650} onChange={event => setPrefs(value => ({ ...value, autoDelayMs: Number(event.target.value) }))} /></label>
+              <label className="avg-volume">阅读余量<input type="range" min="0" max="5000" step="100" aria-label="自动阅读余量" value={autoDelayMs} onChange={event => setPrefs(value => ({ ...value, autoDelayMs: Number(event.target.value) }))} /></label>
               <button onClick={() => setPrefs(value => ({ ...value, reducedMotion: !value.reducedMotion }))}><Gauge />减少动态</button>
               <button onClick={() => setPrefs(value => ({ ...value, textSpeed: value.textSpeed === 35 ? 80 : 35 }))}>文字速度 {prefs.textSpeed === 35 ? '标准' : '快速'}</button>
               <button onClick={() => setUiHidden(true)}><EyeOff />隐藏界面</button>
@@ -423,7 +455,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
           <header><div><small>{panel === 'inventory' ? 'INVENTORY & EVIDENCE' : panel === 'history' ? 'DIALOGUE LOG' : 'SAVE & LOAD'}</small><h2>{panel === 'inventory' ? '物品与证据' : panel === 'history' ? '历史回看' : '存档与时间线'}</h2></div><button aria-label="关闭" onClick={() => setPanel(null)}><X /></button></header>
           {panel === 'inventory' ? <InventoryPanel entries={inventory.entries} mediaUrls={prefs.images ? mediaUrls : {}} busy={store.busy} onAction={async action => { await store.actOnItem(action.key, action.target); const plan = store.runtimeState.avgRules?.systemPlan; return (plan?.version === 2 ? plan.inventory.actions.find(a => a.key === action.key)?.feedback : '') || '操作完成' }} /> : panel === 'history' && nativeReading ? <ReadingHistory key={store.selectedSessionId} entries={nativeReading.history} urls={mediaUrls} volume={prefs.muted ? 0 : prefs.volume * prefs.voiceVolume} paused={!foreground}
             failedAssetKeys={mediaFailures.map(failure=>failure.assetKey)} onReplayRequested={assetKey=>setHistoryRequest(previous=>assetKey&&store.selectedSessionId?{sessionId:store.selectedSessionId,assetKey,attempt:(previous?.attempt??0)+1}:null)}/> : panel === 'history' ? <div className="avg-history">{historyBeats.map(beat => { const attributed = splitAttributedText(beat.text); return <article key={beat.beatKey}><strong>{beat.kind === 'dialogue' ? store.speakerNames[beat.speakerKey ?? ''] ?? attributed?.speaker ?? '未知角色' : attributed?.speaker ?? '旁白'}</strong><p>{attributed?.text ?? beat.text}</p></article> })}{historyBeats.length === 0 && <p>还没有可以回看的对白。</p>}</div> : <div className="avg-saves">
-            <div className="avg-save-actions"><button disabled={store.busy} onClick={() => void quickSave()}><Save />保存当前进度</button></div>
+            <div className="avg-save-actions"><button disabled={!checkpointReady || savingCheckpoint} onClick={() => void quickSave()}><Save />保存当前进度</button></div>
             <h3>时间线检查点</h3>
             {store.checkpoints.map(checkpoint => <article key={checkpoint.id}><div><strong>{checkpoint.name}</strong><small>事件 #{checkpoint.throughSequence}</small></div><button disabled={store.busy} onClick={() => void run(async () => { await store.forkCheckpoint(checkpoint.id!); setPanel(null) })}><GitBranch />从这里开始新分支</button></article>)}
             {store.checkpoints.length === 0 && <p>尚无检查点；剧情选择仍会自动保存。</p>}

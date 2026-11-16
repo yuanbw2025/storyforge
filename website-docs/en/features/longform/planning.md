@@ -1,5 +1,10 @@
 # Longform: settings, characters, and story design
 
+## November 13: saving, recovery and usage checks
+
+Review the actual volume/chapter candidates before adopting selected multi-volume outlines. Rejection or interruption returns to the existing candidate rather than starting another generation. Detailed-outline adoption keeps current author edits both immediately and after reload. Save character/worldview candidate edits before adoption; failed saves retain input, and concurrent confirmations of the same character name allow only one valid write. Sources: [#346](https://github.com/yuanbw2025/storyforge/pull/346), [#399](https://github.com/yuanbw2025/storyforge/pull/399), [#411](https://github.com/yuanbw2025/storyforge/pull/411).
+
+
 ## Confirming that edits were saved
 
 Fields using save acknowledgement in work details, characters, world settings and outlines retain your current input and show a saving indicator. Finish IME composition before switching away. If saving fails, keep the page and input, retry saving that field, and confirm the error clears. Inspect the newer record before resolving a concurrent-edit conflict. Malformed source fields retain their data and pause editing until recovery.

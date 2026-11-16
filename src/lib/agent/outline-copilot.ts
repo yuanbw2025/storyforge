@@ -122,7 +122,7 @@ export interface PreparedOutlineCopilot {
   input: OutlineCopilotInput
   modelIdentity: { provider: string; model: string }
   contextGatewayExecution: ContextGatewayExecutionV1
-  runRaw: (messages: ChatMessage[]) => Promise<CreativeRawModelResultV1>
+  runRaw: (messages: ChatMessage[], result?: ChatResult) => Promise<CreativeRawModelResultV1>
 }
 
 interface OutlineCopilotDependencies {
@@ -514,9 +514,8 @@ export async function prepareOutlineCopilot(input: {
     routingCategory,
     signal: input.signal,
   }
-  const runRaw = async (messages: ChatMessage[]): Promise<CreativeRawModelResultV1> => {
+  const runRaw = async (messages: ChatMessage[], result: ChatResult = {}): Promise<CreativeRawModelResultV1> => {
     const startedAt = Date.now()
-    const result: ChatResult = {}
     const output = dependencies.runAI
       ? await dependencies.runAI(messages)
       : await chat(messages, config, {
@@ -668,11 +667,13 @@ export async function runOutlineCreativeReliabilityV1(input: {
   prepared: PreparedOutlineCopilot
   budget: AgentTeamBudgetTracker
   qualityMode: CreativeQualityModeV1
+  assertBeforeModelCall?: () => Promise<void>
   validate?: (output: GeneratedOutlineItem[]) => Promise<GenerationGateIssue[]> | GenerationGateIssue[]
 }): Promise<CreativeExecutionResultV1<GeneratedOutlineItem[]>> {
   return runCreativeExecutionV1({
     initialMessages: input.prepared.prepared.messages,
     runRaw: input.prepared.runRaw,
+    assertBeforeModelCall: input.assertBeforeModelCall,
     parse: raw => parseOutlineCreativeOutcomeV1(raw, input.prepared),
     buildRepairMessages: (raw, issues) => buildOutlineRepairMessagesV1(
       raw,

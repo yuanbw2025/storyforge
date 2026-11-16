@@ -1,6 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { db } from '../../src/lib/db/schema'
+import * as events from '../../src/lib/agent/run/event-store'
+import * as receipts from '../../src/lib/agent/run/verification-receipt'
+import { beginAgentRunRecoveryV1, completeAgentRunRecoveryV1 } from '../../src/lib/agent/run/checkpoint'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { buildEditImpactGraphV1 } from '../../src/lib/consistency/impact-analysis'
 import { buildImpactHandoffV2 } from '../../src/lib/consistency/impact-handoff'
@@ -76,7 +79,7 @@ async function handoffForOutline(fixture: Awaited<ReturnType<typeof seed>>) {
 
 describe.sequential('R-HARNESS56 · 人工修正完成证明', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
-  afterEach(() => db.close())
+  afterEach(() => { vi.restoreAllMocks(); db.close() })
 
   it('导航只建立 paused pre-state，合法保存后才签发 terminal receipt', async () => {
     const fixture = await seed()
@@ -222,6 +225,104 @@ describe.sequential('R-HARNESS56 · 人工修正完成证明', () => {
     const importedCorrection = completeRuns.find(run => run.parentRunId != null)!
     expect(importedCorrection.status).toBe('running')
     expect(importedCorrection.terminalReceiptHash).toBeNull()
+  })
+
+  for (const boundary of ['step.succeeded', 'verification.started', 'verification.accepted'] as const) {
+    for (const afterCommit of [false, true]) {
+      it(`终验 ${boundary} ${afterCommit ? 'append 后中断' : 'append 前中断'} 后沿原确认恢复且零模型`, async () => {
+        const fixture = await seed()
+        const created = await handoffForOutline(fixture)
+        const started = await beginImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff })
+        await db.outlineNodes.update(fixture.outlineNodeId, { summary: '作者首次确认的保存结果' })
+        const append = events.appendAgentRunEventV1
+        const appendTerminal = events.appendAgentRunEventWithSettlementInTransactionV1
+        const spy = boundary === 'verification.accepted'
+          ? vi.spyOn(events, 'appendAgentRunEventWithSettlementInTransactionV1').mockImplementation(async input => {
+              if (input.snapshot.run.id !== started.snapshot.run.id || input.event.type !== boundary) return appendTerminal(input)
+              if (afterCommit) await appendTerminal(input)
+              throw new Error(`interrupt:${boundary}`)
+            })
+          : vi.spyOn(events, 'appendAgentRunEventV1').mockImplementation(async input => {
+              if (input.runId !== started.snapshot.run.id || input.type !== boundary) return append(input)
+              if (afterCommit) await append(input)
+              throw new Error(`interrupt:${boundary}`)
+            })
+        await expect(completeImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff }))
+          .rejects.toThrow(`interrupt:${boundary}`)
+        spy.mockRestore()
+        const refreshed = await beginImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff })
+        expect(refreshed.snapshot.run.id).toBe(started.snapshot.run.id)
+        expect(refreshed.baseline.completionPostStateHash).toMatch(/^[a-f0-9]{64}$/)
+        const completed = await completeImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff })
+        expect(completed.snapshot.projection.state).toBe('completed')
+        expect(completed.targetPostStateHash).toBe(refreshed.baseline.completionPostStateHash)
+        expect(completed.snapshot.events.filter(event => event.type === 'step.succeeded')).toHaveLength(1)
+        expect(completed.snapshot.events.filter(event => event.type === 'verification.accepted')).toHaveLength(1)
+        expect(completed.snapshot.events.some(event => event.type === 'model.requested')).toBe(false)
+      })
+    }
+  }
+
+  it('首次完成确认冻结后目标再改，恢复不得用新的当前值补签', async () => {
+    const fixture = await seed()
+    const created = await handoffForOutline(fixture)
+    await beginImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff })
+    await db.outlineNodes.update(fixture.outlineNodeId, { summary: '第一次已保存修正' })
+    const original = events.appendAgentRunEventV1
+    const spy = vi.spyOn(events, 'appendAgentRunEventV1').mockImplementation(async input => {
+      if (input.type === 'step.succeeded') throw new Error('interrupt:before-step')
+      return original(input)
+    })
+    await expect(completeImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff }))
+      .rejects.toThrow('interrupt:before-step')
+    spy.mockRestore()
+    const frozen = await beginImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff })
+    await db.outlineNodes.update(fixture.outlineNodeId, { summary: '中断后另一次作者修改' })
+    await expect(completeImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff }))
+      .rejects.toThrow('完成确认后再次变化')
+    const latest = await beginImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff })
+    expect(latest.baseline.completionPostStateHash).toBe(frozen.baseline.completionPostStateHash)
+    expect(latest.snapshot.projection.terminalReceiptHash).toBeUndefined()
+  })
+
+  it('receipt 纯哈希等待期间目标变化，最终原生围栏拒绝旧 post-state 而不签发回执', async () => {
+    const fixture = await seed()
+    const created = await handoffForOutline(fixture)
+    const started = await beginImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff })
+    await db.outlineNodes.update(fixture.outlineNodeId, { summary: '作者首次确认的结果' })
+    const original = receipts.createVerificationReceiptV1
+    const spy = vi.spyOn(receipts, 'createVerificationReceiptV1').mockImplementation(async input => {
+      const receipt = await original(input)
+      if (input.runId === started.snapshot.run.id) {
+        await db.outlineNodes.update(fixture.outlineNodeId, { summary: '最后哈希窗口内保存的另一版本' })
+      }
+      return receipt
+    })
+    await expect(completeImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff }))
+      .rejects.toThrow('终验前再次变化')
+    spy.mockRestore()
+    const run = await events.readAgentRunV1(fixture.scope, started.snapshot.run.id)
+    expect(run.projection.terminalReceiptHash).toBeUndefined()
+    expect(run.events.some(event => event.type === 'verification.accepted')).toBe(false)
+    expect((await db.outlineNodes.get(fixture.outlineNodeId))?.summary).toBe('最后哈希窗口内保存的另一版本')
+    await expect(completeImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff }))
+      .rejects.toThrow('完成确认后再次变化')
+  })
+
+  it('旧 running 状态没有冻结完成确认或成功步骤后态，不从当前目标补造', async () => {
+    const fixture = await seed()
+    const created = await handoffForOutline(fixture)
+    const started = await beginImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff })
+    const recovery = await beginAgentRunRecoveryV1({ scope: fixture.scope, runId: started.snapshot.run.id })
+    await completeAgentRunRecoveryV1({
+      scope: fixture.scope, runId: started.snapshot.run.id, checkpointHash: recovery.checkpointHash,
+    })
+    await db.outlineNodes.update(fixture.outlineNodeId, { summary: '不能证明是旧请求选择的值' })
+    await expect(completeImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff }))
+      .rejects.toThrow('缺少冻结 post-state')
+    const refreshed = await beginImpactManualCorrectionV1({ scope: fixture.scope, handoff: created.handoff })
+    expect(refreshed.baseline.completionPostStateHash).toBeUndefined()
+    expect(refreshed.snapshot.projection.terminalReceiptHash).toBeUndefined()
   })
 
   it('工作区只在作者显式验证时完成，不把导航当作修正', () => {

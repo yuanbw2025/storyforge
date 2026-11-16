@@ -37,6 +37,7 @@ describe('CF-20260702-11 · OpenAI-compatible 模型列表刷新', () => {
     })
 
     expect(fetchImpl).toHaveBeenCalledWith('https://example.com/v1/models', expect.objectContaining({
+      cache: 'no-store',
       headers: { Authorization: 'Bearer sk-test' },
     }))
   })

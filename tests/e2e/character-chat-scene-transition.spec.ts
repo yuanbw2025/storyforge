@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {test, expect} from '@playwright/test'
 
@@ -7,9 +8,8 @@ for (const accepted of [true, false]) test(`known-place arrival and scene header
   let sessionId = 0, sourceSequence = 0; const calls: string[] = []
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://scene-transition.invalid/v1', model: 'test'}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://scene-transition.invalid/v1', model: 'test', apiKey: 'isolated-test-key' })
   const read = () => page.evaluate(async id => {const load = new Function('p', 'return import(p)'); return (await (await load('/storyforge/src/lib/character-interaction/runtime-api.ts')).readProductRuntimeState(id)).interaction}, sessionId)
   await page.route('https://scene-transition.invalid/**', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
@@ -28,13 +28,13 @@ for (const accepted of [true, false]) test(`known-place arrival and scene header
     }
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, value)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   let f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({onlyGuard: true, knownDestination: true})
   })
   sessionId = f.sessionId
-  const open = async () => {await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${sessionId}`); await expect(page.getByPlaceholder('对当前场景中的角色说话…')).toBeVisible()}
+  const open = async () => {await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${sessionId}`); await expect(page.getByPlaceholder('对当前场景中的角色说话…')).toBeVisible()}
   await open(); await page.getByPlaceholder('对当前场景中的角色说话…').fill(request)
   await page.getByRole('button', {name: '发送并生成', exact: true}).click()
   if (accepted) await expect(page.getByRole('article').getByText(arrived, {exact: true})).toBeVisible()
@@ -43,7 +43,7 @@ for (const accepted of [true, false]) test(`known-place arrival and scene header
   expect(expected.activeScene.location).toBe(location); expect(expected.chatNarrative.situation.location).toBe(location)
   expect(expected.chatNarrative.sceneTransitions?.length ?? 0).toBe(accepted ? 1 : 0)
   expect(calls).toEqual(['action', 'review'])
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText(accepted ? '后院 · 后院 · 傍晚' : '暴雨驿站 · 驿站 · 傍晚', {exact: true})).toBeVisible()
   expect(await read()).toEqual(expected)
   f = await page.evaluate(async f => {

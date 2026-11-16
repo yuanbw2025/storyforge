@@ -86,6 +86,7 @@ interface CharacterSupplementCopilotInputV1 {
   routingCategory: string
   generationOverrides?: { temperature?: number; maxTokens?: number }
   signal?: AbortSignal
+  beforeModelDispatch?: () => Promise<void>
 }
 
 export interface PreparedCharacterSupplementCopilotV1 {
@@ -465,6 +466,7 @@ export async function prepareCharacterSupplementCopilotV1(
     generationOverrides?: { temperature?: number; maxTokens?: number }
     contextCompressionRuntime?: AgentContextCompressionRuntimeV1
     signal?: AbortSignal
+    beforeModelDispatch?: () => Promise<void>
   },
   dependencies: CharacterSupplementCopilotDependenciesV1 = {},
 ): Promise<PreparedCharacterSupplementCopilotV1> {
@@ -556,6 +558,7 @@ export async function prepareCharacterSupplementCopilotV1(
     routingCategory,
     generationOverrides: input.generationOverrides,
     signal: input.signal,
+    beforeModelDispatch: input.beforeModelDispatch,
   }
   const node = createCharacterSupplementCopilotNodeV1(nodeInput, dependencies)
   return {
@@ -583,7 +586,8 @@ export function createCharacterSupplementCopilotNodeV1(
       temperature: input.generationOverrides?.temperature ?? 0.35,
     },
     contextOverflowPolicy: 'reject',
-  }, input.signal))
+  }, input.signal, ...(input.beforeModelDispatch
+    ? [{ beforeModelDispatch: input.beforeModelDispatch }] as const : [] as const)))
   return {
     id: `agent.character.supplement:${input.projectId}:${input.snapshot.request.characterId}`,
     kind: 'character.supplement',

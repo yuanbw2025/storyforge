@@ -424,6 +424,11 @@ export class AuthoritativeOnlineRoomV1 {
   private readonly rateWindows = new Map<string, number[]>();
   private pendingGmTransfer: StoredGmTransferV1 | null = null;
   private mutationTail: Promise<void> = Promise.resolve();
+  private pendingRollback: {
+    local: LocalRoomStateV1;
+    domain: unknown;
+    originalError: unknown;
+  } | null = null;
 
   private constructor(
     readonly roomId: string,
@@ -1088,21 +1093,46 @@ export class AuthoritativeOnlineRoomV1 {
       releaseLock = resolve;
     });
     await previous;
-    const localBackup = this.persistence ? this.captureLocalState() : null;
-    const domainBackup = this.persistence
-      ? structuredClone(await this.adapter.exportCheckpoint!())
-      : null;
     try {
-      const result = await operation();
-      if (this.persistence) await this.persistExistingRoom();
-      return result;
-    } catch (error) {
-      if (localBackup) this.restoreLocalState(localBackup);
-      if (this.persistence) await this.adapter.restoreCheckpoint!(domainBackup);
-      throw error;
+      // Failed rollback must finish before another operation can observe or
+      // persist the partial domain state. One recovery attempt per public call.
+      await this.restorePendingRollback();
+      const localBackup = this.persistence ? this.captureLocalState() : null;
+      const domainBackup = this.persistence
+        ? structuredClone(await this.adapter.exportCheckpoint!())
+        : null;
+      try {
+        const result = await operation();
+        if (this.persistence) await this.persistExistingRoom();
+        return result;
+      } catch (error) {
+        if (localBackup) {
+          this.pendingRollback = { local: localBackup, domain: domainBackup, originalError: error };
+          await this.restorePendingRollback();
+        }
+        throw error;
+      }
     } finally {
       releaseLock();
     }
+  }
+
+  private async restorePendingRollback(): Promise<void> {
+    const rollback = this.pendingRollback;
+    if (!rollback) return;
+    const errors: unknown[] = [];
+    try { this.restoreLocalState(rollback.local); } catch (error) { errors.push(error); }
+    try {
+      await this.adapter.restoreCheckpoint!(structuredClone(rollback.domain));
+    } catch (error) { errors.push(error); }
+    if (errors.length) {
+      const message = (error: unknown) => error instanceof Error ? error.message : String(error);
+      throw Object.assign(new OnlineRoomAuthorityError(
+        "rollback_failed",
+        `${message(rollback.originalError)}；恢复失败：${errors.map(message).join("；")}`,
+      ), { cause: rollback.originalError, rollbackErrors: errors });
+    }
+    this.pendingRollback = null;
   }
 
   private captureLocalState(): LocalRoomStateV1 {

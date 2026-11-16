@@ -6,6 +6,7 @@ import { hashProductProductionValueV2 } from '../../src/lib/product-production/h
 import { verifyProductReleaseManifestV1 } from '../../src/lib/product-production/runtime-package'
 import type { ProductRelease } from '../../src/lib/types'
 import { createTextOpenWorldCreatorReleaseFixtureV1 } from '../helpers/text-open-world-creator-release'
+import { seedQuality005LegacyNovelV1, snapshotQuality005RowsV1 } from '../helpers/quality005-legacy-novel'
 
 beforeEach(async () => {
   await db.delete()
@@ -59,7 +60,7 @@ describe('TOW-G5-10 · Creator不可变Release合同', () => {
     await expect(verifyProductReleaseManifestV1(JSON.parse(original))).resolves.toBeDefined()
   }, 60_000)
 
-  it.each(['world-release', 'novel'] as const)(
+  it.each(['world-release'] as const)(
     '冻结 %s 来源、Artifact、装配、质量和作者授权，并能从Release创建正式Session',
     async sourceKind => {
       const fixture = await createTextOpenWorldCreatorReleaseFixtureV1(sourceKind)
@@ -73,11 +74,8 @@ describe('TOW-G5-10 · Creator不可变Release合同', () => {
         .toContain(fixture.releaseQuality.receiptHash)
 
       const serialized = JSON.stringify(fixture.manifest)
-      if (sourceKind === 'novel') {
-        expect(serialized).not.toContain('localReleaseRecordId')
-        expect(serialized).not.toContain('守渠人在黎明发现盐渠断流')
-        expect(fixture.manifest.sourceContracts.sourcePin.units.every(unit => unit.readDepth === 'full')).toBe(true)
-      } else if (fixture.manifest.sourceContracts.sourcePin.source.kind === 'world-release') {
+      expect(serialized).not.toContain('守渠人在黎明发现盐渠断流')
+      if (fixture.manifest.sourceContracts.sourcePin.source.kind === 'world-release') {
         expect(fixture.manifest.sourceContracts.sourcePin.source.worldReference.localReleaseRecordId).toBe(0)
       }
 
@@ -102,6 +100,19 @@ describe('TOW-G5-10 · Creator不可变Release合同', () => {
     },
     60_000,
   )
+
+  it('005 历史 novel Release 的严格合同与字节仍可读取，但不能创建新 Session', async () => {
+    const old = await seedQuality005LegacyNovelV1()
+    const release = (await db.productReleases.get(old.releaseId))!
+    const before = await snapshotQuality005RowsV1()
+    const verified = await verifyProductReleaseManifestV1(release.manifestJson)
+    expect(verified).toMatchObject({ sourceContracts: { sourcePlan: { sourceKind: 'novel' }, sourcePin: { sourceKind: 'novel' } } })
+    expect(release.manifestJson).not.toContain('localReleaseRecordId')
+    expect(release.manifestJson).not.toContain('守渠人在黎明发现盐渠断流')
+    await expect(createTextOpenWorldInstance({ scope: old.scope, productReleaseId: release.id!,
+      title: 'not a new legacy play session', seed: '005-legacy-release-reader' })).rejects.toThrow(/WorldRelease|派生/)
+    expect(await snapshotQuality005RowsV1()).toEqual(before)
+  }, 30_000)
 
   it('任一来源、Artifact、质量或作者授权坐标被改写都拒绝读取', async () => {
     const fixture = await createTextOpenWorldCreatorReleaseFixtureV1('world-release')

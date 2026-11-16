@@ -107,12 +107,12 @@ flowchart TB
 
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
-| 应用语义版本 | `4.0.5` | `package.json` |
-| TypeScript 生产源码 | 2570 个文件 / 653781 行 | `tsconfig.json` |
-| IndexedDB schema | v13 / 130 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
-| PROJECT_TABLES | 130 张表 | `project-tables.ts` |
+| 应用语义版本 | `4.0.7` | `package.json` |
+| TypeScript 生产源码 | 运行 `npm run gen:project-metrics -- --source-size` 查看当前文件数和行数 | `tsconfig.json` |
+| IndexedDB schema | v14 / 131 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
+| PROJECT_TABLES | 131 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 238 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
-| CONTEXT_SOURCES | 173 个上下文源 | `context-sources.ts` |
+| CONTEXT_SOURCES | 175 个上下文源 | `context-sources.ts` |
 | 写回治理 | 59 个通用 adopt target / 68 个领域扩展 | `adoption-schema.ts` |
 <!-- project-metrics:end -->
 
@@ -250,7 +250,7 @@ src/
 - Project/World/Work 可以位于同一本地物理工作区，但身份权威已经拆分：Project 只管理工作区，World 管理世界身份，Work 管理独立作品；存在内部 World 语义 scope 不等于建立了可分享世界。
 - 分步骤长篇 Phase 5 工程主链和 10万/30万/100万字符规模门已经完成；真实作者长期文学一致性仍需持续研究，但不是尚未完成的功能施工项。
 - 世界 Release、中立资源协议、六类上层产品的需求适配器、五项逻辑契约校验、`S1 世界封存 → S2 产品定向 → S3 产品执行` runtime 闸门和产品成熟度门已经形成共享架构基线；它们规定接入方式，不替代各上层产品的 Brief/production/media/runtime 专项实现。
-- 当前分支 schema v12 直接表达 Product Production/Build/Release、Product Runtime、World、Work、独立创作产品、漫剧前期生产与 AVG 作者方案/媒资草稿与跑团、AI 小镇及角色聊天 S2 草稿；保留 v1→v2→v3→v4→v5→v6→v7→v8→v9→v10→v11→v12 的受支持加表与索引迁移（v8 允许不同 Brief revision 使用同一内容 hash，已有记录不改写；v9 新增小镇草稿表，v10 集成角色聊天草稿表，v11 加入插件设施，v12 增加可丢弃且不进入备份的 worldNarrativeIndexCaches）以保护作者数据，不包含旧字段投影、双读或退役运行入口。非受支持数据库版本明确拒绝；备份当前为 v16，严格校验的 v14 经 v15、v15 经显式转换进入 v16；缺失叙事注释保持缺失，其余历史版本拒绝。
+- 当前 schema/表集合以[本页生成工程指标](#3-当前工程指标)、[`STORYFORGE_SCHEMA_VERSION`](../src/lib/db/schema.ts) / [`REQUIRED_TABLES`](../src/lib/db/ensure-schema.ts) 和 [`PROJECT_TABLES`](../src/lib/registry/project-tables.ts) 为准，覆盖 Product Production/Build/Release、Product Runtime、World、Work、独立创作产品、漫剧前期生产、AVG 作者方案/媒资草稿与跑团、AI 小镇及角色聊天 S2 草稿。备份格式以 [`CURRENT_BACKUP_VERSION`](../src/lib/export/backup-trust.ts) 为准；既有加表/索引升级、原位迁移和便携转换的支持窗口见[数据治理 §7](./DATA-GOVERNANCE.md#7-schema-支持窗口与演进门)。不恢复旧字段投影、双读或退役入口；缺失注释与证据保持缺失，不补作者确认或许可，文档口径不替代迁移与往返验证。
 - ProductRelease 谱系已经有跨产品逻辑 validator，并在角色互动参考纵切面落地；其它上层产品在转为 released 前仍需按自己的物理 schema 接入同一逻辑闸门。
 - 节点官方模板已绑定正式长篇领域 action，通用生成仅限显式 experimental draft 且不能采纳 Canon；完整跨模式真实 UI 体验仍是节点产品维护事项。
 - 账户、云端社区、支付和商业平台不是当前核心运行前提；相关代码必须 capability gate / experimental，不能掩盖主产品未完成。
@@ -278,7 +278,7 @@ AVG 的逐句配音与背景音乐、音效、环境声加工复用同一零供�
 
 ### 角色聊天接入
 
-`Work.kind=character-interaction` 拥有 `chatAuthoringDrafts`；统一 schema v10 接入该表；v8/v9 兼容桥保留独立聊天分支已有草稿，且保留所有既有版本。设置及会谈由注册表进行完整生命周期管理。`chat.consult.v1` / `chat.authoring` 与 AVG 共用可恢复会谈运行器，各产品独立定义设置及上下文源。会谈不开始制作，候选由作者确认后回填草稿。正式 `characterChat` Brief 配置控制角色私密知识、初始信任、场景回合及回复预算。
+`Work.kind=character-interaction` 拥有 `chatAuthoringDrafts`，设置、会谈与候选沿注册表管理。当前会谈使用 `chat.consult.v2` / `chat.consultation`：作者逐字段确认候选，讨论不启动制作。旧 v1 的冻结合同、事件及候选继续按既有账本读取和备份，旧 v1 登记不再作为当前可选 Skill。正式 `characterChat` Brief 配置控制角色私密知识、初始信任、场景回合及回复预算。
 
 玩家页对消息听众和记忆证据进行可见性过滤；作者人物快照明确区分公开/私密知识。失败和取消清理 UI 生成状态，多角色导演的结束决策由实例命令执行。当前角色聊天生成发布以纯文字内容为边界；不把未生成的画像或语音标为已完成。
 

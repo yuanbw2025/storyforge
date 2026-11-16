@@ -158,6 +158,8 @@ export interface RacesGatewayEvalScoreV1 {
 }
 
 export interface RacesGatewayEvalCheckpointV1 {
+  /** Only new eval runs have private workspace creation receipts; legacy absence grants no deletion authority. */
+  workspaceOwnerId?: string
   version: typeof RACES_GATEWAY_EVAL_VERSION_V21
   fixtureHash: string
   modelIdentity: { provider: string; model: string }

@@ -1,3 +1,4 @@
+import { useAdaptationActiveProject, useAdaptationSourceChapters } from '../hooks/useAdaptationPageSource'
 import BrandIcon from '../components/shared/BrandIcon'
 import ExampleLibrary from '../components/examples/ExampleLibrary'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
@@ -5,12 +6,12 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { liveQuery } from 'dexie'
 import { BookOpen } from 'lucide-react'
 import { db } from '../lib/db/schema'
-import type { Project, Work, WorkspaceScope, ScreenplayTargetSpecV1 } from '../lib/types'
+import type { Work, WorkspaceScope, ScreenplayTargetSpecV1 } from '../lib/types'
 import { effectiveWorkKind } from '../lib/workspace/work-kind'
 import { createWorkspace } from '../lib/workspace/create-workspace'
 import { switchActiveWork, updateActiveWork } from '../lib/workspace/works'
 import { deleteWork } from '../lib/workspace/lifecycle'
-import { createAdaptation, listAdaptationSourceOptions } from '../lib/adaptation/source-manifest'
+import { createAdaptation } from '../lib/adaptation/source-manifest'
 import { flushPendingEditsV1 } from '../lib/authoring/pending-edit-coordinator'
 import { PRODUCT_NAVIGATION } from '../components/navigation/product-navigation'
 import { useDialog } from '../components/shared/Dialog'
@@ -31,19 +32,15 @@ export default function ScreenplayPage(){
  useEffect(()=>{main.current?.scrollTo(0,0);window.scrollTo(0,0)},[current])
  const [params]=useSearchParams();const workId=Number(params.get('work'))||null;const navigate=useNavigate();const dialog=useDialog()
  const [works,setWorks]=useState<Work[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState(false),[creating,setCreating]=useState(params.has('create')),[menu,setMenu]=useState(false),[search,setSearch]=useState(''),[filter,setFilter]=useState('all')
- const [title,setTitle]=useState(''),[sourceId,setSourceId]=useState(''),[sourceMode,setSourceMode]=useState('local'),[text,setText]=useState(''),[sourceReady,setSourceReady]=useState<WorkspaceScope|null>(null),[chapters,setChapters]=useState<{id:number;title:string;wordCount:number}[]>([]),[selection,setSelection]=useState<number[]>([]),[range,setRange]=useState('all'),[spec,setSpec]=useState(defaultScreenplayTargetSpec)
+ const [title,setTitle]=useState(''),[sourceId,setSourceId]=useState(''),[sourceMode,setSourceMode]=useState('local'),[text,setText]=useState(''),[sourceReady,setSourceReady]=useState<WorkspaceScope|null>(null),[range,setRange]=useState('all'),[spec,setSpec]=useState(defaultScreenplayTargetSpec)
  const work=works.find(w=>w.id===workId&&effectiveWorkKind(w)==='screenplay');const library=works.filter(w=>effectiveWorkKind(w)==='screenplay');const sources=works.filter(w=>effectiveWorkKind(w)==='novel')
  // Keep the scope object stable while live Work metadata changes.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  const scope=useMemo(()=>work?{projectId:work.projectId,workId:work.id!,worldId:work.worldId}:null,[work?.id,work?.projectId,work?.worldId])
- const [project,setProject]=useState<Project|null>(null)
- useEffect(()=>{let cancelled=false;if(work)void switchActiveWork(work.projectId,work.id!).then(()=>db.projects.get(work.projectId)).then(value=>{if(!cancelled)setProject(value??null)}).catch(c=>setError(String(c)));else setProject(null);return()=>{cancelled=true}
- // eslint-disable-next-line react-hooks/exhaustive-deps
- },[work?.id,work?.projectId])
+ const project=useAdaptationActiveProject(work,setError)
  useAutoBackup(work?.projectId??null);useGistAutoBackup(work?.projectId??null)
  useEffect(()=>{const sub=liveQuery(()=>db.works.toArray()).subscribe({next:rows=>{setWorks(rows);setLoading(false)},error:c=>{setError(String(c));setLoading(false)}});return()=>sub.unsubscribe()},[])
- useEffect(()=>{let cancelled=false;const source=sources.find(w=>String(w.id)===sourceId);setChapters([]);setSelection([]);if(source)void listAdaptationSourceOptions({projectId:source.projectId,workId:source.id!,worldId:source.worldId}).then(c=>{if(!cancelled)setChapters(c.chapters)}).catch(c=>setError(String(c)));return()=>{cancelled=true}// eslint-disable-next-line react-hooks/exhaustive-deps
- },[sourceId])
+ const {chapters,selection,setSelection}=useAdaptationSourceChapters(sourceId,sources,setError)
  const path=(id:string,selected:number|null=workId)=>`/script/${id}${selected?`?work=${selected}`:''}`
  const go=async(url:string)=>{try{await flushPendingEditsV1();setMenu(false);navigate(url)}catch(c){setError(String(c))}}
  const choose=async(w:Work,id=current==='library'?'source':current)=>{try{await flushPendingEditsV1();await switchActiveWork(w.projectId,w.id!);setCreating(false);await go(path(id,w.id!))}catch(c){setError(String(c))}}

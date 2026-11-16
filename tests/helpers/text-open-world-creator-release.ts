@@ -93,12 +93,12 @@ export async function createTextOpenWorldCreatorReleaseFixtureV1(
         scope: sourceWorkspace.scope,
         selection: { mode: 'entire-work' as const },
       }
-  const localWorldReleaseId = sourceKind === 'world-release' ? source.localReleaseRecordId : null
+  const localWorldReleaseId = source.kind === 'world-release' ? source.localReleaseRecordId : null
   const creator = await seedAuthorizedTextOpenWorldCreatorBuildV1({
     source, sessionKey: `g5-10-${sourceKind}-${crypto.randomUUID()}`,
   })
   const frozenAt = creator.start.authorizedAt + 1
-  const pinBundle = sourceKind === 'world-release'
+  const pinBundle = source.kind === 'world-release'
     ? await freezeTextOpenWorldWorldReleaseSourceV1({
         scope: creator.scope,
         localReleaseRecordId: source.localReleaseRecordId,
@@ -338,9 +338,13 @@ export async function createTextOpenWorldCreatorReleaseFixtureV1(
   const manifest = await verifyProductReleaseManifestV1({
     ...identityBody, releaseIdentityHash, lineage,
   })
+  if (!('schema' in manifest.sourceContracts) || !('governanceSnapshotHash' in manifest.lineage)) {
+    throw new Error('Creator fixture did not produce its verified product-specific contracts')
+  }
   return {
     scope: creator.scope as WorkspaceScope, creator, pinBundle, sourceManifest,
     runtimePackage, integrationReport, releaseQuality, releaseAuthorization,
-    sourceContracts, manifest, sourceWorkspace, localWorldReleaseId, adoptionIntentHash, portableRoot,
+    sourceContracts, manifest: { ...manifest, sourceContracts: manifest.sourceContracts, lineage: manifest.lineage },
+    sourceWorkspace, localWorldReleaseId, adoptionIntentHash, portableRoot,
   }
 }

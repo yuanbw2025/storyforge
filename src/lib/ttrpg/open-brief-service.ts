@@ -3,7 +3,7 @@ import { db } from '../db/schema'
 import type { WorkspaceScope } from '../types'
 import { readProductRuntimeStateVersion } from '../product/runtime-core'
 import { loadTtrpgOpenMemoryReadStateV1 } from './open-memory-read-state'
-import { assertTtrpgOpenBriefEpochAuthorityV1 } from './open-coordination'
+import { assertTtrpgOpenBriefEpochAuthorityV1, ttrpgOpenScopedKeyV1 } from './open-coordination'
 import { assertTtrpgOpenModelActorV1 } from './open-model-purpose'
 import { getAgentSkillV1 } from '../agent/skill-registry'
 import { startTtrpgOpenEpochV1, closeTtrpgOpenEpochV1, acceptTtrpgOpenBriefMemoryV1 } from './runtime-commands'
@@ -45,7 +45,7 @@ export async function readTtrpgOpenBriefDeskV1(input: TtrpgOpenBriefDeskInputV1)
     canRequest = true
   } catch (cause) { unavailable = cause instanceof Error ? cause.message : String(cause) }
   await loaded.assertCurrent()
-  return { sequence: loaded.state.lastSequence, canRequest, unavailable, actors: content.campaign.characterTemplates.map(actor => ({ key: actor.characterKey, name: actor.name })),
+  return { sequence: loaded.state.lastSequence, epochKey: epoch?.epochKey ?? null, canRequest, unavailable, actors: content.campaign.characterTemplates.map(actor => ({ key: actor.characterKey, name: actor.name })),
     currentWindow: Boolean(epoch && active?.epochKey === epoch.epochKey),
     request: call ? { requestKey: call.requestKey, status: call.status, local: Boolean(id), read: id } : null,
     candidate, rejected, saved: Boolean(saved), receiptPending: Boolean(saved && snapshot?.projection.state !== 'completed' && id),
@@ -109,11 +109,32 @@ export async function cancelTtrpgOpenBriefDeskPreparedV1(input: TtrpgOpenBriefDe
   if (!read) throw new Error('原请求证明不完整，不能取消记账。')
   return cancelTtrpgOpenPreparedRequestV1({ ...input, requestKey, runId: read.runId })
 }
-export async function finishTtrpgOpenBriefDeskV1(input: TtrpgOpenBriefDeskInputV1) {
+export async function finishTtrpgOpenBriefDeskV1(input: TtrpgOpenBriefDeskInputV1 & { epochKey?: string }) {
   const loaded = await loadTtrpgOpenMemoryReadStateV1({ ...input, reader: { kind: 'human', viewerKey: input.viewerKey } })
-  const epoch = loaded.runtime.openRun!.coordination.epochs.find(epoch => epoch.epochKey === loaded.runtime.openRun!.coordination.activeEpochKey)
-  if (!loaded.humanHost || !epoch || epoch.triggerKind !== 'request-brief' || epoch.viewerKey !== input.viewerKey) throw new Error('当前没有本人可结束的复盘。')
-  return closeTtrpgOpenEpochV1({ ...await envelope(input.sessionId, 'brief.desk.finish'), viewerKey: input.viewerKey, epochKey: epoch.epochKey,
-    reason: loaded.runtime.openRun!.coordination.calls.some(call => call.authorizationEpochKey === epoch.epochKey && call.status === 'unknown')
-      ? '真人明确结束结果未知的复盘，保留原请求与费用待核对，不重发' : '真人明确结束本次复盘' })
+  const { runtime } = loaded, coordination = runtime.openRun!.coordination
+  const active = coordination.epochs.find(epoch => epoch.epochKey === coordination.activeEpochKey)
+  const epoch = input.epochKey === undefined ? active ?? [...coordination.epochs].reverse()
+    .find(epoch => epoch.triggerKind === 'request-brief' && epoch.viewerKey === input.viewerKey)
+    : coordination.epochs.find(epoch => epoch.epochKey === input.epochKey)
+  if (!loaded.humanHost || !epoch || epoch.triggerKind !== 'request-brief' || epoch.viewerKey !== input.viewerKey
+    || epoch.startedRef.sessionKey !== runtime.sessionKey) throw new Error('当前没有本人可结束的复盘。')
+  const scopedCommandId = await ttrpgOpenScopedKeyV1(runtime.sessionKey, 'brief-finish', [epoch.epochKey])
+  let prior = await db.productRuntimeEvents.where('[sessionId+commandId]').equals([input.sessionId, scopedCommandId]).first()
+  if (!prior && epoch.closedRef) {
+    const legacy = await db.productRuntimeEvents.where('[sessionId+sequence]').equals([input.sessionId, epoch.closedRef.sequence]).first()
+    if (legacy?.commandId === 'brief.desk.finish') prior = legacy
+  }
+  const commandId = prior?.commandId ?? scopedCommandId
+  if (prior && (prior.type !== 'ttrpg.open.epoch.closed' || prior.baseSequence == null || !prior.baseStateHash
+    || epoch.closedRef?.sessionKey !== runtime.sessionKey || epoch.closedRef.sequence !== prior.sequence)
+    || !prior && (epoch.status !== 'active' || coordination.activeEpochKey !== epoch.epochKey)) throw new Error('复盘结束原记录不完整，不能补造或结束另一窗口。')
+  const reason = epoch.stopReason ?? (coordination.calls.some(call => call.authorizationEpochKey === epoch.epochKey && call.status === 'unknown')
+    ? '真人明确结束结果未知的复盘，保留原请求与费用待核对，不重发' : '真人明确结束本次复盘')
+  await loaded.assertCurrent()
+  // The persisted original command owns retry identity, baseline and intent.
+  // A first click uses this exact verified read; it never silently rebases.
+  return closeTtrpgOpenEpochV1({ sessionId: input.sessionId, commandId,
+    baseSequence: prior?.baseSequence ?? loaded.state.lastSequence,
+    baseStateHash: prior?.baseStateHash ?? loaded.stateHash,
+    viewerKey: input.viewerKey, epochKey: epoch.epochKey, reason })
 }

@@ -1,3 +1,4 @@
+import { sumProductTaskBudgetReservationsV1 } from '../../lib/product-production/task-budget-totals'
 import { useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
@@ -146,24 +147,7 @@ export function TextOpenWorldCreatorProductionStart(props: TextOpenWorldCreatorP
 
   const tasks = preparation?.plan.tasks ?? []
   const groups = [...new Set(tasks.map(task => task.concurrencyGroup))]
-  const total = tasks.reduce((sum, task) => ({
-    modelCalls: sum.modelCalls + task.budgetReservation.modelCalls,
-    inputTokens: sum.inputTokens + task.budgetReservation.inputTokens,
-    outputTokens: sum.outputTokens + task.budgetReservation.outputTokens,
-    mediaCalls: sum.mediaCalls + task.budgetReservation.mediaCalls,
-    durationMs: sum.durationMs + task.budgetReservation.durationMs,
-    storageBytes: sum.storageBytes + task.budgetReservation.storageBytes,
-    maximumCostUsd: sum.maximumCostUsd == null || task.budgetReservation.maximumCostUsd == null
-      ? null : sum.maximumCostUsd + task.budgetReservation.maximumCostUsd,
-  }), {
-    modelCalls: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    mediaCalls: 0,
-    durationMs: 0,
-    storageBytes: 0,
-    maximumCostUsd: 0 as number | null,
-  })
+  const total = sumProductTaskBudgetReservationsV1(tasks)
 
   return <main className="mx-auto w-full max-w-7xl space-y-5 p-4 text-text-primary md:p-6"
     data-testid="text-open-world-creator-production-start">

@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {test, expect} from '@playwright/test'
 import {openChatNarrativeTools} from './helpers/character-chat-ui'
@@ -5,9 +6,8 @@ import {openChatNarrativeTools} from './helpers/character-chat-ui'
 test('three independent role consequences survive a local failure and explicit continuation through the player UI', async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', model: 'test', baseUrl: 'https://chat-ensemble.invalid/v1', maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', model: 'test', baseUrl: 'https://chat-ensemble.invalid/v1', maxTokens: 6000, apiKey: 'isolated-test-key' })
   const actors: string[] = []
   let calls = 0
   await page.route('https://chat-ensemble.invalid/**', async route => {
@@ -33,12 +33,12 @@ test('three independent role consequences survive a local failure and explicit c
     }
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     return (await load('/storyforge/tests/helpers/chat-ensemble-fixture.ts')).seedChatEnsembleFixture()
   })
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await openChatNarrativeTools(page)
   await page.getByLabel('角色接续方式', {exact: true}).selectOption('round-robin')
   await page.getByLabel('演绎节奏', {exact: true}).selectOption('3')
@@ -46,7 +46,7 @@ test('three independent role consequences survive a local failure and explicit c
   await expect(page.getByRole('alert').filter({hasText: /场外人物|听众/}).first()).toBeVisible()
   await expect(page.getByRole('button', {name: '让角色继续', exact: true})).toBeEnabled()
   expect(actors).toEqual(['guard', 'artisan']); expect(calls).toBe(3)
-  await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   expect(calls).toBe(3)
   await openChatNarrativeTools(page)
   await page.getByLabel('角色接续方式', {exact: true}).selectOption('round-robin')
@@ -64,6 +64,6 @@ test('three independent role consequences survive a local failure and explicit c
   expect(before.state.messages.map((m: {speakerKey: string}) => m.speakerKey)).toEqual(['guard', 'artisan', 'courier'])
   expect(before.state.chatNarrative.situation.facts.filter((fact: {factKey: string}) => fact.factKey.startsWith('consequence-'))).toHaveLength(3)
   expect(before.failed).toBe(1)
-  await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   expect(await read()).toEqual(before); expect(calls).toBe(7)
 })

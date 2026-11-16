@@ -45,6 +45,7 @@ export default function TtrpgOpenBriefPanel(props: { input: TtrpgOpenBriefDeskIn
   }, '复盘回复已保留，请查看依据后决定是否保存。')
   if (!page && !error) return null
   const candidate = page?.candidate
+  const finishEpochKey = page?.currentWindow ? page.epochKey : null
   return <details className="sf-open-table-card" data-testid="ttrpg-open-brief" open={expanded} onToggle={event => setExpanded(event.currentTarget.open)}><summary>阶段复盘</summary>
     <p>由真人主持主动请求，只回顾全队共同资料。确认后才保存为本局记忆，保留传闻、推测和原观察者。</p>
     {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
@@ -82,6 +83,6 @@ export default function TtrpgOpenBriefPanel(props: { input: TtrpgOpenBriefDeskIn
     </section>}
     {page?.receiptPending && candidate && <button disabled={props.busy} onClick={() => void act(() => repairTtrpgOpenBriefDeskReceiptV1({ ...input(), candidateHash: candidate.candidateHash }), '已补齐原记忆的保存回执，未重复保存。')}>补齐复盘保存回执</button>}
     {page?.saved && <p role="status">本份复盘已保存为本局记忆，来源标记保留。</p>}
-    {page?.currentWindow && <button disabled={props.busy || ['prepared', 'dispatched'].includes(page.request?.status ?? '')} onClick={() => void act(() => finishTtrpgOpenBriefDeskV1(input()), '本次复盘已结束，冒险进度保留。')}>结束本次复盘</button>}
+    {finishEpochKey && <button disabled={props.busy || ['prepared', 'dispatched'].includes(page?.request?.status ?? '')} onClick={() => void act(() => finishTtrpgOpenBriefDeskV1({ ...input(), epochKey: finishEpochKey }), '本次复盘已结束，冒险进度保留。')}>结束本次复盘</button>}
   </details>
 }

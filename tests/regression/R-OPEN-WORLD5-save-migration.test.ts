@@ -78,7 +78,8 @@ describe('Text Open World G5-11 · 新Release存档迁移', () => {
       canonSnapshot: JSON.parse(created.session.canonSnapshotJson), initialState: JSON.parse(created.session.initialStateJson) }
     await expect(prepareReleasedProductRuntimeSessionRecordV1(input, { parentSessionId: foreign.session.id!, parentThroughSequence: 0 }))
       .rejects.toThrow('父会话或序列')
-    await expect(prepareReleasedProductRuntimeSessionRecordV1(input, { parentSessionId: created.session.id!, parentThroughSequence: original!.runtimeHeadSequence! + 1 }))
+    const actualSequence = (await readProductRuntimeState(created.session.id!)).lastSequence
+    await expect(prepareReleasedProductRuntimeSessionRecordV1(input, { parentSessionId: created.session.id!, parentThroughSequence: actualSequence + 1 }))
       .rejects.toThrow('父会话或序列')
     const prepared = await prepareReleasedProductRuntimeSessionRecordV1(input, { parentSessionId: created.session.id!, parentThroughSequence: 0 })
     prepared.parentThroughSequence = 1

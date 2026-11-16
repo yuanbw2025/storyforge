@@ -4,6 +4,7 @@ import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { captureNarrativeDomainV1, hashNarrativeDomainSourceV1 } from '../../src/lib/world-engine/narrative-domain-capture'
 import { confirmNarrativeDomainAnnotationsV1 } from '../../src/lib/world-engine/narrative-domain-authoring'
+import { projectNarrativeDomainCaptureV1 } from '../../src/lib/world-engine/narrative-domain-projection'
 import { deriveNovelToWorld } from '../../src/lib/world-engine/derivation'
 import { createWorldPackage, importWorldPackage } from '../../src/lib/world-engine/world-package'
 import { verifyWorldReleaseRecordV1 } from '../../src/lib/world-engine/release-codec'
@@ -15,6 +16,8 @@ import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 import { deleteWork } from '../../src/lib/workspace/lifecycle'
 import { createWorldWork } from '../../src/lib/workspace/works'
 import { resolveScope } from '../../src/lib/workspace/scope'
+import { BACKUP_REFERENCE_REVIEW_TITLE } from '../../src/lib/export/backup-trust'
+import { DERIVATION_CONFIRMATION_REVIEW_TITLE } from '../../src/lib/world-engine/narrative-derivation-portability'
 import { createWorldRevision } from '../../src/lib/world-engine/releases'
 import * as worker from '../../src/lib/world-engine/narrative-release-worker'
 import * as identity from '../../src/lib/memory/identity'
@@ -55,6 +58,89 @@ describe('NW-2A · 显式复制的 namespace、确认与来源对照', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => { db.close(); vi.restoreAllMocks(); vi.useRealTimers() })
 
+  it.each([true, false])('派生 v4 后仅凭同作品稳定身份恢复伏笔章节，selected=%s', async includeChapters => {
+    const source = await seed()
+    const { scope, actorIds } = source
+    const now = Date.now(), chapterIds: number[] = []
+    for (const title of ['第一次铃响', '第二次铃响']) {
+      const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
+        projectId: scope.projectId, parentId: null, type: 'chapter' as const, title, summary: '', order: chapterIds.length, createdAt: now, updatedAt: now,
+      }))
+      chapterIds.push(await db.chapters.add(stampNewRecord(scope, 'chapters', {
+        projectId: scope.projectId, outlineNodeId, title, content: title, wordCount: title.length, status: 'draft' as const,
+        order: chapterIds.length, notes: '', createdAt: now, updatedAt: now,
+      })))
+    }
+    const [plantChapterId, resolveChapterId] = chapterIds
+    const echoChapterIds = JSON.stringify([resolveChapterId, plantChapterId])
+    const id = await db.foreshadows.add(stampNewRecord(scope, 'foreshadows', {
+      projectId: scope.projectId, name: '另一头铃声', type: 'dialogue' as const, status: 'planted' as const,
+      description: '铜铃两头先后响了两次。', plantChapterId, resolveChapterId, echoChapterIds, notes: '', createdAt: now, updatedAt: now,
+    }, { owner: 'work' }))
+    const owner = { kind: 'work' as const, workCode: source.work.code }
+    const originalCapture = await captureNarrativeDomainV1({ scope, owner })
+    const original = originalCapture.rows.get('foreshadows')!.find(row => row.id === id)!
+    const actor = (await db.characters.get(actorIds[0]))!
+    await confirmNarrativeDomainAnnotationsV1({ scope, owner, table: 'foreshadows', recordId: id,
+      expectedSourceHash: await hashNarrativeDomainSourceV1(originalCapture, 'foreshadows', original), annotations: {
+        narrativeDevelopmentsV1: [{ semanticSubKey: 'sub:v1:00000000-0000-4000-8000-000000000001',
+          statement: '铜铃两头先后响了两次。', developmentType: 'foreshadow', owners: [{ characterId: actorIds[0], sourceUid: actor.ragDocumentId! }],
+          members: [], state: 'open', transitions: [], resolutionEvidenceKeys: [], narrativeModalityV1: 'intent',
+          narrativeVisibilityV1: { class: 'author-only', audienceKeys: [], policyVersion: 'lineage-fixture-v1' } }],
+      } })
+    const sourceRow = (await db.foreshadows.get(id))!
+    const sourceChapters = await db.chapters.bulkGet(chapterIds)
+    const selectedTables = ['characters', 'storyTimelineEvents', 'foreshadows', ...(includeChapters ? ['outlineNodes', 'chapters'] : [])]
+    const derived = await deriveNovelToWorld({ sourceScope: scope, formatVersion: 4, publish: true, selectedTables })
+    const verified = await verifyWorldReleaseRecordV1(derived.release!)
+    if (verified.version !== 4) throw Error('v4 expected')
+    expect(verified.manifest.records.foreshadows[0]).toMatchObject({ plantChapterId, resolveChapterId, echoChapterIds })
+    expect(verified.manifest.records.foreshadows[0]).not.toHaveProperty('_plantChapterExportId')
+    expect(verified.manifest.narrative.bundle.records.some(row => row.kind === 'development' && row.payload.developmentType === 'foreshadow')).toBe(true)
+    const targetWorld = (await db.worlds.get(derived.targetScope.worldId))!
+    const targetWork = (await db.works.get(derived.targetScope.workId))!
+    const target = await captureNarrativeDomainV1({ scope: derived.targetScope,
+      owner: { kind: 'world', worldCode: targetWorld.code, sourceWorkCode: targetWork.code } })
+    const [copied] = target.rows.get('foreshadows')!
+    expect(copied.ragDocumentId).toBe(sourceRow.ragDocumentId)
+    const notes = await db.notes.where('projectId').equals(derived.targetProjectId).toArray()
+    const review = notes.filter(note => note.pinned && note.content.startsWith(BACKUP_REFERENCE_REVIEW_TITLE))
+    const confirmationNotes = notes.filter(note => note.pinned && note.content.startsWith(DERIVATION_CONFIRMATION_REVIEW_TITLE))
+    expect(confirmationNotes).toHaveLength(1)
+    expect(confirmationNotes[0].content).toContain(derived.release!.contentHash)
+    const frozen = verified.manifest.records.foreshadows[0]._narrativeAuthorityV1Portable
+    expect(copied.narrativeAuthorityV1).toEqual(frozen)
+    const originalCoordinates = { ...copied, plantChapterId, resolveChapterId }
+    expect(await hashNarrativeDomainSourceV1(target, 'foreshadows', originalCoordinates)).toBe(copied.narrativeAuthorityV1!.contentHash)
+    expect(await hashNarrativeDomainSourceV1(target, 'foreshadows', copied)).not.toBe(copied.narrativeAuthorityV1!.contentHash)
+    const draft = await projectNarrativeDomainCaptureV1(target, { branchKey: 'canon' })
+    const sourceKey = `foreshadow:${copied.ragDocumentId}`
+    expect(draft.coverage.gaps.filter(gap => gap.code === 'stale').map(gap => gap.sourceKey)).toEqual([sourceKey])
+    expect(draft.bundle.records.some(row => row.provenance.sourceResourceKey === sourceKey)).toBe(false)
+    expect(draft.bundle.records.some(row => row.kind === 'event')).toBe(true)
+    expect(confirmationNotes[0].content).toContain(copied.narrativeAuthorityV1!.confirmationUid)
+    if (includeChapters) {
+      const targets = target.rows.get('chapters')!
+      const newChapterIds = sourceChapters.map(chapter => targets.find(row => row.ragDocumentId === chapter!.ragDocumentId)!.id!)
+      expect(newChapterIds).not.toEqual(chapterIds)
+      expect(copied).toMatchObject({ plantChapterId: newChapterIds[0], resolveChapterId: newChapterIds[1],
+        echoChapterIds: JSON.stringify([newChapterIds[1], newChapterIds[0]]) })
+      expect(review).toEqual([])
+    } else {
+      expect(target.rows.get('chapters')).toEqual([])
+      expect(copied).toMatchObject({ plantChapterId: null, resolveChapterId: null, echoChapterIds: '[]' })
+      expect(review).toHaveLength(1)
+      const entries = review[0].content.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line))
+      expect(entries).toEqual(expect.arrayContaining([
+        expect.objectContaining({ 来源表: 'foreshadows', 字段: 'plantChapterId', 原值: plantChapterId }),
+        expect.objectContaining({ 来源表: 'foreshadows', 字段: 'resolveChapterId', 原值: resolveChapterId }),
+        expect.objectContaining({ 来源表: 'foreshadows', 字段: 'echoChapterIds', 原值: echoChapterIds }),
+      ]))
+    }
+    expect(await db.foreshadows.get(id)).toEqual(sourceRow)
+    expect(await db.chapters.bulkGet(chapterIds)).toEqual(sourceChapters)
+  })
+
   it.each(['long', 'short'] as const)('%s 小说派生新世界：同名不合并，原文/引用保持，源 owner 和旧确认不变', async profile => {
     const source = await seed(profile)
     const original = { project: await db.projects.get(source.scope.projectId), work: await db.works.get(source.scope.workId),
@@ -72,6 +158,7 @@ describe('NW-2A · 显式复制的 namespace、确认与来源对照', () => {
     expect(bundle.aliases.every(a => a.from.kind === 'semantic' && a.from.semanticId !== a.toSemanticId)).toBe(true)
     expect(verified.manifest.records.storyTimelineEvents[0].description).toBe(source.text)
     expect(derived.derivation.sourceKind).toBe(profile === 'long' ? 'long-novel' : 'short-novel')
+    expect(await db.notes.where('projectId').equals(derived.targetProjectId).toArray()).toEqual([])
     expect({ project: await db.projects.get(source.scope.projectId), work: await db.works.get(source.scope.workId),
       characters: await db.characters.where('projectId').equals(source.scope.projectId).toArray(), event: await db.storyTimelineEvents.get(source.eventId) }).toEqual(original)
     const exported = await deriveExportProjectJSON(derived.targetProjectId)

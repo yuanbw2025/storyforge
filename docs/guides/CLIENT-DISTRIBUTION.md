@@ -58,11 +58,15 @@ node scripts/distribution/build-android.mjs --release
 
 ## 桌面第三方声明
 
-桌面构建继续先运行 `scripts/distribution/notices.mjs` 生成当前依赖声明。`electron-builder.config.cjs` 的 `afterExtract` 钩子在平台运行时清理前，把本次实际解包的 Electron 许可、完整 Chromium 声明及 NPM 声明原字节保留到应用资源的 `third-party/`，并记录实际运行时版本、大小与 SHA-256。Mac 的文件随 `.app` 一起保留；Windows/Linux 使用同一资源合同。缺文件、空文件、符号链接或缺少当前依赖声明会中止构建，不产出一个只带部分声明的目录。此构建元数据不包含个人目录，不属于作品表或模型上下文；它不替代具体模型、媒资和发布用途的独立许可审阅。
+桌面构建继续先运行 `scripts/distribution/notices.mjs` 生成当前依赖声明。`electron-builder.config.cjs` 的 `afterExtract` 钩子在平台运行时清理前，把本次实际解包的 Electron 许可、完整 Chromium 声明及 NPM 声明原字节保留到应用资源的 `third-party/`，记录 builder 解析且与锁核对的运行时版本，以及声明文件大小与 SHA-256；实际进程版本由 smoke 另行验证。Mac 的文件随 `.app` 一起保留；Windows/Linux 使用同一资源合同。缺文件、空文件、符号链接或缺少当前依赖声明会中止构建，不产出一个只带部分声明的目录。此构建元数据不包含个人目录，不属于作品表或模型上下文；它不替代具体模型、媒资和发布用途的独立许可审阅。
+
+2026-10-30 的 SFQA-006 候选将 Electron 固定到 44.10.0，并针对[上游证书安全公告](https://github.com/electron/electron/security/advisories/GHSA-jr5w-w6x2-84p9)建立最低 44.9.1 的运行时门。`check:dependencies` 先执行 `check:desktop-runtime`，核对精确稳定版声明、根锁记录、实际解析条目和本机安装包版本；该门独立于 npm 的 `--omit=dev`，不把全部工具依赖风险宣布为已解决。打包钩子还要求 builder 解析版本与锁一致；客户端 smoke 及覆盖升级的新版本阶段从实际启动进程读取 Electron/Node/Chromium，再核对包内声明并输出无个人路径的 JSON 证据。旧版升级基线保留原运行时，不据此放行新候选。版本门和合成测试不代表正式安装包已替换、所有平台已运行或用户数据升级已验收，这些状态分别取证。
 
 ## 数据保持
 
 Windows 固定用户目录 `%APPDATA%/StoryForge`，固定本地地址 `http://localhost:17831/storyforge/`；端口冲突时停止，不改端口。Android 固定 `https://localhost/storyforge/` 和应用 ID。升级不执行清库或卸载；数据库仍由现有 Dexie 发布迁移管理。不要用卸载、清除应用数据、改 origin 或降级来解决升级错误。
+
+桌面安装版的自定义模型列表、聊天及嵌入等既有模型端点通过受控 IPC 使用 Electron 原生网络，支持系统代理，无需中转站允许页面 CORS。仅受信任主窗口可调用，保留网页安全、沙箱与上下文隔离；不转发浏览器 Cookie、不跟随重定向、不在网络错误后隐藏换地址或重发，流可取消。原有本地固定代理、普通网页请求和浏览器/便携版路径保持各自实现；浏览器版仍需要上游支持 CORS。原生窗口冒烟用无 CORS 的合成中转覆盖模型列表、流式聊天、嵌入、401、重定向拒绝与取消，不读取作者密钥或调用真实模型。
 
 浏览器便携版、Windows 客户端、Android 是独立存储容器。首次迁移应在旧版导出完整 JSON，在客户端显式导入。原浏览器数据不会自动移动。应用更新不等于跨设备同步。
 
@@ -118,16 +122,39 @@ Windows 只保存固定枚举的进程异常摘要；主进程原生硬崩溃未
 
 `npm run build:macos -- --arm64` 或 `--x64` 生成对应 DMG；应用使用同一桌面入口、固定 origin 和 `~/Library/Application Support/StoryForge`。当前采用 ad-hoc 签名，不是 Developer ID 签名或 Apple 公证。macOS 更新固定读取官方仓库最新稳定版，选择当前 CPU 的精确文件名，验证大小与 GitHub SHA-256；用户确认后再次验 hash、打开 DMG 并退出，由用户拖入“应用程序”替换，不假装完成无人值守安装。
 
-`upgrade-smoke.mjs` 在隔离目录运行既有正式版本和本次候选，旧源码 SHA 与版本由客户端工作流的 `PREVIOUS_CLIENT_REF` / `PREVIOUS_CLIENT_VERSION` 一起指定；探针必须传入旧版号并核对实际应用版本，不能沿用固定旧值。v4.0.5 候选从正式 v4.0.4 验证覆盖升级；每次发行都必须同步两个工作流的旧版号与精确源码基线。Windows 实际运行两个 NSIS 安装器，Mac 从新 DMG 替换应用。生产 `createWorkspace()`、注册表派生的完整导出/导入是测试唯一作品入口；比较完整导出，验证正文、封面、OPFS 探针、非法备份零写入与恢复后重启。此证据不代替全部产品媒资/游戏存档或真人移动布局验收。
+`upgrade-smoke.mjs` 在隔离目录运行既有正式版本和本次候选，旧源码 SHA 与版本由客户端工作流的 `PREVIOUS_CLIENT_REF` / `PREVIOUS_CLIENT_VERSION` 一起指定；探针必须传入旧版号并核对实际应用版本，不能沿用固定旧值。v4.0.6 候选从正式 v4.0.5 验证覆盖升级；每次发行都必须同步两个工作流的旧版号与精确源码基线。Windows 实际运行两个 NSIS 安装器，Mac 从新 DMG 替换应用。生产 `createWorkspace()`、注册表派生的完整导出/导入是测试唯一作品入口；比较完整导出，验证正文、封面、OPFS 探针、非法备份零写入与恢复后重启。此证据不代替全部产品媒资/游戏存档或真人移动布局验收。
 
 原生升级用的测试脚本由 `build-upgrade-fixture.mjs` 单独打包，须沿用生产代码的 `?raw` 文本导入语义，准确内嵌源码而非把其当模块执行。该支持只用于测试包构建，不改生产导入导出流程，保留完整旧数据比较和安装替换断言；测试包编译通过仍须继续实际 Windows/Mac 升级与恢复验证。
 
 旧版造数与替换前重启必须使用 `PREVIOUS_CLIENT_REF` 对应的生产代码。构建器显式接收源码目录、输出路径与期望版本，分别生成 `native-upgrade-old.js` 和 `native-upgrade.js`；每阶段核对实际应用版本与脚本来源版本。不得把新版脚本注入旧版，提前升级旧库来绕过真实迁移。新版本只通过现有只读备份转换器补齐注册表声明的新增空表和格式版本，再逐值比较完整旧数据；不忽略差异、丢行或改写旧备份。Android 测试 runner 同时携带两份脚本，正式应用不包含测试脚本。
 
-Android 正式验证用永久密钥在本机签署测试 runner；新正式 APK 与测试 runner 暂存于 Release 草稿，CI 只接收签名后的 APK，不接收密钥。升级工作流从既有正式发行下载旧 APK，从本次草稿下载实际将发布的新 APK，避免另一份同版本测试包替代正式包验收。分别安装旧 APK、执行 seed、`adb install -r` 新 APK、执行恢复和重启校验。旧版号在升级工作流的 `PREVIOUS_CLIENT_VERSION` 指定，与桌面旧版基线一致。测试 JS 只进入 androidTest 的 assets，不进入公开应用。发布前删除临时 `upgrade-test-*.apk` 附件。
+Android 正式验证用永久密钥在本机签署测试 runner；新正式 APK 与测试 runner 暂存于 Release 草稿，CI 只接收签名后的 APK，不接收密钥。手动升级检查从本次草稿取得新 APK；正式 release 调用升级检查时使用本轮 `client-android` 不可变 artifact，覆盖本机签名回退和 CI 密钥签名两种生产路径，避免重新读取可变草稿或重建另一份包替代验收。旧 APK 从既有正式发行下载。分别安装旧 APK、执行 seed、`adb install -r` 新 APK、执行恢复和重启校验。旧版号在升级工作流的 `PREVIOUS_CLIENT_VERSION` 指定，与桌面旧版基线一致。测试 JS 只进入 androidTest 的 assets，不进入公开应用。发布前删除临时 `upgrade-test-*.apk` 附件。
 
 没有 Actions 签名 Secrets 时，正式发布工作流读取草稿中维护者已上传的同版本 APK，校验正式应用 ID、版本和固定证书指纹。未提供正式 APK 则发布失败；不会退回 debug 包。Windows/macOS 仍由 GitHub 自动构建。iOS 本次暂缓。
+
+Android 构建还在包内携带 `storyforge/build-source.json`：精确源码 commit/tree、版本、是否存在未提交内容及全部应用 Web 文件的大小/SHA-256，不包含机器路径、作者数据或凭据。PR 的合成检出与候选 head 可有不同 SHA，但必须同 tree；Android 构建的可见 build ID 与声明都绑定实际候选 head。正式消费只接受 clean 来源；旧同版本包、缺声明或载荷增删改均拒绝。客户端 job 同时对照当前源码独立构建的完整 Web 文件，包名/版本/原证书检查仍保留。此声明和逐文件比较不是对未知原生字节码的独立反编译证明，原生启动与升级门仍须实际通过。
+
+正式四阶段升级前保存新 APK 的来源与摘要，四阶段全部成功后再次核对原摘要并生成不可变 run artifact。publish 在任何 tag/Release 写入前，逐项验证四阶段日志摘要、源码、版本及最终客户端 APK 与已测 APK 的完整字节相同；不同则失败，不重新从同名草稿取另一份作为测试凭据。公开旧 Release 不回填新声明或覆盖资产。
+
+已公开 v4.0.5 Android 的已核验原始输入属于 `372af8bdba34f2ea3b3e3cf2020d0815d0072ce4`，与正式 tag `4dd8a4a1c9b6ef49924520c65cff5fb652f123c5` 的来源范围不同。验证该旧 APK 时，旧 Android 造数脚本应从实际 372 源编译并另存证明；不能直接套用桌面 `PREVIOUS_CLIENT_REF` 后声称准确旧库验收。新版本仍使用固定永久证书、应用 ID 和存储 origin，不卸载或清库绕过。
 
 ## 模块加载失败的明确恢复
 
 React 页面模块或预加载样式失败时，错误页的“重试”先等待既有编辑保存屏障成功，再由用户这一次操作重新加载页面，避免只重置错误边界而反复显示缓存的加载失败。保存失败时保留错误页并阻止重新加载；持续资源故障仍显示失败，不后台循环重试，不清空浏览器数据、不切换 origin。普通渲染/业务错误继续走原有边界重置，不自动刷新。此恢复不等于已确认首次加载失败的网络、构建或缓存根因。
+
+
+## 社区作品集的公开构建配置
+
+正常 Git 运行、便携构建、桌面及 Android 构建共用 `src/lib/community-works/public-deployment.json` 的正式公开连接信息，无需私有密钥或另建账号系统。本地创作仍可离线使用；仅在作者主动投稿或参与社区互动时验证邮箱。社区页面为 <https://yuanbw.vercel.app/community-works/>。
+
+需要禁用入口时设置 `VITE_STORYFORGE_COMMUNITY_SHARING=0`。连接独立测试或自建服务时，必须同时设置开关为 `1`，并完整设置 `VITE_STORYFORGE_COMMUNITY_API_URL`、`VITE_STORYFORGE_COMMUNITY_SUPABASE_URL` 和 `VITE_STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY`；缺项或不安全 URL 会拒绝连接，不混用正式与测试环境。publishable key 是公开客户端标识；数据库服务端 secret key、审核模型密钥和管理授权凭据不得写入这些变量。
+
+本次交付范围为源码主干和官网社区入口；各平台正式客户端由维护者随后依照本文现有流程打包、验证并发行。
+
+### 可选增强故障诊断
+
+设置中的“附带最近操作轨迹”默认关闭，独立于现有基础故障上报。开启后只保存最近五分钟最多20项闭集页面类别/动作代号，不读取输入值、DOM文字、作品/章节ID、URL、手稿或模型内容。错误附带闭集分类和既有脱敏代码位置；桌面原生通知可附进程类别、退出原因和数值退出码。操作代号表示作者触发动作，不表示保存/采纳已经成功。未标注动作的按钮只记 button，不从按钮文字猜测语义。
+
+网页错误捕获时冻结轨迹；原生崩溃在当前进程尽力写入，桌面异常中断只在下次启动检测，不能当成确认崩溃。Android在下次启动时只关联此前持久化轨迹中时间吻合的动作，不将新会话动作倒填旧故障。操作轨迹按事件之前五分钟过滤；本机历史仍沿原七天/有界摘要，后台错误详情仍30天。退出、断电、磁盘/权限错误可能让最后的轨迹缺失，不保证每次故障都有报告。
+
+客户端先读取原支持域名的 capabilities，仅服务端明确支持时发送可选details；旧部署/离线仍按原格式提交基础错误。人工反馈和公开URL交接保持原有确认，URL不附新详情。增强选择关闭后清除操作缓存及待发详情，旧数据不补造，不采集console原文/转储。客户端源码、平台API/代理与受保护后台展示分别验证，未实际发行/部署不得宣称已上线。

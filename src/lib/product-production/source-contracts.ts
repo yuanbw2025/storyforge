@@ -125,6 +125,7 @@ export async function createProductProductionSourcePlanV1(input: {
       ? (await (await import('../character-interaction/consultation-harness')).readChatConsultationProductionEvidenceV1(input.scope, input.brief)).map(row => row.pointer)
       : []
     const common = {
+      sourcePurpose: input.brief.source.sourcePurpose,
       consultationContextManifests,
       productInstanceKey: input.productionKey,
       adapter,
@@ -217,8 +218,11 @@ export async function refreezeProductProductionEvolutionSourcePlanV2(input: {
   createdAt: number
 }): Promise<ProductSourcePlan> {
   const plan = await parseProductProductionSourcePlanV1(input.previous)
-  if (plan.version === 1) return plan
   const prior = JSON.parse(input.previous.briefJson) as ProductProductionBriefV3
+  if (input.nextBrief.source.sourcePurpose?.evidenceHash !== prior.source?.sourcePurpose?.evidenceHash) {
+    throw new Error('[product-production-source] 演化改变了用途声明；必须重新确认世界来源计划')
+  }
+  if (plan.version === 1) return plan
   if (input.nextBrief.intent.productType !== prior.intent.productType
     || input.nextBrief.source.worldContentHash !== prior.source.worldContentHash
     || await hashProductProductionValueV2(input.nextBrief.source.selection) !== await hashProductProductionValueV2(prior.source.selection)

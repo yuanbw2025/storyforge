@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-vi.mock('../../src/lib/ai/client', () => ({ chat: vi.fn(async () => JSON.stringify({ field: 'worldOrigin', value: '模型起源' })) }))
 import { db } from '../../src/lib/db/schema'
 import { chat } from '../../src/lib/ai/client'
+import * as aiClient from '../../src/lib/ai/client'
+import * as usageLog from '../../src/lib/ai/usage-log'
+import { useAIConfigStore } from '../../src/stores/ai-config'
 import { AUTHORING_NODE_BY_ID, defaultConfigForTemplate } from '../../src/lib/node-authoring/catalog'
 import { emptyAuthoringGraph, type AuthoringNodeInstance } from '../../src/lib/node-authoring/contracts'
 import { adoptAuthoringCandidate, persistAdoptedAuthoringCandidate, reviseAuthoringCandidate, runAuthoringGraph } from '../../src/lib/node-authoring/executor'
+import { readNodeFieldProducerPrefixV1 } from '../../src/lib/node-authoring/field-producer'
 import { useNodeFlowStore } from '../../src/stores/node-flow'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
@@ -24,8 +27,26 @@ async function setup(extra = false, candidateCount = 1) {
   return (await db.nodeFlows.get(id))!
 }
 describe('NODE-2 candidate recovery and local authoring', () => {
-  beforeEach(async () => { vi.clearAllMocks(); await db.delete(); await db.open(); projectId = (await seedCurrentWorkspace('节点候选验收')).project.id! })
-  afterEach(() => db.close())
+  let usage: Promise<unknown>[]
+  let modelResponse: string
+  beforeEach(async () => {
+    await db.delete(); await db.open(); projectId = (await seedCurrentWorkspace('节点候选验收')).project.id!; usage = []
+    modelResponse = JSON.stringify({ field: 'worldOrigin', value: '模型起源' })
+    vi.stubGlobal('window', undefined)
+    useAIConfigStore.getState().setConfig({ provider: 'custom', apiKey: '', model: 'isolated-node-recovery',
+      baseUrl: 'http://127.0.0.1:9/v1', temperature: .5, maxTokens: 8_000, contextWindow: 128_000 })
+    const recordUsage = usageLog.recordUsage
+    vi.spyOn(usageLog, 'recordUsage').mockImplementation(function (this: unknown, input) {
+      const pending = recordUsage.call(this, input); usage.push(pending); return pending
+    })
+    vi.spyOn(aiClient, 'chat')
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (url, request) => {
+      if (String(url) !== 'http://127.0.0.1:9/v1/chat/completions' || request?.method !== 'POST') throw new Error('Unexpected external model request')
+      return new Response(JSON.stringify({ choices: [{ message: { content: modelResponse }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 17, completion_tokens: 9, total_tokens: 26 } }), { status: 200 })
+    }))
+  })
+  afterEach(async () => { await Promise.allSettled(usage); vi.unstubAllGlobals(); vi.restoreAllMocks(); db.close() })
   it('runs a selected branch with an unfinished sibling, while whole-graph execution fails before a model call', async () => {
     const flow = await setup(true)
     await expect(runAuthoringGraph({ flow })).rejects.toThrow('缺少必需输入')
@@ -59,27 +80,41 @@ describe('NODE-2 candidate recovery and local authoring', () => {
     await adoptAuthoringCandidate({ flow, runId: result.run.id, nodeId: 'origin', output })
     await persistAdoptedAuthoringCandidate({ flow, runId: result.run.id!, nodeId: 'origin', output })
     expect((await db.worldviews.where('projectId').equals(projectId).first())?.worldOrigin).toBe('作者确认版本')
-    await expect(adoptAuthoringCandidate({ flow, runId: result.run.id, nodeId: 'origin', output })).rejects.toThrow('已处理')
-    await expect(reviseAuthoringCandidate({ flow, runId: result.run.id!, nodeId: 'origin', output: '覆盖' })).rejects.toThrow('已处理')
+    const beforeRepeat = await db.worldviews.toArray()
+    await expect(adoptAuthoringCandidate({ flow, runId: result.run.id, nodeId: 'origin', output })).resolves.toMatchObject({ recovered: true, written: [] })
+    expect(await db.worldviews.toArray()).toEqual(beforeRepeat)
+    expect(chat).toHaveBeenCalledTimes(1)
+    await expect(reviseAuthoringCandidate({ flow, runId: result.run.id!, nodeId: 'origin', output: '覆盖' })).rejects.toThrow('作者首次确认已固定版本和原稿')
+    expect(await db.worldviews.toArray()).toEqual(beforeRepeat)
   })
   it('rejects persistently without writing Canon and refuses a candidate after its target configuration changes', async () => {
     const flow = await setup(); const result = await runAuthoringGraph({ flow })
     const changed = JSON.parse(flow.graphJson); changed.nodes[0].config.request = '修改后的方向'
-    await expect(adoptAuthoringCandidate({ flow: { ...flow, graphJson: JSON.stringify(changed) }, runId: result.run.id, nodeId: 'origin', output: result.candidates.origin.output })).rejects.toThrow('参数或写入目标已变化')
+    await expect(adoptAuthoringCandidate({ flow: { ...flow, graphJson: JSON.stringify(changed) }, runId: result.run.id, nodeId: 'origin', output: result.candidates.origin.output })).rejects.toThrow('节点字段采纳未完成：执行图已变化')
     const rejected = await reviseAuthoringCandidate({ flow, runId: result.run.id!, nodeId: 'origin', reject: true })
     expect(JSON.parse(rejected.nodeResultsJson).origin.status).toBe('rejected')
-    await expect(adoptAuthoringCandidate({ flow, runId: result.run.id, nodeId: 'origin', output: result.candidates.origin.output })).rejects.toThrow('已处理')
+    await expect(adoptAuthoringCandidate({ flow, runId: result.run.id, nodeId: 'origin', output: result.candidates.origin.output })).rejects.toThrow('节点字段采纳未完成：选择、编辑稿或原签名不匹配')
     expect(await db.worldviews.where('projectId').equals(projectId).count()).toBe(0)
   })
   it('presentation edits preserve a paused checkpoint but execution edits invalidate it', async () => {
     const flow = await setup(); const controller = new AbortController(); controller.abort('paused')
     const paused = await runAuthoringGraph({ flow, signal: controller.signal })
     const graph = JSON.parse(flow.graphJson); graph.nodes[0].x = 900; graph.nodes[0].favorite = true; graph.viewport.zoom = 0.5
-    const resumed = await runAuthoringGraph({ flow: { ...flow, graphJson: JSON.stringify(graph) }, resumeRunId: paused.run.id })
+    const presented = { ...flow, graphJson: JSON.stringify(graph) }
+    const resumed = await runAuthoringGraph({ flow: presented, resumeRunId: paused.run.id })
     expect(resumed.run.status).toBe('completed')
+    const prefix = await readNodeFieldProducerPrefixV1({ scope: await resolveScopeLike(projectId),
+      nodeRun: (await db.nodeRuns.get(resumed.run.id!))!, node: graph.nodes[0], requestedCount: 1 })
+    expect(prefix.hasProducerEvidence).toBe(true)
+    expect(prefix.sealedSlots).toHaveLength(1)
+    expect(prefix.prefix?.variants).toEqual(resumed.candidates.origin.variants)
+    const revised = await reviseAuthoringCandidate({ flow: presented, runId: resumed.run.id!, nodeId: 'origin', output: resumed.candidates.origin.output })
+    expect(JSON.parse(revised.nodeResultsJson).origin.output).toBe(resumed.candidates.origin.output)
+    expect(chat).toHaveBeenCalledTimes(1)
     const pausedAgain = await runAuthoringGraph({ flow, signal: controller.signal })
     graph.nodes[0].config.request = '新的创作方向'
     await expect(runAuthoringGraph({ flow: { ...flow, graphJson: JSON.stringify(graph) }, resumeRunId: pausedAgain.run.id })).rejects.toThrow('图已变化')
+    expect(chat).toHaveBeenCalledTimes(1)
   })
   it('cannot revise a run owned by another work', async () => {
     const flow = await setup(); const result = await runAuthoringGraph({ flow })
@@ -102,7 +137,7 @@ describe('NODE-2 candidate recovery and local authoring', () => {
     await adoptAuthoringCandidate({ flow, runId: first.run.id!, nodeId: nodeIds.world, output: first.candidates[nodeIds.world].output })
     const confirmed = await persistAdoptedAuthoringCandidate({ flow, runId: first.run.id!, nodeId: nodeIds.world, output: first.candidates[nodeIds.world].output })
     expect(JSON.parse(confirmed.nodeResultsJson)[nodeIds.world].canonReceipt.records[0].documentId).toMatch(/^res:v1:worldview:/)
-    vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({ field: 'concept', value: '古城中成长的故事。' }))
+    modelResponse = JSON.stringify({ field: 'concept', value: '古城中成长的故事。' })
     const second = await runAuthoringGraph({ flow, targetNodeId: nodeIds.concept, baseRunId: first.run.id!, runNodeIds: new Set([nodeIds.concept]) })
     expect(second.run.status).toBe('completed')
     expect(chat).toHaveBeenCalledTimes(2)

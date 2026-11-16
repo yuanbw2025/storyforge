@@ -46,7 +46,14 @@ describe('R-TTRPGOPEN2 budgeted production envelope and distinct authoring DAG',
   it('rejects a mixed format and a divergent world/direction', async () => {
     const { brief, scripted } = await openProductionFixtureV1()
     expect(() => parseProductProductionBriefV3({ ...brief, ttrpg: scripted.ttrpg })).toThrow(/只能/)
-    expect(() => parseProductProductionBriefV3({ ...brief, source: { ...brief.source, worldContentHash: 'f'.repeat(64) } })).toThrow(/来源/)
+    const wrongWorld = { ...brief.source, worldContentHash: 'f'.repeat(64) }
+    expect(() => parseProductProductionBriefV3({ ...brief, source: wrongWorld })).toThrow(/sourcePurpose/)
+    const wrongLocator = { ...brief.source, worldReleaseId: brief.source.worldReleaseId + 1 }
+    expect(() => parseProductProductionBriefV3({ ...brief, source: wrongLocator }))
+      .toThrow('open 跑团方向/来源与共同制作合同不一致')
+    const legacySource = { ...wrongWorld }
+    delete legacySource.sourcePurpose
+    expect(() => parseProductProductionBriefV3({ ...brief, source: legacySource })).toThrow(/来源/)
     expect(() => parseProductProductionBriefV3({ ...brief, intent: { ...brief.intent, openingSituation: '别的开场' } })).toThrow(/方向/)
   })
   it('rejects damaged frozen rules and an insufficient author-approved budget before planning', async () => {

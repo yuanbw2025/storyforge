@@ -6,6 +6,7 @@ import {
   validateProductSourcePlanV1,
 } from "../product/source-contracts";
 import { validatePortableWorldReferenceV1 } from "../world-engine/world-reference";
+import { validateWorldSourcePurposeProofV1 } from "../world-engine/source-purpose-contract";
 import { parseTtrpgAuthoringSettingsV2, type TtrpgAuthoringSettingsV2 } from "./authoring-contract-v2";
 import type { RulePackV2 } from "./open-contract";
 import { parseRulePackV2 } from "./rule-pack-v2";
@@ -42,10 +43,10 @@ const HASH = /^[a-f0-9]{64}$/;
 function fail(message: string): never {
   throw new Error(`[ttrpg-brief-v3] ${message}`);
 }
-function object(value: unknown, fields: readonly string[], label: string): Record<string, unknown> {
+function object(value: unknown, fields: readonly string[], label: string, optional: readonly string[] = []): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) fail(`${label} 必须是对象`);
   const row = value as Record<string, unknown>;
-  if (Object.keys(row).some((key) => !fields.includes(key)) ||
+  if (Object.keys(row).some((key) => !fields.includes(key) && !optional.includes(key)) ||
     fields.some((key) => !Object.prototype.hasOwnProperty.call(row, key))) fail(`${label} 含未知字段或缺少必填字段`);
   return row;
 }
@@ -98,13 +99,15 @@ export function parseTtrpgProductionBriefContentShapeV3(input: unknown): TtrpgPr
     "schema", "version", "productType", "productInstanceKey", "worldReference", "adapter",
     "requirements", "initialResourceKeys", "permission", "gatewayPolicy", "gatewayPolicyHash",
     "missingStrategy", "consultationContextManifests", "readiness", "createdAt", "planHash",
-  ], "SourcePlan");
+  ], "SourcePlan", ["sourcePurpose"]);
   parseWorldReferenceShape(planRow.worldReference);
   const sourcePlan = planRow as unknown as ProductSourcePlanV1;
   if (sourcePlan.schema !== 'storyforge.product-source-plan' || sourcePlan.version !== 1
     || sourcePlan.productType !== "ttrpg" || sourcePlan.adapter?.productType !== "ttrpg" ||
     !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(sourcePlan.productInstanceKey))
     fail("SourcePlan 不属于有效的 ttrpg production");
+  if (Object.prototype.hasOwnProperty.call(planRow, "sourcePurpose"))
+    validateWorldSourcePurposeProofV1(planRow.sourcePurpose, sourcePlan.worldReference, "ttrpg");
   if (sourcePlan.readiness === "blocked" || !Array.isArray(sourcePlan.initialResourceKeys) || !sourcePlan.initialResourceKeys.length)
     fail("SourcePlan 尚未就绪");
   if (worldReference.referenceHash !== sourcePlan.worldReference.referenceHash ||

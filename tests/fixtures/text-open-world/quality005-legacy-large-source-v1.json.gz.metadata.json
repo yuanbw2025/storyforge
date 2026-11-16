@@ -1,0 +1,14 @@
+{
+  "schema": "storyforge.quality005.immutable-synthetic-fixture.v1",
+  "baselineCommit": "38cbcd5fa632516763f5844bff2665c3aee0003e",
+  "compressedSha256": "437b756741ef05df28b4bb66838224ca89a95ab85b385dea186e916eeba510c8",
+  "decompressedSha256": "bdacae4b966884187c265122502e31886387934636c117529cf9bc5876ca4eab",
+  "decompressedBytes": 21218661,
+  "actualModelCalls": 0,
+  "actualNetworkCalls": 0,
+  "humanAcceptance": false,
+  "notes": [
+    "Native pre-policy production sources, public services and actual persisted evidence; test-helper hybrid selection explicitly recorded",
+    "No real author data, real provider calls/fees or human quality acceptance"
+  ]
+}

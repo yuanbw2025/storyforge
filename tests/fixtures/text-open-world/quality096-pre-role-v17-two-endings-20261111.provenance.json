@@ -1,0 +1,25 @@
+{
+  "base": "8d6416e6a9539583a7d5560575ccd17b7498f60c",
+  "paths": {
+    "src/components/text-game/TextOpenWorldCreatorBriefStudio.tsx": "aed948e3ee1876b1d445f8789520847533f25b4826226696e641ec3c56a220ee",
+    "src/lib/open-world/creator-brief-persistence.ts": "4d89d65a52ea317fa59b8d12882012c7ad769ca052264ca91ccbd56bf134e4dd",
+    "src/lib/open-world/creator-brief.ts": "2930815678fc302569bb244122fc11211807593591e97046fd267f99bd12731e",
+    "src/lib/open-world/creator-derived-authority.ts": "172d6c52908671cefc09eff1dcf14279d856b0da23cb1638721a214dca499321",
+    "src/lib/open-world/creator-production-start.ts": "92879a6f072d2f388bb7ab69b23fd290075e7d18678ebdf5347646d22dbe2085",
+    "src/lib/open-world/creator-quality.ts": "8e097ef206b1ccf6467e81c4e2daefc1aad1a482741cd1b2279a618637d4199c",
+    "src/lib/open-world/creator-source.ts": "022ad49ca979475735b159988f919479172bf96be206891c4e28ea779cea1d46",
+    "src/lib/product-production/scheduler.ts": "c6a072887b3f68dd543aaa98646dbdffd0f4e7a01cf2b49ac51082d087eb620c",
+    "src/lib/types/text-open-world-production.ts": "457e1094eb6dd140e07464a6484b84b28f448f2deec22f89459b2986fc6ebb16"
+  },
+  "allNineProductionSourceExact": true,
+  "fixture": "tests/fixtures/text-open-world/quality096-pre-role-v17-two-endings-20261111.json.gz",
+  "fixtureSHA256": "516fc4ee84c9d77b934d8bcd5005963d214c52b658d607369872e3c4e0e91b00",
+  "capture": "actual public confirm/preflight/preview/authorize/export on exact363 production, zero model calls",
+  "backupVersion": 17,
+  "endingCount": 2,
+  "protagonistMode": "source-character",
+  "SourcePurposeBackfilled": false,
+  "briefHash": "0c1c1d0d26b14b916883dc4b113d1f8a894e915aac44279902c5bddc9d2625f3",
+  "startHash": "40fd5ce9500e5b0ea5518190812592a5020ec636f2a5239a8cb48cfc63e37ab4",
+  "originalV18ArchivePreserved": true
+}

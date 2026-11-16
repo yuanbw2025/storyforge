@@ -6,7 +6,8 @@ import JSZip from 'jszip'
 const result = await build({ configFile: 'vite.adventure-player.config.ts', mode: 'adventure-player', envFile: false })
 const zip = new JSZip()
 async function collect(dir, prefix = '') {
-  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+  const entries = await fs.readdir(dir, { withFileTypes: true })
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
     const relative = prefix + entry.name
     if (entry.isDirectory()) await collect(path.join(dir, entry.name), `${relative}/`)
     else zip.file(relative === 'adventure-web.html' ? 'index.html' : relative, await fs.readFile(path.join(dir, entry.name)))
@@ -35,13 +36,18 @@ const notices = ['Third-party notices for the bundled StoryForge player. Game co
 for (const packageRoot of [...packageRoots].sort()) {
   const metadata = JSON.parse(await fs.readFile(path.join(packageRoot, 'package.json'), 'utf8'))
   notices.push(`\n${metadata.name} ${metadata.version}\nLicense: ${typeof metadata.license === 'string' ? metadata.license : JSON.stringify(metadata.license ?? 'See package notices')}\n`)
-  for (const entry of await fs.readdir(packageRoot, { withFileTypes: true })) {
+  const entries = await fs.readdir(packageRoot, { withFileTypes: true })
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
     if (entry.isFile() && /^(?:licen[cs]e|notice|copying)(?:[.-].*)?$/i.test(entry.name)) {
       notices.push(`${entry.name}\n${await fs.readFile(path.join(packageRoot, entry.name), 'utf8')}\n`)
     }
   }
 }
 zip.file('THIRD-PARTY-NOTICES.txt', notices.join('\n'))
+// Release runners compare the complete Android payload byte for byte. ZIP directory
+// entries also get a timestamp from JSZip, so normalize them along with the files.
+const zipEpoch = new Date('1980-01-01T00:00:00Z')
+zip.forEach((_, entry) => { entry.date = zipEpoch })
 await fs.mkdir('public/player', { recursive: true })
 await fs.writeFile('public/player/adventure-player-template.zip', await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }))
 console.log('Independent adventure player template built.')

@@ -1,3 +1,8 @@
+import {
+  TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1,
+  textOpenWorldRuntimeDialogueRecordLimitV1,
+} from './runtime-dialogue-window'
+import { assertTextOpenWorldSessionNewWorkV1, assertTextOpenWorldRuntimeNewWorkV1 } from './source-admission'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import {
   createAgentRunCheckpointV1,
@@ -60,7 +65,7 @@ import { parseTextOpenWorldSessionProjectionV1 } from './session-projection'
 import { verifyTextOpenWorldVNextSessionBindingV1 } from './session-binding'
 
 export const TEXT_OPEN_WORLD_RUNTIME_MEMORY_STEP_ID_V1 = 'text-open-world-runtime-ai:memory' as const
-export const TEXT_OPEN_WORLD_RUNTIME_MEMORY_DIALOGUE_LIMIT_V1 = 12 as const
+export const TEXT_OPEN_WORLD_RUNTIME_MEMORY_DIALOGUE_LIMIT_V1 = TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1.records
 
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 const HASH = /^[a-f0-9]{64}$/
@@ -220,7 +225,7 @@ function normalizeDialogue(
   actorKey: string,
 ): TextOpenWorldRuntimeMemoryDialogueTurnV1[] {
   if (!Array.isArray(value) || value.length < 2 || value.length > TEXT_OPEN_WORLD_RUNTIME_MEMORY_DIALOGUE_LIMIT_V1) {
-    fail('dialogue-window', `关闭窗口必须包含2到${TEXT_OPEN_WORLD_RUNTIME_MEMORY_DIALOGUE_LIMIT_V1}轮记录`)
+    fail('dialogue-window', `关闭窗口必须包含2到${TEXT_OPEN_WORLD_RUNTIME_MEMORY_DIALOGUE_LIMIT_V1}条记录`)
   }
   let total = 0
   const result = value.map((turn, index) => {
@@ -245,9 +250,10 @@ function normalizeDialogue(
     } else if (source.actorKey !== actorKey || turnSource === 'player-input') {
       fail('dialogue-window', 'NPC对白越过当前角色作用域')
     }
-    const normalizedText = text(source.text, `dialogue[${index}].text`, 1_000)
+    const normalizedText = text(source.text, `dialogue[${index}].text`, textOpenWorldRuntimeDialogueRecordLimitV1(speaker))
     total += normalizedText.length
-    if (total > 6_000) fail('dialogue-window', '关闭窗口超过6000字符')
+    const { totalChars } = TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1
+    if (total > totalChars) fail('dialogue-window', `关闭窗口超过${totalChars}字符`)
     const citedKnowledgeKeys = keys(source.citedKnowledgeKeys, `dialogue[${index}].citedKnowledgeKeys`, 32)
     const candidateHash = source.dialogueCandidateHash == null ? null : String(source.dialogueCandidateHash)
     const manifestHash = source.dialogueContextManifestHash == null ? null : String(source.dialogueContextManifestHash)
@@ -534,6 +540,7 @@ async function commitMemoryEvent(input: {
         resultingStateHash: await hashProductRuntimeStateV1(replayed), replayed: true,
       }
     }
+    assertTextOpenWorldRuntimeNewWorkV1(binding.formal.runtimePackage, '新增长期记忆事件')
     if (session.status !== 'active') fail('session-status', '只有active Session可以写入长期记忆')
     const current = replayProductRuntimeEvents(JSON.parse(session.initialStateJson), events)
     const stateHash = await hashProductRuntimeStateV1(current)
@@ -586,6 +593,8 @@ export async function generateAndCommitTextOpenWorldRuntimeMemoryV1(input: {
   signal?: AbortSignal
   onRunCreated?: (runId: number) => void | Promise<void>
 }): Promise<TextOpenWorldRuntimeMemoryPresentationV1> {
+  input = { ...input, scope: structuredClone(input.scope), ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }), dialogue: structuredClone(input.dialogue), ...(input.terminalCommandIds === undefined ? {} : { terminalCommandIds: [...input.terminalCommandIds] }) }
+  await assertTextOpenWorldSessionNewWorkV1({ scope: input.scope, sessionId: input.productRuntimeSessionId, operation: '新运行模型请求' })
   if (!input.runAI && !input.aiConfig) fail('provider', '缺少AI配置')
   const terminalCommandIds = [...new Set(input.terminalCommandIds ?? [])]
   const initialSurface = await loadSurface({
@@ -675,6 +684,7 @@ export async function generateAndCommitTextOpenWorldRuntimeMemoryV1(input: {
     const output = input.runAI
       ? await input.runAI(messages, input.signal)
       : await executeTextOpenWorldRuntimeAISkillV1({
+          scope: input.scope, productRuntimeSessionId: input.productRuntimeSessionId,
           skillId: 'prose.text-open-world-runtime-memory', executionBinding,
           messages, aiConfig: input.aiConfig!, projectId: input.scope.projectId, signal: input.signal,
         })

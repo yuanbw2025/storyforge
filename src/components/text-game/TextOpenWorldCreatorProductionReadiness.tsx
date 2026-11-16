@@ -17,7 +17,11 @@ import type {
   TextOpenWorldCreatorProductionPreflightV1,
   TextOpenWorldProductionBudgetProfileV1,
 } from '../../lib/types'
-import type { TextOpenWorldCreatorBriefSessionV1 } from '../../lib/open-world/creator-brief'
+import {
+  readTextOpenWorldCreatorConsultationUsageV1,
+  type TextOpenWorldCreatorBriefSessionV1,
+  type TextOpenWorldCreatorConsultationUsageV1,
+} from '../../lib/open-world/creator-brief'
 import {
   confirmTextOpenWorldCreatorProductionPreflightV1,
   createTextOpenWorldCreatorProductionPreflightV1,
@@ -128,16 +132,38 @@ export function TextOpenWorldCreatorProductionReadiness(
     return () => { generation.current += 1 }
   }, [aiConfig, brief, presets, pricing, props.session.scope.projectId, rememberApiKey, resourceProfile, taskRoutes])
 
-  const confirmedCandidate = brief && props.session.candidate?.candidateHash === brief.candidateEvidence.candidateHash
-    ? props.session.candidate : null
-  const consultationCalls = confirmedCandidate?.modelCalls ?? []
+  const [usageLoad, setUsageLoad] = useState<{
+    session: TextOpenWorldCreatorBriefSessionV1
+    usage: TextOpenWorldCreatorConsultationUsageV1 | null
+  } | null>(null)
+  useEffect(() => {
+    const session = props.session
+    if (!session.confirmedBrief) return
+    let cancelled = false
+    void readTextOpenWorldCreatorConsultationUsageV1(session).then(usage => {
+      if (!cancelled) setUsageLoad({ session, usage })
+    }).catch(() => {
+      if (!cancelled) setUsageLoad({ session, usage: null })
+    })
+    return () => { cancelled = true }
+  }, [props.session])
+  const currentUsage = usageLoad?.session === props.session ? usageLoad : null
+  const usage = currentUsage?.usage
+  const consultationCalls = usage?.calls ?? []
+  const unresolvedRequests = usage?.unresolvedRequests ?? 0
   const consultationTotals = consultationCalls.reduce((sum, item) => ({
-    inputTokens: sum.inputTokens + item.inputTokens,
-    outputTokens: sum.outputTokens + item.outputTokens,
-    latencyMs: sum.latencyMs + item.latencyMs,
-    costUsd: sum.costUsd == null || item.estimatedCostUsd == null
-      ? null : sum.costUsd + item.estimatedCostUsd,
-  }), { inputTokens: 0, outputTokens: 0, latencyMs: 0, costUsd: 0 as number | null })
+    inputTokens: sum.inputTokens == null && item.inputTokens == null
+      ? null : (sum.inputTokens ?? 0) + (item.inputTokens ?? 0),
+    outputTokens: sum.outputTokens == null && item.outputTokens == null
+      ? null : (sum.outputTokens ?? 0) + (item.outputTokens ?? 0),
+    latencyMs: sum.latencyMs == null || item.latencyMs == null ? null : sum.latencyMs + item.latencyMs,
+    costUsd: sum.costUsd == null || item.estimatedCostUsd == null ? null : sum.costUsd + item.estimatedCostUsd,
+  }), { inputTokens: null as number | null, outputTokens: null as number | null,
+    latencyMs: 0 as number | null, costUsd: 0 as number | null })
+  const partialTokens = unresolvedRequests > 0 || consultationCalls.some(item => item.inputTokens == null || item.outputTokens == null)
+  const consultationCostUsd = unresolvedRequests ? null : consultationTotals.costUsd
+  const displayedConsultationCost = consultationCostUsd != null && consultationCostUsd > 0 && consultationCostUsd < 0.00005
+    ? '<$0.0001' : cost(consultationCostUsd)
   const allAcknowledged = Object.values(acknowledgement).every(Boolean)
 
   const confirm = async () => {
@@ -303,21 +329,32 @@ export function TextOpenWorldCreatorProductionReadiness(
 
       <section className="rounded-xl border border-border bg-bg-elevated p-5" aria-labelledby="tow-usage-heading">
         <h2 id="tow-usage-heading" className="flex items-center gap-2 text-base font-semibold"><Clock3 className="h-4 w-4 text-accent" />4. 已发生的 Creator Brief 会谈用量</h2>
-        {consultationCalls.length ? <>
+        {currentUsage == null ? <p role="status">正在核验当前会谈的模型用量…</p>
+          : !usage ? <p role="status">会谈用量暂不可核验，不能确认调用次数或费用。</p>
+          : consultationCalls.length || unresolvedRequests ? <>
+          <p className="mt-3 text-xs text-text-muted">
+            当前制作的会谈累计用量。
+            {usage.confirmedOrigin === 'author'
+              ? '本次由作者整理确认，之前的会谈用量仍计入。'
+              : usage.confirmedCalls == null ? '本次确认关联的原会谈调用暂不可核验。'
+                : `本次确认关联 ${usage.confirmedCalls} 次，已包含在会谈累计中。`}
+          </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="text-open-world-consultation-usage">
-            <div className="rounded-lg border border-border bg-bg-base p-3"><span className="text-[10px] text-text-muted">实际请求</span><strong className="mt-1 block text-sm">{consultationCalls.length} 次</strong></div>
-            <div className="rounded-lg border border-border bg-bg-base p-3"><span className="text-[10px] text-text-muted">输入 / 输出</span><strong className="mt-1 block text-sm">{formatTokens(consultationTotals.inputTokens)} / {formatTokens(consultationTotals.outputTokens)}</strong></div>
-            <div className="rounded-lg border border-border bg-bg-base p-3"><span className="text-[10px] text-text-muted">累计耗时</span><strong className="mt-1 block text-sm">{(consultationTotals.latencyMs / 1_000).toFixed(1)} 秒</strong></div>
-            <div className="rounded-lg border border-border bg-bg-base p-3"><span className="text-[10px] text-text-muted">按已知价格估算</span><strong className="mt-1 block text-sm">{cost(consultationTotals.costUsd)}</strong><small className="text-[10px] text-text-muted">不是 Provider 实际账单</small></div>
+            <div className="rounded-lg border border-border bg-bg-base p-3"><span className="text-[10px] text-text-muted">已核验实际请求</span><strong className="mt-1 block text-sm">{consultationCalls.length ? `${consultationCalls.length} 次` : '未知'}</strong>{unresolvedRequests > 0 && <small>{unresolvedRequests} 次请求的发送状态未核验</small>}</div>
+            <div className="rounded-lg border border-border bg-bg-base p-3"><span className="text-[10px] text-text-muted">输入 / 输出</span><strong className="mt-1 block text-sm">{consultationTotals.inputTokens == null ? '未知' : formatTokens(consultationTotals.inputTokens)} / {consultationTotals.outputTokens == null ? '未知' : formatTokens(consultationTotals.outputTokens)}</strong>{partialTokens && <small>仅合计已知用量</small>}</div>
+            <div className="rounded-lg border border-border bg-bg-base p-3"><span className="text-[10px] text-text-muted">累计耗时</span><strong className="mt-1 block text-sm">{unresolvedRequests || consultationTotals.latencyMs == null ? '未知' : `${(consultationTotals.latencyMs / 1_000).toFixed(1)} 秒`}</strong></div>
+            <div className="rounded-lg border border-border bg-bg-base p-3"><span className="text-[10px] text-text-muted">按已知价格估算</span><strong className="mt-1 block text-sm">{displayedConsultationCost}</strong><small className="text-[10px] text-text-muted">不是 Provider 实际账单</small></div>
           </div>
           <ul className="mt-3 space-y-1 text-[11px] text-text-muted">
-            {consultationCalls.map((item, index) => <li key={`${item.provider}:${item.model}:${index}`}>
-              #{index + 1} {item.provider} / {item.model} · {item.usageSource === 'provider' ? 'Provider token 回传' : '本地 token 估算'}
+            {consultationCalls.map((item, index) => <li key={`${item.runId}:${item.generation}:${item.attempt}`}>
+              #{index + 1} {item.provider && item.model ? `${item.provider} / ${item.model}` : '模型身份未知'} · {item.usageSource === 'provider' ? 'Provider token 回传' : item.usageSource === 'estimated' ? '本地 token 估算' : 'token 未知'}
             </li>)}
           </ul>
-        </> : <p className="mt-3 rounded-lg border border-border bg-bg-base p-3 text-xs text-text-muted">
-          本次 Brief 由作者人工确认，没有发生模型调用或费用。
-        </p>}
+        </> : usage.confirmedOrigin === 'author' && usage.confirmedCalls === 0
+          ? <p className="mt-3 rounded-lg border border-border bg-bg-base p-3 text-xs text-text-muted">
+            本次 Brief 由作者人工确认，没有发生模型调用或费用。
+          </p>
+          : <p role="status">会谈用量暂不可核验，不能确认调用次数或费用。</p>}
       </section>
 
       {preflight.blockers.length > 0 && <section role="alert" className="rounded-xl border border-danger/40 bg-danger/5 p-5 text-sm text-danger" data-testid="text-open-world-preflight-blockers">

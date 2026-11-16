@@ -1,17 +1,17 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {test, expect, type Page} from '@playwright/test'
 
 async function openReview(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-source-suggestions.invalid/v1', model: 'test', temperature: .2, maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
-  await page.goto('./chat/library')
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-source-suggestions.invalid/v1', model: 'test', temperature: .2, maxTokens: 6000, apiKey: 'isolated-test-key' })
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const scope = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)'), helper = await load('/storyforge/tests/helpers/chat-background-source.ts')
     return (await helper.seedChatBackgroundSourceFixture(helper.chatStructuredWorldRulesFixture())).scope
   })
-  await page.goto(`./chat/cast?project=${scope.projectId}&work=${scope.workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/cast?project=${scope.projectId}&work=${scope.workId}`)
   await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await page.getByRole('checkbox', {name: /规则条目 · harbor\/public · 架空设定 加入整理建议$/}).check()
   return scope
@@ -42,7 +42,7 @@ test('source suggestions use selected original passages and refresh without gran
     const load = new Function('p', 'return import(p)'), {db} = await load('/storyforge/src/lib/db/schema.ts')
     return {draft: await db.chatAuthoringDrafts.where('workId').equals(scope.workId).first(), worlds: await db.worldReleases.toArray()}
   }, scope)).toEqual(before)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await expect(page.getByTestId('chat-source-suggestion')).toContainText('蓝铃响起时先检查水尺')
   await expect(decision).toHaveValue('unclassified')
@@ -70,7 +70,7 @@ test('an unknown source-review request survives refresh without retry and needs 
   await generate.click()
   await expect(page.getByText(/这次请求的结果尚未留存/)).toBeVisible()
   expect(calls).toBe(1)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await page.getByRole('checkbox', {name: /规则条目 · harbor\/public · 架空设定 加入整理建议$/}).check()
   await expect(generate).toBeDisabled()
@@ -121,7 +121,7 @@ test('actor-scoped suggestions require saved knowledge, reject unknown selected 
   await hidden.uncheck(); await generate.click()
   await expect(page.getByTestId('chat-source-suggestion')).toContainText('仅按该角色已知')
   expect(prompts).toHaveLength(1)
-  await page.reload(); await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
+  await reloadWithBrowserFixtureAIConfigV1(page); await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await expect(page.getByText('下面的建议依据：林舟当时已知的所选资料。', {exact: true})).toBeVisible()
   await expect(perspective).toHaveValue('')
   await decision.selectOption('author-only')

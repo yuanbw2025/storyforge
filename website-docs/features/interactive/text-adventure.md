@@ -1,9 +1,14 @@
 ---
 productId: upper.text-adventure
 status: preview
-lastVerified: 2026-10-28
+lastVerified: 2026-11-13
 ---
 # 文字冒险
+
+## 11月13日：保存、恢复与使用核对
+
+在存档 A 发出操作后切到 B，A 的迟到意图仍归 A，不切回界面或清空 B 的输入。主线地点冲突按原任务及正确范围恢复，先核对已保存的角色/地点再继续。停止制作或切换轮次后，已经观测到的用量仍计入原任务，结果未知时保留待确认状态，不自动重复发送。偏好保存失败会保留当前选择。依据 [#315](https://github.com/yuanbw2025/storyforge/pull/315)、[#320](https://github.com/yuanbw2025/storyforge/pull/320)、[#362](https://github.com/yuanbw2025/storyforge/pull/362)、[#384](https://github.com/yuanbw2025/storyforge/pull/384)。
+
 
 > 当前为预览。专业生产、素材审查、发布与确定性运行已有实现；真实模型内容质量、真人试玩和首个社区推荐成品仍需专项验收。
 

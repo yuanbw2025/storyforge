@@ -6,14 +6,18 @@ import PromptTemplateEditor from '../../src/components/settings/prompt/PromptTem
 import { ToastProvider } from '../../src/components/shared/Toast'
 import { db } from '../../src/lib/db/schema'
 import { REGISTRY_BY_NAME } from '../../src/lib/registry/project-tables'
+import type { StreamResult } from '../../src/lib/ai/client'
 import type { PromptTemplate } from '../../src/lib/types/prompt'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { usePromptStore } from '../../src/stores/prompt'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const ai = vi.hoisted(() => ({
-  start: vi.fn(async () => '好示例一：用具体动作呈现人物犹疑。\n===EXAMPLE===\n好示例二：用环境回声收束冲突。'),
+  start: vi.fn(async (_messages: unknown, _config?: unknown, _meta?: unknown, _resolution?: unknown, result?: StreamResult) => {
+    if (result) result.completion = 'complete'
+    return '好示例一：用具体动作呈现人物犹疑。\n===EXAMPLE===\n好示例二：用环境回声收束冲突。'
+  }),
   reset: vi.fn(),
   stop: vi.fn(),
   setOperation: vi.fn(),

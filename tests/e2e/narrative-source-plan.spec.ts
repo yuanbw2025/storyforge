@@ -1,3 +1,4 @@
+import { gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import { expect, test } from '@playwright/test'
 import { installNarrativeProductionFixtureV4, publishAndOpenNarrativeProductV4 } from './helpers/narrative-v4-production'
 
@@ -6,14 +7,14 @@ for (const product of ['chat', 'avg'] as const) {
     test.setTimeout(180000)
     const fixtureCalls = await installNarrativeProductionFixtureV4(page, product)
     await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
-    await page.goto(`./${product}/library`)
+    await gotoWithBrowserFixtureAIConfigV1(page, `./${product}/library`)
     const source = await page.evaluate(async () => {
       const load = new Function('path', 'return import(path)')
       const seeded = await (await load('/storyforge/tests/helpers/narrative-release-fixture.ts'))
         .seedNarrativeRelationReleaseV4({ explicitEntityEvidence: true })
       return { projectId: seeded.scope.projectId, hash: seeded.release.contentHash, release: seeded.release }
     })
-    await page.goto(`./${product}/vision?narrative-preview=1`)
+    await gotoWithBrowserFixtureAIConfigV1(page, `./${product}/vision?narrative-preview=1`)
     await page.getByLabel(product === 'avg' ? 'AVG 作品名称' : '作品名称', { exact: true }).fill(`NW-2C ${product} 新版世界`)
     await page.getByLabel(product === 'avg' ? '玩家身份／主角' : '玩家身份', { exact: true }).fill('修桥见证人')
     await page.getByLabel(product === 'avg' ? '开场与核心目标' : '开场与场景目标', { exact: true }).fill('与守渡人商议修桥约定')
@@ -24,9 +25,9 @@ for (const product of ['chat', 'avg'] as const) {
     const experimentUrl = page.url()
     const ordinaryUrl = new URL(experimentUrl)
     ordinaryUrl.searchParams.delete('narrative-preview')
-    await page.goto(ordinaryUrl.href)
+    await gotoWithBrowserFixtureAIConfigV1(page, ordinaryUrl.href)
     await expect(page.getByRole('heading', { name: '多段关系原文', exact: true })).toHaveCount(0)
-    await page.goto(experimentUrl)
+    await gotoWithBrowserFixtureAIConfigV1(page, experimentUrl)
     const option = page.locator('article').filter({ has: page.getByRole('heading', { name: '多段关系原文', exact: true }) })
     await expect(option).toContainText('实验性')
     await option.getByRole('button', { name: '选择此版本', exact: true }).click()
@@ -75,7 +76,7 @@ for (const product of ['chat', 'avg'] as const) {
     expect(frozen.plan.worldReference.releaseHash).toBe(source.hash)
     expect(frozen.projectId).not.toBe(source.projectId)
     expect(frozen.plan.exact.authorResourceKeys).toEqual([...frozen.selected.resourceKeys].sort())
-    await page.reload()
+    await reloadWithBrowserFixtureAIConfigV1(page)
     await expect(page.getByText('r1 · 草稿', { exact: true })).toBeVisible()
     expect(await read()).toEqual(frozen)
     const studioUrl = page.url()
@@ -86,7 +87,7 @@ for (const product of ['chat', 'avg'] as const) {
       return db.worldReleases.get(releaseId)
     }, source.release.id)
     expect(originalRelease).toEqual(source.release)
-    await page.goto(studioUrl)
+    await gotoWithBrowserFixtureAIConfigV1(page, studioUrl)
     expect(await read()).toEqual(frozen)
   })
 }
@@ -94,12 +95,12 @@ for (const product of ['chat', 'avg'] as const) {
 test('NW-2C AVG saves the exact source plan through author confirmation and preserves it after refresh', async ({ page }) => {
   test.setTimeout(120000)
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
-  await page.goto('./avg/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './avg/library')
   await page.evaluate(async () => {
     const load = new Function('path', 'return import(path)')
     await (await load('/storyforge/tests/helpers/current-product-world.ts')).seedCurrentProductWorld('NW-2C AVG 来源验证')
   })
-  await page.goto('./avg/vision')
+  await gotoWithBrowserFixtureAIConfigV1(page, './avg/vision')
   await page.getByLabel('AVG 作品名称').fill('NW-2C 来源计划')
   await page.getByLabel('玩家身份／主角', { exact: true }).fill('灯塔档案员')
   await page.getByLabel('开场与核心目标').fill('和林舟核对港口的来信')
@@ -133,7 +134,7 @@ test('NW-2C AVG saves the exact source plan through author confirmation and pres
   expect(first.plan.exact.authorResourceKeys).toEqual([...first.selected].sort())
   expect(first.plan.exact.requiredResourceKeys).toEqual([...new Set([
     ...first.plan.exact.authorResourceKeys, ...first.plan.exact.dependencyResourceKeys])].sort())
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText('r1 · 草稿', { exact: true })).toBeVisible()
   expect((await readPlan()).plan).toEqual(first.plan)
 })

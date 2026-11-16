@@ -20,12 +20,11 @@ import {
 } from '../../context-gateway/attempt-evidence'
 import { db } from '../../db/schema'
 import { readAgentRunArtifactExactV1 } from '../../memory/artifact-store'
-import { cascadeDeleteProject } from '../../registry/lifecycle'
 import type { ContextSourceRefV1 } from '../../registry/types'
 import type { AIConfig, Character, WorkspaceScope, Worldview } from '../../types'
 import { resolveWorkspaceOwnership } from '../../workspace/ownership'
 import { stampNewRecord } from '../../workspace/scope'
-import { createWorkspace } from '../../workspace/create-workspace'
+import { createOwnedEvalWorkspaceV1, cleanupOwnedEvalWorkspaceV1, cleanupOwnedEvalWorkspacesV1, withEvalWorkspaceRunLeaseV1, type EvalWorkspaceRunLeaseV1, type EvalWorkspaceOwnerV1 } from '../workspace-ownership'
 import { createWorldWork } from '../../workspace/works'
 import { RACES_GATEWAY_EVAL_FIXTURES_V1 } from './fixtures'
 import { RacesGatewayBlindGraderFailureV1 } from './protocol'
@@ -57,6 +56,7 @@ export type RacesGatewayBlindGraderV1 = (input: {
 }) => Promise<{ grade: RacesGatewayBlindGradeV1; evidence: RacesGatewayBlindGradeEvidenceV1 }>
 
 interface SeededRacesGatewayWorkspaceV1 {
+  evalOwner: EvalWorkspaceOwnerV1
   projectId: number
   scope: WorkspaceScope
   worldviewId: number | null
@@ -115,47 +115,52 @@ function emptyWorldview(): Omit<Worldview, 'id' | 'projectId'> {
   }
 }
 
-async function seedWorkspace(fixture: RacesGatewayEvalFixtureV1): Promise<SeededRacesGatewayWorkspaceV1> {
+async function seedWorkspace(fixture: RacesGatewayEvalFixtureV1, runId: string, lease: EvalWorkspaceRunLeaseV1): Promise<SeededRacesGatewayWorkspaceV1> {
   const now = Date.now()
-  const created = await createWorkspace({
-    name: fixture.title,
-    genres: ['fantasy'],
-    description: `${PROJECT_MARKER} ${fixture.id}`,
-    status: 'drafting',
-    targetWordCount: 1_000_000,
-  }, { purpose: 'independent-work', kind: 'novel', novelProfile: 'long' })
-  const { scope } = created
-  const projectId = scope.projectId
-  let worldviewId: number | null = null
-  if (fixture.kind === 'partial-world' || fixture.kind === 'pinned-mandatory'
-    || fixture.kind === 'expand' || fixture.kind === 'polish') {
-    const values = emptyWorldview()
-    if (fixture.kind === 'partial-world') values.worldOrigin = fixture.seedText
-    else values.races = fixture.seedText
-    worldviewId = await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
-      projectId,
-      ...values,
-    }, { owner: 'world' }) as Worldview) as number
-  }
-  let lateTargetCharacterId: number | null = null
-  if (fixture.kind === 'late-target') {
-    for (let index = 0; index < 24; index += 1) {
-      const isTarget = index === 23
-      const character = stampNewRecord(scope, 'characters', {
+  const created = await createOwnedEvalWorkspaceV1({
+    suite: 'races-gateway', runId, lease,
+    workspace: { name: fixture.title, genres: ['fantasy'], description: `${PROJECT_MARKER} ${fixture.id}`,
+      status: 'drafting', targetWordCount: 1_000_000 },
+    options: { purpose: 'independent-work', kind: 'novel', novelProfile: 'long' },
+  })
+  try {
+    const { scope } = created
+    const projectId = scope.projectId
+    let worldviewId: number | null = null
+    if (fixture.kind === 'partial-world' || fixture.kind === 'pinned-mandatory'
+      || fixture.kind === 'expand' || fixture.kind === 'polish') {
+      const values = emptyWorldview()
+      if (fixture.kind === 'partial-world') values.worldOrigin = fixture.seedText
+      else values.races = fixture.seedText
+      worldviewId = await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
         projectId,
-        name: isTarget ? fixture.expectedAnchor! : `目录填充角色${fixture.id}-${index + 1}`,
-        roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
-        shortDescription: isTarget
-          ? `${fixture.expectedAnchor}负责保存跨族群通行契约，身份不能被同名概念替代。`
-          : `第 ${index + 1} 位普通港口居民。`,
-        appearance: '', personality: '谨慎', background: '生活在港口。', motivation: '维持日常秩序。',
-        abilities: '', relationships: '[]', arc: '', createdAt: now + index, updatedAt: now + index,
-      }, { owner: 'world' }) as Character
-      const id = await db.characters.add(character) as number
-      if (isTarget) lateTargetCharacterId = id
+        ...values,
+      }, { owner: 'world' }) as Worldview) as number
     }
+    let lateTargetCharacterId: number | null = null
+    if (fixture.kind === 'late-target') {
+      for (let index = 0; index < 24; index += 1) {
+        const isTarget = index === 23
+        const character = stampNewRecord(scope, 'characters', {
+          projectId,
+          name: isTarget ? fixture.expectedAnchor! : `目录填充角色${fixture.id}-${index + 1}`,
+          roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
+          shortDescription: isTarget
+            ? `${fixture.expectedAnchor}负责保存跨族群通行契约，身份不能被同名概念替代。`
+            : `第 ${index + 1} 位普通港口居民。`,
+          appearance: '', personality: '谨慎', background: '生活在港口。', motivation: '维持日常秩序。',
+          abilities: '', relationships: '[]', arc: '', createdAt: now + index, updatedAt: now + index,
+        }, { owner: 'world' }) as Character
+        const id = await db.characters.add(character) as number
+        if (isTarget) lateTargetCharacterId = id
+      }
+    }
+    return { projectId, scope, worldviewId, lateTargetCharacterId, evalOwner: created.evalOwner }
+  } catch (cause) {
+    try { await cleanupOwnedEvalWorkspaceV1(created.evalOwner, lease) }
+    catch (cleanupCause) { throw Object.defineProperty(new Error('RACE 夹具初始化失败，隔离清理未完成；保留运行所有权记录。'), 'cause', { value: { seed: cause, cleanup: cleanupCause }, configurable: true, writable: true }) }
+    throw cause
   }
-  return { projectId, scope, worldviewId, lateTargetCharacterId }
 }
 
 function retrievalDecisions(manifest: Awaited<ReturnType<typeof readContextGatewayManifestV3ForAttemptV1>>['manifest']) {
@@ -175,6 +180,8 @@ function includesRef(
 }
 
 async function executeModelFixture(input: {
+  workspaceOwnerId: string
+  lease: EvalWorkspaceRunLeaseV1
   fixture: RacesGatewayEvalFixtureV1
   modelIdentity: { provider: string; model: string }
   generatorConfig: AIConfig
@@ -185,7 +192,7 @@ async function executeModelFixture(input: {
   let generatedEvidence: RacesGatewayEvalResultV1 | null = null
   let durableRunId: number | null = null
   try {
-    seeded = await seedWorkspace(input.fixture)
+    seeded = await seedWorkspace(input.fixture, input.workspaceOwnerId, input.lease)
     const conversation = await getOrCreateAgentConversation({
       projectId: seeded.projectId,
       scope: seeded.scope,
@@ -357,7 +364,7 @@ async function executeModelFixture(input: {
     let cleanupFailure = ''
     if (failedProjectId != null) {
       try {
-        if (await db.projects.get(failedProjectId)) await cascadeDeleteProject(failedProjectId)
+        await cleanupOwnedEvalWorkspacesV1({ suite: 'races-gateway', runId: input.workspaceOwnerId, projectIds: [failedProjectId], lease: input.lease })
       } catch (cleanupError) {
         cleanupFailure = `；隔离项目清理失败：${safeError(cleanupError)}`
       }
@@ -559,6 +566,7 @@ function isModelFixture(fixture: RacesGatewayEvalFixtureV1): boolean {
 }
 
 async function cleanupCompletedProjectsV1(input: {
+  lease: EvalWorkspaceRunLeaseV1
   checkpoint: RacesGatewayEvalCheckpointV1
   fixtures: readonly RacesGatewayEvalFixtureV1[]
 }): Promise<void> {
@@ -569,9 +577,7 @@ async function cleanupCompletedProjectsV1(input: {
   const disposable = new Set(input.checkpoint.results
     .filter(result => result.status === 'passed' && result.projectId != null && !stillNeeded.has(result.fixtureId))
     .map(result => result.projectId!))
-  for (const projectId of disposable) {
-    if (await db.projects.get(projectId)) await cascadeDeleteProject(projectId)
-  }
+  await cleanupOwnedEvalWorkspacesV1({ suite: 'races-gateway', runId: input.checkpoint.workspaceOwnerId, projectIds: [...disposable], lease: input.lease })
 }
 
 export async function verifyRacesGatewayEvalCheckpointV1(
@@ -579,6 +585,8 @@ export async function verifyRacesGatewayEvalCheckpointV1(
   fixtures: readonly RacesGatewayEvalFixtureV1[] = RACES_GATEWAY_EVAL_FIXTURES_V1,
 ): Promise<boolean> {
   try {
+    if (checkpoint.workspaceOwnerId !== undefined
+      && (typeof checkpoint.workspaceOwnerId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(checkpoint.workspaceOwnerId))) return false
     if (checkpoint.version !== RACES_GATEWAY_EVAL_VERSION_V21
       || !/^[a-f0-9]{64}$/.test(checkpoint.fixtureHash)
       || !/^[a-f0-9]{64}$/.test(checkpoint.checkpointHash)) return false
@@ -686,17 +694,22 @@ export function exportRacesGatewayEvalCheckpointV1(checkpoint: RacesGatewayEvalC
   return JSON.stringify(checkpoint, null, 2)
 }
 
-export async function cleanupRacesGatewayEvalProjectsV1(): Promise<number> {
-  const projectIds = [...new Set((await db.works.toArray())
-    .filter(work => work.description.startsWith(PROJECT_MARKER))
-    .map(work => work.projectId))]
-  for (const projectId of projectIds) await cascadeDeleteProject(projectId)
-  return projectIds.length
+export async function cleanupRacesGatewayEvalProjectsV1(runId?: string): Promise<number> {
+  return cleanupOwnedEvalWorkspacesV1({ suite: 'races-gateway', runId })
 }
 
-export async function clearRacesGatewayEvalCheckpointV1(): Promise<void> {
-  localStorage.removeItem(RACES_GATEWAY_EVAL_STORAGE_KEY_V21)
-  await cleanupRacesGatewayEvalProjectsV1()
+export async function clearRacesGatewayEvalCheckpointV1(runId?: string): Promise<void> {
+  if (!runId) throw new Error('本次 RACE-6 评测缺少可确认的运行身份；原记录保留。')
+  await withEvalWorkspaceRunLeaseV1({ suite: 'races-gateway', runId }, async lease => {
+    const raw = localStorage.getItem(RACES_GATEWAY_EVAL_STORAGE_KEY_V21)
+    const current = raw == null ? null : JSON.parse(raw) as RacesGatewayEvalCheckpointV1
+    if (raw != null && current?.workspaceOwnerId !== runId) throw new Error('RACE-6 checkpoint 不属于本次运行；原记录保留，请重新载入。')
+    await cleanupOwnedEvalWorkspacesV1({ suite: 'races-gateway', runId, lease })
+    if (localStorage.getItem(RACES_GATEWAY_EVAL_STORAGE_KEY_V21) !== raw) {
+      throw new Error('RACE-6 checkpoint 已更新；原记录保留，请重新载入。')
+    }
+    localStorage.removeItem(RACES_GATEWAY_EVAL_STORAGE_KEY_V21)
+  })
 }
 
 export async function runRacesGatewayEvalV1(input: {
@@ -743,9 +756,7 @@ export async function runRacesGatewayEvalV1(input: {
       score: null,
     }
   } else {
-    // A new protocol run may follow a failed older checkpoint. Evaluation
-    // workspaces are disposable and must never become invisible orphans.
-    await cleanupRacesGatewayEvalProjectsV1()
+    // A new protocol run has no authority over another run's workspaces.
     const now = Date.now()
     checkpoint = await sealCheckpoint({
       version: RACES_GATEWAY_EVAL_VERSION_V21,
@@ -764,51 +775,60 @@ export async function runRacesGatewayEvalV1(input: {
       checkpointHash: EMPTY_HASH,
     })
   }
-  await cleanupCompletedProjectsV1({ checkpoint, fixtures })
-  const save = async (fixture: RacesGatewayEvalFixtureV1) => {
+  const workspaceOwnerId = checkpoint.workspaceOwnerId ?? crypto.randomUUID()
+  return withEvalWorkspaceRunLeaseV1({ suite: 'races-gateway', runId: workspaceOwnerId }, async lease => {
+    checkpoint = await sealCheckpoint({ ...checkpoint, workspaceOwnerId })
+    // Persist ownership before the first workspace exists, including interruptions
+    // before the first completed fixture is available after reload.
+    persistRacesGatewayEvalCheckpointV1(checkpoint)
+    await cleanupCompletedProjectsV1({ checkpoint, fixtures, lease })
+    const save = async (fixture: RacesGatewayEvalFixtureV1) => {
+      checkpoint = await sealCheckpoint({ ...checkpoint, updatedAt: Date.now() })
+      persistRacesGatewayEvalCheckpointV1(checkpoint)
+      await input.onProgress?.({ fixture, completed: checkpoint.nextIndex, total: fixtures.length, checkpoint })
+    }
+    for (let index = checkpoint.nextIndex; index < fixtures.length; index += 1) {
+      const fixture = fixtures[index]
+      await input.onProgress?.({ fixture, completed: checkpoint.nextIndex, total: fixtures.length, checkpoint })
+      let result: RacesGatewayEvalResultV1
+      if (fixture.kind === 'cross-scope-attack') result = await executeCrossScopeFixture(fixture, checkpoint.results)
+      else if (fixture.kind === 'concurrent-cas') result = await executeCasFixture(fixture, checkpoint.results)
+      else result = await executeModelFixture({
+        workspaceOwnerId,
+        lease,
+        fixture,
+        modelIdentity: input.modelIdentity,
+        generatorConfig: input.generatorConfig,
+        grade: input.grade,
+      })
+      checkpoint.results = [...checkpoint.results.slice(0, index), result]
+      if (result.status === 'failed') {
+        const attempt = checkpoint.attemptFailures
+          .filter(item => item.fixtureId === fixture.id).length + 1
+        checkpoint.attemptFailures = [...checkpoint.attemptFailures, {
+          fixtureId: fixture.id,
+          attempt,
+          recordedAt: Date.now(),
+          result,
+        }]
+        checkpoint.status = 'failed'
+        checkpoint.nextIndex = index
+        await save(fixture)
+        throw new Error(`RACE-6 ${fixture.id} 执行失败：${result.error ?? '未知错误'}`)
+      }
+      checkpoint.nextIndex = index + 1
+      await save(fixture)
+      await cleanupCompletedProjectsV1({ checkpoint, fixtures, lease })
+    }
+    checkpoint.score = scoreRacesGatewayEvalV1(
+      checkpoint.results,
+      checkpoint.thresholds,
+      fixtures,
+      checkpoint.attemptFailures,
+    )
+    checkpoint.status = 'completed'
     checkpoint = await sealCheckpoint({ ...checkpoint, updatedAt: Date.now() })
     persistRacesGatewayEvalCheckpointV1(checkpoint)
-    await input.onProgress?.({ fixture, completed: checkpoint.nextIndex, total: fixtures.length, checkpoint })
-  }
-  for (let index = checkpoint.nextIndex; index < fixtures.length; index += 1) {
-    const fixture = fixtures[index]
-    await input.onProgress?.({ fixture, completed: checkpoint.nextIndex, total: fixtures.length, checkpoint })
-    let result: RacesGatewayEvalResultV1
-    if (fixture.kind === 'cross-scope-attack') result = await executeCrossScopeFixture(fixture, checkpoint.results)
-    else if (fixture.kind === 'concurrent-cas') result = await executeCasFixture(fixture, checkpoint.results)
-    else result = await executeModelFixture({
-      fixture,
-      modelIdentity: input.modelIdentity,
-      generatorConfig: input.generatorConfig,
-      grade: input.grade,
-    })
-    checkpoint.results = [...checkpoint.results.slice(0, index), result]
-    if (result.status === 'failed') {
-      const attempt = checkpoint.attemptFailures
-        .filter(item => item.fixtureId === fixture.id).length + 1
-      checkpoint.attemptFailures = [...checkpoint.attemptFailures, {
-        fixtureId: fixture.id,
-        attempt,
-        recordedAt: Date.now(),
-        result,
-      }]
-      checkpoint.status = 'failed'
-      checkpoint.nextIndex = index
-      await save(fixture)
-      throw new Error(`RACE-6 ${fixture.id} 执行失败：${result.error ?? '未知错误'}`)
-    }
-    checkpoint.nextIndex = index + 1
-    await save(fixture)
-    await cleanupCompletedProjectsV1({ checkpoint, fixtures })
-  }
-  checkpoint.score = scoreRacesGatewayEvalV1(
-    checkpoint.results,
-    checkpoint.thresholds,
-    fixtures,
-    checkpoint.attemptFailures,
-  )
-  checkpoint.status = 'completed'
-  checkpoint = await sealCheckpoint({ ...checkpoint, updatedAt: Date.now() })
-  persistRacesGatewayEvalCheckpointV1(checkpoint)
-  return checkpoint
+    return checkpoint
+  })
 }

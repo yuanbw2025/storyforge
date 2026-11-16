@@ -1,3 +1,4 @@
+import { workspaceWriteText } from '../helpers/workspace-projection-write'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { db } from '../../src/lib/db/schema'
@@ -55,12 +56,12 @@ function makeFakeWorkspaceDirectory(name = 'StoryForgeMemory') {
           async getFile() {
             const text = dir.files.get(fileName)
             if (text == null) throw notFound()
-            return { async text() { return text } } as File
+            return new File([text], 'fixture')
           },
           async createWritable() {
             let next = ''
             return {
-              async write(value: string | Blob | BufferSource) { next += String(value) },
+              async write(value: string | ArrayBuffer) { next += workspaceWriteText(value) },
               async close() {
                 if (failAtWrite != null && writeOrder.length + 1 === failAtWrite) {
                   failAtWrite = null

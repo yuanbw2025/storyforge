@@ -32,6 +32,8 @@ export default function ProjectStorageFolderField({ value, onChange, disabled = 
         return
       }
       onChange(handle)
+    } catch (cause) {
+      setError(`选择文件夹失败：${cause instanceof Error ? cause.message : '请重试或检查系统权限。'}`)
     } finally {
       setBusy(false)
     }
@@ -59,7 +61,7 @@ export default function ProjectStorageFolderField({ value, onChange, disabled = 
       <p className="text-[11px] leading-relaxed text-text-muted">
         可选择任意硬盘位置。创建后它就是本项目的存储工作区；首次写入仍需你核对并确认。
       </p>
-      {error && <p className="text-xs text-error">{error}</p>}
+      {error && <p role="alert" className="text-xs text-error">{error}</p>}
     </div>
   )
 }

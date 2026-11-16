@@ -14,6 +14,8 @@ import type {
   AgentRunScopeV1,
 } from '../types/agent-run'
 
+import { TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1 } from './runtime-dialogue-window'
+
 export const TEXT_OPEN_WORLD_RUNTIME_AI_CONTRACT_VERSION_V1 = 1 as const
 export const TEXT_OPEN_WORLD_RUNTIME_AI_RUN_CONTRACT_BUILDER_ID_V1 = 'text-open-world-runtime-ai-contract-v1' as const
 export const TEXT_OPEN_WORLD_RUNTIME_AI_VERIFIER_SET_V1 = 'text-open-world-runtime-ai-terminal-v1' as const
@@ -243,7 +245,7 @@ export const TEXT_OPEN_WORLD_RUNTIME_AI_SKILL_CONTRACTS_V1 = [
     candidateSchema: schema('storyforge.text-open-world.runtime-dialogue-candidate', [
       field('kind', 'string', true, { constValue: 'npc-dialogue' }),
       field('actorKey', 'string', true, { maxLength: 160 }),
-      field('replyText', 'string', true, { maxLength: 4_000 }),
+      field('replyText', 'string', true, { maxLength: TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1.npcChars }),
       field('tone', 'string', true, { enumValues: ['bad', 'neutral', 'good'] }),
       field('citedKnowledgeKeys', 'stable-key[]', true, { maxItems: 32 }),
       field('recommendedActionKeys', 'stable-key[]', true, { maxItems: 16 }),

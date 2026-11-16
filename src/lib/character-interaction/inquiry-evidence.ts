@@ -1,3 +1,4 @@
+import {projectChatInquiryQuestionReferenceV1} from './inquiry-question-reference'
 import {chatInquirySettlementContextV1} from './inquiry-settlement'
 import {chatInquiryContactEvidenceContextV1} from './inquiry-contact-evidence'
 import type {CharacterInteractionRuntimeState} from '../types'
@@ -88,16 +89,7 @@ export function chatInquiryQuestionEvidenceContextV1(state: CharacterInteraction
       && !state.messages.some(m => m.role === 'player' && m.eventSequence > question.eventSequence && m.eventSequence <= pending.sourceEventSequence)
       && !story.discoveryHistory?.some(d => d.discoverySequence > question.eventSequence)
       && !story.inquiryHistory?.some(i => i.resultSequence > question.eventSequence))
-    .map(question => {
-      const known = new Set(story.situation.facts.filter(f => f.audienceKeys.includes(pending.actorKey)
-        && (f.sourceEventSequence === 0 || f.sourceEventSequence <= question.eventSequence)).map(f => f.factKey))
-      return {messageId: question.messageId, questionSequence: question.eventSequence,
-        questionEvidenceFactKeys: pending.evidenceFactKeys.filter(key => known.has(key)),
-        targets: story.permissions.maxDiscoveriesPerSituation ? story.situation.facts.filter(f => !f.audienceKeys.includes(pending.actorKey)
-          && f.discovery?.sceneKey === scene.sceneKey && f.discovery.actorKeys.includes(pending.actorKey)
-          && f.discovery.prerequisiteFactKeys.every(key => known.has(key)))
-          .map(f => ({factKey: f.factKey, requiredEvidenceFactKeys: [...f.discovery!.prerequisiteFactKeys]})) : []}
-    })
+    .map(question => projectChatInquiryQuestionReferenceV1(story, pending, scene.sceneKey, question))
   return {schema: 'storyforge.chat-inquiry-evidence', version: 2 as const, actorKey: pending.actorKey,
     requestSequence: pending.sourceEventSequence, questions}
 }

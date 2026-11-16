@@ -140,7 +140,9 @@ export async function readImpactDownstreamScheduleV1(input: {
   if (activeGenerative.length > 1) throw new Error('H57 存在多个活动生成式 child，调度证据冲突。')
   const pendingRuns = [pendingOutline, pendingTimeline].filter(candidate => candidate != null)
   if (pendingRuns.length > 1) throw new Error('H57 同时恢复出多个待确认生成式候选，调度已停止。')
-  if (activeGenerative.length === 1 && pendingRuns.length !== 1) {
+  if ((activeGenerative.length === 1 && pendingRuns.length !== 1)
+    || (pendingRuns.length === 1
+      && (activeGenerative.length !== 1 || pendingRuns[0]?.snapshot.run.id !== activeGenerative[0]?.id))) {
     throw new Error('H57 活动生成式 child 无法恢复为可信候选，调度已停止。')
   }
 

@@ -232,7 +232,7 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
     expect(await db.references.get(otherRefId)).toBeDefined()
   })
 
-  it('项目 JSON 往返重映射 run/chunk；本地断点原文明确定义为不导出', async () => {
+  it.each(['ready', 'active'] as const)('项目 JSON 往返保留 %s 分析版本与分块归属，不导出本地断点原文', async status => {
     const { projectId, referenceId } = await seedProjectAndReference('便携参考')
     const run = await createReferenceAnalysisRun({
       referenceId,
@@ -248,7 +248,8 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
       sourceText: '便携原文',
     })
     await addScopedChunk(projectId, chunk(referenceId, '便携钩子', run.id))
-    await completeReferenceAnalysisRun(run.id!, 1)
+    expect(await completeReferenceAnalysisRun(run.id!, 1)).toBe('ready')
+    if (status === 'active') await activateReferenceAnalysisRun(run.id!)
 
     const exported = await exportProjectJSON(projectId)
     expect(exported.referenceAnalysisRuns).toHaveLength(1)
@@ -260,7 +261,7 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
     const importedRuns = await listReferenceAnalysisRuns(importedRef!.id!)
     const importedChunks = await getReferenceAnalysisRunChunks(importedRef!.id!, importedRuns[0].id)
     expect(importedRuns[0]).toMatchObject({
-      status: 'active',
+      status,
       fileHash: 'portable-hash',
       sourceKind: 'public-domain',
     })

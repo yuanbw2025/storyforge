@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { readOwnedRows } from '../../src/lib/workspace/scope'
 import { AICompletionResponseErrorV1 } from '../../src/lib/ai/completion-response'
 import { ConfiguredProductionTextCallErrorV1 } from '../../src/lib/product-production/capabilities'
 import * as productionCapabilities from '../../src/lib/product-production/capabilities'
@@ -12,87 +13,37 @@ import {
 } from '../../src/lib/open-world/source-curation'
 import {
   acceptTextOpenWorldSourcePinBundleV1,
-  freezeTextOpenWorldNovelSourceV1,
   freezeTextOpenWorldWorldReleaseSourceV1,
-  prepareTextOpenWorldNovelSourceSnapshotV1,
 } from '../../src/lib/open-world/source-pin'
 import { openWorldSemanticResourceCatalogV1 } from '../../src/lib/context-gateway/world-release-client'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import type {
+  StoryCore,
   ProductProductionPlanTaskV3,
   TextOpenWorldSourceGapReportV1,
   TextOpenWorldSourceLedgerV1,
   TextOpenWorldSourceManifestV1,
 } from '../../src/lib/types'
-import { createWorkspace } from '../../src/lib/workspace/create-workspace'
-import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 import { seedAuthorizedTextOpenWorldCreatorBuildV1 } from '../helpers/text-open-world-creator-build'
 
 const HASH = 'a'.repeat(64)
 const CAPABILITY_HASH = 'b'.repeat(64)
 
-async function seedNovelFixture(theme = '成长与守护') {
-  const created = await createWorkspace({
-    name: `TOW P1 ${crypto.randomUUID()}`,
-    genres: ['fantasy'], status: 'drafting',
-    description: '巡井人追查盐脊断流并阻止旧契约吞噬城邦。',
-    targetWordCount: 120_000, enableMultiWorld: false,
-  }, { purpose: 'longform', kind: 'novel', novelProfile: 'long' })
-  const now = 1_788_633_600_000
-  const volumeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
-    projectId: created.scope.projectId, parentId: null, type: 'volume', title: '盐脊卷',
-    summary: '巡井人从断流事件进入横跨三地的调查。', order: 0,
-    createdAt: now, updatedAt: now,
-  } as never, { owner: 'work' })) as number
-  const chapterOutlineId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
-    projectId: created.scope.projectId, parentId: volumeId, type: 'chapter', title: '断流',
-    summary: '巡井人在旧渠发现反派留下的契约印记。', order: 0,
-    createdAt: now, updatedAt: now,
-  } as never, { owner: 'work' })) as number
-  const longBody = `巡井人走入干涸盐渠。${'他沿着契约刻痕前进。'.repeat(22_000)}`
-  await db.chapters.add(stampNewRecord(created.scope, 'chapters', {
-    projectId: created.scope.projectId, outlineNodeId: chapterOutlineId,
-    title: '第一章 断流', content: `<p>${longBody}</p>`, wordCount: longBody.length,
-    status: 'final', order: 0, notes: '', summary: '巡井人发现断流并非天灾。',
-    createdAt: now, updatedAt: now,
-  } as never, { owner: 'work' }))
-  await db.storyCores.add(stampNewRecord(created.scope, 'storyCores', {
-    projectId: created.scope.projectId,
-    theme,
-    centralConflict: '巡井人必须阻止旧契约吞噬盐脊，同时决定如何保存城邦秩序。',
-    plotPattern: '调查—成长—远行—回归',
-    logline: '巡井人追查断流，逐步揭开旧契约与城邦统治者的秘密。',
-    concept: '文字开放世界来源', mainPlot: '阻止断流并守护盐脊。',
-    subPlots: '沿途角色、势力和地区故事。',
-    createdAt: now, updatedAt: now,
-  } as never, { owner: 'work' }))
-  const preview = await prepareTextOpenWorldNovelSourceSnapshotV1({
-    sourceScope: created.scope,
-    selection: { mode: 'entire-work' },
+async function seedWorldFixture(theme?: string, large = false) {
+  const created = await seedCurrentProductWorld(`TOW P1 WorldRelease ${crypto.randomUUID()}`, {
+    characterDetails: large ? { background: `巡井人走入干涸盐渠。${'他沿着契约刻痕前进。'.repeat(22_000)}` } : undefined,
   })
-  const build = await seedAuthorizedTextOpenWorldCreatorBuildV1({
-    source: { kind: 'novel', scope: created.scope, selection: { mode: 'entire-work' } },
-    sessionKey: `curation-novel-${crypto.randomUUID()}`,
-  })
-  const capturedAt = Math.max(Date.now(), build.start.authorizedAt)
-  const bundle = await freezeTextOpenWorldNovelSourceV1({
-    targetScope: created.scope, sourceScope: created.scope, selection: { mode: 'entire-work' },
-    expectedSourceVersionHash: preview.sourceVersionHash,
-    expectedSourceBoundaryHash: preview.sourceBoundaryHash,
-    authorization: build.authorization,
-    createdAt: capturedAt,
-  })
-  await acceptTextOpenWorldSourcePinBundleV1({
-    scope: created.scope, buildId: build.buildId, controlEpoch: build.controlEpoch, bundle,
-  })
-  return { ...created, ...build, bundle, now: capturedAt }
-}
-
-async function seedWorldFixture() {
-  const created = await seedCurrentProductWorld(`TOW P1 WorldRelease ${crypto.randomUUID()}`)
+  let release = created.release
+  if (theme) {
+    const core = (await readOwnedRows<StoryCore>(created.scope, 'storyCores', { owner: 'work' }))[0]!
+    await db.storyCores.update(core.id!, { theme: theme.normalize('NFC') })
+    const revision = await createWorldRevision({ scope: created.scope, label: 'P1 Unicode evidence World' })
+    release = await publishWorldRevision(revision.id!)
+  }
   const catalog = await openWorldSemanticResourceCatalogV1({
-    localReleaseRecordId: created.release.id!,
+    localReleaseRecordId: release.id!,
     expectedProjectId: created.scope.projectId,
     expectedWorldId: created.scope.worldId,
   })
@@ -100,8 +51,8 @@ async function seedWorldFixture() {
     source: {
       kind: 'world-release',
       scope: created.scope,
-      localReleaseRecordId: created.release.id!,
-      expectedReleaseHash: created.release.contentHash,
+      localReleaseRecordId: release.id!,
+      expectedReleaseHash: release.contentHash,
     },
     sessionKey: `curation-world-${crypto.randomUUID()}`,
   })
@@ -109,8 +60,8 @@ async function seedWorldFixture() {
   const capturedAt = Math.max(Date.now(), build.start.authorizedAt)
   const bundle = await freezeTextOpenWorldWorldReleaseSourceV1({
     scope: created.scope,
-    localReleaseRecordId: created.release.id!,
-    expectedReleaseHash: created.release.contentHash,
+    localReleaseRecordId: release.id!,
+    expectedReleaseHash: release.contentHash,
     selection: { mode: 'entire-release' },
     authorization: build.authorization,
     createdAt: capturedAt,
@@ -121,7 +72,7 @@ async function seedWorldFixture() {
     controlEpoch: build.controlEpoch,
     bundle,
   })
-  return { ...created, ...build, bundle, selectedResourceKeys, now: capturedAt }
+  return { ...created, release, ...build, bundle, selectedResourceKeys, now: capturedAt }
 }
 
 function p1Task(): ProductProductionPlanTaskV3 {
@@ -203,9 +154,9 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
     ['provider-empty', /没有可用的回答文本/],
     ['provider-transient', /暂时不可用/],
   ] as const)('V2逐字引文由系统定位，保留Unicode并拒绝无效证据：%s', async (mode, error) => {
-    const fixture = await seedNovelFixture('🌊 序 e\u0301 共同维护潮门；共同维护潮门；唯一证据。')
-    // Novel source snapshots normalize NFC before freezing; quote the actual
-    // frozen source while retaining its leading space and astral prefix.
+    const fixture = await seedWorldFixture('🌊 序 e\u0301 共同维护潮门；共同维护潮门；唯一证据。')
+    // The author-sealed World fixture contains NFC text with the same
+    // leading-space and astral-prefix evidence cases as the legacy codec.
     const exactQuote = ' é 共同维护潮门'
     let selectedContent = ''
     const executor = createTextOpenWorldSourceCurationExecutorV1({
@@ -217,9 +168,11 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
         }, mode === 'provider-empty'
           ? new AICompletionResponseErrorV1('empty', 'finish=length; reasoning=true')
           : new AIError(503, '暂时不可用'))
-        const units = (JSON.parse(input.contextText) as {
-          selectedUnits: Array<{ unitKey: string; content: string }>
-        }).selectedUnits
+        const context = JSON.parse(input.contextText) as {
+          selectedUnits?: Array<{ unitKey: string; content: string }>
+          units?: Array<{ unitKey: string; content: string }>
+        }
+        const units = context.selectedUnits ?? context.units ?? []
         const selected = units.find(unit => unit.content.includes(exactQuote))!
         selectedContent = selected.content
         const quote = mode === 'missing' ? '未提供的来源证据'
@@ -247,7 +200,7 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
     const execution = executor({
       scope: fixture.scope, productionId: fixture.productionId, buildId: fixture.buildId,
       buildNumber: fixture.buildNumber, controlEpoch: fixture.controlEpoch,
-      planHash: fixture.planHash, task: p1Task(), attempt: 1, idempotencyKey: HASH,
+      planHash: fixture.planHash, task: p1Task(), authorResolution: null, attempt: 1, idempotencyKey: HASH,
       contextText: '', inputArtifacts: [],
       capabilityBindings: [{ requirementKey: 'text.primary', bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1' }],
       signal: new AbortController().signal,
@@ -274,14 +227,14 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
 
   it.each(['modelCalls', 'inputTokens', 'outputTokens'] as const)(
     'P1 剩余 %s 不足时明确记录零新增调用，不以未知用量占满预留', async exhaustedBudget => {
-      const fixture = await seedNovelFixture()
+      const fixture = await seedWorldFixture()
       const task = p1Task()
       const runModel = vi.fn(groundedRunner())
       const executor = createTextOpenWorldSourceCurationExecutorV1({ runModel, now: () => fixture.now + 1 })
       await expect(executor({
         scope: fixture.scope, productionId: fixture.productionId, buildId: fixture.buildId,
         buildNumber: fixture.buildNumber, controlEpoch: fixture.controlEpoch,
-        planHash: fixture.planHash, task, attempt: 2,
+        planHash: fixture.planHash, task, authorResolution: null, attempt: 2,
         attemptBudgetReservation: { ...task.budgetReservation, [exhaustedBudget]: 0 },
         idempotencyKey: HASH, contextText: '', inputArtifacts: [],
         capabilityBindings: [{ requirementKey: 'text.primary', bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1' }],
@@ -295,7 +248,7 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
   )
 
   it('P1 默认执行器把非思考 JSON 提取及冻结批次预算传入正式能力边界', async () => {
-    const fixture = await seedNovelFixture()
+    const fixture = await seedWorldFixture()
     const controller = new AbortController()
     const capability = vi.spyOn(productionCapabilities, 'runConfiguredProductionTextWithOutcomeV1')
       .mockRejectedValue(new Error('adapter-probe'))
@@ -304,7 +257,7 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
       await expect(executor({
         scope: fixture.scope, productionId: fixture.productionId, buildId: fixture.buildId,
         buildNumber: fixture.buildNumber, controlEpoch: fixture.controlEpoch,
-        planHash: fixture.planHash, task: p1Task(), attempt: 1,
+        planHash: fixture.planHash, task: p1Task(), authorResolution: null, attempt: 1,
         idempotencyKey: HASH, contextText: '', inputArtifacts: [],
         capabilityBindings: [{ requirementKey: 'text.primary', bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1' }],
         signal: controller.signal,
@@ -324,8 +277,8 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
     }
   }, 30_000)
 
-  it('分批读取冻结小说，逐字证据进入Ledger，未读大单元只能进入显式缺口', async () => {
-    const fixture = await seedNovelFixture()
+  it('分批读取冻结世界，逐字证据进入Ledger，未读大资源只能进入显式缺口', async () => {
+    const fixture = await seedWorldFixture(undefined, true)
     const controller = new AbortController()
     const executor = createTextOpenWorldSourceCurationExecutorV1({
       runModel: groundedRunner(), now: () => fixture.now + 1,
@@ -333,7 +286,7 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
     const result = await executor({
       scope: fixture.scope, productionId: fixture.productionId, buildId: fixture.buildId,
       buildNumber: fixture.buildNumber, controlEpoch: fixture.controlEpoch,
-      planHash: fixture.planHash, task: p1Task(), attempt: 1,
+      planHash: fixture.planHash, task: p1Task(), authorResolution: null, attempt: 1,
       idempotencyKey: HASH, contextText: '',
       inputArtifacts: [],
       capabilityBindings: [{ requirementKey: 'text.primary', bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1' }],
@@ -360,13 +313,8 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
     expect(gapReport.gaps).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'unread-source', status: 'open' }),
     ]))
-    const readContents = new Map(fixture.bundle.units.flatMap(item => (
-      item.payload.contentText && manifest.units.find(unit => unit.unitKey === item.payload.unitKey)?.curationStatus === 'read'
-        ? [[item.payload.unitKey, item.payload.contentText] as const]
-        : []
-    )))
     await expect(validateTextOpenWorldSourceCurationArtifactsV1({
-      bundle: fixture.bundle, artifacts: { manifest, ledger, gapReport }, readContents,
+      bundle: fixture.bundle, artifacts: { manifest, ledger, gapReport },
     })).resolves.toMatchObject({
       manifest: { sourcePinHash: fixture.bundle.pin.pinHash },
       ledger: { sourceManifestHash: manifest.manifestHash },
@@ -374,8 +322,8 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
     })
   }, 30_000)
 
-  it('注册来源未选择单元时只返回Pin边界，不把整本小说正文隐式送入模型', async () => {
-    const fixture = await seedNovelFixture()
+  it('注册来源未选择单元时只返回Pin边界，不把世界原文隐式送入模型', async () => {
+    const fixture = await seedWorldFixture()
     const indexOnly = JSON.parse(await readTextOpenWorldSourcePinContextV1({
       projectId: fixture.scope.projectId,
       scope: fixture.scope,
@@ -387,7 +335,7 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
   }, 30_000)
 
   it('WorldRelease只经冻结引用和Context Gateway完整读取，并生成可复验的逐字证据', async () => {
-    const fixture = await seedWorldFixture()
+    const fixture = await seedWorldFixture(undefined, false)
     const task = p1Task()
     task.budgetReservation.inputTokens = 100_000
     const executor = createTextOpenWorldSourceCurationExecutorV1({
@@ -397,7 +345,7 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
     const result = await executor({
       scope: fixture.scope, productionId: fixture.productionId, buildId: fixture.buildId,
       buildNumber: fixture.buildNumber, controlEpoch: fixture.controlEpoch,
-      planHash: fixture.planHash, task, attempt: 1,
+      planHash: fixture.planHash, task, authorResolution: null, attempt: 1,
       idempotencyKey: await hashProductProductionValueV2('world-curation'), contextText: '', inputArtifacts: [],
       capabilityBindings: [{ requirementKey: 'text.primary', bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1' }],
       signal: new AbortController().signal,
@@ -424,14 +372,14 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
   }, 30_000)
 
   it('拒绝模型用错误偏移或伪造引文冒充已读证据', async () => {
-    const fixture = await seedNovelFixture()
+    const fixture = await seedWorldFixture()
     const executor = createTextOpenWorldSourceCurationExecutorV1({
       runModel: groundedRunner({ corruptQuote: true }), now: () => fixture.now + 1,
     })
     await expect(executor({
       scope: fixture.scope, productionId: fixture.productionId, buildId: fixture.buildId,
       buildNumber: fixture.buildNumber, controlEpoch: fixture.controlEpoch,
-      planHash: fixture.planHash, task: p1Task(), attempt: 1,
+      planHash: fixture.planHash, task: p1Task(), authorResolution: null, attempt: 1,
       idempotencyKey: await hashProductProductionValueV2('negative'), contextText: '', inputArtifacts: [],
       capabilityBindings: [{ requirementKey: 'text.primary', bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1' }],
       signal: new AbortController().signal,

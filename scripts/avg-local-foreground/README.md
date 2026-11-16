@@ -22,7 +22,9 @@ curl --fail --location --output "$BASE/models/sam2.1_hiera_tiny.pt" \
 shasum -a 256 "$BASE/models/sam2.1_hiera_tiny.pt"
 ```
 
-The expected checkpoint digest is recorded in `model-source.json`. If the bytes differ, do not start the service. The fixed foreground recipe uses a centered 75%-width person box and a four-pixel unknown band around the SAM mask for PyMatting. It is designed for a centered subject and is not a quality guarantee; low-confidence or implausible coverage results are rejected, and every alpha remains an unadopted candidate that must be reviewed against the original.
+Before importing SAM or PyTorch, the service checks the pinned Git commit, the tracked `sam2/` package and configuration bytes, and the checkpoint SHA-256. Use a clean checkout of that commit and point the editable installation at that same checkout. If Python resolves SAM from a different installation, SAM is already loaded in the process, or the checked package contains modified, extra or cached files, startup fails. Existing `__pycache__` files are left intact; use a separate clean checkout if needed. The service copies verified package bytes to a process-private temporary directory and reads Python modules and configuration from that snapshot for its lifetime. SAM bytecode caches are neither read nor produced. Capability and segment replies report the verified code revision. The expected checkpoint digest is recorded in `model-source.json`.
+
+The fixed foreground recipe uses a centered 75%-width person box and a four-pixel unknown band around the SAM mask for PyMatting. It is designed for a centered subject and is not a quality guarantee; low-confidence or implausible coverage results are rejected, and every alpha remains an unadopted candidate that must be reviewed against the original.
 
 V4 keeps its original box-only recipe at `/v1`. V5 uses `/v2` and compares the box with a second prompt that adds centered foreground points at 16%, 40% and 72% of image height. It records all six masks, filters scores below 0.75 and mask areas outside 10%–90%, then selects the largest eligible mask (score and original order break ties). Matting output must also have 10%–90% coverage at alpha ≥ 128. These checks reduce obvious partial masks; complex backgrounds, off-center subjects and closeups can still fail visual review. Multi-person sheets must be separated into individual images first. V5 refuses images with any existing nonopaque alpha before model inference; use canvas processing to preserve that boundary instead of segmenting hidden RGB.
 
@@ -48,10 +50,10 @@ Repeat `--origin` for each additional origin. Only canonical `http://localhost:P
 
 `GET /v1/capabilities` reports the frozen V4 identity; `/v2/capabilities` additionally pins the V5 prompt strategy and gate; `/v3/capabilities` pins the V6 background rule and matting method. The matching `POST /v1/segment`, `/v2/segment` and `/v3/segment` consume the exact image bytes plus their hash, MIME type, dimensions and a one-use operation ID, then return an RGBA PNG candidate with model, code, checkpoint, source, prompt, alpha-plane, pixel and encoded-output hashes in response headers. V5/V6 record all six candidate observations and their deterministic selection. V6 adds `X-SF-Neutral-Background`. A V5/V6 plausibility rejection returns HTTP 422. Repeated operation IDs are rejected across all versions; concurrent inference is rejected instead of queued or repeated.
 
-Run the protocol tests without loading model weights:
+The protocol and source-identity tests use synthetic models and throwaway Git checkouts. Run them with:
 
 ```sh
-python3.12 -m unittest discover -s scripts/avg-local-foreground -p 'test_server.py'
+python3.12 -m unittest discover -s scripts/avg-local-foreground -p 'test_*.py'
 ```
 
 No visual or commercial-quality claim follows from protocol tests. Evaluate accepted artwork in the AVG preview and review the original and candidate together.

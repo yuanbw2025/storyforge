@@ -161,6 +161,7 @@ async function runVariantCase(input: {
     delivery = 'truncated'
   } else if (input.variant === 'semantic-compression') {
     const skill = getAgentSkillV1('prose.generate', 'prose')
+    const callFailures: unknown[] = []
     const session = createAgentContextCompressionSessionV1({
       policy: skill.contextCompression,
       config: input.generationConfig,
@@ -175,7 +176,7 @@ async function runVariantCase(input: {
             ...input.generationConfig,
             maxTokens: request.maxOutputTokens,
             temperature: request.temperature,
-          }, 'compression')
+          }, 'compression').catch(cause => { callFailures.push(cause); throw cause })
           const usage = measuredUsage(messages, response.output, response.usage)
           compressionTotals.calls += 1
           compressionTotals.inputTokens += usage.inputTokens
@@ -197,6 +198,9 @@ async function runVariantCase(input: {
       sourceBudgetTokens: input.contextTargetTokens,
       inputBudgetTokens: Math.max(sourceOriginalTokens, input.contextTargetTokens),
     })
+    // The shared transformer may fall back for optional composition. In an
+    // evaluation, an unresolved attempt cannot trigger a generation request.
+    if (callFailures.length) throw callFailures[0]
     if (!transformed?.content || !transformed.delivery) {
       throw new Error(`H17 fixture ${input.fixture.id} 语义压缩未交付可比较上下文`)
     }

@@ -86,6 +86,8 @@ export type AgentSkillExecutionModeV1 =
   | 'history-storm'
   | 'reference-summary'
   | 'reference-characters'
+  | 'reference-analysis-private-chunk'
+  | 'document-import-parse'
   | 'reverse'
   | 'auto'
   | 'story-arcs'
@@ -1413,7 +1415,7 @@ export const AGENT_SKILLS = [
     contextCompression: WORLD_COMPRESSION_POLICY,
     maxOutputTokens: 3_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-HARNESS27-master-candidate-semantic-review'],
   },
   {
@@ -1768,7 +1770,7 @@ export const AGENT_SKILLS = [
       table: 'creativeRules',
       fields: ['writingStyle', 'atmosphere', 'specialRequirements', 'systemFictionElements'],
     }],
-    lastVerifiedAt: '2026-09-26',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: [
       'R-HARNESS39-creative-rules-agent',
       'R-HARNESS39-creative-rules-panel-ui',
@@ -1822,7 +1824,7 @@ export const AGENT_SKILLS = [
         ...CHARACTER_DIMENSIONS.map(dimension => dimension.key),
       ],
     }],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-AGENT1-chat-copilot-character', 'R-HARNESS33-character-panel-ui', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -1955,7 +1957,7 @@ export const AGENT_SKILLS = [
       table: 'characters',
       fields: CHARACTER_DIMENSIONS.map(dimension => dimension.key),
     }],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-HARNESS38-character-supplement-agent', 'R-HARNESS38-character-supplement-ui'],
   },
   {
@@ -2082,6 +2084,60 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'inspiration.reference-analysis-private-chunk',
+    agentId: 'inspiration',
+    defaultForAgent: false,
+    label: '本机参考分析分块',
+    owner: 'inspiration-agent',
+    promptVersion: 'reference-analysis-private-v1',
+    executionMode: 'reference-analysis-private-chunk',
+    contextTaskKind: 'agent-inspiration',
+    readToolNames: [],
+    contextSourceKeys: ['referenceAnalysisPrivateChunk'],
+    optionalContextSourceKeys: [],
+    inputPolicy: {
+      sourceKeys: ['referenceAnalysisPrivateChunk'],
+      states: {
+        empty: { handling: 'require-upstream', instruction: '必须选择并确认本机原文。' },
+        partial: { handling: 'require-upstream', instruction: '分块缺失或跨作品时停止。' },
+        complete: { handling: 'grounded-transform', instruction: '只分析已确认原文，等待作者激活。' },
+      },
+    },
+    contextCompression: compressionPolicy(['referenceAnalysisPrivateChunk']),
+    maxOutputTokens: 8_192,
+    writeTargets: [],
+    lastVerifiedAt: '2026-11-04',
+    regressionTests: ['R-SFQA044-reference-attempt-recovery'],
+  },
+  {
+    version: 1,
+    id: 'inspiration.document-import-parse',
+    agentId: 'inspiration',
+    defaultForAgent: false,
+    label: '文档导入分块候选',
+    owner: 'inspiration-agent',
+    promptVersion: 'document-import-parse-v2',
+    executionMode: 'document-import-parse',
+    contextTaskKind: 'agent-inspiration',
+    readToolNames: [],
+    contextSourceKeys: ['manualText'],
+    optionalContextSourceKeys: ['documentImportCodexCategories'],
+    inputPolicy: {
+      sourceKeys: ['manualText'],
+      states: {
+        empty: { handling: 'require-upstream', instruction: '必须有已确认原文件的精确分块。' },
+        partial: { handling: 'require-upstream', instruction: '原文不完整时停止，不推测或继续。' },
+        complete: { handling: 'grounded-transform', instruction: '仅从当前分块提取可编辑候选。' },
+      },
+    },
+    contextCompression: compressionPolicy(['manualText', 'documentImportCodexCategories']),
+    maxOutputTokens: 16_384,
+    writeTargets: [],
+    lastVerifiedAt: '2026-11-04',
+    regressionTests: ['R-SFQA022-durable-document-parse'],
+  },
+  {
+    version: 1,
     id: 'inspiration.reverse',
     agentId: 'inspiration',
     defaultForAgent: true,
@@ -2097,7 +2153,7 @@ export const AGENT_SKILLS = [
     contextCompression: INSPIRATION_COMPRESSION_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'inspirationWorkspaces', fields: ['versions'] }],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-AGENT1-chat-copilot-inspiration', 'R-CM1-inspiration-fusion-ui', 'R-HARNESS34-inspiration-entry', 'R-HARNESS34-inspiration-panel-ui', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -2117,7 +2173,7 @@ export const AGENT_SKILLS = [
     contextCompression: INSPIRATION_COMPRESSION_POLICY,
     maxOutputTokens: 3_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-HARNESS27-master-candidate-semantic-review'],
   },
   {
@@ -2192,7 +2248,7 @@ export const AGENT_SKILLS = [
       { table: 'storylineCrossings', fields: ['arcIdA', 'arcIdB', 'chapterId', 'chapterTitle', 'note', 'evidenceQuote'] },
       { table: 'storyArcs', fields: ['name', 'type', 'description', 'stages'] },
     ],
-    lastVerifiedAt: '2026-09-26',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-HARNESS40-storyline-progress-agent', 'R-PHASE39-storyline-progress-ui'],
   },
   {
@@ -2212,7 +2268,7 @@ export const AGENT_SKILLS = [
     contextCompression: OUTLINE_CHARACTER_DRIVEN_COMPRESSION_POLICY,
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'characterDrivenPlans', fields: ['generatedVolumes', 'status'] }],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: [
       'R-HARNESS35-character-driven-agent',
       'R-HARNESS35-character-driven-panel-ui',
@@ -2238,7 +2294,7 @@ export const AGENT_SKILLS = [
       { table: 'outlineNodes', fields: ['title', 'summary'] },
       { table: 'chapters', fields: ['title'] },
     ],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: [
       'R-HARNESS36-character-revision-agent',
       'R-HARNESS36-character-revision-panel-ui',
@@ -3232,7 +3288,7 @@ export const AGENT_SKILLS = [
       table: 'chapters',
       fields: ['summary', 'summarySourceTextHash', 'summaryTextNormalizationVersion', 'continuityHandoff', 'planReconciliation'],
     }],
-    lastVerifiedAt: '2026-09-24',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-NS1-T3-chapter-memory-task', 'R-HARNESS20-chapter-post-adoption-durable'],
   },
   {
@@ -3252,7 +3308,7 @@ export const AGENT_SKILLS = [
     contextCompression: PROSE_CONSISTENCY_COMPRESSION_POLICY,
     maxOutputTokens: 1,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-26',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-HARNESS41-consistency-post-adoption'],
   },
   {
@@ -3616,7 +3672,7 @@ export const AGENT_SKILLS = [
     contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 800,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-20',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-ai-eval'],
   },
   {
@@ -3637,7 +3693,7 @@ export const AGENT_SKILLS = [
     contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 1_600,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-20',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-dialogue', 'R-OPEN-WORLD6-runtime-ai-eval'],
   },
   {
@@ -3658,7 +3714,7 @@ export const AGENT_SKILLS = [
     contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-20',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-expression', 'R-OPEN-WORLD6-runtime-ai-eval'],
   },
   {
@@ -3679,7 +3735,7 @@ export const AGENT_SKILLS = [
     contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-20',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-quest-packaging', 'R-OPEN-WORLD6-runtime-ai-eval'],
   },
   {
@@ -3700,7 +3756,7 @@ export const AGENT_SKILLS = [
     contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 1_200,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-20',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-direction', 'R-OPEN-WORLD6-runtime-ai-eval'],
   },
   {
@@ -3721,7 +3777,7 @@ export const AGENT_SKILLS = [
     contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 1_600,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-20',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-memory', 'R-OPEN-WORLD6-runtime-ai-eval'],
   },
   {
@@ -3993,7 +4049,7 @@ export const AGENT_SKILLS = [
     executionMode: 'product-production', contextTaskKind: 'agent-outline', readToolNames: [],
     contextSourceKeys: ['ai-town.authoring'], optionalContextSourceKeys: [],
     inputPolicy: productProductionInputPolicy(['ai-town.authoring']), contextCompression: compressionPolicy(['ai-town.authoring']),
-    maxOutputTokens: 8000, writeTargets: [], lastVerifiedAt: '2026-09-15', regressionTests: ['R-AITOWN6-consultation'],
+    maxOutputTokens: 8000, writeTargets: [], lastVerifiedAt: '2026-10-31', regressionTests: ['R-AITOWN6-consultation'],
   },
   {
     version: 1, id: 'avg.consult.v1', agentId: 'outline', defaultForAgent: false,
@@ -4001,15 +4057,7 @@ export const AGENT_SKILLS = [
     executionMode: 'product-production', contextTaskKind: 'agent-outline', readToolNames: [],
     contextSourceKeys: ['avg.authoring'], optionalContextSourceKeys: [],
     inputPolicy: productProductionInputPolicy(['avg.authoring']), contextCompression: compressionPolicy(['avg.authoring']),
-    maxOutputTokens: 8000, writeTargets: [], lastVerifiedAt: '2026-09-15', regressionTests: ['R-AVG4-consultation'],
-  },
-  {
-    version: 1, id: 'chat.consult.v1', agentId: 'outline', defaultForAgent: false,
-    label: '角色聊天 制作方案会谈', owner: 'outline-agent', promptVersion: 'chat-consult-v2',
-    executionMode: 'product-production', contextTaskKind: 'agent-outline', readToolNames: [],
-    contextSourceKeys: ['chat.authoring'], optionalContextSourceKeys: [],
-    inputPolicy: productProductionInputPolicy(['chat.authoring']), contextCompression: compressionPolicy(['chat.authoring']),
-    maxOutputTokens: 8000, writeTargets: [], lastVerifiedAt: '2026-09-15', regressionTests: ['R-CHAT-UI-authoring'],
+    maxOutputTokens: 8000, writeTargets: [], lastVerifiedAt: '2026-10-31', regressionTests: ['R-AVG4-consultation'],
   },
   {
     version: 1, id: 'chat.consult.v2', agentId: 'outline', defaultForAgent: false,
@@ -5070,7 +5118,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 10_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-27',
+    lastVerifiedAt: '2026-11-12',
     regressionTests: ['R-TEXTADV-source-depth', 'R-TEXTADV3-agent-team'],
   },
   {
@@ -5115,7 +5163,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 14_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-27',
+    lastVerifiedAt: '2026-11-12',
     regressionTests: ['R-PRODUCTPROD1F-production-executor', 'R-TEXTADV-source-depth', 'R-TEXTADV3-agent-team', 'R-TEXTADV3-production-artifacts'],
   },
   {
@@ -5159,7 +5207,7 @@ export const AGENT_SKILLS = [
     ]),
     maxOutputTokens: 4_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-20',
+    lastVerifiedAt: '2026-11-10',
     regressionTests: ['R-TEXTADV3-agent-team', 'R-TEXTADV3-production-artifacts'],
   },
   {
@@ -5182,7 +5230,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-27',
+    lastVerifiedAt: '2026-11-12',
     regressionTests: ['R-PRODUCTPROD1F-production-executor', 'R-TEXTADV-source-depth', 'R-TEXTADV3-agent-team'],
   },
   {
@@ -5350,7 +5398,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-27',
+    lastVerifiedAt: '2026-11-12',
     regressionTests: ['R-TEXTADV-source-depth', 'R-TEXTADV2-production'],
   },
   {
@@ -5374,7 +5422,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 32_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-27',
+    lastVerifiedAt: '2026-11-12',
     regressionTests: ['R-TEXTADV2-production'],
   },
   {
@@ -6107,7 +6155,7 @@ export function validateAgentSkillDefinitionsV1(
   const executionModesByAgent: Record<RegisteredAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
     'world-origin': new Set(['worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'narrative-annotation-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
-    inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
+    inspiration: new Set(['reference-summary', 'reference-characters', 'reference-analysis-private-chunk', 'document-import-parse', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-source-analysis', 'adaptation-causal-graph', 'screenplay-adaptation-brief', 'screenplay-decision-pass', 'screenplay-beat-sheet', 'screenplay-scene-card', 'screenplay-grounding-review', 'screenplay-dramaturgy-review', 'comic-adaptation-brief', 'comic-decision-pass', 'comic-script-adaptation', 'comic-page-rhythm', 'comic-panel-plan', 'comic-visual-bible', 'comic-image-request', 'comic-visual-continuity-review', 'comic-targeted-repair', 'comic-page-review', 'motion-drama-series-bible', 'motion-drama-asset-bible', 'motion-drama-episode-outline', 'motion-drama-shot-design', 'motion-drama-image-prompts', 'motion-drama-video-prompts', 'motion-drama-quality-review', 'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-continuity-review', 'character-interaction-production', 'product-production']),
     prose: new Set(['extension-generate', 'auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'quality-revise', 'organize', 'memory', 'consistency', 'scene-director', 'ai-town-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'text-open-world-runtime-intent', 'text-open-world-runtime-dialogue', 'text-open-world-runtime-expression', 'text-open-world-runtime-quest-packaging', 'text-open-world-runtime-direction', 'text-open-world-runtime-memory', 'screenplay-scene-draft', 'screenplay-targeted-rewrite', 'motion-drama-episode-script', 'short-chapter-draft', 'short-targeted-rewrite', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent', 'ttrpg-open-intent', 'ttrpg-open-oracle-interpret', 'ttrpg-open-common-oracle-interpret', 'ttrpg-open-fact-normalize', 'ttrpg-open-companion', 'ttrpg-open-kp', 'ttrpg-open-local-voice', 'ttrpg-open-brief', 'ttrpg-open-situation-propose', 'ttrpg-open-public-situation-propose', 'ttrpg-open-entity-propose']),
     'text-adventure-showrunner': productProductionModes,

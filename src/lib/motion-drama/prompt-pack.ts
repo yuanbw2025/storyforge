@@ -1,6 +1,7 @@
 import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { db } from '../db/schema'
 import { readMediaBlobObjectData } from '../product-production/media-blob-store'
+import { assertStoredRasterImageV1 } from '../media/blob-store'
 import type {
   MotionDramaAssetSubjectV1,
   MotionDramaAssetVersionV1,
@@ -313,7 +314,10 @@ export async function compileMotionDramaPromptPackV1(input: { scope: WorkspaceSc
       || (subject.kind === 'voice' || subject.kind === 'sound' ? !blob.mimeType.startsWith('audio/') : !blob.mimeType.startsWith('image/')))) {
       throw new Error(`[motion-drama-pack] 物料 ${subject.label} 的参考文件类型、hash 或作用域无效`)
     }
-    if (version && blob) await readMediaBlobObjectData({ scope: roots.scope, blobObjectId: blob.id!, expected: { contentHash: blob.contentHash, byteSize: blob.byteSize, mimeType: blob.mimeType } })
+    if (version && blob) {
+      const data = await readMediaBlobObjectData({ scope: roots.scope, blobObjectId: blob.id!, expected: { contentHash: blob.contentHash, byteSize: blob.byteSize, mimeType: blob.mimeType } })
+      if (blob.mimeType.startsWith('image/')) await assertStoredRasterImageV1(data, blob)
+    }
     const alias = `subject_${refRows.length + 1}`
     aliasByStableKey.set(subject.stableKey, alias)
     if (version && allowed(version.rights)) rightsReadyAliases.add(alias)
@@ -322,7 +326,8 @@ export async function compileMotionDramaPromptPackV1(input: { scope: WorkspaceSc
   for (const reference of references.filter(row => shots.some(shot => shot.stableKey === row.shotKey) && row.blobObjectId != null)) {
     const blob = await db.mediaBlobObjects.get(reference.blobObjectId!)
     if (!blob?.id || blob.workId !== roots.scope.workId || !blob.mimeType.startsWith('image/')) throw new Error('[motion-drama-pack] 分镜参考图不存在、越界或类型错误')
-    await readMediaBlobObjectData({ scope: roots.scope, blobObjectId: blob.id, expected: { contentHash: blob.contentHash, byteSize: blob.byteSize, mimeType: blob.mimeType } })
+    const data = await readMediaBlobObjectData({ scope: roots.scope, blobObjectId: blob.id, expected: { contentHash: blob.contentHash, byteSize: blob.byteSize, mimeType: blob.mimeType } })
+    await assertStoredRasterImageV1(data, blob)
     const alias = `frame_${refRows.length + 1}`
     aliasByStableKey.set(reference.stableKey, alias)
     if (allowed(reference.rights)) rightsReadyAliases.add(alias)

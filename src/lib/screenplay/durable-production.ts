@@ -1,4 +1,6 @@
-import { chat } from '../ai/client'
+import Dexie from 'dexie'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
+import { chat, type ChatResult } from '../ai/client'
 import type {
   AdaptationBriefV1,
   AIConfig,
@@ -19,7 +21,7 @@ import {
   adoptAdaptationDecisionsV1,
   adoptAdaptationSourceFactsV1,
 } from '../adaptation/analysis'
-import { confirmAdaptationBrief, inspectAdaptationFreshness, saveAdaptationBriefDraft } from '../adaptation/source-manifest'
+import { adaptationBriefTransactionTablesV1, confirmAdaptationBrief, inspectAdaptationFreshness, saveAdaptationBriefDraft } from '../adaptation/source-manifest'
 import { assertAdaptationBriefV1 } from '../adaptation/contracts'
 import { db } from '../db/schema'
 import { assembleContext } from '../registry/assemble-context'
@@ -28,7 +30,10 @@ import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { getAgentSkillV1 } from '../agent/skill-registry'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
 import { createContextManifestFromAssemblyV1 } from '../agent/run/context-manifest'
-import { appendAgentRunEventV1, createAgentRunV1, readAgentRunV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
+import { appendAgentRunEventV1, appendAgentRunEventWithSettlementInTransactionV1, agentRunScopeTransactionTablesV1,
+  createAgentRunV1, readAgentRunV1, readVerifiedAgentRunInTransactionV1, withAgentRunMutationLockV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
+import { parseAgentRunEventV1 } from '../agent/run/event-schema'
+import type { AgentRunEventTypeV1, AgentRunEventPayloadByTypeV1 } from '../types/agent-run'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import type { ScreenplaySceneCandidateV1 } from './adoption'
@@ -310,6 +315,17 @@ async function append(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, type:
   return appendAgentRunEventV1({ scope, runId: snapshot.run.id, type, payload, expectedLastSequence: snapshot.projection.lastSequence } as any)
 }
 
+/** Only the Brief caller owns the surrounding native transaction and Run lock. */
+function appendBriefEvent<T extends AgentRunEventTypeV1>(
+  scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, type: T, payload: AgentRunEventPayloadByTypeV1[T],
+) {
+  const event = parseAgentRunEventV1({ version: 1, runId: snapshot.run.id,
+    sequence: snapshot.projection.lastSequence + 1, generation: snapshot.projection.generation,
+    projectId: snapshot.run.projectId, worldGroupId: snapshot.run.worldGroupId ?? null,
+    contractHash: snapshot.run.contractHash, type, payload, createdAt: Date.now() })
+  return Dexie.Promise.resolve(appendAgentRunEventWithSettlementInTransactionV1({ snapshot, event, scope }))
+}
+
 async function rootFor(scope: WorkspaceScope, adaptationProjectId: number) {
   const root = await db.adaptationProjects.get(adaptationProjectId)
   if (!root?.id || root.medium !== 'screenplay' || root.projectId !== scope.projectId || root.worldId !== scope.worldId || root.workId !== scope.workId) throw new Error('[screenplay-run] 剧本改编不存在或越界')
@@ -386,6 +402,10 @@ function contract(scope: WorkspaceScope, stage: ScreenplayProfessionalStageV1) {
   }
 }
 
+class ScreenplaySourceChangedError extends Error {
+  constructor() { super('[screenplay-run] 来源或目标版本已变化，本次请求未派发，请检查后重新明确开始。'); this.name = 'ScreenplaySourceChangedError' }
+}
+
 export async function generateScreenplayProfessionalCandidateV1(input: {
   scope: WorkspaceScope
   adaptationProjectId: number
@@ -398,6 +418,10 @@ export async function generateScreenplayProfessionalCandidateV1(input: {
   runAI?: (messages: ChatMessage[]) => Promise<string>
   signal?: AbortSignal
 }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ScreenplayProfessionalCandidateV1 }> {
+  const callbackReceiver = input
+  const runAI = input.runAI
+  input = { ...input, scope: { ...input.scope }, aiConfig: input.aiConfig ? { ...input.aiConfig } : undefined,
+    sourceUnitKeys: input.sourceUnitKeys?.slice(), targetSceneKeys: input.targetSceneKeys?.slice(), targetIssueKeys: input.targetIssueKeys?.slice() }
   if (!input.aiConfig && !input.runAI) throw new Error('[screenplay-run] 缺少 AI 配置')
   const selected = await selectedContext(input)
   if (selected.root.status === 'complete') throw new Error('请先重新打开剧本审校')
@@ -444,12 +468,33 @@ export async function generateScreenplayProfessionalCandidateV1(input: {
     sceneCardPlanSectionKeys: Object.fromEntries(cardRows.map(row => [row.stableKey, beatSectionByKey.get(row.beatKey) ?? ''])),
   })
   const runModel = async (attemptMessages: ChatMessage[], attempt: number) => {
+    const prepared = await recordCreationModelRequestV1({ scope: input.scope, snapshot, stepId: config.stepId, attempt,
+      contextManifestHash: contextManifest.manifestHash, messages: attemptMessages })
+    snapshot = prepared.snapshot
+    // This preflight rejects drift already visible before this request. It is
+    // not an atomic lock across the async freshness read and the send boundary.
+    const currentRoot = await db.adaptationProjects.get(selected.root.id!)
+    if (!currentRoot || currentRoot.medium !== 'screenplay' || currentRoot.projectId !== input.scope.projectId
+      || currentRoot.worldId !== input.scope.worldId || currentRoot.workId !== input.scope.workId
+      || currentRoot.revision !== selected.root.revision || currentRoot.sourceWorkId !== selected.root.sourceWorkId
+      || currentRoot.activeSourceManifestVersion !== selected.root.activeSourceManifestVersion
+      || currentRoot.activeSourceManifestHash !== selected.root.activeSourceManifestHash
+      || (await inspectAdaptationFreshness(selected.root.id!)).status !== 'unchanged') throw new ScreenplaySourceChangedError()
     snapshot = await append(input.scope, snapshot, 'model.requested', { stepId: config.stepId, attempt, bindingHash: await hashCanonicalValue(snapshot.contract.executionBindings?.[0]) })
+    const result: ChatResult = {}
     let output: string
-    try { output = await (input.runAI ? input.runAI(attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: config.category, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, input.signal)) }
-    catch (error) { snapshot = await append(input.scope, snapshot, 'run.paused', { reason: `screenplay-${input.stage}-model-outcome-unknown`, recoverable: false }); throw error }
-    if (input.signal?.aborted) throw new Error('本次生成已取消，迟到结果未采纳')
+    try { output = await (runAI ? runAI.call(callbackReceiver, attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: config.category, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, input.signal, result)) }
+    catch (error) {
+      const failed = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
+      try { snapshot = await append(input.scope, failed.snapshot, 'run.paused', { reason: `screenplay-${input.stage}-model-outcome-unknown`, recoverable: false }) }
+      catch (persistenceFailure) {
+        throw Object.assign(new Error('[screenplay-run] 请求结果未知，任务暂停证据未能完整保存。'), { cause: failed.report, persistenceFailures: [persistenceFailure] })
+      }
+      throw failed.report
+    }
+    snapshot = await recordCreationModelResponseV1({ snapshot, request: prepared.request, raw: output, result })
     snapshot = await append(input.scope, snapshot, 'model.responded', { stepId: config.stepId, attempt, outputHash: await hashCanonicalValue({ raw: output }) })
+    if (input.signal?.aborted) throw new Error('本次生成已取消，迟到结果未采纳')
     return output
   }
   let finalMessages = messages
@@ -503,8 +548,15 @@ export async function generateScreenplayProfessionalCandidateV1(input: {
   snapshot = await append(input.scope, snapshot, 'candidate.persisted', { stepId: config.stepId, attempt: finalAttempt, candidateHash: candidate.candidateHash, requiresConfirmation: true })
   return { snapshot, candidate }
   } catch (error) {
-    const current = await readAgentRunV1(input.scope, snapshot.run.id)
-    if (current.projection.state === 'running') await append(input.scope, current, input.signal?.aborted ? 'run.cancelled' : 'run.failed', input.signal?.aborted ? { reason: 'author-cancelled' } : { code: `screenplay-${input.stage}-preparation-or-persistence-failed`, retryable: false })
+    try {
+      const current = await readAgentRunV1(input.scope, snapshot.run.id)
+      if (current.projection.state === 'running') {
+        if (error instanceof ScreenplaySourceChangedError) await append(input.scope, current, 'run.paused', { reason: 'screenplay-source-stale-before-model', recoverable: false })
+        else await append(input.scope, current, input.signal?.aborted ? 'run.cancelled' : 'run.failed', input.signal?.aborted ? { reason: 'author-cancelled' } : { code: `screenplay-${input.stage}-preparation-or-persistence-failed`, retryable: false })
+      }
+    } catch (persistenceFailure) {
+      throw Object.assign(new Error('[screenplay-run] 原失败与任务状态未能完整保存，请检查原错误及存储。'), { cause: error, persistenceFailures: [persistenceFailure] })
+    }
     throw error
   }
 }
@@ -523,7 +575,11 @@ async function parseCandidate(value: unknown): Promise<ScreenplayProfessionalCan
 async function latest(scope: WorkspaceScope, runId: number): Promise<{ candidate: ScreenplayProfessionalCandidateV1; intent: ScreenplayProfessionalIntentV1 | null }> {
   const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(scope, runId)
   if (!checkpoint) throw new Error('[screenplay-run] 运行缺少可验证检查点')
-  const value = checkpoint.resumePayload as any
+  return parseProfessionalCheckpointV1(checkpoint.resumePayload)
+}
+
+async function parseProfessionalCheckpointV1(payload: unknown): Promise<{ candidate: ScreenplayProfessionalCandidateV1; intent: ScreenplayProfessionalIntentV1 | null }> {
+  const value = payload as any
   if (value?.kind === 'screenplay-professional-intent') {
     const candidate = await parseCandidate(value.candidate)
     const authorPayload = parseScreenplayProfessionalPayloadV1(candidate.stage, value.authorPayload)
@@ -668,6 +724,124 @@ async function postStateHash(scope: WorkspaceScope, candidate: ScreenplayProfess
   return hashCanonicalValue(await db.screenplayReviewIssues.where('[adaptationProjectId+manifestVersion]').equals(key).filter(issue => candidate.targetSceneKeys.includes(issue.sceneKey)).toArray())
 }
 
+/** Freeze authorization first; Brief content, confirmation and terminal evidence
+ * then commit together. No current-value equality can manufacture an adoption. */
+async function adoptScreenplayBriefAtomically(
+  input: Parameters<typeof adoptScreenplayProfessionalCandidateV1>[0], loaded: AgentRunSnapshotV1,
+  initial: Awaited<ReturnType<typeof latest>>,
+): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ScreenplayProfessionalCandidateV1; receiptHash: string }> {
+  const candidate = initial.candidate
+  const stepId = STAGES[candidate.stage].stepId
+  let intent = initial.intent
+  if (intent) {
+    if (input.authorPayload !== undefined
+      && await hashCanonicalValue(parseScreenplayProfessionalPayloadV1(candidate.stage, input.authorPayload)) !== intent.authorPayloadHash) {
+      throw new Error('[screenplay-run] 已冻结的作者 Brief 不能由恢复输入替换')
+    }
+    if (input.allowReplaceDownstream === true && !intent.allowReplaceDownstream) {
+      throw new Error('[screenplay-run] 恢复不能扩大已冻结的替换授权')
+    }
+  } else {
+    if (loaded.projection.state !== 'awaiting_confirmation') throw new Error('[screenplay-run] Brief 不在作者确认边界')
+    await assertFresh(input.scope, candidate)
+    const authorPayload = parseScreenplayProfessionalPayloadV1(candidate.stage, input.authorPayload ?? candidate.payload)
+    const body = { version: 1 as const, kind: 'screenplay-professional-intent' as const, ...(input.allowReplaceDownstream ? { allowReplaceDownstream: true } : {}),
+      candidate, authorPayload, authorPayloadHash: await hashCanonicalValue(authorPayload) }
+    intent = { ...body, intentHash: await hashCanonicalValue(body) }
+    loaded = (await createAgentRunCheckpointV1({ scope: input.scope, runId: loaded.run.id,
+      expectedLastSequence: loaded.projection.lastSequence, resumePayload: intent })).snapshot
+  }
+  const frozen = intent
+  const result = await withAgentRunMutationLockV1(input.runId, () => db.transaction('rw',
+    agentRunScopeTransactionTablesV1(input.runId, ...adaptationBriefTransactionTablesV1(),
+      db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, db.screenplayScenes), async () => {
+      let snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
+      const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope, input.runId)
+      if (!checkpoint) throw new Error('[screenplay-run] Brief 缺少原检查点')
+      // Await the native reader normally; keep only pure payload hashing alive.
+      const current = await Dexie.waitFor(parseProfessionalCheckpointV1(checkpoint.resumePayload))
+      if (current.candidate.candidateHash !== candidate.candidateHash || current.intent?.intentHash !== frozen.intentHash
+        || snapshot.projection.generation !== loaded.projection.generation
+        || snapshot.projection.contractHash !== loaded.projection.contractHash) {
+        throw new Error('[screenplay-run] Brief 原运行、候选或冻结意图已变化')
+      }
+      if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash) {
+        return { snapshot, candidate, receiptHash: snapshot.projection.terminalReceiptHash }
+      }
+      if (!['awaiting_confirmation', 'running', 'verifying'].includes(snapshot.projection.state)
+        || snapshot.projection.lastSequence !== loaded.projection.lastSequence
+        || snapshot.projection.steps[stepId]?.candidateHash !== candidate.candidateHash) {
+        throw new Error('[screenplay-run] Brief 当前运行前缀不可继续采纳')
+      }
+      if (snapshot.projection.state === 'awaiting_confirmation') {
+        await assertFresh(input.scope, candidate)
+        snapshot = await appendBriefEvent(input.scope, snapshot, 'confirmation.recorded',
+          { stepId, candidateHash: candidate.candidateHash, decision: 'adopt' })
+      }
+      if (snapshot.projection.steps[stepId]?.confirmation !== 'adopt') throw new Error('[screenplay-run] Brief 缺少原作者确认')
+      const starts = snapshot.events.filter(event => event.type === 'adoption.started'
+        && event.generation === snapshot.projection.generation && event.payload.stepId === stepId
+        && event.payload.candidateHash === candidate.candidateHash)
+      if (starts.some(event => event.type === 'adoption.started'
+        && event.payload.intentHash != null && event.payload.intentHash !== frozen.intentHash)) {
+        throw new Error('[screenplay-run] Brief 开始事件与冻结意图不匹配')
+      }
+      if (!starts.length) {
+        snapshot = await appendBriefEvent(input.scope, snapshot, 'adoption.started',
+          { stepId, candidateHash: candidate.candidateHash, intentHash: frozen.intentHash })
+        await Dexie.waitFor(Promise.resolve(input.onDurableBoundary?.('adoption.started', structuredClone(snapshot))))
+      }
+      let adoptionHash = snapshot.projection.steps[stepId]?.adoptionHash
+      if (!adoptionHash) {
+        // Existing +1/+2 rows without adoption evidence remain stale: they may
+        // belong to another author. New failures roll this entire write back.
+        await writeFormal(input.scope, frozen)
+        await Dexie.waitFor(Promise.resolve(input.onDurableBoundary?.('formal.written', structuredClone(snapshot))))
+      }
+      const root = await rootFor(input.scope, candidate.adaptationProjectId)
+      if (root.revision !== candidate.adaptationRevision + 2
+        || root.activeSourceManifestVersion !== candidate.sourceManifestVersion
+        || root.activeSourceManifestHash !== candidate.sourceManifestHash
+        || root.briefSourceManifestVersion !== candidate.sourceManifestVersion
+        || (await inspectAdaptationFreshness(root.id!)).status !== 'unchanged'
+        || await Dexie.waitFor(hashCanonicalValue(root.brief)) !== frozen.authorPayloadHash) {
+        throw new Error('[screenplay-run] Brief 已采纳后态或来源已变化，不能补签')
+      }
+      const stateHash = await Dexie.waitFor(hashCanonicalValue(root.brief))
+      const expectedAdoption = await Dexie.waitFor(hashCanonicalValue({ intentHash: frozen.intentHash, stateHash }))
+      if (adoptionHash && adoptionHash !== expectedAdoption) throw new Error('[screenplay-run] Brief 后态与原采纳证据不匹配')
+      if (!adoptionHash) {
+        adoptionHash = expectedAdoption
+        snapshot = await appendBriefEvent(input.scope, snapshot, 'adoption.committed',
+          { stepId, candidateHash: candidate.candidateHash, adoptionHash })
+        await Dexie.waitFor(Promise.resolve(input.onDurableBoundary?.('adoption.committed', structuredClone(snapshot))))
+      }
+      if (snapshot.projection.steps[stepId]?.status === 'running') {
+        snapshot = await appendBriefEvent(input.scope, snapshot, 'step.succeeded',
+          { stepId, attempt: snapshot.projection.steps[stepId]?.attempt ?? 1, outputHash: adoptionHash })
+      }
+      if (snapshot.projection.state === 'running') {
+        snapshot = await appendBriefEvent(input.scope, snapshot, 'verification.started',
+          { verifierSetVersion: `screenplay-adaptation-brief-terminal-v1` })
+      }
+      const receipt = await Dexie.waitFor(createVerificationReceiptV1({
+        version: 1, runId: snapshot.run.id, generation: snapshot.projection.generation, contractHash: snapshot.projection.contractHash,
+        contextManifestHashes: [candidate.contextManifestHash], candidateHashes: [candidate.candidateHash], adoptionEventIds: [],
+        postStateHash: stateHash, verifierSetVersion: `screenplay-adaptation-brief-terminal-v1`, criteria: [
+          { id: `${stepId}.candidate`, status: 'passed', evidenceRefs: [`candidate:${candidate.candidateHash}`] },
+          { id: `${stepId}.author`, status: 'passed', evidenceRefs: [`intent:${frozen.intentHash}`] },
+          { id: `${stepId}.post-state`, status: 'passed', evidenceRefs: [`post-state:${stateHash}`] },
+        ], acceptedAt: Date.now(),
+      }))
+      snapshot = await appendBriefEvent(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
+      return { snapshot, candidate, receiptHash: receipt.receiptHash }
+    }))
+  // This callback observes a committed terminal, so a host failure here cannot
+  // leave a successful Brief hidden behind an unfinished Run.
+  await input.onDurableBoundary?.('verification.accepted', structuredClone(result.snapshot))
+  return result
+}
+
 export async function adoptScreenplayProfessionalCandidateV1(input: {
   scope: WorkspaceScope
   runId: number
@@ -675,28 +849,46 @@ export async function adoptScreenplayProfessionalCandidateV1(input: {
   allowReplaceDownstream?: boolean
   onDurableBoundary?: (boundary: 'adoption.started' | 'formal.written' | 'adoption.committed' | 'verification.accepted', snapshot: AgentRunSnapshotV1) => void | Promise<void>
 }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ScreenplayProfessionalCandidateV1; receiptHash: string }> {
+  input = { ...input, scope: { ...input.scope },
+    authorPayload: input.authorPayload === undefined ? undefined : structuredClone(input.authorPayload) }
   let snapshot = await readAgentRunV1(input.scope, input.runId); const state = await latest(input.scope, input.runId); const candidate = state.candidate
   if (candidate.projectId !== input.scope.projectId || candidate.worldId !== input.scope.worldId || candidate.workId !== input.scope.workId) throw new Error('[screenplay-run] 候选越过当前 Work')
   const config = STAGES[candidate.stage]; let intent = state.intent
   if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash) return { snapshot, candidate, receiptHash: snapshot.projection.terminalReceiptHash }
+  if (candidate.stage === 'adaptation-brief') return adoptScreenplayBriefAtomically(input, snapshot, state)
   if (snapshot.projection.state === 'awaiting_confirmation') {
     await assertFresh(input.scope, candidate)
-    if (['beat-sheet','scene-card'].includes(candidate.stage) && !input.allowReplaceDownstream) {
-      const scenes = await db.screenplayScenes.where('adaptationProjectId').equals(candidate.adaptationProjectId).count()
-      const cards = await db.screenplaySceneCards.where('[adaptationProjectId+manifestVersion]').equals([candidate.adaptationProjectId,candidate.sourceManifestVersion]).count()
-      if(scenes || (candidate.stage==='beat-sheet' && cards))throw new Error('重做规划需要先明确确认下游替换，候选已保留')
+    // A saved intent owns the author's edits and replacement authorization,
+    // including a crash before confirmation.recorded was appended.
+    if (!intent) {
+      if (['beat-sheet','scene-card'].includes(candidate.stage) && !input.allowReplaceDownstream) {
+        const scenes = await db.screenplayScenes.where('adaptationProjectId').equals(candidate.adaptationProjectId).count()
+        const cards = await db.screenplaySceneCards.where('[adaptationProjectId+manifestVersion]').equals([candidate.adaptationProjectId,candidate.sourceManifestVersion]).count()
+        if(scenes || (candidate.stage==='beat-sheet' && cards))throw new Error('重做规划需要先明确确认下游替换，候选已保留')
+      }
+      const authorPayload = parseScreenplayProfessionalPayloadV1(candidate.stage, input.authorPayload ?? candidate.payload)
+      const body = { version: 1 as const, kind: 'screenplay-professional-intent' as const, ...(input.allowReplaceDownstream ? { allowReplaceDownstream: true } : {}), candidate, authorPayload, authorPayloadHash: await hashCanonicalValue(authorPayload) }
+      intent = { ...body, intentHash: await hashCanonicalValue(body) }
+      const saved = await createAgentRunCheckpointV1({
+        scope: input.scope, runId: snapshot.run.id, resumePayload: intent,
+        expectedLastSequence: snapshot.projection.lastSequence,
+      }); snapshot = saved.snapshot
     }
-    const authorPayload = parseScreenplayProfessionalPayloadV1(candidate.stage, input.authorPayload ?? candidate.payload)
-    const body = { version: 1 as const, kind: 'screenplay-professional-intent' as const, ...(input.allowReplaceDownstream ? { allowReplaceDownstream: true } : {}), candidate, authorPayload, authorPayloadHash: await hashCanonicalValue(authorPayload) }
-    intent = { ...body, intentHash: await hashCanonicalValue(body) }
-    const saved = await createAgentRunCheckpointV1({ scope: input.scope, runId: snapshot.run.id, resumePayload: intent }); snapshot = saved.snapshot
     snapshot = await append(input.scope, snapshot, 'confirmation.recorded', { stepId: config.stepId, candidateHash: candidate.candidateHash, decision: 'adopt' })
-    snapshot = await append(input.scope, snapshot, 'adoption.started', { stepId: config.stepId, candidateHash: candidate.candidateHash, intentHash: intent.intentHash })
-    await input.onDurableBoundary?.('adoption.started', snapshot)
   }
-  if (!intent) throw new Error('[screenplay-run] 候选不在可采纳状态')
+  if (!intent || snapshot.projection.steps[config.stepId]?.confirmation !== 'adopt') throw new Error('[screenplay-run] 候选不在可采纳状态')
+  const started = snapshot.events.filter(event => event.type === 'adoption.started'
+    && event.generation === snapshot.projection.generation
+    && event.payload.stepId === config.stepId
+    && event.payload.candidateHash === candidate.candidateHash)
+  const intentHash = intent.intentHash
+  if (started.some(event => event.type === 'adoption.started' && event.payload.intentHash != null && event.payload.intentHash !== intentHash)) throw new Error('[screenplay-run] 采纳开始事件与冻结意图不匹配')
   let adoptionHash = snapshot.projection.steps[config.stepId]?.adoptionHash
   if (!adoptionHash) {
+    if (!started.length) {
+      snapshot = await append(input.scope, snapshot, 'adoption.started', { stepId: config.stepId, candidateHash: candidate.candidateHash, intentHash: intent.intentHash })
+      await input.onDurableBoundary?.('adoption.started', snapshot)
+    }
     if (!await formalAlreadyApplied(input.scope, intent)) await writeFormal(input.scope, intent)
     await input.onDurableBoundary?.('formal.written', snapshot)
     const stateHash = await postStateHash(input.scope, candidate); adoptionHash = await hashCanonicalValue({ intentHash: intent.intentHash, stateHash })
@@ -724,12 +916,17 @@ export async function adoptScreenplayProfessionalCandidateV1(input: {
   return { snapshot, candidate, receiptHash: receipt.receiptHash }
 }
 
-export async function readPendingScreenplayProfessionalCandidateV1(scope: WorkspaceScope): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ScreenplayProfessionalCandidateV1 } | null> {
-  const rows = (await readOwnedRows<any>(scope, 'agentRuns', { owner: 'work' })).filter(row => ['awaiting_confirmation', 'running'].includes(row.status) && row.contractJson?.includes('screenplay-professional:')).sort((a, b) => (b.id ?? 0) - (a.id ?? 0))
+export async function readPendingScreenplayProfessionalCandidateV1(scope: WorkspaceScope): Promise<{ snapshot: AgentRunSnapshotV1; candidate: ScreenplayProfessionalCandidateV1; recovering?: boolean; authorPayload?: ScreenplayProfessionalPayloadV1 } | null> {
+  const rows = (await readOwnedRows<any>(scope, 'agentRuns', { owner: 'work' })).filter(row => ['awaiting_confirmation', 'running', 'verifying'].includes(row.status) && row.contractJson?.includes('screenplay-professional:')).sort((a, b) => (b.id ?? 0) - (a.id ?? 0))
   for (const row of rows) {
     if (!row.id) continue
     try {
-      let snapshot = await readAgentRunV1(scope, row.id); const state = await latest(scope, row.id); if (state.intent) continue
+      let snapshot = await readAgentRunV1(scope, row.id); const state = await latest(scope, row.id)
+      if (state.intent) {
+        if (state.candidate.stage === 'adaptation-brief') return { snapshot, candidate: state.candidate,
+          recovering: true, authorPayload: state.intent.authorPayload }
+        continue
+      }
       const candidate = state.candidate; const config = STAGES[candidate.stage]
       if (!snapshot.projection.steps[config.stepId]?.candidateHash && snapshot.projection.steps[config.stepId]?.status === 'running') snapshot = await append(scope, snapshot, 'candidate.persisted', {
         stepId: config.stepId,
@@ -768,5 +965,12 @@ export async function closeScreenplayTaskV1(scope: WorkspaceScope, runId: number
   if (!task) throw new Error('剧本任务不存在或已结束')
   if (task.intent) throw new Error('已确认采纳的任务需要恢复采纳，不能丢弃正式写入证据')
   const snapshot = await readAgentRunV1(scope, runId)
+  const inFlight = snapshot.projection.state === 'running' && snapshot.events.some(event => (
+    event.type === 'model.requested' && event.generation === snapshot.projection.generation
+    && snapshot.projection.steps[event.payload.stepId]?.attempt === event.payload.attempt
+    && !snapshot.events.some(response => response.type === 'model.responded' && response.generation === event.generation
+      && response.payload.stepId === event.payload.stepId && response.payload.attempt === event.payload.attempt)
+  ))
+  if (inFlight) throw new Error('模型请求仍在途，不能提前结束本运行；取消或停止等待不代表供应商已取消，请保留原运行等待结果。')
   await append(scope, snapshot, 'run.cancelled', { reason: 'author-closed-screenplay-task-no-automatic-retry' })
 }

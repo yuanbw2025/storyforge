@@ -1,17 +1,17 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {test, expect, type Page} from '@playwright/test'
 async function open(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-role-profile.invalid/v1', model: 'test', temperature: .2, maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
-  await page.goto('./chat/library')
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-role-profile.invalid/v1', model: 'test', temperature: .2, maxTokens: 6000, apiKey: 'isolated-test-key' })
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const fixture = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)'), helper = await load('/storyforge/tests/helpers/chat-role-profile.ts')
     const f = await helper.seedChatRoleProfileFixture()
     return {scope: f.scope, candidate: f.candidate, actorKey: f.actor.resourceKey}
   })
-  await page.goto(`./chat/cast?project=${fixture.scope.projectId}&work=${fixture.scope.workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/cast?project=${fixture.scope.projectId}&work=${fixture.scope.workId}`)
   await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await page.getByTestId('chat-source-fragment').filter({has: page.locator('pre').filter({hasText: '谨慎而固执'})}).getByRole('checkbox', {name: /加入整理建议$/}).check()
   await page.getByRole('combobox', {name: '整理人物', exact: true}).selectOption({label: '林舟'})
@@ -28,7 +28,7 @@ test('AI profile stays a candidate across reload, author edits are adopted once 
   await generate.click(); await expect(edit).toBeVisible(); await expect(generate).toBeDisabled()
   expect(prompts).toHaveLength(1); expect(prompts[0]).not.toContain('失踪船队'); expect(JSON.parse(JSON.parse(prompts[0])[1].content).fragments.every((row: {confirmedClassification: unknown}) => row.confirmedClassification === null)).toBe(true)
   await expect(page.getByTestId('chat-role-profile')).toHaveCount(0)
-  await page.reload(); await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
+  await reloadWithBrowserFixtureAIConfigV1(page); await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await expect(edit).toBeVisible(); expect(prompts).toHaveLength(1)
   await edit.click()
   const text = '遇到陌生局面先谨慎核实，确认之后坚持自己的立场。'
@@ -47,7 +47,7 @@ test('AI profile stays a candidate across reload, author edits are adopted once 
   expect(observed.events.filter((row: {type: string}) => row.type === 'adoption.committed')).toHaveLength(1)
   expect(observed.compiled.profiles.find((row: {characterKey: string}) => row.characterKey === f.actorKey).voiceRules).toContain(text)
   for (const other of observed.compiled.profiles.filter((row: {characterKey: string}) => row.characterKey !== f.actorKey)) expect(other.voiceRules).not.toContain(text)
-  await page.reload(); await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
+  await reloadWithBrowserFixtureAIConfigV1(page); await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await expect(page.getByTestId('chat-role-profile')).toContainText(text)
   await page.setViewportSize({width: 390, height: 844}); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   expect(prompts).toHaveLength(1)
@@ -62,7 +62,7 @@ test('unknown profile requests survive refresh without retry and explicit dismis
   })
   await page.getByRole('button', {name: 'AI整理人物特征', exact: true}).click()
   await expect(page.getByTestId('chat-role-profile-candidate')).toContainText('结果尚未留存')
-  await page.reload(); await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
+  await reloadWithBrowserFixtureAIConfigV1(page); await page.getByRole('button', {name: '读取并检查完整资料', exact: true}).click()
   await expect(page.getByTestId('chat-role-profile-candidate')).toContainText('结果尚未留存'); expect(calls).toBe(1)
   await page.getByRole('button', {name: '结束本次人物候选', exact: true}).click()
   await expect(page.getByTestId('chat-role-profile-candidate')).toContainText('没有自动重发')

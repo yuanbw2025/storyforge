@@ -19,6 +19,10 @@ import type {
   TextOpenWorldRuntimeDialogueHistoryTurnV1,
   TextOpenWorldRuntimeDialoguePresentationV1,
 } from '../../lib/open-world/runtime-dialogue'
+import {
+  selectTextOpenWorldRuntimeDialogueWindowV1,
+  TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1,
+} from '../../lib/open-world/runtime-dialogue-window'
 import type {
   TextOpenWorldRuntimeMemoryDialogueTurnV1,
   TextOpenWorldRuntimeMemoryPresentationV1,
@@ -218,6 +222,7 @@ export default function TextOpenWorldScenePanel({
   const [interpreting, setInterpreting] = useState(false)
   const [pendingIntentOptions, setPendingIntentOptions] = useState<PendingIntentOption[]>([])
   const [dialogueTurns, setDialogueTurns] = useState<PresentedDialogueTurn[]>([])
+  const dialogueWindow = useMemo(() => selectTextOpenWorldRuntimeDialogueWindowV1(dialogueTurns), [dialogueTurns])
   const [memoryBusy, setMemoryBusy] = useState(false)
   const [memoryNotice, setMemoryNotice] = useState<string | null>(null)
   const [runtimeAIFailure, setRuntimeAIFailure] = useState<{
@@ -225,6 +230,12 @@ export default function TextOpenWorldScenePanel({
     operation: 'natural-input' | 'memory'
   } | null>(null)
   const interpretationRevision = useRef(0)
+  const memoryRevision = useRef(0)
+  const memoryView = useRef({ sessionKey, selectedSceneKey })
+  if (memoryView.current.sessionKey !== sessionKey || memoryView.current.selectedSceneKey !== selectedSceneKey) {
+    memoryView.current = { sessionKey, selectedSceneKey }
+  }
+  useEffect(() => () => { memoryRevision.current += 1 }, [])
 
   useEffect(() => {
     setSelectedSceneKey(projection.recommendedSceneKey)
@@ -375,7 +386,7 @@ export default function TextOpenWorldScenePanel({
       const resolution = await onInterpretNaturalInput({
         utterance: naturalInput.normalize('NFC').trim(),
         selectedSceneKey: scene.key,
-        recentDialogue: dialogueTurns.map(turn => ({
+        recentDialogue: dialogueWindow.map(turn => ({
           speaker: turn.speaker,
           actorKey: turn.actorKey,
           text: turn.text,
@@ -426,7 +437,7 @@ export default function TextOpenWorldScenePanel({
           contextManifestHash: dialogue.contextManifestHash,
           runId: dialogue.runId,
         }]
-        setDialogueTurns(current => [...current, ...addedTurns].slice(-12))
+        setDialogueTurns(current => [...current, ...addedTurns].slice(-TEXT_OPEN_WORLD_RUNTIME_DIALOGUE_WINDOW_V1.records))
         setNotice({
           tone: 'boundary',
           message: dialogue.source === 'ai-candidate'
@@ -463,7 +474,10 @@ export default function TextOpenWorldScenePanel({
   }
 
   const commitDialogueMemory = async () => {
-    if (!scene?.actor || !onCommitMemory || dialogueTurns.length < 2 || memoryBusy) return
+    if (!scene?.actor || !onCommitMemory || dialogueWindow.length < 2 || memoryBusy) return
+    const view = memoryView.current
+    const requestRevision = ++memoryRevision.current
+    const mayPublish = () => memoryView.current === view && memoryRevision.current === requestRevision
     setRuntimeAIFailure(null)
     setMemoryBusy(true)
     setMemoryNotice('正在把本场景对白压缩为最小长期记忆；完成前不会改变游戏状态。')
@@ -471,7 +485,7 @@ export default function TextOpenWorldScenePanel({
       const result = await onCommitMemory({
         selectedSceneKey: scene.key,
         actorKey: scene.actor.key,
-        dialogue: dialogueTurns.map(turn => ({
+        dialogue: dialogueWindow.map(turn => ({
           speaker: turn.speaker,
           actorKey: turn.actorKey,
           text: turn.text,
@@ -486,14 +500,16 @@ export default function TextOpenWorldScenePanel({
           dialogueRunId: turn.runId,
         })),
       })
+      if (!mayPublish()) return
       setDialogueTurns([])
       setMemoryNotice(`已写入长期记忆：${result.summary}`)
     } catch (error) {
+      if (!mayPublish()) return
       const failure = textOpenWorldRuntimeAIPlayerFailureV1(error)
       if (failure) setRuntimeAIFailure({ failure, operation: 'memory' })
       setMemoryNotice(`${failure?.message ?? '长期记忆整理失败'}；临时对白和确定性玩法不受影响。`)
     } finally {
-      setMemoryBusy(false)
+      if (mayPublish()) setMemoryBusy(false)
     }
   }
 
@@ -572,13 +588,15 @@ export default function TextOpenWorldScenePanel({
       {scene?.actor && <footer className="open-world-runtime-memory-actions">
         <button
           type="button"
-          disabled={busy || memoryBusy || !memoryAvailable || !onCommitMemory || dialogueTurns.length < 2}
+          disabled={busy || memoryBusy || !memoryAvailable || !onCommitMemory || dialogueWindow.length < 2}
           onClick={() => void commitDialogueMemory()}
         >
           <Archive aria-hidden="true" />{memoryBusy ? '整理中…' : '整理并保存长期记忆'}
         </button>
         <small>{memoryAvailable
-          ? '只保存摘要、知识键和证据指纹；不保存完整聊天正文。'
+          ? dialogueWindow.length > 0
+            ? `整理最近 ${dialogueWindow.length / 2} 轮完整对白。只保存摘要、知识键和证据指纹；不保存完整聊天正文。`
+            : '当前没有符合记忆整理范围的完整对白。'
           : '配置可用的文字模型后，才能整理长期记忆。'}</small>
       </footer>}
     </section>}

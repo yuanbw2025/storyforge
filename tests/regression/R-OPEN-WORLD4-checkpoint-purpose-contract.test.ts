@@ -212,7 +212,8 @@ describe('TOW-G4-12A · checkpoint purpose and portable lineage contract', () =>
       expect(await verifyProductRuntimeCheckpoint(item.id!)).toBe(true)
     }
 
-    const projectCount = await db.projects.count()
+    const countRows = () => Promise.all(db.tables.map(table => table.count()))
+    const before = await countRows()
     const expectRejected = async (
       mutate: (copy: any) => void,
       message: string,
@@ -220,7 +221,7 @@ describe('TOW-G4-12A · checkpoint purpose and portable lineage contract', () =>
       const copy = structuredClone(backup) as any
       mutate(copy)
       await expect(importProjectJSON(copy)).rejects.toThrow(message)
-      expect(await db.projects.count()).toBe(projectCount)
+      expect(await countRows()).toEqual(before)
     }
     const autosaveIndex = backup.productRuntimeCheckpoints.findIndex(item => item.purpose === 'autosave')
     const childIndex = backup.productRuntimeSessions.findIndex(item => item.title === '检查点分支')
@@ -238,7 +239,7 @@ describe('TOW-G4-12A · checkpoint purpose and portable lineage contract', () =>
     }, 'Hash 不匹配')
     await expectRejected(copy => {
       copy.productRuntimeCheckpoints[autosaveIndex]._productRuntimeSessionExportId = 99_999
-    }, 'lineage')
+    }, `productRuntimeCheckpoints[${autosaveIndex}]._productRuntimeSessionExportId=99999 没有对应的 productRuntimeSessions 记录`)
     await expectRejected(copy => {
       copy.productRuntimeSessions[childIndex].parentThroughSequence = null
     }, 'lineage')

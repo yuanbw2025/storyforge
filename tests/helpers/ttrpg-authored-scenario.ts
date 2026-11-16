@@ -10,12 +10,15 @@ export function authoredScenarioFixture(input: {
   const { brief, rulePack, nodes } = input
   const investigation = rulePack.actions.find(action => action.key.includes('investigat')) ?? rulePack.actions[0]
   const alternative = rulePack.actions.find(action => action.key !== investigation.key)!
+  const playerAttributes = rulePack.attributes.filter(attribute => !(rulePack.advancement.progressionModel === 'numeric-level' && attribute.key === 'level'))
+  if (playerAttributes.length < 2) throw new Error('Authored fixture requires two ordinary player attributes')
   const characters = [...brief.table.seats.map((seat, index) => ({ key: `hero.${index + 1}`, seatKey: seat.seatKey,
     name: seat.characterName || seat.label })), { key: 'keeper', seatKey: null, name: '守灯人' }].map(actor => ({ ...actor,
     description: '带着一只黄铜怀表来到码头的调查者。', appearance: '深蓝雨衣，袖口磨损。',
     background: '曾在港口修理船只，如今寻找失踪的家人。', goal: '找出求救信号来自哪里。',
     secret: `只有 ${actor.name} 知道怀表内部藏有一张旧船票。`, portrayal: '谨慎倾听，直接发问。', leverage: '认得当年的潮汐标记。',
-    strengthAttributeKey: rulePack.attributes[0].key, weaknessAttributeKey: rulePack.attributes[1].key,
+    strengthAttributeKey: actor.seatKey == null ? rulePack.attributes[0].key : playerAttributes[0].key,
+    weaknessAttributeKey: actor.seatKey == null ? rulePack.attributes[1].key : playerAttributes[1].key,
   }))
   return {
     schema: 'storyforge.ttrpg-authored-scenario', version: 1, characters,

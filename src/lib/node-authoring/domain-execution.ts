@@ -1,3 +1,4 @@
+import { modelDispatchWasCancelledV1, ModelDispatchGuardRejectedV1 } from '../ai/codex-transport'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import {
   adoptCharacterCopilotCandidate,
@@ -55,7 +56,6 @@ import {
 } from '../agent/creative-reliability'
 import { buildNarrativeBriefV1, formatNarrativeBriefForPromptV1 } from '../agent/narrative-brief'
 import {
-  buildChapterOrganizationPrompt,
   isChapterOrganizationCurrent,
   persistChapterOrganizationCandidate,
   adoptChapterOrganizationSelection,
@@ -65,7 +65,6 @@ import {
 import { AgentTeamBudgetTracker, type AgentTeamBudgetProfile } from '../agent/team-budget'
 import { hashChapterText, normalizeChapterText } from '../ai/chapter-memory/text-normalization'
 import {
-  buildFactExtractPrompt,
   parseCanonicalFactCandidateDraftV1,
   parseFactExtractResult,
 } from '../ai/adapters/fact-extract-adapter'
@@ -77,10 +76,11 @@ import type { AIConfig, WorkspaceScope } from '../types'
 import type { AdoptResult } from '../registry/types'
 import { AUTHORING_NODE_BY_ID } from './catalog'
 import {
-  hashAuthoringText,
   readAuthoringCanonBinding,
   resolveAuthoringBoundRecordId,
+  type AuthoringSourceEvidenceV1,
 } from './bindings'
+import { chapterNodeContextPolicy, readFactNodeSource, readOrganizationNodeSource } from './chapter-source'
 import type {
   AuthoringCandidateDomain,
   AuthoringInputEnvelope,
@@ -89,6 +89,7 @@ import type {
 } from './contracts'
 import { assertRecordInScope, readOwnedRows, resolveScopeLike } from '../workspace/scope'
 import { executeQualityAuthoringNodeV1, executeQualityRevisionAuthoringNodeV1, adoptQualityAuthoringRevisionV1 } from './quality-execution'
+import { createNodeFieldProducerV1 } from './field-producer'
 
 export interface DomainExecutionResult {
   output: string
@@ -96,12 +97,7 @@ export interface DomainExecutionResult {
   creativeArtifacts?: CreativeArtifactV1[]
   sourceKeys?: string[]
   sourceHash?: string
-  sourceEvidence?: {
-    included: string[]
-    omitted: string[]
-    trimmed: string[]
-    missing: string[]
-  }
+  sourceEvidence?: AuthoringSourceEvidenceV1
   semantic: AuthoringSemantic
   domain: AuthoringCandidateDomain
 }
@@ -118,6 +114,9 @@ export interface DomainExecutionInput {
     budgetProfile: AgentTeamBudgetProfile
   }
   signal?: AbortSignal
+  /** Actual registered correlation; never used as an AgentRun identity. */
+  nodeRunId?: number
+  assertResumeSourcesCurrent?: () => Promise<void>
 }
 
 async function resolveDomainScope(input: Pick<DomainExecutionInput, 'projectId' | 'scope'>): Promise<WorkspaceScope> {
@@ -186,7 +185,10 @@ async function domainBinding(input: DomainExecutionInput) {
   })
 }
 
-async function executeWorldviewField(input: DomainExecutionInput): Promise<DomainExecutionResult> {
+async function executeWorldviewField(input: DomainExecutionInput, sourceNode: AuthoringNodeInstance): Promise<DomainExecutionResult> {
+  const count = generationCount(input.node, input.inputs)
+  if (input.nodeRunId == null) throw new Error('正式世界观节点需要真实 NodeRun；未发送模型请求。')
+  let producer: ReturnType<typeof createNodeFieldProducerV1> | undefined
   const scope = await resolveDomainScope(input)
   const targetField = registeredSingleField(input)
   if (!WORLDVIEW_AGENT_FIELDS.includes(targetField as WorldviewAgentField)) {
@@ -208,25 +210,46 @@ async function executeWorldviewField(input: DomainExecutionInput): Promise<Domai
     configOverride: input.aiConfig,
     generationOverrides: generationOverrides(input.node, input.inputs),
     signal: input.signal,
-  })
+  }, { runModel: (assertCurrent, ...args) => {
+    if (!producer) throw new Error('世界观候选尚未绑定真实生产槽位。')
+    return producer.runModel(assertCurrent, ...args)
+  } })
   if (prepared.targetField !== field) throw new Error('世界观节点与字段 Copilot 解析出的目标不一致。')
   const binding = await domainBinding(input)
   const variants: string[] = []
-  for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
-    variants.push(JSON.stringify(await prepared.node.run(prepared.prepared.messages), null, 2))
+  const creativeArtifacts: CreativeArtifactV1[] = []
+  const domain: Extract<AuthoringCandidateDomain, { kind: 'worldview-field' }> = { kind: 'worldview-field', targetField: field, snapshot: prepared.snapshot }
+  for (let index = 0; index < count; index += 1) {
+    producer = createNodeFieldProducerV1({ scope, worldGroupId: input.worldGroupId, nodeRunId: input.nodeRunId,
+      node: sourceNode, variantIndex: index, family: 'worldview', targetField: field,
+      assembled: prepared.input.assembled, gateway: prepared.contextGatewayExecution, targetSnapshot: prepared.snapshot,
+      assertResumeSourcesCurrent: input.assertResumeSourcesCurrent })
+    try {
+      const payload = await prepared.node.run(prepared.prepared.messages)
+      const gate = await prepared.node.gate?.(payload)
+      if (gate?.status !== 'pass') throw new Error(gate?.issues.map(issue => issue.message).join('；') || '原字段候选硬校验未通过。')
+      const sealed = await producer.sealCandidate({ payload, domain, sourceBinding: binding,
+        qualityMode: creativeReliabilitySettings(input).qualityMode })
+      variants.push(sealed.output)
+      creativeArtifacts.push(sealed.artifact)
+    } catch (error) { return producer.fail(error) }
   }
   return {
     output: variants[0] ?? '',
     variants,
+    creativeArtifacts,
     semantic: input.node.outputs[0]?.semantic ?? 'world.setting',
     sourceKeys: binding.sourceKeys,
     sourceHash: binding.sourceHash,
     sourceEvidence: binding,
-    domain: { kind: 'worldview-field', targetField: field, snapshot: prepared.snapshot },
+    domain,
   }
 }
 
-async function executeStoryCoreField(input: DomainExecutionInput): Promise<DomainExecutionResult> {
+async function executeStoryCoreField(input: DomainExecutionInput, sourceNode: AuthoringNodeInstance): Promise<DomainExecutionResult> {
+  const count = generationCount(input.node, input.inputs)
+  if (input.nodeRunId == null) throw new Error('正式故事核心节点需要真实 NodeRun；未发送模型请求。')
+  let producer: ReturnType<typeof createNodeFieldProducerV1> | undefined
   const scope = await resolveDomainScope(input)
   const targetField = registeredSingleField(input)
   if (!STORY_CORE_FIELDS.includes(targetField as StoryCoreField)) {
@@ -248,21 +271,39 @@ async function executeStoryCoreField(input: DomainExecutionInput): Promise<Domai
     configOverride: input.aiConfig,
     generationOverrides: generationOverrides(input.node, input.inputs),
     signal: input.signal,
-  })
+  }, { runModel: (assertCurrent, ...args) => {
+    if (!producer) throw new Error('故事核心候选尚未绑定真实生产槽位。')
+    return producer.runModel(assertCurrent, ...args)
+  } })
   if (prepared.targetField !== field) throw new Error('故事节点与字段 Copilot 解析出的目标不一致。')
   const binding = await domainBinding(input)
   const variants: string[] = []
-  for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
-    variants.push(JSON.stringify(await prepared.node.run(prepared.prepared.messages), null, 2))
+  const creativeArtifacts: CreativeArtifactV1[] = []
+  const domain: Extract<AuthoringCandidateDomain, { kind: 'story-core-field' }> = { kind: 'story-core-field', targetField: field, snapshot: prepared.snapshot }
+  for (let index = 0; index < count; index += 1) {
+    producer = createNodeFieldProducerV1({ scope, worldGroupId: input.worldGroupId, nodeRunId: input.nodeRunId,
+      node: sourceNode, variantIndex: index, family: 'story-core', targetField: field,
+      assembled: prepared.input.assembled, gateway: prepared.contextGatewayExecution, targetSnapshot: prepared.snapshot,
+      assertResumeSourcesCurrent: input.assertResumeSourcesCurrent })
+    try {
+      const payload = await prepared.node.run(prepared.prepared.messages)
+      const gate = await prepared.node.gate?.(payload)
+      if (gate?.status !== 'pass') throw new Error(gate?.issues.map(issue => issue.message).join('；') || '原字段候选硬校验未通过。')
+      const sealed = await producer.sealCandidate({ payload, domain, sourceBinding: binding,
+        qualityMode: creativeReliabilitySettings(input).qualityMode })
+      variants.push(sealed.output)
+      creativeArtifacts.push(sealed.artifact)
+    } catch (error) { return producer.fail(error) }
   }
   return {
     output: variants[0] ?? '',
     variants,
+    creativeArtifacts,
     semantic: input.node.outputs[0]?.semantic ?? 'story.theme',
     sourceKeys: binding.sourceKeys,
     sourceHash: binding.sourceHash,
     sourceEvidence: binding,
-    domain: { kind: 'story-core-field', targetField: field, snapshot: prepared.snapshot },
+    domain,
   }
 }
 
@@ -290,10 +331,12 @@ async function executeCharacterSupplement(input: DomainExecutionInput): Promise<
     configOverride: input.aiConfig,
     generationOverrides: generationOverrides(input.node, input.inputs),
     signal: input.signal,
+    beforeModelDispatch: input.assertResumeSourcesCurrent,
   })
   const binding = await domainBinding(input)
   const variants: string[] = []
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
+    if (input.assertResumeSourcesCurrent) await input.assertResumeSourcesCurrent()
     variants.push(JSON.stringify(await prepared.node.run(prepared.prepared.messages), null, 2))
   }
   return {
@@ -328,6 +371,7 @@ async function executeStoryArc(input: DomainExecutionInput): Promise<DomainExecu
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
     const result = await runStoryArcCreativeReliabilityV1({
       prepared,
+      assertBeforeModelCall: input.assertResumeSourcesCurrent,
       budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
       qualityMode: reliability.qualityMode,
     })
@@ -353,6 +397,8 @@ async function executeCharacterRelation(input: DomainExecutionInput): Promise<Do
     worldGroupId: input.worldGroupId,
     aiConfig: { ...input.aiConfig, ...generationOverrides(input.node, input.inputs) },
     authorRequest: configText(input.node, 'request'),
+    assertBeforeDispatch: input.assertResumeSourcesCurrent,
+    signal: input.assertResumeSourcesCurrent ? input.signal : undefined,
   })
   const binding = await domainBinding(input)
   const output = JSON.stringify(generated.candidate, null, 2)
@@ -387,6 +433,9 @@ function generationCount(node: AuthoringNodeInstance, inputs: AuthoringInputEnve
   const raw = Number(inputControl(inputs, 'control.count') || configNumber(node, 'candidateCount', 1))
   return Math.min(8, Math.max(1, Number.isFinite(raw) ? Math.round(raw) : 1))
 }
+
+// Recovery reads the same frozen count rule; it does not prepare or generate.
+export { generationCount as readNodeFieldCandidateCountV1 }
 
 function contextBudget(node: AuthoringNodeInstance, inputs: AuthoringInputEnvelope[], fallback: number): number {
   const value = Number(inputControl(inputs, 'control.context-budget') || configNumber(node, 'contextBudget', fallback))
@@ -433,6 +482,7 @@ async function executeCharacter(input: DomainExecutionInput): Promise<DomainExec
     configOverride: input.aiConfig,
     generationOverrides: generationOverrides(input.node, input.inputs),
     signal: input.signal,
+    beforeModelDispatch: input.assertResumeSourcesCurrent,
   })
   const binding = await readAuthoringCanonBinding({
     node: input.node,
@@ -443,6 +493,7 @@ async function executeCharacter(input: DomainExecutionInput): Promise<DomainExec
   })
   const variants: string[] = []
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
+    if (input.assertResumeSourcesCurrent) await input.assertResumeSourcesCurrent()
     const candidate = await prepared.node.run(prepared.prepared.messages)
     variants.push(JSON.stringify(candidate, null, 2))
   }
@@ -504,6 +555,7 @@ async function executeOutline(input: DomainExecutionInput): Promise<DomainExecut
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
     const result = await runOutlineCreativeReliabilityV1({
       prepared,
+      assertBeforeModelCall: input.assertResumeSourcesCurrent,
       budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
       qualityMode: reliability.qualityMode,
     })
@@ -594,13 +646,14 @@ async function executeDetail(input: DomainExecutionInput): Promise<DomainExecuti
   const variants: string[] = []
   const creativeArtifacts: CreativeArtifactV1[] = []
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
+    if (input.assertResumeSourcesCurrent) await input.assertResumeSourcesCurrent()
     const budget = new AgentTeamBudgetTracker(reliability.budgetProfile)
     const reservation = budget.reserveCall({
       label: '细纲领域 Agent',
       messages,
       maxOutputTokens: resolved.config.maxTokens > 0 ? resolved.config.maxTokens : 16_000,
     })
-    const result: ChatResult = {}
+    const result: ChatResult = input.assertResumeSourcesCurrent ? { beforeModelDispatch: input.assertResumeSourcesCurrent } : {}
     const startedAt = Date.now()
     let raw: string
     try {
@@ -612,7 +665,8 @@ async function executeDetail(input: DomainExecutionInput): Promise<DomainExecuti
       }, input.signal, result, undefined, resolved)
       budget.settleCall(reservation, raw)
     } catch (error) {
-      budget.settleFailedCall(reservation)
+      if (error instanceof ModelDispatchGuardRejectedV1 || modelDispatchWasCancelledV1(result)) budget.releaseUnsentCall(reservation)
+      else budget.settleFailedCall(reservation)
       throw error
     }
     const artifact = await createDetailedOutlineCreativeArtifactV1({
@@ -677,6 +731,7 @@ async function executeProse(input: DomainExecutionInput): Promise<DomainExecutio
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
     const result = await runProseCreativeReliabilityV1({
       prepared,
+      assertBeforeModelCall: input.assertResumeSourcesCurrent,
       budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
       qualityMode: reliability.qualityMode,
     })
@@ -722,69 +777,32 @@ async function resolveOrganizationChapter(input: DomainExecutionInput) {
   return { chapter, outline, scope }
 }
 
-function chapterSegment(assembled: Awaited<ReturnType<typeof assembleContext>>, key: string): string {
-  const index = assembled.included.indexOf(key)
-  return index >= 0 ? assembled.segments[index]?.content ?? '' : ''
-}
-
 async function executeChapterOrganization(input: DomainExecutionInput): Promise<DomainExecutionResult> {
-  const { chapter, outline, scope } = await resolveOrganizationChapter(input)
+  const { chapter, scope } = await resolveOrganizationChapter(input)
   const contextBudgetValue = contextBudget(input.node, input.inputs, 28_000)
-  const assembled = await assembleContext({
-    projectId: input.projectId,
-    scope,
-    worldGroupId: input.worldGroupId,
-    outlineNodeId: outline.id,
-    chapterId: chapter.id,
-    sourceKeys: AUTHORING_NODE_BY_ID.get(input.node.templateId)?.reads?.sourceKeys,
-    inputBudgetTokens: contextBudgetValue,
-    provider: input.aiConfig.provider,
-    model: input.aiConfig.model,
+  const canonicalContext = chapterNodeContextPolicy(input.node.templateId, contextBudgetValue, input.aiConfig)
+  const { assembled, chapterText, messages, sourceHash, characters, visibleRelations, foreshadows } = await readOrganizationNodeSource({
+    projectId: input.projectId, scope, worldGroupId: input.worldGroupId, chapter, policy: canonicalContext,
   })
-  const chapterText = normalizeChapterText(chapterSegment(assembled, 'chapterContent') || chapter.content || '')
   if (!chapterText) throw new Error('目标章节没有可整理的正文。')
-  const [allCharacters, relations, foreshadows, itemRows] = await Promise.all([
-    readOwnedRows<any>(scope, 'characters', { owner: 'world' }),
-    readOwnedRows<any>(scope, 'characterRelations', { owner: 'world' }),
-    readOwnedRows<any>(scope, 'foreshadows', { owner: 'work' }),
-    readOwnedRows<any>(scope, 'itemLedger', { owner: 'work' }),
-  ])
-  const characters = allCharacters.filter(character => (
-    Boolean(character.isCrossWorld) || (character.homeWorldGroupId ?? null) === input.worldGroupId
-  ))
-  const visibleCharacterIds = new Set(characters.flatMap(character => character.id == null ? [] : [character.id]))
-  const visibleRelations = relations.filter(relation => (
-    visibleCharacterIds.has(relation.fromCharacterId) && visibleCharacterIds.has(relation.toCharacterId)
-  ))
-  const knownItemNames = [...new Set(itemRows.map(item => item.itemName.trim()).filter(Boolean))]
   const tracker = new AgentTeamBudgetTracker(organizationBudgetProfile(contextBudgetValue))
-  const messages = buildChapterOrganizationPrompt({
-    chapterTitle: chapter.title,
-    chapterText,
-    stateContext: [
-      chapterSegment(assembled, 'stateCards'),
-      chapterSegment(assembled, 'currentFacts'),
-      chapterSegment(assembled, 'characterKnowledge'),
-      chapterSegment(assembled, 'storylineProgress'),
-    ].filter(Boolean).join('\n\n'),
-    characters,
-    knownItemNames,
-    existingRelations: visibleRelations,
-    foreshadows,
-  })
   if (configText(input.node, 'request')) messages.push({ role: 'user', content: configText(input.node, 'request') })
+  if (input.assertResumeSourcesCurrent) await input.assertResumeSourcesCurrent()
   const trackerReservation = tracker.reserveCall({ label: '整理本章', messages, maxOutputTokens: 8_000 })
   let raw: string
+  const dispatchResult: ChatResult | undefined = input.assertResumeSourcesCurrent
+    ? { beforeModelDispatch: input.assertResumeSourcesCurrent } : undefined
   try {
     raw = await chat(messages, input.aiConfig, {
       category: 'chapter.continuity',
       projectId: input.projectId,
       configOverrides: generationOverrides(input.node, input.inputs),
       contextOverflowPolicy: 'reject',
-    }, input.signal)
+    }, input.signal, ...(dispatchResult ? [dispatchResult] as const : [] as const))
     tracker.settleCall(trackerReservation, raw)
   } catch (error) {
-    tracker.settleFailedCall(trackerReservation)
+    if (error instanceof ModelDispatchGuardRejectedV1 || modelDispatchWasCancelledV1(dispatchResult)) tracker.releaseUnsentCall(trackerReservation)
+    else tracker.settleFailedCall(trackerReservation)
     throw error
   }
   const sourceTextHash = await hashChapterText(chapter.content || '')
@@ -806,8 +824,9 @@ async function executeChapterOrganization(input: DomainExecutionInput): Promise<
     output: JSON.stringify(parsed, null, 2),
     semantic: 'continuity.report',
     sourceKeys: assembled.included,
-    sourceHash: hashAuthoringText(`${assembled.included.join(',')}:${sourceTextHash}`),
+    sourceHash,
     sourceEvidence: {
+      canonicalContext,
       included: assembled.included,
       omitted: assembled.omitted,
       trimmed: assembled.trimmed,
@@ -824,54 +843,55 @@ async function executeChapterOrganization(input: DomainExecutionInput): Promise<
 }
 
 async function executeFactNode(input: DomainExecutionInput): Promise<DomainExecutionResult> {
-  const { chapter, outline, scope } = await resolveOrganizationChapter(input)
+  const { chapter, scope } = await resolveOrganizationChapter(input)
   const contextBudgetValue = contextBudget(input.node, input.inputs, 20_000)
-  const assembled = await assembleContext({
-    projectId: input.projectId,
-    scope,
-    worldGroupId: input.worldGroupId,
-    outlineNodeId: outline.id,
-    chapterId: chapter.id,
-    sourceKeys: AUTHORING_NODE_BY_ID.get(input.node.templateId)?.reads?.sourceKeys,
-    inputBudgetTokens: contextBudgetValue,
-    provider: input.aiConfig.provider,
-    model: input.aiConfig.model,
+  const canonicalContext = chapterNodeContextPolicy(input.node.templateId, contextBudgetValue, input.aiConfig)
+  const { assembled, chapterText, messages, sourceHash } = await readFactNodeSource({
+    projectId: input.projectId, scope, worldGroupId: input.worldGroupId, chapter, policy: canonicalContext,
   })
-  const chapterText = normalizeChapterText(chapterSegment(assembled, 'chapterContent') || chapter.content || '')
   if (!chapterText) throw new Error('目标章节没有可抽取事实的正文。')
-  const messages = buildFactExtractPrompt({ chapterTitle: chapter.title, chapterContent: chapterText })
   if (configText(input.node, 'request')) messages.push({ role: 'user', content: configText(input.node, 'request') })
+  if (input.assertResumeSourcesCurrent) await input.assertResumeSourcesCurrent()
   const raw = await chat(messages, input.aiConfig, {
     category: 'chapter.continuity',
     projectId: input.projectId,
     configOverrides: generationOverrides(input.node, input.inputs),
     contextOverflowPolicy: 'reject',
-  }, input.signal)
+  }, input.signal, ...(input.assertResumeSourcesCurrent
+      ? [{ beforeModelDispatch: input.assertResumeSourcesCurrent }] as const : [] as const))
   const candidates = parseFactExtractResult({ raw, chapterContent: chapterText })
   const sourceTextHash = await hashChapterText(chapter.content || '')
   return {
     output: JSON.stringify({ facts: candidates }, null, 2),
     semantic: 'continuity.fact',
     sourceKeys: assembled.included,
-    sourceHash: hashAuthoringText(`${assembled.included.join(',')}:${sourceTextHash}`),
-    sourceEvidence: { included: assembled.included, omitted: assembled.omitted, trimmed: assembled.trimmed, missing: [] },
+    sourceHash,
+    sourceEvidence: { canonicalContext, included: assembled.included, omitted: assembled.omitted, trimmed: assembled.trimmed, missing: [] },
     domain: { kind: 'facts', chapterId: chapter.id!, sourceTextHash, candidateJson: JSON.stringify(candidates) },
   }
 }
 
 /** 领域节点专用执行器；返回 null 时由通用 FLOW-3 执行器处理。 */
 export async function executeDomainNode(input: DomainExecutionInput): Promise<DomainExecutionResult | null> {
+  if (input.node.templateId.startsWith('world.')
+    || (input.node.templateId.startsWith('story.') && input.node.templateId !== 'story.arc')) {
+    // Only plain request inputs are copied. Signals and model callbacks retain
+    // their original identities, and unrelated domain paths are unchanged.
+    input = { ...input, node: structuredClone(input.node), inputs: structuredClone(input.inputs),
+      aiConfig: { ...input.aiConfig }, ...(input.scope ? { scope: { ...input.scope } } : {}) }
+  }
   if (input.node.templateId === 'chapter.quality-review') return executeQualityAuthoringNodeV1(input)
   if (input.node.templateId === 'chapter.quality-revision') return executeQualityRevisionAuthoringNodeV1(input)
+  const sourceNode = input.node
   // Preserve the formal action's schema prompt; the selected author template
   // supplements its request instead of replacing the domain contract.
   const prompt = inputControl(input.inputs, 'control.prompt')
   if (prompt) {
     input = { ...input, node: { ...input.node, config: { ...input.node.config, request: `${configText(input.node, 'request') || AUTHORING_NODE_BY_ID.get(input.node.templateId)?.description || ''}\n\n【作者选择的提示词】\n${prompt}` } } }
   }
-  if (input.node.templateId.startsWith('world.')) return executeWorldviewField(input)
+  if (input.node.templateId.startsWith('world.')) return executeWorldviewField(input, sourceNode)
   if (input.node.templateId.startsWith('story.') && input.node.templateId !== 'story.arc') {
-    return executeStoryCoreField(input)
+    return executeStoryCoreField(input, sourceNode)
   }
   if (input.node.templateId.startsWith('character.field.')) return executeCharacterSupplement(input)
   switch (input.node.templateId) {

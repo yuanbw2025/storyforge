@@ -555,6 +555,7 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
       worldGroups={worldGroups}
       aiStreaming={ai.isStreaming}
       batchRunning={batch.running}
+      batchConfirming={batch.confirming}
       batchProgress={batch.progress}
       batchResult={batch.result}
       activeChapterDrag={activeChapterDrag}

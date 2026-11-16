@@ -148,7 +148,8 @@ describe('AVG V5 portable originals retain exact original author and policy evid
     await db.avgDraftMedia.update(upload.id!,{assetJson:JSON.stringify({...JSON.parse(upload.assetJson),license:'已撤销原使用声明'})})
     await expect(readAvgAdoptedGeneratedImageV2({scope:s.scope,source:image.source})).rejects.toThrow()
     await db.avgDraftMedia.put(upload)
-    const responses=await db.agentRunArtifacts.filter(r=>r.projectId===s.scope.projectId&&r.artifactKind==='raw-response'&&r.contentHash===image.source.raw.responseEvidenceHash).toArray()
+    const responseHash=image.source.raw.responseEvidenceHash
+    const responses=await db.agentRunArtifacts.filter(r=>r.projectId===s.scope.projectId&&r.artifactKind==='raw-response'&&r.contentHash===responseHash).toArray()
     expect(responses.length).toBeGreaterThan(0);await db.agentRunArtifacts.bulkDelete(responses.map(r=>r.id!))
     await expect(readAvgAdoptedGeneratedImageV2({scope:s.scope,source:image.source})).rejects.toThrow()
     await db.agentRunArtifacts.bulkAdd(responses)

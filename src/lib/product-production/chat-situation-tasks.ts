@@ -63,7 +63,8 @@ export async function executeChatSituationDeterministicTaskV1(input: ProductProd
   if (input.task.taskKey === 'content.design') {
     const worldScope = await readProductProductionBuildWorldScopeV1({...input, brief: options.brief})
     const sourceCatalog = await loadProductProductionWorldSourceCatalogV2({scope: input.scope,
-      worldReleaseId: worldScope.worldReleaseId, selection: options.brief.source.selection, chatPrivateCharacters: settings.privateCharacters})
+      worldReleaseId: worldScope.worldReleaseId, selection: options.brief.source.selection,
+      sourcePlan: worldScope.sourcePlan, chatPrivateCharacters: settings.privateCharacters})
     const projected = prepareChatNarrativeCompilerSourceV1({brief: options.brief, sourceCatalog})
     // Raw authored prose can be unclassified or author-only. Only the reviewed
     // projection may enter a production model's input, including for new cast.

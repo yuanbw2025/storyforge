@@ -18,7 +18,7 @@ export function deriveNarrativeSemanticTransferV1(input: {
   }
   const rows = new Map(selectedTables.map(name => [name,
     input.capture.rows.get(name)!.filter(row => isWorldReleaseSourceEligibleV4(name, row))] as const))
-  const { records } = deriveRegisteredSemanticRowsV1({ rows, worldId: world.id!, workId: work.id! })
+  const { records, exportIds } = deriveRegisteredSemanticRowsV1({ rows, worldId: world.id!, workId: work.id! })
   const semanticSnapshot: WorldSemanticSnapshotV1 = {
     schema: 'storyforge.world-semantic-snapshot', version: 1,
     ownership: { contractVersion: 1, worldExportId: 0, workExportId: 0 },
@@ -35,5 +35,5 @@ export function deriveNarrativeSemanticTransferV1(input: {
   }
   const selectedCapture: NarrativeDomainCaptureV1 = { ...input.capture,
     rows: new Map([...input.capture.rows.keys()].map(name => [name, rows.get(name) ?? []])) }
-  return { transfer: { selectedTables, records, semanticSnapshot }, capture: selectedCapture }
+  return { transfer: { selectedTables, records, semanticSnapshot }, capture: selectedCapture, exportIds }
 }

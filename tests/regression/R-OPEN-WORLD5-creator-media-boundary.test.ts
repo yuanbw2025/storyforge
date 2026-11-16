@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { assertTextOpenWorldBuildNewWorkV1 } from '../../src/lib/open-world/source-admission'
 import { createTextOpenWorldProductionExecutorV1 } from '../../src/lib/open-world/production-executor'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
@@ -22,11 +23,8 @@ import {
 import type {
   ProductProductionBriefV3,
   ProductProductionPlanTaskV3,
-  ProductProductionRecordV1,
 } from '../../src/lib/types'
 import {
-  CURRENT_PRODUCT_RESOURCE_KEYS,
-  currentProductSelection,
   seedCurrentProductWorld,
 } from '../helpers/current-product-world'
 
@@ -48,32 +46,15 @@ function capability(requirementKey: string, mediaClass: 'text' | 'image') {
   } as const
 }
 
-function creatorExecutionBrief(): ProductProductionBriefV3 {
+function creatorExecutionBrief(source: ProductProductionBriefV3['source']): ProductProductionBriefV3 {
   return parseProductProductionBriefV3({
     schema: 'storyforge.product-production-brief',
     version: 3,
-    source: {
-      worldReleaseId: 1,
-      worldContentHash: HASH,
-      selection: currentProductSelection('text-open-world', {
-        story: [CURRENT_PRODUCT_RESOURCE_KEYS.story],
-        characters: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
-        locations: [CURRENT_PRODUCT_RESOURCE_KEYS.location],
-        storyArcs: [CURRENT_PRODUCT_RESOURCE_KEYS.arc],
-      }),
-      startingPoint: {
-        kind: 'mainline',
-        title: '盐脊断流',
-        summary: '冻结来源的 Creator 正式生产入口。',
-        sourceRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.story],
-        protagonistRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
-        openingConflict: '盐井失去回声。',
-      },
-    },
+    source,
     intent: {
       productType: 'text-open-world',
       playerRole: '巡盐人',
-      protagonistRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
+      protagonistRefs: [...source.startingPoint.protagonistRefs],
       openingSituation: '盐井失去回声。',
       coreExperience: ['有边界的自由演绎'],
       requiredFacts: ['冻结来源保持不变'],
@@ -138,25 +119,46 @@ function creatorExecutionBrief(): ProductProductionBriefV3 {
   })
 }
 
-function production(): ProductProductionRecordV1 {
-  return {
-    id: 1,
-    projectId: 1,
-    worldId: 1,
-    workId: 1,
-    productionKey: 'creator-media-boundary',
-    productType: 'text-open-world',
-    title: 'Creator 媒资授权边界',
-    status: 'producing',
-    stateRevision: 1,
-    controlEpoch: 0,
-    currentBriefRevision: 1,
-    currentBuildNumber: 1,
-    currentProductReleaseId: null,
-    lastErrorJson: '{}',
-    createdAt: 1,
-    updatedAt: 1,
+// Only the first two direct-executor controls need this real World authority.
+// Keep their original zero-fee Brief fields; replace only its synthetic source.
+async function creatorFixture() {
+  const owned = await seedCurrentProductWorld('Creator 媒资授权边界')
+  const worldReleaseId = owned.release.id
+  if (!worldReleaseId) throw new Error('Creator媒资测试必须绑定实际封存世界')
+  const suggestions = await suggestProductStartingPoints({ scope: owned.scope, worldReleaseId })
+  const start = suggestions.suggestions[0]
+  if (!start) throw new Error('Creator媒资测试缺少世界起点')
+  const sourceBrief = await draftProductProductionBriefV3({ scope: owned.scope, worldReleaseId,
+    suggestionKey: start.suggestionKey, productType: 'text-open-world', scale: 'chapter',
+    visualLevel: 'key-scenes', audioLevel: 'none', qualityProfile: 'prototype',
+  })
+  const brief = creatorExecutionBrief(sourceBrief.source)
+  const created = await executeProductProductionCommand({ scope: owned.scope, command: {
+    type: 'create-intent', commandId: 'creator-media-boundary.intent', productionKey: 'creator-media-boundary',
+    productType: 'text-open-world', worldReleaseId, userText: 'Creator 媒资授权边界',
+  } })
+  if (!created.ok || !created.productionId) throw new Error('Creator媒资测试Production创建失败')
+  const saved = await executeProductProductionCommand({ scope: owned.scope, productionId: created.productionId,
+    command: { type: 'save-brief-revision', commandId: 'creator-media-boundary.brief',
+      expectedStateRevision: 0, parentRevision: null, brief } })
+  if (!saved.ok || typeof saved.result.briefHash !== 'string') throw new Error('Creator媒资测试Brief保存失败')
+  const authorized = await executeProductProductionCommand({ scope: owned.scope, productionId: created.productionId,
+    command: { type: 'authorize-start', commandId: 'creator-media-boundary.start', expectedStateRevision: 1,
+      briefRevision: 1, briefHash: saved.result.briefHash, authorizationNonce: 'creator-media-boundary.author-click' } })
+  if (!authorized.ok) throw new Error('Creator媒资测试Build授权失败')
+  const production = await db.productProductions.get(created.productionId)
+  const build = await db.productBuilds.where('[productionId+buildNumber]').equals([created.productionId, 1]).first()
+  const briefRow = await db.productProductionBriefs.where('[productionId+revision]').equals([created.productionId, 1]).first()
+  if (!production?.id || !build?.id || !briefRow?.id) throw new Error('Creator媒资测试授权记录必须实际入库')
+  if (briefRow.sourceWorldReleaseId !== worldReleaseId || briefRow.sourceWorldContentHash !== owned.release.contentHash) {
+    throw new Error('Creator媒资测试Brief必须绑定本次封存世界版本')
   }
+  const admission = { scope: owned.scope, productionId: production.id, buildId: build.id,
+    buildNumber: build.buildNumber, controlEpoch: build.controlEpoch, planHash: build.planHash }
+  await assertTextOpenWorldBuildNewWorkV1({ ...admission, operation: 'Creator媒资费用边界测试输入核验' })
+  return { brief, production,
+    executionInput: (task: ProductProductionPlanTaskV3, bindings: ProductProductionTaskExecutionInputV1['capabilityBindings']) =>
+      creatorExecutionInput(task, bindings, admission) }
 }
 
 function zeroCostVisualTask(): ProductProductionPlanTaskV3 {
@@ -193,17 +195,13 @@ function zeroCostVisualTask(): ProductProductionPlanTaskV3 {
   }
 }
 
-function executionInput(
+function creatorExecutionInput(
   task: ProductProductionPlanTaskV3,
   capabilityBindings: ProductProductionTaskExecutionInputV1['capabilityBindings'],
+  admission: Pick<ProductProductionTaskExecutionInputV1, 'scope' | 'productionId' | 'buildId' | 'buildNumber' | 'controlEpoch' | 'planHash'>,
 ): ProductProductionTaskExecutionInputV1 {
   return {
-    scope: { projectId: 1, worldId: 1, workId: 1 },
-    productionId: 1,
-    buildId: 1,
-    buildNumber: 1,
-    controlEpoch: 0,
-    planHash: 'b'.repeat(64),
+    ...admission,
     task,
     attemptBudgetReservation: structuredClone(task.budgetReservation),
     attempt: 1,
@@ -211,6 +209,7 @@ function executionInput(
     contextText: '',
     inputArtifacts: [],
     capabilityBindings,
+    authorResolution: null,
     signal: new AbortController().signal,
   }
 }
@@ -374,7 +373,7 @@ describe('TOW-G5-04 · Creator 零费用媒资调用与恢复边界', () => {
   afterAll(() => db.close())
 
   it('外部 relay binding 在真实 open-world media executor 委托 provider 前失败', async () => {
-    const brief = creatorExecutionBrief()
+    const { brief, production, executionInput } = await creatorFixture()
     const requirement = brief.capabilityRequirements.find(item => item.requirementKey === 'media.visual')!
     const fetcher = vi.fn(async () => new Response('{}', {
       status: 200,
@@ -388,7 +387,7 @@ describe('TOW-G5-04 · Creator 零费用媒资调用与恢复边界', () => {
       now: 1,
     })
     const executor = createTextOpenWorldProductionExecutorV1({
-      production: production(),
+      production,
       brief,
       mediaCapabilities: new Map([[requirement.requirementKey, resolved]]),
     })
@@ -399,7 +398,7 @@ describe('TOW-G5-04 · Creator 零费用媒资调用与恢复边界', () => {
   })
 
   it('零费用 media.visual 不允许 taskExecutors override 绕过程序化硬闸', async () => {
-    const brief = creatorExecutionBrief()
+    const { brief, production, executionInput } = await creatorFixture()
     const binding = await createBuiltInProductionCapabilityBindingV1({
       requirementKey: 'media.visual',
       adapterId: 'storyforge.procedural-svg.v1',
@@ -418,7 +417,7 @@ describe('TOW-G5-04 · Creator 零费用媒资调用与恢复边界', () => {
       },
     }))
     const executor = createTextOpenWorldProductionExecutorV1({
-      production: production(),
+      production,
       brief,
       taskExecutors: { 'media.visual': override },
     })

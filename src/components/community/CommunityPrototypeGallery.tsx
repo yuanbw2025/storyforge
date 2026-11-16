@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CheckCircle2, Download, FlaskConical, Loader2, ShieldCheck } from 'lucide-react'
-import { createWorkspace } from '../../lib/workspace/create-workspace'
+import { createWorkspaceForProductDistributionV1 } from '../../lib/product-platform/workspace-install'
 import { importMarketplaceProductDistributionV2, verifyProductDistributionBundleV2 } from '../../lib/product-platform/distribution-bundle'
 import {
   loadCommunityPrototypeCatalogV1,
@@ -47,15 +47,23 @@ export default function CommunityPrototypeGallery(props: {
 
   const importPrototype = async (entry: CommunityPrototypeCatalogEntryV1) => {
     if (importing.current) return
+    entry = structuredClone(entry)
+    const providedScope = props.scope ? structuredClone(props.scope) : undefined
     importing.current = true
     setBusyId(entry.prototypeId); setMessage(''); setError('')
     try {
-      const bundle = await loadCommunityPrototypeReleaseBundleV1({ entry })
+      const candidate = await loadCommunityPrototypeReleaseBundleV1({ entry })
       // Verify the complete release before creating a local sample workspace.
-      await verifyProductDistributionBundleV2(bundle)
-      if (!props.scope && entry.productType !== 'ai-town') throw new Error('请先选择对应产品的作品。')
-      const scope = props.scope ?? retryScopes.current[entry.prototypeId] ?? (await createWorkspace({ name: `${entry.title}（体验副本）`, genres: [], description: entry.summary, targetWordCount: 0, status: 'drafting' }, { purpose: 'independent-work', kind: 'ai-town' })).scope
-      if (!props.scope) retryScopes.current[entry.prototypeId] = scope
+      let bundle = await verifyProductDistributionBundleV2(structuredClone(candidate))
+      if (bundle.productRelease.manifest.productType !== entry.productType) throw new Error('原型产品与目录身份不一致。')
+      if (!providedScope && entry.productType !== 'ai-town') throw new Error('请先选择对应产品的作品。')
+      let scope = providedScope ?? retryScopes.current[entry.prototypeId]
+      if (!scope) {
+        const installed = await createWorkspaceForProductDistributionV1({ name: `${entry.title}（体验副本）`, genres: [], description: entry.summary, targetWordCount: 0, status: 'drafting' }, { bundle, expectedBundleHash: bundle.bundleHash, expectedProductType: entry.productType })
+        scope = installed.workspace.scope
+        bundle = installed.bundle
+      }
+      if (!providedScope) retryScopes.current[entry.prototypeId] = scope
       const release = await importMarketplaceProductDistributionV2({
         scope,
         bundle,

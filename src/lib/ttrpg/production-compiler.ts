@@ -191,6 +191,12 @@ function npcTemplate(input: {
     attribute.key,
     Math.max(attribute.minimum, Math.min(attribute.maximum, attribute.defaultValue + (attributeIndex === input.index % input.rulePack.attributes.length ? 1 : 0))),
   ]))
+  const progression = productionStartingProgression({
+    rulePack: input.rulePack,
+    startingLevelOrTier: input.rulePack.advancement.progressionModel === 'numeric-level'
+      && Object.prototype.hasOwnProperty.call(attributes, 'level') ? String(attributes.level) : '规则默认',
+    attributes,
+  })
   const name = input.source?.name ?? '核心对手'
   const description = input.source?.description || `围绕“${input.campaign.coreConflict}”采取行动的关键 NPC。`
   const sourceRefs = input.source ? [input.source.resourceKey] : ['product:generated-npc']
@@ -224,6 +230,7 @@ function npcTemplate(input: {
         shortTermGoal: template.gmProfile!.objective,
         desires: [template.gmProfile!.objective],
       },
+      progression,
     }),
   }
 }

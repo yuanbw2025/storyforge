@@ -227,7 +227,7 @@ export async function resolveConfiguredTextCapabilityV1(input: {
   expectedProviderIdentity?: ExpectedConfiguredTextProviderIdentityV1
 }, dependencies: CapabilityDependenciesV1 = {}): Promise<ResolvedConfiguredTextCapabilityV1> {
   const category = normalizeProductProductionTextCategoryV1(input.category)
-  const resolution: AIRequestConfigResolution = dependencies.resolveConfig
+  const configuredResolution: AIRequestConfigResolution = dependencies.resolveConfig
     ? {
         config: dependencies.resolveConfig(category),
         taskKind: null,
@@ -237,6 +237,11 @@ export async function resolveConfiguredTextCapabilityV1(input: {
         useAIConfigStore.getState().config,
         { category, projectId: input.projectId },
       )
+  // Routing can return the mutable global/preset config by reference. Capture
+  // its scalar fields before the first asynchronous identity/hash operation.
+  const resolution: AIRequestConfigResolution = {
+    ...configuredResolution, config: { ...configuredResolution.config },
+  }
   const config = resolution.config
   if (!isAIConfigReady(config)) throw new Error(getAIConfigRequiredMessage(config))
   if (!config.model.trim() || !config.baseUrl.trim()) throw new Error('现有 AI 配置缺少模型或 Base URL。')
@@ -397,6 +402,10 @@ export async function runConfiguredProductionVisionV1(input: {
     input.signal,
     input.result,
     input.responseFormat ? { responseFormat: input.responseFormat } : undefined,
+    {
+      ...resolved.resolution,
+      config: { ...resolved.config, maxTokens: input.maximumOutputTokens },
+    },
   )
   return { output, bindingReceipt: resolved.receipt }
 }

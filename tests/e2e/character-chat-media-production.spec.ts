@@ -1,24 +1,24 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {expect, test} from '@playwright/test'
 
 for (const width of [390, 1440]) test(`legacy chat image confirmation remains readable before assembly at ${width}px`, async ({page}, info) => {
   await page.setViewportSize({width, height: 844})
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: 'https://chat-production.invalid/v1', apiKey: ''}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: 'https://chat-production.invalid/v1', apiKey: 'isolated-test-key' })
   let externalCalls = 0
   for (const pattern of ['**/chat/completions', '**/images/generations', '**/local-codex/v1/requests']) {
     await page.route(pattern, async route => {
       if (route.request().method() === 'POST') {externalCalls++; await route.abort()} else await route.continue()
     })
   }
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     return (await load('/storyforge/tests/helpers/chat-media-production-fixture.ts')).seedChatMediaConfirmationFixture()
   })
-  await page.goto(`./chat/production?project=${f.scope.projectId}&work=${f.scope.workId}&production=${f.productionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/production?project=${f.scope.projectId}&work=${f.scope.workId}&production=${f.productionId}`)
   const selection = page.getByTestId('chat-media-selection'), confirm = selection.getByRole('button', {name: '确认这些图片与用途并继续', exact: true})
   await expect(selection.getByRole('img')).toHaveCount(2)
   await expect(selection.getByRole('heading', {name: '苏禾 · 头像与在场立绘', exact: true})).toBeVisible()
@@ -35,7 +35,7 @@ for (const width of [390, 1440]) test(`legacy chat image confirmation remains re
   }, f)
   const before = await read()
   expect(before).toMatchObject({status: 'recovery-required', releases: 0, selection: 0, runtime: null})
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(confirm).toBeEnabled()
   expect(await read()).toEqual(before)
   await confirm.scrollIntoViewIfNeeded()
@@ -53,7 +53,7 @@ for (const width of [390, 1440]) test(`legacy chat image confirmation remains re
   expect(after.runtime.presentation.cues).toEqual([])
   expect(after.world).toBe(f.world); expect(after.releases).toBe(0)
   expect(externalCalls).toBe(0)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(selection).toHaveCount(0)
   expect(await read()).toEqual(after)
   expect(externalCalls).toBe(0)

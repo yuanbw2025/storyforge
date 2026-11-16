@@ -9,6 +9,7 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/deploy-docs.yml"
+      - "scripts/deploy/verify-docs-ssh-host-key.mjs"
 
   workflow_dispatch:
 
@@ -41,24 +42,37 @@ jobs:
         env:
           SSH_PRIVATE_KEY: ${{ secrets.STORYFORGE_DOCS_SSH_KEY }}
           SSH_HOST: ${{ secrets.STORYFORGE_DOCS_HOST }}
+          # For rotation, verify the new SHA256 fingerprint through the trusted server
+          # console and update this pin independently before the next deployment.
+          STORYFORGE_DOCS_HOST_KEY_SHA256: ${{ secrets.STORYFORGE_DOCS_HOST_KEY_SHA256 }}
         run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
+          set -euo pipefail
+          if [[ ! "$SSH_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ || -z "$STORYFORGE_DOCS_HOST_KEY_SHA256" || -z "$SSH_PRIVATE_KEY" ]]; then
+            echo "Docs SSH host, identity or independent host-key pin is missing or invalid." >&2
+            exit 1
+          fi
+          umask 077
+          ssh_dir="$(mktemp -d "$RUNNER_TEMP/storyforge-docs-ssh.XXXXXX")"
+          if ! ssh-keyscan -T 5 -t ed25519,ecdsa,rsa -- "$SSH_HOST" > "$ssh_dir/candidates" 2>/dev/null; then
+            echo "Unable to collect docs SSH host-key candidates." >&2
+            exit 1
+          fi
+          node scripts/deploy/verify-docs-ssh-host-key.mjs "$SSH_HOST" "$ssh_dir/candidates" "$ssh_dir/known_hosts"
+          ssh-keygen -F "$SSH_HOST" -f "$ssh_dir/known_hosts" >/dev/null 2>&1
 
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/storyforge_docs_deploy
-          chmod 600 ~/.ssh/storyforge_docs_deploy
-
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$ssh_dir/identity"
+          printf 'STORYFORGE_DOCS_SSH_DIR=%s\n' "$ssh_dir" >> "$GITHUB_ENV"
 
       - name: Deploy to Tencent Cloud
         env:
           SSH_HOST: ${{ secrets.STORYFORGE_DOCS_HOST }}
           SSH_USER: ${{ secrets.STORYFORGE_DOCS_USER }}
         run: |
+          set -euo pipefail
+          ssh_dir="${STORYFORGE_DOCS_SSH_DIR:?SSH preparation did not complete}"
           rsync -az --delete \
-            -e "ssh -i ~/.ssh/storyforge_docs_deploy" \
-            website-docs/.vitepress/dist/ \
+            -e "ssh -F /dev/null -i '$ssh_dir/identity' -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='$ssh_dir/known_hosts' -o GlobalKnownHostsFile=/dev/null -o UpdateHostKeys=no -o VerifyHostKeyDNS=no" \
+            -- website-docs/.vitepress/dist/ \
             "$SSH_USER@$SSH_HOST:/var/www/storyforge-docs/"
 
       - name: Verify deployment

@@ -130,9 +130,10 @@ export async function requireBackupBefore(
  *   第一步:显示"是否已备份?"(确认 / 取消)
  *     取消 → cancel
  *     确认 → 第二步
- *   第二步:显示"立即下载备份 还是 跳过?"(确认 / 取消)
+ *   第二步:显示"是否立即下载备份?"(确认 / 取消)
  *     确认 → proceed-backup-now
- *     取消 → proceed-already-backed-up(用户声明已自己备份了)
+ *     取消 → 第三步，明确确认已经自行备份；关闭原生窗口也会返回取消。
+ *   第三步:只有明确确认已备份才继续，否则 cancel。
  *
  * 这是无定制对话框时的当前降级交互。
  */
@@ -155,11 +156,18 @@ async function promptUserChoiceFallback(options: RequireBackupOptions): Promise<
 
   const wantBackup = await confirmFallback({
     title: '是否立即下载备份(JSON 文件到本地)?',
-    message: '确认后会立即下载备份，然后继续；取消表示你已经备份过，直接继续。',
+    message: '确认后会立即下载备份，然后继续；取消后仍需明确确认已自行备份，才会继续。',
     confirmText: '立即备份',
   })
 
-  return wantBackup ? 'proceed-backup-now' : 'proceed-already-backed-up'
+  if (wantBackup) return 'proceed-backup-now'
+  const alreadyBackedUp = await confirmFallback({
+    title: `已自行备份，仍要继续「${options.operation}」？`,
+    message: '只有你已保存可恢复的备份，才能确认继续。取消或关闭此窗口将中止当前操作。',
+    confirmText: options.confirmLabel ?? '已备份，继续',
+    tone: 'danger',
+  })
+  return alreadyBackedUp ? 'proceed-already-backed-up' : 'cancel'
 }
 
 /**

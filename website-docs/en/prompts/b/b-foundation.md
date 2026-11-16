@@ -68,66 +68,66 @@ Revise story promise, structural causality, character arcs, information pacing, 
 | Language revision | How can expression improve without changing facts? | Targeted rewrite, change notes |
 | Reader validation | Where might readers be confused, lose anticipation, or misjudge? | Reading risks, comprehension path, validation questions |
 | Packaging | How can the work be represented accurately without false promises? | Title, blurb, synopsis, tags, submission materials |
-+
-+Stages are not irreversible. Character design may expose premise flaws; scenes may reveal insufficient rules; real choices in prose may require later outline changes. Returning upstream preserves the work's vitality.
-+
-+## 4. Longform, short fiction, and serial tracks
-+
-+### Longform
-+
-+Manage multistage change. Each volume completes a local task and changes the whole-book situation. The middle must change strategy, relationships, resources, knowledge, or conflict level—not merely add events. Subplots need independent functions and must collide, exchange consequences, or converge at key points.
-+
-+### Short fiction
-+
-+Concentrate and compress. Characters, background, viewpoint, and subplots serve one core change. Enter the crucial situation later; let images, actions, and limited information serve multiple functions. The ending completes the change and leaves an aftereffect consistent with the whole.
-+
-+### Serials
-+
-+Add reading rewards and production management to story structure. Chapters advance long-term conflict while giving interim gains. Breaks arise from unfinished action, judgment, or consequence, not arbitrary cuts. Update rhythm, chapter length, and reward density belong in the work profile.
-+
-+## 5. Enabling genre specialties
-+
-+Genre rules strengthen the main reading promise; do not load them all indiscriminately.
-+
-+- **Mystery:** solution, evidence chain, grounded misdirection, reader-visible information, fair reveals.
-+- **Romance:** relationship axis, mutual attraction, credible resistance, intimacy changes, emotional ending.
-+- **Progression:** ability changes, justified gains, resource costs, challenge ladder, new limits.
-+- **Historical:** period conditions, institutions, lived texture, history/fiction boundaries.
-+- **Science fiction:** constraints of the novum, cascading deductions, effects on institutions and choices.
-+- **Fantasy:** rules, costs, culture, myth structures, actual consequences of wonder.
-+- **Ensemble:** irreplaceable viewpoints, character weight, complementary information, convergence.
-+- **Realism/literary:** daily pressure, subtle change, complexity, open meaning.
-+- **Horror:** threat boundaries, managed unknowns, sensory evidence, escalation, lingering fear.
-+- **Comedy:** character logic, contrast, fair information in misunderstandings, timing, dignity.
-+
-+For mixed genres, choose a primary promise and a few supporting genres. Supporting genres enrich but must not override the primary payoff.
-+
-+## 6. Basic structure of a quality Prompt
-+
-+Every directly usable Prompt needs at least:
-+
-+1. **Task goal:** the one creative problem this call resolves.
-+2. **Input contract:** required material and missing-data behavior.
-+3. **Fact priority:** resolving prose, author decisions, project rules, and genre conventions.
-+4. **Steps:** what to analyze, compare, then generate.
-+5. **Output contract:** fields, order, format, length, and adoptable units.
-+6. **Boundaries:** no unsupported invention, unauthorized rewriting, or suggestions disguised as facts.
-+7. **Checks:** omissions, contradictions, causality, repetition, format, executability.
-+
-+A role is a working perspective, not task logic. Adjectives do not replace inputs, steps, outputs, and tests.
-+
-+## 7. Usage principles
-+
-+1. Separate general principles, genre rules, serial strategy, and project rules; author project rules take priority.
-+2. Authors confirm diagnoses before revision or writeback.
-+3. Do not run concurrent generation tasks that modify the same fact target in one round.
-+4. Extract mechanisms from references; do not import original names, proprietary settings, or expression fingerprints.
-+5. AI generates candidates, not automatically effective canonical answers.
-+6. Check fields, references, conflicts, and ownership before adopting structured results.
-+7. Upgrade Prompts based on cross-genre cases, not the impression from one output.
-+
-+## 8. Value of the methodology
-+
-+The value is not finding the one correct story for the author. It clarifies why a story works, why characters act, how worlds pressure them, conflicts escalate, information is released, chapters change things, endings pay off, and revision should begin.
-+
-+When these questions are explicit, handled stepwise, and checked repeatedly, AI becomes a stable creative assistant rather than an uncontrollable text generator.
+
+Stages are not irreversible. Character design may expose premise flaws; scenes may reveal insufficient rules; real choices in prose may require later outline changes. Returning upstream preserves the work's vitality.
+
+## 4. Longform, short fiction, and serial tracks
+
+### Longform
+
+Manage multistage change. Each volume completes a local task and changes the whole-book situation. The middle must change strategy, relationships, resources, knowledge, or conflict level—not merely add events. Subplots need independent functions and must collide, exchange consequences, or converge at key points.
+
+### Short fiction
+
+Concentrate and compress. Characters, background, viewpoint, and subplots serve one core change. Enter the crucial situation later; let images, actions, and limited information serve multiple functions. The ending completes the change and leaves an aftereffect consistent with the whole.
+
+### Serials
+
+Add reading rewards and production management to story structure. Chapters advance long-term conflict while giving interim gains. Breaks arise from unfinished action, judgment, or consequence, not arbitrary cuts. Update rhythm, chapter length, and reward density belong in the work profile.
+
+## 5. Enabling genre specialties
+
+Genre rules strengthen the main reading promise; do not load them all indiscriminately.
+
+- **Mystery:** solution, evidence chain, grounded misdirection, reader-visible information, fair reveals.
+- **Romance:** relationship axis, mutual attraction, credible resistance, intimacy changes, emotional ending.
+- **Progression:** ability changes, justified gains, resource costs, challenge ladder, new limits.
+- **Historical:** period conditions, institutions, lived texture, history/fiction boundaries.
+- **Science fiction:** constraints of the novum, cascading deductions, effects on institutions and choices.
+- **Fantasy:** rules, costs, culture, myth structures, actual consequences of wonder.
+- **Ensemble:** irreplaceable viewpoints, character weight, complementary information, convergence.
+- **Realism/literary:** daily pressure, subtle change, complexity, open meaning.
+- **Horror:** threat boundaries, managed unknowns, sensory evidence, escalation, lingering fear.
+- **Comedy:** character logic, contrast, fair information in misunderstandings, timing, dignity.
+
+For mixed genres, choose a primary promise and a few supporting genres. Supporting genres enrich but must not override the primary payoff.
+
+## 6. Basic structure of a quality Prompt
+
+Every directly usable Prompt needs at least:
+
+1. **Task goal:** the one creative problem this call resolves.
+2. **Input contract:** required material and missing-data behavior.
+3. **Fact priority:** resolving prose, author decisions, project rules, and genre conventions.
+4. **Steps:** what to analyze, compare, then generate.
+5. **Output contract:** fields, order, format, length, and adoptable units.
+6. **Boundaries:** no unsupported invention, unauthorized rewriting, or suggestions disguised as facts.
+7. **Checks:** omissions, contradictions, causality, repetition, format, executability.
+
+A role is a working perspective, not task logic. Adjectives do not replace inputs, steps, outputs, and tests.
+
+## 7. Usage principles
+
+1. Separate general principles, genre rules, serial strategy, and project rules; author project rules take priority.
+2. Authors confirm diagnoses before revision or writeback.
+3. Do not run concurrent generation tasks that modify the same fact target in one round.
+4. Extract mechanisms from references; do not import original names, proprietary settings, or expression fingerprints.
+5. AI generates candidates, not automatically effective canonical answers.
+6. Check fields, references, conflicts, and ownership before adopting structured results.
+7. Upgrade Prompts based on cross-genre cases, not the impression from one output.
+
+## 8. Value of the methodology
+
+The value is not finding the one correct story for the author. It clarifies why a story works, why characters act, how worlds pressure them, conflicts escalate, information is released, chapters change things, endings pay off, and revision should begin.
+
+When these questions are explicit, handled stepwise, and checked repeatedly, AI becomes a stable creative assistant rather than an uncontrollable text generator.

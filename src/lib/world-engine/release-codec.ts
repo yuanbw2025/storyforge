@@ -317,6 +317,24 @@ export async function verifyWorldReleaseManifestV1(input: {
   return fail('version', '未知 WorldRelease 版本，无法按当前合同验证')
 }
 
+/** Match a built-in edition across installations while preserving portable row
+ * identities, relationships and content. WorldRelease identity stays distinct. */
+export async function readWorldReleaseEditionV3(input: Parameters<typeof verifyPureWorldReleaseManifestV3>[0]) {
+  const manifest = await verifyPureWorldReleaseManifestV3(input)
+  const content = Object.fromEntries(Object.entries(manifest.records).filter(([, rows]) => rows.length).map(([table, rows]) => [
+    table, rows.map(row => {
+      if (!isRecord(row)) fail('records', '封存作品版本含无效语义记录')
+      const { createdAt: _created, updatedAt: _updated, ragDocumentId: _localDocument, ...portable } = row
+      return portable
+    }),
+  ]))
+  return {
+    editionHash: await hashWorldReleaseValueV1(content),
+    sourceWorkspaceUid: manifest.sourceManifest.sourceWorkspaceUid,
+    sourceWorkCode: manifest.sourceManifest.sourceWorkCode,
+  }
+}
+
 export async function verifyWorldReleaseRecordV1(release: WorldRelease): Promise<VerifiedWorldReleaseV1> {
   if (!release.id || !Number.isSafeInteger(release.id)) fail('release-id', 'WorldRelease 缺少本地记录 ID')
   return verifyWorldReleaseManifestV1({ manifest: release.manifestJson,

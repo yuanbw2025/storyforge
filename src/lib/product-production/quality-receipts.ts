@@ -1809,7 +1809,7 @@ async function verifyTextAdventureHumanVisualReviewGateV1(
   row: ProductQualityGateReceiptRecordV1,
   resolved: ResolvedTextAdventureHumanVisualInputsV1,
 ): Promise<VerifiedTextAdventureHumanVisualReviewGateV1> {
-  const gateReceipt = parseProductQualityGateReceiptV1(row.receiptJson)
+  const gateReceipt = await verifyProductQualityGateReceiptRecordV1(row)
   const evidence = parseTextAdventureHumanVisualReviewEvidenceV1(gateReceipt.measuredJson)
   const expectedAssets = resolved.assets.map(asset => ({
     assetKey: asset.assetKey, artifactKey: asset.artifactKey,

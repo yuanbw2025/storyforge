@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { makeRagEntryKey } from '../../src/lib/retrieval/rag-library'
-import { prepareNarrativeCandidateV1 } from '../../src/lib/world-engine/narrative-domain-candidate'
+import { matchesSavedNarrativeBaselineV1, prepareNarrativeCandidateV1 } from '../../src/lib/world-engine/narrative-domain-candidate'
 import { generateNarrativeAnnotationCandidateV1, readNarrativeAnnotationRunV1, reviseNarrativeAnnotationCandidateV1,
   adoptNarrativeAnnotationCandidateV1 } from '../../src/lib/agent/run/narrative-annotation-durable'
 import { deriveExportProjectJSON } from '../../src/lib/export/registry-export'
@@ -61,10 +61,21 @@ describe('NW-1C · 既有子记录的目标状态交接', () => {
     const scope = { projectId, workId: work.id!, worldId: work.worldId }
     const run = (await db.agentRuns.where('projectId').equals(projectId).toArray())[0]
     const loaded = await readNarrativeAnnotationRunV1(scope, run.id!)
+    const restored = await deriveExportProjectJSON(projectId)
+    const detached = legacy.project.chapters[4]
+    const chapter = restored.chapters.find(row => row.ragDocumentId === detached.ragDocumentId)!
+    expect(chapter.content).toBe(detached.content)
+    const outline = restored.outlineNodes.find(row => row._exportId === chapter._outlineExportId)!
+    expect(outline.title).toBe('【恢复占位·原章纲待确认】' + detached.title)
+    const review = restored.notes.find(note => note.content.includes('来源 v16'))!
+    expect(review.content).toContain(detached.ragDocumentId)
     expect(loaded.state.promptVersion).toBe('narrative-annotation-extract-v3')
     expect(loaded.state.baselineHash).toBe(legacy.baselineHash)
     expect(loaded.candidate!.candidateHash).toBe(legacy.candidateHash)
     expect(loaded.state.baseline).not.toHaveProperty('targetState')
+    const checked = await prepareNarrativeCandidateV1({ scope, selection: loaded.state.selection, includeTargetState: false })
+    expect(checked.baselineHash).not.toBe(legacy.baselineHash)
+    expect(await matchesSavedNarrativeBaselineV1(checked, '0'.repeat(64))).toBe(false)
     const proposal = structuredClone(loaded.candidate!.proposal!)
     const children = proposal.annotations.narrativeDevelopmentsV1 as Array<Record<string, unknown>>
     children[0].state = 'open'

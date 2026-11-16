@@ -1,7 +1,8 @@
+import Dexie from 'dexie'
 import { db } from '../../db/schema'
 import { observeDuplicatedProseFrameV1 } from '../../prose/provider-frame-observation'
 import { normalizeProseForEditorV1, plainTextToHtml } from '../../utils/html'
-import { adopt } from '../../registry/adopt'
+import { adopt, adoptionTransactionTablesV1 } from '../../registry/adopt'
 import { hashChapterText, normalizeChapterText, sha256Text, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../../ai/chapter-memory/text-normalization'
 import type { AgentConversation, AgentEvent, Chapter, ChatMessage, WorkspaceScope } from '../../types'
 import type {
@@ -18,11 +19,15 @@ import {
   readAgentRunV1,
   readVerifiedAgentRunInTransactionV1,
   appendPrivilegedAgentRunEventInTransactionV1,
+  appendAgentRunEventWithSettlementInTransactionV1,
+  withAgentRunMutationLockV1,
+  agentRunScopeTransactionTablesV1,
   type AgentRunSnapshotV1,
 } from './event-store'
 import { parseAgentRunEventV1 } from './event-schema'
 import { createVerificationReceiptV1 } from './verification-receipt'
-import { hashCanonicalValue } from './hash'
+import { canonicalStringify, hashCanonicalValue } from './hash'
+import type { TokenUsage } from '../../ai/logger'
 import { createContextManifestFromAssemblyV1, createContextManifestV2FromV1 } from './context-manifest'
 import {
   assertRecordInScope,
@@ -58,6 +63,7 @@ import type {
 } from '../../types/agent-run'
 import {
   assertWorkspaceContentRevisionFreshV1,
+  contentRevisionTableSpecsV1,
   parseWorkspaceContentRevisionV1,
   type WorkspaceContentRevisionVectorV1,
 } from '../../authoring/content-revision'
@@ -75,7 +81,8 @@ import type { ContextGatewayExecutionV1 } from '../../context-gateway/execution'
 import { assertContextGatewayCandidateAdoptableV1 } from '../../context-gateway/execution'
 import { proseGatewayExecutionFromAssemblyV1 } from '../../prose/gateway-context'
 import { proseRenderedRequestV1 } from '../../prose/request-evidence'
-import type { AIRequestSettingsV1 } from '../../ai/client'
+import type { AIRequestSettingsV1, ChatResult } from '../../ai/client'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1 } from './creation-response-evidence'
 import { parseProseLengthObservationV1, type ProseLengthObservationV1 } from '../../prose/length-observation'
 import { recordAgentRunArtifactV1, readAgentRunArtifactExactV1 } from '../../memory/artifact-store'
 import { QUALITY_RECHECK_STEP_V1, verifyQualityRevisionEvidenceV1, type QualityRevisionEvidenceV1 } from '../../prose/quality-revision-evidence'
@@ -445,6 +452,12 @@ function verifyQualityRevisionDurableEvidence(snapshot: AgentRunSnapshotV1, cand
     && snapshot.events.some(event => event.type === 'context.assembled' && event.payload.stepId === QUALITY_RECHECK_STEP_V1 && event.payload.manifestHash === evidence.recheckManifestHash)
 }
 
+// These integrity promises consume bytes already read from the caller's
+// snapshot. Gateway and database reads must remain outside the keep-alive.
+function keepProseIntegrityAlive<T>(pending: Promise<T>): Promise<T> {
+  return Dexie.currentTransaction?.db === db ? Dexie.waitFor(pending) : pending
+}
+
 async function verifyQualityRevisionGatewayEvidence(scope: WorkspaceScope, candidate: ProseGenerationCandidateV1): Promise<boolean> {
   try {
     const metadata = candidate.qualityRevision!
@@ -455,8 +468,8 @@ async function verifyQualityRevisionGatewayEvidence(scope: WorkspaceScope, candi
     const raw = JSON.parse(await readAgentRunArtifactExactV1({ projectId: scope.projectId, artifactKind: 'raw-response', contentHash: rawRef.contentHash }))
     const request = JSON.parse(await readAgentRunArtifactExactV1({ projectId: scope.projectId, artifactKind: 'rendered-request', contentHash: requestRef.contentHash }))
     if (raw.version !== 'quality-recheck-response-v1' || raw.recheck.artifactHash !== metadata.recheck.artifactHash
-      || await hashCanonicalValue(request.messages) !== await hashCanonicalValue(metadata.recheckMessages)) return false
-    const parsed = await parseQualityRecheckV1({ raw: raw.raw, plan: metadata.plan, candidateText: candidate.outputText, messages: request.messages, settings: request.settings, completion: 'complete', createdAt: metadata.recheck.review.createdAt })
+      || await keepProseIntegrityAlive(hashCanonicalValue(request.messages)) !== await keepProseIntegrityAlive(hashCanonicalValue(metadata.recheckMessages))) return false
+    const parsed = await keepProseIntegrityAlive(parseQualityRecheckV1({ raw: raw.raw, plan: metadata.plan, candidateText: candidate.outputText, messages: request.messages, settings: request.settings, completion: 'complete', createdAt: metadata.recheck.review.createdAt }))
     return parsed.artifactHash === metadata.recheck.artifactHash
   } catch { return false }
 }
@@ -500,6 +513,23 @@ async function append(
     payload,
     expectedLastSequence: snapshot.projection.lastSequence,
   } as any)
+}
+
+async function appendAdoptionInTransaction(
+  scope: WorkspaceScope,
+  snapshot: AgentRunSnapshotV1,
+  type: Parameters<typeof appendAgentRunEventV1>[0]['type'],
+  payload: unknown,
+): Promise<AgentRunSnapshotV1> {
+  return appendAgentRunEventWithSettlementInTransactionV1({
+    scope, snapshot,
+    event: parseAgentRunEventV1({
+      version: 1, runId: snapshot.run.id, sequence: snapshot.projection.lastSequence + 1,
+      generation: snapshot.projection.generation, projectId: snapshot.run.projectId,
+      worldGroupId: snapshot.run.worldGroupId ?? null, contractHash: snapshot.projection.contractHash,
+      type, payload, createdAt: Date.now(),
+    }),
+  })
 }
 
 export async function proseGenerationManifestV1(input: {
@@ -608,6 +638,52 @@ export async function beginProseGenerationGatewayStepV1(input: {
   return { snapshot, attempt: { execution, baseManifest, preflight: recorded.evidence } }
 }
 
+function parseObservedProseUsageV1(value: unknown): TokenUsage | null {
+  if (value == null) return null
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error('正文供应商用量观测格式无效。')
+  const row = value as Record<string, unknown>
+  const { inputTokens, outputTokens, totalTokens } = row
+  if (typeof inputTokens !== 'number' || !Number.isSafeInteger(inputTokens) || inputTokens < 0
+    || typeof outputTokens !== 'number' || !Number.isSafeInteger(outputTokens) || outputTokens < 0
+    || typeof totalTokens !== 'number' || !Number.isSafeInteger(totalTokens) || totalTokens < 0) throw new Error('正文供应商用量必须是完整、非负的实际观测。')
+  return { inputTokens, outputTokens, totalTokens }
+}
+
+/** Read only the original attempt's verified receipt; never infer from global
+ * totals, a newer attempt or UI session state. Historical absent fields stay unknown. */
+export async function readProseGenerationObservedUsageV1(input: {
+  scope: WorkspaceScope; runId: number; attempt: number
+}): Promise<TokenUsage | null> {
+  if (!Number.isSafeInteger(input.attempt) || input.attempt < 1) throw new Error('正文用量读取缺少真实 attempt。')
+  const snapshot = await readAgentRunV1(input.scope, input.runId)
+  if (!snapshot.events.some(event => event.type === 'model.requested'
+    && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1 && event.payload.attempt === input.attempt)) return null
+  const responded = snapshot.events.find(event => event.type === 'model.responded'
+    && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1 && event.payload.attempt === input.attempt)
+  for (const event of [...snapshot.events].reverse()) {
+    if (event.type !== 'evidence.artifact.recorded' || event.payload.stepId !== PROSE_GENERATION_STEP_ID_V1
+      || event.payload.attempt !== input.attempt || event.payload.artifactKind !== 'raw-response') continue
+    const content = await readAgentRunArtifactExactV1({ projectId: input.scope.projectId,
+      artifactKind: 'raw-response', contentHash: event.payload.contentHash })
+    let row: Record<string, unknown>
+    try { row = JSON.parse(content) } catch { continue }
+    if (!row || typeof row !== 'object' || Array.isArray(row)
+      || !['prose-observed-response-v1', 'prose-interrupted-response-v1'].includes(String(row.version))
+      || !Object.prototype.hasOwnProperty.call(row, 'observedUsage')) continue
+    if (row.version === 'prose-observed-response-v1') {
+      // An old unwrapped model JSON body cannot authorize its own metering.
+      if (typeof row.text !== 'string' || responded?.type !== 'model.responded'
+        || responded.payload.outputHash !== await hashCanonicalValue(row.text)) continue
+    } else if (responded || !['failed', 'cancelled', 'unknown'].includes(String(row.completion))) continue
+    const usage = parseObservedProseUsageV1(row.observedUsage)
+    if (row.usageBasis !== (usage ? 'provider-observed' : 'unknown')) throw new Error('正文用量观测来源不一致。')
+    if (row.version === 'prose-interrupted-response-v1' ? row.budgetTokenBasis !== 'reserved'
+      : usage ? row.budgetTokenBasis !== 'provider-observed' : !['estimated', 'not-settled'].includes(String(row.budgetTokenBasis))) throw new Error('正文用量预算依据不一致。')
+    if (usage) return usage
+  }
+  return null
+}
+
 /** Finalize exact response and ContextManifestV3 before candidate.persisted. */
 export async function finalizeProseGenerationGatewayStepV1(input: {
   scope: WorkspaceScope
@@ -616,19 +692,39 @@ export async function finalizeProseGenerationGatewayStepV1(input: {
   output: string
   lengthObservation?: ProseLengthObservationV1
   usedTokens?: number
+  observedUsage?: TokenUsage | null
 }): Promise<{ snapshot: AgentRunSnapshotV1; manifest: ContextManifestV3 }> {
+  const declaresUsage = Object.prototype.hasOwnProperty.call(input, 'observedUsage')
+  const observedUsage = parseObservedProseUsageV1(input.observedUsage)
+  const metering = declaresUsage ? { observedUsage, usageBasis: observedUsage ? 'provider-observed' : 'unknown',
+    budgetTokenBasis: observedUsage ? 'provider-observed' : input.usedTokens != null ? 'estimated' : 'not-settled' } : {}
+  const rawResponse = input.lengthObservation || declaresUsage ? {
+    version: 'prose-observed-response-v1', text: input.output,
+    ...(input.lengthObservation ? { length: parseProseLengthObservationV1(input.lengthObservation) } : {}), ...metering,
+  } : input.output
   const outputHash = await hashCanonicalValue(input.output)
-  let snapshot = await append(input.scope, input.snapshot, 'model.responded', {
+  let snapshot = input.snapshot
+  if (declaresUsage) {
+    const step = snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
+    if (!step || step.status !== 'running' || step.attempt !== 1) throw new Error('正文用量观测不属于正在执行的原始 attempt。')
+    // Retain paid text and metering before subsequent budget/manifest writes.
+    // The gateway below reuses this exact canonical body and existing identity.
+    snapshot = (await recordAgentRunArtifactV1({ scope: input.scope, runId: snapshot.run.id,
+      stepId: PROSE_GENERATION_STEP_ID_V1, attempt: step.attempt, artifactKind: 'raw-response',
+      content: typeof rawResponse === 'string' ? rawResponse : canonicalStringify(rawResponse),
+      expectedLastSequence: snapshot.projection.lastSequence })).snapshot
+  }
+  snapshot = await append(input.scope, snapshot, 'model.responded', {
     stepId: PROSE_GENERATION_STEP_ID_V1,
     attempt: 1,
     outputHash,
   })
-  if (input.usedTokens != null) {
+  if (observedUsage || input.usedTokens != null) {
     snapshot = await append(input.scope, snapshot, 'budget.settled', {
       stepId: PROSE_GENERATION_STEP_ID_V1,
       modelCalls: 1,
       toolCalls: 0,
-      tokens: Math.max(0, Math.floor(input.usedTokens)),
+      tokens: observedUsage?.totalTokens ?? Math.max(0, Math.floor(input.usedTokens!)),
     })
   }
   const finalized = await finalizeContextGatewayAttemptEvidenceV1({
@@ -643,7 +739,7 @@ export async function finalizeProseGenerationGatewayStepV1(input: {
     retrievalTrace: input.attempt.execution.retrievalTrace,
     gatewayVersionHash: input.attempt.execution.contextPacket.gatewayVersionHash,
     policyHash: input.attempt.execution.contextPacket.policyHash,
-    rawResponse: input.lengthObservation ? { version: 'prose-observed-response-v1', text: input.output, length: parseProseLengthObservationV1(input.lengthObservation) } : input.output,
+    rawResponse,
     candidateHash: outputHash,
     expectedLastSequence: snapshot.projection.lastSequence,
   })
@@ -662,8 +758,9 @@ export async function beginProseSemanticStepV1(input: {
   contextManifest: ContextManifestV1
   executionBinding: AgentSkillExecutionBindingV1 | AgentSkillExecutionBindingV2
   requestBinding: unknown
+  messages: readonly ChatMessage[]
   reservedTokens: number
-}): Promise<AgentRunSnapshotV1> {
+}) {
   assertProseGenerationExecutionBindingsV1(input.snapshot)
   if (
     input.contextManifest.runId !== input.snapshot.run.id
@@ -683,6 +780,11 @@ export async function beginProseSemanticStepV1(input: {
     attempt: 1,
     manifestHash: input.contextManifest.manifestHash,
   })
+  const prepared = await recordCreationModelRequestV1({
+    scope: input.scope, snapshot, stepId: input.stepId, attempt: 1,
+    contextManifestHash: input.contextManifest.manifestHash, messages: input.messages,
+  })
+  snapshot = prepared.snapshot
   snapshot = await append(input.scope, snapshot, 'model.requested', {
     stepId: input.stepId,
     attempt: 1,
@@ -692,12 +794,13 @@ export async function beginProseSemanticStepV1(input: {
       contextManifestHash: input.contextManifest.manifestHash,
     }),
   })
-  return append(input.scope, snapshot, 'budget.reserved', {
+  snapshot = await append(input.scope, snapshot, 'budget.reserved', {
     stepId: input.stepId,
     modelCalls: 1,
     toolCalls: 0,
     tokens: Math.max(1, Math.floor(input.reservedTokens)),
   })
+  return { snapshot, request: prepared.request }
 }
 
 export async function recordProseSemanticModelOutputV1(input: {
@@ -705,13 +808,24 @@ export async function recordProseSemanticModelOutputV1(input: {
   snapshot: AgentRunSnapshotV1
   stepId: ProseSemanticStepIdV1
   output: string
+  request: Awaited<ReturnType<typeof beginProseSemanticStepV1>>['request']
+  result?: ChatResult
   usedTokens: number
 }): Promise<AgentRunSnapshotV1> {
   const step = input.snapshot.projection.steps[input.stepId]
   if (!step || step.status !== 'running' || step.attempt !== 1) {
     throw new Error(`正文语义步骤 ${input.stepId} 不在模型响应状态。`)
   }
-  let snapshot = await append(input.scope, input.snapshot, 'model.responded', {
+  if (input.request.stepId !== input.stepId || input.request.attempt !== 1
+    || input.request.scope.projectId !== input.scope.projectId
+    || input.request.scope.worldId !== input.scope.worldId
+    || input.request.scope.workId !== input.scope.workId) {
+    throw new Error('正文语义响应不属于原始请求的步骤或作用域。')
+  }
+  let snapshot = await recordCreationModelResponseV1({
+    snapshot: input.snapshot, request: input.request, raw: input.output, result: input.result,
+  })
+  snapshot = await append(input.scope, snapshot, 'model.responded', {
     stepId: input.stepId,
     attempt: 1,
     outputHash: await hashCanonicalValue(input.output),
@@ -932,6 +1046,11 @@ export interface InterruptedProseGenerationV1 {
   outputText: string
   completion: 'cancelled' | 'failed' | 'unknown'
   message: string
+  /** Missing on historical payloads means not recorded, never zero. */
+  observedUsage?: TokenUsage | null
+  usageBasis?: 'provider-observed' | 'unknown'
+  /** An interruption retains the original reservation, not a final invoice. */
+  budgetTokenBasis?: 'reserved'
 }
 
 /** Keep the received bytes as run evidence. This is never a candidate or an adoption. */
@@ -942,13 +1061,21 @@ export async function recordInterruptedProseGenerationV1(input: {
 }): Promise<AgentRunSnapshotV1> {
   const step = input.snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
   if (!step || step.status !== 'running') throw new Error('中断片段缺少正在执行的正文步骤。')
+  const response = structuredClone(input.response)
+  const declaresUsage = Object.prototype.hasOwnProperty.call(response, 'observedUsage')
+  if (!declaresUsage && (response.usageBasis != null || response.budgetTokenBasis != null)) throw new Error('正文用量依据缺少原始观测字段。')
+  if (declaresUsage) {
+    response.observedUsage = parseObservedProseUsageV1(response.observedUsage)
+    response.usageBasis = response.observedUsage ? 'provider-observed' : 'unknown'
+    response.budgetTokenBasis = 'reserved'
+  }
   const recorded = await recordAgentRunArtifactV1({
     scope: input.scope,
     runId: input.snapshot.run.id,
     stepId: PROSE_GENERATION_STEP_ID_V1,
     attempt: step.attempt,
     artifactKind: 'raw-response',
-    content: JSON.stringify(input.response),
+    content: declaresUsage ? canonicalStringify(response) : JSON.stringify(response),
     expectedLastSequence: input.snapshot.projection.lastSequence,
   })
   return recorded.snapshot
@@ -974,13 +1101,20 @@ export async function readLatestInterruptedProseGenerationV1(input: {
   const snapshot = await readAgentRunV1(input.scope, latest.id)
   if (snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]?.status !== 'failed') return null
   const evidence = [...snapshot.events].reverse().find(event => event.type === 'evidence.artifact.recorded'
-    && event.payload.artifactKind === 'raw-response' && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1)
+    && event.payload.artifactKind === 'raw-response' && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1
+    && event.payload.attempt === snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]?.attempt)
   if (!evidence || evidence.type !== 'evidence.artifact.recorded') return null
   const content = await readAgentRunArtifactExactV1({ projectId: input.scope.projectId, artifactKind: 'raw-response', contentHash: evidence.payload.contentHash })
   let row: InterruptedProseGenerationV1
   try { row = JSON.parse(content) } catch { return null }
   if (!row || row.version !== 'prose-interrupted-response-v1' || typeof row.outputText !== 'string'
     || !['cancelled', 'failed', 'unknown'].includes(row.completion) || typeof row.message !== 'string') return null
+  if (Object.prototype.hasOwnProperty.call(row, 'observedUsage')) {
+    if (snapshot.events.some(event => event.type === 'model.responded'
+      && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1 && event.payload.attempt === evidence.payload.attempt)) return null
+    row.observedUsage = parseObservedProseUsageV1(row.observedUsage)
+    if (row.usageBasis !== (row.observedUsage ? 'provider-observed' : 'unknown') || row.budgetTokenBasis !== 'reserved') throw new Error('中断正文用量观测的来源或预算依据不一致。')
+  } else if (row.usageBasis != null || row.budgetTokenBasis != null) throw new Error('中断正文用量依据缺少原始观测字段。')
   return { ...row, operation: snapshot.contract.objective.startsWith('续写') ? 'continue' : 'generate' }
 }
 
@@ -1058,12 +1192,12 @@ export async function isProseGenerationCandidateCurrentV1(
   candidate: ProseGenerationCandidateV1,
 ): Promise<boolean> {
   const chapter = await db.chapters.get(candidate.chapterId)
-  if (!chapter || await hashChapterText(chapter.content ?? '') !== candidate.sourceTextHash) return false
+  if (!chapter || await keepProseIntegrityAlive(hashChapterText(chapter.content ?? '')) !== candidate.sourceTextHash) return false
   if (candidate.operation === 'quality-revise' && (!candidate.qualityRevision
-    || candidate.qualityRevision.sourceHtmlHash !== await sha256Text(chapter.content ?? '')
-    || !await verifyQualityRevisionEvidenceV1(candidate.qualityRevision, candidate.outputText))) return false
+    || candidate.qualityRevision.sourceHtmlHash !== await keepProseIntegrityAlive(sha256Text(chapter.content ?? ''))
+    || !await keepProseIntegrityAlive(verifyQualityRevisionEvidenceV1(candidate.qualityRevision, candidate.outputText)))) return false
   const { durable, ...candidateBody } = candidate
-  if (await hashProseGenerationCandidateV1(candidateBody) !== durable.candidateHash) return false
+  if (await keepProseIntegrityAlive(hashProseGenerationCandidateV1(candidateBody)) !== durable.candidateHash) return false
   if (candidate.semanticReview && !await verifySemanticReviewEvidence(candidate)) return false
   let scope: WorkspaceScope
   try {
@@ -1222,12 +1356,12 @@ async function prosePostStateHash(input: { scope: WorkspaceScope; chapterId: num
   if (!chapter || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) {
     throw new Error('正文生成终态校验找不到章节。')
   }
-  return hashCanonicalValue({
+  return Dexie.waitFor(hashCanonicalValue({
     version: 1,
     chapterId: input.chapterId,
     content: chapter.content,
     wordCount: chapter.wordCount,
-  })
+  }))
 }
 
 export async function commitProseGenerationAdoptionV1(input: {
@@ -1237,6 +1371,33 @@ export async function commitProseGenerationAdoptionV1(input: {
   contentHtml: string
   wordCount: number
 }): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1 }> {
+  input = structuredClone(input)
+  if (input.runId !== input.candidate.durable.runId) throw new Error('正文候选与 Run 不一致。')
+  const intentBody = {
+    version: 1, candidateHash: input.candidate.durable.candidateHash,
+    chapterId: input.candidate.chapterId, operation: input.candidate.operation,
+    sourceTextHash: input.candidate.sourceTextHash,
+    contentHtml: input.contentHtml, wordCount: input.wordCount,
+  }
+  const intentHash = await hashCanonicalValue(intentBody)
+  const previous = await readAgentRunV1(input.scope, input.runId)
+  if (previous.projection.state === 'completed' && previous.projection.terminalReceiptHash) {
+    const { durable, ...body } = input.candidate
+    const chapter = await db.chapters.get(input.candidate.chapterId)
+    const started = previous.events.find(event => event.type === 'adoption.started'
+      && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1
+      && event.payload.candidateHash === durable.candidateHash && event.payload.intentHash === intentHash)
+    const committed = previous.events.find(event => event.type === 'adoption.committed'
+      && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1
+      && event.payload.candidateHash === durable.candidateHash)
+    if (input.runId !== durable.runId || await hashProseGenerationCandidateV1(body) !== durable.candidateHash
+      || !started || !committed || !chapter
+      || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })
+      || chapter.content !== input.contentHtml || chapter.wordCount !== input.wordCount) {
+      throw new Error('正文完成证明与原确认载荷或当前正式正文不一致，不能重放采纳。')
+    }
+    return { snapshot: previous, receiptHash: previous.projection.terminalReceiptHash }
+  }
   const frame = observeDuplicatedProseFrameV1(input.candidate.outputText)
   if (frame) throw new Error(frame.message)
   if (input.candidate.operation === 'quality-revise' && input.candidate.qualityRevision) {
@@ -1304,104 +1465,97 @@ export async function commitProseGenerationAdoptionV1(input: {
     })
     throw new Error('正文编辑器的待写入内容与作者确认的候选不一致。')
   }
-  snapshot = await append(input.scope, snapshot, 'confirmation.recorded', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    candidateHash: input.candidate.durable.candidateHash,
-    decision: 'adopt',
-  })
-  snapshot = await append(input.scope, snapshot, 'adoption.started', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    candidateHash: input.candidate.durable.candidateHash,
-    intentHash: await hashCanonicalValue({
-      chapterId: input.candidate.chapterId,
-      operation: input.candidate.operation,
-      sourceTextHash: input.candidate.sourceTextHash,
-    }),
-  })
-  let result
-  try {
-    result = await adopt({
-      projectId: input.scope.projectId,
-      scope: input.scope,
-      target: 'chapters',
-      recordId: input.candidate.chapterId,
-      mode: 'replace',
-      data: {
-        content: input.contentHtml,
+  await assertProseTerminalCandidateEvidence(input, snapshot)
+  const preflightSequence = snapshot.projection.lastSequence
+  return withAgentRunMutationLockV1(input.runId, () => db.transaction(
+    'rw',
+    agentRunScopeTransactionTablesV1(input.runId,
+      ...adoptionTransactionTablesV1('chapters', { content: input.contentHtml, wordCount: input.wordCount }),
+      ...contentRevisionTableSpecsV1().map(spec => spec.table),
+      db.characterDrivenPlans, db.agentRuns, db.agentRunEvents,
+    ),
+    async () => {
+      snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
+      if (snapshot.projection.lastSequence !== preflightSequence) {
+        throw new Error('正文 Run 已推进，请重新读取原候选后确认。')
+      }
+      await assertWorkspaceContentRevisionFreshV1(input.candidate.contentRevision, {
+        scope: input.scope, worldGroupId: input.candidate.worldGroupId,
+      })
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'confirmation.recorded', {
+        stepId: PROSE_GENERATION_STEP_ID_V1,
+        candidateHash: input.candidate.durable.candidateHash,
+        decision: 'adopt',
+      })
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'adoption.started', {
+        stepId: PROSE_GENERATION_STEP_ID_V1,
+        candidateHash: input.candidate.durable.candidateHash,
+        intentHash,
+      })
+      const result = await adopt({
+        projectId: input.scope.projectId,
+        scope: input.scope,
+        target: 'chapters',
+        recordId: input.candidate.chapterId,
+        mode: 'replace',
+        data: {
+          content: input.contentHtml,
+          wordCount: input.wordCount,
+        },
+        compareAndSet: {
+          kind: 'chapter-source-text-hash',
+          expectedHash: input.candidate.sourceTextHash,
+          ...(input.candidate.qualityRevision ? { expectedContentHash: input.candidate.qualityRevision.sourceHtmlHash } : {}),
+          textNormalizationVersion: CHAPTER_TEXT_NORMALIZATION_VERSION,
+        },
+      })
+      if (!result.written.some(item => item.id === input.candidate.chapterId && item.fields.includes('content'))
+        || result.unknown.length || result.typeErrors.length || result.fkErrors.length || result.skipped.length) {
+        throw new Error(result.skipped[0]?.reason || '正文候选没有完整写入章节。')
+      }
+      const writtenChapter = await db.chapters.get(input.candidate.chapterId)
+      if (!writtenChapter || writtenChapter.content !== input.contentHtml || writtenChapter.wordCount !== input.wordCount) {
+        throw new Error('正文写入后的完整 HTML 或字数与冻结确认不一致。')
+      }
+      const adoptionHash = await Dexie.waitFor(hashCanonicalValue({
+        version: 1,
+        candidateHash: input.candidate.durable.candidateHash,
+        chapterId: input.candidate.chapterId,
+        sourceTextHash: input.candidate.sourceTextHash,
+        outputContentHash,
         wordCount: input.wordCount,
-      },
-      compareAndSet: {
-        kind: 'chapter-source-text-hash',
-        expectedHash: input.candidate.sourceTextHash,
-        ...(input.candidate.qualityRevision ? { expectedContentHash: input.candidate.qualityRevision.sourceHtmlHash } : {}),
-        textNormalizationVersion: CHAPTER_TEXT_NORMALIZATION_VERSION,
-      },
-    })
-  } catch (error) {
-    const current = await readAgentRunV1(input.scope, input.runId)
-    if (current.projection.state === 'running') {
-      await append(input.scope, current, 'adoption.rejected', {
+      }))
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'adoption.committed', {
         stepId: PROSE_GENERATION_STEP_ID_V1,
         candidateHash: input.candidate.durable.candidateHash,
-        code: error instanceof Error ? error.message : 'prose_adoption_failed',
+        adoptionHash,
       })
-    }
-    throw error
-  }
-  if (!result.written.some(item => item.id === input.candidate.chapterId && item.fields.includes('content'))) {
-    const current = await readAgentRunV1(input.scope, input.runId)
-    if (current.projection.state === 'running') {
-      await append(input.scope, current, 'adoption.rejected', {
+      snapshot = await appendAdoptionInTransaction(input.scope, snapshot, 'step.succeeded', {
         stepId: PROSE_GENERATION_STEP_ID_V1,
-        candidateHash: input.candidate.durable.candidateHash,
-        code: result.skipped[0]?.reason || 'prose_adoption_skipped',
+        attempt: input.candidate.durable.attempt,
+        outputHash: input.candidate.durable.candidateHash,
       })
-    }
-    throw new Error(result.skipped[0]?.reason || '正文候选没有写入章节。')
-  }
-  const adoptionHash = await hashCanonicalValue({
-    version: 1,
-    candidateHash: input.candidate.durable.candidateHash,
-    chapterId: input.candidate.chapterId,
-    sourceTextHash: input.candidate.sourceTextHash,
-    outputContentHash,
-    wordCount: input.wordCount,
-  })
-  snapshot = await append(input.scope, snapshot, 'adoption.committed', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    candidateHash: input.candidate.durable.candidateHash,
-    adoptionHash,
-  })
-  snapshot = await append(input.scope, snapshot, 'step.succeeded', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    attempt: input.candidate.durable.attempt,
-    outputHash: input.candidate.durable.candidateHash,
-  })
-  return verifyProseGenerationRunV1({
-    scope: input.scope,
-    runId: input.runId,
-    candidate: input.candidate,
-    snapshot,
-  })
+      return verifyProseGenerationRunState({
+        scope: input.scope,
+        runId: input.runId,
+        candidate: input.candidate,
+        snapshot,
+      }, appendAdoptionInTransaction)
+    },
+  ))
 }
 
-export async function verifyProseGenerationRunV1(input: {
+async function assertProseTerminalCandidateEvidence(input: {
   scope: WorkspaceScope
   runId: number
   candidate: ProseGenerationCandidateV1
-  snapshot?: AgentRunSnapshotV1
-}): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1 }> {
+}, snapshot: AgentRunSnapshotV1): Promise<void> {
   if (input.candidate.operation === 'quality-revise') {
-    const state = input.snapshot ?? await readAgentRunV1(input.scope, input.runId)
+    const state = snapshot
     if (!input.candidate.qualityRevision || !await verifyQualityRevisionEvidenceV1(input.candidate.qualityRevision, input.candidate.outputText)
       || !verifyQualityRevisionDurableEvidence(state, input.candidate)
       || !await verifyQualityRevisionGatewayEvidence(input.scope, input.candidate)) throw new Error('范围修订保护与复核证据不一致，不能通过终验。')
   }
-  let snapshot = input.snapshot ?? await readAgentRunV1(input.scope, input.runId)
-  if (snapshot.projection.state === 'completed' && snapshot.run.terminalReceiptHash) {
-    return { snapshot, receiptHash: snapshot.run.terminalReceiptHash }
-  }
-  const step = snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
   assertProseGenerationExecutionBindingsV1(snapshot)
   const semanticRequired = requiresSemanticReview(snapshot)
   if (semanticRequired && (
@@ -1410,6 +1564,34 @@ export async function verifyProseGenerationRunV1(input: {
   )) {
     throw new Error('正文生成终态校验发现语义评审证据缺失、过期或被篡改。')
   }
+}
+
+export async function verifyProseGenerationRunV1(input: {
+  scope: WorkspaceScope
+  runId: number
+  candidate: ProseGenerationCandidateV1
+  snapshot?: AgentRunSnapshotV1
+}): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1 }> {
+  const snapshot = input.snapshot ?? await readAgentRunV1(input.scope, input.runId)
+  await assertProseTerminalCandidateEvidence(input, snapshot)
+  return verifyProseGenerationRunState({ ...input, snapshot })
+}
+
+async function verifyProseGenerationRunState(input: {
+  scope: WorkspaceScope
+  runId: number
+  candidate: ProseGenerationCandidateV1
+  snapshot: AgentRunSnapshotV1
+}, writeEvent: typeof append = append): Promise<{
+  snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1
+}> {
+  let snapshot = input.snapshot
+  if (snapshot.projection.state === 'completed' && snapshot.run.terminalReceiptHash) {
+    return { snapshot, receiptHash: snapshot.run.terminalReceiptHash }
+  }
+  const step = snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
+  assertProseGenerationExecutionBindingsV1(snapshot)
+  const semanticRequired = requiresSemanticReview(snapshot)
   const adoption = snapshot.events.find(event => (
     event.type === 'adoption.committed'
       && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1
@@ -1433,7 +1615,7 @@ export async function verifyProseGenerationRunV1(input: {
   if (!chapter || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) {
     throw new Error('正文生成终态校验找不到来源章节。')
   }
-  if (await hashChapterText(chapter.content ?? '') !== input.candidate.expectedContentHash) {
+  if (await Dexie.waitFor(hashChapterText(chapter.content ?? '')) !== input.candidate.expectedContentHash) {
     throw new Error('正文生成终态校验发现章节正文与候选不一致。')
   }
   const currentBoundary = await buildChapterInformationBoundaryV1({
@@ -1450,14 +1632,14 @@ export async function verifyProseGenerationRunV1(input: {
   const verifierSetVersion = semanticRequired
     ? PROSE_GENERATION_VERIFIER_SET_V3
     : PROSE_GENERATION_VERIFIER_SET_V2
-  snapshot = await append(input.scope, snapshot, 'verification.started', {
+  snapshot = await writeEvent(input.scope, snapshot, 'verification.started', {
     verifierSetVersion,
   })
   const postStateHash = await prosePostStateHash({
     scope: input.scope,
     chapterId: input.candidate.chapterId,
   })
-  const receipt = await createVerificationReceiptV1({
+  const receipt = await Dexie.waitFor(createVerificationReceiptV1({
     version: 1,
     runId: input.runId,
     generation: snapshot.projection.generation,
@@ -1507,7 +1689,7 @@ export async function verifyProseGenerationRunV1(input: {
       { id: 'prose-generation.post-state', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },
     ],
     acceptedAt: Date.now(),
-  })
-  snapshot = await append(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
+  }))
+  snapshot = await writeEvent(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
   return { snapshot, receiptHash: receipt.receiptHash, receipt }
 }

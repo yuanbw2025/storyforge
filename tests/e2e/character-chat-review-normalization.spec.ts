@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {expect, test} from '@playwright/test'
 
@@ -6,9 +7,8 @@ for (const shared of [false, true]) for (const rejected of [false, true]) test(`
   const calls: string[] = []
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://review-normalization.invalid/v1', model: 'test', maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://review-normalization.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
   await page.route('https://review-normalization.invalid/**', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const messages = route.request().postDataJSON().messages as Array<{content: string}>
@@ -22,14 +22,14 @@ for (const shared of [false, true]) for (const rejected of [false, true]) test(`
     if (review) rawReview = JSON.stringify(value)
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, value)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async shared => {
     const load = new Function('p', 'return import(p)'), f = await (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture()
     const state = await (await load('/storyforge/src/lib/character-interaction/runtime-api.ts')).readProductRuntimeState(f.sessionId)
     return {...f, original: state.interaction.chatNarrative.situation.facts.find((fact: {factKey: string}) => fact.factKey === (shared ? 'road' : 'regret'))}
   }, shared)
   spoken = f.original.text
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   await page.getByRole('button', {name: '让角色开场', exact: true}).click()
   if (rejected) {
@@ -46,7 +46,7 @@ for (const shared of [false, true]) for (const rejected of [false, true]) test(`
   expect(evidence.state.interaction.messages).toHaveLength(rejected ? 0 : 1)
   expect(evidence.state.interaction.chatNarrative.situation.facts.find((fact: {factKey: string}) => fact.factKey === f.original.factKey)).toEqual(shared ? f.original : {...f.original, audienceKeys: rejected ? ['guard'] : ['guard', 'player']})
   expect(evidence.raw).toContain(rawReview); expect(evidence.reports).toHaveLength(!rejected && shared ? 1 : 0)
-  await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   const restored = await page.evaluate(async f => {
     const load = new Function('p', 'return import(p)'), api = await load('/storyforge/src/lib/character-interaction/runtime-api.ts'), portable = await load('/storyforge/src/lib/export/json-export.ts'), db = (await load('/storyforge/src/lib/db/schema.ts')).db
     const before = await api.readProductRuntimeState(f.sessionId), projectId = await portable.importProjectJSON(await portable.exportProjectJSON(f.scope.projectId))
@@ -57,7 +57,7 @@ for (const shared of [false, true]) for (const rejected of [false, true]) test(`
   expect(restored.before).toEqual(evidence.state); expect(restored.after.interaction).toEqual(evidence.state.interaction)
   expect(restored.retained).toContain(rawReview)
   for (const report of evidence.reports) expect(restored.retained).toContain(report)
-  await page.goto(`./chat/play?project=${restored.session.projectId}&work=${restored.session.workId}&session=${restored.session.id}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${restored.session.projectId}&work=${restored.session.workId}&session=${restored.session.id}`)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   await expect(page.getByRole('article').getByText(spoken, {exact: true})).toHaveCount(rejected ? 0 : 1)
   expect(calls).toEqual(['action', 'review'])

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_V1, TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from '../../lib/open-world/creator-ending-count'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -20,6 +21,7 @@ import {
   TEXT_OPEN_WORLD_CREATOR_PRODUCT_BOUNDARY_V1,
   type TextOpenWorldCreatorBriefSessionV1,
 } from '../../lib/open-world/creator-brief'
+import { listTextOpenWorldCreatorProtagonistChoicesV1 } from '../../lib/open-world/creator-source'
 import { describeTextOpenWorldProviderFailureV1 } from '../../lib/open-world/creator-production-preflight'
 import type {
   TextOpenWorldCreatorBriefDraftV1,
@@ -28,6 +30,7 @@ import type {
 import { useAIConfigStore } from '../../stores/ai-config'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { canonicalStringify } from '../../lib/agent/run/hash'
+import TextOpenWorldCreatorBriefEvidence from './TextOpenWorldCreatorBriefEvidence'
 
 export interface TextOpenWorldCreatorBriefStudioProps {
   selection?: TextOpenWorldCreatorSourceSelectionV1 | null
@@ -35,6 +38,7 @@ export interface TextOpenWorldCreatorBriefStudioProps {
   onBack: () => void
   onConfirmed?: (session: TextOpenWorldCreatorBriefSessionV1) => void
   onContinue?: (session: TextOpenWorldCreatorBriefSessionV1) => void
+  readOnly?: boolean
 }
 
 type BusyAction = 'opening' | 'saving' | 'consulting' | 'confirming' | null
@@ -123,6 +127,11 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
   const aiConfig = useAIConfigStore(state => state.config)
   const [session, setSession] = useState<TextOpenWorldCreatorBriefSessionV1 | null>(props.initialSession ?? null)
   const [draft, setDraft] = useState<TextOpenWorldCreatorBriefDraftV1 | null>(props.initialSession?.draft ?? null)
+  const [roleChoices, setRoleChoices] = useState<{
+    referenceHash: string
+    options: Awaited<ReturnType<typeof listTextOpenWorldCreatorProtagonistChoicesV1>>
+    error?: string
+  } | null>(null)
   const [followUp, setFollowUp] = useState('')
   const [busy, setBusy] = useState<BusyAction>(props.initialSession ? null : 'opening')
   const [error, setError] = useState('')
@@ -134,6 +143,8 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
     directPublishWorkflowReviewed: false,
   })
   const generation = useRef(0)
+  const readOnly = props.readOnly === true || session?.sourceBinding.kind === 'novel'
+    || (!session && props.selection?.sourceKind === 'novel')
 
   useEffect(() => {
     if (props.initialSession) {
@@ -143,7 +154,7 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
       setBusy(null)
       return
     }
-    if (!props.selection) {
+    if (!props.selection || readOnly) {
       setBusy(null)
       return
     }
@@ -164,17 +175,46 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
       setBusy(null)
     })
     return () => { generation.current += 1 }
-  }, [props.initialSession, props.selection])
+  }, [props.initialSession, props.selection, readOnly])
+
+  const endingCountReady = draft != null && isTextOpenWorldCreatorEndingCountV1(draft.scale.endings)
+  const selectedSource = session?.selection
+  const sourceCharacterMode = draft?.protagonistMode === 'source-character'
+  const sourceReferenceHash = selectedSource?.sourceKind === 'world-release'
+    ? selectedSource.preview.worldReference.referenceHash : null
+  useEffect(() => {
+    if (!sourceCharacterMode || !selectedSource || !sourceReferenceHash || readOnly) return
+    let cancelled = false
+    void listTextOpenWorldCreatorProtagonistChoicesV1(selectedSource).then(options => {
+      if (!cancelled) setRoleChoices({ referenceHash: sourceReferenceHash, options })
+    }).catch(cause => {
+      if (!cancelled) setRoleChoices({ referenceHash: sourceReferenceHash, options: [],
+        error: errorMessage(cause, '无法读取当前封存角色。') })
+    })
+    return () => { cancelled = true }
+  }, [readOnly, selectedSource, sourceCharacterMode, sourceReferenceHash])
+  const currentRoleChoices = roleChoices?.referenceHash === sourceReferenceHash ? roleChoices : null
+  const protagonistSelectionReady = !sourceCharacterMode ||
+    Boolean(currentRoleChoices?.options.some(item => item.resourceKey === draft?.protagonistSourceResourceKey))
 
   const allAcknowledged = Object.values(acknowledgements).every(Boolean)
-  const canConfirm = Boolean(session && draft && !session.sourceIssue
-    && draft.unresolvedQuestions.length === 0 && allAcknowledged && !busy)
-  const canContinue = Boolean(session?.confirmedBrief && draft && !busy && !session.sourceIssue
-    && session.production.status === 'brief-ready'
+  const canConfirm = Boolean(!readOnly && session && draft && !session.sourceIssue
+    && endingCountReady && protagonistSelectionReady && draft.unresolvedQuestions.length === 0 && allAcknowledged && !busy)
+  const canContinue = Boolean(!readOnly && session?.confirmedBrief && draft && !busy && !session.sourceIssue
+    && endingCountReady && protagonistSelectionReady && session.production.status === 'brief-ready'
     && canonicalStringify(draft) === canonicalStringify(session.confirmedBrief.draft))
   const sourceLabel = session?.sourceSummary.label ?? '正在读取来源…'
   const hasAI = isAIConfigReady(aiConfig)
   const fixedBoundary = useMemo(() => Object.entries(TEXT_OPEN_WORLD_CREATOR_PRODUCT_BOUNDARY_V1), [])
+
+  const updateProtagonist = (mode: TextOpenWorldCreatorBriefDraftV1['protagonistMode'], key?: string) => {
+    setDraft(current => {
+      if (!current) return current
+      const { protagonistSourceResourceKey: _previous, ...rest } = current
+      return { ...rest, protagonistMode: mode,
+        ...(mode === 'source-character' && key ? { protagonistSourceResourceKey: key } : {}) }
+    })
+  }
 
   const updateDraft = (patch: Partial<TextOpenWorldCreatorBriefDraftV1>) => {
     setDraft(current => current ? { ...current, ...patch } : current)
@@ -186,7 +226,7 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
   }
 
   const saveDraft = async () => {
-    if (!session || !draft) return
+    if (readOnly || !session || !draft) return
     setBusy('saving'); setError(''); setNotice('')
     try {
       const next = await saveTextOpenWorldCreatorBriefDraftV1({ session, draft })
@@ -196,7 +236,7 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
   }
 
   const consult = async () => {
-    if (!session || !draft) return
+    if (readOnly || !session || !draft) return
     setBusy('consulting'); setError(''); setNotice('')
     try {
       const next = await generateTextOpenWorldCreatorBriefCandidateV1({
@@ -212,14 +252,14 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
   }
 
   const applyCandidate = () => {
-    if (!session?.candidate || !draft) return
+    if (readOnly || !session?.candidate || !draft) return
     setDraft(applyTextOpenWorldCreatorBriefSynthesisV1(draft, session.candidate.synthesis))
     setNotice('已把 Agent 建议合入当前表单；正式确认前仍可继续修改。')
   }
 
   const resetDraft = () => {
     const selection = session?.selection ?? props.selection
-    if (!selection || session?.sourceIssue) return
+    if (readOnly || !selection || session?.sourceIssue) return
     setDraft(createDefaultTextOpenWorldCreatorBriefDraftV1(selection))
     setAcknowledgements({
       sourceIdentityReviewed: false,
@@ -232,7 +272,7 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
   }
 
   const confirm = async () => {
-    if (!session || !draft) return
+    if (readOnly || !session || !draft) return
     setBusy('confirming'); setError(''); setNotice('')
     try {
       const next = await confirmTextOpenWorldCreatorBriefV1({ session, draft, acknowledgements })
@@ -257,7 +297,7 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <span className="text-[10px] font-semibold tracking-[0.2em] text-accent">TEXT OPEN WORLD · BRIEF</span>
-          <h1 className="mt-2 text-xl font-semibold">确认这款游戏要提供什么体验</h1>
+          <h1 className="mt-2 text-xl font-semibold">{readOnly ? '历史小说会谈 · 只读记录' : '确认这款游戏要提供什么体验'}</h1>
           <p className="mt-2 max-w-3xl text-xs leading-6 text-text-muted">
             主 Agent 只理解你的设定与来源摘要；完整正文和世界内容会在正式生产阶段按冻结来源读取。
           </p>
@@ -280,7 +320,7 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
         </div>
         <div className="rounded-lg border border-border bg-bg-base p-3">
           <div className="text-[10px] text-text-muted">模型路径</div>
-          <div className="mt-1 text-sm font-medium">{hasAI ? '可请求主 Agent' : '未配置 Key，可纯人工确认'}</div>
+          <div className="mt-1 text-sm font-medium">{readOnly ? '只读证据，无新调用' : hasAI ? '可请求主 Agent' : '未配置 Key，可纯人工确认'}</div>
           <div className="mt-1 text-[10px] text-text-muted">正式模型调用有 durable Run 与候选证据</div>
         </div>
       </div>
@@ -291,7 +331,9 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
     </div>}
     {error && <div role="alert" className="rounded-lg border border-danger/40 bg-danger/5 p-4 text-sm text-danger">{error}</div>}
     {notice && <div role="status" className="rounded-lg border border-success/30 bg-success/5 p-4 text-sm text-success">{notice}</div>}
+    {readOnly && <TextOpenWorldCreatorBriefEvidence session={session} />}
 
+    <fieldset disabled={readOnly} className="contents">
     <section className="rounded-xl border border-border bg-bg-elevated p-5">
       <h2 className="text-base font-semibold">1. 核心体验与主角</h2>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -300,11 +342,30 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
           <span className="text-xs font-medium">主角来源</span>
           <select id="tow-protagonist-mode" value={draft.protagonistMode}
             className="w-full rounded-lg border border-border bg-bg-base px-3 py-2 text-sm"
-            onChange={event => updateDraft({ protagonistMode: event.target.value as TextOpenWorldCreatorBriefDraftV1['protagonistMode'] })}>
+            onChange={event => updateProtagonist(event.target.value as TextOpenWorldCreatorBriefDraftV1['protagonistMode'])}>
             <option value="author-defined">用户自己设定</option>
             <option value="source-character">从来源角色中选择</option>
           </select>
         </label>
+        {sourceCharacterMode && <label className="block space-y-1.5" htmlFor="tow-protagonist-resource">
+          <span className="text-xs font-medium">封存角色</span>
+          <select id="tow-protagonist-resource" value={draft.protagonistSourceResourceKey ?? ''}
+            disabled={!currentRoleChoices?.options.length}
+            className="w-full rounded-lg border border-border bg-bg-base px-3 py-2 text-sm"
+            onChange={event => updateProtagonist('source-character', event.target.value)}>
+            <option value="">{currentRoleChoices ? '请选择一名已封存角色' : readOnly
+              ? (draft.protagonistSourceResourceKey ?? '旧记录没有明确的封存角色') : '正在核对封存角色…'}</option>
+            {readOnly && draft.protagonistSourceResourceKey && <option value={draft.protagonistSourceResourceKey}>
+              {draft.protagonistSourceResourceKey}
+            </option>}
+            {currentRoleChoices?.options.map(option => <option key={option.resourceKey} value={option.resourceKey}>
+              {option.label}
+            </option>)}
+          </select>
+          {currentRoleChoices?.error && <span role="alert" className="block text-xs text-danger">{currentRoleChoices.error}</span>}
+          {currentRoleChoices && !currentRoleChoices.error && currentRoleChoices.options.length === 0 &&
+            <span className="block text-xs text-text-muted">当前封存来源没有可用角色。请选择原创主角，或更换封存来源。</span>}
+        </label>}
         <TextField id="tow-player-role" label="玩家扮演谁" value={draft.playerRole} multiline onChange={playerRole => updateDraft({ playerRole })} />
         <TextField id="tow-protagonist" label="主角设定约束" value={draft.protagonistDirective} multiline onChange={protagonistDirective => updateDraft({ protagonistDirective })} />
         <TextField id="tow-fantasy" label="玩家幻想 / 核心感受" value={draft.playerFantasy} multiline onChange={playerFantasy => updateDraft({ playerFantasy })} />
@@ -339,9 +400,14 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
         <RangeField id="tow-locations" label="命名地点" value={draft.scale.namedLocations} onChange={namedLocations => updateScale({ namedLocations })} />
         <RangeField id="tow-mainline" label="主线阶段" value={draft.scale.mainlineStages} onChange={mainlineStages => updateScale({ mainlineStages })} />
         <label className="space-y-1.5 text-xs font-medium" htmlFor="tow-endings">核心结局数量
-          <input id="tow-endings" type="number" min={1} max={12} value={draft.scale.endings}
+          <input id="tow-endings" type="number" min={TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_V1.minimum}
+            max={TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_V1.maximum} value={draft.scale.endings}
+            aria-invalid={!endingCountReady} aria-describedby={endingCountReady ? undefined : 'tow-ending-count-error'}
             className="mt-1 w-full rounded-lg border border-border bg-bg-base px-3 py-2 text-sm"
             onChange={event => updateScale({ endings: Number(event.target.value) })} />
+          {!endingCountReady && <span id="tow-ending-count-error" className="mt-1 block text-text-muted">
+            {TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1}
+          </span>}
         </label>
         <label className="space-y-1.5 text-xs font-medium" htmlFor="tow-threads">重要故事线数量
           <input id="tow-threads" type="number" min={0} max={30} value={draft.scale.significantStorylines}
@@ -373,7 +439,7 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="text-base font-semibold">4. 主 Agent 理解与未决项</h2>
           <p className="mt-1 text-xs text-text-muted">可以反复补充答案；模型候选不会直接写入正式 Brief。</p></div>
-        <button type="button" disabled={!hasAI || Boolean(busy) || Boolean(session.sourceIssue)} onClick={consult}
+        <button type="button" disabled={readOnly || !hasAI || !endingCountReady || Boolean(busy) || Boolean(session.sourceIssue)} onClick={consult}
           className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white disabled:opacity-40">
           {busy === 'consulting' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           请求主 Agent
@@ -389,7 +455,7 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
           <div><strong>来源使用</strong><ul className="mt-1 list-disc pl-5 text-text-muted">{session.candidate.synthesis.sourceUsePlan.map(item => <li key={item}>{item}</li>)}</ul></div>
           <div><strong>风险</strong><ul className="mt-1 list-disc pl-5 text-text-muted">{session.candidate.synthesis.risks.map(item => <li key={item}>{item}</li>)}</ul></div>
         </div>
-        <button type="button" onClick={applyCandidate} className="rounded-lg border border-accent px-3 py-2 text-xs text-accent">采纳到表单</button>
+        <button type="button" disabled={readOnly} onClick={applyCandidate} className="rounded-lg border border-accent px-3 py-2 text-xs text-accent">采纳到表单</button>
       </article>}
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <LinesField id="tow-unresolved" label={`未决问题（${draft.unresolvedQuestions.length}）`} value={draft.unresolvedQuestions}
@@ -434,11 +500,11 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
           className="inline-flex items-center gap-2 rounded-lg border border-accent px-4 py-2 text-xs font-semibold text-accent disabled:opacity-40">
           核对模型与预算<ArrowRight className="h-4 w-4" />
         </button>}
-        <button type="button" disabled={Boolean(busy) || Boolean(session.sourceIssue) || !(session.selection ?? props.selection)} onClick={resetDraft}
+        <button type="button" disabled={readOnly || Boolean(busy) || Boolean(session.sourceIssue) || !(session.selection ?? props.selection)} onClick={resetDraft}
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs disabled:opacity-40">
           <RotateCcw className="h-4 w-4" />恢复预填
         </button>
-        <button type="button" disabled={Boolean(busy) || Boolean(session.sourceIssue)} onClick={saveDraft}
+        <button type="button" disabled={readOnly || !endingCountReady || Boolean(busy) || Boolean(session.sourceIssue)} onClick={saveDraft}
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs disabled:opacity-40">
           {busy === 'saving' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}保存草稿
         </button>
@@ -448,6 +514,7 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
         </button>
       </div>
     </footer>
+    </fieldset>
   </main>
 }
 

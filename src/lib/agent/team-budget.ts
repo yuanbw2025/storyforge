@@ -142,6 +142,12 @@ export class AgentTeamBudgetTracker {
     this.usedTokens += reservation.estimatedInputTokens
   }
 
+  /** Only for a known refusal before the transport was entered. */
+  releaseUnsentCall(reservation: AgentTeamCallReservation): void {
+    this.consumeReservation(reservation)
+    this.calls -= 1
+  }
+
   private consumeReservation(reservation: AgentTeamCallReservation): void {
     if (this.outstandingReservations.get(reservation.reservationId) !== reservation) {
       throw new AgentTeamBudgetExceededError(`模型调用“${reservation.label}”的预算预留不存在或已经结算。`)

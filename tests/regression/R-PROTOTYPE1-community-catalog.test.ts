@@ -50,7 +50,7 @@ describe('R-PROTOTYPE-1 · same-origin community prototype catalog', () => {
   })
 
   it('目录与发行包读取固定使用同源、无凭据和有界 JSON', async () => {
-    const fetcher = vi.fn(async (target: RequestInfo | URL) => new Response(
+    const fetcher = vi.fn<(target: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async (target: RequestInfo | URL) => new Response(
       String(target).endsWith('/catalog.json') ? JSON.stringify(catalog()) : JSON.stringify({ bundle: true }),
       { status: 200, headers: { 'content-type': 'application/json' } },
     ))

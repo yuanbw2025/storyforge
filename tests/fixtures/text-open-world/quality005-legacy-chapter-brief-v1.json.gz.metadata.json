@@ -1,0 +1,14 @@
+{
+  "schema": "storyforge.quality005.immutable-synthetic-fixture.v1",
+  "baselineCommit": "38cbcd5fa632516763f5844bff2665c3aee0003e",
+  "compressedSha256": "db91996053f16040fe9cc56810bdd7b9158dfbdc67f0900a1a3cae08695e4857",
+  "decompressedSha256": "622342bba3f1c4f74039da35c0ee8e43de9bb9dac88967e2e2d45774bec3396f",
+  "decompressedBytes": 75748,
+  "actualModelCalls": 0,
+  "actualNetworkCalls": 0,
+  "humanAcceptance": false,
+  "notes": [
+    "Actual native pre-policy non-contiguous chapter Brief confirmation and second distinct conversation",
+    "Historical reader/portable-remap fixture only, never an allowLegacy production capability"
+  ]
+}

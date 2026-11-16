@@ -1,3 +1,5 @@
+import { sha256BinaryV1 } from '../../src/lib/media/blob-store'
+import { encodeFixtureRasterV1, installRasterDecoderForVitestV1 } from '../helpers/raster-decoder-vitest'
 import JSZip from 'jszip'
 import { exportMotionMaterialBundle } from '../../src/lib/motion-drama/delivery'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -67,13 +69,9 @@ const seriesBible = {
   productionConstraints: ['单镜头不超过 10 秒。', '避免复杂群像和画面内文字。'],
 }
 
-function pngBytes(): ArrayBuffer {
-  const bytes = new Uint8Array(32)
-  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-  const view = new DataView(bytes.buffer)
-  view.setUint32(16, 1024); view.setUint32(20, 1536)
-  return bytes.buffer
-}
+installRasterDecoderForVitestV1()
+
+function pngBytes(): ArrayBuffer { return encodeFixtureRasterV1(1024, 1536) }
 
 function wavBytes(): ArrayBuffer {
   const bytes = new Uint8Array(44)
@@ -268,7 +266,7 @@ describe('MOTION-DRAMA-1 · independent preproduction pipeline', () => {
     expect(() => assertMotionDramaPromptPackManifestV2(overLimit)).toThrow('超出 providerProfile 能力')
     await saveMotionDramaPromptOverrideV1({ scope: item.scope, stage: 'video-prompts', overrideScope: 'work', episodeNumber: 1, instruction: '动作必须有起点、方向、速度与停点。' })
     await saveMotionDramaPromptOverrideV1({ scope: item.scope, stage: 'video-prompts', overrideScope: 'episode', episodeNumber: 1, instruction: '本集所有推进镜头保持缓慢压迫感。' })
-    expect(await db.motionDramaPromptPacks.count()).toBe(0)
+    expect(await db.motionDramaPromptPacks.where('projectId').equals(item.scope.projectId).count()).toBe(0)
     expect((await resolveMotionDramaPromptV1(item.scope, 'video-prompts', 1)).source).toBe('episode')
     expect((await resolveMotionDramaPromptV1(item.scope, 'video-prompts', 2)).source).toBe('work')
     await deleteMotionDramaPromptOverrideV1({ scope: item.scope, stage: 'video-prompts', overrideScope: 'episode', episodeNumber: 1 })
@@ -288,12 +286,33 @@ describe('MOTION-DRAMA-1 · independent preproduction pipeline', () => {
     expect(promptManifest.releaseScope).toEqual({ episodeNumbers: [1], providers: [...providers] })
     expect(promptManifest.shots).toHaveLength(2)
 
-    await commitMotionDramaAssetReferenceV1({ scope: item.scope, subjectKey: 'character.linlan', data: pngBytes(), rights: rights(), note: '角色三视图与表情参考。' })
+    const imageVersion = await commitMotionDramaAssetReferenceV1({ scope: item.scope, subjectKey: 'character.linlan', data: pngBytes(), rights: rights(), note: '角色三视图与表情参考。' })
     await commitMotionDramaAssetReferenceV1({ scope: item.scope, subjectKey: 'voice.linlan', data: wavBytes(), rights: rights(), note: '角色干声试听。' })
     await commitMotionDramaAssetReferenceV1({ scope: item.scope, subjectKey: 'sound.ticket-punch', data: wavBytes(), rights: rights(), note: '能力触发音试听。' })
     for (const shot of (await loadMotionDramaStudioV1(item.scope)).shots) {
       await commitMotionDramaShotReferenceV1({ scope: item.scope, shotKey: shot.stableKey, role: 'start-frame', data: pngBytes(), rights: rights(), note: '作者确认的起始帧。' })
     }
+    const imageRow = (await db.mediaBlobObjects.get(imageVersion.blobObjectId!))!
+    const fake = new Uint8Array(32)
+    fake.set([137, 80, 78, 71, 13, 10, 26, 10])
+    new DataView(fake.buffer).setUint32(16, 1024)
+    new DataView(fake.buffer).setUint32(20, 1536)
+    const legacy = {data: fake.buffer, byteSize: fake.length, contentHash: await sha256BinaryV1(fake.buffer)}
+    const useLegacy = async () => {
+      await db.mediaBlobObjects.update(imageRow.id!, legacy)
+      await db.motionDramaAssetVersions.update(imageVersion.id, {contentHash: legacy.contentHash})
+    }
+    const restoreGood = async () => {
+      await db.mediaBlobObjects.put(imageRow)
+      await db.motionDramaAssetVersions.put(imageVersion)
+    }
+    studio = await loadMotionDramaStudioV1(item.scope)
+    await useLegacy()
+    try {
+      await expect(compileMotionDramaPromptPackV1({scope: item.scope, episodeNumber: 1, provider: providers[0],
+        expectedProductionRevision: studio.production.revision})).rejects.toThrow(/图片/u)
+      expect(await db.mediaBlobObjects.get(imageRow.id!)).toMatchObject(legacy)
+    } finally { await restoreGood() }
     for (const provider of providers) {
       studio = await loadMotionDramaStudioV1(item.scope)
       const pack = await compileMotionDramaPromptPackV1({ scope: item.scope, episodeNumber: 1, provider, expectedProductionRevision: studio.production.revision })
@@ -312,6 +331,17 @@ describe('MOTION-DRAMA-1 · independent preproduction pipeline', () => {
     quality = await inspectMotionDramaQualityV1({ scope: item.scope, episodeNumber: 1, providers: [...providers] })
     expect(quality).toMatchObject({ ready: true, achievableTier: 'reference-ready', metrics: { directUseReadyProviderCount: 1 } })
     studio = await loadMotionDramaStudioV1(item.scope)
+    await useLegacy()
+    try {
+      const degraded = await inspectMotionDramaQualityV1({scope: item.scope, episodeNumber: 1, providers: [...providers]})
+      expect(degraded).toMatchObject({ready: true, achievableTier: 'prompt-only', metrics: {directUseReadyProviderCount: 0}})
+      expect(degraded.warnings).toEqual(expect.arrayContaining([expect.stringMatching(/参考图不可用.*图片/u)]))
+      await expect(publishMotionDramaReleaseV1({ scope: item.scope, episodeNumbers: [1], providers: [...providers],
+        tier: 'reference-ready', expectedProductionRevision: studio.production.revision }))
+        .rejects.toThrow(/图片|参考物料尚未就绪/u)
+      expect(await db.mediaBlobObjects.get(imageRow.id!)).toMatchObject(legacy)
+      expect(await db.creationReleases.where('workId').equals(item.scope.workId).count()).toBe(1)
+    } finally { await restoreGood() }
     const referenceRelease = await publishMotionDramaReleaseV1({ scope: item.scope, episodeNumbers: [1], providers: [...providers], tier: 'reference-ready', expectedProductionRevision: studio.production.revision })
     expect(referenceRelease).toMatchObject({ version: 2, parentReleaseId: promptRelease.id })
     expect(await db.creationReleaseAssets.where('releaseId').equals(referenceRelease.id).count()).toBe(5)
@@ -326,10 +356,25 @@ describe('MOTION-DRAMA-1 · independent preproduction pipeline', () => {
     expect(gcReceipt.retained).toEqual(expect.arrayContaining(protectedBlobIds))
     expect(gcReceipt.deleted).toHaveLength(0)
 
+    // In a separately restored project, a valid historical prompt pack still
+    // permits a prompt-only handoff when an old image cannot be decoded.
+    const cloneId = await importProjectJSON(await exportProjectJSON(item.scope.projectId))
+    const cloneBlob = (await db.mediaBlobObjects.where('projectId').equals(cloneId)
+      .filter(row => row.contentHash === imageRow.contentHash).first())!
+    const cloneScope = {projectId: cloneId, worldId: cloneBlob.worldId, workId: cloneBlob.workId}
+    const cloneStudio = await loadMotionDramaStudioV1(cloneScope)
+    await db.mediaBlobObjects.update(cloneBlob.id!, legacy)
+    const clonePromptOnly = await publishMotionDramaReleaseV1({scope: cloneScope, episodeNumbers: [1],
+      providers: [...providers], tier: 'prompt-only', expectedProductionRevision: cloneStudio.production.revision})
+    expect((await readMotionDramaReleaseManifestV1(cloneScope, clonePromptOnly.id)).tier).toBe('prompt-only')
+    expect(await db.creationReleaseAssets.where('releaseId').equals(clonePromptOnly.id).count()).toBe(0)
+    expect(await db.mediaBlobObjects.get(cloneBlob.id!)).toMatchObject(legacy)
+    expect((await db.creationReleases.get(referenceRelease.id))?.manifestJson).toBe(referenceRelease.manifestJson)
+
     const frozen = promptRelease.manifestJson
     await saveMotionDramaPromptOverrideV1({ scope: item.scope, stage: 'shot-design', overrideScope: 'work', episodeNumber: 1, instruction: '镜头必须服务单一叙事动作。' })
     expect((await db.creationReleases.get(promptRelease.id))?.manifestJson).toBe(frozen)
-    expect(await db.motionDramaPromptPacks.count()).toBe(0)
+    expect(await db.motionDramaPromptPacks.where('projectId').equals(item.scope.projectId).count()).toBe(0)
 
     const backup = await exportProjectJSON(item.scope.projectId)
     expect(backup.motionDramaProductions).toHaveLength(1)

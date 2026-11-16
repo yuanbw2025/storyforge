@@ -93,8 +93,6 @@ interface AdventurePlayerState {
   remove(sessionId: number): Promise<void>
 }
 
-let generationAbortController: AbortController | null = null
-
 async function readLibrary(scope: WorkspaceScope): Promise<AdventureLibraryItem[]> {
   const rows = (await db.productReleases.where('projectId').equals(scope.projectId).toArray())
     .filter(row => row.worldId === scope.worldId && row.workId === scope.workId)
@@ -183,6 +181,28 @@ async function automaticCheckpoint(sessionId: number): Promise<void> {
 
 export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, get) => {
   let readRevision = 0
+  let operationRevision = 0
+  let generationAbortController: AbortController | null = null
+  const detachPlayerRequests = () => {
+    // Navigation detaches presentation only. Paid output still belongs to its
+    // original durable Run and remains recoverable when that save is reopened.
+    operationRevision += 1
+    generationAbortController = null
+    set({ busy: false, generatingRunId: null, pendingIntent: null, generatedNarrative: null })
+  }
+  const playerContext = () => {
+    const { scope, selectedSessionId: sessionId, loading } = get()
+    if (!scope || sessionId == null || loading) throw new Error('请先开始或继续一个文字冒险。')
+    return { scope: { ...scope }, sessionId, revision: readRevision }
+  }
+  const isCurrentPlayer = (context: ReturnType<typeof playerContext>) => {
+    const current = get()
+    return context.revision === readRevision && !current.loading
+      && context.sessionId === current.selectedSessionId
+      && context.scope.projectId === current.scope?.projectId
+      && context.scope.worldId === current.scope?.worldId
+      && context.scope.workId === current.scope?.workId
+  }
   const discardStaleResolver = (resolved: Awaited<ReturnType<typeof details>>) => {
     if (resolved.selectedMediaResolver !== get().selectedMediaResolver) resolved.selectedMediaResolver?.dispose()
   }
@@ -259,10 +279,12 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
     }
   }
   const run = async <T>(operation: () => Promise<T>): Promise<T> => {
+    const operationId = ++operationRevision
+    const current = () => operationId === operationRevision
     set({ busy: true, error: '' })
     try { return await operation() }
-    catch (error) { set({ error: error instanceof Error ? error.message : String(error) }); throw error }
-    finally { set({ busy: false }) }
+    catch (error) { if (current()) set({ error: error instanceof Error ? error.message : String(error) }); throw error }
+    finally { if (current()) set({ busy: false }) }
   }
   return {
     scope: null, worldGroupId: null, releases: [], previews: [], sessions: [], completedSessionEndingKeys: {}, selectedSessionId: null,
@@ -272,6 +294,7 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
     loading: false, busy: false, error: '',
     load: async (scope, worldGroupId, openLibrary = false) => {
       const revision = ++readRevision
+      detachPlayerRequests()
       const changed = get().scope?.projectId !== scope.projectId || get().scope?.worldId !== scope.worldId
         || get().scope?.workId !== scope.workId || get().worldGroupId !== worldGroupId
       if (changed || openLibrary) get().selectedMediaResolver?.dispose()
@@ -286,9 +309,10 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       catch (error) { if (revision === readRevision) set({ error: error instanceof Error ? error.message : String(error) }) }
       finally { if (revision === readRevision) set({ loading: false }) }
     },
-    cancelPendingLoad: () => { readRevision += 1; set({ loading: false }) },
+    cancelPendingLoad: () => { readRevision += 1; detachPlayerRequests(); set({ loading: false }) },
     select: async sessionId => {
       const revision = ++readRevision
+      detachPlayerRequests()
       set({ loading: true, error: '', pendingIntent: null, generatedNarrative: null })
       try {
         if (sessionId == null) {
@@ -367,77 +391,92 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       set({ generatedNarrative: null })
     }),
     generateIntent: (text, aiConfig) => run(async () => {
-      const scope = get().scope; const sessionId = get().selectedSessionId
-      if (!scope || sessionId == null) throw new Error('请先开始或继续一个文字冒险。')
-      generationAbortController?.abort()
-      generationAbortController = new AbortController()
+      const context = playerContext()
+      const { scope, sessionId } = context
+      const controller = new AbortController()
+      generationAbortController = controller
+      const current = () => generationAbortController === controller && isCurrentPlayer(context)
       set({ generatingRunId: -1, pendingIntent: null })
       try {
         const generated = await generateAdventureRuntimeCandidateV1({
           scope, productRuntimeSessionId: sessionId, skillId: 'prose.adventure-intent-parser',
-          objective: text, aiConfig, signal: generationAbortController.signal,
-          onRunCreated: runId => set({ generatingRunId: runId }),
+          objective: text, aiConfig, signal: controller.signal,
+          onRunCreated: runId => { if (current()) set({ generatingRunId: runId }) },
         })
         if (generated.candidate.kind !== 'adventure-intent-candidate') throw new Error('Harness 返回了错误候选类型。')
-        set({ pendingIntent: generated.candidate })
+        if (current()) set({ pendingIntent: generated.candidate })
       } finally {
-        generationAbortController = null
-        set({ generatingRunId: null })
+        if (current()) set({ generatingRunId: null })
+        if (generationAbortController === controller) generationAbortController = null
       }
     }),
     adoptPendingIntent: () => run(async () => {
-      const scope = get().scope; const candidate = get().pendingIntent
-      if (!scope || !candidate) throw new Error('当前没有待确认的自由输入候选。')
-      await adoptAdventureRuntimeCandidateV1({ scope, runId: candidate.runId })
-      set({ pendingIntent: null, generatedNarrative: null })
+      const context = playerContext(), candidate = get().pendingIntent
+      if (!candidate || candidate.productRuntimeSessionId !== context.sessionId) throw new Error('当前没有属于此存档的待确认自由输入候选。')
+      await adoptAdventureRuntimeCandidateV1({ scope: context.scope, runId: candidate.runId,
+        expectedProductRuntimeSessionId: context.sessionId })
       await automaticCheckpoint(candidate.productRuntimeSessionId)
-      await refresh()
+      if (isCurrentPlayer(context)) {
+        if (get().pendingIntent === candidate) set({ pendingIntent: null, generatedNarrative: null })
+        await refresh()
+      }
     }),
     rejectPendingIntent: () => run(async () => {
-      const scope = get().scope; const candidate = get().pendingIntent
-      if (!scope || !candidate) return
-      await cancelAdventureRuntimeRunV1({ scope, runId: candidate.runId, reason: 'player-rejected-intent' })
-      set({ pendingIntent: null })
+      const context = playerContext(), candidate = get().pendingIntent
+      if (!candidate || candidate.productRuntimeSessionId !== context.sessionId) return
+      await cancelAdventureRuntimeRunV1({ scope: context.scope, runId: candidate.runId,
+        expectedProductRuntimeSessionId: context.sessionId, reason: 'player-rejected-intent' })
+      if (isCurrentPlayer(context) && get().pendingIntent === candidate) set({ pendingIntent: null })
     }),
     narrateLastResult: aiConfig => run(async () => {
-      const scope = get().scope; const sessionId = get().selectedSessionId
+      const context = playerContext()
+      const { scope, sessionId } = context
       const last = get().runtimeState.adventure?.actionHistory.slice(-1)[0]
-      if (!scope || sessionId == null || !last) throw new Error('没有可以润色的行动结果。')
-      generationAbortController?.abort()
-      generationAbortController = new AbortController()
+      if (!last) throw new Error('没有可以润色的行动结果。')
+      const controller = new AbortController()
+      generationAbortController = controller
+      const current = () => generationAbortController === controller && isCurrentPlayer(context)
       set({ generatingRunId: -1 })
       try {
         const generated = await generateAdventureRuntimeCandidateV1({
           scope, productRuntimeSessionId: sessionId, skillId: 'prose.adventure-result-narrator',
           objective: `润色行动 ${last.actionKey} 的已发生结果，不改变规则事实。`,
-          aiConfig, signal: generationAbortController.signal,
-          onRunCreated: runId => set({ generatingRunId: runId }),
+          aiConfig, signal: controller.signal,
+          onRunCreated: runId => { if (current()) set({ generatingRunId: runId }) },
         })
-        const adopted = await adoptAdventureRuntimeCandidateV1({ scope, runId: generated.snapshot.run.id })
+        if (!current()) return
+        const adopted = await adoptAdventureRuntimeCandidateV1({ scope, runId: generated.snapshot.run.id,
+          expectedProductRuntimeSessionId: sessionId })
         if (adopted.candidate.kind !== 'adventure-narration-candidate') throw new Error('Harness 返回了错误叙述类型。')
-        set({ generatedNarrative: adopted.candidate })
+        if (current()) set({ generatedNarrative: adopted.candidate })
       } finally {
-        generationAbortController = null
-        set({ generatingRunId: null })
+        if (current()) set({ generatingRunId: null })
+        if (generationAbortController === controller) generationAbortController = null
       }
     }),
     cancelGeneration: async () => {
-      generationAbortController?.abort()
-      const scope = get().scope; const runId = get().generatingRunId
-      if (scope && runId != null && runId > 0) {
-        try { await cancelAdventureRuntimeRunV1({ scope, runId }) } catch { /* generation owns terminal failure */ }
-      }
+      const controller = generationAbortController
+      const { scope, generatingRunId: runId, selectedSessionId: sessionId } = get()
+      generationAbortController = null
       set({ generatingRunId: null })
+      controller?.abort()
+      if (scope && sessionId != null && runId != null && runId > 0) {
+        try { await cancelAdventureRuntimeRunV1({ scope, runId, expectedProductRuntimeSessionId: sessionId }) }
+        catch { /* generation owns terminal failure */ }
+      }
     },
     resumeRun: runId => run(async () => {
-      const scope = get().scope
-      if (!scope) throw new Error('工作区未就绪。')
-      const adopted = await adoptAdventureRuntimeCandidateV1({ scope, runId })
+      const context = playerContext()
+      if (!get().recoverableRunIds.includes(runId)) throw new Error('此运行不属于当前存档的可恢复候选。')
+      const adopted = await adoptAdventureRuntimeCandidateV1({ scope: context.scope, runId,
+        expectedProductRuntimeSessionId: context.sessionId })
       if (adopted.candidate.kind === 'adventure-intent-candidate') {
         await automaticCheckpoint(adopted.candidate.productRuntimeSessionId)
-        set({ pendingIntent: null })
-        await refresh()
-      } else set({ generatedNarrative: adopted.candidate })
+        if (isCurrentPlayer(context)) {
+          if (get().pendingIntent?.runId === runId) set({ pendingIntent: null })
+          await refresh()
+        }
+      } else if (isCurrentPlayer(context)) set({ generatedNarrative: adopted.candidate })
     }),
     choose: choiceKey => run(async () => {
       const scope = get().scope; const sessionId = get().selectedSessionId

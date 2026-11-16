@@ -1,9 +1,14 @@
 ---
 productId: upper.character-interaction
 status: preview
-lastVerified: 2026-10-28
+lastVerified: 2026-11-13
 ---
 # 角色聊天
+
+## 11月13日：保存、恢复与使用核对
+
+配图已经保存、后续终验中断时，刷新后可重新查看原图；明确补齐只完成原任务剩余确认，不重复请求同一画面。真正生成失败与结果未知分开处理，未知结果不自动重发。制作继续使用已确认的来源计划，切换或修改来源后须复核，不把其他存档资料带入当前对话。依据 [#368](https://github.com/yuanbw2025/storyforge/pull/368)、[#381](https://github.com/yuanbw2025/storyforge/pull/381)。
+
 
 > 预览：文字会话与单角色图文技术流程已接通，增强入口默认隐藏；稳定多轮对话、人物跨图一致性和长期效果仍待验证。
 

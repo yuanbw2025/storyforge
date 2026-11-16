@@ -26,6 +26,8 @@ export function targetsOfficialProvider(config: ModelTarget): boolean {
 const RETIRED_MODELS: ReadonlyArray<{ provider: AIProvider; model: string; retiredOn: string; sourceUrl: string }> = [
   { provider: 'claude', model: 'claude-sonnet-4-20250514', retiredOn: '2026-06-15', sourceUrl: 'https://platform.claude.com/docs/en/about-claude/model-deprecations' },
   { provider: 'gemini', model: 'gemini-2.0-flash', retiredOn: '2026-06-01', sourceUrl: 'https://ai.google.dev/gemini-api/docs/deprecations' },
+  { provider: 'doubao', model: 'doubao-1-5-pro-32k-250115', retiredOn: '2026-09-21', sourceUrl: 'https://docs.volcengine.com/docs/ark/model-deprecation-notice?lang=zh' },
+  { provider: 'doubao', model: 'deepseek-v4-flash-260425', retiredOn: '2026-09-21', sourceUrl: 'https://docs.volcengine.com/docs/ark/model-deprecation-notice?lang=zh' },
 ]
 
 export function getModelRetirement(config: ModelTarget) {

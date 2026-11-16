@@ -1,9 +1,14 @@
 ---
 productId: independent.screenplay
 status: released
-lastVerified: 2026-09-20
+lastVerified: 2026-11-13
 ---
 # 小说转剧本
+
+## 11月13日：保存、恢复与使用核对
+
+下载 Fountain 后，用兼容阅读器核对人物名、对白与场景结构。修复后的下载保持对白结构，不把对白当作普通描述段落。原小说与已确认剧本保留，导出失败时先保存作品再重试。依据 [#317](https://github.com/yuanbw2025/storyforge/pull/317)。
+
 
 把已有小说改编为电影、剧集或短剧。入口：“剧本 → 我的剧本 → 新建剧本改编”。剧本与原作分别保存。
 

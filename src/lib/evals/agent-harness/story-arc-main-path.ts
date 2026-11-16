@@ -1,3 +1,4 @@
+import { cleanupOwnedEvalWorkspacesV1, withEvalWorkspaceRunLeaseV1, type EvalWorkspaceRunLeaseV1 } from '../workspace-ownership'
 import type { AIConfig, ChatMessage } from '../../types'
 import { hashCanonicalValue } from '../../agent/run/hash'
 import { computeCostUsd } from '../../ai/usage-log'
@@ -171,6 +172,8 @@ export interface H86CheckpointV1 {
 }
 
 export interface H86GenerationCallInputV1 {
+  evalRunId?: string
+  evalRunLease?: EvalWorkspaceRunLeaseV1
   fixture: H86StoryArcFixtureV1
   variant: H86StoryArcVariantV1
   generator: H86ModelIdentityV1
@@ -554,6 +557,10 @@ export async function runH86StoryArcMainPathEvalV1(input: {
   retryFailed?: boolean
   onCheckpoint?: (checkpoint: H86CheckpointV1) => Promise<void> | void
 }): Promise<H86CheckpointV1> {
+  return withEvalWorkspaceRunLeaseV1({ suite: 'h86-story-arc', runId: input.resumeFrom?.runId ?? input.runId }, lease => runH86WithLeaseV1(input, lease))
+}
+
+async function runH86WithLeaseV1(input: Parameters<typeof runH86StoryArcMainPathEvalV1>[0], lease: EvalWorkspaceRunLeaseV1): Promise<H86CheckpointV1> {
   const fixtures = input.fixtures ?? H86_STORY_ARC_DEVELOPMENT_FIXTURES_V1
   if (!fixtures.length) throw new Error('H86 至少需要一个 fixture')
   if (input.generator.provider === input.verifier.provider && input.generator.model === input.verifier.model) {
@@ -618,6 +625,8 @@ export async function runH86StoryArcMainPathEvalV1(input: {
         let attempt: H86GenerationAttemptV1
         try {
           attempt = await input.dependencies.generate({
+            evalRunId: checkpoint.runId,
+            evalRunLease: lease,
             fixture,
             variant,
             generator: input.generator,
@@ -936,8 +945,17 @@ export async function loadH86CheckpointV1(): Promise<H86CheckpointV1 | null> {
   return checkpoint
 }
 
-export function clearH86CheckpointV1(): void {
-  localStorage.removeItem(H86_STORY_ARC_STORAGE_KEY_V1)
+export async function clearH86CheckpointV1(runId: string): Promise<void> {
+  await withEvalWorkspaceRunLeaseV1({ suite: 'h86-story-arc', runId }, async lease => {
+    const raw = localStorage.getItem(H86_STORY_ARC_STORAGE_KEY_V1)
+    const current = raw == null ? null : JSON.parse(raw) as H86CheckpointV1
+    if (raw != null && current?.runId !== runId) throw new Error('H86 checkpoint 已切换到其他运行；原记录保留，请重新载入。')
+    await cleanupOwnedEvalWorkspacesV1({ suite: 'h86-story-arc', runId, lease })
+    if (localStorage.getItem(H86_STORY_ARC_STORAGE_KEY_V1) !== raw) {
+      throw new Error('H86 checkpoint 已更新；原记录保留，请重新载入。')
+    }
+    localStorage.removeItem(H86_STORY_ARC_STORAGE_KEY_V1)
+  })
 }
 
 export async function exportH86CheckpointV1(checkpoint: H86CheckpointV1): Promise<string> {

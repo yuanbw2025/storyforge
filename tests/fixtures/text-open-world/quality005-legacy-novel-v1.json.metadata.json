@@ -1,0 +1,13 @@
+{
+  "schema": "storyforge.quality005.synthetic-legacy-fixture-metadata.v1",
+  "baseline": "38cbcd5fa632516763f5844bff2665c3aee0003e",
+  "compressedSha256": "db255ace333a0867ada2b98bd623e1f44e2398935c907a542174dc8edba42b0f",
+  "decompressedSha256": "c2cd43a626045fb62842b30c02c4558d98ce7bfd7ae1b84ef837c12f633f46b3",
+  "decompressedBytes": 1233512,
+  "captureMethod": "pre-fix public Creator contract helpers and runtime command; fake IndexedDB only",
+  "limitations": [
+    "synthetic test fixtures, zero actual providers",
+    "helper quality receipts are structural witnesses, not real author or model acceptance"
+  ],
+  "fixture": "tests/fixtures/text-open-world/quality005-legacy-novel-v1.json.gz"
+}

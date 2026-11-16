@@ -5,11 +5,20 @@ import type {
   CodexEntry,
   ImportantLocation,
   StateCategory,
+  Chapter,
+  OutlineNode,
+  StateCard,
+  ItemLedgerEntry,
+  KnowledgeLedgerEntry,
+  CultivationProgress,
+  StoryCore,
+  DetailedOutline,
 } from '../types'
+import type { TemporalFact } from '../types/temporal-fact'
 import { adopt } from '../registry/adopt'
 import { transactionTablesFor } from '../registry/lifecycle'
 import type { WorkspaceScope } from '../types/world-ownership'
-import { resolveScope } from '../workspace/scope'
+import { assertRecordInScope, getTableSpec, readOwnedRows, resolveScope, resolveScopeLike, type WorkspaceScopeLike } from '../workspace/scope'
 import {
   buildChapterSearchTargets,
   findChapterMatches,
@@ -44,6 +53,7 @@ export interface EntityRenameRecordChange {
     | 'cultivationProgress'
     | 'itemLedger'
   id: number
+  resourceUid: string
   before: Record<string, unknown>
   after: Record<string, unknown>
 }
@@ -55,6 +65,7 @@ export interface EntityRenameManualReview {
 }
 
 export interface EntityRenamePreview {
+  scope: WorkspaceScope
   entity: RenamableEntity
   newName: string
   blockers: string[]
@@ -71,6 +82,7 @@ export interface EntityRenameUndoPatch {
   label: string
   snapshotId: number
   projectId: number
+  scope: WorkspaceScope
   entity: EntityRenameTarget
   oldName: string
   newName: string
@@ -79,6 +91,7 @@ export interface EntityRenameUndoPatch {
 
 export interface ExecuteEntityRenameArgs {
   projectId: number
+  scope?: WorkspaceScope
   entity: EntityRenameTarget
   newName: string
   expectedBaseline: string
@@ -131,12 +144,14 @@ function sortedChanges(changes: EntityRenameRecordChange[]): EntityRenameRecordC
 }
 
 function buildBaseline(input: {
+  scope: WorkspaceScope
   entity: RenamableEntity
   newName: string
   blockers: string[]
   changes: EntityRenameRecordChange[]
 }): string {
   return JSON.stringify({
+    scope: [input.scope.projectId, input.scope.worldId, input.scope.workId],
     entity: { kind: input.entity.kind, id: input.entity.id, name: input.entity.name },
     newName: input.newName,
     blockers: [...input.blockers].sort(),
@@ -144,7 +159,7 @@ function buildBaseline(input: {
   })
 }
 
-async function projectEntities(projectId: number): Promise<{
+async function projectEntities(scope: WorkspaceScope): Promise<{
   entities: RenamableEntity[]
   characters: Character[]
   categories: CodexCategory[]
@@ -152,10 +167,10 @@ async function projectEntities(projectId: number): Promise<{
   locations: ImportantLocation[]
 }> {
   const [characters, locations, categories, codexEntries] = await Promise.all([
-    db.characters.where('projectId').equals(projectId).toArray(),
-    db.importantLocations.where('projectId').equals(projectId).toArray(),
-    db.codexCategories.where('projectId').equals(projectId).toArray(),
-    db.codexEntries.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<Character>(scope, 'characters', { owner: 'world' }),
+    readOwnedRows<ImportantLocation>(scope, 'importantLocations', { owner: 'world' }),
+    readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' }),
+    readOwnedRows<CodexEntry>(scope, 'codexEntries', { owner: 'world' }),
   ])
   const categoryById = new Map(categories.map(category => [category.id, category]))
   const entities: RenamableEntity[] = [
@@ -190,8 +205,8 @@ async function projectEntities(projectId: number): Promise<{
   return { entities, characters, categories, codexEntries, locations }
 }
 
-export async function listRenamableEntities(projectId: number): Promise<RenamableEntity[]> {
-  const { entities } = await projectEntities(projectId)
+export async function listRenamableEntities(scopeInput: WorkspaceScopeLike): Promise<RenamableEntity[]> {
+  const { entities } = await projectEntities(await resolveScopeLike(scopeInput))
   return entities.sort((left, right) =>
     left.kind.localeCompare(right.kind) || left.name.localeCompare(right.name, 'zh-CN'),
   )
@@ -207,12 +222,15 @@ function targetEntity(
 function addChange(
   changes: EntityRenameRecordChange[],
   target: EntityRenameRecordChange['target'],
-  id: number | undefined,
+  record: { id?: number },
   before: Record<string, unknown>,
   after: Record<string, unknown>,
 ): void {
-  if (id == null || sameValue(before, after)) return
-  changes.push({ target, id, before, after })
+  if (record.id == null || sameValue(before, after)) return
+  const field = getTableSpec(target).resourceIdentity?.field
+  const resourceUid = field && (record as Record<string, unknown>)[field]
+  if (typeof resourceUid !== 'string' || !resourceUid) throw new Error(`记录缺少稳定身份：${target} #${record.id}`)
+  changes.push({ target, id: record.id, resourceUid, before, after })
 }
 
 function expectedStateCategory(
@@ -257,12 +275,13 @@ function pushManualReview(
 }
 
 export async function buildEntityRenamePreview(
-  projectId: number,
+  scopeInput: WorkspaceScopeLike,
   target: EntityRenameTarget,
   requestedName: string,
 ): Promise<EntityRenamePreview> {
   const newName = requestedName.normalize('NFKC').trim()
-  const { entities, characters, categories, codexEntries, locations } = await projectEntities(projectId)
+  const scope = await resolveScopeLike(scopeInput)
+  const { entities, characters, categories, codexEntries, locations } = await projectEntities(scope)
   const entity = targetEntity(entities, target)
   if (!entity) throw new Error('目标实体不存在或不属于当前项目')
 
@@ -276,7 +295,7 @@ export async function buildEntityRenamePreview(
   if (!newName) blockers.push('新名称不能为空')
   if (newKey === oldKey) blockers.push('新名称与当前名称相同')
 
-  const itemRows = await db.itemLedger.where('projectId').equals(projectId).toArray()
+  const itemRows = await readOwnedRows<ItemLedgerEntry>(scope, 'itemLedger', { owner: 'work' })
   const itemNames = Array.from(new Set(itemRows.map(row => row.itemName.trim()).filter(Boolean)))
   const oldEntityCollisions = entities.filter(item =>
     !(item.kind === entity.kind && item.id === entity.id)
@@ -293,7 +312,9 @@ export async function buildEntityRenamePreview(
     blockers.push(`新名称「${newName}」已被其他实体或物品使用`)
   }
 
-  addChange(changes, TARGET_TABLE[entity.kind], entity.id, { name: entity.name }, { name: newName })
+  const entityRecord = (entity.kind === 'character' ? characters : entity.kind === 'location' ? locations : codexEntries)
+    .find(row => row.id === entity.id)!
+  addChange(changes, TARGET_TABLE[entity.kind], entityRecord, { name: entity.name }, { name: newName })
 
   const [
     chapters,
@@ -305,14 +326,14 @@ export async function buildEntityRenamePreview(
     storyCores,
     detailedOutlines,
   ] = await Promise.all([
-    db.chapters.where('projectId').equals(projectId).toArray(),
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
-    db.stateCards.where('projectId').equals(projectId).toArray(),
-    db.temporalFacts.where('projectId').equals(projectId).toArray(),
-    db.knowledgeLedger.where('projectId').equals(projectId).toArray(),
-    db.cultivationProgress.where('projectId').equals(projectId).toArray(),
-    db.storyCores.where('projectId').equals(projectId).toArray(),
-    db.detailedOutlines.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
+    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<StateCard>(scope, 'stateCards', { owner: 'work' }),
+    readOwnedRows<TemporalFact>(scope, 'temporalFacts', { owner: 'work' }),
+    readOwnedRows<KnowledgeLedgerEntry>(scope, 'knowledgeLedger', { owner: 'work' }),
+    readOwnedRows<CultivationProgress>(scope, 'cultivationProgress', { owner: 'work' }),
+    readOwnedRows<StoryCore>(scope, 'storyCores', { owner: 'work' }),
+    readOwnedRows<DetailedOutline>(scope, 'detailedOutlines', { owner: 'work' }),
   ])
 
   const protectedTerms = Array.from(new Set([
@@ -337,7 +358,7 @@ export async function buildEntityRenamePreview(
     addChange(
       changes,
       'chapters',
-      chapter.id,
+      chapter,
       { content: chapter.content || '', wordCount: chapter.wordCount || 0 },
       { content: replacement.html, wordCount: replacement.wordCount },
     )
@@ -362,7 +383,7 @@ export async function buildEntityRenamePreview(
     for (const card of stateCards.filter(card =>
       card.category === stateCategory && normalizedName(card.entityName) === oldKey,
     )) {
-      addChange(changes, 'stateCards', card.id, { entityName: card.entityName }, { entityName: newName })
+      addChange(changes, 'stateCards', card, { entityName: card.entityName }, { entityName: newName })
     }
   } else if (stateCards.some(card => normalizedName(card.entityName) === oldKey)) {
     warnings.push('该词条没有可证明的状态卡类型映射，同名状态卡仅列入人工复核')
@@ -370,24 +391,24 @@ export async function buildEntityRenamePreview(
 
   if (entity.kind === 'character') {
     for (const fact of temporalFacts.filter(row => row.characterId === entity.id)) {
-      addChange(changes, 'temporalFacts', fact.id, { subjectName: fact.subjectName }, { subjectName: newName })
+      addChange(changes, 'temporalFacts', fact, { subjectName: fact.subjectName }, { subjectName: newName })
     }
     for (const row of knowledgeRows.filter(item => item.characterId === entity.id)) {
-      addChange(changes, 'knowledgeLedger', row.id, { characterName: row.characterName }, { characterName: newName })
+      addChange(changes, 'knowledgeLedger', row, { characterName: row.characterName }, { characterName: newName })
     }
     for (const row of cultivationRows.filter(item => item.characterId === entity.id)) {
-      addChange(changes, 'cultivationProgress', row.id, { characterName: row.characterName }, { characterName: newName })
+      addChange(changes, 'cultivationProgress', row, { characterName: row.characterName }, { characterName: newName })
     }
     for (const row of itemRows.filter(item => item.characterId === entity.id)) {
-      addChange(changes, 'itemLedger', row.id, { heldByName: row.heldByName }, { heldByName: newName })
+      addChange(changes, 'itemLedger', row, { heldByName: row.heldByName }, { heldByName: newName })
     }
   } else if (entity.kind === 'location') {
     for (const fact of temporalFacts.filter(row => row.locationId === entity.id)) {
-      addChange(changes, 'temporalFacts', fact.id, { subjectName: fact.subjectName }, { subjectName: newName })
+      addChange(changes, 'temporalFacts', fact, { subjectName: fact.subjectName }, { subjectName: newName })
     }
   } else {
     for (const fact of temporalFacts.filter(row => row.codexEntryId === entity.id)) {
-      addChange(changes, 'temporalFacts', fact.id, { subjectName: fact.subjectName }, { subjectName: newName })
+      addChange(changes, 'temporalFacts', fact, { subjectName: fact.subjectName }, { subjectName: newName })
     }
   }
 
@@ -437,9 +458,11 @@ export async function buildEntityRenamePreview(
     warnings.push(`另有 ${manualReview.length} 条自由文本或非规范记录需人工复核，未自动改写`)
   }
   warnings.push('角色设计方案等历史快照继续保留当时名称，不随本次改名重写')
+  warnings.push('世界共享主档会改名；仅同步当前作品的正文与私域引用，其他作品的内容保持原样')
 
   const sorted = sortedChanges(changes)
   const preview: EntityRenamePreview = {
+    scope,
     entity,
     newName,
     blockers: Array.from(new Set(blockers)),
@@ -455,6 +478,16 @@ export async function buildEntityRenamePreview(
   return preview
 }
 
+async function assertCurrentScope(scope: WorkspaceScope): Promise<void> {
+  // Read the actual pointer, rather than treating a disposable resolution cache
+  // as authority after a dialog or snapshot has awaited another action.
+  const project = await db.projects.get(scope.projectId)
+  if (project?.activeWorldId !== scope.worldId || project.activeWorkId !== scope.workId) {
+    throw new Error('改名作用域已切换，请回到原作品并重新预览')
+  }
+  await resolveScope({ scope })
+}
+
 async function getRecord(
   target: EntityRenameRecordChange['target'],
   id: number,
@@ -462,9 +495,12 @@ async function getRecord(
   return await db[target].get(id) as Record<string, unknown> | undefined
 }
 
-async function assertRecordState(change: EntityRenameRecordChange, side: 'before' | 'after'): Promise<void> {
+async function assertRecordState(scope: WorkspaceScope, change: EntityRenameRecordChange, side: 'before' | 'after'): Promise<void> {
   const current = await getRecord(change.target, change.id)
   if (!current) throw new Error(`记录已不存在：${change.target} #${change.id}`)
+  if (!await assertRecordInScope(scope, change.target, current)) throw new Error(`记录已离开本次改名作用域：${change.target} #${change.id}`)
+  const field = getTableSpec(change.target).resourceIdentity?.field
+  if (!field || current[field] !== change.resourceUid) throw new Error(`记录身份已变化：${change.target} #${change.id}，请重新预览`)
   const expected = change[side]
   for (const [field, value] of Object.entries(expected)) {
     if (!sameValue(current[field], value)) {
@@ -480,8 +516,13 @@ async function applyChange(
   side: 'before' | 'after',
 ): Promise<void> {
   const data = change[side]
+  await assertRecordState(scope, change, side === 'after' ? 'before' : 'after')
   if (change.target === 'temporalFacts') {
-    await db.temporalFacts.update(change.id, { ...data, updatedAt: Date.now() })
+    // Registered fact-ledger domain extension: only the redundant display name
+    // may change, after the same owner, identity and field-CAS checks above.
+    if (Object.keys(data).length !== 1 || typeof data.subjectName !== 'string') throw new Error('事实改名仅允许更新主体显示名')
+    const updated = await db.temporalFacts.update(change.id, { subjectName: data.subjectName, updatedAt: Date.now() })
+    if (updated !== 1) throw new Error(`事实记录未保存：temporalFacts #${change.id}`)
     return
   }
   const result = await adopt({
@@ -500,18 +541,19 @@ async function applyChange(
 export async function executeEntityRename(
   args: ExecuteEntityRenameArgs,
 ): Promise<ExecuteEntityRenameResult> {
-  const workspaceScope = await resolveScope({ projectId: args.projectId })
-  const preview = await buildEntityRenamePreview(args.projectId, args.entity, args.newName)
+  const workspaceScope = await resolveScope({ projectId: args.projectId, scope: args.scope })
+  await assertCurrentScope(workspaceScope)
+  const preview = await buildEntityRenamePreview(workspaceScope, args.entity, args.newName)
   if (preview.baseline !== args.expectedBaseline) throw new Error('项目数据已变化，请重新预览后再执行')
   if (preview.blockers.length) throw new Error(preview.blockers.join('；'))
 
   const snapshotId = await args.createSnapshot(args.projectId, args.label, 'manual')
   await db.transaction('rw', transactionTablesFor('importProject'), async () => {
-    const current = await buildEntityRenamePreview(args.projectId, args.entity, args.newName)
+    await assertCurrentScope(workspaceScope)
+    const current = await buildEntityRenamePreview(workspaceScope, args.entity, args.newName)
     if (current.baseline !== args.expectedBaseline || current.blockers.length) {
       throw new Error('创建快照后项目数据发生变化，已取消改名，请重新预览')
     }
-    for (const change of current.changes) await assertRecordState(change, 'before')
     for (const change of current.changes) await applyChange(args.projectId, workspaceScope, change, 'after')
   })
 
@@ -523,6 +565,7 @@ export async function executeEntityRename(
       label: `${args.label} · 快照 #${snapshotId}`,
       snapshotId,
       projectId: args.projectId,
+      scope: workspaceScope,
       entity: args.entity,
       oldName: preview.entity.name,
       newName: preview.newName,
@@ -532,10 +575,13 @@ export async function executeEntityRename(
 }
 
 export async function undoEntityRename(patch: EntityRenameUndoPatch): Promise<number> {
-  const workspaceScope = await resolveScope({ projectId: patch.projectId })
+  if (!patch.scope) throw new Error('撤销记录缺少原作品作用域，请使用项目快照恢复')
+  const workspaceScope = await resolveScope({ projectId: patch.projectId, scope: patch.scope })
+  await assertCurrentScope(workspaceScope)
   await db.transaction('rw', transactionTablesFor('importProject'), async () => {
+    await assertCurrentScope(workspaceScope)
     const reversePreview = await buildEntityRenamePreview(
-      patch.projectId,
+      workspaceScope,
       patch.entity,
       patch.oldName,
     )
@@ -555,7 +601,6 @@ export async function undoEntityRename(patch: EntityRenameUndoPatch): Promise<nu
     if (!sameValue(expectedShapes, currentShapes)) {
       throw new Error('改名后新增了相关正文或结构化记录，请改用项目快照恢复')
     }
-    for (const change of patch.changes) await assertRecordState(change, 'after')
     for (const change of [...patch.changes].reverse()) {
       await applyChange(patch.projectId, workspaceScope, change, 'before')
     }

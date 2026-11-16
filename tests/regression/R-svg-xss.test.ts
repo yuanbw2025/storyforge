@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest'
 import { sanitizeSvg } from '../../src/lib/utils/sanitize-svg'
 
-const SVG_OPEN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+const SVG_OPEN = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 100 100">'
 
 describe('R-svg-xss · SVG 清洗剔除执行向量', () => {
   it('剔除 <script> 标签', () => {
@@ -38,13 +38,15 @@ describe('R-svg-xss · SVG 清洗剔除执行向量', () => {
   })
 
   it('剔除 javascript: 协议的 href / xlink:href', () => {
-    const out = sanitizeSvg(`${SVG_OPEN}<a href="javascript:alert(1)"><text>x</text></a><a xlink:href="javascript:evil()"><text>y</text></a></svg>`)
+    const out = sanitizeSvg(`${SVG_OPEN}<a href="javascript:alert(1)"><text>x</text></a><a xlink:href="javascript:evil()"><text>y</text></a><path id="sfqa131-safe-link-control" d="M0 0L10 10"/></svg>`)
     expect(out.toLowerCase()).not.toContain('javascript:')
+    expect(out).toContain('sfqa131-safe-link-control')
   })
 
   it('剔除 data:text/html 协议的 href', () => {
-    const out = sanitizeSvg(`${SVG_OPEN}<a href="data:text/html,<script>alert(1)</script>"><text>x</text></a></svg>`)
+    const out = sanitizeSvg(`${SVG_OPEN}<a href="data:text/html,%3Cscript%3Ealert(1)%3C/script%3E"><text>x</text></a><path id="sfqa131-safe-data-control" d="M0 0L10 10"/></svg>`)
     expect(out.toLowerCase()).not.toContain('data:text/html')
+    expect(out).toContain('sfqa131-safe-data-control')
   })
 
   it('剔除 <iframe>/<object>/<embed>', () => {

@@ -1,9 +1,14 @@
 ---
 productId: independent.screenplay
 status: released
-lastVerified: 2026-09-20
+lastVerified: 2026-11-13
 ---
 # Novel to screenplay
+
+## November 13: saving, recovery and usage checks
+
+After downloading Fountain, check character cues, dialogue and scenes in a compatible reader. The repaired export preserves dialogue structure instead of turning dialogue into action paragraphs. Source novels and confirmed screenplays remain intact; save the work before retrying a failed export. Source: [#317](https://github.com/yuanbw2025/storyforge/pull/317).
+
 
 Adapt an existing novel for film, television, or short drama. Entry: Screenplay → My screenplays → New adaptation (剧本 → 我的剧本 → 新建剧本改编). The screenplay and source work are stored separately.
 

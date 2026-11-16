@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {test, expect} from '@playwright/test'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 
@@ -7,7 +8,7 @@ test('the author inspects exact Build images and missing Build bytes cannot borr
   let calls = 0
   await page.route('**/chat/completions', async route => {calls++; await route.abort()})
   await page.route('**/local-codex/v1/requests', async route => {if (route.request().method() === 'POST') {calls++; await route.abort()} else await route.continue()})
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)'), f = await (await load('/storyforge/tests/helpers/chat-media-fixture.ts')).seedChatMediaBuildFixture()
     const {db} = await load('/storyforge/src/lib/db/schema.ts')
@@ -15,7 +16,7 @@ test('the author inspects exact Build images and missing Build bytes cannot borr
       before: JSON.stringify({build: await db.productBuilds.get(f.buildId), production: await db.productProductions.get(f.productionId),
         worlds: await db.worldReleases.toArray(), events: await db.productRuntimeEvents.toArray()})}
   })
-  await page.goto(`./chat/media?project=${f.scope.projectId}&work=${f.scope.workId}&production=${f.productionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/media?project=${f.scope.projectId}&work=${f.scope.workId}&production=${f.productionId}`)
   const gallery = page.getByTestId('chat-build-media')
   await expect(gallery.getByRole('img')).toHaveCount(3)
   await expect(gallery.getByRole('img', {name: '叶岑工程头像与立绘'})).toBeVisible()
@@ -36,7 +37,7 @@ test('the author inspects exact Build images and missing Build bytes cannot borr
   await expect(gallery.getByRole('img')).toHaveCount(2)
   await expect(gallery.getByRole('img', {name: '叶岑工程头像与立绘'})).toHaveCount(0)
   await expect(gallery.getByText('图片暂不可用，文字内容仍可查看。', {exact: true})).toBeVisible()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(gallery.getByRole('img')).toHaveCount(2)
   expect(calls).toBe(0)
 })
@@ -45,9 +46,8 @@ for (const width of [390, 1440]) test(`frozen chat images survive save changes a
   await page.setViewportSize({width, height: 844})
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', model: 'test', baseUrl: 'https://chat-media.invalid/v1', apiKey: ''}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', model: 'test', baseUrl: 'https://chat-media.invalid/v1', apiKey: 'isolated-test-key' })
   let calls = 0
   await page.route('https://chat-media.invalid/**', async route => {
     calls++
@@ -58,12 +58,12 @@ for (const width of [390, 1440]) test(`frozen chat images survive save changes a
       : {kind: 'speak', text: '我先看看门边的告示，有消息再告诉你。', goalKey: 'find-seal', evidenceFactKeys: ['lost'], audienceKeys: ['guard', 'player'], waitingForPlayer: false, newFacts: [], disclosures: [], threadUpdates: [], goalStatus: null}
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)'), f = await (await load('/storyforge/tests/helpers/chat-media-fixture.ts')).seedChatMediaPlayerFixture()
     return {...f, worlds: JSON.stringify(await (await load('/storyforge/src/lib/db/schema.ts')).db.worldReleases.toArray())}
   })
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByRole('button', {name: '作品与存档'}).click()
   const card = page.getByRole('article', {name: '驿站工程核验 · 版本 2', exact: true})
   await card.getByLabel('开场行动角色').selectOption('guard')
@@ -90,7 +90,7 @@ for (const width of [390, 1440]) test(`frozen chat images survive save changes a
   await expect(gallery.getByText('叶岑', {exact: true})).toHaveCount(0)
   await expect(gallery.getByText('程素', {exact: true})).toBeVisible()
   await expect(messages.getByRole('img', {name: '叶岑工程头像与立绘'})).toBeVisible()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(messages.getByRole('img', {name: '叶岑工程头像与立绘'})).toBeVisible()
   expect(calls).toBe(3)
   const backup = await page.evaluate(async id => {
@@ -103,7 +103,7 @@ for (const width of [390, 1440]) test(`frozen chat images survive save changes a
     await restoredPage.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
     await restoredPage.route('**/chat/completions', async route => {restoredCalls++; await route.abort()})
     await restoredPage.route('**/local-codex/v1/requests', async route => {if (route.request().method() === 'POST') {restoredCalls++; await route.abort()} else await route.continue()})
-    await restoredPage.goto(new URL('/storyforge/chat/library', page.url()).href)
+    await gotoWithBrowserFixtureAIConfigV1(restoredPage, new URL('/storyforge/chat/library', page.url()).href)
     const restored = await restoredPage.evaluate(async backup => {
       const load = new Function('p', 'return import(p)'), db = (await load('/storyforge/src/lib/db/schema.ts')).db
       const projectId = await (await load('/storyforge/src/lib/export/json-export.ts')).importProjectJSON(backup)
@@ -111,7 +111,7 @@ for (const width of [390, 1440]) test(`frozen chat images survive save changes a
       const session = (await db.productRuntimeSessions.where('projectId').equals(projectId).toArray()).find((s: {productReleaseId: number}) => s.productReleaseId === release.id)
       return {projectId, workId: session.workId, sessionId: session.id}
     }, backup)
-    await restoredPage.goto(new URL(`/storyforge/chat/play?project=${restored.projectId}&work=${restored.workId}&session=${restored.sessionId}`, page.url()).href)
+    await gotoWithBrowserFixtureAIConfigV1(restoredPage, new URL(`/storyforge/chat/play?project=${restored.projectId}&work=${restored.workId}&session=${restored.sessionId}`, page.url()).href)
     await expect(restoredPage.getByRole('region', {name: '对话记录', exact: true}).getByRole('img', {name: '叶岑工程头像与立绘'})).toBeVisible()
     expect(restoredCalls).toBe(0)
   } finally {await isolated.close()}

@@ -11,7 +11,6 @@ import {
   readEnum,
   readHash,
   readInteger,
-  readNonNegativeNumber,
   readRecord,
   readString,
 } from '../../agent/run/schema-utils'
@@ -40,6 +39,7 @@ import {
   type LongConsistencyReportSourceInputV1,
   type LongConsistencyReportSourceV1,
 } from './report-types'
+import { parseLongConsistencyModelUsageV1 } from './model-usage'
 
 export const LONG_CONSISTENCY_BENCHMARK_VERSION_V1 = 'storyforge-h4-evidence-v1'
 export const LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V1 = 'h4-long-consistency-judge-v1'
@@ -116,12 +116,7 @@ export interface CreateLongConsistencyEvalArtifactInputV1 {
 
 export interface LongConsistencyAuditCallResultV1 {
   output: string
-  usage?: {
-    inputTokens?: number
-    outputTokens?: number
-    durationMs?: number
-    costUsd?: number
-  }
+  usage?: Partial<LongConsistencyModelUsageV1>
 }
 
 export function createLongConsistencyJudgeRepairV1(
@@ -400,7 +395,7 @@ function locateQuote(
     if (offset < 0) break
     offsets.push(offset)
     if (offsets.length > 1) break
-    cursor = offset + Math.max(quote.length, 1)
+    cursor = offset + 1
   }
   if (!offsets.length) failSchema('evidence_not_found', path, `来源 ${source.id} 中找不到逐字引文`)
   if (offsets.length > 1) failSchema('ambiguous_evidence', path, `逐字引文在来源 ${source.id} 中出现多次`)
@@ -509,18 +504,6 @@ function parseModelBinding(value: unknown, path: string): LongConsistencyModelBi
     provider: readString(record.provider, `${path}.provider`, { max: 120 }),
     model: readString(record.model, `${path}.model`, { max: 200 }),
     promptVersion: readString(record.promptVersion, `${path}.promptVersion`, { max: 160 }),
-  }
-}
-
-function parseModelUsage(value: unknown, path: string): LongConsistencyModelUsageV1 {
-  const record = readRecord(value, path)
-  const keys = ['inputTokens', 'outputTokens', 'durationMs', 'costUsd'] as const
-  assertExactKeys(record, keys, keys, path)
-  return {
-    inputTokens: readInteger(record.inputTokens, `${path}.inputTokens`, { min: 0 }),
-    outputTokens: readInteger(record.outputTokens, `${path}.outputTokens`, { min: 0 }),
-    durationMs: readNonNegativeNumber(record.durationMs, `${path}.durationMs`),
-    costUsd: readNonNegativeNumber(record.costUsd, `${path}.costUsd`),
   }
 }
 
@@ -786,8 +769,8 @@ export function parseLongConsistencyEvalArtifactV1(value: unknown): LongConsiste
       generator,
       verifier,
       modelIdentitySeparated: separated,
-      generationUsage: parseModelUsage(execution.generationUsage, 'artifact.execution.generationUsage'),
-      verifierUsage: parseModelUsage(execution.verifierUsage, 'artifact.execution.verifierUsage'),
+      generationUsage: parseLongConsistencyModelUsageV1(execution.generationUsage, 'artifact.execution.generationUsage'),
+      verifierUsage: parseLongConsistencyModelUsageV1(execution.verifierUsage, 'artifact.execution.verifierUsage'),
     },
     sourceSetHash: readHash(record.sourceSetHash, 'artifact.sourceSetHash'),
     ...(hasJudgeRepair ? { judgeRepair: judgeRepair ?? null } : {}),
@@ -894,6 +877,7 @@ export async function runLongConsistencySemanticAuditV1(
       outputTokens: response.usage?.outputTokens ?? estimateTokens(response.output),
       durationMs: response.usage?.durationMs ?? measuredDurationMs,
       costUsd: response.usage?.costUsd ?? 0,
+      ...(response.usage?.provenance === undefined ? {} : { provenance: response.usage.provenance }),
     },
   })
 }

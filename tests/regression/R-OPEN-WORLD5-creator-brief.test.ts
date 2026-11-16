@@ -14,7 +14,6 @@ import {
   textOpenWorldCreatorLocatorColumnsV1,
 } from '../../src/lib/open-world/creator-brief-persistence'
 import {
-  inspectTextOpenWorldCreatorNovelSourceV1,
   inspectTextOpenWorldCreatorWorldSourceV1,
 } from '../../src/lib/open-world/creator-source'
 import type {
@@ -23,8 +22,7 @@ import type {
   TextOpenWorldCreatorSourceLocatorV1,
   TextOpenWorldCreatorSourceSelectionV1,
 } from '../../src/lib/types'
-import { createWorkspace } from '../../src/lib/workspace/create-workspace'
-import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedQuality005LegacyChapterBriefV1 } from '../helpers/quality005-legacy-chapter-brief'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
 const ACKNOWLEDGEMENTS = {
@@ -49,64 +47,6 @@ async function emptyDownstreamCounts() {
   return { builds, artifacts, releases, runtimeSessions }
 }
 
-async function seedNovel(name: string) {
-  const created = await createWorkspace({
-    name,
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '用于 Creator Brief 持久化测试的小说来源。',
-    targetWordCount: 80_000,
-    enableMultiWorld: false,
-  }, { purpose: 'independent-work', kind: 'novel', novelProfile: 'long' })
-  const now = Date.now()
-  const volumeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
-    projectId: created.scope.projectId,
-    parentId: null,
-    type: 'volume',
-    title: '盐脊卷',
-    summary: '巡井人从断流调查走向城邦边境。',
-    order: 0,
-    createdAt: now,
-    updatedAt: now,
-  } as never, { owner: 'work' })) as number
-  const chapterOutlineId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
-    projectId: created.scope.projectId,
-    parentId: volumeId,
-    type: 'chapter',
-    title: '第一章 断流',
-    summary: '巡井人在旧渠发现被抹去的盐印。',
-    order: 0,
-    createdAt: now,
-    updatedAt: now,
-  } as never, { owner: 'work' })) as number
-  const chapterId = await db.chapters.add(stampNewRecord(created.scope, 'chapters', {
-    projectId: created.scope.projectId,
-    outlineNodeId: chapterOutlineId,
-    title: '第一章 断流',
-    content: '<p>巡井人在旧渠发现被抹去的盐印，并决定追查断流源头。</p>',
-    wordCount: 28,
-    status: 'final',
-    order: 0,
-    notes: '',
-    summary: '巡井人在旧渠发现被抹去的盐印。',
-    createdAt: now,
-    updatedAt: now,
-  } as never, { owner: 'work' })) as number
-  await db.storyCores.add(stampNewRecord(created.scope, 'storyCores', {
-    projectId: created.scope.projectId,
-    theme: '成长与守护',
-    centralConflict: '巡井人必须在城邦秩序与断流真相之间作出选择。',
-    plotPattern: '调查—成长—远行—回归',
-    logline: '巡井人追查正在吞噬各地水源的旧日契约。',
-    concept: '从小说拆解为文字开放世界',
-    mainPlot: '逐区追查断流源头并完成主线目标。',
-    subPlots: '各地角色、势力和地域命运故事。',
-    createdAt: now,
-    updatedAt: now,
-  } as never, { owner: 'work' }))
-  return { ...created, volumeId, chapterOutlineId, chapterId, now }
-}
-
 async function worldSelection(
   owned: Awaited<ReturnType<typeof seedCurrentProductWorld>>,
 ): Promise<TextOpenWorldCreatorSourceSelectionV1> {
@@ -120,22 +60,6 @@ async function worldSelection(
     sourceScope: owned.scope,
     localReleaseRecordId: owned.release.id!,
     expectedReleaseHash: owned.release.contentHash,
-    preview,
-  }
-}
-
-async function novelSelection(
-  novel: Awaited<ReturnType<typeof seedNovel>>,
-  selection: AdaptationSourceSelectionV1 = { mode: 'entire-work' },
-): Promise<TextOpenWorldCreatorSourceSelectionV1> {
-  const preview = await inspectTextOpenWorldCreatorNovelSourceV1({
-    sourceScope: novel.scope,
-    selection,
-  })
-  return {
-    sourceKind: 'novel',
-    sourceScope: novel.scope,
-    selection,
     preview,
   }
 }
@@ -268,15 +192,8 @@ describe('R-OPEN-WORLD5 · Creator Brief 会谈、确认与持久化', () => {
   }, 30_000)
 
   it('设置往返按会谈、产品与来源绑定精确恢复，绝不误选同 Work 的更新会谈', async () => {
-    const novel = await seedNovel(`TOW G5 Brief 精确恢复 ${crypto.randomUUID()}`)
-    const first = await startTextOpenWorldCreatorBriefSessionV1({
-      selection: await novelSelection(novel),
-      sessionKey: 'settings-first',
-    })
-    const second = await startTextOpenWorldCreatorBriefSessionV1({
-      selection: await novelSelection(novel, { mode: 'chapters', chapterIds: [novel.chapterId] }),
-      sessionKey: 'settings-second',
-    })
+    const fixture = await seedQuality005LegacyChapterBriefV1()
+    const novel = fixture.novel, first = fixture.confirmed, second = fixture.otherSession
     await db.agentConversations.update(first.conversation.id, { updatedAt: novel.now + 10 })
     await db.agentConversations.update(second.conversation.id, { updatedAt: novel.now + 20 })
 
@@ -299,34 +216,21 @@ describe('R-OPEN-WORLD5 · Creator Brief 会谈、确认与持久化', () => {
     })).resolves.toBeNull()
   }, 30_000)
 
-  it('小说来源在会谈后发生正文漂移时 fail-closed，不写 Brief 或虚假完成 Run', async () => {
-    const novel = await seedNovel(`TOW G5 Brief 小说 ${crypto.randomUUID()}`)
-    const selection = await novelSelection(novel)
-    const started = await startTextOpenWorldCreatorBriefSessionV1({
-      selection,
-      sessionKey: 'novel-source-stale',
-      createdAt: novel.now + 1,
-    })
-
-    await db.chapters.update(novel.chapterId, {
+  it('历史小说来源正文漂移仍可见，禁止新确认并保留原 Brief、Run 与回执', async () => {
+    const fixture = await seedQuality005LegacyChapterBriefV1(), novel = fixture.novel
+    const started = fixture.otherSession
+    await db.chapters.update(novel.chapters[0]!.id, {
       content: '<p>作者在会谈之后改写了来源正文，旧 Hash 不得继续使用。</p>',
       updatedAt: novel.now + 2,
     })
+    const beforeBriefs = await db.productProductionBriefs.toArray()
+    const beforeRuns = await db.agentRuns.toArray()
     await expect(confirmTextOpenWorldCreatorBriefV1({
-      session: started,
-      draft: started.draft,
-      acknowledgements: ACKNOWLEDGEMENTS,
-      confirmedAt: novel.now + 3,
-    })).rejects.toThrow(/来源|变化|stale|Hash/i)
-    expect(await db.productProductionBriefs.count()).toBe(0)
-    expect(await db.agentRuns.count()).toBe(0)
-    expect(await emptyDownstreamCounts()).toEqual({
-      builds: 0,
-      artifacts: 0,
-      releases: 0,
-      runtimeSessions: 0,
-    })
-
+      session: started, draft: started.draft, acknowledgements: ACKNOWLEDGEMENTS, confirmedAt: novel.now + 3,
+    })).rejects.toThrow(/WorldRelease|派生.*世界/)
+    expect(await db.productProductionBriefs.toArray()).toEqual(beforeBriefs)
+    expect(await db.agentRuns.toArray()).toEqual(beforeRuns)
+    expect(await emptyDownstreamCounts()).toEqual({ builds: 0, artifacts: 0, releases: 0, runtimeSessions: 0 })
     const recovered = await recoverLatestTextOpenWorldCreatorBriefSessionV1([novel.scope])
     expect(recovered).not.toBeNull()
     expect(recovered!.selection).toBeNull()

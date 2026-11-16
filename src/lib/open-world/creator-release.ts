@@ -9,6 +9,7 @@ import {
   type ProductProductionPublishReceiptV1,
 } from '../product-production/adoption'
 import { createTextOpenWorldCreatorReleaseAuthorizationV1 } from './creator-release-contract'
+import { assertTextOpenWorldNewSourceV1 } from './source-admission'
 
 export interface PreparedTextOpenWorldCreatorPublicationV1
   extends PreparedProductProductionAdoptionV1 {
@@ -32,6 +33,7 @@ export async function prepareTextOpenWorldCreatorReleaseV1(input: {
   productionId: number
   expectedBuildId?: number
 }): Promise<PreparedTextOpenWorldCreatorPublicationV1> {
+  input = structuredClone(input)
   const prepared = await prepareProductProductionAdoption(input)
   if (prepared.productType !== 'text-open-world' || !prepared.creatorRelease) {
     fail('目标Production不是通过Creator双来源生产体系生成的文字开放世界Build')
@@ -54,6 +56,8 @@ export async function publishTextOpenWorldCreatorReleaseV1(input: {
   authorization: TextOpenWorldCreatorReleaseAuthorizationV1
   receipt: ProductProductionPublishReceiptV1
 }> {
+  input = structuredClone(input)
+  assertTextOpenWorldNewSourceV1(input.prepared.creatorRelease.sourceKind, '确认发布新产品版本')
   const releaseLabel = input.releaseLabel.trim().normalize('NFC')
   if (!releaseLabel) fail('发布名称不能为空')
   if (Object.values(input.acknowledgement).some(value => value !== true)) {

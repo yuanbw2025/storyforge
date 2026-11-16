@@ -106,6 +106,7 @@ export async function seedAuthorizedTextOpenWorldCreatorBuildV1(input: {
     | 'playerRole'
     | 'playerFantasy'
     | 'protagonistMode'
+    | 'protagonistSourceResourceKey'
     | 'protagonistDirective'
     | 'coreGoal'
     | 'primaryConflict'

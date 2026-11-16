@@ -308,7 +308,7 @@ async function readDetails(scope: WorkspaceScope, worldGroupId: number | null, s
   // Legacy open-world packages do not own the vNext Action/Effect projection.
   // Only the frozen vNext package may enter system follow-up recovery.
   let recoveredFeedback: TextOpenWorldFeedbackReceiptV1 | null = null
-  if (selectedManifest.textOpenWorldVNext) {
+  if (selectedManifest.textOpenWorldVNext?.sourceManifest.kind === 'world-release') {
     recoveredFeedback = await resumeTextOpenWorldSystemWorkV1(sessionId)
     await reconcileTextOpenWorldAutomaticSavesV1({
       owner: { scope, worldGroupId },
@@ -358,7 +358,9 @@ async function readDetails(scope: WorkspaceScope, worldGroupId: number | null, s
     lastDirectionOutcome: null,
     recoveryNotice: recoveredFeedback
       ? '检测到一项已记录但未完成展示的操作；播放器已沿用原命令完成核对，没有重复提交。'
-      : '',
+      : selectedManifest.textOpenWorldVNext?.sourceManifest.kind === 'novel-source-pin'
+        ? '此存档绑定历史小说来源，当前仅供只读核验和回放；没有恢复后台任务或新增互动事件。'
+        : '',
   }
 }
 

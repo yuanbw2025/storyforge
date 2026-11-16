@@ -115,20 +115,22 @@ export function checkSettingAssertionClashes(
     .map(confirmed => ({ candidate, confirmed }))
 }
 
-export function formatCanonAssertionsContext(facts: readonly TemporalFact[]): string {
+export function canonAssertionContextRows(facts: readonly TemporalFact[]) {
+  const heading = '【世界宪法（作者已确认，生成内容不得与之矛盾）】'
   const rows = facts.filter(fact =>
     fact.status === 'confirmed'
     && isConstitutionPredicate(fact.predicate)
     && fact.sourceFingerprint != null,
-  )
-  if (!rows.length) return ''
-  return [
-    '【世界宪法（作者已确认，生成内容不得与之矛盾）】',
-    ...rows.slice(0, 80).map(fact => {
-      const spec = getFactPredicate(fact.predicate)
-      return `- ${fact.subjectName}｜${spec?.label ?? fact.predicate}：${fact.value}`
-    }),
-  ].join('\n')
+  ).slice(0, 80).map(fact => ({
+    fact,
+    text: `- ${fact.subjectName}｜${getFactPredicate(fact.predicate)?.label ?? fact.predicate}：${fact.value}`,
+  }))
+  return { heading, rows }
+}
+
+export function formatCanonAssertionsContext(facts: readonly TemporalFact[]): string {
+  const { heading, rows } = canonAssertionContextRows(facts)
+  return rows.length ? [heading, ...rows.map(row => row.text)].join('\n') : ''
 }
 
 export async function readCanonAssertions(

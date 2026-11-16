@@ -44,11 +44,11 @@ function texts(value: unknown, label: string, options: { allowEmpty?: boolean; s
   if (new Set(value).size !== value.length) throw new Error(`[motion-drama] ${label} 不得重复`)
 }
 
-function batch<T>(value: unknown, label: string, validate: (item: unknown, index: number) => asserts item is T, max = 2_000, allowEmpty = false): asserts value is T[] {
+function batch<T>(value: unknown, label: string, validate: (item: unknown, index: number) => asserts item is T, max = 2_000, allowEmpty = false, identityField: 'stableKey' | 'shotKey' = 'stableKey'): asserts value is T[] {
   if (!Array.isArray(value) || (!allowEmpty && !value.length) || value.length > max) throw new Error(`[motion-drama] ${label} 必须包含 ${allowEmpty ? '0' : '1'}～${max} 项`)
   value.forEach(validate)
-  const stableKeys = value.flatMap(item => typeof item === 'object' && item && 'stableKey' in item ? [String((item as any).stableKey)] : [])
-  if (new Set(stableKeys).size !== stableKeys.length) throw new Error(`[motion-drama] ${label} stableKey 重复`)
+  const keys = value.flatMap(item => typeof item === 'object' && item && identityField in item ? [String((item as Record<string, unknown>)[identityField])] : [])
+  if (new Set(keys).size !== keys.length) throw new Error(`[motion-drama] ${label} ${identityField} 重复`)
 }
 
 export const SERIES_KEYS = ['version', 'titlePromise', 'logline', 'coreTheme', 'emotionalPromise', 'audiencePromise', 'storyEngine', 'worldRules', 'seasonArc', 'protagonistArc', 'relationshipArcs', 'episodeArchitecture', 'hookPatterns', 'visualLanguage', 'soundLanguage', 'continuityRules', 'productionConstraints'] as const
@@ -179,8 +179,8 @@ export function parseMotionDramaCandidatePayloadV1(stage: import('../types').Mot
   if (stage === 'episode-outline') { assertMotionDramaEpisodeCandidateV1(value); return structuredClone(value) }
   if (stage === 'episode-script') { batch(value, 'ScriptScene[]', assertMotionDramaScriptSceneCandidateV1, 200); return structuredClone(value) }
   if (stage === 'shot-design') { batch(value, 'Shot[]', assertMotionDramaShotCandidateV1, 2_000); return structuredClone(value) }
-  if (stage === 'image-prompts') { batch(value, 'ImagePromptIR[]', assertMotionDramaImagePromptCandidateV1, 2_000); return structuredClone(value) }
-  if (stage === 'video-prompts') { batch(value, 'VideoPromptIR[]', assertMotionDramaVideoPromptCandidateV1, 2_000); return structuredClone(value) }
+  if (stage === 'image-prompts') { batch(value, 'ImagePromptIR[]', assertMotionDramaImagePromptCandidateV1, 2_000, false, 'shotKey'); return structuredClone(value) }
+  if (stage === 'video-prompts') { batch(value, 'VideoPromptIR[]', assertMotionDramaVideoPromptCandidateV1, 2_000, false, 'shotKey'); return structuredClone(value) }
   batch(value, 'ReviewIssue[]', assertMotionDramaReviewIssueCandidateV1, 2_000, true); return structuredClone(value)
 }
 

@@ -1,3 +1,4 @@
+import { stableRuntimeJsonV1 } from "../product/runtime-stable-json";
 import { db } from "../db/schema";
 import type {
   ProductRuntimeSession,
@@ -17,17 +18,6 @@ function stableKey(value: string, label: string): string {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(parsed)) fail(`${label}无效`);
   return parsed;
 }
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (value && typeof value === "object")
-    return `{${Object.entries(value as Record<string, unknown>)
-      .filter(([, child]) => child !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([field, child]) => `${JSON.stringify(field)}:${stableJson(child)}`)
-      .join(",")}}`;
-  return JSON.stringify(value) ?? "null";
-}
-
 function defaultConsent(hasAi: boolean): TtrpgSessionConsentPolicyV2 {
   return {
     safetyBoundariesAccepted: false,
@@ -261,7 +251,7 @@ export async function configureTtrpgSessionParticipantV2(input: {
     input.requestedByViewerKey,
     "requestedByViewerKey",
   );
-  const commandFingerprint = stableJson({
+  const commandFingerprint = stableRuntimeJsonV1({
     seatKey,
     requestedBy,
     controller: input.controller,
@@ -396,7 +386,7 @@ export async function finalizeTtrpgSessionParticipantsV2(input: {
         sessionZeroAcceptedAtSequence: input.eventSequence,
         revision: row.revision + 1,
         lastCommandId: `session-zero.${input.eventSequence}.${input.completedBy}`,
-        lastCommandFingerprint: stableJson({
+        lastCommandFingerprint: stableRuntimeJsonV1({
           eventSequence: input.eventSequence,
           completedBy: input.completedBy,
         }),
@@ -471,7 +461,7 @@ export async function carryTtrpgContinuationParticipantsV2(input: {
       sessionZeroAcceptedAtSequence: null,
       revision: current.revision + 1,
       lastCommandId: `continuation.${transitionKey}`,
-      lastCommandFingerprint: stableJson({
+      lastCommandFingerprint: stableRuntimeJsonV1({
         parentSessionId: input.parentSessionId,
         childSessionId: input.child.id,
         transitionKey,
@@ -511,7 +501,7 @@ export async function cloneTtrpgSessionParticipantsV2(input: {
       sessionId: input.child.id!,
       revision: 1,
       lastCommandId: input.parentSessionKey ? 'branch-initialization' : `branch-from.${input.parentSessionId}`,
-      lastCommandFingerprint: stableJson({
+      lastCommandFingerprint: stableRuntimeJsonV1({
         ...(input.parentSessionKey ? { parentSessionKey: input.parentSessionKey } : { parentSessionId: input.parentSessionId }),
         seatKey: row.seatKey,
       }),

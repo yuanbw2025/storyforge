@@ -23,6 +23,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execSync } from 'node:child_process'
 import ts from 'typescript'
+import { localChatMetaCategoryPositions } from './ai-call-meta.mjs'
+import { readStaticContextSources } from './ai-manual-context-sources.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const OUT = path.join(root, 'docs/AI-FUNCTIONS-MANUAL.generated.md')
@@ -70,33 +72,51 @@ function booleanValue(node) {
   return null
 }
 
-function numberValue(node, sourceFile) {
-  if (!node || !ts.isNumericLiteral(node)) return null
-  return Number(node.getText(sourceFile).replaceAll('_', ''))
-}
-
 function stringArrayValue(node) {
   if (!node || !ts.isArrayLiteralExpression(node)) return []
   return node.elements.map(stringValue).filter(value => value != null)
 }
 
 // ── ① PromptModuleKey 枚举 ──
-function extractModuleKeys() {
-  const sourceFile = parseSource('src/lib/types/prompt.ts')
-  const keys = []
-  visit(sourceFile, node => {
-    if (!ts.isTypeAliasDeclaration(node) || node.name.text !== 'PromptModuleKey') return
-    visit(node.type, child => {
-      if (ts.isLiteralTypeNode(child) && ts.isStringLiteral(child.literal)) {
-        keys.push(child.literal.text)
-      }
-    })
-  })
-  const duplicates = keys.filter((key, index) => keys.indexOf(key) !== index)
-  if (duplicates.length) {
-    throw new Error(`PromptModuleKey 重复声明: ${[...new Set(duplicates)].join(', ')}`)
+/** Read the literal fact actually bound to the exported PromptModuleKey type. */
+function readPromptModuleKeys(sourceFile) {
+  const exported = node => node.modifiers?.some(item => item.kind === ts.SyntaxKind.ExportKeyword)
+  const aliases = sourceFile.statements.filter(node => ts.isTypeAliasDeclaration(node)
+    && node.name.text === 'PromptModuleKey' && exported(node))
+  if (aliases.length !== 1) throw new Error('PromptModuleKey 必须有唯一导出声明')
+  const type = aliases[0].type
+  const inline = ts.isUnionTypeNode(type) ? [...type.types] : [type]
+  let literals
+  if (inline.every(node => ts.isLiteralTypeNode(node) && ts.isStringLiteral(node.literal))) {
+    literals = inline.map(node => node.literal)
+  } else {
+    if (!ts.isIndexedAccessTypeNode(type) || type.indexType.kind !== ts.SyntaxKind.NumberKeyword
+      || !ts.isTypeQueryNode(type.objectType) || !ts.isIdentifier(type.objectType.exprName)) {
+      throw new Error('PromptModuleKey 必须绑定字符串 union 或本文件 const 数组[number]')
+    }
+    const name = type.objectType.exprName.text
+    const bindings = sourceFile.statements.flatMap(node => ts.isVariableStatement(node) && exported(node)
+      && (node.declarationList.flags & ts.NodeFlags.Const)
+      ? [...node.declarationList.declarations].filter(item => ts.isIdentifier(item.name) && item.name.text === name)
+      : [])
+    if (bindings.length !== 1 || !bindings[0].initializer) throw new Error(`PromptModuleKey 缺少唯一 const 绑定：${name}`)
+    let value = bindings[0].initializer
+    if (ts.isAsExpression(value) && ts.isTypeReferenceNode(value.type)
+      && ts.isIdentifier(value.type.typeName) && value.type.typeName.text === 'const') value = value.expression
+    if (!ts.isArrayLiteralExpression(value) || value.elements.some(item => !ts.isStringLiteral(item))) {
+      throw new Error('PromptModuleKey const 绑定必须是纯字符串字面量数组')
+    }
+    literals = [...value.elements]
   }
+  const keys = literals.map(node => node.text)
+  if (!keys.length || keys.some(key => !key.trim())) throw new Error('PromptModuleKey 不得为空')
+  const duplicates = keys.filter((key, index) => keys.indexOf(key) !== index)
+  if (duplicates.length) throw new Error(`PromptModuleKey 重复声明: ${[...new Set(duplicates)].join(', ')}`)
   return keys
+}
+
+function extractModuleKeys() {
+  return readPromptModuleKeys(parseSource('src/lib/types/prompt.ts'))
 }
 
 // ── ② prompt 种子 ──
@@ -124,22 +144,7 @@ function extractSeeds() {
 
 // ── ③ CONTEXT_SOURCES ──
 function extractContextSources() {
-  const out = []
-  const sourceFile = parseSource('src/lib/registry/context-sources.ts')
-  visit(sourceFile, node => {
-    if (!ts.isObjectLiteralExpression(node)) return
-    const key = stringValue(objectProperty(node, 'key')?.initializer)
-    const budget = numberValue(objectProperty(node, 'budgetTokens')?.initializer, sourceFile)
-    if (!key || budget == null) return
-    out.push({
-      key,
-      label: stringValue(objectProperty(node, 'label')?.initializer) ?? '',
-      scope: stringValue(objectProperty(node, 'scope')?.initializer) ?? '',
-      layer: stringValue(objectProperty(node, 'layer')?.initializer) ?? '',
-      budget: String(budget),
-    })
-  })
-  return out
+  return readStaticContextSources(path.join(root, 'src/lib/registry/context-sources.ts'))
 }
 
 // ── ④ FIELD_REGISTRY 可写字段(target → field 列表) ──
@@ -224,7 +229,6 @@ function extractAdoptionExtensions() {
 // ── ⑤ AI 调用点 category ──
 const AI_META_FORWARDERS = new Set([
   'src/hooks/useAIStream.ts',
-  'src/lib/import/chat-with-abort.ts',
   'src/lib/reference-analysis/pipeline.ts',
 ])
 
@@ -275,6 +279,7 @@ function extractAiCalls() {
       if (ent.isDirectory()) walk(rel)
       else if (/\.(ts|tsx)$/.test(ent.name)) {
         const src = read(rel)
+        let localMetaCategories
         for (const callee of ['ai.start', 'chat', 'streamChat']) {
           for (const call of findCallRanges(src, callee)) {
             const lineStart = src.lastIndexOf('\n', call.start) + 1
@@ -293,6 +298,15 @@ function extractAiCalls() {
             if (/\bcategory\s*:/.test(call.text)) {
               dynamic.push(`${rel}:${line} · ${callee}`)
             } else {
+              // Be conservative: only prove a declared dynamic category, never
+              // infer a literal value through a metadata variable.
+              if (callee === 'chat') {
+                localMetaCategories ??= localChatMetaCategoryPositions(rel, src)
+                if (localMetaCategories.has(call.start)) {
+                  dynamic.push(`${rel}:${line} · ${callee}`)
+                  continue
+                }
+              }
               uncategorized.push(`${rel}:${line} · ${callee}`)
             }
           }

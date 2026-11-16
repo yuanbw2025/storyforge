@@ -64,7 +64,10 @@ function judgeOutput(fixtureId: string, options: { escalateIntent?: boolean; cle
 function successfulCall(options: { escalateIntent?: boolean; cleanFalsePositive?: boolean } = {}) {
   return async ({ fixture }: H4LongConsistencyVerifierCallInputV1) => ({
     output: judgeOutput(fixture.id, options),
-    usage: { inputTokens: 1_000, outputTokens: 100, durationMs: 25, costUsd: 0.01 },
+    usage: {
+      inputTokens: 1_000, outputTokens: 100, durationMs: 25, costUsd: 0.01,
+      provenance: { input: 'provider' as const, output: 'provider' as const, providerTotalTokens: 1100, cost: 'fallback-estimate' as const },
+    },
   })
 }
 
@@ -170,7 +173,10 @@ describe('R-HARNESS28 · H4 verifier runner, recovery and sealed scoring', { tim
     const failures: H4LongConsistencyRunCheckpointV1[] = []
     const call = vi.fn(async (input: Parameters<ReturnType<typeof successfulCall>>[0]) => (
       call.mock.calls.length === 1
-        ? { output: 'not-json', usage: { inputTokens: 10, outputTokens: 1, durationMs: 2, costUsd: 0 } }
+        ? { output: 'not-json', usage: {
+            inputTokens: 10, outputTokens: 1, durationMs: 2, costUsd: 0,
+            provenance: { input: 'provider' as const, output: 'provider' as const, providerTotalTokens: 11, cost: 'missing' as const },
+          } }
         : successfulCall()(input)
     ))
     const checkpoint = await runH4LongConsistencyVerifierV1(runnerInput({
@@ -181,8 +187,21 @@ describe('R-HARNESS28 · H4 verifier runner, recovery and sealed scoring', { tim
       },
     }))
     expect(call).toHaveBeenCalledTimes(2)
-    expect(failures).toHaveLength(1)
+    // Retry checkpoints retain the first failure while recording the next
+    // dispatch and its raw response before local parsing completes.
+    expect(failures.map(value => ({
+      failedAttempts: value.failures.map(failure => failure.attempt),
+      pendingAttempt: value.pendingAttempt?.attempt ?? null,
+      rawResponse: value.pendingAttempt?.response?.rawJudgeOutput ?? null,
+    }))).toEqual([
+      { failedAttempts: [1], pendingAttempt: null, rawResponse: null },
+      { failedAttempts: [1], pendingAttempt: 2, rawResponse: null },
+      { failedAttempts: [1], pendingAttempt: 2, rawResponse: judgeOutput('h4-held-01') },
+    ])
+    expect(failures.map(value => value.failures)).toEqual([checkpoint.failures, checkpoint.failures, checkpoint.failures])
+    expect(await Promise.all(failures.map(verifyH4LongConsistencyRunCheckpointV1))).toEqual([true, true, true])
     expect(failures[0].failures[0]?.code).toBe('invalid_json')
+    expect(failures[0].failures[0]?.rawJudgeOutput).toBe('not-json')
     expect(checkpoint.status).toBe('completed')
     expect(checkpoint.attempts).toEqual([{ fixtureId: 'h4-held-01', count: 2 }])
     expect(checkpoint.failures).toHaveLength(1)

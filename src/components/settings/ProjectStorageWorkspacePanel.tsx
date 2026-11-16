@@ -69,7 +69,7 @@ export default function ProjectStorageWorkspacePanel({ project, onOpenDataManage
           : `已将“${selected.name}”设为项目存储工作区。尚未写入任何文件。`,
       })
     } catch (error) {
-      setNotice({ kind: 'error', text: `保存位置失败：${(error as Error).message}` })
+      setNotice({ kind: 'error', text: `保存位置失败：${error instanceof Error ? error.message : '请重试或检查系统权限。'}` })
     } finally {
       setBusy(false)
     }

@@ -16,10 +16,15 @@ import type {
   ComicScriptBeatV1,
   ComicVisualBibleCandidateV1,
   ComicVisualSubject,
+  Character,
+  Geography,
+  WorkCharacterBinding,
   WorkspaceScope,
 } from '../types'
-import { resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
+import { assertRecordInScope, readOwnedRows, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { assertComicReadingOrderV1, assertComicVisualSubjectV1 } from './contracts'
+import { canonicalStringify } from '../agent/run/hash'
+import { comicVisualSubjectReviewSignatureV1, invalidateComicVisualReviewsInTransactionV1 } from './service'
 import {
   assertComicCandidateBatchV1,
   assertComicImageRequestCandidateV1,
@@ -218,13 +223,46 @@ export async function adoptComicPanelPlansV1(input: { scope: WorkspaceScope; exp
 }
 
 export async function adoptComicVisualBibleV1(input: { scope: WorkspaceScope; expectedAdaptationRevision: number; sourceManifestVersion: number; candidate: ComicVisualBibleCandidateV1; allowReplaceExisting?: boolean }): Promise<void> {
+  input = structuredClone(input)
   assertComicVisualBibleCandidateV1(input.candidate)
   const { scope, root } = await requireRoot(input.scope, input.expectedAdaptationRevision); await requireFresh(root)
-  return db.transaction('rw', scopeTransactionTables(db.adaptationProjects, db.adaptationSourceUnits, db.comicVisualSubjects, db.comicPanels, db.comicMediaAssets), async () => {
+  return db.transaction('rw', scopeTransactionTables(db.adaptationProjects, db.adaptationSourceUnits, db.comicVisualSubjects, db.comicPages, db.comicPanels, db.comicMediaAssets, db.workCharacterBindings, db.characters, db.geographies), async () => {
     assertRootCas(await db.adaptationProjects.get(root.id), root)
-    const key = [root.id, input.sourceManifestVersion] as [number, number]; const [units, existing] = await Promise.all([db.adaptationSourceUnits.where('[adaptationProjectId+manifestVersion]').equals(key).toArray(), db.comicVisualSubjects.where('adaptationProjectId').equals(root.id).toArray()])
+    const key = [root.id, input.sourceManifestVersion] as [number, number]
+    const [units, existing, workBindings, characters] = await Promise.all([
+      db.adaptationSourceUnits.where('[adaptationProjectId+manifestVersion]').equals(key).toArray(),
+      db.comicVisualSubjects.where('adaptationProjectId').equals(root.id).toArray(),
+      readOwnedRows<WorkCharacterBinding>(scope, 'workCharacterBindings', { owner: 'work' }),
+      readOwnedRows<Character>(scope, 'characters', { owner: 'world' }),
+    ])
+    const characterIds = new Set(characters.flatMap(character => character.id == null ? [] : [character.id]))
+    const bindings = workBindings.filter(binding => characterIds.has(binding.characterId))
+    const locationRefKeys = new Set<string>(existing.some(subject => subject.locationRefKey)
+      ? (await readOwnedRows<Geography>(scope, 'geographies', { owner: 'world' })).flatMap(geography => {
+        let locations: unknown
+        try { locations = JSON.parse(geography.locations) }
+        catch { throw new Error('[comic-production] 地点原始数据无法解析，请先核查绑定来源') }
+        if (!Array.isArray(locations)) throw new Error('[comic-production] 地点来源不是有效列表')
+        return locations.flatMap((location: unknown) => location && typeof location === 'object'
+          && 'id' in location && typeof location.id === 'string' ? [location.id] : [])
+      }) : [])
+    const owned = await Promise.all([
+      ...units.map(row => assertRecordInScope(scope, 'adaptationSourceUnits', row, { owner: 'work' })),
+      ...existing.map(row => assertRecordInScope(scope, 'comicVisualSubjects', row, { owner: 'work' })),
+    ])
+    if (owned.some(value => !value)) throw new Error('[comic-production] 视觉主体或来源越过目标 Work')
+    // Validate retained references before a candidate can change the kind or
+    // clear an invalid reference. Unbound professional subjects stay allowed.
+    for (const previous of existing) {
+      if (previous.characterId != null && !bindings.some(binding => binding.characterId === previous.characterId)) throw new Error('[comic-production] 已有角色绑定已失效或越过目标 Work/World')
+      if (previous.locationRefKey && !locationRefKeys.has(previous.locationRefKey)) throw new Error('[comic-production] 已有地点绑定已失效或越过目标 World')
+    }
     if (existing.length && !input.allowReplaceExisting) throw new Error('[comic-production] 重做视觉圣经会清除视觉条目，必须显式确认')
     const existingAssets = await db.comicMediaAssets.where('adaptationProjectId').equals(root.id).toArray()
+    if ((await Promise.all(existingAssets.map(asset => assertRecordInScope(scope, 'comicMediaAssets', asset, { owner: 'work' })))).some(value => !value)) throw new Error('[comic-production] 参考媒资越过目标 Work')
+    for (const previous of existing) {
+      if (previous.selectedMediaAssetKey && !existingAssets.some(asset => asset.stableKey === previous.selectedMediaAssetKey && asset.subjectKey === previous.stableKey)) throw new Error('[comic-production] 已选参考媒资已失效或不属于原主体')
+    }
     const nextKeys = new Set(input.candidate.subjects.map(s => s.stableKey))
     if (existingAssets.some(a => a.subjectKey && !nextKeys.has(a.subjectKey))) throw new Error('[comic-production] 移除视觉主体前请先在参考图页面清理其媒资')
     if (existing.some(s => s.status === 'locked')) throw new Error('[comic-production] 请先解锁视觉主体')
@@ -234,12 +272,19 @@ export async function adoptComicVisualBibleV1(input: { scope: WorkspaceScope; ex
       const previous = existing.find(s => s.stableKey === row.stableKey)
       if(previous && previous.kind !== row.kind && existingAssets.some(a=>a.subjectKey===row.stableKey)) throw new Error('[comic-production] 修改主体类型前请先清理其参考图')
       if (previous) Object.assign(row, {id:previous.id, characterId:row.kind==='character'?previous.characterId:null,locationRefKey:row.kind==='location'?previous.locationRefKey:null, selectedMediaAssetKey:previous.selectedMediaAssetKey, revision:previous.revision+1, createdAt:previous.createdAt})
-      assertComicVisualSubjectV1({ subject: row, adaptation: root, sourceUnitIds: new Set(unitByKey.values()), bindings: [], allowMissingExternalRef: true }); return row
+      assertComicVisualSubjectV1({ subject: row, adaptation: root, sourceUnitIds: new Set(unitByKey.values()), bindings, locationRefKeys,
+        allowMissingExternalRef: row.kind === 'character' ? row.characterId == null : row.kind === 'location' ? !row.locationRefKey : false }); return row
     })
     const panelRefs = await db.comicPanels.where('workId').equals(scope.workId).toArray(); const subjectKeys = new Set(subjects.map(row => row.stableKey))
     if (panelRefs.some(panel => [...(panel.continuityRefs ?? []), ...(panel.subjectStates ?? [])].some(ref => !subjectKeys.has(ref.subjectKey)))) throw new Error('[comic-production] 视觉圣经没有覆盖 panel 引用的 subject key')
+    const changedSubjectKeys = new Set(subjects.filter(subject => {
+      const previous = existing.find(row => row.stableKey === subject.stableKey)
+      return !previous || comicVisualSubjectReviewSignatureV1(previous) !== comicVisualSubjectReviewSignatureV1(subject)
+    }).map(subject => subject.stableKey))
+    await invalidateComicVisualReviewsInTransactionV1({ scope, adaptationProjectId: root.id, changedSubjectKeys,
+      allPanels: canonicalStringify(root.visualBible) !== canonicalStringify(input.candidate.global)
+        || root.visualBibleSourceManifestVersion !== input.sourceManifestVersion })
     await db.comicVisualSubjects.where('adaptationProjectId').equals(root.id).delete(); await db.comicVisualSubjects.bulkAdd(subjects)
-    await db.comicPanels.where('workId').equals(scope.workId).modify({visualReviewRevision:null,visualReviewBasis:null,visualReviewedAt:null})
     await db.adaptationProjects.update(root.id, { visualBible: structuredClone(input.candidate.global), visualBibleSourceManifestVersion: input.sourceManifestVersion, revision: root.revision + 1, updatedAt: now })
   })
 }

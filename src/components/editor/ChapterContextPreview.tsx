@@ -1,22 +1,22 @@
 import { CheckSquare, Square } from 'lucide-react'
-import type { OutlineNode, StateCard } from '../../lib/types'
+import type { StateCard } from '../../lib/types'
+import type { ProseGatewayAssemblyV1 } from '../../lib/prose/gateway-context'
 import { STATE_CATEGORY_LABELS } from '../../lib/types/state-card'
 
-const CATEGORY_STYLES: Record<StateCard['category'], string> = {
-  character: 'bg-blue-500/10 text-blue-400',
-  location: 'bg-green-500/10 text-green-400',
-  item: 'bg-yellow-500/10 text-yellow-400',
-  faction: 'bg-purple-500/10 text-purple-400',
-  event: 'bg-red-500/10 text-red-400',
+export type ContextPreviewOperation = 'generate' | 'continue' | 'review'
+
+const OPERATION_LABELS: Record<ContextPreviewOperation, string> = {
+  generate: '生成正文', continue: '续写正文', review: '评审基础材料',
 }
 
 interface Props {
-  worldContext: string
-  characterContext: string
-  outlineNode?: Pick<OutlineNode, 'title' | 'summary'>
+  operation: ContextPreviewOperation
+  assembly?: ProseGatewayAssemblyV1
+  error?: string
+  onOperationChange: (operation: ContextPreviewOperation) => void
+  onRefresh: () => void
   stateCards: StateCard[]
   matchedIds: number[]
-  allIds: number[]
   extraIds: number[]
   stateListExpanded: boolean
   onToggleStateList: () => void
@@ -24,40 +24,51 @@ interface Props {
 }
 
 export default function ChapterContextPreview({
-  worldContext,
-  characterContext,
-  outlineNode,
-  stateCards,
-  matchedIds,
-  allIds,
-  extraIds,
-  stateListExpanded,
-  onToggleStateList,
-  onToggleStateCard,
+  operation, assembly, error, onOperationChange, onRefresh,
+  stateCards, matchedIds, extraIds, stateListExpanded, onToggleStateList, onToggleStateCard,
 }: Props) {
+  const execution = assembly?.contextGatewayExecution
+  const packet = execution?.contextPacket
+  const stateIds = [...new Set(packet?.sourceRefs.filter(ref => ref.table === 'stateCards').map(ref => ref.recordId) ?? [])]
+  const mandatoryDossier = execution?.retrievalTrace.mandatory.some(ref => ref.resourceKey.endsWith(':consistency-dossier'))
   return (
-    <div className="mx-6 mb-3 max-h-64 overflow-y-auto rounded-xl border border-border bg-bg-elevated p-3 text-xs text-text-muted shadow-theme-sm">
-      <p className="font-medium text-text-secondary mb-1">📋 发送给 AI 的上下文：</p>
-      <div className="whitespace-pre-wrap">
-        {worldContext && <p>【世界观】{worldContext.slice(0, 500)}...</p>}
-        {characterContext && <p>【角色】{characterContext.slice(0, 300)}...</p>}
-        {outlineNode && <p>【章节大纲】{outlineNode.title}：{outlineNode.summary}</p>}
+    <section aria-label="章节上下文预览" className="mx-6 mb-3 max-h-80 overflow-y-auto rounded-xl border border-border bg-bg-elevated p-3 text-xs text-text-muted shadow-theme-sm">
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <label className="font-medium text-text-secondary">上下文用途
+          <select aria-label="上下文预览用途" value={operation} onChange={event => onOperationChange(event.target.value as ContextPreviewOperation)} className="ml-2 rounded border border-border bg-bg-base p-1">
+            {Object.entries(OPERATION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <button type="button" onClick={onRefresh} className="text-accent hover:text-accent-hover">刷新预览</button>
       </div>
+      <p>已保存资料的读取快照；正式执行会完成保存检查并重新冻结上下文。</p>
+      {operation === 'review' && <p>此处展示评审基础材料；评审面板的本轮补充要求、审校类型和专用资料在发起评审时确定。</p>}
+      {error ? <p role="alert" className="mt-2 text-warning">上下文预览失败：{error}</p>
+        : !packet ? <p role="status" className="mt-2">正在读取当前章节上下文…</p>
+          : <div className="mt-2" data-testid="context-preview-packet">
+            <p className="font-medium text-text-secondary">{OPERATION_LABELS[operation]} · 已读取状态卡 {stateIds.length} 张</p>
+            {mandatoryDossier && <p>一致性档案为必读资料，按本章时间边界纳入有效状态；整理关注卡的勾选不控制此处读取。</p>}
+            <details className="mt-1">
+              <summary>查看本次材料与来源</summary>
+              <p className="break-all">操作：{operation} · 包哈希：<code>{packet.packetHash}</code></p>
+              <p>状态卡来源 ID：{stateIds.length ? stateIds.join('、') : '无'}</p>
+              <pre className="mt-1 whitespace-pre-wrap font-sans">{packet.content}</pre>
+            </details>
+          </div>}
 
       {stateCards.length > 0 && (
         <div className="mt-2 pt-2 border-t border-border">
           <div className="flex items-center justify-between mb-1">
-            <p className="font-medium text-text-secondary">
-              📋 状态卡注入（{matchedIds.length}/{allIds.length}）
-            </p>
+            <p className="font-medium text-text-secondary">本章整理关注卡（{matchedIds.length}/{stateCards.length}）</p>
             <button
               type="button"
               onClick={onToggleStateList}
               className="text-accent hover:text-accent-hover text-xs"
             >
-              {stateListExpanded ? '收起' : '展开调整'}
+              {stateListExpanded ? '收起关注卡' : '展开整理关注卡'}
             </button>
           </div>
+          <p>仅用于本章手动整理和采纳后的章后整理。自动匹配或无匹配时的全量回退沿用现有规则，可手动追加关注卡。</p>
           {stateListExpanded && (
             <div className="space-y-1 mt-1">
               {stateCards.map(card => {
@@ -65,10 +76,12 @@ export default function ChapterContextPreview({
                 const isMatched = matchedIds.includes(cardId)
                 const isExtra = extraIds.includes(cardId)
                 return (
-                  <div key={cardId} className="flex items-center gap-1.5 cursor-pointer hover:bg-bg-hover rounded px-1 py-0.5">
+                  <div key={cardId} className="flex items-center gap-1.5 rounded px-1 py-0.5">
                     <button
                       type="button"
-                      aria-label={`状态卡：${card.entityName}`}
+                      aria-label={`整理关注卡：${card.entityName}`}
+                      aria-pressed={isMatched || isExtra}
+                      disabled={isMatched && !isExtra}
                       onClick={() => onToggleStateCard(cardId)}
                       className="flex-shrink-0"
                     >
@@ -76,14 +89,9 @@ export default function ChapterContextPreview({
                         ? <CheckSquare className="w-3.5 h-3.5 text-accent" />
                         : <Square className="w-3.5 h-3.5 text-text-muted" />}
                     </button>
-                    <span className={`px-1 py-0.5 rounded text-[10px] ${CATEGORY_STYLES[card.category]}`}>
-                      {STATE_CATEGORY_LABELS[card.category]}
-                    </span>
-                    <span className={isMatched || isExtra ? 'text-text-primary' : 'text-text-muted'}>
-                      {card.entityName}
-                    </span>
-                    {isMatched && !isExtra && <span className="text-[10px] text-accent/60">自动匹配</span>}
-                    {isExtra && <span className="text-[10px] text-warning">手动添加</span>}
+                    <span>{STATE_CATEGORY_LABELS[card.category]} · {card.entityName}</span>
+                    {isMatched && !isExtra && <span className="text-accent/60">规则匹配</span>}
+                    {isExtra && <span className="text-warning">手动追加</span>}
                   </div>
                 )
               })}
@@ -91,6 +99,6 @@ export default function ChapterContextPreview({
           )}
         </div>
       )}
-    </div>
+    </section>
   )
 }

@@ -1,0 +1,15 @@
+{
+  "schema": "storyforge.quality005.immutable-synthetic-fixture.v1",
+  "baselineCommit": "38cbcd5fa632516763f5844bff2665c3aee0003e",
+  "compressedSha256": "5b1c05b214f84ecf0d8a5da03bc70440986b5e608f64da2fb46d99029e2b23e3",
+  "decompressedSha256": "91f9eb3206dd5efe28515c45f264b7b7190297bf5061d4693aa73bccce1d9694",
+  "decompressedBytes": 1164111,
+  "actualModelCalls": 0,
+  "actualNetworkCalls": 0,
+  "humanAcceptance": false,
+  "notes": [
+    "Actual baseline public Session source verification and native Adventure/Interaction/Media commands",
+    "Test helper intentionally chooses its already-existing historical hybrid codec builder; production code untouched",
+    "Synthetic producer/quality witnesses do not prove real model quality, human acceptance or fully produced real delivery"
+  ]
+}

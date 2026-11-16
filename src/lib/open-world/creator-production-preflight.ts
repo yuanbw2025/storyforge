@@ -9,6 +9,7 @@ import type {
   TextOpenWorldCreatorProviderBindingV1,
   TextOpenWorldProductionBudgetProfileV1,
 } from '../types'
+import { TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1, isTextOpenWorldCreatorEndingCountV1 } from './creator-ending-count'
 import { PROVIDER_PRESETS } from '../types'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { resolveRequestConfig } from '../ai/client'
@@ -609,6 +610,9 @@ export async function createTextOpenWorldCreatorProductionPreflightV1(input: {
   pricing: TextOpenWorldCreatorPricingSelectionV1
 }): Promise<TextOpenWorldCreatorProductionPreflightV1> {
   const brief = await verifyTextOpenWorldCreatorBriefV1(input.brief)
+  if (!isTextOpenWorldCreatorEndingCountV1(brief.draft.scale.endings)) {
+    throw new Error('[text-open-world-preflight] ' + TEXT_OPEN_WORLD_CREATOR_ENDING_COUNT_ERROR_V1)
+  }
   const current = await currentProviderBinding(input)
   const blockers: string[] = [...current.blockers]
   const warnings: string[] = []

@@ -35,11 +35,15 @@
 
 `AdventureContentV1` 暂时保留给旧文字冒险发布和文字开放世界兼容层。文字开放世界必须继续显式要求 V1；V2 私域状态不得被它复用。V1 只能在 V2 发布、运行、存档和迁移完成后按证据收口。
 
+新文字冒险预览、发行和装配产物必须用正式行动共享的版本化骰式解析器核验执行支持。旧冻结 V1/V2 包保持原表达式、hash 与 lineage；不支持的随机行动显示明确限制，其他合法行动及既有读取、重放继续可用。导入恢复先核验原冻结预览，再与独立重建的完整内容和绑定比较，不能借恢复创建新预览或跳过原完整性校验。失败候选保留原文及原岗位错误，不改写骰式或自动重发。
+
 ## 4. 当前工程基座与已确认缺口
 
 当前代码已经具备 `AdventureContentV2` 严格合同、确定性行动/事件/随机检查、产品会话与存档、Build/ProductRelease、共享媒资适配器、基础生产工作台和浏览器玩家。这些能力证明“受治理生产工件可以被编译并运行”，仍值得复用。
 
 专业生产底座已登记 19 个独立岗位，每个岗位只挂载自己的核心 Skill；叙事弧、结局路线、主支线、任务脚本、分场正文、对白、连续性、媒资、自动游玩和真人试玩都有独立 Run Contract、严格 Artifact 与确定性装配边界。完整主线不再压成单任务单阶段；结局资格由互斥、完备且可穷举验证的持久决定条件裁决，不再由编译器按数组前缀猜测。角色系统 Artifact 也必须逐字覆盖冻结 Brief 的全部属性、技能和装备槽。任务路线、技能成长、物品操作、装备、地图、旅程、存档、分支和结局回顾已进入正式播放器与事件权威链路。
+
+主线任务地点冲突的恢复必须从该次审查实际使用的同轮主线与地图工件重算，核对 owner、接收状态和内容 hash。证据缺失或无法重现冲突时停止恢复；证据有效时重新生成主线及其依赖并再次审查，不能只重跑审查器。仅修正主线文字且没有其他媒资阻塞时保留冻结地点与既有媒资计划。
 
 技术黄金路径已经在受控 Provider 输出下闭合：同一次正式 Production 从冻结世界与授权 Brief 进入专业 DAG，完成剧情/任务/媒资工件、装配、质量门、可玩 Preview、主线通关、不可变发布和含媒资分发包导出；该同一分发包随后原样进入隔离的新 Work，复验 Release/hash/媒资并再次从开局通到结局。独立浏览器 E2E 另验证实际文件下载、全新 Work 上传、刷新恢复、存档分支、双结局和删除生命周期。受控输出只用于隔离外部模型波动，这一结论是“工程路径可重复跑通”，不是“真实内容质量已达社区推荐”。
 
@@ -55,6 +59,8 @@
 
 工作区、页面或存档切换后，旧读取的结果、错误和媒资 resolver 不得覆盖当前页面。作品库逐份核验存档通关摘要，避免同时重放全部存档；损坏存档仍保留既有错误与恢复入口。本路径不新增 AI 读写、表或迁移，继续由 Work 拥有制作、媒资、Build/Release 和运行数据，只读引用冻结世界版本。
 
+自由输入与结果叙述的异步请求同时绑定工作区、存档和本次页面请求。切换或离开页面只解除显示绑定，原运行的响应与候选继续保存在原 Harness 中，返回原存档后可显式恢复，不自动重发模型请求。迟到的结果、错误或结束回调不得覆盖后续请求；候选采用、取消及恢复须核对当前存档，确定性行动和原有过期校验继续生效。
+
 - 契约：`src/lib/types/adventure.ts`、`src/lib/types/adventure-v2.ts`
 - 内容校验与确定性规则：`src/lib/adventure/runtime.ts`
 - 正式生产 Brief、Artifact 与编译：`src/lib/adventure/production-brief.ts`、`src/lib/adventure/production-artifacts.ts`、`src/lib/adventure/production-compiler.ts`
@@ -62,5 +68,5 @@
 - 生产 DAG 与执行器：`src/lib/product-production/plan.ts`、`src/lib/product-production/production-executor.ts`
 - RuntimePackage 边界：`src/lib/product-production/runtime-package.ts`
 - 运行组合根：`src/lib/product/runtime-product-adapters.ts`、`src/lib/product/runtime-instances.ts`
-- 作者工作台：`src/components/product/ProductProductionStudio.tsx`、`src/components/text-game/TextAdventureProductionWizard.tsx`
+- 作者工作台：`src/components/product/ProductProductionStudio.tsx`、`src/components/text-game/TextAdventureProductionWizard.tsx`。逐图审查及已校验原图的展示位于 `src/components/product/TextAdventureMediaReview.tsx`。上传、返修、作者确认和发布仍经工作台的生产命令完成。
 - 玩家入口：`src/stores/adventure-game-player.ts`、`src/components/text-game/AdventureGamePlayer.tsx`

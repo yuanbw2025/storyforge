@@ -1,3 +1,4 @@
+import { keepIntegrityReadAlive } from '../db/transaction-integrity'
 import { estimateTokens } from '../ai/context-budget'
 import { buildGenreConstraintContext } from '../ai/genre-metadata'
 import { buildStylePromptInjection } from '../ai/writing-styles'
@@ -22,10 +23,10 @@ async function projection(scope: FrozenResourceScopeV1) {
   await canonScopeFingerprintV1(scope)
   const work = await db.works.get(scope.workId!)
   if (!work || work.projectId !== scope.projectId || work.worldId !== scope.worldId) throw new Error('作品意图不属于当前 Work。')
-  const sourceRefs: ContextSourceRefV1[] = await Promise.all(FIELDS.map(async field => ({
+  const sourceRefs: ContextSourceRefV1[] = await keepIntegrityReadAlive(Promise.all(FIELDS.map(async field => ({
     table: 'works', recordId: work.id!, field, revision: work.updatedAt,
     contentHash: await sha256Text(exact(work[field])),
-  })))
+  }))))
   const content = [
     '【作者确认的作品意图与文风】这些是当前作品的写作偏好，不是已发生的故事事实。',
     `作品：${work.title}`,
@@ -40,8 +41,8 @@ async function projection(scope: FrozenResourceScopeV1) {
   const descriptor: ContextResourceDescriptorV1 = {
     version: 1, sourceKey: SOURCE_KEY, resourceKey: workAuthoringIntentResourceKeyV1(work), kind: 'reference',
     title: `作品意图 · ${work.title}`, shortSummary: summary.slice(0, 300), authority: 'confirmed-evidence',
-    contentRevision: work.updatedAt, contentHash: await sha256Text(content),
-    policyRevision: 1, policyHash: await hashCanonicalValue({ sourceKey: SOURCE_KEY, providerVersion: PROVIDER_VERSION, fields: FIELDS }),
+    contentRevision: work.updatedAt, contentHash: await keepIntegrityReadAlive(sha256Text(content)),
+    policyRevision: 1, policyHash: await keepIntegrityReadAlive(hashCanonicalValue({ sourceKey: SOURCE_KEY, providerVersion: PROVIDER_VERSION, fields: FIELDS })),
     scope: { projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId },
     relations: [], sourceRefs,
     tokenEstimate: { index: estimateTokens(summary.slice(0, 300)), summary: estimateTokens(summary.slice(0, 300)), focused: estimateTokens(content), full: estimateTokens(content), original: estimateTokens(content) },

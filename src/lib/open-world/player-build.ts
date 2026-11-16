@@ -1,3 +1,4 @@
+import { captureTextOpenWorldTaskExecutionInputV1, assertTextOpenWorldBuildNewWorkV1 } from './source-admission'
 import type { ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
 import { db } from '../db/schema'
@@ -590,6 +591,9 @@ export function createTextOpenWorldPlayerBuildExecutorV1(options: {
   const runModel = options.runModel ?? defaultModelRunner
   const now = options.now ?? Date.now
   return async execution => {
+    execution = captureTextOpenWorldTaskExecutionInputV1(execution)
+    await assertTextOpenWorldBuildNewWorkV1({ scope: execution.scope, productionId: execution.productionId,
+      buildId: execution.buildId, operation: '执行新的文字开放世界制作任务' })
     if (execution.signal.aborted) throw new DOMException('Aborted', 'AbortError')
     if (execution.task.taskKey !== 'p4.player-build'
       || execution.task.skillId !== SKILL_ID

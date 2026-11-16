@@ -1,6 +1,6 @@
 import { db } from '../db/schema'
 import { importCommunityProductDistributionV1, verifyProductDistributionBundleV2, type ProductDistributionBundleV2 } from '../product-platform/distribution-bundle'
-import { createWorkspace } from '../workspace/create-workspace'
+import { createWorkspaceForProductDistributionV1 } from '../product-platform/workspace-install'
 import { createProductRuntimeInstance } from '../product/runtime-instances'
 import { resolveScope } from '../workspace/scope'
 
@@ -32,6 +32,7 @@ export async function readCommunityTtrpgCatalogV1(signal?: AbortSignal) {
   return parseCommunityTtrpgCatalogV1(JSON.parse(raw))
 }
 export async function readCommunityTtrpgBundleV1(game: CommunityTtrpgGameV1, signal?: AbortSignal): Promise<ProductDistributionBundleV2> {
+  game = structuredClone(game)
   const response = await fetch(`${import.meta.env.BASE_URL}${game.bundlePath}`, { signal })
   if (!response.ok) throw new Error('游戏内容暂时不可用，请稍后重试')
   const raw = await response.text()
@@ -43,15 +44,17 @@ export async function readCommunityTtrpgBundleV1(game: CommunityTtrpgGameV1, sig
 const starts = new Map<string, Promise<number>>()
 /** The click creates a product-owned local copy and a separate runtime; no authored world is imported. */
 export async function startCommunityTtrpgGameV1(game: CommunityTtrpgGameV1, bundle: ProductDistributionBundleV2): Promise<number> {
+  game = structuredClone(game)
+  bundle = structuredClone(bundle)
   if (starts.has(game.key)) return starts.get(game.key)!
   const start = async () => {
     const verified = await verifyProductDistributionBundleV2(bundle)
     if (verified.bundleHash !== game.bundleHash || verified.productRelease.manifest.productType !== 'ttrpg') throw new Error('社区游戏版本不匹配')
-    let release = await db.productReleases.where('contentHash').equals(bundle.productRelease.contentHash)
+    let release = await db.productReleases.where('contentHash').equals(verified.productRelease.contentHash)
       .filter(row => row.distributionProvenance?.source === 'community-bundle').first()
     const scope = release ? await resolveScope({ scope: { projectId: release.projectId, workId: release.workId, worldId: release.worldId } })
-      : (await createWorkspace({ name: `游玩 · ${game.title}`, description: '社区游戏的本地副本与独立存档。', genres: ['interactive-fiction'],
-        status: 'drafting', targetWordCount: 1 }, { purpose: 'independent-work', kind: 'ttrpg' })).scope
+      : (await createWorkspaceForProductDistributionV1({ name: `游玩 · ${game.title}`, description: '社区游戏的本地副本与独立存档。', genres: ['interactive-fiction'],
+        status: 'drafting', targetWordCount: 1 }, { bundle: verified, expectedBundleHash: game.bundleHash, expectedProductType: 'ttrpg' })).workspace.scope
     release ??= await importCommunityProductDistributionV1({ scope, bundle: verified, catalogKey: game.key,
       license: { licenseId: 'MIT', licenseVersion: '1', allowOfflineExport: true, allowRemix: true, commercialReuse: true,
         requiresAttribution: true, termsUrl: 'https://github.com/yuanbw2025/storyforge/blob/main/LICENSE' }, attribution: ['StoryForge 社区原创游戏'] })

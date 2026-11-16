@@ -1,3 +1,4 @@
+import { assertTextOpenWorldSessionNewWorkV1 } from './source-admission'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import {
   createAgentRunCheckpointV1,
@@ -603,6 +604,8 @@ export async function generateTextOpenWorldRuntimeQuestPackagingV1(input: {
   signal?: AbortSignal
   onRunCreated?: (runId: number) => void | Promise<void>
 }): Promise<TextOpenWorldRuntimeQuestPackagingPresentationV1> {
+  input = { ...input, scope: structuredClone(input.scope), ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }) }
+  await assertTextOpenWorldSessionNewWorkV1({ scope: input.scope, sessionId: input.productRuntimeSessionId, operation: '新运行模型请求' })
   if (!input.runAI && !input.aiConfig) fail('provider', '缺少AI配置')
   const initialSurface = await loadSurface(input)
   const boundary = await captureOpenWorldRuntimeHarnessBoundaryV1({
@@ -674,6 +677,7 @@ export async function generateTextOpenWorldRuntimeQuestPackagingV1(input: {
     const output = input.runAI
       ? await input.runAI(messages, input.signal)
       : await executeTextOpenWorldRuntimeAISkillV1({
+          scope: input.scope, productRuntimeSessionId: input.productRuntimeSessionId,
           skillId: 'prose.text-open-world-runtime-quest-packaging',
           executionBinding,
           messages,

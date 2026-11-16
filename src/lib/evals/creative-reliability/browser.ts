@@ -11,10 +11,9 @@ import { AgentTeamBudgetTracker } from '../../agent/team-budget'
 import { db } from '../../db/schema'
 import { adopt } from '../../registry/adopt'
 import { assembleContext } from '../../registry/assemble-context'
-import { cascadeDeleteProject } from '../../registry/lifecycle'
 import type { AIConfig, ChatMessage, Project, WorkspaceScope } from '../../types'
 import type { CreativeReliabilityFixtureV1 } from './fixtures'
-import { createWorkspace } from '../../workspace/create-workspace'
+import { createOwnedEvalWorkspaceV1, cleanupOwnedEvalWorkspaceV1, cleanupOwnedEvalWorkspacesV1, withEvalWorkspaceRunLeaseV1, type EvalWorkspaceRunLeaseV1, type EvalWorkspaceOwnerV1 } from '../workspace-ownership'
 import {
   CREATIVE_RELIABILITY_GENERATOR_PROMPT_VERSION_V1,
   CREATIVE_RELIABILITY_BASELINE_PROMPT_VERSION_V1,
@@ -39,6 +38,7 @@ const CREL_PROJECT_PREFIX = '[CREL-EVAL] '
 const CALL_TIMEOUT_MS = 180_000
 
 interface CreativeReliabilityWorkspaceV1 {
+  evalOwner: EvalWorkspaceOwnerV1
   project: Project
   scope: WorkspaceScope
 }
@@ -187,90 +187,90 @@ function assertSeedAdoption(
   ) throw new Error(`CREL ${target} 夹具未通过正式采纳入口`)
 }
 
-async function seedWorkspace(fixture: CreativeReliabilityFixtureV1): Promise<CreativeReliabilityWorkspaceV1> {
-  const created = await createWorkspace({
+async function seedWorkspace(fixture: CreativeReliabilityFixtureV1, runId: string, lease: EvalWorkspaceRunLeaseV1): Promise<CreativeReliabilityWorkspaceV1> {
+  const created = await createOwnedEvalWorkspaceV1({
+    suite: 'creative-reliability', runId, lease, workspace: {
     name: `${CREL_PROJECT_PREFIX}${fixture.id} ${fixture.projectName}`,
     genres: [fixture.genre],
     description: 'CREL 隔离评测项目；运行后按 PROJECT_TABLES 生命周期清理。',
     status: 'drafting',
     targetWordCount: 100_000,
-  }, {
+    }, options: {
     purpose: 'independent-work',
     kind: 'novel',
     novelProfile: 'long',
+    },
   })
-  const { scope } = created
-  const projectId = scope.projectId
-  if (fixture.worldOrigin) {
-    assertSeedAdoption('worldviews', await adopt({
-      projectId,
-      scope,
-      target: 'worldviews',
-      mode: 'replace',
-      data: { worldOrigin: fixture.worldOrigin },
-    }), 1)
+  try {
+    const { scope } = created
+    const projectId = scope.projectId
+    if (fixture.worldOrigin) {
+      assertSeedAdoption('worldviews', await adopt({
+        projectId,
+        scope,
+        target: 'worldviews',
+        mode: 'replace',
+        data: { worldOrigin: fixture.worldOrigin },
+      }), 1)
+    }
+    if (fixture.worldRules) {
+      assertSeedAdoption('worldRulesProfiles', await adopt({
+        projectId,
+        scope,
+        target: 'worldRulesProfiles',
+        mode: 'replace',
+        data: { entries: {}, customNodes: [], globalNote: fixture.worldRules },
+      }), 1)
+    }
+    if (fixture.theme || fixture.centralConflict || fixture.logline || fixture.mainPlot) {
+      assertSeedAdoption('storyCores', await adopt({
+        projectId,
+        scope,
+        target: 'storyCores',
+        mode: 'replace',
+        data: {
+          theme: fixture.theme,
+          centralConflict: fixture.centralConflict,
+          logline: fixture.logline,
+          mainPlot: fixture.mainPlot,
+        },
+      }), 1)
+    }
+    if (fixture.characters.length) {
+      assertSeedAdoption('characters', await adopt({
+        projectId,
+        scope,
+        target: 'characters',
+        mode: 'add-many',
+        data: fixture.characters.map(character => ({
+          name: character.name,
+          roleWeight: character.role === 'supporting' ? 'secondary' : 'main',
+          moralAxis: 'neutral',
+          orderAxis: 'neutral',
+          shortDescription: character.background,
+          appearance: '',
+          personality: character.personality,
+          background: character.background,
+          motivation: character.motivation,
+          abilities: '',
+          relationships: '[]',
+          arc: '',
+        })),
+      }), fixture.characters.length)
+    }
+    const project = await db.projects.get(projectId)
+    if (!project) throw new Error('CREL 隔离项目创建失败')
+    return { project, scope, evalOwner: created.evalOwner }
+  } catch (cause) {
+    try { await cleanupOwnedEvalWorkspaceV1(created.evalOwner, lease) }
+    catch (cleanupCause) { throw Object.defineProperty(new Error('评测夹具初始化失败，隔离清理未完成；保留运行所有权记录。'), 'cause', { value: { seed: cause, cleanup: cleanupCause }, configurable: true, writable: true }) }
+    throw cause
   }
-  if (fixture.worldRules) {
-    assertSeedAdoption('worldRulesProfiles', await adopt({
-      projectId,
-      scope,
-      target: 'worldRulesProfiles',
-      mode: 'replace',
-      data: { entries: {}, customNodes: [], globalNote: fixture.worldRules },
-    }), 1)
-  }
-  if (fixture.theme || fixture.centralConflict || fixture.logline || fixture.mainPlot) {
-    assertSeedAdoption('storyCores', await adopt({
-      projectId,
-      scope,
-      target: 'storyCores',
-      mode: 'replace',
-      data: {
-        theme: fixture.theme,
-        centralConflict: fixture.centralConflict,
-        logline: fixture.logline,
-        mainPlot: fixture.mainPlot,
-      },
-    }), 1)
-  }
-  if (fixture.characters.length) {
-    assertSeedAdoption('characters', await adopt({
-      projectId,
-      scope,
-      target: 'characters',
-      mode: 'add-many',
-      data: fixture.characters.map(character => ({
-        name: character.name,
-        roleWeight: character.role === 'supporting' ? 'secondary' : 'main',
-        moralAxis: 'neutral',
-        orderAxis: 'neutral',
-        shortDescription: character.background,
-        appearance: '',
-        personality: character.personality,
-        background: character.background,
-        motivation: character.motivation,
-        abilities: '',
-        relationships: '[]',
-        arc: '',
-      })),
-    }), fixture.characters.length)
-  }
-  const project = await db.projects.get(projectId)
-  if (!project) throw new Error('CREL 隔离项目创建失败')
-  return { project, scope }
 }
 
-async function cleanupWorkspace(projectId: number): Promise<void> {
-  const project = await db.projects.get(projectId)
-  if (!project) return
-  if (!project.name.startsWith(CREL_PROJECT_PREFIX)) throw new Error('拒绝清理非 CREL 评测项目')
-  await cascadeDeleteProject(projectId)
-}
-
-export async function cleanupStrandedCreativeReliabilityWorkspacesV1(): Promise<number> {
-  const projects = await db.projects.filter(project => project.name.startsWith(CREL_PROJECT_PREFIX)).toArray()
-  for (const project of projects) if (project.id != null) await cleanupWorkspace(project.id)
-  return projects.length
+/** Unknown legacy workspaces have no deletion authority and are retained. */
+export async function cleanupStrandedCreativeReliabilityWorkspacesV1(runId?: string): Promise<number> {
+  return cleanupOwnedEvalWorkspacesV1({ suite: 'creative-reliability', runId })
 }
 
 async function baselineGeneration(input: {
@@ -536,24 +536,28 @@ export function createCreativeReliabilityBrowserDependenciesV1(input: {
   generatorConfig: AIConfig
   verifierConfig: AIConfig
 }): CreativeReliabilityEvalRunDependenciesV1 {
+  const fallbackRunId = `creative-reliability-call-${crypto.randomUUID()}`
   return {
     generate: async request => {
-      const workspace = await seedWorkspace(request.fixture)
-      try {
-        return request.variant === 'baseline-direct'
-          ? await baselineGeneration({
-              ...request,
-              config: input.generatorConfig,
-              workspace,
-            })
-          : await creativeGeneration({
-              ...request,
-              config: input.generatorConfig,
-              workspace,
-            })
-      } finally {
-        await cleanupWorkspace(workspace.scope.projectId)
-      }
+      const runId = request.evalRunId ?? fallbackRunId
+      return withEvalWorkspaceRunLeaseV1({ suite: 'creative-reliability', runId, lease: request.evalRunLease }, async lease => {
+        const workspace = await seedWorkspace(request.fixture, runId, lease)
+        try {
+          return request.variant === 'baseline-direct'
+            ? await baselineGeneration({
+                ...request,
+                config: input.generatorConfig,
+                workspace,
+              })
+            : await creativeGeneration({
+                ...request,
+                config: input.generatorConfig,
+                workspace,
+              })
+        } finally {
+          await cleanupOwnedEvalWorkspaceV1(workspace.evalOwner, lease)
+        }
+      })
     },
     verify: request => verification({
       ...request,

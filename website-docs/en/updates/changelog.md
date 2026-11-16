@@ -1,5 +1,48 @@
 # Changelog
 
+## 2026-11-16 · Website feedback follow-ups
+
+- Feedback now supports searching existing issues, reading issue text and comments, explicitly appending evidence and opening receipts. Creation and attachments remain available. Request IDs prevent duplicate writes; check the issue after an unknown outcome. GitHub identity and management permissions remain on GitHub. See the [feedback center](/en/feedback/) for steps and Agent API details.
+
+## November 15, 2026 · v4.0.7 downloads and source startup checks
+
+- v4.0.7 was published on November 13. The installation guide now lists current Windows, Mac and Android filenames and upgrade steps. See [compatibility](/en/updates/compatibility) for database v14, backup v18 and the fixed source revision.
+- On Windows, use `git clone -c core.longpaths=true` to enable repository long paths before checkout. If key configuration or entry files are missing, `npm run dev` stops and lists them. Retain the original folder and local edits, then download into a new short-path directory. Complete source ZIPs require no `.git`. See [installation](/en/getting-started/install), based on [#448](https://github.com/yuanbw2025/storyforge/pull/448).
+- This review covers `ff30400a` through `7ccc1d10`. #447/#449 adjust release regression checks; #450/#451 archive traffic. They are not additional product capabilities. See [development status](/en/updates/development-status) for retained local branches.
+
+## November 13, 2026 · Adoption, backup and interactive recovery repairs
+
+- Local-file synchronization checks actual content and retains external bytes before writing back. Bundled examples cover low-frame-rate movement and resource checks. See [workspace](/en/features/memory-workspace), [examples](/en/guides/examples) and [import](/en/guides/import).
+- Longform/nodes: saved detailed-outline and character adoption, no repeated outline appends during reconciliation, immediate isolation of old revision actions on chapter switches, and safe zero-width search through emoji. See [writing](/en/features/longform/writing), [continuity](/en/features/longform/continuity), [nodes](/en/features/nodes).
+- Data/world sources: strict backup import, forward-parent recovery, same-name workspace snapshot isolation and visible automatic-backup failures. Reference parsing restores original attempts and requires author adoption; world sources and disabled material follow their actual intended use. See [backup](/en/guides/backup-restore), [references](/en/features/longform/references), [world engine](/en/features/world-engine).
+- Comics/motion drama: damaged-image decoding checks, repeated visual review after substantive setting edits, complete shot-prompt coverage, concurrent episode protection and frozen reference-package validation. See [comics](/en/features/comic), [motion drama](/en/features/motion-drama).
+- Interactive production/runtime: saved chat images can complete verification; long replies and late memories retain original saves. Protagonist/NPC target/ending-count checks, continuation ownership, pause recovery and observed usage are preserved. See [open world](/en/features/interactive/open-world), [character chat](/en/features/interactive/character-chat), [TTRPG](/en/features/interactive/ttrpg), [text adventure](/en/features/interactive/text-adventure).
+- Guides also cover Fountain dialogue export, AVG checkpoint saving, world-draft switching, late model catalogs and measured versus estimated usage. Data formats are in [compatibility](/en/updates/compatibility), with uncommitted integration residues in [development status](/en/updates/development-status).
+
+This review follows actual product changes in main `66dc20d7…c101170c`; each guide links its merged PRs and historical text remains.
+
+
+
+
+
+## November 11, 2026 · Outline review, batch details and optional diagnostics
+
+[PR #303](https://github.com/yuanbw2025/storyforge/pull/303) merged as `5420f854`. Outline diagnosis displays empty-response, invalid-report and call errors while retaining raw responses. Selective rewriting checks the real source, preview and final patch, preserving unselected content verbatim. See [outlines and prose](/en/features/longform/writing).
+
+[PR #301](https://github.com/yuanbw2025/storyforge/pull/301) merged as `bc18dc84`, integrating history-bound deletion protection, explicit batch-outline adoption, desktop model connections, new Doubao defaults/retirement notices and the empty-save TTRPG selection-loop repair. General settings add an optional recent-operation trace that defaults to off. See [troubleshooting](/en/guides/troubleshooting) for preview, controls and basic-summary fallback. Formal installers and pending branches are tracked in [compatibility](/en/updates/compatibility) and [development status](/en/updates/development-status).
+
+## November 10, 2026 · Community submissions and quality repairs
+
+Community sharing [#234](https://github.com/yuanbw2025/storyforge/pull/234) merged as `b1a4bf65`. Select novel or existing work-analysis content, inspect the exact public preview, confirm rights and submit. See [sharing steps](/en/features/longform/references#sharing-novels-and-book-analysis-publicly) for review status, withdrawal and appeals.
+
+[#255](https://github.com/yuanbw2025/storyforge/pull/255) and [#256](https://github.com/yuanbw2025/storyforge/pull/256) merged as `924d3f37` and `79e30c69`. They add interrupted-save/adoption recovery, node field versions, failed comic/motion-drama tasks, root-level chapter exports and deletion protection after cancelling backup. Open-world production from a novel first derives and seals a world draft. TTRPG room cancellation/timeouts, embedding-response validation, duplicate history-generation prevention, map zoom precision and preservation of newer feedback edits are also updated. Product guides cover the workflows. See [development status](/en/updates/development-status) for pending follow-ups.
+
+## November 3, 2026 · Formal release and continuity evidence
+
+- Formal v4.0.5 was published on October 30, including editing recovery, chapter instructions, model configuration and merged product updates. See [compatibility](/en/updates/compatibility) for downloads, fixed source and data formats. Export a complete backup before updating in the original data environment.
+- [PR #246](https://github.com/yuanbw2025/storyforge/pull/246) merged November 2 as `501e8548`: source reads bind frozen identities, continuity reports reject overlapping repeated quotes as unique evidence, and two regression checks are strengthened. See [continuity](/en/features/longform/continuity).
+- Further quality repairs, community sharing, empty TTRPG sessions and model-default branches remain unmerged; see [development status](/en/updates/development-status). Dependencies and equivalent patches are deduplicated rather than counted as separate features.
+
 ## October 30, 2026 · Longform save acknowledgement and recovery
 
 - [PR #215](https://github.com/yuanbw2025/storyforge/pull/215) merged as `f73623b1`. Check saving indicators when editing work details, characters, settings and outlines; failed saves retain input for explicit retry. Save prose candidates before reload; formal prose still requires adoption. See [planning](/en/features/longform/planning) and [continuity](/en/features/longform/continuity).

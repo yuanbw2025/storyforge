@@ -7,20 +7,12 @@ import ShowcaseNotice from '../showcase/ShowcaseNotice'
  */
 import { useState } from 'react'
 import { Sparkles, Loader2 } from 'lucide-react'
-import { useAIConfigStore } from '../../stores/ai-config'
+import { hasUnmatchedSessionCredentialV1, useAIConfigStore } from '../../stores/ai-config'
 import { useProjectStore } from '../../stores/project'
 import { ensureChunkEmbeddings, rebuildProjectNarrativeSummaries, rebuildProjectRetrievalChunks } from '../../lib/retrieval/retrieval'
 import { isEmbeddingReady } from '../../lib/ai/adapters/embedding-adapter'
-import { hasLocalProviderProxy } from '../../lib/ai/proxy-endpoints'
+import { EMBEDDING_PROXY_ENDPOINTS as PROXY_PAIRS, hasLocalProviderProxy } from '../../lib/ai/proxy-endpoints'
 import type { EmbeddingConfig } from '../../lib/types'
-
-// 本地代理 ↔ 直连 地址对（与聊天配置同套路：本地运行用代理绕 CORS，线上部署用直连）。
-const PROXY_PAIRS: Array<{ proxy: string; direct: string }> = [
-  { proxy: '/siliconflow-proxy/v1', direct: 'https://api.siliconflow.cn/v1' },
-  { proxy: '/qwen-proxy/compatible-mode/v1', direct: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
-  { proxy: '/glm-proxy/api/paas/v4', direct: 'https://open.bigmodel.cn/api/paas/v4' },
-  { proxy: '/openai-proxy/v1', direct: 'https://api.openai.com/v1' },
-]
 
 // 开发模式使用已登记的本地代理；生产预设在作者点击时改用对应直连地址。
 const PRESETS: Array<{ label: string; note: string; cfg: Partial<EmbeddingConfig> }> = [
@@ -153,6 +145,9 @@ function EmbeddingConfigCardFull() {
             <label className="block text-xs text-text-secondary mb-1">API Key <span className="text-text-muted">(本地 Ollama 可留空)</span></label>
             <input type="password" value={embedding.apiKey} onChange={e => setEmbeddingConfig({ apiKey: e.target.value })}
               placeholder="sk-..." className="w-full px-3 py-1.5 bg-bg-base border border-border rounded text-text-primary text-xs focus:outline-none focus:border-accent" />
+            {hasUnmatchedSessionCredentialV1('embedding') && (
+              <p className="mt-2 text-xs text-text-secondary" role="status">临时 API Key 未能与当前配置匹配，请确认嵌入服务地址后重新填写。</p>
+            )}
           </div>
           <p className="text-[11px] text-text-muted">
             语义向量幂等可续跑;新写章节在接受时会自动建索引。约百万字嵌一次,云端约 ¥0.2、本地免费。

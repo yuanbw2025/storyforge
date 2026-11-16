@@ -1,3 +1,4 @@
+import { evaluateCurrentProductEntryV1 } from '../../lib/product/product-catalog'
 import SourceRunFailure from './SourceRunFailure'
 import {useEffect, useRef, useState} from 'react'
 import type {WorkspaceScope} from '../../lib/types'
@@ -13,6 +14,7 @@ export default function SourceSuggestions(props: {
   labels: Map<string, string>
   actors: Array<{key: string; label: string; knownFragmentKeys: string[] | null}>
 }) {
+  const catalogAllowsAuthoring = evaluateCurrentProductEntryV1('upper.character-interaction').enterable
   const config = useAIConfigStore(state => state.config)
   const [view, setView] = useState<ChatSourceReviewRunViewV1 | null>(null)
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
@@ -46,14 +48,14 @@ export default function SourceSuggestions(props: {
     <h5>原文整理建议</h5>
     <p>勾选下方想讨论的资料，一次最多12项。AI 会解释用途并提示秘密、时态等风险；引用可对照原文，解释仍需你判断。建议不会修改资料或知情范围。</p>
     <p>已选 {props.fragmentKeys.length} 项。以已保存的方案为依据。</p>
-    <label>整理视角<select aria-label="整理视角" disabled={props.disabled || busy || unfinished} value={actorKey} onChange={event => setActorKey(event.target.value)}>
+    <label>整理视角<select aria-label="整理视角" disabled={(props.disabled || busy || unfinished) || !catalogAllowsAuthoring} value={actorKey} onChange={event => setActorKey(event.target.value)}>
       <option value="">作者完整审查</option>{props.actors.map(row => <option value={row.key} key={row.key}>仅按{row.label}已知资料整理</option>)}
     </select></label>
     {actorKey && <p>只读取该角色已获准知道的所选原文；不传入作者隐情、发现条件或未公开的人物称呼。结果仍供作者检查，不会自动进入聊天。</p>}
     {actorUnavailable ? <p role="status">请先确认并保存资料知情范围，再按角色视角整理。</p>
       : unread.length > 0 && <p role="status">所选 {unread.length} 项不在该角色已保存的知情范围内，请取消选择：{unread.map(key => props.labels.get(key) ?? '资料片段').join('、')}。</p>}
     {!isAIConfigReady(config) && <p>配置全局 AI 后可生成建议，仍可直接手动检查资料。</p>}
-    <button type="button" className="lf-action" disabled={props.disabled || busy || unfinished || actorUnavailable || unread.length > 0 || !isAIConfigReady(config) || !props.fragmentKeys.length || props.fragmentKeys.length > 12}
+    <button type="button" className="lf-action" disabled={(props.disabled || busy || unfinished || actorUnavailable || unread.length > 0 || !isAIConfigReady(config) || !props.fragmentKeys.length || props.fragmentKeys.length > 12) || !catalogAllowsAuthoring}
       onClick={() => void act(() => generateChatSourceReviewSuggestionsV1({scope: props.scope, request: {draftRevision: props.revision, projectionHash: props.projectionHash, fragmentKeys: [...props.fragmentKeys], ...(actorKey ? {actorKey} : {})}, config}))}>
       {busy ? '正在整理…' : '生成所选资料的建议'}
     </button>

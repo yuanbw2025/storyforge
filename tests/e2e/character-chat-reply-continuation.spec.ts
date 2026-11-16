@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {openChatMessageTools} from './helpers/character-chat-ui'
 import {test, expect} from '@playwright/test'
@@ -7,9 +8,8 @@ test('continues the current reply with an immutable prefix in a refreshed branch
   let actions = 0, reviews = 0
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-continuation.invalid/v1', model: 'test', maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-continuation.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
   await page.route('https://chat-continuation.invalid/**', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')
@@ -28,9 +28,9 @@ test('continues the current reply with an immutable prefix in a refreshed branch
     }
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture()})
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   await page.getByRole('button', {name: '让角色开场', exact: true}).click()
   await expect(page.getByText(prefix, {exact: true})).toBeVisible()
@@ -48,7 +48,7 @@ test('continues the current reply with an immutable prefix in a refreshed branch
   await expect(page.getByTestId('chat-pending-edit')).toBeVisible()
   expect((await read()).sessionId).not.toBe(f.sessionId)
   expect(actions).toBe(1); expect(reviews).toBe(1)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByLabel('已保存的续写原文', {exact: true})).toHaveValue(prefix)
   await expect(page.getByLabel('已保存的续写原文', {exact: true})).toHaveJSProperty('readOnly', true)
   expect(actions).toBe(1)
@@ -61,7 +61,7 @@ test('continues the current reply with an immutable prefix in a refreshed branch
   expect(actions).toBe(2); expect(reviews).toBe(2)
   const original = await page.evaluate(async sessionId => {const load = new Function('p', 'return import(p)'); return (await (await load('/storyforge/src/lib/character-interaction/runtime-api.ts')).readProductRuntimeState(sessionId)).interaction}, f.sessionId)
   expect(original).toEqual(parent.state)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText(prefix + suffix, {exact: true})).toBeVisible()
   expect(actions).toBe(2)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')

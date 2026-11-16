@@ -4,14 +4,14 @@
 
 ## Windows / macOS / Android 客户端 {#开发中的-windows-android-客户端}
 
-[v4.0.2](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2) 已于 2026-10-16 发布桌面安装器与 Android APK，另有四平台便携 ZIP。iOS 本次暂缓。
+[v4.0.7](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.7) 已于 2026-11-13 正式发布，提供桌面安装器、Android APK 与四平台便携 ZIP。iOS 本次暂缓。从 v4.0.5 升级前请保存编辑并导出完整备份，详见[版本兼容](/updates/compatibility)。
 
 | 设备 | 下载文件 | 安装方式 |
 |---|---|---|
-| Windows x64 | `StoryForge-4.0.2-windows-x64-setup.exe` | 运行安装器 |
-| Mac，M 系列芯片 | `StoryForge-4.0.2-macos-arm64.dmg` | 将 StoryForge 拖入“应用程序” |
-| Mac，Intel 芯片 | `StoryForge-4.0.2-macos-x64.dmg` | 将 StoryForge 拖入“应用程序” |
-| Android | `StoryForge-4.0.2-android.apk` | 允许该下载来源安装应用，再确认安装 |
+| Windows x64 | `StoryForge-4.0.7-windows-x64-setup.exe` | 运行安装器 |
+| Mac，M 系列芯片 | `StoryForge-4.0.7-macos-arm64.dmg` | 将 StoryForge 拖入“应用程序” |
+| Mac，Intel 芯片 | `StoryForge-4.0.7-macos-x64.dmg` | 将 StoryForge 拖入“应用程序” |
+| Android | `StoryForge-4.0.7-android.apk` | 允许该下载来源安装应用，再确认安装 |
 
 Windows 安装器尚无发布者证书；macOS 使用本地签名，尚未通过 Apple 公证。系统可能要求明确允许打开。请先核对官方发行来源及校验值，不要关闭系统整体安全防护。
 
@@ -46,11 +46,13 @@ macOS 若阻止双击启动，可在解压目录的终端运行 `bash Start-Stor
 使用与项目 CI 一致的 Node.js 24 和 npm：
 
 ```bash
-git clone https://github.com/yuanbw2025/storyforge.git
+git clone -c core.longpaths=true https://github.com/yuanbw2025/storyforge.git
 cd storyforge
 npm ci
 npm run dev
 ```
+
+Windows 请使用 Git for Windows，并选择较短的目录路径。上述克隆命令在检出前为本仓库启用长路径。若出现 `Filename too long` 或 fatal 检出错误，先停止，不要继续运行 npm。保留不完整目录及其中的本地修改，另选新目录克隆，避免覆盖文件。`npm run dev` 现在会在关键源码或配置缺失时拒绝启动 Vite；这项检查不能保证全部文件完整。参见 [Git 克隆配置说明](https://git-scm.com/docs/git-clone#Documentation/git-clone.txt--ckeyvalue)。
 
 不使用 Git 也可以下载 [最新 main 源码 ZIP](https://github.com/yuanbw2025/storyforge/archive/refs/heads/main.zip)，解压后运行同样的 `npm ci` 和 `npm run dev`。固定源码版本可从发布页的 `Source code (zip)` 获取。
 

@@ -294,7 +294,7 @@ describe('R-PRODUCTPROD-1G · upper-product adapter registry', () => {
         ...brief('avg'),
         source: {
           ...brief('avg').source,
-          selection: { ...brief('avg').source.selection, productType: 'ttrpg' },
+          selection: currentProductSelection('ttrpg', productRoles('avg')),
         },
         intent: { ...brief('avg').intent, productType: 'ttrpg' },
       },

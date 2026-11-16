@@ -1,3 +1,4 @@
+import { db } from '../../db/schema'
 import { chat } from '../../ai/client'
 import {
   buildInventoryExtractPromptFromContext,
@@ -8,8 +9,8 @@ import {
 import { splitExtractionText, uniqueBy } from '../../ai/structured-extraction'
 import type { AIConfig, Chapter, ChatMessage, OutlineNode, WorkspaceScope } from '../../types'
 import { assembleContext } from '../../registry/assemble-context'
-import { replaceAdoptedCollection } from '../../registry/adopt'
-import { readOwnedRows } from '../../workspace/scope'
+import { adoptionTransactionTablesV1, replaceAdoptedCollection } from '../../registry/adopt'
+import { readOwnedRows, scopeTransactionTables } from '../../workspace/scope'
 import { selectInventoryExtractionChapters, type InventoryExtractionMode } from '../../inventory/extraction-range'
 import { getAgentSkillV1 } from '../skill-registry'
 import { createAgentSkillExecutionBindingV1 } from '../execution-binding'
@@ -23,7 +24,10 @@ import {
 import { createContextManifestFromAssemblyV1 } from './context-manifest'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from './checkpoint'
 import { createVerificationReceiptV1 } from './verification-receipt'
-import { hashCanonicalValue } from './hash'
+import {
+  acceptExtractionReceiptV1, ExtractionEvidenceStaleError, hashExtractionValueV1 as hashCanonicalValue,
+  withExtractionSourceTransactionV1,
+} from './extraction-adoption'
 
 export const INVENTORY_EXTRACTION_STEP_ID_V1 = 'prose:inventory-extraction' as const
 export const INVENTORY_EXTRACTION_VERIFIER_SET_V1 = 'inventory-extraction-terminal-v1' as const
@@ -347,7 +351,7 @@ async function prepareSources(
     startOrdinal: stableRequest.startOrdinal ?? undefined,
     endOrdinal: stableRequest.endOrdinal ?? undefined,
   })
-  if (selected.error) throw new Error(selected.error)
+  if (selected.error) throw new ExtractionEvidenceStaleError(selected.error)
   const chapters: PreparedInventorySourcesV1['chapters'] = []
   for (const chapter of selected.chapters) {
     if (chapter.id == null) continue
@@ -360,9 +364,9 @@ async function prepareSources(
     if (chunks.length) chapters.push({ chapter: chapter as Chapter & { id: number }, assembled, chunks })
   }
   const callCount = chapters.reduce((sum, entry) => sum + entry.chunks.length, 0)
-  if (!callCount) throw new Error('所选章节没有可提取的正文。')
+  if (!callCount) throw new ExtractionEvidenceStaleError('所选章节没有可提取的正文。')
   if (callCount > MAX_MODEL_CALLS) {
-    throw new Error(`当前范围需要 ${callCount} 个物品提取分块，超过单次上限 ${MAX_MODEL_CALLS}。`)
+    throw new ExtractionEvidenceStaleError(`当前范围需要 ${callCount} 个物品提取分块，超过单次上限 ${MAX_MODEL_CALLS}。`)
   }
   const characters = stableCharacters(characterRows)
   const originalInventory = stableInventory(inventoryRows)
@@ -863,13 +867,11 @@ async function verifyCurrentPlan(
   plan: InventoryExtractionPlanV1,
   options: { requireInventoryBaseline: boolean } = { requireInventoryBaseline: true },
 ): Promise<PreparedInventorySourcesV1> {
-  if (plan.projectId !== scope.projectId || plan.workId !== scope.workId) throw new Error('物品提取计划与当前 Work 不匹配。')
-  let current: PreparedInventorySourcesV1
-  try {
-    current = await prepareSources(scope, requestInput(plan.request))
-  } catch {
-    throw new Error('正文、角色、物品基线或提示词模板已变化，请重新提取。')
-  }
+  if (plan.projectId !== scope.projectId || plan.workId !== scope.workId) throw new ExtractionEvidenceStaleError('物品提取计划与当前 Work 不匹配。')
+  const current = await prepareSources(scope, requestInput(plan.request)).catch(error => {
+    if (error instanceof ExtractionEvidenceStaleError) throw new ExtractionEvidenceStaleError('正文、角色、物品基线或提示词模板已变化，请重新提取。')
+    throw error
+  })
   if (
     current.promptTemplateHash !== plan.promptTemplateHash
     || current.characterContextHash !== plan.characterContextHash
@@ -881,7 +883,7 @@ async function verifyCurrentPlan(
       current.inventoryContextHash !== plan.inventoryContextHash
       || current.originalInventoryHash !== plan.originalInventoryHash
     ))
-  ) throw new Error('正文、角色、物品基线或提示词模板已变化，请重新提取。')
+  ) throw new ExtractionEvidenceStaleError('正文、角色、物品基线或提示词模板已变化，请重新提取。')
   return current
 }
 
@@ -1062,6 +1064,7 @@ export async function readRecoverableInventoryExtractionV1(input: {
   for (const row of rows) {
     if (!row.id) continue
     const snapshot = await readAgentRunV1(input.scope, row.id)
+    if (snapshot.projection.steps[INVENTORY_EXTRACTION_STEP_ID_V1]?.status === 'stale') continue
     try {
       const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope, row.id)
       if (!checkpoint) throw new Error('缺少物品提取检查点。')
@@ -1214,6 +1217,23 @@ async function saveAdoptionProgress(
   return { snapshot: saved.snapshot, progress }
 }
 
+async function stopStaleAdoption(
+  scope: WorkspaceScope,
+  snapshot: AgentRunSnapshotV1,
+  candidate: InventoryExtractionCandidateV1,
+  progress: InventoryExtractionAdoptionProgressV1,
+  error: unknown,
+): Promise<never> {
+  if (!(error instanceof ExtractionEvidenceStaleError)) throw error
+  const current = stableInventory(await readOwnedRows<Record<string, unknown>>(scope, 'itemLedger', { owner: 'work' }))
+  const retained = progress.formalChapters.filter(formal => sameValue(formalRowsFromStable(current, formal.chapterId), formal.rows)).length
+  await append(scope, snapshot, 'candidate.staled', {
+    stepId: INVENTORY_EXTRACTION_STEP_ID_V1, candidateHash: candidate.candidateHash,
+    reason: 'inventory-extraction-adoption-evidence-stale',
+  })
+  throw new Error(`${error.message}已保留 ${retained}/${progress.formalChapters.length} 章当前采纳结果与作者改动；剩余采纳已停止，请刷新查看结果后重新提取。`)
+}
+
 export async function adoptInventoryExtractionCandidateV1(input: {
   scope: WorkspaceScope
   runId: number
@@ -1231,9 +1251,13 @@ export async function adoptInventoryExtractionCandidateV1(input: {
   let adoption = state.adoption
   if (adoption && !sameValue(adoption.selectedIndexes, indexes)) throw new Error('物品采纳选择与冻结意图不一致。')
   const step = snapshot.projection.steps[INVENTORY_EXTRACTION_STEP_ID_V1]
+  if (step?.status === 'stale') throw new Error('物品旧候选已失效，请刷新后重新提取。')
   if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash && adoption) {
     let upstreamFresh = true
-    try { await verifyCurrentPlan(input.scope, candidate.plan, { requireInventoryBaseline: false }) } catch { upstreamFresh = false }
+    try { await verifyCurrentPlan(input.scope, candidate.plan, { requireInventoryBaseline: false }) } catch (error) {
+      if (!(error instanceof ExtractionEvidenceStaleError)) throw error
+      upstreamFresh = false
+    }
     const formal = await allFormalState({ scope: input.scope, progress: adoption })
     const adoptionHash = await hashCanonicalValue({ intentHash: adoption.intentHash, formalState: formal.rows })
     if (!upstreamFresh || !formal.fresh || adoptionHash !== step?.adoptionHash) {
@@ -1251,6 +1275,7 @@ export async function adoptInventoryExtractionCandidateV1(input: {
   }
   if (snapshot.projection.state === 'awaiting_confirmation') {
     try { await verifyCurrentPlan(input.scope, candidate.plan) } catch (error) {
+      if (!(error instanceof ExtractionEvidenceStaleError)) throw error
       snapshot = await append(input.scope, snapshot, 'candidate.staled', {
         stepId: INVENTORY_EXTRACTION_STEP_ID_V1,
         candidateHash: candidate.candidateHash,
@@ -1292,31 +1317,35 @@ export async function adoptInventoryExtractionCandidateV1(input: {
   } else if (step?.confirmation !== 'adopt' || !adoption) {
     throw new Error('物品候选不在可恢复采纳状态。')
   }
-  try { await verifyCurrentPlan(input.scope, candidate.plan, { requireInventoryBaseline: false }) } catch (error) {
-    await pauseUnsafeRun(input.scope, snapshot, 'inventory-extraction-upstream-stale-during-adoption')
-    throw error
-  }
+  const tables = scopeTransactionTables(...adoptionTransactionTablesV1('itemLedger'), db.chapters, db.outlineNodes, db.characters)
+  const verifySources = () => verifyCurrentPlan(input.scope, candidate.plan, { requireInventoryBaseline: false })
   while (adoption.nextChapterIndex < adoption.formalChapters.length) {
     const chapterIndex = adoption.nextChapterIndex
     const formal = adoption.formalChapters[chapterIndex]
-    const inspected = await inspectAdoptionState({ scope: input.scope, progress: adoption })
-    if (!inspected.fresh) {
-      await pauseUnsafeRun(input.scope, snapshot, 'inventory-extraction-formal-state-diverged')
-      throw new Error(`物品正式状态与冻结采纳进度不一致：${inspected.reason ?? 'unknown'}。`)
-    }
-    if (!inspected.nextAlreadyApplied) {
-      const result = await replaceAdoptedCollection({
-        projectId: input.scope.projectId,
-        workspaceScope: input.scope,
-        target: 'itemLedger',
-        scope: { chapterId: formal.chapterId },
-        data: formal.rows.map(row => ({ ...row } as Record<string, unknown>)),
+    const progress = adoption
+    try {
+      await withExtractionSourceTransactionV1(tables, verifySources, async () => {
+        const inspected = await inspectAdoptionState({ scope: input.scope, progress })
+        if (!inspected.fresh) {
+          throw new ExtractionEvidenceStaleError(`物品正式状态与冻结采纳进度不一致：${inspected.reason ?? 'unknown'}。`)
+        }
+        if (!inspected.nextAlreadyApplied) {
+          const result = await replaceAdoptedCollection({
+            projectId: input.scope.projectId,
+            workspaceScope: input.scope,
+            target: 'itemLedger',
+            scope: { chapterId: formal.chapterId },
+            data: formal.rows.map(row => ({ ...row } as Record<string, unknown>)),
+          })
+          if (result.written.length !== formal.rows.length) throw new Error('物品章节替换未完整写入。')
+        }
+        const current = stableInventory(await readOwnedRows<any>(input.scope, 'itemLedger', { owner: 'work' }))
+        if (!sameValue(formalRowsFromStable(current, formal.chapterId), formal.rows)) {
+          throw new ExtractionEvidenceStaleError('物品章节替换后正式状态与冻结意图不一致。')
+        }
       })
-      if (result.written.length !== formal.rows.length) throw new Error('物品章节替换未完整写入。')
-    }
-    const current = stableInventory(await readOwnedRows<any>(input.scope, 'itemLedger', { owner: 'work' }))
-    if (!sameValue(formalRowsFromStable(current, formal.chapterId), formal.rows)) {
-      throw new Error('物品章节替换后正式状态与冻结意图不一致。')
+    } catch (error) {
+      return stopStaleAdoption(input.scope, snapshot, candidate, progress, error)
     }
     await input.onDurableBoundary?.('formal.chapter', snapshot, chapterIndex)
     const nextBase = {
@@ -1334,14 +1363,24 @@ export async function adoptInventoryExtractionCandidateV1(input: {
     snapshot = saved.snapshot
     adoption = saved.progress
   }
-  const terminal = await allFormalState({ scope: input.scope, progress: adoption })
-  if (!terminal.fresh) {
-    await pauseUnsafeRun(input.scope, snapshot, 'inventory-extraction-formal-state-changed-before-terminal')
-    throw new Error('物品正式状态在终验前发生变化。')
+  const finalProgress = adoption
+  let terminal: Awaited<ReturnType<typeof allFormalState>>
+  try {
+    terminal = await withExtractionSourceTransactionV1(tables, verifySources, async () => {
+      const formal = await allFormalState({ scope: input.scope, progress: finalProgress })
+      if (!formal.fresh) throw new ExtractionEvidenceStaleError('物品正式状态在终验前已变化。')
+      return formal
+    })
+  } catch (error) {
+    return stopStaleAdoption(input.scope, snapshot, candidate, finalProgress, error)
   }
-  let adoptionHash = snapshot.projection.steps[INVENTORY_EXTRACTION_STEP_ID_V1]?.adoptionHash
-  if (!adoptionHash) {
-    adoptionHash = await hashCanonicalValue({ intentHash: adoption.intentHash, formalState: terminal.rows })
+  const committedHash = snapshot.projection.steps[INVENTORY_EXTRACTION_STEP_ID_V1]?.adoptionHash
+  const adoptionHash = await hashCanonicalValue({ intentHash: adoption.intentHash, formalState: terminal.rows })
+  if (committedHash && committedHash !== adoptionHash) {
+    return stopStaleAdoption(input.scope, snapshot, candidate, finalProgress,
+      new ExtractionEvidenceStaleError('物品正式记录与已提交的采纳证据不同。'))
+  }
+  if (!committedHash) {
     snapshot = await append(input.scope, snapshot, 'adoption.committed', {
       stepId: INVENTORY_EXTRACTION_STEP_ID_V1,
       candidateHash: candidate.candidateHash,
@@ -1379,12 +1418,22 @@ export async function adoptInventoryExtractionCandidateV1(input: {
     verifierSetVersion: INVENTORY_EXTRACTION_VERIFIER_SET_V1,
     criteria: [
       { id: 'inventory.candidate', status: 'passed', evidenceRefs: [`candidate:${candidate.candidateHash}`] },
-      { id: 'inventory.author', status: 'passed', evidenceRefs: [`intent:${adoption.intentHash}`] },
+      { id: 'inventory.author', status: 'passed', evidenceRefs: [`intent:${finalProgress.intentHash}`] },
       { id: 'inventory.post-state', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },
     ],
     acceptedAt: Date.now(),
   })
-  snapshot = await append(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
+  try {
+    snapshot = await acceptExtractionReceiptV1({
+      scope: input.scope, snapshot, tables, verifySources, receiptHash: receipt.receiptHash,
+      verifyPostState: async () => {
+        const formal = await allFormalState({ scope: input.scope, progress: finalProgress })
+        if (!formal.fresh || !sameValue(formal.rows, terminal.rows)) throw new ExtractionEvidenceStaleError('物品正式状态在签发回执前已变化。')
+      },
+    })
+  } catch (error) {
+    return stopStaleAdoption(input.scope, snapshot, candidate, finalProgress, error)
+  }
   await input.onDurableBoundary?.('verification.accepted', snapshot)
   return { snapshot, receiptHash: receipt.receiptHash, written: indexes.length }
 }

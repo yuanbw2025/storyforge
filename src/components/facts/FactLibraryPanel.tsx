@@ -57,9 +57,24 @@ export default function FactLibraryPanel({
   const [tab, setTab] = useState<FactTab>('exceptions')
   const [diffText, setDiffText] = useState('')
   const [ioMsg, setIoMsg] = useState('')
+  const [confirmationMsg, setConfirmationMsg] = useState('')
   const [libraryMode, setLibraryMode] = useState<'facts' | 'knowledge' | 'constitution' | 'narrative'>('facts')
 
   useEffect(() => { if (project.id != null) void load(project.id) }, [project.id, load])
+
+  const handleConfirm = async (factId: number) => {
+    try {
+      const result = await confirmFact(project.id!, factId)
+      setConfirmationMsg(result.confirmed ? '已确认为 Canon，旧区间记录已保留。'
+        : result.reason === 'locked-conflict' ? '确认被阻止：同一时段的事实已锁定，请先复核旧事实。'
+          : result.reason === 'invalid-range' ? '确认被阻止：章节或有效区间已失效，请先复核章界。'
+            : result.reason === 'source-stale' || result.reason === 'source-missing' ? '确认被阻止：来源已修改或缺失，请重新提取并复核。'
+              : result.clashes.length ? '确认被阻止：已有互斥世界宪法，请在世界宪法面板复核。'
+                : '候选已变化或已被处理，请刷新并复核。')
+    } catch (error) {
+      setConfirmationMsg(`确认未完成：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {}
@@ -172,6 +187,7 @@ export default function FactLibraryPanel({
       </div>
 
       {loading && <p className="text-sm text-text-muted">加载中…</p>}
+      {confirmationMsg && <p role="status" className="text-xs text-amber-300 mb-3">{confirmationMsg}</p>}
       {!loading && rows.length === 0 && (
         <p className="text-sm text-text-muted py-8 text-center">暂无{STATUS_TABS.find(t => t.key === tab)?.label}。</p>
       )}
@@ -200,7 +216,7 @@ export default function FactLibraryPanel({
               </div>
               {(['candidate', ...EXCEPTION_STATUSES] as FactStatus[]).includes(f.status) && f.id != null && (
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => void confirmFact(project.id!, f.id!)} title="确认为权威事实（Canon）"
+                  <button onClick={() => void handleConfirm(f.id!)} title="确认为权威事实（Canon）"
                     className="p-1.5 text-emerald-400 hover:bg-emerald-500/15 rounded">
                     <Check className="w-4 h-4" />
                   </button>

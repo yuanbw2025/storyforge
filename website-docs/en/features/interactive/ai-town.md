@@ -1,9 +1,14 @@
 ---
 productId: upper.ai-town
 status: preview
-lastVerified: 2026-09-20
+lastVerified: 2026-11-13
 ---
 # Epilogue AI town
+
+## November 13: saving, recovery and usage checks
+
+Runtime actions such as resident movement use the product's available-action entry points, rejecting mismatched destinations, permissions or versions. A generic event entry cannot replace these checks. Saved branches keep complete events and original session ownership; late results do not enter another save. Sources: [#316](https://github.com/yuanbw2025/storyforge/pull/316), [#326](https://github.com/yuanbw2025/storyforge/pull/326).
+
 
 > Preview: schedules, resident relationships, events, checkpoints, and replay exist. Long-term real-model behavior, media quality, and cost still require focused validation.
 

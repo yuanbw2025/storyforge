@@ -87,6 +87,51 @@ describe('NW-2A · 现有修订/发布入口的 v4 接入', () => {
     expect((await db.temporalFacts.get(prior))!.workId).toBe(scope.workId)
   })
 
+  it('v4 保留已确认伏笔的原章节字段，不将备份坐标混入封存', async () => {
+    const { input, scope, world, work, actorId } = await setup()
+    const now = Date.now()
+    const chapterIds: number[] = []
+    for (const title of ['埋设', '回收']) {
+      const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
+        projectId: scope.projectId, parentId: null, type: 'chapter' as const, title, summary: '', order: chapterIds.length, createdAt: now, updatedAt: now,
+      }))
+      chapterIds.push(await db.chapters.add(stampNewRecord(scope, 'chapters', {
+        projectId: scope.projectId, outlineNodeId, title, content: title, wordCount: 2, status: 'draft' as const, order: chapterIds.length,
+        notes: '', createdAt: now, updatedAt: now,
+      })))
+    }
+    const [plantChapterId, resolveChapterId] = chapterIds
+    const echoChapterIds = JSON.stringify(chapterIds)
+    const recordId = await db.foreshadows.add(stampNewRecord(scope, 'foreshadows', {
+      projectId: scope.projectId, name: '回信', type: 'dialogue' as const, status: 'planted' as const,
+      description: '这封回信暗示驿站有密道。', plantChapterId, resolveChapterId, echoChapterIds, notes: '', createdAt: now, updatedAt: now,
+    }, { owner: 'work' }))
+    const capture = await captureNarrativeDomainV1({ scope, owner: { kind: 'world', worldCode: world.code, sourceWorkCode: work.code } })
+    const before = capture.rows.get('foreshadows')!.find(row => row.id === recordId)!
+    const actor = (await db.characters.get(actorId))!
+    await confirmNarrativeDomainAnnotationsV1({ scope, table: 'foreshadows', recordId,
+      expectedSourceHash: await hashNarrativeDomainSourceV1(capture, 'foreshadows', before), annotations: {
+        narrativeDevelopmentsV1: [{ semanticSubKey: 'sub:v1:00000000-0000-4000-8000-000000000001',
+          statement: '这封回信暗示驿站有密道。', developmentType: 'foreshadow', owners: [{ characterId: actorId, sourceUid: actor.ragDocumentId! }],
+          members: [], state: 'open', transitions: [], resolutionEvidenceKeys: [], narrativeModalityV1: 'intent',
+          narrativeVisibilityV1: { class: 'author-only', audienceKeys: [], policyVersion: 'fixture-v1' } }],
+      } })
+    const local = (await db.foreshadows.get(recordId))!
+    const revision = await createWorldRevision({ ...input, includeWorkSources: true, selectedTables: ['characters', 'foreshadows'] })
+    const release = await publishWorldRevision(revision.id!)
+    const decoded = await verifyWorldReleaseRecordV1(release)
+    if (decoded.version !== 4) throw Error('wrong codec')
+    const [frozen] = decoded.manifest.records.foreshadows
+    expect(frozen).toMatchObject({ plantChapterId, resolveChapterId, echoChapterIds })
+    expect(frozen).not.toHaveProperty('_plantChapterExportId')
+    expect(frozen).not.toHaveProperty('_resolveChapterExportId')
+    expect(frozen).not.toHaveProperty('_echoChapterExportIds')
+    const restored = compiler.captureFrozenNarrativeSourcesV4({ ...decoded.manifest, sourceWorkCode: work.code })
+    const [original] = restored.rows.get('foreshadows')!
+    expect(await hashNarrativeDomainSourceV1(restored, 'foreshadows', original)).toBe(local.narrativeAuthorityV1!.contentHash)
+    expect(decoded.manifest.narrative.bundle.records.some(row => row.kind === 'development' && row.payload.developmentType === 'foreshadow')).toBe(true)
+  })
+
   it('父修订跨 World、重复领域和独立作品身份都不能创建修订', async () => {
     const first = await setup(), other = await setup()
     const parent = await createWorldRevision(other.input)

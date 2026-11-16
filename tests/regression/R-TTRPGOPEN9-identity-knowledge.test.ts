@@ -76,9 +76,9 @@ describe('R-TTRPGOPEN9 actual later observation and attributed identity propagat
     const failure = vi.spyOn(db.productRuntimeEvents, 'add').mockRejectedValueOnce(new Error('identity storage rollback'))
     await expect(confirm(s.owner, review)).rejects.toThrow(/identity storage rollback/); failure.mockRestore()
     expect(await readProductRuntimeState(s.f.sessionId)).toEqual(before)
-    const transaction = db.transaction.bind(db), lost = vi.spyOn(db, 'transaction').mockImplementationOnce(async (...args: Parameters<typeof db.transaction>) => {
-      await transaction(...args); throw new Error('identity committed response lost')
-    })
+    const transaction = db.transaction.bind(db), lost = vi.spyOn(db, 'transaction').mockImplementationOnce((...args: Parameters<typeof db.transaction>) => transaction(...args).then(() => {
+      throw new Error('identity committed response lost')
+    }))
     await expect(confirm(s.owner, review)).rejects.toThrow(/committed response lost/); lost.mockRestore()
     const saved = await confirm(s.owner, review); expect(await confirm(s.owner, review)).toEqual(saved)
     expect(rt(await readProductRuntimeState(s.f.sessionId)).openRun!.knowledge).toHaveLength(2)

@@ -1,28 +1,25 @@
 import {expect, test, type Page} from '@playwright/test'
 import {chatActionResponseFixture} from './helpers/character-chat-choice'
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 
 const firstReply = '我退回柜台外，将已经核实的线索按时间排好。'
 const nextReply = '整理的线索留着，我想先听听你更在意哪一条。'
 const privateReason = '仅供审查的本轮结束依据，不应发布为角色台词'
-const config = {provider: 'openai', baseUrl: 'https://turn-end-control.invalid/v1', model: 'turn-end-fixture', apiKey: 'isolated-test-key', maxTokens: 9000}
+const config = {provider: 'openai' as const, baseUrl: 'https://turn-end-control.invalid/v1', model: 'turn-end-fixture', apiKey: 'isolated-test-key', maxTokens: 9000}
 test.beforeEach(async ({page}) => {
-  await page.addInitScript(config => {
-    localStorage.setItem('storyforge_guide_completed', 'e2e')
-    const {apiKey, ...saved} = config
-    localStorage.setItem('storyforge-ai-config', JSON.stringify(saved))
-    sessionStorage.setItem('storyforge-ai-api-key-session', apiKey)
-  }, config)
+  registerBrowserFixtureAIConfigV1(page, config)
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
 })
 
 async function seed(page: Page) {
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   return page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     return (await load('/storyforge/tests/helpers/chat-turn-end-runtime.ts')).seedChatTurnEndRuntimeFixture()
   })
 }
 async function open(page: Page, f: Awaited<ReturnType<typeof seed>>) {
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
 }
 async function read(page: Page, f: Awaited<ReturnType<typeof seed>>) {
@@ -75,7 +72,7 @@ for (const width of [390, 1440]) test(`ends the existing turn without a bubble o
   expect(after.state.interaction.remainingDirectorBudget).toBe(before.state.interaction.remainingDirectorBudget - 3)
   expect(after.terminal).toHaveLength(1)
   expect(calls).toEqual(['choice', 'result', 'review-control'])
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('region', {name: '对话记录', exact: true}).getByText(firstReply, {exact: true})).toHaveCount(1)
   await expect(page.getByText(privateReason, {exact: false})).toHaveCount(0)
   await expect(page.getByText('草稿：暂缓寻找铜印', {exact: false})).toHaveCount(0)
@@ -99,7 +96,7 @@ test('a rejected ending keeps the original action and active goal through reload
   await page.getByRole('button', {name: '补齐未完成本轮', exact: true}).click()
   await expect.poll(async () => (await read(page, f)).runs[0]?.status).toBe('failed')
   expect((await read(page, f)).state).toEqual(before.state)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('region', {name: '对话记录', exact: true}).getByText(firstReply, {exact: true})).toHaveCount(1)
   await expect(page.getByRole('button', {name: '补齐未完成本轮', exact: true})).toBeDisabled()
   expect((await read(page, f)).state).toEqual(before.state)
@@ -119,7 +116,7 @@ test('refresh resumes a persisted ending using only the missing review', async (
     if (id == null) throw Error('missing turn-end run')
     return id
   }, {f, config})
-  await open(page, f); await page.reload()
+  await open(page, f); await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('button', {name: `继续本次角色行动 #${runId}`, exact: true})).toBeEnabled()
   expect(calls).toEqual(['choice', 'result'])
   await page.getByRole('button', {name: `继续本次角色行动 #${runId}`, exact: true}).click()

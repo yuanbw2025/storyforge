@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {openChatNarrativeTools} from './helpers/character-chat-ui'
 import {test, expect, type Page} from '@playwright/test'
@@ -5,13 +6,12 @@ import {test, expect, type Page} from '@playwright/test'
 test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-scheduling.invalid/v1', model: 'test', maxTokens: 8000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-scheduling.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' })
 })
 
 async function seed(page: Page, partial = false) {
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async partial => {
     const load = new Function('p', 'return import(p)')
     const fixture = await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')
@@ -29,7 +29,7 @@ async function seed(page: Page, partial = false) {
     }
     return f
   }, partial)
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await expect(page.getByLabel('角色接续方式', {exact: true})).toHaveValue('manual')
   return f
 }
@@ -77,7 +77,7 @@ test('bounded round-robin passes visible consequences between roles; natural rep
   expect(receipt.actors).toEqual(['guard', 'artisan', 'guard'])
   expect(receipt.calls).toBe(6)
   expect((await read(page, f.sessionId)).chatNarrative.triggers[0]).toMatchObject({status: 'complete', direction: {actionLimit: 3, scheduling: {mode: 'round-robin', participantKeys: ['guard', 'artisan']}}})
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByLabel('角色接续方式', {exact: true})).toHaveValue('manual')
   await expect(page.getByLabel('演绎节奏', {exact: true})).toHaveValue('3')
   expect(receipt.calls).toBe(6)
@@ -100,7 +100,7 @@ test('refresh and changed new-turn controls preserve the scheduled next actor an
   const receipt = await provider(page), f = await seed(page, true)
   await expect(page.getByTestId('chat-turn-resume')).toContainText('最多 1 次行动额度')
   await expect(page.getByTestId('chat-turn-resume')).toContainText('下一位是 程素')
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByLabel('角色接续方式', {exact: true})).toHaveValue('manual')
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   await openChatNarrativeTools(page)
@@ -127,7 +127,7 @@ test('waiting for the player stops the entire group without generating the next 
   await expect(page.getByRole('button', {name: '让角色继续', exact: true})).toBeEnabled()
   expect((await read(page, f.sessionId)).chatNarrative.triggers[0].status).toBe('waiting-player')
   expect(receipt.actors).toEqual(['guard']); expect(receipt.calls).toBe(2)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByTestId('chat-turn-resume')).toHaveCount(0)
   expect(receipt.calls).toBe(2)
 })
@@ -154,7 +154,7 @@ test('a player can interrupt resumed automatic scheduling without selecting a ne
   expect(state.messages.map((m: {role: string}) => m.role)).toEqual(['character', 'player'])
   expect(state.chatNarrative.triggers[0].status).toBe('cancelled')
   expect(calls).toBe(1)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText('先停一下，我要补充一件事。', {exact: true})).toBeVisible()
   await expect(page.getByText('这条已打断的回复不能进入故事。', {exact: true})).toHaveCount(0)
   expect(await read(page, f.sessionId)).toEqual(state)

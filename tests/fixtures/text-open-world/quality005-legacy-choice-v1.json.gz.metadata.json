@@ -1,0 +1,13 @@
+{
+  "schema": "storyforge.quality005.legacy-choice-fixture.v1",
+  "baselineCommit": "38cbcd5fa632516763f5844bff2665c3aee0003e",
+  "baseFixtureSha256": "c2cd43a626045fb62842b30c02c4558d98ce7bfd7ae1b84ef837c12f633f46b3",
+  "compressedSha256": "9cf1ea593ea4a20f026b1ebb0c267d277fd71c2dc54e64de83d040b1aa55e367",
+  "decompressedSha256": "5134d9a3656d3a18e32316b1064b789f86780cb9c092e437021fd84e2c444010",
+  "decompressedBytes": 146836,
+  "probeSha256": "e1eb9adbd3026c16ec3a2f928b8f49a587105fb1bad821de1c6fc65399dfbae5",
+  "actualNetworkCalls": 0,
+  "actualModelCalls": 0,
+  "capture": "38cb native commitNarrativeChoice on the exact frozen old novel fixture; no manufactured receipt; static fixture helper copied with exact source hash",
+  "events": 5
+}

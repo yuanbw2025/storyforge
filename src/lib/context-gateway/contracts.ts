@@ -130,6 +130,9 @@ export function assertContextResourceDescriptorV1(input: {
   }
   requireHash(descriptor.contentHash, `${descriptor.resourceKey}.contentHash`)
   requireHash(descriptor.policyHash, `${descriptor.resourceKey}.policyHash`)
+  if (descriptor.automaticSelectionEnabled !== undefined && typeof descriptor.automaticSelectionEnabled !== 'boolean') {
+    fail('invalid-selection-permission', `${descriptor.resourceKey} automaticSelectionEnabled 必须为布尔值`)
+  }
   if ('content' in descriptor || 'body' in descriptor || 'original' in descriptor) {
     fail('metadata-body-leak', `${descriptor.resourceKey} 的 metadata 夹带正文`)
   }
@@ -296,6 +299,7 @@ export function isContextResourceDiscoverableV1(input: {
   explicitResourceKey?: string
 }): boolean {
   const { descriptor, policy } = input
+  if (descriptor.automaticSelectionEnabled === false) return false
   if (!policy.allowedSourceKeys.includes(descriptor.sourceKey)
     || !policy.allowedResourceKinds.includes(descriptor.kind)) return false
   if (descriptor.authority !== 'candidate') return true
@@ -324,6 +328,9 @@ export function assertContextReadPermissionV1(input: {
   policy: ContextAccessPolicyV1
   explicitResourceKey?: string
 }): void {
+  if (input.descriptor.automaticSelectionEnabled === false) {
+    fail('resource-forbidden', `${input.descriptor.resourceKey} 已被作者停用或依赖已停用；请在“资料与检索库”恢复启用后重试。`)
+  }
   if (!isContextResourceDiscoverableV1(input)) fail('resource-forbidden', `${input.descriptor.resourceKey} 不可发现或读取`)
   if (!input.policy.allowedDepths.includes(input.depth) || !input.descriptor.availableDepths.includes(input.depth)) {
     fail('depth-forbidden', `${input.descriptor.resourceKey} 不允许 depth ${input.depth}`)

@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { BACKUP_REFERENCE_REVIEW_TITLE } from '../../src/lib/export/backup-trust'
 import { parseWorldPortals } from '../../src/lib/utils/world-portals'
 import { seedFullProject as seedEverything, EXPORTABLE_PROJECT_TABLES } from '../helpers/seed-full-project'
 
@@ -30,21 +31,47 @@ describe('R-export-fullcoverage · 全表多世界往返安全网', () => {
     expect(rcaCount, 'referenceChunkAnalysis 应有种子数据').toBeGreaterThan(0)
   })
 
-  it('全量导出→导入:每张表行数一致 + 外键/树/世界组重映射正确', async () => {
+  it('全量导出→导入:原表行与复核证据保留 + 外键/树/世界组重映射正确', async () => {
     const src = await seedEverything()
+    const sourceNotes = await db.notes.where('projectId').equals(src.projectId).toArray()
+    const sourceModule = await db.narrativeModules.where('projectId').equals(src.projectId).first()
+    expect(sourceModule?.sourceProjection).toBe('outline')
+    expect(sourceModule?.ragDocumentId).toMatch(/^res:v1:narrative-module:/)
     const sourceDetail = await db.detailedOutlines.where('projectId').equals(src.projectId).first()
     const sourceForeshadow = await db.foreshadows.where('projectId').equals(src.projectId).first()
     await db.detailedOutlines.update(sourceDetail!.id!, { foreshadowIds: [sourceForeshadow!.id!] })
     const exported = await exportProjectJSON(src.projectId)
+    // The legacy outline locator is evidence, not permission to guess a current FK.
+    const reviews = exported.notes.filter(note => note.content.startsWith(BACKUP_REFERENCE_REVIEW_TITLE))
+    expect(reviews).toHaveLength(1)
+    expect(reviews[0]).toMatchObject({
+      _workOwnerExportId: exported.ownership.workExportId, _chapterExportId: null,
+      color: 'yellow', pinned: true,
+    })
+    expect(reviews[0].content.split('\n').slice(3).map(line => JSON.parse(line))).toEqual([{
+      来源表: 'narrativeModules', 原行序号: 0, 便携行键: 0, 资源UID: sourceModule!.ragDocumentId,
+      字段: 'sourceRefId', 原值: sourceModule!.sourceRefId, 原因: '来源类型没有可确认的关联目标',
+    }])
+    expect(exported.notes).toHaveLength(sourceNotes.length + 1)
+    for (const note of sourceNotes) {
+      const authorValues = Object.fromEntries(Object.entries(note)
+        .filter(([key]) => !['id', 'projectId', 'worldId', 'workId', 'chapterId'].includes(key)))
+      expect(exported.notes).toContainEqual(expect.objectContaining(authorValues))
+    }
     const newId = await importProjectJSON(exported)
     expect(newId).not.toBe(src.projectId)
 
-    // 每张项目级表行数一致
+    // 原表行数保留；notes 的新增复核证据逐值核对，不能重复产生。
     for (const name of EXPORTABLE_PROJECT_TABLES) {
       const srcCount = await (db as any)[name].where('projectId').equals(src.projectId).count()
       const newCount = await (db as any)[name].where('projectId').equals(newId).count()
-      expect(newCount, `表 ${name} 往返后行数应一致`).toBe(srcCount)
+      expect(newCount, `表 ${name} 往返后行数应一致`).toBe(name === 'notes' ? exported.notes.length : srcCount)
     }
+    expect(await db.notes.where('projectId').equals(src.projectId).toArray()).toEqual(sourceNotes)
+    expect((await exportProjectJSON(newId)).notes).toEqual(exported.notes)
+    expect(await db.narrativeModules.where('projectId').equals(newId).first()).toMatchObject({
+      title: sourceModule!.title, description: sourceModule!.description, sourceProjection: 'outline', sourceRefId: null,
+    })
 
     // WORLD-2C: Workspace → World → Work → character binding 全部使用便携 ID。
     const newWorld = await db.worlds.where('projectId').equals(newId).first()

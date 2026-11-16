@@ -340,6 +340,13 @@ async function readSourceRows(scope: WorkspaceScope): Promise<{ outlines: Outlin
   return { outlines, chapters, storyCores }
 }
 
+/** Brief confirmation reads this complete source view in the caller's native
+ * transaction. Run owners add their existing ledger stores to this closure. */
+export function adaptationBriefTransactionTablesV1() {
+  return scopeTransactionTables(db.adaptationProjects, db.adaptationSourceUnits,
+    db.outlineNodes, db.chapters, db.storyCores)
+}
+
 async function requireSourceNovelScope(sourceScope: WorkspaceScope): Promise<{ scope: WorkspaceScope; sourceWork: Work; rows: Awaited<ReturnType<typeof readSourceRows>> }> {
   const scope = await resolveScope({ scope: sourceScope })
   const sourceWork = await db.works.get(scope.workId)

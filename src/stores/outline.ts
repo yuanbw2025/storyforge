@@ -7,6 +7,7 @@ import { useDetailedOutlineStore } from './detailed-outline'
 import { cascadeDeleteChapterRecords } from '../lib/chapters/lifecycle'
 import { cascadeRegisteredReferences } from '../lib/workspace/lifecycle'
 import { transactionTablesFor, transactionTablesForReferenceCascade } from '../lib/registry/lifecycle'
+import { assertRetainedRunScopeTargetsV1 } from '../lib/agent/run/scope-lifecycle'
 import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 import { FIELD_BY_TARGET } from '../lib/registry/field-registry'
@@ -254,6 +255,9 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
           detailIds.push(detail.id)
         }
         // This shared lifecycle owns prose evidence detachment and dependent rows.
+        await assertRetainedRunScopeTargetsV1(new Map([
+          ['outlineNodes', postorder], ['chapters', chapterIds],
+        ]))
         await cascadeDeleteChapterRecords(chapterIds)
         for (const id of postorder) { await cascadeRegisteredReferences('outlineNodes', id); await db.outlineNodes.delete(id) }
         return { nodeIds: postorder, chapterIds, detailIds }

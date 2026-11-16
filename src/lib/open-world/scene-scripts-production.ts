@@ -1,3 +1,5 @@
+import { addTextOpenWorldTaskUsageV1, readTextOpenWorldObservedTokenPairV1 } from './production-usage'
+import { captureTextOpenWorldTaskExecutionInputV1, assertTextOpenWorldBuildNewWorkV1 } from './source-admission'
 import { uniqueTextOpenWorldObjectiveInteractionLocationV1 } from './objective-scene-location'
 import type { ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
@@ -2512,29 +2514,6 @@ function zeroTaskUsage(durationMs = 0): ProductProductionTaskUsageV1 {
   }
 }
 
-function addTaskUsage(
-  left: ProductProductionTaskUsageV1,
-  right: ProductProductionTaskUsageV1,
-): ProductProductionTaskUsageV1 {
-  return {
-    modelCalls: left.modelCalls + right.modelCalls,
-    inputTokens: left.inputTokens + right.inputTokens,
-    outputTokens: left.outputTokens + right.outputTokens,
-    mediaCalls: left.mediaCalls + right.mediaCalls,
-    costUsd: left.costUsd == null || right.costUsd == null ? null : left.costUsd + right.costUsd,
-    durationMs: left.durationMs + right.durationMs,
-    storageBytes: left.storageBytes + right.storageBytes,
-  }
-}
-
-function observedTokenUsage(value: unknown): { inputTokens: number; outputTokens: number } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const usage = value as Record<string, unknown>
-  if (!Number.isSafeInteger(usage.inputTokens) || Number(usage.inputTokens) < 0
-    || !Number.isSafeInteger(usage.outputTokens) || Number(usage.outputTokens) < 0) return null
-  return { inputTokens: Number(usage.inputTokens), outputTokens: Number(usage.outputTokens) }
-}
-
 function estimatedFragmentInputTokens(fragment: PreparedSceneScriptsFragmentV1): number {
   // Include the stable transport envelope as well as the domain prompt and
   // safe projection; otherwise 116 small calls systematically undercount.
@@ -2550,7 +2529,7 @@ function responseUsage(
   fragment: PreparedSceneScriptsFragmentV1,
   startedAt: number,
 ): ProductProductionTaskUsageV1 {
-  const observed = observedTokenUsage(response.usage)
+  const observed = readTextOpenWorldObservedTokenPairV1(response.usage)
   return {
     modelCalls: 1,
     inputTokens: observed?.inputTokens ?? estimatedFragmentInputTokens(fragment),
@@ -3109,6 +3088,9 @@ export function createTextOpenWorldSceneScriptsExecutorV1(options: {
 } = {}): ProductProductionTaskExecutorV1 {
   const runModel = options.runModel ?? defaultRunner; const now = options.now ?? Date.now
   return async execution => {
+    execution = captureTextOpenWorldTaskExecutionInputV1(execution)
+    await assertTextOpenWorldBuildNewWorkV1({ scope: execution.scope, productionId: execution.productionId,
+      buildId: execution.buildId, operation: '执行新的文字开放世界制作任务' })
     if (execution.signal.aborted) throw new DOMException('Aborted', 'AbortError')
     if (execution.task.taskKey !== 'p9.scene-scripts' || execution.task.skillId !== SKILL_ID || execution.task.executionMode !== 'model') fail('执行器收到错误任务')
     const expectedOutputs = ['text-open-world.scene-scripts', 'text-open-world.choice-contracts', 'text-open-world.action-bindings']
@@ -3207,7 +3189,7 @@ export function createTextOpenWorldSceneScriptsExecutorV1(options: {
       let paidUsage = zeroTaskUsage()
       const activeReservation = execution.attemptBudgetReservation ?? execution.task.budgetReservation
       const accountPaidUsage = (usage: ProductProductionTaskUsageV1) => {
-        const next = addTaskUsage(paidUsage, usage)
+        const next = addTextOpenWorldTaskUsageV1(paidUsage, usage)
         // The response is already billable. Record it before enforcing the
         // current attempt's remaining reservation so an over-report cannot
         // erase a real paid call or permit avoidable later fragment calls.

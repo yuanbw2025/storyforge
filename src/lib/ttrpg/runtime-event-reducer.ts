@@ -149,6 +149,8 @@ export function applyTtrpgRuntimeEventV1(
         payload.authorizationRevision !== authorization.revision || !seat || seat.controller === "ai" ||
         seat.assignmentState !== "claimed" || event.actorKey !== seat.actorKey ||
         stableJson(openRun.companions.map(companion => companion.actorKey).sort()) !== stableJson([...authorization.selectedActorKeys].sort()) ||
+        // Historical starts used the frozen template controller. Keep their
+        // exact projection; new commands resolve current authorization before append.
         openRun.companions.some(companion => companion.consecutiveActions !== 0)
       ) {
         throw new Error("open run started 初始状态不符合固定起点。");
@@ -485,6 +487,21 @@ export function applyTtrpgRuntimeEventV1(
           after !== before + 1
         )
           throw new Error("角色等级成长无效。");
+        // Older events only advanced the progression ledger. Keep their exact
+        // projection; new events also record the mechanical level delta used
+        // by the existing frozen-attribute/derived-stat branch verifier.
+        if (Object.prototype.hasOwnProperty.call(payload.entityAttributes, "level")) {
+          const currentLevel = state.entities[characterKey]?.attributes.level;
+          if (
+            payload.entityAttributes.level !== after ||
+            typeof currentLevel !== "number" ||
+            !Number.isSafeInteger(currentLevel) ||
+            currentLevel < 1 ||
+            currentLevel > after
+          ) throw new Error("角色等级实体投影与成长后态不一致。");
+          progression.attributeIncreases.level =
+            (progression.attributeIncreases.level ?? 0) + after - currentLevel;
+        }
         progression.level = after;
       } else {
         if (

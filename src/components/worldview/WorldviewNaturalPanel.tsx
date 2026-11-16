@@ -1,3 +1,4 @@
+import ScopedWorldAuthoringBoundary from '../world-group/ScopedWorldAuthoringBoundary'
 import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
 import WorldviewReadBoundary from './WorldviewReadBoundary'
 import { useState, useEffect } from 'react'
@@ -51,9 +52,18 @@ const NATURAL_CODEX_KEYS: Record<string, string[] | undefined> = {
 // ── 主面板 ─────────────────────────────────────────────────────
 
 export default function WorldviewNaturalPanel({ project }: Props) {
-  const { worldview, saveWorldview } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
+  return <ScopedWorldAuthoringBoundary project={project} activeGroupId={activeGroupId}>
+    {view => <ScopedNaturalPanel {...view} />}
+  </ScopedWorldAuthoringBoundary>
+}
+
+function ScopedNaturalPanel({ project, activeGroupId }: Props & { activeGroupId: number | null }) {
+  const { worldview, saveWorldview, loadedScope, activeWorldGroupId, loading, loadError } = useWorldviewStore()
   const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
+  const readReady = !loading && !loadError && loadedScope?.projectId === authorScope.projectId
+    && loadedScope.worldId === authorScope.worldId && loadedScope.workId === authorScope.workId
+    && activeWorldGroupId === (project.enableMultiWorld ? activeGroupId : null)
   const targetWorldGroupId = project.enableMultiWorld ? activeGroupId : (worldview?.worldGroupId ?? null)
   const copilot = useMasterCopilot({
     project,
@@ -66,18 +76,18 @@ export default function WorldviewNaturalPanel({ project }: Props) {
   const [runningField, setRunningField] = useState<WorldviewAgentField | null>(null)
 
   useEffect(() => {
-    if (!worldview) return
+    if (!readReady) return
     setValues({
-      worldStructure:   worldview.worldStructure ?? '',
-      worldDimensions:  worldview.worldDimensions ?? '',
-      continentLayout:  worldview.continentLayout ?? '',
-      regionDimensions: worldview.regionDimensions ?? '',
-      mountainsRivers:  worldview.mountainsRivers ?? '',
-      climateByRegion:  worldview.climateByRegion ?? '',
-      naturalResourceOverview: worldview.naturalResourceOverview ?? '',
+      worldStructure:   worldview?.worldStructure ?? '',
+      worldDimensions:  worldview?.worldDimensions ?? '',
+      continentLayout:  worldview?.continentLayout ?? '',
+      regionDimensions: worldview?.regionDimensions ?? '',
+      mountainsRivers:  worldview?.mountainsRivers ?? '',
+      climateByRegion:  worldview?.climateByRegion ?? '',
+      naturalResourceOverview: worldview?.naturalResourceOverview ?? '',
     })
-    setNaturalResources(worldview.naturalResources || { ...EMPTY_NATURAL_RESOURCES })
-  }, [worldview])
+    setNaturalResources(worldview?.naturalResources || { ...EMPTY_NATURAL_RESOURCES })
+  }, [worldview, readReady])
 
   const save = (patch: WorldviewAuthorPatch) =>
     saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, ...patch }, authorScope)
@@ -101,7 +111,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
   }, [pendingPanelKey])
 
   return (
-    <WorldviewReadBoundary onRetry={reloadCurrent}>
+    <WorldviewReadBoundary onRetry={reloadCurrent} ready={readReady}>
     <div className="flex flex-col w-full h-full space-y-4">
       {/* 顶部 */}
       <div className="pb-4 border-b border-border/40 px-6 pt-4 shrink-0">

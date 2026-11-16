@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { extractTextFromFile } from '../../../lib/doc-parser'
-import { chunkDocument } from '../../../lib/import/chunker'
+import { chunkDocument, quickHash } from '../../../lib/import/chunker'
 import type { ImportSession } from '../../../lib/types/import-session'
-import { useImportSessionStore } from '../../../stores/import-session'
+import { hashImportChunkTextV1, hasFrozenImportIdentityV1, readImportSessionAuthorityV1, useImportSessionStore } from '../../../stores/import-session'
 import { hasChunkTexts, registerChunkTexts } from '../../../lib/import/pipeline'
 
-export default function useImportSessionRecovery(projectId: number) {
+export default function useImportSessionRecovery(projectId: number, activeWorldId?: number | null, activeWorkId?: number | null) {
   const [unfinished, setUnfinished] = useState<ImportSession | null>(null)
   const [reusable, setReusable] = useState<ImportSession | null>(null)
   const [blobRestored, setBlobRestored] = useState(false)
@@ -21,17 +21,20 @@ export default function useImportSessionRecovery(projectId: number) {
   useEffect(() => {
     let cancelled = false
     const scan = async () => {
-      useImportSessionStore.getState().findReusableCompleted(projectId).then(session => {
-        if (!cancelled) setReusable(session)
-      })
-      const session = await useImportSessionStore.getState().findUnfinished(projectId)
+      const store = useImportSessionStore.getState()
+      const [reusable, unfinished] = await Promise.all([store.findReusableCompleted(projectId), store.findUnfinished(projectId)])
       if (cancelled) return
+      setReusable(reusable)
+      setUnfinished(unfinished)
+      const session = unfinished ?? (reusable?.publishedReferenceId && reusable.analysisDepth === 'deep' ? reusable : null)
       if (!session?.id) {
-        setUnfinished(session || null)
         setBlobRestored(false)
         return
       }
-      setUnfinished(session)
+      if (!hasFrozenImportIdentityV1(session)) {
+        setBlobRestored(false)
+        return
+      }
       if (hasChunkTexts(session.id)) {
         setBlobRestored(true)
         return
@@ -39,22 +42,32 @@ export default function useImportSessionRecovery(projectId: number) {
 
       setRestoringBlob(true)
       try {
+        const frozen = await readImportSessionAuthorityV1(session.id, projectId, session)
         const row = await useImportSessionStore.getState().loadBlob(session.id)
         if (cancelled) return
-        if (!row?.blob) {
+        if (!row?.blob || row.fileHash !== frozen.fileHash) {
           setBlobRestored(false)
           return
         }
         const file = new File([row.blob], row.filename, { type: row.blob.type })
         const result = await extractTextFromFile(file)
         if (cancelled) return
-        const plans = chunkDocument(result.text, { targetChars: session.chunkSize })
-        if (plans.length === session.totalChunks) {
+        const plans = chunkDocument(result.text, { targetChars: frozen.chunkSize })
+        let matches = quickHash(result.text) === frozen.fileHash && plans.length === frozen.totalChunks
+        for (const plan of plans) {
+          if (!matches) break
+          const chunk = frozen.chunks[plan.index]
+          matches = Boolean(chunk && chunk.index === plan.index && chunk.sourceTextHash === await hashImportChunkTextV1(plan.text))
+        }
+        if (cancelled) return
+        if (matches) {
+          await readImportSessionAuthorityV1(session.id, projectId, frozen)
+          if (cancelled) return
           registerChunkTexts(session.id, plans.map(plan => ({ index: plan.index, text: plan.text })))
           setBlobRestored(true)
         } else {
           console.warn(
-            '[import] Blob 恢复后切块数对不上：',
+            '[import] Blob 恢复后原文件或切块摘要不一致：',
             `原 ${session.totalChunks} vs 新 ${plans.length}`,
           )
           setBlobRestored(false)
@@ -68,7 +81,7 @@ export default function useImportSessionRecovery(projectId: number) {
     }
     scan()
     return () => { cancelled = true }
-  }, [projectId])
+  }, [activeWorldId, activeWorkId, projectId])
 
   return {
     unfinished,

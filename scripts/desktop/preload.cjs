@@ -1,10 +1,16 @@
 const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('storyforgeClient', Object.freeze({
+  http: Object.freeze({
+    open: /** @param {unknown} options */ options => ipcRenderer.invoke('client-http:open', options),
+    read: /** @param {unknown} options */ options => ipcRenderer.invoke('client-http:read', options),
+    cancel: /** @param {unknown} options */ options => ipcRenderer.invoke('client-http:cancel', options),
+  }),
   getState: () => ipcRenderer.invoke('client-update:state'),
   check: () => ipcRenderer.invoke('client-update:check'),
   download: () => ipcRenderer.invoke('client-update:download'),
   install: () => ipcRenderer.invoke('client-update:install'),
   diagnostics: () => ipcRenderer.invoke('client-diagnostics:read'),
+  diagnosticContext: (/** @type {unknown} */ value) => ipcRenderer.invoke('client-diagnostics:context', value),
   telemetryAllowed: () => ipcRenderer.invoke('client-diagnostics:allowed'),
   subscribe: callback => {
     const listener = (_event, state) => callback(state)

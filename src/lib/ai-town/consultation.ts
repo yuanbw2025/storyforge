@@ -1,4 +1,5 @@
 import { executeRegisteredAIEntryV1 } from '../agent/formal-ai-entry';
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import { resolveRequestConfig } from "../ai/client";
 import { assembleContext } from "../registry/assemble-context";
 import { getAgentSkillV1 } from "../agent/skill-registry";
@@ -27,6 +28,7 @@ export async function consultAiTownV1(input: {
   signal?: AbortSignal;
   runAI?: (messages: ChatMessage[]) => Promise<string>;
 }) {
+  assertCurrentProductEntryV1('upper.ai-town')
   const question = input.question.trim();
   if (!question || question.length > 5000)
     throw new Error("请填写 1～5000 字的问题");
@@ -155,11 +157,13 @@ export async function consultAiTownV1(input: {
       attempt: 1,
       manifestHash: manifest.manifestHash,
     });
+    assertCurrentProductEntryV1('upper.ai-town')
     await append("model.requested", {
       stepId: STEP,
       attempt: 1,
       bindingHash: await hashCanonicalValue(messages),
     });
+    assertCurrentProductEntryV1('upper.ai-town')
     const output = input.runAI
       ? await input.runAI(messages)
       : await executeRegisteredAIEntryV1(

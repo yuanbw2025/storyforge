@@ -1,3 +1,4 @@
+import { evaluateCurrentProductEntryV1 } from '../../lib/product/product-catalog'
 import { useEffect, useState } from 'react'
 import { liveQuery } from 'dexie'
 import type { AuthoringNodeInstance } from '../../lib/node-authoring/contracts'
@@ -9,6 +10,7 @@ import { htmlToPlainText } from '../../lib/utils/html'
 import { db } from '../../lib/db/schema'
 
 export default function RevisionNodeSelection({ projectId, worldGroupId, node, onConfigChange }: { projectId: number; worldGroupId: number | null; node: AuthoringNodeInstance; onConfigChange: (value: Record<string, unknown>) => void }) {
+  const canAuthor = evaluateCurrentProductEntryV1('authoring.nodes').enterable
   const title = node.config.chapterTitle
   const mode = qualityAuthoringModeV1(node.config.mode)
   const [data, setData] = useState<{ report: DurableQualityReviewV1 | null; view: QualityRevisionViewV1 | null; text: string } | null>(null)
@@ -49,15 +51,18 @@ export default function RevisionNodeSelection({ projectId, worldGroupId, node, o
   const selected = bound && Array.isArray(node.config.selectedIssueIds) ? node.config.selectedIssueIds.filter((value): value is string => typeof value === 'string') : []
   const extra = bound && Array.isArray(node.config.additionalParagraphs) ? node.config.additionalParagraphs.filter((value): value is number => typeof value === 'number') : []
   const protectedText = bound && typeof node.config.protectedText === 'string' ? node.config.protectedText : ''
-  const update = (values: Record<string, unknown>) => onConfigChange({ ...node.config, ...(!bound ? { selectedIssueIds: [], additionalParagraphs: [], protectedText: '' } : {}), ...values, reportHash: data?.report?.report.artifactHash })
+  const update = (values: Record<string, unknown>) => {
+    if (!evaluateCurrentProductEntryV1('authoring.nodes').enterable) return
+    onConfigChange({ ...node.config, ...(!bound ? { selectedIssueIds: [], additionalParagraphs: [], protectedText: '' } : {}), ...values, reportHash: data?.report?.report.artifactHash })
+  }
   return <section className="mt-4 space-y-3 rounded border border-border p-3" data-testid="node-revision-selection">
     <p className="text-xs text-text-muted">连接全文评审节点，再明确选择问题。修订与复核最多两次请求；生成后在运行结果中确认采纳。</p>
     {error && <p role="alert" className="text-xs text-error">{error}</p>}
     {!data?.report && <p className="text-xs text-text-muted">当前没有可用的本章报告，请先运行上游全文评审。</p>}
     {data?.report && <>
-      <WholeQualityReportView result={data.report} selected={selected} disabled={!data.report.current} toggle={id => update({ selectedIssueIds: selected.includes(id) ? selected.filter(value => value !== id) : [...selected, id] })} />
+      <WholeQualityReportView result={data.report} selected={selected} disabled={!data.report.current || !canAuthor} toggle={id => update({ selectedIssueIds: selected.includes(id) ? selected.filter(value => value !== id) : [...selected, id] })} />
       {!bound && <p className="text-xs text-warning">请选择本轮问题；旧报告的选择不会自动用于新报告。</p>}
-      <QualityRevisionScopeControls chapterText={data.text} extraParagraphs={extra} protectedText={protectedText} disabled={!data.report.current} setExtraParagraphs={value => update({ additionalParagraphs: value })} setProtectedText={value => update({ protectedText: value })} />
+      <QualityRevisionScopeControls chapterText={data.text} extraParagraphs={extra} protectedText={protectedText} disabled={!data.report.current || !canAuthor} setExtraParagraphs={value => update({ additionalParagraphs: value })} setProtectedText={value => update({ protectedText: value })} />
     </>}
     {data?.view && <QualityRevisionComparisonView view={data.view}>
       {(['running', 'paused', 'recovery_required'].includes(data.view.state) || data.view.state === 'awaiting_confirmation' && Boolean(data.view.protectionError)) && <button className="rounded border border-border p-2 text-xs" onClick={() => {

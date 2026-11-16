@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import {
   createTextAdventureCommunitySubmissionV1,
   type TextAdventureCommunityPackageV1,
@@ -22,6 +22,11 @@ import {
   type CommercialTextAdventureReviewRecordV1,
 } from '../../src/lib/commercial/release-delivery'
 import { createTextAdventureCommunityPackageFixtureV1 } from '../helpers/text-adventure-community-package'
+
+beforeEach(() => {
+  window.location.href = 'http://localhost:4178/storyforge/'
+  window.localStorage.setItem('storyforge:experimental-products', 'enabled')
+})
 
 const CREATOR_TOKEN = 'token-creator-remote-candidate'
 const PUBLISHER_TOKEN = 'token-publisher-remote-candidate'

@@ -1,0 +1,16 @@
+{
+  "schema": "storyforge.quality005.immutable-synthetic-fixture.v1",
+  "baselineCommit": "38cbcd5fa632516763f5844bff2665c3aee0003e",
+  "compressedSha256": "914cfacab97d1829b5872a6b631c4aa9414262cb34f7a8774f3757ea6b2ce754",
+  "decompressedSha256": "04ea998e305b2c8d3126eafffc12dc473b9d1c246668e2fbc062f8c0e38b513b",
+  "decompressedBytes": 70056,
+  "actualModelCalls": 0,
+  "actualNetworkCalls": 0,
+  "syntheticTransportCalls": 1,
+  "humanAcceptance": false,
+  "notes": [
+    "Actual pre-policy shared Character generation and read-only candidate adoption, no fake receipt",
+    "Pending and completed native rows are deltas over separately hash-verified legacy-hybrid-v1",
+    "No claim of real provider usage, literary quality, visual quality or human acceptance"
+  ]
+}

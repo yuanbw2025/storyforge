@@ -2,22 +2,26 @@
  * Phase 25.3 — 重要地点面板
  * 树状图 / 列表双视图 + 多标签组合 + 树状父子层级
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Plus, Trash2, ChevronDown, ChevronRight, MapPin,
   GitBranch, List, Sparkles, Loader2, RotateCcw, AlertTriangle,
 } from 'lucide-react'
-import { useLocationStore } from '../../stores/location'
+import { useLocationStore, type LocationTreeNode } from '../../stores/location'
+import { locationDescendantsV1 } from '../../lib/location/hierarchy'
 import type { Project, ImportantLocation, LocationTag } from '../../lib/types'
 import { TAG_EMOJI } from '../../lib/types/location'
 import LocationTagPicker from './LocationTagPicker'
 import LocationTreeView from './LocationTreeView'
+import { LocationTagsParseError, readLocationRecordTagsV1, readLocationTagsV1 } from '../../lib/types/location'
+import { saveFile } from '../../lib/platform/save-file'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { resolveRequestConfig } from '../../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import type { ExtractedLocation } from '../../lib/ai/adapters/structured-extract-adapter'
 import ExtractionReviewPanel from '../shared/ExtractionReviewPanel'
-import { resolveScopeLike } from '../../lib/workspace/scope'
+import { assertRecordInScope, resolveScopeLike } from '../../lib/workspace/scope'
+import { db } from '../../lib/db/schema'
 import {
   abandonLocationExtractionV1,
   adoptLocationExtractionCandidateV1,
@@ -31,6 +35,68 @@ interface Props {
   project: Project
 }
 
+function rawTagText(value: unknown): string {
+  if (typeof value === 'string') return value
+  try { return JSON.stringify(value) ?? String(value) }
+  catch { return String(value) }
+}
+
+function LocationTagRepair({ location, issue, onRepair, onReload }: {
+  location: ImportantLocation
+  issue: string
+  onRepair: (tags: string, expectedTags: unknown) => Promise<void>
+  onReload: () => Promise<ImportantLocation>
+}) {
+  const [original, setOriginal] = useState<unknown>(() => structuredClone(location.tags))
+  const [loadedIssue, setLoadedIssue] = useState(issue)
+  const [draft, setDraft] = useState(() => rawTagText(location.tags))
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const repair = async () => {
+    setError(''); setBusy(true)
+    try { readLocationTagsV1(draft); await onRepair(draft, original) }
+    catch (cause) { setError(cause instanceof Error ? cause.message : '标签修复未保存，输入已保留。') }
+    finally { setBusy(false) }
+  }
+  const exportOriginal = async () => {
+    setError('')
+    try {
+      await saveFile(new Blob([JSON.stringify({ locationId: location.id, field: 'tags',
+        storedType: typeof original, value: original }, null, 2)], { type: 'application/json' }),
+      `storyforge-location-${location.id}-tags-original.json`)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '原值导出失败，记录仍已保留。') }
+  }
+  const reloadOriginal = async () => {
+    setError(''); setBusy(true)
+    try {
+      const current = await onReload()
+      setOriginal(structuredClone(current.tags)); setDraft(rawTagText(current.tags))
+      try { readLocationRecordTagsV1(current); setLoadedIssue('') }
+      catch (cause) {
+        if (!(cause instanceof LocationTagsParseError)) throw cause
+        setLoadedIssue(cause.message)
+      }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '原值重读失败，修复输入已保留。') }
+    finally { setBusy(false) }
+  }
+  return <div role="alert" className="mb-3 space-y-2 rounded border border-warning/50 bg-bg-surface p-3 text-sm">
+    <p>{location.name}（#{location.id}）{loadedIssue ? `标签异常：${loadedIssue}` : '载入的标签已符合结构，请确认后保存。'} 原记录与正文已保留。</p>
+    <label className="block text-xs">载入时原值
+      <textarea aria-label={`${location.name}标签原值`} readOnly value={rawTagText(original)} className="mt-1 w-full rounded border border-border bg-bg-base p-2" />
+    </label>
+    <label className="block text-xs">修复标签（JSON 数组，例如 ["港口"] 或 []）
+      <textarea aria-label={`修复${location.name}标签`} value={draft} disabled={busy}
+        onChange={event => setDraft(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-base p-2" />
+    </label>
+    {error && <p className="text-warning">{error}</p>}
+    <div className="flex gap-3 text-xs">
+      <button type="button" disabled={busy} onClick={() => { void repair() }}>{busy ? '正在保存修复…' : '保存标签修复'}</button>
+      <button type="button" disabled={busy} onClick={() => { void exportOriginal() }}>导出标签原值</button>
+      <button type="button" disabled={busy} onClick={() => { void reloadOriginal() }}>重新载入当前原值</button>
+    </div>
+  </div>
+}
+
 export default function LocationPanel({ project }: Props) {
   const {
     locations, loading, loadAll,
@@ -42,6 +108,10 @@ export default function LocationPanel({ project }: Props) {
   const [view, setView] = useState<'tree' | 'list'>('tree')
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
+  const viewScopeKey = `${project.id}:${project.activeWorldId}:${project.activeWorkId}`
+  const viewScopeKeyRef = useRef(viewScopeKey)
+  viewScopeKeyRef.current = viewScopeKey
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState<string | null>(null)
   const [extractRunId, setExtractRunId] = useState<number | null>(null)
@@ -93,9 +163,44 @@ export default function LocationPanel({ project }: Props) {
   }, [project.id])
 
   const tree = getTree()
+  const listRows: Array<{ location: LocationTreeNode; depth: number }> = []
+  const pendingRows = tree.map(location => ({ location, depth: 0 })).reverse()
+  while (pendingRows.length) {
+    const current = pendingRows.pop()!
+    listRows.push(current)
+    for (let i = current.location.children.length - 1; i >= 0; i--) {
+      pendingRows.push({ location: current.location.children[i], depth: current.depth + 1 })
+    }
+  }
+  const issueCount = listRows.filter(row => row.location.hierarchyIssue).length
+  const damagedTags = useMemo(() => locations.flatMap(location => {
+    try { readLocationRecordTagsV1(location); return [] }
+    catch (error) {
+      if (!(error instanceof LocationTagsParseError)) throw error
+      return [{ location, issue: error.message }]
+    }
+  }), [locations])
+
+  useEffect(() => { setEditError(null) }, [viewScopeKey])
+
+  const edit = useCallback(async (operation: () => Promise<void>) => {
+    const capturedScopeKey = viewScopeKey
+    setEditError(null)
+    try { await operation() }
+    catch (error) {
+      if (viewScopeKeyRef.current === capturedScopeKey) {
+        setEditError(error instanceof Error ? error.message : '地点修改未完成，请重试。')
+      }
+    }
+  }, [viewScopeKey])
+
+  const handleUpdate = useCallback((id: number, patch: Partial<ImportantLocation>) => {
+    void edit(() => updateLocation(id, patch))
+  }, [edit, updateLocation])
 
   const handleAdd = useCallback(async (parentId: number | null = null) => {
-    const id = await addLocation({
+    await edit(async () => {
+      const id = await addLocation({
       projectId: project.id!,
       name: '新地点',
       tags: '[]',
@@ -103,22 +208,31 @@ export default function LocationPanel({ project }: Props) {
       significance: '',
       parentId,
       sortOrder: locations.length,
+      })
+      if (viewScopeKeyRef.current === viewScopeKey) setExpandedId(id)
     })
-    setExpandedId(id)
-  }, [project.id, addLocation, locations.length])
+  }, [project.id, addLocation, locations.length, edit, viewScopeKey])
 
   const handleDelete = useCallback(async (id: number) => {
-    await deleteLocation(id)
-    if (expandedId === id) setExpandedId(null)
-    setConfirmDeleteId(null)
-  }, [deleteLocation, expandedId])
+    await edit(async () => {
+      await deleteLocation(id)
+      if (viewScopeKeyRef.current !== viewScopeKey) return
+      if (expandedId === id) setExpandedId(null)
+      setConfirmDeleteId(null)
+    })
+  }, [deleteLocation, expandedId, edit, viewScopeKey])
 
   const handleUpdateTags = useCallback((id: number, tags: LocationTag[]) => {
-    updateLocation(id, { tags: JSON.stringify(tags) })
-  }, [updateLocation])
+    handleUpdate(id, { tags: JSON.stringify(tags) })
+  }, [handleUpdate])
 
-  const parseTags = (tagsStr: string): LocationTag[] => {
-    try { return JSON.parse(tagsStr || '[]') } catch { return [] }
+  const parseTags = (location: ImportantLocation): LocationTag[] => {
+    try { return readLocationRecordTagsV1(location) }
+    catch (error) {
+      if (!(error instanceof LocationTagsParseError)) throw error
+      // Display-only neutral tags; the raw row and its explicit repair stay above.
+      return []
+    }
   }
 
   const handleExtractLocations = async () => {
@@ -232,11 +346,13 @@ export default function LocationPanel({ project }: Props) {
     }
   }
 
-  // 递归渲染列表项
-  const renderListItem = (loc: ImportantLocation, depth: number = 0) => {
+  const renderListItem = (loc: LocationTreeNode, depth: number = 0) => {
     const isExpanded = expandedId === loc.id
-    const tags = parseTags(loc.tags)
-    const children = locations.filter(l => l.parentId === loc.id)
+    const tags = parseTags(loc)
+    const children = loc.children
+    const excludedParents = isExpanded ? locationDescendantsV1(locations, loc.id!) : new Set<number>()
+    const invalidCurrentParent = isExpanded && loc.parentId != null
+      && (excludedParents.has(loc.parentId) || !locations.some(row => row.id === loc.parentId))
     const isConfirmingDelete = confirmDeleteId === loc.id
 
     return (
@@ -288,7 +404,7 @@ export default function LocationPanel({ project }: Props) {
                   <label className="block text-xs text-text-muted mb-1">名称</label>
                   <input
                     value={loc.name}
-                    onChange={e => updateLocation(loc.id!, { name: e.target.value })}
+                    onChange={e => handleUpdate(loc.id!, { name: e.target.value })}
                     className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
@@ -296,12 +412,14 @@ export default function LocationPanel({ project }: Props) {
                   <label className="block text-xs text-text-muted mb-1">上级地点</label>
                   <select
                     value={loc.parentId ?? ''}
-                    onChange={e => updateLocation(loc.id!, { parentId: e.target.value ? Number(e.target.value) : null })}
+                    aria-label={`设置${loc.name}的上级地点`}
+                    onChange={e => handleUpdate(loc.id!, { parentId: e.target.value ? Number(e.target.value) : null })}
                     className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
                   >
                     <option value="">（顶级）</option>
+                    {invalidCurrentParent && <option value={loc.parentId!} disabled>当前上级关系异常，请重新选择</option>}
                     {locations
-                      .filter(l => l.id !== loc.id)
+                      .filter(l => l.id != null && !excludedParents.has(l.id))
                       .map(l => (
                         <option key={l.id} value={l.id}>{l.name}</option>
                       ))}
@@ -312,10 +430,10 @@ export default function LocationPanel({ project }: Props) {
               {/* 标签 */}
               <div>
                 <label className="block text-xs text-text-muted mb-1">地点标签（可多选组合）</label>
-                <LocationTagPicker
+                {damagedTags.some(row => row.location.id === loc.id) ? <p className="text-xs text-warning">标签原值异常，请使用页面上方的修复输入。</p> : <LocationTagPicker
                   selected={tags}
                   onChange={newTags => handleUpdateTags(loc.id!, newTags)}
-                />
+                />}
               </div>
 
               {/* 描述 */}
@@ -323,7 +441,7 @@ export default function LocationPanel({ project }: Props) {
                 <label className="block text-xs text-text-muted mb-1">描述</label>
                 <textarea
                   value={loc.description}
-                  onChange={e => updateLocation(loc.id!, { description: e.target.value })}
+                  onChange={e => handleUpdate(loc.id!, { description: e.target.value })}
                   placeholder="地点的详细描述、外观、氛围…"
                   className="w-full h-20 p-2 bg-bg-base border border-border rounded text-sm text-text-primary resize-y focus:outline-none focus:border-accent"
                 />
@@ -334,7 +452,7 @@ export default function LocationPanel({ project }: Props) {
                 <label className="block text-xs text-text-muted mb-1">剧情重要性</label>
                 <textarea
                   value={loc.significance}
-                  onChange={e => updateLocation(loc.id!, { significance: e.target.value })}
+                  onChange={e => handleUpdate(loc.id!, { significance: e.target.value })}
                   placeholder="此地点在故事中的作用、关键事件、与角色的关联…"
                   className="w-full h-16 p-2 bg-bg-base border border-border rounded text-sm text-text-primary resize-y focus:outline-none focus:border-accent"
                 />
@@ -379,14 +497,9 @@ export default function LocationPanel({ project }: Props) {
           )}
         </div>
 
-        {/* 子地点递归渲染 */}
-        {children.map(child => renderListItem(child, depth + 1))}
       </div>
     )
   }
-
-  // 顶层地点
-  const topLevelLocations = locations.filter(l => l.parentId === null)
 
   if (loading) {
     return (
@@ -403,6 +516,20 @@ export default function LocationPanel({ project }: Props) {
       <p className="text-sm text-text-muted mb-4">
         管理故事中的重要场景地点，支持标签组合与树状层级
       </p>
+      {issueCount > 0 && <p role="status" className="mb-3 rounded border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-text-secondary">
+        有 {issueCount} 个地点的上级关系异常。原记录已保留，请在列表中选择有效上级或设为顶级；修复后再删除。
+      </p>}
+      {editError && <p role="alert" className="mb-3 text-sm text-red-400">{editError}</p>}
+      {damagedTags.map(({ location, issue }) => <LocationTagRepair key={`${viewScopeKey}:${location.id}`}
+        location={location} issue={issue} onRepair={(tags, expectedTags) => updateLocation(location.id!, { tags }, { expectedTags })}
+        onReload={async () => {
+          const scope = await resolveScopeLike(project.id!)
+          const current = await db.importantLocations.get(location.id!)
+          if (viewScopeKeyRef.current !== viewScopeKey || !current
+            || !await assertRecordInScope(scope, 'importantLocations', current, { owner: 'world' })) throw new Error('地点已删除或当前世界已切换，原修复输入仍已保留。')
+          if (viewScopeKeyRef.current !== viewScopeKey) throw new Error('当前世界已切换，原修复输入仍已保留。')
+          return current
+        }} />)}
 
       {/* 工具栏 */}
       <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
@@ -547,7 +674,7 @@ export default function LocationPanel({ project }: Props) {
               </button>
             </div>
           ) : (
-            topLevelLocations.map(loc => renderListItem(loc))
+            listRows.map(({ location, depth }) => renderListItem(location, depth))
           )}
         </div>
       )}

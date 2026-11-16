@@ -1,21 +1,80 @@
 import JSZip from 'jszip'
 import { db } from '../db/schema'
+import { prepareAudioBlobV1, prepareMediaBlobV1 } from '../media/blob-store'
 import { readMediaBlobObjectData } from '../product-production/media-blob-store'
-import type { WorkspaceScope } from '../types'
-import { readMotionDramaReleaseManifestV1 } from './release'
+import type { CreationReleaseAssetV1, MotionDramaReleaseManifestV1, WorkspaceScope } from '../types'
+import { assertMotionDramaPromptPackManifest } from './prompt-pack-contracts'
+import { motionReleaseSubjectKeys, readMotionDramaReleaseManifestV1 } from './release'
+
+function requiredReferences(manifest: MotionDramaReleaseManifestV1) {
+  const required = new Map<string, { contentHash: string; mimeType: string; role: CreationReleaseAssetV1['role'] }>()
+  for (const pack of manifest.promptPacks) {
+    assertMotionDramaPromptPackManifest(pack)
+    for (const reference of pack.references) {
+      if (reference.contentHash == null || reference.mimeType == null) {
+        if (manifest.tier === 'reference-ready') throw new Error('冻结参考包缺少实际素材证据')
+        continue
+      }
+      const expected = { contentHash: reference.contentHash, mimeType: reference.mimeType,
+        role: reference.kind === 'subject' ? 'motion-subject-reference' as const : 'motion-shot-reference' as const }
+      const prior = required.get(reference.stableKey)
+      if (prior && (prior.contentHash !== expected.contentHash || prior.mimeType !== expected.mimeType || prior.role !== expected.role)) {
+        throw new Error(`冻结参考包的素材证据冲突：${reference.stableKey}`)
+      }
+      required.set(reference.stableKey, expected)
+    }
+  }
+  return required
+}
 
 /** Export only the frozen release and its pinned bytes, never current draft assets. */
-export async function exportMotionMaterialBundle(scope: WorkspaceScope, releaseId: number): Promise<Blob> {
+export async function exportMotionMaterialBundle(scopeInput: WorkspaceScope, releaseId: number): Promise<Blob> {
+  const scope = { ...scopeInput }
   const manifest = await readMotionDramaReleaseManifestV1(scope, releaseId)
+  const required = requiredReferences(manifest)
   const zip = new JSZip()
   zip.file('manifest.json', JSON.stringify(manifest, null, 2))
   const assets = await db.creationReleaseAssets.where('releaseId').equals(releaseId).toArray()
+  if (manifest.tier === 'prompt-only' && assets.length) throw new Error('仅提示词交付版不能包含冻结素材')
+  const selected = new Map<string, 'audio' | 'image'>()
+  if (manifest.tier === 'reference-ready') {
+    const used = motionReleaseSubjectKeys(manifest.shots, manifest.assets)
+    for (const { stableKey, selectedVersionKey, kind } of manifest.assets) {
+      if (typeof stableKey !== 'string' || !used.has(stableKey) || typeof selectedVersionKey !== 'string') continue
+      if (selected.has(selectedVersionKey)) throw new Error('多个冻结物料使用同一版本标识')
+      selected.set(selectedVersionKey, kind === 'voice' || kind === 'sound' ? 'audio' : 'image')
+    }
+  }
+  const pinned = new Set<string>()
+  for (const asset of assets) {
+    if (asset.projectId !== scope.projectId || asset.worldId !== scope.worldId || asset.workId !== scope.workId) throw new Error('交付素材归属不匹配')
+    if (pinned.has(asset.assetKey)) throw new Error(`冻结素材pin重复：${asset.assetKey}`)
+    pinned.add(asset.assetKey)
+  }
+  if (manifest.tier === 'reference-ready') {
+    for (const key of new Set([...required.keys(), ...selected.keys()])) {
+      if (!pinned.has(key)) throw new Error(`冻结素材pin缺失：${key}`)
+    }
+  }
   const index: Array<{key:string;file:string;hash:string}> = []
   for (const asset of assets) {
-    if (asset.projectId !== scope.projectId || asset.workId !== scope.workId) throw new Error('交付素材归属不匹配')
+    const expected = required.get(asset.assetKey)
+    let audio: boolean
+    if (expected) {
+      if (asset.role !== expected.role || asset.contentHash !== expected.contentHash) throw new Error('冻结素材pin与参考包不匹配')
+      audio = expected.mimeType.startsWith('audio/')
+    } else {
+      // Some historical packs omitted subjects that their publisher nevertheless pinned.
+      const media = selected.get(asset.assetKey)
+      if (!media || asset.role !== 'motion-subject-reference') throw new Error('附加素材缺少冻结选择证据')
+      audio = media === 'audio'
+    }
     const blob = await db.mediaBlobObjects.get(asset.blobObjectId)
-    if (!blob || blob.workId !== scope.workId || blob.contentHash !== asset.contentHash) throw new Error('冻结素材缺失或版本不匹配')
+    if (!blob || blob.projectId !== scope.projectId || blob.worldId !== scope.worldId || blob.workId !== scope.workId || blob.contentHash !== asset.contentHash
+      || (expected && blob.mimeType !== expected.mimeType)) throw new Error('冻结素材缺失、类型或版本不匹配')
     const data = await readMediaBlobObjectData({scope,blobObjectId:asset.blobObjectId,expected:{contentHash:asset.contentHash,byteSize:blob.byteSize,mimeType:blob.mimeType}})
+    const prepared = audio ? await prepareAudioBlobV1(data) : await prepareMediaBlobV1(data)
+    if (prepared.mimeType !== blob.mimeType || prepared.contentHash !== asset.contentHash) throw new Error('冻结素材实际格式或字节不匹配')
     const extension: Record<string,string> = {'image/png':'png','image/jpeg':'jpg','image/webp':'webp','audio/wav':'wav','audio/mpeg':'mp3','audio/ogg':'ogg','audio/mp4':'m4a'}
     const file=`references/${asset.contentHash}.${extension[blob.mimeType]??'bin'}`
     zip.file(file,data);index.push({key:asset.assetKey,file,hash:asset.contentHash})

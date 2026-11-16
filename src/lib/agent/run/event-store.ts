@@ -8,16 +8,20 @@ import type {
   AgentRunEventTypeV1,
   AgentRunProjectionV1,
   AgentRunRecord,
+  AgentRunNodeProducerTupleV1,
   AnyAgentRunEventV1,
   MemorySettlementReceiptV1,
+  OutlineNode,
   WorkspaceScope,
 } from '../../types'
 import {
   assertRecordInScope,
+  readOwnedRows,
   resolveScope,
   scopeTransactionTables,
   stampNewRecord,
 } from '../../workspace/scope'
+import { resolveCanonicalOutlineAncestry } from '../../outline/canonical-outline-walk'
 import { acceptAgentRunContract } from './contract'
 import { parseAgentRunEventV1 } from './event-schema'
 import { canonicalStringify, hashCanonicalValue } from './hash'
@@ -32,6 +36,7 @@ import {
 } from '../../memory/settlement-core'
 import { pruneUnreferencedAgentRunArtifactsInCurrentTransactionV1 } from '../../memory/artifact-retention-store'
 import { exactArtifactOwnerTablesV1 } from '../../memory/artifact-root-registry'
+import { readAgentRunNodeProducerTupleV1, readHash } from './schema-utils'
 
 export class AgentRunStoreError extends Error {
   constructor(public readonly code: string, message: string) {
@@ -55,6 +60,12 @@ export interface VerifiedRecordedMemorySettlementV1 {
 
 export interface CreateAgentRunV1Input {
   scope: WorkspaceScope
+  /** Optional Node correlation. Preconditions are checked in the native create
+   * transaction and never added to the frozen contract or historical payloads. */
+  nodeProducer?: AgentRunNodeProducerTupleV1 & {
+    expectedNodeRunHash: string
+    expectedFlowHash: string
+  }
   /** Runtime runs are Instance-owned; omitted runs remain Work-owned. */
   productRuntimeSessionId?: number | null
   /** Optional creation precondition, checked atomically against the complete
@@ -194,17 +205,47 @@ async function assertContractScope(
 
   if (expectedWorldGroupId != null) {
     const group = await db.worldGroups.get(expectedWorldGroupId)
-    if (!group || group.projectId !== scope.projectId) {
-      fail('world_scope', 'RunContract 引用了不属于当前工作区的世界组')
+    if (!group || !await assertRecordInScope(scope, 'worldGroups', group, { owner: 'world' })) {
+      fail('world_scope', 'RunContract 引用了不属于当前 World 的世界组')
     }
   }
 
+  const hasOutlines = (contract.scope.outlineNodeIds?.length ?? 0) > 0
+    || (contract.scope.chapterIds?.length ?? 0) > 0
+  const outlineById = new Map((hasOutlines
+    ? await Dexie.Promise.resolve(readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }))
+    : []).flatMap(node => node.id == null ? [] : [[node.id, node] as const]))
+  // Closing multi-world hides grouping without clearing stored groups. Honor
+  // null-scoped editor runs, while explicit group contracts retain their scope.
+  const useUngroupedRunScope = hasOutlines && expectedWorldGroupId === null
+    && (await db.projects.get(scope.projectId))?.enableMultiWorld !== true
+  const resolvedGroups = new Map<number, number | null>()
+  const checkedGroups = new Set(expectedWorldGroupId == null ? [] : [expectedWorldGroupId])
+  const outlineWorldGroup = async (outlineNodeId: number): Promise<number | null> => {
+    if (resolvedGroups.has(outlineNodeId)) return resolvedGroups.get(outlineNodeId)!
+    let ancestry: ReturnType<typeof resolveCanonicalOutlineAncestry>
+    try { ancestry = resolveCanonicalOutlineAncestry(outlineNodeId, outlineById) } catch {
+      fail('outline_ancestry', `大纲节点 ${outlineNodeId} 的父链缺失、循环或越过当前 Work`)
+    }
+    for (const ancestor of ancestry.path) {
+      const groupId = ancestor.worldGroupId
+      if (groupId == null || checkedGroups.has(groupId)) continue
+      const group = await db.worldGroups.get(groupId)
+      if (!group || !await assertRecordInScope(scope, 'worldGroups', group, { owner: 'world' })) {
+        fail('outline_ancestor_world_scope', `大纲节点 ${outlineNodeId} 的父链世界组越过当前 World`)
+      }
+      checkedGroups.add(groupId)
+    }
+    const effectiveGroupId = useUngroupedRunScope ? null : ancestry.worldGroupId
+    resolvedGroups.set(outlineNodeId, effectiveGroupId)
+    return effectiveGroupId
+  }
+
   for (const outlineNodeId of contract.scope.outlineNodeIds ?? []) {
-    const node = await db.outlineNodes.get(outlineNodeId)
-    if (!node || !await assertRecordInScope(scope, 'outlineNodes', node, { owner: 'work' })) {
+    if (!outlineById.has(outlineNodeId)) {
       fail('outline_scope', `RunContract 引用了越界大纲节点 ${outlineNodeId}`)
     }
-    if (!sameNullableId(node.worldGroupId, expectedWorldGroupId)) {
+    if (!sameNullableId(await outlineWorldGroup(outlineNodeId), expectedWorldGroupId)) {
       fail('outline_world_scope', `大纲节点 ${outlineNodeId} 不属于 RunContract 世界组`)
     }
   }
@@ -214,11 +255,10 @@ async function assertContractScope(
     if (!chapter || !await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) {
       fail('chapter_scope', `RunContract 引用了越界章节 ${chapterId}`)
     }
-    const node = await db.outlineNodes.get(chapter.outlineNodeId)
-    if (!node || !await assertRecordInScope(scope, 'outlineNodes', node, { owner: 'work' })) {
+    if (!outlineById.has(chapter.outlineNodeId)) {
       fail('chapter_outline_scope', `章节 ${chapterId} 的大纲节点越界或不存在`)
     }
-    if (!sameNullableId(node.worldGroupId, expectedWorldGroupId)) {
+    if (!sameNullableId(await outlineWorldGroup(chapter.outlineNodeId), expectedWorldGroupId)) {
       fail('chapter_world_scope', `章节 ${chapterId} 不属于 RunContract 世界组`)
     }
   }
@@ -316,6 +356,7 @@ async function readRunEvents(run: AgentRunRecord & { id: number }): Promise<AnyA
 }
 
 async function verifyContractRecord(run: AgentRunRecord & { id: number }): Promise<AgentRunContract> {
+  readAgentRunNodeProducerTupleV1(run as unknown as Record<string, unknown>)
   let raw: unknown
   try {
     raw = JSON.parse(run.contractJson)
@@ -670,6 +711,18 @@ export async function verifyRecordedMemorySettlementV1(input: {
 }
 
 export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<AgentRunSnapshotV1> {
+  const origin = input.nodeProducer
+  let nodeProducer: CreateAgentRunV1Input['nodeProducer']
+  if (origin !== undefined) {
+    const tuple = readAgentRunNodeProducerTupleV1(origin as unknown as Record<string, unknown>)
+    if (!tuple || tuple.nodeRunId == null) fail('node_producer_binding', '节点生产创建要求真实存活的 NodeRun')
+    nodeProducer = { ...tuple,
+      expectedNodeRunHash: readHash(origin.expectedNodeRunHash, 'nodeProducer.expectedNodeRunHash'),
+      expectedFlowHash: readHash(origin.expectedFlowHash, 'nodeProducer.expectedFlowHash') }
+    // Only the new opt-in path snapshots plain input. Existing callers keep
+    // their original defaults and exact contract/event bytes.
+    input = { ...input, scope: { ...input.scope }, contract: structuredClone(input.contract), nodeProducer }
+  }
   const expectedRuntimeSessionHash = input.expectedRuntimeSessionHash
   if (expectedRuntimeSessionHash !== undefined && (typeof expectedRuntimeSessionHash !== 'string'
     || !/^[a-f0-9]{64}$/.test(expectedRuntimeSessionHash) || input.productRuntimeSessionId == null)) {
@@ -683,6 +736,9 @@ export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<Ag
   const conversationId = input.conversationId ?? null
   const productRuntimeSessionId = input.productRuntimeSessionId ?? null
   const productBuildId = input.productBuildId ?? null
+  if (nodeProducer && (productRuntimeSessionId != null || productBuildId != null)) {
+    fail('node_producer_owner', '节点生产只允许原 Work owner，不得借用 Instance 或 Build')
+  }
   if (productRuntimeSessionId != null && conversationId != null) {
     fail('runtime_conversation', 'Instance-owned 运行不得绑定作者对话')
   }
@@ -703,12 +759,43 @@ export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<Ag
       db.agentConversations,
       ...(productRuntimeSessionId == null ? [] : [db.productRuntimeSessions]),
       ...(productBuildId == null ? [] : [db.productBuilds]),
+      ...(nodeProducer ? [db.nodeRuns, db.nodeFlows] : []),
       db.agentRuns,
       db.agentRunEvents,
     ),
     async () => {
       await assertContractScope(input.scope, accepted.contract, worldGroupId, productRuntimeSessionId, productBuildId)
       await assertOptionalConversationScope(input.scope, conversationId, worldGroupId)
+      if (nodeProducer) {
+        await resolveScope({ scope: input.scope })
+        if (worldGroupId != null) {
+          const group = await db.worldGroups.get(worldGroupId)
+          if (!group || !await assertRecordInScope(input.scope, 'worldGroups', group, { owner: 'world' })) {
+            fail('node_producer_world_group', '节点生产世界组不属于原 World')
+          }
+        }
+        const nodeRun = await db.nodeRuns.get(nodeProducer.nodeRunId!)
+        if (!nodeRun || nodeRun.status !== 'running'
+          || !await assertRecordInScope(input.scope, 'nodeRuns', nodeRun, { owner: 'work' })) {
+          fail('node_producer_scope', '节点运行不存在、不在执行中或不属于当前 Work')
+        }
+        const flow = await db.nodeFlows.get(nodeRun.flowId)
+        if (!flow || !await assertRecordInScope(input.scope, 'nodeFlows', flow, { owner: 'work' })
+          || !sameNullableId(flow.worldGroupId, worldGroupId)) {
+          fail('node_producer_flow', '节点图不存在或越过原 Work/世界组')
+        }
+        if (await waitForHash(nodeRun) !== nodeProducer.expectedNodeRunHash
+          || await waitForHash(flow) !== nodeProducer.expectedFlowHash) {
+          fail('node_producer_snapshot', '节点运行或图快照已变化；未创建新的 Run 或事件')
+        }
+        // A single native RW transaction serializes this predicate+insert
+        // across tabs. No unregistered index or process-local uniqueness map.
+        const duplicate = await db.agentRuns.filter(row => row.nodeRunId === nodeProducer!.nodeRunId
+          && row.nodeProducerNodeId === nodeProducer!.nodeProducerNodeId
+          && row.nodeProducerVariantIndex === nodeProducer!.nodeProducerVariantIndex
+          && row.nodeProducerAttempt === nodeProducer!.nodeProducerAttempt).first()
+        if (duplicate) fail('node_producer_duplicate', '原节点版本/attempt 已有真实 Run；只能读取原证据，不得再次创建发送')
+      }
       if (expectedRuntimeSessionHash !== undefined) {
         const session = await db.productRuntimeSessions.get(productRuntimeSessionId!)
         if (!session || await waitForHash(session) !== expectedRuntimeSessionHash) {
@@ -724,6 +811,11 @@ export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<Ag
         workId: productRuntimeSessionId == null ? input.scope.workId : null,
         productRuntimeSessionId,
         productBuildId,
+        ...(nodeProducer ? {
+          nodeRunId: nodeProducer.nodeRunId, nodeProducerNodeId: nodeProducer.nodeProducerNodeId,
+          nodeProducerVariantIndex: nodeProducer.nodeProducerVariantIndex,
+          nodeProducerAttempt: nodeProducer.nodeProducerAttempt,
+        } : {}),
         worldGroupId,
         conversationId,
         parentRunId: parent?.runId ?? null,

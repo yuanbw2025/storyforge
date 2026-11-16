@@ -22,6 +22,7 @@ import {
 } from '../../lib/inventory/extraction-range'
 import { resolveScopeLike } from '../../lib/workspace/scope'
 import ExtractionReviewPanel from '../shared/ExtractionReviewPanel'
+import { readExtractionPanelRecovery } from '../shared/readExtractionPanelRecovery'
 import {
   abandonInventoryExtractionV1,
   adoptInventoryExtractionCandidateV1,
@@ -92,27 +93,18 @@ export default function InventoryPanel({ project, initialEntryId }: Props) {
     setSelectedCandidates(new Set())
     setSelectionFrozen(false)
     setAdoptionStarted(false)
-    void resolveScopeLike(project.id!).then(async scope => {
-      const pending = await readPendingInventoryExtractionCandidateV1({ scope })
-      if (pending) return { pending, recoverable: null }
-      return { pending: null, recoverable: await readRecoverableInventoryExtractionV1({ scope }) }
-    }).then(result => {
+    void readExtractionPanelRecovery(
+      project.id!, readPendingInventoryExtractionCandidateV1, readRecoverableInventoryExtractionV1,
+    ).then(result => {
       if (!active) return
       if (result.pending) {
-        setExtractRunId(result.pending.snapshot.run.id)
-        setCandidates(result.pending.candidate.events)
-        setSelectedCandidates(new Set(
-          result.pending.selectedIndexes ?? result.pending.candidate.events.map((_, index) => index),
-        ))
-        setSelectionFrozen(result.pending.selectedIndexes != null)
+        setExtractRunId(result.pending.runId)
+        setCandidates(result.pending.events)
+        setSelectedCandidates(result.pending.selectedCandidates)
+        setSelectionFrozen(result.pending.selectionFrozen)
         setAdoptionStarted(result.pending.adoptionStarted)
       } else if (result.recoverable) {
-        setRecoverable({
-          runId: result.recoverable.snapshot.run.id,
-          nextCallIndex: result.recoverable.nextCallIndex,
-          totalCalls: result.recoverable.totalCalls,
-          safeToResume: result.recoverable.safeToResume,
-        })
+        setRecoverable(result.recoverable)
       }
     }).catch(error => {
       if (active) setExtractError(error instanceof Error ? error.message : '物品提取运行恢复失败')

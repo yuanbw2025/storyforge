@@ -3,6 +3,11 @@
 declare const __STORYFORGE_BUILD_SHA__: string
 
 interface ImportMetaEnv {
+  /** Public community endpoints only. The server-only secret key must never be prefixed with VITE. */
+  readonly VITE_STORYFORGE_COMMUNITY_SHARING?: '0' | '1'
+  readonly VITE_STORYFORGE_COMMUNITY_API_URL?: string
+  readonly VITE_STORYFORGE_COMMUNITY_SUPABASE_URL?: string
+  readonly VITE_STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY?: string
   /** Experimental AVG image production; defaults off. Never put credentials in VITE variables. */
   readonly VITE_STORYFORGE_AVG_MEDIA_PRODUCTION?: '0' | '1'
   /** Same-origin, hash-verified image pack for an explicitly configured community prototype. */

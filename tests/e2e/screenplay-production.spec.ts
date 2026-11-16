@@ -1,6 +1,7 @@
 import { createLongform } from './helpers/product-entry'
 import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
+import { Fountain } from 'fountain-js'
 
 test('小说转剧本从产品入口冻结来源，经专业生产数据发布并导出 Fountain', async ({ page }) => {
   await page.addInitScript(() => {
@@ -180,6 +181,9 @@ test('小说转剧本从产品入口冻结来源，经专业生产数据发布�
   expect(fountain).toContain('Title: E2E 山门电影剧本')
   expect(fountain).toContain('EXT. 青云山门 - 晨')
   expect(fountain).toContain('林惊羽')
+  const parsedExport = new Fountain().parse(fountain, true)
+  expect(parsedExport.tokens.filter(token => token.type === 'character').map(token => token.text)).toEqual(['林惊羽'])
+  expect(parsedExport.tokens.filter(token => token.type === 'dialogue').map(token => token.text)).toEqual(['先守住这里。'])
 
   await page.reload()
   await page.getByRole('navigation',{name:'剧本页面导航'}).getByRole('button',{name:'版本与导出',exact:true}).click()

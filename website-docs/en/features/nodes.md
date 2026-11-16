@@ -1,15 +1,25 @@
 ---
 productId: authoring.nodes
 status: preview
-lastVerified: 2026-10-19
+lastVerified: 2026-11-13
 ---
 # Node authoring
+
+## November 13: saving, recovery and usage checks
+
+Domain candidates in nodes still require explicit author adoption; reload/interruption recovery does not replace confirmation. Facts, post-chapter organization and chapter source checks share the actual source fingerprint. Changed text or source versions pause old operations for review instead of bypassing checks at a checkpoint. Nodes and step mode continue sharing work data. Sources: [#355](https://github.com/yuanbw2025/storyforge/pull/355), [#369](https://github.com/yuanbw2025/storyforge/pull/369), [#307](https://github.com/yuanbw2025/storyforge/pull/307).
+
 
 > Preview. Full cross-mode interoperability and real user paths are still being validated.
 
 See the [longform quality trial](/en/updates/development-status) for development-branch whole-chapter review, independent scoped revision, and downstream continuation after adoption. These changes are unmerged and undeployed, and are not included in existing downloads.
 
 Entry: Longform → Workbench → Node authoring (长篇 → 长篇工作台 → 节点创作). Nodes place inputs, generation steps, and intermediate results on a canvas for inspection and composition.
+
+
+## Field versions and recovery
+
+Formal world-setting and story-core field production retains candidate versions, author drafts and adoption records. Inspect candidates and actual sources before explicit adoption. Changes limited to node coordinates, titles or other presentation properties preserve recovery against the original execution inputs. Recheck freshness after execution-graph, configuration or source changes. Reconfirming an already confirmed result reuses its receipt. Other node families follow their own available recovery prompts. See [PR #255](https://github.com/yuanbw2025/storyforge/pull/255).
 
 ## When to use it
 

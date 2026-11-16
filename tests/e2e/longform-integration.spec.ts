@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test'
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 
 test('longform library creates a real work and retains edits across navigation and reload', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
-  await page.goto('./long')
+  await gotoWithBrowserFixtureAIConfigV1(page, './long')
   await page.getByRole('button', { name: '新建长篇', exact: true }).click()
   await page.getByRole('textbox', { name: '新长篇名称' }).fill('青港长篇验收')
   await page.getByRole('button', { name: '创建并进入工作台' }).click()
@@ -14,7 +15,7 @@ test('longform library creates a real work and retains edits across navigation a
   await page.getByRole('navigation', { name: '长篇工作台二级导航' }).getByRole('button', { name: '世界与设定', exact: true }).click()
   await page.getByRole('navigation', { name: '世界与设定三级导航' }).getByRole('button', { name: '世界起源', exact: true }).click()
   await expect(page).toHaveURL(/module=worldview-origin/)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('navigation', { name: '世界与设定三级导航' }).getByRole('button', { name: '世界起源', exact: true })).toHaveAttribute('aria-current', 'page')
   await expect(page.locator('.lf-current')).toContainText('青港长篇验收·修订')
   const primary = page.getByRole('navigation', { name: '长篇一级导航' })
@@ -30,7 +31,7 @@ test('longform library creates a real work and retains edits across navigation a
   await expect(page).toHaveURL(/module=visual-workflows/)
   await page.getByRole('navigation', { name: '工作台创作方式' }).getByRole('button', { name: 'Agent', exact: true }).click()
   await expect(page.getByRole('textbox', { name: '告诉主 Agent 你的目标' })).toBeVisible()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('textbox', { name: '告诉主 Agent 你的目标' })).toBeVisible()
   await primary.getByRole('button', { name: '作品库', exact: true }).click()
   await expect(page.getByRole('heading', { name: '青港长篇验收·修订', exact: true })).toBeVisible()
@@ -39,17 +40,14 @@ test('longform library creates a real work and retains edits across navigation a
 })
 
 test('Agent discussion and proposed plan survive reload without starting production', async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'openai', baseUrl: 'https://longform-test.invalid/v1', model: 'gpt-4o', temperature: 0.2, maxTokens: 4000 }))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
-  })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://longform-test.invalid/v1', model: 'gpt-4o', temperature: 0.2, maxTokens: 4000, apiKey: 'isolated-test-key' })
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
   let calls = 0
   await page.route('https://longform-test.invalid/**', async route => {
     calls++
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { role: 'assistant', content: JSON.stringify({ summary: '先创建一名寻找旧信的主角，等待作者确认。', tasks: [{ id: 'hero', agentId: 'character', instruction: '创建一名寻找旧信的主角', dependsOn: [] }] }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 80, total_tokens: 180 } }) })
   })
-  await page.goto('./long')
+  await gotoWithBrowserFixtureAIConfigV1(page, './long')
   await page.getByRole('button', { name: '新建长篇', exact: true }).click()
   await page.getByRole('textbox', { name: '新长篇名称' }).fill('会谈隔离验收')
   await page.getByRole('button', { name: '创建并进入工作台' }).click()
@@ -58,14 +56,14 @@ test('Agent discussion and proposed plan survive reload without starting product
   await page.getByRole('button', { name: '讨论与规划', exact: true }).click()
   await expect(page.getByRole('button', { name: '确认计划并开始', exact: true })).toBeVisible()
   expect(calls).toBe(1)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('button', { name: '确认计划并开始', exact: true })).toBeVisible()
   expect(calls).toBe(1)
   await page.getByText('整理需求摘要', { exact: true }).click()
   await page.getByRole('textbox', { name: '已确认的需求摘要', exact: true }).fill('修改方向：主角寻找的是旧日航图，暂不创建角色。')
   await page.getByRole('button', { name: '确认保存需求摘要', exact: true }).click()
   await expect(page.getByRole('button', { name: '确认计划并开始', exact: true })).toHaveCount(0)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('textbox', { name: '告诉主 Agent 你的目标' })).toBeVisible()
   await expect(page.getByRole('button', { name: '确认计划并开始', exact: true })).toHaveCount(0)
   expect(calls).toBe(1)
@@ -76,10 +74,8 @@ test('Agent discussion and proposed plan survive reload without starting product
 
 test('chunked outline choices and formal candidates survive reload and adopt into their selected volume', async ({ page }) => {
   test.setTimeout(90000)
-  await page.addInitScript(() => {
-    localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', baseUrl: 'https://longform-chunked.invalid/v1', model: 'chunked-e2e', temperature: 0.2, maxTokens: 4000 }))
-  })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'ollama', baseUrl: 'https://longform-chunked.invalid/v1', model: 'chunked-e2e', temperature: 0.2, maxTokens: 4000, apiKey: '' })
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
   let directionCalls = 0
   let chapterCalls = 0
   await page.route('https://longform-chunked.invalid/**', async route => {
@@ -97,7 +93,7 @@ test('chunked outline choices and formal candidates survive reload and adopt int
     }
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 120, total_tokens: 220 } }) })
   })
-  await page.goto('./long')
+  await gotoWithBrowserFixtureAIConfigV1(page, './long')
   await page.getByRole('button', { name: '新建长篇', exact: true }).click()
   await page.getByRole('textbox', { name: '新长篇名称' }).fill('精细章纲浏览器验收')
   await page.getByRole('button', { name: '创建并进入工作台' }).click()
@@ -110,12 +106,12 @@ test('chunked outline choices and formal candidates survive reload and adopt int
   await page.getByRole('button', { name: '确认生成', exact: true }).click()
   await expect(page.getByRole('button', { name: '选定此方案', exact: true })).toBeVisible()
   expect(directionCalls).toBe(1); expect(chapterCalls).toBe(0)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', { name: '继续精细生成', exact: true }).click()
   await page.getByRole('button', { name: '选定此方案', exact: true }).click()
   await expect(page.getByText('《旧信的方向2》', { exact: true }).first()).toBeVisible()
   expect(chapterCalls).toBe(1)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   const callsBefore = directionCalls + chapterCalls
   await expect(page.getByRole('button', { name: '继续精细生成', exact: true })).toBeVisible()
   expect(directionCalls + chapterCalls).toBe(callsBefore)
@@ -127,7 +123,7 @@ test('chunked outline choices and formal candidates survive reload and adopt int
   await expect(page.getByRole('button', { name: /^(正在采纳…|采纳这些章纲)$/ })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: '章节列表（20 章）', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '编辑章节', exact: true })).toHaveCount(20)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByRole('heading', { name: '章节列表（20 章）', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '编辑章节', exact: true })).toHaveCount(20)
   expect(directionCalls).toBe(3); expect(chapterCalls).toBe(3)
@@ -137,7 +133,7 @@ test('chunked outline choices and formal candidates survive reload and adopt int
 test('narrow longform workspace keeps the editor usable and offers both navigation levels', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
-  await page.goto('./long')
+  await gotoWithBrowserFixtureAIConfigV1(page, './long')
   await page.getByRole('button', { name: '新建长篇', exact: true }).click()
   await page.getByRole('textbox', { name: '新长篇名称' }).fill('窄屏长篇验收')
   await page.getByRole('button', { name: '创建并进入工作台' }).click()

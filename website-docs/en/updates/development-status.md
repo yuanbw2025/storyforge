@@ -1,5 +1,355 @@
 # Pending development and branch audit
 
+## November 16, 2026 · Desktop directory permission follow-up
+
+[#458](https://github.com/yuanbw2025/storyforge/issues/458) adds v4.0.7 evidence to [#300](https://github.com/yuanbw2025/storyforge/issues/300): the picker opens, but confirmation does not bind the directory. The desktop permission callback rejects filesystem access and does not answer restricted-directory events. The correction requires the trusted current window and author confirmation; protected locations can only be reselected or cancelled. It does not write or move files automatically or change storage identity. Isolated Electron 44.10.0 verifies real directory permission denial and approval with controlled OS-confirmation answers; this is not acceptance of the reporter's native picker. Formal client delivery and original-environment recovery remain pending, and both issues stay open.
+
+## November 15, 2026 · Release completion and local-state review
+
+Review from successful baseline `ff30400a` through `7ccc1d10` enumerated **444 local branches, 9 currently registered worktrees (including detached), and 1 worktree with uncommitted status**; 236 heads remain outside main ancestry. Remote references were refreshed and no PRs were open at the snapshot. Current registration counts do not prove that historical directories absent from this list were safely cleaned.
+
+- `869a9ba7` on `fix/client-release-407-browser-20261113` is a main ancestor and the formal v4.0.7 tag. `8e823201` on `fix/client-release-407-regressions-20261113` is also merged. They are revisions in one release chain, not two new capabilities. v4.0.7 is public; see [compatibility](/en/updates/compatibility).
+- The `feat/community-works-library-20261029` worktree has only two observed untracked entries: `supabase/.temp/cli-latest` and `supabase/.temp/linked-project.json`. These are tool temporary/local connection metadata, not new product features. Their contents were not published, committed, uploaded or cleaned.
+- The same 27 unique unpushed non-merge commits remain, with no newly unpushed development commit. Ancestry, file differences and stable-patch evidence were reviewed again. Equivalent patches are not reported as missing features; historical variants, probes and receipts remain for their authors to review without automatic merging.
+- The author checkout retains its original branch and commit. This task uses a separate documentation branch. Older dated sections are historical snapshots, not assertions that their merge conflicts persist in currently registered worktrees.
+
+## November 13, 2026 · Current merges and retained local work
+
+Review from the last successfully delivered `66dc20d7` through `c101170c` enumerated **442 local branches, 102 worktrees (including detached), and 78 worktrees with working-file status**. 236 branch heads are outside main ancestry, including historical/experimental/integration branches; this is not a count of undelivered features. No PRs were open at the snapshot. Product guides now describe actual merged behavior. Older dated sections are historical snapshots; this current section takes precedence.
+
+### Worktree deltas and retained work
+
+These are observations only. No author development was committed, pushed, merged or cleaned:
+
+| Branch/location | Observed scope | Deduplication/status |
+| --- | --- | --- |
+| Author checkout `main` | Nested `.worktrees/` and a separate quality checkout directory | Other-checkout entries, not new features |
+| `fix/sfqa-058-chat-frozen-source-plan-standalone` | 35 README/source/production/test status entries | Head already in main; retained in-progress merge staging for its author |
+| `fix/sfqa-077-consistency-evidence-dsh` | 21 consistency/revision/test entries, including conflicts | Head already in main; conflicts retained, not a second delivered repair |
+| `fix/sfqa307-import-registry-migration` | 9 backup/registry/import-test entries | Head already in main; uncommitted scope only |
+| `fix/sfqa-007008-acp-integrate-20261112` | 859 workflow/inherited source/test entries | Head already in main; merge staging is not 859 new features |
+| `fix/sfqa-007008-coverage-audit-20261112` | 17 engineering/dependency/checker entries | One commit remains outside main ancestry plus an in-progress merge; its author must review |
+
+### Unpushed patch review
+
+There are 27 unique unpushed non-merge commits; **11 have exactly equivalent stable patches in reviewed main** and are not missing features. The remaining 16 include historical implementation variants, recovery probes, fixtures and receipts. Different patches alone do not prove missing product behavior. Concrete retained branches/commits follow for author review, with shared commits listed once. Other worktrees retain earlier observations without repeated claims of new development.
+
+| Example retained branch | Commit | Status |
+| --- | --- | --- |
+| `fix/sfqa-096-join-gates-witness-20261112` | `0b49904e0` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa307-harness-world-fixtures-20261113` | `0d24fdd6e` | Stable-patch equivalent in main |
+| `fix/sfqa307-gateway-paging-20261113` | `16406a3dc` | Stable-patch equivalent in main |
+| `fix/sfqa-034039-standalone370-acp` | `20f5c8ccc` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa-backup-lifecycle-final-contract` | `28268294e` | Stable-patch equivalent in main |
+| `fix/sfqa-096-097-021-integration-with-417` | `28f634aaf` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/quality-037-canon-read-prep-20261031` | `459ff25f0` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/quality-037-canon-read-prep-20261031` | `57acec982` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa-025-real-decoder-20261113` | `648c49cb4` | Stable-patch equivalent in main |
+| `fix/quality-002-node-producers-20261031` | `6759f5544` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/quality-002-node-producers-20261031` | `695e38e38` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa021-world-publish-transaction-20261112` | `72816a85f` | Stable-patch equivalent in main |
+| `fix/sfqa030-product-foreign-key-evidence-20261113` | `8c30bd0b1` | Stable-patch equivalent in main |
+| `fix/quality-002-node-producers-20261031` | `9de2e88d7` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa-096-021-shared-validation-patch` | `a1fe9c023` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa370-downstream-contracts-20261112` | `aa09d8812` | Stable-patch equivalent in main |
+| `fix/quality-linked34-runtime-media-red-tests-20261103` | `ab91d556a` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa-096-097-021-integration-with-417` | `ad7881834` | Stable-patch equivalent in main |
+| `fix/sfqa370-domain-lifecycle-integration-20261112` | `b4af8f462` | Stable-patch equivalent in main |
+| `fix/quality-linked34-runtime-media-20261103` | `c0e3eadc5` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/quality-002-node-producers-20261031` | `c884b475b` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa-010-merged-tree-20261112-independent370` | `cf6c54678` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/quality-002-node-producers-20261031` | `d0bf498dd` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa307-inventory-boundaries-20261113` | `d767d8467` | Stable-patch equivalent in main |
+| `fix/quality-002-node-producers-20261031` | `e2c46b906` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+| `fix/sfqa307-canon-evidence-20261113` | `ea0a44325` | Stable-patch equivalent in main |
+| `fix/quality-037-history-delete-feedback-20261031` | `ed364a1ad` | Local variant/probe/receipt; unpushed, pending review; not counted as completed |
+
+
+
+
+
+## November 11, 2026 · Merged repairs and development deltas
+
+Reviewed main `5420f854` from `834718d1`. Enumerated 317 local branches and 89 registered worktrees including detached checkouts. 285 heads are outside main, with working-file entries in 72 worktrees. PR #301 is merged, incorporating the original #240/#275/#245 heads. Independent outline-review PR #303 is also merged. Older sections retain their dated snapshots.
+
+### New or updated pending PRs
+
+All rows below are open and unmerged. Paths identify observed source areas rather than completion or acceptance. Inherited integration changes are deduplicated using ancestry, identical heads and stable patch comparison. The remaining open PRs keep their preceding snapshot.
+
+| PR / head | Observed source areas |
+| --- | --- |
+| [#391](https://github.com/yuanbw2025/storyforge/pull/391) · `e038588b` | `src/components/text-game/TextOpenWorldCreatorProductionStart.tsx`, `src/lib/agent/creative-execution.ts` |
+| [#390](https://github.com/yuanbw2025/storyforge/pull/390) · `19002292` | `src/components/comic/ComicSource.tsx`, `src/components/geography/LocationTreeMap.tsx` |
+| [#389](https://github.com/yuanbw2025/storyforge/pull/389) · `c1775938` | `src/components/editor/ChapterEditor.tsx`, `src/components/editor/ChapterPostAdoptionSettingsPanel.tsx` |
+| [#388](https://github.com/yuanbw2025/storyforge/pull/388) · `ecd0ba53` | `scripts/ai-call-meta.mjs`, `scripts/check-ai-entry-registry.mjs` |
+| [#387](https://github.com/yuanbw2025/storyforge/pull/387) · `1374cc2f` | `src/components/product/ProductProductionStudio.tsx`, `src/components/product/TextAdventureMediaReview.tsx` |
+| [#386](https://github.com/yuanbw2025/storyforge/pull/386) · `cec18d69` | `src/components/system/ImportDocPanel.tsx`, `src/components/system/import/ImportConfirmModal.tsx` |
+| [#385](https://github.com/yuanbw2025/storyforge/pull/385) · `5c6b262e` | `src/lib/comic/qa.ts`, `src/lib/comic/release.ts` |
+| [#384](https://github.com/yuanbw2025/storyforge/pull/384) · `bd7bdf92` | `src/lib/product-production/scheduler.ts` |
+| [#383](https://github.com/yuanbw2025/storyforge/pull/383) · `b706f4f1` | `src/components/editor/ReviewPanel.tsx`, `src/lib/agent/consistency-agent.ts` |
+| [#382](https://github.com/yuanbw2025/storyforge/pull/382) · `05860d6e` | `.github/workflows/deploy-docs.yml`, `scripts/deploy/verify-docs-ssh-host-key.mjs` |
+| [#381](https://github.com/yuanbw2025/storyforge/pull/381) · `d2843b0e` | `src/lib/product-production/chat-media-tasks.ts`, `src/lib/product-production/chat-situation-tasks.ts` |
+| [#380](https://github.com/yuanbw2025/storyforge/pull/380) · `66e08051` | `src/components/facts/FactLibraryPanel.tsx`, `src/lib/consistency/lifecycle-boundary.ts` |
+| [#379](https://github.com/yuanbw2025/storyforge/pull/379) · `1cde5ac9` | `scripts/evaluate-narrative-reader-judge-local-codex.mjs`, `scripts/narrative-reader-judge-continuation.mjs` |
+| [#378](https://github.com/yuanbw2025/storyforge/pull/378) · `f2ec7acf` | `src/components/comic/ComicSourcePanel.tsx`, `src/components/comic/ComicStudio.tsx` |
+| [#377](https://github.com/yuanbw2025/storyforge/pull/377) · `3362bad5` | `src/lib/product/source-contracts.ts` |
+| [#376](https://github.com/yuanbw2025/storyforge/pull/376) · `d46eb0c7` | `src/components/text-game/TextOpenWorldCreatorBriefStudio.tsx`, `src/lib/open-world/creator-brief-persistence.ts` |
+| [#375](https://github.com/yuanbw2025/storyforge/pull/375) · `dfb6c61b` | `src/lib/salt-ridge/production.ts`, `src/pages/SaltRidgePage.tsx` |
+| [#374](https://github.com/yuanbw2025/storyforge/pull/374) · `94e65980` | `src/components/editor/ChapterEditor.tsx`, `src/components/editor/ReconciliationTable.tsx` |
+| [#373](https://github.com/yuanbw2025/storyforge/pull/373) · `772584c9` | `src/components/editor/ChapterContextPreview.tsx`, `src/components/editor/ChapterEditor.tsx` |
+| [#372](https://github.com/yuanbw2025/storyforge/pull/372) · `32792ad7` | `src/components/text-game/TextOpenWorldCreatorProductionReadiness.tsx`, `src/lib/open-world/creator-brief.ts` |
+| [#371](https://github.com/yuanbw2025/storyforge/pull/371) · `46e9ab7f` | `src/components/data/DataManagementPanel.tsx`, `src/components/home/HomeTools.tsx` |
+| [#370](https://github.com/yuanbw2025/storyforge/pull/370) · `a1cccb2d` | `src/components/location/LocationPanel.tsx`, `src/components/location/LocationTreeView.tsx` |
+| [#369](https://github.com/yuanbw2025/storyforge/pull/369) · `da90513e` | `src/components/node-authoring/NodeAuthoringWorkspace.tsx` |
+| [#368](https://github.com/yuanbw2025/storyforge/pull/368) · `544078d4` | `src/components/character-interaction/useChatMedia.ts`, `src/lib/character-interaction/runtime-visuals.ts` |
+| [#367](https://github.com/yuanbw2025/storyforge/pull/367) · `a92bec3c` | `src/components/worldview/WorldRulesPanel.tsx`, `src/stores/world-rules.ts` |
+| [#366](https://github.com/yuanbw2025/storyforge/pull/366) · `d41da09c` | `src/components/settings/HarnessEvalPanel.tsx`, `src/lib/ai/client.ts` |
+| [#365](https://github.com/yuanbw2025/storyforge/pull/365) · `54f04267` | `src/components/outline/OutlinePanel.tsx`, `src/components/outline/OutlineVolumeSidebar.tsx` |
+| [#364](https://github.com/yuanbw2025/storyforge/pull/364) · `2a4d6997` | `src/components/text-game/TextOpenWorldScenePanel.tsx`, `src/components/text-game/TextOpenWorldVNextPlayer.tsx` |
+| [#363](https://github.com/yuanbw2025/storyforge/pull/363) · `8d6416e6` | `src/components/text-game/TextOpenWorldCreatorBriefStudio.tsx`, `src/lib/open-world/creator-brief.ts` |
+| [#362](https://github.com/yuanbw2025/storyforge/pull/362) · `c071628b` | `src/components/text-game/AdventureGamePlayer.tsx`, `src/lib/adventure/harness.ts` |
+| [#361](https://github.com/yuanbw2025/storyforge/pull/361) · `0238c7dd` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#360](https://github.com/yuanbw2025/storyforge/pull/360) · `27278756` | `src/components/settings/HarnessEvalPanel.tsx`, `src/lib/ai/client.ts` |
+| [#359](https://github.com/yuanbw2025/storyforge/pull/359) · `b92975c6` | `src/lib/agent/character-copilot.ts`, `src/lib/agent/character-supplement-copilot.ts` |
+| [#358](https://github.com/yuanbw2025/storyforge/pull/358) · `c7229971` | `src/lib/product-production/capabilities.ts`, `src/lib/product-production/production-executor.ts` |
+| [#357](https://github.com/yuanbw2025/storyforge/pull/357) · `eefb698e` | `src/lib/agent/run/extraction-adoption.ts`, `src/lib/agent/run/inventory-extraction-durable.ts` |
+| [#356](https://github.com/yuanbw2025/storyforge/pull/356) · `90c11cb3` | `src/lib/product/runtime-media-library.ts` |
+| [#355](https://github.com/yuanbw2025/storyforge/pull/355) · `5fd27635` | `src/lib/node-authoring/bindings.ts`, `src/lib/node-authoring/chapter-source.ts` |
+| [#354](https://github.com/yuanbw2025/storyforge/pull/354) · `1b6fdc02` | `src/lib/open-world/action-executor.ts`, `src/lib/open-world/runtime-intent-recovery.ts` |
+| [#353](https://github.com/yuanbw2025/storyforge/pull/353) · `860a7ab6` | `src/components/agent/useMasterCopilot.ts`, `src/components/worldview/WorldviewAgentControls.tsx` |
+| [#352](https://github.com/yuanbw2025/storyforge/pull/352) · `6aa9ada8` | `src/components/editor/EntityRenamePanel.tsx`, `src/lib/editor/entity-rename.ts` |
+| [#351](https://github.com/yuanbw2025/storyforge/pull/351) · `eebed79b` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#350](https://github.com/yuanbw2025/storyforge/pull/350) · `6c480363` | `src/components/facts/FactLibraryPanel.tsx`, `src/lib/consistency/lifecycle-boundary.ts` |
+| [#349](https://github.com/yuanbw2025/storyforge/pull/349) · `81cf761f` | `src/components/location/LocationPanel.tsx`, `src/components/location/LocationTreeView.tsx` |
+| [#348](https://github.com/yuanbw2025/storyforge/pull/348) · `d618de1f` | `docs/ENGINEERING-QUALITY-STANDARD.md`, `package-lock.json` |
+| [#347](https://github.com/yuanbw2025/storyforge/pull/347) · `0e59e8f9` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#346](https://github.com/yuanbw2025/storyforge/pull/346) · `1b4daada` | `src/lib/agent/orchestrator.ts` |
+| [#345](https://github.com/yuanbw2025/storyforge/pull/345) · `0e22b609` | `src/components/comic/ComicStudio.tsx`, `src/components/comic/ComicVisualPanel.tsx` |
+| [#344](https://github.com/yuanbw2025/storyforge/pull/344) · `84dd2c81` | `docs/ENGINEERING-QUALITY-STANDARD.md`, `scripts/quality/critical-coverage-scopes.json` |
+| [#343](https://github.com/yuanbw2025/storyforge/pull/343) · `59e39ba1` | `scripts/avg-local-foreground/README.md`, `scripts/avg-local-foreground/runtime_guard.py` |
+| [#342](https://github.com/yuanbw2025/storyforge/pull/342) · `2ac13a9e` | `src/lib/aphelion/scene.ts`, `src/lib/tidemark/scene.ts` |
+| [#341](https://github.com/yuanbw2025/storyforge/pull/341) · `2801f1bc` | `src/lib/adventure/runtime.ts`, `src/lib/product-production/preview-manifest.ts` |
+| [#340](https://github.com/yuanbw2025/storyforge/pull/340) · `63e283b8` | `src/components/settings/AIConfigPanel.tsx`, `src/lib/ai/model-list.ts` |
+| [#339](https://github.com/yuanbw2025/storyforge/pull/339) · `85f9dbbd` | `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/ai-manual-context-sources.mjs` |
+| [#338](https://github.com/yuanbw2025/storyforge/pull/338) · `56de9ba8` | `src/components/community/CommunityReviewPanel.tsx`, `src/components/community/CommunitySafetyPanel.tsx` |
+| [#337](https://github.com/yuanbw2025/storyforge/pull/337) · `7d65daa9` | `src/components/text-game/AvgGamePlayer.tsx` |
+| [#336](https://github.com/yuanbw2025/storyforge/pull/336) · `4c8f7520` | `src/components/character/CharacterDetailCard.tsx`, `src/components/character/CharacterStatusPanel.tsx` |
+| [#335](https://github.com/yuanbw2025/storyforge/pull/335) · `aeda7d16` | `src/components/settings/CreativeReliabilityEvalPanel.tsx`, `src/components/settings/H86StoryArcEvalPanel.tsx` |
+| [#334](https://github.com/yuanbw2025/storyforge/pull/334) · `a118cc01` | `src/lib/product-production/original-response-author-source.ts`, `src/lib/product-production/original-response-booking.ts` |
+| [#333](https://github.com/yuanbw2025/storyforge/pull/333) · `29ba9061` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#332](https://github.com/yuanbw2025/storyforge/pull/332) · `c1994b1e` | `src/components/geography/GeographyPanel.tsx`, `src/components/world-group/ScopedWorldAuthoringBoundary.tsx` |
+| [#331](https://github.com/yuanbw2025/storyforge/pull/331) · `9f93e983` | `src/components/outline/DetailedOutlinePanel.tsx`, `src/lib/agent/run/detailed-outline-batch-durable.ts` |
+| [#330](https://github.com/yuanbw2025/storyforge/pull/330) · `e15540e9` | `src/lib/memory/workspace-projection.ts`, `src/lib/types/memory-engineering.ts` |
+| [#329](https://github.com/yuanbw2025/storyforge/pull/329) · `12b3096c` | `src/components/location/LocationPanel.tsx`, `src/components/location/LocationTreeView.tsx` |
+| [#328](https://github.com/yuanbw2025/storyforge/pull/328) · `fe69aa11` | `src/App.tsx`, `src/components/data/DataManagementPanel.tsx` |
+| [#327](https://github.com/yuanbw2025/storyforge/pull/327) · `848c637c` | `src/components/product/WorldSharingPanel.tsx`, `src/lib/db/ensure-schema.ts` |
+| [#326](https://github.com/yuanbw2025/storyforge/pull/326) · `9baf6e83` | `src/components/ttrpg/TtrpgRuntimeMediaPanel.tsx`, `src/lib/open-world/checkpoints.ts` |
+| [#325](https://github.com/yuanbw2025/storyforge/pull/325) · `f84f28b3` | `src/components/product/WorldSharingPanel.tsx`, `src/lib/editor/find-replace.ts` |
+| [#324](https://github.com/yuanbw2025/storyforge/pull/324) · `fdc4a38c` | `src/lib/extensions/domain.ts`, `src/lib/types/world-ownership.ts` |
+| [#323](https://github.com/yuanbw2025/storyforge/pull/323) · `c10f3791` | `src/components/outline/OutlinePanel.tsx`, `src/components/outline/OutlineVolumeSidebar.tsx` |
+| [#322](https://github.com/yuanbw2025/storyforge/pull/322) · `43c622ae` | `src/lib/product-production/media-blob-store.ts` |
+| [#321](https://github.com/yuanbw2025/storyforge/pull/321) · `5ded129f` | `src/components/ttrpg/TtrpgRuntimeMediaPanel.tsx`, `src/lib/open-world/checkpoints.ts` |
+| [#320](https://github.com/yuanbw2025/storyforge/pull/320) · `fd8c3052` | `src/lib/product-production/artifact-store.ts`, `src/lib/product-production/contracts.ts` |
+| [#319](https://github.com/yuanbw2025/storyforge/pull/319) · `51ae322a` | `CLAUDE.md`, `docs/ARCHITECTURE.md` |
+| [#318](https://github.com/yuanbw2025/storyforge/pull/318) · `39fe5b69` | `src/lib/editor/find-replace.ts` |
+| [#317](https://github.com/yuanbw2025/storyforge/pull/317) · `03d235e5` | `src/lib/screenplay/renderers.ts` |
+| [#316](https://github.com/yuanbw2025/storyforge/pull/316) · `0b79f7b2` | `src/lib/open-world/checkpoints.ts`, `src/lib/product/runtime-branch-lineage.ts` |
+| [#315](https://github.com/yuanbw2025/storyforge/pull/315) · `dabb50eb` | `src/lib/open-world/player-preferences.ts` |
+| [#314](https://github.com/yuanbw2025/storyforge/pull/314) · `ecc99701` | `src/components/editor/ChapterEditor.tsx`, `src/hooks/useAIStream.ts` |
+| [#313](https://github.com/yuanbw2025/storyforge/pull/313) · `20f8fa0a` | `src/lib/commercial/authority.ts`, `src/lib/community/commercial-release-policy.ts` |
+| [#312](https://github.com/yuanbw2025/storyforge/pull/312) · `9dbf6ad2` | `src/lib/motion-drama/contracts.ts`, `src/lib/motion-drama/delivery.ts` |
+| [#311](https://github.com/yuanbw2025/storyforge/pull/311) · `5703deea` | `.github/workflows/traffic-archive.yml`, `data/traffic/README.md` |
+| [#310](https://github.com/yuanbw2025/storyforge/pull/310) · `a1c42b7e` | `src/lib/context-gateway/canon-provider.ts` |
+| [#309](https://github.com/yuanbw2025/storyforge/pull/309) · `765a4906` | `src/lib/open-world/runtime-ai-context-provider.ts`, `src/lib/registry/assemble-context.ts` |
+| [#308](https://github.com/yuanbw2025/storyforge/pull/308) · `8371513e` | `src/lib/open-world/creator-artifact-edit-dispatch.ts`, `src/lib/open-world/creator-artifact-edit.ts` |
+| [#307](https://github.com/yuanbw2025/storyforge/pull/307) · `d4d42acf` | `src/components/ai-town/Consultation.tsx`, `src/components/avg/Consultation.tsx` |
+| [#306](https://github.com/yuanbw2025/storyforge/pull/306) · `8103cc53` | `src/components/comic/ComicSourcePanel.tsx`, `src/lib/comic/production.ts` |
+| [#305](https://github.com/yuanbw2025/storyforge/pull/305) · `0bef1578` | `src/components/product/WorldSharingPanel.tsx`, `src/lib/world-engine/world-package.ts` |
+| [#304](https://github.com/yuanbw2025/storyforge/pull/304) · `23a32a5a` | `src/lib/export/backup-trust.ts`, `src/lib/export/portable-table-structure.ts` |
+| [#302](https://github.com/yuanbw2025/storyforge/pull/302) · `57945be8` | `src/lib/editor/find-replace.ts` |
+| [#295](https://github.com/yuanbw2025/storyforge/pull/295) · `5145a169` | `src/App.tsx`, `src/components/agent/useMasterCopilot.ts` |
+
+### Changed uncommitted observations
+
+- `quality-secondline-closeout-20261111` · `fix/quality021-purpose-on-foundation-20261111` · 49 working/staged entries · `src/components/product/ProductProductionStudio.tsx`, `src/components/text-game/TextOpenWorldCreatorStudio.tsx`, `src/components/ttrpg/AuthorProposal.tsx`
+- `quality028032021-final-20261104` · `fix/quality-shared-regression-closure-20261104` · 1 working/staged entries · `tests/e2e/quality004-product-entry-admission.spec.ts`
+- `quality098099-split-20261111` · `fix/quality129-independent-20261111` · 19 working/staged entries · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `docs/ARCHITECTURE.md`, `docs/DATA-GOVERNANCE.md`
+
+The earlier 11 unique unpushed non-merge commits retain their local differences. Three newly observed unpushed commits are merge-only history. Other working-file entries retain the preceding recorded scope. Full branch/worktree paths, changes and ancestry proofs remain in private evidence. These observations do not establish completed product delivery.
+
+## November 10, 2026 · Current integration snapshot
+
+Reviewed main `1304d29a` from successful baseline `79c022c5`. Enumerated 220 local branches and 79 registered worktrees including detached checkouts. 193 heads are outside main. #255 and #256 are merged, carrying #250–#254 and their original heads. #234 is merged. Old dated sections retain their snapshots.
+
+### Pending PRs
+
+| PR / head | Scope recorded by its owner |
+| --- | --- |
+| [#295](https://github.com/yuanbw2025/storyforge/pull/295) · `4c5ace3f` | AVG sound inheritance with recovered author sources |
+| [#294](https://github.com/yuanbw2025/storyforge/pull/294) · `855f10ca` | Dependency audit and business coverage gates |
+| [#293](https://github.com/yuanbw2025/storyforge/pull/293) · `e5bed6db` | Source-purpose, failure recovery and maintenance follow-ups |
+| [#292](https://github.com/yuanbw2025/storyforge/pull/292) · `972f1d65` | Seven data and authoring repairs |
+| [#291](https://github.com/yuanbw2025/storyforge/pull/291) · `870c9498` | Import, adoption recovery and frozen product sources |
+| [#290](https://github.com/yuanbw2025/storyforge/pull/290) · `1d2e0b9f` | Node and world production repairs |
+| [#289](https://github.com/yuanbw2025/storyforge/pull/289) · `cc6329d7` | Save, runtime media and evaluation evidence |
+| [#288](https://github.com/yuanbw2025/storyforge/pull/288) · `5a394e51` | Runtime owners and AVG assembly compatibility |
+| [#287](https://github.com/yuanbw2025/storyforge/pull/287) · `0ecb3dc2` | Production charges and stale-agent recovery |
+| [#286](https://github.com/yuanbw2025/storyforge/pull/286) · `41786f24` | Runtime reads and visible saved candidates |
+| [#285](https://github.com/yuanbw2025/storyforge/pull/285) · `2ed4a7bc` | Evaluation workspaces and checkpoint branches |
+| [#284](https://github.com/yuanbw2025/storyforge/pull/284) · `ccef5349` | Authoring and runtime quality integration |
+| [#283](https://github.com/yuanbw2025/storyforge/pull/283) · `c4e1362f` | Adventure dice admission and Canon catalog concurrency |
+| [#282](https://github.com/yuanbw2025/storyforge/pull/282) · `cf23f644` | Low-frame-rate adventure movement |
+| [#281](https://github.com/yuanbw2025/storyforge/pull/281) · `03c14ab3` | Automatic backup failure reporting |
+| [#280](https://github.com/yuanbw2025/storyforge/pull/280) · `8cb0aee3` | Verified OPFS media read recovery |
+| [#279](https://github.com/yuanbw2025/storyforge/pull/279) · `15be60a5` | Backup fields and explicit malformed location-tag repair |
+| [#278](https://github.com/yuanbw2025/storyforge/pull/278) · `b3676c67` | Author recovery, sparse backups and CI validation |
+| [#277](https://github.com/yuanbw2025/storyforge/pull/277) · `b3cbb470` | Model-list asynchronous response ownership |
+| [#276](https://github.com/yuanbw2025/storyforge/pull/276) · `2f843cab` | Stream usage and prose recovery receipts |
+| [#275](https://github.com/yuanbw2025/storyforge/pull/275) · `6f1acb8a` | Desktop provider, chat and embedding CORS |
+| [#274](https://github.com/yuanbw2025/storyforge/pull/274) · `5cb30f87` | Fountain Chinese dialogue and literal-text export |
+| [#273](https://github.com/yuanbw2025/storyforge/pull/273) · `4613d54a` | Product maturity at entry and formal writes |
+| [#272](https://github.com/yuanbw2025/storyforge/pull/272) · `3806ee8f` | Comic visual identity and stale visual reviews |
+| [#271](https://github.com/yuanbw2025/storyforge/pull/271) · `bbc9192d` | Cumulative backup, compatibility and delivery recovery |
+| [#270](https://github.com/yuanbw2025/storyforge/pull/270) · `4f8fd009` | Source wire receipts and precise binding |
+| [#269](https://github.com/yuanbw2025/storyforge/pull/269) · `1172b155` | TTRPG navigation until save acknowledgement |
+| [#268](https://github.com/yuanbw2025/storyforge/pull/268) · `9212302c` | Android frozen source and measured APK release candidate |
+| [#267](https://github.com/yuanbw2025/storyforge/pull/267) · `b1af4dea` | Provider routes and runtime media concurrency |
+| [#265](https://github.com/yuanbw2025/storyforge/pull/265) · `5fa88fb3` | Frozen provider/config checks before dispatch |
+| [#264](https://github.com/yuanbw2025/storyforge/pull/264) · `bd75de32` | Runtime recovery, content identity and AVG reading delay |
+| [#259](https://github.com/yuanbw2025/storyforge/pull/259) · `d3426692` | Portable world-origin declaration foundation |
+| [#258](https://github.com/yuanbw2025/storyforge/pull/258) · `3ac7ef74` | Mapped command authorization and recovery |
+| [#257](https://github.com/yuanbw2025/storyforge/pull/257) · `26ece3ba` | Integrated cross-scope recovery repairs |
+| [#245](https://github.com/yuanbw2025/storyforge/pull/245) · `1258a5c1` | Empty TTRPG selection-loop repair |
+| [#244](https://github.com/yuanbw2025/storyforge/pull/244) · `eec8ad5e` | New Doubao defaults and lifecycle notices |
+| [#240](https://github.com/yuanbw2025/storyforge/pull/240) · `55485908` | Batch outlines, provider defaults and backup references |
+| [#238](https://github.com/yuanbw2025/storyforge/pull/238) · `4d295c81` | Character-chat content-production plan |
+| [#236](https://github.com/yuanbw2025/storyforge/pull/236) · `5b52b35f` | Earlier manuscript/recovery/source integration |
+| [#235](https://github.com/yuanbw2025/storyforge/pull/235) · `3a5b3722` | Quality audit and staged remediation plan |
+| [#233](https://github.com/yuanbw2025/storyforge/pull/233) · `ca120a73` | History-bound deletion protection |
+
+Dependent quality PRs inherit earlier repairs. Identical heads, ancestor topics and merge-only histories are deduplicated in the private audit. Eleven unique unpushed non-merge commits remain under patch review with no matching patch in the fetched origin-only comparison set. Each retained difference stays local until its owner delivers it.
+
+### Uncommitted worktrees
+
+- `ed9f` · `feat/community-works-library-20261029` — 2 observed working/staged entries · local CLI metadata
+- `quality-002-semantic-raw` · `fix/quality-002-longform-semantic-raw-20261102` — 5 observed working/staged entries · `src/lib/agent/prose-semantic-review.ts`, `src/lib/agent/run/prose-generation-durable.ts`
+- `quality-audit-baseline` · `fix/quality011-home-results-20261104` — 7 observed working/staged entries · `src/components/editor/ChapterEditor.tsx`, `src/components/ttrpg/TtrpgCampaignGuide.tsx`
+- `quality-audit-plan` · `fix/quality-036-brief-atomic-20261102` — 26 observed working/staged entries · `src/components/editor/ChapterEditor.tsx`, `src/components/editor/ChapterEditorToolbar.tsx`
+- `quality-ci-complete-coverage-20261103` · `fix/quality-node-admission-scope-20261103` — 2 observed working/staged entries · `src/lib/node-authoring/executor.ts`, `tests/regression/R-SFQA-node-admission-transaction.test.ts`
+- `quality-ci278-catalog-consistency-20261104` · `fix/quality-ci278-catalog-consistency-20261104` — 4 observed working/staged entries · `src/lib/context-gateway/canon-provider.ts`, `src/lib/context-gateway/provider-cache.ts`
+- `quality-ci278-third-shard-20261104` · `fix/quality-ci278-third-shard-20261104` — 4 observed working/staged entries · `tests/helpers/sfqa105-creator-source-refs.ts`, `tests/regression/R-SFQA004-product-entry-admission.test.tsx`
+- `quality-client-round1` · `fix/quality-048-original-counterfactual-20261031` — 1 observed working/staged entries · `tests/regression/R-SFQA048-foreshadow-delete-refs.test.ts`
+- `quality-context-round1` · `fix/quality085-memory-session-guard-20261104` — 4 observed working/staged entries · `src/components/text-game/TextOpenWorldScenePanel.tsx`, `src/components/text-game/TextOpenWorldVNextPlayer.tsx`
+- `quality-data-round1` · `fix/quality-037-canon-read-prep-20261031` — 6 observed working/staged entries · `scripts/check-architecture.mjs`, `src/lib/context-gateway/canon-provider.ts`
+- `quality-extra-data9-20261102` · `fix/quality257-memory-roundtrip-20261103` — 2 observed working/staged entries · `src/lib/export/registry-import.ts`, `tests/regression/R-MEMORY-CLOSE3-longform-acceptance.test.ts`
+- `quality-extra-runtime9-20261102` · `fix/quality257-canon-compat-20261103` — 3 observed working/staged entries · `src/lib/agent/run/narrative-annotation-durable.ts`, `tests/regression/R-NW-1C-target-state.test.ts`
+- `quality-extra-web8-20261102` · `fix/quality143-auto-backup-status-20261103` — 10 observed working/staged entries · `docs/ARCHITECTURE.md`, `docs/DATA-GOVERNANCE.md`
+- `quality-game-controls-20261103` · `fix/quality128-direct-movement-20261103` — 4 observed working/staged entries · `src/lib/aphelion/scene.ts`, `src/lib/tidemark/scene.ts`
+- `quality-independent79-20261102` · `fix/quality141-context-manual-20261103` — 7 observed working/staged entries · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/ai-manual-context-sources.mjs`
+- `quality-intent-round1` · `fix/quality-002-node-producers-20261031` — 20 observed working/staged entries · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `docs/ARCHITECTURE.md`
+- `quality-linked34-20261102` · `fix/quality-world-source-library-ui-20261103` — 5 observed working/staged entries · `docs/ARCHITECTURE.md`, `docs/products/WORLD-ENGINE.md`
+- `quality-main-docs-delta-20261103` · `fix/quality257-browser-causality-20261103` — 2 observed working/staged entries · `tests/e2e/core-workflow.spec.ts`, `tests/e2e/longform-chapter-review.spec.ts`
+- `quality-next-three-20261104` · `fix/quality044-attempt-recovery-20261104` — 27 observed working/staged entries · `docs/DATA-GOVERNANCE.md`, `src/components/data/DataManagementPanel.tsx`
+- `quality-node002-delivery` · `fix/quality-002-node-delivery-20261102` — 46 observed working/staged entries · `scripts/ai-call-meta.mjs`, `scripts/check-ai-entry-registry.mjs`
+- `quality-round1-integration` · `fix/quality002-runtime-raw-evidence-20261102` — 8 observed working/staged entries · `src/lib/adventure/harness.ts`, `src/lib/agent/run/creation-response-evidence.ts`
+- `quality-studio005-20261031` · `fix/quality144-tooling-gates-20261102` — 10 observed working/staged entries · `docs/ENGINEERING-QUALITY-STANDARD.md`, `package-lock.json`
+- `quality002-master-raw` · `fix/quality002-master-raw-20261102` — 7 observed working/staged entries · `src/lib/agent/detailed-outline-authoring.ts`, `src/lib/agent/orchestrator.ts`
+- `quality021-world-source-library-20261104` · `fix/quality021-purpose-admission-20261104` — 50 observed working/staged entries · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `docs/products/WORLD-ENGINE.md`
+- `quality022-author-confirmed-import-20261104` · `fix/quality022-author-confirmed-import-20261104` — 35 observed working/staged entries · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/check-ai-entry-registry.mjs`
+- `quality022-durable-import-candidate-20261104` · `fix/quality022-durable-import-candidate-20261104` — 25 observed working/staged entries · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/check-ai-entry-registry.mjs`
+- `quality022-final-dispatch-r6` · `fix/quality022-final-dispatch-r6` — 27 observed working/staged entries · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/check-ai-entry-registry.mjs`
+- `quality022-full-source-admission-r8` · `fix/quality022-full-source-admission-r8` — 18 observed working/staged entries · `src/components/system/ImportDocPanel.tsx`, `src/components/system/import/ImportConfirmModal.tsx`
+- `quality022-legacy-import-admission-20261104` · `fix/quality022-legacy-import-admission-20261104` — 18 observed working/staged entries · `src/components/system/ImportDocPanel.tsx`, `src/components/system/import/ImportConfirmModal.tsx`
+- `quality022-reference-start-r2` · `fix/quality044-reference-attempt-20261104` — 41 observed working/staged entries · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/check-ai-entry-registry.mjs`
+- `quality028-ttrpg-continuation-20261104` · `fix/quality028-ttrpg-continuation-20261104` — 2 observed working/staged entries · `src/lib/product/runtime-instances.ts`, `tests/regression/R-SFQA028-ttrpg-continuation-group.test.ts`
+- `quality028032021-final-20261104` · `fix/quality-shared-regression-closure-20261104` — 9 observed working/staged entries · `tests/registry/ai-manual.test.ts`, `tests/regression/R-CHAT-01-role-profile.test.ts`
+- `quality030-portable-required-refs-20261104` · `fix/quality007-dev-dependency-report-20261104` — 32 observed working/staged entries · `scripts/ai-call-meta.mjs`, `scripts/check-ai-entry-registry.mjs`
+- `quality031-runtime-branch-atomic-20261103` · `fix/quality066-detail-parser-consistency-20261103` — 2 observed working/staged entries · `src/lib/agent/orchestrator.ts`, `tests/regression/R-SFQA066-detail-parser-consistency.test.ts`
+- `quality032-runtime-event-boundary-20261104` · `fix/quality032-runtime-event-boundary-20261104` — 2 observed working/staged entries · `src/lib/product/runtime-core.ts`, `tests/regression/R-SFQA032-runtime-event-boundary.test.ts`
+- `quality033-traffic-assets-20261104` · `fix/quality133-docs-host-pin-20261104` — 8 observed working/staged entries · `.github/workflows/deploy-docs.yml`, `.github/workflows/traffic-archive.yml`
+- `quality034039-comic-visual-20261103` · `fix/quality136-context-preview-20261103` — 5 observed working/staged entries · `src/components/editor/ChapterContextPreview.tsx`, `src/components/editor/ChapterEditor.tsx`
+- `quality040-045-067-final-20261104` · `fix/quality018-source-plan-conditional-20261104` — 2 observed working/staged entries · `src/lib/product/source-contracts.ts`, `tests/regression/R-SFQA018-source-plan-conditional.test.ts`
+- `quality040045-atomic-budget-seal-20261104` · `fix/quality040045-atomic-budget-seal-20261104` — 6 observed working/staged entries · `src/lib/product-production/artifact-store.ts`, `src/lib/product-production/contracts.ts`
+- `quality040045-production-budget-ledger-20261104` · `fix/quality040045-production-budget-ledger-20261104` — 5 observed working/staged entries · `src/lib/product-production/artifact-store.ts`, `src/lib/product-production/contracts.ts`
+- `quality041-118-final-20261104` · `fix/quality058-chat-frozen-plan-20261104` — 4 observed working/staged entries · `src/lib/product-production/chat-media-tasks.ts`, `src/lib/product-production/chat-situation-tasks.ts`
+- `quality041-runtime-context-scope-20261104` · `fix/quality041-runtime-context-scope-20261104` — 4 observed working/staged entries · `src/lib/open-world/runtime-ai-context-provider.ts`, `src/lib/registry/assemble-context.ts`
+- `quality051-node-resume-freshness-20261104` · `fix/quality051-node-resume-freshness-20261104` — 26 observed working/staged entries · `src/lib/agent/character-copilot.ts`, `src/lib/agent/character-supplement-copilot.ts`
+- `quality052-node-source-fingerprint-20261104` · `fix/quality052-node-source-fingerprint-20261104` — 5 observed working/staged entries · `src/lib/node-authoring/bindings.ts`, `src/lib/node-authoring/domain-execution.ts`
+- `quality064-adoption-recovery-stale-20261104` · `fix/quality064-adoption-recovery-stale-20261104` — 9 observed working/staged entries · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `src/lib/agent/character-revision-copilot.ts`
+- `quality065-chat-visual-recovery-20261104` · `fix/quality065-chat-visual-recovery-20261104` — 4 observed working/staged entries · `src/components/character-interaction/useChatMedia.ts`, `src/lib/character-interaction/runtime-visuals.ts`
+- `quality067-master-stale-policy-20261104` · `fix/quality067-master-stale-policy-20261104` — 3 observed working/staged entries · `src/lib/agent/run/master-adoption.ts`, `src/lib/agent/run/master-durable.ts`
+- `quality068-character-cold-cas-20261104` · `fix/quality068-character-cold-cas-20261104` — 3 observed working/staged entries · `src/lib/agent/orchestrator.ts`, `tests/regression/R-SFQA066-detail-parser-consistency.test.ts`
+- `quality069-parent-timeline-branch-20261104` · `fix/quality069-parent-timeline-branch-20261104` — 2 observed working/staged entries · `src/lib/open-world/checkpoints.ts`, `tests/regression/R-SFQA069-parent-timeline-branch.test.ts`
+- `quality081-chapter-reconciliation-20261104` · `fix/quality081-chapter-reconciliation-20261104` — 6 observed working/staged entries · `src/components/editor/ChapterEditor.tsx`, `src/components/editor/ReconciliationTable.tsx`
+- `quality082083-cut-history-r10-20261104` · `fix/quality082083-cut-history-r10-20261104` — 11 observed working/staged entries · `src/components/ttrpg/TtrpgRuntimeMediaPanel.tsx`, `src/lib/product/runtime-core.ts`
+- `quality082083-late-fee-cut-r11-20261104` · `fix/quality082083-late-fee-cut-r11-20261104` — 11 observed working/staged entries · `src/components/ttrpg/TtrpgRuntimeMediaPanel.tsx`, `src/lib/product/runtime-core.ts`
+- `quality082083-runtime-media-attempts-20261104` · `fix/quality082083-runtime-media-attempts-20261104` — 11 observed working/staged entries · `src/components/ttrpg/TtrpgRuntimeMediaPanel.tsx`, `src/lib/product/runtime-core.ts`
+- `quality084-dialogue-window-20261104` · `fix/quality084-dialogue-window-20261104` — 7 observed working/staged entries · `src/components/text-game/TextOpenWorldScenePanel.tsx`, `src/lib/open-world/runtime-ai-contract.ts`
+- `quality089-creator-consultation-usage-20261104` · `fix/quality089-creator-consultation-usage-20261104` — 4 observed working/staged entries · `src/components/text-game/TextOpenWorldCreatorProductionReadiness.tsx`, `src/lib/open-world/creator-brief.ts`
+- `quality096-creator-protagonist-handoff-20261104` · `fix/quality096-creator-protagonist-handoff-20261104` — 13 observed working/staged entries · `src/components/text-game/TextOpenWorldCreatorBriefStudio.tsx`, `src/lib/open-world/creator-brief-persistence.ts`
+- `quality096-creator-scheduler-admission-r10-20261104` · `fix/quality096-creator-scheduler-admission-r10-20261104` — 16 observed working/staged entries · `src/components/text-game/TextOpenWorldCreatorBriefStudio.tsx`, `src/lib/open-world/creator-brief-persistence.ts`
+- `quality096-historical-start-proof-20261104` · `fix/quality096-historical-start-proof-20261104` — 1 observed working/staged entries · `tests/regression/R-SFQA096-historical-proof-only.test.ts`
+- `quality103-ai-config-20261103` · `fix/quality129-missing-location-tags-probe-20261103` — 11 observed working/staged entries · `src/components/location/LocationPanel.tsx`, `src/components/location/LocationTreeView.tsx`
+- `quality109-adventure-dice-20261103` · `fix/quality109-adventure-dice-admission-20261103` — 7 observed working/staged entries · `src/lib/adventure/runtime.ts`, `src/lib/product-production/preview-manifest.ts`
+- `quality111-eval-cleanup-ownership-20261104` · `fix/quality111-eval-cleanup-ownership-20261104` — 18 observed working/staged entries · `src/components/settings/CreativeReliabilityEvalPanel.tsx`, `src/components/settings/H86StoryArcEvalPanel.tsx`
+- `quality116-intent-session-guard-20261104` · `fix/quality116-intent-session-guard-20261104` — 6 observed working/staged entries · `docs/products/TEXT-ADVENTURE.md`, `src/components/text-game/AdventureGamePlayer.tsx`
+- `quality118-visible-candidate-draft-20261104` · `fix/quality118-visible-candidate-draft-20261104` — 6 observed working/staged entries · `src/components/agent/useMasterCopilot.ts`, `src/components/worldview/WorldviewAgentControls.tsx`
+- `quality120-h4-usage-provenance-20261104` · `fix/quality120-h4-usage-provenance-20261104` — 13 observed working/staged entries · `src/components/settings/HarnessEvalPanel.tsx`, `src/lib/ai/client.ts`
+- `quality123-community-request-intents-20261104` · `fix/quality123-community-request-intents-20261104` — 8 observed working/staged entries · `src/components/community/CommunityReviewPanel.tsx`, `src/components/community/CommunitySafetyPanel.tsx`
+- `quality129-backup-field-shapes-20261103` · `fix/quality131-svg-preview-isolation-20261103` — 4 observed working/staged entries · `src/components/geography/GeographyPanel.tsx`, `tests/e2e/quality131-svg-preview-isolation.spec.ts`
+- `quality132-salt-ridge-resource-hashes-20261104` · `fix/quality132-salt-ridge-resource-hashes-20261104` — 5 observed working/staged entries · `src/lib/salt-ridge/production.ts`, `src/pages/SaltRidgePage.tsx`
+- `quality135-sam-source-20261104` · `fix/quality135-sam-source-20261104` — 5 observed working/staged entries · `scripts/avg-local-foreground/README.md`, `scripts/avg-local-foreground/server.py`
+- `quality137-judge-continuation-20261104` · `fix/quality137-judge-continuation-20261104` — 3 observed working/staged entries · `scripts/evaluate-narrative-reader-judge-local-codex.mjs`, `scripts/narrative-reader-judge-continuation.mjs`
+- `quality271-browser-recovery-20261103` · `fix/quality009-domain-evidence-leaves-20261104` — 75 observed working/staged entries · `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/quality/coverage-shards.mjs`
+
+These entries record file scope only. Some retain already-integrated or overlapping changes, test material or generated files. Full paths, hashes and differences stay in private evidence. Product owners retain their working content and delivery decisions.
+
+## November 3, 2026 · Current development snapshot
+
+Reviewed from `a3317feb` to remote main `054d8a06`: **110 local branches, 24 registered worktrees including detached checkouts, 103 heads outside main**. These are audit counts, not feature counts. Formal v4.0.5 is published; #246 is merged. Other open PRs below are not in main. Older dated sections remain historical snapshots.
+
+| PR / branch / head | Observed scope and status |
+| --- | --- |
+| [#259](https://github.com/yuanbw2025/storyforge/pull/259) · `fix/quality-world-sharing-foundation-20261103` · `d3426692` | World-sharing origin declarations; purpose gates and formal wiring incomplete；open |
+| [#258](https://github.com/yuanbw2025/storyforge/pull/258) · `fix/quality-mapped-recovery072-20261103` · `3ac7ef74` | Mapped open-world command recovery；open |
+| [#257](https://github.com/yuanbw2025/storyforge/pull/257) · `fix/quality-ready24-integration-20261103` · `26ece3ba` | Editing ownership, delayed I/O, adoption, sharing and media integration；open |
+| [#256](https://github.com/yuanbw2025/storyforge/pull/256) · `fix/quality-ready17-integration-20261103` · `2cd0e6eb` | 17 follow-up repairs dependent on #255；draft |
+| [#255](https://github.com/yuanbw2025/storyforge/pull/255) · `fix/quality-priority31-final-20261102` · `23c3be69` | Integrated delivery of 27 remaining priority findings; full checks pending；open |
+| [#254](https://github.com/yuanbw2025/storyforge/pull/254) · `fix/quality-036-completion-delivery-20261102` · `1496d2e9` | Atomic prose, scene-outline and impact adoption/recovery；open |
+| [#253](https://github.com/yuanbw2025/storyforge/pull/253) · `fix/quality144-delivery-20261102` · `cc5508f3` | Engineering type/tooling checks；open |
+| [#252](https://github.com/yuanbw2025/storyforge/pull/252) · `fix/quality-002-036-adoption-delivery-20261102` · `df9fa441` | Raw-response preservation and Brief adoption recovery；open |
+| [#251](https://github.com/yuanbw2025/storyforge/pull/251) · `fix/quality-005-world-lineage-delivery-20261102` · `d17d2c42` | Sealed open-world sourcing and historical read-only boundaries；open |
+| [#250](https://github.com/yuanbw2025/storyforge/pull/250) · `fix/quality-ready-delivery-20-20261102` · `44e86d4e` | Follow-up delivery within the priority repair chain；open |
+| [#245](https://github.com/yuanbw2025/storyforge/pull/245) · `fix/ttrpg-empty-session-loop-20261102` · `1258a5c1` | Empty TTRPG session-loop repair；draft |
+| [#244](https://github.com/yuanbw2025/storyforge/pull/244) · `fix/doubao-default-lifecycle-20261102` · `eec8ad5e` | New Doubao default and lifecycle notices；open |
+| [#240](https://github.com/yuanbw2025/storyforge/pull/240) · `fix/batch-detail-confirmation-20261031` · `0b58a5c4` | Batch outline confirmation, Doubao and backup-reference protection；open |
+| [#238](https://github.com/yuanbw2025/storyforge/pull/238) · `refactor/chat-content-development-plan-20261030` · `4d295c81` | Character-chat story-quality development plan; not feature delivery；draft |
+| [#236](https://github.com/yuanbw2025/storyforge/pull/236) · `fix/quality-round1-integration-20261030` · `5b52b35f` | Earlier first-round quality integration；draft |
+| [#235](https://github.com/yuanbw2025/storyforge/pull/235) · `feat/quality-audit-plan-20261029` · `3a5b3722` | Fixed-baseline audit and staged remediation plan；draft |
+| [#234](https://github.com/yuanbw2025/storyforge/pull/234) · `feat/community-works-library-20261029` · `72a231b5` | Explicit author-selected community submission/reading; final delivery pending；draft |
+| [#233](https://github.com/yuanbw2025/storyforge/pull/233) · `fix/issue-179-run-backup-lifecycle-20261029` · `ca120a73` | History-bound Run target deletion guard; not recovery of existing bad backups；open |
+
+#255 → #256 → #257 → #258 is one dependency chain. #250–#254 and #236 contain earlier integration inputs; inherited commits, identical heads, merge-only history and equivalent patches are not counted again. #259 is a separate partial foundation, not public sharing permission or a new schema.
+
+### Uncommitted worktrees
+
+- `ed9f` · `feat/community-works-library-20261029`：Only two local Supabase CLI metadata files, not product features; contents stay private.
+- `quality-002-semantic-raw` · `fix/quality-002-longform-semantic-raw-20261102`：5 working/staged entries, including `src/lib/agent/prose-semantic-review.ts`, `src/lib/agent/run/prose-generation-durable.ts`; observed scope only, not completed implementation.
+- `quality-audit-plan` · `fix/quality-036-brief-atomic-20261102`：26 working/staged entries, including `src/components/editor/ChapterEditor.tsx`, `src/components/editor/ChapterEditorToolbar.tsx`; observed scope only, not completed implementation.
+- `quality-client-round1` · `fix/quality-048-original-counterfactual-20261031`：1 working/staged entries, including `tests/regression/R-SFQA048-foreshadow-delete-refs.test.ts`; observed scope only, not completed implementation.
+- `quality-data-round1` · `fix/quality-037-canon-read-prep-20261031`：6 working/staged entries, including `scripts/check-architecture.mjs`, `src/lib/context-gateway/canon-provider.ts`; observed scope only, not completed implementation.
+- `quality-extra-runtime9-20261102` · `fix/quality056-runtime-media-concurrency-20261103`：4 working/staged entries, including `docs/ARCHITECTURE.md`, `src/lib/product/runtime-media-library.ts`; observed scope only, not completed implementation.
+- `quality-extra-web8-20261102` · `fix/quality-ready-followups-20261103`：5 working/staged entries, including `docs/AI-FUNCTIONS-MANUAL.generated.md`, `scripts/quality/engineering-debt-baseline.json`; observed scope only, not completed implementation.
+- `quality-independent79-20261102` · `fix/quality050-provider-dispatch-binding-20261103`：4 working/staged entries, including `src/lib/product-production/capabilities.ts`, `src/lib/product-production/production-executor.ts`; observed scope only, not completed implementation.
+- `quality-intent-round1` · `fix/quality-002-node-producers-20261031`：20 working/staged entries, including `docs/AI-FUNCTIONS-MANUAL.generated.md`, `docs/ARCHITECTURE.md`; observed scope only, not completed implementation.
+- `quality-linked34-20261102` · `fix/quality-world-source-receipts-20261103`：15 working/staged entries, including `docs/DATA-GOVERNANCE.md`, `src/lib/db/ensure-schema.ts`; observed scope only, not completed implementation.
+- `quality-node002-delivery` · `fix/quality-002-node-delivery-20261102`：46 working/staged entries, including `scripts/ai-call-meta.mjs`, `scripts/check-ai-entry-registry.mjs`; observed scope only, not completed implementation.
+- `quality-round1-integration` · `fix/quality002-runtime-raw-evidence-20261102`：8 working/staged entries, including `src/lib/adventure/harness.ts`, `src/lib/agent/run/creation-response-evidence.ts`; observed scope only, not completed implementation.
+- `quality-studio005-20261031` · `fix/quality144-tooling-gates-20261102`：10 working/staged entries, including `docs/ENGINEERING-QUALITY-STANDARD.md`, `package-lock.json`; observed scope only, not completed implementation.
+- `quality002-master-raw` · `fix/quality002-master-raw-20261102`：7 working/staged entries, including `src/lib/agent/detailed-outline-authoring.ts`, `src/lib/agent/orchestrator.ts`; observed scope only, not completed implementation.
+
+Twelve branch heads contain commits absent from origin, but two commits on `fix/quality-ready-followups-20261103` are merge-only history. Across 11 unique unpushed non-merge commits, one has an equivalent origin patch; the others remain local evidence. The 037 read-frame/backup/reference chain, node-producer lifecycle chain and linked34 media/test branches overlap: preserve their ancestry and patch differences rather than treating each as independent delivery. Full paths and differences remain private. No product changes are committed, pushed, merged or cleaned by this task; no product tests are run.
+
 ## October 30, 2026 · Current branches and pending delivery
 
 Reviewed from successful baseline `3b524e11` to remote main `8707bb8a`. Before editing, enumerated **12 local branches and 11 registered worktrees, including detached checkouts**. Nine heads are outside main; all committed work is reachable from origin references. Branch counts are not feature counts. Removed registrations are not recreated or treated as proof of lost content. Older dated sections retain their historical snapshots; this section records the current review.

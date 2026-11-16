@@ -1,9 +1,14 @@
 ---
 productId: upper.character-interaction
 status: preview
-lastVerified: 2026-10-28
+lastVerified: 2026-11-13
 ---
 # Character chat
+
+## November 13: saving, recovery and usage checks
+
+When an image was saved but final verification was interrupted, reload to view the original image. Explicit completion finishes that task's remaining verification without requesting the same image again. Confirmed generation failures and unknown outcomes remain distinct; unknown results are not automatically resent. Production uses the confirmed source plan, requiring review after source changes and keeping other saves' private material out of the current conversation. Sources: [#368](https://github.com/yuanbw2025/storyforge/pull/368), [#381](https://github.com/yuanbw2025/storyforge/pull/381).
+
 
 > Preview: text conversations and the single-character illustrated technical flow are connected, with enhanced entries hidden by default. Stable multi-turn dialogue, cross-image character consistency, and long-term behavior remain unverified.
 

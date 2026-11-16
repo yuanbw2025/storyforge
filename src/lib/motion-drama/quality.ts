@@ -1,4 +1,5 @@
 import { db } from '../db/schema'
+import { readVerifiedMediaBlobV1 } from '../media/blob-store'
 import type { MotionDramaPromptPackMaturityV1, MotionDramaProviderTargetV1, WorkspaceScope } from '../types'
 import { verifyMotionDramaPromptPackV1, inspectMotionDramaPackMaturityV1 } from './prompt-pack'
 import { requireMotionDramaRootsV1 } from './service'
@@ -62,5 +63,40 @@ export async function inspectMotionDramaQualityV1(input: { scope: WorkspaceScope
   }
   const maturity = inspectMotionDramaPackMaturityV1({ subjects, versions, shots, references })
   warnings.push(...maturity.missing)
-  return { episodeNumber: input.episodeNumber, ready: blockers.length === 0, achievableTier: maturity.maturity, blockers, warnings, metrics: { sceneCount: scenes.length, shotCount: shots.length, totalSeconds, promptCoverage: shots.length ? prompted / shots.length : 0, openCritical, openMajor, providerPackCount: packs.length, directUseReadyProviderCount } }
+  const visualSubjectKeys = new Set(shots.flatMap(shot => [
+    ...shot.subjectKeys, ...shot.soundPlan.flatMap(cue => cue.subjectKey ? [cue.subjectKey] : []),
+  ]))
+  const shotByKey = new Map(shots.map(shot => [shot.stableKey, shot]))
+  const imageRefs = [
+    ...subjects.flatMap(subject => {
+      if (!visualSubjectKeys.has(subject.stableKey) || subject.kind === 'voice' || subject.kind === 'sound') return []
+      const version = versions.find(row => row.stableKey === subject.selectedVersionKey && row.origin !== 'prompt-only')
+      return version?.blobObjectId != null
+        ? [{ id: version.blobObjectId, label: `物料 ${subject.label}`, expectedHash: version.contentHash }]
+        : []
+    }),
+    ...references.flatMap(reference => {
+      const shot = shotByKey.get(reference.shotKey)
+      return shot && reference.blobObjectId != null
+        ? [{ id: reference.blobObjectId, label: `镜头 ${shot.shotNumber} ${reference.role}`, expectedHash: null }]
+        : []
+    }),
+  ]
+  const verified = new Map<number, string | Error>()
+  let imagesReady = true
+  for (const ref of imageRefs) {
+    let hash = verified.get(ref.id)
+    if (hash == null) {
+      hash = await readVerifiedMediaBlobV1({ scope: roots.scope, blobObjectId: ref.id })
+        .then(row => row.contentHash)
+        .catch(cause => cause instanceof Error ? cause : new Error('无法读取参考图'))
+      verified.set(ref.id, hash)
+    }
+    if (hash instanceof Error || (ref.expectedHash != null && ref.expectedHash !== hash)) {
+      imagesReady = false
+      warnings.push(`${ref.label} 的参考图不可用：${hash instanceof Error ? hash.message : '内容 hash 与选定版本不符'}`)
+    }
+  }
+  if (!imagesReady) directUseReadyProviderCount = 0
+  return { episodeNumber: input.episodeNumber, ready: blockers.length === 0, achievableTier: imagesReady ? maturity.maturity : 'prompt-only', blockers, warnings, metrics: { sceneCount: scenes.length, shotCount: shots.length, totalSeconds, promptCoverage: shots.length ? prompted / shots.length : 0, openCritical, openMajor, providerPackCount: packs.length, directUseReadyProviderCount } }
 }

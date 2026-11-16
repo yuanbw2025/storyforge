@@ -85,7 +85,7 @@ function plan(): MasterAgentPlan {
 
 function fakeExecutor(input: {
   failAfterTask?: string
-  calls: ReturnType<typeof vi.fn>
+  calls: (taskId: string) => void
 }) {
   return async (options: any): Promise<void> => {
     for (const task of options.plan.tasks) {

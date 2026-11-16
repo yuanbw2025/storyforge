@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {expect, test} from '@playwright/test'
 
@@ -9,9 +10,8 @@ for (const rejectRevision of [false, true]) test(`explicitly revises rejected co
   let calls = 0
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'isolated-revision')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-revision.invalid/v1', model: 'test', maxTokens: 4000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-fixture-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-revision.invalid/v1', model: 'test', maxTokens: 4000, apiKey: 'isolated-fixture-key' })
   await page.route('https://chat-revision.invalid/**', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     calls++
@@ -23,16 +23,16 @@ for (const rejectRevision of [false, true]) test(`explicitly revises rejected co
       : calls === 1 ? action : {...action, threadUpdates: [{threadKey: 'investigate', status: 'paused', evidenceExcerpt: text}]}
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture()})
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   await page.getByRole('button', {name: '让角色开场', exact: true}).click()
   await expect(page.getByTestId('chat-action-revision')).toBeVisible()
   await expect(page.getByText(text, {exact: true})).toHaveCount(0)
   await expect(page.getByText('审查私有理由', {exact: false})).toHaveCount(0)
   expect(calls).toBe(2)
-  await page.reload(); await expect(page.getByTestId('chat-action-revision')).toBeVisible(); expect(calls).toBe(2)
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-action-revision')).toBeVisible(); expect(calls).toBe(2)
   await page.setViewportSize({width: 390, height: 844})
   await page.getByRole('button', {name: '修订未通过回复', exact: true}).click()
   await expect.poll(() => calls).toBe(4)
@@ -44,7 +44,7 @@ for (const rejectRevision of [false, true]) test(`explicitly revises rejected co
   const result = await read()
   expect(result.statuses).toEqual(['failed', rejectRevision ? 'failed' : 'completed'])
   expect(result.state.interaction.messages).toHaveLength(rejectRevision ? 0 : 1)
-  await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   expect(await read()).toEqual(result); expect(calls).toBe(4)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })

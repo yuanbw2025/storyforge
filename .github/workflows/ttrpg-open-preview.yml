@@ -1,56 +1,6 @@
 name: TTRPG open preview
 
-on:
-  pull_request:
-    branches: [main]
-    paths:
-      - '.github/workflows/ttrpg-open-preview.yml'
-      - 'package*.json'
-      - 'playwright.config.ts'
-      - 'vite.config.ts'
-      - 'scripts/serve-e2e-snapshot.mjs'
-      - 'src/lib/ttrpg/**'
-      - 'src/components/ttrpg/**'
-      - 'src/pages/TtrpgPage.tsx'
-      - 'src/pages/PlaySessionPage.tsx'
-      - 'src/lib/product/**'
-      - 'src/lib/product-production/**'
-      - 'src/lib/world-engine/**'
-      - 'src/lib/db/**'
-      - 'src/lib/registry/**'
-      - 'src/lib/types/**'
-      - 'src/lib/agent/**'
-      - 'src/lib/context-gateway/**'
-      - 'src/lib/export/**'
-      - 'src/lib/platform/**'
-      - 'tests/e2e/ttrpg-*.spec.ts'
-      - 'tests/helpers/**'
-      - 'tests/fixtures/**'
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/ttrpg-open-preview.yml'
-      - 'package*.json'
-      - 'playwright.config.ts'
-      - 'vite.config.ts'
-      - 'scripts/serve-e2e-snapshot.mjs'
-      - 'src/lib/ttrpg/**'
-      - 'src/components/ttrpg/**'
-      - 'src/pages/TtrpgPage.tsx'
-      - 'src/pages/PlaySessionPage.tsx'
-      - 'src/lib/product/**'
-      - 'src/lib/product-production/**'
-      - 'src/lib/world-engine/**'
-      - 'src/lib/db/**'
-      - 'src/lib/registry/**'
-      - 'src/lib/types/**'
-      - 'src/lib/agent/**'
-      - 'src/lib/context-gateway/**'
-      - 'src/lib/export/**'
-      - 'src/lib/platform/**'
-      - 'tests/e2e/ttrpg-*.spec.ts'
-      - 'tests/helpers/**'
-      - 'tests/fixtures/**'
+on: workflow_dispatch
 
 permissions:
   contents: read

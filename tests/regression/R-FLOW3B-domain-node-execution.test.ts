@@ -1,13 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../src/lib/ai/client', () => ({
-  chat: vi.fn(async () => JSON.stringify({
-    field: 'worldOrigin',
-    value: '潮汐退去后，第一座城从海床升起。',
-  })),
-}))
-
 import { chat } from '../../src/lib/ai/client'
+import * as aiClient from '../../src/lib/ai/client'
+import * as usageLog from '../../src/lib/ai/usage-log'
+import { useAIConfigStore } from '../../src/stores/ai-config'
 import { db } from '../../src/lib/db/schema'
 import {
   AUTHORING_NODE_BY_ID,
@@ -55,15 +51,33 @@ function node(templateId: string, id: string, config: Record<string, unknown> = 
 }
 
 describe('FLOW-3B · 领域节点运行和显式采纳', () => {
+  let usage: Promise<unknown>[]
   beforeEach(async () => {
     await db.delete()
     await db.open()
     await putCurrentWorkspaceFixtureV1(project)
+    usage = []
+    vi.stubGlobal('window', undefined)
+    useAIConfigStore.getState().setConfig({ provider: 'custom', apiKey: '', model: 'isolated-domain-node',
+      baseUrl: 'http://127.0.0.1:9/v1', temperature: .5, maxTokens: 8_000, contextWindow: 128_000 })
+    const recordUsage = usageLog.recordUsage
+    vi.spyOn(usageLog, 'recordUsage').mockImplementation(function (this: unknown, input) {
+      const pending = recordUsage.call(this, input); usage.push(pending); return pending
+    })
+    vi.spyOn(aiClient, 'chat')
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (url, request) => {
+      if (String(url) !== 'http://127.0.0.1:9/v1/chat/completions' || request?.method !== 'POST') throw new Error('Unexpected external model request')
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+        field: 'worldOrigin', value: '潮汐退去后，第一座城从海床升起。',
+      }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 17, completion_tokens: 9, total_tokens: 26 } }), { status: 200 })
+    }))
     vi.mocked(chat).mockClear()
     useNodeFlowStore.setState({ projectId: null, flows: [], runs: [], loading: false })
   })
 
-  afterEach(() => db.close())
+  afterEach(async () => {
+    await Promise.allSettled(usage); vi.unstubAllGlobals(); vi.restoreAllMocks(); db.close()
+  })
 
   it('新建图使用当前 version=2，并拒绝把旧 FLOW-2 图重新写回', async () => {
     const flowId = await useNodeFlowStore.getState().createFlow(project.id!, null)
@@ -157,7 +171,7 @@ describe('FLOW-3B · 领域节点运行和显式采纳', () => {
     expect(await db.promptTemplates.count()).toBe(0)
     prompt.config.parameterValues = { pace: '急促' }
     const changed = { ...flow, graphJson: JSON.stringify(graph) }
-    await expect(adoptAuthoringCandidate({ flow: changed, nodeId: origin.id, output: outcome.candidates.origin.output, runId: outcome.run.id })).rejects.toThrow('节点参数或写入目标已变化')
+    await expect(adoptAuthoringCandidate({ flow: changed, nodeId: origin.id, output: outcome.candidates.origin.output, runId: outcome.run.id })).rejects.toThrow('节点字段采纳未完成：执行图已变化')
     expect(await db.worldviews.where('projectId').equals(project.id!).count()).toBe(0)
   })
 

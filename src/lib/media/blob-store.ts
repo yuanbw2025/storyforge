@@ -5,8 +5,8 @@ import { assertRecordInScope, resolveScope, stampNewRecord } from '../workspace/
 import { hashCanonicalValue } from '../agent/run/hash'
 import { assertMediaBlobObjectV1 } from '../comic/contracts'
 import { PROJECT_TABLES } from '../registry/project-tables'
+import { decodeRasterImageV1, isRasterImageMimeV1, MAX_RASTER_IMAGE_BYTES_V1 } from './raster-image'
 
-const MAX_IMAGE_BYTES = 25 * 1024 * 1024
 const MAX_AUDIO_BYTES = 50 * 1024 * 1024
 
 export interface PreparedMediaBlobV1 {
@@ -44,50 +44,6 @@ export function binaryDataUrlV1(data: ArrayBuffer, mimeType: string): string {
   return `data:${mimeType};base64,${btoa(binary)}`
 }
 
-function readPng(bytes: Uint8Array): { mimeType: 'image/png'; width: number; height: number } | null {
-  if (bytes.length < 24 || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4e || bytes[3] !== 0x47) return null
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  return { mimeType: 'image/png', width: view.getUint32(16), height: view.getUint32(20) }
-}
-
-function readJpeg(bytes: Uint8Array): { mimeType: 'image/jpeg'; width: number; height: number } | null {
-  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null
-  let offset = 2
-  while (offset + 9 < bytes.length) {
-    if (bytes[offset] !== 0xff) { offset++; continue }
-    const marker = bytes[offset + 1]
-    if (marker === 0xd8 || marker === 0xd9) { offset += 2; continue }
-    const length = (bytes[offset + 2] << 8) | bytes[offset + 3]
-    if (length < 2 || offset + length + 2 > bytes.length) break
-    if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) {
-      return { mimeType: 'image/jpeg', height: (bytes[offset + 5] << 8) | bytes[offset + 6], width: (bytes[offset + 7] << 8) | bytes[offset + 8] }
-    }
-    offset += length + 2
-  }
-  return null
-}
-
-function readWebp(bytes: Uint8Array): { mimeType: 'image/webp'; width: number; height: number } | null {
-  const ascii = (start: number, length: number) => String.fromCharCode(...bytes.subarray(start, start + length))
-  if (bytes.length < 30 || ascii(0, 4) !== 'RIFF' || ascii(8, 4) !== 'WEBP') return null
-  const kind = ascii(12, 4)
-  if (kind === 'VP8X') return { mimeType: 'image/webp', width: 1 + bytes[24] + (bytes[25] << 8) + (bytes[26] << 16), height: 1 + bytes[27] + (bytes[28] << 8) + (bytes[29] << 16) }
-  if (kind === 'VP8 ' && bytes.length >= 30) return { mimeType: 'image/webp', width: (bytes[26] | (bytes[27] << 8)) & 0x3fff, height: (bytes[28] | (bytes[29] << 8)) & 0x3fff }
-  if (kind === 'VP8L' && bytes.length >= 25 && bytes[20] === 0x2f) {
-    const bits = bytes[21] | (bytes[22] << 8) | (bytes[23] << 16) | (bytes[24] << 24)
-    return { mimeType: 'image/webp', width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 }
-  }
-  return null
-}
-
-export function inspectImageBytesV1(data: ArrayBuffer): { mimeType: MediaBlobObject['mimeType']; width: number; height: number } {
-  if (!(data instanceof ArrayBuffer) || data.byteLength < 16 || data.byteLength > MAX_IMAGE_BYTES) throw new Error('[media] 图片体积非法或超过 25 MiB')
-  const bytes = new Uint8Array(data)
-  const result = readPng(bytes) ?? readJpeg(bytes) ?? readWebp(bytes)
-  if (!result || !Number.isInteger(result.width) || !Number.isInteger(result.height) || result.width < 1 || result.height < 1 || result.width > 16384 || result.height > 16384) throw new Error('[media] 仅支持可验证尺寸的 PNG、JPEG、WebP 图片')
-  return result
-}
-
 /** Sniff audio bytes instead of trusting a browser-supplied extension or MIME. */
 export function inspectAudioBytesV1(data: ArrayBuffer): { mimeType: PreparedAudioBlobV1['mimeType'] } {
   if (!(data instanceof ArrayBuffer) || data.byteLength < 4 || data.byteLength > MAX_AUDIO_BYTES) throw new Error('[media] 音频体积非法或超过 50 MiB')
@@ -103,10 +59,22 @@ export function inspectAudioBytesV1(data: ArrayBuffer): { mimeType: PreparedAudi
   throw new Error('[media] 仅支持可验证签名的 MP3、WAV、OGG、M4A 音频')
 }
 
-/** Prepare and hash bytes before entering a caller-owned IndexedDB transaction. */
+const preparedImages = new WeakMap<PreparedMediaBlobV1, ArrayBuffer>()
+
+/** Decode and hash an owned snapshot before opening a caller-owned transaction. */
 export async function prepareMediaBlobV1(data: ArrayBuffer): Promise<PreparedMediaBlobV1> {
-  const image = inspectImageBytesV1(data)
-  return { data: data.slice(0), contentHash: await sha256BinaryV1(data), ...image }
+  if (!(data instanceof ArrayBuffer) || data.byteLength > MAX_RASTER_IMAGE_BYTES_V1) {
+    throw new Error('[media] 图片体积非法或超过 25 MiB')
+  }
+  const bytes = data.slice(0)
+  const image = await decodeRasterImageV1(bytes)
+  const prepared = Object.freeze({
+    get data() { return bytes.slice(0) },
+    contentHash: await sha256BinaryV1(bytes),
+    ...image,
+  })
+  preparedImages.set(prepared, bytes)
+  return prepared
 }
 
 export async function prepareAudioBlobV1(data: ArrayBuffer): Promise<PreparedAudioBlobV1> {
@@ -151,17 +119,24 @@ export async function putPreparedMediaBlobV1(
   scope: WorkspaceScope,
   image: PreparedMediaBlobV1,
 ): Promise<MediaBlobObject & { id: number }> {
+  const bytes = preparedImages.get(image)
+  if (!bytes) throw new Error('[media] 图片尚未经共享解码验证')
   const existing = await db.mediaBlobObjects.where('[workId+contentHash]').equals([scope.workId, image.contentHash]).first()
   if (existing?.id) {
     if (!await assertRecordInScope(scope, 'mediaBlobObjects', existing, { owner: 'work' })) {
       throw new Error('[media] 同 hash Blob 越界')
     }
     assertMediaBlobObjectV1(existing)
-    if (existing.byteSize !== image.data.byteLength
+    if (existing.byteSize !== bytes.byteLength
       || existing.mimeType !== image.mimeType
       || existing.width !== image.width
       || existing.height !== image.height) {
       throw new Error('[media] 同 hash Blob 元数据冲突')
+    }
+    const storedBytes = new Uint8Array(existing.data)
+    const verifiedBytes = new Uint8Array(bytes)
+    if (storedBytes.some((byte, index) => byte !== verifiedBytes[index])) {
+      throw new Error('[media] 同 hash Blob 内容冲突')
     }
     if (existing.disposition === 'pending-delete') {
       const restored = { ...existing, disposition: 'available' as const, storageState: 'ready' as const, deleteRequestedAt: null, deleteReceiptHash: null, updatedAt: Date.now() }
@@ -173,7 +148,7 @@ export async function putPreparedMediaBlobV1(
   const now = Date.now()
   const row: MediaBlobObject = stampNewRecord(scope, 'mediaBlobObjects', {
     projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId, contentHash: image.contentHash, mimeType: image.mimeType,
-    byteSize: image.data.byteLength, width: image.width, height: image.height, data: image.data.slice(0),
+    byteSize: bytes.byteLength, width: image.width, height: image.height, data: bytes.slice(0),
     backend: 'indexeddb', storageState: 'ready', opfsPath: null, leaseOwner: null,
     leaseExpiresAt: null, lastVerifiedAt: now,
     disposition: 'available', deleteRequestedAt: null, deleteReceiptHash: null, createdAt: now, updatedAt: now,
@@ -194,6 +169,15 @@ export async function putVerifiedMediaBlobV1(input: { scope: WorkspaceScope; dat
   return putPreparedMediaBlobV1(scope, image)
 }
 
+export async function assertStoredRasterImageV1(data: ArrayBuffer, stored: { mimeType: string; width?: number | null; height?: number | null }): Promise<void> {
+  const image = await decodeRasterImageV1(data)
+  if (image.mimeType !== stored.mimeType
+    || (stored.width != null && stored.width !== image.width)
+    || (stored.height != null && stored.height !== image.height)) {
+    throw new Error('[media] 图片解码结果与冻结 MIME 或尺寸不一致')
+  }
+}
+
 export async function readVerifiedMediaBlobV1(input: { scope: WorkspaceScope; blobObjectId: number }): Promise<MediaBlobObject & { id: number }> {
   const scope = await resolveScope({ scope: input.scope })
   const row = await db.mediaBlobObjects.get(input.blobObjectId)
@@ -201,6 +185,7 @@ export async function readVerifiedMediaBlobV1(input: { scope: WorkspaceScope; bl
   assertMediaBlobObjectV1(row)
   if (row.disposition !== 'available' || row.storageState !== 'ready') throw new Error('[media] Blob 不存在、已回收或越界')
   if (await sha256BinaryV1(row.data) !== row.contentHash) throw new Error('[media] Blob 内容 hash 不匹配')
+  await assertStoredRasterImageV1(row.data, row)
   return row as MediaBlobObject & { id: number }
 }
 
@@ -215,6 +200,7 @@ export async function mediaObjectDataUrlV1(input: { scope: WorkspaceScope; blobO
   const row = await db.mediaBlobObjects.get(input.blobObjectId)
   if (!row?.id || !await assertRecordInScope(scope, 'mediaBlobObjects', row, { owner: 'work' }) || row.storageState !== 'ready' || row.disposition === 'pending-delete' || !row.data) throw new Error('[media] Blob 不存在、已回收、越界或不支持本地预览')
   if (row.data.byteLength !== row.byteSize || await sha256BinaryV1(row.data) !== row.contentHash) throw new Error('[media] Blob 内容校验失败')
+  if (isRasterImageMimeV1(row.mimeType)) await assertStoredRasterImageV1(row.data, row)
   return binaryDataUrlV1(row.data, row.mimeType)
 }
 

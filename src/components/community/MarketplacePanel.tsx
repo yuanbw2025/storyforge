@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { assertCurrentProductEntryV1, evaluateCurrentProductEntryV1 } from '../../lib/product/product-catalog'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   Bell, Download, ExternalLink, Heart, KeyRound, Loader2, PackageCheck, RefreshCw, Search, Send, ShieldAlert, ShoppingBag, Upload, UserPlus,
 } from 'lucide-react'
@@ -8,6 +9,7 @@ import {
   type CommercialHttpErrorV1,
 } from '../../lib/commercial/http-client'
 import { CommunityHttpClientV1 } from '../../lib/community/http-client'
+import { createCommunityRequestIntentsV1 } from '../../lib/community/request-intent'
 import { CommercialOperationsHttpClientV1 } from '../../lib/commercial/operations-http-client'
 import type { CommercialListingV1 } from '../../lib/commercial/authority'
 import type { CommunitySocialEdgeV1 } from '../../lib/community/authority'
@@ -107,6 +109,7 @@ export default function MarketplacePanel(props: {
     provenance: MarketplaceImportProvenanceV2
   }) => Promise<ProductRelease>
 }) {
+  const canCreate = evaluateCurrentProductEntryV1('platform.marketplace').enterable
   const [serviceUrl, setServiceUrl] = useState(props.initialServiceUrl ?? import.meta.env.VITE_STORYFORGE_PLATFORM_SERVICE_URL ?? '')
   const [accessToken, setAccessToken] = useState('')
   const [mode, setMode] = useState<'discover' | 'groups' | 'creator' | 'review' | 'safety' | 'operations'>('discover')
@@ -126,7 +129,7 @@ export default function MarketplacePanel(props: {
   const [error, setError] = useState('')
   const [checkout, setCheckout] = useState<{ listingId: string; url: string } | null>(null)
   const [reviewListingId, setReviewListingId] = useState<string | null>(null)
-  const [socialEdges, setSocialEdges] = useState<CommunitySocialEdgeV1[]>([])
+  const [socialEdges, setSocialEdges] = useState<CommunitySocialEdgeV1[] | null>(null)
   const [creatorListings, setCreatorListings] = useState<CommercialListingV1[]>([])
   const [reviewQueue, setReviewQueue] = useState<CommercialListingV1[]>([])
   const [reviewCandidates, setReviewCandidates] = useState<Record<string, CommercialTextAdventureReviewProjectionV1>>({})
@@ -134,7 +137,8 @@ export default function MarketplacePanel(props: {
   const [revisionListingId, setRevisionListingId] = useState<string | null>(null)
   const [textAdventureCandidate, setTextAdventureCandidate] = useState<TextAdventureCommunityCandidateDossierV1 | null>(null)
   const acquisitionIds = useRef(new Map<string, string>())
-  const socialRequestIds = useRef(new Map<string, string>())
+  const [socialRequests] = useState(createCommunityRequestIntentsV1)
+  const socialIntentOwners = useRef(new Map<string, CommunityHttpClientV1>())
   const operationRequestIds = useRef(new Map<string, string>())
   const submission = useRef<{
     fingerprint: string
@@ -160,6 +164,30 @@ export default function MarketplacePanel(props: {
     try { return new CommunityHttpClientV1({ baseUrl: serviceUrl, timeoutMs: 60_000 }) } catch { return null }
   }, [props.communityClient, serviceUrl])
   const communityClient = props.communityClient ?? generatedCommunityClient
+
+  const socialToken = accessToken.trim()
+  const socialOwner = useMemo(() => ({ client: communityClient, token: socialToken, current: false, revision: 0 }), [communityClient, socialToken])
+  useLayoutEffect(() => {
+    socialOwner.current = true
+    setSocialEdges(null)
+    setBusy(previous => previous?.startsWith('social:') ? null : previous)
+    setMessage(''); setError('')
+    return () => { socialOwner.current = false }
+  }, [socialOwner])
+
+  const refreshSocial = async () => {
+    if (!socialOwner.current || !socialOwner.client || !socialOwner.token) return
+    const revision = ++socialOwner.revision
+    try {
+      const edges = await socialOwner.client.mySocialEdges(socialOwner.token)
+      if (socialOwner.current && socialOwner.revision === revision) setSocialEdges(edges)
+    } catch (cause) {
+      if (socialOwner.current && socialOwner.revision === revision) {
+        setSocialEdges(null)
+        setError(messageOf(cause))
+      }
+    }
+  }
 
   useEffect(() => {
     discoveryEpoch.current += 1
@@ -188,10 +216,10 @@ export default function MarketplacePanel(props: {
     submission.current = null
   }, [localReleases, selectedReleaseId])
 
-  const run = async (key: string, operation: () => Promise<void>) => {
+  const run = async (key: string, operation: () => Promise<void>, owner?: typeof socialOwner) => {
     setBusy(key); setMessage(''); setError('')
-    try { await operation() } catch (cause) { setError(messageOf(cause)) }
-    finally { setBusy(null) }
+    try { await operation() } catch (cause) { if (!owner || owner.current) setError(messageOf(cause)) }
+    finally { if (!owner || owner.current) setBusy(null) }
   }
   const operationRequestId = (key: string) => {
     const prior = operationRequestIds.current.get(key)
@@ -226,27 +254,31 @@ export default function MarketplacePanel(props: {
       ? [...new Map([...current, ...page.items].map(item => [item.listingId, item])).values()]
       : page.items)
     setNextDiscoveryCursor(page.nextCursor)
-    if (!append && communityClient && accessToken.trim()) {
-      try { setSocialEdges(await communityClient.mySocialEdges(accessToken.trim())) } catch { setSocialEdges([]) }
-    }
+    if (!append) void refreshSocial()
   })
 
   const toggleSocial = (kind: CommunitySocialEdgeV1['kind'], targetId: string) => run(`social:${kind}:${targetId}`, async () => {
     if (!communityClient) throw new Error('请先配置社区服务地址。')
     if (!accessToken.trim()) throw new Error('请输入当前账号的访问凭据。')
+    if (!socialOwner.current) return
+    if (socialEdges === null) { await refreshSocial(); return }
     const prior = socialEdges.find(edge => edge.kind === kind && edge.targetId === targetId)
     const active = !prior?.active
-    const requestKey = `${kind}:${targetId}:${active}`
-    const requestId = socialRequestIds.current.get(requestKey) ?? `social.${crypto.randomUUID()}`
-    socialRequestIds.current.set(requestKey, requestId)
-    const edge = await communityClient.setSocialEdge({
-      accessToken: accessToken.trim(), requestId, kind, targetId, active,
+    const token = socialOwner.token
+    const revision = ++socialOwner.revision
+    const body = { kind, targetId, active }
+    // Returning to a configured endpoint can create a new transport for the same outstanding command.
+    const intentOwner = props.communityClient ?? socialIntentOwners.current.get(communityClient.baseUrl) ?? communityClient
+    if (!props.communityClient) socialIntentOwners.current.set(communityClient.baseUrl, intentOwner)
+    const edge = await socialRequests.send(intentOwner, token, 'social.edge', body, ({ requestId }) =>
+      communityClient.setSocialEdge({ accessToken: token, requestId, ...body }), { ...body, active: !active })
+    if (!socialOwner.current || revision !== socialOwner.revision) return
+    setSocialEdges(current => {
+      const remaining = (current ?? []).filter(item => item.edgeId !== edge.edgeId)
+      return edge.active ? [edge, ...remaining] : remaining
     })
-    setSocialEdges(current => edge.active
-      ? [edge, ...current.filter(item => item.edgeId !== edge.edgeId)]
-      : current.filter(item => item.edgeId !== edge.edgeId))
     setMessage(active ? '社区关系已保存到账号。' : '社区关系已取消。')
-  })
+  }, socialOwner)
 
   const download = async (listing: CommercialListingV1) => {
     if (!client) throw new Error('请先配置市场服务地址。')
@@ -262,6 +294,7 @@ export default function MarketplacePanel(props: {
   }
 
   const acquire = (listing: CommercialListingV1) => run(`acquire:${listing.listingId}`, async () => {
+    assertCurrentProductEntryV1('platform.marketplace')
     if (!client) throw new Error('请先配置市场服务地址。')
     if (!accessToken.trim()) throw new Error('请输入当前账号的访问凭据。')
     const requestId = acquisitionIds.current.get(listing.listingId) ?? `acquire.${crypto.randomUUID()}`
@@ -276,6 +309,7 @@ export default function MarketplacePanel(props: {
   })
 
   const submitRelease = () => run('submit', async () => {
+    assertCurrentProductEntryV1('platform.marketplace')
     if (!client) throw new Error('请先配置市场服务地址。')
     if (!accessToken.trim()) throw new Error('请输入创作者账号访问凭据。')
     if (!props.scope || selectedReleaseId == null) throw new Error('当前 Work 没有可提交的正式 ProductRelease。')
@@ -315,6 +349,7 @@ export default function MarketplacePanel(props: {
       },
       currency: 'CNY', amountMinor, creatorShareBps: 8_000,
     }
+    assertCurrentProductEntryV1('platform.marketplace')
     const listing = revisionListingId
       ? await client.reviseListing({
           accessToken: accessToken.trim(), requestId: ids.reviseRequestId,
@@ -324,6 +359,7 @@ export default function MarketplacePanel(props: {
           accessToken: accessToken.trim(), requestId: ids.createRequestId,
           productType: selected.productType, ...listingInput,
         })
+    assertCurrentProductEntryV1('platform.marketplace')
     await client.registerRelease({
       accessToken: accessToken.trim(), requestId: ids.uploadRequestId, bundle,
       ...(candidate ? {
@@ -331,6 +367,7 @@ export default function MarketplacePanel(props: {
         textAdventureCandidate: createTextAdventureCommunitySubmissionV1(candidate),
       } : {}),
     })
+    assertCurrentProductEntryV1('platform.marketplace')
     await client.submitListing({
       accessToken: accessToken.trim(), requestId: ids.submitRequestId, listingId: listing.listingId,
     })
@@ -371,6 +408,7 @@ export default function MarketplacePanel(props: {
     setMessage('已读取服务端重新验证并冻结的文字冒险候选证据。')
   })
   const approveListing = (listingId: string) => run(`approve:${listingId}`, async () => {
+    assertCurrentProductEntryV1('platform.marketplace')
     if (!client) throw new Error('请先配置市场服务地址。')
     const listing = await client.publishListing({
       accessToken: accessToken.trim(), requestId: operationRequestId(`approve:${listingId}`), listingId,
@@ -433,7 +471,7 @@ export default function MarketplacePanel(props: {
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
         {!props.client && <label className="grid gap-2 text-[10px] text-text-muted">市场服务地址<input value={serviceUrl} onChange={event => { invalidateDiscovery(); setServiceUrl(event.target.value) }} placeholder="https://market.example.com" className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label>}
-        <label className="grid gap-2 text-[10px] text-text-muted">账号访问凭据（仅保存在当前页面内存）<span className="flex items-center gap-2 rounded border border-border bg-bg-base px-2"><KeyRound className="h-4 w-4" /><input type="password" value={accessToken} onChange={event => setAccessToken(event.target.value)} autoComplete="off" className="min-w-0 flex-1 bg-transparent py-2 text-xs text-text-primary outline-none" /></span></label>
+        <label className="grid gap-2 text-[10px] text-text-muted">账号访问凭据（仅保存在当前页面内存）<span className="flex items-center gap-2 rounded border border-border bg-bg-base px-2"><KeyRound className="h-4 w-4" /><input type="password" value={accessToken} onChange={event => setAccessToken(event.target.value)} onBlur={() => { if (listings.length && socialEdges === null) void refreshSocial() }} autoComplete="off" className="min-w-0 flex-1 bg-transparent py-2 text-xs text-text-primary outline-none" /></span></label>
       </div>
       <div className="mt-4 flex flex-wrap gap-2"><button onClick={() => setMode('discover')} className={`rounded px-3 py-2 text-xs ${mode === 'discover' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><ShoppingBag className="mr-2 inline h-4 w-4" />玩家市场</button><button onClick={() => setMode('groups')} className={`rounded px-3 py-2 text-xs ${mode === 'groups' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><PackageCheck className="mr-2 inline h-4 w-4" />组团中心</button><button onClick={() => setMode('creator')} className={`rounded px-3 py-2 text-xs ${mode === 'creator' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><Upload className="mr-2 inline h-4 w-4" />创作者提交</button><button onClick={() => setMode('review')} className={`rounded px-3 py-2 text-xs ${mode === 'review' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><PackageCheck className="mr-2 inline h-4 w-4" />发行审核</button><button onClick={() => setMode('safety')} className={`rounded px-3 py-2 text-xs ${mode === 'safety' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><ShieldAlert className="mr-2 inline h-4 w-4" />安全与申诉</button><button onClick={() => setMode('operations')} className={`rounded px-3 py-2 text-xs ${mode === 'operations' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><KeyRound className="mr-2 inline h-4 w-4" />支持与结算</button></div>
     </section>
@@ -450,13 +488,13 @@ export default function MarketplacePanel(props: {
         <button disabled={busy != null || !client} onClick={() => void discover()} className="flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><RefreshCw className="h-4 w-4" />刷新</button>
       </div>
       <div className="mt-5 grid gap-3 lg:grid-cols-2">{listings.map(listing => {
-        const favorite = socialEdges.some(edge => edge.kind === 'favorite-listing' && edge.targetId === listing.listingId)
-        const subscribed = socialEdges.some(edge => edge.kind === 'subscribe-listing' && edge.targetId === listing.listingId)
-        const followed = socialEdges.some(edge => edge.kind === 'follow-creator' && edge.targetId === listing.creatorId)
+        const favorite = socialEdges?.some(edge => edge.kind === 'favorite-listing' && edge.targetId === listing.listingId)
+        const subscribed = socialEdges?.some(edge => edge.kind === 'subscribe-listing' && edge.targetId === listing.listingId)
+        const followed = socialEdges?.some(edge => edge.kind === 'follow-creator' && edge.targetId === listing.creatorId)
         return <article key={listing.listingId} className="rounded border border-border bg-bg-base p-4">
           <div className="flex items-start gap-3"><PackageCheck className="mt-0.5 h-5 w-5 text-accent" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold text-text-primary">{listing.title}</h3><span className="rounded bg-accent/10 px-2 py-0.5 text-[10px] text-accent">{PRODUCT_OPTIONS.find(item => item.value === listing.productType)?.label}</span><strong className="ml-auto text-xs text-text-primary">{price(listing)}</strong></div><p className="mt-2 text-xs leading-5 text-text-muted">{listing.summary}</p><p className="mt-2 break-all font-mono text-[9px] text-text-muted">Release {listing.releaseHash}</p><p className="mt-1 font-mono text-[9px] text-text-muted">Listing {listing.listingId} · Creator {listing.creatorId}</p>
-            <div className="mt-3 flex flex-wrap gap-2"><button disabled={busy != null} onClick={() => void acquire(listing)} className="rounded bg-accent px-3 py-2 text-xs text-white">{listing.amountMinor === 0 ? '领取并导入' : '创建支付订单'}</button><button disabled={busy != null} onClick={() => void run(`download:${listing.listingId}`, () => download(listing))} className="flex items-center gap-2 rounded border border-border px-3 py-2 text-xs text-text-primary"><Download className="h-4 w-4" />下载已拥有版本</button><button onClick={() => setReviewListingId(current => current === listing.listingId ? null : listing.listingId)} className="rounded border border-border px-3 py-2 text-xs text-text-primary">评价与评分</button>{checkout?.listingId === listing.listingId && <a href={checkout.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded border border-warning px-3 py-2 text-xs text-warning">前往支付<ExternalLink className="h-4 w-4" /></a>}</div>
-            <div className="mt-2 flex flex-wrap gap-2"><button aria-pressed={favorite} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('favorite-listing', listing.listingId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${favorite ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><Heart className="h-3 w-3" />{favorite ? '已收藏' : '收藏'}</button><button aria-pressed={subscribed} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('subscribe-listing', listing.listingId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${subscribed ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><Bell className="h-3 w-3" />{subscribed ? '已订阅更新' : '订阅更新'}</button><button aria-pressed={followed} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('follow-creator', listing.creatorId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${followed ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><UserPlus className="h-3 w-3" />{followed ? '已关注创作者' : '关注创作者'}</button></div>
+            <div className="mt-3 flex flex-wrap gap-2"><button disabled={busy != null || !canCreate} onClick={() => void acquire(listing)} className="rounded bg-accent px-3 py-2 text-xs text-white">{listing.amountMinor === 0 ? '领取并导入' : '创建支付订单'}</button><button disabled={busy != null} onClick={() => void run(`download:${listing.listingId}`, () => download(listing))} className="flex items-center gap-2 rounded border border-border px-3 py-2 text-xs text-text-primary"><Download className="h-4 w-4" />下载已拥有版本</button><button onClick={() => setReviewListingId(current => current === listing.listingId ? null : listing.listingId)} className="rounded border border-border px-3 py-2 text-xs text-text-primary">评价与评分</button>{checkout?.listingId === listing.listingId && <a href={checkout.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded border border-warning px-3 py-2 text-xs text-warning">前往支付<ExternalLink className="h-4 w-4" /></a>}</div>
+            <div className="mt-2 flex flex-wrap gap-2"><button aria-pressed={favorite ?? 'mixed'} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('favorite-listing', listing.listingId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${favorite ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><Heart className="h-3 w-3" />{favorite === undefined && socialToken ? '读取收藏状态' : favorite ? '已收藏' : '收藏'}</button><button aria-pressed={subscribed ?? 'mixed'} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('subscribe-listing', listing.listingId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${subscribed ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><Bell className="h-3 w-3" />{subscribed === undefined && socialToken ? '读取订阅状态' : subscribed ? '已订阅更新' : '订阅更新'}</button><button aria-pressed={followed ?? 'mixed'} disabled={busy != null || !communityClient} onClick={() => void toggleSocial('follow-creator', listing.creatorId)} className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${followed ? 'border-accent text-accent' : 'border-border text-text-muted'}`}><UserPlus className="h-3 w-3" />{followed === undefined && socialToken ? '读取关注状态' : followed ? '已关注创作者' : '关注创作者'}</button></div>
           </div></div>
         </article>
       })}{listings.length === 0 && <div className="rounded border border-dashed border-border p-8 text-center text-xs text-text-muted lg:col-span-2">配置服务后点击刷新；公开目录只返回已审核且可领取的发行物。</div>}</div>
@@ -483,7 +521,7 @@ export default function MarketplacePanel(props: {
             <span className="mt-1 block">最短路线 {candidateReview.dossier.metrics.estimatedMinimumRouteMinutes.toFixed(1)} 分钟 · {candidateReview.dossier.metrics.minimumRouteDialogueTurns} 轮对白 · {candidateReview.dossier.metrics.reachableEndingCount} 个结局</span>
             <span className="mt-1 block break-all font-mono">candidate {candidateReview.candidateHash} · record {candidateReview.recordHash}</span>
           </div>}
-          <div className="mt-3 flex flex-wrap gap-2">{listing.productType === 'text-adventure' && <button disabled={busy != null} onClick={() => void loadTextAdventureReview(listing)} className="rounded border border-accent/50 px-3 py-2 text-xs text-accent">查看候选证据</button>}<button disabled={busy != null || (listing.productType === 'text-adventure' && !candidateReview)} onClick={() => void approveListing(listing.listingId)} className="rounded bg-success px-3 py-2 text-xs text-white disabled:opacity-40">审核发布</button><button disabled={busy != null || !reviewReasonCode.trim()} onClick={() => void rejectListing(listing.listingId)} className="rounded border border-warning/50 px-3 py-2 text-xs text-warning">要求修改</button></div>
+          <div className="mt-3 flex flex-wrap gap-2">{listing.productType === 'text-adventure' && <button disabled={busy != null} onClick={() => void loadTextAdventureReview(listing)} className="rounded border border-accent/50 px-3 py-2 text-xs text-accent">查看候选证据</button>}<button disabled={busy != null || !canCreate || (listing.productType === 'text-adventure' && !candidateReview)} onClick={() => void approveListing(listing.listingId)} className="rounded bg-success px-3 py-2 text-xs text-white disabled:opacity-40">审核发布</button><button disabled={busy != null || !reviewReasonCode.trim()} onClick={() => void rejectListing(listing.listingId)} className="rounded border border-warning/50 px-3 py-2 text-xs text-warning">要求修改</button></div>
         </article>
       })}{reviewQueue.length === 0 && <p className="rounded border border-dashed border-border p-6 text-center text-xs text-text-muted">加载后显示 submitted 且完整包已验证的目录项。</p>}</div>
     </section> : mode === 'safety' ? <CommunitySafetyPanel client={communityClient} accessToken={accessToken} /> : mode === 'operations' ? <CommercialOperationsPanel client={operationsClient} accessToken={accessToken} /> : <>
@@ -499,9 +537,9 @@ export default function MarketplacePanel(props: {
           : <span className="mt-1 block">将重新计算冻结内容规模并核验自动游玩、作者主路线、浏览器性能和媒资证据；通用分发包通过不等于内容达到推荐标准。</span>}
         <button disabled={busy != null || selectedReleaseId == null} onClick={() => void verifyTextAdventureCandidate()} className="mt-3 rounded border border-current px-3 py-2 text-xs disabled:opacity-40">{textAdventureCandidateReady ? '重新复验候选资格' : '复验社区候选资格'}</button>
       </div>}
-      <button disabled={busy != null || !client || selectedReleaseId == null || !creatorTitle.trim() || !creatorSummary.trim() || !textAdventureCandidateReady} onClick={() => void submitRelease()} className="mt-4 flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><Upload className="h-4 w-4" />{revisionListingId ? '上传修订版并重新提交' : '冻结、上传并提交审核'}</button>
+      <button disabled={busy != null || !canCreate || !client || selectedReleaseId == null || !creatorTitle.trim() || !creatorSummary.trim() || !textAdventureCandidateReady} onClick={() => void submitRelease()} className="mt-4 flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><Upload className="h-4 w-4" />{revisionListingId ? '上传修订版并重新提交' : '冻结、上传并提交审核'}</button>
     </section>
-    <section className="rounded-lg border border-border bg-bg-elevated p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold text-text-primary">我的远程发行状态</h3><button disabled={busy != null || !client || !accessToken.trim()} onClick={() => void loadCreatorListings()} className="ml-auto flex items-center gap-1 rounded border border-border px-3 py-2 text-xs text-text-primary disabled:opacity-40"><RefreshCw className="h-3.5 w-3.5" />同步状态</button></div><div className="mt-4 space-y-2">{creatorListings.map(listing => <article key={listing.listingId} className="flex flex-wrap items-center gap-3 rounded border border-border bg-bg-base p-3"><div className="min-w-0 flex-1"><strong className="text-xs text-text-primary">{listing.title}</strong><p className="mt-1 font-mono text-[9px] text-text-muted">{listing.listingId} · {listing.status}{listing.reviewedBy ? ` · reviewer ${listing.reviewedBy}` : ''}</p>{listing.reviewReasonCode && <p className="mt-1 text-[10px] text-warning">修改理由：{listing.reviewReasonCode}</p>}</div>{listing.status === 'changes-requested' && <button disabled={busy != null} onClick={() => beginRevision(listing)} className="rounded border border-accent/50 px-3 py-1.5 text-xs text-accent">开始修订</button>}{!['withdrawn', 'suspended'].includes(listing.status) && <button disabled={busy != null} onClick={() => void withdrawRemoteListing(listing.listingId)} className="rounded border border-warning/40 px-3 py-1.5 text-xs text-warning">撤回发行</button>}</article>)}{creatorListings.length === 0 && <p className="text-xs text-text-muted">点击同步读取当前账号的草稿、审核中、要求修改、已发布、暂停和撤回状态。</p>}</div></section>
+    <section className="rounded-lg border border-border bg-bg-elevated p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold text-text-primary">我的远程发行状态</h3><button disabled={busy != null || !client || !accessToken.trim()} onClick={() => void loadCreatorListings()} className="ml-auto flex items-center gap-1 rounded border border-border px-3 py-2 text-xs text-text-primary disabled:opacity-40"><RefreshCw className="h-3.5 w-3.5" />同步状态</button></div><div className="mt-4 space-y-2">{creatorListings.map(listing => <article key={listing.listingId} className="flex flex-wrap items-center gap-3 rounded border border-border bg-bg-base p-3"><div className="min-w-0 flex-1"><strong className="text-xs text-text-primary">{listing.title}</strong><p className="mt-1 font-mono text-[9px] text-text-muted">{listing.listingId} · {listing.status}{listing.reviewedBy ? ` · reviewer ${listing.reviewedBy}` : ''}</p>{listing.reviewReasonCode && <p className="mt-1 text-[10px] text-warning">修改理由：{listing.reviewReasonCode}</p>}</div>{listing.status === 'changes-requested' && <button disabled={busy != null || !canCreate} onClick={() => beginRevision(listing)} className="rounded border border-accent/50 px-3 py-1.5 text-xs text-accent">开始修订</button>}{!['withdrawn', 'suspended'].includes(listing.status) && <button disabled={busy != null} onClick={() => void withdrawRemoteListing(listing.listingId)} className="rounded border border-warning/40 px-3 py-1.5 text-xs text-warning">撤回发行</button>}</article>)}{creatorListings.length === 0 && <p className="text-xs text-text-muted">点击同步读取当前账号的草稿、审核中、要求修改、已发布、暂停和撤回状态。</p>}</div></section>
     </>}
 
     {message && <p className="rounded border border-success/30 bg-success/10 p-3 text-xs text-success">{message}</p>}

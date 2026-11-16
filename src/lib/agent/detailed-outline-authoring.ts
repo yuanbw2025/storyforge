@@ -1,10 +1,10 @@
 import Dexie from 'dexie'
 import { db } from '../db/schema'
-import { readOwnedRows, resolveScope, scopeTransactionTables } from '../workspace/scope'
+import { readOwnedRows, resolveScope } from '../workspace/scope'
 import type { Chapter, DetailedOutline, OutlineNode, WorkspaceScope, ChatMessage } from '../types'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { executeRegisteredAIEntryV1 } from './formal-ai-entry'
-import { resolveRequestConfig } from '../ai/client'
+import { resolveRequestConfig, type ChatResult } from '../ai/client'
 import { prepareGenerationNode, type GenerationNode } from '../generation/generation-node'
 import { prepareDetailedOutlineGatewayAssemblyV1 } from '../outline/detail-gateway-context'
 import { buildDetailSceneGeneratePrompt, buildEnhancedDetailPrompt } from '../ai/adapters/detail-scene-adapter'
@@ -14,7 +14,7 @@ import { attachAgentContextInputStateV1, evidenceFromContextResult } from './con
 import { buildNarrativeBriefV1, formatNarrativeBriefForPromptV1 } from './narrative-brief'
 import { buildDetailedOutlineCopilotPatchV1, buildDetailedOutlineSceneMergeGuidanceV1, detailedOutlinePostStateMatchesPatchV1, type DetailedOutlineCopilotOperationV1 } from './detailed-outline-copilot'
 import { hashCanonicalValue } from './run/hash'
-import { adopt } from '../registry/adopt'
+import { adopt, adoptionTransactionTablesV1 } from '../registry/adopt'
 import { assertDetailedOutlineTargetsUnwrittenFutureV1 } from '../outline/future-boundary'
 import { resolveUnwrittenChapterTargetV1 } from './prose-copilot'
 import type { OutlineGatewayAssemblyV1 } from '../outline/gateway-context'
@@ -61,7 +61,7 @@ export async function detailedOutlineAuthoringPostStateMatchesV1(scope: Workspac
 export async function adoptDetailedOutlineAuthoringV1(scope: WorkspaceScope, worldGroupId: number | null, snapshot: DetailedOutlineAuthoringSnapshotV1, raw: string): Promise<void> {
   await assertDetailedOutlineTargetsUnwrittenFutureV1({ scope, worldGroupId, outlineNodeId: snapshot.outlineNodeId })
   const patch = await detailedOutlineExpectedPatchV1(snapshot, raw)
-  await db.transaction('rw', scopeTransactionTables(db.outlineNodes, db.detailedOutlines), async () => {
+  await db.transaction('rw', adoptionTransactionTablesV1('detailedOutlines'), async () => {
     const outline = (await readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' })).find(row => row.id === snapshot.outlineNodeId)
     const detailed = (await readOwnedRows<DetailedOutline>(scope, 'detailedOutlines', { owner: 'work' })).find(row => row.outlineNodeId === snapshot.outlineNodeId) ?? null
     if (!outline || (outline.worldGroupId ?? null) !== worldGroupId
@@ -89,7 +89,12 @@ export async function prepareDetailedOutlineAuthoringV1(input: { projectId: numb
   const skill = getAgentSkillV1('outline.details', 'outline')
   const contextEvidence = attachAgentContextInputStateV1(evidenceFromContextResult('full', assembled), prompt.inputState)
   contextEvidence.inputStateSourceKeys = contextGatewayInputStateSourceKeysV1(skill, assembled.contextGatewayExecution)
-  const node: GenerationNode<void, string, void> = { id: `outline.details:${outline.id}`, kind: 'outline.details', editableInput: true, assembleInput: () => prompt.messages, run: messages => executeRegisteredAIEntryV1('outline.detail.enhance', messages, config, { category: 'detail.enhance', projectId: input.projectId }, input.signal), adopt: raw => adoptDetailedOutlineAuthoringV1(scope, input.worldGroupId, snapshot, raw) }
+  const runRaw = async (messages: ChatMessage[], result: ChatResult = {}) => {
+    const startedAt = Date.now()
+    const output = await executeRegisteredAIEntryV1('outline.detail.enhance', messages, config, { category: 'detail.enhance', projectId: input.projectId }, input.signal, result)
+    return { output, ...(result.usage ? { usage: result.usage } : {}), durationMs: Math.max(0, Date.now() - startedAt) }
+  }
+  const node: GenerationNode<void, string, void> = { id: `outline.details:${outline.id}`, kind: 'outline.details', editableInput: true, assembleInput: () => prompt.messages, run: async messages => (await runRaw(messages)).output, adopt: raw => adoptDetailedOutlineAuthoringV1(scope, input.worldGroupId, snapshot, raw) }
   const route = resolveRequestConfig(config, { category: 'detail.enhance' }).config
-  return { scope, snapshot, node, prepared: prepareGenerationNode(node, undefined), assembled, narrativeBrief: prompt.narrativeBrief, contextEvidence, contextSources: contextEvidence.included, label: `场景细纲 · ${outline.title}`, modelIdentity: { provider: route.provider, model: route.model } }
+  return { scope, snapshot, node, prepared: prepareGenerationNode(node, undefined), assembled, narrativeBrief: prompt.narrativeBrief, contextEvidence, contextSources: contextEvidence.included, label: `场景细纲 · ${outline.title}`, modelIdentity: { provider: route.provider, model: route.model }, runRaw }
 }

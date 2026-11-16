@@ -1,3 +1,5 @@
+import { revalidateWorldSourcePurposeV1 } from '../world-engine/source-purpose-actions'
+import type { SaltRidgeInstallPermit } from '../salt-ridge/install-admission'
 import { canonicalProductProductionJsonV2 } from './hash'
 import { deriveAvgAssemblyRecoveryBaseV1 } from '../avg/assembly-recovery'
 import { AVG_VISUAL_TEXT_CAPABILITY_V4 } from '../avg/visual-planning-roles'
@@ -12,9 +14,7 @@ import type {
   ProductBuildArtifactKindV1,
   ProductEvolutionAffectedLaneV1,
   ProductEvolutionBaseV1,
-  ProductProductionBriefRecordV1,
   ProductProductionBriefV3,
-  ProductProductionCommandRecordV1,
   ProductProductionRecordV1,
   ProductionProductKindV1,
   TextOpenWorldCreatorProductionPreflightConfirmationV1,
@@ -46,6 +46,7 @@ import {
 } from './recovery-policy'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from './consultation'
 import { parseProductProductionBriefV3 } from './contracts'
+import { readProductProductionDetailsV1, type ProductProductionDetailsV1 } from './read-details'
 import { parseProductProductionSourcePlanV1 } from './source-contracts'
 import {
   inspectConfiguredTextCapabilityV1,
@@ -120,21 +121,12 @@ import {
 } from './media-transport'
 import { readAcceptedBuildArtifacts } from './artifact-store'
 import { putMediaBlobObject, readMediaBlobObjectData } from './media-blob-store'
+import { assertTextOpenWorldProductionNewWorkV1 } from '../open-world/source-admission'
+import { readTextOpenWorldCreatorBuildNewWorkAuthorityV1 } from '../open-world/creator-derived-authority'
 import { minimumTextAdventureCommercialImageCountV1 } from '../adventure/production-brief'
 import { parseProductProductionPlanV3, textAdventureProductionBudgetFloorV1 } from './plan'
 
-export interface ProductProductionDetailsV1 {
-  production: ProductProductionRecordV1
-  brief: ProductProductionBriefRecordV1 | null
-  /** Frozen scheduler/runtime envelope. Creator rows retain their own author
-   * Brief in `briefJson`; this projection is available only after start. */
-  executionBrief: ProductProductionBriefV3 | null
-  build: ProductBuildRecordV1 | null
-  artifactCount: number
-  recentCommands: ProductProductionCommandRecordV1[]
-  briefHistory: ProductProductionBriefRecordV1[]
-  buildHistory: ProductBuildRecordV1[]
-}
+export { readProductProductionDetailsV1, type ProductProductionDetailsV1 }
 
 export type ProductProductionProgressV1 = ProductProductionSchedulerProjectionV1
 
@@ -154,9 +146,11 @@ async function resolveTextOpenWorldCreatorMediaProviderV1(input: {
   buildId: number
   now?: number
 }): Promise<ResolvedProductMediaCapabilityV1> {
-  const authority = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+  input = { ...input, scope: structuredClone(input.scope) }
+  const authority = await readTextOpenWorldCreatorBuildNewWorkAuthorityV1({
     scope: input.scope,
     buildId: input.buildId,
+    operation: '规划新媒资 Provider',
   })
   const visualTask = authority.productionPlan.tasks.find(task => task.taskKey === 'media.visual')
   const requirementKey = visualTask?.capabilityRequirementKeys[0]
@@ -186,6 +180,8 @@ async function resolveTextOpenWorldCreatorMediaProviderV1(input: {
  * command/result contract. */
 export async function importTextOpenWorldCreatorMediaBlobV1(input: {
   scope: WorkspaceScope
+  productionId: number
+  buildId: number
   data: ArrayBuffer
 }): Promise<{
   blobObjectId: number
@@ -195,12 +191,37 @@ export async function importTextOpenWorldCreatorMediaBlobV1(input: {
   width: number
   height: number
 }> {
+  input = { ...input, scope: structuredClone(input.scope), data: input.data.slice(0) }
+  const scope = await resolveScope({ scope: { ...input.scope } })
+  const authority = await readTextOpenWorldCreatorBuildNewWorkAuthorityV1({ scope, buildId: input.buildId, operation: '导入新的作者媒资' })
+  if (authority.production.id !== input.productionId
+    || authority.production.currentBuildNumber !== authority.build.buildNumber
+    || authority.production.currentBriefRevision !== authority.build.briefRevision
+    || authority.production.controlEpoch !== authority.build.controlEpoch
+    || !['producing', 'preview-ready'].includes(authority.production.status)
+    || !['authorized', 'building', 'preview-ready', 'release-ready'].includes(authority.build.status)) {
+    throw new Error('[product-production-service] 媒资导入必须绑定当前仍有效的制作与 Build。')
+  }
+  const expected = canonicalProductProductionJsonV2([authority.production, authority.build, authority.briefRow])
   const mimeType = detectProductMediaMimeTypeV1(input.data)
   const dimensions = detectProductImageDimensionsV1(input.data)
   if (!mimeType || !['image/png', 'image/jpeg', 'image/webp'].includes(mimeType) || !dimensions) {
     throw new Error('[product-production-service] 只允许导入可验证的 PNG、JPEG 或 WebP 图片')
   }
-  const row = await putMediaBlobObject({ scope: input.scope, data: input.data, mimeType })
+  const row = await putMediaBlobObject({ scope, data: input.data, mimeType, commitGuard: {
+    transactionTables: [db.productProductions, db.productBuilds, db.productProductionBriefs],
+    assertCurrentInTransaction: async () => {
+      const [production, build, brief] = await Promise.all([
+        db.productProductions.get(authority.production.id), db.productBuilds.get(authority.build.id),
+        db.productProductionBriefs.get(authority.briefRow.id),
+      ])
+      if (!production || !build || !brief
+        || canonicalProductProductionJsonV2([production, build, brief]) !== expected) {
+        throw new Error('[product-production-service] 媒资写入前制作来源或 Build 已变化，请重新检查。')
+      }
+      assertTextOpenWorldProductionNewWorkV1(production, brief, '导入新的作者媒资')
+    },
+  } })
   if (row.id == null) throw new Error('[product-production-service] 导入图片没有形成持久 Blob')
   return {
     blobObjectId: row.id,
@@ -1046,88 +1067,6 @@ export async function listProductProductionWorkspaceV1(
   return { worldReleases, productions }
 }
 
-export async function readProductProductionDetailsV1(
-  scopeInput: WorkspaceScope,
-  productionId: number,
-  allowedProducts?: readonly ProductionProductKindV1[],
-): Promise<ProductProductionDetailsV1> {
-  const scope = await resolveScope({ scope: scopeInput })
-  const production = await db.productProductions.get(productionId)
-  if (!production || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
-    throw new Error('[product-production-service] Production 不存在或跨 Work')
-  }
-  if (allowedProducts && !allowedProducts.includes(production.productType)) {
-    throw new Error('[product-production-service] Production 不属于当前产品入口')
-  }
-  const [brief, build, commandRows, briefRows, buildRows] = await Promise.all([
-    production.currentBriefRevision == null ? null : db.productProductionBriefs
-      .where('[productionId+revision]').equals([productionId, production.currentBriefRevision]).first(),
-    production.currentBuildNumber == null ? null : db.productBuilds
-      .where('[productionId+buildNumber]').equals([productionId, production.currentBuildNumber]).first(),
-    db.productProductionCommands.where('productionId').equals(productionId).toArray(),
-    db.productProductionBriefs.where('productionId').equals(productionId).toArray(),
-    db.productBuilds.where('productionId').equals(productionId).toArray(),
-  ])
-  if (brief && !await assertRecordInScope(scope, 'productProductionBriefs', brief, { owner: 'work' })) {
-    throw new Error('[product-production-service] Brief 跨 Work')
-  }
-  if (build && !await assertRecordInScope(scope, 'productBuilds', build, { owner: 'work' })) {
-    throw new Error('[product-production-service] Build 跨 Work')
-  }
-  const recentCommands: ProductProductionCommandRecordV1[] = []
-  for (const command of commandRows
-    .sort((left, right) => right.createdAt - left.createdAt || (right.id ?? 0) - (left.id ?? 0))
-    .slice(0, 8)) {
-    if (!await assertRecordInScope(scope, 'productProductionCommands', command, { owner: 'work' })) {
-      throw new Error('[product-production-service] Command 跨 Work')
-    }
-    recentCommands.push(command)
-  }
-  const briefHistory: ProductProductionBriefRecordV1[] = []
-  for (const row of briefRows.sort((left, right) => right.revision - left.revision)) {
-    if (!await assertRecordInScope(scope, 'productProductionBriefs', row, { owner: 'work' })) {
-      throw new Error('[product-production-service] Brief history 跨 Work')
-    }
-    briefHistory.push(row)
-  }
-  const buildHistory: ProductBuildRecordV1[] = []
-  for (const row of buildRows.sort((left, right) => right.buildNumber - left.buildNumber)) {
-    if (!await assertRecordInScope(scope, 'productBuilds', row, { owner: 'work' })) {
-      throw new Error('[product-production-service] Build history 跨 Work')
-    }
-    buildHistory.push(row)
-  }
-  const storedOpenTtrpgBrief = (() => {
-    if (!brief || brief.briefKind === 'text-open-world-creator-v1') return false
-    try {
-      const value = JSON.parse(brief.briefJson) as Record<string, unknown>
-      return value.schema === 'storyforge.ttrpg-production-brief'
-        && value.version === 3
-        && value.runFormat === 'open'
-    } catch {
-      return false
-    }
-  })()
-  const executionBrief = brief?.briefKind === 'text-open-world-creator-v1'
-    ? brief.status === 'authorized' && build
-      ? (await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
-          scope,
-          buildId: build.id!,
-        })).contracts.executionBrief
-      : null
-    : storedOpenTtrpgBrief ? null : brief ? parseProductProductionBriefV3(brief.briefJson) : null
-  return {
-    production,
-    brief: brief ?? null,
-    executionBrief,
-    build: build ? await prepareLegacyPausedProductBuildV1(scope, build) : null,
-    artifactCount: build?.id == null ? 0 : await db.productBuildArtifacts.where('buildId').equals(build.id).count(),
-    recentCommands,
-    briefHistory,
-    buildHistory,
-  }
-}
-
 export async function consultProductProductionStartV1(input: {
   scope: WorkspaceScope
   worldReleaseId: number
@@ -1143,6 +1082,7 @@ export async function compileProductProductionBriefV3(
 }
 
 export async function createProductProductionWithBriefV1(input: {
+  saltRidgeInstall?: SaltRidgeInstallPermit
   scope: WorkspaceScope
   worldReleaseId: number
   title: string
@@ -1150,8 +1090,16 @@ export async function createProductProductionWithBriefV1(input: {
 }): Promise<number> {
   const title = input.title.trim()
   if (!title) throw new Error('[product-production-service] 游戏标题不能为空')
+  if (input.worldReleaseId !== input.brief.source.worldReleaseId) {
+    throw new Error('[product-production-service] Brief 与所选冻结来源不一致')
+  }
+  await revalidateWorldSourcePurposeV1({
+    worldReleaseId: input.worldReleaseId, expectedProjectId: input.scope.projectId, expectedWorldId: input.scope.worldId,
+    purpose: input.brief.intent.productType, proof: input.brief.source.sourcePurpose,
+  })
   const productionKey = `productprod.${Date.now().toString(36)}.${crypto.randomUUID().slice(0, 8)}`
   const created = await executeProductProductionCommand({
+    saltRidgeInstall: input.saltRidgeInstall,
     scope: input.scope,
     command: {
       type: 'create-intent', commandId: commandId('intent'), productionKey,
@@ -1160,6 +1108,7 @@ export async function createProductProductionWithBriefV1(input: {
     },
   })
   const saved = await executeProductProductionCommand({
+    saltRidgeInstall: input.saltRidgeInstall,
     scope: input.scope, productionId: created.productionId,
     command: {
       type: 'save-brief-revision', commandId: commandId('brief'), expectedStateRevision: 0,
@@ -1528,6 +1477,7 @@ export async function restoreArchivedProductProductionV1(input: {
 }
 
 export async function retryProductProductionBlockerV1(input: {
+  saltRidgeInstall?: SaltRidgeInstallPermit
   scope: WorkspaceScope
   details: ProductProductionDetailsV1
   afterCapabilityChange?: boolean
@@ -1609,6 +1559,7 @@ export async function retryProductProductionBlockerV1(input: {
     throw new Error('[product-production-service] 当前 blocker 不存在待结算 provider reservation')
   }
   const receipt = await executeProductProductionCommand({
+    saltRidgeInstall: input.saltRidgeInstall,
     scope: input.scope, productionId: input.details.production.id!,
     command: {
       type: 'resolve-blocker', commandId: commandId('resolve-blocker'),
@@ -1769,6 +1720,7 @@ export async function runAuthorizedProductProductionV1(input: {
   signal?: AbortSignal
   onProgress?: (projection: ProductProductionSchedulerProjectionV1) => void | Promise<void>
 }): Promise<ProductProductionSchedulerProjectionV1> {
+  input = { ...input, scope: structuredClone(input.scope) }
   const scope = await resolveScope({ scope: input.scope })
   const details = await readProductProductionDetailsV1(scope, input.productionId)
   if (!details.brief || !details.build) throw new Error('[product-production-service] Production 尚未授权 Build')
@@ -1782,6 +1734,9 @@ export async function runAuthorizedProductProductionV1(input: {
   }
   if (['preview-ready', 'release-ready', 'released'].includes(details.build.status)) {
     return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
+  }
+  if (details.production.productType === 'text-open-world') {
+    assertTextOpenWorldProductionNewWorkV1(details.production, details.brief, '自动执行新的制作任务')
   }
   const creatorAuthority = details.brief.briefKind === 'text-open-world-creator-v1'
     ? await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
@@ -1939,10 +1894,14 @@ export async function runAuthorizedProductProductionV1(input: {
 }
 
 export async function publishProductProductionV1(input: {
+  expectedPackageHash?: string
   scope: WorkspaceScope
   productionId: number
 }) {
   const prepared = await prepareProductProductionAdoption(input)
+  if (input.expectedPackageHash != null && input.expectedPackageHash !== prepared.intent.packageHash) {
+    throw new Error('制作运行包与预期的冻结作品版本不一致')
+  }
   if (prepared.creatorRelease) {
     throw new Error('文字开放世界 Creator Build 必须经过专属作者发布确认，不能调用通用发布入口。')
   }
@@ -1971,6 +1930,7 @@ export async function startProductProductionPreviewV1(input: {
   expectedPreviewHash?: string
   worldGroupId?: number | null
 }): Promise<{ sessionId: number; productType: ProductProductionBriefV3['intent']['productType'] }> {
+  input = { ...input, scope: structuredClone(input.scope) }
   const details = await readProductProductionDetailsV1(input.scope, input.productionId)
   if (!details.brief || !details.build || !details.build.previewHash) {
     throw new Error('[product-production-service] 当前 Production 尚无可验证 Build Preview')
@@ -1978,6 +1938,9 @@ export async function startProductProductionPreviewV1(input: {
   if ((input.expectedBuildId != null && input.expectedBuildId !== details.build.id)
     || (input.expectedPreviewHash != null && input.expectedPreviewHash !== details.build.previewHash)) {
     throw new Error('[product-production-service] 试玩版本已更新，请返回作品库重新选择')
+  }
+  if (details.production.productType === 'text-open-world') {
+    assertTextOpenWorldProductionNewWorkV1(details.production, details.brief, '创建新的 Build 试玩 Session')
   }
   const receipt = await executeProductProductionCommand({
     scope: input.scope, productionId: details.production.id!,

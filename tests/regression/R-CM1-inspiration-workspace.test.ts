@@ -35,7 +35,7 @@ describe('R-CM1 · 增量灵感工作区', () => {
     await db.delete()
     await db.open()
     useInspirationWorkspaceStore.setState({
-      workspace: null,
+      scope: null, workspace: null,
       fragments: [],
       versions: [],
       loading: false,
@@ -61,13 +61,16 @@ describe('R-CM1 · 增量灵感工作区', () => {
     })!)
     expect(fragments).toHaveLength(1)
 
-    for (let index = 0; index < MAX_INSPIRATION_FRAGMENTS + 3; index++) {
+    for (let index = 0; index < MAX_INSPIRATION_FRAGMENTS - 1; index++) {
       fragments = upsertInspirationFragment(fragments, createInspirationFragment({
         text: `${index}-` + '潮'.repeat(MAX_INSPIRATION_FRAGMENT_CHARS - `${index}-`.length),
         now: index + 10,
       })!)
     }
     expect(fragments).toHaveLength(MAX_INSPIRATION_FRAGMENTS)
+    expect(() => upsertInspirationFragment(fragments, createInspirationFragment({ text: '超出容量的新输入' })!))
+      .toThrow('上限')
+    expect(fragments[0]).toEqual(first)
     expect(Math.max(...fragments.map(fragment => fragment.text.length)))
       .toBeLessThanOrEqual(MAX_INSPIRATION_FRAGMENT_CHARS)
 
@@ -119,8 +122,8 @@ describe('R-CM1 · 增量灵感工作区', () => {
     expect(storedVersions.slice(1).every(version => (
       version.parentVersionId === null || retainedIds.has(version.parentVersionId)
     ))).toBe(true)
-    expect(storedVersions.at(-1)?.fragmentIds).toEqual([fragment!.id])
-    expect(storedVersions.at(-1)?.resultJson).toContain(`版本 ${MAX_INSPIRATION_VERSIONS + 1}`)
+    expect(storedVersions[storedVersions.length - 1]?.fragmentIds).toEqual([fragment!.id])
+    expect(storedVersions[storedVersions.length - 1]?.resultJson).toContain(`版本 ${MAX_INSPIRATION_VERSIONS + 1}`)
     const assembled = await assembleContext({
       projectId,
       sourceKeys: ['inspirationWorkspace'],

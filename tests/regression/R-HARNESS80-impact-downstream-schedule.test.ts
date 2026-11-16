@@ -1,4 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, createElement, type ComponentProps } from 'react'
+import { createRoot } from 'react-dom/client'
+import { MemoryRouter } from 'react-router'
+import ChapterEditor from '../../src/components/editor/ChapterEditor'
+import type RichEditor from '../../src/components/editor/RichEditor'
+import type { RichEditorHandle } from '../../src/components/editor/RichEditor'
+import { useChapterStore } from '../../src/stores/chapter'
+import { useOutlineStore } from '../../src/stores/outline'
+import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { buildEditImpactGraphV1 } from '../../src/lib/consistency/impact-analysis'
 import { buildImpactHandoffV2 } from '../../src/lib/consistency/impact-handoff'
 import { buildImpactRemediationPlanV1 } from '../../src/lib/consistency/impact-remediation-plan'
@@ -26,6 +35,35 @@ import { staleAgentRunVerificationV1 } from '../../src/lib/agent/run/event-store
 import type { WorkspaceScope } from '../../src/lib/types'
 import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
+
+// Keep the real ChapterEditor, stores, recovery readers and adoption handlers.
+// The rich-text surface itself is irrelevant to the recovered-confirmation UI.
+vi.mock('../../src/components/editor/RichEditor', async () => {
+  const react = await import('react')
+  return {
+    default: react.forwardRef<RichEditorHandle, ComponentProps<typeof RichEditor>>((props, _ref) => (
+      react.createElement('div', null, props.contentHeader)
+    )),
+  }
+})
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
+
+async function mountEditor(fixture: Awaited<ReturnType<typeof seed>>) {
+  const project = await db.projects.get(fixture.projectId)
+  if (!project) throw new Error('missing project fixture')
+  await useChapterStore.getState().loadAll(fixture.scope)
+  useChapterStore.getState().selectChapter(fixture.sourceChapterId)
+  await useOutlineStore.getState().loadAll(fixture.scope)
+  const host = document.createElement('div')
+  document.body.append(host)
+  const root = createRoot(host)
+  const view = { host, root }
+  mounted.push(view)
+  await act(async () => { root.render(createElement(MemoryRouter, null,
+    createElement(ChapterEditor, { project, outlineNodeId: fixture.sourceOutlineNodeId }))) })
+  return view
+}
 
 const OUTLINE_OUTPUT = JSON.stringify({
   summary: '钟楼根据半开启的潮门调整撤离次序，并留下追查潮声来源的因果钩子。',
@@ -148,7 +186,19 @@ async function prepare(fixture: Awaited<ReturnType<typeof seed>>) {
 
 describe.sequential('R-HARNESS80 · H57 跨类型下游调度与完成投影', { timeout: 30_000 }, () => {
   beforeEach(async () => { await db.delete(); await db.open() })
-  afterEach(() => db.close())
+  afterEach(async () => {
+    while (mounted.length) {
+      const view = mounted.pop()
+      if (view) {
+        await act(async () => { view.root.unmount() })
+        view.host.remove()
+      }
+    }
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    useChapterStore.setState({ chapters: [], currentChapter: null })
+    db.close()
+  })
 
   it('从 current H57 与可信 ledger 生成稳定拓扑/hash，且读取本身不创建 Run', async () => {
     const fixture = await seed()
@@ -253,6 +303,65 @@ describe.sequential('R-HARNESS80 · H57 跨类型下游调度与完成投影', {
     expect(schedule.items.find(item => item.itemId === outlineItem.id)?.status).toBe('awaiting-confirmation')
     expect(calls).toBe(1)
   })
+
+  for (const kind of ['outline', 'timeline'] as const) {
+    it(`${kind} 冻结 intent 经真实 schedule 与 ChapterEditor 卸载重挂恢复，只继续原确认且不调用模型`, async () => {
+      const fixture = await seed(`intent-ui-${kind}`)
+      const { replan, outlineItem, timelineItem } = await prepare(fixture)
+      const runAI = vi.fn(async () => kind === 'outline' ? OUTLINE_OUTPUT : TIMELINE_OUTPUT)
+      const generate = kind === 'outline'
+        ? generateImpactOutlineRegenerationCandidateV1 : generateImpactStoryTimelineRegenerationCandidateV1
+      const adopt = kind === 'outline'
+        ? adoptImpactOutlineRegenerationCandidateV1 : adoptImpactStoryTimelineRegenerationCandidateV1
+      const generated = await generate({
+        scope: fixture.scope, expectedReplan: replan,
+        itemId: kind === 'outline' ? outlineItem.id : timelineItem.id, runAI,
+      })
+      await expect(adopt({
+        scope: fixture.scope, runId: generated.snapshot.run.id,
+        onDurableBoundary: boundary => {
+          if (boundary === 'intent.checkpoint') throw new Error('interrupt:confirmed-intent')
+        },
+      })).rejects.toThrow('interrupt:confirmed-intent')
+      const schedule = await readImpactDownstreamScheduleV1({ scope: fixture.scope, expectedReplan: replan })
+      expect(schedule.items.find(item => item.itemId === generated.candidate.item.id)?.status)
+        .toBe('awaiting-confirmation')
+      const fetch = vi.fn(() => { throw new Error('unexpected model/network call') })
+      vi.stubGlobal('fetch', fetch)
+      const label = kind === 'outline' ? '继续完成已确认摘要' : '继续完成已确认年表'
+      const rejectLabel = kind === 'outline' ? '放弃候选' : '放弃年表候选'
+      const first = await mountEditor(fixture)
+      await vi.waitFor(async () => {
+        await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+        expect(first.host.textContent).toContain(label)
+      })
+      await act(async () => { first.root.unmount() })
+      first.host.remove()
+      mounted.pop()
+      const refreshed = await mountEditor(fixture)
+      let continueButton: HTMLButtonElement | undefined
+      await vi.waitFor(async () => {
+        await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+        continueButton = [...refreshed.host.querySelectorAll('button')]
+          .find(button => button.textContent?.trim() === label)
+        expect(continueButton).toBeDefined()
+      })
+      const reject = [...refreshed.host.querySelectorAll('button')]
+        .find(button => button.textContent?.trim() === rejectLabel)
+      expect(reject?.disabled).toBe(true)
+      await act(async () => { continueButton?.click() })
+      await vi.waitFor(async () => {
+        await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+        const completed = await readAgentRunV1(fixture.scope, generated.snapshot.run.id)
+        expect(completed.projection.state).toBe('completed')
+        expect(refreshed.host.textContent).toContain('终态回执')
+      })
+      expect(runAI).toHaveBeenCalledOnce()
+      expect(fetch).not.toHaveBeenCalled()
+      expect((await readAgentRunV1(fixture.scope, generated.snapshot.run.id)).events
+        .filter(event => event.type === 'model.requested')).toHaveLength(1)
+    })
+  }
 
   it('并发创建由 parent mutation lock 与同 relation 收敛为一次模型调用和一个 child', async () => {
     const fixture = await seed('concurrent-slot')

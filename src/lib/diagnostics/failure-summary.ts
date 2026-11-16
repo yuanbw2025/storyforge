@@ -1,3 +1,4 @@
+import { parseDiagnosticDetails, type DiagnosticDetails } from './diagnostic-context'
 /** Small, content-free handoff shared by the application and the official form. */
 export const FAILURE_REPORT_FRAGMENT = '#storyforge-report='
 export const FAILURE_FEEDBACK_URL = 'https://docs.storyforge-lab.com/feedback/bug'
@@ -13,6 +14,7 @@ export interface FailureEvent {
   name: string
   frames: string[]
   build: string
+  details?: DiagnosticDetails
 }
 export interface FailureSummary {
   format: 'storyforge-failure-summary'
@@ -46,8 +48,9 @@ export function parseFailureEvent(value: unknown, now = Date.now()): FailureEven
     || !Number.isFinite(Date.parse(row.occurredAt)) || Date.parse(row.occurredAt) < now - 7 * 86_400_000
     || Date.parse(row.occurredAt) > now + 300_000 || !FAILURE_SOURCES.includes(row.source as FailureSource)) return null
   const frames = Array.isArray(row.frames) ? row.frames.filter((frame): frame is string => typeof frame === 'string') : []
-  return { occurredAt: new Date(row.occurredAt).toISOString(), source: row.source as FailureSource,
-    name: safeErrorName(row.name), build: safeFailureBuild(row.build), frames: safeErrorFrames('Error\n' + frames.join('\n')) }
+  const occurredAt = new Date(row.occurredAt).toISOString(), details = parseDiagnosticDetails(row.details, occurredAt)
+  return { occurredAt, source: row.source as FailureSource,
+    name: safeErrorName(row.name), build: safeFailureBuild(row.build), frames: safeErrorFrames('Error\n' + frames.join('\n')), ...(details ? { details } : {}) }
 }
 
 /** Reconstruct allowlisted fields; never trust a handoff or persisted object as-is. */
@@ -77,7 +80,8 @@ export function failureFeedbackLink(summary: FailureSummary): string {
   const safe = parseFailureSummary(summary)
   if (!safe) return FAILURE_FEEDBACK_URL
   // Keep the URL bounded even when a long session accumulated many failures.
-  safe.errors = safe.errors.slice(-5).map(error => ({ ...error, frames: error.frames.slice(0, 3) }))
+  // Public URL handoff retains its original small contract; extended details stay private.
+  safe.errors = safe.errors.slice(-5).map(({ details: _, ...error }) => ({ ...error, frames: error.frames.slice(0, 3) }))
   return FAILURE_FEEDBACK_URL + FAILURE_REPORT_FRAGMENT + encodeURIComponent(JSON.stringify(safe))
 }
 

@@ -3,17 +3,6 @@ name: Release Current Local Package
 on:
   push:
     tags: ['v*']
-  pull_request:
-    paths:
-      - 'scripts/distribution/**'
-      - 'scripts/local-codex/**'
-      - 'vite.config.ts'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'src/lib/ai/proxy-endpoints.ts'
-      - 'src/components/settings/AIConfigPanel.tsx'
-      - 'src/components/settings/EmbeddingConfigCard.tsx'
-      - '.github/workflows/release.yml'
   workflow_dispatch:
     inputs:
       tag:
@@ -28,13 +17,21 @@ on:
 permissions:
   contents: read
 
+env:
+  # These are public client coordinates, never the backend secret key.
+  VITE_STORYFORGE_COMMUNITY_SHARING: ${{ vars.STORYFORGE_COMMUNITY_SHARING }}
+  VITE_STORYFORGE_COMMUNITY_API_URL: ${{ vars.STORYFORGE_COMMUNITY_API_URL }}
+  VITE_STORYFORGE_COMMUNITY_SUPABASE_URL: ${{ vars.STORYFORGE_COMMUNITY_SUPABASE_URL }}
+  VITE_STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY: ${{ vars.STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY }}
+  VITE_STORYFORGE_COMMUNITY_R2_ORIGIN: ${{ vars.STORYFORGE_COMMUNITY_R2_ORIGIN }}
+  VITE_STORYFORGE_COMMUNITY_R2_BUCKET: ${{ vars.STORYFORGE_COMMUNITY_R2_BUCKET }}
+
 concurrency:
   group: local-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   release-checks:
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -81,14 +78,12 @@ jobs:
   clients:
     permissions:
       contents: write
-    if: github.event_name != 'pull_request'
     uses: ./.github/workflows/clients.yml
     with:
       release: true
     secrets: inherit
   build:
     needs: release-checks
-    if: ${{ !cancelled() && (github.event_name == 'pull_request' || needs.release-checks.result == 'success') }}
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -102,7 +97,6 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Verify release metadata
-        if: github.event_name != 'pull_request'
         run: npm run check:release-metadata -- "${RELEASE_TAG}"
       - run: npm run test:distribution
       - name: Build local portable channel
@@ -164,7 +158,6 @@ jobs:
           retention-days: 5
 
   publish:
-    if: github.event_name != 'pull_request'
     needs: [package, clients, signed-upgrade]
     runs-on: ubuntu-latest
     permissions:
@@ -187,6 +180,15 @@ jobs:
           pattern: client-*
           path: release-assets/
           merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-android-release-input
+          path: verified-android-release-input/
+      - name: Require the exact Android APK accepted by all four upgrade phases
+        run: |
+          version=$(node -p "require('./package.json').version")
+          python3 scripts/distribution/verify-android-source.py check-tested "release-assets/StoryForge-$version-android.apk" --commit "$(git rev-parse HEAD)" --tree "$(git rev-parse HEAD^{tree})" --version "$version" --receipt verified-android-release-input/tested-release.json --phases verified-android-release-input
+          cmp "release-assets/StoryForge-$version-android.apk" verified-android-release-input/upgrade-test-new.apk
       - name: Publish only after all target packages pass
         run: |
           git fetch origin main
@@ -220,6 +222,7 @@ jobs:
   signed-upgrade:
     permissions:
       contents: write
-    if: github.event_name != 'pull_request'
     needs: clients
     uses: ./.github/workflows/client-release-upgrade.yml
+    with:
+      client-artifact: true

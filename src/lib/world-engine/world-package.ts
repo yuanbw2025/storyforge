@@ -2,7 +2,14 @@ import { importProjectJSON } from '../export/json-export'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import { db } from '../db/schema'
 import Dexie from 'dexie'
-import type { CommunityWorldLicense, WorldReleaseManifestV3 } from '../types'
+import type { CommunityWorldLicense, WorldRelease, WorldReleaseManifestV3 } from '../types'
+import type { WorldPackageManifest, WorldPackageUse, WorldSourceDeclarationV1 } from '../types/world-sharing'
+import { encodeWorldSourceDeclarationV1 } from './source-declaration'
+import { WORLD_SOURCE_WIRE_MAX_BYTES } from './source-receipt-contract'
+import { inspectWorldPackageMetadata } from './world-package-metadata'
+export { WORLD_PACKAGE_USES } from '../types/world-sharing'
+export type { WorldPackageManifest, WorldPackageUse } from '../types/world-sharing'
+export { inspectWorldPackageMetadata } from './world-package-metadata'
 import type { WorldReleaseManifestV4 } from '../types/narrative-release'
 import type { NarrativeIndexV1 } from '../types/narrative-index'
 import { canonicalNarrativeJsonV1 } from './narrative-json'
@@ -18,33 +25,6 @@ import { compressNarrativePackV1, decompressNarrativePackV1, type CompressedNarr
 
 export const WORLD_PACKAGE_FORMAT = 'storyforge.world-package'
 export const WORLD_PACKAGE_VERSION = 5
-
-/** Current, explicit destinations for a frozen semantic world. */
-export const WORLD_PACKAGE_USES = [
-  'world-remix',
-  'ttrpg',
-  'character-interaction',
-  'ai-town',
-  'text-adventure',
-  'avg',
-  'text-open-world',
-] as const
-export type WorldPackageUse = (typeof WORLD_PACKAGE_USES)[number]
-
-export interface WorldPackageManifest {
-  packageId: string
-  sourceWorldCode: string
-  sourceWorldVersion: number
-  name: string
-  description: string
-  authorName: string
-  attribution: string
-  license: CommunityWorldLicense
-  allowedUses: Record<WorldPackageUse, boolean>
-  contentWarnings: string[]
-  publishedAt: number
-  releaseHash: string
-}
 
 interface WorldPackageEnvelope {
   format: typeof WORLD_PACKAGE_FORMAT
@@ -81,23 +61,13 @@ export interface WorldPackageTrustReport {
   warnings: string[]
 }
 
-const LICENSES = new Set<CommunityWorldLicense>([
-  'CC-BY-4.0',
-  'CC-BY-SA-4.0',
-  'CC-BY-NC-4.0',
-  'ALL-RIGHTS-RESERVED',
-])
-const WORLD_PACKAGE_MAX_BYTES = 32 * 1024 * 1024
+const WORLD_PACKAGE_MAX_BYTES = WORLD_SOURCE_WIRE_MAX_BYTES
 const WORLD_PACKAGE_KEYS = new Set(['format', 'packageVersion', 'manifest', 'release', 'integrity'])
-const WORLD_PACKAGE_MANIFEST_KEYS = new Set([
-  'packageId', 'sourceWorldCode', 'sourceWorldVersion', 'name', 'description',
-  'authorName', 'attribution', 'license', 'allowedUses', 'contentWarnings',
-  'publishedAt', 'releaseHash',
-])
 const WORLD_PACKAGE_RELEASE_KEYS_V3 = new Set(['label', 'version', 'contentHash', 'manifest'])
 const WORLD_PACKAGE_RELEASE_KEYS_V4 = new Set([...WORLD_PACKAGE_RELEASE_KEYS_V3, 'index'])
 const WORLD_PACKAGE_RELEASE_KEYS_V5 = new Set(['label', 'version', 'contentHash', 'packed'])
 const WORLD_PACKAGE_INTEGRITY_KEYS = new Set(['algorithm', 'digest'])
+
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -176,11 +146,11 @@ export async function createWorldPackage(
     : await verifyWorldReleaseManifestV1({ manifest: release.manifestJson, expectedContentHash: release.contentHash, expectedWorldCode: release.sourceWorldCode })
   const current = await db.worldReleases.get(releaseId)
   if (!current || canonicalStringify(current) !== canonicalStringify(release)) throw new Error('生成分享包期间发布记录已变化。')
+  const { guardWorldPackageCreationV1 } = await import('./source-receipt')
+  const assertSourceUnchanged = await guardWorldPackageCreationV1(release, verified)
   const releaseManifest = verified.manifest
   if (verified.version === 4 && !verified.index) throw new Error('v4 分享包必须携带已核对的完整索引。')
-  if (!options.authorName.trim()) throw new Error('请填写作者署名。')
-  if (!LICENSES.has(options.license)) throw new Error('许可选项无效。')
-  if (!Object.values(options.allowedUses).some(Boolean)) throw new Error('至少选择一种允许的使用方式。')
+  if (typeof options.authorName !== 'string' || !options.authorName.trim()) throw new Error('请填写作者署名。')
   const manifest: WorldPackageManifest = {
     packageId: `${release.sourceWorldCode}@v${release.version}`,
     sourceWorldCode: release.sourceWorldCode,
@@ -188,13 +158,15 @@ export async function createWorldPackage(
     name: releaseManifest.worldName,
     description: release.label,
     authorName: options.authorName.trim(),
-    attribution: options.attribution?.trim() || `${options.authorName.trim()} · ${releaseManifest.worldName}`,
+    attribution: options.attribution ?? `${options.authorName.trim()} · ${releaseManifest.worldName}`,
     license: options.license,
     allowedUses: { ...options.allowedUses },
-    contentWarnings: (options.contentWarnings ?? []).map(item => item.trim()).filter(Boolean).slice(0, 12),
+    contentWarnings: options.contentWarnings ?? [],
     publishedAt: release.createdAt,
     releaseHash: release.contentHash,
   }
+  const metadata = inspectWorldPackageMetadata(manifest, verified.version)
+  if (metadata.errors.length) throw new Error(metadata.errors.join('；'))
   const shared = { format: WORLD_PACKAGE_FORMAT, manifest } as const
   const released = { label: release.label, version: release.version, contentHash: release.contentHash }
   let withoutIntegrity: WorldPackagePayload = verified.version === 3
@@ -216,6 +188,7 @@ export async function createWorldPackage(
   if (new TextEncoder().encode(canonicalStringify(pkg)).byteLength > WORLD_PACKAGE_MAX_BYTES) {
     throw new Error(`世界分享包超过 ${WORLD_PACKAGE_MAX_BYTES / 1024 / 1024} MiB 纯语义包预算。`)
   }
+  await assertSourceUnchanged()
   return pkg
 }
 
@@ -236,32 +209,9 @@ export async function inspectWorldPackage(input: unknown): Promise<WorldPackageT
     errors.push(`不支持的世界分享包版本：${String(input.packageVersion)}。`)
   }
 
-  let manifest: WorldPackageManifest | null = null
-  const rawManifest = input.manifest
-  if (!isRecord(rawManifest)) {
-    errors.push('分享包缺少发布信息。')
-  } else {
-    const allowedUses = rawManifest.allowedUses
-    const allowedUseKeys = isRecord(allowedUses) ? Object.keys(allowedUses) : []
-    const validUses = isRecord(allowedUses)
-      && allowedUseKeys.length === WORLD_PACKAGE_USES.length
-      && WORLD_PACKAGE_USES.every(key => typeof allowedUses[key] === 'boolean')
-      && Object.values(allowedUses).some(value => value === true)
-    const unknownManifestKeys = Object.keys(rawManifest).filter(key => !WORLD_PACKAGE_MANIFEST_KEYS.has(key))
-    if (unknownManifestKeys.length > 0) errors.push(`世界发布信息包含未知字段：${unknownManifestKeys.join('、')}。`)
-    if (typeof rawManifest.packageId !== 'string' || typeof rawManifest.sourceWorldCode !== 'string' || typeof rawManifest.name !== 'string' || !rawManifest.name.trim()) errors.push('发布信息缺少世界编号或名称。')
-    if (typeof rawManifest.sourceWorldVersion !== 'number' || !Number.isInteger(rawManifest.sourceWorldVersion) || rawManifest.sourceWorldVersion < 1) errors.push('世界版本无效。')
-    if (rawManifest.packageId !== `${String(rawManifest.sourceWorldCode)}@v${String(rawManifest.sourceWorldVersion)}`) errors.push('世界分享包编号与来源版本不一致。')
-    if (typeof rawManifest.description !== 'string' || rawManifest.description.length > 2_000) errors.push('世界分享说明无效。')
-    if (typeof rawManifest.authorName !== 'string' || !rawManifest.authorName.trim()) errors.push('分享包缺少作者署名。')
-    if (typeof rawManifest.attribution !== 'string' || !rawManifest.attribution.trim() || rawManifest.attribution.length > 500) errors.push('世界分享包署名说明无效。')
-    if (!LICENSES.has(rawManifest.license as CommunityWorldLicense)) errors.push('分享包许可无效。')
-    if (!validUses) errors.push('分享包没有与当前产品目录完全一致的二创用途声明。')
-    if (!Array.isArray(rawManifest.contentWarnings) || rawManifest.contentWarnings.length > 12 || rawManifest.contentWarnings.some(value => typeof value !== 'string' || value.length > 200)) errors.push('内容警告格式无效。')
-    if (typeof rawManifest.publishedAt !== 'number' || !Number.isFinite(rawManifest.publishedAt) || rawManifest.publishedAt <= 0) errors.push('世界发布时间无效。')
-    if (typeof rawManifest.releaseHash !== 'string' || !/^[a-f0-9]{64}$/.test(rawManifest.releaseHash)) errors.push('分享包缺少有效发布哈希。')
-    if (errors.length === 0) manifest = rawManifest as unknown as WorldPackageManifest
-  }
+  const metadata = inspectWorldPackageMetadata(input.manifest, input.packageVersion)
+  errors.push(...metadata.errors)
+  const manifest = errors.length === 0 ? metadata.manifest : null
 
   const wireRelease = isRecord(input.release) ? input.release : null
   let release: Record<string, unknown> | null = null
@@ -325,99 +275,95 @@ export async function inspectWorldPackage(input: unknown): Promise<WorldPackageT
   return { valid, importable: valid, manifest, errors, warnings }
 }
 
-export async function importWorldPackage(input: unknown): Promise<number> {
-  input = detachPackage(input)
-  const report = await inspectWorldPackage(input)
-  if (!report.valid || !report.importable || !report.manifest || !isRecord(input) || !isRecord(input.release)) {
-    throw new Error(`世界分享包预检失败：${report.errors.join('；')}`)
+export interface CapturedWorldSourceWireV1 {
+  readonly wireJson: string
+  readonly declaration: WorldSourceDeclarationV1
+  readonly verified: VerifiedWorldReleaseV1
+  readonly frozenRelease: Omit<WorldRelease, 'id' | 'projectId' | 'worldId' | 'revisionId'>
+}
+const capturedWires = new WeakSet<CapturedWorldSourceWireV1>()
+/** An in-memory preflight marker, never a portable authorization receipt. */
+export function assertCapturedWorldSourceWireV1(value: CapturedWorldSourceWireV1): void {
+  if (!capturedWires.has(value)) throw Error('[world-source-receipt] 必须使用真实 wire 预检结果')
+}
+
+/** Capture the actual submitted representation before unpacking. String input
+ * keeps its decoded JSON text; object callers submit its JSON serialization.
+ * Neither promises physical-file BOM/formatting bytes under integrity.digest. */
+export async function captureWorldSourceWireV1(input: unknown): Promise<CapturedWorldSourceWireV1> {
+  const wireJson = typeof input === 'string' ? input : JSON.stringify(input)
+  if (typeof wireJson !== 'string' || !wireJson.length
+    || new TextEncoder().encode(wireJson).byteLength > WORLD_SOURCE_WIRE_MAX_BYTES) throw Error('原 wire 缺失或超出包预算')
+  const packet: unknown = JSON.parse(wireJson)
+  const report = await inspectWorldPackage(packet)
+  // Decoder importability is separate from editing/product permission.
+  if (!report.valid || !report.importable || !report.manifest || !isRecord(packet) || !isRecord(packet.integrity)) {
+    throw Error(`世界分享包预检失败：${report.errors.join('；')}`)
   }
-  const release = (await expandedPackageRelease(input))!
-  const verified = await verifyWorldReleaseManifestV1({ manifest: release.manifest, expectedContentHash: String(release.contentHash),
-    expectedWorldCode: report.manifest.sourceWorldCode, ...(input.packageVersion === 4 || input.packageVersion === 5 ? { index: release.index } : {}) })
+  const release = (await expandedPackageRelease(packet))!
+  const verified = await verifyWorldReleaseManifestV1({ manifest: release.manifest,
+    expectedContentHash: String(release.contentHash), expectedWorldCode: report.manifest.sourceWorldCode,
+    ...(packet.packageVersion === 4 || packet.packageVersion === 5 ? { index: release.index } : {}) })
+  const declaration = encodeWorldSourceDeclarationV1({ manifest: report.manifest,
+    packageVersion: packet.packageVersion as 3 | 4 | 5, packageDigest: String(packet.integrity.digest) })
+  Object.freeze(declaration.allowedUses); Object.freeze(declaration.contentWarnings); Object.freeze(declaration)
+  const frozenRelease = Object.freeze({
+    releaseUid: worldReleaseUidV1({ worldCode: declaration.sourceWorldCode,
+      version: Number(release.version), contentHash: String(release.contentHash) }),
+    version: Number(release.version), label: String(release.label), contentHash: String(release.contentHash),
+    manifestJson: verified.version === 3 ? stableJson(verified.manifest) : canonicalNarrativeJsonV1(verified.manifest),
+    sourceWorldCode: declaration.sourceWorldCode, createdAt: declaration.publishedAt,
+  })
+  const captured = Object.freeze({ wireJson, declaration, verified, frozenRelease })
+  capturedWires.add(captured)
+  return captured
+}
+
+export async function importWorldPackage(input: unknown): Promise<number> {
+  const captured = await captureWorldSourceWireV1(input)
+  const { assertWorldPackageEditingSourceV1, installCapturedWorldSourceInTransactionV1 } = await import('./source-receipt')
+  assertWorldPackageEditingSourceV1(captured)
+  const verified = captured.verified, release = captured.frozenRelease, packageManifest = captured.declaration
   const releaseManifest = verified.manifest
-  const manifestJson = verified.version === 3 ? stableJson(releaseManifest) : canonicalNarrativeJsonV1(releaseManifest)
   const sourceProject = releaseManifest.semanticSnapshot.project
   const semanticProjectKeys = [
     'workspaceUid', 'workspacePurpose', 'name', 'enableMultiWorld', 'productPlatformOptIns',
-    '_activeWorldExportId', '_activeWorkExportId',
-    'createdAt', 'updatedAt',
+    '_activeWorldExportId', '_activeWorkExportId', 'createdAt', 'updatedAt',
   ] as const
   const project = Object.fromEntries(semanticProjectKeys
     .filter(key => Object.prototype.hasOwnProperty.call(sourceProject, key))
     .map(key => [key, sourceProject[key]])) as Record<string, unknown>
   project.workspacePurpose = 'world-engine'
-  const communityOrigin = {
-    packageId: report.manifest.packageId,
-    sourceWorldCode: report.manifest.sourceWorldCode,
-    sourceWorldVersion: report.manifest.sourceWorldVersion,
-    authorName: report.manifest.authorName,
-    license: report.manifest.license,
-    importedAt: Date.now(),
-  }
-  // Capture the non-null validated identity before entering the async callback.
-  const packageManifest = report.manifest
   const localWorldCode = generateWorldCode()
   const lineage = verified.version === 4 ? await createNarrativeLineageV1({ source: verified.manifest.narrative,
     targetOwner: { kind: 'world', worldCode: localWorldCode, sourceWorkCode: String(verified.manifest.semanticSnapshot.works[0].code) },
-    sourceWorkspaceUid: verified.manifest.sourceManifest.sourceWorkspaceUid, sourceContentHash: String(release.contentHash),
-    sourceReleaseUid: worldReleaseUidV1({ worldCode: report.manifest.sourceWorldCode, version: Number(release.version), contentHash: String(release.contentHash) }) }) : null
-  // Preflight, hashing and ID planning finish before the import transaction.
-  // Draft, lineage, original revision and original release commit atomically.
-  return importProjectJSON(materializeWorldReleaseBackupV1(releaseManifest, project), { finalizeInTransaction: async importedProjectId => {
-    const importedProject = await db.projects.get(importedProjectId)
-    if (!importedProject?.activeWorldId) {
-      throw new Error('世界包导入后缺少当前 World 指针。')
-    }
+    sourceWorkspaceUid: verified.manifest.sourceManifest.sourceWorkspaceUid, sourceContentHash: release.contentHash,
+    sourceReleaseUid: release.releaseUid }) : null
+  // The existing import transaction owns domain materialization, original R,
+  // exact D receipt/binding and the immutable origin snapshot together.
+  return importProjectJSON(materializeWorldReleaseBackupV1(releaseManifest, project), { finalizeInTransaction: async projectId => {
+    const importedProject = await db.projects.get(projectId)
+    if (!importedProject?.activeWorldId) throw Error('世界包导入后缺少当前 World 指针。')
     if (await db.worlds.where('code').equals(localWorldCode).count()) throw Error('新世界编号冲突，请重新导入。')
-    await db.worlds.update(importedProject.activeWorldId, {
-      identityKind: 'world-draft',
-      code: localWorldCode,
-      currentVersion: packageManifest.sourceWorldVersion,
-      communityOrigin,
-      updatedAt: Date.now(),
-    })
-    const scope = await Dexie.Promise.resolve(resolveWorkspaceScope(importedProjectId))
-    if (verified.version === 4 && lineage) {
-      // The original installed release remains byte-identical. This receipt
-      // refers to the new editable draft, whose confirmations still need review.
-      await db.worldDerivations.add({ projectId: importedProjectId, worldId: scope.worldId,
-        sourceWorkspaceUid: lineage.sourceWorkspaceUid, sourceWorkCode: String(verified.manifest.semanticSnapshot.works[0].code),
-        sourceWorkRevision: 0, sourceKind: 'world-release-copy',
-        sourceRevisionVectorJson: canonicalNarrativeJsonV1({ version: 1, revisionVectorHash: lineage.sourceRevisionVectorHash }),
-        sourceRangeJson: canonicalNarrativeJsonV1({ kind: 'frozen-world-release', releaseUid: lineage.sourceReleaseUid }),
-        selectedResourceIdsJson: canonicalNarrativeJsonV1(verified.manifest.narrative.coverage.eligibleSelected),
-        sourceContentHash: lineage.sourceContentHash, narrativeLineageJson: canonicalNarrativeJsonV1(lineage),
-        targetRevisionId: null, targetReleaseId: null, createdAt: Date.now() })
-    }
-    const now = Date.now()
-    const revisionId = await db.worldRevisions.add({
-      projectId: importedProjectId,
-      worldId: scope.worldId,
-      parentRevisionId: null,
-      revision: Number(release.version),
-      label: String(release.label),
-      manifestJson,
-      contentHash: String(release.contentHash),
-      createdAt: now,
-      updatedAt: now,
-    }) as number
-    await db.worldReleases.add({
-      releaseUid: worldReleaseUidV1({
-        worldCode: packageManifest.sourceWorldCode,
-        version: Number(release.version),
-        contentHash: String(release.contentHash),
-      }),
-      projectId: importedProjectId,
-      worldId: scope.worldId,
-      revisionId,
-      version: Number(release.version),
-      label: String(release.label),
-      manifestJson,
-      contentHash: String(release.contentHash),
-      sourceWorldCode: packageManifest.sourceWorldCode,
-      createdAt: now,
-    })
-    await db.worlds.update(scope.worldId, { currentVersion: Number(release.version), updatedAt: now })
+    await db.worlds.update(importedProject.activeWorldId, { identityKind: 'world-draft', code: localWorldCode,
+      currentVersion: packageManifest.sourceWorldVersion, updatedAt: Date.now() })
+    const scope = await Dexie.Promise.resolve(resolveWorkspaceScope(projectId))
+    const installed = await installCapturedWorldSourceInTransactionV1(scope, captured)
+    const receipt = await db.worldSourceReceipts.get(installed.receiptId)
+    if (!receipt) throw Error('编辑起源回执未写入')
+    await db.worlds.update(scope.worldId, { communityOrigin: { ...structuredClone(captured.declaration), importedAt: receipt.importedAt } })
+    await db.worldDerivations.add({ projectId, worldId: scope.worldId,
+      sourceWorkspaceUid: releaseManifest.sourceManifest.sourceWorkspaceUid,
+      sourceWorkCode: String(releaseManifest.semanticSnapshot.works[0].code), sourceWorkRevision: 0,
+      sourceKind: 'world-release-copy', sourceReceiptBinding: { version: 1, declarationHash: captured.declaration.declarationHash },
+      sourceRevisionVectorJson: lineage
+        ? canonicalNarrativeJsonV1({ version: 1, revisionVectorHash: lineage.sourceRevisionVectorHash })
+        : canonicalNarrativeJsonV1(releaseManifest.sourceManifest),
+      sourceRangeJson: canonicalNarrativeJsonV1({ kind: 'frozen-world-release', releaseUid: release.releaseUid }),
+      selectedResourceIdsJson: canonicalNarrativeJsonV1(verified.version === 4
+        ? verified.manifest.narrative.coverage.eligibleSelected : verified.manifest.sourceManifest.selectedResourceIds),
+      sourceContentHash: release.contentHash, ...(lineage ? { narrativeLineageJson: canonicalNarrativeJsonV1(lineage) } : {}),
+      targetRevisionId: null, targetReleaseId: null, createdAt: receipt.importedAt })
   } })
 }
 

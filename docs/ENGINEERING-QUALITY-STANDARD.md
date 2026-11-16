@@ -51,6 +51,14 @@
 
 测试必须能在干净环境重复运行；禁止依赖顺序、作者 localStorage、现有 IndexedDB 或线上不可控状态。
 
+`npm run check:engineering` 从 Git 当前文件集合枚举全部测试 TS/TSX（含 E2E/helper）、工程 JS 及 TS 配置，分别使用 `tsconfig.tests.json`、`tsconfig.tooling.json` 和独立 Node ESLint 配置。测试保留生产严格选项与 ES2020；Node 工具使用与 CI Node 24 匹配的 ES2022/NodeNext，并检查真实 JS 语义。每批最多160个主根，共享声明和传递依赖正常加载；实际主根必须完整且无重复，编译异常、缺文件、空范围或被 lint 忽略均失败。生产 `src` 与构建中的独立 `ui-preview` 检查继续保留；原 Experience 定向命令保留为局部诊断，不在 CI 重复运行。
+
+工程门采用逐条诊断身份及次数的基线，绝不按错误总数放行。新增的门实现及已验证零诊断的 Experience 单元不允许写入旧债基线。既有债务始终可见，不表示类型错误已修或产品缺陷已确认；新增诊断失败，已消失的债务必须从基线显式删除以防回潮。编译器、严格选项、配置及锁文件变化须复审基线。初始采集必须在实际最终组合运行：`npm run check:engineering -- --capture-baseline /绝对路径/待审基线.json --report /绝对路径/实际结果.json`；采集完成不是检查全绿，审核后才放到 `scripts/quality/engineering-debt-baseline.json`。普通 CI 只读取该基线，缺失时失败，不会自动刷新或接受新错误。`npm run test:engineering-gate` 保留真实编译器错参/未定义标识符、JS配置语义、Node lint、次数和文件覆盖反例；类型门不替代原行为/故障/覆盖率测试。
+
+历史不可变脚本和已生成浏览器分发文件只按 `scripts/quality/engineering-scope.json` 中的精确路径、原字节SHA与理由例外；无目录前缀豁免，新文件必须正常进入检查，旧文件变化须先处理其来源。YAML工作流和作品内容不是 TypeScript 工程源码，此门不宣称检查其全部运行语义。
+
+故意违反合同的运行时负例，可在具体故障行使用注明原因的 `@ts-expect-error`，保留原非法值、重新计算的 hash 和拒绝断言；约束被意外放宽时，未使用的指令必须使类型检查失败。禁止用文件级忽略、宽泛 `any` 或放宽生产类型掩盖错误。
+
 Node 测试环境的 fake-indexeddb 6.2.5 会在内部调度数组保留已结束事务，并在后续调度时扫描这些历史条目（[上游实现](https://github.com/dumbmatter/fakeIndexedDB/blob/master/src/lib/Database.ts)）。全局测试 setup 使用具名、锁定版本和内部结构检查的生命周期辅助器，只移除 `finished` 调度条目，保留 active/inactive/committing 及其顺序；不移除业务表、运行事件或回执，不改生产 IndexedDB，也不修改共享依赖文件。版本或内部结构改变须失败并重新审查。公开 IDB 的串行/并发、commit、abort、错误回滚、版本阻塞、删除重建和清理恢复须与未处理的新 Factory 对照验证；不能靠放宽超时或减少原测试内容处理性能失败。
 
 ## 5. AI 测试诚实边界
@@ -97,22 +105,14 @@ Node 测试环境的 fake-indexeddb 6.2.5 会在内部调度数组保留已结�
 
 ## 11. 合并前命令
 
-定向验证后，交付单元运行：
+普通 PR 按 [协作流程 §6](COLLAB-WORKFLOW.md#6-合并-main) 对改动范围运行非浏览器检查。跨模块引用和高风险数据路径需在 PR 记录对应的回归证据。完整发行运行 `npm run ci` 和适用的发行验收。专项浏览器验证与媒资实验可手动发起。
 
-```bash
-npm run ci
-```
+完整发行通过 `npm run test:coverage` 检查覆盖率。原有注册表、DB、导入导出和 AI 范围单独保留行/函数/语句/分支 58/50/58/60% 的合计门槛，原有各目录阈值也继续生效。新增 Harness、产品生产和运行时三个范围，每个范围单独要求 50/40/50/50%，扩大后的总体仍须通过 58/50/58/60%。[关键入口清单](../scripts/quality/critical-coverage-scopes.json)逐项列出参与计量的文件。Harness 关注事件、恢复和回执，生产关注命令授权、调度和结算，运行时关注来源、分支与媒资。CI 要求每个登记文件出现在报告中且有可执行语句，每个范围的四项指标都有分母。
 
-`npm run ci` 应覆盖 required tables、AI Manual、AI 入口、架构、源码可达、路线图、Agent 上下文/freshness、Canon 覆盖、项目指标、依赖审计、lint、TypeScript、覆盖率测试、生产构建与 bundle 门。
+关键入口清单以外的同目录文件不计入这三个分域。UI、视觉地图、真实 AI 传输、静态提示词/文风和类型声明沿用[覆盖率配置](../vitest.config.ts)的边界。所有权拒绝、事务回滚和中断恢复仍须由行为回归证明。
 
-适用时再运行：
-
-```bash
-npm run ci:e2e
-```
-
-CI 任何一步失败都不得称为“全绿”。上游依赖服务阻塞要单独记录，不能吞掉其余门。
+依赖检查保留生产依赖的 moderate 门槛，同时审计锁文件中的开发、可选和 peer 依赖。开发工具链的 high 或 critical 公告按包、锁定版本、安装位置和公告编号报告。未经登记的高危项、审计服务失败或检查时锁文件变化都会使检查失败。
 
 ## 12. Definition of Done
 
-完成必须同时满足：产品目标达成；范围外未暗中扩张；旧入口删除；数据与 AI 闭环完整；错误与恢复可用；正反例通过；必要 E2E 通过；文档与版本同步；diff 无空白错误；PR 可审查；主干可构建部署。
+完成必须同时满足：产品目标达成；范围外未暗中扩张；旧入口删除；数据与 AI 闭环完整；错误与恢复可用；正反例通过；对应交付范围的验证通过；文档与版本同步；diff 无空白错误；PR 可审查；主干可构建部署。

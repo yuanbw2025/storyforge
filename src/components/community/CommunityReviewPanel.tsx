@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Loader2, MessageSquareText, RefreshCw, ShieldCheck, Star } from 'lucide-react'
 import type { CommunityReviewAggregateV1, CommunityReviewCapabilitiesV1, CommunityReviewV1 } from '../../lib/community/authority'
 import type { CommunityHttpClientV1, CommunityHttpErrorV1 } from '../../lib/community/http-client'
+import { createCommunityRequestIntentsV1 } from '../../lib/community/request-intent'
 
 type ReviewClientV1 = Pick<CommunityHttpClientV1, 'listReviews' | 'reviewCapabilities' | 'upsertReview' | 'withdrawReview' | 'respondToReview'>
 
@@ -37,15 +38,8 @@ export default function CommunityReviewPanel(props: {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const requestIds = useRef(new Map<string, string>())
+  const [requestIntents] = useState(createCommunityRequestIntentsV1)
 
-  const requestId = (key: string) => {
-    const prior = requestIds.current.get(key)
-    if (prior) return prior
-    const created = `${key}.${crypto.randomUUID()}`
-    requestIds.current.set(key, created)
-    return created
-  }
   const run = async (operation: () => Promise<void>) => {
     setBusy(true); setError(''); setMessage('')
     try { await operation() } catch (cause) { setError(messageOf(cause)) }
@@ -74,33 +68,40 @@ export default function CommunityReviewPanel(props: {
   }, [props.client, props.subjectType, props.releaseHash, props.postId])
 
   const submit = () => run(async () => {
-    if (!props.client) throw new Error('请先配置社区服务地址。')
-    if (!props.accessToken.trim()) throw new Error('请输入账号访问凭据。')
+    const client = props.client
+    if (!client) throw new Error('请先配置社区服务地址。')
+    const accessToken = props.accessToken.trim()
+    if (!accessToken) throw new Error('请输入账号访问凭据。')
     const tagList = [...new Set(tags.split(/[，,]/).map(item => item.trim()).filter(Boolean))]
-    const fingerprint = JSON.stringify({ rating, title: title.trim(), body: body.trim(), tagList, containsSpoilers })
-    await props.client.upsertReview({
-      accessToken: props.accessToken.trim(), requestId: requestId(`review:${props.subjectType}:${props.postId ?? props.releaseHash}:${fingerprint}`),
+    const bodyInput = {
       subjectType: props.subjectType, releaseHash: props.releaseHash, postId: props.postId ?? null,
       rating, title: title.trim(), body: body.trim(), tags: tagList, containsSpoilers,
-    })
-    requestIds.current.clear()
+    }
+    await requestIntents.send(client, accessToken, 'review.upsert', bodyInput, ({ requestId }) => client.upsertReview({
+      accessToken, requestId, ...bodyInput,
+    }))
     await load()
     setMessage(props.subjectType === 'release' ? '已发布已验证权益评价。' : '已发布已验证参团评价。')
   })
   const withdraw = (reviewId: string) => run(async () => {
-    if (!props.client) throw new Error('请先配置社区服务地址。')
-    await props.client.withdrawReview({
-      accessToken: props.accessToken.trim(), requestId: requestId(`withdraw:${reviewId}`), reviewId,
-    })
-    requestIds.current.clear(); await load(); setMessage('评价已撤回，不再计入公开聚合。')
+    const client = props.client
+    if (!client) throw new Error('请先配置社区服务地址。')
+    const accessToken = props.accessToken.trim()
+    const bodyInput = { reviewId }
+    await requestIntents.send(client, accessToken, 'review.withdraw', bodyInput, ({ requestId }) => client.withdrawReview({
+      accessToken, requestId, ...bodyInput,
+    }))
+    await load(); setMessage('评价已撤回，不再计入公开聚合。')
   })
   const respond = (reviewId: string) => run(async () => {
-    if (!props.client) throw new Error('请先配置社区服务地址。')
-    await props.client.respondToReview({
-      accessToken: props.accessToken.trim(), requestId: requestId(`respond:${reviewId}:${response.trim()}`),
-      reviewId, response: response.trim(),
-    })
-    requestIds.current.clear(); setRespondingReviewId(null); setResponse(''); await load(); setMessage('公开回应已发布。')
+    const client = props.client
+    if (!client) throw new Error('请先配置社区服务地址。')
+    const accessToken = props.accessToken.trim()
+    const bodyInput = { reviewId, response: response.trim() }
+    await requestIntents.send(client, accessToken, 'review.respond', bodyInput, ({ requestId }) => client.respondToReview({
+      accessToken, requestId, ...bodyInput,
+    }))
+    setRespondingReviewId(null); setResponse(''); await load(); setMessage('公开回应已发布。')
   })
 
   return <section className="rounded-lg border border-accent/30 bg-bg-elevated p-5" data-testid="community-review-panel">

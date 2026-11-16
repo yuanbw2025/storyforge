@@ -93,6 +93,39 @@ const fields = reactive<FeedbackFields>({
   extra: '',
 })
 
+const searchQuery = ref('')
+const issueInput = ref('')
+const searching = ref(false)
+const searchError = ref('')
+type PublicIssue = { number: number; title: string; state: string; locked?: boolean; url: string; body?: string }
+const matches = ref<PublicIssue[]>([])
+const selectedIssue = ref<PublicIssue | null>(null)
+const commentPage = ref(1)
+const moreComments = ref(false)
+const commentRows = ref<{ body: string; url: string }[]>([])
+let lookupGeneration = 0
+async function lookup(number?: number, page = 1) {
+  const generation = ++lookupGeneration
+  searching.value = true; searchError.value = ''
+  try {
+    const url = number ? `/api/feedback/${number}?page=${page}` : '/api/feedback?' + new URLSearchParams({ search: searchQuery.value })
+    const response = await fetch(url)
+    const result = await response.json()
+    if (generation !== lookupGeneration) return
+    if (!response.ok || !result.ok) throw new Error(t('查询失败，草稿已保留。', 'Lookup failed; your draft is preserved.'))
+    if (number) { const append = page > 1 && selectedIssue.value?.number === number; selectedIssue.value = result.issue; commentRows.value = append ? [...commentRows.value, ...result.comments] : result.comments; commentPage.value = page; moreComments.value = result.hasMore === true }
+    else matches.value = result.issues
+  } catch (error) { if (generation === lookupGeneration) searchError.value = error instanceof Error ? error.message : 'Lookup failed' }
+  finally { if (generation === lookupGeneration) searching.value = false }
+}
+function chooseNumber() {
+  if (!/^[1-9][0-9]{0,8}$/.test(issueInput.value)) { searchError.value = t('请输入工单数字编号。', 'Enter a numeric issue number.'); return }
+  void lookup(Number(issueInput.value))
+}
+function newIssue() { lookupGeneration++; searching.value = false; selectedIssue.value = null; commentRows.value = [] }
+
+let submissionKey: { signature: string; id: string } | null = null
+const submittedNumber = ref<number | null>(null)
 const importedDiagnostics = ref(false)
 onMounted(() => {
   if (props.type !== 'bug' || !location.hash.startsWith(FAILURE_REPORT_FRAGMENT)) return
@@ -251,7 +284,7 @@ function removeAttachment(index: number): void {
 }
 
 function validationMessage(): string {
-  if (!fields.title.trim()) return t('请填写标题。', 'Please enter a title.')
+  if (!selectedIssue.value && !fields.title.trim()) return t('请填写标题。', 'Please enter a title.')
   if (props.type === 'feature' && !fields.problem.trim()) return t('请填写使用场景 / 当前问题。', 'Please describe the use case / current problem.')
   if (props.type !== 'feature' && !fields.description.trim()) return t('请填写问题描述。', 'Please describe the problem.')
   return ''
@@ -288,10 +321,15 @@ async function submit(): Promise<void> {
   }
 
   submitting.value = true
+  const submittedIssue = selectedIssue.value
+  const submittedFields = { ...fields }
+  const submittedAttachments = [...attachments.value]
   try {
     const formData = new FormData()
     const payload: Record<string, string> = {
       type: props.type,
+      action: submittedIssue ? 'comment' : 'create',
+      ...(submittedIssue ? { issueNumber: String(submittedIssue.number) } : {}),
       title: fields.title.trim(),
       description: props.type === 'feature' ? fields.problem.trim() : fields.description.trim(),
       version: fields.version.trim(),
@@ -313,8 +351,11 @@ async function submit(): Promise<void> {
       website: honeypot.value,
     }
 
+    const signature = JSON.stringify([payload, submittedAttachments.map(x => [x.file.name, x.file.size, x.file.lastModified])])
+    if (submissionKey?.signature !== signature) submissionKey = { signature, id: crypto.randomUUID() }
+    payload.requestId = submissionKey.id
     Object.entries(payload).forEach(([key, value]) => formData.append(key, value))
-    attachments.value.forEach(({ file }) => formData.append('attachments', file, file.name))
+    submittedAttachments.forEach(({ file }) => formData.append('attachments', file, file.name))
 
     const response = await fetch('/api/feedback', { method: 'POST', body: formData })
     const result: unknown = await response.json().catch(() => null)
@@ -323,12 +364,18 @@ async function submit(): Promise<void> {
     }
 
     const number = result.issueNumber
-    importedDiagnostics.value = false
-    successMessage.value = number === undefined ? t('反馈已提交', 'Feedback submitted') : t(`反馈已提交，编号 #${number}`, `Feedback submitted, #${number}`)
-    attachments.value = []
-    Object.keys(fields).forEach((key) => {
-      fields[key as keyof FeedbackFields] = ''
-    })
+    submittedNumber.value = Number.isSafeInteger(Number(number)) && Number(number) > 0 ? Number(number) : null
+    submissionKey = null
+    if (fields.extra === submittedFields.extra) importedDiagnostics.value = false
+    attachments.value = attachments.value.filter(item => !submittedAttachments.includes(item))
+    for (const key of Object.keys(submittedFields) as Array<keyof FeedbackFields>) {
+      if (fields[key] === submittedFields[key]) fields[key] = ''
+    }
+    const retainedDraft = Object.values(fields).some(value => value !== '') || attachments.value.length > 0
+    const submittedMessage = number === undefined ? t('反馈已提交', 'Feedback submitted') : (submittedIssue ? t(`补充已追加到 #${number}`, `Follow-up added to #${number}`) : t(`反馈已提交，编号 #${number}`, `Feedback submitted, #${number}`))
+    successMessage.value = submittedMessage + (retainedDraft
+      ? t('。等待期间的新修改已保留，尚未提交。', '. Changes made while waiting are preserved and have not been submitted.')
+      : '')
   } catch (error) {
     errorMessage.value = error instanceof Error && error.message ? error.message : t('反馈提交失败，请稍后重试。', 'Feedback submission failed. Please try again later.')
   } finally {
@@ -340,10 +387,29 @@ async function submit(): Promise<void> {
 <template>
   <section class="feedback-form-shell" :aria-label="typeMeta.label">
     <p v-if="importedDiagnostics" class="feedback-notice">{{ t('已带入本机故障摘要，尚未发送。请补充问题描述和复现步骤，检查“补充信息”并删除不想公开的内容。提交后将成为项目公开反馈；请勿填写手稿或密钥。', 'A local failure summary has been imported but not sent. Add a description and reproduction steps, inspect Additional information, and remove anything you do not want public. Submission creates public project feedback; do not include manuscripts or secrets.') }}</p>
+    <section class="feedback-followup" :aria-label="t('查找与补充已有问题', 'Find and follow up existing issues')">
+      <h2>{{ t('先查找已有问题', 'Find an existing issue first') }}</h2>
+      <p>{{ t('相同问题请追加新证据，避免重复建单。以下内容与附件会公开到 GitHub；匿名补充不代表维护者结论。', 'Add evidence to an existing issue to avoid duplicates. Text and attachments are public on GitHub; anonymous follow-ups are not maintainer conclusions.') }}</p>
+      <label>{{ t('关键词', 'Keywords') }} <input v-model="searchQuery" /></label>
+      <button type="button" :disabled="searching" @click="lookup()">{{ t('查找问题', 'Search issues') }}</button>
+      <label>{{ t('已有工单编号', 'Existing issue number') }} <input v-model="issueInput" inputmode="numeric" /></label>
+      <button type="button" :disabled="searching" @click="chooseNumber">{{ t('读取工单', 'Read issue') }}</button>
+      <p v-if="searchError" role="alert">{{ searchError }}</p>
+      <ul><li v-for="issue in matches" :key="issue.number"><button type="button" @click="lookup(issue.number)">#{{ issue.number }} {{ issue.title }} ({{ issue.state }})</button></li></ul>
+      <div v-if="selectedIssue">
+        <h3>#{{ selectedIssue.number }} {{ selectedIssue.title }} ({{ selectedIssue.state }})</h3>
+        <p style="white-space: pre-wrap; overflow-wrap: anywhere">{{ selectedIssue.body }}</p>
+        <details><summary>{{ t('已有评论（前20条；完整讨论见GitHub）', 'Existing comments (first 20; full discussion on GitHub)') }}</summary><p v-for="(comment, index) in commentRows" :key="index" style="white-space: pre-wrap; overflow-wrap: anywhere">{{ comment.body }}</p></details>
+        <button v-if="moreComments" type="button" :disabled="searching" @click="lookup(selectedIssue.number, commentPage + 1)">{{ t('更多评论', 'More comments') }}</button>
+        <a :href="`https://github.com/yuanbw2025/storyforge/issues/${selectedIssue.number}`" target="_blank" rel="noopener noreferrer">{{ t('在GitHub跟进或管理', 'Follow or manage on GitHub') }}</a>
+        <p>{{ t('下方提交将追加评论，不新建工单。关闭、重开、编辑和标签管理请在GitHub按权限操作。', 'Submitting below adds a comment, not a new issue. Close, reopen, edit and label actions use GitHub permissions.') }}</p>
+        <button type="button" @click="newIssue">{{ t('改为新建问题', 'Create a new issue instead') }}</button>
+      </div>
+    </section>
     <p class="feedback-form-intro">{{ typeMeta.intro }}</p>
 
     <div v-if="successMessage" class="feedback-notice feedback-notice--success" role="status" aria-live="polite">
-      {{ successMessage }}
+      {{ successMessage }} <a v-if="submittedNumber" :href="`https://github.com/yuanbw2025/storyforge/issues/${submittedNumber}`" target="_blank" rel="noopener noreferrer">{{ t('查看工单', 'View issue') }}</a>
     </div>
     <div v-if="errorMessage" class="feedback-notice feedback-notice--error" role="alert" aria-live="assertive">
       {{ errorMessage }}
@@ -354,7 +420,7 @@ async function submit(): Promise<void> {
 
       <div class="feedback-field feedback-field--full">
         <label :for="props.type + '-title'">{{ t('标题', 'Title') }} <span class="feedback-required">{{ t('必填', 'Required') }}</span></label>
-        <input :id="props.type + '-title'" v-model="fields.title" type="text" name="title" required maxlength="160" autocomplete="off" />
+        <input :id="props.type + '-title'" v-model="fields.title" type="text" name="title" :required="!selectedIssue" maxlength="160" autocomplete="off" />
       </div>
 
       <template v-if="props.type === 'bug'">
@@ -443,8 +509,8 @@ async function submit(): Promise<void> {
       </div>
 
       <div class="feedback-form-actions">
-        <button class="feedback-submit-button" type="submit" :disabled="submitting">
-          {{ submitting ? t('提交中…', 'Submitting…') : t('提交反馈', 'Submit feedback') }}
+        <button class="feedback-submit-button" type="submit" :disabled="submitting || searching || Boolean(selectedIssue?.locked)">
+          {{ submitting ? t('提交中…', 'Submitting…') : selectedIssue ? t('追加到已有工单', 'Append to existing issue') : t('提交反馈', 'Submit feedback') }}
         </button>
         <span>{{ t('提交后不会跳转 GitHub。', 'You will not be redirected to GitHub.') }}</span>
       </div>

@@ -202,7 +202,7 @@ async function seedNovelSource() {
     description: '盐脊巡井人的长篇故事。',
     targetWordCount: 500_000,
     enableMultiWorld: false,
-  }, { purpose: 'longform', kind: 'novel', novelProfile: 'long' })
+  }, { purpose: 'independent-work', kind: 'novel', novelProfile: 'long' })
   const now = Date.now()
   const volumeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
     projectId: created.scope.projectId,
@@ -369,24 +369,22 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
       .resolves.toMatchObject({ kind: 'world-release', worldReference: { releaseHash: created.release.contentHash } })
   }, 30_000)
 
-  it('把小说正文完整复制为产品私有分片，原小说变化后旧 Build 仍可独立读取且禁止静默换源', async () => {
+  it('历史小说 codec 保留完整分片、原始字节与来源漂移校验，但不创建正式 Build', async () => {
     const created = await seedNovelSource()
     const preview = await prepareTextOpenWorldNovelSourceSnapshotV1({
       sourceScope: created.scope,
       selection: { mode: 'entire-work' },
     })
-    const build = await seedAuthorizedTextOpenWorldCreatorBuildV1({
-      source: { kind: 'novel', scope: created.scope, selection: { mode: 'entire-work' } },
-      sessionKey: `source-pin-novel-${crypto.randomUUID()}`,
-    })
-    const capturedAt = Math.max(Date.now(), build.start.authorizedAt)
+    const capturedAt = Date.now()
+    const legacyCodecAuthorization = authorization('legacy.novel.codec-fixture', 'legacy-codec-test', capturedAt)
+    const before = await databaseTableCounts()
     const bundle = await freezeTextOpenWorldNovelSourceV1({
       targetScope: created.scope,
       sourceScope: created.scope,
       selection: { mode: 'entire-work' },
       expectedSourceVersionHash: preview.sourceVersionHash,
       expectedSourceBoundaryHash: preview.sourceBoundaryHash,
-      authorization: build.authorization,
+      authorization: legacyCodecAuthorization,
       createdAt: capturedAt,
     })
 
@@ -418,23 +416,14 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
     expect(bundle.pin.authorization).not.toHaveProperty('authorizationNonce')
     expect(portable).not.toContain('"authorizationNonce":"')
 
-    await acceptTextOpenWorldSourcePinBundleV1({
-      scope: created.scope,
-      buildId: build.buildId,
-      controlEpoch: build.controlEpoch,
-      bundle,
-    })
+    expect(await databaseTableCounts()).toEqual(before)
     await db.chapters.update(created.chapterId, {
       content: '<p>来源小说后来被彻底改写。</p>',
       updatedAt: capturedAt + 1,
     })
-    const frozen = await readAcceptedTextOpenWorldSourcePinBundleV1({
-      scope: created.scope,
-      buildId: build.buildId,
-    })
-    expect(frozen.unitArtifacts
-      .filter(item => JSON.parse(item.payloadJson).kind === 'chapter')
-      .map(item => JSON.parse(item.payloadJson).contentText).join('')).toContain('盐井失去了回声')
+    const frozen = await validateTextOpenWorldSourcePinBundleV1(structuredClone(bundle))
+    expect(frozen.units.filter(item => item.payload.kind === 'chapter')
+      .map(item => item.payload.contentText).join('')).toContain('盐井失去了回声')
     await expect(verifyTextOpenWorldSourcePinAvailabilityV1({ scope: created.scope, pin: bundle.pin }))
       .resolves.toEqual({ kind: 'novel', selfContained: true })
 
@@ -444,7 +433,7 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
       selection: { mode: 'entire-work' },
       expectedSourceVersionHash: preview.sourceVersionHash,
       expectedSourceBoundaryHash: preview.sourceBoundaryHash,
-      authorization: build.authorization,
+      authorization: legacyCodecAuthorization,
       createdAt: capturedAt + 1,
     })).rejects.toThrow(/预览后变化/)
     const changedPreview = await prepareTextOpenWorldNovelSourceSnapshotV1({
@@ -457,16 +446,13 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
       selection: { mode: 'entire-work' },
       expectedSourceVersionHash: changedPreview.sourceVersionHash,
       expectedSourceBoundaryHash: changedPreview.sourceBoundaryHash,
-      authorization: build.authorization,
+      authorization: legacyCodecAuthorization,
       createdAt: capturedAt + 1,
     })
     expect(changed.pin.sourceVersionHash).not.toBe(bundle.pin.sourceVersionHash)
-    await expect(acceptTextOpenWorldSourcePinBundleV1({
-      scope: created.scope,
-      buildId: build.buildId,
-      controlEpoch: build.controlEpoch,
-      bundle: changed,
-    })).rejects.toThrow(/来源变化必须创建新 Build/)
+    expect(await databaseTableCounts()).toEqual(before)
+    expect(await db.productProductions.count()).toBe(0)
+    expect(await db.productBuildArtifacts.count()).toBe(0)
   }, 30_000)
 
   it('拒绝跨项目小说、越界世界资源、篡改 unit 与未明确授权的来源', async () => {

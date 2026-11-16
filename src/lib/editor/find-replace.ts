@@ -39,6 +39,11 @@ interface TextMatch {
   match: RegExpExecArray
 }
 
+// Shared by previews and replacements, including ignored zero-width matches.
+// This bounds result enumeration; one native RegExp execution is not preemptible.
+const MAX_SEARCH_MATCHES = 100_000
+interface MatchBudget { remaining: number }
+
 export interface ReplaceChapterResult {
   html: string
   plainText: string
@@ -83,17 +88,16 @@ function createSearchRegExp(options: FindReplaceOptions): RegExp | null {
   return new RegExp(source, flags)
 }
 
-function findMatchesInText(text: string, options: FindReplaceOptions): TextMatch[] {
+function findMatchesInText(text: string, options: FindReplaceOptions, budget: MatchBudget = { remaining: MAX_SEARCH_MATCHES }): TextMatch[] {
   const regex = createSearchRegExp(options)
   if (!regex) return []
 
   const matches: TextMatch[] = []
-  let match: RegExpExecArray | null
-  while ((match = regex.exec(text)) !== null) {
-    if (match[0] === '') {
-      regex.lastIndex += 1
-      continue
-    }
+  // matchAll advances empty Unicode matches by a complete code point rather
+  // than leaving lastIndex inside a surrogate pair and revisiting its start.
+  for (const match of text.matchAll(regex)) {
+    if (--budget.remaining < 0) throw new Error(`单章查找超过 ${MAX_SEARCH_MATCHES} 次匹配，请缩小范围或修改查找条件。`)
+    if (match[0] === '') continue
     const start = match.index
     const end = start + match[0].length
     if (options.wholeWord && (isAsciiWordChar(text[start - 1]) || isAsciiWordChar(text[end]))) continue
@@ -178,10 +182,11 @@ export function findChapterMatches(
   if (!options.query.trim()) return null
   const container = createHtmlContainer(target.content)
   const occurrences: FindReplaceOccurrence[] = []
+  const budget = { remaining: MAX_SEARCH_MATCHES }
 
   for (const node of textNodesOf(container)) {
     const text = node.textContent ?? ''
-    for (const match of findMatchesInText(text, options)) {
+    for (const match of findMatchesInText(text, options, budget)) {
       occurrences.push({
         occurrenceIndex: occurrences.length,
         snippet: snippetFor(text, match),
@@ -208,10 +213,11 @@ export function replaceChapterContent(
   const container = createHtmlContainer(content)
   let occurrenceIndex = 0
   let replacedCount = 0
+  const budget = { remaining: MAX_SEARCH_MATCHES }
 
   for (const node of textNodesOf(container)) {
     const text = node.textContent ?? ''
-    const matches = findMatchesInText(text, options)
+    const matches = findMatchesInText(text, options, budget)
     if (!matches.length) continue
 
     let cursor = 0

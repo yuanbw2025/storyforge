@@ -1,4 +1,8 @@
+import { readTextOpenWorldObservedTokenPairV1 } from "./production-usage"
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import Dexie from 'dexie'
+import { readTextOpenWorldCreatorBuildNewWorkAuthorityV1 } from './creator-derived-authority'
+import { assertTextOpenWorldProductionNewWorkV1 } from './source-admission'
 import { estimateTokens } from '../ai/context-budget'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
 import {
@@ -477,6 +481,7 @@ function assembleInput(selection: TextOpenWorldCreatorArtifactEditSelectionV1) {
 export async function prepareTextOpenWorldCreatorArtifactEditV1(
   selection: TextOpenWorldCreatorArtifactEditSelectionV1,
 ): Promise<TextOpenWorldCreatorEditTargetContextV1> {
+  selection = structuredClone(selection)
   assertSelection(selection)
   return (await resolveTextOpenWorldCreatorEditWorkspaceV1(assembleInput(selection))).targetContext
 }
@@ -586,14 +591,6 @@ function parseModelUsageArtifactV1(value: unknown, label: string): TextOpenWorld
     return fail('model-result', `${label} usage 无效`)
   }
   return usageRecord as unknown as TextOpenWorldCreatorEditModelUsageV1
-}
-
-function safeProviderUsageV1(value: unknown): { inputTokens: number; outputTokens: number } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const usage = value as Record<string, unknown>
-  if (!Number.isSafeInteger(usage.inputTokens) || Number(usage.inputTokens) < 0
-    || !Number.isSafeInteger(usage.outputTokens) || Number(usage.outputTokens) < 0) return null
-  return { inputTokens: Number(usage.inputTokens), outputTokens: Number(usage.outputTokens) }
 }
 
 async function parseModelResultArtifactBody(
@@ -1377,6 +1374,7 @@ async function createOrReadRun(prepared: GenerationPreparedV1): Promise<{
       }
       return { snapshot: existing, prepared: effective }
     }
+    assertCurrentProductEntryV1('upper.text-open-world')
     try {
       const snapshot = await createAgentRunV1({
         scope: prepared.selection.scope,
@@ -1479,6 +1477,10 @@ async function buildCandidate(input: {
     })),
     context: input.workspace.taskContext,
     draft: applied.draft,
+    target: {
+      artifactKey: context.target.artifactKey,
+      entityIdentity: context.target.entityIdentity,
+    },
   })
   const rebuiltArtifacts = await Promise.all(rebuilt.artifacts.map(async artifact => {
     const base = input.workspace.baseArtifacts.find(row => row.artifactKey === artifact.artifactKey)
@@ -2788,6 +2790,7 @@ async function claimCreatorEditModelRequestV1(input: {
       db.agentRunEvents,
       db.productProductions,
       db.productBuilds,
+      db.productProductionBriefs,
     ),
     async () => {
       const current = await readVerifiedAgentRunInTransactionV1(
@@ -2824,6 +2827,7 @@ async function claimCreatorEditModelRequestV1(input: {
         }
         return { snapshot: current, claimed: false }
       }
+      await assertCreatorEditNewWorkSourceInTransactionV1(input.prepared.workspace.targetContext.production.id, input.prepared.selection.buildId, '新增工件修改模型请求')
       const siblings = await db.agentRuns.where('parentRunId').equals(parentRunId).toArray()
       for (const sibling of siblings) {
         if (sibling.id == null || sibling.id === current.run.id
@@ -2853,6 +2857,7 @@ async function claimCreatorEditModelRequestV1(input: {
           )
         }
       }
+      assertCurrentProductEntryV1('upper.text-open-world')
       const event = parseAgentRunEventV1({
         version: 1,
         runId: current.run.id,
@@ -2998,6 +3003,7 @@ async function resolveAgentPatch(input: {
       }
       fail('model-outcome-unknown', '模型请求已发出但没有 durable response；为避免重复计费不会自动重发')
     }
+    assertCurrentProductEntryV1('upper.text-open-world')
     const claim = await claimCreatorEditModelRequestV1({
       prepared: input.prepared,
       snapshot,
@@ -3014,6 +3020,11 @@ async function resolveAgentPatch(input: {
     const startedAt = Date.now()
     const result: ChatResult = {}
     try {
+      try { assertCurrentProductEntryV1('upper.text-open-world') }
+      catch (cause) {
+        result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }
+        throw cause
+      }
       raw = input.runAI
         ? await input.runAI(messages, input.signal)
         : await executeFrozenFormalAIEntryV1(
@@ -3044,7 +3055,7 @@ async function resolveAgentPatch(input: {
     } catch (cause) {
       const lifecycle = result.requestLifecycle
       const status = lifecycle?.phase === 'response-observed' ? lifecycle.responseStatus : null
-      const providerUsage = safeProviderUsageV1(result.usage)
+      const providerUsage = readTextOpenWorldObservedTokenPairV1(result.usage)
       const retryable = status != null && retryableCreatorEditResponseStatusV1(status)
       const knownFailure = lifecycle?.phase === 'pre-dispatch'
         || (lifecycle?.phase === 'response-observed' && status != null
@@ -3117,7 +3128,7 @@ async function resolveAgentPatch(input: {
       throw cause
     }
     const durationMs = Math.max(0, Date.now() - startedAt)
-    const providerUsage = safeProviderUsageV1(result.usage)
+    const providerUsage = readTextOpenWorldObservedTokenPairV1(result.usage)
     const inputTokens = providerUsage?.inputTokens ?? estimatedPromptTokens
     const outputTokens = providerUsage?.outputTokens ?? estimateTokens(raw)
     const modelUsage: TextOpenWorldCreatorEditModelUsageV1 = {
@@ -3270,6 +3281,14 @@ export interface TextOpenWorldCreatorArtifactEditGenerationInputV1 {
 export async function generateTextOpenWorldCreatorArtifactEditCandidateV1(
   input: TextOpenWorldCreatorArtifactEditGenerationInputV1,
 ): Promise<TextOpenWorldCreatorArtifactEditStateV1> {
+  input = { ...input, selection: structuredClone(input.selection),
+    ...(input.operations === undefined ? {} : { operations: structuredClone(input.operations) }),
+    ...(input.modelIdentity === undefined ? {} : { modelIdentity: structuredClone(input.modelIdentity) }),
+    ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }),
+  }
+  await readTextOpenWorldCreatorBuildNewWorkAuthorityV1({
+    scope: input.selection.scope, buildId: input.selection.buildId, operation: '创建新工件修改候选',
+  })
   const prepared = await prepareGeneration(input)
   return withCreatorEditOperationLockV1(
     groupOperationLockKey(
@@ -3312,6 +3331,7 @@ export interface TextOpenWorldCreatorArtifactEditIntakeResumeInputV1 {
 export async function resumeTextOpenWorldCreatorArtifactEditIntakeV1(
   input: TextOpenWorldCreatorArtifactEditIntakeResumeInputV1,
 ): Promise<TextOpenWorldCreatorArtifactEditStateV1> {
+  input = { ...input, selection: structuredClone(input.selection), ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }) }
   assertSelection(input.selection)
   if (!Number.isSafeInteger(input.runId) || input.runId < 1) {
     fail('intake-resume', '恢复 Creator edit intake 必须提供有效 runId')
@@ -3356,6 +3376,7 @@ export async function resumeTextOpenWorldCreatorArtifactEditIntakeV1(
       if (requested.length > 0 && !result) {
         fail('model-outcome-unknown', '模型请求已发出但没有 durable response；不会通过 intake 恢复重发')
       }
+      if (!result) assertCurrentProductEntryV1('upper.text-open-world')
       const generationInput: TextOpenWorldCreatorArtifactEditGenerationInputV1 = intake.mode === 'direct'
         ? {
             selection: input.selection,
@@ -3423,6 +3444,9 @@ async function generateTextOpenWorldCreatorArtifactEditCandidateLockedV1(
   }
   if (!['planned', 'running'].includes(snapshot.projection.state)) {
     fail('run-state', `Creator edit Run 状态 ${snapshot.projection.state} 不可生成候选`)
+  }
+  if (!exactArtifactEvent(snapshot, 'tool-result') && eventFor(snapshot, 'model.requested').length === 0) {
+    assertCurrentProductEntryV1('upper.text-open-world')
   }
   snapshot = await ensureRunStarted(input.selection.scope, snapshot)
   await notifyBoundary(input.onDurableBoundary, 'run.started', snapshot)
@@ -3627,6 +3651,14 @@ interface CreatorEditFrozenProductionBuildAuthorityV1 {
  * enlisting the two authoritative Product stores in the same IndexedDB
  * transaction as the Run event.
  */
+async function assertCreatorEditNewWorkSourceInTransactionV1(productionId: number, buildId: number, operation: string): Promise<void> {
+  const [production, build] = await Promise.all([db.productProductions.get(productionId), db.productBuilds.get(buildId)])
+  if (!production || !build || build.productionId !== production.id) fail('source-admission', '制作来源已不存在或跨 owner')
+  const brief = await db.productProductionBriefs.where('[productionId+revision]').equals([productionId, build.briefRevision]).first()
+  if (!brief || brief.briefHash !== build.briefHash) fail('source-admission', '制作来源简报已变化')
+  assertTextOpenWorldProductionNewWorkV1(production, brief, operation)
+}
+
 async function assertCreatorEditBaseRowsInTransactionV1(input: {
   scope: WorkspaceScope
 } & CreatorEditFrozenProductionBuildAuthorityV1): Promise<void> {
@@ -3728,6 +3760,7 @@ export interface TextOpenWorldCreatorArtifactEditRevisionInputV1 {
 export function reviseTextOpenWorldCreatorArtifactEditCandidateV1(
   input: TextOpenWorldCreatorArtifactEditRevisionInputV1,
 ): Promise<TextOpenWorldCreatorArtifactEditStateV1> {
+  input = { ...input, selection: structuredClone(input.selection), operations: structuredClone(input.operations) }
   return withCreatorEditOperationLockV1(
     runOperationLockKey(input.selection.scope, input.runId),
     () => reviseTextOpenWorldCreatorArtifactEditCandidateLockedV1(input),
@@ -3753,6 +3786,10 @@ async function reviseTextOpenWorldCreatorArtifactEditCandidateLockedV1(
     operations: input.operations,
   })
   if (sameJson(patch, state.candidate.patch)) return state
+  assertCurrentProductEntryV1('upper.text-open-world')
+  await readTextOpenWorldCreatorBuildNewWorkAuthorityV1({
+    scope: input.selection.scope, buildId: input.selection.buildId, operation: '修订新的工件修改候选',
+  })
   const revisedAt = Date.now()
   const candidate = await buildCandidate({
     workspace,
@@ -3784,6 +3821,7 @@ async function reviseTextOpenWorldCreatorArtifactEditCandidateLockedV1(
     terminalReceipt: null,
     verificationReceipt: null,
   }
+  assertCurrentProductEntryV1('upper.text-open-world')
   let snapshot = (await createAgentRunCheckpointV1({
     scope: input.selection.scope,
     runId: state.snapshot.run.id,
@@ -3804,6 +3842,7 @@ export function rejectTextOpenWorldCreatorArtifactEditCandidateV1(input: {
   selection: TextOpenWorldCreatorArtifactEditSelectionV1
   runId: number
 }): Promise<AgentRunSnapshotV1> {
+  input = { ...input, selection: structuredClone(input.selection) }
   return withCreatorEditOperationLockV1(
     runOperationLockKey(input.selection.scope, input.runId),
     async () => {
@@ -3849,6 +3888,7 @@ export async function cancelTextOpenWorldCreatorArtifactEditIntakeV1(input: {
   selection: TextOpenWorldCreatorArtifactEditSelectionV1
   runId: number
 }): Promise<AgentRunSnapshotV1> {
+  input = { ...input, selection: structuredClone(input.selection) }
   assertSelection(input.selection)
   if (!Number.isSafeInteger(input.runId) || input.runId < 1) {
     fail('intake-cancel', '取消 Creator edit intake 必须提供有效 runId')
@@ -4005,6 +4045,7 @@ async function assertUnknownModelRequestMatchesIntakeV1(input: {
 export async function abandonTextOpenWorldCreatorArtifactEditUnknownModelOutcomeV1(
   input: TextOpenWorldCreatorArtifactEditUnknownOutcomeAbandonInputV1,
 ): Promise<AgentRunSnapshotV1> {
+  input = { ...input, selection: structuredClone(input.selection) }
   assertSelection(input.selection)
   if (!Number.isSafeInteger(input.runId) || input.runId < 1
     || input.acknowledgePossibleCharge !== true) {
@@ -4142,6 +4183,7 @@ async function persistIntentClaimV1(input: {
       db.agentRunCheckpoints,
       db.productProductions,
       db.productBuilds,
+      db.productProductionBriefs,
     ),
     async () => {
       const current = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
@@ -4168,6 +4210,7 @@ async function persistIntentClaimV1(input: {
         || currentStep?.candidateHash !== input.candidate.candidateHash) {
         fail('confirmation-state', 'Creator edit 候选已被其它执行者推进')
       }
+      if (input.checkpoint) await assertCreatorEditNewWorkSourceInTransactionV1(input.candidate.production.productionId, input.candidate.baseBuild.buildId, '冻结新的作者工件修改意图')
       const siblings = await db.agentRuns.where('parentRunId').equals(parentRunId).toArray()
       for (const sibling of siblings) {
         if (sibling.id == null || sibling.id === input.runId
@@ -4188,6 +4231,7 @@ async function persistIntentClaimV1(input: {
           )
         }
       }
+      if (input.checkpoint) assertCurrentProductEntryV1('upper.text-open-world')
       const checkpointed = input.checkpoint
         ? await createAgentRunCheckpointInTransactionV1({
             snapshot: current,
@@ -4229,6 +4273,7 @@ export interface TextOpenWorldCreatorArtifactEditConfirmationInputV1 {
 export function confirmTextOpenWorldCreatorArtifactEditIntentV1(
   input: TextOpenWorldCreatorArtifactEditConfirmationInputV1,
 ): Promise<TextOpenWorldCreatorArtifactEditHandoffV1> {
+  input = { ...input, selection: structuredClone(input.selection), warningAcknowledgementCodes: [...input.warningAcknowledgementCodes] }
   assertSelection(input.selection)
   return resolveTextOpenWorldCreatorEditWorkspaceV1(assembleInput(input.selection)).then(workspace => (
     withCreatorEditOperationLockV1(
@@ -4265,6 +4310,10 @@ async function confirmTextOpenWorldCreatorArtifactEditIntentLockedV1(
   await assertCandidateBaseFresh(scope, restored.candidate)
 
   if (restored.checkpoint.phase === 'candidate') {
+    assertCurrentProductEntryV1('upper.text-open-world')
+    await readTextOpenWorldCreatorBuildNewWorkAuthorityV1({
+      scope, buildId: input.selection.buildId, operation: '确认新工件修改意图',
+    })
     if (restored.snapshot.projection.state !== 'awaiting_confirmation') {
       fail('confirmation-state', '尚未冻结 intent 的候选必须处于等待确认状态')
     }
@@ -4869,6 +4918,7 @@ export async function createTextOpenWorldCreatorDirectEditOperationsV1(input: {
   context: TextOpenWorldCreatorEditTargetContextV1
   values: Readonly<Record<string, unknown>>
 }): Promise<TextOpenWorldCreatorEditPatchOperationV1[]> {
+  input = structuredClone(input)
   const operations: TextOpenWorldCreatorEditPatchOperationV1[] = []
   for (const field of input.context.editableFields) {
     if (!Object.prototype.hasOwnProperty.call(input.values, field.fieldId)) continue

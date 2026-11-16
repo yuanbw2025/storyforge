@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { db } from '../../src/lib/db/schema'
+import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import { seedAuthorizedTextOpenWorldCreatorBuildV1 } from '../helpers/text-open-world-creator-build'
 import {
   createTextOpenWorldRegionNarrativePacksExecutorV1,
   validateTextOpenWorldRegionNarrativePacksV1,
@@ -240,6 +243,15 @@ async function executeDraft(
   context: TextOpenWorldRegionNarrativePacksInputContextV1,
   draft: Record<string, unknown>,
 ) {
+  // A legacy knowledge-context shape is still supported for a current World
+  // source. Exercise the real admission gate without changing the hash fixture.
+  const world = await seedCurrentProductWorld('p7-knowledge-contract')
+  const creator = await seedAuthorizedTextOpenWorldCreatorBuildV1({
+    source: { kind: 'world-release', scope: world.scope,
+      localReleaseRecordId: world.release.id!, expectedReleaseHash: world.release.contentHash },
+    sessionKey: 'p7-knowledge-contract',
+  })
+  expect(creator.brief.sourceBinding.kind).toBe('world-release')
   const requirementKey = 'capability.text'
   const executor = createTextOpenWorldRegionNarrativePacksExecutorV1({
     now: () => NOW,
@@ -250,12 +262,12 @@ async function executeDraft(
     }),
   })
   return executor({
-    scope: { projectId: 1, worldId: 1, workId: 1 },
-    productionId: 1,
-    buildId: 1,
-    buildNumber: 1,
-    controlEpoch: 1,
-    planHash: 'e'.repeat(64),
+    scope: creator.scope,
+    productionId: creator.productionId,
+    buildId: creator.buildId,
+    buildNumber: creator.buildNumber,
+    controlEpoch: creator.controlEpoch,
+    planHash: creator.planHash,
     task: {
       taskKey: 'p7.region-narrative-packs',
       skillId: 'text-open-world.production.region-narrative-packs.v1',
@@ -279,6 +291,13 @@ async function executeDraft(
 }
 
 describe('R-OPEN-WORLD-G4-11A · P7 Knowledge contract compatibility', () => {
+  beforeEach(async () => {
+    await db.delete(); await db.open()
+    vi.spyOn(Date, 'now').mockReturnValue(NOW)
+  })
+  afterEach(() => vi.restoreAllMocks())
+  afterAll(() => db.close())
+
   it('fresh marker拒绝完全缺失治理字段的旧rumor shape', async () => {
     await expect(executeDraft(await minimalContext(true), legacyDraft()))
       .rejects.toThrow(/rumors\[0\]字段不精确/)

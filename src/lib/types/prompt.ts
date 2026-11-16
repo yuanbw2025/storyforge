@@ -5,91 +5,94 @@
  */
 
 /** 当前提示词模块标识全集。 */
-export type PromptModuleKey =
+export const PROMPT_MODULE_KEYS = [
   // 世界观
-  | 'worldview.dimension'
+  'worldview.dimension',
   // 角色
-  | 'character.generate'
-  | 'character.dimension'
+  'character.generate',
+  'character.dimension',
   // 大纲
-  | 'outline.volume'
-  | 'outline.chapter'
+  'outline.volume',
+  'outline.chapter',
   // 章节正文
-  | 'chapter.content'
-  | 'chapter.continue'
-  | 'chapter.memory'
-  | 'chapter.polish'
-  | 'chapter.expand'
-  | 'chapter.condense'
-  | 'chapter.rewrite'
-  | 'chapter.check'
-  | 'chapter.de-ai'
+  'chapter.content',
+  'chapter.continue',
+  'chapter.memory',
+  'chapter.polish',
+  'chapter.expand',
+  'chapter.condense',
+  'chapter.rewrite',
+  'chapter.check',
+  'chapter.de-ai',
   // 伏笔
-  | 'foreshadow.generate'
+  'foreshadow.generate',
   // 地理 / 概念地图
-  | 'geography.concept-map'
-  | 'geography.image-map-prompt'
+  'geography.concept-map',
+  'geography.image-map-prompt',
   // 扩展创作与产品模块
-  | 'worldview.generate'
-  | 'worldview.worldbuilding'
-  | 'story.generate'
-  | 'story.brief'
-  | 'story.ideation'
-  | 'story.positioning'
-  | 'story.core'
-  | 'story.packaging'
-  | 'rules.generate'
-  | 'research.method'
-  | 'prompt.operations'
-  | 'detail.scene'
-  | 'detail.chapter-planning'
-  | 'character.design'
-  | 'outline.plot'
-  | 'outline.structure'
-  | 'outline.long-form'
-  | 'outline.short-story'
-  | 'outline.serialization'
-  | 'chapter.drafting'
-  | 'chapter.continuity'
-  | 'chapter.line-editing'
-  | 'review.developmental'
-  | 'review.line-editing'
-  | 'review.reader-validation'
-  | 'import.parse-character'
-  | 'import.parse-worldview'
-  | 'import.parse-outline'
-  | 'import.parse-all'
-  | 'import.parse-chunk'
-  | 'import.merge-characters'
+  'worldview.generate',
+  'worldview.worldbuilding',
+  'story.generate',
+  'story.brief',
+  'story.ideation',
+  'story.positioning',
+  'story.core',
+  'story.packaging',
+  'rules.generate',
+  'research.method',
+  'prompt.operations',
+  'detail.scene',
+  'detail.chapter-planning',
+  'character.design',
+  'outline.plot',
+  'outline.structure',
+  'outline.long-form',
+  'outline.short-story',
+  'outline.serialization',
+  'chapter.drafting',
+  'chapter.continuity',
+  'chapter.line-editing',
+  'review.developmental',
+  'review.line-editing',
+  'review.reader-validation',
+  'import.parse-character',
+  'import.parse-worldview',
+  'import.parse-outline',
+  'import.parse-all',
+  'import.parse-chunk',
+  'import.merge-characters',
   // —— Phase 30.2 角色关系提取 ——
-  | 'relation.extract'
+  'relation.extract',
   // —— Phase 26.3 角色驱动剧情 ——
-  | 'plot.character-driven'
+  'plot.character-driven',
   // —— STORY-1 / CF-12 角色变更影响分析 ——
-  | 'plot.character-revision'
+  'plot.character-revision',
   // —— Phase 26.4 灵感反推 ——
-  | 'inspiration.reverse'
-  | 'inspiration.reverse.multiworld'
+  'inspiration.reverse',
+  'inspiration.reverse.multiworld',
   // —— Phase 25.4 多世界 ——
-  | 'world-group.suggest'
-  | 'world-group.expand'
+  'world-group.suggest',
+  'world-group.expand',
   // —— Phase 25.5.2-b 物品栏 ——
-  | 'inventory.extract'
+  'inventory.extract',
   // —— C-1/C-2 通用词条拆分 ——
-  | 'codex.extract'
-  | 'codex.enrich'
+  'codex.extract',
+  'codex.enrich',
   // —— C-6 重要地点提取 ——
-  | 'location.extract'
+  'location.extract',
   // —— Phase 25.5.2-a 故事进程年表 ——
-  | 'story-timeline.extract'
+  'story-timeline.extract',
   // —— Phase 27.2a 场景考证 ——
-  | 'scene.verify'
+  'scene.verify',
   // —— H1.5 历史年表双 agent ——
-  | 'history.consult'
-  | 'history.storm'
+  'history.consult',
+  'history.storm',
   // —— FB-5 自适应文风学习 ——
-  | 'style.learn'
-  | 'style.calibrate'
+  'style.learn',
+  'style.calibrate',
+] as const
+
+export type PromptModuleKey = typeof PROMPT_MODULE_KEYS[number]
 
 export type PromptWorkField =
   | 'title'

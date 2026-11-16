@@ -40,7 +40,7 @@ describe.sequential('STAB · 故事线作者保存与作用域', () => {
     let release!: () => void; let entered!: () => void
     const gate = new Promise<void>(r => { release = r }); const started = new Promise<void>(r => { entered = r })
     vi.spyOn(scopeModule, 'readOwnedRows').mockImplementation(async (...args) => {
-      if (args[1] === 'storyArcs' && args[0].workId === a.scope.workId) { entered(); await gate }
+      if (args[1] === 'storyArcs' && 'workId' in args[0] && args[0].workId === a.scope.workId) { entered(); await gate }
       return read(...args)
     })
     const older = useStoryArcStore.getState().loadAll(a.scope); await started

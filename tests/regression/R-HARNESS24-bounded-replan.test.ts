@@ -78,7 +78,7 @@ function outputFor(taskId: string): string {
 function executor(input: {
   failBaselineCharacter?: boolean
   failAllCharacters?: boolean
-  calls?: ReturnType<typeof vi.fn>
+  calls?: (taskId: string, instruction: string) => void
 }) {
   return async (options: any): Promise<void> => {
     for (const task of options.plan.tasks) {

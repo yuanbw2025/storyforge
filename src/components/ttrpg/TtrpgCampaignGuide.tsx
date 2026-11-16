@@ -83,6 +83,7 @@ import {
   createTtrpgAutomaticSessionRecapsV2,
   createTtrpgViewerProjectionV1,
   type TtrpgViewerProjectionV1,
+  type TtrpgViewerRoleV1,
 } from "../../lib/ttrpg/viewer-projection";
 import { resolveRequestConfig } from "../../lib/ai/client";
 import { isAIConfigReady } from "../../lib/ai/config-readiness";
@@ -112,6 +113,7 @@ import type {
   WorkspaceScope,
 } from "../../lib/types";
 import TtrpgTabletopSurface from "./TtrpgTabletopSurface";
+import TtrpgSessionRecap from "./TtrpgSessionRecap";
 import TtrpgRuntimeMediaPanel from "./TtrpgRuntimeMediaPanel";
 
 type PlayerMode = "player" | "gm";
@@ -205,8 +207,8 @@ function numberAttribute(
 function TabletopBoard(props: {
   tabletop: NonNullable<TtrpgViewerProjectionV1["tabletop"]>;
   state: ProductRuntimeState;
-  mode: PlayerMode;
-  actorKey: string;
+  mode: TtrpgViewerRoleV1;
+  actorKey: string | null;
   selectedTokenKey: string;
   disabled: boolean;
   onSelect: (tokenKey: string) => void;
@@ -724,6 +726,7 @@ export default function TtrpgCampaignGuide(props: {
       ? targetKey
       : (otherTargets[0] ?? "");
   const allDiscovered = product?.discoveredClues ?? [];
+  const viewerRole: TtrpgViewerRoleV1 = theaterMode ? "spectator" : mode;
   const viewerProjection = useMemo(() => {
     if (!frozen || !product || !product.sessionZero.completed) return null;
     try {
@@ -731,8 +734,8 @@ export default function TtrpgCampaignGuide(props: {
         state: props.state,
         campaign: frozen.campaign,
         rulePack: frozen.rulePack,
-        role: mode,
-        actorKey: mode === "player" ? clueRecipientKey : null,
+        role: viewerRole,
+        actorKey: viewerRole === "player" ? clueRecipientKey : null,
         participantControllers: Object.fromEntries(
           participants.flatMap((row) =>
             row.actorKey == null ? [] : [[row.actorKey, row.controller]],
@@ -742,7 +745,8 @@ export default function TtrpgCampaignGuide(props: {
     } catch {
       return null;
     }
-  }, [clueRecipientKey, frozen, mode, participants, product, props.state]);
+  }, [clueRecipientKey, frozen, participants, product, props.state, viewerRole]);
+  const publicProjectionUnavailable = theaterMode && !viewerProjection;
   const visibleClueKeys = new Set(
     viewerProjection?.visibleClues.map((item) => item.clueKey) ?? [],
   );
@@ -1126,6 +1130,12 @@ export default function TtrpgCampaignGuide(props: {
       </header>
 
       <div className="space-y-5 p-5">
+        {publicProjectionUnavailable && (
+          <p role="status" className="text-sm text-text-muted">
+            公开投影尚未就绪。请退出投屏完成 Session Zero 或检查冻结战役。
+          </p>
+        )}
+        {!publicProjectionUnavailable && <>
         {theaterMode && (
           <section
             className="overflow-hidden rounded-xl border border-accent/40 bg-gradient-to-br from-bg-base via-bg-surface to-accent/10 p-5"
@@ -1565,14 +1575,14 @@ export default function TtrpgCampaignGuide(props: {
                 </button>
               ) : (
                 <div className="flex min-w-[260px] flex-1 flex-wrap justify-end gap-2">
-                  <input
+                  {!theaterMode && <input
                     value={safetyReason}
                     onChange={(event) => setSafetyReason(event.target.value)}
                     aria-label="安全暂停原因"
                     className="min-w-[220px] flex-1 rounded border border-border bg-bg-base px-2 py-1.5 text-xs text-text-primary"
-                  />
+                  />}
                   <button
-                    disabled={busy || !safetyReason.trim()}
+                    disabled={busy || (!theaterMode && !safetyReason.trim())}
                     onClick={() =>
                       void run(async () => {
                         const version = await readProductRuntimeStateVersion(
@@ -1588,7 +1598,9 @@ export default function TtrpgCampaignGuide(props: {
                           baseSequence: version.sequence,
                           baseStateHash: version.stateHash,
                           status: "paused",
-                          reason: safetyReason,
+                          reason: theaterMode
+                            ? "玩家在安全投屏期间请求暂停。"
+                            : safetyReason,
                           changedBy: "player",
                         });
                       })
@@ -1604,6 +1616,7 @@ export default function TtrpgCampaignGuide(props: {
           </section>
         )}
 
+        </>}
         {props.panel === "room" && frozen.onlineReleaseHash == null && <p>在线房间需要已发布战役。当前是制作预览，可先进行本地试玩。</p>}
         {(!props.panel || props.panel === "room") && frozen.onlineReleaseHash != null &&
           (product.sessionZero.completed ||
@@ -1630,9 +1643,11 @@ export default function TtrpgCampaignGuide(props: {
               )}
               initialHandoff={props.initialOnlineHandoff}
               onInitialHandoffConsumed={props.onOnlineHandoffConsumed}
+              publicPresentation={theaterMode}
             />
           )}
 
+        {!publicProjectionUnavailable && <>
         {(!props.panel || props.panel === "tabletop") && product.sessionZero.completed &&
           viewerProjection?.media &&
           runtimeMediaScope &&
@@ -1645,6 +1660,7 @@ export default function TtrpgCampaignGuide(props: {
               media={viewerProjection.media}
               viewerKey={runtimeMediaViewerKey}
               disabled={busy || theaterMode}
+              publicPresentation={theaterMode}
               onChanged={props.onChanged}
             />
           )}
@@ -1653,10 +1669,10 @@ export default function TtrpgCampaignGuide(props: {
           <TabletopBoard
             tabletop={viewerProjection.tabletop}
             state={props.state}
-            mode={mode}
-            actorKey={mode === "gm" ? "gm" : clueRecipientKey}
+            mode={viewerRole}
+            actorKey={viewerRole === "spectator" ? null : mode === "gm" ? "gm" : clueRecipientKey}
             selectedTokenKey={selectedTokenKey}
-            disabled={busy || safetyPaused || !!product.ending}
+            disabled={busy || safetyPaused || !!product.ending || theaterMode}
             onSelect={setSelectedTokenKey}
             onOperation={commitTabletop}
           />
@@ -2537,7 +2553,7 @@ export default function TtrpgCampaignGuide(props: {
                       },
                     )}
                   </div>
-                  <div className="mt-3">
+                  {!theaterMode && <div className="mt-3">
                     <span className="text-[10px] text-text-muted">
                       物品实例
                     </span>
@@ -2571,7 +2587,7 @@ export default function TtrpgCampaignGuide(props: {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </div>}
                   {selectedProgression?.history.length ? (
                     <details className="mt-3">
                       <summary className="cursor-pointer text-[10px] text-accent">
@@ -2729,7 +2745,7 @@ export default function TtrpgCampaignGuide(props: {
                   由主持人打开场景后，系统会按角色卡和 RulePack 显示可用行动。
                 </p>
               )}
-              {currentScene &&
+              {!theaterMode && currentScene &&
               selectedActor &&
               (mode === "gm" ||
                 (selectedActor.role === "player" &&
@@ -4604,7 +4620,7 @@ export default function TtrpgCampaignGuide(props: {
               )}
             </section>
 
-            <section
+            {!theaterMode && <section
               className="rounded border border-border bg-bg-base p-3"
               data-testid="ttrpg-inventory-ledger"
             >
@@ -4947,7 +4963,7 @@ export default function TtrpgCampaignGuide(props: {
                   </p>
                 )}
               </div>
-            </section>
+            </section>}
 
             <section className="rounded border border-border bg-bg-base p-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
@@ -6117,208 +6133,13 @@ export default function TtrpgCampaignGuide(props: {
         {viewerProjection &&
           (viewerProjection.recap.resolvedActionCount > 0 ||
             viewerProjection.recap.ending) && (
-            <section hidden={Boolean(props.panel && !["history"].includes(props.panel))}
-              className="rounded border border-border bg-bg-base p-4"
-              data-testid="ttrpg-session-recap"
-            >
-              <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-                <ScrollText className="h-4 w-4 text-accent" />
-                会后记录
-              </div>
-              <div className="mt-3 grid gap-3 text-xs text-text-secondary md:grid-cols-3">
-                <div className="rounded bg-bg-surface p-3">
-                  <div className="text-[10px] text-text-muted">已历场景</div>
-                  <div className="mt-1">
-                    {viewerProjection.recap.openedSceneTitles.join("、") ||
-                      "尚未开始"}
-                  </div>
-                </div>
-                <div className="rounded bg-bg-surface p-3">
-                  <div className="text-[10px] text-text-muted">可见线索</div>
-                  <div className="mt-1">
-                    {viewerProjection.recap.visibleClueTitles.join("、") ||
-                      "尚无"}
-                  </div>
-                </div>
-                <div className="rounded bg-bg-surface p-3">
-                  <div className="text-[10px] text-text-muted">
-                    规则行动 / 成长
-                  </div>
-                  <div className="mt-1">
-                    {viewerProjection.recap.resolvedActionCount} 次 /{" "}
-                    {viewerProjection.recap.advancementAwarded} 点
-                  </div>
-                </div>
-              </div>
-              <div className="mt-3 rounded border border-border bg-bg-surface p-3 text-[10px] text-text-muted">
-                <strong className="text-xs text-text-primary">
-                  本场事实对账 · {viewerProjection.recap.scope.title}
-                </strong>
-                <span className="ml-2">
-                  {viewerProjection.recap.viewerKind === "gm-complete"
-                    ? "KP 完整账"
-                    : viewerProjection.recap.viewerKind === "character-private"
-                      ? "本角色私人账"
-                      : "公开观战账"}
-                </span>
-                <span className="ml-2">
-                  事件 {viewerProjection.recap.scope.fromSequence}–
-                  {viewerProjection.recap.scope.toSequence}
-                </span>
-                <p className="mt-1">
-                  本场新发现：
-                  {viewerProjection.recap.discoveredThisSessionTitles.join(
-                    "、",
-                  ) || "无"}{" "}
-                  · 未解必需线索：
-                  {viewerProjection.recap.unresolvedRequiredClues.visibleTitles.join(
-                    "、",
-                  ) ||
-                    `${viewerProjection.recap.unresolvedRequiredClues.hiddenCount} 条未公开`}
-                </p>
-              </div>
-              <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                <article className="rounded border border-border bg-bg-surface p-3 text-[10px] text-text-secondary">
-                  <strong className="text-xs text-text-primary">
-                    资源、状态与能力次数
-                  </strong>
-                  <div className="mt-2 max-h-48 space-y-1 overflow-auto">
-                    {viewerProjection.recap.resourceChanges.map((change) => (
-                      <p
-                        key={`resource.${change.eventSequence}.${change.actorKey}.${change.resourceKey}`}
-                      >
-                        #{change.eventSequence} {change.actorName} ·{" "}
-                        {change.resourceName} {change.before} → {change.after}（
-                        {change.delta >= 0 ? "+" : ""}
-                        {change.delta}）
-                      </p>
-                    ))}
-                    {viewerProjection.recap.conditionChanges.map((change) => (
-                      <p
-                        key={`condition.${change.eventSequence}.${change.actorKey}.${change.conditionKey}`}
-                      >
-                        #{change.eventSequence} {change.actorName} ·{" "}
-                        {change.conditionName} ×{change.stacks}
-                        {change.duration == null
-                          ? ""
-                          : ` · 剩余 ${change.duration}`}
-                      </p>
-                    ))}
-                    {viewerProjection.recap.abilityChanges.map((change) => (
-                      <p
-                        key={`ability.${change.eventSequence}.${change.actorKey}.${change.abilityKey}.${change.reason}`}
-                      >
-                        #{change.eventSequence} {change.actorName} ·{" "}
-                        {change.abilityName} · {change.reason} · 次数{" "}
-                        {change.usesBefore ?? "∞"} → {change.usesAfter ?? "∞"}
-                      </p>
-                    ))}
-                    {!viewerProjection.recap.resourceChanges.length &&
-                      !viewerProjection.recap.conditionChanges.length &&
-                      !viewerProjection.recap.abilityChanges.length && (
-                        <p className="text-text-muted">本场没有可见变化。</p>
-                      )}
-                  </div>
-                </article>
-                <article className="rounded border border-border bg-bg-surface p-3 text-[10px] text-text-secondary">
-                  <strong className="text-xs text-text-primary">
-                    物品取得、使用与转移
-                  </strong>
-                  <div className="mt-2 max-h-48 space-y-1 overflow-auto">
-                    {viewerProjection.recap.itemChanges.map((change) => (
-                      <p
-                        key={`item.${change.eventSequence}.${change.itemInstanceId}.${change.source}`}
-                      >
-                        #{change.eventSequence} {change.title} ·{" "}
-                        {change.operation} ·{" "}
-                        {change.ownerBefore
-                          ? (props.state.entities[change.ownerBefore]?.name ??
-                            change.ownerBefore)
-                          : "无主"}{" "}
-                        →{" "}
-                        {change.ownerAfter
-                          ? (props.state.entities[change.ownerAfter]?.name ??
-                            change.ownerAfter)
-                          : "移除"}
-                        {change.chargesBefore !== change.chargesAfter
-                          ? ` · 充能 ${change.chargesBefore ?? "—"} → ${change.chargesAfter ?? "—"}`
-                          : ""}
-                        {change.durabilityBefore !== change.durabilityAfter
-                          ? ` · 耐久 ${change.durabilityBefore ?? "—"} → ${change.durabilityAfter ?? "—"}`
-                          : ""}
-                      </p>
-                    ))}
-                    {!viewerProjection.recap.itemChanges.length && (
-                      <p className="text-text-muted">本场没有可见物品变化。</p>
-                    )}
-                  </div>
-                </article>
-                <article className="rounded border border-border bg-bg-surface p-3 text-[10px] text-text-secondary lg:col-span-2">
-                  <strong className="text-xs text-text-primary">
-                    奖励、惩罚、关系与剧情账本
-                  </strong>
-                  <div className="mt-2 max-h-48 space-y-1 overflow-auto">
-                    {viewerProjection.recap.ledgerChanges
-                      .filter(
-                        (change) =>
-                          !["item", "ability", "numeric", "condition"].includes(
-                            change.family,
-                          ),
-                      )
-                      .map((change) => (
-                        <p
-                          key={`ledger.${change.eventSequence}.${change.family}.${change.operation}.${change.targetRef}`}
-                        >
-                          #{change.eventSequence} {change.family}/
-                          {change.operation} ·{" "}
-                          {props.state.entities[change.targetRef]?.name ??
-                            change.targetRef}{" "}
-                          · {change.before} → {change.after} · {change.reason}
-                        </p>
-                      ))}
-                    {!viewerProjection.recap.ledgerChanges.some(
-                      (change) =>
-                        !["item", "ability", "numeric", "condition"].includes(
-                          change.family,
-                        ),
-                    ) && (
-                      <p className="text-text-muted">
-                        本场没有可见奖励、关系或剧情账本变化。
-                      </p>
-                    )}
-                  </div>
-                  <p className="mt-2 text-text-muted">
-                    待处理：
-                    {[
-                      ...viewerProjection.recap.outstanding.exhaustedAbilityNames.map(
-                        (name) => `能力 ${name}`,
-                      ),
-                      ...viewerProjection.recap.outstanding
-                        .activeConditionNames,
-                      ...viewerProjection.recap.outstanding.activeQuestTitles.map(
-                        (name) => `任务 ${name}`,
-                      ),
-                      ...viewerProjection.recap.outstanding.incompleteClockTitles.map(
-                        (name) => `Clock ${name}`,
-                      ),
-                    ].join("、") || "无"}
-                  </p>
-                </article>
-              </div>
-              {viewerProjection.recap.ending && (
-                <div className="mt-3 rounded border border-success/30 bg-success/5 p-3">
-                  <strong className="text-xs text-text-primary">
-                    {viewerProjection.recap.ending.title}
-                  </strong>
-                  <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-text-secondary">
-                    {viewerProjection.recap.ending.epilogue}
-                  </p>
-                </div>
-              )}
-              <p className="mt-3 text-xs text-text-muted">
-                {viewerProjection.recap.nextPreparation}
-              </p>
-            </section>
+            <TtrpgSessionRecap
+              recap={viewerProjection.recap}
+              hidden={Boolean(props.panel && !["history"].includes(props.panel))}
+              resolveEntityName={(entityKey) =>
+                props.state.entities[entityKey]?.name ?? entityKey
+              }
+            />
           )}
 
         {mode === "gm" && (
@@ -6421,9 +6242,10 @@ export default function TtrpgCampaignGuide(props: {
             aria-live="assertive"
             className="rounded border border-danger/30 bg-danger/10 p-3 text-xs text-danger"
           >
-            {error}
+            {theaterMode ? "操作未完成。请退出投屏查看详情。" : error}
           </p>
         )}
+        </>}
       </div>
     </section>
   );

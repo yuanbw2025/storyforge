@@ -111,7 +111,11 @@ function request(path: string, body: unknown, token: string) {
 }
 
 describe('PLATFORM-1D · creator upload to buyer playable local copy', () => {
-  beforeEach(async () => { await db.delete(); await db.open() })
+  beforeEach(async () => {
+    window.location.href = 'http://localhost:4178/storyforge/'
+    window.localStorage.setItem('storyforge:experimental-products', 'enabled')
+    await db.delete(); await db.open()
+  })
   afterAll(() => db.close())
 
   it('未验证发行物不得上架；上传后免费领取、授权下载、导入与游玩来源验证全部走通', async () => {

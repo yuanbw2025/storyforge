@@ -70,20 +70,7 @@ export const GENRE_OPTIONS = [
   { group: '其他', value: 'other',          label: '其他' },
 ] as const
 
-export type CommunityWorldLicense =
-  | 'CC-BY-4.0'
-  | 'CC-BY-SA-4.0'
-  | 'CC-BY-NC-4.0'
-  | 'ALL-RIGHTS-RESERVED'
-
-export interface CommunityWorldOrigin {
-  packageId: string
-  sourceWorldCode: string
-  sourceWorldVersion: number
-  authorName: string
-  license: CommunityWorldLicense
-  importedAt: number
-}
+export type { CommunityWorldLicense, CommunityWorldOrigin } from './world-sharing'
 
 /**
  * ARCH-01: the product purpose of a LocalWorkspace.

@@ -1,5 +1,7 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { X, CheckCircle2, AlertTriangle, RotateCcw, FileText, Trash2, ArrowRight, BookOpenCheck } from 'lucide-react'
+import type { UnifiedParseResult } from '../../../lib/types'
+import type { DocumentImportChunkCandidateV1, readDocumentImportChunkEvidenceV1 } from '../../../lib/import/document-parse-durable'
 import type { ImportSession } from '../../../lib/types/import-session'
 
 interface Props {
@@ -11,6 +13,14 @@ interface Props {
   onNavigate?: () => void
   /** Phase 35-c：进入 Codex 候选审查；候选未确认前不会入库。 */
   onReviewCodex?: () => void
+  evidence?: Awaited<ReturnType<typeof readDocumentImportChunkEvidenceV1>>
+  onStartAnalysis?: () => void
+  review?: {
+    candidate: DocumentImportChunkCandidateV1
+    raw: string | null
+    canConfirm: boolean
+    onConfirm: (result: UnifiedParseResult) => Promise<void>
+  }
 }
 
 /**
@@ -22,7 +32,7 @@ interface Props {
  *   · 要不要对失败块单独重试
  */
 export default function ImportReportModal({
-  session, onRetryFailed, onClose, onDiscard, onNavigate, onReviewCodex,
+  session, onRetryFailed, onClose, onDiscard, onNavigate, onReviewCodex, review, evidence, onStartAnalysis,
 }: Props) {
   const toReference = session.importTarget === 'reference'
   const { done, failed, totalWv, totalChars, totalOl, failedChunks } = useMemo(() => {
@@ -41,7 +51,16 @@ export default function ImportReportModal({
     return { done, failed, totalWv, totalChars, totalOl, failedChunks }
   }, [session])
 
-  const allSuccess = failed === 0
+  const allSuccess = session.status === 'done'
+  const observation = evidence?.observation as {
+    usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } | null
+    requestLifecycle?: { phase?: string; responseStatus?: number | null } | null
+  } | null | undefined
+  const attemptNote = observation?.usage?.totalTokens != null
+    ? `已记录用量：输入 ${observation.usage.inputTokens ?? '—'}，输出 ${observation.usage.outputTokens ?? '—'}，合计 ${observation.usage.totalTokens} tokens。`
+    : observation?.requestLifecycle?.phase === 'pre-dispatch' ? '请求未发送。'
+      : observation?.requestLifecycle?.responseStatus ? `服务返回 HTTP ${observation.requestLifecycle.responseStatus}。` : null
+  if (review) return <ImportChunkReview key={review.candidate.candidateHash} filename={session.filename} review={review} onClose={onClose} attemptNote={attemptNote} />
   const codexCandidates = session.merged?.codexCandidates?.length || 0
 
   return (
@@ -56,7 +75,7 @@ export default function ImportReportModal({
               ? <CheckCircle2 className="w-5 h-5 text-success" />
               : <AlertTriangle className="w-5 h-5 text-warning" />}
             <h3 className="text-base font-semibold text-text-primary">
-              {allSuccess ? '✓ 全部解析完成' : `⚠ 解析完成（${failed} 块失败）`}
+              {allSuccess ? '✓ 全部导入完成' : `导入记录（已处理 ${done} 块，失败 ${failed} 块）`}
             </h3>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-bg-hover rounded">
@@ -86,7 +105,7 @@ export default function ImportReportModal({
             <StatCard label="词条候选" value={codexCandidates} color="text-accent" />
           </div>
           <div className="text-xs text-text-muted">
-            大纲节点累计 +{totalOl} 个（跨块合并已自动处理别名去重）。
+            大纲节点累计 +{totalOl} 个。异名角色请由作者核对；不会自动合并。
           </div>
 
           {/* 已导入提示 —— 数据在解析时已实时入库,无需再点「导入」 */}
@@ -94,12 +113,12 @@ export default function ImportReportModal({
             <div className="bg-success/10 border border-success/30 rounded-lg p-3 text-sm">
               <div className="flex items-center gap-1.5 text-success font-medium mb-1">
                 <CheckCircle2 className="w-4 h-4" />
-                {toReference ? '已存入「项目参考」' : '已导入当前项目'}
+                {toReference ? (allSuccess ? '已存入「项目参考」' : '已确认的参考内容') : '已导入当前项目'}
               </div>
               <div className="text-text-secondary text-xs leading-relaxed">
                 {toReference
-                  ? '解析结果已作为创作参照保存到「项目参考」页，不影响当前项目。无需再点导入；关闭后可在「项目参考」中查看，并按需采用到项目。'
-                  : '解析出的世界观、角色、大纲已在解析过程中实时写入对应模块——无需再点导入。关闭本窗口后，即可在左侧「设定库 / 角色设计 / 大纲」中查看与编辑。'}
+                  ? allSuccess ? '可在「项目参考」中查看导入内容。' : '项目参考尚未发布；已确认的内容留在原会话中。'
+                  : '可以在「设定库 / 角色设计 / 大纲」查看已导入的内容。'}
               </div>
             </div>
           )}
@@ -166,11 +185,21 @@ export default function ImportReportModal({
                 ))}
               </div>
               <div className="mt-2 text-[11px] text-text-muted leading-relaxed">
-                点击下方「重试失败块」，会重试失败块并继续尚未处理的块；已成功的块不会重复写入。
+                旧尝试的结果无法核实时，不会自动发送新的请求。
               </div>
             </div>
           )}
 
+          {evidence && !evidence.candidate && (
+            <div className="bg-warning/5 border border-warning/30 rounded-lg p-3 text-sm">
+              <p>本块有保留的尝试记录。打开或继续本任务不会重新发送请求。</p>
+              {attemptNote && <p className="mt-1 text-xs text-text-secondary">{attemptNote}</p>}
+              {evidence.raw !== null && <details className="mt-2">
+                <summary>查看已保留的模型原答</summary>
+                <pre className="whitespace-pre-wrap max-h-40 overflow-y-auto">{evidence.raw}</pre>
+              </details>}
+            </div>
+          )}
           {session.fatalError && !failedChunks.length && (
             <div className="bg-error/10 border border-error/30 rounded-lg p-3 text-xs text-error">
               <AlertTriangle className="inline w-3 h-3 mr-1" />
@@ -189,14 +218,16 @@ export default function ImportReportModal({
             <Trash2 className="w-3.5 h-3.5" /> 清理会话
           </button>
           <div className="flex items-center gap-2">
-            {failedChunks.length > 0 && (
+            {failedChunks.length > 0 && !evidence && (
               <button
                 onClick={onRetryFailed}
                 className="flex items-center gap-1.5 px-4 py-2 bg-warning text-white text-sm rounded hover:bg-warning/90"
               >
-                <RotateCcw className="w-4 h-4" /> 重试失败块（{failedChunks.length}）
+                <RotateCcw className="w-4 h-4" /> 核对并继续
               </button>
             )}
+            {onStartAnalysis && <button onClick={onStartAnalysis}
+              className="px-3 py-2 bg-accent text-white text-sm rounded">开始{session.analysisDepth === 'deep' ? '深层' : '浅层'}分析</button>}
             {onNavigate && done > 0 && (
               <button
                 onClick={onNavigate}
@@ -232,4 +263,109 @@ function StatCard({ label, value, color }: {
       <div className="text-[10px] text-text-muted mt-0.5">{label}</div>
     </div>
   )
+}
+
+function ImportChunkReview({ filename, review, onClose, attemptNote }: {
+  filename: string
+  review: NonNullable<Props['review']>
+  attemptNote: string | null
+  onClose: () => void
+}) {
+  const [draft, setDraft] = useState(() => structuredClone(review.candidate.result))
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const confirm = async () => {
+    if (saving || !review.canConfirm) return
+    setSaving(true)
+    setError('')
+    try { await review.onConfirm(draft) }
+    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { setSaving(false) }
+  }
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <section role="dialog" aria-modal="true" aria-label="审查导入候选"
+        className="bg-bg-surface border border-border rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto p-5 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-semibold text-text-primary">审查第 {review.candidate.chunkIndex + 1} 块</h3>
+          <button aria-label="稍后审查" onClick={onClose} disabled={saving}><X className="w-4 h-4" /></button>
+        </div>
+        <p className="text-sm text-text-secondary break-all">{filename}。确认后才保存本块内容，可先修改或删除不需要的内容。</p>
+        <div className="space-y-2">
+          {Object.entries(draft).filter(([key, value]) => key !== 'codexCandidates' && value && Object.keys(value).length > 0)
+            .map(([key, value]) => (
+              <details key={key} open className="rounded border border-border bg-bg-base p-3 text-sm">
+                <summary className="font-medium text-text-primary">{labelForField(key)}</summary>
+                <EditableImportValue value={value} label={labelForField(key)}
+                  onChange={next => setDraft(current => ({ ...current, [key]: next }))} />
+              </details>
+            ))}
+          {Boolean(draft.codexCandidates?.length) && <p className="text-sm text-text-secondary">
+            另有 {draft.codexCandidates?.length} 条词条候选，完成文档导入后可单独审查。
+          </p>}
+          {!Object.values(draft).some(value => value && Object.keys(value).length > 0) &&
+            <p className="text-sm text-text-secondary">本块没有提取到可保存的内容。确认后可继续处理下一块。</p>}
+        </div>
+        {attemptNote && <p className="text-xs text-text-secondary">{attemptNote}</p>}
+        {review.raw !== null && <details className="text-sm text-text-secondary">
+          <summary>查看模型原答</summary>
+          <pre className="whitespace-pre-wrap max-h-40 overflow-y-auto mt-2">{review.raw}</pre>
+        </details>}
+        {!review.canConfirm && <p className="text-sm text-text-secondary">需要先恢复或重新上传相同原文件，才能确认本块。</p>}
+        {error && <p role="alert" className="text-sm text-error">{error}</p>}
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} disabled={saving} className="px-3 py-2 text-sm">稍后审查</button>
+          <button onClick={confirm} disabled={saving || !review.canConfirm}
+            className="px-4 py-2 rounded bg-accent text-white text-sm disabled:opacity-50">{saving ? '保存中…' : '确认保存本块'}</button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+
+const IMPORT_REVIEW_LABELS: Record<string, string> = {
+  worldview: '世界观', geography: '地理', history: '历史', characters: '角色', outline: '大纲',
+  writingTechniques: '写作技法', worldOrigin: '世界来源', overview: '概述', summary: '摘要',
+  name: '名称', title: '标题', children: '下级条目', shortDescription: '角色简介',
+  type: '类型', roleWeight: '角色定位', moralAxis: '道德倾向', orderAxis: '秩序倾向',
+}
+const labelForField = (key: string) => IMPORT_REVIEW_LABELS[key] ?? key
+
+function EditableImportValue({ value, label, onChange, depth = 0 }: {
+  value: unknown
+  label: string
+  onChange: (value: unknown) => void
+  depth?: number
+}) {
+  if (depth > 8 || value == null) return null
+  if (typeof value === 'string') {
+    return <textarea aria-label={label} rows={Math.min(5, Math.max(1, Math.ceil(value.length / 60)))}
+      value={value} onChange={event => onChange(event.target.value)}
+      className="w-full bg-bg-surface border border-border rounded px-2 py-1 text-sm" />
+  }
+  if (Array.isArray(value)) {
+    return <div className="space-y-2 mt-2">{value.map((item, index) => (
+      <div key={index} className="border border-border p-2 rounded">
+        <div className="flex justify-between mb-1">
+          <span>{label} {index + 1}</span>
+          <button aria-label={`移除 ${label} ${index + 1}`} className="text-text-muted hover:text-error"
+            onClick={() => onChange(value.filter((_, position) => position !== index))}>移除</button>
+        </div>
+        <EditableImportValue label={`${label} ${index + 1}`} value={item} depth={depth + 1}
+          onChange={next => onChange(value.map((previous, position) => position === index ? next : previous))} />
+      </div>
+    ))}</div>
+  }
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return <div className="grid gap-2 mt-2">{Object.entries(record).map(([key, child]) => (
+      <div key={key}>
+        <span className="block text-xs text-text-secondary">{labelForField(key)}</span>
+        <EditableImportValue label={labelForField(key)} value={child} depth={depth + 1}
+          onChange={next => onChange({ ...record, [key]: next })} />
+      </div>
+    ))}</div>
+  }
+  return <span className="text-text-secondary">{String(value)}</span>
 }

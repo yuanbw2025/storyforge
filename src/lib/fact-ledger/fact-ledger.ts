@@ -10,8 +10,10 @@
  *   候选(observation)不改 canon（§14.6「无证据 observation 不得自动升级为 Canon」）。
  */
 import { db } from '../db/schema'
+import { isCanonFactV1 } from './canon-eligibility'
 import type { TemporalFact } from '../types/temporal-fact'
 import type { ExtractedFactCandidate } from '../ai/adapters/fact-extract-adapter'
+import { CANON_ASSERTION_SOURCE_REGISTRY } from '../registry/canon-assertion-source-registry'
 import { getFactPredicate, normalizeFactValue } from '../registry/fact-predicate-registry'
 import {
   checkSettingAssertionClashes,
@@ -19,12 +21,14 @@ import {
   type SettingAssertionClash,
 } from './setting-assertions'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
+import { normalizeChapterText } from '../ai/chapter-memory/text-normalization'
 import {
   assertRecordInScope,
   readOwnedRows,
   resolveReadScopeLike,
   resolveScopeLike,
   stampNewRecord,
+  scopeTransactionTables,
 } from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 
@@ -163,163 +167,144 @@ export interface ConfirmFactResult {
   confirmed: boolean
   clashes: SettingAssertionClash[]
   reason?: 'missing' | 'invalid-status' | 'source-stale' | 'source-missing'
-}
-
-export async function confirmFactCandidate(factId: number): Promise<ConfirmFactResult> {
-  const existingRecord = await db.temporalFacts.get(factId)
-  if (!existingRecord || existingRecord.id == null) return { confirmed: false, clashes: [], reason: 'missing' }
-  const scope = await resolveScopeLike(existingRecord.projectId)
-  const fact = await db.temporalFacts.get(factId)
-  if (!fact || !await assertRecordInScope(scope, 'temporalFacts', fact, { owner: 'work' })) {
-    throw new Error('事实候选不存在或不属于当前作品。')
-  }
-  if (!['candidate', 'stale', 'source-missing', 'invalid-range'].includes(fact.status)) {
-    return { confirmed: false, clashes: [], reason: 'invalid-status' }
-  }
-  const spec = getFactPredicate(fact.predicate)
-  if (spec?.constitution) {
-    const sourceState = await validateSettingAssertionSource(fact, scope)
-    if (sourceState !== 'current') {
-      await db.temporalFacts.update(fact.id!, { status: sourceState, updatedAt: now() })
-      return {
-        confirmed: false,
-        clashes: [],
-        reason: sourceState === 'stale' ? 'source-stale' : 'source-missing',
-      }
-    }
-    const confirmed = (await readOwnedRows<TemporalFact>(scope, 'temporalFacts', { owner: 'work' }))
-      .filter(row => row.status === 'confirmed')
-    const clashes = checkSettingAssertionClashes(fact, confirmed)
-    if (clashes.length) return { confirmed: false, clashes }
-  }
-
-  let confirmedStatus: TemporalFact['status'] = 'confirmed'
-  let validToChapterId = fact.validToChapterId ?? null
-  let supersedesFactId = fact.supersedesFactId ?? null
-
-  // 单值 state 谓词：按规范章序关闭同主体+谓词的旧事实。
-  // 若作者先确认了后章、再补确认前章，前章事实成为有截止点的历史 Canon，
-  // 不能倒过来把后章当前状态关闭。
-  if (spec && spec.factKind === 'state' && spec.cardinality === 'single' && spec.conflictPolicy === 'supersede') {
-    const priors = (await readOwnedRows<TemporalFact>(scope, 'temporalFacts', { owner: 'work' }))
-      .filter(f =>
-        f.id !== fact.id &&
-        f.predicate === fact.predicate &&
-        (f.worldGroupId ?? null) === (fact.worldGroupId ?? null) &&
-        sameFactSubject(f, fact) &&
-        f.validToChapterId == null &&
-        f.status === 'confirmed')
-    const orderOf = spec.temporal ? await canonicalOrderForScope(scope) : null
-    const factOrder = fact.validFromChapterId == null
-      ? -1
-      : orderOf?.get(fact.validFromChapterId)
-    const closable: TemporalFact[] = []
-    const future: Array<{ fact: TemporalFact; order: number }> = []
-    for (const prior of priors) {
-      const priorOrder = prior.validFromChapterId == null
-        ? -1
-        : orderOf?.get(prior.validFromChapterId)
-      if (orderOf && factOrder != null && priorOrder != null) {
-        if (priorOrder > factOrder) future.push({ fact: prior, order: priorOrder })
-        else if (!prior.locked) closable.push(prior)
-      } else if (!prior.locked) {
-        closable.push(prior)
-      }
-    }
-    future.sort((a, b) => a.order - b.order || (a.fact.id ?? 0) - (b.fact.id ?? 0))
-    if (future[0]?.fact.validFromChapterId != null) {
-      validToChapterId = future[0].fact.validFromChapterId
-      confirmedStatus = 'superseded'
-    }
-    const timestamp = now()
-    await db.transaction('rw', db.temporalFacts, async () => {
-      for (const prior of closable) {
-        if (prior.id == null) continue
-        await db.temporalFacts.update(prior.id, {
-          validToChapterId: fact.validFromChapterId ?? null,
-          status: 'superseded',
-          updatedAt: timestamp,
-        })
-        supersedesFactId ??= prior.id
-      }
-      await db.temporalFacts.update(fact.id!, {
-        status: confirmedStatus,
-        validToChapterId,
-        supersedesFactId,
-        updatedAt: timestamp,
-      })
-    })
-    return { confirmed: true, clashes: [] }
-  }
-  await db.temporalFacts.update(fact.id!, {
-    status: confirmedStatus,
-    validToChapterId,
-    supersedesFactId,
-    updatedAt: now(),
-  })
-  return { confirmed: true, clashes: [] }
+    | 'candidate-changed' | 'locked-conflict' | 'invalid-range'
 }
 
 export interface ReplaceConstitutionFactResult {
   confirmed: boolean
   clashes: SettingAssertionClash[]
   replaced: number
-  reason?: ConfirmFactResult['reason'] | 'not-constitution' | 'locked-conflict'
+  reason?: ConfirmFactResult['reason'] | 'not-constitution'
+}
+
+function confirmationTables() {
+  return scopeTransactionTables(
+    db.temporalFacts, db.chapters, db.outlineNodes,
+    ...CANON_ASSERTION_SOURCE_REGISTRY.map(source => db.table(source.table)),
+  )
+}
+
+async function confirmationSourceState(fact: TemporalFact, scope: WorkspaceScope): Promise<'current' | 'stale' | 'source-missing'> {
+  if (getFactPredicate(fact.predicate)?.constitution) return validateSettingAssertionSource(fact, scope)
+  if (fact.sourceType !== 'chapter') return 'current'
+  const chapter = fact.sourceChapterId == null ? undefined : await db.chapters.get(fact.sourceChapterId)
+  if (!chapter || !await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) return 'source-missing'
+  // Chapter extraction promises verbatim evidence. An explicit manual/import fact has no such claim.
+  return fact.sourceQuote && !normalizeChapterText(chapter.content).includes(fact.sourceQuote) ? 'stale' : 'current'
+}
+
+function chapterRange(fact: TemporalFact, orderOf: ReadonlyMap<number, number>) {
+  const from = fact.validFromChapterId == null ? -1 : orderOf.get(fact.validFromChapterId)
+  const to = fact.validToChapterId == null ? Infinity : orderOf.get(fact.validToChapterId)
+  return from == null || to == null || from > to ? null : { from, to }
 }
 
 /**
- * 作者第二次显式操作：以候选取代所有同主体/同主题的互斥世界宪法。
- * 普通确认绝不会走这里；locked 旧断言仍拒绝覆盖。
+ * All authoritative decisions share one IndexedDB write transaction, including source reads and
+ * chapter order. Concurrent requests serialize here; none may commit a pre-transaction prior set.
+ * The initial candidate snapshot is a CAS guard against edits/rejections while scope is resolving.
  */
-export async function replaceConstitutionFactCandidate(
-  factId: number,
-): Promise<ReplaceConstitutionFactResult> {
-  const existingRecord = await db.temporalFacts.get(factId)
-  if (!existingRecord || existingRecord.id == null) return { confirmed: false, clashes: [], replaced: 0, reason: 'missing' }
-  const scope = await resolveScopeLike(existingRecord.projectId)
-  const fact = await db.temporalFacts.get(factId)
-  if (!fact || !await assertRecordInScope(scope, 'temporalFacts', fact, { owner: 'work' })) {
-    throw new Error('世界宪法候选不存在或不属于当前作品。')
-  }
-  const spec = getFactPredicate(fact.predicate)
-  if (!spec?.constitution) {
-    return { confirmed: false, clashes: [], replaced: 0, reason: 'not-constitution' }
-  }
-  if (!['candidate', 'stale', 'source-missing', 'invalid-range'].includes(fact.status)) {
-    return { confirmed: false, clashes: [], replaced: 0, reason: 'invalid-status' }
-  }
-  const sourceState = await validateSettingAssertionSource(fact, scope)
-  if (sourceState !== 'current') {
-    await db.temporalFacts.update(fact.id!, { status: sourceState, updatedAt: now() })
-    return {
-      confirmed: false,
-      clashes: [],
-      replaced: 0,
-      reason: sourceState === 'stale' ? 'source-stale' : 'source-missing',
+async function commitFactConfirmation(factId: number, replaceConstitution: boolean): Promise<ReplaceConstitutionFactResult> {
+  const expected = await db.temporalFacts.get(factId)
+  if (!expected || expected.id == null) return { confirmed: false, clashes: [], replaced: 0, reason: 'missing' }
+  const scope = await resolveScopeLike(expected.projectId)
+  return db.transaction('rw', confirmationTables(), async (): Promise<ReplaceConstitutionFactResult> => {
+    await resolveScopeLike(scope)
+    const fact = await db.temporalFacts.get(factId)
+    if (!fact || !await assertRecordInScope(scope, 'temporalFacts', fact, { owner: 'work' })) {
+      throw new Error('事实候选不存在或不属于当前作品。')
     }
-  }
-  const confirmed = (await readOwnedRows<TemporalFact>(scope, 'temporalFacts', { owner: 'work' }))
-    .filter(row => row.status === 'confirmed')
-  const clashes = checkSettingAssertionClashes(fact, confirmed)
-  if (clashes.some(clash => clash.confirmed.locked)) {
-    return { confirmed: false, clashes, replaced: 0, reason: 'locked-conflict' }
-  }
-  const timestamp = now()
-  await db.transaction('rw', db.temporalFacts, async () => {
-    for (const clash of clashes) {
-      if (clash.confirmed.id == null) continue
-      await db.temporalFacts.update(clash.confirmed.id, {
-        status: 'superseded',
-        updatedAt: timestamp,
+    if (!['candidate', 'stale', 'source-missing', 'invalid-range'].includes(fact.status)) {
+      return { confirmed: false, clashes: [], replaced: 0, reason: 'invalid-status' }
+    }
+    if (JSON.stringify(fact) !== JSON.stringify(expected)) {
+      return { confirmed: false, clashes: [], replaced: 0, reason: 'candidate-changed' }
+    }
+    const spec = getFactPredicate(fact.predicate)
+    if (replaceConstitution && !spec?.constitution) {
+      return { confirmed: false, clashes: [], replaced: 0, reason: 'not-constitution' }
+    }
+    if (!spec) return { confirmed: false, clashes: [], replaced: 0, reason: 'invalid-status' }
+    const sourceState = await confirmationSourceState(fact, scope)
+    if (sourceState !== 'current') {
+      await db.temporalFacts.update(factId, { status: sourceState, updatedAt: now() })
+      return { confirmed: false, clashes: [], replaced: 0,
+        reason: sourceState === 'stale' ? 'source-stale' : 'source-missing' }
+    }
+    const canon = (await readOwnedRows<TemporalFact>(scope, 'temporalFacts', { owner: 'work' }))
+      .filter(isCanonFactV1)
+    const timestamp = now()
+    if (spec.constitution) {
+      const clashes = checkSettingAssertionClashes(fact, canon)
+      if (clashes.length && !replaceConstitution) return { confirmed: false, clashes, replaced: 0 }
+      if (clashes.some(clash => clash.confirmed.locked)) {
+        return { confirmed: false, clashes, replaced: 0, reason: 'locked-conflict' }
+      }
+      for (const clash of clashes) {
+        await db.temporalFacts.update(clash.confirmed.id!, { status: 'superseded', updatedAt: timestamp })
+      }
+      await db.temporalFacts.update(factId, {
+        status: 'confirmed', supersedesFactId: clashes[0]?.confirmed.id ?? null, updatedAt: timestamp,
       })
+      return { confirmed: true, clashes, replaced: clashes.length }
     }
-    await db.temporalFacts.update(fact.id!, {
-      status: 'confirmed',
-      supersedesFactId: clashes[0]?.confirmed.id ?? null,
-      updatedAt: timestamp,
+
+    const orderOf = spec.temporal ? await canonicalOrderForScope(scope) : new Map<number, number>()
+    const range = chapterRange(fact, orderOf)
+    if (!range) {
+      await db.temporalFacts.update(factId, { status: 'invalid-range', updatedAt: timestamp })
+      return { confirmed: false, clashes: [], replaced: 0, reason: 'invalid-range' }
+    }
+    let validToChapterId = fact.validToChapterId ?? null
+    let supersedesFactId = fact.supersedesFactId ?? null
+    let confirmedStatus: TemporalFact['status'] = 'confirmed'
+    if (spec.factKind === 'state' && spec.cardinality === 'single' && spec.conflictPolicy === 'supersede') {
+      const priors = canon.filter(prior => prior.id !== factId && prior.predicate === fact.predicate
+        && (prior.worldGroupId ?? null) === (fact.worldGroupId ?? null) && sameFactSubject(prior, fact))
+      const priorRanges = []
+      for (const prior of priors) {
+        const priorRange = chapterRange(prior, orderOf)
+        if (!priorRange) return { confirmed: false, clashes: [], replaced: 0, reason: 'invalid-range' }
+        priorRanges.push({ prior, range: priorRange })
+      }
+      // The next known transition bounds an earlier insertion. Also inspect bounded historical
+      // Canon: inserting chapter 2 after chapters 3 and 1 must shorten chapter 1's interval.
+      for (const item of priorRanges) {
+        if (item.range.from > range.from && item.range.from < range.to && item.range.to > item.range.from) {
+          range.to = item.range.from
+          validToChapterId = item.prior.validFromChapterId!
+          confirmedStatus = 'superseded'
+        }
+      }
+      const closable = priorRanges.filter(item => item.range.from <= range.from
+        && item.range.to > range.from && range.to > range.from)
+      if (closable.some(item => item.prior.locked)) {
+        return { confirmed: false, clashes: [], replaced: 0, reason: 'locked-conflict' }
+      }
+      for (const { prior } of closable) {
+        await db.temporalFacts.update(prior.id!, {
+          validToChapterId: fact.validFromChapterId ?? null, status: 'superseded', updatedAt: timestamp,
+        })
+        supersedesFactId ??= prior.id ?? null
+      }
+    }
+    await db.temporalFacts.update(factId, {
+      status: confirmedStatus,
+      validToChapterId, supersedesFactId, updatedAt: timestamp,
     })
+    return { confirmed: true, clashes: [], replaced: 0 }
   })
-  return { confirmed: true, clashes, replaced: clashes.length }
+}
+
+export async function confirmFactCandidate(factId: number): Promise<ConfirmFactResult> {
+  const result = await commitFactConfirmation(factId, false)
+  return { confirmed: result.confirmed, clashes: result.confirmed ? [] : result.clashes,
+    ...(result.reason ? { reason: result.reason === 'not-constitution' ? 'invalid-status' : result.reason } : {}) }
+}
+
+/** Explicit second author action; a normal confirmation never replaces a conflicting constitution. */
+export async function replaceConstitutionFactCandidate(factId: number): Promise<ReplaceConstitutionFactResult> {
+  return commitFactConfirmation(factId, true)
 }
 
 /** 作者否决候选/异常事实（不入 Canon、不再注入生成）。不动已确认/已锁定事实。 */
@@ -327,12 +312,16 @@ export async function rejectFactCandidate(factId: number): Promise<void> {
   const existingRecord = await db.temporalFacts.get(factId)
   if (!existingRecord || existingRecord.id == null) return
   const scope = await resolveScopeLike(existingRecord.projectId)
-  const fact = await db.temporalFacts.get(factId)
-  if (!fact || !await assertRecordInScope(scope, 'temporalFacts', fact, { owner: 'work' })) {
-    throw new Error('事实候选不存在或不属于当前作品。')
-  }
-  if (fact.status === 'confirmed' || fact.locked) return
-  await db.temporalFacts.update(fact.id!, { status: 'rejected', updatedAt: now() })
+  await db.transaction('rw', scopeTransactionTables(db.temporalFacts), async () => {
+    await resolveScopeLike(scope)
+    const fact = await db.temporalFacts.get(factId)
+    if (!fact || !await assertRecordInScope(scope, 'temporalFacts', fact, { owner: 'work' })) {
+      throw new Error('事实候选不存在或不属于当前作品。')
+    }
+    if (!['candidate', 'stale', 'source-missing', 'invalid-range'].includes(fact.status) || fact.locked
+      || JSON.stringify(fact) !== JSON.stringify(existingRecord)) return
+    await db.temporalFacts.update(factId, { status: 'rejected', updatedAt: now() })
+  })
 }
 
 /** 读某项目的事实（按状态可选过滤），供事实库 UI 与投影使用。 */

@@ -15,6 +15,7 @@ import type {
   FrozenResourceScopeV1,
   WorkspaceScope,
 } from '../../src/lib/types'
+import type { ResourceListInputV1 } from '../../src/lib/registry/types'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 
@@ -140,7 +141,7 @@ describe('CTXG-8 · provider cache, invalidation and long-form retrieval', () =>
       providerId: 'replaceable-backend-a', content: () => content, contentHash: () => contentHash, calls,
     }))
     const scope = { projectId: 1, worldId: 1, workId: 1, worldGroupId: null }
-    const listRequest = { scope, kinds: ['chapter'] as const, limit: 10 }
+    const listRequest: ResourceListInputV1 = { scope, kinds: ['chapter'], limit: 10 }
     const readRequest = { scope, resourceKey: 'chapter:chapter-test', depth: 'full' as const, maxTokens: 100 }
 
     const firstPage = await cached.listMetadata(listRequest)

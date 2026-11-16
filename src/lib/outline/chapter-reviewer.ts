@@ -2,6 +2,7 @@ import type { OutlineReviewTarget } from './review-adoption'
 import { executeRegisteredAIEntryV1 } from '../agent/formal-ai-entry'
 import { useAIConfigStore } from '../../stores/ai-config'
 import type { OutlineNode } from '../types'
+import { wholeJSONContainerTextV1 } from '../ai/whole-json-container'
 
 export type ChapterIssueType = 'logic' | 'consistency' | 'plot' | 'character' | 'timeline' | 'other'
 export type IssueSeverity = 'low' | 'medium' | 'high'
@@ -19,6 +20,7 @@ export interface ChapterReviewIssue {
 export interface ChapterReviewResult {
   issues: ChapterReviewIssue[]
   summary: string
+  rawOutput?: string
 }
 
 export interface ReviewChapter {
@@ -40,10 +42,20 @@ export interface ChangeItem {
 
 export interface RewriteResult {
   target?: OutlineReviewTarget
+  /** System-owned input snapshot. Model echoes never supply this baseline. */
+  baseline: Readonly<ReviewChapter>
+  rawOutput: string
   originalSummary: string
   revisedSummary: string
   changes: ChangeItem[]
   summary: string
+}
+
+export class ChapterReviewError extends Error {
+  constructor(message: string, readonly rawOutput: string | undefined, readonly cause: unknown) {
+    super(message)
+    this.name = 'ChapterReviewError'
+  }
 }
 
 // ========== 诊断阶段 ==========
@@ -76,7 +88,7 @@ ${userQuestion ? `\n【用户特别关注】${userQuestion}\n` : ''}
       "issueType": "logic",
       "severity": "high",
       "description": "问题描述（30-80字，说清楚哪里矛盾/不合理）",
-      "affectedChapters": [1, 2],
+      "affectedChapters": [0, 1],
       "suggestion": "修改方向（说清楚应该改成什么样，不要写具体改写内容）"
     }
   ]
@@ -86,7 +98,7 @@ ${userQuestion ? `\n【用户特别关注】${userQuestion}\n` : ''}
 【字段说明】
 - issueType: logic/consistency/plot/character/timeline/other
 - severity: low(轻微)/medium(中等)/high(严重)
-- affectedChapters: 涉及矛盾的章节序号
+- affectedChapters: 涉及矛盾的章节 index（从 0 开始，第 1 章的 index 为 0）
 - suggestion: 只说修改方向，例如"将倚天剑改为破云剑"，不要生成完整章节摘要
 
 【严格规则】
@@ -118,18 +130,15 @@ export async function reviewChapterOutlines(
     },
   ]
 
+  let rawOutput: string | undefined
   try {
-    const rawOutput = await executeRegisteredAIEntryV1('outline.chapter.review', messages, config, {
+    rawOutput = await executeRegisteredAIEntryV1('outline.chapter.review', messages, config, {
       category: 'outline.review',
     })
 
-    return parseDiagnoseResult(rawOutput)
+    return parseDiagnoseResult(rawOutput, chapters)
   } catch (error) {
-    console.error('[ChapterReview] 诊断失败:', error)
-    return {
-      issues: [],
-      summary: `诊断失败：${error instanceof Error ? error.message : '未知错误'}`,
-    }
+    throw new ChapterReviewError(`诊断失败：${error instanceof Error ? error.message : '未知错误'}`, rawOutput, error)
   }
 }
 
@@ -184,7 +193,7 @@ ${surroundingChapters.map(ch =>
 
 【严格规则】
 1. 只修改必要的部分，保留其他所有内容
-2. 如果问题涉及多章，用 changes 数组表示每章的修改
+2. 本次只改目标章节；其他章节需单独生成候选。chapterIndex 必须是目标章节的 index
 3. before/after 要能直接定位到原文中的具体片段
 4. revisedSummary 是修改后的完整章节摘要，必须包含所有未修改的内容
 5. 如果该问题不应该修改（用户可能忽略），返回空的 changes
@@ -200,16 +209,10 @@ export async function rewriteChapterOutline(
 
   // 找到第一个需要修改的目标章节
   const targetIndex = issue.affectedChapters[0]
-  const targetChapter = allChapters.find(ch => ch.index === targetIndex)
+  const sourceChapter = allChapters.find(ch => ch.index === targetIndex)
 
-  if (!targetChapter) {
-    return {
-      originalSummary: '',
-      revisedSummary: '',
-      changes: [],
-      summary: '未找到目标章节',
-    }
-  }
+  if (!sourceChapter) throw new Error('未找到目标章节，请重新诊断。')
+  const targetChapter = Object.freeze({ ...sourceChapter })
 
   // 获取上下文（前后各2章）
   const surroundingChapters = allChapters.filter(ch =>
@@ -232,20 +235,15 @@ export async function rewriteChapterOutline(
     },
   ]
 
+  let rawOutput: string | undefined
   try {
-    const rawOutput = await executeRegisteredAIEntryV1('outline.chapter.rewrite', messages, config, {
+    rawOutput = await executeRegisteredAIEntryV1('outline.chapter.rewrite', messages, config, {
       category: 'outline.rewrite',
     })
 
     return parseRewriteResult(rawOutput, targetChapter)
   } catch (error) {
-    console.error('[ChapterReview] 改写失败:', error)
-    return {
-      originalSummary: targetChapter.summary,
-      revisedSummary: targetChapter.summary,
-      changes: [],
-      summary: `改写失败：${error instanceof Error ? error.message : '未知错误'}`,
-    }
+    throw new ChapterReviewError(`改写失败：${error instanceof Error ? error.message : '未知错误'}`, rawOutput, error)
   }
 }
 
@@ -267,88 +265,69 @@ function compressChapters(chapters: ReviewChapter[]): ReviewChapter[] {
   return result
 }
 
-function parseDiagnoseResult(rawOutput: string): ChapterReviewResult {
-  const jsonMatch = rawOutput.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    return { issues: [], summary: '未能解析 AI 输出' }
-  }
-
-  try {
-    const parsed = JSON.parse(jsonMatch[0])
-    const issues: ChapterReviewIssue[] = Array.isArray(parsed.issues)
-      ? parsed.issues.map((issue: {
-          id?: string
-          issueType?: string
-          severity?: string
-          description?: string
-          affectedChapters?: number[]
-          suggestion?: string
-        }, idx: number) => ({
-          id: issue.id || `issue-${idx}`,
-          issueType: (issue.issueType as ChapterReviewIssue['issueType']) || 'other',
-          severity: (issue.severity as ChapterReviewIssue['severity']) || 'medium',
-          description: issue.description || '未描述的问题',
-          affectedChapters: Array.isArray(issue.affectedChapters) ? issue.affectedChapters : [],
-          suggestion: issue.suggestion || '无建议',
-        }))
-      : []
-
-    return {
-      issues,
-      summary: parsed.summary || '诊断完成',
-    }
-  } catch {
-    return { issues: [], summary: `解析失败：${rawOutput.slice(0, 200)}` }
-  }
+function parseReportObject(raw: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(wholeJSONContainerTextV1(raw, '审校报告'))
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('审校报告必须是 JSON 对象。')
+  return parsed as Record<string, unknown>
 }
 
-function parseRewriteResult(rawOutput: string, fallbackChapter: ReviewChapter): RewriteResult {
-  const jsonMatch = rawOutput.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    return {
-      originalSummary: fallbackChapter.summary,
-      revisedSummary: fallbackChapter.summary,
-      changes: [],
-      summary: '未能解析改写结果',
-    }
-  }
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
 
-  try {
-    const parsed = JSON.parse(jsonMatch[0])
-    const changes: ChangeItem[] = Array.isArray(parsed.changes)
-      ? parsed.changes.map((change: {
-          id?: string
-          chapterIndex?: number
-          chapterTitle?: string
-          chapterName?: string
-          before?: string
-          after?: string
-          reason?: string
-        }, idx: number) => ({
-          id: change.id || `change-${idx}`,
-          chapterIndex: change.chapterIndex ?? fallbackChapter.index,
-          chapterTitle: change.chapterTitle || fallbackChapter.title,
-          chapterName: change.chapterName || `第${fallbackChapter.index + 1}章`,
-          before: change.before || '',
-          after: change.after || '',
-          reason: change.reason || '',
-        }))
-      : []
+function parseDiagnoseResult(rawOutput: string, chapters: ReviewChapter[]): ChapterReviewResult {
+  const parsed = parseReportObject(rawOutput)
+  if (typeof parsed.summary !== 'string' || !parsed.summary.trim() || !Array.isArray(parsed.issues)) throw new Error('诊断报告缺少 summary 或 issues。')
+  const ids = new Set<string>()
+  const indices = new Set(chapters.map(chapter => chapter.index))
+  const issues = parsed.issues.map((issue: unknown): ChapterReviewIssue => {
+    if (!isRecord(issue) || typeof issue.id !== 'string' || !issue.id.trim() || ids.has(issue.id)
+      || !['logic', 'consistency', 'plot', 'character', 'timeline', 'other'].includes(String(issue.issueType))
+      || !['low', 'medium', 'high'].includes(String(issue.severity))
+      || typeof issue.description !== 'string' || !issue.description.trim()
+      || typeof issue.suggestion !== 'string' || !issue.suggestion.trim()
+      || !Array.isArray(issue.affectedChapters) || !issue.affectedChapters.length
+      || issue.affectedChapters.some(index => !Number.isInteger(index) || !indices.has(index))) throw new Error('诊断问题字段或章节定位无效。')
+    ids.add(issue.id)
+    return { id: issue.id, issueType: issue.issueType as ChapterIssueType, severity: issue.severity as IssueSeverity, description: issue.description, suggestion: issue.suggestion, affectedChapters: issue.affectedChapters }
+  })
+  return { issues, summary: parsed.summary, rawOutput }
+}
 
-    return {
-      originalSummary: parsed.originalSummary || fallbackChapter.summary,
-      revisedSummary: parsed.revisedSummary || fallbackChapter.summary,
-      changes,
-      summary: parsed.summary || '改写完成',
-    }
-  } catch {
-    return {
-      originalSummary: fallbackChapter.summary,
-      revisedSummary: fallbackChapter.summary,
-      changes: [],
-      summary: `解析失败：${rawOutput.slice(0, 200)}`,
-    }
+function parseRewriteResult(rawOutput: string, baseline: Readonly<ReviewChapter>): RewriteResult {
+  const parsed = parseReportObject(rawOutput)
+  if (typeof parsed.originalSummary !== 'string' || typeof parsed.revisedSummary !== 'string'
+    || typeof parsed.summary !== 'string' || !Array.isArray(parsed.changes)) throw new Error('改写报告字段不完整。')
+  const changes = parsed.changes.map((change: unknown): ChangeItem => {
+    if (!isRecord(change) || typeof change.id !== 'string' || !change.id.trim()
+      || change.chapterIndex !== baseline.index || typeof change.before !== 'string' || !change.before.length
+      || typeof change.after !== 'string' || typeof change.reason !== 'string') throw new Error('改写补丁字段或目标章节无效。')
+    return { id: change.id, chapterIndex: baseline.index, chapterTitle: baseline.title, chapterName: `第${baseline.index + 1}章`, before: change.before, after: change.after, reason: change.reason }
+  })
+  const result = { baseline, rawOutput, originalSummary: parsed.originalSummary, revisedSummary: parsed.revisedSummary, changes, summary: parsed.summary }
+  applySelectedChapterReviewChanges(result, new Set(changes.map(change => change.id)))
+  return result
+}
+
+/** Preview and adoption use the exact same ranges against the frozen system input. */
+export function applySelectedChapterReviewChanges(rewrite: RewriteResult, selectedIds: ReadonlySet<string>): string {
+  const original = rewrite.baseline.summary
+  if (rewrite.originalSummary !== original || (rewrite.target && rewrite.target.sourceSummary !== original)) throw new Error('模型原摘要与系统冻结原稿不一致，请重新生成候选。')
+  const ids = new Set<string>()
+  const ranges = rewrite.changes.map(change => {
+    if (ids.has(change.id) || change.chapterIndex !== rewrite.baseline.index) throw new Error('改写补丁身份或目标章节不一致。')
+    ids.add(change.id)
+    const start = original.indexOf(change.before)
+    if (!change.before.length || start < 0 || original.indexOf(change.before, start + 1) >= 0) throw new Error('改写 before 必须逐字唯一定位到系统原稿。')
+    return { change, start, end: start + change.before.length }
+  }).sort((a, b) => a.start - b.start)
+  if ([...selectedIds].some(id => !ids.has(id))) throw new Error('所选修改不属于当前候选。')
+  if (ranges.some((range, index) => index > 0 && range.start < ranges[index - 1].end)) throw new Error('改写补丁范围重叠，请重新生成候选。')
+  let text = original
+  for (const { change, start, end } of ranges.reverse()) {
+    if (selectedIds.has(change.id)) text = text.slice(0, start) + change.after + text.slice(end)
   }
+  return text
 }
 
 export function toReviewChapters(nodes: OutlineNode[]): ReviewChapter[] {
@@ -358,6 +337,6 @@ export function toReviewChapters(nodes: OutlineNode[]): ReviewChapter[] {
     .map((n, idx) => ({
       index: idx,
       title: n.title || `第${idx + 1}章`,
-      summary: n.summary || '（无摘要）',
+      summary: n.summary ?? '',
     }))
 }

@@ -446,7 +446,7 @@ export class CommercialPlatformAuthorityV1 {
       listing.status = 'suspended'
       listing.updatedAt = this.now()
       for (const entitlement of this.entitlements.values()) {
-        if (entitlement.listingId !== listing.listingId) continue
+        if (entitlement.listingId !== listing.listingId || entitlement.status !== 'active') continue
         entitlement.status = 'moderation-hold'
         entitlement.hostedAccess = false
         entitlement.updatedAt = this.now()
@@ -623,7 +623,27 @@ export class CommercialPlatformAuthorityV1 {
   entitlementFor(input: { principal: CommercialPrincipalV1; releaseHash: string }): CommercialEntitlementV1 | null {
     const buyerId = stableKey(input.principal.userId, 'principal.userId')
     const releaseHash = sha(input.releaseHash, 'releaseHash')
-    const entitlement = [...this.entitlements.values()].find(row => row.buyerId === buyerId && row.releaseHash === releaseHash)
+    // Refund rows remain historical. Resolve usable current access independently
+    // of insertion/snapshot order and recheck its order and catalog authority.
+    const candidates = [...this.entitlements.values()]
+      .filter(row => row.buyerId === buyerId && row.releaseHash === releaseHash)
+      .map((row): CommercialEntitlementV1 => {
+        if (row.status !== 'active') return row
+        const listing = this.listings.get(row.listingId)
+        const order = this.orders.get(row.orderId)
+        if (!listing || listing.releaseHash !== releaseHash || listing.status === 'suspended' || !listing.rightsConfirmed
+          || !order || order.status !== 'paid' || order.buyerId !== buyerId || order.releaseHash !== releaseHash || order.listingId !== row.listingId) {
+          return {
+            ...row, hostedAccess: false,
+            status: order?.status === 'refunded' ? 'refunded' : order?.status === 'disputed' ? 'disputed' : 'moderation-hold',
+          }
+        }
+        return row
+      })
+      .sort((left, right) => Number(right.status === 'active' && right.hostedAccess) - Number(left.status === 'active' && left.hostedAccess)
+        || right.acquiredAt - left.acquiredAt || right.updatedAt - left.updatedAt
+        || (left.entitlementId < right.entitlementId ? -1 : left.entitlementId > right.entitlementId ? 1 : 0))
+    const entitlement = candidates[0]
     return entitlement ? clone(entitlement) : null
   }
 
@@ -668,8 +688,7 @@ export class CommercialPlatformAuthorityV1 {
         localCopyPreserved: true, acquiredAt: ownedListing.createdAt,
       }
     }
-    const entitlement = [...this.entitlements.values()].find(row => row.buyerId === userId
-      && row.releaseHash === releaseHash)
+    const entitlement = this.entitlementFor(input)
     if (!entitlement || entitlement.status !== 'active' || !entitlement.hostedAccess) {
       fail('entitlement_required', '没有可下载此 Release 的有效权益')
     }
@@ -695,8 +714,7 @@ export class CommercialPlatformAuthorityV1 {
     const creatorListing = [...this.listings.values()].find(row => row.creatorId === userId
       && row.releaseHash === releaseHash && row.status === 'published' && row.rightsConfirmed)
     if (creatorListing) return true
-    const entitlement = [...this.entitlements.values()].find(row => row.buyerId === userId
-      && row.releaseHash === releaseHash)
+    const entitlement = this.entitlementFor(input)
     return entitlement?.status === 'active' && entitlement.hostedAccess
   }
 

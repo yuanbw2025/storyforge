@@ -1,5 +1,6 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
+import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import DataManagementPanel from '../../src/components/data/DataManagementPanel'
 import { db } from '../../src/lib/db/schema'
@@ -67,7 +68,7 @@ describe('HEALTH-4 · 数据管理诊断下载用户路径', () => {
     document.body.append(host)
     const root = createRoot(host)
     mounted.push({ host, root })
-    await act(async () => root.render(createElement(DataManagementPanel, { project })))
+    await act(async () => root.render(createElement(MemoryRouter, null, createElement(DataManagementPanel, { project }))))
 
     const button = Array.from(host.querySelectorAll('button'))
       .find(candidate => candidate.textContent?.includes('下载诊断信息'))

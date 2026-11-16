@@ -1,17 +1,20 @@
 import { db } from '../db/schema'
 import { exportProjectJSON } from '../export/json-export'
-import { deriveStrictExportProjectSnapshot } from '../export/registry-export'
+import { deriveStrictExportProjectSnapshot, type StrictProjectExportSnapshot } from '../export/registry-export'
 import type {
   MemoryArtifactIndexV1,
   MemorySettlementReceiptV1,
   WorkspaceScope,
 } from '../types'
 import { isWorkspaceUid } from './identity'
-import { hashCanonicalValue } from '../agent/run/hash'
+import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import {
   readAgentRunV1,
   verifyRecordedMemorySettlementV1,
+  type AgentRunSnapshotV1,
 } from '../agent/run/event-store'
+import { replayAgentRunEventsV1 } from '../agent/run/projection'
+import { expectedNodeProducerImportRetirementReasonV1 } from '../agent/run/ledger-portability'
 import { inspectAgentRunArtifactAvailabilityV1 } from './artifact-store'
 import {
   buildMemorySettlementReceiptFromSnapshotV1,
@@ -20,6 +23,58 @@ import {
 } from './settlement-core'
 
 const MEMORY_SETTLEMENT_TERMINAL_STATES = new Set(['completed', 'failed', 'cancelled'])
+
+/** The strict registered snapshot has already verified the complete Node/Flow/
+ * Work/group joins. Bind this later scoped replay to that captured tuple before
+ * deriving an incomplete historical index; a reason string grants no exception. */
+function verifiedImportedNodeCancellationV1(
+  scope: WorkspaceScope,
+  snapshot: AgentRunSnapshotV1,
+  captured: StrictProjectExportSnapshot | null,
+): boolean {
+  const last = snapshot.events[snapshot.events.length - 1]
+  if (snapshot.projection.state !== 'cancelled' || last?.type !== 'run.cancelled'
+    || snapshot.projection.memorySettlement) return false
+  const events = snapshot.events.slice(0, -1)
+  const prefix = replayAgentRunEventsV1(events)
+  const reason = expectedNodeProducerImportRetirementReasonV1({ run: { ...snapshot.run }, projection: prefix, events })
+  if (reason === null) return false
+  if (prefix.errors.length || prefix.generation !== snapshot.run.generation || prefix.generation !== last.generation
+    || prefix.contractHash !== snapshot.run.contractHash || prefix.contractHash !== last.contractHash
+    || prefix.lastSequence + 1 !== last.sequence
+    || canonicalStringify(last.payload) !== canonicalStringify({ reason })) {
+    throw new Error('[memory-settlement] 节点只读取消缺少同代原始前缀/准确尾事件')
+  }
+  if (!captured) throw new Error('[memory-settlement] 节点只读取消缺少已核验的关联快照')
+  const coordinate = (table: string, id: number | null | undefined): number | null => {
+    if (id == null) return null
+    const value = captured.exportIds.get(table)?.get(id)
+    if (value == null) throw new Error('[memory-settlement] 节点只读取消的关联坐标缺失')
+    return value
+  }
+  const runId = coordinate('agentRuns', snapshot.run.id)
+  const workId = coordinate('works', scope.workId)
+  const worldId = coordinate('worlds', scope.worldId)
+  const rows = captured.data.agentRuns.filter(row => row._exportId === runId)
+  const portable = rows[0]
+  const work = captured.data.works.find(row => row._exportId === workId)
+  if (rows.length !== 1 || !portable || snapshot.run.projectId !== scope.projectId || snapshot.run.workId !== scope.workId
+    || workId == null || worldId == null || work?._worldExportId !== worldId || portable._workOwnerExportId !== workId
+    || (portable._worldGroupExportId ?? null) !== coordinate('worldGroups', snapshot.run.worldGroupId)
+    || portable._nodeRunExportId !== coordinate('nodeRuns', snapshot.run.nodeRunId)
+    || portable.nodeProducerNodeId !== snapshot.run.nodeProducerNodeId
+    || portable.nodeProducerVariantIndex !== snapshot.run.nodeProducerVariantIndex
+    || portable.nodeProducerAttempt !== snapshot.run.nodeProducerAttempt
+    || portable.generation !== snapshot.projection.generation || portable.lastSequence !== snapshot.projection.lastSequence
+    || portable.status !== snapshot.projection.state) {
+    throw new Error('[memory-settlement] 节点只读取消与已核验的 owner/原始关联不一致')
+  }
+  if (!Number.isSafeInteger(last.createdAt) || !Number.isSafeInteger(snapshot.run.updatedAt) || last.createdAt > Date.now()
+    || snapshot.run.updatedAt < last.createdAt || snapshot.run.updatedAt > Date.now()) {
+    throw new Error('[memory-settlement] 节点只读取消的尾事件时间无效')
+  }
+  return true
+}
 
 // MEMINT-0 keeps exact evidence, retention and working-context replay behind
 // the existing settlement boundary instead of exposing a parallel memory API.
@@ -110,7 +165,8 @@ export async function buildMemoryArtifactIndexV1(
     if (!work) continue
     const scope = { projectId, worldId: work.worldId, workId: run.workId }
     const snapshot = await readAgentRunV1(scope, run.id)
-    if (MEMORY_SETTLEMENT_TERMINAL_STATES.has(snapshot.projection.state)) {
+    const importedNodeCancellation = verifiedImportedNodeCancellationV1(scope, snapshot, portableSnapshot)
+    if (MEMORY_SETTLEMENT_TERMINAL_STATES.has(snapshot.projection.state) && !importedNodeCancellation) {
       await verifyRecordedMemorySettlementV1({ snapshot, scope })
     }
     const settlementEventCandidate = [...snapshot.events]
@@ -120,7 +176,7 @@ export async function buildMemoryArtifactIndexV1(
       && snapshot.projection.memorySettlement?.receiptHash === settlementEventCandidate.payload.receiptHash
       ? settlementEventCandidate
       : undefined
-    if (MEMORY_SETTLEMENT_TERMINAL_STATES.has(snapshot.projection.state) && !settlementEvent) {
+    if (MEMORY_SETTLEMENT_TERMINAL_STATES.has(snapshot.projection.state) && !settlementEvent && !importedNodeCancellation) {
       throw new Error(`[memory-settlement] Run ${run.id} 缺少当前终态记忆结算事件`)
     }
     const receipt = await buildMemorySettlementReceiptFromSnapshotV1({

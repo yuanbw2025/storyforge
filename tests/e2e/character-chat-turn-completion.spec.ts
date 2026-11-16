@@ -3,6 +3,7 @@ import Ajv from 'ajv'
 import {readFileSync} from 'node:fs'
 import {chatActionResponseFixture} from './helpers/character-chat-choice'
 import {openChatNarrativeTools} from './helpers/character-chat-ui'
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 
 const reply = '叶岑把油灯移到门边。门边亮了起来。“入口先照亮了，我会自己继续找，不要求你帮忙。”'
 const purpose = '仅供结束审查的内部局部目的'
@@ -12,11 +13,8 @@ const action = {kind: 'complete', text: reply, goalKey: 'find-seal', evidenceFac
   disclosures: [], threadUpdates: [], goalStatus: null, turnCompletion: {version: 1, purpose, evidenceExcerpt: '门边亮了起来。'}}
 
 async function setup(page: Page, passed = true, provider: 'openai' | 'agnes' = 'openai') {
-  await page.addInitScript(selectedProvider => {
-    localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: selectedProvider, baseUrl: 'https://turn-completion.invalid/v1', model: 'test', maxTokens: 8000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
-  }, provider)
+  registerBrowserFixtureAIConfigV1(page, { provider, baseUrl: 'https://turn-completion.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' })
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
   const calls: string[] = []
   await page.route('https://turn-completion.invalid/**', async route => {
     const messages = route.request().postDataJSON().messages, text = JSON.stringify(messages)
@@ -43,12 +41,12 @@ async function setup(page: Page, passed = true, provider: 'openai' | 'agnes' = '
     }
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({maxActionsPerTrigger: 2, onlyGuard: true})
   })
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   await openChatNarrativeTools(page)
   const read = () => page.evaluate(async id => {
@@ -76,7 +74,7 @@ for (const width of [390, 1440]) test(`local completion leaves an active goal wi
   expect(calls).toEqual(['choice', 'expression', 'review'])
   expect(after.state.interaction.remainingDirectorBudget).toBe(before.state.interaction.remainingDirectorBudget - 3)
   expect(await page.locator('body').innerText()).not.toContain(purpose)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText(reply, {exact: true})).toBeVisible()
   expect((await read()).state).toEqual(after.state)
   expect(calls).toEqual(['choice', 'expression', 'review'])
@@ -91,7 +89,7 @@ test('a failed local completion review preserves the player message and original
   const after = await read()
   expect(after.state.interaction.messages.map((message: {role: string}) => message.role)).toEqual(['player'])
   expect(after.state.interaction.chatNarrative.situation).toEqual(before.state.interaction.chatNarrative.situation)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText('我不想帮忙，你自己安排吧。', {exact: true})).toBeVisible()
   expect((await read()).state).toEqual(after.state)
   expect(calls).toEqual(['choice', 'expression', 'review'])

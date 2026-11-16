@@ -43,7 +43,7 @@ export default function ImportConfirmModal({
     const totalChunks = chunks.length
     const totalSeconds = totalChunks * estSecondsPerChunk
     // 中文 token 粗估：1 字 ≈ 1 token；输入 ≈ chunkSize，输出 ≈ 3k tokens/块
-    const estInputTokens = totalChars + totalChunks * 800 // + rolling context
+    const estInputTokens = totalChars + totalChunks * 800 // prompt overhead
     const estOutputTokens = totalChunks * 3000
     // 简单成本估算（以 Gemini 2.5 Flash ¥0.001/1K in, ¥0.002/1K out 的量级参考）
     const estRmbLow = (estInputTokens * 0.001 + estOutputTokens * 0.002) / 1000
@@ -101,6 +101,10 @@ export default function ImportConfirmModal({
               {totalChars.toLocaleString()} 字符 · 预计拆成 {stats.totalChunks} 块
             </div>
           </div>
+
+          <p className="text-sm text-text-secondary">
+            每块解析后会保留候选供你审查。确认后才保存，可在审查前退出并恢复。
+          </p>
 
           {/* 分卷结构检测 */}
           {volumeDetect && (volumeDetect.hasVolumes || volumeDetect.totalChapters > 0) && (
@@ -194,11 +198,11 @@ export default function ImportConfirmModal({
           <div className="bg-accent/5 border border-accent/30 rounded-lg p-3 space-y-1.5 text-xs text-text-secondary leading-relaxed">
             <div className="flex items-start gap-1.5">
               <Info className="w-3.5 h-3.5 text-accent mt-0.5 flex-shrink-0" />
-              <span><strong className="text-text-primary">串行处理</strong>：每块独立调用 AI，前块解析结果作为"已识别上下文"塞给后块，保证角色不乱飞。</span>
+              <span><strong className="text-text-primary">串行处理</strong>：每块独立解析。确认本块后，可选择继续处理下一块。</span>
             </div>
             <div className="flex items-start gap-1.5">
               <Info className="w-3.5 h-3.5 text-accent mt-0.5 flex-shrink-0" />
-              <span><strong className="text-text-primary">即时入库</strong>：每块成功后立即写入 worldview / characters / outline 表。切到其它 Tab、刷新页面都看得到已解析部分。</span>
+              <span><strong className="text-text-primary">审查后保存</strong>：解析只生成候选，确认后才写入；刷新可重新打开候选。</span>
             </div>
             <div className="flex items-start gap-1.5">
               <Info className="w-3.5 h-3.5 text-accent mt-0.5 flex-shrink-0" />
@@ -206,11 +210,11 @@ export default function ImportConfirmModal({
             </div>
             <div className="flex items-start gap-1.5">
               <Info className="w-3.5 h-3.5 text-accent mt-0.5 flex-shrink-0" />
-              <span><strong className="text-text-primary">自动重试</strong>：仅服务明确繁忙（503）时至多尝试 3 次；解析失败、授权错误或结果未知会停止，调整后可手动重试。</span>
+              <span><strong className="text-text-primary">失败处理</strong>：可以查看已保留的原答和失败信息。已有尝试的分块不会自动重发。</span>
             </div>
             <div className="flex items-start gap-1.5">
               <Info className="w-3.5 h-3.5 text-accent mt-0.5 flex-shrink-0" />
-              <span><strong className="text-text-primary">跨块合并</strong>：每 10 块 + 终末调用一次 AI "找同名/别名"，自动合并同一角色的多条记录。</span>
+              <span><strong className="text-text-primary">跨块合并</strong>：同名内容按目标世界处理；不同名字的角色不会自动合并或删除，请由作者核对。</span>
             </div>
           </div>
 
@@ -218,14 +222,14 @@ export default function ImportConfirmModal({
           <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 text-xs text-warning leading-relaxed flex items-start gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
             <span>
-              <strong>注意</strong>：页面在解析期间可切走做别的事，但<strong>不要关闭浏览器</strong>（关闭后内存中的原文会丢，下次续跑需要重新上传同文件）。
+              <strong>注意</strong>：浏览器会尝试在本地保存原文件。存档不可用时，可重新上传同一份文件继续。
             </span>
           </div>
         </div>
 
         {/* 导入目标说明 */}
         <div className="px-5 py-3 border-t border-border bg-bg-elevated/50">
-          <div className="text-xs text-text-muted mb-2">解析完成后，数据将写入：</div>
+          <div className="text-xs text-text-muted mb-2">作者确认后，数据将写入：</div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-bg-base border border-accent/30 rounded-lg p-2.5">
               <div className="font-medium text-accent mb-0.5">📥 导入当前项目</div>

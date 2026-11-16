@@ -1,3 +1,4 @@
+import { evaluateCurrentProductEntryV1 } from '../../lib/product/product-catalog'
 import {useEffect, useRef, useState} from 'react'
 import {canonicalStringify} from '../../lib/agent/run/hash'
 import type {WorkspaceScope} from '../../lib/types'
@@ -14,6 +15,7 @@ import SourceRunFailure from './SourceRunFailure'
 
 export default function SourceUnitConfirmation(props: {scope: WorkspaceScope; draft: ChatAuthoringDraftV1; settings: ChatAuthoringSettingsV3; projection: ChatSourceProjectionDraftV1;
   source: ChatSourceReviewRequestV1; candidate: ChatSourceUnitsCandidateV1; disabled: boolean; onConfirmed: () => void}) {
+  const catalogAllowsAuthoring = evaluateCurrentProductEntryV1('upper.character-interaction').enterable
   const config = useAIConfigStore(state => state.config)
   const [view, setView] = useState<ChatSourceUnitConfirmationViewV1 | null>(null)
   const [permissions, setPermissions] = useState<ChatSourceUnitPermissionV1[]>([])
@@ -75,7 +77,7 @@ export default function SourceUnitConfirmation(props: {scope: WorkspaceScope; dr
     {savedIssue && <p role="alert">{savedIssue}；新制作不能使用过期整理，可重新整理同批原文或明确移除。</p>}
     {saved?.bundles.map((bundle, index) => <article key={bundle.candidate.fragments[0].fragmentKey} data-testid="chat-saved-source-units" className="rounded bg-bg-base p-2">
       <p>已确认批次 {index + 1}：{bundle.candidate.fragments.flatMap(row => row.facts.map(fact => fact.text)).join('；')}</p>
-      <button type="button" className="lf-action" disabled={disabled} onClick={() => void act(async () => {
+      <button type="button" className="lf-action" disabled={(disabled) || !catalogAllowsAuthoring} onClick={() => void act(async () => {
         await removeChatSourceUnitBundleV1(props.scope, props.draft.revision, bundle.candidate.fragments.map(row => row.fragmentKey)); props.onConfirmed()
       })}>移除此批已确认事实整理</button>
     </article>)}
@@ -84,26 +86,26 @@ export default function SourceUnitConfirmation(props: {scope: WorkspaceScope; dr
       return <fieldset key={canonicalStringify([permission.fragmentKey, permission.unitKey])} className="space-y-2 rounded border border-border p-2">
         <legend>{fact.text}</legend>
         <p>起初知道这项事实的人</p>
-        {audiences.map(actor => <label key={actor.key} className="mr-3 inline-flex gap-1"><input type="checkbox" disabled={disabled || stale} checked={permission.audienceKeys.includes(actor.key)} onChange={event => update(permission, {audienceKeys: event.target.checked ? [...permission.audienceKeys, actor.key] : permission.audienceKeys.filter(key => key !== actor.key)})}/>{actor.label}</label>)}
-        <label className="block"><input type="checkbox" disabled={disabled || stale || !props.settings.narrative.permissions.maxDiscoveriesPerSituation} checked={!!permission.discovery} onChange={event => update(permission,
+        {audiences.map(actor => <label key={actor.key} className="mr-3 inline-flex gap-1"><input type="checkbox" disabled={(disabled || stale) || !catalogAllowsAuthoring} checked={permission.audienceKeys.includes(actor.key)} onChange={event => update(permission, {audienceKeys: event.target.checked ? [...permission.audienceKeys, actor.key] : permission.audienceKeys.filter(key => key !== actor.key)})}/>{actor.label}</label>)}
+        <label className="block"><input type="checkbox" disabled={(disabled || stale || !props.settings.narrative.permissions.maxDiscoveriesPerSituation) || !catalogAllowsAuthoring} checked={!!permission.discovery} onChange={event => update(permission,
           {discovery: event.target.checked ? {actorKeys: actors.filter(actor => !permission.audienceKeys.includes(actor.key)).slice(0, 1).map(actor => actor.key), condition: '', prerequisiteFragmentKeys: []} : undefined})}/>允许调查后获知此事实</label>
         {permission.discovery && <div className="space-y-2">
-          <label className="block">实际发现条件<textarea className="w-full" maxLength={2000} disabled={disabled || stale} value={permission.discovery.condition} onChange={event => update(permission, {discovery: {...permission.discovery!, condition: event.target.value}})}/></label>
-          <fieldset><legend>允许调查者</legend>{actors.filter(actor => !permission.audienceKeys.includes(actor.key)).map(actor => <label key={actor.key} className="mr-3 inline-flex gap-1"><input type="checkbox" disabled={disabled || stale} checked={permission.discovery!.actorKeys.includes(actor.key)} onChange={event => update(permission, {discovery: {...permission.discovery!, actorKeys: event.target.checked ? [...permission.discovery!.actorKeys, actor.key] : permission.discovery!.actorKeys.filter(key => key !== actor.key)}})}/>{actor.label}</label>)}</fieldset>
+          <label className="block">实际发现条件<textarea className="w-full" maxLength={2000} disabled={(disabled || stale) || !catalogAllowsAuthoring} value={permission.discovery.condition} onChange={event => update(permission, {discovery: {...permission.discovery!, condition: event.target.value}})}/></label>
+          <fieldset><legend>允许调查者</legend>{actors.filter(actor => !permission.audienceKeys.includes(actor.key)).map(actor => <label key={actor.key} className="mr-3 inline-flex gap-1"><input type="checkbox" disabled={(disabled || stale) || !catalogAllowsAuthoring} checked={permission.discovery!.actorKeys.includes(actor.key)} onChange={event => update(permission, {discovery: {...permission.discovery!, actorKeys: event.target.checked ? [...permission.discovery!.actorKeys, actor.key] : permission.discovery!.actorKeys.filter(key => key !== actor.key)}})}/>{actor.label}</label>)}</fieldset>
           <fieldset className="max-h-40 overflow-auto"><legend>调查者已知的前提</legend>{resources.flatMap(resource => resource.fragments.map(fragment => {
             const rule = permission.discovery!, decision = props.settings.sourceReview?.classifications.find(row => row.fragmentKey === fragment.fragmentKey)
             const allowed = !props.candidate.fragments.some(row => row.fragmentKey === fragment.fragmentKey) && decision?.purpose === 'knowledge' && (decision.visibility === 'public' || decision.visibility === 'participants' && rule.actorKeys.every(key => decision.audienceKeys.includes(key)))
             const selected = rule.prerequisiteFragmentKeys.includes(fragment.fragmentKey)
             if (!allowed && !selected) return null
-            return <label key={fragment.fragmentKey} className="block text-xs"><input type="checkbox" disabled={disabled || stale || !allowed && !selected} checked={selected} onChange={event => update(permission, {discovery: {...rule, prerequisiteFragmentKeys: event.target.checked ? [...rule.prerequisiteFragmentKeys, fragment.fragmentKey] : rule.prerequisiteFragmentKeys.filter(key => key !== fragment.fragmentKey)}})}/>{resource.label}：{fragment.valueJson}</label>
+            return <label key={fragment.fragmentKey} className="block text-xs"><input type="checkbox" disabled={(disabled || stale || !allowed && !selected) || !catalogAllowsAuthoring} checked={selected} onChange={event => update(permission, {discovery: {...rule, prerequisiteFragmentKeys: event.target.checked ? [...rule.prerequisiteFragmentKeys, fragment.fragmentKey] : rule.prerequisiteFragmentKeys.filter(key => key !== fragment.fragmentKey)}})}/>{resource.label}：{fragment.valueJson}</label>
           }))}</fieldset>
         </div>}
       </fieldset>
     })}
     {error && <p role="alert" className="text-danger">{error}</p>}
     {busy && <p>正在处理本次确认…</p>}
-    <button type="button" className="lf-action" disabled={disabled || stale || !eligible || pending || view?.status === 'ready' || !isAIConfigReady(config)} onClick={() => void act(() => reviewChatSourceUnitConfirmationV1({scope: props.scope, request: {source: props.source, candidate: props.candidate, permissions}, config}))}>复核事实和知情范围</button>
-    <button type="button" className="lf-action" disabled={disabled || !matched || !view?.result?.passed} onClick={() => void act(async () => {
+    <button type="button" className="lf-action" disabled={(disabled || stale || !eligible || pending || view?.status === 'ready' || !isAIConfigReady(config)) || !catalogAllowsAuthoring} onClick={() => void act(() => reviewChatSourceUnitConfirmationV1({scope: props.scope, request: {source: props.source, candidate: props.candidate, permissions}, config}))}>复核事实和知情范围</button>
+    <button type="button" className="lf-action" disabled={(disabled || !matched || !view?.result?.passed) || !catalogAllowsAuthoring} onClick={() => void act(async () => {
       await adoptChatSourceUnitConfirmationV1({scope: props.scope, runId: view!.runId, expectedCandidateHash: view!.candidateHash!, candidate: props.candidate, permissions}); props.onConfirmed()
     })}>确认保存事实与知情范围</button>
     {view && <div data-testid="chat-source-unit-confirmation-result">

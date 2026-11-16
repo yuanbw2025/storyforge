@@ -99,7 +99,12 @@ describe('R-HARNESS84 · H4 taxonomy calibration', () => {
       expect(JSON.stringify(input.messages)).toContain('operationalDefinitionZh')
       return {
         output: validJudgeOutput(),
-        usage: { inputTokens: 1_200, outputTokens: 120, durationMs: 30, costUsd: 0.01 },
+        usage: {
+          inputTokens: 1_200, outputTokens: 120, durationMs: 30, costUsd: 0.01,
+          provenance: {
+            input: 'provider', output: 'provider', providerTotalTokens: 1_320, cost: 'fallback-estimate',
+          } as const,
+        },
       }
     })
 

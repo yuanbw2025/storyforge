@@ -7,7 +7,7 @@ import { execSync } from 'node:child_process'
 import { providerProxies } from './scripts/distribution/proxies.mjs'
 
 function resolveBuildSha(): string {
-  const envSha = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA
+  const envSha = process.env.STORYFORGE_ANDROID_SOURCE_SHA || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA
   if (envSha) return envSha.slice(0, 7)
   try {
     return execSync('git rev-parse --short=7 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
@@ -19,6 +19,8 @@ function resolveBuildSha(): string {
 // Actual static replay dependency groups: mechanics -> state -> open -> adapters.
 // Keep adapters separate from their prerequisites to avoid circular chunk loading.
 const TTRPG_REPLAY_CHUNK_MODULES = {
+  // Both the table registry and runtime replay import this dependency-free parser.
+  accounting: ['runtime-media-attempt-accounting'],
   mechanics: [
     'ability-ledger', 'action-economy', 'action-feedback', 'action-requirement',
     'advancement', 'dice', 'world-time', 'open-narrative-envelope',

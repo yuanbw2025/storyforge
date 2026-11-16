@@ -25,7 +25,9 @@ export const CURRENT_PRODUCT_RESOURCE_KEYS = {
 } as const
 
 export const CURRENT_PRODUCT_SOURCE_CATALOG: Pick<ProductProductionWorldSourceCatalogV2,
-  'characters' | 'locations' | 'artifacts' | 'loreEntries' | 'storyArcs'> = {
+  'characters' | 'locations' | 'artifacts' | 'loreEntries' | 'storyArcs' | 'relationships' | 'storySources'> = {
+  relationships: [],
+  storySources: [],
   characters: [{
     resourceKey: CURRENT_PRODUCT_RESOURCE_KEYS.character,
     name: '林舟',
@@ -183,7 +185,7 @@ export async function seedCurrentProductWorld(name: string, options: { minimumCh
     createdAt: now, updatedAt: now,
   } as never, { owner: 'world' }))
   await db.importantLocations.add(stampNewRecord(created.scope, 'importantLocations', {
-    projectId: created.scope.projectId, parentId: null, name: '雾港灯塔', type: 'lighthouse',
+    projectId: created.scope.projectId, parentId: null, name: '雾港灯塔', type: 'lighthouse', tags: '[]',
     description: '潮门关闭前仍可进入的调查起点。', createdAt: now, updatedAt: now,
   } as never, { owner: 'world' }))
   const categoryId = await db.codexCategories.add(stampNewRecord(created.scope, 'codexCategories', {

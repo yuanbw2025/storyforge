@@ -22,4 +22,4 @@ Saving a direction draft does not mean formal production requirements are satisf
 
 To try a prepared result first, see [Built-in works and examples](/en/guides/examples).
 
-For a novel source, follow the dedicated [text open world production guide](/en/features/interactive/open-world) to select and freeze the range. Converting the novel to a shared world first is not required; original-work ownership is preserved.
+When starting text open world from a novel, follow its [production guide](/en/features/interactive/open-world): explicitly derive an independent world draft, review and seal it before product orientation. The original work owner remains unchanged.

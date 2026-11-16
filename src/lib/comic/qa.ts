@@ -1,6 +1,6 @@
 import { comicLetteringOverflowsV1 } from './renderers'
 import { db } from '../db/schema'
-import type { ComicMediaAsset, ComicPanel, WorkspaceScope } from '../types'
+import type { ComicMediaAsset, ComicPanel, ComicVisualSubject, WorkspaceScope } from '../types'
 import { resolveScope } from '../workspace/scope'
 import { readVerifiedMediaBlobV1 } from '../media/blob-store'
 import { assertComicMediaAssetV1, assertComicMediaReferenceGraphV1, assertComicReadingOrderV1, framesOverlap } from './contracts'
@@ -60,6 +60,27 @@ export async function inspectComicQualityV1(scopeInput: WorkspaceScope): Promise
     const expectedRole = subject.kind === 'character' ? 'character-sheet' : subject.kind === 'location' ? 'location-sheet' : subject.kind === 'prop' ? 'prop-sheet' : 'style-reference'
     if (!asset || asset.disposition !== 'available' || asset.subjectKey !== subject.stableKey || asset.role !== expectedRole || asset.workId !== scope.workId) push(issues, { level: 'error', code: 'subject-selected-media-invalid', message: `${subject.label} 所选设定图不存在、不可用或角色不匹配。` })
   }
+  const imageMetadata = (id: number) => readVerifiedMediaBlobV1({ scope, blobObjectId: id })
+    .then(({ width, height, mimeType }) => ({ width, height, mimeType }))
+  const verified = new Map<number, ReturnType<typeof imageMetadata>>()
+  const readImage = (id: number) => {
+    let pending = verified.get(id)
+    if (!pending) {
+      pending = imageMetadata(id)
+      verified.set(id, pending)
+    }
+    return pending
+  }
+  const selectedPanelKeys = new Set(panels.map(panel => panel.selectedMediaAssetKey))
+  for (const asset of comicVisualReleaseAssetsV1(panels, subjects, assetByKey)) {
+    if (selectedPanelKeys.has(asset.stableKey)) continue // The page check below reports the exact panel.
+    try {
+      await readImage(asset.blobObjectId)
+    } catch (error) {
+      push(issues, { level: 'error', code: 'reference-blob-invalid',
+        message: `参考图 ${asset.stableKey} 不可用：${error instanceof Error ? error.message : '图片解码失败'}` })
+    }
+  }
   const selectedUsage = new Map<string, string[]>()
   for (const page of pages) {
     const rows = panels.filter(panel => panel.pageId === page.id).sort((left, right) => left.order - right.order)
@@ -75,7 +96,7 @@ export async function inspectComicQualityV1(scopeInput: WorkspaceScope): Promise
           selectedUsage.set(asset.stableKey, [...(selectedUsage.get(asset.stableKey) ?? []), panel.stableKey])
           try {
             assertComicMediaAssetV1(asset)
-            const blob = await readVerifiedMediaBlobV1({ scope, blobObjectId: asset.blobObjectId })
+            const blob = await readImage(asset.blobObjectId)
             if (blob.width !== asset.quality.width || blob.height !== asset.quality.height || blob.mimeType !== asset.quality.mimeType) throw new Error('asset 与 Blob 尺寸/MIME 不一致')
             if (blob.width < root.targetSpec.imageCapabilityRequirement.minimumWidth || blob.height < root.targetSpec.imageCapabilityRequirement.minimumHeight) throw new Error('所选成图低于目标规格最小尺寸')
             if (asset.rights.commercialUse !== 'allowed' || asset.rights.redistribution !== 'allowed') throw new Error('所选成图未明确允许商用与再分发')
@@ -125,4 +146,18 @@ export async function inspectComicQualityV1(scopeInput: WorkspaceScope): Promise
 export function selectedAssetsForPanelsV1(panels: ComicPanel[], assets: ComicMediaAsset[]): ComicMediaAsset[] {
   const byKey = new Map(assets.map(asset => [asset.stableKey, asset]))
   return panels.flatMap(panel => panel.selectedMediaAssetKey && byKey.has(panel.selectedMediaAssetKey) ? [byKey.get(panel.selectedMediaAssetKey)!] : [])
+}
+
+/** The images frozen in a visual release, in historical manifest order. */
+export function comicVisualReleaseAssetsV1(
+  panels: ComicPanel[], subjects: ComicVisualSubject[], byKey: Map<string, ComicMediaAsset>,
+): ComicMediaAsset[] {
+  const selected = (keys: (string | null)[]) => keys.flatMap(key => {
+    const asset = key == null ? undefined : byKey.get(key)
+    return asset ? [asset] : []
+  })
+  const panelAssets = selected(panels.map(panel => panel.selectedMediaAssetKey))
+  const subjectAssets = selected(subjects.map(subject => subject.selectedMediaAssetKey))
+  const references = selected(panelAssets.flatMap(asset => asset.referenceAssetKeys))
+  return [...new Map([...panelAssets, ...subjectAssets, ...references].map(asset => [asset.stableKey, asset])).values()]
 }

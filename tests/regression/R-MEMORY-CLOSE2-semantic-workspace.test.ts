@@ -1,3 +1,4 @@
+import { workspaceWriteText } from '../helpers/workspace-projection-write'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { db } from '../../src/lib/db/schema'
@@ -45,12 +46,12 @@ function memoryDirectory() {
         async getFile() {
           const text = dir.files.get(name)
           if (text == null) throw notFound()
-          return { async text() { return text } } as File
+          return new File([text], 'fixture')
         },
         async createWritable() {
           let next = ''
           return {
-            async write(value: string | Blob | BufferSource) { next += String(value) },
+            async write(value: string | ArrayBuffer) { next += workspaceWriteText(value) },
             async close() { dir.files.set(name, next) },
           } as FileSystemWritableFileStream
         },

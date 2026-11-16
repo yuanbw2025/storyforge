@@ -1,5 +1,28 @@
 # Longform: outlines, scene beats, and prose
 
+## November 13: saving, recovery and usage checks
+
+Before renaming an entity, review affected content for the initiating work and confirm explicitly. Switching works or editing the new name requires a fresh preview. Prose, state and undo records check the original work and stable identities instead of including another work’s chapters. Source: [#352](https://github.com/yuanbw2025/storyforge/pull/352).
+
+Zero-width search advances safely through prose containing emoji. After recovering a review/revision candidate, switching chapters or workspaces immediately hides the previous chapter's prose, candidate and adopt/finish actions. Return to its original chapter to continue the saved candidate. Review input remains chapter-owned and late results do not refresh another chapter. Context preview shows the actual content fixed for this operation. Sources: [#302](https://github.com/yuanbw2025/storyforge/pull/302), [#404](https://github.com/yuanbw2025/storyforge/pull/404), [#442](https://github.com/yuanbw2025/storyforge/pull/442).
+
+
+
+
+## Outline diagnosis and selective rewriting
+
+Open AI chapter-outline diagnosis, start diagnosis, then expand an issue to choose AI repair, manual editing or ignore. A valid empty issue list reports that this diagnosis located no issue so the author can continue reviewing the original. Empty responses, invalid reports and call failures show their actual errors. Inspect any received raw response before explicitly restarting diagnosis or rewriting.
+
+Check the selected outline and the after-application preview before confirming. Preview and adoption use the frozen real outline and uniquely located patches, preserving unselected content verbatim. Resolve mismatched model quotations, ambiguous locations or changed sources while retaining the candidate. See [PR #303](https://github.com/yuanbw2025/storyforge/pull/303).
+
+## Confirming batch detailed outlines individually
+
+Inspect each current candidate after batch generation and explicitly adopt it before continuing. After reload, return to a pending chapter to recover a saved candidate. Refresh and inspect a changed candidate or target before confirming again. Failed adoption retains its error, and completion requires a full readback of the written result. Outlines or prose still referenced by historical runs are protected before local deletion to retain history and backup references. See [PR #301](https://github.com/yuanbw2025/storyforge/pull/301).
+
+## Completing previously confirmed content after interruption
+
+After interrupted prose, detailed-outline or impact-patch adoption, inspect the candidate, task and recovery prompt first. Recovery checks the original author decision, source and target before continuing that confirmation. Use Continue completing confirmed content when offered instead of starting generation again. Failed writes or completion-event saves roll back together, retaining the candidate for confirmation. An existing completion proof reuses the original result. See [#255](https://github.com/yuanbw2025/storyforge/pull/255).
+
 ## Malformed encyclopedia references and chapter entry
 
 Encyclopedia names and summaries provide read-only reference previews in prose. [PR #231](https://github.com/yuanbw2025/storyforge/pull/231) fixes malformed names or preview values blocking chapter entry: invalid names do not participate in references, non-text previews are treated as empty, and original encyclopedia records stay unchanged. Continue editing, saving and reloading the chapter to check prose persistence. If an error remains, preserve the original records and report the version, error text and steps. The source of malformed writes remains unknown; unrelated native exits are not declared resolved.

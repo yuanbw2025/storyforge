@@ -46,6 +46,19 @@ interface PendingCommandV1 {
   state: "queued" | "sending";
 }
 
+/** A definitive rejection is visible to the caller and is no longer retryable in the outbox. */
+export class OnlineRoomCommandRejectedErrorV1 extends Error {
+  constructor(
+    public readonly requestId: string,
+    public readonly code: "domain_rejected" | "forbidden",
+    message: string,
+    public readonly cause: unknown,
+  ) {
+    super(message);
+    this.name = "OnlineRoomCommandRejectedErrorV1";
+  }
+}
+
 function errorCode(error: unknown): string {
   if (
     error &&
@@ -181,7 +194,7 @@ export class OnlineRoomClientV1 {
       this.lastErrorCode = null;
       await this.flushInternal();
     } catch (error) {
-      this.connection = "error";
+      this.connection = error instanceof OnlineRoomCommandRejectedErrorV1 ? "online" : "error";
       this.lastErrorCode = errorCode(error);
       throw error;
     }
@@ -192,10 +205,12 @@ export class OnlineRoomClientV1 {
     while (this.pending.length) {
       const pending = this.pending[0];
       pending.state = "sending";
+      let accepted = false;
       try {
         const receipt = await this.transport.submit(
           structuredClone(pending.command),
         );
+        accepted = true;
         this.consumeEvents([receipt.event]);
         this.pending.shift();
         // A receipt proves the event, while the per-viewer projection remains
@@ -220,6 +235,18 @@ export class OnlineRoomClientV1 {
         pending.state = "queued";
         const code = errorCode(error);
         this.lastErrorCode = code;
+        // Only explicit pre-acceptance rejection can leave the outbox. A lost
+        // receipt, timeout or failed post-acceptance projection stays recoverable.
+        if (!accepted && (code === "domain_rejected" || code === "forbidden")) {
+          this.pending.shift();
+          this.connection = "online";
+          throw new OnlineRoomCommandRejectedErrorV1(
+            pending.command.requestId,
+            code,
+            error instanceof Error ? error.message : `房间拒绝了此命令：${code}`,
+            error,
+          );
+        }
         if (code === "stale_cursor") {
           const recovered = await this.transport.reconnect({
             roomId: this.identity.roomId,

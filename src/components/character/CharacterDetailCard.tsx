@@ -175,7 +175,8 @@ export default function CharacterDetailCard({
 
       </fieldset>
 
-      <CharacterStatusPanel projectId={project.id!} characterName={typeof char.name === 'string' ? char.name : ''} />
+      <CharacterStatusPanel scope={{ projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! }}
+        characterId={char.id} characterName={typeof char.name === 'string' ? char.name : ''} />
 
       <fieldset disabled={patchSaving}>
       <CharacterWorldAffiliations

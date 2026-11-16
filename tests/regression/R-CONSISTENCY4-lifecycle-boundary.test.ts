@@ -89,6 +89,16 @@ describe('CONSISTENCY-4 · 存亡时序边界', () => {
     })).toMatchObject([{ status: 'alive' }])
   })
 
+  it('无截止章界的已取代记录及未知截止章不再投影为当前死亡', () => {
+    const { outlineNodes, chapters, characters, fact } = fixtures()
+    for (const validToChapterId of [null, 99999]) {
+      expect(projectCharacterLifecycles({
+        facts: [fact({ status: 'superseded', validToChapterId })],
+        characters, outlineNodes, chapters, chapterId: 25, worldGroupId: 8,
+      })).toEqual([])
+    }
+  })
+
   it('闭集解析拒绝幻觉角色、非正常活动类型和不存在的正文引文', () => {
     const catalog: LifecycleCatalogEntry[] = [{
       characterId: 7, characterName: '林飞', status: 'dead',

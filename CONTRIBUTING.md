@@ -43,23 +43,7 @@ schema、迁移、删除、导入导出、引用重映射或 blob/OPFS 变更属
 
 ## 提交前验证
 
-先跑定向测试，再至少运行：
-
-```bash
-npm run check:architecture
-npm run check:required-tables
-npm run check:ai-manual
-npx tsc --noEmit
-npm run build
-```
-
-完整交付：
-
-```bash
-npm run ci
-```
-
-涉及真实 UI/API、刷新恢复、迁移/备份或跨产品版本引用时运行 `npm run ci:e2e`。任何一步失败都不要写“CI 全绿”。
+普通 PR 按改动及其直接调用方运行非浏览器检查，在 PR 里写明命令和结果。GitHub 在试合后的代码上运行 `Changed files`。本地验证已提交的改动可运行 `node scripts/quality/check-merge-scope.mjs "$(git merge-base HEAD origin/main)"`。实际发布按发行工作流完成验收。
 
 ## Commit 与 PR
 

@@ -1,0 +1,394 @@
+{
+  "sourceBase": "bc18dc8466f2e6661b6ce9a17131981f41992844",
+  "evidence": "synthetic current-main unextracted H4 checkpoints;not actual model or author archive",
+  "base": {
+    "schemaVersion": 1,
+    "checkpointType": "storyforge-h4-verifier-checkpoint",
+    "runnerVersion": "h4-verifier-runner-v1",
+    "fixtureVersion": "h4-synthetic-zh-60-v1",
+    "runId": "h85-base-1",
+    "split": "development",
+    "codeRevision": "h85-base-test",
+    "createdAt": "1970-01-01T00:00:00.000Z",
+    "updatedAt": "1970-01-01T00:00:00.000Z",
+    "status": "completed",
+    "execution": {
+      "generator": {
+        "provider": "fixture",
+        "model": "h4-synthetic-corpus",
+        "promptVersion": "h4-synthetic-zh-60-v1"
+      },
+      "verifier": {
+        "provider": "agnes",
+        "model": "agnes-2.5-flash",
+        "promptVersion": "h4-long-consistency-judge-v7"
+      }
+    },
+    "maxAttemptsPerFixture": 2,
+    "budget": {
+      "maxModelCalls": 2,
+      "maxInputTokens": 2000000,
+      "maxOutputTokens": 200000,
+      "maxDurationMs": 3600000,
+      "maxCostUsd": 1000
+    },
+    "fixtureIds": [
+      "h4-dev-39"
+    ],
+    "fixtureSetHash": "6f9657fe4154d93788d654a5f2650984a114cf651671e7328293da862de3d72a",
+    "attempts": [
+      {
+        "fixtureId": "h4-dev-39",
+        "count": 1
+      }
+    ],
+    "completed": [
+      {
+        "fixtureId": "h4-dev-39",
+        "attempts": 1,
+        "rawJudgeOutput": "{\"schemaVersion\":1,\"issues\":[]}",
+        "artifact": {
+          "schemaVersion": 1,
+          "artifactType": "storyforge-long-consistency-eval",
+          "benchmark": {
+            "version": "storyforge-h4-evidence-v1",
+            "taxonomyVersion": "constory-bench-19-v1",
+            "judgePromptVersion": "h4-long-consistency-judge-v7"
+          },
+          "evidenceProtocol": {
+            "normalizationVersion": "chapter-text-v1",
+            "offsetUnit": "utf-16-code-unit",
+            "endOffset": "exclusive"
+          },
+          "runId": "h85-base-1:h4-dev-39",
+          "createdAt": "1970-01-01T00:00:00.000Z",
+          "codeRevision": "h85-base-test",
+          "fixture": {
+            "id": "h4-dev-39",
+            "split": "development",
+            "task": "expansion",
+            "inputHash": "406252064e6cad9b4fb812ba83ad625e53830f2a45ef4e34578dd82236f1b6c0",
+            "labelHash": "d62d195345ebc267a9f66479a52fbbd64dccf1b7838877897c8b3e8034f6e3c3"
+          },
+          "execution": {
+            "generator": {
+              "provider": "fixture",
+              "model": "h4-synthetic-corpus",
+              "promptVersion": "h4-synthetic-zh-60-v1"
+            },
+            "verifier": {
+              "provider": "agnes",
+              "model": "agnes-2.5-flash",
+              "promptVersion": "h4-long-consistency-judge-v7"
+            },
+            "modelIdentitySeparated": true,
+            "generationUsage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "durationMs": 0,
+              "costUsd": 0
+            },
+            "verifierUsage": {
+              "inputTokens": 100,
+              "outputTokens": 10,
+              "durationMs": 5,
+              "costUsd": 0.001
+            }
+          },
+          "sourceSetHash": "7676c3d72c327449efaebc45c3c9fdad15b60be3a9df62973012af388b24de6d",
+          "judgeRepair": null,
+          "judgeInputHash": "d85d6eb363d492ba04876a26da1fa75e5c6a7c0abfa5f091721cf436ce1eb1d5",
+          "judgeOutputHash": "8b80454a48dc7a582f75fbfba3092f385856095f8af428460aa547a62424cb0c",
+          "sources": [
+            {
+              "id": "narrative:h4-dev-39",
+              "kind": "narrative",
+              "contentHash": "fbffda028a47597b46cbacb978b5a5a8b9000d9a9505623ded17025c88c94083",
+              "charLength": 8363
+            }
+          ],
+          "issues": [],
+          "metrics": {
+            "issueCount": 0,
+            "hardConflictCount": 0,
+            "highSeverityHardConflictCount": 0,
+            "advisoryCount": 0,
+            "intentionalCount": 0,
+            "ambiguousCount": 0
+          },
+          "traceHashes": [
+            "db3e7b627bdf38010043bedc6e48b8fdd0183c8af76155f1023275b065b716fb"
+          ],
+          "artifactHash": "1bad90c7b9f6f63476a81718ccdfef72707f2a747188fc59ab3df1327680b8ee"
+        }
+      }
+    ],
+    "failures": [],
+    "usage": {
+      "modelCalls": 1,
+      "meteredModelCalls": 1,
+      "unmeteredModelCalls": 0,
+      "inputTokens": 100,
+      "outputTokens": 10,
+      "durationMs": 5,
+      "costUsd": 0.001
+    },
+    "checkpointHash": "4157d6e07adf76b2029758894b038c0375c46028a7a839d9b11fc1fb1a10d859"
+  },
+  "adjudication": {
+    "schemaVersion": 1,
+    "checkpointType": "storyforge-h4-subtype-adjudication-checkpoint",
+    "runnerVersion": "h4-subtype-adjudication-runner-v1",
+    "fixtureVersion": "h4-synthetic-zh-60-v1",
+    "runId": "h85-shared-codec",
+    "split": "development",
+    "codeRevision": "sfqa009",
+    "createdAt": "1970-01-01T00:00:00.000Z",
+    "updatedAt": "1970-01-01T00:00:00.000Z",
+    "status": "completed",
+    "baseCheckpointHash": "4157d6e07adf76b2029758894b038c0375c46028a7a839d9b11fc1fb1a10d859",
+    "baseCheckpoint": {
+      "schemaVersion": 1,
+      "checkpointType": "storyforge-h4-verifier-checkpoint",
+      "runnerVersion": "h4-verifier-runner-v1",
+      "fixtureVersion": "h4-synthetic-zh-60-v1",
+      "runId": "h85-base-1",
+      "split": "development",
+      "codeRevision": "h85-base-test",
+      "createdAt": "1970-01-01T00:00:00.000Z",
+      "updatedAt": "1970-01-01T00:00:00.000Z",
+      "status": "completed",
+      "execution": {
+        "generator": {
+          "provider": "fixture",
+          "model": "h4-synthetic-corpus",
+          "promptVersion": "h4-synthetic-zh-60-v1"
+        },
+        "verifier": {
+          "provider": "agnes",
+          "model": "agnes-2.5-flash",
+          "promptVersion": "h4-long-consistency-judge-v7"
+        }
+      },
+      "maxAttemptsPerFixture": 2,
+      "budget": {
+        "maxModelCalls": 2,
+        "maxInputTokens": 2000000,
+        "maxOutputTokens": 200000,
+        "maxDurationMs": 3600000,
+        "maxCostUsd": 1000
+      },
+      "fixtureIds": [
+        "h4-dev-39"
+      ],
+      "fixtureSetHash": "6f9657fe4154d93788d654a5f2650984a114cf651671e7328293da862de3d72a",
+      "attempts": [
+        {
+          "fixtureId": "h4-dev-39",
+          "count": 1
+        }
+      ],
+      "completed": [
+        {
+          "fixtureId": "h4-dev-39",
+          "attempts": 1,
+          "rawJudgeOutput": "{\"schemaVersion\":1,\"issues\":[]}",
+          "artifact": {
+            "schemaVersion": 1,
+            "artifactType": "storyforge-long-consistency-eval",
+            "benchmark": {
+              "version": "storyforge-h4-evidence-v1",
+              "taxonomyVersion": "constory-bench-19-v1",
+              "judgePromptVersion": "h4-long-consistency-judge-v7"
+            },
+            "evidenceProtocol": {
+              "normalizationVersion": "chapter-text-v1",
+              "offsetUnit": "utf-16-code-unit",
+              "endOffset": "exclusive"
+            },
+            "runId": "h85-base-1:h4-dev-39",
+            "createdAt": "1970-01-01T00:00:00.000Z",
+            "codeRevision": "h85-base-test",
+            "fixture": {
+              "id": "h4-dev-39",
+              "split": "development",
+              "task": "expansion",
+              "inputHash": "406252064e6cad9b4fb812ba83ad625e53830f2a45ef4e34578dd82236f1b6c0",
+              "labelHash": "d62d195345ebc267a9f66479a52fbbd64dccf1b7838877897c8b3e8034f6e3c3"
+            },
+            "execution": {
+              "generator": {
+                "provider": "fixture",
+                "model": "h4-synthetic-corpus",
+                "promptVersion": "h4-synthetic-zh-60-v1"
+              },
+              "verifier": {
+                "provider": "agnes",
+                "model": "agnes-2.5-flash",
+                "promptVersion": "h4-long-consistency-judge-v7"
+              },
+              "modelIdentitySeparated": true,
+              "generationUsage": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "durationMs": 0,
+                "costUsd": 0
+              },
+              "verifierUsage": {
+                "inputTokens": 100,
+                "outputTokens": 10,
+                "durationMs": 5,
+                "costUsd": 0.001
+              }
+            },
+            "sourceSetHash": "7676c3d72c327449efaebc45c3c9fdad15b60be3a9df62973012af388b24de6d",
+            "judgeRepair": null,
+            "judgeInputHash": "d85d6eb363d492ba04876a26da1fa75e5c6a7c0abfa5f091721cf436ce1eb1d5",
+            "judgeOutputHash": "8b80454a48dc7a582f75fbfba3092f385856095f8af428460aa547a62424cb0c",
+            "sources": [
+              {
+                "id": "narrative:h4-dev-39",
+                "kind": "narrative",
+                "contentHash": "fbffda028a47597b46cbacb978b5a5a8b9000d9a9505623ded17025c88c94083",
+                "charLength": 8363
+              }
+            ],
+            "issues": [],
+            "metrics": {
+              "issueCount": 0,
+              "hardConflictCount": 0,
+              "highSeverityHardConflictCount": 0,
+              "advisoryCount": 0,
+              "intentionalCount": 0,
+              "ambiguousCount": 0
+            },
+            "traceHashes": [
+              "db3e7b627bdf38010043bedc6e48b8fdd0183c8af76155f1023275b065b716fb"
+            ],
+            "artifactHash": "1bad90c7b9f6f63476a81718ccdfef72707f2a747188fc59ab3df1327680b8ee"
+          }
+        }
+      ],
+      "failures": [],
+      "usage": {
+        "modelCalls": 1,
+        "meteredModelCalls": 1,
+        "unmeteredModelCalls": 0,
+        "inputTokens": 100,
+        "outputTokens": 10,
+        "durationMs": 5,
+        "costUsd": 0.001
+      },
+      "checkpointHash": "4157d6e07adf76b2029758894b038c0375c46028a7a839d9b11fc1fb1a10d859"
+    },
+    "execution": {
+      "generator": {
+        "provider": "fixture",
+        "model": "h4-synthetic-corpus",
+        "promptVersion": "h4-synthetic-zh-60-v1"
+      },
+      "discoveryVerifier": {
+        "provider": "agnes",
+        "model": "agnes-2.5-flash",
+        "promptVersion": "h4-long-consistency-judge-v7"
+      },
+      "adjudicator": {
+        "provider": "agnes",
+        "model": "agnes-2.5-flash",
+        "promptVersion": "h4-long-consistency-subtype-adjudication-v1"
+      },
+      "generatorIdentitySeparated": true
+    },
+    "maxAttemptsPerFixture": 2,
+    "budget": {
+      "maxModelCalls": 4,
+      "maxInputTokens": 1000000,
+      "maxOutputTokens": 100000,
+      "maxDurationMs": 3600000,
+      "maxCostUsd": 1000
+    },
+    "fixtureIds": [
+      "h4-dev-39"
+    ],
+    "fixtureSetHash": "6f9657fe4154d93788d654a5f2650984a114cf651671e7328293da862de3d72a",
+    "attempts": [
+      {
+        "fixtureId": "h4-dev-39",
+        "count": 0
+      }
+    ],
+    "completed": [
+      {
+        "fixtureId": "h4-dev-39",
+        "attempts": 0,
+        "rawAdjudicationOutput": null,
+        "artifact": {
+          "schemaVersion": 1,
+          "artifactType": "storyforge-h4-subtype-adjudication-artifact",
+          "protocolVersion": "h4-evidence-pair-subtype-adjudication-v1",
+          "runId": "h85-shared-codec:h4-dev-39",
+          "createdAt": "1970-01-01T00:00:00.000Z",
+          "codeRevision": "sfqa009",
+          "fixture": {
+            "id": "h4-dev-39",
+            "split": "development",
+            "task": "expansion",
+            "inputHash": "406252064e6cad9b4fb812ba83ad625e53830f2a45ef4e34578dd82236f1b6c0",
+            "labelHash": "d62d195345ebc267a9f66479a52fbbd64dccf1b7838877897c8b3e8034f6e3c3"
+          },
+          "execution": {
+            "generator": {
+              "provider": "fixture",
+              "model": "h4-synthetic-corpus",
+              "promptVersion": "h4-synthetic-zh-60-v1"
+            },
+            "discoveryVerifier": {
+              "provider": "agnes",
+              "model": "agnes-2.5-flash",
+              "promptVersion": "h4-long-consistency-judge-v7"
+            },
+            "adjudicator": {
+              "provider": "agnes",
+              "model": "agnes-2.5-flash",
+              "promptVersion": "h4-long-consistency-subtype-adjudication-v1"
+            },
+            "generatorIdentitySeparated": true
+          },
+          "source": {
+            "checkpointHash": "4157d6e07adf76b2029758894b038c0375c46028a7a839d9b11fc1fb1a10d859",
+            "artifactHash": "1bad90c7b9f6f63476a81718ccdfef72707f2a747188fc59ab3df1327680b8ee",
+            "judgeInputHash": "d85d6eb363d492ba04876a26da1fa75e5c6a7c0abfa5f091721cf436ce1eb1d5",
+            "judgeOutputHash": "8b80454a48dc7a582f75fbfba3092f385856095f8af428460aa547a62424cb0c",
+            "traceHashes": [
+              "db3e7b627bdf38010043bedc6e48b8fdd0183c8af76155f1023275b065b716fb"
+            ],
+            "verifierUsage": {
+              "inputTokens": 100,
+              "outputTokens": 10,
+              "durationMs": 5,
+              "costUsd": 0.001
+            }
+          },
+          "sourceSetHash": "7676c3d72c327449efaebc45c3c9fdad15b60be3a9df62973012af388b24de6d",
+          "candidateSetHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "call": null,
+          "decisions": [],
+          "derivedIssueSetHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "artifactHash": "066bed062db532ac4dc08e31b1dc4cd7898546fbbe94c31d2300d0d58a96eefc"
+        }
+      }
+    ],
+    "failures": [],
+    "calls": [],
+    "usage": {
+      "modelCalls": 0,
+      "meteredModelCalls": 0,
+      "unmeteredModelCalls": 0,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "durationMs": 0,
+      "costUsd": 0
+    },
+    "checkpointHash": "552be6d1bd8c43526cec85ace324cc1b8bb5d23f6782f0cb4b40da40200e566d"
+  }
+}

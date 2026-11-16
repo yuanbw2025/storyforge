@@ -1,3 +1,4 @@
+import { evaluateCurrentProductEntryV1 } from '../../lib/product/product-catalog'
 import {useEffect, useRef, useState} from 'react'
 import type {WorkspaceScope} from '../../lib/types'
 import {useAIConfigStore} from '../../stores/ai-config'
@@ -16,6 +17,7 @@ import type {ChatAuthoringDraftV1, ChatAuthoringSettingsV3} from '../../lib/char
 const pending = (view: ChatSourceUnitsRunViewV1 | ChatSourceUnitsReviewRunViewV1 | null) => view?.status === 'unknown' || view?.status === 'pending'
 export default function SourceUnits(props: {scope: WorkspaceScope; revision: number; projection: ChatSourceProjectionDraftV1; selectedKeys: string[]; disabled: boolean;
   draft: ChatAuthoringDraftV1; settings: ChatAuthoringSettingsV3; onConfirmed: () => void}) {
+  const catalogAllowsAuthoring = evaluateCurrentProductEntryV1('upper.character-interaction').enterable
   const config = useAIConfigStore(state => state.config)
   const [generation, setGeneration] = useState<ChatSourceUnitsRunViewV1 | null>(null)
   const [review, setReview] = useState<ChatSourceUnitsReviewRunViewV1 | null>(null)
@@ -69,11 +71,11 @@ export default function SourceUnits(props: {scope: WorkspaceScope; revision: num
     <p>把位置、经手者、用途等整理为可分别验证的事实。完整原文始终保留；未来安排、初始未知和其他限制须单独列出。</p>
     <p>候选不会自动进入聊天。须在下方设置逐项知情范围，复核并明确确认后才用于新制作。编辑后须重新复核；未提交复核的手工修改刷新后会丢失。</p>
     <div className="flex flex-wrap gap-2">
-      <button type="button" className="lf-action" disabled={disabled || !selected || pending(generation) || pending(review) || !isAIConfigReady(config)} onClick={() => void act(async ticket => {
+      <button type="button" className="lf-action" disabled={(disabled || !selected || pending(generation) || pending(review) || !isAIConfigReady(config)) || !catalogAllowsAuthoring} onClick={() => void act(async ticket => {
         const selectedSource = request(), view = await generateChatSourceUnitsV1({scope: props.scope, request: selectedSource, config})
         if (ticket === epoch.value && view.result?.candidate) {setCandidate(view.result.candidate); setRetainedContext(view.context); setSource(selectedSource)}
       })}>整理所选原文的事实</button>
-      <button type="button" className="lf-action" disabled={disabled || !selected || pending(generation) || pending(review)} onClick={() => {
+      <button type="button" className="lf-action" disabled={(disabled || !selected || pending(generation) || pending(review)) || !catalogAllowsAuthoring} onClick={() => {
         const selectedSource = request(); setSource(selectedSource); setCandidate({fragments: selectedSource.fragmentKeys.map(fragmentKey => ({fragmentKey, facts: [], constraints: []}))})
       }}>手动整理所选原文</button>
     </div>
@@ -110,15 +112,15 @@ export default function SourceUnits(props: {scope: WorkspaceScope; revision: num
           <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs">{original ? JSON.stringify(JSON.parse(original.valueJson), null, 2) : '来源已变化，请查看历史运行记录。'}</pre>
           {(['facts', 'constraints'] as const).map(kind => <fieldset key={kind} className="space-y-2"><legend>{kind === 'facts' ? '可分别验证的事实' : '必须保留的限制'}</legend>
             {fragment[kind].map((item, index) => <div key={item.key} className="space-y-1 border-l-2 border-border pl-2">
-              <label className="block">{kind === 'facts' ? '事实' : '限制'} {index + 1}<textarea aria-label={`${kind === 'facts' ? '事实' : '限制'} ${index + 1}`} className="w-full" disabled={disabled || stale} maxLength={600} value={item.text}
+              <label className="block">{kind === 'facts' ? '事实' : '限制'} {index + 1}<textarea aria-label={`${kind === 'facts' ? '事实' : '限制'} ${index + 1}`} className="w-full" disabled={(disabled || stale) || !catalogAllowsAuthoring} maxLength={600} value={item.text}
                 onChange={event => change(fragment.fragmentKey, kind, fragment[kind].map(row => row.key === item.key ? {...row, text: event.target.value} : row))}/></label>
-              {item.quotes.map((quote, quoteIndex) => <label key={quoteIndex} className="block text-xs">原文引用 {quoteIndex + 1}<textarea className="w-full" disabled={disabled || stale} maxLength={800} value={quote}
+              {item.quotes.map((quote, quoteIndex) => <label key={quoteIndex} className="block text-xs">原文引用 {quoteIndex + 1}<textarea className="w-full" disabled={(disabled || stale) || !catalogAllowsAuthoring} maxLength={800} value={quote}
                 onChange={event => change(fragment.fragmentKey, kind, fragment[kind].map(row => row.key === item.key ? {...row, quotes: row.quotes.map((value, i) => i === quoteIndex ? event.target.value : value)} : row))}/>
-                <button type="button" disabled={disabled || stale || item.quotes.length <= 1} onClick={() => change(fragment.fragmentKey, kind, fragment[kind].map(row => row.key === item.key ? {...row, quotes: row.quotes.filter((_, i) => i !== quoteIndex)} : row))}>删除引用 {quoteIndex + 1}</button></label>)}
-              <button type="button" disabled={disabled || stale || item.quotes.length >= 4} onClick={() => change(fragment.fragmentKey, kind, fragment[kind].map(row => row.key === item.key ? {...row, quotes: [...row.quotes, '']} : row))}>添加原文引用</button>
-              <button type="button" disabled={disabled || stale} onClick={() => change(fragment.fragmentKey, kind, fragment[kind].filter(row => row.key !== item.key))}>删除此{kind === 'facts' ? '事实' : '限制'}</button>
+                <button type="button" disabled={(disabled || stale || item.quotes.length <= 1) || !catalogAllowsAuthoring} onClick={() => change(fragment.fragmentKey, kind, fragment[kind].map(row => row.key === item.key ? {...row, quotes: row.quotes.filter((_, i) => i !== quoteIndex)} : row))}>删除引用 {quoteIndex + 1}</button></label>)}
+              <button type="button" disabled={(disabled || stale || item.quotes.length >= 4) || !catalogAllowsAuthoring} onClick={() => change(fragment.fragmentKey, kind, fragment[kind].map(row => row.key === item.key ? {...row, quotes: [...row.quotes, '']} : row))}>添加原文引用</button>
+              <button type="button" disabled={(disabled || stale) || !catalogAllowsAuthoring} onClick={() => change(fragment.fragmentKey, kind, fragment[kind].filter(row => row.key !== item.key))}>删除此{kind === 'facts' ? '事实' : '限制'}</button>
             </div>)}
-            <button type="button" className="lf-action" disabled={disabled || stale || fragment[kind].length >= 16} onClick={() => {
+            <button type="button" className="lf-action" disabled={(disabled || stale || fragment[kind].length >= 16) || !catalogAllowsAuthoring} onClick={() => {
               const keys = new Set([...fragment.facts, ...fragment.constraints].map(row => row.key)); let n = 1
               while (keys.has(`${kind}-${n}`)) n++
               change(fragment.fragmentKey, kind, [...fragment[kind], {key: `${kind}-${n}`, text: '', quotes: ['']}])
@@ -126,7 +128,7 @@ export default function SourceUnits(props: {scope: WorkspaceScope; revision: num
           </fieldset>)}
         </article>
       })}
-      <button type="button" className="lf-action" disabled={disabled || stale || pending(review) || pending(generation) || !isAIConfigReady(config)} onClick={() => void act(() => reviewChatSourceUnitsV1({scope: props.scope, request: {source: source!, candidate}, config}))}>独立复核当前候选</button>
+      <button type="button" className="lf-action" disabled={(disabled || stale || pending(review) || pending(generation) || !isAIConfigReady(config)) || !catalogAllowsAuthoring} onClick={() => void act(() => reviewChatSourceUnitsV1({scope: props.scope, request: {source: source!, candidate}, config}))}>独立复核当前候选</button>
       <p role="status">{matchesReview ? review.result?.passed ? '当前候选已获独立复核通过，尚未确认用于制作。' : '当前候选未通过独立复核，请按原因修改。'
         : stale ? '这是历史候选；请按当前所选原文重新整理。' : '当前候选没有匹配的有效复核结果。'}</p>
     </div>}

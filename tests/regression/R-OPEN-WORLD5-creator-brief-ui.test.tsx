@@ -17,6 +17,7 @@ const creatorBriefMocks = vi.hoisted(() => ({
   save: vi.fn(),
   consult: vi.fn(),
   confirm: vi.fn(),
+  roleChoices: vi.fn(),
 }))
 
 vi.mock('../../src/lib/open-world/creator-brief', async importOriginal => {
@@ -31,6 +32,11 @@ vi.mock('../../src/lib/open-world/creator-brief', async importOriginal => {
     confirmTextOpenWorldCreatorBriefV1: creatorBriefMocks.confirm,
   }
 })
+
+vi.mock('../../src/lib/open-world/creator-source', async importOriginal => ({
+  ...await importOriginal<typeof import('../../src/lib/open-world/creator-source')>(),
+  listTextOpenWorldCreatorProtagonistChoicesV1: creatorBriefMocks.roleChoices,
+}))
 
 vi.mock('../../src/components/text-game/TextOpenWorldCreatorStudio', async () => {
   const { createElement: element } = await import('react')
@@ -50,14 +56,14 @@ import TextOpenWorldCreatorBriefStudio from '../../src/components/text-game/Text
 import TextOpenWorldCreatorWorkflow from '../../src/components/text-game/TextOpenWorldCreatorWorkflow'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true)
 
 const SCOPE: WorkspaceScope = { projectId: 51, worldId: 52, workId: 53 }
 const SOURCE_VERSION_HASH = 'a'.repeat(64)
 const SOURCE_BOUNDARY_HASH = 'b'.repeat(64)
 const SOURCE_BINDING_HASH = 'c'.repeat(64)
 
-function sourceSelection(): TextOpenWorldCreatorSourceSelectionV1 {
+function legacySourceSelection(): Extract<TextOpenWorldCreatorSourceSelectionV1, { sourceKind: 'novel' }> {
   return {
     sourceKind: 'novel',
     sourceScope: SCOPE,
@@ -86,6 +92,22 @@ function sourceSelection(): TextOpenWorldCreatorSourceSelectionV1 {
       sourceUnitCount: 12,
       readiness: 'ready',
       gaps: [],
+    },
+  }
+}
+
+function sourceSelection(): Extract<TextOpenWorldCreatorSourceSelectionV1, { sourceKind: 'world-release' }> {
+  return {
+    sourceKind: 'world-release', sourceScope: SCOPE, localReleaseRecordId: 71, expectedReleaseHash: SOURCE_VERSION_HASH,
+    preview: {
+      schema: 'storyforge.text-open-world-creator-world-source-candidate', version: 1, sourceKind: 'world-release',
+      worldReference: { schema: 'storyforge.world-reference', version: 1, worldCode: 'world.river-lantern',
+        releaseUid: 'release.river-lantern.v1', releaseVersion: 1, releaseHash: SOURCE_VERSION_HASH, localReleaseRecordId: 71,
+        manifestIdentity: { schema: 'storyforge.world-release', version: 3, semanticContract: 3, schemaHash: 'd'.repeat(64) },
+        capabilityIdentity: { catalogHash: 'e'.repeat(64), profileHash: 'f'.repeat(64) }, referenceHash: SOURCE_BINDING_HASH },
+      label: '河灯长夜 · 封存世界 v1', worldName: '河灯长夜', workTitle: '河灯长夜', releasedAt: 1_788_000_000_000,
+      capabilities: [], resourceCounts: { totalResources: 12, totalRows: 42, byArea: [], byKind: [] },
+      requirements: [], readiness: 'ready', gaps: [],
     },
   }
 }
@@ -169,7 +191,7 @@ function consultationSession(overrides: Partial<TextOpenWorldCreatorBriefSession
       currentBriefRevision: null,
       currentBuildNumber: null,
       currentProductReleaseId: null,
-      creatorSourceKind: 'novel',
+      creatorSourceKind: 'world-release',
       creatorSourceWorkId: SCOPE.workId,
       creatorSourceSelectionMode: 'entire-work',
       creatorSourceVersionHash: SOURCE_VERSION_HASH,
@@ -183,20 +205,15 @@ function consultationSession(overrides: Partial<TextOpenWorldCreatorBriefSession
     productInstanceKey: 'text-open-world.primary.test-source',
     selection: sourceSelection(),
     sourceBinding: {
-      kind: 'novel',
-      workCode: 'work.river-lantern',
-      sourceVersionHash: SOURCE_VERSION_HASH,
-      sourceBoundaryHash: SOURCE_BOUNDARY_HASH,
-      coverage: 'full-text',
-      selectionMode: 'entire-work',
-      selectedChapterCount: 8,
-      selectedOutlineCount: 3,
+      kind: 'world-release', worldCode: 'world.river-lantern', releaseUid: 'release.river-lantern.v1', releaseVersion: 1,
+      releaseHash: SOURCE_VERSION_HASH, referenceHash: SOURCE_BINDING_HASH, manifestSchemaHash: 'd'.repeat(64),
+      capabilityCatalogHash: 'e'.repeat(64), capabilityProfileHash: 'f'.repeat(64),
     },
     sourceBindingHash: SOURCE_BINDING_HASH,
     sourceSummary: {
-      label: '河灯长夜 · 整部小说',
-      sourceKind: 'novel',
-      coverage: 'full-text',
+      label: '河灯长夜 · 封存世界 v1',
+      sourceKind: 'world-release',
+      coverage: 'world-release-catalog',
       resourceCount: 12,
       rowOrWordCount: 42_000,
       capabilityAreas: ['story', 'characters'],
@@ -353,11 +370,60 @@ describe('TOW-G5-02 · Creator Brief UI', () => {
     host.remove()
   })
 
+  it('096 要求作者选定封存角色，并在切回原创时清除角色引用', async () => {
+    const roleKey = 'world-release:character:river-lantern-keeper'
+    creatorBriefMocks.roleChoices.mockResolvedValue([{ resourceKey: roleKey, label: '守灯人' }])
+    const session = consultationSession()
+    session.draft.unresolvedQuestions = []
+    await act(async () => root.render(createElement(TextOpenWorldCreatorBriefStudio, { initialSession: session, onBack: vi.fn() })))
+    const changeSelect = async (id: string, value: string) => act(async () => {
+      const element = host.querySelector<HTMLSelectElement>(id)!
+      element.value = value
+      element.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await changeSelect('#tow-protagonist-mode', 'source-character')
+    for (const label of ['我确认当前来源身份与 Hash', '我理解首版是有边界的自由演绎',
+      '我确认未决问题已经清空', '我理解通过质量门后直接发布'])
+      await act(async () => checkbox(host, label).click())
+    const confirm = button(host, '确认 Brief')
+    expect(confirm.disabled).toBe(true)
+    await waitFor(() => expect(host.querySelector<HTMLSelectElement>('#tow-protagonist-resource')?.options[1]?.text).toBe('守灯人'))
+    await changeSelect('#tow-protagonist-resource', roleKey)
+    expect(confirm.disabled).toBe(false)
+    await act(async () => button(host, '保存草稿').click())
+    await waitFor(() => expect(creatorBriefMocks.save).toHaveBeenCalledWith(expect.objectContaining({
+      draft: expect.objectContaining({ protagonistMode: 'source-character', protagonistSourceResourceKey: roleKey }),
+    })))
+    await changeSelect('#tow-protagonist-mode', 'author-defined')
+    await act(async () => confirm.click())
+    await waitFor(() => expect(creatorBriefMocks.confirm).toHaveBeenCalled())
+    expect(creatorBriefMocks.confirm.mock.calls[0]?.[0].draft).toMatchObject({ protagonistMode: 'author-defined' })
+    expect(creatorBriefMocks.confirm.mock.calls[0]?.[0].draft).not.toHaveProperty('protagonistSourceResourceKey')
+  })
+
+  it('005 恢复历史小说会谈只显示原草稿，不重新会谈、保存、确认或进入制作核对', async () => {
+    const legacy = consultationSession()
+    legacy.selection = legacySourceSelection()
+    legacy.sourceBinding = { kind: 'novel', workCode: 'work.river-lantern', sourceVersionHash: SOURCE_VERSION_HASH,
+      sourceBoundaryHash: SOURCE_BOUNDARY_HASH, coverage: 'full-text', selectionMode: 'entire-work',
+      selectedChapterCount: 8, selectedOutlineCount: 3 }
+    legacy.production.creatorSourceKind = 'novel'
+    legacy.sourceSummary = { ...legacy.sourceSummary, sourceKind: 'novel', coverage: 'full-text' }
+    creatorBriefMocks.recover.mockResolvedValue(legacy)
+    await act(async () => root.render(createElement(TextOpenWorldCreatorWorkflow, { novelScope: SCOPE,
+      initialSourceKind: 'novel', initialView: 'readiness' })))
+    await waitFor(() => expect(host.querySelector('[data-testid="text-open-world-legacy-novel-brief-readonly"]')).toBeTruthy())
+    expect(host.textContent).toContain(legacy.draft.gameTitle)
+    for (const method of [creatorBriefMocks.start, creatorBriefMocks.save, creatorBriefMocks.consult, creatorBriefMocks.confirm]) {
+      expect(method).not.toHaveBeenCalled()
+    }
+    expect(host.querySelector('[data-testid="text-open-world-creator-production-readiness"]')).toBeNull()
+  })
+
   it('从已核验来源进入会谈，支持编辑保存，并在无 AI 时通过全部人工门禁确认到 brief-ready', async () => {
     await act(async () => root.render(createElement(TextOpenWorldCreatorWorkflow, {
       worldScope: SCOPE,
-      novelScope: SCOPE,
-      initialSourceKind: 'novel',
+      initialSourceKind: 'world-release',
     })))
     await waitFor(() => expect(host.querySelector('[data-testid="mock-creator-source-studio"]')).not.toBeNull())
 
@@ -368,7 +434,7 @@ describe('TOW-G5-02 · Creator Brief UI', () => {
       selection: sourceSelection(),
       sessionKey: 'primary',
     })
-    expect(host.textContent).toContain('河灯长夜 · 整部小说')
+    expect(host.textContent).toContain('河灯长夜 · 封存世界 v1')
     expect(host.textContent).toContain('未配置 Key，可纯人工确认')
     expect(button(host, '请求主 Agent').disabled).toBe(true)
 
@@ -476,7 +542,7 @@ describe('TOW-G5-02 · Creator Brief UI', () => {
     const recovered = consultationSession()
     recovered.production = { ...recovered.production, status: 'brief-ready', currentBuildNumber: 1 }
     creatorBriefMocks.recover.mockResolvedValue(recovered)
-    await act(async () => root.render(createElement(TextOpenWorldCreatorWorkflow, { novelScope: SCOPE })))
+    await act(async () => root.render(createElement(TextOpenWorldCreatorWorkflow, { worldScope: SCOPE })))
     await waitFor(() => expect(host.querySelector('[data-testid="text-open-world-creator-brief-studio"]')).not.toBeNull())
     expect(host.textContent).toContain('保留旧 Build #1')
   })
@@ -533,8 +599,8 @@ describe('TOW-G5-02 · Creator Brief UI', () => {
     })
 
     await act(async () => root.render(createElement(TextOpenWorldCreatorWorkflow, {
-      novelScope: SCOPE,
-      initialSourceKind: 'novel',
+      worldScope: SCOPE,
+      initialSourceKind: 'world-release',
       initialView: 'readiness',
       initialResumeTarget: exactTarget,
     })))
@@ -556,8 +622,8 @@ describe('TOW-G5-02 · Creator Brief UI', () => {
     }))
 
     await act(async () => root.render(createElement(TextOpenWorldCreatorWorkflow, {
-      novelScope: SCOPE,
-      initialSourceKind: 'novel',
+      worldScope: SCOPE,
+      initialSourceKind: 'world-release',
       initialView: 'readiness',
       initialResumeTarget: exactTarget,
     })))

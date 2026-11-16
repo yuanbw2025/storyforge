@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useCodexStore } from '../../src/stores/codex'
@@ -97,17 +98,31 @@ describe('Codex author persistence acknowledgement', () => {
   })
   it('keeps a late create acknowledgement out of the next workspace cache', async () => {
     const a = await fixture('A')
-    const add = db.codexEntries.add.bind(db.codexEntries)
+    const transaction = db.transaction.bind(db)
     let release!: () => void
-    vi.spyOn(db.codexEntries, 'add').mockImplementationOnce(async row => {
-      await new Promise<void>(resolve => { release = resolve })
-      return add(row)
-    })
+    let committed!: () => void
+    const acknowledgement = new Promise<void>(resolve => { release = resolve })
+    const committedWrite = new Promise<void>(resolve => { committed = resolve })
+    // Delay only the caller acknowledgement after the real native RW has
+    // committed. Holding table.add across another workspace transaction would
+    // expire IndexedDB's transaction instead of modelling a late acknowledgement.
+    vi.spyOn(db, 'transaction').mockImplementationOnce((...args) => transaction(...args).then(result => {
+      committed()
+      return acknowledgement.then(() => result)
+    }))
     const pending = useCodexStore.getState().addEntry({ projectId: a.scope.projectId, categoryId: a.categoryId, name: '迟到的新词条', summary: '', description: '', fields: '{}', refs: '{}', order: 1 })
-    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    await committedWrite
+    const created = await db.codexEntries.where('projectId').equals(a.scope.projectId)
+      .filter(row => row.name === '迟到的新词条').first()
+    if (!created?.id) throw new Error('A 的新增词条应在确认返回前已实际提交')
+    expect(created).toMatchObject({ projectId: a.scope.projectId, worldId: a.scope.worldId, categoryId: a.categoryId })
     const b = await fixture('B')
+    expect(useCodexStore.getState().loadedScope).toEqual(b.scope)
+    expect(useCodexStore.getState().entries.map(row => row.id)).toEqual([b.id])
+    expect(await db.codexEntries.get(created.id)).toEqual(created)
     release(); const id = await pending
-    expect((await db.codexEntries.get(id))!.projectId).toBe(a.scope.projectId)
+    expect(id).toBe(created.id)
+    expect(await db.codexEntries.get(id)).toEqual(created)
     expect(useCodexStore.getState().entries.map(row => row.id)).toEqual([b.id])
   })
   it('keeps a read failure visible with the last canonical data, then clears it on retry', async () => {
@@ -122,10 +137,8 @@ describe('Codex author persistence acknowledgement', () => {
     const a = await fixture('A'), b = await fixture('B')
     const get = db.projects.get.bind(db.projects)
     let release!: () => void
-    vi.spyOn(db.projects, 'get').mockImplementationOnce(async key => {
-      await new Promise<void>(resolve => { release = resolve })
-      return get(key)
-    })
+    const delayedRead = new Dexie.Promise<void>(resolve => { release = resolve })
+    vi.spyOn(db.projects, 'get').mockImplementationOnce(key => delayedRead.then(() => get(key)))
     const old = useCodexStore.getState().loadAll(a.scope)
     await useCodexStore.getState().loadAll(b.scope)
     release(); await old

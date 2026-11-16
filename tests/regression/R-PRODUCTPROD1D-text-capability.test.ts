@@ -148,7 +148,8 @@ describe('R-PRODUCTPROD-1D · reuse existing text provider configuration', () =>
     const resolved = await resolveConfiguredTextCapabilityV1({
       projectId: 1, category: 'product-production.content', requirementKey: 'text.runtime-package',
     }, { resolveConfig: () => configured, now: () => 100 })
-    expect(resolved.config).toBe(configured)
+    expect(resolved.config).not.toBe(configured)
+    expect(resolved.config).toEqual(configured)
     expect(resolved.receipt).toMatchObject({
       provider: 'agnes', model: 'agnes-2.0-flash', endpointOrigin: 'https://apihub.agnes-ai.com',
       credentialSource: 'existing-ai-config', credentialPresent: true, boundAt: 100,

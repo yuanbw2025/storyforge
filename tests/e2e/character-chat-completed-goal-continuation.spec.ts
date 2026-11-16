@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {expect, test, type Page} from '@playwright/test'
 import {chatActionResponseFixture} from './helpers/character-chat-choice'
 import {openChatNarrativeTools} from './helpers/character-chat-ui'
@@ -10,9 +11,8 @@ const close = {kind: 'complete', text: '铜印还没找到。我先前只是猜�
 async function setup(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://goal-continuation.invalid/v1', model: 'test', maxTokens: 8000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://goal-continuation.invalid/v1', model: 'test', maxTokens: 8000, apiKey: 'isolated-test-key' })
   const calls: string[] = []
   await page.route('https://goal-continuation.invalid/**', async route => {
     const messages = route.request().postDataJSON().messages, text = JSON.stringify(messages)
@@ -26,7 +26,7 @@ async function setup(page: Page) {
     const content = chatActionResponseFixture(route, output)
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async action => {
     const load = new Function('p', 'return import(p)')
     const fixture = await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')
@@ -42,7 +42,7 @@ async function setup(page: Page) {
     await harness.adoptInteractionRuntimeCandidateV1({scope: seeded.scope, runId: saved.snapshot.run.id})
     return seeded
   }, hold)
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   await openChatNarrativeTools(page)
   const read = () => page.evaluate(async id => {
@@ -73,7 +73,7 @@ for (const width of [390, 1440]) test(`closing the active goal leaves an old pau
   expect(after.runs).toHaveLength(before.runs.length + 1)
   expect(calls).toEqual(['choice', 'expression', 'review'])
   expect(after.state.interaction.remainingDirectorBudget).toBe(before.state.interaction.remainingDirectorBudget - 3)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText(close.text, {exact: true})).toBeVisible()
   await expect(page.getByTestId('chat-turn-resume')).toHaveCount(0)
   await expect(page.getByRole('button', {name: '让角色继续', exact: true})).toBeEnabled()

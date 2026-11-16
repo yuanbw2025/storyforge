@@ -1,11 +1,13 @@
 import { db } from '../../src/lib/db/schema'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import { classifyTextOpenWorldRuntimePackageShapeV1 } from '../../src/lib/product/releases'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { createTextOpenWorldInstance } from '../../src/lib/product/runtime-instances'
 import type {
   ProductProductionBriefV3,
   ProductRelease,
   ProductRuntimePackageV1,
+  PlayableTextOpenWorldProductRuntimePackageV1,
   ProductRuntimeSession,
   TextOpenWorldRuntimePackageV1,
   TextOpenWorldSessionProjectionV1,
@@ -101,12 +103,21 @@ function brief(sourceHash: string): ProductProductionBriefV3 {
   }
 }
 
+/** Validate the same package identity and complete module shape as the player
+ * reader. These are runtime packages, not outer ProductRelease manifests. */
+function parsePlayableFixture(value: unknown): PlayableTextOpenWorldProductRuntimePackageV1 {
+  const parsed = parseProductRuntimePackageV1(value)
+  if (parsed.productType !== 'text-open-world') throw new Error('Expected a text-open-world fixture')
+  classifyTextOpenWorldRuntimePackageShapeV1(parsed)
+  return parsed as PlayableTextOpenWorldProductRuntimePackageV1
+}
+
 export function createTextOpenWorldProductRuntimePackageFixtureV1(
   textOpenWorldVNext: TextOpenWorldRuntimePackageV1,
-): ProductRuntimePackageV1 {
+): PlayableTextOpenWorldProductRuntimePackageV1 {
   const currentBrief = brief(textOpenWorldVNext.sourceManifest.contentHash)
   const frozenNarrative = narrative()
-  return parseProductRuntimePackageV1({
+  return parsePlayableFixture({
     schema: 'storyforge.product-runtime-package', version: 1, productType: 'text-open-world',
     definition: {
       productKey: textOpenWorldVNext.metadata.packageKey,
@@ -127,27 +138,27 @@ export function createTextOpenWorldProductRuntimePackageFixtureV1(
 
 export function createTextOpenWorldVNextOnlyProductRuntimePackageFixtureV1(
   textOpenWorldVNext: TextOpenWorldRuntimePackageV1,
-): ProductRuntimePackageV1 {
+): PlayableTextOpenWorldProductRuntimePackageV1 {
   return createTextOpenWorldProductRuntimePackageFixtureV1(textOpenWorldVNext)
 }
 
 /** Frozen historical package used only to prove old immutable Releases remain playable. */
 export function createLegacyTextOpenWorldProductRuntimePackageFixtureV1(
   sourceContentHash = 'a'.repeat(64),
-): ProductRuntimePackageV1 {
+): PlayableTextOpenWorldProductRuntimePackageV1 {
   const legacy = structuredClone(legacyRuntimePackageV1) as unknown as ProductRuntimePackageV1
   legacy.sourceWorld.contentHash = sourceContentHash
-  return parseProductRuntimePackageV1(legacy)
+  return parsePlayableFixture(legacy)
 }
 
 /** Historical transition shape; compatibility readers may consume it but production must never emit it. */
 export function createHybridTextOpenWorldProductRuntimePackageFixtureV1(
   textOpenWorldVNext: TextOpenWorldRuntimePackageV1,
-): ProductRuntimePackageV1 {
+): PlayableTextOpenWorldProductRuntimePackageV1 {
   const legacy = createLegacyTextOpenWorldProductRuntimePackageFixtureV1(
     textOpenWorldVNext.sourceManifest.contentHash,
   )
-  return parseProductRuntimePackageV1({
+  return parsePlayableFixture({
     ...legacy,
     definition: {
       ...legacy.definition,

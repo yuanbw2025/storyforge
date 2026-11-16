@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {expect, test} from '@playwright/test'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {chatInquiryReviewFixture} from '../helpers/chat-inquiry-output'
@@ -12,9 +13,8 @@ for (const {width, rejectSecond} of [{width: 390, rejectSecond: false}, {width: 
     await page.setViewportSize({width, height: 900})
     await page.addInitScript(() => {
       localStorage.setItem('storyforge_guide_completed', 'isolated-inquiry-settlement')
-      localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://inquiry-settlement.invalid/v1', model: 'test', maxTokens: 6000}))
-      sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-fixture-key')
     })
+    registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://inquiry-settlement.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-fixture-key' })
     let sessionId = 0, actionCount = 0, answerCount = 0, totalCalls = 0, proposal: ChatSituationDraftV1
     const calls: string[] = []
     const read = () => page.evaluate(async id => {
@@ -58,10 +58,10 @@ for (const {width, rejectSecond} of [{width: 390, rejectSecond: false}, {width: 
       }
       await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})})
     })
-    await page.goto('./chat/library')
+    await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
     const f = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({inquiryResults: true, maxActionsPerTrigger: 2})})
     sessionId = f.sessionId
-    await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${sessionId}`)
+    await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${sessionId}`)
     await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
     const before = await read()
     await page.getByRole('button', {name: '让角色开场', exact: true}).click()
@@ -79,7 +79,7 @@ for (const {width, rejectSecond} of [{width: 390, rejectSecond: false}, {width: 
     else {expect(story.pendingSituation).toBeUndefined(); expect(story.triggers.at(-1).status).toBe('complete')}
     expect(calls).toEqual(['action', 'action-review', 'construction', 'situation-review', 'action', 'action-review', 'construction', 'situation-review'])
     expect(totalCalls).toBe(10)
-    await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
+    await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
     expect((await read()).state).toEqual(after.state); expect(totalCalls).toBe(10)
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1)
   })

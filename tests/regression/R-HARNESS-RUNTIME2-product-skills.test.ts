@@ -47,7 +47,6 @@ import { useTextOpenWorldPlayerStore } from '../../src/stores/text-open-world-pl
 
 interface RuntimeFixture {
   scope: WorkspaceScope
-  release: WorldRelease & { id: number }
   session: ProductRuntimeSession & { id: number }
   runtimePackage: ProductRuntimePackageV1
 }
@@ -76,7 +75,6 @@ async function runtimeFixture(
   })
   return {
     scope: world.scope,
-    release,
     session: created.session as ProductRuntimeSession & { id: number },
     runtimePackage,
   }
@@ -90,7 +88,6 @@ async function legacyOpenWorldReleaseFixture(title: string): Promise<RuntimeFixt
   })
   return {
     scope: created.scope,
-    release: created.worldRelease as WorldRelease & { id: number },
     session: created.session as ProductRuntimeSession & { id: number },
     runtimePackage: created.runtimePackage,
   }

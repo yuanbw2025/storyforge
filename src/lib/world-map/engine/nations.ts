@@ -203,7 +203,7 @@ export function generateStates(
 /** Dijkstra 领土扩张 */
 function expandStates(cells: GridCells, states: State[], burgs: Burg[]): void {
   const n = cells.length
-  const cost = new Float32Array(n).fill(Infinity)
+  const cost = new Float64Array(n).fill(Infinity)
 
   // 优先队列（简单实现）
   const queue: { cell: number; state: number; cost: number }[] = []

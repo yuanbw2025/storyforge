@@ -2,6 +2,7 @@ import type { AnyProductBuildPreviewManifest, ProductBuildPreviewManifestV1, Pro
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import { parseProductRuntimePackageV1, parseProductRuntimePackageV2, productProtocolVersion, type ProductTtrpgProtocol2ReaderV1 } from './runtime-package'
 import { avgExecutableModule } from '../avg/executable-module'
+import { assertAdventureRuntimeDiceSupportV1 } from '../adventure/runtime'
 import {
   createTtrpgVerifiedContentViewV1,
   verifyTtrpgFrozenContentHashesV1,
@@ -150,10 +151,26 @@ export function createProductBuildPreviewManifestV1(
 export async function createProductBuildPreviewManifestV1(
   input: ProductBuildPreviewInputWithTtrpgV2, reader?: ProductTtrpgProtocol2ReaderV1,
 ): Promise<ProductBuildPreviewManifestWithTtrpgV2> {
+  const body = await productBuildPreviewBodyV1(input, reader)
+  if (body.runtimePackage.productType === 'text-adventure' && body.runtimePackage.adventure) {
+    assertAdventureRuntimeDiceSupportV1(body.runtimePackage.adventure)
+  }
+  const manifest = {
+    ...body,
+    previewHash: await hashProductProductionValueV2(previewHashBody(body)),
+  }
+  return reader
+    ? verifyProductBuildPreviewManifestV1(manifest, reader)
+    : parseProductBuildPreviewManifestV1(manifest)
+}
+
+async function productBuildPreviewBodyV1(
+  input: ProductBuildPreviewInputWithTtrpgV2, reader?: ProductTtrpgProtocol2ReaderV1,
+): Promise<Omit<ProductBuildPreviewManifestWithTtrpgV2, 'previewHash'>> {
   const runtimePackage = reader
     ? parseProductRuntimePackageV1(input.runtimePackage, reader)
     : parseProductRuntimePackageV1(input.runtimePackage)
-  const body: Omit<ProductBuildPreviewManifestWithTtrpgV2, 'previewHash'> = {
+  return {
     schema: 'storyforge.product-build-preview',
     version: 1,
     productionKey: input.productionKey.trim().normalize('NFC'),
@@ -166,13 +183,28 @@ export async function createProductBuildPreviewManifestV1(
     )),
     fallbackSummary: [...new Set(input.fallbackSummary ?? [])].sort(),
   }
-  const manifest = {
-    ...body,
-    previewHash: await hashProductProductionValueV2(previewHashBody(body)),
+}
+
+/** Imported proof recovery verifies the original frozen preview AND the entire
+ * independently rebuilt body. It cannot mint a new preview or change old bytes. */
+export function verifyRestoredProductBuildPreviewManifestV1(
+  value: string | unknown, input: ProductBuildPreviewInputV1,
+): Promise<ProductBuildPreviewManifestV1>
+export function verifyRestoredProductBuildPreviewManifestV1(
+  value: string | unknown, input: ProductBuildPreviewInputWithTtrpgV2, reader: ProductTtrpgProtocol2ReaderV1,
+): Promise<ProductBuildPreviewManifestWithTtrpgV2>
+export async function verifyRestoredProductBuildPreviewManifestV1(
+  value: string | unknown, input: ProductBuildPreviewInputWithTtrpgV2, reader?: ProductTtrpgProtocol2ReaderV1,
+): Promise<ProductBuildPreviewManifestWithTtrpgV2> {
+  const manifest = reader
+    ? await verifyProductBuildPreviewManifestV1(value, reader)
+    : await verifyProductBuildPreviewManifestV1(value)
+  const expected = await productBuildPreviewBodyV1(input, reader)
+  const { previewHash: _previewHash, ...body } = manifest
+  if (canonicalProductProductionJsonV2(body) !== canonicalProductProductionJsonV2(expected)) {
+    fail('导入复验与独立重建的 Preview 内容或绑定不一致')
   }
-  return reader
-    ? verifyProductBuildPreviewManifestV1(manifest, reader)
-    : parseProductBuildPreviewManifestV1(manifest)
+  return manifest
 }
 
 export function verifyProductBuildPreviewManifestV1(value: string | unknown): Promise<ProductBuildPreviewManifestV1>

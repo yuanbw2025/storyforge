@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import * as compatibilityModule from '../../src/lib/product-production/compatibility'
 import { resolveProductBuildCompatibilityPackageV1 } from '../../src/lib/product-production/compatibility-baseline'
 import { createLegacyProductBuildRootTerminalReceiptV1, createProductBuildRootTerminalReceiptV1,
@@ -4850,4 +4851,162 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
       },
     }))).toThrow('costUsd 无效')
   })
+
+  it.each(['both-paid-before-admission', 'first-already-accepted'] as const)(
+    'SFQA040045 atomic sibling accounting preserves exactly the authorized admissions: %s', async order => {
+    const together = order === 'both-paid-before-admission'
+    const owned = await fixture(`sfqa045-atomic-${order}`)
+    const cap = owned.brief.productionBudget.maximumOutputTokens
+    const siblings = new Set(['content.narrative', 'media.requirements'])
+    const base = await createProductProductionPlanV3({ brief: owned.brief,
+      briefHash: await hashProductProductionValueV2(owned.brief), buildNumber: 1 })
+    const plan = { ...base, concurrency: { ...base.concurrency, maximumCostBearingTasks: 2, maximumTextProviderTasks: 2 },
+      tasks: base.tasks.map(task => ({ ...task, budgetReservation: { ...task.budgetReservation,
+        outputTokens: task.taskKey === 'content.design' ? 10 : task.taskKey === 'content.narrative' ? Math.floor((cap - 30) / 2)
+          : task.taskKey === 'media.requirements' ? Math.ceil((cap - 30) / 2) : 0 } })) }
+    const calls = new Map<string, number>()
+    const execute = executorFor(owned, calls, { active: 0, peak: 0 })
+    let releaseSecond!: () => void
+    const firstAccepted = new Promise<void>(resolve => { releaseSecond = resolve })
+    const executor: ProductProductionTaskExecutorV1 = async request => {
+      if (!together && request.task.taskKey === 'media.requirements') await firstAccepted
+      const result = await execute(request)
+      if (siblings.has(request.task.taskKey)) result.usage.outputTokens = request.attemptBudgetReservation!.outputTokens + 20
+      return result
+    }
+    const capabilityBindings = [{ requirementKey: owned.brief.capabilityRequirements.find(row => row.mediaClass === 'text')!.requirementKey,
+      adapterId: 'configured-text-provider.v1', bindingHash: 'a'.repeat(64) }]
+    const input = { ...owned, suppliedPlan: plan, capabilityBindings, executor }
+    const first = await runProductProductionSchedulerCycleV1(input)
+    expect(calls.get('content.design')).toBe(1)
+    let release!: () => void
+    const wait = new Promise<void>(resolve => { release = resolve })
+    const arrived = new Set<string>()
+    let firstAcceptedBeforeSecond = false
+    const cycle = runProductProductionSchedulerCycleV1({ ...input, onDurableBoundary: async (point, snapshot) => {
+      const key = snapshot.contract.scope.productProduction?.taskKey
+      if (together && point === 'provider.responded' && key && siblings.has(key)) { arrived.add(key); await wait }
+      if (!together && point === 'artifact.accepted' && key === 'content.narrative') {
+        firstAcceptedBeforeSecond = true
+        releaseSecond()
+      }
+    } })
+    try {
+      await expect.poll(async () => (together ? arrived.size === 2 : firstAcceptedBeforeSecond)
+        || (await db.productBuilds.get(first.buildId))?.status === 'recovery-required').toBe(true)
+    } finally { release(); releaseSecond() }
+    const projection = await cycle
+    const build = (await db.productBuilds.get(first.buildId))!
+    const siblingOutputs = new Set(plan.tasks.filter(task => siblings.has(task.taskKey)).flatMap(task => task.outputArtifactKeys))
+    const accepted = await db.productBuildArtifacts.where('buildId').equals(build.id!)
+      .and(row => siblingOutputs.has(row.artifactKey) && row.status === 'accepted').toArray()
+    expect(accepted.map(row => row.artifactKey)).toEqual(together ? []
+      : plan.tasks.find(task => task.taskKey === 'content.narrative')!.outputArtifactKeys)
+    expect(firstAcceptedBeforeSecond).toBe(!together)
+    expect(projection.buildStatus).toBe('recovery-required')
+    expect(build.failureJson).toContain('Build lifetime budget 不足:outputTokens=')
+    expect([...siblings].map(key => calls.get(key))).toEqual([1, 1])
+    const measured = JSON.parse(build.budgetLedgerJson).attempts.filter((attempt: { taskKey: string }) => siblings.has(attempt.taskKey))
+    expect(measured).toHaveLength(2)
+    expect(measured.every((attempt: { usageKnown: boolean }) => attempt.usageKnown)).toBe(true)
+    expect(projection.budget.usage.outputTokens).toBe(cap + 20)
+  }, 30_000)
+
+  it('SFQA040045 atomic root seal rolls back a stale ledger race and finishes on reopen without dispatch', async () => {
+    const owned = await fixture('sfqa040-atomic-root-seal', { retryModelCallHeadroom: 4 })
+    const base = await createProductProductionPlanV3({ brief: owned.brief,
+      briefHash: await hashProductProductionValueV2(owned.brief), buildNumber: 1 })
+    const plan = { ...base, concurrency: { ...base.concurrency, maximumCostBearingTasks: 2, maximumTextProviderTasks: 2 } }
+    const calls = new Map<string, number>()
+    const success = executorFor(owned, calls, { active: 0, peak: 0 })
+    const capabilityBindings = [{ requirementKey: owned.brief.capabilityRequirements.find(row => row.mediaClass === 'text')!.requirementKey,
+      adapterId: 'configured-text-provider.v1', bindingHash: 'a'.repeat(64) }]
+    let late: Parameters<ProductProductionTaskExecutorV1>[0] | undefined
+    let releaseLate!: () => void
+    const wait = new Promise<void>(resolve => { releaseLate = resolve })
+    const oldExecutor: ProductProductionTaskExecutorV1 = async request => {
+      if (request.task.taskKey === 'content.narrative') { late = request; await wait }
+      const result = await success(request)
+      if (request.task.taskKey === 'media.requirements') {
+        await expect.poll(() => late != null).toBe(true)
+        throw new ProductProductionDraftRejectedErrorV1('isolated original sibling blocker', result.usage)
+      }
+      return result
+    }
+    const before = await runProductProductionSchedulerCycleV1({ ...owned, suppliedPlan: plan, capabilityBindings, executor: oldExecutor })
+    const oldCycle = runProductProductionSchedulerCycleV1({ ...owned, suppliedPlan: plan, capabilityBindings, executor: oldExecutor })
+    const input = { ...owned, capabilityBindings, executor: success }
+    let raceApplied = false
+    try {
+      await expect.poll(async () => (await db.productBuilds.get(before.buildId))?.status).toBe('recovery-required')
+      const production = (await db.productProductions.get(owned.productionId))!
+      await expect(executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+        command: { type: 'resolve-blocker', commandId: 'sfqa040.atomic-root-retry', expectedStateRevision: production.stateRevision,
+          blockerKey: 'media.requirements', resolution: { action: 'retry', note: 'isolated explicit retry' } },
+      })).resolves.toMatchObject({ ok: true, result: { controlEpoch: 1 } })
+      const transact = db.transaction.bind(db)
+      let armed = false
+      const spy = vi.spyOn(db, 'transaction').mockImplementation(((...args: unknown[]) => {
+        const tables = args.slice(1, -1).flat(1).map(table => (table as { name?: string }).name ?? table)
+        if (!armed || args[0] !== 'rw' || !['productBuilds', 'productProductions', 'productBuildArtifacts'].every(table => tables.includes(table))) {
+          return Reflect.apply(transact, db, args)
+        }
+        armed = false
+        // Interrupt before the actual terminal transaction, never inside IDB.
+        // The old callback really returns through the original scheduler.
+        return (async () => {
+          const ledgerBefore = JSON.parse((await db.productBuilds.get(before.buildId))!.budgetLedgerJson)
+          expect(ledgerBefore.attempts).toContainEqual(expect.objectContaining({ runId: late!.taskRunId, controlEpoch: 0, usageKnown: false }))
+          releaseLate()
+          await oldCycle
+          const ledgerAfter = JSON.parse((await db.productBuilds.get(before.buildId))!.budgetLedgerJson)
+          expect(ledgerAfter.attempts).toContainEqual(expect.objectContaining({ runId: late!.taskRunId, controlEpoch: 0,
+            usageKnown: true, usage: expect.objectContaining({ outputTokens: 10 }) }))
+          raceApplied = true
+          return Reflect.apply(transact, db, args)
+        })()
+      }) as typeof db.transaction)
+      try {
+        await expect(runProductProductionUntilBlockedV1({ ...input, onDurableBoundary: (point, snapshot) => {
+          if (point === 'artifact.accepted' && snapshot.contract.scope.productProduction?.taskKey === plan.terminalTaskKey) armed = true
+        } })).rejects.toThrow('terminal commit CAS 已过期')
+      } finally { spy.mockRestore() }
+    } finally { releaseLate(); await oldCycle }
+    expect(raceApplied).toBe(true)
+    const failedSeal = (await db.productBuilds.get(before.buildId))!
+    const rootRunId = JSON.parse(failedSeal.budgetLedgerJson).rootRunId as number
+    const originalRoot = await readAgentRunV1(owned.scope, rootRunId)
+    expect(originalRoot.projection.state).toBe('running')
+    expect(failedSeal.rootTerminalReceiptHash).toBeNull()
+    const originalCalls = [...calls]
+    db.close(); await db.open()
+
+    // The second interruption occurs after the transaction's real root
+    // event writes, before the Build update can succeed. Both must roll back.
+    const update = db.productBuilds.update.bind(db.productBuilds)
+    let sawUncommittedRoot = false
+    const failBuildUpdate = vi.spyOn(db.productBuilds, 'update').mockImplementation((key, changes) => Dexie.Promise.resolve((async () => {
+      if (typeof changes !== 'function' && changes.status === 'release-ready') {
+        const root = await db.agentRuns.get(rootRunId)
+        sawUncommittedRoot = root?.status === 'completed' && !!root.terminalReceiptHash
+        throw new Error('isolated terminal Build update failure')
+      }
+      return update(key, changes)
+    })()))
+    try {
+      await expect(runProductProductionUntilBlockedV1(input)).rejects.toThrow('isolated terminal Build update failure')
+    } finally { failBuildUpdate.mockRestore() }
+    expect(sawUncommittedRoot).toBe(true)
+    expect((await readAgentRunV1(owned.scope, rootRunId)).projection.lastSequence).toBe(originalRoot.projection.lastSequence)
+    expect((await db.productBuilds.get(before.buildId))!.rootTerminalReceiptHash).toBeNull()
+
+    const finished = await runProductProductionUntilBlockedV1(input)
+    const sealed = (await db.productBuilds.get(before.buildId))!
+    expect(finished).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    const root = await readAgentRunV1(owned.scope, rootRunId)
+    expect(root.projection.terminalReceiptHash).toBe(sealed.rootTerminalReceiptHash)
+    expect(root.events.filter(event => event.type === 'verification.accepted')).toHaveLength(1)
+    expect(sealed.budgetLedgerJson).toBe(failedSeal.budgetLedgerJson)
+    expect([...calls]).toEqual(originalCalls)
+  }, 30_000)
 })

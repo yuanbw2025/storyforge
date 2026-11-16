@@ -129,7 +129,10 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
   let root: ReturnType<typeof createRoot>
 
   beforeEach(async () => {
-    localStorage.clear(); await db.delete(); await db.open()
+    localStorage.clear()
+    window.location.href = 'http://localhost:4178/storyforge/'
+    localStorage.setItem('storyforge:experimental-products', 'enabled')
+    await db.delete(); await db.open()
     host = document.createElement('div'); document.body.append(host); root = createRoot(host)
   })
   afterEach(async () => { await act(async () => root.unmount()); host.remove() })
@@ -387,11 +390,138 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     expect(community.setSocialEdge).toHaveBeenCalledWith(expect.objectContaining({
       accessToken: 'token-social-buyer-12345', kind: 'favorite-listing', targetId: listing.listingId, active: true,
     }))
+    await act(async () => { button(host, '已收藏').click(); await settle() })
+    await waitFor(() => expect(button(host, '收藏')).toBeTruthy())
+    await act(async () => { button(host, '收藏').click(); await settle() })
+    await waitFor(() => expect(host.textContent).toContain('已收藏'))
+    const favorites = community.setSocialEdge.mock.calls.map(([input]) => input)
+    expect(favorites.map(input => input.active)).toEqual([true, false, true])
+    expect(new Set(favorites.map(input => input.requestId)).size).toBe(3)
     await act(async () => { button(host, '订阅更新').click(); await settle() })
+    await waitFor(() => expect(button(host, '已订阅更新').getAttribute('aria-pressed')).toBe('true'))
     await act(async () => { button(host, '关注创作者').click(); await settle() })
     expect(community.setSocialEdge).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'follow-creator', targetId: listing.creatorId, active: true,
     }))
+  })
+
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    let reject!: (reason: Error) => void
+    const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail })
+    return { promise, resolve, reject }
+  }
+
+  function syntheticSocialService() {
+    type Input = Parameters<import('../../src/lib/community/http-client').CommunityHttpClientV1['setSocialEdge']>[0]
+    const edges = new Map<string, import('../../src/lib/community/authority').CommunitySocialEdgeV1>()
+    const save = (input: Input) => {
+      const edgeId = [input.accessToken, input.kind, input.targetId].join('/')
+      const edge = { edgeId, actorId: input.accessToken, kind: input.kind, targetId: input.targetId, active: input.active, createdAt: 1, updatedAt: 2 }
+      if (edge.active) edges.set(edgeId, edge)
+      else edges.delete(edgeId)
+      return edge
+    }
+    return {
+      save,
+      mySocialEdges: vi.fn(async (token: string) => [...edges.values()].filter(edge => edge.actorId === token)),
+      setSocialEdge: vi.fn(async (input: Input) => save(input)),
+    }
+  }
+
+  const accountA = 'synthetic-account-a'
+  const accountB = 'synthetic-account-b'
+  const credential = (token: string) => act(async () => setInput(host.querySelector<HTMLInputElement>('input[type="password"]')!, token))
+  const clickSocial = (label: string) => act(async () => { button(host, label).click(); await settle() })
+  const expectFavorite = (label: string) => waitFor(() => expect(button(host, '收藏').textContent).toBe(label))
+  async function openSocial(community: ReturnType<typeof syntheticSocialService>, fake = client()) {
+    await act(async () => { root.render(createElement(MarketplacePanel, { client: fake as never, communityClient: community as never })); await settle() })
+    await credential(accountA)
+    await clickSocial('刷新')
+    await expectFavorite('收藏')
+    return fake
+  }
+
+  it('切换 A→B→A 只显示当前账号关系，未知关系只读取，按钮按已读状态写入', async () => {
+    const service = syntheticSocialService()
+    await openSocial(service)
+    await clickSocial('收藏')
+    await expectFavorite('已收藏')
+    await credential(accountB)
+    await expectFavorite('读取收藏状态')
+    await clickSocial('读取收藏状态')
+    await expectFavorite('收藏')
+    expect(service.setSocialEdge).toHaveBeenCalledTimes(1)
+    await clickSocial('收藏')
+    await expectFavorite('已收藏')
+    await credential(accountA)
+    await clickSocial('读取收藏状态')
+    await expectFavorite('已收藏')
+    await clickSocial('已收藏')
+    await expectFavorite('收藏')
+    expect(service.setSocialEdge.mock.calls.map(([op]) => [op.accessToken, op.active])).toEqual([
+      [accountA, true], [accountB, true], [accountA, false],
+    ])
+  })
+
+  it('切回相同账号或更换服务后拒收旧关系列表与晚到操作', async () => {
+    const first = syntheticSocialService()
+    const fake = await openSocial(first)
+    const previousRead = deferred<Awaited<ReturnType<typeof first.mySocialEdges>>>()
+    first.mySocialEdges.mockImplementationOnce(() => previousRead.promise)
+    await clickSocial('刷新')
+    await credential(accountB)
+    await credential(accountA)
+    await clickSocial('读取收藏状态')
+    await expectFavorite('收藏')
+    await clickSocial('收藏')
+    await expectFavorite('已收藏')
+    await act(async () => { previousRead.resolve([]); await settle() })
+    await expectFavorite('已收藏')
+
+    const previousWrite = deferred<Awaited<ReturnType<typeof first.setSocialEdge>>>()
+    first.setSocialEdge.mockImplementationOnce(() => previousWrite.promise)
+    await clickSocial('已收藏')
+    const second = syntheticSocialService()
+    await act(async () => { root.render(createElement(MarketplacePanel, { client: fake as never, communityClient: second as never })); await settle() })
+    await clickSocial('读取收藏状态')
+    await expectFavorite('收藏')
+    await clickSocial('收藏')
+    await expectFavorite('已收藏')
+    await act(async () => { previousWrite.resolve(first.save(first.setSocialEdge.mock.calls[1][0])); await settle() })
+    await expectFavorite('已收藏')
+    expect(second.setSocialEdge.mock.calls.map(([op]) => [op.accessToken, op.active])).toEqual([[accountA, true]])
+  })
+
+  it('跨账号保留未知结果的原 UUID，已确认反向操作后不重放旧收藏', async () => {
+    const service = syntheticSocialService()
+    await openSocial(service)
+    const firstWrite = deferred<Awaited<ReturnType<typeof service.setSocialEdge>>>()
+    service.setSocialEdge.mockImplementationOnce(() => firstWrite.promise)
+    await clickSocial('收藏')
+    await waitFor(() => expect(service.setSocialEdge).toHaveBeenCalledTimes(1))
+    const id = service.setSocialEdge.mock.calls[0][0].requestId
+    await credential(accountB)
+    await clickSocial('读取收藏状态')
+    await clickSocial('收藏')
+    await expectFavorite('已收藏')
+    await act(async () => { firstWrite.reject(new Error('先前账号的请求失败')); await settle() })
+    expect(host.textContent).not.toContain('先前账号的请求失败')
+    await credential(accountA)
+    await clickSocial('读取收藏状态')
+    service.setSocialEdge.mockImplementationOnce(async input => { service.save(input); throw new Error('回复未送达') })
+    await clickSocial('收藏')
+    await waitFor(() => expect(host.textContent).toContain('回复未送达'))
+    expect(service.setSocialEdge.mock.calls[2][0].requestId).toBe(id)
+    await clickSocial('刷新')
+    await expectFavorite('已收藏')
+    await clickSocial('已收藏')
+    await expectFavorite('收藏')
+    await clickSocial('收藏')
+    await expectFavorite('已收藏')
+    expect(service.setSocialEdge.mock.calls.map(([op]) => op.active)).toEqual([true, true, true, false, true])
+    expect(service.setSocialEdge.mock.calls[4][0].requestId).not.toBe(id)
   })
 
   it('安全中心提交举报并允许处罚主体发起独立申诉', async () => {
@@ -489,7 +619,7 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     await waitFor(() => expect(host.textContent).toContain('等待主持人处理'))
     expect(community.applyToLfg).toHaveBeenCalledWith(expect.objectContaining({
       accessToken: 'token-community-player-123', postId: 'lfg.ui',
-      requestId: expect.stringMatching(/^apply:lfg\.ui\./),
+      requestId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
     }))
   })
 
@@ -589,10 +719,14 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
       applicationId: 'application.host-ui', postId: post.postId, userId: 'user.player',
       characterPreference: '记者', note: '偏调查', status: 'accepted' as const, createdAt: 1, updatedAt: 2,
     }
+    const profileReply = deferred<void>()
     const community = {
-      upsertProfile: vi.fn().mockResolvedValue({
-        userId: 'user.host', handle: 'host', displayName: '主持人', bio: '', locale: 'zh-CN',
-        timeZone: 'Asia/Shanghai', ageBand: 'adult', status: 'active', createdAt: 1, updatedAt: 1,
+      upsertProfile: vi.fn(async () => {
+        await profileReply.promise
+        return {
+          userId: 'user.host', handle: 'host', displayName: '主持人', bio: '', locale: 'zh-CN',
+          timeZone: 'Asia/Shanghai', ageBand: 'adult', status: 'active', createdAt: 1, updatedAt: 1,
+        }
       }),
       discoverLfg: vi.fn().mockResolvedValue([{ post, accepted: 1, waitlisted: 0, availableSeats: 3 }]),
       myApplications: vi.fn().mockResolvedValue([]), applyToLfg: vi.fn(), createLfg: vi.fn(),
@@ -620,7 +754,16 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
       setInput(labeledInput(host, '显示名称'), '主持人')
     })
     await act(async () => { button(host, '保存社区资料').click(); await settle() })
+    await waitFor(() => expect(community.upsertProfile).toHaveBeenCalledOnce())
+    expect(button(host, '刷新招募').disabled).toBe(true)
     await act(async () => { button(host, '刷新招募').click(); await settle() })
+    expect(community.discoverLfg).not.toHaveBeenCalled()
+    await act(async () => { profileReply.resolve() })
+    await waitFor(() => {
+      expect(host.textContent).toContain('已连接 @host')
+      expect(button(host, '刷新招募').disabled).toBe(false)
+    })
+    await act(async () => button(host, '刷新招募').click())
     await waitFor(() => expect(host.textContent).toContain('主持人周末团'))
     await act(async () => { button(host, '管理申请').click(); await settle() })
     await waitFor(() => expect(host.textContent).toContain('偏调查'))
@@ -629,7 +772,8 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
       setInput(host.querySelector<HTMLInputElement>('[aria-label="交接在线房间 ID"]')!, 'room.hosted')
     })
     await act(async () => { button(host, '分配在线席位').click(); await settle() })
-    await waitFor(() => expect(community.bindRoomHandoffs).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(host.textContent).toContain('已为 1 个正式席位绑定在线房间'))
+    expect(community.bindRoomHandoffs).toHaveBeenCalledTimes(1)
     expect(community.bindRoomHandoffs).toHaveBeenCalledWith(expect.objectContaining({
       accessToken: 'token-community-host-12345', postId: post.postId, roomId: 'room.hosted',
       releaseHash: RELEASE,

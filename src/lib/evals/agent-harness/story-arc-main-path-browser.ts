@@ -17,7 +17,6 @@ import { runBudgetedGenerationNode } from '../../agent/team-execution'
 import { db } from '../../db/schema'
 import { adopt } from '../../registry/adopt'
 import { assembleContext } from '../../registry/assemble-context'
-import { cascadeDeleteProject } from '../../registry/lifecycle'
 import type { AIConfig, Project, WorkspaceScope } from '../../types'
 import { stringifyStages } from '../../types/story-arc'
 import {
@@ -37,12 +36,13 @@ import {
   type H86VerificationCallInputV1,
 } from './story-arc-main-path'
 import type { H86StoryArcFixtureV1 } from './story-arc-main-path-fixtures'
-import { createWorkspace } from '../../workspace/create-workspace'
+import { createOwnedEvalWorkspaceV1, cleanupOwnedEvalWorkspaceV1, cleanupOwnedEvalWorkspacesV1, withEvalWorkspaceRunLeaseV1, type EvalWorkspaceRunLeaseV1, type EvalWorkspaceOwnerV1 } from '../workspace-ownership'
 
 const H86_PROJECT_PREFIX = '[H86-EVAL] '
 const CALL_TIMEOUT_MS = 180_000
 
 interface H86WorkspaceV1 {
+  evalOwner: EvalWorkspaceOwnerV1
   project: Project
   scope: WorkspaceScope
 }
@@ -172,105 +172,102 @@ class H86CallFailure extends Error {
   }
 }
 
-async function seedWorkspace(fixture: H86StoryArcFixtureV1): Promise<H86WorkspaceV1> {
-  const created = await createWorkspace({
+async function seedWorkspace(fixture: H86StoryArcFixtureV1, runId: string, lease: EvalWorkspaceRunLeaseV1): Promise<H86WorkspaceV1> {
+  const created = await createOwnedEvalWorkspaceV1({
+    suite: 'h86-story-arc', runId, lease, workspace: {
     name: `${H86_PROJECT_PREFIX}${fixture.id} ${fixture.projectName}`,
     genres: [fixture.genre],
     description: 'HARNESS-86 隔离评测项目；运行后由 PROJECT_TABLES 生命周期清理。',
     status: 'drafting',
     targetWordCount: 100_000,
-  }, {
+    }, options: {
     purpose: 'independent-work',
     kind: 'novel',
     novelProfile: 'long',
+    },
   })
-  const { scope } = created
-  const projectId = scope.projectId
-  assertSeedAdoption('worldviews', await adopt({
-    projectId,
-    scope,
-    target: 'worldviews',
-    mode: 'replace',
-    data: {
-      worldOrigin: fixture.worldOrigin,
-    },
-  }), 1)
-  assertSeedAdoption('worldRulesProfiles', await adopt({
-    projectId,
-    scope,
-    target: 'worldRulesProfiles',
-    mode: 'replace',
-    data: {
-      entries: {},
-      customNodes: [],
-      globalNote: fixture.worldRules,
-    },
-  }), 1)
-  assertSeedAdoption('storyCores', await adopt({
-    projectId,
-    scope,
-    target: 'storyCores',
-    mode: 'replace',
-    data: {
-      theme: fixture.theme,
-      centralConflict: fixture.centralConflict,
-      logline: fixture.logline,
-      mainPlot: fixture.mainPlot,
-    },
-  }), 1)
-  assertSeedAdoption('characters', await adopt({
-    projectId,
-    scope,
-    target: 'characters',
-    mode: 'add-many',
-    data: fixture.characters.map(item => ({
-      name: item.name,
-      roleWeight: item.role === 'protagonist' || item.role === 'antagonist' ? 'main' : 'secondary',
-      moralAxis: 'neutral',
-      orderAxis: 'neutral',
-      shortDescription: item.background,
-      appearance: '',
-      personality: item.personality,
-      background: item.background,
-      motivation: item.motivation,
-      abilities: '',
-      relationships: '[]',
-      arc: '',
-    })),
-  }), fixture.characters.length)
-  if (fixture.existingArc) {
-    assertSeedAdoption('storyArcs', await adopt({
+  try {
+    const { scope } = created
+    const projectId = scope.projectId
+    assertSeedAdoption('worldviews', await adopt({
       projectId,
       scope,
-      target: 'storyArcs',
-      mode: 'add',
+      target: 'worldviews',
+      mode: 'replace',
       data: {
-        name: fixture.existingArc.name,
-        type: fixture.existingArc.type,
-        description: fixture.existingArc.description,
-        stages: stringifyStages([]),
+        worldOrigin: fixture.worldOrigin,
       },
     }), 1)
+    assertSeedAdoption('worldRulesProfiles', await adopt({
+      projectId,
+      scope,
+      target: 'worldRulesProfiles',
+      mode: 'replace',
+      data: {
+        entries: {},
+        customNodes: [],
+        globalNote: fixture.worldRules,
+      },
+    }), 1)
+    assertSeedAdoption('storyCores', await adopt({
+      projectId,
+      scope,
+      target: 'storyCores',
+      mode: 'replace',
+      data: {
+        theme: fixture.theme,
+        centralConflict: fixture.centralConflict,
+        logline: fixture.logline,
+        mainPlot: fixture.mainPlot,
+      },
+    }), 1)
+    assertSeedAdoption('characters', await adopt({
+      projectId,
+      scope,
+      target: 'characters',
+      mode: 'add-many',
+      data: fixture.characters.map(item => ({
+        name: item.name,
+        roleWeight: item.role === 'protagonist' || item.role === 'antagonist' ? 'main' : 'secondary',
+        moralAxis: 'neutral',
+        orderAxis: 'neutral',
+        shortDescription: item.background,
+        appearance: '',
+        personality: item.personality,
+        background: item.background,
+        motivation: item.motivation,
+        abilities: '',
+        relationships: '[]',
+        arc: '',
+      })),
+    }), fixture.characters.length)
+    if (fixture.existingArc) {
+      assertSeedAdoption('storyArcs', await adopt({
+        projectId,
+        scope,
+        target: 'storyArcs',
+        mode: 'add',
+        data: {
+          name: fixture.existingArc.name,
+          type: fixture.existingArc.type,
+          description: fixture.existingArc.description,
+          stages: stringifyStages([]),
+        },
+      }), 1)
+    }
+    const project = await db.projects.get(projectId)
+    if (!project) throw new Error('H86 评测项目创建失败')
+    return { project, scope, evalOwner: created.evalOwner }
+  } catch (cause) {
+    try { await cleanupOwnedEvalWorkspaceV1(created.evalOwner, lease) }
+    catch (cleanupCause) { throw Object.defineProperty(new Error('评测夹具初始化失败，隔离清理未完成；保留运行所有权记录。'), 'cause', { value: { seed: cause, cleanup: cleanupCause }, configurable: true, writable: true }) }
+    throw cause
   }
-  const project = await db.projects.get(projectId)
-  if (!project) throw new Error('H86 评测项目创建失败')
-  return { project, scope }
 }
 
-async function cleanupWorkspace(projectId: number): Promise<void> {
-  const project = await db.projects.get(projectId)
-  if (!project) return
-  if (!project.name.startsWith(H86_PROJECT_PREFIX)) throw new Error('拒绝清理非 H86 评测项目')
-  await cascadeDeleteProject(projectId)
-}
-
-/** Cleans only stranded workspaces created by this evaluator. */
-export async function cleanupStrandedH86WorkspacesV1(): Promise<number> {
-  const projects = await db.projects.filter(project => project.name.startsWith(H86_PROJECT_PREFIX)).toArray()
-  for (const project of projects) {
-    if (project.id != null) await cleanupWorkspace(project.id)
-  }
-  return projects.length
+/** Unknown legacy workspaces have no deletion authority and are retained. */
+export async function cleanupStrandedH86WorkspacesV1(runId?: string): Promise<number> {
+  return cleanupOwnedEvalWorkspacesV1({ suite: 'h86-story-arc', runId })
 }
 
 function directPlan(fixture: H86StoryArcFixtureV1): MasterAgentPlan {
@@ -541,16 +538,20 @@ export function createH86BrowserRunDependenciesV1(input: {
   generatorConfig: AIConfig
   verifierConfig: AIConfig
 }) {
+  const fallbackRunId = `h86-story-arc-call-${crypto.randomUUID()}`
   return {
     generate: async (call: H86GenerationCallInputV1): Promise<H86GenerationAttemptV1> => {
-      const workspace = await seedWorkspace(call.fixture)
-      try {
-        return call.variant === 'baseline-direct'
-          ? await baselineGeneration(call, input.generatorConfig, workspace)
-          : await agentHarnessGeneration(call, input.generatorConfig, workspace)
-      } finally {
-        await cleanupWorkspace(workspace.scope.projectId)
-      }
+      const runId = call.evalRunId ?? fallbackRunId
+      return withEvalWorkspaceRunLeaseV1({ suite: 'h86-story-arc', runId, lease: call.evalRunLease }, async lease => {
+        const workspace = await seedWorkspace(call.fixture, runId, lease)
+        try {
+          return call.variant === 'baseline-direct'
+            ? await baselineGeneration(call, input.generatorConfig, workspace)
+            : await agentHarnessGeneration(call, input.generatorConfig, workspace)
+        } finally {
+          await cleanupOwnedEvalWorkspaceV1(workspace.evalOwner, lease)
+        }
+      })
     },
     verify: async (call: H86VerificationCallInputV1): Promise<H86VerificationAttemptV1> => {
       const messages = buildH86VerifierMessagesV1({

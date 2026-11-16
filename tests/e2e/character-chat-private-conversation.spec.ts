@@ -1,22 +1,20 @@
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {test, expect, type Page} from '@playwright/test'
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 
 const input = (page: Page) => page.getByRole('textbox', {name: '发送给角色的消息', exact: true})
 const audience = (page: Page) => page.getByLabel('对话范围', {exact: true})
 const saved = (page: Page) => page.getByText('草稿已保存，仅在此存档可见', {exact: true})
 async function setup(page: Page, model = false) {
-  await page.context().addInitScript(model => {
-    localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', model: 'test', baseUrl: 'https://chat-private.invalid/v1', apiKey: ''}))
-    if (model) sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
-  }, model)
-  await page.goto('./chat/library')
+  registerBrowserFixtureAIConfigV1(page.context(), { provider: 'openai', model: 'test', baseUrl: 'https://chat-private.invalid/v1', apiKey: model ? 'isolated-test-key' : '' })
+  await page.context().addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture()
   })
   const url = `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`
-  await page.goto(url); await expect(input(page)).toBeEnabled()
+  await gotoWithBrowserFixtureAIConfigV1(page, url); await expect(input(page)).toBeEnabled()
   return {...f, url}
 }
 
@@ -28,13 +26,13 @@ for (const width of [390, 1440]) test(`private drafts retain recipients through 
   const send = page.getByRole('button', {name: '仅保存消息', exact: true})
   await audience(page).selectOption(JSON.stringify(['guard']))
   await input(page).fill('这段私聊只有叶岑可以听见。'); await expect(saved(page)).toBeVisible()
-  await page.reload(); await expect(input(page)).toHaveValue('这段私聊只有叶岑可以听见。')
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(input(page)).toHaveValue('这段私聊只有叶岑可以听见。')
   await expect(audience(page)).toHaveValue(JSON.stringify(['guard']))
   await page.getByText('在场角色', {exact: true}).click()
   await page.getByRole('button', {name: '让 叶岑 离场', exact: true}).click()
   await expect(page.getByText('收件人已离场。', {exact: false})).toBeVisible()
   await expect(send).toBeDisabled(); await expect(input(page)).toHaveValue('这段私聊只有叶岑可以听见。')
-  await page.reload(); await expect(audience(page)).toHaveValue(JSON.stringify(['guard'])); await expect(send).toBeDisabled()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(audience(page)).toHaveValue(JSON.stringify(['guard'])); await expect(send).toBeDisabled()
   await page.getByText('在场角色', {exact: true}).click()
   await page.getByRole('button', {name: '让 叶岑 回归', exact: true}).click()
   await expect(send).toBeEnabled(); await send.click(); await expect(input(page)).toHaveValue('')
@@ -54,7 +52,7 @@ for (const width of [390, 1440]) test(`private drafts retain recipients through 
 test('two pages resolve recipient-only conflicts without silently publishing identical text', async ({page, context}) => {
   const f = await setup(page)
   await input(page).fill('相同的文字，不同的收件人。'); await expect(saved(page)).toBeVisible()
-  const other = await context.newPage(); await other.goto(f.url); await expect(input(other)).toHaveValue('相同的文字，不同的收件人。')
+  const other = await context.newPage(); await gotoWithBrowserFixtureAIConfigV1(other, f.url); await expect(input(other)).toHaveValue('相同的文字，不同的收件人。')
   await audience(page).selectOption(JSON.stringify(['guard'])); await expect(saved(page)).toBeVisible()
   await audience(other).selectOption(JSON.stringify(['artisan']))
   const alert = other.getByRole('alert').filter({hasText: '另一页面已经修改'})
@@ -65,7 +63,7 @@ test('two pages resolve recipient-only conflicts without silently publishing ide
   await alert.getByRole('button', {name: '使用已保存草稿', exact: true}).click()
   await expect(audience(other)).toHaveValue(JSON.stringify(['guard']))
   await other.getByRole('button', {name: '仅保存消息', exact: true}).click(); await expect(input(other)).toHaveValue('')
-  await page.reload(); await expect(input(page)).toHaveValue(''); await expect(audience(page)).toHaveValue(JSON.stringify(['guard']))
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(input(page)).toHaveValue(''); await expect(audience(page)).toHaveValue(JSON.stringify(['guard']))
   await other.close()
 })
 
@@ -94,7 +92,7 @@ test('private reply and continuation keep the original conversation through impo
     const session = await db.productRuntimeSessions.where('projectId').equals(projectId).first()
     return {projectId, workId: session.workId, sessionId: session.id}
   }, f)
-  await page.goto(`./chat/play?project=${restored.projectId}&work=${restored.workId}&session=${restored.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${restored.projectId}&work=${restored.workId}&session=${restored.sessionId}`)
   await expect(audience(page)).toHaveValue(JSON.stringify(['guard'])); expect(calls).toHaveLength(2)
   await page.getByRole('button', {name: '让角色继续', exact: true}).click()
   await expect(page.getByText('我继续轻声说明自己的核对办法。', {exact: true})).toBeVisible()
@@ -106,6 +104,6 @@ test('private reply and continuation keep the original conversation through impo
   }, restored.sessionId)
   const before = await read(); expect(before.state.messages).toHaveLength(3); expect(before.other.messages).toHaveLength(0)
   expect(before.state.chatNarrative.triggers.every((t: {direction: {audienceParticipantKeys: string[]; conversationMode: string}}) => t.direction.audienceParticipantKeys.join() === 'guard' && t.direction.conversationMode === 'private')).toBe(true)
-  await page.reload(); await expect(audience(page)).toHaveValue(JSON.stringify(['guard']))
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(audience(page)).toHaveValue(JSON.stringify(['guard']))
   expect(await read()).toEqual(before); expect(calls).toEqual(['action', 'review', 'action', 'review'])
 })

@@ -24,8 +24,8 @@ import {
 } from '../../lib/evals/races-gateway/runner'
 import { RACES_GATEWAY_EVAL_FIXTURES_V1 } from '../../lib/evals/races-gateway/fixtures'
 import type { RacesGatewayEvalCheckpointV1 } from '../../lib/evals/races-gateway/types'
-import { PROVIDER_MODELS, type AIConfig, type AIConfigPreset } from '../../lib/types'
-import { getAIConfigPresetSessionApiKey, useAIConfigStore } from '../../stores/ai-config'
+import { PROVIDER_MODELS, type AIConfigPreset } from '../../lib/types'
+import { resolveAIConfigPresetV1, useAIConfigStore } from '../../stores/ai-config'
 import { useDialog } from '../shared/Dialog'
 
 function rate(value: number): string {
@@ -39,13 +39,6 @@ function downloadJson(raw: string, filename: string): void {
   anchor.download = filename
   anchor.click()
   URL.revokeObjectURL(url)
-}
-
-function presetConfig(preset: AIConfigPreset, current: AIConfig): AIConfig {
-  const apiKey = preset.config.apiKey
-    || getAIConfigPresetSessionApiKey(preset.id)
-    || (preset.config.provider === current.provider ? current.apiKey : '')
-  return { ...preset.config, apiKey }
 }
 
 function defaultPresetId(presets: AIConfigPreset[], pattern: RegExp, exclude?: string): string {
@@ -97,10 +90,10 @@ export default function RacesGatewayEvalPanel() {
   const generatorPreset = presets.find(item => item.id === generatorPresetId) ?? null
   const graderPreset = presets.find(item => item.id === graderPresetId) ?? null
   const generatorConfig = useMemo(() => (
-    generatorPreset ? presetConfig(generatorPreset, currentConfig) : null
+    generatorPreset ? resolveAIConfigPresetV1(generatorPreset, currentConfig) : null
   ), [currentConfig, generatorPreset])
   const graderPresetConfig = useMemo(() => (
-    graderPreset ? presetConfig(graderPreset, currentConfig) : null
+    graderPreset ? resolveAIConfigPresetV1(graderPreset, currentConfig) : null
   ), [currentConfig, graderPreset])
   const graderOptions = useMemo(() => {
     if (!graderPresetConfig) return []
@@ -261,16 +254,20 @@ export default function RacesGatewayEvalPanel() {
   const clear = async () => {
     const confirmed = await dialog.confirm({
       title: '清除 RACE-6 评测？',
-      message: '这会删除本机 checkpoint，并通过 PROJECT_TABLES 生命周期清理所有 RACE-6 隔离项目。请先导出需要保留的证据。',
+      message: '这会清除本次运行的本机 checkpoint 和隔离项目。请先导出需要保留的证据。',
       confirmText: '清除评测',
       cancelText: '取消',
       tone: 'danger',
     })
     if (!confirmed) return
-    await clearRacesGatewayEvalCheckpointV1()
-    setCheckpoint(null)
-    setProgress('')
-    setError('')
+    try {
+      await clearRacesGatewayEvalCheckpointV1(checkpoint?.workspaceOwnerId)
+      setCheckpoint(null)
+      setProgress('')
+      setError('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
   }
 
   const score = checkpoint?.score

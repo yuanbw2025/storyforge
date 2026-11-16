@@ -11,6 +11,7 @@ import { estimateTokens, trimMessagesToFit } from '../ai/context-budget'
 import { getAgentSkillV1 } from '../agent/skill-registry'
 import { createAgentSkillExecutionBindingV2 } from '../agent/execution-binding'
 import { executeFrozenFormalAIEntryV1, freezeFormalAIEntryBindingV1 } from '../agent/formal-ai-entry'
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import { createAgentRunV1, readAgentRunV1, appendAgentRunEventV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
 import { beginAgentRunRecoveryV1, completeAgentRunRecoveryV1, createAgentRunCheckpointV1 } from '../agent/run/checkpoint'
 import { createContextManifestFromAssemblyV1, createContextManifestV2FromV1 } from '../agent/run/context-manifest'
@@ -232,6 +233,7 @@ export async function generateTtrpgOpenAuthoringDesignCandidateV1(input: {
   runAI?: (messages: ChatMessage[], signal?: AbortSignal) => Promise<string>
   onPrepared?: (runId: number) => void
 }): Promise<TtrpgOpenAuthoringDesignCandidateV1> {
+  assertCurrentProductEntryV1('upper.ttrpg')
   return withTtrpgOpenDesignOwnerV1(input.scope, () => generateOwned(input))
 }
 async function generateOwned(input: Parameters<typeof generateTtrpgOpenAuthoringDesignCandidateV1>[0]): Promise<TtrpgOpenAuthoringDesignCandidateV1> {
@@ -298,6 +300,7 @@ async function generateOwned(input: Parameters<typeof generateTtrpgOpenAuthoring
   try {
     input.onPrepared?.(snapshot.run.id)
     await assertFirstPending(input.scope, snapshot)
+    assertCurrentProductEntryV1('upper.ttrpg')
     snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: STEP })
     snapshot = await append(input.scope, snapshot, 'step.started', { stepId: STEP, attempt: 1 })
     const assembled: AssembleContextResult = { ...basisAssembly, text: `${basisAssembly.text}\n\n${worldText}`,
@@ -335,6 +338,7 @@ async function generateOwned(input: Parameters<typeof generateTtrpgOpenAuthoring
       snapshot = (await recordAgentRunArtifactV1({ scope: input.scope, runId: snapshot.run.id, stepId: STEP, attempt: 1,
         artifactKind: 'source-snapshot', content: JSON.stringify(value), expectedLastSequence: snapshot.projection.lastSequence })).snapshot
     }
+    assertCurrentProductEntryV1('upper.ttrpg')
     const output = input.runAI ? await input.runAI(messages, input.signal)
       : profile.entryId === 'ttrpg.open.authoring-design.full'
         ? await executeFrozenFormalAIEntryV1('ttrpg.open.authoring-design.full', binding.formalEntry, skill, 'src/lib/ttrpg/open-authoring-design-harness.ts',

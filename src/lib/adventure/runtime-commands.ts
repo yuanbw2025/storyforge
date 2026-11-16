@@ -4,6 +4,7 @@ import { db } from "../db/schema";
 import { applyProductRuntimeEvent, assertFormalRuntimeSourceUnchangedV1, commitNarrativeChoice, hashStateJson, normalizeCommandId, parseEventPayload, parseProductRuntimeState, readProductRuntimeState, readSessionEvents, replayProductRuntimeEvents, verifyFormalRuntimeSourceV1 } from "../product/runtime-core";
 import { buildProductRuntimeDiceResolutionV1, parseProductRuntimeDiceExpressionV1 } from "../product/runtime-dice";
 import { adventureNarrativeActionCommandIdV1 } from "./command-identity";
+import { assertTextOpenWorldRuntimeNewWorkV1 } from '../open-world/source-admission';
 import type { ProductRuntimeEvent, ProductRuntimeSession, ProductRuntimeEventType, ProductRuntimeState } from "../types";
 export function adventureNarrativeActionCommandId(
   sessionId: number,
@@ -439,6 +440,7 @@ export async function allocateAdventureSkillPoint(
 export async function commitAdventureAction(
   input: AdventureCommandEnvelope,
 ): Promise<ProductRuntimeEvent> {
+  input = { ...input }
   const commandId = normalizeCommandId(input.commandId);
   const actionKey = input.actionKey.trim();
   if (!actionKey || actionKey.length > 160)
@@ -456,8 +458,21 @@ export async function commitAdventureAction(
   ) {
     throw new Error("[adventure] 正式文字冒险实例不存在。");
   }
+  let retainedOpenWorldEvents: ProductRuntimeEvent[] | undefined;
+  if (previewSession.kind === 'text-open-world') {
+    retainedOpenWorldEvents = await readSessionEvents(previewSession);
+    const prior = retainedOpenWorldEvents.find(event => event.commandId === commandId);
+    if (prior) {
+      const body = parseEventPayload(prior);
+      if (prior.type !== 'adventure.action.committed' || body.actionKey !== actionKey
+        || prior.baseSequence !== input.baseSequence || prior.baseStateHash !== input.baseStateHash) {
+        throw new Error('[adventure] commandId 已被不同命令使用。');
+      }
+      return prior;
+    }
+  }
   const [previewEvents, frozen] = await Promise.all([
-    readSessionEvents(previewSession),
+    retainedOpenWorldEvents ?? readSessionEvents(previewSession),
     verifyFormalRuntimeSourceV1(previewSession, [
       "text-adventure",
       "text-open-world",
@@ -481,6 +496,9 @@ export async function commitAdventureAction(
       throw new Error("[adventure] commandId 已被不同命令使用。");
     }
     return previewPrior;
+  }
+  if (previewSession.kind === 'text-open-world') {
+    assertTextOpenWorldRuntimeNewWorkV1(frozen.runtimePackage, '新增冒险兼容行动');
   }
   const previewState = replayProductRuntimeEvents(
     parseProductRuntimeState(previewSession.initialStateJson),
@@ -552,6 +570,9 @@ export async function commitAdventureAction(
           throw new Error("[adventure] commandId 已被不同命令使用。");
         }
         return prior;
+      }
+      if (session.kind === 'text-open-world') {
+        assertTextOpenWorldRuntimeNewWorkV1(frozen.runtimePackage, '新增冒险兼容行动');
       }
       if (session.status !== "active")
         throw new Error("[adventure] 只有 active 实例可以行动。");

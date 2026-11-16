@@ -1,3 +1,4 @@
+import { stableRuntimeJsonV1 } from "../product/runtime-stable-json";
 import { hashProductProductionValueV2 } from "../product-production/hash";
 import type {
   RulePackV1,
@@ -43,17 +44,6 @@ export interface TtrpgContinuationPlanV2 {
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (value && typeof value === "object")
-    return `{${Object.entries(value as Record<string, unknown>)
-      .filter(([, child]) => child !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, child]) => `${JSON.stringify(key)}:${stableJson(child)}`)
-      .join(",")}}`;
-  return JSON.stringify(value) ?? "null";
-}
-
 function key(value: string, label: string): string {
   const parsed = value.trim();
   if (!KEY.test(parsed)) throw new Error(`[ttrpg-continuity] ${label} 无效`);
@@ -62,8 +52,8 @@ function key(value: string, label: string): string {
 
 function sameProgressionRules(left: RulePackV1, right: RulePackV1): boolean {
   return (
-    stableJson(left.advancement) === stableJson(right.advancement) &&
-    stableJson(left.attributes) === stableJson(right.attributes)
+    stableRuntimeJsonV1(left.advancement) === stableRuntimeJsonV1(right.advancement) &&
+    stableRuntimeJsonV1(left.attributes) === stableRuntimeJsonV1(right.attributes)
   );
 }
 
@@ -92,7 +82,7 @@ function compatibleCustomization(input: {
   )
     return false;
   const keys = Object.keys(customization.attributes).sort();
-  if (stableJson(keys) !== stableJson(Object.keys(target.attributes).sort()))
+  if (stableRuntimeJsonV1(keys) !== stableRuntimeJsonV1(Object.keys(target.attributes).sort()))
     return false;
   const customizedBudget = Object.values(customization.attributes).reduce(
     (sum, value) => sum + value,
@@ -367,13 +357,13 @@ export async function buildTtrpgContinuationStateV2(input: {
   const targetActionUsage = new Map(
     input.targetRulePack.actions.map((action) => [
       action.key,
-      stableJson(action.usage),
+      stableRuntimeJsonV1(action.usage),
     ]),
   );
   const parentActionUsage = new Map(
     input.parentRulePack.actions.map((action) => [
       action.key,
-      stableJson(action.usage),
+      stableRuntimeJsonV1(action.usage),
     ]),
   );
   for (const [stateKey, ability] of Object.entries(

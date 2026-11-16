@@ -1,9 +1,14 @@
 ---
 productId: upper.avg
 status: preview
-lastVerified: 2026-10-28
+lastVerified: 2026-11-13
 ---
 # AVG and visual novels
+
+## November 13: saving, recovery and usage checks
+
+Quick save reports completion only after its checkpoint is actually written, and remains available during audio-state updates. Recovery/continuation does not regenerate saved results; changed assets are rechecked against their version. Local foreground processing checks the actual installed tool and result; missing valid output cannot be represented by an old image or placeholder. Sources: [#320](https://github.com/yuanbw2025/storyforge/pull/320), [#401](https://github.com/yuanbw2025/storyforge/pull/401), [#429](https://github.com/yuanbw2025/storyforge/pull/429).
+
 
 > Preview: author workbench, production revision, release, and player saves are connected. Generated literary and audiovisual quality still require per-work acceptance.
 

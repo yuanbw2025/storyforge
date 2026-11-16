@@ -21,7 +21,10 @@ async function createWorkspace(): Promise<{
   const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const worldGroupId = await db.worldGroups.add({
     projectId,
+    worldId,
     name: '主世界',
+    description: '',
+    type: 'primary',
     order: 0,
     createdAt: now,
     updatedAt: now,

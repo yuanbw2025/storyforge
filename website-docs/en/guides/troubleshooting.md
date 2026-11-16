@@ -1,5 +1,12 @@
 # Troubleshooting
 
+
+## Optional recent-operation traces
+
+In general settings, open Enhanced failure diagnostics and select Include recent operation traces, which defaults to off. Failure summaries can then include up to 20 page categories, operation codes and technical error classifications from the last five minutes, plus supported native process/reason/numeric-exit-code information. Turning it off clears local traces and pending details. A failed preference save shows an error and stops collection for the current session.
+
+Inspect the preview before sending under the existing failure-reporting choice. Older backends or failed capability negotiation continue with basic summaries. Public feedback links omit extended traces. Traces exclude input text, button labels, work titles, manuscripts, model responses, URLs and keys. See [PR #301](https://github.com/yuanbw2025/storyforge/pull/301) for delivery scope and backend integration status.
+
 ## Interrupted resource loading at startup
 
 Before the application opens, a recognized module or stylesheet load failure may trigger at most one automatic reload. Persistent failure keeps the error and an explicit reload action instead of looping; ordinary errors do not trigger this recovery. Module failures after the app opens still use the save barrier described below and require the author to retry. Recovery neither starts model tasks nor clears work data. The safeguards in [PR #215](https://github.com/yuanbw2025/storyforge/pull/215) do not establish that all native crashes or memory issues are resolved.

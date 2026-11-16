@@ -10,6 +10,7 @@ import { createProductRuntimeInstanceFromSource } from '../../src/lib/product/ru
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import { exportOriginalAuthorSource } from '../helpers/product-author-world-backup'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { verifyImportedWorldContextBindingV1 } from '../../src/lib/product/world-context-portability'
@@ -80,6 +81,26 @@ describe.each([2, 3] as const)('R-TTRPGOPEN2 normal author production adoption p
     expect(prepared.intent.packageHash).toBe(original.packageHash)
     expect((await publishProductProductionV1(f)).receipt.releaseVersion).toBe(1)
   })
+  it('refuses local preview verification when the pause receipt belongs to another epoch', async () => {
+    const f = await produce()
+    const revision = async () => (await db.productProductions.get(f.productionId))!.stateRevision
+    expect((await executeProductProductionCommand({ ...f, command: {
+      type: 'pause', commandId: 'epoch.pause', expectedStateRevision: await revision(), reason: '检查暂停来源',
+    } })).ok).toBe(true)
+    expect((await executeProductProductionCommand({ ...f, command: {
+      type: 'resume', commandId: 'epoch.resume', expectedStateRevision: await revision(),
+    } })).ok).toBe(true)
+    const build = (await db.productBuilds.where('productionId').equals(f.productionId).first())!
+    const receipt = JSON.parse(build.failureJson)
+    receipt.pauseReceipt.pausedFromControlEpoch -= 1
+    await db.productBuilds.update(build.id!, { failureJson: JSON.stringify(receipt) })
+
+    const resumed = await runOpenBrowserProductionV1(f)
+    expect(resumed).toMatchObject({ terminal: false, status: 'recovery-required',
+      taskKey: profile === 2 ? 'ttrpg.open.integration' : 'ttrpg.open.media-plan',
+      modelCalls: profile === 2 ? 4 : 3 })
+    expect(JSON.parse((await db.productBuilds.get(build.id!))!.failureJson).code).toBe('task-aborted')
+  })
   it('rolls back immutable carry with a failed Plan commit and resumes without discarding content or repeating a paid call', async () => {
     const f = await seedOpenBrowserProductionV1()
     await runOpenBrowserProductionV1(f);await runOpenBrowserProductionV1(f,true)
@@ -137,6 +158,8 @@ describe.each([2, 3] as const)('R-TTRPGOPEN2 normal author production adoption p
   it('moves the complete author backup across two clean databases with different local IDs and preserves the exact original world-read manifests', async () => {
     const f = await produce(), productionKey = (await db.productProductions.get(f.productionId))!.productionKey
     let backup = await exportProjectJSON(f.scope.projectId)
+    const author = await exportOriginalAuthorSource(f.productionId)
+    let authorWorld = author.backup
     const originalBindings = backup.agentRuns.filter(r => r.portableWorldContextBindingsJson).flatMap(r => JSON.parse(r.portableWorldContextBindingsJson!))
     expect(originalBindings.length).toBeGreaterThan(0)
     for (let round = 0; round < 2; round++) {
@@ -150,6 +173,11 @@ describe.each([2, 3] as const)('R-TTRPGOPEN2 normal author production adoption p
       backup = await exportProjectJSON(projectId)
       const bindings = backup.agentRuns.filter(r => r.portableWorldContextBindingsJson).flatMap(r => JSON.parse(r.portableWorldContextBindingsJson!))
       expect(bindings).toEqual(originalBindings)
+      await expect(publishProductProductionV1(restored)).rejects.toThrow('原作者世界目前不可核实')
+      expect(await db.productReleases.where('projectId').equals(projectId).count()).toBe(0)
+      const sourceProjectId = await importProjectJSON(authorWorld)
+      expect((await db.projects.get(sourceProjectId))?.workspaceUid).toBe(author.backup.project.workspaceUid)
+      authorWorld = await exportProjectJSON(sourceProjectId)
       if (round === 1) expect((await publishProductProductionV1(restored)).receipt.releaseVersion).toBe(1)
     }
   })

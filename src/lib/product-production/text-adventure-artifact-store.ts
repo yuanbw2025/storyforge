@@ -184,20 +184,6 @@ export async function acceptProductBuildArtifact(input: {
   })
 }
 
-export async function readAcceptedBuildArtifacts(input: {
-  scope: WorkspaceScope
-  buildId: number
-}): Promise<ProductBuildArtifactRecordV1[]> {
-  const scope = await resolveScope({ scope: input.scope })
-  const build = await db.productBuilds.get(input.buildId)
-  if (!build || !await assertRecordInScope(scope, 'productBuilds', build, { owner: 'work' })) {
-    throw new Error('[product-production-artifact] Build 不存在或跨 Work')
-  }
-  const rows = await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray()
-  return rows.filter(row => row.status === 'accepted' || row.status === 'carried-forward')
-    .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey) || left.version - right.version)
-}
-
 /**
  * Rebinds already accepted, immutable outputs to a new control epoch after an
  * author pause/resume. Binary objects and payload bytes are reused; a new

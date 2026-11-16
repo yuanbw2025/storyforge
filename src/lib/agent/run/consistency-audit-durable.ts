@@ -43,7 +43,7 @@ import { createVerificationReceiptV1 } from './verification-receipt'
 
 export const CONSISTENCY_AUDIT_DURABLE_STEP_ID_V1 = 'chapter:consistency-audit' as const
 export const CONSISTENCY_AUDIT_VERIFIER_SET_V1 = 'chapter-consistency-audit-terminal-v1' as const
-export const CONSISTENCY_AUDIT_ADAPTER_VERSION_V1 = 'chapter-consistency-audit-durable-v5' as const
+export const CONSISTENCY_AUDIT_ADAPTER_VERSION_V1 = 'chapter-consistency-audit-durable-v6' as const
 
 const ACTIVE_STATES = new Set(['planned', 'running', 'paused', 'awaiting_confirmation', 'verifying'])
 const AUDIT_IN_FLIGHT = new Map<string, Promise<DurableConsistencyAuditResultV1>>()
@@ -372,6 +372,10 @@ async function executeDurableConsistencyAuditV1(
   if (existing) {
     const checkpointed = await recoverCandidate(input.scope, existing)
     if (checkpointed) {
+      if (!/^[a-f0-9]{64}$/u.test(checkpointed.context?.citationIndexHash ?? '')) {
+        await append(input.scope, existing, 'run.cancelled', { reason: 'legacy-consistency-audit-citations-unverified' })
+        throw new Error('旧审计候选未核验引文来源，不能补签；如需新报告，请再次明确开始。')
+      }
       return finalizeCandidate({
         scope: input.scope,
         snapshot: existing,
@@ -409,6 +413,7 @@ async function executeDurableConsistencyAuditV1(
   try {
     candidate = await runConsistencyAgent({
       projectId: input.scope.projectId,
+      scope: input.scope,
       chapterId: input.chapterId,
       chapterTitle: input.chapterTitle,
       worldGroupId: input.worldGroupId,
@@ -420,12 +425,12 @@ async function executeDurableConsistencyAuditV1(
       budget: input.budget,
       call: input.call,
       trace: {
-        contextAssembled: async ({ assembled, messages }) => {
+        contextAssembled: async ({ assembled, messages, citationIndex, citationIndexHash }) => {
           snapshot = (await recordAgentRunArtifactV1({
             scope: input.scope, runId: snapshot.run.id,
             stepId: CONSISTENCY_AUDIT_DURABLE_STEP_ID_V1, attempt: 1,
             artifactKind: 'rendered-request',
-            content: JSON.stringify({ version: 'consistency-audit-request-v1', messages, provider: input.provider, model: input.model, settings: input.requestSettings }),
+            content: JSON.stringify({ version: 'consistency-audit-request-v2', messages, citationIndex, citationIndexHash, provider: input.provider, model: input.model, settings: input.requestSettings }),
             expectedLastSequence: snapshot.projection.lastSequence,
           })).snapshot
           const manifest = await createContextManifestFromAssemblyV1({
@@ -545,6 +550,7 @@ async function executeDurableConsistencyAuditV1(
 export async function runDurableConsistencyAuditV1(
   input: RunDurableConsistencyAuditInputV1,
 ): Promise<DurableConsistencyAuditResultV1> {
+  input = { ...input, scope: { ...input.scope } }
   const sourceTextHash = await hashChapterText(input.chapterContent)
   const key = [
     input.scope.projectId,

@@ -80,7 +80,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [pendingNodeIds, setPendingNodeIds] = useState<ReadonlySet<number>>(new Set())
   const [pendingReadError, setPendingReadError] = useState<string | null>(null)
-  const batchDecisionRef = useRef<((decision: 'adopt' | 'reject') => void) | null>(null)
+  const batchDecisionRef = useRef<((decision: 'adopt' | 'reject' | 'pause') => void) | null>(null)
 
   useEffect(() => {
     let active = true
@@ -114,6 +114,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
   // 当前选中章节的细纲
   const currentChapter = chapterNodes.find(n => n.id === selectedNodeId)
   const currentDetailed = detailedOutlines.find(d => d.outlineNodeId === selectedNodeId)
+  const currentBatchCandidate = pendingBatchCandidate?.outlineNodeId === selectedNodeId ? pendingBatchCandidate : null
   useInitialRecordTarget(initialNodeId, currentChapter?.id === initialNodeId)
   const validCharacterIds = useMemo(
     () => new Set(characters.map(c => c.id).filter((id): id is number => id != null)),
@@ -154,6 +155,8 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
     clearPendingCandidate,
     restoreEnhanced,
   } = detailGeneration
+  // Batch candidates belong to their frozen chapter, independent of the stream session selected before generation.
+  const enhancedOutput = pendingBatchCandidate ? currentBatchCandidate?.output ?? '' : enhanceAI.output
 
   useEffect(() => {
     let active = true
@@ -271,7 +274,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
           },
           postState: async () => {
             const row = await db.detailedOutlines.where('outlineNodeId').equals(currentChapter.id!).first()
-            return row ? { outlineNodeId: row.outlineNodeId, scenes: row.scenes, lastUsedSummary: row.lastUsedSummary ?? '' } : null
+            return row ?? null
           },
         })
         const expectedIds = committed.contract.scope.outlineNodeIds ?? []
@@ -367,6 +370,15 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null)
   const batchAbortRef = useRef<AbortController | null>(null)
 
+  useEffect(() => () => {
+    batchAbortRef.current?.abort()
+    const decide = batchDecisionRef.current
+    if (decide) {
+      batchDecisionRef.current = null
+      decide('pause')
+    }
+  }, [])
+
   const handleBatchDetail = useCallback(async () => {
     if (batchProgress) return // 已在运行
     const readFailure = loadError || useDetailedOutlineStore.getState().loadError
@@ -399,13 +411,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
         },
         onPostState: async outlineNodeId => {
           const row = await db.detailedOutlines.where('outlineNodeId').equals(outlineNodeId).first()
-          return row ? {
-            outlineNodeId: row.outlineNodeId,
-            scenes: row.scenes,
-            openingHook: row.openingHook ?? '',
-            endingCliffhanger: row.endingCliffhanger ?? '',
-            lastUsedSummary: row.lastUsedSummary ?? '',
-          } : null
+          return row ?? null
         },
         onProgress: setBatchProgress,
         signal: ac.signal,
@@ -428,11 +434,9 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
     const decide = batchDecisionRef.current
     if (decide) {
       batchDecisionRef.current = null
-      setPendingBatchCandidate(null)
-      enhanceAI.reset()
-      decide('reject')
+      decide('pause')
     }
-  }, [enhanceAI])
+  }, [])
 
   return (
     <div className="h-full flex flex-col md:flex-row">
@@ -548,19 +552,19 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
             )}
 
             {/* 完善细纲 AI 输出 */}
-            {(enhanceAI.output || enhanceAI.isStreaming || enhanceAI.error) && (
+            {(enhancedOutput || enhanceAI.isStreaming || enhanceAI.error) && (
               <div className="mb-4">
                 <AIStreamOutput
-                  output={enhanceAI.output} isStreaming={enhanceAI.isStreaming} isFinalizing={finalizingOperation === 'enhanced' && !enhanceAI.isStreaming} error={enhanceAI.error} tokenUsage={enhanceAI.tokenUsage}
+                  output={enhancedOutput} isStreaming={enhanceAI.isStreaming} isFinalizing={finalizingOperation === 'enhanced' && !enhanceAI.isStreaming} error={enhanceAI.error} tokenUsage={enhanceAI.tokenUsage}
                   editable={pendingDetailedCandidate?.candidate.operation === 'enhanced'}
                   onStop={enhanceAI.stop}
-                  onAccept={pendingDetailedCandidate?.candidate.operation === 'enhanced'
+                  onAccept={currentBatchCandidate || pendingDetailedCandidate?.candidate.operation === 'enhanced'
                     ? text => handleAcceptDetailed('enhanced', text)
                     : undefined}
-                  onDismiss={pendingDetailedCandidate?.candidate.operation === 'enhanced'
+                  onDismiss={currentBatchCandidate || pendingDetailedCandidate?.candidate.operation === 'enhanced'
                     ? () => { void handleDismissDetailed('enhanced') }
                     : undefined}
-                  onRetry={handleEnhancedGenerate}
+                  onRetry={pendingBatchCandidate ? undefined : handleEnhancedGenerate}
                 />
                 {pendingDetailedCandidate?.candidate.operation === 'enhanced'
                   && pendingDetailedCandidate.candidate.creativeArtifact && (

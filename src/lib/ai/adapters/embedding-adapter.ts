@@ -2,7 +2,7 @@
  * NS-5 · Embedding 适配器 — 语义检索通道的唯一出口。
  *
  * 走 OpenAI 兼容 /embeddings 端点（{model, input:[...]} → {data:[{embedding:[...]}]}）。
- * 批量嵌入（一次多段省往返）；带超时重试；消耗记到 'retrieval.embed' 分类。
+ * 批量嵌入（一次多段省往返）；带超时与取消；消耗记到 'retrieval.embed' 分类。
  * 失败抛错由调用方决定降级——绝不污染主流程。
  */
 import type { EmbeddingConfig } from '../../types'
@@ -54,19 +54,33 @@ export async function embedTexts(
       const body = await res.text().catch(() => '')
       throw new Error(`embedding HTTP ${res.status}: ${body.slice(0, 200)}`)
     }
-    const json = await res.json() as { data?: Array<{ embedding?: number[]; index?: number }> }
-    const data = json.data
+    const json: unknown = await res.json()
+    const data = json && typeof json === 'object' && 'data' in json ? json.data : undefined
     if (!Array.isArray(data) || data.length !== texts.length) {
-      throw new Error(`embedding 返回条数不符：期望 ${texts.length}，实得 ${data?.length ?? 0}`)
+      throw new Error(`embedding 返回条数不符：期望 ${texts.length}，实得 ${Array.isArray(data) ? data.length : 0}`)
     }
-    // 按 index 归位（多数实现已有序，仍按 index 防错位）
+    // 整批未提供 index 时按响应顺序兼容；一旦提供，必须是完整的一一映射。
+    const rows: unknown[] = data
+    const indexed = rows.some(row => row != null && typeof row === 'object' && 'index' in row)
     const out: number[][] = new Array(texts.length)
-    data.forEach((d, i) => {
-      const vec = d.embedding
+    const seen = new Set<number>()
+    let dimensions = 0
+    for (const [position, row] of rows.entries()) {
+      if (!row || typeof row !== 'object' || !('embedding' in row)) throw new Error('embedding 响应条目无效')
+      const vec = row.embedding
       if (!Array.isArray(vec) || !vec.length) throw new Error('embedding 向量为空')
-      const at = typeof d.index === 'number' && d.index >= 0 && d.index < texts.length ? d.index : i
+      for (const value of vec) {
+        if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('embedding 向量必须由有限数值组成')
+      }
+      if (dimensions && vec.length !== dimensions) throw new Error('embedding 向量维度不一致')
+      dimensions = vec.length
+      const at = indexed ? ('index' in row ? row.index : undefined) : position
+      if (typeof at !== 'number' || !Number.isInteger(at) || at < 0 || at >= texts.length || seen.has(at)) {
+        throw new Error('embedding index 必须为范围内、不重复且完整的整数')
+      }
+      seen.add(at)
       out[at] = vec
-    })
+    }
     // 消耗记账（嵌入只有输入，无输出）
     const inputTokens = texts.reduce((s, t) => s + estimateTokens(t), 0)
     void recordUsage({

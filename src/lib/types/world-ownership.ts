@@ -89,6 +89,12 @@ export interface WorkCharacterBinding {
   updatedAt: number
 }
 
+/** A real World owner; author domain operations do not require a Work. */
+export interface WorldOwnerScope {
+  projectId: number
+  worldId: number
+}
+
 export interface WorkspaceScope {
   projectId: number
   worldId: number

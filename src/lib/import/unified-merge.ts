@@ -247,7 +247,7 @@ export function buildRollingContext(merged: UnifiedParseResult): string {
 export function normalizeUnified(raw: unknown, codex?: {
   sourceText: string
   chunkIndex: number
-  options: readonly CodexImportCategoryOption[]
+  options: readonly Pick<CodexImportCategoryOption, 'ref' | 'fields'>[]
 }): UnifiedParseResult {
   const r = (raw as UnifiedParseResult) || {}
   return normalizeNonCharacterConcepts({

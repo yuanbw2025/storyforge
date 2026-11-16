@@ -7,12 +7,20 @@ on:
     - cron: '17 2 * * *'   # 每天 UTC 02:17（错峰，避开整点拥堵）
   workflow_dispatch: {}     # 支持在 Actions 页面手动触发（首次验证用）
 
+concurrency:
+  group: daily-traffic-archive
+  cancel-in-progress: false
+
 permissions:
-  contents: write           # 允许 workflow 把归档结果 commit 回仓库
+  actions: read
+  contents: write
+  pull-requests: write
 
 jobs:
   archive:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -24,10 +32,64 @@ jobs:
           python3 scripts/archive-traffic.py
           python3 scripts/archive-release-downloads.py
 
-      - name: Commit updated data
+      - name: Validate and stage the daily CSV update
+        id: stage
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/traffic
-          git diff --cached --quiet || git commit -m "chore(traffic): 归档 $(date -u +%F) 流量数据"
-          git push
+          git add -- data/traffic
+          if git diff --cached --quiet; then exit 0; fi
+          # Preserve the public CSV paths and admit only these three generated files.
+          git diff --cached --quiet -- . ':(exclude)data/traffic/clones.csv' ':(exclude)data/traffic/views.csv' ':(exclude)data/traffic/release-assets.csv'
+          python3 - <<'PYCSV'
+          import csv, pathlib, subprocess
+          for path in pathlib.Path('data/traffic').glob('*.csv'):
+              header = subprocess.check_output(['git', 'show', f'HEAD:{path}']).decode().splitlines()[0]
+              with path.open(newline='') as stream:
+                  rows = csv.reader(stream, strict=True)
+                  fields = next(rows)
+                  if fields != next(csv.reader([header])) or any(len(row) != len(fields) for row in rows):
+                      raise SystemExit(f'Invalid archive columns in {path}')
+          PYCSV
+          git diff --cached --quiet --diff-filter=D || { echo 'Archive deletion refused'; exit 1; }
+          git commit -m "chore(traffic): 归档 $(date -u +%F) 流量数据"
+          branch="automation/traffic-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git push origin "HEAD:refs/heads/$branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Open the archive pull request
+        id: open
+        if: steps.stage.outputs.head != ''
+        env:
+          # Opening as the existing archive account triggers the ordinary pull_request checks.
+          GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+          BRANCH: ${{ steps.stage.outputs.branch }}
+        run: |
+          number=$(gh api --method POST "repos/$GITHUB_REPOSITORY/pulls" -f base=main -f head="$BRANCH" \
+            -f title="chore(traffic): 归档 $(date -u +%F) 流量数据" \
+            -f body="仅更新已校验的每日统计 CSV，沿用现有历史与公开路径。" --jq .number)
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Merge the checked archive commit
+        if: steps.open.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ steps.open.outputs.number }}
+          HEAD_SHA: ${{ steps.stage.outputs.head }}
+          BRANCH: ${{ steps.stage.outputs.branch }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..24}; do
+            run_id=$(gh run list --workflow ci.yml --event pull_request --commit "$HEAD_SHA" \
+              --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+            if [[ -n "$run_id" ]]; then break; fi
+            sleep 5
+          done
+          test -n "$run_id"
+          gh run watch "$run_id" --exit-status --interval 10
+          pull="repos/$GITHUB_REPOSITORY/pulls/$NUMBER"
+          test "$(gh api "$pull" --jq '.base.ref')" = main
+          test "$(gh api --method PUT "$pull/merge" -f sha="$HEAD_SHA" -f merge_method=merge --jq .merged)" = true
+          git push --force-with-lease="refs/heads/$BRANCH:$HEAD_SHA" origin ":refs/heads/$BRANCH"

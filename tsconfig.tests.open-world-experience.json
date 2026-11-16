@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2020", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
+    "types": ["node", "vitest/globals", "vite/client"]
+  },
+  "files": [
+    "src/vite-env.d.ts",
+    "src/lib/platform/client-updates.ts",
+    "tests/regression/R-OPEN-WORLD3-experience-design.test.ts",
+    "tests/helpers/text-open-world-delivery-recognition-assertions.ts"
+  ],
+  "include": []
+}

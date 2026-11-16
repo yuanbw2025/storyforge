@@ -118,6 +118,7 @@ import type {
   WorldGroupLink,
   WorldNode,
   WorldRelease,
+  WorldSourceReceiptV1,
   WorldRevision,
   WorldRulesProfile,
   Worldview,
@@ -129,7 +130,7 @@ import type { RetrievalChunk } from '../types/retrieval-chunk'
 import type { TemporalFact } from '../types/temporal-fact'
 
 export const STORYFORGE_DATABASE_NAME = 'storyforge-core'
-export const STORYFORGE_SCHEMA_VERSION = 13
+export const STORYFORGE_SCHEMA_VERSION = 14
 
 /** The hard-cutover baseline released before independent creation releases. */
 export const STORYFORGE_STORES_V1 = {
@@ -319,8 +320,13 @@ export const STORYFORGE_STORES_V12 = {
   worldNarrativeIndexCaches: '++id, projectId, worldId, &releaseId, lastAccessedAt',
 } as const satisfies Record<string, string>
 
-export const STORYFORGE_STORES = {
+export const STORYFORGE_STORES_V13 = {
   ...STORYFORGE_STORES_V12,
+} as const satisfies Record<string, string>
+
+export const STORYFORGE_STORES = {
+  ...STORYFORGE_STORES_V13,
+  worldSourceReceipts: '++id, projectId, worldId, worldReleaseId, &[worldId+declarationHash], [worldId+packageDigest], [worldId+releaseUid]',
 } as const satisfies Record<string, string>
 
 export class StoryForgeDB extends Dexie {
@@ -398,6 +404,7 @@ export class StoryForgeDB extends Dexie {
   narrativeChoices!: Table<NarrativeChoice, number>
   worldRevisions!: Table<WorldRevision, number>
   worldReleases!: Table<WorldRelease, number>
+  worldSourceReceipts!: Table<WorldSourceReceiptV1, number>
   worldNarrativeIndexCaches!: Table<WorldNarrativeIndexCacheV1, number>
   worldDerivations!: Table<WorldDerivationV1, number>
   workspaceDocuments!: Table<WorkspaceDocumentBindingV1, number>
@@ -471,6 +478,7 @@ export class StoryForgeDB extends Dexie {
     this.version(10).stores(STORYFORGE_STORES_V10)
     this.version(11).stores(STORYFORGE_STORES_V11)
     this.version(12).stores(STORYFORGE_STORES_V12)
+    this.version(13).stores(STORYFORGE_STORES_V13)
     this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)
   }
 }

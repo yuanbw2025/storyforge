@@ -26,8 +26,12 @@ async function seed(suffix = '', withProfile = true) {
   const now = Date.now()
   const created = await seedCurrentWorkspace(`纸灯小说${suffix}`)
   const { projectId, worldId, workId } = created.scope
+  const outlineNodeId = await db.outlineNodes.add({
+    projectId, workId, parentId: null, type: 'chapter', title: '雨落纸灯', summary: '',
+    order: 1, createdAt: now, updatedAt: now,
+  })
   const chapterId = await db.chapters.add({
-    projectId, worldId, workId, title: '雨落纸灯', order: 1, status: 'polished',
+    projectId, worldId, workId, outlineNodeId, title: '雨落纸灯', order: 1, status: 'polished',
     content: '<p>雨落下来。灯没有灭。阿棠把伞收在门外，只带进一身潮湿。</p><p>她不解释。旧钟又响了一次。</p>',
     summary: '', wordCount: 36, createdAt: now, updatedAt: now,
   } as any) as number

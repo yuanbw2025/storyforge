@@ -20,3 +20,6 @@
 ## 共享能力
 
 [本地记忆工作区](/features/memory-workspace) · [AI 候选与恢复](/guides/ai-workflow) · [当前能力状态](/features/current-capabilities)
+
+
+作者可从小说和已有作品分析中选择内容投稿社区，先预览再确认公开。步骤见[公开分享指南](/features/longform/references#公开分享小说与作品分析)。

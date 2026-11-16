@@ -1,3 +1,4 @@
+import {projectChatInquiryQuestionReferenceV1} from './inquiry-question-reference'
 import type {CharacterInteractionRuntimeState} from '../types'
 import {isChatMessageRetrievableV1} from './narrative-retrieval'
 
@@ -24,16 +25,7 @@ export function chatInquiryContinuityContextV1(state: CharacterInteractionRuntim
       // An excluded withdrawal cannot silently disappear from this proof.
       && !state.messages.some(m => m.eventSequence > question.eventSequence
         && (m.supersededBySequence != null || !isChatMessageRetrievableV1(state, m))))
-    .map(question => {
-      const known = new Set(story.situation.facts.filter(f => f.audienceKeys.includes(pending.actorKey)
-        && (f.sourceEventSequence === 0 || f.sourceEventSequence <= question.eventSequence)).map(f => f.factKey))
-      return {messageId: question.messageId, questionSequence: question.eventSequence,
-        questionEvidenceFactKeys: pending.evidenceFactKeys.filter(key => known.has(key)),
-        targets: story.permissions.maxDiscoveriesPerSituation ? story.situation.facts.filter(f => !f.audienceKeys.includes(pending.actorKey)
-          && f.discovery?.sceneKey === scene.sceneKey && f.discovery.actorKeys.includes(pending.actorKey)
-          && f.discovery.prerequisiteFactKeys.every(key => known.has(key)))
-          .map(f => ({factKey: f.factKey, requiredEvidenceFactKeys: [...f.discovery!.prerequisiteFactKeys]})) : []}
-    })
+    .map(question => projectChatInquiryQuestionReferenceV1(story, pending, scene.sceneKey, question))
   const first = Math.min(...questions.map(q => q.questionSequence))
   const dialogueMessageIds = state.messages.filter(m => m.eventSequence >= first)
     .map(m => m.messageId)

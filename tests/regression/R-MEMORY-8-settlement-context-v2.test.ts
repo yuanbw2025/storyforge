@@ -1,3 +1,4 @@
+import { workspaceWriteText } from '../helpers/workspace-projection-write'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
@@ -39,11 +40,11 @@ function memoryDirectory(): FileSystemDirectoryHandle {
       if (!dir.files.has(fileName)) dir.files.set(fileName, '')
       return {
         kind: 'file', name: fileName,
-        async getFile() { const text = dir.files.get(fileName)!; return { async text() { return text } } as File },
+        async getFile() { const text = dir.files.get(fileName)!; return new File([text], 'fixture') },
         async createWritable() {
           let text = ''
           return {
-            async write(value: string | Blob | BufferSource) { text += String(value) },
+            async write(value: string | ArrayBuffer) { text += workspaceWriteText(value) },
             async close() { dir.files.set(fileName, text) },
           } as FileSystemWritableFileStream
         },

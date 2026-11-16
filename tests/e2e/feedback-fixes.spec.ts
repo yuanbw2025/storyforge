@@ -76,49 +76,77 @@ test('custom gateway network failure gives actionable guidance and HTTP auth err
   await expect(page.getByText(/❌.*Invalid API key/)).toBeVisible()
 })
 
-for (const failure of ['malformed', 'exhausted-503'] as const) test(`document upload recovers ${failure} only on author action after refresh`, async ({ page }) => {
-  const failedCalls = failure === 'exhausted-503' ? 3 : 1
+for (const failure of ['malformed', 'http-503'] as const) test(`document upload keeps ${failure} evidence and only a new import sends again`, async ({ page }) => {
   await createLongform(page, '解析隔离验收')
-  await page.evaluate(async () => {
-    const { useAIConfigStore } = await (new Function('return import("/storyforge/src/stores/ai-config.ts")'))()
-    useAIConfigStore.getState().setConfig({ provider: 'deepseek', baseUrl: 'https://parse.invalid/v1', model: 'deepseek-v4-flash', apiKey: 'test-only-key' })
+  const configureProvider = () => page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
+    const { useAIConfigStore } = await load<typeof import('../../src/stores/ai-config')>('/storyforge/src/stores/ai-config.ts')
+    useAIConfigStore.getState().setConfig({
+      provider: 'deepseek', baseUrl: 'https://parse.invalid/v1', model: 'deepseek-v4-flash', apiKey: 'test-only-key',
+    })
   })
+  await configureProvider()
   let calls = 0
   let valid = false
-  await page.route('https://parse.invalid/**', async route => {
+  await page.route('https://parse.invalid/v1/chat/completions', async route => {
+    expect(route.request().method()).toBe('POST')
     calls++
     expect(route.request().postDataJSON()).toMatchObject({ response_format: { type: 'json_object' }, thinking: { type: 'disabled' } })
-    if (!valid && failure === 'exhausted-503') {
+    if (!valid && failure === 'http-503') {
       await route.fulfill({ status: 503, body: 'Service unavailable' })
       return
     }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: valid ? '{"outline":[{"type":"volume","title":"海港","children":[{"type":"chapter","title":"归航"}]}]}' : 'not-json' } }], usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } }) })
+    const content = valid
+      ? JSON.stringify({ outline: [{ type: 'volume', title: '海港', children: [{ type: 'chapter', title: '归航' }] }] })
+      : 'not-json'
+    await route.fulfill({ status: 200, json: {
+      choices: [{ finish_reason: 'stop', message: { content } }],
+      usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+    } })
   })
+  const startImport = async () => {
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'harbor.txt', mimeType: 'text/plain', buffer: Buffer.from('第一章 归航\n海港有一座灯塔，夜里引导渔船归来。'.repeat(15)),
+    })
+    await page.getByRole('button', { name: '开始解析', exact: true }).click()
+    await page.getByRole('button', { name: /导入当前项目（/ }).click()
+  }
+  const expectStoppedEvidence = async () => {
+    await expect(page.getByText('本块有保留的尝试记录。打开或继续本任务不会重新发送请求。')).toBeVisible()
+    if (failure === 'malformed') {
+      await page.getByText('查看已保留的模型原答', { exact: true }).click()
+      await expect(page.getByText('not-json', { exact: true })).toBeVisible()
+      await expect(page.getByText('已记录用量：输入 10，输出 10，合计 20 tokens。')).toBeVisible()
+    } else {
+      await expect(page.getByText('服务返回 HTTP 503。')).toBeVisible()
+    }
+    expect(calls).toBe(1)
+  }
   await openLongformLeaf(page, '文档导入')
-  await page.locator('input[type="file"]').first().setInputFiles({ name: 'harbor.txt', mimeType: 'text/plain', buffer: Buffer.from('第一章 归航\n海港有一座灯塔，夜里引导渔船归来。'.repeat(15)) })
-  await page.getByRole('button', { name: '开始解析', exact: true }).click()
-  await page.getByRole('button', { name: /导入当前项目（/ }).click()
-  if (failure === 'malformed') await expect(page.getByText(/块 1 已停止，未自动重发/).last()).toBeVisible()
-  await expect.poll(() => page.evaluate(async () => {
-    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
-    return (await db.importSessions.toArray())[0]?.status
-  })).toBe('failed')
-  expect(calls).toBe(failedCalls)
+  await startImport()
+  await expectStoppedEvidence()
+  await expect(page.getByRole('dialog', { name: '审查导入候选' })).toHaveCount(0)
+
   await page.reload()
-  await expect(page.getByText(/harbor.txt/).first()).toBeVisible()
-  expect(calls).toBe(failedCalls)
+  await openLongformLeaf(page, '文档导入')
+  await expect(page.getByText('已从本地存档恢复原文')).toBeVisible()
+  expect(calls).toBe(1)
+  await page.getByRole('button', { name: '继续处理', exact: true }).click()
+  await expectStoppedEvidence()
+
+  // A fresh author-confirmed import gets a new attempt; the old evidence remains.
+  await page.reload()
+  await openLongformLeaf(page, '文档导入')
+  await configureProvider()
   valid = true
-  // The failed state is durable; restoring the original upload permits an
-  // explicit resume and never silently reissues a paid model request.
-  const resume = page.getByRole('button', { name: /续跑|继续解析|恢复/ }).first()
-  await expect(resume).toBeVisible()
-  await resume.click()
-  await expect.poll(() => calls).toBe(failedCalls + 1)
-  await expect.poll(() => page.evaluate(async () => {
-    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
-    return (await db.importSessions.toArray())[0]?.status
-  })).toBe('done')
+  await startImport()
+  const review = page.getByRole('dialog', { name: '审查导入候选' })
+  await expect(review.getByRole('heading', { name: '审查第 1 块' })).toBeVisible()
+  expect(calls).toBe(2)
+  await review.getByRole('button', { name: '确认保存本块' }).click()
+  await expect(page.getByRole('heading', { name: '✓ 全部导入完成' })).toBeVisible()
   await page.getByRole('button', { name: '完成', exact: true }).click()
   await openLongformLeaf(page, '大纲')
   await expect(page.getByText('海港', { exact: true })).toBeVisible()
+  expect(calls).toBe(2)
 })

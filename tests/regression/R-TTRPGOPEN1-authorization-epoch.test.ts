@@ -47,6 +47,26 @@ describe('R-TTRPGOPEN1 authoritative Session Zero and epochs', () => {
     expect(() => assertFrozenProductRuntimeStateV1({ ...good, initial: altered })).toThrow(/冻结内容/)
   })
 
+  it('SFQA009 replays a participant command with its original persisted fingerprint bytes', async () => {
+    const fixture = await seedOpenTtrpgSessionV1()
+    const human = (await readTtrpgSessionParticipantsV2(fixture.sessionId)).find(seat => seat.actorKey === 'hero')!
+    const input = {
+      sessionId: fixture.sessionId, seatKey: human.seatKey, expectedRevision: human.revision,
+      commandId: 'sfqa009.stable-seat', requestedByViewerKey: OPEN_HUMAN_VIEWER,
+      assignmentState: 'claimed' as const, consent: { aiIdentityDisclosed: true, aiAdviceAllowed: false },
+    }
+    const configured = await configureTtrpgSessionParticipantV2(input)
+    const frozen = '{"assignmentState":"claimed","consent":{"aiAdviceAllowed":false,"aiIdentityDisclosed":true},"requestedBy":"viewer.seat.hero","seatKey":"seat.hero"}'
+    expect(configured.lastCommandFingerprint).toBe(frozen)
+    expect((await readTtrpgSessionParticipantsV2(fixture.sessionId)).find(seat => seat.id === configured.id)
+      ?.lastCommandFingerprint).toBe(frozen)
+    await expect(configureTtrpgSessionParticipantV2({
+      ...input, consent: { aiAdviceAllowed: false, aiIdentityDisclosed: true },
+    })).resolves.toEqual(configured)
+    await expect(configureTtrpgSessionParticipantV2({ ...input, consent: { ...input.consent, aiAdviceAllowed: true } }))
+      .rejects.toThrow('commandId 已被不同席位配置使用')
+  })
+
   it('cannot start before Session Zero or use the old implicit authority API', async () => {
     const fixture = await seedOpenTtrpgSessionV1()
     const before = await db.productRuntimeSessions.get(fixture.sessionId)

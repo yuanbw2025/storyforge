@@ -23,7 +23,7 @@ import { parseProductProductionBriefV3 } from '../product-production/contracts'
 import { parseProductProductionPlanV3 } from '../product-production/plan'
 import { readMediaBlobObjectData } from '../product-production/media-blob-store'
 import { detectProductImageDimensionsV1, detectProductMediaMimeTypeV1 } from '../product-production/media-adapters'
-import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
+import { readTextOpenWorldCreatorDerivedBuildAuthorityV1, readTextOpenWorldCreatorBuildNewWorkAuthorityV1 } from './creator-derived-authority'
 import { textOpenWorldProductionTaskDescendantsV1 } from './production-contract'
 import {
   parseTextOpenWorldCreatorMediaAuthorizationV1,
@@ -384,8 +384,14 @@ export async function prepareTextOpenWorldCreatorMediaV1(input: {
   provider?: ResolvedProductMediaCapabilityV1 | null
   imports?: TextOpenWorldCreatorMediaImportInputV1[]
 }): Promise<TextOpenWorldCreatorMediaPreparationV1> {
+  input = { ...input, scope: structuredClone(input.scope),
+    ...(input.imports === undefined ? {} : { imports: structuredClone(input.imports) }),
+    ...(input.provider == null ? {} : { provider: { ...input.provider,
+      binding: structuredClone(input.provider.binding), receipt: structuredClone(input.provider.receipt),
+    } }),
+  }
   const scope = await resolveScope({ scope: input.scope })
-  const derived = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({ scope, buildId: input.buildId })
+  const derived = await readTextOpenWorldCreatorBuildNewWorkAuthorityV1({ scope, buildId: input.buildId, operation: '规划新媒资制作' })
   const { production, build: baseBuild, briefRow } = derived
   if (production.id !== input.productionId
     || production.status !== 'preview-ready'
@@ -659,6 +665,8 @@ export async function createTextOpenWorldCreatorMediaAuthorizationV1(input: {
   authorizationNonce: string
   authorizedAt: number
 }): Promise<TextOpenWorldCreatorMediaAuthorizationV1> {
+  const { provider, ...preparedData } = input.prepared
+  input = { ...input, prepared: { ...structuredClone(preparedData), provider } }
   const nonce = input.authorizationNonce.trim().normalize('NFC')
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(nonce)) fail('authorizationNonce 无效')
   const body = {

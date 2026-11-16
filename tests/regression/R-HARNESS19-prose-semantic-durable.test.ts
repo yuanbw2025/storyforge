@@ -310,20 +310,23 @@ describe.sequential('R-HARNESS19 · 正文语义评审 durable 主路径', () =>
     ))
     if (!contractBinding) throw new Error('测试夹具缺少冻结语义评审 binding')
     const { stepId: _stepId, ...reviewerBinding } = contractBinding
-    snapshot = await beginProseSemanticStepV1({
+    const semanticRequest = await beginProseSemanticStepV1({
       scope: fixture.scope,
       snapshot,
       stepId: PROSE_SEMANTIC_REVIEW_STEP_ID_V1,
       contextManifest: reviewManifest,
       executionBinding: reviewerBinding,
       requestBinding: { candidateTextHash: await hashCanonicalValue(outputText) },
+      messages: [{ role: 'user', content: '显式评审潮门正文' }],
       reservedTokens: 4_000,
     })
+    snapshot = semanticRequest.snapshot
     const rawReview = '{"issues":[]}'
     snapshot = await recordProseSemanticModelOutputV1({
       scope: fixture.scope,
       snapshot,
       stepId: PROSE_SEMANTIC_REVIEW_STEP_ID_V1,
+      request: semanticRequest.request,
       output: rawReview,
       usedTokens: 900,
     })

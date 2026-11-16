@@ -11,6 +11,7 @@ const mediaMocks = vi.hoisted(() => ({
   readVisible: vi.fn(),
   request: vi.fn(),
   retry: vi.fn(),
+  recover: vi.fn(),
   cancel: vi.fn(),
   readBlob: vi.fn(),
 }));
@@ -19,6 +20,7 @@ vi.mock("../../src/lib/ttrpg/runtime-media", () => ({
   readVisibleTtrpgRuntimeMediaRequestsV1: mediaMocks.readVisible,
   requestConfiguredTtrpgRuntimeAssetV1: mediaMocks.request,
   retryConfiguredTtrpgRuntimeAssetRequestV1: mediaMocks.retry,
+  recoverTtrpgRuntimeMediaQueueV1: mediaMocks.recover,
   cancelTtrpgRuntimeAssetRequestV1: mediaMocks.cancel,
   readTtrpgRuntimeMediaBlobV1: mediaMocks.readBlob,
 }));
@@ -50,7 +52,7 @@ function projection(
         status,
         requestKey,
         assetKey: null,
-        mediaAssetId: null,
+        runtimeAsset: null,
         mediaContentHash: null,
         lastErrorCode:
           status === "failed" ? "provider-generation-failed" : null,
@@ -75,6 +77,7 @@ describe("R-TTRPG-3G · runtime media UI", () => {
     mediaMocks.request
       .mockReset()
       .mockResolvedValue({ id: 1, status: "queued" });
+    mediaMocks.recover.mockReset().mockResolvedValue(0);
     mediaMocks.retry.mockReset().mockResolvedValue({ id: 1, status: "queued" });
     mediaMocks.cancel
       .mockReset()
@@ -139,6 +142,8 @@ describe("R-TTRPG-3G · runtime media UI", () => {
         status: "failed",
         attemptCount: 1,
         maximumAttempts: 3,
+        canRetry: true,
+        hasUnresolvedAttempt: false,
       },
     ]);
     const onChanged = vi.fn(async () => undefined);
@@ -175,5 +180,26 @@ describe("R-TTRPG-3G · runtime media UI", () => {
       requestId: 11,
       viewerKey: "viewer.gm",
     });
+  });
+  it("刷新只复核过期请求，未确认费用不显示重试", async () => {
+    const key = "runtime.unknown.1";
+    const request = { id: 21, requestKey: key, attemptCount: 1, maximumAttempts: 3,
+      canRetry: false, canResume: false, hasUnresolvedAttempt: true };
+    mediaMocks.readVisible.mockResolvedValue([{ ...request, status: "generating" }]);
+    mediaMocks.recover.mockImplementation(async () => {
+      mediaMocks.readVisible.mockResolvedValue([{ ...request, status: "failed" }]);
+      return 1;
+    });
+    const onChanged = vi.fn(async () => undefined);
+    const props = { sessionId: 7, scope: { projectId: 1, worldId: 2, workId: 3 }, runtimePackage,
+      source: { kind: "release", productReleaseId: 1 } as const, viewerKey: "viewer.gm", disabled: false, onChanged };
+    await act(async () => root.render(createElement(TtrpgRuntimeMediaPanel, { ...props, media: projection("queued", key) })));
+    expect(mediaMocks.recover).toHaveBeenCalledWith({ sessionId: 7 });
+    expect(onChanged).toHaveBeenCalled();
+    await act(async () => root.render(createElement(TtrpgRuntimeMediaPanel, { ...props, media: projection("failed", key) })));
+    expect(host.textContent).toContain("已保留预算");
+    expect(host.textContent).not.toMatch(/重试|继续生成/);
+    expect(mediaMocks.request).not.toHaveBeenCalled();
+    expect(mediaMocks.retry).not.toHaveBeenCalled();
   });
 });

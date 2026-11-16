@@ -23,15 +23,39 @@ function cue(block: Extract<ScreenplayBlock, { type: 'character' }>): string {
   return `${block.name.toLocaleUpperCase()}${block.extension ? ` (${block.extension})` : ''}${block.dualDialogue ? ' ^' : ''}`
 }
 
+/** AST text is literal, not author-supplied Fountain markup. */
+function fountainText(value: string): string {
+  // The reference readers do not reliably escape literal note delimiters.
+  // Never silently hide manuscript text inside a note or alter the stored AST.
+  if (value.includes('[[')) throw new Error('[screenplay-render] Fountain 无法无损导出含 [[ 的原文，请使用 FDX 导出；剧本内容未修改。')
+  return value.replace(/\r\n?/g, '\n').replace(/[\\*_]/g, '\\$&')
+    .replace(/^([ \t]*)([!~])/gm, '$1\\$2')
+}
+
+function fountainLine(value: string, label: string): string {
+  if (/[\r\n\u2028\u2029]/.test(value)) throw new Error(`[screenplay-render] ${label}包含换行，无法作为 Fountain 单行元素导出，请使用 FDX 导出。`)
+  return fountainText(value)
+}
+
+function fountainContinuousText(value: string): string {
+  // Fountain reserves a line containing exactly two spaces for an internal
+  // blank line; a truly empty line would end this dialogue/note block.
+  return fountainText(value).split('\n').map(line => line.trim() ? line : '  ').join('\n')
+}
+
 function titlePageLines(document: ScreenplayRenderDocumentV1): string[] {
   const page = document.targetSpec.titlePage
+  const field = (key: string, value: string) => {
+    const text = fountainText(value)
+    return text.includes('\n') ? `${key}:\n${text.split('\n').map(line => `   ${line}`).join('\n')}` : `${key}: ${text}`
+  }
   return [
-    `Title: ${document.title}`,
-    `Credit: ${page.creditLine}`,
-    `Author: ${page.authorDisplayName}`,
-    ...(page.contactText ? [`Contact: ${page.contactText}`] : []),
-    ...(page.copyrightNotice ? [`Copyright: ${page.copyrightNotice}`] : []),
-    ...(page.draftLabel ? [`Draft date: ${page.draftLabel}`] : []),
+    field('Title', document.title),
+    ...(page.creditLine.trim() ? [field('Credit', page.creditLine)] : []),
+    ...(page.authorDisplayName.trim() ? [field('Author', page.authorDisplayName)] : []),
+    ...(page.contactText ? [field('Contact', page.contactText)] : []),
+    ...(page.copyrightNotice ? [field('Copyright', page.copyrightNotice)] : []),
+    ...(page.draftLabel ? [field('Draft date', page.draftLabel)] : []),
   ]
 }
 
@@ -41,17 +65,36 @@ export function renderScreenplayFountainV1(document: ScreenplayRenderDocumentV1)
   for (const scene of orderedScenes(document)) {
     if (document.targetSpec.format !== 'film' && scene.episodeNumber !== episode) {
       episode = scene.episodeNumber
-      lines.push(`=== 第 ${episode} 集 ===`, '')
+      lines.push(`!=== 第 ${episode} 集 ===`, '')
     }
-    lines.push(`.${heading(scene)}`, '')
+    const sceneHeading = heading(scene)
+    if (/#[-\w.]+#\s*$/.test(sceneHeading)) throw new Error('[screenplay-render] 场景标题末尾的 #...# 会被 Fountain 识别为场景编号，请使用 FDX 导出以保留原文。')
+    lines.push(`.${fountainLine(sceneHeading, '场景标题')}`, '')
     for (const block of scene.blocks) {
       if (block.type === 'note' && !document.includeNotes) continue
-      if (block.type === 'character') lines.push(cue(block))
-      else if (block.type === 'parenthetical') lines.push(`(${block.text.replace(/^\(|\)$/g, '')})`)
-      else if (block.type === 'transition') lines.push(`> ${block.text.toLocaleUpperCase()}`)
-      else if (block.type === 'shot') lines.push(`!! ${block.text}`)
-      else if (block.type === 'note') lines.push(`[[${block.text}]]`)
-      else lines.push(block.text)
+      if (block.type === 'character') {
+        if (block.name.includes('^')) throw new Error('[screenplay-render] 角色名包含 Fountain 双栏标记 ^，请使用 FDX 导出以保留原名。')
+        lines.push(`@${fountainLine(block.name, '角色名')}${block.extension ? ` (${block.extension})` : ''}${block.dualDialogue ? ' ^' : ''}`)
+        continue
+      }
+      if (block.type === 'parenthetical') {
+        lines.push(`(${fountainLine(block.text.replace(/^\(|\)$/g, ''), '括注')})`)
+        continue
+      }
+      if (block.type === 'dialogue') {
+        if (block.text.split(/\r\n?|\n/).some(line => /^\s*\(.+\)\s*$/.test(line))) throw new Error('[screenplay-render] 对白有整行括号文本，会被 Fountain 识别为括注，请使用 FDX 导出以保留对白类型。')
+        lines.push(fountainContinuousText(block.text))
+      }
+      else if (block.type === 'transition') {
+        if (block.text.trimEnd().endsWith('<')) throw new Error('[screenplay-render] 转场以 < 结尾会被 Fountain 识别为居中文字，请使用 FDX 导出。')
+        lines.push(`> ${fountainLine(block.text, '转场')}`)
+      } else if (block.type === 'note') {
+        if (block.text.includes(']]')) throw new Error('[screenplay-render] 注释原文中的 ]] 会提前结束 Fountain 注释，请使用 FDX 导出。')
+        lines.push(`[[${fountainContinuousText(block.text)}]]`)
+      }
+      // Fountain has no separate Shot element. It uses action paragraphs;
+      // FDX and print retain the original typed Shot block independently.
+      else lines.push(fountainText(block.text).replace(/(^[ \t\n]*|\n[ \t]*\n)([ \t]*)(?=\S)/g, '$1$2!'))
       lines.push('')
     }
   }
@@ -110,7 +153,7 @@ export interface ScreenplayRoundTripOutlineV1 {
   orderedParagraphs: Array<{ type: string; text: string }>
 }
 
-/** Strict enough to verify StoryForge's deterministic Fountain export without pretending to be a full Fountain editor. */
+/** Outline inspection only: this deliberately discards blank lines and cannot verify Fountain dialogue structure or interoperability. */
 export function parseStoryForgeFountainV1(source: string): ScreenplayRoundTripOutlineV1 {
   if (typeof source !== 'string' || !source.trim()) throw new Error('[screenplay-render] Fountain 内容为空')
   const lines = source.replace(/\r\n?/g, '\n').split('\n').map(line => line.trim()).filter(Boolean)

@@ -1,3 +1,4 @@
+import { stableRuntimeJsonV1 } from './runtime-stable-json'
 import type { WorldSemanticResourceSnapshotV1 } from '../context-gateway/world-release-client'
 import {
   EMPTY_PRODUCT_RUNTIME_STATE,
@@ -25,24 +26,13 @@ function compact(value: string | null | undefined, max = 240): string {
 function fields(input: Record<string, unknown>): Record<string, string> {
   return Object.fromEntries(Object.entries(input).flatMap(([key, value]) => {
     if (value == null) return []
-    const text = typeof value === 'string' ? value.trim() : stableJson(value)
+    const text = typeof value === 'string' ? value.trim() : stableRuntimeJsonV1(value)
     return text ? [[key, text]] : []
   }))
 }
 
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, child]) => child !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-    return `{${entries.map(([key, child]) => `${JSON.stringify(key)}:${stableJson(child)}`).join(',')}}`
-  }
-  return JSON.stringify(value) ?? 'null'
-}
-
 async function sha256(value: unknown): Promise<string> {
-  const bytes = new TextEncoder().encode(stableJson(value))
+  const bytes = new TextEncoder().encode(stableRuntimeJsonV1(value))
   const digest = await crypto.subtle.digest('SHA-256', bytes)
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
 }

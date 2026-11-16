@@ -2,7 +2,7 @@
  * 表格形式的计划-正文对账组件
  * 支持：本地状态管理、批量保存、撤销更改
  */
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   Check, X, RefreshCw, HelpCircle, ChevronDown, ChevronUp,
   AlertTriangle, FileText, Calendar, GitBranch, EyeOff,
@@ -137,6 +137,8 @@ export function ReconciliationTable({
   )
   const [showHelp, setShowHelp] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const saveInFlight = useRef(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [foreshadowSuccess, setForeshadowSuccess] = useState<string | null>(null)
 
@@ -195,6 +197,7 @@ export function ReconciliationTable({
     }
 
     setSections(initSections())
+    setSaveError(null)
     setHasUnsavedChanges(false)
     setSaveSuccess(false)
   }, [reconciliation])
@@ -236,6 +239,7 @@ export function ReconciliationTable({
   }, [sections])
 
   const handleItemAction = async (sectionKey: string, itemIndex: number, action: ItemAction) => {
+    if (saveInFlight.current) return
     const section = sections.find(s => s.key === sectionKey)
     const item = section?.items[itemIndex]
 
@@ -273,26 +277,32 @@ export function ReconciliationTable({
   }
 
   const handleSave = async () => {
+    if (saveInFlight.current) return
     const actionMap = getActionMap()
 
     if (Object.keys(actionMap).length === 0) {
       return
     }
 
+    saveInFlight.current = true
     setIsSaving(true)
+    setSaveError(null)
     try {
       await onSave(actionMap)
       setHasUnsavedChanges(false)
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (err) {
-      console.error('Failed to save changes:', err)
+      setSaveError(err instanceof Error ? err.message : '对账未保存，输入已保留。')
     } finally {
+      saveInFlight.current = false
       setIsSaving(false)
     }
   }
 
   const handleReset = () => {
+    if (saveInFlight.current) return
+    setSaveError(null)
     // 重置所有更改
     setSections(prev => prev.map(section => ({
       ...section,
@@ -303,6 +313,7 @@ export function ReconciliationTable({
   }
 
   const handleGlobalAction = (action: 'confirm-all' | 'apply-all' | 'dismiss-all') => {
+    if (saveInFlight.current) return
     const statusMap = {
       'confirm-all': 'confirmed' as ItemAction,
       'apply-all': 'applied' as ItemAction,
@@ -630,6 +641,7 @@ export function ReconciliationTable({
               </div>
             </div>
 
+            {saveError && <p role="alert" className="text-xs text-red-400">{saveError}</p>}
             {/* Save & Reset */}
             <div className="flex items-center justify-between">
               <button

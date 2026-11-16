@@ -53,8 +53,14 @@ export const useForeshadowStore = create<ForeshadowStore>((set, get) => ({
 
   deleteForeshadow: async (id) => {
     const current = get().foreshadows.find(f => f.id === id) ?? await db.foreshadows.get(id)
-    if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'foreshadows', current, { owner: 'work' })) return
+    if (!current) return
+    const scope = await resolveScopeLike(current.projectId)
+    if (!await assertRecordInScope(scope, 'foreshadows', current, { owner: 'work' })) return
     await db.transaction('rw', transactionTablesForReferenceCascade('foreshadows'), async () => {
+      await resolveScopeLike(scope)
+      const persisted = await db.foreshadows.get(id)
+      if (!persisted) return
+      if (!await assertRecordInScope(scope, 'foreshadows', persisted, { owner: 'work' })) throw new Error('伏笔归属已变化；删除已取消，原数据保留。')
       await cascadeRegisteredReferences('foreshadows', id)
       await db.foreshadows.delete(id)
     })

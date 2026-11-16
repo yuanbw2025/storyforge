@@ -1,9 +1,10 @@
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import { updateWorkTitle } from "../workspace/works";
 import { db } from "../db/schema";
 import type { WorkspaceScope } from "../types";
 import { createWorkspace, workspaceCreationTransactionTablesV1, } from "../workspace/create-workspace";
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord, } from "../workspace/scope";
-import { cacheWorldReferenceForProductV1 } from "../world-engine/reference-cache";
+import { selectWorldReferenceForProductPurposeV1 } from "../world-engine/reference-cache";
 import { DEFAULT_CHAT_SETTINGS, DEFAULT_CHAT_SETTINGS_V2, DEFAULT_CHAT_SETTINGS_V3, parseChatAuthoringSettings, type ChatAuthoringDraftV1, type ChatAuthoringSettings, } from "./authoring-contract";
 import { loadProductProductionConsultationSourceV2, loadProductProductionWorldSourceCatalogV2 } from '../product-production/world-source';
 import { readChatSourceProjectionViewV1, type ChatSourceReviewV1 } from './source-projection';
@@ -59,6 +60,7 @@ export async function readChatDraftV1(scopeInput: WorkspaceScope): Promise<ChatA
     return row;
 }
 export async function saveChatDraftV1(scope: WorkspaceScope, revision: number, settings: ChatAuthoringSettings, title?: string) {
+  assertCurrentProductEntryV1('upper.character-interaction')
     const parsed = parseChatAuthoringSettings(settings);
     if (title !== undefined && (!title.trim() || title.length > 200))
         throw new Error("请填写 1～200 字的作品名称");
@@ -86,23 +88,28 @@ export async function saveChatDraftV1(scope: WorkspaceScope, revision: number, s
             revision: revision + 1,
             updatedAt: Date.now(),
         };
+        assertCurrentProductEntryV1('upper.character-interaction')
         await db.chatAuthoringDrafts.put(next);
         if (title !== undefined)
             await updateWorkTitle(scope, title);
         return next;
     });
 }
-export async function selectChatWorldV1(scope: WorkspaceScope, revision: number, releaseId: number) {
+export async function selectChatWorldV1(scope: WorkspaceScope, revision: number, releaseId: number, sourceDeclarationHash?: string) {
+  assertCurrentProductEntryV1('upper.character-interaction')
     const current = await readChatDraftV1(scope);
     if (current.revision !== revision)
         throw new Error("角色聊天 方案已变化，请刷新后重新选择世界");
-    const localId = await cacheWorldReferenceForProductV1(scope, releaseId, { narrativeProductType: 'character-interaction' });
+    const { localId, sourcePurpose } = await selectWorldReferenceForProductPurposeV1(scope, releaseId, 'character-interaction', { narrativeProductType: 'character-interaction', sourceDeclarationHash });
     return db.transaction("rw", scopeTransactionTables(db.chatAuthoringDrafts), async () => {
         const row = await readChatDraftV1(scope);
         if (row.revision !== revision)
             throw new Error("角色聊天 方案已变化，请刷新后重新选择世界");
         const settings = parseChatAuthoringSettings(JSON.parse(row.settingsJson));
-        if (row.worldReleaseId !== localId) {
+        const samePurpose = row.sourcePurpose
+            ? row.sourcePurpose.evidenceHash === sourcePurpose.evidenceHash
+            : sourcePurpose.origin.kind === 'local-author';
+        if (row.worldReleaseId !== localId || !samePurpose) {
             settings.characters = [];
             if (settings.version === 3) delete settings.narrative.playerCharacterKey;
             if (settings.version !== 1) {settings.sourceReview = null; if (settings.backgroundResourceKeys) settings.backgroundResourceKeys = [];}
@@ -110,10 +117,12 @@ export async function selectChatWorldV1(scope: WorkspaceScope, revision: number,
         const next = {
             ...row,
             worldReleaseId: localId,
+            sourcePurpose,
             settingsJson: JSON.stringify(settings),
             revision: revision + 1,
             updatedAt: Date.now(),
         };
+        assertCurrentProductEntryV1('upper.character-interaction')
         await db.chatAuthoringDrafts.put(next);
         return next;
     });
@@ -141,6 +150,7 @@ export async function loadChatSourceProjectionV1(scope: WorkspaceScope, revision
 
 /** The author confirms the displayed classification; no model call or world write. */
 export async function confirmChatSourceReviewV1(scope: WorkspaceScope, revision: number, review: ChatSourceReviewV1) {
+  assertCurrentProductEntryV1('upper.character-interaction')
     const snapshot = structuredClone(review);
     const projection = await loadChatSourceProjectionV1(scope, revision);
     if (projection.projectionHash !== snapshot.projectionHash) throw new Error('来源投影已变化，请重新检查');
@@ -151,6 +161,7 @@ export async function confirmChatSourceReviewV1(scope: WorkspaceScope, revision:
         const previous = parseChatAuthoringSettings(JSON.parse(row.settingsJson));
         const settings = parseChatAuthoringSettings({...previous, version: previous.version === 3 ? 3 : 2, sourceReview: snapshot});
         const next = {...row, settingsJson: JSON.stringify(settings), revision: revision + 1, updatedAt: Date.now()};
+        assertCurrentProductEntryV1('upper.character-interaction')
         await db.chatAuthoringDrafts.put(next);
         return next;
     });

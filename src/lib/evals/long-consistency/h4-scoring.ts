@@ -1,3 +1,4 @@
+import { currentProviderUsageCountsV1, PROVIDER_USAGE_POLICY_V1 } from './model-usage'
 import { normalizeChapterText } from '../../ai/chapter-memory/text-normalization'
 import { canonicalStringify, hashCanonicalValue } from '../../agent/run/hash'
 import { assertExactKeys, readRecord } from '../../agent/run/schema-utils'
@@ -44,6 +45,7 @@ export interface H4LongConsistencySealedScoreV1 {
   schemaVersion: 1
   scoreType: typeof H4_LONG_CONSISTENCY_SCORE_TYPE_V1
   scoringVersion: typeof H4_LONG_CONSISTENCY_SCORING_VERSION_V1
+  usagePolicy?: typeof PROVIDER_USAGE_POLICY_V1
   fixtureVersion: H4LongConsistencyRunCheckpointV1['fixtureVersion']
   runId: string
   split: H4LongConsistencyRunCheckpointV1['split']
@@ -362,14 +364,21 @@ export function evaluateH4LongConsistencyReleaseGateV1(input: {
   return { passed: failures.length === 0, failures }
 }
 
-export async function scoreH4LongConsistencyCheckpointV1(input: {
+interface ScoreH4InputV1 {
   checkpoint: unknown
   thresholds?: Partial<H4LongConsistencyReleaseThresholdsV1>
-}): Promise<H4LongConsistencySealedScoreV1> {
+}
+
+export async function scoreH4LongConsistencyCheckpointV1(input: ScoreH4InputV1): Promise<H4LongConsistencySealedScoreV1> {
+  return await calculateScore(input, false)
+}
+
+async function calculateScore(input: ScoreH4InputV1, historical: boolean): Promise<H4LongConsistencySealedScoreV1> {
   if (!await verifyH4LongConsistencyRunCheckpointV1(input.checkpoint)) {
     throw new Error('H4 checkpoint 无法通过完整性验证')
   }
   const checkpoint = parseH4LongConsistencyRunCheckpointV1(input.checkpoint)
+  if (historical && checkpoint.usagePolicy !== undefined) throw new Error('新版 checkpoint 不适用历史用量评分')
   const metrics = computeH4LongConsistencyMetricSummaryV1(
     checkpoint.split,
     checkpoint.completed.map(item => ({
@@ -378,6 +387,7 @@ export async function scoreH4LongConsistencyCheckpointV1(input: {
     })),
   )
   const thresholds = resolveH4LongConsistencyReleaseThresholdsV1(checkpoint.split, input.thresholds)
+  const usage = historical ? checkpoint.usage : currentProviderUsageCountsV1(checkpoint.usage, checkpoint.usagePolicy)
   const gate = evaluateH4LongConsistencyReleaseGateV1({
     status: checkpoint.status,
     completedCases: checkpoint.completed.length,
@@ -389,7 +399,7 @@ export async function scoreH4LongConsistencyCheckpointV1(input: {
     thresholds,
     budgetExceeded: checkpoint.status === 'budget-exhausted',
     identitySeparated: checkpoint.completed.every(item => item.artifact.execution.modelIdentitySeparated),
-    unmeteredModelCalls: checkpoint.usage.unmeteredModelCalls,
+    unmeteredModelCalls: usage.unmeteredModelCalls,
   })
   const artifactSetHash = await hashCanonicalValue(checkpoint.completed.map(item => ({
     fixtureId: item.fixtureId,
@@ -400,6 +410,7 @@ export async function scoreH4LongConsistencyCheckpointV1(input: {
     schemaVersion: 1,
     scoreType: H4_LONG_CONSISTENCY_SCORE_TYPE_V1,
     scoringVersion: H4_LONG_CONSISTENCY_SCORING_VERSION_V1,
+    ...(historical ? {} : { usagePolicy: PROVIDER_USAGE_POLICY_V1 }),
     fixtureVersion: checkpoint.fixtureVersion,
     runId: checkpoint.runId,
     split: checkpoint.split,
@@ -416,7 +427,7 @@ export async function scoreH4LongConsistencyCheckpointV1(input: {
     intentControls: metrics.intentControls,
     cleanControls: metrics.cleanControls,
     failedAttempts: checkpoint.failures.length,
-    usage: checkpoint.usage,
+    usage,
     thresholds,
     gate,
     scoreHash: '0'.repeat(64),
@@ -432,10 +443,10 @@ export async function verifyH4LongConsistencySealedScoreV1(
   checkpoint: unknown,
 ): Promise<boolean> {
   try {
-    const expected = await scoreH4LongConsistencyCheckpointV1({
-      checkpoint,
-      thresholds: (score as H4LongConsistencySealedScoreV1).thresholds,
-    })
+    const candidate = score as H4LongConsistencySealedScoreV1
+    const historical = !Object.prototype.hasOwnProperty.call(candidate, 'usagePolicy')
+    if (!historical && candidate.usagePolicy !== PROVIDER_USAGE_POLICY_V1) return false
+    const expected = await calculateScore({ checkpoint, thresholds: candidate.thresholds }, historical)
     return canonicalStringify(expected) === canonicalStringify(score)
       && await hashCanonicalValue(scoreBody(expected)) === expected.scoreHash
   } catch {

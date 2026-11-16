@@ -1,7 +1,7 @@
 /** assembleContext · 当前唯一上下文装配入口。 */
 import Dexie from 'dexie'
 import { estimateTokens, getModelPreset, type ContextLayer, type ContextSegment } from '../ai/context-budget'
-import { CONTEXT_SOURCES, CONTEXT_SOURCE_BY_KEY } from './context-sources'
+import { assertRuntimeContextOwner, CONTEXT_SOURCES, CONTEXT_SOURCE_BY_KEY } from './context-sources'
 import type {
   AssembleContextInput,
   AssembleContextResult,
@@ -136,6 +136,7 @@ function deriveInputBudget(input: AssembleContextInput): number {
 
 export async function assembleContext(input: AssembleContextInput): Promise<AssembleContextResult> {
   maybeInjectHarnessFaultV1('context.before-assemble')
+  input = { ...input, scope: input.scope && { ...input.scope } }
   const scope = await resolveReadScope(input)
   const resolvedBase: AssembleContextInput = { ...input, projectId: scope.projectId, scope }
   const selected = selectSources(resolvedBase)
@@ -388,8 +389,9 @@ async function assertContextAnchors(input: AssembleContextInput, selected: Conte
       }
     }
   }
-  // Runtime readers omit foreign sessions themselves and surface only same-scope
-  // snapshot-integrity failures, preserving a fail-closed read contract.
+  if (input.productRuntimeSessionId != null && selected.some(source => source.requiresProductRuntimeSessionId)) {
+    await assertRuntimeContextOwner(input)
+  }
 }
 
 function selectSources(input: AssembleContextInput): ContextSource[] {

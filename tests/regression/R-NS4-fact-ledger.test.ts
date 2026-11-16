@@ -16,8 +16,8 @@ async function seed() {
     projectId: pid, name: '林飞', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral',
     homeWorldGroupId: null, isCrossWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
-  const c1 = await db.chapters.add({ projectId: pid, outlineNodeId: null, title: '第1章', content: '', wordCount: 0, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
-  const c2 = await db.chapters.add({ projectId: pid, outlineNodeId: null, title: '第2章', content: '', wordCount: 0, status: 'draft', order: 1, notes: '', createdAt: now, updatedAt: now } as any) as number
+  const c1 = await db.chapters.add({ projectId: pid, outlineNodeId: null, title: '第1章', content: 'q', wordCount: 1, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
+  const c2 = await db.chapters.add({ projectId: pid, outlineNodeId: null, title: '第2章', content: 'q', wordCount: 1, status: 'draft', order: 1, notes: '', createdAt: now, updatedAt: now } as any) as number
   await finalizeCurrentFixtureV1(pid)
   return { pid, charId, c1, c2 }
 }

@@ -1,3 +1,4 @@
+import { assertTextOpenWorldProductionNewWorkV1 } from './source-admission'
 import { db } from '../db/schema'
 import { readMediaBlobObjectData } from '../product-production/media-blob-store'
 import {
@@ -60,7 +61,7 @@ import {
   inspectTextOpenWorldRuntimeHeadV1,
 } from './checkpoints'
 import { readTextOpenWorldArtifactGovernanceV1 } from './creator-artifact-governance'
-import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
+import { assertTextOpenWorldCreatorDraftForNewWorkV1, readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
 import {
   assertTextOpenWorldCalibrationLineageUnchangedV1,
   readTextOpenWorldCalibrationLineageV1,
@@ -352,7 +353,7 @@ function plausibleRealProviderIdentity(provider: string, model: string): boolean
   return !/(fixture|mock|simulat|fake|test-provider|test-model)/i.test(`${provider}/${model}`)
 }
 
-async function calibrationReadiness(authority: BuildAuthorityV1): Promise<{
+async function calibrationReadiness(authority: BuildAuthorityV1, requiresNewReview = false): Promise<{
   readiness: TextOpenWorldCreatorCalibrationReadinessV1
   graderConfig: ReturnType<typeof resolveRequestConfig>['config']
   graderResolution: ReturnType<typeof resolveRequestConfig>
@@ -361,6 +362,7 @@ async function calibrationReadiness(authority: BuildAuthorityV1): Promise<{
   const derived = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
     scope: authority.scope, buildId: authority.build.id,
   })
+  if (requiresNewReview) assertTextOpenWorldCreatorDraftForNewWorkV1(derived.contracts.creatorBrief.draft)
   const generator = derived.contracts.start.preflight.providerBinding
   const aiState = useAIConfigStore.getState()
   const resolved = resolveRequestConfig(aiState.config, {
@@ -478,6 +480,7 @@ async function loadBuildAuthority(input: {
   productionId: number
   expectedBuildId?: number
 }): Promise<BuildAuthorityV1> {
+  input = structuredClone(input)
   const scope = await resolveScope({ scope: input.scope })
   const production = await db.productProductions.get(input.productionId)
   if (!production || production.id == null
@@ -738,6 +741,18 @@ async function latestCalibrationReceipt(
   })
 }
 
+async function hashTextOpenWorldCreatorEventStreamV1(events: readonly ProductRuntimeEvent[]): Promise<string> {
+  return hashProductProductionValueV2(await Promise.all(events.map(async event => ({
+    sequence: event.sequence,
+    type: event.type,
+    actorKeyHash: event.actorKey ? await hashProductProductionValueV2(event.actorKey) : null,
+    targetKeyHash: event.targetKey ? await hashProductProductionValueV2(event.targetKey) : null,
+    commandIdHash: event.commandId ? await hashProductProductionValueV2(event.commandId) : null,
+    payloadHash: await hashProductProductionValueV2(JSON.parse(event.payloadJson)),
+    createdAt: event.createdAt,
+  }))))
+}
+
 function parseCommandActionKey(event: ProductRuntimeEvent): string | null {
   if (event.type !== 'text-open-world.command.committed') return null
   try {
@@ -830,15 +845,7 @@ async function createSessionWitness(input: {
   }
   // Replace the temporary redacted placeholders with deterministic hashes. No
   // command id or player/world prose enters the portable graybox receipt.
-  const eventStreamHash = await hashProductProductionValueV2(await Promise.all(events.map(async event => ({
-    sequence: event.sequence,
-    type: event.type,
-    actorKeyHash: event.actorKey ? await hashProductProductionValueV2(event.actorKey) : null,
-    targetKeyHash: event.targetKey ? await hashProductProductionValueV2(event.targetKey) : null,
-    commandIdHash: event.commandId ? await hashProductProductionValueV2(event.commandId) : null,
-    payloadHash: await hashProductProductionValueV2(JSON.parse(event.payloadJson)),
-    createdAt: event.createdAt,
-  }))))
+  const eventStreamHash = await hashTextOpenWorldCreatorEventStreamV1(events)
   portable.eventStreamHash = eventStreamHash
   const witnessWithoutKey = portable
   const sessionWitnessKey = `session.${(await hashProductProductionValueV2(witnessWithoutKey)).slice(0, 24)}`
@@ -1181,15 +1188,7 @@ async function captureReleaseSaveV1(input: {
   const stateHash = throughSequence === allEvents.length
     ? (await readVerifiedProductRuntimeHeadV1(session)).stateHash
     : await replayTextOpenWorldMigrationSourceStateHashV1({ session, events, throughSequence })
-  const eventStreamHash = await hashProductProductionValueV2(await Promise.all(events.map(async event => ({
-    sequence: event.sequence,
-    type: event.type,
-    actorKeyHash: event.actorKey ? await hashProductProductionValueV2(event.actorKey) : null,
-    targetKeyHash: event.targetKey ? await hashProductProductionValueV2(event.targetKey) : null,
-    commandIdHash: event.commandId ? await hashProductProductionValueV2(event.commandId) : null,
-    payloadHash: await hashProductProductionValueV2(JSON.parse(event.payloadJson)),
-    createdAt: event.createdAt,
-  }))))
+  const eventStreamHash = await hashTextOpenWorldCreatorEventStreamV1(events)
   const portable = {
     releaseUid: release.manifest.lineage.releaseUid,
     releaseHash: release.manifest.releaseIdentityHash,
@@ -1788,10 +1787,13 @@ export async function recordTextOpenWorldCreatorCalibrationV1(input: {
   runReview?: typeof runTextOpenWorldCreatorIndependentCalibrationReviewV1
   now?: () => number
 } = {}): Promise<TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorCalibrationEvidence>> {
+  input = { ...input, scope: structuredClone(input.scope) }
+  dependencies = { ...dependencies }
   const authority = await loadBuildAuthority({
     scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId,
   })
-  const state = await calibrationReadiness(authority)
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
+  const state = await calibrationReadiness(authority, !input.reuseReceiptHash)
   if (!input.reuseReceiptHash && !state.readiness.ready) fail(state.readiness.issue ?? '独立校准尚未就绪')
   const { mainline, significant, regions, quests, director, scenes, contentBudget, semanticReview } = calibrationArtifacts(authority)
   const context: TextOpenWorldCreatorCalibrationReviewContextV1 = buildTextOpenWorldCreatorCalibrationContextV1({
@@ -1937,7 +1939,9 @@ export async function recordTextOpenWorldCreatorGrayboxV1(input: {
   humanChecks: TextOpenWorldCreatorGrayboxHumanChecksV1
   authorNote: string
 }): Promise<TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorGrayboxEvidenceV1>> {
+  input = structuredClone(input)
   const authority = await loadBuildAuthority({ scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId })
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
   const sessionIds = [...new Set(input.sessionIds)]
   if (sessionIds.length !== input.sessionIds.length || sessionIds.length < 1 || sessionIds.length > 6
     || sessionIds.some(id => !Number.isInteger(id) || id < 1)) fail('灰盒Session选择无效')
@@ -2014,9 +2018,11 @@ export async function recordTextOpenWorldCreatorFullPlaytestV1(input: {
   }
   authorNote: string
 }): Promise<TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorFullPlaytestEvidenceV1>> {
+  input = structuredClone(input)
   const authority = await loadBuildAuthority({
     scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId,
   })
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
   const sessionIds = input.routes.map(route => route.sessionId)
   if (new Set(sessionIds).size !== sessionIds.length || sessionIds.length < 2 || sessionIds.length > 6
     || sessionIds.some(id => !Number.isInteger(id) || id < 1)) fail('完整试玩路线选择无效')
@@ -2146,9 +2152,11 @@ export async function recordTextOpenWorldCreatorUpdateVerificationV1(input: {
   humanChecks: TextOpenWorldCreatorUpdateVerificationHumanChecksV1
   authorNote: string
 }): Promise<TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorUpdateVerificationEvidenceV1>> {
+  input = structuredClone(input)
   const authority = await loadBuildAuthority({
     scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId,
   })
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
   if (authority.build.sourceProductReleaseId == null || authority.build.status !== 'released') {
     fail('只有已正式发布的Creator修复Build可以记录更新验证')
   }
@@ -2388,6 +2396,7 @@ export async function recordTextOpenWorldCreatorIssueV1(input: {
   sessionId?: number | null
   sourceTextExcluded: true
 }): Promise<TextOpenWorldCreatorIssueRecordV1> {
+  input = structuredClone(input)
   const authority = await loadBuildAuthority({ scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId })
   if (!['advisory', 'blocking'].includes(input.severity)
     || !TEXT_OPEN_WORLD_CREATOR_ISSUE_CATEGORIES_V1.includes(input.category)
@@ -2486,7 +2495,9 @@ export async function waiveTextOpenWorldCreatorAdvisoryIssueV1(input: {
   reason: string
   confirmation: 'author-accepts-advisory-risk'
 }): Promise<TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorIssueWaiverEvidenceV1>> {
+  input = structuredClone(input)
   const authority = await loadBuildAuthority({ scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId })
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
   const reason = boundedText(input.reason, 'reason', 2_000, 20)
   if (!isSha256Hash(input.issueReceiptHash) || input.confirmation !== 'author-accepts-advisory-risk') fail('问题回执Hash或确认无效')
   const issues = await readIssues(authority)
@@ -2532,7 +2543,9 @@ export async function finalizeTextOpenWorldCreatorQualityV1(input: {
   humanChecks: TextOpenWorldCreatorHumanQualityChecksV1
   authorNote: string
 }): Promise<TextOpenWorldCreatorQualityWorkspaceV1> {
+  input = structuredClone(input)
   const authority = await loadBuildAuthority({ scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId })
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
   if (authority.hardChecks.some(check => !check.passed)) fail('代码硬门未全部通过，不能豁免')
   if (authority.reviews.some(review => review.verdict !== 'pass'
     || review.findings.some(finding => finding.severity === 'blocking'))) fail('模型评审仍有阻断项，必须创建新Build修复')
@@ -2770,7 +2783,9 @@ export async function recordTextOpenWorldVisualReviewV1(input: {
   imagesActuallyViewed: true
   noAutomationProxy: true
 }) {
+  input = structuredClone(input)
   const authority = await loadBuildAuthority({ ...input, expectedBuildId: input.buildId })
+  assertTextOpenWorldProductionNewWorkV1(authority.production, authority.briefRow, '新增制作质量验收')
   if (authority.build.status === 'released') fail('已发布 Build 的视觉确认保留原回执；需要变更请创建子 Build')
   const visual = await visualReviewInputs(authority)
   if (input.expectedAssetsHash !== visual.consistency.assetsHash || visual.consistency.issues.length > 0) {

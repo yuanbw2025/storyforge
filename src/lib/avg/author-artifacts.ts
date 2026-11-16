@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import { avgSoundProductionTemplates } from './sound-production-brief'
 /** Author-supplied professional candidates. No provider/Skill invocation occurs here.
  * AI candidates keep the closed admission gate until their role package is registered. */
@@ -645,6 +646,7 @@ export async function stageAvgAuthorArtifactV1(input: {
   scope: WorkspaceScope; buildId: number; expectedBuildRevision: number; controlEpoch: number
   taskKey: string; artifactKey: string; kind: ProductBuildArtifactRecordV1['kind']; payload: unknown; declaration: string
 }) {
+  input = structuredClone(input)
   const scope = await resolveScope({ scope: input.scope })
   const taskKey = avgKey(input.taskKey, 'taskKey'); const artifactKey = avgKey(input.artifactKey, 'artifactKey')
   const declaration = avgText(input.declaration, 'author declaration', 2000)
@@ -703,6 +705,7 @@ export async function stageAvgAuthorArtifactV1(input: {
       blobObjectId: null, mimeType: null, byteSize: new TextEncoder().encode(prepared.payloadJson).byteLength,
       parentArtifactHash: base?.contentHash ?? null, carriedFrom: null, createdAt: now, updatedAt: now,
     } satisfies ProductBuildArtifactRecordV1, { owner: 'work' })
+    assertCurrentProductEntryV1('upper.avg')
     const id = await db.productBuildArtifacts.add(row) as number
     return { ...row, id }
   })

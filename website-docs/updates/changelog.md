@@ -1,5 +1,48 @@
 # 更新日志
 
+## 2026-11-16 · 官网反馈跟进
+
+- 反馈入口增加已有问题搜索、正文与评论读取、明确选择原工单后追加证据和回执链接；原新建与附件流程保留。同一请求编号用于防止重复写入；结果未知时先核对工单。GitHub身份与管理权限继续由GitHub负责。操作及Agent接口见[反馈中心](/feedback/)。
+
+## 2026-11-15 · v4.0.7 下载与源码启动检查
+
+- 正式 v4.0.7 已于 11 月 13 日发布。安装指南更新 Windows、Mac、Android 文件名及升级步骤；数据库 v14、完整备份 v18 和固定源码见[版本兼容](/updates/compatibility)。
+- Windows 源码下载使用 `git clone -c core.longpaths=true` 在检出前启用仓库长路径。若关键配置或入口缺失，`npm run dev` 会提前显示缺失项；保留原目录和本地修改，在新的短路径目录重新获取。完整源码 ZIP 无需 `.git`。操作见[安装与启动](/getting-started/install)，依据 [#448](https://github.com/yuanbw2025/storyforge/pull/448)。
+- 本轮从 `ff30400a` 核对到 `7ccc1d10`；#447/#449 是发行回归检查调整，#450/#451 是流量归档，没有另计新增产品能力。本地分支保留状态见[开发记录](/updates/development-status)。
+
+## 2026-11-13 · 创作采纳、备份与互动恢复集中修复
+
+- 本地文件同步会核对实际内容，保留外部稿再写回；内置作品补齐低帧率移动与资源核验说明。见[工作区](/features/memory-workspace)、[内置作品](/guides/examples)和[导入](/guides/import)。
+- 长篇与节点：细纲和角色候选保存后采纳，章节对账不重复追加，切章立即隔离旧修订入口，emoji 零宽查找可继续前进。见[正文](/features/longform/writing)、[连续性](/features/longform/continuity)、[节点](/features/nodes)。
+- 数据与世界来源：补齐严格备份导入、前向父引用恢复、同名工作区快照隔离、自动备份失败提示；参考解析保留原尝试并由作者确认，世界来源与关闭资料按实际用途读取。见[备份](/guides/backup-restore)、[参考分析](/features/longform/references)、[世界引擎](/features/world-engine)。
+- 漫画与漫剧：损坏图片解码阻断、视觉设定变化后重新审图、逐镜提示词完整覆盖、并发切集保护和冻结素材包核验。见[漫画](/features/comic)、[漫剧](/features/motion-drama)。
+- 互动制作与运行：保存过的聊天图片可补齐确认，长角色回复与迟到记忆保留原存档；制作主角/NPC目标/结局数量检查、续团归属、暂停恢复及实际用量保留。见[开放世界](/features/interactive/open-world)、[角色聊天](/features/interactive/character-chat)、[跑团](/features/interactive/ttrpg)、[文字冒险](/features/interactive/text-adventure)。
+- Fountain 对白导出、AVG 检查点保存、世界草稿切换、模型目录迟到响应及实测/估算用量也已补齐操作说明。数据库与备份版本见[兼容说明](/updates/compatibility)，本地未提交整合残留见[开发记录](/updates/development-status)。
+
+本轮按主干 `66dc20d7…c101170c` 的实际产品改动核对；各指南列出对应合并 PR，历史正文保留。
+
+
+
+
+
+## 2026-11-11 · 章纲审校、批量细纲与可选诊断
+
+[PR #303](https://github.com/yuanbw2025/storyforge/pull/303) 已合入 `5420f854`。章纲诊断显示空回答、非法报告与调用错误并保留原始响应，选择性改写核对真实原文、预览和最终补丁，未选内容逐字保留。操作见[章纲与正文](/features/longform/writing)。
+
+[PR #301](https://github.com/yuanbw2025/storyforge/pull/301) 已合入 `bc18dc84`，整合历史引用删除保护、批量细纲明确采纳、桌面模型连接、豆包新建默认/退役提示及跑团空存档选择循环修复。通用设置新增默认关闭的最近操作轨迹选项，预览、开关与基础摘要回退见[故障排查](/guides/troubleshooting)。正式安装包和后续分支状态见[版本兼容](/updates/compatibility)与[开发记录](/updates/development-status)。
+
+## 2026-11-10 · 社区投稿与质量修复使用说明
+
+社区作品分享 [#234](https://github.com/yuanbw2025/storyforge/pull/234) 已合入 `b1a4bf65`。从小说或已有作品分析中选择内容、逐字预览、确认权利并投稿，审核状态、撤回和申诉见[分享步骤](/features/longform/references#公开分享小说与作品分析)。
+
+[#255](https://github.com/yuanbw2025/storyforge/pull/255) 与 [#256](https://github.com/yuanbw2025/storyforge/pull/256) 已合入 `924d3f37`、`79e30c69`。补齐保存与采纳中断恢复、节点字段版本、漫画/漫剧失败任务、根级章节导出和取消备份后的删除保护。文字开放世界从小说开始时先派生世界草稿并封存。跑团房间取消/超时、嵌入结果校验、历史生成防重复、地图缩放精度及反馈提交期间的新编辑保护也已更新。对应操作见各产品指南，待合并后续见[开发记录](/updates/development-status)。
+
+## 2026-11-03 · 正式版本与连续性证据核对
+
+- 正式 v4.0.5 已于 10 月 30 日发布，包含编辑恢复、逐章要求、模型配置及已合并产品增量。下载、固定源码与数据格式见[版本兼容](/updates/compatibility)。升级先导出完整备份，再在原数据环境覆盖安装。
+- [PR #246](https://github.com/yuanbw2025/storyforge/pull/246) 已于 11 月 2 日合入 `501e8548`：来源读取绑定冻结身份，连续性报告拒绝把重叠重复引文当作唯一证据，并加强两类回归检查。核对方式见[连续性指南](/features/longform/continuity)。
+- 质量整改、社区分享、跑团空团局和模型默认值等后续分支仍未合入，详见[开发记录](/updates/development-status)。按依赖和补丁去重，不把多个验证分支计作多套功能。
+
 ## 2026-10-30 · 长篇保存确认与异常恢复
 
 - [PR #215](https://github.com/yuanbw2025/storyforge/pull/215) 已合入 `f73623b1`。编辑作品资料、人物、设定和大纲时核对保存提示，失败保留输入并明确重试；正文候选先保存再刷新，正式正文仍需采纳。操作见[规划](/features/longform/planning)与[连续性](/features/longform/continuity)。

@@ -1,4 +1,5 @@
 import type { ChatMessage } from '../types'
+import type { ChatResult } from '../ai/client'
 import type { AssembleContextResult } from '../registry/types'
 import type { GenerationGateIssue } from '../generation/generation-node'
 import type { AgentSkillExecutionBindingV1, AgentSkillExecutionBindingV2 } from '../types/agent-run'
@@ -13,6 +14,22 @@ export const PROSE_SEMANTIC_REVIEW_PROMPT_VERSION_V1 = 'prose-semantic-review-v2
 export const PROSE_SEMANTIC_REVISION_PROMPT_VERSION_V1 = 'prose-semantic-revision-v2'
 
 type ProseSemanticExecutionBinding = AgentSkillExecutionBindingV1 | AgentSkillExecutionBindingV2
+
+/** Legacy callbacks expose only text. An observed caller explicitly passes the
+ * real client's result container; absent usage remains unknown, never estimated. */
+export type ProseSemanticModelCallV1 =
+  | ((messages: ChatMessage[]) => Promise<string>)
+  | { call: (messages: ChatMessage[], result: ChatResult) => Promise<string> }
+
+type ProseSemanticCallEventV1 = {
+  phase: 'review' | 'revision' | 'rereview'
+  estimatedInputTokens: number
+  reservedOutputTokens: number
+} & (
+  | { state: 'requested'; messages: ChatMessage[] }
+  | { state: 'responded'; output: string; result?: ChatResult }
+  | { state: 'unavailable'; error: unknown; result?: ChatResult }
+)
 
 export const PROSE_SEMANTIC_ISSUE_CODES_V1 = [
   'world-rule-conflict',
@@ -341,9 +358,10 @@ async function callBudgeted(input: {
   label: string
   messages: ChatMessage[]
   maxOutputTokens: number
-  call: (messages: ChatMessage[]) => Promise<string>
+  call: ProseSemanticModelCallV1
   onRequested?: (messages: ChatMessage[]) => Promise<void>
-  onResponded?: (output: string) => Promise<void>
+  onResponded?: (output: string, result?: ChatResult) => Promise<void>
+  onUnavailable?: (error: unknown, result?: ChatResult) => Promise<void>
 }): Promise<string> {
   const reservation = input.budget.reserveCall({
     label: input.label,
@@ -353,10 +371,20 @@ async function callBudgeted(input: {
   let settled = false
   try {
     await input.onRequested?.(input.messages)
-    const output = await input.call(input.messages)
+    const result: ChatResult = {}
+    const observed = typeof input.call !== 'function'
+    let output: string
+    try {
+      output = typeof input.call === 'function'
+        ? await input.call(input.messages)
+        : await input.call.call(input.messages, result)
+    } catch (error) {
+      await input.onUnavailable?.(error, observed ? result : undefined)
+      throw error
+    }
     input.budget.settleCall(reservation, output)
     settled = true
-    await input.onResponded?.(output)
+    await input.onResponded?.(output, observed ? result : undefined)
     return output
   } catch (error) {
     if (!settled) input.budget.settleFailedCall(reservation)
@@ -373,17 +401,10 @@ export async function runProseSemanticReviewCycleV1(input: {
   reviewer: ProseSemanticReviewerIdentityV1
   revisionExecutionBinding: ProseSemanticExecutionBinding
   budget: AgentTeamBudgetTracker
-  review: (messages: ChatMessage[]) => Promise<string>
-  revise: (messages: ChatMessage[]) => Promise<string>
+  review: ProseSemanticModelCallV1
+  revise: ProseSemanticModelCallV1
   validateRevision: (output: string) => Promise<GenerationGateIssue[]> | GenerationGateIssue[]
-  onCall?: (event: {
-    phase: 'review' | 'revision' | 'rereview'
-    state: 'requested' | 'responded'
-    messages?: ChatMessage[]
-    output?: string
-    estimatedInputTokens: number
-    reservedOutputTokens: number
-  }) => Promise<void>
+  onCall?: (event: ProseSemanticCallEventV1) => Promise<void>
   onReviewArtifact?: (artifact: ProseSemanticReviewArtifactV1) => Promise<void>
   onRevisionArtifact?: (artifact: ProseSemanticRevisionArtifactV1) => Promise<void>
   now?: () => number
@@ -409,10 +430,19 @@ export async function runProseSemanticReviewCycleV1(input: {
         estimatedInputTokens: request.reduce((sum, message) => sum + estimateTokens(message.content), 0),
         reservedOutputTokens: 3_000,
       }) ?? Promise.resolve(),
-      onResponded: output => input.onCall?.({
+      onResponded: (output, result) => input.onCall?.({
         phase,
         state: 'responded',
         output,
+        result,
+        estimatedInputTokens: messages.reduce((sum, message) => sum + estimateTokens(message.content), 0),
+        reservedOutputTokens: 3_000,
+      }) ?? Promise.resolve(),
+      onUnavailable: (error, result) => input.onCall?.({
+        phase,
+        state: 'unavailable',
+        error,
+        result,
         estimatedInputTokens: messages.reduce((sum, message) => sum + estimateTokens(message.content), 0),
         reservedOutputTokens: 3_000,
       }) ?? Promise.resolve(),
@@ -472,10 +502,19 @@ export async function runProseSemanticReviewCycleV1(input: {
       estimatedInputTokens: request.reduce((sum, message) => sum + estimateTokens(message.content), 0),
       reservedOutputTokens: 16_000,
     }) ?? Promise.resolve(),
-    onResponded: output => input.onCall?.({
+    onResponded: (output, result) => input.onCall?.({
       phase: 'revision',
       state: 'responded',
       output,
+      result,
+      estimatedInputTokens: revisionMessages.reduce((sum, message) => sum + estimateTokens(message.content), 0),
+      reservedOutputTokens: 16_000,
+    }) ?? Promise.resolve(),
+    onUnavailable: (error, result) => input.onCall?.({
+      phase: 'revision',
+      state: 'unavailable',
+      error,
+      result,
       estimatedInputTokens: revisionMessages.reduce((sum, message) => sum + estimateTokens(message.content), 0),
       reservedOutputTokens: 16_000,
     }) ?? Promise.resolve(),

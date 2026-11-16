@@ -1,16 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Plus, Trash2, Sparkles, ThumbsUp, ThumbsDown, Loader2 } from 'lucide-react'
 import { useAIStream } from '../../../hooks/useAIStream'
 import { useAIConfigStore } from '../../../stores/ai-config'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../../lib/ai/config-readiness'
-import { resolveRequestConfig } from '../../../lib/ai/client'
+import { resolveRequestConfig, type StreamResult } from '../../../lib/ai/client'
 import type { PromptTemplate, PromptExample } from '../../../lib/types/prompt'
 import { useDialog } from '../../shared/Dialog'
 import { useToast } from '../../shared/Toast'
 
 interface Props {
   template: PromptTemplate
-  onChange: (next: { good?: PromptExample[]; bad?: PromptExample[] }) => void
+  onChange: (edit: (current: NonNullable<PromptTemplate['examples']>) => NonNullable<PromptTemplate['examples']>) => void
   readOnly?: boolean
 }
 
@@ -27,8 +27,28 @@ export default function PromptExamplesEditor({ template, onChange, readOnly }: P
   const dialog = useDialog()
   const toast = useToast()
   const ai = useAIStream()
+  const stop = ai.stop
   const aiConfig = useAIConfigStore(s => s.config)
   const [generatingFor, setGeneratingFor] = useState<'good' | 'bad' | null>(null)
+  const mounted = useRef(false)
+  const activeOperation = useRef<object | null>(null)
+  const latest = useRef({ template, onChange, readOnly })
+  latest.current = { template, onChange, readOnly }
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      if (activeOperation.current) {
+        activeOperation.current = null
+        stop()
+      }
+    }
+  }, [stop])
+
+  const ownsTemplate = (source: PromptTemplate) => mounted.current && !latest.current.readOnly
+    && latest.current.template.id === source.id
+    && latest.current.template.moduleKey === source.moduleKey
 
   const examples = template.examples || {}
   const good = examples.good || []
@@ -36,12 +56,13 @@ export default function PromptExamplesEditor({ template, onChange, readOnly }: P
 
   const addManual = async (kind: 'good' | 'bad') => {
     if (readOnly) return
+    const source = template
     const text = await dialog.prompt({
       title: kind === 'good' ? '添加好示例' : '添加反例',
       message: '粘贴一条完整示例文本。',
       placeholder: '粘贴示例内容',
     })
-    if (!text || !text.trim()) return
+    if (!text || !text.trim() || !ownsTemplate(source)) return
     const ex: PromptExample = {
       id: `ex-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       text: text.trim(),
@@ -49,29 +70,27 @@ export default function PromptExamplesEditor({ template, onChange, readOnly }: P
       rating: kind === 'good' ? 5 : 1,
       createdAt: Date.now(),
     }
-    onChange({
-      ...examples,
-      [kind]: [...(kind === 'good' ? good : bad), ex],
-    })
+    latest.current.onChange(current => ({ ...current, [kind]: [...(current[kind] ?? []), ex] }))
   }
 
   const remove = (kind: 'good' | 'bad', id: string) => {
     if (readOnly) return
-    onChange({
-      ...examples,
-      [kind]: (kind === 'good' ? good : bad).filter(e => e.id !== id),
-    })
+    onChange(current => ({ ...current, [kind]: (current[kind] ?? []).filter(e => e.id !== id) }))
   }
 
   /** 让 AI 自动生成示例：用 meta-prompt 让 AI 基于模板生成 2 条示例 */
   const generateWithAI = async (kind: 'good' | 'bad') => {
-    if (readOnly) return
+    if (readOnly || activeOperation.current) return
     const effectiveConfig = resolveRequestConfig(aiConfig, { category: 'prompt.examples' }).config
     if (!isAIConfigReady(effectiveConfig)) {
       toast.error(getAIConfigRequiredMessage(effectiveConfig))
       return
     }
+    const operation = {}
+    const source = template
+    activeOperation.current = operation
     setGeneratingFor(kind)
+    const isCurrent = () => activeOperation.current === operation && ownsTemplate(source)
 
     const metaPrompt = kind === 'good'
       ? `请根据以下提示词模板，生成 2 条"好示例" — 即用户调用此模板时，AI 应该输出的高质量内容样本。
@@ -105,10 +124,16 @@ ${template.systemPrompt}
 4. 不要包含说明文字，只输出反例内容`
 
     try {
+      const streamResult: StreamResult = {}
       const result = await ai.start([
         { role: 'system', content: '你是一位提示词工程师助手，擅长为提示词模板生成示例数据。' },
         { role: 'user', content: metaPrompt },
-      ], undefined, { formalEntryId: 'prompt.examples.generate', category: 'prompt.examples' })
+      ], undefined, { formalEntryId: 'prompt.examples.generate', category: 'prompt.examples' }, undefined, streamResult)
+      if (!isCurrent()) return
+      if (streamResult.completion !== 'complete') {
+        toast.error('示例生成未完整完成，未将部分输出加入草稿；当前编辑仍保留。')
+        return
+      }
       // 解析输出
       const parts = result.split(/===EXAMPLE===/i).map(s => s.trim()).filter(Boolean)
       const newExamples: PromptExample[] = parts.slice(0, 3).map(t => ({
@@ -121,18 +146,26 @@ ${template.systemPrompt}
       if (newExamples.length === 0) {
         toast.error('AI 输出未识别到示例，请重试或手动添加')
       } else {
-        onChange({
-          ...examples,
-          [kind]: [...(kind === 'good' ? good : bad), ...newExamples],
-        })
+        latest.current.onChange(current => ({ ...current, [kind]: [...(current[kind] ?? []), ...newExamples] }))
         toast.info(`已将 ${newExamples.length} 条${kind === 'good' ? '好示例' : '反例'}加入当前草稿；点击顶部「保存」后才会生效。`)
       }
     } catch (e) {
-      toast.error(`生成失败：${e instanceof Error ? e.message : String(e)}`)
+      if (isCurrent()) toast.error(`生成失败：${e instanceof Error ? e.message : String(e)}`)
     } finally {
-      setGeneratingFor(null)
-      ai.reset()
+      if (mounted.current && activeOperation.current === operation) {
+        activeOperation.current = null
+        setGeneratingFor(null)
+        ai.reset()
+      }
     }
+  }
+
+  const stopGenerating = () => {
+    if (!activeOperation.current) return
+    activeOperation.current = null
+    ai.stop()
+    setGeneratingFor(null)
+    toast.info('已停止本次示例生成；当前草稿保留，晚到输出不会加入示例。')
   }
 
   const renderList = (kind: 'good' | 'bad') => {
@@ -219,6 +252,11 @@ ${template.systemPrompt}
         <span className="text-xs text-text-muted">
           🤖 AI 生成 · 👤 用户标记 · ✍️ 手动添加
         </span>
+        {generatingFor && (
+          <button onClick={stopGenerating} className="text-xs text-text-secondary hover:text-text-primary">
+            停止生成
+          </button>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-3">
         {renderList('good')}

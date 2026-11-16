@@ -19,8 +19,8 @@ import {
 import { createTextOpenWorldProductionExecutorV1 } from '../../src/lib/open-world/production-executor'
 import { readTextOpenWorldProductionPlanAuthorityV1 } from '../../src/lib/open-world/production-authority'
 import {
-  inspectTextOpenWorldCreatorNovelSourceV1,
   inspectTextOpenWorldCreatorWorldSourceV1,
+  listTextOpenWorldCreatorWorldSourcesV1,
 } from '../../src/lib/open-world/creator-source'
 import {
   authorizeTextOpenWorldCreatorProductionStartV1,
@@ -54,6 +54,13 @@ import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import { deriveTextOpenWorldNovelWorldDraftV1, previewTextOpenWorldNovelWorldDraftV1 } from '../../src/lib/open-world/novel-world-derivation'
+import { createWorldPackage } from '../../src/lib/world-engine/world-package'
+import { installWorldSourcePackageV1 } from '../../src/lib/world-engine/source-receipt'
+import { readWorldSourcePurposeDeclarationV1 } from '../../src/lib/world-engine/source-purpose'
+import { publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { validateTextOpenWorldSourcePinBundleV1, validateTextOpenWorldSourcePinV1, validateTextOpenWorldSourcePinUnitV1 } from '../../src/lib/open-world/source-pin'
+import { readQuality005LegacyLargeSourceV1 } from '../helpers/quality005-legacy-large-source'
 
 const AI_CONFIG: AIConfig = {
   provider: 'deepseek',
@@ -138,38 +145,33 @@ async function seedNovel(name: string, options: { chapterBody?: string } = {}) {
   return { ...created, chapterId, now }
 }
 
-async function worldSelection(name: string): Promise<TextOpenWorldCreatorSourceSelectionV1> {
+async function worldSelection(name: string): Promise<Extract<TextOpenWorldCreatorSourceSelectionV1, { sourceKind: 'world-release' }>> {
   const owned = await seedCurrentProductWorld(name)
+  const release = owned.release
   const preview = await inspectTextOpenWorldCreatorWorldSourceV1({
     scope: owned.scope,
-    localReleaseRecordId: owned.release.id!,
-    expectedReleaseHash: owned.release.contentHash,
+    localReleaseRecordId: release.id!,
+    expectedReleaseHash: release.contentHash,
   })
   return {
     sourceKind: 'world-release',
     sourceScope: owned.scope,
-    localReleaseRecordId: owned.release.id!,
-    expectedReleaseHash: owned.release.contentHash,
+    localReleaseRecordId: release.id!,
+    expectedReleaseHash: release.contentHash,
     preview,
   }
 }
 
+/** A normal new OW source derived by the author through the explicit S1
+ * draft and separate seal. The novel remains independently owned. */
 async function novelSelection(name: string) {
   const novel = await seedNovel(name)
-  const selection = { mode: 'entire-work' } as const
-  const preview = await inspectTextOpenWorldCreatorNovelSourceV1({
-    sourceScope: novel.scope,
-    selection,
-  })
-  return {
-    novel,
-    selection: {
-      sourceKind: 'novel',
-      sourceScope: novel.scope,
-      selection,
-      preview,
-    } satisfies TextOpenWorldCreatorSourceSelectionV1,
-  }
+  const derived = await deriveTextOpenWorldNovelWorldDraftV1(await previewTextOpenWorldNovelWorldDraftV1(novel.scope))
+  const release = await publishWorldRevision(derived.revision.id!)
+  const preview = await inspectTextOpenWorldCreatorWorldSourceV1({ scope: derived.targetScope,
+    localReleaseRecordId: release.id!, expectedReleaseHash: release.contentHash })
+  return { novel, derived, release, selection: { sourceKind: 'world-release' as const, sourceScope: derived.targetScope,
+    localReleaseRecordId: release.id!, expectedReleaseHash: release.contentHash, preview } satisfies TextOpenWorldCreatorSourceSelectionV1 }
 }
 
 async function prepareStart(
@@ -268,9 +270,52 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
     useAIConfigStore.setState(originalAIState)
   })
 
+  it('021: Creator starts and pins the exact allowed D; R-only cannot create even a consultation', async () => {
+    const source = await seedCurrentProductWorld('Creator purpose original')
+    const { scope } = await createWorkspace({ name: 'Creator purpose target', description: '', genres: ['other'],
+      status: 'drafting', targetWordCount: 0 }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
+    const options = { authorName: '合成作者', attribution: ' 原署名 é ', license: 'CC-BY-4.0' as const,
+      contentWarnings: [' 原提示 '], allowedUses: { 'world-remix': false, ttrpg: false, 'character-interaction': false,
+        'ai-town': true, 'text-adventure': false, avg: false, 'text-open-world': true } }
+    const allowed = await installWorldSourcePackageV1(scope, await createWorldPackage(source.release.id!, options))
+    const denied = await installWorldSourcePackageV1(scope, await createWorldPackage(source.release.id!, {
+      ...options, allowedUses: { ...options.allowedUses, 'text-open-world': false },
+    }))
+    expect(denied.worldReleaseId).toBe(allowed.worldReleaseId)
+    const candidates = await listTextOpenWorldCreatorWorldSourcesV1(scope)
+    expect(candidates.map(candidate => candidate.purposeAllowed).sort()).toEqual([false, true])
+    const bare = await inspectTextOpenWorldCreatorWorldSourceV1({ scope, localReleaseRecordId: allowed.worldReleaseId,
+      expectedReleaseHash: source.release.contentHash })
+    const selection = { sourceKind: 'world-release' as const, sourceScope: scope,
+      localReleaseRecordId: allowed.worldReleaseId, expectedReleaseHash: source.release.contentHash, preview: bare }
+    const before = await productionMutationSnapshot()
+    await expect(startTextOpenWorldCreatorBriefSessionV1({ selection, sessionKey: 'purpose-missing' }))
+      .rejects.toThrow(/明确选择|unknown/)
+    expect(await productionMutationSnapshot()).toEqual(before)
+
+    const preview = candidates.find(candidate => candidate.purposeAllowed)!
+    const prepared = await prepareStart({ ...selection, preview }, 'purpose-licensed')
+    const binding = prepared.preview.sourcePlan.sourceBinding
+    if (binding.kind !== 'world-release' || binding.sourcePurpose?.origin.kind !== 'declared') throw new Error('Missing exact D')
+    expect(readWorldSourcePurposeDeclarationV1(binding.sourcePurpose.origin)).toMatchObject({
+      declarationHash: allowed.declarationHash, attribution: options.attribution, contentWarnings: options.contentWarnings,
+    })
+    const result = await authorizeTextOpenWorldCreatorProductionStartV1({
+      ...prepared.input, expectedPlanHash: prepared.preview.start.productionPlanHash,
+    })
+    expect(result.ok).toBe(true)
+    const executor = createTextOpenWorldProductionExecutorV1({ production: prepared.preview.production,
+      brief: prepared.preview.start.executionBrief })
+    const pinned = await runProductProductionSchedulerCycleV1({
+      scope: prepared.preview.scope, productionId: prepared.input.productionId, executor,
+    })
+    const p0 = pinned.tasks.find(task => task.taskKey === 'p0.source-lock')
+    expect(p0?.status, JSON.stringify(p0)).toBe('completed')
+  }, 30_000)
+
   it.each([
     ['world-release', () => worldSelection(`Creator revision world ${crypto.randomUUID()}`)],
-    ['novel', async () => (await novelSelection(`Creator revision novel ${crypto.randomUUID()}`)).selection],
+    ['novel-derived-world', async () => (await novelSelection(`Creator revision novel ${crypto.randomUUID()}`)).selection],
   ] as const)('%s 停止后修订简报创建后继 Build，保留历史并拒绝活动 Build 和旧预检', async (_sourceKind, selectionFactory) => {
     const selection = await selectionFactory()
     const sessionKey = `revision-${_sourceKind}`
@@ -434,13 +479,13 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
 
   it.each([
     ['world-release', () => worldSelection(`G5-04 world ${crypto.randomUUID()}`)],
-    ['novel', async () => (await novelSelection(`G5-04 novel ${crypto.randomUUID()}`)).selection],
+    ['novel-derived-world', async () => (await novelSelection(`G5-04 novel ${crypto.randomUUID()}`)).selection],
   ] as const)('%s 来源预览零写入，并原子冻结 SourcePlan、Start、Plan 与 Build', async (sourceKind, selectionFactory) => {
     const selection = await selectionFactory()
     const prepared = await prepareStart(selection, `happy-${sourceKind}`)
 
-    expect(prepared.preview.sourcePlan.sourceKind).toBe(sourceKind)
-    expect(prepared.preview.sourcePlan.selection.kind).toBe(sourceKind === 'world-release' ? 'world-release' : 'novel')
+    expect(prepared.preview.sourcePlan.sourceKind).toBe(selection.sourceKind)
+    expect(prepared.preview.sourcePlan.selection.kind).toBe('world-release')
     expect(prepared.preview.start.executionBrief.intent.productType).toBe('text-open-world')
     expect(prepared.preview.start.executionBrief).toMatchObject({
       qualityProfile: 'prototype',
@@ -509,61 +554,24 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
     expect(frozen.executionBrief).toEqual(prepared.preview.start.executionBrief)
   }, 30_000)
 
-  it('大篇幅小说的实际P0冻结用量不会再撞上任务均分，并保持总Plan预留不超过200MB Brief', async () => {
-    const novel = await seedNovel(`G5-05 large novel ${crypto.randomUUID()}`, {
-      chapterBody: '盐'.repeat(3_500_000),
-    })
-    const selection = { mode: 'entire-work' } as const
-    const source = {
-      sourceKind: 'novel',
-      sourceScope: novel.scope,
-      selection,
-      preview: await inspectTextOpenWorldCreatorNovelSourceV1({
-        sourceScope: novel.scope,
-        selection,
-      }),
-    } satisfies TextOpenWorldCreatorSourceSelectionV1
-    const prepared = await prepareStart(source, 'large-source-storage')
-    const p0 = prepared.preview.plan.tasks.find(task => task.taskKey === 'p0.source-lock')!
-    const maximumStorageBytes = prepared.preview.start.executionBrief.productionBudget.maximumStorageBytes
-    const oldEqualShare = Math.floor(maximumStorageBytes / prepared.preview.plan.tasks.length)
-    const totalReserved = prepared.preview.plan.tasks.reduce(
-      (sum, task) => sum + task.budgetReservation.storageBytes,
-      0,
-    )
-    expect(p0.budgetReservation.storageBytes).toBeGreaterThan(oldEqualShare)
+  it('历史大篇幅小说P0的实际字节与预算仍可严格读取，不借兼容契约重新执行制作', async () => {
+    const saved = readQuality005LegacyLargeSourceV1()
+    const plan = saved.prepared.preview.plan
+    const maximumStorageBytes = saved.prepared.preview.start.executionBrief.productionBudget.maximumStorageBytes
+    const oldEqualShare = Math.floor(maximumStorageBytes / plan.tasks.length)
+    const totalReserved = plan.tasks.reduce((sum, task) => sum + task.budgetReservation.storageBytes, 0)
+    expect(saved.p0.budgetReservation.storageBytes).toBeGreaterThan(oldEqualShare)
     expect(totalReserved).toBeLessThanOrEqual(maximumStorageBytes)
-
-    await authorizeTextOpenWorldCreatorProductionStartV1({
-      ...prepared.input,
-      expectedPlanHash: prepared.preview.start.productionPlanHash,
-    })
-    const build = await db.productBuilds
-      .where('[productionId+buildNumber]')
-      .equals([prepared.input.productionId, prepared.preview.buildNumber])
-      .first()
-    const executor = createTextOpenWorldProductionExecutorV1({
-      production: prepared.preview.production,
-      brief: prepared.preview.start.executionBrief,
-    })
-    const result = await executor({
-      scope: prepared.preview.scope,
-      productionId: prepared.input.productionId,
-      buildId: build!.id!,
-      buildNumber: prepared.preview.buildNumber,
-      controlEpoch: prepared.preview.plan.controlEpoch,
-      planHash: prepared.preview.start.productionPlanHash,
-      task: p0,
-      attemptBudgetReservation: p0.budgetReservation,
-      attempt: 1,
-      idempotencyKey: await hashProductProductionValueV2('large-source-storage.p0'),
-      contextText: '',
-      inputArtifacts: [],
-      capabilityBindings: [],
-      signal: new AbortController().signal,
-    })
-    expect(result.usage.storageBytes).toBeGreaterThan(oldEqualShare)
-    expect(result.usage.storageBytes).toBeLessThanOrEqual(p0.budgetReservation.storageBytes)
+    expect(saved.result.usage.storageBytes).toBeGreaterThan(oldEqualShare)
+    expect(saved.result.usage.storageBytes).toBeLessThanOrEqual(saved.p0.budgetReservation.storageBytes)
+    const pin = saved.result.artifacts.find(row => row.kind === 'text-open-world.source-pin')!
+    const units = saved.result.artifacts.filter(row => row.kind === 'text-open-world.source-pin-unit')
+    const before = await productionMutationSnapshot()
+    const bundle = await validateTextOpenWorldSourcePinBundleV1({ pin: await validateTextOpenWorldSourcePinV1(pin.payload),
+      units: await Promise.all(units.map(async row => ({ payload: await validateTextOpenWorldSourcePinUnitV1(row.payload), artifactContentHash: row.contentHash! }))) })
+    expect(bundle.pin.sourceKind).toBe('novel')
+    expect(bundle.units.length).toBe(units.length)
+    expect(await productionMutationSnapshot()).toEqual(before)
   }, 60_000)
 
   it('Creator SourcePlan 接受512个来源单元并拒绝第513个', async () => {
@@ -696,10 +704,7 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
   it('source/config/plan 任一 CAS 漂移都在命令 claim 前失败且生产链零写入', async () => {
     const sourceCase = await novelSelection(`G5-04 source CAS ${crypto.randomUUID()}`)
     const sourcePrepared = await prepareStart(sourceCase.selection, 'source-cas')
-    await db.chapters.update(sourceCase.novel.chapterId, {
-      content: '<p>作者在预览后修改了小说正文，旧 SourcePlan 必须失效。</p>',
-      updatedAt: Date.now(),
-    })
+    await db.worldReleases.update(sourceCase.release.id!, { contentHash: '0'.repeat(64) })
     const beforeSourceFailure = await productionMutationSnapshot()
     await expect(authorizeTextOpenWorldCreatorProductionStartV1({
       ...sourcePrepared.input,
@@ -776,6 +781,8 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
   it('零媒体费用计划在任何外部 adapter 调用前失败关闭', async () => {
     const selection = await worldSelection(`G5-04 media boundary ${crypto.randomUUID()}`)
     const prepared = await prepareStart(selection, 'media-boundary')
+    await authorizeTextOpenWorldCreatorProductionStartV1({ ...prepared.input, expectedPlanHash: prepared.preview.start.productionPlanHash })
+    const actualBuild = (await db.productBuilds.where('productionId').equals(prepared.input.productionId).first())!
     const task = prepared.preview.plan.tasks.find(candidate => candidate.taskKey === 'media.visual')!
     const executor = createTextOpenWorldProductionExecutorV1({
       production: prepared.preview.production,
@@ -785,7 +792,7 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
     const execution = {
       scope: prepared.preview.scope,
       productionId: prepared.preview.production.id,
-      buildId: 1,
+      buildId: actualBuild.id!,
       buildNumber: prepared.preview.buildNumber,
       controlEpoch: prepared.preview.plan.controlEpoch,
       planHash: prepared.preview.start.productionPlanHash,
@@ -794,6 +801,7 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
       attempt: 1,
       idempotencyKey: 'media-boundary-attempt',
       contextText: '{}',
+      authorResolution: null,
       inputArtifacts: [],
       capabilityBindings: [{
         requirementKey: 'media.visual',
@@ -927,7 +935,7 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
     const first = await runProductProductionSchedulerCycleV1({
       scope: prepared.preview.scope, productionId: prepared.input.productionId, executor,
     })
-    expect(first.tasks.find(task => task.taskKey === 'p0.source-lock')?.status).toBe('completed')
+    expect(first.tasks.find(task => task.taskKey === 'p0.source-lock')?.status, JSON.stringify(first.tasks[0])).toBe('completed')
     expect(executor).toHaveBeenCalledTimes(1)
     const artifacts = await db.productBuildArtifacts.where('buildId').equals(first.buildId).toArray()
     expect(artifacts.length).toBeGreaterThan(1)
@@ -1088,12 +1096,12 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
         scope: prepared.preview.scope, productionId: prepared.input.productionId,
       })).rejects.toThrow(/没有待复验的导入任务证明/)
       const backup = await exportProjectJSON(prepared.preview.scope.projectId)
-      const portableFailure = JSON.parse(backup.productBuilds[0]!._failurePortableJson)
-      const portableLedger = JSON.parse(backup.productBuilds[0]!._budgetLedgerPortableJson)
+      const portableFailure = JSON.parse(backup.productBuilds[0]!._failurePortableJson!)
+      const portableLedger = JSON.parse(backup.productBuilds[0]!._budgetLedgerPortableJson!)
       expect(portableFailure.failureProvenance.runId).toBe(portableLedger.tasks['p1.source-curation'].runId)
       expect(portableFailure.taskFailures['p1.source-curation'].failureProvenance.rootRunId).toBe(portableLedger.rootRunId)
       const corrupted = structuredClone(backup)
-      const invalidFailure = JSON.parse(corrupted.productBuilds[0]!._failurePortableJson)
+      const invalidFailure = JSON.parse(corrupted.productBuilds[0]!._failurePortableJson!)
       invalidFailure.failureProvenance.runId = 999_999_999
       corrupted.productBuilds[0]!._failurePortableJson = JSON.stringify(invalidFailure)
       const projectsBefore = await db.projects.count()
@@ -1256,10 +1264,7 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
     const first = await authorizeTextOpenWorldCreatorProductionStartV1(command)
     expect(first).toMatchObject({ ok: true, replayed: false })
 
-    await db.chapters.update(seeded.novel.chapterId, {
-      content: '<p>首次授权后来源已经变化，但相同命令只能读取既有 receipt。</p>',
-      updatedAt: Date.now(),
-    })
+    await db.worldReleases.update(seeded.release.id!, { contentHash: '0'.repeat(64) })
     useAIConfigStore.setState({
       config: { ...AI_CONFIG, apiKey: '', model: '', baseUrl: '' },
       rememberApiKey: false,
@@ -1269,5 +1274,27 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
     expect(replay).toEqual({ ...first, replayed: true })
     expect(await productionMutationSnapshot()).toEqual(beforeReplay)
     expect(await db.productBuilds.where('productionId').equals(prepared.input.productionId).count()).toBe(1)
+  }, 30_000)
+
+  it('005 同一真实 World 作者授权并发最多写入一个 Build，后续只读原 receipt', async () => {
+    const selection = await worldSelection(`005 concurrent Start ${crypto.randomUUID()}`)
+    const prepared = await prepareStart(selection, 'quality005-concurrent-author-start')
+    const command = { ...prepared.input, expectedPlanHash: prepared.preview.start.productionPlanHash }
+    const sourceBefore = await db.worldReleases.get(selection.localReleaseRecordId)
+    const runsBefore = await db.agentRuns.toArray()
+    const results = await Promise.allSettled([
+      authorizeTextOpenWorldCreatorProductionStartV1(command),
+      authorizeTextOpenWorldCreatorProductionStartV1(command),
+    ])
+    expect(results.some(result => result.status === 'fulfilled' && result.value.ok)).toBe(true)
+    const commands = (await db.productProductionCommands.where('productionId').equals(command.productionId).toArray())
+      .filter(row => row.type === 'authorize-text-open-world-creator-start')
+    expect(commands).toHaveLength(1)
+    expect(await db.productBuilds.where('productionId').equals(command.productionId).count()).toBe(1)
+    const beforeReplay = await productionMutationSnapshot()
+    expect(await authorizeTextOpenWorldCreatorProductionStartV1(command)).toMatchObject({ ok: true, replayed: true })
+    expect(await productionMutationSnapshot()).toEqual(beforeReplay)
+    expect(await db.worldReleases.get(selection.localReleaseRecordId)).toEqual(sourceBefore)
+    expect(await db.agentRuns.toArray()).toEqual(runsBefore)
   }, 30_000)
 })

@@ -162,6 +162,11 @@ export function TextOpenWorldCreatorWorkflow(props: TextOpenWorldCreatorWorkflow
     </main>
   }
 
+  if (session?.sourceBinding.kind === 'novel' && view !== 'production') {
+    return <TextOpenWorldCreatorBriefStudio key={session.sourceBindingHash}
+      initialSession={session} readOnly onBack={returnToSource} />
+  }
+
   if (view === 'brief' && (session || selection)) {
     const key = session?.sourceBindingHash ?? selectionIdentity(selection!)
     return <TextOpenWorldCreatorBriefStudio
@@ -207,7 +212,11 @@ export function TextOpenWorldCreatorWorkflow(props: TextOpenWorldCreatorWorkflow
   }
 
   if (view === 'production' && session?.production.id) {
-    return <ProductProductionStudio
+    return <>
+      {session.sourceBinding.kind === 'novel' && <nav className="mx-auto max-w-6xl px-5 pt-4" aria-label="历史小说制作来源">
+        <button type="button" onClick={returnToSource} className="rounded border border-border px-3 py-2 text-xs">重新选择封存世界或派生独立世界草稿</button>
+      </nav>}
+      <ProductProductionStudio
       scope={session.scope}
       worldGroupId={props.worldGroupId}
       allowedProducts={OPEN_WORLD_PRODUCT}
@@ -230,7 +239,8 @@ export function TextOpenWorldCreatorWorkflow(props: TextOpenWorldCreatorWorkflow
         setReadinessResult(null)
         setView('brief')
       }}
-    />
+      />
+    </>
   }
 
   return <>

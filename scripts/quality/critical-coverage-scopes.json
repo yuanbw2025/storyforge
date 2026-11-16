@@ -1,0 +1,28 @@
+{
+  "harness": [
+    "src/lib/agent/run/contract.ts",
+    "src/lib/agent/run/checkpoint.ts",
+    "src/lib/agent/run/context-manifest.ts",
+    "src/lib/agent/run/event-schema.ts",
+    "src/lib/agent/run/event-store.ts",
+    "src/lib/agent/run/projection.ts",
+    "src/lib/agent/run/verification-receipt.ts",
+    "src/lib/agent/run/creation-response-evidence.ts"
+  ],
+  "production": [
+    "src/lib/product-production/artifact-store.ts",
+    "src/lib/product-production/commands.ts",
+    "src/lib/product-production/plan.ts",
+    "src/lib/product-production/recovery-policy.ts",
+    "src/lib/product-production/scheduler.ts",
+    "src/lib/product-production/task-evidence.ts"
+  ],
+  "runtime": [
+    "src/lib/product/runtime-core.ts",
+    "src/lib/product/runtime-instances.ts",
+    "src/lib/product/runtime-branch-lineage.ts",
+    "src/lib/product/runtime-source-authority.ts",
+    "src/lib/product/runtime-source-manifest.ts",
+    "src/lib/product/runtime-media-library.ts"
+  ]
+}

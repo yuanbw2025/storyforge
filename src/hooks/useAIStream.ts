@@ -38,7 +38,7 @@ export interface UseAIStreamReturn {
   /** 设置当前会话的操作类型。 */
   setOperation: (operation: string | null) => void
   /** 从持久化候选恢复已完成输出；不会发起模型调用。 */
-  restore: (session: Pick<AIGenerationSession, 'output' | 'operation'> & Partial<Pick<AIGenerationSession, 'error'>>) => void
+  restore: (session: Pick<AIGenerationSession, 'output' | 'operation'> & Partial<Pick<AIGenerationSession, 'error' | 'tokenUsage'>>) => void
 }
 
 const sharedAbortControllers = new Map<string, AbortController>()
@@ -101,14 +101,14 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
     }
   }, [sessionKey, patchShared])
 
-  const restore = useCallback((session: Pick<AIGenerationSession, 'output' | 'operation'> & Partial<Pick<AIGenerationSession, 'error'>>) => {
+  const restore = useCallback((session: Pick<AIGenerationSession, 'output' | 'operation'> & Partial<Pick<AIGenerationSession, 'error' | 'tokenUsage'>>) => {
     stop()
     if (sessionKey) {
       patchShared({
         output: session.output,
         operation: session.operation,
         error: session.error ?? null,
-        tokenUsage: null,
+        tokenUsage: session.tokenUsage ? { ...session.tokenUsage } : null,
         isStreaming: false,
       })
       return
@@ -116,7 +116,7 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
     setOutput(session.output)
     setLocalOperation(session.operation)
     setError(session.error ?? null)
-    setTokenUsage(null)
+    setTokenUsage(session.tokenUsage ? { ...session.tokenUsage } : null)
     setIsStreaming(false)
   }, [patchShared, sessionKey, stop])
 

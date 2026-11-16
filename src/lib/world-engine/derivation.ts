@@ -5,6 +5,7 @@ import { isWorkCode, isWorkspaceUid } from '../memory/identity'
 import {
   captureWorkspaceContentRevisionV1,
   verifyWorkspaceContentRevisionV1,
+  type WorkspaceContentRevisionVectorV1,
 } from '../authoring/content-revision'
 import { cascadeDeleteProject } from '../registry/lifecycle'
 import type {
@@ -36,6 +37,9 @@ export interface DeriveNovelToWorldInput {
   publish?: boolean
   /** Explicit development preview; v3 remains the released default. */
   formatVersion?: 3 | 4
+  /** Optional author-reviewed source preview. Omitted by existing derivation
+   * callers; supplied by flows that must reject edits since their preview. */
+  expectedSourceRevision?: WorkspaceContentRevisionVectorV1
 }
 
 export interface DerivedNovelWorldResult {
@@ -72,6 +76,7 @@ export async function nameDerivedWorldV1(scope: WorkspaceScope, name: string, de
 export async function deriveNovelToWorld(
   input: DeriveNovelToWorldInput,
 ): Promise<DerivedNovelWorldResult> {
+  const expectedSourceRevision = input.expectedSourceRevision && structuredClone(input.expectedSourceRevision)
   if (input.formatVersion !== undefined && input.formatVersion !== 3 && input.formatVersion !== 4) throw Error('[derivation] 未知派生封存格式')
   if (input.formatVersion === 4) return (await import('./narrative-derivation')).deriveNarrativeNovelToWorldV4(input)
   const sourceScope = await resolveScope({ scope: input.sourceScope })
@@ -94,6 +99,12 @@ export async function deriveNovelToWorld(
     scope: sourceScope,
     worldGroupId: null,
   })
+  if (expectedSourceRevision) {
+    const expected = await verifyWorkspaceContentRevisionV1(expectedSourceRevision, { scope: sourceScope, worldGroupId: null })
+    if (!expected.fresh || expected.current.vectorHash !== sourceRevision.vectorHash) {
+      throw new Error('[derivation] 作者预览后源作品已变化，请重新检查来源再派生世界草稿')
+    }
+  }
   const snapshot = await buildIndependentWorkWorldSnapshot({
     scope: sourceScope,
     selectedTables: input.selectedTables,

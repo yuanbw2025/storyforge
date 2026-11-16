@@ -1,5 +1,6 @@
+import { resolveFieldGenerationRequestModeV1 } from './field-generation-request-mode'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { chat, resolveRequestConfig } from '../ai/client'
+import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import type { FieldGenerationMode } from '../ai/field-generation-context'
 import { db } from '../db/schema'
 import type {
@@ -112,6 +113,8 @@ export interface PreparedStoryCoreCopilot {
 
 interface StoryCoreCopilotDependencies {
   runAI?: (messages: ChatMessage[]) => Promise<string>
+  /** Opt-in durable owner of the same request, before schema handling. */
+  runModel?: (assertCurrent: () => Promise<void>, ...request: Parameters<typeof chat>) => ReturnType<typeof chat>
   readCurrent?: () => Promise<StoryCoreCopilotSnapshot>
   adoptOutput?: (candidate: StoryCoreCopilotCandidate) => Promise<AdoptResult>
 }
@@ -206,11 +209,7 @@ export function resolveStoryCoreFieldV1(request: string): StoryCoreField {
 }
 
 export function resolveStoryCoreModeV1(request: string): FieldGenerationMode {
-  const explicit = /生成模式\s*=\s*(expand|rewrite|polish)\b/i.exec(request)?.[1]?.toLowerCase()
-  if (explicit === 'rewrite' || explicit === 'polish' || explicit === 'expand') return explicit
-  if (/重写|重做|推倒重来/.test(request)) return 'rewrite'
-  if (/润色|优化表达/.test(request)) return 'polish'
-  return 'expand'
+  return resolveFieldGenerationRequestModeV1(request)
 }
 
 export function parseStoryCoreCandidateDraft(draft: string): StoryCoreCopilotCandidate {
@@ -343,6 +342,8 @@ async function adoptCandidate(input: {
     },
   )
 }
+
+export { candidateIssues as storyCoreCandidateIssuesV1 }
 
 export async function adoptRestoredStoryCoreCandidate(input: {
   projectId: number
@@ -547,6 +548,10 @@ export function createStoryCoreCopilotNode(
   dependencies: StoryCoreCopilotDependencies = {},
 ): PreparedStoryCoreCopilot['node'] {
   const readCurrent = dependencies.readCurrent ?? (() => readSnapshot(input.projectId, input.scope))
+  const expectedSerialized = input.snapshot.serialized
+  const assertCurrent = async () => {
+    if ((await readCurrent()).serialized !== expectedSerialized) throw new StoryCoreCopilotStaleError()
+  }
   const adoptOutput = dependencies.adoptOutput ?? (candidate => adoptCandidate({
     projectId: input.projectId,
     scope: input.scope,
@@ -554,15 +559,30 @@ export function createStoryCoreCopilotNode(
     targetField: input.targetField,
     candidate,
   }))
-  const runAI = dependencies.runAI ?? (messages => chat(messages, input.config, {
-    category: input.routingCategory,
-    projectId: input.projectId,
-    configOverrides: {
-      maxTokens: input.generationOverrides?.maxTokens ?? 6_000,
-      temperature: input.generationOverrides?.temperature ?? 0.5,
-    },
-    contextOverflowPolicy: 'reject',
-  }, input.signal))
+  const runAI = dependencies.runAI ?? (async messages => {
+    const result: ChatResult = {}
+    const requestMessages = dependencies.runModel ? structuredClone(messages) : messages
+    const requestConfig = dependencies.runModel ? { ...input.config } : input.config
+    const signal = input.signal
+    const meta = {
+      category: input.routingCategory,
+      projectId: input.projectId,
+      configOverrides: {
+        maxTokens: input.generationOverrides?.maxTokens ?? 6_000,
+        temperature: input.generationOverrides?.temperature ?? 0.5,
+      },
+      contextOverflowPolicy: 'reject' as const,
+    }
+    if (dependencies.runModel) await assertCurrent()
+    const raw = await (dependencies.runModel
+      ? dependencies.runModel(assertCurrent, requestMessages, requestConfig, meta, signal, result)
+      : chat(requestMessages, requestConfig, meta, signal, result))
+    if (dependencies.runModel) {
+      signal?.throwIfAborted()
+      await assertCurrent()
+    }
+    return raw
+  })
   return {
     id: `agent.world-foundation.story-core:${input.projectId}:${input.targetField}:${input.snapshot.updatedAt ?? 0}`,
     kind: 'world-foundation.story-core',

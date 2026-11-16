@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { chat } from '../../ai/client'
 import {
   buildForeshadowSuggestionMessagesV1,
@@ -107,6 +108,8 @@ interface PreparedInputV1 {
   promptHash: string
 }
 
+class ForeshadowUpstreamStaleError extends Error {}
+
 function isHash(value: unknown): value is string {
   return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)
 }
@@ -198,19 +201,23 @@ function registeredSegment(
   return segment.content
 }
 
+function assembleForeshadowSuggestionContext(scope: WorkspaceScope, worldGroupId: number | null) {
+  return assembleContext({
+    projectId: scope.projectId,
+    scope,
+    worldGroupId,
+    sourceKeys: [...FORESHADOW_SUGGESTION_CONTEXT_SOURCE_KEYS_V1],
+    inputBudgetMaxTokens: 130_000,
+  })
+}
+
 async function prepareInput(
   scope: WorkspaceScope,
   request: ForeshadowSuggestionRequestV1,
 ): Promise<PreparedInputV1> {
   const [baseline, assembled] = await Promise.all([
     readForeshadowSuggestionBaselineV1({ scope, worldGroupId: request.worldGroupId }),
-    assembleContext({
-      projectId: scope.projectId,
-      scope,
-      worldGroupId: request.worldGroupId,
-      sourceKeys: [...FORESHADOW_SUGGESTION_CONTEXT_SOURCE_KEYS_V1],
-      inputBudgetMaxTokens: 130_000,
-    }),
+    assembleForeshadowSuggestionContext(scope, request.worldGroupId),
   ])
   const baselineContext = registeredSegment(
     assembled,
@@ -738,6 +745,16 @@ export async function adoptForeshadowSuggestionCandidateV1(input: {
     && !sameValue(intent.selectedIndexes, [...input.selectedIndexes].sort((left, right) => left - right))) {
     throw new Error('伏笔建议采纳选择与冻结意图不一致。')
   }
+  const rejectStaleBeforeWrite = async () => {
+    if (snapshot.projection.state === 'running' || snapshot.projection.state === 'paused') {
+      await append(input.scope, snapshot, 'candidate.staled', {
+        stepId: FORESHADOW_SUGGESTION_STEP_ID_V1,
+        candidateHash: candidate.candidateHash,
+        reason: 'foreshadow-suggestions-upstream-stale-before-write',
+      })
+    }
+    throw new Error('伏笔候选来源已过期，请重新审查。')
+  }
   let evidence = await currentEvidence(input.scope, candidate, intent)
   if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash && intent) {
     if (!evidence.postMatches || !evidence.templateFresh || !evidence.upstreamFresh) {
@@ -785,7 +802,8 @@ export async function adoptForeshadowSuggestionCandidateV1(input: {
       intentHash: intent.intentHash,
     })
     await input.onDurableBoundary?.('adoption.started', snapshot)
-  } else if (snapshot.projection.steps[FORESHADOW_SUGGESTION_STEP_ID_V1]?.confirmation !== 'adopt' || !intent) {
+  } else if (snapshot.projection.steps[FORESHADOW_SUGGESTION_STEP_ID_V1]?.status === 'stale'
+    || snapshot.projection.steps[FORESHADOW_SUGGESTION_STEP_ID_V1]?.confirmation !== 'adopt' || !intent) {
     throw new Error('伏笔建议候选不在可恢复采纳状态。')
   }
   let adoptionHash = snapshot.projection.steps[FORESHADOW_SUGGESTION_STEP_ID_V1]?.adoptionHash
@@ -796,12 +814,28 @@ export async function adoptForeshadowSuggestionCandidateV1(input: {
         await pauseUnsafeRun(input.scope, snapshot, 'foreshadow-suggestions-formal-state-diverged')
         throw new Error('伏笔正式状态与冻结 baseline 或意图不一致。')
       }
-      await adoptForeshadowSuggestionsAtomicV1({
-        scope: input.scope,
-        worldGroupId: candidate.request.worldGroupId,
-        baseline: candidate.baseline,
-        formalItems: intent.formalItems,
-      })
+      if (!evidence.upstreamFresh) await rejectStaleBeforeWrite()
+      try {
+        await adoptForeshadowSuggestionsAtomicV1({
+          scope: input.scope,
+          worldGroupId: candidate.request.worldGroupId,
+          baseline: candidate.baseline,
+          formalItems: intent.formalItems,
+          assertFrozenUpstream: async () => {
+            const assembled = await assembleForeshadowSuggestionContext(input.scope, candidate.request.worldGroupId)
+            const [template, upstream] = await Dexie.waitFor(Promise.all([
+              hashCanonicalValue(readForeshadowSuggestionPromptTemplateSnapshotV1()),
+              hashCanonicalValue(upstreamContextInput(assembled)),
+            ]))
+            if (template !== candidate.promptTemplateHash || upstream !== candidate.upstreamContextHash) {
+              throw new ForeshadowUpstreamStaleError()
+            }
+          },
+        })
+      } catch (error) {
+        if (error instanceof ForeshadowUpstreamStaleError) await rejectStaleBeforeWrite()
+        throw error
+      }
       evidence = await currentEvidence(input.scope, candidate, intent)
     }
     if (!evidence.postMatches) {

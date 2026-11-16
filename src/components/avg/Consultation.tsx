@@ -1,3 +1,4 @@
+import { assertCurrentProductEntryV1, evaluateCurrentProductEntryV1 } from '../../lib/product/product-catalog'
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import type { WorkspaceScope } from "../../lib/types";
@@ -45,6 +46,7 @@ export default function Consultation({
   onConfirm: (value: AvgAuthoringSettingsV1) => void;
   onSource: () => void;
 }) {
+  const canAuthor = evaluateCurrentProductEntryV1('upper.avg').enterable
   const config = useAIConfigStore((s) => s.config);
   const [question, setQuestion] = useState(""),
     [busy, setBusy] = useState(false),
@@ -61,6 +63,7 @@ export default function Consultation({
     setError("");
     controller.current = new AbortController();
     try {
+      assertCurrentProductEntryV1('upper.avg')
       await consultAvgV1({
         scope,
         question,
@@ -77,6 +80,7 @@ export default function Consultation({
   const candidate = recovered ?? [...turns].reverse().find((t) => !t.archived&&t.settings);
   return (
     <div className="avg-consult">
+      {!canAuthor && <p role="status">当前产品尚未开放新会谈或方案确认；原始回答和历史候选仍可查看或恢复。</p>}
       <section className="lf-paper">
         <h3>AVG 主 Agent</h3>
         <p>
@@ -131,7 +135,7 @@ export default function Consultation({
             </div>
             <label>
               你的想法
-              <textarea
+              <textarea disabled={!canAuthor}
                 aria-label="AVG 会谈输入"
                 value={question}
                 maxLength={5000}
@@ -146,7 +150,7 @@ export default function Consultation({
             <div className="avg-actions">
               <button
                 className="lf-action lf-action-primary"
-                disabled={busy || !question.trim() || !isAIConfigReady(config)}
+                disabled={busy || !canAuthor || !question.trim() || !isAIConfigReady(config)}
                 onClick={() => void send()}
               >
                 {busy ? "会谈中…" : "发送"}
@@ -183,7 +187,7 @@ export default function Consultation({
             </dl>
             <button
               className="lf-action lf-action-primary"
-              disabled={busy}
+              disabled={busy || !canAuthor}
               onClick={() => onConfirm(candidate.settings!)}
             >
               确认并回填制作方案

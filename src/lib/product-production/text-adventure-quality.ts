@@ -55,6 +55,22 @@ function artifactKeyForTextAdventureBeatV1(
     : 'content.narrative'
 }
 
+function projectTextAdventureCastAliases(cast: Record<string, unknown> | null) {
+  return (Array.isArray(cast?.characters) ? cast.characters : []).flatMap(value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+    const row = value as Record<string, unknown>
+    if (typeof row.key !== 'string' || typeof row.name !== 'string' || !row.name.trim()) return []
+    const name = row.name.trim()
+    // Cast display names may carry a role prefix (for example
+    // “议会巡灯员·克罗”) while authored dialogue naturally uses only the
+    // personal-name suffix. Treat that suffix as a frozen alias so a model
+    // cannot hide a wrong speakerKey behind the shorter everyday form.
+    const parts = name.split(/[·・•]/u)
+    const suffix = (parts[parts.length - 1] ?? '').trim()
+    return [{ key: row.key, name, aliases: [...new Set([name, suffix].filter(Boolean))] }]
+  })
+}
+
 /**
  * The narrative arc is the authority for who may participate in a scene.
  * Global Cast membership alone is insufficient: accepting any registered
@@ -71,15 +87,7 @@ export function textAdventureSceneSpeakerAuthorityIssuesV1(
   const arcPlan = arcPlanValue as Record<string, unknown>
   const cast = castValue && typeof castValue === 'object' && !Array.isArray(castValue)
     ? castValue as Record<string, unknown> : null
-  const characters = (Array.isArray(cast?.characters) ? cast.characters : []).flatMap(value => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return []
-    const row = value as Record<string, unknown>
-    if (typeof row.key !== 'string' || typeof row.name !== 'string' || !row.name.trim()) return []
-    const name = row.name.trim()
-    const parts = name.split(/[·・•]/u)
-    const suffix = (parts[parts.length - 1] ?? '').trim()
-    return [{ key: row.key, name, aliases: [...new Set([name, suffix].filter(Boolean))] }]
-  })
+  const characters = projectTextAdventureCastAliases(cast)
   const allowedByScene = new Map<string, Set<string>>()
   for (const actValue of Array.isArray(arcPlan.acts) ? arcPlan.acts : []) {
     if (!actValue || typeof actValue !== 'object' || Array.isArray(actValue)) continue
@@ -184,19 +192,7 @@ export function textAdventureDialogueAttributionIssuesV1(
   const narrative = narrativeValue as Record<string, unknown>
   const cast = castValue as Record<string, unknown>
   const beats = Array.isArray(narrative.beats) ? narrative.beats : []
-  const characters = (Array.isArray(cast.characters) ? cast.characters : []).flatMap(value => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return []
-    const row = value as Record<string, unknown>
-    if (typeof row.key !== 'string' || typeof row.name !== 'string' || !row.name.trim()) return []
-    const name = row.name.trim()
-    // Cast display names may carry a role prefix (for example
-    // “议会巡灯员·克罗”) while authored dialogue naturally uses only the
-    // personal-name suffix. Treat that suffix as a frozen alias so a model
-    // cannot hide a wrong speakerKey behind the shorter everyday form.
-    const parts = name.split(/[·・•]/u)
-    const suffix = (parts[parts.length - 1] ?? '').trim()
-    return [{ key: row.key, name, aliases: [...new Set([name, suffix].filter(Boolean))] }]
-  })
+  const characters = projectTextAdventureCastAliases(cast)
   const issues: TextAdventureDialogueAttributionIssueV1[] = []
   for (const value of beats) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) continue

@@ -1,5 +1,5 @@
 import { CInput, CTextarea } from '../shared/CompositionInput'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Plus, Trash2, ArrowRight, Sparkles, Loader2, LayoutList, LayoutGrid, Info } from 'lucide-react'
 import { useForeshadowStore } from '../../stores/foreshadow'
 import { useChapterStore } from '../../stores/chapter'
@@ -60,6 +60,17 @@ export default function ForeshadowPanel({ project }: Props) {
   const [unsafeRunId, setUnsafeRunId] = useState<number | null>(null)
   const [aiBusy, setAIBusy] = useState(false)
   const [aiMessage, setAIMessage] = useState<string | null>(null)
+  const ownerKey = JSON.stringify([project.id, project.activeWorldId, project.activeWorkId])
+  const deleteView = useRef({ ownerKey, selected })
+  deleteView.current = { ownerKey, selected }
+  const mounted = useRef(false)
+  const deleteOperation = useRef<{ ownerKey: string; id: number } | null>(null)
+  const [deleting, setDeleting] = useState<{ ownerKey: string; id: number } | null>(null)
+  const [deleteError, setDeleteError] = useState<{ ownerKey: string; id: number; message: string } | null>(null)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false; deleteOperation.current = null }
+  }, [])
 
   useEffect(() => {
     loadForeshadows(project.id!)
@@ -165,6 +176,29 @@ export default function ForeshadowPanel({ project }: Props) {
     const idx = STATUS_FLOW.indexOf(f.status)
     if (idx < STATUS_FLOW.length - 1 && f.id) {
       updateStatus(f.id, STATUS_FLOW[idx + 1])
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (deleteOperation.current?.ownerKey === ownerKey && deleteOperation.current.id === id) return
+    const operation = { ownerKey, id }
+    deleteOperation.current = operation
+    setDeleting(operation)
+    setDeleteError(null)
+    try {
+      await deleteForeshadow(id)
+      if (mounted.current && deleteOperation.current === operation && deleteView.current.ownerKey === operation.ownerKey) {
+        setSelected(current => current === id ? null : current)
+      }
+    } catch (error) {
+      if (mounted.current && deleteOperation.current === operation && deleteView.current.ownerKey === operation.ownerKey && deleteView.current.selected === id) {
+        setDeleteError({ ...operation, message: error instanceof Error ? error.message : '删除伏笔失败，请核对后重试。' })
+      }
+    } finally {
+      if (mounted.current && deleteOperation.current === operation) {
+        deleteOperation.current = null
+        setDeleting(null)
+      }
     }
   }
 
@@ -521,10 +555,15 @@ export default function ForeshadowPanel({ project }: Props) {
                   className="flex items-center gap-1 px-2 py-1 text-xs bg-bg-elevated text-text-secondary rounded hover:text-accent disabled:opacity-30">
                   <ArrowRight className="w-3 h-3" /> 推进状态
                 </button>
-                <button onClick={() => { deleteForeshadow(selectedF.id!); setSelected(null) }}
-                  className="text-text-muted hover:text-error"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => { void handleDelete(selectedF.id!) }} aria-label="删除伏笔"
+                  disabled={deleting?.ownerKey === ownerKey && deleting.id === selectedF.id}
+                  className="text-text-muted hover:text-error disabled:opacity-40"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
+
+            {deleteError?.ownerKey === ownerKey && deleteError.id === selectedF.id && (
+              <p role="alert" className="text-sm text-error">{deleteError.message}</p>
+            )}
 
             <div className="flex gap-3">
               <div>

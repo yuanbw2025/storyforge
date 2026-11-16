@@ -101,12 +101,10 @@ describe('Text Open World vNext · three registries and complete data lifecycle'
       genres: ['open-world'], status: 'drafting', description: '', targetWordCount: 1,
       enableMultiWorld: false,
     }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
-    const foreign = await assembleContext({
+    await expect(assembleContext({
       projectId: foreignWorkspace.scope.projectId, scope: foreignWorkspace.scope,
       productRuntimeSessionId: created.session.id!, sourceKeys: ['openWorldRuntime'],
-    })
-    expect(foreign.included).toEqual([])
-    expect(foreign.text).toBe('')
+    })).rejects.toThrow('[runtime-context] 运行实例不属于当前 Project/World/Work')
   }, 20_000)
 
   it('PROJECT_TABLES派生的备份恢复会重映射完整ProductRelease、Session、Event与Checkpoint链', async () => {

@@ -1,18 +1,18 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {test, expect, type Page} from '@playwright/test'
 
 async function open(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-plan.invalid/v1', model: 'test', maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
-  await page.goto('./chat/library')
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-plan.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {
     const load = new Function('p', 'return import(p)')
     const f = await (await load('/storyforge/tests/helpers/chat-consultation.ts')).seedChatConsultationFixtureV2()
     return {scope: f.scope, settings: f.settings, candidate: f.candidate}
   })
-  await page.goto(`./chat/agent?project=${f.scope.projectId}&work=${f.scope.workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/agent?project=${f.scope.projectId}&work=${f.scope.workId}`)
   return f
 }
 test('author selects evidence, resumes a conversation and adopts only chosen plan fields across refresh', async ({page}) => {
@@ -36,7 +36,7 @@ test('author selects evidence, resumes a conversation and adopts only chosen pla
     return {draft: await db.chatAuthoringDrafts.where('workId').equals(scope.workId).first(), productions: await db.productProductions.count()}
   }, f.scope)
   expect(JSON.parse((await read()).draft.settingsJson)).toEqual(f.settings)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByTestId('chat-plan-change')).toHaveCount(2)
   expect(prompts).toHaveLength(1)
   // A new explicitly sent question ends the old unadopted run and carries its saved discussion.
@@ -54,7 +54,7 @@ test('author selects evidence, resumes a conversation and adopts only chosen pla
   const saved = await read()
   expect(JSON.parse(saved.draft.settingsJson)).toEqual({...f.settings, openingSituation: f.candidate.changes[0].value})
   expect(saved.productions).toBe(0)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText('已采用所选修改；其他方案设置保持原样。', {exact: true})).toBeVisible()
   await page.setViewportSize({width: 390, height: 844})
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1)
@@ -70,7 +70,7 @@ test('unknown and rejected plan requests do not resend on refresh; explicit dism
   await page.getByRole('textbox', {name: '角色聊天 会谈输入', exact: true}).fill('讨论一个新开场。')
   await page.getByRole('button', {name: '发送', exact: true}).click()
   await expect(page.getByText(/这次请求的结果尚未留存/)).toBeVisible()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText(/这次请求的结果尚未留存/)).toBeVisible()
   await page.getByRole('textbox', {name: '角色聊天 会谈输入', exact: true}).fill('另开一次讨论。')
   await expect(page.getByRole('button', {name: '发送', exact: true})).toBeDisabled()
@@ -78,7 +78,7 @@ test('unknown and rejected plan requests do not resend on refresh; explicit dism
   await page.getByRole('button', {name: '结束本次讨论', exact: true}).click()
   await page.getByRole('button', {name: '发送', exact: true}).click()
   await expect(page.getByText(/模型服务拒绝了这次请求，没有生成方案/)).toBeVisible()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText(/模型服务拒绝了这次请求，没有生成方案/)).toBeVisible()
   expect(calls).toBe(2)
 })
@@ -92,11 +92,11 @@ test('a later author edit disables the old candidate and the page lists missing 
   await page.getByRole('textbox', {name: '角色聊天 会谈输入', exact: true}).fill('提一个开场。')
   await page.getByRole('button', {name: '发送', exact: true}).click()
   await expect(page.getByRole('button', {name: '采用勾选的修改', exact: true})).toBeEnabled()
-  await page.goto(`./chat/vision?project=${f.scope.projectId}&work=${f.scope.workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/vision?project=${f.scope.projectId}&work=${f.scope.workId}`)
   await page.getByLabel('开场与场景目标', {exact: true}).fill('')
   await page.getByRole('button', {name: '保存方案', exact: true}).click()
   await expect(page.getByText('方案已保存', {exact: true})).toBeVisible()
-  await page.goto(`./chat/agent?project=${f.scope.projectId}&work=${f.scope.workId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/agent?project=${f.scope.projectId}&work=${f.scope.workId}`)
   await expect(page.getByText('方案或资料已变化，下面是历史候选，不能覆盖当前方案。', {exact: true})).toBeVisible()
   await expect(page.getByRole('button', {name: '采用勾选的修改', exact: true})).toBeDisabled()
   await expect(page.getByRole('region', {name: '制作前待补齐'})).toContainText('填写开场情景或矛盾')
@@ -119,11 +119,11 @@ test('a saved response interrupted before parsing can be recovered from the page
       })
     } catch (error) {if (!(error instanceof Error) || error.message !== 'isolated saved-response interruption') throw error}
   }, f.scope)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByRole('button', {name: '恢复已保存结果', exact: true}).click()
   await expect(page.getByText('可以先讨论一起修钟的理由。', {exact: true})).toBeVisible()
   await expect(page.getByRole('button', {name: '恢复已保存结果', exact: true})).toHaveCount(0)
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(page.getByText('可以先讨论一起修钟的理由。', {exact: true})).toBeVisible()
   expect(calls).toBe(0)
 })
@@ -137,7 +137,7 @@ test('an invalid response remains readable after refresh and cannot be adopted',
   await page.getByRole('textbox', {name: '角色聊天 会谈输入', exact: true}).fill('讨论开场')
   await page.getByRole('button', {name: '发送', exact: true}).click()
   await expect(page.getByText('查看保留的原始回复', {exact: true})).toBeVisible()
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await page.getByText('查看保留的原始回复', {exact: true}).click()
   await expect(page.getByText('先保留这段未能整理成方案的回复。', {exact: true})).toBeVisible()
   await expect(page.getByRole('button', {name: '采用勾选的修改', exact: true})).toHaveCount(0)
@@ -170,7 +170,7 @@ test('adopted consultation evidence reaches the saved production through the rea
   await evidence.getByText('开场与当前矛盾', {exact: true}).first().click()
   await expect(evidence).toContainText('希望修好旧钟，愿意自己检查工具。')
   await expect(evidence).not.toContainText('来借书的旅人，还没有答应参与修理。')
-  await page.reload()
+  await reloadWithBrowserFixtureAIConfigV1(page)
   await expect(evidence).toContainText('已冻结 1 次已采用会谈的读取记录。')
   const imported = await page.evaluate(async scope => {
     const load = new Function('p', 'return import(p)'), {db} = await load('/storyforge/src/lib/db/schema.ts')
@@ -182,7 +182,7 @@ test('adopted consultation evidence reaches the saved production through the rea
     if (await db.productBuilds.count() || await db.productRuntimeSessions.count()) throw new Error('Saving a Brief unexpectedly started production')
     return {projectId, workId: target.workId, productionId: target.productionId}
   }, f.scope)
-  await page.goto(`./chat/production?project=${imported.projectId}&work=${imported.workId}&production=${imported.productionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/production?project=${imported.projectId}&work=${imported.workId}&production=${imported.productionId}`)
   await expect(evidence).toContainText('已冻结 1 次已采用会谈的读取记录。')
   await evidence.getByText('开场与当前矛盾', {exact: true}).first().click()
   await expect(evidence).toContainText('希望修好旧钟，愿意自己检查工具。')

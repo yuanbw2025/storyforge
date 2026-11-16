@@ -1,3 +1,4 @@
+import { registerBrowserFixtureAIConfigV1, gotoWithBrowserFixtureAIConfigV1, reloadWithBrowserFixtureAIConfigV1 } from './helpers/browser-ai-config'
 import {chatActionResponseFixture, fulfillChatActionChoiceFixture} from './helpers/character-chat-choice'
 import {test, expect} from '@playwright/test'
 
@@ -9,9 +10,8 @@ for (const bounded of [false, true]) for (const reject of [false, true]) test(`a
   const calls: string[] = []; let actions = 0
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({provider: 'openai', baseUrl: 'https://chat-observation.invalid/v1', model: 'test', maxTokens: 6000}))
-    sessionStorage.setItem('storyforge-ai-api-key-session', 'isolated-test-key')
   })
+  registerBrowserFixtureAIConfigV1(page, { provider: 'openai', baseUrl: 'https://chat-observation.invalid/v1', model: 'test', maxTokens: 6000, apiKey: 'isolated-test-key' })
   await page.route('https://chat-observation.invalid/**', async route => {
           if (await fulfillChatActionChoiceFixture(route)) return
     const prompt = route.request().postDataJSON().messages.map((m: {content: string}) => m.content).join('\n')
@@ -36,10 +36,10 @@ for (const bounded of [false, true]) for (const reject of [false, true]) test(`a
     }
     await route.fulfill({contentType: 'application/json', body: JSON.stringify({choices: [{message: {role: 'assistant', content: chatActionResponseFixture(route, output)}, finish_reason: 'stop'}]})})
   })
-  await page.goto('./chat/library')
+  await gotoWithBrowserFixtureAIConfigV1(page, './chat/library')
   const f = await page.evaluate(async () => {const load = new Function('p', 'return import(p)'); return (await load('/storyforge/tests/helpers/chat-narrative-fixture.ts')).seedChatNarrativeRuntimeFixture({actorSituationExpansion: true})})
   const read = () => page.evaluate(async f => {const load = new Function('p', 'return import(p)'); return (await (await load('/storyforge/src/lib/character-interaction/runtime-api.ts')).readProductRuntimeState(f.sessionId)).interaction}, f)
-  await page.goto(`./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
+  await gotoWithBrowserFixtureAIConfigV1(page, `./chat/play?project=${f.scope.projectId}&work=${f.scope.workId}&session=${f.sessionId}`)
   await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
   const before = await read()
   await page.getByRole('button', {name: '让角色开场', exact: true}).click()
@@ -57,7 +57,7 @@ for (const bounded of [false, true]) for (const reject of [false, true]) test(`a
     evidenceFactKeys: ['lost'], actorKey: 'guard', goalKey: 'find-seal', source: 'action'}, ...(reject ? [] : [{
     factKey: 'outside-checked', kind: 'observation', evidenceFactKeys: ['inspected'], actorKey: 'guard', goalKey: 'find-seal', source: 'situation',
   }])]})
-  await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   expect(await read()).toEqual(observed); expect(calls).toHaveLength(4)
   if (!reject) {
     await page.getByLabel('本轮行动角色', {exact: true}).selectOption('guard')
@@ -75,7 +75,7 @@ for (const bounded of [false, true]) for (const reject of [false, true]) test(`a
     expect(after.chatNarrative.pendingSituation).toEqual(observed.chatNarrative.pendingSituation)
     await expect(page.getByText(reply, {exact: true})).toHaveCount(0)
   } else expect(after.chatNarrative.pendingSituation).toBeUndefined()
-  await page.reload(); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
+  await reloadWithBrowserFixtureAIConfigV1(page); await expect(page.getByTestId('chat-narrative-controls')).toBeVisible()
   expect(await read()).toEqual(after)
   expect(calls).toEqual(['action', 'action-review', 'construction', 'situation-review', ...(reject ? [] : ['action', 'action-review'])])
 })

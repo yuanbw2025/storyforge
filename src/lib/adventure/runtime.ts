@@ -1,4 +1,5 @@
 import { ADVENTURE_V2_CORE_CAPABILITIES } from '../types'
+import { parseProductRuntimeDiceExpressionV1 } from '../product/runtime-dice'
 import type {
   AdventureActionDefinition,
   AdventureCheckEvidence,
@@ -167,8 +168,25 @@ function action(value: unknown): AdventureActionDefinition {
   }
 }
 
-function validateExpression(value: string): void {
+// Preserve the frozen V1/V2 reader grammar. This is a historical shape check,
+// not execution admission; new previews/releases use the pinned runtime parser.
+function validateHistoricalExpressionShape(value: string): void {
   if (!/^\d{1,3}d\d{1,4}(?:[+-]\d{1,7})?$/.test(value.trim().toLowerCase())) fail(`随机表达式无效:${value}`)
+}
+
+function adventureActionDiceFailureV1(action: AdventureActionDefinition): string | null {
+  if (action.rule.kind !== 'random') return null
+  try { parseProductRuntimeDiceExpressionV1(action.rule.expression); return null }
+  catch (cause) {
+    return `行动 ${action.key} 的随机表达式 ${action.rule.expression} 不受当前冻结骰式执行器支持：${cause instanceof Error ? cause.message : String(cause)}`
+  }
+}
+
+/** Admission for newly produced content, using the exact parser that settles
+ * formal actions. Validation never normalizes stored expressions or old hashes. */
+export function assertAdventureRuntimeDiceSupportV1(content: AdventureContent): void {
+  const errors = content.actions.map(adventureActionDiceFailureV1).filter((error): error is string => error !== null)
+  if (errors.length) fail(errors.join('；'))
 }
 
 export interface AdventureContentReport {
@@ -538,6 +556,8 @@ export function parseAdventureContent(value: string | AdventureContent): Adventu
   return row.version === 2 ? parseAdventureContentV2(row) : parseAdventureContentV1(row)
 }
 
+/** Frozen content structure validation. New execution admission also requires
+ * assertAdventureRuntimeDiceSupportV1; historical readability is not a playability claim. */
 export function validateAdventureContent(value: AdventureContent): AdventureContentReport {
   const errors: string[] = []; const warnings: string[] = []
   const error = (message: string) => errors.push(message)
@@ -572,7 +592,7 @@ export function validateAdventureContent(value: AdventureContent): AdventureCont
     action.requirements.forEach(item => checkRequirement(item, `行动 ${action.key}`))
     if ((action.rule.kind === 'threshold' || action.rule.kind === 'random') && !abilities.has(action.rule.abilityKey)) error(`行动规则能力不存在:${action.key}`)
     if (action.rule.kind === 'resource-payment' && !resources.has(action.rule.resourceKey)) error(`行动支付资源不存在:${action.key}`)
-    if (action.rule.kind === 'random') try { validateExpression(action.rule.expression) } catch (cause) { error(cause instanceof Error ? cause.message : String(cause)) }
+    if (action.rule.kind === 'random') try { validateHistoricalExpressionShape(action.rule.expression) } catch (cause) { error(cause instanceof Error ? cause.message : String(cause)) }
     if (action.kind === 'move') {
       const entered = [...action.successEffects, ...action.costlySuccessEffects]
         .filter(effect => effect.op === 'enter-location')
@@ -1000,6 +1020,8 @@ export function adventureNarrativeActionContext(
 
 export function availableAdventureActions(content: AdventureContent, state: AdventureRuntimeState, narrativeVariables: Record<string, unknown> = {}): Array<{ action: AdventureActionDefinition; available: boolean; reason: string }> {
   return content.actions.filter(action => action.locationKey === state.currentLocationKey).map(action => {
+    const diceFailure = adventureActionDiceFailureV1(action)
+    if (diceFailure) return { action, available: false, reason: diceFailure }
     const available = (action.repeatable || !state.completedActionKeys.includes(action.key)) && action.requirements.every(item => adventureRequirementSatisfied(item, state, narrativeVariables, content))
     let reason = available ? '' : action.unavailableText
     if (!available && content.version === 2) {

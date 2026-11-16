@@ -25,6 +25,22 @@ describe('NW-2A · v4 封存解释规则', () => {
     expect(frozen.tables.filter(spec => spec.worldSemantic?.projector)).toHaveLength(13)
   })
 
+  it('备份准入和待复核本地坐标不改封存解释，真实语义引用变更仍可见', () => {
+    const spec = PROJECT_TABLES.find(item => item.name === 'chapters')!
+    const original = spec.exportRemap!
+    const before = currentNarrativeDomainRegistryV1()
+    try {
+      spec.exportRemap = [
+        ...original.map(ref => ({ ...ref, requiredOnImport: true as const, sameWorkOnImport: true as const })),
+        { field: 'localReviewChapterId', remapVia: 'chapters', exportAs: '_localReviewChapterExportId', reviewLocal: 'chapter' },
+      ]
+      expect(currentNarrativeDomainRegistryV1()).toEqual(before)
+      spec.exportRemap = original.map((ref, index) => index === 0 ? { ...ref, remapVia: 'characters' } : ref)
+      expect(currentNarrativeDomainRegistryV1()).not.toEqual(before)
+    } finally { spec.exportRemap = original }
+    expect(currentNarrativeDomainRegistryV1()).toEqual(before)
+  })
+
   it('当前注册表增加或更改领域时，已捕获合同的投影和索引字节不漂移', async () => {
     const fixture = await seedConfirmedNarrativeDomainV1()
     const capture = await captureNarrativeDomainV1(fixture.input)

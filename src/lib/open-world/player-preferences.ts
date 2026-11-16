@@ -279,6 +279,18 @@ function notify(
   }
 }
 
+function persistPreferences(
+  key: string,
+  storage: TextOpenWorldPlayerPreferencesStorageV1 | null,
+  preferences: Readonly<TextOpenWorldPlayerPreferencesV1>,
+): Readonly<TextOpenWorldPlayerPreferencesV1> {
+  if (storage) {
+    try { storage.setItem(key, JSON.stringify(preferences)) } catch { /* browser-local persistence is best effort */ }
+  }
+  notify(key, storage, preferences)
+  return preferences
+}
+
 /** Writes an allowed partial update. Unknown fields (including apiKey) fail before persistence. */
 export function writeTextOpenWorldPlayerPreferencesV1(
   scope: TextOpenWorldPlayerPreferenceScopeV1,
@@ -288,11 +300,7 @@ export function writeTextOpenWorldPlayerPreferencesV1(
   const key = textOpenWorldPlayerPreferencesStorageKeyV1(scope)
   const storage = resolveStorage(options)
   const preferences = parsePatch(readTextOpenWorldPlayerPreferencesV1(scope, options), patch)
-  if (storage) {
-    try { storage.setItem(key, JSON.stringify(preferences)) } catch { /* browser-local persistence is best effort */ }
-  }
-  notify(key, storage, preferences)
-  return preferences
+  return persistPreferences(key, storage, preferences)
 }
 
 export function resetTextOpenWorldPlayerPreferencesV1(
@@ -359,12 +367,14 @@ function samePreferences(
 /**
  * Small external-store facade for React. Instantiate once per product/user
  * scope (for example with useMemo), then pass its three snapshot/subscribe
- * methods to useSyncExternalStore.
+ * methods to useSyncExternalStore. Partial writes merge the current snapshot
+ * before best-effort persistence, so unavailable storage cannot erase earlier choices.
  */
 export function createTextOpenWorldPlayerPreferencesStoreV1(
-  scope: TextOpenWorldPlayerPreferenceScopeV1,
+  scopeInput: TextOpenWorldPlayerPreferenceScopeV1,
   options: TextOpenWorldPlayerPreferencesOptionsV1 = {},
 ): TextOpenWorldPlayerPreferencesStoreV1 {
+  const scope = { ...scopeInput }
   let snapshot = readTextOpenWorldPlayerPreferencesV1(scope, options)
   const listeners = new Set<() => void>()
   let unsubscribeChannel: (() => void) | null = null
@@ -391,7 +401,8 @@ export function createTextOpenWorldPlayerPreferencesStoreV1(
     }
   }
   const write = (patch: TextOpenWorldPlayerPreferencesPatchV1) => {
-    accept(writeTextOpenWorldPlayerPreferencesV1(scope, patch, options))
+    const next = parsePatch(snapshot, patch)
+    accept(persistPreferences(textOpenWorldPlayerPreferencesStorageKeyV1(scope), resolveStorage(options), next))
     return snapshot
   }
   const reset = () => {

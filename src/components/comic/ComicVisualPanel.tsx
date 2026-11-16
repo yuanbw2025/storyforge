@@ -128,7 +128,9 @@ export default function ComicVisualPanel({
         <div className="comic-visual-form">
           <label>
             稳定 key
-            <input value={subjectDraft.stableKey} onChange={(event) => setSubjectDraft({ ...subjectDraft, stableKey: event.target.value })} />
+            <input value={subjectDraft.stableKey} readOnly={selectedSubject != null}
+              onChange={(event) => setSubjectDraft({ ...subjectDraft, stableKey: event.target.value })} />
+            {selectedSubject && <small>创建后身份固定；可修改显示名称。设定变更后需重新验图。</small>}
           </label>
           <label>
             类型

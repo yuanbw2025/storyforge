@@ -1,6 +1,7 @@
 import {
   CommunityAuthorityErrorV1,
   CommunityPlatformAuthorityV1,
+  communityRequestIdForAuditV1,
   type CommunityAgeBandV1,
   type CommunityLfgPostV1,
   type CommunityPrincipalV1,
@@ -123,7 +124,7 @@ export function createCommunityGatewayV1(input: {
           throw new CommunityAuthorityErrorV1('payload_too_large', '请求体超过 64KB')
         }
         const body = record(request.body)
-        requestId = typeof body.requestId === 'string' ? body.requestId : null
+        requestId = communityRequestIdForAuditV1(body.requestId)
         if (request.path === '/v1/community/lfg/discover') {
           fields(body, [], ['locale', 'releaseHash', 'includeFull'])
           if ((body.locale != null && typeof body.locale !== 'string')

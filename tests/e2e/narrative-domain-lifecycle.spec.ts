@@ -105,16 +105,18 @@ test('narrative confirmation survives reload and isolated restore; deletion keep
     const { useCharacterStore } = await imp('/storyforge/src/stores/character.ts')
     const { projectNarrativeDomainsV1 } = await imp('/storyforge/src/lib/world-engine/narrative-domain-projection.ts')
     const { deriveExportProjectJSON } = await imp('/storyforge/src/lib/export/registry-export.ts')
+    const { CURRENT_BACKUP_VERSION } = await imp('/storyforge/src/lib/export/backup-trust.ts')
     await useCharacterStore.getState().deleteCharacter(prepared.characterId)
     const event = await db.storyTimelineEvents.get(prepared.eventId)
     const result = await projectNarrativeDomainsV1(prepared.input)
     const backup = await deriveExportProjectJSON(prepared.input.scope.projectId)
     return { reference: event.narrativeEventV1.participants[0].entity,
       kinds: result.bundle.records.map((record: { kind: string }) => record.kind), backupVersion: backup.version,
+      currentBackupVersion: CURRENT_BACKUP_VERSION,
       releaseBytes: (await db.worldReleases.get(prepared.releaseId)).manifestJson }
   }, prepared)
   expect(deleted.reference).toEqual({ characterId: null, sourceUid: prepared.characterUid })
   expect(deleted.kinds).toEqual([])
-  expect(deleted.backupVersion).toBe(17)
+  expect(deleted.backupVersion).toBe(deleted.currentBackupVersion)
   expect(deleted.releaseBytes).toBe(prepared.releaseBytes)
 })

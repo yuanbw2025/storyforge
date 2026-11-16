@@ -12,3 +12,10 @@ export function isProviderQuotaRejectionV1(input: {
 }): boolean {
   return input.status === 402 || PROVIDER_QUOTA_REJECTION_PATTERN.test(input.message)
 }
+
+/** A bare 429 can also be a billing rejection. Only an observed message
+ * identifying a rate limit can authorize a bounded retry of a paid call. */
+export function isConfirmedProviderThrottleV1(input: { status: number; message: string }): boolean {
+  return input.status === 429 && !isProviderQuotaRejectionV1(input)
+    && /rate[_\s-]*limit|throttl(?:e|ed|ing)|too[_\s-]*many[_\s-]*requests|限流|请求(?:过于|太)频繁/i.test(input.message)
+}

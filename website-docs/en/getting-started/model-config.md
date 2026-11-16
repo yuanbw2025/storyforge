@@ -1,6 +1,21 @@
 # Models and APIs
 
+## November 13: saving, recovery and usage checks
+
+After changing a service endpoint, a late model list from the old endpoint does not overwrite the current catalog. Check the current endpoint, model and capabilities when refreshing. Text and vision tasks use the provider/configuration actually authorized for that operation. Observed usage remains after interrupted/stopped streaming; estimates stay separate from provider measurements, and unknown usage is not shown as verified zero cost. Sources: [#340](https://github.com/yuanbw2025/storyforge/pull/340), [#358](https://github.com/yuanbw2025/storyforge/pull/358), [#402](https://github.com/yuanbw2025/storyforge/pull/402), [#314](https://github.com/yuanbw2025/storyforge/pull/314).
+
+
 AI generation requires your own model service. You can begin with manual writing and built-in works that need no API.
+
+
+
+## Custom relay connections in the desktop client
+
+After configuring a custom model service, check the original endpoint and parameters separately for model lists, streaming chat and embeddings. Mainline desktop clients now provide a restricted HTTP connection path for CORS-blocked requests in these three categories. Web clients follow browser connection restrictions. Authentication failures, cancellation and rejected redirects retain their actual results. Correct the configuration based on the error before explicitly retrying. New Doubao configurations also have an updated default model and official retirement notices; authors continue to review existing configurations. See [PR #301](https://github.com/yuanbw2025/storyforge/pull/301).
+
+## Configuration identity and embedding results
+
+Credentials follow the saved provider-configuration identity. Recheck the selected provider and model after switching or updating a configuration. Embedding responses with invalid indices or vector shapes are rejected before caching, with an error available for inspection. Check the embedding configuration and service response before continuing retrieval. See [#255](https://github.com/yuanbw2025/storyforge/pull/255) and [#256](https://github.com/yuanbw2025/storyforge/pull/256).
 
 ## First configuration
 

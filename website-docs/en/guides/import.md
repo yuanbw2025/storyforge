@@ -1,5 +1,10 @@
 # Import existing fiction and references
 
+## Confirming and recovering import parsing
+
+Document parsing first creates a recoverable candidate. Review its target work, original file and content before adopting it. Reloading/opening failed tasks restores the original attempt rather than automatically making another paid send. Replaced files or changed sources require another check. Reference parsing does not automatically merge existing characters; source reference text remains private and local. See [reference analysis](/en/features/longform/references), based on [#307](https://github.com/yuanbw2025/storyforge/pull/307) and [#386](https://github.com/yuanbw2025/storyforge/pull/386).
+
+
 Choose the entry by the material's purpose. Restoring a backup and asking AI to analyze a novel are different operations.
 
 | Material and goal | Entry | Model calls? |

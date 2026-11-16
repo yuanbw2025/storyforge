@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { db } from '../../db/schema'
 import type { AgentRunContractV3, AgentRunRecord, ChatMessage, WorkspaceScope } from '../../types'
 import type { AIRequestConfigResolution, StreamResult } from '../../ai/client'
@@ -119,6 +120,10 @@ export async function runWholeChapterQualityReviewV1(input: {
   }
 }
 
+function keepReviewIntegrityAlive<T>(pending: Promise<T>): Promise<T> {
+  return Dexie.currentTransaction ? Dexie.waitFor(pending) : pending
+}
+
 /** Historical reports may remain readable; they never become adoption authority. */
 export async function readLatestWholeChapterQualityReviewV1(input: { scope: WorkspaceScope; chapterId: number; mode: QualityReviewModeV1 }): Promise<DurableQualityReviewV1 | null> {
   const chapter = await db.chapters.get(input.chapterId)
@@ -143,8 +148,8 @@ export async function readLatestWholeChapterQualityReviewV1(input: { scope: Work
     const payload = JSON.parse(await readAgentRunArtifactExactV1({ projectId: input.scope.projectId, artifactKind: 'raw-response', contentHash: ref.contentHash })) as { version: string; chapterText: string; report: QualityReviewArtifactV1; revision: WorkspaceContentRevisionVectorV1; authorRequest?: string }
     const requestRef = evidence.manifest.artifacts.find(item => item.role === 'rendered-request')!
     const request = JSON.parse(await readAgentRunArtifactExactV1({ projectId: input.scope.projectId, artifactKind: 'rendered-request', contentHash: requestRef.contentHash })) as { messages: ChatMessage[] }
-    if (payload.version !== 'quality-review-response-v1' || payload.report.artifactHash !== candidate.payload.candidateHash || !await verifyWholeChapterQualityReviewV1(payload.report, payload.chapterText, request.messages)) throw new Error('报告证据已损坏。')
-    let current = payload.report.targetTextHash === await hashCanonicalValue(htmlToPlainText(chapter.content ?? ''))
+    if (payload.version !== 'quality-review-response-v1' || payload.report.artifactHash !== candidate.payload.candidateHash || !await keepReviewIntegrityAlive(verifyWholeChapterQualityReviewV1(payload.report, payload.chapterText, request.messages))) throw new Error('报告证据已损坏。')
+    let current = payload.report.targetTextHash === await keepReviewIntegrityAlive(hashCanonicalValue(htmlToPlainText(chapter.content ?? '')))
     try { await assertWorkspaceContentRevisionFreshV1(payload.revision, { scope: input.scope, worldGroupId: snapshot.contract.scope.worldGroupId }) } catch { current = false }
     const session = await createContextGatewayToolSessionV1({ scope: { ...input.scope, worldGroupId: snapshot.contract.scope.worldGroupId ?? null, chapterId: input.chapterId, characterId: chapter.perspectiveCharacterId ?? null }, policy: createContextAccessPolicyForExecutionV1(getAgentSkillV1('prose.quality-review', 'prose')) })
     const freshness = await inspectContextGatewayManifestFreshnessV1({ session, manifest: evidence.manifest })

@@ -24,10 +24,10 @@ import {
   REQUIRED_TABLES,
 } from '../../src/lib/db/ensure-schema'
 
-describe('CURRENT-SCHEMA · v1-v12 to v13 additive migration', () => {
-  it('v11 snapshot is unchanged and v13 adds both empty stores without changing the v11 snapshot', async () => {
+describe('CURRENT-SCHEMA · v1-v13 to v14 additive migration', () => {
+  it('v11 snapshot is unchanged and v14 adds three empty stores without changing the v11 snapshot', async () => {
     expect(Object.keys(STORYFORGE_STORES_V11)).toHaveLength(128)
-    expect(Object.keys(STORYFORGE_STORES).filter(key => !(key in STORYFORGE_STORES_V11))).toEqual(['ttrpgNarrativeMemories','worldNarrativeIndexCaches'])
+    expect(Object.keys(STORYFORGE_STORES).filter(key => !(key in STORYFORGE_STORES_V11))).toEqual(['ttrpgNarrativeMemories','worldNarrativeIndexCaches','worldSourceReceipts'])
     const name = `memory-v11-upgrade-${crypto.randomUUID()}`
     const old = new Dexie(name)
     old.version(11).stores(STORYFORGE_STORES_V11)
@@ -43,7 +43,9 @@ describe('CURRENT-SCHEMA · v1-v12 to v13 additive migration', () => {
       expect(await current.works.get(workId as number)).toEqual({ ...work, id: workId })
       expect(await current.extensionRecords.get(extensionId as number)).toEqual({ ...extension, id: extensionId })
       expect(await current.ttrpgNarrativeMemories.count()).toBe(0)
-      expect(current.verno).toBe(13)
+      expect(await current.worldNarrativeIndexCaches.count()).toBe(0)
+      expect(await current.worldSourceReceipts.count()).toBe(0)
+      expect(current.verno).toBe(STORYFORGE_SCHEMA_VERSION)
     } finally { current.close(); await current.delete() }
   })
   beforeEach(async () => {
@@ -53,9 +55,9 @@ describe('CURRENT-SCHEMA · v1-v12 to v13 additive migration', () => {
 
   afterEach(() => db.close())
 
-  it('数据库使用独立当前命名空间和 v13 schema', () => {
+  it('数据库使用独立当前命名空间和 v14 schema', () => {
     expect(STORYFORGE_DATABASE_NAME).toBe('storyforge-core')
-    expect(STORYFORGE_SCHEMA_VERSION).toBe(13)
+    expect(STORYFORGE_SCHEMA_VERSION).toBe(14)
     expect(db.name).toBe(STORYFORGE_DATABASE_NAME)
     expect(db.verno).toBe(STORYFORGE_SCHEMA_VERSION)
   })
@@ -239,9 +241,10 @@ describe('CURRENT-SCHEMA · v1-v12 to v13 additive migration', () => {
     const name=`storyforge-avg-migration-${Date.now()}`;const old=new Dexie(name)
     old.version(6).stores(STORYFORGE_STORES_V6);await old.open()
     const id=await old.table('works').add({projectId:1,worldId:1,title:'作者原稿',kind:'novel',createdAt:1,updatedAt:1})
+    if (typeof id !== 'number') throw new Error('migration fixture requires a numeric Work primary key')
     const original=await old.table('works').get(id);old.close()
     const current=new StoryForgeDB(name)
-    try{await current.open();expect(await current.works.get(id)).toEqual(original);expect(await current.avgAuthoringDrafts.count()).toBe(0);expect(await current.avgDraftMedia.count()).toBe(0);expect(Object.keys(STORYFORGE_STORES).filter(k=>!(k in STORYFORGE_STORES_V6)).sort()).toEqual(['aiTownAuthoringDrafts','avgAuthoringDrafts','avgDraftMedia','chatAuthoringDrafts','ttrpgAuthoringDrafts','extensionPackages','extensionProfiles','extensionRecords','extensionContracts','extensionOperations','ttrpgNarrativeMemories','worldNarrativeIndexCaches'].sort())}finally{current.close();await current.delete()}
+    try{await current.open();expect(await current.works.get(id)).toEqual(original);expect(await current.avgAuthoringDrafts.count()).toBe(0);expect(await current.avgDraftMedia.count()).toBe(0);expect(Object.keys(STORYFORGE_STORES).filter(k=>!(k in STORYFORGE_STORES_V6)).sort()).toEqual(['aiTownAuthoringDrafts','avgAuthoringDrafts','avgDraftMedia','chatAuthoringDrafts','ttrpgAuthoringDrafts','extensionPackages','extensionProfiles','extensionRecords','extensionContracts','extensionOperations','ttrpgNarrativeMemories','worldNarrativeIndexCaches','worldSourceReceipts'].sort())}finally{current.close();await current.delete()}
   })
 
 })
@@ -258,7 +261,7 @@ it('v7 upgrades preserve author data and Brief revisions while allowing repeated
     await current.open();
     expect(await current.works.get(id as number)).toMatchObject(original);
     expect(await current.ttrpgAuthoringDrafts.count()).toBe(0);
-    expect(Object.keys(STORYFORGE_STORES).filter(k => !(k in STORYFORGE_STORES_V7))).toEqual(['ttrpgAuthoringDrafts','aiTownAuthoringDrafts','chatAuthoringDrafts','extensionPackages','extensionProfiles','extensionRecords','extensionContracts','extensionOperations','ttrpgNarrativeMemories','worldNarrativeIndexCaches']);
+    expect(Object.keys(STORYFORGE_STORES).filter(k => !(k in STORYFORGE_STORES_V7))).toEqual(['ttrpgAuthoringDrafts','aiTownAuthoringDrafts','chatAuthoringDrafts','extensionPackages','extensionProfiles','extensionRecords','extensionContracts','extensionOperations','ttrpgNarrativeMemories','worldNarrativeIndexCaches','worldSourceReceipts']);
     expect(await current.productProductionBriefs.get(briefId as number)).toEqual({ ...brief, id: briefId });
     await current.table('productProductionBriefs').add({ ...brief, id: undefined, revision: 2, authorizedAt: null });
     await expect(current.table('productProductionBriefs').add({ ...brief, id: undefined, revision: 2, briefHash: 'other' })).rejects.toThrow();
@@ -270,7 +273,7 @@ it('v8 → current adds registered stores and preserves existing work/runtime da
  const name='town-v8-migration';const old=new Dexie(name);old.version(8).stores(STORYFORGE_STORES_V8);await old.open();
  const work={projectId:1,worldId:1,kind:'ttrpg',title:'已有作品',novelProfile:null};const id=await old.table('works').add(work);
  const session={projectId:1,worldId:1,workId:id,kind:'ai-town',title:'旧存档',stateJson:'{"keep":true}'};const sid=await old.table('productRuntimeSessions').add(session);old.close();
- const current=new StoryForgeDB(name);try{await current.open();expect(await current.works.get(id as number)).toEqual({...work,id});expect(await current.productRuntimeSessions.get(sid as number)).toEqual({...session,id:sid});expect(await current.aiTownAuthoringDrafts.count()).toBe(0);expect(Object.keys(STORYFORGE_STORES).filter(k=>!(k in STORYFORGE_STORES_V8))).toEqual(['aiTownAuthoringDrafts','chatAuthoringDrafts','extensionPackages','extensionProfiles','extensionRecords','extensionContracts','extensionOperations','ttrpgNarrativeMemories','worldNarrativeIndexCaches']);}finally{current.close();await current.delete();}
+ const current=new StoryForgeDB(name);try{await current.open();expect(await current.works.get(id as number)).toEqual({...work,id});expect(await current.productRuntimeSessions.get(sid as number)).toEqual({...session,id:sid});expect(await current.aiTownAuthoringDrafts.count()).toBe(0);expect(Object.keys(STORYFORGE_STORES).filter(k=>!(k in STORYFORGE_STORES_V8))).toEqual(['aiTownAuthoringDrafts','chatAuthoringDrafts','extensionPackages','extensionProfiles','extensionRecords','extensionContracts','extensionOperations','ttrpgNarrativeMemories','worldNarrativeIndexCaches','worldSourceReceipts']);}finally{current.close();await current.delete();}
 });
 it('v7 upgrade preserves AVG drafts and adds an empty character chat store',async()=>{const name=`chat-migration-${crypto.randomUUID()}`;const old=new Dexie(name);old.version(7).stores(STORYFORGE_STORES_V7);await old.open();await old.table('avgAuthoringDrafts').add({projectId:1,worldId:1,workId:1,settingsJson:'preserve-original-bytes'});old.close();const next=new StoryForgeDB(name);try{await next.open();expect((await next.avgAuthoringDrafts.toArray())[0].settingsJson).toBe('preserve-original-bytes');expect(await next.chatAuthoringDrafts.count()).toBe(0)}finally{next.close();await next.delete()}})
 
@@ -307,7 +310,7 @@ it('v10 upgrades add plugin, memory and rebuildable cache tables, preserving man
     expect(await current.chapters.get(1)).toEqual(chapter)
     expect(await current.creationReleases.get(1)).toEqual(release)
     const added = Object.keys(STORYFORGE_STORES).filter(key=>!(key in STORYFORGE_STORES_V10)).sort()
-    expect(added).toEqual(['extensionContracts','extensionOperations','extensionPackages','extensionProfiles','extensionRecords','ttrpgNarrativeMemories','worldNarrativeIndexCaches'])
+    expect(added).toEqual(['extensionContracts','extensionOperations','extensionPackages','extensionProfiles','extensionRecords','ttrpgNarrativeMemories','worldNarrativeIndexCaches','worldSourceReceipts'])
     for (const table of added) expect(await current.table(table).count()).toBe(0)
   } finally { current.close(); await current.delete() }
 })

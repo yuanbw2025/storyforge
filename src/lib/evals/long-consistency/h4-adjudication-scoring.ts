@@ -1,3 +1,4 @@
+import { currentProviderUsageCountsV1, PROVIDER_USAGE_POLICY_V1 } from './model-usage'
 import { canonicalStringify, hashCanonicalValue } from '../../agent/run/hash'
 import {
   deriveH4SubtypeAdjudicatedIssuesV1,
@@ -25,6 +26,7 @@ export interface H4SubtypeAdjudicationSealedScoreV1 {
   schemaVersion: 1
   scoreType: typeof H4_SUBTYPE_ADJUDICATION_SCORE_TYPE_V1
   scoringVersion: typeof H4_SUBTYPE_ADJUDICATION_SCORING_VERSION_V1
+  usagePolicy?: typeof PROVIDER_USAGE_POLICY_V1
   fixtureVersion: H4SubtypeAdjudicationCheckpointV1['fixtureVersion']
   runId: string
   split: H4SubtypeAdjudicationCheckpointV1['split']
@@ -81,14 +83,21 @@ function scoreBody(
   return body
 }
 
-export async function scoreH4SubtypeAdjudicationCheckpointV1(input: {
+interface ScoreH85InputV1 {
   checkpoint: unknown
   thresholds?: Partial<H4LongConsistencyReleaseThresholdsV1>
-}): Promise<H4SubtypeAdjudicationSealedScoreV1> {
+}
+
+export async function scoreH4SubtypeAdjudicationCheckpointV1(input: ScoreH85InputV1): Promise<H4SubtypeAdjudicationSealedScoreV1> {
+  return await calculateScore(input, false)
+}
+
+async function calculateScore(input: ScoreH85InputV1, historical: boolean): Promise<H4SubtypeAdjudicationSealedScoreV1> {
   if (!await verifyH4SubtypeAdjudicationCheckpointV1(input.checkpoint)) {
     throw new Error('H85 checkpoint 无法通过完整性验证')
   }
   const checkpoint = parseH4SubtypeAdjudicationCheckpointV1(input.checkpoint)
+  if (historical && checkpoint.usagePolicy !== undefined) throw new Error('新版 checkpoint 不适用历史用量评分')
   const sourceById = new Map(checkpoint.baseCheckpoint.completed.map(item => [item.fixtureId, item] as const))
   const metrics = computeH4LongConsistencyMetricSummaryV1(
     checkpoint.split,
@@ -101,7 +110,11 @@ export async function scoreH4SubtypeAdjudicationCheckpointV1(input: {
     })),
   )
   const thresholds = resolveH4LongConsistencyReleaseThresholdsV1(checkpoint.split, input.thresholds)
-  const totalUsage = addUsage(checkpoint.baseCheckpoint.usage, checkpoint.usage)
+  const discoveryUsage = historical ? checkpoint.baseCheckpoint.usage
+    : currentProviderUsageCountsV1(checkpoint.baseCheckpoint.usage, checkpoint.baseCheckpoint.usagePolicy)
+  const adjudicationUsage = historical ? checkpoint.usage
+    : currentProviderUsageCountsV1(checkpoint.usage, checkpoint.usagePolicy)
+  const totalUsage = addUsage(discoveryUsage, adjudicationUsage)
   const gate = evaluateH4LongConsistencyReleaseGateV1({
     status: checkpoint.status,
     completedCases: checkpoint.completed.length,
@@ -121,6 +134,7 @@ export async function scoreH4SubtypeAdjudicationCheckpointV1(input: {
     schemaVersion: 1,
     scoreType: H4_SUBTYPE_ADJUDICATION_SCORE_TYPE_V1,
     scoringVersion: H4_SUBTYPE_ADJUDICATION_SCORING_VERSION_V1,
+    ...(historical ? {} : { usagePolicy: PROVIDER_USAGE_POLICY_V1 }),
     fixtureVersion: checkpoint.fixtureVersion,
     runId: checkpoint.runId,
     split: checkpoint.split,
@@ -148,8 +162,8 @@ export async function scoreH4SubtypeAdjudicationCheckpointV1(input: {
       total: discoveryFailures + adjudicationFailures,
     },
     usage: {
-      discovery: checkpoint.baseCheckpoint.usage,
-      adjudication: checkpoint.usage,
+      discovery: discoveryUsage,
+      adjudication: adjudicationUsage,
       total: totalUsage,
     },
     thresholds,
@@ -167,10 +181,10 @@ export async function verifyH4SubtypeAdjudicationSealedScoreV1(
   checkpoint: unknown,
 ): Promise<boolean> {
   try {
-    const expected = await scoreH4SubtypeAdjudicationCheckpointV1({
-      checkpoint,
-      thresholds: (score as H4SubtypeAdjudicationSealedScoreV1).thresholds,
-    })
+    const candidate = score as H4SubtypeAdjudicationSealedScoreV1
+    const historical = !Object.prototype.hasOwnProperty.call(candidate, 'usagePolicy')
+    if (!historical && candidate.usagePolicy !== PROVIDER_USAGE_POLICY_V1) return false
+    const expected = await calculateScore({ checkpoint, thresholds: candidate.thresholds }, historical)
     return canonicalStringify(expected) === canonicalStringify(score)
       && await hashCanonicalValue(scoreBody(expected)) === expected.scoreHash
   } catch {

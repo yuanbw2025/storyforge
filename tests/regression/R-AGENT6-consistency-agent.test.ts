@@ -8,7 +8,9 @@ import {
   runConsistencyAgent,
 } from '../../src/lib/agent/consistency-agent'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
-import type { Project } from '../../src/lib/types'
+import { fingerprintSettingSource } from '../../src/lib/fact-ledger/setting-assertions'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import type { Project, TemporalFact, WorkspaceScope } from '../../src/lib/types'
 import { putCurrentWorkspaceFixtureV1 } from '../helpers/current-workspace'
 import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
@@ -28,7 +30,7 @@ async function seedConsistencyProject() {
     createdAt: now,
     updatedAt: now,
   }
-  await putCurrentWorkspaceFixtureV1(project)
+  const scope = await putCurrentWorkspaceFixtureV1(project)
   await db.creativeRules.add({
     projectId: project.id!,
     writingStyle: '',
@@ -124,7 +126,20 @@ async function seedConsistencyProject() {
     createdAt: now,
   })
   await finalizeCurrentFixtureV1(project.id!)
-  return { project, targetChapterId, targetOutlineId }
+  return { project, scope, targetChapterId, targetOutlineId }
+}
+
+async function addConfirmedCanon(scope: WorkspaceScope) {
+  const value = '潮汐钥匙 ×1'
+  const sourceWorldviewId = await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
+    projectId: scope.projectId, worldOrigin: value, createdAt: now, updatedAt: now,
+  }, { owner: 'world' }))
+  return db.temporalFacts.add(stampNewRecord<TemporalFact>(scope, 'temporalFacts', {
+    projectId: scope.projectId, worldGroupId: null, subjectName: '世界规则', predicate: 'magicSource', value,
+    factKind: 'state', sourceType: 'setting', sourceWorldviewId, sourceRecordTable: 'worldviews',
+    sourceField: 'worldOrigin', sourceFingerprint: fingerprintSettingSource(value),
+    status: 'confirmed', locked: false, createdAt: now, updatedAt: now,
+  }, { owner: 'work' }))
 }
 
 describe('AGENT-1 27.2c · 一致性 Agent', () => {
@@ -164,10 +179,12 @@ describe('AGENT-1 27.2c · 一致性 Agent', () => {
   })
 
   it('显式 Fast Guard 最多一次模型调用，准确正文与证据引用可以进入报告', async () => {
-    const { project, targetChapterId, targetOutlineId } = await seedConsistencyProject()
+    const { project, scope, targetChapterId, targetOutlineId } = await seedConsistencyProject()
+    const factId = await addConfirmedCanon(scope)
     let calls = 0
     let sentCreativeRule = false
     const candidate = await runConsistencyAgent({
+      scope,
       projectId: project.id!,
       chapterId: targetChapterId,
       outlineNodeId: targetOutlineId,
@@ -188,7 +205,7 @@ describe('AGENT-1 27.2c · 一致性 Agent', () => {
             quote: targetText,
             evidence: [{
               sourceType: 'canon',
-              sourceId: 1,
+              sourceId: factId,
               quote: '潮汐钥匙 ×1',
             }],
             reason: '正文重复写成获得。',
@@ -210,11 +227,12 @@ describe('AGENT-1 27.2c · 一致性 Agent', () => {
   })
 
   it.each(['正文', '证据'] as const)('混入伪造%s时整份拒绝，不保存有效子集或自动重发', async kind => {
-    const { project, targetChapterId, targetOutlineId } = await seedConsistencyProject()
+    const { project, scope, targetChapterId, targetOutlineId } = await seedConsistencyProject()
+    const factId = await addConfirmedCanon(scope)
     const budget = new AgentTeamBudgetTracker('economy')
     const valid = {
       category: '物品', severity: 'hard', quote: targetText,
-      evidence: [{ sourceType: 'canon', sourceId: 1, quote: '潮汐钥匙 ×1' }],
+      evidence: [{ sourceType: 'canon', sourceId: factId, quote: '潮汐钥匙 ×1' }],
       reason: '正文重复写成获得。',
     }
     const invalid = kind === '正文'
@@ -222,6 +240,7 @@ describe('AGENT-1 27.2c · 一致性 Agent', () => {
       : { ...valid, evidence: [{ sourceType: 'canon', sourceId: 999, quote: '证据上下文里不存在。' }] }
     let calls = 0
     await expect(runConsistencyAgent({
+      scope,
       projectId: project.id!, chapterId: targetChapterId, outlineNodeId: targetOutlineId,
       chapterTitle: '第二章 重逢', worldGroupId: null, chapterContent: targetHtml,
       mode: 'fast', budget,
@@ -296,8 +315,9 @@ describe('AGENT-1 27.2c · 一致性 Agent', () => {
   })
 
   it('模型返回非 JSON 时显式失败，不保存半份报告', async () => {
-    const { project, targetChapterId, targetOutlineId } = await seedConsistencyProject()
+    const { project, scope, targetChapterId, targetOutlineId } = await seedConsistencyProject()
     await expect(runConsistencyAgent({
+      scope,
       projectId: project.id!,
       chapterId: targetChapterId,
       outlineNodeId: targetOutlineId,

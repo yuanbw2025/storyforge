@@ -1,4 +1,15 @@
+import type { WorldSourceReceiptBindingV1 } from './world-source-receipt'
 import type { WorldCapabilityArea } from '../registry/types'
+
+/** Local writer provenance, outside immutable semantic release bytes. A
+ * transported claim is checked against the complete frozen owner roots. */
+export interface WorldRevisionOriginV1 {
+  version: 1
+  kind: 'author-seal' | 'reference-cache'
+  sourceWorkspaceUid: string
+  worldCode: string
+  contentHash: string
+}
 
 export interface WorldRevision {
   id?: number
@@ -9,6 +20,7 @@ export interface WorldRevision {
   label: string
   manifestJson: string
   contentHash: string
+  publicationOrigin?: WorldRevisionOriginV1
   createdAt: number
   updatedAt: number
 }
@@ -46,6 +58,8 @@ export interface WorldDerivationV1 {
   sourceContentHash: string
   /** Versioned, hash-bound narrative identity mapping. Historical rows omit it. */
   narrativeLineageJson?: string
+  /** Explicit selected D; written once with the receipt and origin snapshot. */
+  sourceReceiptBinding?: WorldSourceReceiptBindingV1
   targetRevisionId: number | null
   targetReleaseId: number | null
   createdAt: number

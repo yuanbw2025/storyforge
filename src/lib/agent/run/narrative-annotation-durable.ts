@@ -23,7 +23,7 @@ import { parseAgentRunEventV1 } from './event-schema'
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { captureNarrativeDomainV1, captureNarrativeDomainInTransactionV1, hashNarrativeDomainSourceV1, narrativeDomainCaptureTablesV1,
   type NarrativeDomainCaptureV1 } from '../../world-engine/narrative-domain-capture'
-import { assertNarrativeCandidateBaselineV1, compileNarrativeAnnotationProposalV1, findNarrativeCandidateSourceV1, prepareNarrativeCandidateV1, narrativeAnnotationTargetContractV1,
+import { assertNarrativeCandidateBaselineV1, compileNarrativeAnnotationProposalV1, findNarrativeCandidateSourceV1, prepareNarrativeCandidateV1, matchesSavedNarrativeBaselineV1, narrativeAnnotationTargetContractV1,
   type NarrativeCandidateSelectionV1, type NarrativeCandidateBaselineV1, type NarrativeAnnotationProposalV1 } from '../../world-engine/narrative-domain-candidate'
 import { canonicalNarrativeJsonV1, hashNarrativeValueV1 } from '../../world-engine/narrative-json'
 
@@ -291,7 +291,7 @@ export async function reviseNarrativeAnnotationCandidateV1(input: { scope: Works
   if (!loaded.candidate || loaded.candidate.candidateHash !== input.expectedCandidateHash || loaded.snapshot.projection.state !== 'awaiting_confirmation' || loaded.state.intent) fail('候选已改变或不再可编辑')
   const prepared = await prepareNarrativeCandidateV1({ scope: input.scope, selection: loaded.state.selection,
     includeTargetState: loaded.state.promptVersion === PROMPT_VERSION })
-  if (prepared.baselineHash !== loaded.state.baselineHash) fail('候选来源已变化，不能沿用旧审核')
+  if (!await matchesSavedNarrativeBaselineV1(prepared, loaded.state.baselineHash)) fail('候选来源已变化，不能沿用旧审核')
   const compiled = await compileNarrativeAnnotationProposalV1({ ...prepared, raw: input.draft, allowedSubKeys: loaded.candidate.subKeys })
   const { candidateHash: _previousHash, ...previous } = loaded.candidate
   const candidate = await candidateWithHash({ ...previous, revision: loaded.candidate.revision + 1,

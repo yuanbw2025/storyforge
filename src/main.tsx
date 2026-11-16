@@ -47,6 +47,10 @@ async function requestPersistentStorage() {
 }
 
 async function bootstrap() {
+  if (window.storyforgeClient?.http) {
+    const { installDesktopFetch } = await import('./lib/platform/desktop-fetch')
+    installDesktopFetch()
+  }
   if (import.meta.env.MODE === 'android') {
     const { installAndroidFetch } = await import('./lib/platform/android-fetch')
     await installAndroidFetch()

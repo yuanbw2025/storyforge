@@ -8,15 +8,15 @@
 import { useCharacterStore } from '../../stores/character'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useOutlineStore } from '../../stores/outline'
-import { db } from '../db/schema'
-import { adopt } from '../registry/adopt'
-import type { UnifiedParseResult } from '../types'
+import Dexie from 'dexie'
+import { adopt, adoptionTransactionTablesV1 } from '../registry/adopt'
+import type { AdoptResult } from '../registry/types'
+import type { Character, OutlineNode, UnifiedParseResult, Worldview } from '../types'
 import { CHARACTER_DIMENSIONS } from '../character/character-dimensions'
 import { isCompleteCharacterAxes } from '../character/character-axes'
-import { readOwnedRows, resolveReadScopeLike } from '../workspace/scope'
+import { readOwnedRows, resolveScopeLike, type WorkspaceScopeLike } from '../workspace/scope'
 import {
   deduplicateWorldviewText,
-  checkCharacterDuplicate,
   mergeCharacterFields,
   checkOutlineDuplicate,
 } from './dedup'
@@ -34,35 +34,93 @@ export interface ApplyChunkCounts {
   codexCandidates?: number
 }
 
+type ConfirmedChunkWrites = { target: string; rows: AdoptResult['written'] }[]
+const CHUNK_TARGETS = ['worldviews', 'geographies', 'histories', 'characters', 'outlineNodes'] as const
+
+export function importChunkAdoptionTablesV1() {
+  // Canon adoption can invalidate dependent source assertions.
+  return [...new Set(CHUNK_TARGETS.flatMap(target => adoptionTransactionTablesV1(target, undefined, { callerOwned: true })))]
+}
+
+export function refreshImportedChunkStoresV1(scope: Awaited<ReturnType<typeof resolveScopeLike>>, worldGroupId: number | null) {
+  return Promise.all([
+    useWorldviewStore.getState().loadAll(scope, worldGroupId),
+    useCharacterStore.getState().loadAll(scope),
+    useOutlineStore.getState().loadAll(scope),
+  ])
+}
+
 /**
  * 把单块解析结果写入对应的三张表。
  * - worldview：同字段已有内容 → 追加（\n\n 连接）；空字段 → 新写
- * - characters：直接 add（跨块重名合并由 runCharacterMerge 处理）
+ * - characters：按当前目标世界中明确同名的角色追加内容，不删除异名角色
  * - outline：递归写入，顶层 order 接着已有数量
  */
-export async function applyChunkResult(
-  projectId: number,
+export function applyChunkResult(
+  scopeInput: WorkspaceScopeLike,
   result: UnifiedParseResult,
   worldGroupId: number | null = null,
+  guard?: () => Promise<void>,
+  confirmedWrites?: ConfirmedChunkWrites,
 ): Promise<ApplyChunkCounts> {
+  const sequence = applyChunkInSequence(scopeInput, result, worldGroupId, guard, confirmedWrites)
+  const advance = (state: IteratorResult<Promise<unknown>, ApplyChunkCounts>): Promise<ApplyChunkCounts> =>
+    state.done ? Dexie.Promise.resolve(state.value) :
+      Dexie.Promise.resolve(state.value).then(value => advance(sequence.next(value)))
+  return Dexie.Promise.resolve().then(() => advance(sequence.next()))
+}
+
+function* inDexieScope<T>(pending: Promise<T>): Generator<Promise<unknown>, T, unknown> {
+  return (yield pending) as T
+}
+
+// Dexie promises advance this generator in the caller transaction zone. Do not
+// use native async continuations between scoped reads and registered writes.
+function* applyChunkInSequence(
+  scopeInput: WorkspaceScopeLike, result: UnifiedParseResult, worldGroupId: number | null,
+  guard?: () => Promise<void>, confirmedWrites?: ConfirmedChunkWrites,
+): Generator<Promise<unknown>, ApplyChunkCounts, unknown> {
+  const transaction = Dexie.currentTransaction
+  const checkTransaction = () => {
+    if (confirmedWrites && (!transaction || !transaction.active || Dexie.currentTransaction !== transaction))
+      throw new Error('导入候选必须在原确认事务中采纳。')
+  }
+  checkTransaction()
+  const scope = yield* inDexieScope(resolveScopeLike(scopeInput))
+  const { projectId } = scope
+  const adoptScoped = function* (input: Parameters<typeof adopt>[0]): Generator<Promise<unknown>, AdoptResult, unknown> {
+    if (guard) yield* inDexieScope(guard())
+    checkTransaction()
+    const adopted = yield* inDexieScope(adopt({ ...input, scope }, confirmedWrites && transaction ? { transaction } : undefined))
+    checkTransaction()
+    if (confirmedWrites) {
+      if (!adopted.written.length || adopted.unknown.length || adopted.typeErrors.length ||
+        adopted.fkErrors.length || adopted.skipped.length) {
+        throw new Error(`导入候选未完整写入 ${input.target}：${adopted.skipped[0]?.reason ??
+          [...adopted.unknown, ...adopted.typeErrors.map(item => item.field), ...adopted.fkErrors.map(item => item.field)].join('、')}`)
+      }
+      confirmedWrites.push({ target: input.target, rows: adopted.written })
+    }
+    return adopted
+  }
+  if (guard) yield* inDexieScope(guard())
   const targetWorldGroupId = worldGroupId ?? null
   let worldviewFields = 0
   let charactersAdded = 0
   let outlineAdded = 0
 
-  const mergeWorldOverview = async (
+  const mergeWorldOverview = function* (
     target: 'geographies' | 'histories',
     incoming: string | undefined,
-  ): Promise<number> => {
+  ): Generator<Promise<unknown>, number, unknown> {
     const value = incoming?.trim()
     if (!value) return 0
-    const scope = await resolveReadScopeLike(projectId)
-    const rows = await readOwnedRows<Record<string, unknown>>(scope, target, { owner: 'world' })
+    const rows = yield* inDexieScope(readOwnedRows<Record<string, unknown>>(scope, target, { owner: 'world' }))
     const existing = rows.find(row => (row.worldGroupId ?? null) === targetWorldGroupId)
     const current = typeof existing?.overview === 'string' ? existing.overview : ''
     const addition = deduplicateWorldviewText(current, value)
     if (!addition) return 0
-    await adopt({
+    yield* adoptScoped({
       projectId,
       scope,
       worldGroupId: targetWorldGroupId,
@@ -76,8 +134,8 @@ export async function applyChunkResult(
   // ── 世界观：合并写（Phase 30.5: 句子级去重） ────────────────────
   if (result.worldview) {
     const wvStore = useWorldviewStore.getState()
-    await wvStore.loadAll(projectId, targetWorldGroupId)
-    const existing = useWorldviewStore.getState().worldview
+    const existing = (yield* inDexieScope(readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' })))
+      .find(row => (row.worldGroupId ?? null) === targetWorldGroupId)
     const patch: Record<string, string> = {}
     for (const [k, v] of Object.entries(result.worldview)) {
       if (typeof v === 'string' && v.trim()) {
@@ -97,97 +155,61 @@ export async function applyChunkResult(
       }
     }
     if (Object.keys(patch).length > 0) {
-      await adopt({
+      yield* adoptScoped({
         projectId,
         worldGroupId: targetWorldGroupId,
         target: 'worldviews',
         mode: 'replace',
         data: patch,
       })
-      await wvStore.loadAll(projectId, targetWorldGroupId)
+      if (guard) yield* inDexieScope(guard())
+      if (!confirmedWrites) yield* inDexieScope(wvStore.loadAll(scope, targetWorldGroupId))
     }
   }
 
-  worldviewFields += await mergeWorldOverview('geographies', result.geography?.overview)
-  worldviewFields += await mergeWorldOverview('histories', result.history?.overview)
+  worldviewFields += yield* mergeWorldOverview('geographies', result.geography?.overview)
+  worldviewFields += yield* mergeWorldOverview('histories', result.history?.overview)
 
   // ── 角色：去重后写入（Phase 30.5: 同名角色合并） ──────────────
   if (Array.isArray(result.characters)) {
     const chStore = useCharacterStore.getState()
-    await chStore.loadAll(projectId)
-    const existingChars = useCharacterStore.getState().characters
+    const existingChars = (yield* inDexieScope(readOwnedRows<Character>(scope, 'characters', { owner: 'world' })))
       .filter(ch => (ch.homeWorldGroupId ?? null) === targetWorldGroupId)
-    // 建立名字→ID映射
-    const nameMap = new Map<string, number>()
-    for (const ch of existingChars) {
-      if (ch.id != null) nameMap.set(ch.name, ch.id)
-    }
-
+    const byName = new Map(existingChars.filter(character => character.id != null).map(character => [character.name, character]))
     for (const c of result.characters) {
       if (!c || typeof c.name !== 'string' || !c.name.trim()) continue
-      if (!isCompleteCharacterAxes(c)) {
-        throw new Error(`[import] 角色「${c.name.trim()}」缺少当前三轴分类`)
-      }
-      const axes = {
-        roleWeight: c.roleWeight,
-        moralAxis: c.moralAxis,
-        orderAxis: c.orderAxis,
-      }
-      const incomingFields = pickCharacterFields(c as Record<string, unknown>)
-
-      // Phase 30.5: 检查同名角色
-      const dedup = checkCharacterDuplicate(c.name.trim(), nameMap)
-      if (dedup.isDuplicate && dedup.existingId != null) {
-        // 已有同名角色 → 合并字段（追加不覆盖）
-        const existing = existingChars.find(ch => ch.id === dedup.existingId)
-        if (existing) {
-          const existingFields = pickCharacterFields(existing as unknown as Record<string, unknown>)
-          const merged = mergeCharacterFields(existingFields, incomingFields)
-          await adopt({
-            projectId,
-            worldGroupId: targetWorldGroupId,
-            target: 'characters',
-            mode: 'add',
-            data: {
-              name: c.name.trim(),
-              ...axes,
-              homeWorldGroupId: targetWorldGroupId,
-              ...merged,
-            },
-          })
-          charactersAdded++ // 仍然计数（表示处理了一个角色）
-        }
+      const name = c.name.trim()
+      const incoming = pickCharacterFields(c as Record<string, unknown>)
+      const existing = byName.get(name)
+      if (existing?.id != null) {
+        // The author reviewed the new excerpt. Preserve the existing role
+        // identity and its current classification; merge only text additions.
+        const current = pickCharacterFields(existing as unknown as Record<string, unknown>)
+        const merged = mergeCharacterFields(current, incoming)
+        const additions = Object.fromEntries(Object.entries(merged).filter(([field, value]) => value !== current[field]))
+        if (!Object.keys(additions).length) continue
+        yield* adoptScoped({ projectId, worldGroupId: targetWorldGroupId, target: 'characters',
+          recordId: existing.id, mode: 'replace', data: additions })
+        Object.assign(existing, additions)
       } else {
-        // 新角色 → 直接创建
-        const charName = String(c.name).trim()
-        await adopt({
-          projectId,
-          worldGroupId: targetWorldGroupId,
-          target: 'characters',
-          mode: 'add',
-          data: {
-            name: charName,
-            ...axes,
-            homeWorldGroupId: targetWorldGroupId,
-            ...incomingFields,
-          },
-        })
-        // 更新映射以便同块内后续角色也能去重
-        const newChars = await db.characters.where('projectId').equals(projectId).toArray()
-        const added = newChars.find(ch =>
-          ch.name === charName && (ch.homeWorldGroupId ?? null) === targetWorldGroupId)
-        if (added?.id != null) nameMap.set(added.name, added.id)
-        charactersAdded++
+        if (!isCompleteCharacterAxes(c)) throw new Error(`[import] 角色「${name}」缺少当前三轴分类`)
+        const data = { name, roleWeight: c.roleWeight, moralAxis: c.moralAxis, orderAxis: c.orderAxis,
+          homeWorldGroupId: targetWorldGroupId, ...incoming }
+        const adopted = yield* adoptScoped({ projectId, worldGroupId: targetWorldGroupId,
+          target: 'characters', mode: 'add', data })
+        const id = adopted.written[0]?.id
+        if (id != null) byName.set(name, { ...data, id, projectId, createdAt: Date.now(), updatedAt: Date.now() } as Character)
       }
+      charactersAdded++
     }
-    await chStore.loadAll(projectId)
+    if (guard) yield* inDexieScope(guard())
+    if (!confirmedWrites) yield* inDexieScope(chStore.loadAll(scope))
   }
 
   // ── 大纲：递归写（Phase 28.4: 支持将章节挂到已存在的同名卷下） ──
   if (Array.isArray(result.outline)) {
     const olStore = useOutlineStore.getState()
-    await olStore.loadAll(projectId)
-    const existingNodes = [...useOutlineStore.getState().nodes]
+    const existingNodes = (yield* inDexieScope(readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' })))
       .filter(n => (n.worldGroupId ?? null) === targetWorldGroupId)
 
     // 已有卷节点的名称→ID映射（用于匹配 AI 返回的卷标题）
@@ -212,11 +234,25 @@ export async function applyChunkResult(
       return null
     }
 
-    const writeNode = async (
+    const fillOutlineSummary = function* (record: OutlineNode, value: unknown): Generator<Promise<unknown>, void, unknown> {
+      if (record.id == null) return
+      const summary = String(value)
+      if (confirmedWrites) {
+        yield* adoptScoped({ projectId, worldGroupId: targetWorldGroupId, target: 'outlineNodes',
+          mode: 'replace', recordId: record.id, data: { summary } })
+        record.summary = summary
+      } else {
+        if (guard) yield* inDexieScope(guard())
+        yield* inDexieScope(olStore.updateNode(record.id, { summary }, { scope,
+          expected: { summary: record.summary, updatedAt: record.updatedAt } }))
+      }
+    }
+
+    const writeNode = function* (
       node: Record<string, unknown>,
       parentId: number | null,
       orderRef: { value: number },
-    ): Promise<void> => {
+    ): Generator<Promise<unknown>, void, unknown> {
       if (!node || typeof node.title !== 'string' || !node.title.trim()) return
       const isVolume = node.type === 'volume' ||
         (Array.isArray(node.children) && node.children.length > 0)
@@ -228,14 +264,14 @@ export async function applyChunkResult(
           // 补充摘要（如果已有卷摘要为空）
           const existingVol = existingNodes.find(n => n.id === existingId)
           if (existingVol && !existingVol.summary && node.summary) {
-            await olStore.updateNode(existingId, { summary: String(node.summary) })
+            yield* fillOutlineSummary(existingVol, node.summary)
           }
           // 子节点挂到已有卷下
           if (Array.isArray(node.children)) {
             const childStart = existingNodes.filter(n => n.parentId === existingId).length
             const childRef = { value: childStart }
             for (const c of node.children) {
-              await writeNode(c as Record<string, unknown>, existingId, childRef)
+              yield* writeNode(c as Record<string, unknown>, existingId, childRef)
             }
           }
           return
@@ -253,20 +289,20 @@ export async function applyChunkResult(
         // 已有相似节点 → 跳过创建，但如果有摘要且已有为空则补充
         const existNode = existingNodes.find(n => n.id === dupCheck.existingId)
         if (existNode && !existNode.summary && node.summary) {
-          await olStore.updateNode(dupCheck.existingId, { summary: String(node.summary) })
+          yield* fillOutlineSummary(existNode, node.summary)
         }
         // 如果有子节点，仍然递归写（挂到已有节点下）
         if (Array.isArray(node.children)) {
           const childStart = existingNodes.filter(n => n.parentId === dupCheck.existingId).length
           const childRef = { value: childStart }
           for (const c of node.children) {
-            await writeNode(c as Record<string, unknown>, dupCheck.existingId!, childRef)
+            yield* writeNode(c as Record<string, unknown>, dupCheck.existingId!, childRef)
           }
         }
         return
       }
 
-      const adopted = await adopt({
+      const adopted = yield* adoptScoped({
         projectId,
         worldGroupId: targetWorldGroupId,
         target: 'outlineNodes',
@@ -299,7 +335,7 @@ export async function applyChunkResult(
       if (Array.isArray(node.children)) {
         const childOrder = { value: 0 }
         for (const c of node.children) {
-          await writeNode(c as Record<string, unknown>, id, childOrder)
+          yield* writeNode(c as Record<string, unknown>, id, childOrder)
         }
       }
     }
@@ -319,7 +355,7 @@ export async function applyChunkResult(
         fallbackVolumeId = vols[vols.length - 1].id ?? null
         fallbackChildRef.value = existingNodes.filter(n => n.parentId === fallbackVolumeId).length
       } else {
-        const adopted = await adopt({
+        const adopted = yield* adoptScoped({
           projectId, worldGroupId: targetWorldGroupId,
           target: 'outlineNodes', mode: 'add',
           data: {
@@ -348,12 +384,13 @@ export async function applyChunkResult(
       const node = n as Record<string, unknown>
       if (!isVolumeNode(node) && fallbackVolumeId != null) {
         // 顶层章节 → 挂到卷下(不再成为孤儿)
-        await writeNode(node, fallbackVolumeId, fallbackChildRef)
+        yield* writeNode(node, fallbackVolumeId, fallbackChildRef)
       } else {
-        await writeNode(node, null, ref)
+        yield* writeNode(node, null, ref)
       }
     }
-    await olStore.loadAll(projectId)
+    if (guard) yield* inDexieScope(guard())
+    if (!confirmedWrites) yield* inDexieScope(olStore.loadAll(scope))
   }
 
   return {
