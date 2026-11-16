@@ -22,7 +22,7 @@ import { installFileSystemPermissions } from './file-system-permissions.mjs'
 function fixture() {
  const session=new EventEmitter();let request;session.setPermissionRequestHandler=fn=>{request=fn}
  const frame={url:'http://localhost:17831/storyforge/settings',frames:[]}
- const contents={mainFrame:frame,isDestroyed:()=>false};const window={webContents:contents,isDestroyed:()=>false}
+ const contents=Object.assign(new EventEmitter(),{mainFrame:frame,isDestroyed:()=>false});const window={webContents:contents,isDestroyed:()=>false}
  const prompts=[];let answer=0;let fail=false;let respond
  const dialog={showMessageBox:async (...args)=>{prompts.push(args);if(fail)throw Error('system error');return respond?await respond():{response:answer}}}
  installFileSystemPermissions({session,window,dialog,origin:'http://localhost:17831'})
@@ -59,4 +59,9 @@ test('restricted paths can only reselect or cancel, never bypass protection',asy
  assert.equal(await f.restricted({origin:'https://example.com',webContents:f.contents,frame:f.frame}),'deny')
  assert.equal(await f.restricted({origin:'http://localhost:17831',webContents:f.contents,frame:{url:f.frame.url}}),'deny')
  f.fail();assert.equal(await f.restricted(),'deny')
+})
+
+test('a same-URL navigation cannot reuse an earlier OS confirmation',async()=>{
+ const f=fixture();let complete;f.defer(()=>new Promise(resolve=>{complete=resolve}));const result=f.request()
+ f.contents.emit('did-start-navigation',{},f.frame.url,false,true);complete({response:1});assert.equal(await result,false)
 })

@@ -7,6 +7,8 @@ import { basename, isAbsolute } from 'node:path'
  */
 export function installFileSystemPermissions({ session, window, dialog, origin }) {
   const contents = window.webContents
+  let navigation = 0
+  contents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => { if (isMainFrame) navigation++ })
   const trusted = details => {
     try {
       const frame = contents.mainFrame
@@ -26,12 +28,15 @@ export function installFileSystemPermissions({ session, window, dialog, origin }
       callback(false); return
     }
     const documentUrl = contents.mainFrame.url
+    const documentFrame = contents.mainFrame
+    const startedAtNavigation = navigation
     void dialog.showMessageBox(window, {
       type: 'question', title: '项目文件夹权限',
       message: `允许 StoryForge ${details.fileAccessType === 'writable' ? '读写' : '读取'}所选文件夹“${basename(details.filePath)}”？`,
       detail: '仅授权当前选定的文件夹。关联位置不会自动移动或写入作品；首次写入仍需在数据管理中核对确认。',
       buttons: ['取消', '允许'], defaultId: 0, cancelId: 0, noLink: true,
-    }).then(({ response }) => callback(response === 1 && trusted(details) && contents.mainFrame.url === documentUrl),
+    }).then(({ response }) => callback(response === 1 && navigation === startedAtNavigation && trusted(details)
+      && contents.mainFrame === documentFrame && contents.mainFrame.url === documentUrl),
       () => callback(false))
   })
   session.on('file-system-access-restricted', (_event, details, callback) => {
@@ -41,12 +46,15 @@ export function installFileSystemPermissions({ session, window, dialog, origin }
         || details.frame !== contents.mainFrame
         || (details.origin !== origin + '/' && details.origin !== origin)) { callback('deny'); return }
     const documentUrl = contents.mainFrame.url
+    const documentFrame = contents.mainFrame
+    const startedAtNavigation = navigation
     void dialog.showMessageBox(window, {
       type: 'warning', title: '请选择普通项目文件夹',
       message: '这个位置受系统保护，不能作为项目文件夹。',
       detail: '请选择专门的普通子文件夹。原绑定和文件不会改变。',
       buttons: ['重新选择', '取消'], defaultId: 1, cancelId: 1, noLink: true,
-    }).then(({ response }) => callback(response === 0 && trusted({ requestingUrl: documentUrl }) ? 'tryAgain' : 'deny'),
+    }).then(({ response }) => callback(response === 0 && navigation === startedAtNavigation && trusted({ requestingUrl: documentUrl })
+      && contents.mainFrame === documentFrame ? 'tryAgain' : 'deny'),
       () => callback('deny'))
   })
 }
