@@ -42,7 +42,7 @@ ByteDance Trae, Tencent WorkBuddy, Alibaba Tongyi Lingma, Google Antigravity 등
 
 ---
 
-## 중요 — 로컬 AI로 문제를 조사하고 직접 피드백을 제출하세요
+## 중요 — 로컬 Agent(ByteDance의 Trae 또는 Tencent의 WorkBuddy 등, 각 공식 사이트에서 다운로드하고 로그인하면 무료 제공량을 받을 수 있습니다)를 활용해 문제를 조사하고 직접 피드백을 제출하세요
 
 StoryForge는 개발 중이며 **한 사람이 개발하고 유지보수합니다**. 기능이 많아 사용 중 버그가 발생할 수 있습니다. 제보를 환영합니다.
 
