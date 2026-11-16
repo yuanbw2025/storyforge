@@ -42,7 +42,7 @@ Un Agent desktop come ByteDance Trae, Tencent WorkBuddy, Alibaba Tongyi Lingma o
 
 ---
 
-## Importante — Usa l’IA locale per diagnosticare problemi e inviare segnalazioni
+## Importante — Usa agent locali (come Trae di ByteDance o WorkBuddy di Tencent; scaricali dai rispettivi siti ufficiali e accedi per ricevere una quota gratuita) per diagnosticare problemi e inviare segnalazioni
 
 StoryForge è ancora in sviluppo ed è **sviluppato e mantenuto da una sola persona**. Con tante funzioni possono verificarsi bug. Le segnalazioni sono benvenute.
 

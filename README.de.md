@@ -42,7 +42,7 @@ Ein Desktop-Agent wie ByteDance Trae, Tencent WorkBuddy, Alibaba Tongyi Lingma o
 
 ---
 
-## Wichtig — Lokale KI zur Fehlersuche und direkten Fehlermeldung nutzen
+## Wichtig — Nutzen Sie lokale Agenten (z. B. Trae von ByteDance oder WorkBuddy von Tencent; auf der jeweiligen offiziellen Website herunterladen und anmelden, um ein kostenloses Kontingent zu erhalten) zur Fehlersuche und direkten Fehlermeldung
 
 StoryForge befindet sich in Entwicklung und wird **von einer Person entwickelt und gepflegt**. Bei den vielen Funktionen können Fehler auftreten. Rückmeldungen sind willkommen.
 
