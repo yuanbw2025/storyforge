@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-16 · Website feedback follow-ups
+
+- Feedback now supports searching existing issues, reading issue text and comments, explicitly appending evidence and opening receipts. Creation and attachments remain available. Request IDs prevent duplicate writes; check the issue after an unknown outcome. GitHub identity and management permissions remain on GitHub. See the [feedback center](/en/feedback/) for steps and Agent API details.
+
 ## November 15, 2026 · v4.0.7 downloads and source startup checks
 
 - v4.0.7 was published on November 13. The installation guide now lists current Windows, Mac and Android filenames and upgrade steps. See [compatibility](/en/updates/compatibility) for database v14, backup v18 and the fixed source revision.
