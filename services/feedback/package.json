@@ -1,0 +1,13 @@
+{
+  "name": "storyforge-feedback",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test server.test.mjs"
+  },
+  "dependencies": {
+    "express": "5.2.1",
+    "multer": "2.5.0"
+  }
+}
