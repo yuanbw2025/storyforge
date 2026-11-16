@@ -1,5 +1,9 @@
 # Pending development and branch audit
 
+## November 16, 2026 · Desktop directory permission follow-up
+
+[#458](https://github.com/yuanbw2025/storyforge/issues/458) adds v4.0.7 evidence to [#300](https://github.com/yuanbw2025/storyforge/issues/300): the picker opens, but confirmation does not bind the directory. The desktop permission callback rejects filesystem access and does not answer restricted-directory events. The correction requires the trusted current window and author confirmation; protected locations can only be reselected or cancelled. It does not write or move files automatically or change storage identity. Isolated Electron 44.10.0 verifies real directory permission denial and approval with controlled OS-confirmation answers; this is not acceptance of the reporter's native picker. Formal client delivery and original-environment recovery remain pending, and both issues stay open.
+
 ## November 15, 2026 · Release completion and local-state review
 
 Review from successful baseline `ff30400a` through `7ccc1d10` enumerated **444 local branches, 9 currently registered worktrees (including detached), and 1 worktree with uncommitted status**; 236 heads remain outside main ancestry. Remote references were refreshed and no PRs were open at the snapshot. Current registration counts do not prove that historical directories absent from this list were safely cleaned.

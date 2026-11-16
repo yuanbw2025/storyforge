@@ -7,6 +7,7 @@ import updater from 'electron-updater'
 import { desktopDiagnostics } from './diagnostics.mjs'
 import { createMacUpdater } from './mac-updater.mjs'
 import { installHttpTransport } from './http-transport.mjs'
+import { installFileSystemPermissions } from './file-system-permissions.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 // This identity, profile and origin are part of the data contract. Never randomize them.
@@ -36,13 +37,13 @@ else {
     server = createPortableServer({ webRoot: join(root, '../../dist'),
       ...(app.isPackaged ? { localTtsRoot: join(process.resourcesPath, 'local-tts') } : {}) })
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen(17831, '127.0.0.1', resolve) })
-    session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => callback(permission === 'persistent-storage'))
     const mainWindow = new BrowserWindow({
       width: 1440, height: 960, minWidth: 800, minHeight: 600, show: false,
       autoHideMenuBar: true, title: 'StoryForge',
       webPreferences: { preload: join(root, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true },
     })
     window = mainWindow
+    installFileSystemPermissions({ session: session.defaultSession, window: mainWindow, dialog, origin })
     installHttpTransport({ window: mainWindow, ipcMain, origin, fetch: net.fetch })
     ipcMain.handle('client-diagnostics:read', event => {
       if (!event.senderFrame || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || new URL(event.senderFrame.url).origin !== origin) throw new Error('Invalid diagnostics caller')
