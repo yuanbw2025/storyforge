@@ -40,7 +40,7 @@ A desktop AI Agent such as ByteDance Trae, Tencent WorkBuddy, Alibaba Tongyi Lin
 
 ---
 
-## Important — Use local AI to investigate problems and submit feedback
+## Important — Use local agents (such as ByteDance’s Trae or Tencent’s WorkBuddy; download from their official websites and sign in to receive a free allowance) to investigate problems and submit feedback
 
 StoryForge is still in development and **developed and maintained by one person**. With many features, bugs can occur. Feedback is welcome.
 
