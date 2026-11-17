@@ -118,6 +118,50 @@ afterEach(async () => {
   db.close()
 })
 
+describe('HistoryPanel confirmed deletion', () => {
+  it.each(['event', 'keyword'] as const)('%s keeps the record on failure and allows retry', async kind => {
+    const { project, scope } = await createWorkspace({ name: '历史删除', genres: ['fantasy'], description: '', status: 'drafting', targetWordCount: 1000 })
+    const title = '旧港灯塔'
+    const entry = { projectId: scope.projectId, era: 'custom', description: '作者保存的港口手稿' }
+    const store = useHistoricalStore.getState()
+    const id = kind === 'event'
+      ? await store.addEvent({ ...entry, title, year: 300, date: '三百年', isHistorical: false })
+      : await store.addKeyword({ ...entry, keyword: title, category: 'architecture' })
+    const table = kind === 'event' ? db.historicalTimelineEvents : db.historicalKeywords
+    const original = await table.get(id)
+    const label = kind === 'event' ? '删除事件' : '删除关键词'
+
+    await act(async () => root.render(createElement(ToastProvider, null,
+      createElement(DialogProvider, null, createElement(HistoryPanel, { project })))))
+    if (kind === 'keyword') await act(async () => button('历史细节风暴').click())
+    await settle(() => expect(host.textContent).toContain(title))
+    await act(async () => button(title).click())
+
+    async function confirmDeletion() {
+      await act(async () => button(label).click())
+      const dialog = host.querySelector('[role="dialog"]')
+      const confirm = Array.from(dialog?.querySelectorAll('button') ?? []).find(item => item.textContent === '删除')
+      if (!confirm) throw new Error('找不到删除确认按钮')
+      await act(async () => confirm.click())
+    }
+
+    const fail = () => { throw new Error('历史条目删除事务失败') }
+    table.hook('deleting', fail)
+    try {
+      await confirmDeletion()
+      await settle(() => expect(host.textContent).toContain('历史条目删除事务失败'))
+      expect(await table.get(id)).toEqual(original)
+      expect(button(title)).toBeDefined()
+    } finally {
+      table.hook('deleting').unsubscribe(fail)
+    }
+
+    await confirmDeletion()
+    await settle(() => expect(host.textContent).not.toContain(title))
+    expect(await table.get(id)).toBeUndefined()
+  })
+})
+
 describe('SFQA-125 · author rejection and explicit history retry', () => {
   for (const mode of ['consult', 'storm'] as const) {
     for (const combined of [true, false]) {

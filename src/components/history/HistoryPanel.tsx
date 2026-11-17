@@ -65,7 +65,12 @@ export default function HistoryPanel({ project }: Props) {
       confirmText: '删除',
       tone: 'danger',
     })
-    if (ok) deleteEvent(id)
+    if (!ok) return
+    try {
+      await deleteEvent(id)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '删除历史事件失败，请重试。')
+    }
   }
 
   const handleDeleteKeyword = async (id: number) => {
@@ -75,7 +80,12 @@ export default function HistoryPanel({ project }: Props) {
       confirmText: '删除',
       tone: 'danger',
     })
-    if (ok) deleteKeyword(id)
+    if (!ok) return
+    try {
+      await deleteKeyword(id)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '删除关键词失败，请重试。')
+    }
   }
 
   // ── UI 状态 ──
