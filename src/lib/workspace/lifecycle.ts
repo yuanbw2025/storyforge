@@ -12,6 +12,7 @@ import { resolveWorkspaceOwnership } from './ownership'
 import { markAndSweepAgentRunArtifactsV1 } from '../memory/artifact-retention-store'
 import { remapNarrativeDomainReferencesV1 } from '../narrative-domain/lifecycle'
 import { clearRegisteredArrayReferences, registeredArrayReferencesTo } from '../registry/array-references'
+import type { Work } from '../types'
 
 function ownerField(spec: typeof PROJECT_TABLES[number]): { owner: 'world' | 'work'; field: string } | null {
   const locator = spec.domainOwner?.locator
@@ -93,11 +94,20 @@ async function deleteOwnerRows(owner: 'world' | 'work', ownerId: number): Promis
   }
 }
 
-export async function deleteWork(workId: number): Promise<void> {
+export async function deleteWork(workId: number, options?: { expected: Work }): Promise<void> {
   const work = await db.works.get(workId)
-  if (!work) return
+  if (!work) {
+    if (options?.expected) throw new Error('作品已变化或删除，请刷新作品库后重新确认。')
+    return
+  }
   await resolveWorkspaceOwnership(work.projectId)
   await db.transaction('rw', transactionTablesFor('deleteProject'), async () => {
+    const current = await db.works.get(workId)
+    const expected = options?.expected
+    if (!current || (expected && (expected.id !== workId || current.projectId !== expected.projectId
+      || current.worldId !== expected.worldId || current.kind !== expected.kind || current.updatedAt !== expected.updatedAt))) {
+      throw new Error('作品已变化或删除，请刷新作品库后重新确认。')
+    }
     await cascadeRegisteredReferences('works', workId)
     await deleteOwnerRows('work', workId)
     await db.works.delete(workId)

@@ -1,4 +1,5 @@
 import { listLocalWorldReferenceChoicesV1 } from '../../lib/world-engine/reference-cache'
+import { DeleteTextAdventureDraftButton } from './ProductDeleteButton'
 import { freezeWorldSourcePurposeV1, revalidateWorldSourcePurposeV1 } from '../../lib/world-engine/source-purpose-actions'
 import { type WorldSourcePurposeProofV1 } from '../../lib/world-engine/source-purpose-contract'
 import { assertCurrentProductEntryV1, evaluateCurrentProductEntryV1, productCatalogIdForProductionV1 } from '../../lib/product/product-catalog'
@@ -2336,6 +2337,8 @@ export default function ProductProductionStudio(props: {
           <div><small className="font-mono text-[9px] tracking-widest text-accent">{details.production.productionKey}</small><h1 className="mt-2 font-serif text-2xl">{details.production.title}</h1><p className="mt-2 text-xs text-text-muted">Production {statusLabel(details.production.status)} · revision {details.production.stateRevision} · epoch {details.production.controlEpoch}</p></div>
           <div className="flex flex-wrap gap-2">
             <button aria-label="刷新当前 Production" disabled={busy} onClick={() => void refresh(details.production.id)} className="rounded border border-border p-2 text-text-muted"><RefreshCw className="h-4 w-4" /></button>
+            <DeleteTextAdventureDraftButton scope={props.scope} production={details.production} disabled={busy}
+              onDeleted={() => refresh(null)} />
             {details.production.status === 'paused' && <button disabled={(sourceNewWorkBlocked || progressReadBlocked || busy || (pausedProviderReservationBlocked && !unknownResultDisposition)) || (!catalogEntry.enterable && details?.production.status === 'paused')} onClick={pauseOrResume} className="flex items-center gap-2 rounded border border-accent/40 px-3 py-2 text-xs text-accent disabled:opacity-40"><Play className="h-3.5 w-3.5" />{pausedProviderReservationBlocked ? '结算并恢复' : '恢复并继续'}</button>}
             {canPause && <button disabled={(busy) || (!catalogEntry.enterable && details?.production.status === 'paused')} onClick={pauseOrResume} title="停止领取新任务；已完成产物与预算回执保留" className="flex items-center gap-2 rounded border border-border px-3 py-2 text-xs"><CirclePause className="h-3.5 w-3.5" />暂停</button>}
             {details.production.status !== 'archived' && details.build && !['released', 'cancelled'].includes(details.build.status) && <button disabled={busy} onClick={stop} title="取消当前未发布 Build；已完成产物保留用于审计" className="flex items-center gap-2 rounded border border-error/30 px-3 py-2 text-xs text-error"><Square className="h-3.5 w-3.5" />停止</button>}

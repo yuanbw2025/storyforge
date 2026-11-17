@@ -14,6 +14,7 @@ import { useActiveWork } from '../../hooks/useActiveWork'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 import ScopedWorldAuthoringBoundary, { worldAuthorViewKey } from '../world-group/ScopedWorldAuthoringBoundary'
+import { CInput, CTextarea } from '../shared/CompositionInput'
 
 const LOCATION_TYPES: { value: LocationType; label: string }[] = [
   { value: 'continent', label: '大陆' },
@@ -70,9 +71,11 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
   const [saveError, setSaveError] = useState('')
   const [readError, setReadError] = useState('')
   const [saving, setSaving] = useState(false)
+  const composingRef = useRef(false)
+  const [composing, setComposing] = useState(false)
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
-  useBeforeUnload(dirty || saving)
+  useBeforeUnload(dirty || saving || composing)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [view, setView] = useState<'list' | 'map' | 'aimap'>('map')
   const [svgContent, setSvgContent] = useState<string>('')
@@ -109,6 +112,7 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
   }, [geography, readReady, groupId])
 
   const persistDraft = useCallback(async function persist(): Promise<void> {
+    if (composingRef.current) throw new Error('输入法仍在组合文字，请完成输入后再保存地理内容。')
     if (pendingSave.current) { await pendingSave.current; return persist() }
     if (!dirtyFields.current.size) return
     if (!draftReady.current) throw new Error('地理读取未完成，输入已保留')
@@ -228,12 +232,14 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
         <button type="button" className="ml-3 underline" onClick={() => { void persistDraft().catch(() => undefined) }}>重试保存</button>
       </div>}
       {saving && <p role="status" className="text-xs text-text-muted">正在保存…</p>}
-      <fieldset disabled={!readReady || !!readError} inert={!readReady || !!readError} className="contents" aria-label="地理读取保护">
+      <fieldset disabled={!readReady || !!readError} inert={!readReady || !!readError} className="contents" aria-label="地理读取保护"
+        onCompositionStartCapture={() => { composingRef.current = true; setComposing(true) }}
+        onCompositionEndCapture={() => { composingRef.current = false; setComposing(false) }}>
 
       {/* 总述 */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-text-secondary mb-1">地理总述</label>
-        <textarea
+        <CTextarea
           value={overview}
           onChange={e => {
             draft.current.overview = e.target.value
@@ -386,7 +392,7 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
                     <div className="grid grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs text-text-muted mb-1">名称</label>
-                        <input
+                        <CInput
                           value={loc.name}
                           onChange={e => handleUpdateLocation(loc.id, { name: e.target.value })}
                           className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
@@ -420,7 +426,7 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
                     </div>
                     <div>
                       <label className="block text-xs text-text-muted mb-1">描述</label>
-                      <textarea
+                      <CTextarea
                         value={loc.description}
                         onChange={e => handleUpdateLocation(loc.id, { description: e.target.value })}
                         className="w-full h-20 p-2 bg-bg-base border border-border rounded text-sm text-text-primary resize-y focus:outline-none focus:border-accent"
@@ -428,7 +434,7 @@ function ScopedGeographyPanel({ project, activeGroupId }: Props & { activeGroupI
                     </div>
                     <div>
                       <label className="block text-xs text-text-muted mb-1">剧情重要性</label>
-                      <input
+                      <CInput
                         value={loc.significance}
                         onChange={e => handleUpdateLocation(loc.id, { significance: e.target.value })}
                         className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
