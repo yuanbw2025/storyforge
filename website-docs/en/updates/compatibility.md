@@ -1,5 +1,11 @@
 # Versions, upgrades, and data compatibility
 
+## November 17, 2026 · Fixes after v4.0.7
+
+The latest formal stable release remains v4.0.7; its fixed source and data formats are listed below. Mainline `35c38eab` includes desktop folder permissions in [#462](https://github.com/yuanbw2025/storyforge/pull/462) and historical deletion-failure feedback in [#463](https://github.com/yuanbw2025/storyforge/pull/463), both after that release tag. Public feedback follow-ups in [#460](https://github.com/yuanbw2025/storyforge/pull/460) are delivered on the website.
+
+Local v4.0.8 preparation currently has observed uncommitted files, with no verified formal release. Do not assign a publication date or assume the desktop fix is already in an installer. See [development status](/en/updates/development-status).
+
 ## November 15, 2026 · Released v4.0.7
 
 [**v4.0.7**](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.7) was published on **November 13, 2026 at 13:49 UTC (21:49 Beijing time)**, with tagged source `869a9ba79457da10d787c78165173b95e71d2825`. It uses **database v14** and **complete backup v18**. The 11 release assets include the Windows installer, Apple Silicon and Intel Mac DMGs, Android APK, four portable ZIPs, update metadata, blockmap and `SHA256SUMS.txt`. v4.0.6 remains an unpublished draft.

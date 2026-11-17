@@ -1,5 +1,11 @@
 # Changelog
 
+## November 17, 2026 · Historical deletion feedback and folder permissions
+
+- Historical event and keyword deletion waits for storage completion. Failures show an error and retain the original record for retry in the same panel. See [world and history planning](/en/features/longform/planning), based on [#463](https://github.com/yuanbw2025/storyforge/pull/463).
+- Desktop folder requests add author confirmation; protected locations allow reselection or cancellation. See [troubleshooting](/en/guides/troubleshooting) and [compatibility](/en/updates/compatibility) for steps and pending client delivery, based on [#462](https://github.com/yuanbw2025/storyforge/pull/462).
+- The website supports finding existing issues, reading comments and explicitly choosing a target for additional evidence. See the [feedback center](/en/feedback/). This review rechecked delivered [#460](https://github.com/yuanbw2025/storyforge/pull/460); new submissions and attachments remain available. Unmerged local work is listed in [development status](/en/updates/development-status).
+
 ## 2026-11-16 · Website feedback follow-ups
 
 - Feedback now supports searching existing issues, reading issue text and comments, explicitly appending evidence and opening receipts. Creation and attachments remain available. Request IDs prevent duplicate writes; check the issue after an unknown outcome. GitHub identity and management permissions remain on GitHub. See the [feedback center](/en/feedback/) for steps and Agent API details.
