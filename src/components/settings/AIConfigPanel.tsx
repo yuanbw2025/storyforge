@@ -214,8 +214,7 @@ function AIConfigPanelFull() {
 
   return (
     <div className="w-full min-w-0">
-      <h2 className="text-xl font-bold text-text-primary mb-6">设置</h2>
-      <div className="mb-8"><ThemeSelector /></div>
+      <div className="mb-4"><ThemeSelector /></div>
 
       {/* AI 配置 */}
       <div className="bg-bg-surface border border-border rounded-xl p-5 mb-6">
