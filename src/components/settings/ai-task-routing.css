@@ -1,0 +1,9 @@
+.ai-task-routing .ai-routing-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ai-task-routing .ai-route-card{display:flex;flex-direction:column;gap:4px;min-width:0;padding:10px}
+.ai-task-routing .ai-route-card>span{margin:0}
+.ai-task-routing .ai-route-card>span:nth-child(2){font-size:13px;line-height:1.5}
+.ai-task-routing .ai-route-select{width:100%;max-width:100%;min-width:0;font-size:13px;line-height:1.5;padding:6px 9px;border-radius:7px;margin-top:4px}
+.ai-task-routing .ai-team-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:10px}
+.ai-task-routing .ai-team-controls .ai-route-select{max-width:400px}
+@media(min-width:1200px){.ai-task-routing .ai-routing-general{grid-template-columns:repeat(4,minmax(0,1fr))}.ai-task-routing .ai-routing-roles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.ai-task-routing .ai-routing-grid,.ai-task-routing .ai-team-controls{grid-template-columns:minmax(0,1fr)}}
