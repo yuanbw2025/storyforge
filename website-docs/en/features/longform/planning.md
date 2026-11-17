@@ -1,5 +1,9 @@
 # Longform: settings, characters, and story design
 
+## November 17: deletion feedback for historical events and keywords
+
+In Worlds and settings → Historical timeline (历史年表), check the event or keyword before confirming deletion. If storage deletion fails, the panel shows an error and retains the original record. Read the error, confirm the record remains, and retry from the same panel. Treat the record as removed only after successful deletion; do not clear site data to resolve this. Based on [PR #463](https://github.com/yuanbw2025/storyforge/pull/463).
+
 ## November 13: saving, recovery and usage checks
 
 Review the actual volume/chapter candidates before adopting selected multi-volume outlines. Rejection or interruption returns to the existing candidate rather than starting another generation. Detailed-outline adoption keeps current author edits both immediately and after reload. Save character/worldview candidate edits before adoption; failed saves retain input, and concurrent confirmations of the same character name allow only one valid write. Sources: [#346](https://github.com/yuanbw2025/storyforge/pull/346), [#399](https://github.com/yuanbw2025/storyforge/pull/399), [#411](https://github.com/yuanbw2025/storyforge/pull/411).

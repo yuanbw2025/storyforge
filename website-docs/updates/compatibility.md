@@ -1,5 +1,11 @@
 # 版本、升级与数据兼容
 
+## 2026-11-17 · v4.0.7 后的修复范围
+
+最新正式稳定版仍为 v4.0.7，固定源码与数据格式见下方。主干 `35c38eab` 包含 [#462](https://github.com/yuanbw2025/storyforge/pull/462) 的桌面目录授权与 [#463](https://github.com/yuanbw2025/storyforge/pull/463) 的历史删除失败提示，均晚于该正式标签。公开反馈跟进 [#460](https://github.com/yuanbw2025/storyforge/pull/460) 已在官网交付。
+
+本地 v4.0.8 准备仅观察到未提交文件，尚无可核对的正式发行；不要据此填入发布日期或认为上述桌面修正已进入安装包。实际准备状态见[开发记录](/updates/development-status)。
+
 ## 2026-11-15 · 正式 v4.0.7
 
 [**v4.0.7**](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.7) 于 **2026-11-13 13:49 UTC（北京时间 21:49）**正式发布，标签固定源码 `869a9ba79457da10d787c78165173b95e71d2825`。数据库为 **v14**，完整备份为 **v18**。发行页有 Windows 安装器、两种芯片的 Mac DMG、Android APK、四平台便携 ZIP，以及更新元数据、blockmap 和 `SHA256SUMS.txt`，共 11 项附件；v4.0.6 仍为未公开草稿。

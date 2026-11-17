@@ -1,5 +1,19 @@
 # Pending development and branch audit
 
+## November 17, 2026 · Mainline fixes and local development snapshot
+
+Review from successful baseline `ec9f8aed` through `35c38eab` enumerated **7 local branches, 11 registered worktrees (including detached), and 2 worktrees with uncommitted status**. Two branch heads are outside main ancestry; no PRs were open at the snapshot. Registration changes do not prove historical files were safely cleaned. This task neither cleaned nor restored other worktrees.
+
+| Branch/worktree | Observed scope and state | Deduplication |
+| --- | --- | --- |
+| Author checkout `fix/bug-audit-20261117` | Local commit `4c1d62577`: geography IME input protection, product-draft deletion and related tests/contracts; unpushed and unmerged | No stable-patch equivalent in main; observed source changes only, not verified completion or delivery |
+| `fix/client-release-4.0.8-20261117` | Five uncommitted entries: client/upgrade workflows, package/lock and v4.0.8 notes | Uncommitted release preparation, not a formal version or extra product capability |
+| `refactor/chat-content-development-plan-20261030` | Pushed historical planning, head `62015359f` outside main ancestry | Four non-merge historical commits lack individual patch equivalence, but the branch has no net file difference from its merge base; not missing functionality |
+| `feat/community-works-library-20261029` | Two existing untracked `supabase/.temp/` tool temporary/connection metadata files | Contents remain private; preserved, not a new feature |
+| `feat/workshop-marketplace-20261116` | Head equals current main and worktree is clean | Its branch name does not establish new workshop functionality |
+
+[#460](https://github.com/yuanbw2025/storyforge/pull/460) is merged and its website feedback service is delivered. [#462](https://github.com/yuanbw2025/storyforge/pull/462) and [#463](https://github.com/yuanbw2025/storyforge/pull/463) are merged into main. The original folder-permission case and formal client acceptance remain pending. Older dated sections retain historical states. This task does not commit, push or merge the local development above.
+
 ## November 16, 2026 · Desktop directory permission follow-up
 
 [#458](https://github.com/yuanbw2025/storyforge/issues/458) adds v4.0.7 evidence to [#300](https://github.com/yuanbw2025/storyforge/issues/300): the picker opens, but confirmation does not bind the directory. The desktop permission callback rejects filesystem access and does not answer restricted-directory events. The correction requires the trusted current window and author confirmation; protected locations can only be reselected or cancelled. It does not write or move files automatically or change storage identity. Isolated Electron 44.10.0 verifies real directory permission denial and approval with controlled OS-confirmation answers; this is not acceptance of the reporter's native picker. Formal client delivery and original-environment recovery remain pending, and both issues stay open.

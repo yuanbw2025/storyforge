@@ -1,5 +1,11 @@
 # 更新日志
 
+## 2026-11-17 · 历史删除反馈与目录授权排查
+
+- 历史事件、关键词删除等待实际存储结果；失败显示错误并保留原记录，可在同一面板重试。见[世界与历史规划](/features/longform/planning)，依据 [#463](https://github.com/yuanbw2025/storyforge/pull/463)。
+- 桌面目录请求增加作者确认，受保护位置可重选或取消。排查步骤和正式客户端待交付范围见[故障排查](/guides/troubleshooting)与[版本兼容](/updates/compatibility)，依据 [#462](https://github.com/yuanbw2025/storyforge/pull/462)。
+- 官网已支持搜索原工单、读取评论并明确选择后追加证据，见[反馈中心](/feedback/)。本轮复核已交付的 [#460](https://github.com/yuanbw2025/storyforge/pull/460)，保留原新建和附件入口。未合并本地开发见[开发记录](/updates/development-status)。
+
 ## 2026-11-16 · 官网反馈跟进
 
 - 反馈入口增加已有问题搜索、正文与评论读取、明确选择原工单后追加证据和回执链接；原新建与附件流程保留。同一请求编号用于防止重复写入；结果未知时先核对工单。GitHub身份与管理权限继续由GitHub负责。操作及Agent接口见[反馈中心](/feedback/)。

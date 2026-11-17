@@ -1,5 +1,10 @@
 # Troubleshooting
 
+## Desktop folder selection does not create a binding
+
+Record the version, operating system, selected location and error. Retain the existing binding and a complete backup; do not clear app data or automatically move works. The mainline directory-permission fix [#462](https://github.com/yuanbw2025/storyforge/pull/462) displays a folder-permission confirmation for valid requests from the trusted current desktop window. Check the folder and choose Allow, or cancel. Protected locations permit only selecting an ordinary project subfolder or cancelling, without bypassing system protection. Verify the first write in data management after granting permission.
+
+Released v4.0.7 does not include this fix. The original machine's native picker, binding recovery and a subsequent formal client still await acceptance. [#300](https://github.com/yuanbw2025/storyforge/issues/300) and [#458](https://github.com/yuanbw2025/storyforge/issues/458) remain under investigation. Add evidence to the existing issue through the [feedback center](/en/feedback/) instead of creating duplicates.
 
 ## Optional recent-operation traces
 
