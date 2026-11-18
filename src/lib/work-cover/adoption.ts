@@ -7,7 +7,7 @@ import type { WorkspaceScope } from '../types'
 import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { binaryDataUrlV1, readVerifiedMediaBlobV1, sha256BinaryV1 } from '../media/blob-store'
 import { assertLongformCoverWorkV1, coverRecordInScopeV1 } from './drafts'
-import { assertWorkCoverCandidateHashV1, parseWorkCoverImageCandidateV1 } from './contracts'
+import { assertWorkCoverCandidateHashV1, assertWorkCoverPortableRowV1, parseWorkCoverImageCandidateV1 } from './contracts'
 import type { WorkCoverAdoptionV1 } from './types'
 
 export interface WorkCoverIdentityV1 {
@@ -40,6 +40,7 @@ export async function renderWorkCoverV1(input: { scope: WorkspaceScope; assetId:
   const scope = await resolveScope({ scope: input.scope })
   const asset = await db.workCoverAssets.get(input.assetId)
   if (!asset?.id || !coverRecordInScopeV1(scope, asset) || !await assertRecordInScope(scope, 'workCoverAssets', asset, { owner: 'work' })) throw new Error('封面候选不存在或不属于此作品。')
+  assertWorkCoverPortableRowV1('asset', asset as unknown as Record<string, unknown>)
   const blob = await readVerifiedMediaBlobV1({ scope, blobObjectId: asset.blobObjectId })
   if (blob.contentHash !== asset.blobHash || blob.byteSize !== asset.byteSize || blob.mimeType !== asset.mimeType
     || blob.width !== asset.width || blob.height !== asset.height) throw new Error('封面原图与候选证据不一致。')
@@ -163,6 +164,13 @@ async function verifyWorkCoverReceiptV1(scope: WorkspaceScope, draftId: number, 
     || !await assertRecordInScope(scope, 'workCoverAssets', asset, { owner: 'work' })
     || receipt.draftId !== draftId || receipt.draftKey !== draft.draftKey || receipt.workCode !== work.code
     || receipt.originalAssetId !== receipt.finalAssetId || receipt.newCoverHash !== asset.blobHash) throw new Error('采用回执作用域或原图不匹配。')
+  const candidate = asset.candidateJson ? parseWorkCoverImageCandidateV1(asset.candidateJson) : null
+  if (candidate) await assertWorkCoverCandidateHashV1(candidate)
+  const actualCandidateHash = candidate?.candidateHash ?? await hashCanonicalValue({ origin: 'upload', assetKey: asset.assetKey, blobHash: asset.blobHash })
+  const descriptor = { rendererId: 'identity-v1', sourceBlobHash: asset.blobHash, outputBlobHash: asset.blobHash,
+    mimeType: asset.mimeType, width: asset.width, height: asset.height, byteSize: asset.byteSize }
+  if (receipt.candidateHash !== actualCandidateHash || receipt.renderManifestJson !== canonicalStringify(descriptor)
+    || receipt.renderManifestHash !== await Dexie.waitFor(hashCanonicalValue(descriptor))) throw new Error('采用回执与候选内容不一致。')
   const intent: CoverAdoptionIntentV1 = { version: 1, operationKey: receipt.operationKey, workCode: receipt.workCode,
     draftKey: receipt.draftKey, draftRevision: receipt.draftRevision, expectedWorkUpdatedAt: receipt.expectedWorkUpdatedAt,
     assetKey: asset.assetKey, candidateHash: receipt.candidateHash, oldCoverHash: receipt.oldCoverHash, newCoverHash: receipt.newCoverHash,
