@@ -118,7 +118,7 @@ describe('native once-audio durable transport and portable lifecycle', () => {
     const copy = (await db.productRuntimeSessions.where('projectId').equals(copyId).toArray()).find(r => r.title === child.title)!
     expect(copy.id).not.toBe(child.id)
     expect((await readProductRuntimeState(copy.id!)).presentation!.onceAudio).toEqual(before)
-    await deleteWork(copyId, copy.workId!)
+    await deleteWork(copy.workId!)
     expect(await db.productRuntimeSessions.where('projectId').equals(copyId).count()).toBe(0)
     expect((await readProductRuntimeState(child.id!)).presentation!.onceAudio).toEqual(before)
   })

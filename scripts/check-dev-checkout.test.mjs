@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process'
 const source = new URL('../package.json', import.meta.url)
 const scripts = JSON.parse(readFileSync(source, 'utf8')).scripts
 const required = ['vite.config.ts', 'vite.adventure-player.config.ts', 'tsconfig.json', 'tsconfig.tests.json', 'tsconfig.tooling.json', 'index.html', 'src/entry.ts', 'src/main.tsx']
+/** @param {import('node:test').TestContext} t @param {string} [missing] */
 function fixture(t, missing) {
   const root = mkdtempSync(join(tmpdir(), 'storyforge checkout '))
   // Retain fixtures for failure diagnostics; never touch an existing checkout.

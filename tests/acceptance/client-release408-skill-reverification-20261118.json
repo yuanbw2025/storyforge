@@ -1,0 +1,231 @@
+{
+  "schema": "storyforge.release-skill-reverification.v1",
+  "verifiedAt": "2026-11-18",
+  "release": "4.0.8",
+  "sourceCommit": "f856212d7480b1530686a10ddc238ad2944a43e3",
+  "registrySHA256BeforeDateUpdate": "97e528d0ff8c1416dd589717fd3c776a5083ca2f642ad2ea81364545a1586492",
+  "boundary": "Deterministic contract regressions with test fixtures; no live-model or literary-quality acceptance. Only verification dates change.",
+  "initialRun": {
+    "total": 320,
+    "passed": 318,
+    "failed": 2,
+    "timeouts": [
+      "空候选也可由作者确认，明确清理范围内的旧提取结果",
+      "采纳在 adoption.started 中断后从同一 Run 恢复同一冻结替换结果"
+    ]
+  },
+  "isolatedRecheck": {
+    "file": "tests/regression/R-HARNESS63-inventory-extraction-durable.test.ts",
+    "passed": 21,
+    "failed": 0,
+    "maxWorkers": 1
+  },
+  "skills": [
+    {
+      "id": "world-origin.world-suggest",
+      "promptVersion": "world-suggest-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS68-world-suggest-durable"
+      ]
+    },
+    {
+      "id": "world-origin.worldview-expand",
+      "promptVersion": "worldview-expand-v2",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS67-worldview-expand-durable"
+      ]
+    },
+    {
+      "id": "world-origin.constitution-extract",
+      "promptVersion": "constitution-extract-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS69-constitution-extraction-durable"
+      ]
+    },
+    {
+      "id": "world-origin.locations",
+      "promptVersion": "location-extract-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS62-location-extraction-durable"
+      ]
+    },
+    {
+      "id": "world-origin.map-config",
+      "promptVersion": "world-map-config-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS66-world-map-durable"
+      ]
+    },
+    {
+      "id": "world-origin.history-consult",
+      "promptVersion": "history-consult-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS73-history-agent-durable"
+      ]
+    },
+    {
+      "id": "world-origin.history-storm",
+      "promptVersion": "history-storm-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS73-history-agent-durable"
+      ]
+    },
+    {
+      "id": "character.relationships",
+      "promptVersion": "character-relationships-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS60-character-relationship-durable"
+      ]
+    },
+    {
+      "id": "inspiration.reference-summary",
+      "promptVersion": "reference-derived-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS74-reference-derived-durable"
+      ]
+    },
+    {
+      "id": "inspiration.reference-characters",
+      "promptVersion": "reference-derived-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS74-reference-derived-durable"
+      ]
+    },
+    {
+      "id": "outline.impact-summary-regenerate",
+      "promptVersion": "impact-outline-regeneration-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS77-impact-outline-regeneration"
+      ]
+    },
+    {
+      "id": "prose.emotion-beats",
+      "promptVersion": "prose-emotion-beats-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS61-emotion-beat-durable"
+      ]
+    },
+    {
+      "id": "prose.inventory-extraction",
+      "promptVersion": "inventory-extract-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS63-inventory-extraction-durable"
+      ]
+    },
+    {
+      "id": "prose.story-timeline-extraction",
+      "promptVersion": "story-timeline-extract-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS64-story-timeline-extraction-durable",
+        "R-HARNESS79-impact-story-timeline-regeneration"
+      ]
+    },
+    {
+      "id": "prose.cultivation-progress-extraction",
+      "promptVersion": "cultivation-progress-extraction-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS71-cultivation-progress-extraction-durable"
+      ]
+    },
+    {
+      "id": "outline.foreshadow-suggestions",
+      "promptVersion": "foreshadow-suggestions-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS72-foreshadow-suggestions-durable"
+      ]
+    },
+    {
+      "id": "prose.style-learn",
+      "promptVersion": "style-learning-agent-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS76-style-learning-durable"
+      ]
+    },
+    {
+      "id": "prose.selection-edit",
+      "promptVersion": "prose-selection-edit-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS65-selection-edit-durable"
+      ]
+    },
+    {
+      "id": "prose.selection-check",
+      "promptVersion": "prose-selection-check-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS65-selection-edit-durable"
+      ]
+    },
+    {
+      "id": "character.interaction-reply",
+      "promptVersion": "character-interaction-reply-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS-RUNTIME1-instance-ledger"
+      ]
+    },
+    {
+      "id": "character.ai-town-reply",
+      "promptVersion": "ai-town-character-reply-v1",
+      "previousVerifiedAt": "2026-10-03",
+      "regressionTests": [
+        "R-AITOWN1-runtime"
+      ]
+    },
+    {
+      "id": "prose.interaction-scene-director",
+      "promptVersion": "character-interaction-scene-director-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS-RUNTIME1-instance-ledger"
+      ]
+    },
+    {
+      "id": "character.interaction-memory-curator",
+      "promptVersion": "character-interaction-memory-curator-v1",
+      "previousVerifiedAt": "2026-09-29",
+      "regressionTests": [
+        "R-HARNESS-RUNTIME1-instance-ledger"
+      ]
+    }
+  ],
+  "testFiles": {
+    "tests/regression/R-HARNESS68-world-suggest-durable.test.ts": "965b585e5e5bf0f6f5ec53f7c583c98b8f2836c128397662be494fee5a5fd723",
+    "tests/regression/R-HARNESS67-worldview-expand-durable.test.ts": "0c4ecd9e09484d184b7845862f30e43dbfad37917f31ed43318eafa7fc33a168",
+    "tests/regression/R-HARNESS69-constitution-extraction-durable.test.ts": "09dd134a3cc26969e68a6e3363a9f6637c921261fbb77210ae4b3823b06472a9",
+    "tests/regression/R-HARNESS62-location-extraction-durable.test.ts": "a51c37e69453f5d53ec39c6737919d2c0f4b4adc26d4faf611fd837793655907",
+    "tests/regression/R-HARNESS66-world-map-durable.test.ts": "f07d856472c809c6493989df15c7fc437fb2ca1e8ea861390cc0bf5da8189925",
+    "tests/regression/R-HARNESS73-history-agent-durable.test.ts": "e161dd35d64ef2f4e8dd50adf38c19b86f2b5729a14990583ac30a6ebc548c87",
+    "tests/regression/R-HARNESS60-character-relationship-durable.test.ts": "a3ad1396fc9e57700461a10deae60246506250023c158b54d8515f8c318dce63",
+    "tests/regression/R-HARNESS74-reference-derived-durable.test.ts": "8ab3e6efb19c52ed8829cfcc6972cacf2dc69a24b2f1cca027ae52e37a3d5465",
+    "tests/regression/R-HARNESS77-impact-outline-regeneration.test.ts": "8c3a055bb186c8e118695c6331375ced017b6944f756f7559fcabb04338ccd50",
+    "tests/regression/R-HARNESS61-emotion-beat-durable.test.ts": "94f22eb8c03ed44a7a0e543a1752b824b0aaf2da8fbba89b1e65d76a232ad09f",
+    "tests/regression/R-HARNESS63-inventory-extraction-durable.test.ts": "58b95692cb1409cee43c9dfb801192391d657127977ecde00cebfa7a85f39554",
+    "tests/regression/R-HARNESS64-story-timeline-extraction-durable.test.ts": "e2b3bcca9ba83bf10cf005ab5164b8ca89fb38aa56fe5fcf0cd751fd7ac934a5",
+    "tests/regression/R-HARNESS79-impact-story-timeline-regeneration.test.ts": "468bb283a712fb9b5714da77c17d2bcf5605a88ea9065c000a3d49a0109941a9",
+    "tests/regression/R-HARNESS71-cultivation-progress-extraction-durable.test.ts": "02aac54662fb2b8fe1b57927516992864e8be6cb7216df66eb20b6508de3685f",
+    "tests/regression/R-HARNESS72-foreshadow-suggestions-durable.test.ts": "15323289712d0932deb8bcf27fcd5130d6f62db51685a255a062f40149badf7c",
+    "tests/regression/R-HARNESS76-style-learning-durable.test.ts": "c16144447597bfdf3f2c739c2d32d0262b3113baef6650885cd424d8bf990f46",
+    "tests/regression/R-HARNESS65-selection-edit-durable.test.ts": "098002e7e0195ad20dc3dfd863988243b68b84706ccda0479e48fd643ee7bdf1",
+    "tests/regression/R-HARNESS-RUNTIME1-instance-ledger.test.ts": "ab71744abc987ef804246a17bd2bcac897198ad380b3b625f486fec7b602c5e9",
+    "tests/regression/R-AITOWN1-runtime.test.ts": "b166f072e6f1f3a37225684f1294b08ca6a7c40888285b93317a9ebdf3e462b7"
+  }
+}

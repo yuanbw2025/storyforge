@@ -35,13 +35,10 @@ public class ClientStorageTest {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             ready(scenario);
             evaluate(scenario, "localStorage.removeItem('storyforge-client-agreement-v1'); window.__consentReloadPending = true; location.reload(); true");
-            awaitTrue(scenario, "!window.__consentReloadPending && !!Array.from(document.querySelectorAll('button')).find(b => b.textContent === '同意协议并继续')");
-            assertEquals("true", evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b => b.textContent === '同意协议并继续').disabled && Array.from(document.querySelectorAll('input[type=checkbox]')).every(i => !i.checked)"));
-            evaluate(scenario, "Array.from(document.querySelectorAll('label')).find(l => l.textContent.includes('我已阅读并同意')).querySelector('input').click(); true");
-            awaitTrue(scenario, "!Array.from(document.querySelectorAll('button')).find(b => b.textContent === '同意协议并继续').disabled");
-            evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b => b.textContent === '同意协议并继续').click(); true");
-            awaitTrue(scenario, "!!JSON.parse(localStorage.getItem('storyforge-client-agreement-v1'))?.acceptedAt && !Array.from(document.querySelectorAll('button')).some(b => b.textContent === '同意协议并继续')");
-            assertEquals("true", evaluate(scenario, "JSON.parse(localStorage.getItem('storyforge-client-observability-v1')).analytics && JSON.parse(localStorage.getItem('storyforge-client-observability-v1')).errors"));
+            awaitTrue(scenario, "!window.__consentReloadPending && !!document.querySelector('#root button')");
+            assertEquals("true", evaluate(scenario, "!Array.from(document.querySelectorAll('button')).some(b => b.textContent === '同意协议并继续')"));
+            assertEquals("true", evaluate(scenario, "localStorage.getItem('storyforge-client-agreement-v1') === null"));
+            assertEquals("true", evaluate(scenario, "JSON.parse(localStorage.getItem('storyforge-client-observability-v1'))?.analytics !== true && JSON.parse(localStorage.getItem('storyforge-client-observability-v1'))?.errors !== true"));
             evaluate(scenario, "localStorage.setItem('native-client-probe', 'preserved'); window.__probe = false; var r = indexedDB.open('native-client-probe', 1); r.onupgradeneeded = () => r.result.createObjectStore('values'); r.onsuccess = () => { var t = r.result.transaction('values', 'readwrite'); t.objectStore('values').put('manuscript-probe', 'sample'); t.oncomplete = () => { r.result.close(); window.__probe = true; }; }; true");
             awaitTrue(scenario, "window.__probe === true");
             evaluate(scenario, "window.__blocked = false; fetch('http://example.com/v1').catch(() => { window.__blocked = true; }); true");
@@ -49,7 +46,7 @@ public class ClientStorageTest {
         }
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             ready(scenario);
-            assertEquals("true", evaluate(scenario, "!!JSON.parse(localStorage.getItem('storyforge-client-agreement-v1'))?.acceptedAt"));
+            assertEquals("true", evaluate(scenario, "localStorage.getItem('storyforge-client-agreement-v1') === null"));
             assertEquals("\"preserved\"", evaluate(scenario, "localStorage.getItem('native-client-probe')"));
             evaluate(scenario, "window.__read = null; var r = indexedDB.open('native-client-probe', 1); r.onsuccess = () => { var q = r.result.transaction('values').objectStore('values').get('sample'); q.onsuccess = () => { window.__read = q.result; r.result.close(); }; }; true");
             awaitTrue(scenario, "window.__read === 'manuscript-probe'");

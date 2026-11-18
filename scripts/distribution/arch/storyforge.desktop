@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=StoryForge
+Name[zh_CN]=叙事熔炉
+Comment=AI writing workspace
+Exec=storyforge %U
+Icon=storyforge
+Terminal=false
+Categories=Office;
+StartupWMClass=StoryForge

@@ -261,7 +261,7 @@ describe("Settings V2 版本与闭集", () => {
     const restored = await db.ttrpgAuthoringDrafts.where("projectId").equals(restoredProject).first();
     expect(restored!.workId).not.toBe(original.workId);
     expect(settingsFromTtrpgDraft(restored!)).toEqual(settingsFromTtrpgDraft(original));
-    await deleteWork(restoredProject, restored!.workId);
+    await deleteWork(restored!.workId);
     expect(await db.ttrpgAuthoringDrafts.where("projectId").equals(restoredProject).count()).toBe(0);
     expect(await readTtrpgDraft(made.scope)).toEqual(original);
   });

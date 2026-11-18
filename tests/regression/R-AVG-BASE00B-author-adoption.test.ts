@@ -41,7 +41,7 @@ describe('AVG-BASE-00B · author candidate, durable confirmation and revision pe
     const recovered = { ...s, scope: restoredScope, productionId: build.productionId, buildId: build.id! }
     // Actual restored authority/receipt, rather than a bytes-only comparison.
     expect((await stageAuthorFixture(recovered, 1)).status).toBe('pending')
-    await deleteWork(importedId, restored.workId)
+    await deleteWork(restored.workId)
     expect(await db.productBuildArtifacts.where('projectId').equals(importedId).count()).toBe(0)
     expect(await db.productBuildArtifacts.get(candidate.id!)).toBeDefined()
   })

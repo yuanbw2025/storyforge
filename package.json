@@ -1,7 +1,7 @@
 {
   "name": "storyforge",
   "private": true,
-  "version": "4.0.7",
+  "version": "4.0.8",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -76,6 +76,7 @@
     "build:adventure-player": "node scripts/build-adventure-player.mjs",
     "build:portable": "tsc -b && tsc -p ui-preview/tsconfig.json && npm run build:adventure-player && vite build --mode portable",
     "test:distribution": "node --test scripts/distribution/*.test.mjs",
+    "build:linux": "npm run build:portable && node scripts/distribution/notices.mjs && electron-builder --config electron-builder.config.cjs --linux dir --x64 --publish never --config.directories.output=release/linux",
     "build:windows": "npm run build:portable && node scripts/distribution/notices.mjs && electron-builder --config electron-builder.config.cjs --win --x64 --publish never",
     "desktop:dev": "npm run build:portable && electron scripts/desktop/main.mjs",
     "build:android:web": "tsc -b && npm run build:adventure-player && vite build --mode android && node scripts/distribution/prepare-android.mjs && cap sync android",
@@ -85,7 +86,7 @@
     "check:engineering": "node scripts/quality/check-engineering.mjs",
     "test:engineering-gate": "node --test scripts/quality/check-engineering.test.mjs scripts/quality/check-dev-dependency-report.test.mjs",
     "check:types:open-world-experience": "tsc --noEmit -p tsconfig.tests.open-world-experience.json",
-    "check:dev-dependencies": "node scripts/quality/check-dev-dependency-report.mjs"
+    "check:dev-dependencies": "node scripts/quality/check-dev-dependency-report.mjs --approved scripts/quality/dev-dependency-approvals.json"
   },
   "dependencies": {
     "@capacitor/android": "8.5.3",
@@ -127,6 +128,8 @@
   "devDependencies": {
     "@capacitor/cli": "8.5.3",
     "@playwright/test": "^1.61.1",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.3.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/three": "0.183.1",

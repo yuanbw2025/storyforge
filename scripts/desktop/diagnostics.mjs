@@ -69,6 +69,14 @@ export function desktopDiagnostics(directory, build) {
       write(current)
     },
     record,
+    /** Electron can report fatal Linux renderer exits as abnormal-exit.
+     * Keep those as interruptions, not confirmed crashes or intentional kills.
+     * @param {{process:string,reason:string,exitCode?:number}} value */
+    recordExit(value) {
+      if (value.reason === 'crashed') record('NativeCrash', value)
+      else if (value.reason === 'oom') record('NativeOutOfMemory', value)
+      else if (value.reason === 'abnormal-exit') record('NativeInterrupted', { ...value, reason: 'interrupted' })
+    },
     read: () => read().errors,
   }
 }

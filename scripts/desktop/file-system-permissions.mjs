@@ -9,10 +9,12 @@ export function installFileSystemPermissions({ session, window, dialog, origin }
   const contents = window.webContents
   let navigation = 0
   contents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => { if (isMainFrame) navigation++ })
+  /** @param {{requestingUrl?:unknown}} details */
   const trusted = details => {
     try {
       const frame = contents.mainFrame
-      const url = new URL(details?.requestingUrl)
+      if (typeof details?.requestingUrl !== 'string') return false
+      const url = new URL(details.requestingUrl)
       // fileSystem.isMainFrame is not reliable across Chromium versions. Do not
       // grant requests while a child frame could be the requesting document.
       return !window.isDestroyed() && !contents.isDestroyed() && frame.frames.length === 0
@@ -23,8 +25,9 @@ export function installFileSystemPermissions({ session, window, dialog, origin }
   session.setPermissionRequestHandler((requester, permission, callback, details) => {
     if (permission === 'persistent-storage') { callback(true); return }
     if (permission !== 'fileSystem' || requester !== contents || !trusted(details)
-        || details.isDirectory !== true || !['readable', 'writable'].includes(details.fileAccessType)
-        || typeof details.filePath !== 'string' || !isAbsolute(details.filePath)) {
+        || !('isDirectory' in details) || details.isDirectory !== true
+        || !('fileAccessType' in details) || typeof details.fileAccessType !== 'string' || !['readable', 'writable'].includes(details.fileAccessType)
+        || !('filePath' in details) || typeof details.filePath !== 'string' || !isAbsolute(details.filePath)) {
       callback(false); return
     }
     const documentUrl = contents.mainFrame.url

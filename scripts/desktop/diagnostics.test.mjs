@@ -4,6 +4,25 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { desktopDiagnostics } from './diagnostics.mjs'
+test('records abnormal native exits without labeling them as crashes or recording intentional termination', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'sf-native-exit-'))
+  try {
+    const d = desktopDiagnostics(directory, 'v4.0.8+local'); d.start()
+    d.setContext({ enabled: true, trail: [] })
+    d.recordExit({ process: 'renderer', reason: 'abnormal-exit', exitCode: 134 })
+    d.recordExit({ process: 'renderer', reason: 'crashed', exitCode: 139 })
+    d.recordExit({ process: 'GPU', reason: 'oom', exitCode: 137 })
+    for (const reason of ['clean-exit', 'killed', 'unknown']) d.recordExit({ process: 'renderer', reason, exitCode: 0 })
+    assert.deepEqual(d.read().map(row => row.name), ['NativeInterrupted', 'NativeCrash', 'NativeOutOfMemory'])
+    assert.deepEqual(d.read()[0].details?.native, { process: 'renderer', reason: 'interrupted', exitCode: 134 })
+    d.cleanExit()
+    const restarted = desktopDiagnostics(directory, 'v4.0.8+local'); restarted.start()
+    assert.deepEqual(restarted.read()[0], d.read()[0])
+    restarted.setContext({ enabled: false })
+    restarted.recordExit({ process: 'renderer', reason: 'abnormal-exit', exitCode: 134 })
+    assert.ok(restarted.read().every(row => !row.details))
+  } finally { rmSync(directory, { recursive: true }) }
+})
 test('native summaries are bounded, omit raw errors, and distinguish unclean exits from confirmed crashes', () => {
   const directory = mkdtempSync(join(tmpdir(), 'sf-native-diagnostics-'))
   try {
