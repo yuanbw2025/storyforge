@@ -25,12 +25,10 @@ else {
   diagnostics.start()
   process.on('uncaughtExceptionMonitor', () => diagnostics.record('NativeCrash', { process: 'browser', reason: 'uncaught' }))
   app.on('render-process-gone', (_event, _contents, details) => {
-    if (details.reason === 'crashed') diagnostics.record('NativeCrash', { process: 'renderer', reason: 'crashed', exitCode: details.exitCode })
-    if (details.reason === 'oom') diagnostics.record('NativeOutOfMemory', { process: 'renderer', reason: 'oom', exitCode: details.exitCode })
+    diagnostics.recordExit({ process: 'renderer', reason: details.reason, exitCode: details.exitCode })
   })
   app.on('child-process-gone', (_event, details) => {
-    if (details.reason === 'crashed') diagnostics.record('NativeCrash', { process: details.type, reason: 'crashed', exitCode: details.exitCode })
-    if (details.reason === 'oom') diagnostics.record('NativeOutOfMemory', { process: details.type, reason: 'oom', exitCode: details.exitCode })
+    diagnostics.recordExit({ process: details.type, reason: details.reason, exitCode: details.exitCode })
   })
   app.on('second-instance', () => { window?.restore(); window?.focus() })
   app.whenReady().then(async () => {
