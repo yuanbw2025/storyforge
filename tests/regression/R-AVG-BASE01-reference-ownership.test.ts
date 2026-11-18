@@ -57,7 +57,7 @@ describe('R-AVG-BASE01 · owner-scoped actual references and portable lifecycle'
     const scope = { projectId: importedId, worldId: restored.worldId, workId: restored.workId }
     const adapter = await createAvgDraftReferenceAdapterV1({ scope, frozen: s.frozen })
     await expect(adapter.generate(s.executable, s.transport, new AbortController().signal)).resolves.toHaveLength(1)
-    await deleteWork(importedId, restored.workId)
+    await deleteWork(restored.workId)
     await expect(adapter.generate(s.executable, s.transport, new AbortController().signal)).rejects.toThrow()
     const source = await createAvgDraftReferenceAdapterV1({ scope: s.scope, frozen: s.frozen })
     await expect(source.generate(s.executable, s.transport, new AbortController().signal)).resolves.toHaveLength(1)

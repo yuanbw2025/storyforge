@@ -38,7 +38,7 @@ async function production(scope: WorkspaceScope) {
     lastErrorJson: '{}', createdAt: 1, updatedAt: 1 }
   row.id = await db.productProductions.add(row) as number
   await db.productProductionCommands.add({ ...scope, productionId: row.id, commandId: `create.${row.id}`,
-    type: 'create', payloadHash: 'a'.repeat(64), expectedStateRevision: 0, status: 'succeeded',
+    type: 'create-intent', payloadHash: 'a'.repeat(64), expectedStateRevision: 0, status: 'succeeded',
     resultJson: '{}', errorCode: null, createdAt: 1, completedAt: 1 })
   return row
 }

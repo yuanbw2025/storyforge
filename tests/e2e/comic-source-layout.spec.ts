@@ -106,7 +106,7 @@ for (const viewport of [{ width: 1728, height: 997 }, { width: 1366, height: 768
     const saved = await page.evaluate(async ({ workId, sourceWorkId }) => {
       const load = new Function('path', 'return import(path)') as <T>(path: string) => Promise<T>
       const { db } = await load<typeof import('../../src/lib/db/schema')>('/storyforge/src/lib/db/schema.ts')
-      return { units: await db.adaptationSourceUnits.where('workId').equals(workId).toArray(), chapters: await db.chapters.filter(chapter => chapter.workId === sourceWorkId).count(), hash: (await db.adaptationProjects.where('workId').equals(workId).first())!.activeSourceManifestHash }
+      return { units: await db.adaptationSourceUnits.where('workId').equals(workId).toArray(), chapters: await db.chapters.filter(chapter => 'workId' in chapter && chapter.workId === sourceWorkId).count(), hash: (await db.adaptationProjects.where('workId').equals(workId).first())!.activeSourceManifestHash }
     }, fixture)
     expect(saved.units.sort((a, b) => a.order - b.order)).toEqual(fixture.units)
     expect(saved.chapters).toBe(101)

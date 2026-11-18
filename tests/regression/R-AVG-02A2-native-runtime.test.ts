@@ -160,7 +160,7 @@ describe('AVG native V2 compilation, event replay and saves', () => {
     expect(sessions).toHaveLength(2)
     const restored = sessions.find(row => row.parentSessionId != null)!
     expect((await readProductRuntimeState(restored.id!)).narrative?.endingKey).toBe('handover')
-    await deleteWork(importedId, restored.workId!)
+    await deleteWork(restored.workId!)
     expect(await db.productRuntimeSessions.where('projectId').equals(importedId).count()).toBe(0)
     expect(await db.productRuntimeSessions.get(id)).toBeDefined()
   })

@@ -92,7 +92,7 @@ describe('AVG native reading protocol and durable playback/history', () => {
     const importedId = await importProjectJSON(await exportProjectJSON(s.scope.projectId))
     const restored = (await db.productRuntimeSessions.where('projectId').equals(importedId).toArray()).find(r => r.parentSessionId != null)!
     expect((await readProductRuntimeState(restored.id!)).avgReading).toEqual(state.avgReading)
-    await deleteWork(importedId, restored.workId!)
+    await deleteWork(restored.workId!)
     expect(await db.productRuntimeSessions.where('projectId').equals(importedId).count()).toBe(0)
     expect(await db.productRuntimeSessions.get(s.sessionId)).toBeDefined()
     expect(await db.agentRuns.count()).toBe(0)

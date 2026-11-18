@@ -109,7 +109,7 @@ export function inspectReaderReceiptJournal(bytes, promptHash) {
   }
   if (!corruption && trailingPartial) corruption = 'incomplete-final-line'
   return { version: 1, promptHash, events, corruption, automaticRecoveryAllowed: false,
-    generationCompletedEvidence: events.findLast(event => event.kind === 'generation-completed')?.payload ?? null,
-    terminalEvidence: events.findLast(event => event.kind === 'terminal-receipt')?.payload ?? null,
+    generationCompletedEvidence: [...events].reverse().find(event => event.kind === 'generation-completed')?.payload ?? null,
+    terminalEvidence: [...events].reverse().find(event => event.kind === 'terminal-receipt')?.payload ?? null,
     accepted: false }
 }

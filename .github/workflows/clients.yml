@@ -1,6 +1,12 @@
 name: Build Desktop and Android Clients
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: 'Platform to diagnose; formal releases always verify every platform'
+        type: choice
+        default: all
+        options: [all, windows, macos, android, arch, consent]
   workflow_call:
     inputs:
       release:
@@ -34,8 +40,10 @@ env:
   VITE_STORYFORGE_COMMUNITY_R2_BUCKET: ${{ vars.STORYFORGE_COMMUNITY_R2_BUCKET }}
 jobs:
   arch:
+    if: ${{ inputs.release || !inputs.target || inputs.target == 'all' || inputs.target == 'arch' }}
     uses: ./.github/workflows/arch-client.yml
   consent:
+    if: ${{ inputs.release || !inputs.target || inputs.target == 'all' || inputs.target == 'consent' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -55,6 +63,7 @@ jobs:
           path: test-results/
           retention-days: 14
   windows:
+    if: ${{ inputs.release || !inputs.target || inputs.target == 'all' || inputs.target == 'windows' }}
     runs-on: windows-latest
     env:
       # Retained acceptance evidence includes paths beyond Windows MAX_PATH.
@@ -76,6 +85,14 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
       - name: Launch packaged app in an isolated profile
         run: node scripts/desktop/smoke.mjs release/windows/win-unpacked/StoryForge.exe
+      - name: Preserve native failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-native-smoke
+          path: release/native-smoke/
+          if-no-files-found: ignore
+          retention-days: 14
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.PREVIOUS_CLIENT_REF }}
@@ -102,6 +119,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   macos:
+    if: ${{ inputs.release || !inputs.target || inputs.target == 'all' || inputs.target == 'macos' }}
     strategy:
       fail-fast: false
       matrix:
@@ -152,6 +170,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   android:
+    if: ${{ inputs.release || !inputs.target || inputs.target == 'all' || inputs.target == 'android' }}
     permissions:
       contents: write # Read maintainer-signed APKs from the unpublished release.
     runs-on: ubuntu-latest

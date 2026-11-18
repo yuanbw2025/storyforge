@@ -79,7 +79,7 @@
       "tsconfig.tests.open-world-experience.json": "7596a50c2d283b59660b6402b2c2a421c73b6d6482eb2b7a7a1612006622db31",
       "tsconfig.tooling.json": "2f8f44cd11e5314602f6a753d8898590d0e8b75f227de3cf4b0394f7df54761a"
     },
-    "lockfileHash": "1221865bed4fe8d98ff7d8acd4cb3061ced8a636aa19f6ffb03ab465c62ed0a3"
+    "lockfileHash": "47ebd20ced657453ac590d653c7b3f8d10402b3f8b57bafc917d4fa2db95d6e9"
   },
   "entries": [
     {
@@ -34958,21 +34958,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AITOWN5-authoring.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"a2fb77752efed04a9231631cbaeb59d06f6cbfbc1099bcf32d7df288cb6a2c23\",26,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AITOWN5-authoring.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "a2fb77752efed04a9231631cbaeb59d06f6cbfbc1099bcf32d7df288cb6a2c23",
-        "line": 62,
-        "column": 26,
-        "start": 2163,
-        "length": 16
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-APHELION-builtin.test.ts\",\"TS2550\",\"Property 'at' does not exist on type 'Point[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.\",\"7ace20a30e8bf0057dffa31dc6cc1eca31fb2af0530407c4dc8554bd01193f53\",204,2]",
       "count": 1,
       "diagnostic": {
@@ -35858,36 +35843,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-02A1-author-system.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"9f1a2a64c1174e2a86f1134b7adf59f7cf73bf95774db3677310acbdb1adfea2\",34,21]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-02A1-author-system.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "9f1a2a64c1174e2a86f1134b7adf59f7cf73bf95774db3677310acbdb1adfea2",
-        "line": 106,
-        "column": 34,
-        "start": 8719,
-        "length": 21
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-02A2-native-runtime.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"c73ff74a4330d5a94d5c8d23d5814b0a5d3a07b7942f8de91b15f0b0ed7d91e6\",34,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-02A2-native-runtime.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "c73ff74a4330d5a94d5c8d23d5814b0a5d3a07b7942f8de91b15f0b0ed7d91e6",
-        "line": 163,
-        "column": 34,
-        "start": 13429,
-        "length": 16
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-AVG-02B1-inventory.test.ts\",\"TS2345\",\"Argument of type '\\\"inspect.once\\\"' is not assignable to parameter of type '`${string}-${string}-${string}-${string}-${string}`'.\",\"58bc2f85a9626fcca9369d6e0459e2be741df67dad4317bfb418255d00aa2a98\",116,14]",
       "count": 1,
       "diagnostic": {
@@ -35903,36 +35858,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-02B1-inventory.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"c73ff74a4330d5a94d5c8d23d5814b0a5d3a07b7942f8de91b15f0b0ed7d91e6\",34,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-02B1-inventory.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "c73ff74a4330d5a94d5c8d23d5814b0a5d3a07b7942f8de91b15f0b0ed7d91e6",
-        "line": 192,
-        "column": 34,
-        "start": 16853,
-        "length": 16
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-03A-once-audio.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"ae9166765055de012d6b64467b0ada225e2cac23292377feea437b1a3ecd835c\",30,12]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-03A-once-audio.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "ae9166765055de012d6b64467b0ada225e2cac23292377feea437b1a3ecd835c",
-        "line": 121,
-        "column": 30,
-        "start": 9403,
-        "length": 12
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-AVG-03A-player-scope.test.ts\",\"TS2352\",\"Conversion of type '() => Promise<never>' to type '{ (): PromiseExtended<ProductRelease[]>; <R>(thenShortcut: ThenShortcut<ProductRelease[], R>): PromiseExtended<R>; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.\\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<ProductRelease[]>'.\",\"7e05ecc210fcad9897ac05b76cd58f311457b250dfebbbc6246f65e1e2d0b37c\",172,119]",
       "count": 1,
       "diagnostic": {
@@ -35945,21 +35870,6 @@
         "column": 172,
         "start": 3360,
         "length": 119
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-03A-reading.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"c73ff74a4330d5a94d5c8d23d5814b0a5d3a07b7942f8de91b15f0b0ed7d91e6\",34,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-03A-reading.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "c73ff74a4330d5a94d5c8d23d5814b0a5d3a07b7942f8de91b15f0b0ed7d91e6",
-        "line": 95,
-        "column": 34,
-        "start": 8414,
-        "length": 16
       }
     },
     {
@@ -38843,36 +38753,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-visual-planning-harness.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"7796efc2c7b2c52e8f4d688d436854c8810c54984dfc845718725e5ef8e08b2d\",38,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-04A5-visual-planning-harness.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "7796efc2c7b2c52e8f4d688d436854c8810c54984dfc845718725e5ef8e08b2d",
-        "line": 1623,
-        "column": 38,
-        "start": 148186,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-visual-planning-harness.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"f164b229a46653b6ba04b79b1586e62b45955683a0d9c2639ae605c6a3e3e6e7\",42,9]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-04A5-visual-planning-harness.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "f164b229a46653b6ba04b79b1586e62b45955683a0d9c2639ae605c6a3e3e6e7",
-        "line": 1308,
-        "column": 42,
-        "start": 116996,
-        "length": 9
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-visual-planning-harness.test.ts\",\"TS7005\",\"Variable 'single' implicitly has an 'any[]' type.\",\"41cc4b1831df5f1b332b43db70ed4aaa323a1ce4b06f84a2f2decb6ef3b1e8d4\",73,6]",
       "count": 1,
       "diagnostic": {
@@ -39713,21 +39593,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-05A-author-assembly.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"a4cdee066440c9c34055860f7bb9cfdd2f80cd09f184fc019451d32ff5238f27\",33,12]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-05A-author-assembly.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "a4cdee066440c9c34055860f7bb9cfdd2f80cd09f184fc019451d32ff5238f27",
-        "line": 153,
-        "column": 33,
-        "start": 12413,
-        "length": 12
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-AVG-05A-combined-media-stage.test.ts\",\"TS18047\",\"'preview' is possibly 'null'.\",\"03a9b2483633f1eab096fd3dedfc85eca79f03f85133fd1a36c1d20def9314c9\",35,7]",
       "count": 1,
       "diagnostic": {
@@ -39815,36 +39680,6 @@
         "column": 62,
         "start": 5864,
         "length": 25
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-BASE00B-author-adoption.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"d9e98e7a8aebdc9294c7d92937c9aae87f5fdef6816abae1a28031044a6748c2\",34,15]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-BASE00B-author-adoption.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "d9e98e7a8aebdc9294c7d92937c9aae87f5fdef6816abae1a28031044a6748c2",
-        "line": 44,
-        "column": 34,
-        "start": 3494,
-        "length": 15
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-BASE01-reference-ownership.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"d9e98e7a8aebdc9294c7d92937c9aae87f5fdef6816abae1a28031044a6748c2\",34,15]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-BASE01-reference-ownership.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "d9e98e7a8aebdc9294c7d92937c9aae87f5fdef6816abae1a28031044a6748c2",
-        "line": 60,
-        "column": 34,
-        "start": 4957,
-        "length": 15
       }
     },
     {
@@ -40130,36 +39965,6 @@
         "column": 21,
         "start": 9376,
         "length": 2
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG3-authoring-lifecycle.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"b8b4878a048232064ba9c13542521484f4bb69afc2aa6edc474c711476cf8407\",22,12]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG3-authoring-lifecycle.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "b8b4878a048232064ba9c13542521484f4bb69afc2aa6edc474c711476cf8407",
-        "line": 133,
-        "column": 22,
-        "start": 4876,
-        "length": 12
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG3-authoring-lifecycle.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"f656f66a2f7a023cd73d3ddf24efd50872cae5722c088597beb413bf5d6fe239\",30,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG3-authoring-lifecycle.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "f656f66a2f7a023cd73d3ddf24efd50872cae5722c088597beb413bf5d6fe239",
-        "line": 62,
-        "column": 30,
-        "start": 2241,
-        "length": 16
       }
     },
     {
@@ -46084,36 +45889,6 @@
         "line": 133,
         "column": 165,
         "start": 11466,
-        "length": 2
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-CHAT-UI-lifecycle.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"dbb72597e592cab31024e64ac8e7dd7759a95cf27e7dbb6ad5d2fbbb3ed9802a\",32,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CHAT-UI-lifecycle.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "dbb72597e592cab31024e64ac8e7dd7759a95cf27e7dbb6ad5d2fbbb3ed9802a",
-        "line": 38,
-        "column": 32,
-        "start": 2211,
-        "length": 16
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-CLIENT-LEGAL1-consent.test.tsx\",\"TS2769\",\"No overload matches this call.\\n  The last overload gave the following error.\\n    Argument of type '{}' is not assignable to parameter of type 'Attributes & { children: ReactNode; }'.\\n      Property 'children' is missing in type '{}' but required in type '{ children: ReactNode; }'.\",\"a7149833178331eb5b467dfb5bb988310e37b2b5afc0662b87c7027e50b44b1c\",81,2]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CLIENT-LEGAL1-consent.test.tsx",
-        "code": "TS2769",
-        "message": "No overload matches this call.\n  The last overload gave the following error.\n    Argument of type '{}' is not assignable to parameter of type 'Attributes & { children: ReactNode; }'.\n      Property 'children' is missing in type '{}' but required in type '{ children: ReactNode; }'.",
-        "anchor": "a7149833178331eb5b467dfb5bb988310e37b2b5afc0662b87c7027e50b44b1c",
-        "line": 16,
-        "column": 81,
-        "start": 1207,
         "length": 2
       }
     },
@@ -58628,21 +58403,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPG5-authoring.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"a2fb77752efed04a9231631cbaeb59d06f6cbfbc1099bcf32d7df288cb6a2c23\",26,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPG5-authoring.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "a2fb77752efed04a9231631cbaeb59d06f6cbfbc1099bcf32d7df288cb6a2c23",
-        "line": 62,
-        "column": 26,
-        "start": 2207,
-        "length": 16
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-TTRPGNW1-migration-compatibility.test.ts\",\"TS2339\",\"Property 'chapters' does not exist on type '{ version: number; }'.\",\"5af14e6adb5a277a0315b2509df2e481e8a4b490d9946e668ff0c80e19ff84d1\",27,8]",
       "count": 1,
       "diagnostic": {
@@ -58700,21 +58460,6 @@
         "column": 66,
         "start": 2618,
         "length": 7
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN1-authoring-version.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"88c6979854a55d9bcdc39f4a5fbe693115de9018390c462a9601effe44f850e8\",39,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN1-authoring-version.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "88c6979854a55d9bcdc39f4a5fbe693115de9018390c462a9601effe44f850e8",
-        "line": 264,
-        "column": 39,
-        "start": 14135,
-        "length": 16
       }
     },
     {

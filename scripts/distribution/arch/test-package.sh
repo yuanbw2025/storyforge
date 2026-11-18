@@ -23,17 +23,17 @@ desktop-file-validate /usr/share/applications/storyforge.desktop
 test -x /usr/bin/storyforge
 test -f /usr/share/icons/hicolor/512x512/apps/storyforge.png
 # Chromium's sandbox stays enabled; the container permits its namespace setup.
-runuser -u storyforge -- dbus-run-session -- xvfb-run -a node scripts/desktop/smoke.mjs /usr/bin/storyforge
-runuser -u storyforge -- dbus-run-session -- xvfb-run -a node scripts/desktop/arch-lifecycle.mjs seed
+timeout 300 runuser -u storyforge -- dbus-run-session -- xvfb-run -a node scripts/desktop/smoke.mjs /usr/bin/storyforge
+timeout 300 runuser -u storyforge -- dbus-run-session -- xvfb-run -a node scripts/desktop/arch-lifecycle.mjs seed
 pacman -U --noconfirm "$package"
-runuser -u storyforge -- dbus-run-session -- xvfb-run -a node scripts/desktop/arch-lifecycle.mjs verify
+timeout 300 runuser -u storyforge -- dbus-run-session -- xvfb-run -a node scripts/desktop/arch-lifecycle.mjs verify
 pacman -R --noconfirm storyforge
 test ! -e /usr/bin/storyforge
 test ! -e /usr/share/applications/storyforge.desktop
 test ! -e /usr/share/icons/hicolor/512x512/apps/storyforge.png
 # Reinstall after removal and verify the same real production manuscript and OPFS.
 pacman -U --noconfirm "$package"
-runuser -u storyforge -- dbus-run-session -- xvfb-run -a node scripts/desktop/arch-lifecycle.mjs verify
+timeout 300 runuser -u storyforge -- dbus-run-session -- xvfb-run -a node scripts/desktop/arch-lifecycle.mjs verify
 pacman -Q > release/arch/test-environment.txt
 sha256sum "$package" > release/arch/package.sha256
 printf 'Arch pacman install, native launch, agreement, restart, reinstall, removal and data preservation passed.\n' > release/arch/test-result.txt
