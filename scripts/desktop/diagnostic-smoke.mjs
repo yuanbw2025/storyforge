@@ -1,5 +1,8 @@
 /* global window */
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { expect } from '@playwright/test'
 /** Synthetic profile only. Exercise the real renderer-crash event and IPC, then recover.
  * @param {import('@playwright/test').ElectronApplication} app
  * @param {import('@playwright/test').Page} page
@@ -8,10 +11,23 @@ export async function verifyDiagnosticContext(app, page, launch) {
   await page.goto('http://localhost:17831/storyforge/home/settings')
   const choice = page.getByLabel('附带最近操作轨迹（可选，默认关闭）')
   await choice.waitFor(); await choice.check()
-  await page.evaluate(async () => {
-    const client = /** @type {Window & {storyforgeClient?: {diagnosticContext?(v:unknown):Promise<void>}}} */ (window).storyforgeClient
-    if (!client?.diagnosticContext) throw new Error('Missing native diagnostic context')
-    await client.diagnosticContext({enabled:true,trail:[{at:new Date().toISOString(),area:'longform',action:'save',text:'PRIVATE-SYNTHETIC'}]})
+  // Use the installed operation collector: a direct IPC fixture can be replaced
+  // by a later real UI update. Button content must never enter the stored trail.
+  await page.evaluate(() => {
+    const button = window.document.createElement('button')
+    button.id = 'native-diagnostic-save-probe'
+    button.setAttribute('data-diagnostic-action', 'save')
+    button.textContent = 'PRIVATE-SYNTHETIC'
+    window.document.body.append(button)
+  })
+  await page.locator('#native-diagnostic-save-probe').click()
+  const directory = await app.evaluate(({app}) => app.getPath('userData'))
+  await expect.poll(async () => {
+    const state = JSON.parse(await readFile(join(directory, 'native-diagnostics.json'), 'utf8'))
+    assert.equal(JSON.stringify(state).includes('PRIVATE-SYNTHETIC'), false)
+    return state.context
+  }, { timeout: 10000, message: 'Real operation trail must reach native storage before the crash' }).toMatchObject({
+    enabled: true, trail: expect.arrayContaining([expect.objectContaining({action:'save'})]),
   })
   // Await the handle so the main-process listener is installed before the CDP
   // command can crash the renderer. The event may arrive before we read result.
