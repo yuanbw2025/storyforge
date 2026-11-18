@@ -2,6 +2,7 @@ import { DEFAULT_ATLAS_LAYERS, type AtlasLayers } from './layers'
 import { stamp } from './symbols'
 import { terrainWash } from './relief'
 import { atlasIslandInsideWater } from './inspect'
+import { atlasShorelinePoints } from './shoreline'
 import { seedRandom } from '../engine/random'
 import type { AtlasGeometry, Point } from './geometry'
 
@@ -28,23 +29,6 @@ function wash(c: Brush, x: number, y: number, r: number, color: string) {
   g.addColorStop(1, color.slice(0, 7) + '00')
   c.fillStyle = g
   c.fillRect(x - r, y - r, r * 2, r * 2)
-}
-// Add fine shoreline detail without moving the supplied vertices.
-function shoreline(points: Point[], rng: Random) {
-  const shore: Point[] = []
-  points.forEach(([x, y], i) => {
-    const [u, v] = points[(i + 1) % points.length],
-      dx = u - x,
-      dy = v - y
-    const d = Math.hypot(dx, dy),
-      n = Math.max(1, Math.ceil(d / 2.7))
-    for (let j = 0; j < n; j++) {
-      const t = j / n,
-        off = Math.sin(t * Math.PI) * (rng() - 0.5) * Math.min(5, d / 5)
-      shore.push([x + dx * t - (dy / (d || 1)) * off, y + dy * t + (dx / (d || 1)) * off])
-    }
-  })
-  return line(shore, true)
 }
 function watercourse(points: Point[], name: string) {
   const rng = seedRandom('river-' + name)
@@ -343,7 +327,7 @@ export function drawTerrain(
     const [u, v] = points[(i + 1) % points.length]
     return sum + x * v - u * y
   }, 0)
-  const shore = (points: Point[]) => shoreline(points, seedRandom(seed + ':shore:' + JSON.stringify(points)))
+  const shore = (points: Point[]) => line(atlasShorelinePoints(points, seed), true)
   if (layers.waterBodies) for (const f of features) if (f.kind === 'water') {
     const outline = shore(area(f.points) > 0 ? [...f.points].reverse() : f.points)
     waterEdges.addPath(outline)
