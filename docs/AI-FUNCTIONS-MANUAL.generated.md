@@ -394,7 +394,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `independent-creation-release-lifecycle` | `creationReleases` | `SHORT_NOVEL_RELEASE_V1 + SCREENPLAY_RELEASE_V1 + COMIC_RELEASE_V1 + MOTION_DRAMA_RELEASE_V1 + PROJECT_TABLES + completion gates + immutable hash` | `src/lib/short-novel/service.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/release.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-06 |
 | `chapter-delete-lifecycle` | `chapters` | `PROJECT_TABLES refs + WorkspaceScope + chapter deletion impact policy + SHORT_NOVEL_PRODUCTION_V1 + durable Harness + PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/chapters/lifecycle.ts`<br/>`src/lib/workspace/workspace-allocation.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts`<br/>`src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts`<br/>`src/lib/agent/run/narrative-annotation-durable.ts` | 2027-08-01 |
 | `chapter-emotion-delete-lifecycle` | `emotionBeatCards` | `PROJECT_TABLES chapter refs` | `src/lib/chapters/lifecycle.ts` | 2027-08-01 |
-| `product-production-roots` | `productProductions` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PRODUCT_PRODUCTION_ARTIFACT_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/artifact-store.ts`<br/>`src/lib/product-production/media-blob-store.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-production/scheduler.ts`<br/>`src/lib/avg/author-artifacts.ts` | 2027-08-21 |
+| `product-production-roots` | `productProductions` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PRODUCT_PRODUCTION_ARTIFACT_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/delete-draft.ts`<br/>`src/lib/product-production/artifact-store.ts`<br/>`src/lib/product-production/media-blob-store.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-production/scheduler.ts`<br/>`src/lib/avg/author-artifacts.ts` | 2027-08-21 |
 | `product-production-briefs` | `productProductionBriefs` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/adoption.ts` | 2027-08-21 |
 | `product-production-commands` | `productProductionCommands` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/adoption.ts` | 2027-08-21 |
 | `product-production-builds` | `productBuilds` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PRODUCT_PRODUCTION_ARTIFACT_POLICY + PRODUCT_QUALITY_GATE_RECEIPT_V1 + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/artifact-store.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-production/scheduler.ts`<br/>`src/lib/product-production/quality-receipts.ts`<br/>`src/lib/avg/author-artifacts.ts` | 2027-08-21 |
@@ -432,7 +432,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:660` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:576` |
-| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:190` |
+| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:194` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:945` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
@@ -591,4 +591,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `50a33e43c`
+生成时间基准:commit `8132a0e38`
