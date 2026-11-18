@@ -38,3 +38,29 @@
 
 .comic-app .lf-content>.cp-subnav{max-height:calc(100vh - 150px);overflow-y:auto;overscroll-behavior:contain}.cp-subnav small:empty{display:none}
 @media(max-width:700px){.comic-app .lf-content>.cp-subnav{max-height:260px}}
+
+/* Source rows must keep their content height inside the scrolling list. The
+   studio's generic inline-flex buttons otherwise shrink 203 rows to 36px. */
+.comic-app .cp-source { min-width: 0; }
+.comic-app .cp-source-layout { grid-template-columns: minmax(240px, 32%) minmax(0, 1fr); gap: 16px; align-items: start; }
+.comic-app .cp-source-layout > nav { min-width: 0; max-height: min(600px, 60vh); gap: 6px; overflow: auto; overscroll-behavior: contain; padding: 2px; }
+.comic-app .cp-source-layout > nav > button {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; justify-content: normal;
+  flex: 0 0 auto; width: 100%; height: auto; min-height: 44px; box-sizing: border-box;
+  gap: 10px; padding: 10px 12px; border-radius: 8px; font-size: 14px; line-height: 1.55;
+  font-weight: 400; text-align: left; white-space: normal; transform: none;
+}
+.comic-app .cp-source-unit-title { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comic-app .cp-source-layout .cp-source-unit-meta { display: grid; gap: 2px; margin: 0; font-size: 12px; line-height: 1.6; white-space: nowrap; text-align: right; }
+.comic-app .cp-source-layout > nav > button[aria-pressed=true] { background: var(--skin-selected, #dce7d2); border-color: var(--skin-accent, #286a5c); box-shadow: inset 3px 0 var(--skin-accent, #286a5c); }
+.comic-app .cp-source-layout > article { min-width: 0; border: 1px solid var(--skin-border, #d3dfcf); border-radius: 8px; padding: 12px; }
+.comic-app .cp-source-layout > article > pre { margin: 0; max-height: min(650px, 60vh); white-space: pre-wrap; overflow-wrap: anywhere; font: 16px/1.9 Georgia, 'Noto Serif SC', serif; }
+.comic-app .cp-source-layout > article > p { margin: 0; }
+@media (max-width: 900px) {
+  .comic-app .cp-source-layout { grid-template-columns: minmax(0, 1fr); }
+  .comic-app .cp-source-layout > nav { max-height: 240px; }
+}
+@media (max-width: 700px) {
+  .comic-app .cp-source { padding: 14px; border-radius: 16px; }
+  .comic-app .cp-source-layout > nav { max-height: 180px; }
+}
