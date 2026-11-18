@@ -38,7 +38,7 @@ export default function WorldMapPanel({ project }: Props) {
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const aiConfig = useAIConfigStore(state => state.config)
 
-  const atlasLab = import.meta.env.DEV && new URLSearchParams(window.location.search).has('atlas')
+  const atlasPreferred = new URLSearchParams(window.location.search).has('atlas')
   const [requestedView, setViewMode] = useState<ViewMode>('saved')
 
   // 当前活跃世界的 Voronoi 配置
@@ -49,7 +49,7 @@ export default function WorldMapPanel({ project }: Props) {
     try { return JSON.parse(configJSON) } catch { return undefined }
   }, [configJSON])
   const savedAtlas = Boolean(voronoiConfig?.atlasDraft || voronoiConfig?.atlasReference)
-  const viewMode = requestedView === 'saved' ? (atlasLab || savedAtlas ? 'atlas' : 'voronoi') : requestedView
+  const viewMode = requestedView === 'saved' ? (atlasPreferred || savedAtlas ? 'atlas' : 'voronoi') : requestedView
   const [scope, setScope] = useState<WorkspaceScope | null>(null)
   const [candidate, setCandidate] = useState<WorldMapConfigCandidateV1 | null>(null)
   const [runId, setRunId] = useState<number | null>(null)
@@ -131,7 +131,7 @@ export default function WorldMapPanel({ project }: Props) {
         worldGroupId: targetWorldGroupId,
         worldNodeId: targetWorldNodeId,
         aiConfig,
-        atlasDraft: (atlasLab || savedAtlas) && viewMode === 'atlas',
+        atlasDraft: viewMode === 'atlas',
       })
       if (isCurrentTarget(targetWorldNodeId, targetWorldGroupId)) {
         setCandidate(generated.candidate)
@@ -282,8 +282,8 @@ export default function WorldMapPanel({ project }: Props) {
             >
               <Globe className="w-3 h-3" /> 奇幻
             </button>
-            {(atlasLab || savedAtlas) && <button type="button" aria-pressed={viewMode === 'atlas'} onClick={() => setViewMode('atlas')}
-              className="px-2.5 py-1 text-xs rounded">绘本图集 · 实验</button>}
+            <button type="button" aria-pressed={viewMode === 'atlas'} onClick={() => setViewMode('atlas')}
+              className="px-2.5 py-1 text-xs rounded">绘本与绘画</button>
             <button
               type="button"
               disabled
@@ -337,7 +337,7 @@ export default function WorldMapPanel({ project }: Props) {
         <div className="mb-3 p-3 bg-accent/10 border border-accent/20 rounded-lg">
           <div className="text-xs text-amber-400 mb-1">地图候选尚未写入</div>
           <div className="text-sm text-text-primary mb-1">
-            {candidate.mapConfig.mapName} · {candidate.mapConfig.atlasDraft ? '实验图集 · 地理位置为模型推测' : (candidate.mapConfig.stateCount ?? 0) + ' 国 · ' + candidate.mapConfig.heightmapTemplate}
+            {candidate.mapConfig.mapName} · {candidate.mapConfig.atlasDraft ? '世界图集 · 地理位置为模型推测' : (candidate.mapConfig.stateCount ?? 0) + ' 国 · ' + candidate.mapConfig.heightmapTemplate}
           </div>
           <div className="text-xs text-text-muted mb-2">
             命名实体 {candidate.mapConfig.spatialEntities?.length ?? 0} 个，空间关系 {candidate.mapConfig.spatialRelations?.length ?? 0} 条。确认前主地图和正式数据保持不变。

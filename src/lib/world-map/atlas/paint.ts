@@ -275,6 +275,7 @@ export function drawTerrain(
   seed: string,
   sheet?: HTMLImageElement,
   layers: AtlasLayers = DEFAULT_ATLAS_LAYERS,
+  painted?: HTMLImageElement,
 ) {
   const canvas = document.createElement('canvas')
   const scale = Math.min(3, 4096 / Math.max(g.width, g.height))
@@ -288,10 +289,10 @@ export function drawTerrain(
     rng = seedRandom(seed)
   const realms = features.some((f) => f.kind === 'realm')
   const sea = c.createLinearGradient(0, 0, w, h)
-  sea.addColorStop(0, realms ? '#4d4a59' : '#638d90')
-  sea.addColorStop(0.38, realms ? '#77747c' : '#94b3a9')
-  sea.addColorStop(0.68, realms ? '#656773' : '#81a5a0')
-  sea.addColorStop(1, realms ? '#3f4653' : '#4f7f83')
+  sea.addColorStop(0, realms ? '#4d4a59' : painted ? '#063e49' : '#638d90')
+  sea.addColorStop(0.38, realms ? '#77747c' : painted ? '#12656a' : '#94b3a9')
+  sea.addColorStop(0.68, realms ? '#656773' : painted ? '#075563' : '#81a5a0')
+  sea.addColorStop(1, realms ? '#3f4653' : painted ? '#073a48' : '#4f7f83')
   c.fillStyle = sea
   c.fillRect(0, 0, w, h)
   for (let i = 0; i < 75; i++)
@@ -363,18 +364,28 @@ export function drawTerrain(
       ;(f.kind === 'realm' ? realmEdges : coast).addPath(outline)
     }
   if (layers.coastlines) {
-    ink(c, coast, '#cbd4b039', 20)
-    ink(c, coast, '#d7d9b775', 12)
-    ink(c, coast, '#72938c', 7)
-    ink(c, coast, '#dce1be', 5.8)
-    ink(c, coast, '#638583', 2.6)
+    // Keep shoreline ink on the water side of the union. Overlapping land
+    // polygons are one landmass, not artificial coastlines across its interior.
+    const shoreCanvas = document.createElement('canvas')
+    shoreCanvas.width = canvas.width; shoreCanvas.height = canvas.height
+    const sc = shoreCanvas.getContext('2d')!
+    sc.scale(scale, scale); sc.lineJoin = 'round'
+    ink(sc, coast, '#cbd4b039', 20)
+    ink(sc, coast, '#d7d9b775', 12)
+    ink(sc, coast, '#72938c', 7)
+    ink(sc, coast, '#dce1be', 5.8)
+    ink(sc, coast, '#638583', 2.6)
+    ink(sc, coast, '#645f48', 0.95)
+    sc.globalCompositeOperation = 'destination-out'
+    sc.fill(land, fillRule)
+    c.drawImage(shoreCanvas, 0, 0, w, h)
   }
   c.save()
   c.clip(land, fillRule)
   for (const outsideWater of outsideWaters) c.clip(outsideWater, 'nonzero')
   c.fillStyle = '#e3dcc0'
   c.fillRect(0, 0, w, h)
-  if (layers.terrain) c.drawImage(terrainWash(g, seed), 0, 0, w, h)
+  if (layers.terrain) c.drawImage(painted ?? terrainWash(g, seed), 0, 0, w, h)
   const glyphs: {
     x: number
     y: number
@@ -384,6 +395,7 @@ export function drawTerrain(
   }[] = []
   for (const f of features) {
     const k = f.kind
+    if (painted && layers.terrain && ['ridge', 'wood', 'desert', 'marsh'].includes(k)) continue
     if (
       (k === 'ridge' && !layers.mountains) ||
       (k === 'wood' && !layers.forests) ||
@@ -452,7 +464,7 @@ export function drawTerrain(
   }
   const grain = seedRandom(seed + 'grain')
   // Short pen strokes give a continuous paper surface across biome boundaries.
-  for (let i = 0; i < 15000; i++) {
+  for (let i = 0; i < (painted ? 0 : 15000); i++) {
     const x = grain() * w,
       y = grain() * h
     ink(
@@ -501,7 +513,6 @@ export function drawTerrain(
     ink(c, path, /桥/.test(f.name) ? '#8a897d' : '#976e4d', 0.85)
     c.setLineDash([])
   }
-  if (layers.coastlines) ink(c, coast, '#645f48', 0.95)
   if (layers.coastlines && layers.waterBodies) {
     ink(c, waterEdges, '#71938b', 5)
     ink(c, waterEdges, '#dce1be', 3.6)
@@ -598,6 +609,8 @@ export function drawLabels(
     sheet?: HTMLImageElement
     kmPerPixel?: number
     fullDetail?: boolean
+    screenScale?: number
+    textScale?: number
   } = {},
 ) {
   const layers = options.layers ?? DEFAULT_ATLAS_LAYERS
@@ -686,10 +699,12 @@ export function drawLabels(
     if (!options.fullDetail && ((f.rank === 2 && zoom < 1.65) ||
       (!city && !landmark && !area && !water && f.rank > 0 && zoom < 1.45)))
       continue
-    const size =
+    const nominalSize =
       (water ? 17 : area ? 13 : city ? (f.rank === 0 ? 11 : 9) : landmark ? 9 : 8) /
-      Math.pow(zoom, 0.65)
-    c.font = (city && f.rank === 0 ? '600 ' : '') + size + 'px ' + serif
+      Math.pow(zoom, 0.65) * (options.textScale ?? 1)
+    const minimumPixels = (area || water ? 16 : city ? 14 : 12) * (options.textScale ?? 1)
+    const size = Math.max(nominalSize, minimumPixels / (options.screenScale ?? Infinity))
+    c.font = (city || area ? '600 ' : '500 ') + size + 'px ' + serif
     const width = c.measureText(f.name).width
     const labelPositions =
       city || landmark
@@ -699,10 +714,10 @@ export function drawLabels(
             [-width / 2, -size * 0.65],
             [-width / 2, size * 1.4],
           ]
-        : [[-width / 2, 0]]
+        : [[-width / 2, 0], [-width / 2, size * 1.4], [-width / 2, -size * 1.4]]
     for (const [dx, dy] of labelPositions) {
-      const tx = x + dx,
-        ty = y + dy,
+      const tx = Math.max(10, Math.min(g.width - width - 10, x + dx)),
+        ty = Math.max(size + 10, Math.min(g.height - 12, y + dy)),
         box = { x: tx - 1.5, y: ty - size, w: width + 3, h: size + 2 }
       if (
         occupied.some(
@@ -714,10 +729,10 @@ export function drawLabels(
       occupied.push(box)
       labeledNames.add(f.name)
       c.lineJoin = 'round'
-      c.lineWidth = size * 0.21
-      c.strokeStyle = water ? '#bdd0bcba' : '#eee5c7e0'
+      c.lineWidth = size * 0.34
+      c.strokeStyle = '#fff4dfeF'
       c.strokeText(f.name, tx, ty)
-      c.fillStyle = water ? '#385f62' : area ? '#62543e' : city ? '#332f26' : '#536457'
+      c.fillStyle = water ? '#154555' : area ? '#3d3020' : city ? '#201c18' : '#263d36'
       c.fillText(f.name, tx, ty)
       break
     }

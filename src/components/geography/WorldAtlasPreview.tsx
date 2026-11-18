@@ -4,7 +4,7 @@ import {
   type AtlasLayers,
 } from '../../lib/world-map/atlas/layers'
 import { createPortal } from 'react-dom'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { generateMap, type MapGenConfig } from '../../lib/world-map/engine'
 import {
   geometryFromMap,
@@ -14,6 +14,9 @@ import {
 import { inspectCityPlacement } from '../../lib/world-map/atlas/inspect'
 import { loadAtlasSymbols, type AtlasSymbolStyle } from '../../lib/world-map/atlas/symbols'
 import { drawLabels, drawTerrain } from '../../lib/world-map/atlas/paint'
+import AtlasPaintControls from './AtlasPaintControls'
+
+type AtlasViewStyle = AtlasSymbolStyle | 'painted'
 
 interface Props {
   config: MapGenConfig
@@ -45,11 +48,18 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
   const [showLayers, setShowLayers] = useState(false)
   const reference = !auto && config.atlasReference
   const [sheet, setSheet] = useState<HTMLImageElement>()
-  const [symbolStyle, setSymbolStyle] = useState<AtlasSymbolStyle>(() => {
+  const [viewStyle, setViewStyle] = useState<AtlasViewStyle>(() => {
     let saved = new URLSearchParams(location.search).get('art')
     try { saved ||= localStorage.getItem('storyforge-atlas-art') } catch { /* View-only preference. */ }
-    return saved === 'ink' ? 'ink' : 'watercolor'
+    return saved === 'ink' || saved === 'painted' ? saved : 'watercolor'
   })
+  const symbolStyle = viewStyle === 'painted' ? 'watercolor' : viewStyle
+  const [painted, setPainted] = useState<HTMLImageElement>()
+  const handlePaintedChange = useCallback((image: HTMLImageElement | undefined) => {
+    setPainted(image)
+    if (image) setLayers(previous => ({ ...previous, terrain: true, mountains: true, forests: true, waterBodies: true }))
+  }, [])
+  const [textScale, setTextScale] = useState(1)
   useEffect(() => {
     let active = true
     setSheet(undefined)
@@ -78,8 +88,9 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
   }, [config, reference])
   const { geometry } = result
   const terrain = useMemo(
-    () => (geometry ? drawTerrain(geometry, config.seed || 'atlas', sheet, layers) : undefined),
-    [geometry, config.seed, sheet, layers],
+    () => (geometry ? drawTerrain(geometry, config.seed || 'atlas', sheet, layers,
+      viewStyle === 'painted' ? painted : undefined) : undefined),
+    [geometry, config.seed, sheet, layers, viewStyle, painted],
   )
   const kmPerPixel =
     config.kmPerPixel ??
@@ -186,8 +197,8 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
     c.rect(0, 0, geometry.width, geometry.height)
     c.clip()
     c.drawImage(terrain, 0, 0, geometry.width, geometry.height)
-    drawLabels(c, geometry, cam.zoom, !!sheet, { layers, sheet, kmPerPixel })
-  }, [geometry, terrain, revision, layers, sheet, expanded, kmPerPixel])
+    drawLabels(c, geometry, cam.zoom, !!sheet, { layers, sheet, kmPerPixel, screenScale: k, textScale })
+  }, [geometry, terrain, revision, layers, sheet, expanded, kmPerPixel, textScale])
   const exportMap = () => {
     if (!terrain || !geometry) return
     const out = document.createElement('canvas')
@@ -196,7 +207,7 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
     const c = out.getContext('2d')!
     c.drawImage(terrain, 0, 0)
     c.scale(out.width / geometry.width, out.height / geometry.height)
-    drawLabels(c, geometry, 1, !!sheet, { layers, sheet, kmPerPixel, fullDetail: true })
+    drawLabels(c, geometry, 1, !!sheet, { layers, sheet, kmPerPixel, fullDetail: true, screenScale: 1, textScale })
     out.toBlob((blob) => {
       if (!blob) return
       const url = URL.createObjectURL(blob),
@@ -222,14 +233,20 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
         <label className="flex items-center gap-2">
           <span>画风</span>
           <select aria-label="地图画风" className="bg-bg-base border border-border rounded px-2 py-1"
-            value={symbolStyle} onChange={(event) => {
-              const style = event.target.value as AtlasSymbolStyle
-              setSymbolStyle(style)
+            value={viewStyle} onChange={(event) => {
+              const style = event.target.value as AtlasViewStyle
+              setViewStyle(style)
               try { localStorage.setItem('storyforge-atlas-art', style) } catch { /* View-only preference. */ }
             }}>
             <option value="watercolor">水彩奇幻</option>
             <option value="ink">水墨山河</option>
+            <option value="painted">连续绘画</option>
           </select>
+        </label>
+        <label className="flex items-center gap-2">文字大小
+          <input aria-label="地图文字大小" type="range" min="1" max="1.8" step="0.1" value={textScale}
+            onChange={event => setTextScale(Number(event.target.value))} className="w-20" />
+          <output>{Math.round(textScale * 100)}%</output>
         </label>
         {config.atlasReference && (
           <button onClick={() => setAuto((v) => !v)}>
@@ -262,7 +279,8 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
               <legend className="sr-only">地图图层</legend>
               {(Object.entries(ATLAS_LAYER_LABELS) as [keyof AtlasLayers, string][]).map(
                 ([key, label]) => {
-                  const available =
+                  const baked = viewStyle === 'painted' && !!painted && ['terrain', 'mountains', 'forests', 'waterBodies'].includes(key)
+                  const available = !baked &&
                     hasLayer(key) &&
                     (key !== 'scaleBar' ||
                       (Boolean(kmPerPixel) && !geometry?.features.some((f) => f.kind === 'realm')))
@@ -270,14 +288,14 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
                     <label key={key} className="flex items-center gap-2 py-1.5">
                       <input
                         type="checkbox"
-                        checked={available && layers[key]}
+                        checked={baked || (available && layers[key])}
                         disabled={!available}
                         onChange={() => setLayers((prev) => ({ ...prev, [key]: !prev[key] }))}
                       />
                       <span>{label}</span>
                       {!available && (
                         <span className="ml-auto text-xs text-text-muted">
-                          {key === 'scaleBar' ? '未设定距离' : '无此类数据'}
+                          {baked ? '绘画底图内' : key === 'scaleBar' ? '未设定距离' : '无此类数据'}
                         </span>
                       )}
                     </label>
@@ -322,6 +340,8 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
           </label>
         )}
       </div>
+      {geometry && <div hidden={viewStyle !== 'painted'}><AtlasPaintControls geometry={geometry}
+        seed={config.seed || 'atlas'} sheet={sheet} onChange={handlePaintedChange} /></div>}
       {(error || result.error) && <p role="alert">{error || result.error}</p>}
       <canvas
         ref={viewport}

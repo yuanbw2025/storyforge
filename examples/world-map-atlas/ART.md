@@ -2,6 +2,8 @@
 
 原型使用内建 imagegen 工具生成透明水彩图集，转码为 WebP 后由 Canvas 读取网格区域。坐标、视角、文字及排布均由应用控制。默认符号与程序绘制降级路径共用地理几何。
 
+连续绘画可显式生成或导入当前地图的图片底图。产品使用的生成提示定义在 [paint-preview.ts](../../src/lib/world-map/atlas/paint-preview.ts) 的 `ATLAS_PAINT_PROMPT`；参考图由同一地图几何生成，去除程序河流、道路、边界与注记。模型不得生成文字，实际文字由地图组件叠加。返回图片须由作者核对，不能把模型的构图遵循程度当成确定性地理校验。绘画底图保存在作者显式导出的底图包中，不随世界语义保存。
+
 [实际使用的符号表](../../src/assets/world-map/watercolor-symbols.webp)
 
 水墨山河画风使用另一套原创透明符号：[素材](../../src/assets/world-map/ink-mountains-symbols.png)。同样由内建 imagegen 生成，保留原始透明通道，四列两行；地图画风选择只更换符号，不改变地理几何、图层或来源。城镇与关隘使用中式建筑，诸天分区和天壑由程序绘制。

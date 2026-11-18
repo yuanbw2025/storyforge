@@ -51,11 +51,12 @@ const reply = (body: string, finish_reason = 'stop') => new Response(JSON.string
   usage: { prompt_tokens: 31, completion_tokens: 17, total_tokens: 48 },
 }), { headers: { 'Content-Type': 'application/json' } })
 
-it('imports the exact long source with a configured custom-model context window', async () => {
+it('imports the exact long source with a discovered custom-model context window', async () => {
   const documentText = '北境有山川城池，原文必须逐字交付。\r\n'.repeat(2400)
   const f = await fixture('project', undefined, undefined, documentText)
   useAIConfigStore.getState().setConfig({ provider: 'custom', model: 'isolated-custom-model', contextWindow: 131_072 })
   const post = vi.fn(async (_url: unknown, init?: RequestInit) => {
+    if (String(_url).endsWith('/api/v1/models')) return new Response(JSON.stringify({ models: [{ key: 'isolated-custom-model', type: 'llm', loaded_instances: [{ config: { context_length: 131_072 } }] }] }))
     const request = JSON.parse(String(init?.body))
     expect(request.response_format).toEqual({ type: 'json_object' })
     expect(
@@ -67,7 +68,7 @@ it('imports the exact long source with a configured custom-model context window'
   })
   vi.stubGlobal('fetch', post)
   await createDocumentImportChunkCandidateV1(f.input)
-  expect(post).toHaveBeenCalledTimes(1)
+  expect(post.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
 })
 
 it('rejects an oversized source before dispatch when the configured window is small', async () => {
