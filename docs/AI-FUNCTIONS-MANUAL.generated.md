@@ -482,7 +482,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/story-core-copilot.ts:580 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:933 · chat`
-- `src/lib/character-interaction/harness.ts:894 · chat`
+- `src/lib/character-interaction/harness.ts:899 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:73 · chat`
 - `src/lib/character-interaction/situation-harness.ts:189 · chat`
 - `src/lib/comic/durable-production.ts:487 · chat`
@@ -591,4 +591,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `b5393352a`
+生成时间基准:commit `f236522d7`
