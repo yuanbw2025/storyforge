@@ -13,6 +13,8 @@ import { collectUnreferencedMediaBlobObjects } from '../../src/lib/product-produ
 import { deleteWork } from '../../src/lib/workspace/lifecycle'
 import { updateWorkCover } from '../../src/lib/workspace/works'
 import { normalizeProjectBackup } from '../../src/lib/export/backup-trust'
+import { assertWorkCoverPortableRowV1 } from '../../src/lib/work-cover/contracts'
+import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 
 installRasterDecoderForVitestV1()
 beforeEach(async () => { await db.delete(); await db.open() })
@@ -28,6 +30,24 @@ async function uploaded(name = '封面隔离样例') {
 }
 
 describe('035 Work cover identity/CAS/lifecycle', () => {
+  it('rejects generated image evidence without a source Run and upload rows carrying model candidates', async () => {
+    const { asset, draft } = await uploaded()
+    const preimage = {
+      schema: 'storyforge.work-cover.image-candidate@1', workCode: asset.workCode,
+      dispatchKey: crypto.randomUUID(), attempt: 1, ordinal: 0,
+      briefHash: draft.briefHash, routeHash: 'a'.repeat(64), assetKey: asset.assetKey,
+      blobHash: asset.blobHash, responseHash: 'b'.repeat(64), providerReceiptHash: 'c'.repeat(64),
+      rights: 'provider-terms-unverified',
+    }
+    const candidateJson = JSON.stringify({ ...preimage, candidateHash: await hashCanonicalValue(preimage) })
+    const generated = { ...asset, role: 'generated-original', rights: 'provider-terms-unverified', candidateJson }
+    expect(() => assertWorkCoverPortableRowV1('asset', generated)).toThrow()
+    expect(() => assertWorkCoverPortableRowV1('asset', { ...asset, candidateJson })).toThrow()
+    expect(() => assertWorkCoverPortableRowV1('asset', { ...asset, role: 'rendered-cover' })).toThrow()
+    const portable = { ...generated, _sourceRunExportId: 1 }
+    expect(() => assertWorkCoverPortableRowV1('asset', portable)).not.toThrow()
+  })
+
   it('v14→v15 adds only empty cover stores and preserves existing author bytes', async () => {
     const name = `cover-upgrade-${crypto.randomUUID()}`
     const old = new Dexie(name); old.version(14).stores(STORYFORGE_STORES_V14)
