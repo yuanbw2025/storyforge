@@ -79,7 +79,8 @@ export function assertWorkCoverPortableRowV1(kind: 'draft' | 'asset' | 'adoption
         || row.sourceRunId != null || row._sourceRunExportId != null) fail()
     } else if (row.role === 'generated-original') {
       if (row.rights !== 'provider-terms-unverified' || row.candidateJson === null) fail()
-      integer(row, row.sourceRunId != null ? 'sourceRunId' : '_sourceRunExportId', 1)
+      if (row.sourceRunId != null) integer(row, 'sourceRunId', 1)
+      else integer(row, '_sourceRunExportId') // Portable export coordinates start at zero.
     } else fail() // No derived rendering mode is implemented by the identity-only foundation.
     if (row.candidateJson !== null) {
       const candidate = parseWorkCoverImageCandidateV1(row.candidateJson as string)

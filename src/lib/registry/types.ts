@@ -459,6 +459,9 @@ export interface TableSpec<T = any> {
   portableData?: PortableDataSpec
   /** Confirmed owners pin exact evidence through their own registered lifecycle, independently of source Runs. */
   exactArtifactRoots?: readonly ExactArtifactRootSpecV1[]
+  /** A registered exact-evidence owner also needs the source Run entity until
+   * its own lifecycle releases this indexed FK; single/tree Run deletion stops. */
+  sourceRunRetention?: { field: string }
   /** Product-neutral stable reference to a governed binary object table, used by shared GC. */
   mediaRef?: { blobTable: string; field: string }
   /**

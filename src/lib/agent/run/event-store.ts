@@ -35,7 +35,7 @@ import {
   hashMemoryArtifactIndexV1,
 } from '../../memory/settlement-core'
 import { pruneUnreferencedAgentRunArtifactsInCurrentTransactionV1 } from '../../memory/artifact-retention-store'
-import { exactArtifactOwnerTablesV1 } from '../../memory/artifact-root-registry'
+import { assertRegisteredSourceRunsUnreferencedV1, exactArtifactOwnerTablesV1 } from '../../memory/artifact-root-registry'
 import { readAgentRunNodeProducerTupleV1, readHash } from './schema-utils'
 
 export class AgentRunStoreError extends Error {
@@ -1184,6 +1184,7 @@ export async function deleteAgentRunV1(
         const children = await db.agentRuns.where('parentRunId').equals(current).primaryKeys()
         pending.push(...children.filter((id): id is number => typeof id === 'number'))
       }
+      await assertRegisteredSourceRunsUnreferencedV1(runIds)
       await db.agentRunEvents.where('runId').anyOf(runIds).delete()
       await db.agentRunCheckpoints.where('runId').anyOf(runIds).delete()
       await db.agentEvents
