@@ -69,7 +69,7 @@ export default function AIConfigPresetSection({
       </div>
 
       {presets.length === 0 ? (
-        <p className="text-xs text-text-muted">还没有预设。配好一套 API 后点「保存当前为预设」，之后可一键切换。</p>
+        <p className="text-[13px] text-text-muted">还没有预设。配好一套 API 后点「保存当前为预设」，之后可一键切换。</p>
       ) : (
         <div className="flex items-center gap-1.5 flex-wrap">
           {presets.map(preset => (

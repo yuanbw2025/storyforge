@@ -1,3 +1,4 @@
+import './ai-task-routing.css'
 import type { AIConfigPreset } from '../../lib/types'
 import {
   AGENT_ROLE_TASK_KINDS,
@@ -73,19 +74,19 @@ export default function AITaskRoutingSection({
   onSetCreativeQualityMode,
 }: Props) {
   const renderRoutes = (taskKinds: readonly AITaskKind[]) => (
-    <div className="grid gap-2 sm:grid-cols-2">
+    <div className={`ai-routing-grid ${taskKinds === GENERAL_AI_TASK_KINDS ? 'ai-routing-general' : 'ai-routing-roles'}`}>
       {taskKinds.map(taskKind => {
         const selectedPreset = presets.find(preset => preset.id === routes[taskKind])
         const routeMeta = TASK_ROUTE_META[taskKind]
         const contextTask = isContextTaskKind(taskKind)
         return (
-          <label key={taskKind} className="block rounded border border-border bg-bg-base p-2.5">
-            <span className="block text-xs font-medium text-text-primary">{routeMeta.label}</span>
-            <span className="mb-2 block min-h-8 text-[11px] leading-4 text-text-muted">{routeMeta.description}</span>
+          <label key={taskKind} className="ai-route-card rounded border border-border bg-bg-base p-2.5">
+            <span className="block text-sm font-medium text-text-primary">{routeMeta.label}</span>
+            <span className="block text-[13px] leading-4 text-text-muted">{routeMeta.description}</span>
             <select value={selectedPreset?.id ?? ''}
               onChange={event => onSetRoute(taskKind, event.target.value || null)}
               aria-label={`${routeMeta.label}模型预设`}
-              className="w-full rounded border border-border bg-bg-surface px-2 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none">
+              className="ai-route-select w-full rounded border border-border bg-bg-surface px-2 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none">
               <option value="">使用当前全局模型</option>
               {presets.map(preset => (
                 <option key={preset.id} value={preset.id}>{preset.name} · {preset.config.provider}/{preset.config.model}</option>
@@ -93,12 +94,12 @@ export default function AITaskRoutingSection({
             </select>
             {contextTask && (
               <>
-                <span className="mb-1 mt-2 block text-[10px] text-text-muted">上下文输入档位</span>
+                <span className="mb-1 mt-2 block text-xs text-text-muted">上下文输入档位</span>
                 <select
                   value={contextProfiles[taskKind]}
                   onChange={event => onSetContextProfile(taskKind, event.target.value as AgentContextProfile)}
                   aria-label={`${routeMeta.label}上下文输入档位`}
-                  className="w-full rounded border border-border bg-bg-surface px-2 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"
+                  className="ai-route-select w-full rounded border border-border bg-bg-surface px-2 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"
                 >
                   {(Object.entries(CONTEXT_PROFILE_META) as Array<[AgentContextProfile, typeof CONTEXT_PROFILE_META[AgentContextProfile]]>)
                     .map(([profile, meta]) => (
@@ -114,58 +115,60 @@ export default function AITaskRoutingSection({
   )
 
   return (
-    <div className="mb-4 border-b border-border/50 pb-4">
+    <div className="ai-task-routing mb-4 border-b border-border/50 pb-4">
       <div className="mb-2">
         <h4 className="text-sm font-medium text-text-secondary">任务模型路由</h4>
-        <p className="mt-1 text-[11px] text-text-muted">
+        <p className="mt-1 text-[13px] text-text-muted">
           按任务自动使用已保存预设；未绑定、预设被删除或专用预设缺少 API Key 时，回退到当前全局模型。Codex 预设无需 Key；其登录或连接失败会停止，不会回退到付费 API。云端预设会接收对应任务的提示词与上下文。
         </p>
       </div>
       {renderRoutes(GENERAL_AI_TASK_KINDS)}
       <div className="mb-2 mt-4">
-        <h5 className="text-xs font-medium text-text-secondary">主 Agent 团队角色</h5>
-        <p className="mt-1 text-[11px] text-text-muted">
+        <h5 className="text-sm font-medium text-text-secondary">主 Agent 团队角色</h5>
+        <p className="mt-1 text-[13px] text-text-muted">
           只影响主 Agent 幕后执行；手工面板仍使用上方四类路由。未绑定的角色沿用当前全局模型。
           五个领域还可独立收窄登记源预算；“完整”保持原上下文上限。
         </p>
       </div>
-      <label className="mb-2 block rounded border border-border bg-bg-base p-2.5">
-        <span className="block text-xs font-medium text-text-primary">创作结果模式</span>
-        <span className="mt-0.5 block text-[10px] text-text-muted">
-          控制单个创作产物的自动调用；任何模式都禁止隐藏第三次调用和自动切换服务商。
-        </span>
-        <select
-          value={creativeQualityMode}
-          onChange={event => onSetCreativeQualityMode(event.target.value as CreativeQualityModeV1)}
-          aria-label="创作结果模式"
-          className="mt-2 w-full rounded border border-border bg-bg-surface px-2 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"
-        >
-          {(Object.entries(CREATIVE_QUALITY_META) as Array<[CreativeQualityModeV1, typeof CREATIVE_QUALITY_META[CreativeQualityModeV1]]>)
-            .map(([mode, meta]) => (
-              <option key={mode} value={mode}>{meta.label} · {meta.description}</option>
-            ))}
-        </select>
-      </label>
-      <label className="mb-2 block rounded border border-border bg-bg-base p-2.5">
-        <span className="block text-xs font-medium text-text-primary">本轮团队总预算</span>
-        <span className="mt-0.5 block text-[10px] text-text-muted">
-          覆盖主 Agent、领域生成和一次受控 Canon 打回；达到上限会在下一次调用前停止。
-        </span>
-        <select
-          value={teamBudgetProfile}
-          onChange={event => onSetTeamBudgetProfile(event.target.value as AgentTeamBudgetProfile)}
-          aria-label="主 Agent 团队总预算"
-          className="mt-2 w-full rounded border border-border bg-bg-surface px-2 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"
-        >
-          {(Object.entries(TEAM_BUDGET_META) as Array<[AgentTeamBudgetProfile, typeof TEAM_BUDGET_META[AgentTeamBudgetProfile]]>)
-            .map(([profile, meta]) => (
-              <option key={profile} value={profile}>{meta.label} · {meta.description}</option>
-            ))}
-        </select>
-      </label>
+      <div className="ai-team-controls">
+        <label className="ai-route-card rounded border border-border bg-bg-base p-2.5">
+          <span className="block text-sm font-medium text-text-primary">创作结果模式</span>
+          <span className="mt-0.5 block text-xs text-text-muted">
+            控制单个创作产物的自动调用；任何模式都禁止隐藏第三次调用和自动切换服务商。
+          </span>
+          <select
+            value={creativeQualityMode}
+            onChange={event => onSetCreativeQualityMode(event.target.value as CreativeQualityModeV1)}
+            aria-label="创作结果模式"
+            className="ai-route-select mt-2 w-full rounded border border-border bg-bg-surface px-2 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"
+          >
+            {(Object.entries(CREATIVE_QUALITY_META) as Array<[CreativeQualityModeV1, typeof CREATIVE_QUALITY_META[CreativeQualityModeV1]]>)
+              .map(([mode, meta]) => (
+                <option key={mode} value={mode}>{meta.label} · {meta.description}</option>
+              ))}
+          </select>
+        </label>
+        <label className="ai-route-card rounded border border-border bg-bg-base p-2.5">
+          <span className="block text-sm font-medium text-text-primary">本轮团队总预算</span>
+          <span className="mt-0.5 block text-xs text-text-muted">
+            覆盖主 Agent、领域生成和一次受控 Canon 打回；达到上限会在下一次调用前停止。
+          </span>
+          <select
+            value={teamBudgetProfile}
+            onChange={event => onSetTeamBudgetProfile(event.target.value as AgentTeamBudgetProfile)}
+            aria-label="主 Agent 团队总预算"
+            className="ai-route-select mt-2 w-full rounded border border-border bg-bg-surface px-2 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"
+          >
+            {(Object.entries(TEAM_BUDGET_META) as Array<[AgentTeamBudgetProfile, typeof TEAM_BUDGET_META[AgentTeamBudgetProfile]]>)
+              .map(([profile, meta]) => (
+                <option key={profile} value={profile}>{meta.label} · {meta.description}</option>
+              ))}
+          </select>
+        </label>
+      </div>
       {renderRoutes(AGENT_ROLE_TASK_KINDS)}
       {presets.length === 0 && (
-        <p className="mt-2 text-[11px] text-amber-400">先保存至少一个配置预设，才能给任务绑定专用模型。</p>
+        <p className="mt-2 text-[13px] text-amber-400">先保存至少一个配置预设，才能给任务绑定专用模型。</p>
       )}
     </div>
   )

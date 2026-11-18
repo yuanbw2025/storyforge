@@ -219,7 +219,7 @@ function AIConfigPanelFull() {
       {/* AI 配置 */}
       <div className="bg-bg-surface border border-border rounded-xl p-5 mb-6">
         <h3 className="text-base font-semibold text-text-primary mb-4">AI 模型配置</h3>
-        <p className="text-[11px] text-text-muted mb-4 rounded-lg border border-border bg-bg-base px-3 py-2">
+        <p className="text-xs text-text-muted mb-4 rounded-lg border border-border bg-bg-base px-3 py-2">
           API Key 默认仅保存在本次浏览器会话；勾选“记住在本机”才会写入 localStorage。发起 AI 生成、测试连接或使用自定义 baseUrl 时，相关提示词和上下文会发送到你配置的模型服务。
         </p>
 
@@ -294,7 +294,7 @@ function AIConfigPanelFull() {
             {hasUnmatchedSessionCredentialV1('chat') && (
               <p className="mt-2 text-xs text-text-secondary" role="status">临时 API Key 未能与当前配置匹配。请确认服务地址后重新填写；使用预设时，再保存修改到该预设。</p>
             )}
-            <label className="mt-2 flex items-start gap-2 text-[11px] text-text-secondary cursor-pointer">
+            <label className="mt-2 flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
               <input
                 type="checkbox"
                 checked={rememberApiKey}
@@ -333,7 +333,7 @@ function AIConfigPanelFull() {
                 </div>
               )}
               {['custom', 'ollama'].includes(config.provider) && (
-                <p className="mt-1 text-[11px] text-text-muted">
+                <p className="mt-1 text-xs text-text-muted">
                   本地模型请选择 OpenAI 兼容接口，Base URL 填到 /v1；Ollama 常用 :11434/v1，LM Studio 常用 :1234/v1。不要填 /v1/models 或 /chat/completions，测试时会自动修正常见误填。
                 </p>
               )}
@@ -443,7 +443,7 @@ function AIConfigPanelFull() {
                   className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
                 />
               )}
-              {modelListError && <p className="mt-1 text-[11px] text-amber-400">{modelListError}</p>}
+              {modelListError && <p className="mt-1 text-xs text-amber-400">{modelListError}</p>}
               {modelRetirement && (
                 <p role="alert" className="mt-2 rounded border border-border bg-bg-elevated p-2 text-xs text-text-secondary">
                   该型号在官方 API 已于 {modelRetirement.retiredOn} 下线。当前配置已保留，请手动选择可用型号后测试连接。{' '}
@@ -451,7 +451,7 @@ function AIConfigPanelFull() {
                 </p>
               )}
               {config.provider === 'ollama' && (
-                <p className="mt-1 text-[11px] text-text-muted">未安装的模型请先在 Ollama 中拉取，完成后回到这里刷新。</p>
+                <p className="mt-1 text-xs text-text-muted">未安装的模型请先在 Ollama 中拉取，完成后回到这里刷新。</p>
               )}
             </div>
           </div>
@@ -544,16 +544,16 @@ function AIConfigPanelFull() {
               </button>
             </div>
             {contextWindowError ? (
-              <p className="mt-1 text-[11px] text-red-400">{contextWindowError}；已保存值未改变。</p>
+              <p className="mt-1 text-xs text-red-400">{contextWindowError}；已保存值未改变。</p>
             ) : (
-              <p className="mt-1 flex items-center gap-1 text-[11px] text-green-400/80">
+              <p className="mt-1 flex items-center gap-1 text-xs text-green-400/80">
                 <CheckCircle className="w-3 h-3" />
                 {editingPreset && activePresetId === null
                   ? `已自动保存到当前配置，尚未写回「${editingPreset.name}」`
                   : '已自动保存到当前配置'}
               </p>
             )}
-            <p className="text-[11px] text-text-muted mt-1">
+            <p className="text-xs text-text-muted mt-1">
               识别不到的模型默认按 8K 计算,会误报「上下文超出窗口」。本地模型(LM Studio / Ollama)请在此填真实窗口,如 128000 / 262144。
             </p>
           </div>
