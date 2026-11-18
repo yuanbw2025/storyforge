@@ -107,6 +107,12 @@ export async function adopt(input: AdoptInput, owner?: CallerOwnedAdoptionV1): P
   if (owner && (!CALLER_OWNED_ADOPTION_TARGETS_V1.has(input.target) || input.narrativeCandidate || input.compareAndSet ||
     ADOPTION_BY_TARGET.get(input.target)?.writePolicy))
     throw new Error('[adopt] 当前采纳策略未开放调用方事务模式。')
+  if (input.workCoverAdoption) {
+    if (owner || input.target !== 'works' || input.recordId == null || input.mode !== 'replace' || input.narrativeCandidate || input.compareAndSet || Object.keys(input.data).length) throw new Error('[adopt] 封面只能采用已冻结的指定候选')
+    const policy = await import('../work-cover/adoption')
+    return policy.commitWorkCoverAdoptionV1(input)
+  }
+  if (input.target === 'works' && (Array.isArray(input.data) ? input.data : [input.data]).some(payload => Object.prototype.hasOwnProperty.call(payload, 'coverImage'))) throw new Error('[adopt] 封面须经过 work-cover-v1 候选确认与 CAS')
   const result = emptyResult()
   const fieldSpecs = FIELD_BY_TARGET.get(input.target) ?? []
   if (!fieldSpecs.length) {

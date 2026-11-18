@@ -1,3 +1,4 @@
+import { assertWorkCoverPortableRowV1 } from '../work-cover/contracts'
 /**
  * PROJECT_TABLES 注册表·单一事实源
  *
@@ -75,6 +76,58 @@ type ProjectTableRegistration = Omit<TableSpec, 'memoryClassification'> & {
 }
 
 const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
+  { table: db.workCoverAssets, name: 'workCoverAssets',
+    owner: 'project', domainOwner: WORK_DOMAIN_OWNER, exportable: true, exportIdField: true, introducedBackupVersion: 19,
+    validateImportRow: row => assertWorkCoverPortableRowV1('asset', row),
+    mediaRef: { blobTable: 'mediaBlobObjects', field: 'blobObjectId' },
+    exactArtifactRoots: [{ field: 'exactArtifactRefsJson', path: [] }],
+    refs: [
+      { kind: 'simple', field: 'id', target: 'workCoverDrafts[selectedAssetId]', onDelete: 'setNull' },
+      { kind: 'simple', field: 'id', target: 'workCoverDrafts[adoptedAssetId]', onDelete: 'setNull' },
+      { kind: 'simple', field: 'id', target: 'workCoverAssets[parentAssetId]', onDelete: 'keep' },
+      { kind: 'simple', field: 'id', target: 'workCoverAdoptions[originalAssetId]', onDelete: 'keep' },
+      { kind: 'simple', field: 'id', target: 'workCoverAdoptions[finalAssetId]', onDelete: 'keep' },
+      { kind: 'simple', field: 'id', target: 'workCoverResponseBuffers[assetId]', onDelete: 'setNull' },
+    ],
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require', requiredOnImport: true },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require', requiredOnImport: true },
+      { field: 'blobObjectId', remapVia: 'mediaBlobObjects', exportAs: '_blobObjectExportId', onUnmapped: 'require', sameWorkOnImport: true, requiredOnImport: true },
+      { field: 'sourceRunId', remapVia: 'agentRuns', exportAs: '_sourceRunExportId', onUnmapped: 'require', sameWorkOnImport: true },
+      { field: 'parentAssetId', remapVia: 'workCoverAssets', exportAs: '_parentAssetExportId', onUnmapped: 'require', sameWorkOnImport: true, deferImport: true },
+    ], note: 'Work封面不可变原图/成品；仅引用共享Blob，不进入世界引擎' },
+  { table: db.workCoverDrafts, name: 'workCoverDrafts',
+    owner: 'project', domainOwner: WORK_DOMAIN_OWNER, exportable: true, exportIdField: true, introducedBackupVersion: 19,
+    validateImportRow: row => assertWorkCoverPortableRowV1('draft', row),
+    portableData: { kind: 'work-cover-draft' },
+    exportRefRemap: [{ kind: 'json-id-paths', field: 'briefJson', remapVia: 'chapters', paths: ['selectedText.chapterId'], exportAs: '_selectedChapterRefs', onUnmapped: 'require-if-present' }],
+    refs: [
+      { kind: 'simple', field: 'id', target: 'workCoverAdoptions[draftId]', onDelete: 'keep' },
+      { kind: 'simple', field: 'id', target: 'workCoverResponseBuffers[draftId]', onDelete: 'cascade' },
+    ],
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require', requiredOnImport: true },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require', requiredOnImport: true },
+      { field: 'selectedAssetId', remapVia: 'workCoverAssets', exportAs: '_selectedAssetExportId', onUnmapped: 'require', sameWorkOnImport: true, deferImport: true },
+      { field: 'adoptedAssetId', remapVia: 'workCoverAssets', exportAs: '_adoptedAssetExportId', onUnmapped: 'require', sameWorkOnImport: true, deferImport: true },
+      { field: 'lastRunId', remapVia: 'agentRuns', exportAs: '_lastRunExportId', onUnmapped: 'require', sameWorkOnImport: true },
+    ], note: '一个长篇Work一个封面草稿，revision/CAS；首期无文字层' },
+  { table: db.workCoverAdoptions, name: 'workCoverAdoptions',
+    owner: 'project', domainOwner: WORK_DOMAIN_OWNER, exportable: true, exportIdField: true, introducedBackupVersion: 19,
+    validateImportRow: row => assertWorkCoverPortableRowV1('adoption', row),
+    exactArtifactRoots: [{ field: 'exactArtifactRefsJson', path: [] }],
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require', requiredOnImport: true },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require', requiredOnImport: true },
+      { field: 'draftId', remapVia: 'workCoverDrafts', exportAs: '_draftExportId', onUnmapped: 'require', sameWorkOnImport: true, requiredOnImport: true },
+      { field: 'originalAssetId', remapVia: 'workCoverAssets', exportAs: '_originalAssetExportId', onUnmapped: 'require', sameWorkOnImport: true, requiredOnImport: true },
+      { field: 'finalAssetId', remapVia: 'workCoverAssets', exportAs: '_finalAssetExportId', onUnmapped: 'require', sameWorkOnImport: true, requiredOnImport: true },
+      { field: 'sourceRunId', remapVia: 'agentRuns', exportAs: '_sourceRunExportId', onUnmapped: 'require', sameWorkOnImport: true },
+    ], note: '明确采用的原子幂等回执；不自动清除旧封面证据' },
+  { table: db.workCoverResponseBuffers, name: 'workCoverResponseBuffers',
+    owner: 'project', domainOwner: WORK_DOMAIN_OWNER, exportable: false,
+    note: '本机一次派发日志与有界响应缓冲；导入不携带发送授权' },
+
   { table: db.extensionPackages, name: 'extensionPackages', owner: 'global', exportable: false, note: '本机插件字节，不随作品备份执行或传递' },
 
   { table: db.extensionProfiles, name: 'extensionProfiles', owner: 'project', exportable: true, exportIdField: true, introducedBackupVersion: 15,
@@ -159,6 +212,11 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     },
     refs: [
       { kind: 'simple', field: 'id', target: 'extensionProfiles[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'workCoverDrafts[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'workCoverAssets[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'workCoverAdoptions[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'workCoverResponseBuffers[workId]', onDelete: 'cascade' },
+
       { kind: 'simple', field: 'id', target: 'extensionRecords[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'extensionContracts[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'extensionOperations[workId]', onDelete: 'cascade' },
@@ -608,6 +666,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
     refs: [
       { kind: 'simple', field: 'id', target: 'comicMediaAssets[blobObjectId]', onDelete: 'keep' },
+      { kind: 'simple', field: 'id', target: 'workCoverAssets[blobObjectId]', onDelete: 'keep' },
       { kind: 'simple', field: 'id', target: 'creationReleaseAssets[blobObjectId]', onDelete: 'keep' },
       { kind: 'simple', field: 'id', target: 'productBuildArtifacts[blobObjectId]', onDelete: 'keep' },
       { kind: 'simple', field: 'id', target: 'productMediaBlobs[blobObjectId]', onDelete: 'keep' },
@@ -1270,6 +1329,11 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'storyArcs[producerRunId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'codexEntries[producerRunId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'workspaceDocuments[lastSyncRunId]', onDelete: 'setNull' },
+      { kind: 'simple', field: 'id', target: 'workCoverDrafts[lastRunId]', onDelete: 'setNull' },
+      { kind: 'simple', field: 'id', target: 'workCoverAssets[sourceRunId]', onDelete: 'setNull' },
+      { kind: 'simple', field: 'id', target: 'workCoverAdoptions[sourceRunId]', onDelete: 'setNull' },
+      { kind: 'simple', field: 'id', target: 'workCoverResponseBuffers[runId]', onDelete: 'cascade' },
+
     ],
     exportRemap: [
       { field: 'parentRunId', remapVia: 'agentRuns', selfTree: true, exportAs: '_parentExportId' },

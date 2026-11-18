@@ -576,6 +576,9 @@ async function portableizeSnapshot(snapshot: CapturedProjectExportSnapshot, opti
       .map(spec => [spec.name, (Array.isArray(portable[spec.name]) ? portable[spec.name] : []) as Record<string, unknown>[]])), 'portable')
   }
   for (const spec of PROJECT_TABLES) {
+    if (spec.portableData?.kind === 'work-cover-draft') {
+      for (const row of (portable[spec.name] ?? []) as Array<Record<string, unknown>>) row.pendingAdoptionJson = null
+    }
     if (spec.portableData?.kind === 'exact-run-artifact') {
       const rows = portable[spec.name]
       if (!Array.isArray(rows)) continue
@@ -642,6 +645,7 @@ async function portableizeSnapshot(snapshot: CapturedProjectExportSnapshot, opti
       row[dataField] = `data:${mimeType};base64,${btoa(binary)}`
     }
   }
+  await (await import('../work-cover/backup')).assertWorkCoverBackupV1(portable)
   return snapshot
 }
 

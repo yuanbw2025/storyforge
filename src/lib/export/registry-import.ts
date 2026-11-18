@@ -962,6 +962,7 @@ async function validateCurrentBackup(data: Record<string, unknown>): Promise<voi
     await verifyPortableProductBuildRootBudgetEvidenceV1(value as unknown as ProjectExportData)
   }
   await validateIndependentCreationBackup(value)
+  await (await import('../work-cover/backup')).assertWorkCoverBackupV1(value)
   for (const spec of PROJECT_TABLES) {
     if (!spec.exportable || spec.name === 'projects' || spec.name === 'worlds' || spec.name === 'works') continue
     const rows = value[spec.name]
@@ -1795,6 +1796,7 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
         }
 
         if (spec.owner === 'project') obj.projectId = newProjectId
+        if (spec.portableData?.kind === 'work-cover-draft') obj.pendingAdoptionJson = null
         if (spec.portableData?.kind === 'world-revision-origin') {
           const origin = revisionOrigins.get(exportId)
           if (origin) obj.publicationOrigin = origin
@@ -2008,6 +2010,11 @@ export async function deriveImportProjectJSON(input: unknown, options: ProjectIm
     }
 
     if (finalizeInTransaction) await Dexie.Promise.resolve(finalizeInTransaction(newProjectId))
+    for (const spec of PROJECT_TABLES.filter(spec => spec.portableData?.kind === 'work-cover-draft')) {
+      for (const row of await spec.table.where('projectId').equals(newProjectId).toArray()) {
+        await spec.table.update(row.id, { briefHash: await Dexie.waitFor(hashCanonicalValue(JSON.parse(row.briefJson))) })
+      }
+    }
     return newProjectId
   })
   return importedProjectId

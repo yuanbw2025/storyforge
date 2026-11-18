@@ -183,6 +183,7 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   text('worlds', 'name'),
   longtext('worlds', 'description'),
 
+  { target: 'works', field: 'coverImage', type: 'string', candidateId: 'work-cover.final-image.v1', adoptionPolicy: 'work-cover-v1' },
   text('works', 'title'),
   longtext('works', 'description'),
   arr('works', 'genres'),

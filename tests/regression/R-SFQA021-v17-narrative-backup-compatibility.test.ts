@@ -158,7 +158,7 @@ it.each([14, 15, 16, 17])('v%i refuses the v18-only receipt table even when it i
 
 it('a future backup version is rejected before writing', async () => {
   const fixture = await seedConfirmedNarrativeDomainV1()
-  const bad = versionedBackup(await exportProjectJSON(fixture.scope.projectId), 19)
+  const bad = versionedBackup(await exportProjectJSON(fixture.scope.projectId), 20)
   const before = await counts()
   expect(inspectProjectBackup(bad).valid).toBe(false)
   await expect(importProjectJSON(bad)).rejects.toThrow(/备份预检失败/)
