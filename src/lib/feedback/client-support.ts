@@ -1,6 +1,7 @@
 import { APP_BUILD_ID } from '../version'
 import { safeFailureBuild, parseFailureEvent, type FailureEvent } from '../diagnostics/failure-summary'
 import { diagnosticDetailsSupported, diagnosticWireError } from './diagnostic-wire'
+import type { FeedbackImage } from './attachments'
 
 export const CLIENT_SUPPORT_URL = 'https://storyforge-lab.com/v1/client-support'
 export interface ClientMetadata {
@@ -18,6 +19,18 @@ export interface ClientFeedback {
   expected: string
   client: ClientMetadata
   diagnostics?: FailureEvent[]
+  details?: {
+    module: string
+    browser: string
+    actual: string
+    model: string
+    requestType: string
+    workflow: string
+    workaround: string
+    references: string
+    extra: string
+  }
+  attachments?: FeedbackImage[]
 }
 export function clientMetadata(): ClientMetadata {
   const ua = navigator.userAgent
@@ -34,10 +47,18 @@ export function feedbackDiagnostics(rows: FailureEvent[]): FailureEvent[] {
 export async function submitClientFeedback(body: ClientFeedback): Promise<string> {
   let wire = feedbackWires.get(body)
   if (!wire) {
-    wire = diagnosticDetailsSupported(CLIENT_SUPPORT_URL).then(extended => ({ ...body, ...(body.diagnostics ? { diagnostics: body.diagnostics.map(row => diagnosticWireError(row, extended)) } : {}) }))
+    wire = (async () => {
+      if (body.details || body.attachments?.length) {
+        const response = await fetch(CLIENT_SUPPORT_URL + '/capabilities', { credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error', signal: AbortSignal.timeout(2000) })
+        const capabilities = response.ok ? await response.json() as { feedbackForm?: number; feedbackImages?: number } : null
+        if (capabilities?.feedbackForm !== 2 || (body.attachments?.length && capabilities.feedbackImages !== 1)) throw new Error('反馈服务尚未支持完整表单或截图，草稿已保留。请稍后重试。')
+      }
+      const extended = await diagnosticDetailsSupported(CLIENT_SUPPORT_URL)
+      return { ...body, ...(body.diagnostics ? { diagnostics: body.diagnostics.map(row => diagnosticWireError(row, extended)) } : {}) }
+    })()
     feedbackWires.set(body, wire)
   }
-  const negotiated = await wire
+  const negotiated = await wire.catch(error => { feedbackWires.delete(body); throw error })
   const prepared = { ...negotiated, ...(negotiated.diagnostics ? { diagnostics: negotiated.diagnostics.map(row => diagnosticWireError(row, true)) } : {}) }
   // Manual reports are sent once per click. An unknown outcome retains the same id on retry.
   const response = await fetch(CLIENT_SUPPORT_URL + '/feedback', {
@@ -46,7 +67,8 @@ export async function submitClientFeedback(body: ClientFeedback): Promise<string
   })
   const result: unknown = await response.json().catch(() => null)
   if (response.ok && result && typeof result === 'object' && 'accepted' in result && result.accepted === true
-    && 'id' in result && result.id === body.id) return body.id
+    && 'id' in result && result.id === body.id
+    && (!body.attachments?.length || ('attachmentCount' in result && result.attachmentCount === body.attachments.length))) return body.id
   const code = result && typeof result === 'object' && 'error' in result ? result.error : ''
   if (code === 'REMOVE_CREDENTIALS') throw new Error('内容中可能包含密钥，请删除凭证后重新提交。')
   if (response.status === 429) throw new Error('提交次数较多，请稍后重试；填写内容已保留。')

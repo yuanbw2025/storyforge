@@ -11,6 +11,7 @@ import TextOpenWorldPlayerErrorBoundary from '../../src/components/text-game/Tex
 import { recordRuntimeDiagnosticError, readRuntimeDiagnosticErrors, resetRuntimeDiagnostics, RUNTIME_DIAGNOSTICS_KEY } from '../../src/lib/diagnostics/runtime-errors'
 import { failureFeedbackLink, readFailureHandoff, parseFailureSummary } from '../../src/lib/diagnostics/failure-summary'
 import { buildFailureSummary } from '../../src/lib/diagnostics/build-failure-summary'
+import * as summaryModule from '../../src/lib/diagnostics/build-failure-summary'
 import { APP_BUILD_ID } from '../../src/lib/version'
 
 afterEach(async () => { if (root) await act(async () => root?.unmount()); container?.remove(); root = undefined; container = undefined; resetRuntimeDiagnostics(); vi.restoreAllMocks() })
@@ -46,21 +47,41 @@ describe('local failure reporting privacy and explicit handoff', () => {
     expect(parseFailureSummary({ ...report, application: 'SECRET' })).toBeNull()
   })
 
-  it('does not transmit or open windows when preparing or clearing a report', async () => {
+  it('prepares and cancels locally without sending, opening another site or deleting error evidence', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    recordRuntimeDiagnosticError(new Error('isolated error evidence'), 'react')
     container = document.createElement('div'); document.body.append(container); root = createRoot(container)
     await act(async () => root!.render(createElement(FailureFeedbackPanel)))
     const button = [...container.querySelectorAll('button')].find(node => node.textContent === '查看故障摘要并反馈')!
     await act(async () => button.click())
     expect(container.querySelector('[aria-label=故障摘要预览]')).toBeTruthy()
-    const link = [...container.querySelectorAll('a')].find(node => node.textContent === '带摘要打开官方反馈表单')!.getAttribute('href')!
-    expect(link).toMatch(/^https:\/\/docs\.storyforge-lab\.com\/feedback\/bug#storyforge-report=/)
+    expect(container.querySelectorAll('a')).toHaveLength(0)
+    expect(container.textContent).not.toContain('清除错误记录')
     expect(fetchSpy).not.toHaveBeenCalled()
     expect(open).not.toHaveBeenCalled()
-    await act(async () => [...container!.querySelectorAll('button')].find(node => node.textContent === '清空本地错误记录')!.click())
-    expect(readRuntimeDiagnosticErrors()).toEqual([])
+    await act(async () => [...container!.querySelectorAll('button')].find(node => node.textContent === '取消')!.click())
+    expect(readRuntimeDiagnosticErrors()).toHaveLength(1)
     expect(container.querySelector('[aria-label=故障摘要预览]')).toBeNull()
+    expect(container.textContent).toContain('未发送新的反馈')
+  })
+
+  it('shows preparation progress and a recoverable summary failure without sending or losing the form', async () => {
+    let rejectSummary!: (error: Error) => void
+    vi.spyOn(summaryModule, 'buildFailureSummary').mockImplementationOnce(() => new Promise((_, reject) => { rejectSummary = reject }))
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    container = document.createElement('div'); document.body.append(container); root = createRoot(container)
+    await act(async () => root!.render(createElement(FailureFeedbackPanel)))
+    await act(async () => [...container!.querySelectorAll('button')].find(node => node.textContent === '查看故障摘要并反馈')!.click())
+    expect(container.textContent).toContain('正在整理本机故障摘要')
+    await act(async () => rejectSummary(new Error('isolated summary failure')))
+    expect(container.textContent).toContain('故障摘要生成失败')
+    expect(container.querySelector('form')).toBeTruthy()
+    expect(container.querySelector('fieldset')!.disabled).toBe(false)
+    expect(fetchSpy).not.toHaveBeenCalled()
+    await act(async () => [...container!.querySelectorAll('button')].find(node => node.textContent === '查看故障摘要并反馈')!.click())
+    expect(container.textContent).toContain('故障摘要已生成，目前没有本地错误记录')
+    expect(fetchSpy).not.toHaveBeenCalled()
   })
 
   it('survives denied local storage without recursive failures', () => {

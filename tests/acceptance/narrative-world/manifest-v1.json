@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261118-issue483-integrated-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261118-issue483-feedback-integration-v3.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -1355,6 +1355,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261118-client-release408-final-v1.json",
         "workPackage": "ISSUE-483-integration",
         "note": "Preserves current main release/Arch receipt before the existing workStatus compression declarations."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261118-issue483-integrated-v2.json",
+        "workPackage": "ISSUE-483-final-integration",
+        "note": "Preserves measured release/Arch integration before the subsequently merged feedback dependency and native smoke changes."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
