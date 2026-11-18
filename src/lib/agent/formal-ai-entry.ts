@@ -38,7 +38,7 @@ export interface FormalAIEntryBindingV1 {
   allowedCallers: readonly string[]
   reason: string
   /** Omitted legacy entries retain their exact frozen text binding. */
-  outputModality?: 'audio'
+  outputModality?: 'audio' | 'image'
 }
 
 export interface FormalAIEntryRegistryV1 {
@@ -166,8 +166,12 @@ export function parseFormalAIEntryRegistryV1(
       fail(`${entryId} experimental 必须使用 experimental 边界`)
     }
     const outputModality = record.outputModality === undefined ? undefined : record.outputModality
-    if (outputModality !== undefined && (outputModality !== 'audio' || entryKind !== 'formal' || executionBoundary !== 'product-runtime'
-      || adoptAllowed || adoptionTargets.length || skill.writeTargets.length || skill.readToolNames.length)) fail(`${entryId} 音频入口必须是无工具、无写回和无自动采用的正式产品候选`)
+    if (outputModality !== undefined) {
+      const audio = outputModality === 'audio' && entryKind === 'formal' && executionBoundary === 'product-runtime'
+        && !skill.writeTargets.length && !skill.readToolNames.length
+      const imagePreview = outputModality === 'image' && entryKind === 'auxiliary' && executionBoundary === 'authoring-draft'
+      if ((!audio && !imagePreview) || adoptAllowed || adoptionTargets.length) fail(`${entryId} 非文本入口必须符合无正式写回的音频候选或临时图片预览边界`)
+    }
 
     return {
       version: 1,
@@ -182,7 +186,7 @@ export function parseFormalAIEntryRegistryV1(
       adoptionTargets,
       allowedCallers,
       reason,
-      ...(outputModality === undefined ? {} : { outputModality: 'audio' as const }),
+      ...(outputModality === undefined ? {} : { outputModality: outputModality as 'audio' | 'image' }),
     }
   })
 
@@ -329,6 +333,27 @@ export async function executeFrozenFormalAudioEntryV1<T>(
   const binding = await assertFormalAIEntrySnapshotIntegrityV1(snapshot, new Map([[frozenSkill.id, frozenSkill]]))
   if (binding.entryId !== entryId || binding.skillId !== frozenSkill.id || binding.outputModality !== 'audio'
     || !binding.allowedCallers.includes(caller) || !binding.categories.includes(meta.category ?? '')) fail(`${entryId} 的冻结音频入口、Skill、category 或 caller 权限不匹配`)
+  signal?.throwIfAborted()
+  return invoke()
+}
+
+/** An explicitly requested, in-memory image candidate. No DB writer, retry or
+ * adoption authority is granted by this dispatch; the caller owns cancellation. */
+export async function executeFrozenFormalImagePreviewV1<T>(
+  entryId: FormalAIEntryId,
+  snapshot: AgentRunFormalAIEntryBindingV1,
+  frozenSkill: AgentSkillDefinitionV1,
+  caller: string,
+  invoke: () => Promise<T>,
+  meta: AICallMeta,
+  signal?: AbortSignal,
+): Promise<T> {
+  const binding = await assertFormalAIEntrySnapshotIntegrityV1(snapshot, new Map([[frozenSkill.id, frozenSkill]]))
+  if (binding.entryId !== entryId || binding.skillId !== frozenSkill.id || binding.outputModality !== 'image'
+    || binding.executionBoundary !== 'authoring-draft' || binding.adoptAllowed
+    || !binding.allowedCallers.includes(caller) || !binding.categories.includes(meta.category ?? '')) {
+    fail(`${entryId} 的冻结图片预览入口、Skill、category 或 caller 权限不匹配`)
+  }
   signal?.throwIfAborted()
   return invoke()
 }
