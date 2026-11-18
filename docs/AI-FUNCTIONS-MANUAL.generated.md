@@ -433,7 +433,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:576` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:194` |
-| `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
+| `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:376` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:945` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
 | `node.creation` | `src/lib/node-authoring/executor.ts:408` |
@@ -501,10 +501,11 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 71 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio 使用独立冻结音频执行器，文本入口不补默认字段。
+共 72 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
+| `world.map.paint-preview` | `world-origin.map-config` | `geography.world-map-paint` | auxiliary / authoring-draft / image | `map-paint-image-preview` | 禁止 | `src/lib/world-map/atlas/paint-preview.ts` |
 | `node.worldview.field` | `world-origin.worldview-field` | `worldview.dimension` | formal / durable-run | `node-worldview-field-candidate` | `worldviews` | `src/lib/node-authoring/field-producer.ts` |
 | `node.story-core.field` | `world-origin.story-core` | `story.core` | formal / durable-run | `node-story-core-field-candidate` | `storyCores` | `src/lib/node-authoring/field-producer.ts` |
 | `chat.source-unit-confirmation` | `chat.source-unit-confirmation.v1` | `authoring.chat-source-unit-confirmation` | formal / durable-run | `chat-source-unit-confirmation` | `chatAuthoringDrafts` | `src/lib/character-interaction/source-unit-confirmation-harness.ts` |
@@ -591,4 +592,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `f236522d7`
+生成时间基准:commit `c63ea888a`

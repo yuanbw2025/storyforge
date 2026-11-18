@@ -52,3 +52,54 @@ export async function requestOpenAICompatibleImagesV1(input: {
   }
   return { requestId: typeof json.id === 'string' ? json.id : response.headers.get('x-request-id'), images }
 }
+
+/** Reference-preserving edit route. Deliberately separate from text-to-image:
+ * no unsupported reference capability or automatic fallback is implied. */
+export async function requestOpenAICompatibleImageEditV1(input: {
+  binding: ImageGenerationBindingV1
+  prompt: string
+  reference: Blob
+  width: number
+  height: number
+  signal?: AbortSignal
+}): Promise<ArrayBuffer> {
+  assertGenerationAvailable()
+  if (input.reference.type !== 'image/png' || !input.reference.size || input.reference.size > MAX_BYTES
+    || !input.prompt.trim() || input.prompt.length > 16_000
+    || ![input.width, input.height].every(n => Number.isInteger(n) && n >= 256 && n <= 4096)) {
+    throw new Error('[media] 地图参考图片或编辑请求无效')
+  }
+  const body = new FormData()
+  body.append('model', input.binding.model)
+  body.append('prompt', input.prompt)
+  body.append('n', '1')
+  body.append('size', `${input.width}x${input.height}`)
+  body.append('image', input.reference, 'map-reference.png')
+  const response = await fetch(`${input.binding.baseUrl}/images/edits`, {
+    method: 'POST', body, signal: input.signal,
+    headers: { Authorization: `Bearer ${input.binding.apiKey}` },
+  })
+  if (!response.ok) throw new Error(`[media] 绘画底图生成失败：HTTP ${response.status}。未自动重试，请核对图片模型与参考图编辑接口。`)
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('[media] 图片编辑响应为空')
+  const chunks: Uint8Array[] = []
+  let size = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.byteLength
+      if (size > MAX_BYTES * 1.5) { await reader.cancel(); throw new Error('[media] 图片编辑响应超过上限') }
+      chunks.push(value)
+    }
+  } finally { reader.releaseLock() }
+  const bytes = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength }
+  const json = JSON.parse(new TextDecoder().decode(bytes)) as { data?: Array<{ b64_json?: string; url?: string }> }
+  if (json.data?.length !== 1) throw new Error('[media] 图片编辑必须返回一个候选')
+  const item = json.data[0]
+  if (typeof item.b64_json === 'string') return decodeBase64(item.b64_json)
+  if (typeof item.url === 'string') return download(item.url, input.signal)
+  throw new Error('[media] 图片编辑候选缺少内容')
+}
