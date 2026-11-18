@@ -4,6 +4,7 @@ import { bindCreatedProjectStorageWorkspace } from '../lib/storage/project-stora
 import ExampleLibrary from '../components/examples/ExampleLibrary'
 import { useDialog } from '../components/shared/Dialog'
 import { useEffect, useRef, useState } from 'react'
+import { ArrowRight, BookOpen, ImagePlus, MoreHorizontal, Plus, Search } from 'lucide-react'
 import { liveQuery } from 'dexie'
 import { useNavigate, useSearchParams } from 'react-router'
 import { db } from '../lib/db/schema'
@@ -20,6 +21,7 @@ import LongformBrowsePage from '../components/longform/LongformBrowsePage'
 import LongformLayout from '../components/longform/LongformLayout'
 import { useBeforeUnload } from '../hooks/useBeforeUnload'
 import type { WorkspaceScope } from '../lib/types'
+import '../components/longform/longform-library.css'
 
 export default function LongformLibraryPage() {
   const navigate = useNavigate()
@@ -108,6 +110,7 @@ export default function LongformLibraryPage() {
     }
     catch (cause) { setError(String(cause)) }
   }
+  const visibleRows = rows.filter(({ work }) => `${work.title} ${work.description}`.toLowerCase().includes(search.toLowerCase()))
   return <LongformLayout section={section} mode={mode} module={module} onHome={() => navigate('/')}
     onSection={next => browse(next, next === 'versions' ? 'version-history' : next === 'import' ? 'import-doc' : next === 'settings' ? 'settings' : 'info')}
     onMode={next => browse('workbench', next === 'nodes' ? 'visual-workflows' : 'info', next)}
@@ -134,13 +137,43 @@ export default function LongformLibraryPage() {
       <form onSubmit={event => { event.preventDefault(); void create() }} className="flex flex-wrap gap-3"><ProjectStorageFolderField value={projectFolder} onChange={setProjectFolder} disabled={busy}/><input aria-label="新长篇名称" value={title} onChange={event => setTitle(event.target.value)} placeholder="新长篇名称" maxLength={200}/><button className="lf-action lf-action-primary" disabled={busy || loading || !title.trim()}>{busy ? '创建中…' : '创建并进入当前页面'}</button><button className="lf-action" type="button" onClick={() => setChoosing(false)}>继续浏览</button></form>
       {error && <p role="alert">{error}</p>}
     </section>}
-    {section !== 'library' ? <LongformBrowsePage section={section} mode={mode} module={module} onModule={next => browse(section, next, mode)} onRequireWork={requireWork}/> : <>
-    <section className="lf-paper"><div className="flex flex-wrap items-center justify-between gap-4"><h3>我的长篇</h3><button className="lf-action lf-action-primary" onClick={() => setCreating(value => !value)}>新建长篇</button></div><input aria-label="搜索长篇" value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索作品名称或简介"/>
-      {creating && <form className="mt-5 flex flex-wrap gap-3" onSubmit={event => { event.preventDefault(); void create() }}><ProjectStorageFolderField value={projectFolder} onChange={setProjectFolder} disabled={busy}/><input aria-label="新长篇名称" autoFocus value={title} onChange={event => setTitle(event.target.value)} placeholder="为这部作品起个名字" maxLength={200}/><button className="lf-action lf-action-primary" disabled={busy || !title.trim()}>{busy ? '创建中…' : '创建并进入工作台'}</button></form>}
+    {section !== 'library' ? <LongformBrowsePage section={section} mode={mode} module={module} onModule={next => browse(section, next, mode)} onRequireWork={requireWork}/> : <div className="lf-library">
+    <section className="lf-paper lf-library-tools" aria-label="长篇作品库工具">
+      <div className="lf-library-toolbar">
+        <span className="lf-library-count">{loading ? '读取作品…' : `${rows.length} 部长篇`}</span>
+        <label className="lf-library-search"><Search size={17} aria-hidden="true"/><input aria-label="搜索长篇" value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索作品名称或简介"/></label>
+        <button className="lf-action lf-action-primary" aria-expanded={creating} onClick={() => setCreating(value => !value)}><Plus size={17} aria-hidden="true"/>新建长篇</button>
+      </div>
+      {creating && <form className="lf-library-create" onSubmit={event => { event.preventDefault(); void create() }}>
+        <h3>新建长篇</h3>
+        <input aria-label="新长篇名称" autoFocus value={title} onChange={event => setTitle(event.target.value)} placeholder="为这部作品起个名字" maxLength={200}/>
+        <ProjectStorageFolderField value={projectFolder} onChange={setProjectFolder} disabled={busy}/>
+        <div className="lf-library-create-actions"><button type="button" className="lf-action" disabled={busy} onClick={() => setCreating(false)}>取消</button><button className="lf-action lf-action-primary" disabled={busy || !title.trim()}>{busy ? '创建中…' : '创建并进入工作台'}</button></div>
+      </form>}
       {error && <p role="alert">{error}</p>}
     </section>
-    {loading ? <p role="status">正在读取作品库…</p> : !rows.length ? <section className="lf-paper"><h3>从你的第一个故事开始</h3><p>在这里创建长篇，随后自由完善世界、故事和人物，直至写出正文。</p></section> : <div className="lf-library-grid">{rows.filter(({work}) => `${work.title} ${work.description}`.toLowerCase().includes(search.toLowerCase())).map(({ project, work }) => <article className="lf-paper" key={work.id}><h3>{work.title}</h3><p>{work.description || '尚未填写作品简介'}</p><p>{work.currentWordCount.toLocaleString()} 字 · 最近编辑 {new Date(work.updatedAt).toLocaleDateString()}</p><button className="lf-action" onClick={() => void open(project, work, `/workspace/${project.id}?module=info`)}>进入长篇工作台</button><div className="mt-3 flex flex-wrap gap-3"><button className="lf-action" onClick={() => void rename(project, work)}>重命名</button><button className="lf-action" onClick={() => void open(project, work, `/workspace/${project.id}?module=export`)}>导出与备份</button><button className="lf-action" onClick={() => void remove(project, work)}>删除作品</button></div></article>)}</div>}
+    {loading ? <p role="status">正在读取作品库…</p> : !rows.length ? <section className="lf-paper lf-library-empty"><BookOpen size={30} aria-hidden="true"/><div><h3>从你的第一个故事开始</h3><p>新建长篇后，就可以逐步完善世界、故事与人物，写下正文。</p></div></section> : !visibleRows.length ? <section className="lf-paper lf-library-empty" role="status"><Search size={28} aria-hidden="true"/><div><h3>没有找到匹配的长篇</h3><p>试试其他书名或简介关键词。</p><button className="lf-action" onClick={() => setSearch('')}>清除搜索</button></div></section> : <div className="lf-library-books">{visibleRows.map(({ project, work }) => <article className="lf-paper lf-library-card" key={work.id} aria-label={work.title}>
+      <div className="lf-library-book">
+        <button type="button" className="lf-library-cover" aria-label={`修改封面：${work.title}`} onClick={() => void open(project, work, `/home/cover?work=${work.id}`)}>
+          {work.coverImage ? <img src={work.coverImage} alt=""/> : <span className="lf-library-cover-placeholder"><BookOpen size={28} aria-hidden="true"/><span>暂无封面</span></span>}
+          <span className="lf-library-cover-action"><ImagePlus size={14} aria-hidden="true"/>{work.coverImage ? '更换封面' : '上传封面'}</span>
+        </button>
+        <div className="lf-library-book-info"><h3>{work.title}</h3><p className="lf-library-description">{work.description || '尚未填写作品简介'}</p><div className="lf-library-meta"><span>{work.currentWordCount.toLocaleString()} 字</span><span>最近编辑 <time dateTime={new Date(work.updatedAt).toJSON() ?? undefined}>{new Date(work.updatedAt).toLocaleDateString('zh-CN')}</time></span></div></div>
+      </div>
+      <div className="lf-library-card-actions">
+        <button className="lf-action lf-action-primary" onClick={() => void open(project, work, `/workspace/${project.id}?module=info`)}>进入长篇工作台<ArrowRight size={16} aria-hidden="true"/></button>
+        <details className="lf-library-more" onKeyDown={event => { if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus() } }}>
+          <summary className="lf-action" aria-label={`更多操作：${work.title}`}>更多操作<MoreHorizontal size={17} aria-hidden="true"/></summary>
+          <div className="lf-library-menu">
+            <button onClick={event => { event.currentTarget.closest('details')?.removeAttribute('open'); rename(project, work) }}>重命名</button>
+            <button onClick={() => void open(project, work, `/home/cover?work=${work.id}`)}>修改封面</button>
+            <button onClick={() => void open(project, work, `/workspace/${project.id}?module=export`)}>导出与备份</button>
+            <button className="lf-library-delete" onClick={event => { event.currentTarget.closest('details')?.removeAttribute('open'); void remove(project, work) }}>删除作品</button>
+          </div>
+        </details>
+      </div>
+    </article>)}</div>}
     <ExampleLibrary kind="long"/>
-    </> }
+    </div> }
   </LongformLayout>
 }
