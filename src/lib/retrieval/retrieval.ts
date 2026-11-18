@@ -57,13 +57,17 @@ export function extractKeywords(text: string, knownEntities: string[]): string[]
  * 重建某章的检索块（删旧块 + 切块 + 抽关键词 + 写入）。正文未变（hash 相同）则跳过。
  * embedding 字段留空——由可选 embedding 通道异步回填，不阻塞。
  */
-export async function rebuildChapterChunks(args: {
+interface ChapterChunkInputV1 {
   projectId: number
   chapter: Chapter
   worldGroupId?: number | null
   knownEntities: string[]
   scope?: WorkspaceScope
-}): Promise<{ rebuilt: boolean; count: number }> {
+}
+export async function rebuildChapterChunks(args: ChapterChunkInputV1): Promise<{ rebuilt: boolean; count: number }> {
+  return rebuildChapterChunksWithSnapshotV1(args)
+}
+async function rebuildChapterChunksWithSnapshotV1(args: ChapterChunkInputV1, ownedChunks?: RetrievalChunk[]): Promise<{ rebuilt: boolean; count: number }> {
   const { projectId, chapter, worldGroupId, knownEntities } = args
   if (chapter.id == null) return { rebuilt: false, count: 0 }
   const scope = args.scope ?? await resolveScopeLike(projectId)
@@ -74,16 +78,18 @@ export async function rebuildChapterChunks(args: {
   const normalized = normalizeChapterText(chapter.content || '')
   const hash = await hashChapterText(chapter.content || '')
 
-  const existing = (await readOwnedRows<RetrievalChunk>(scope, 'retrievalChunks', { owner: 'work' }))
+  const existing = (ownedChunks ?? await readOwnedRows<RetrievalChunk>(scope, 'retrievalChunks', { owner: 'work' }))
     .filter(chunk => chunk.sourceChapterId === chapter.id)
-  if (existing.length && existing[0].sourceTextHash === hash) {
-    return { rebuilt: false, count: existing.length } // 正文未变，复用
-  }
-  // 正文变了 / 首次：清旧块重建
-  if (existing.length) await db.retrievalChunks.bulkDelete(existing.map(c => c.id!).filter(Boolean))
-  if (!normalized.trim()) return { rebuilt: true, count: 0 }
-
   const pieces = splitIntoChunks(normalized)
+  const sorted = [...existing].sort((a,b) => a.chunkIndex-b.chunkIndex)
+  if (existing.length > 0 && existing.length === pieces.length && sorted.every((row,index) => row.sourceTextHash === hash && row.text === pieces[index] && (row.worldGroupId ?? null) === (worldGroupId ?? null))) {
+    for (const row of sorted) {
+      const keywords = extractKeywords(row.text, knownEntities)
+      if (row.id != null && JSON.stringify(row.keywords) !== JSON.stringify(keywords)) await db.retrievalChunks.update(row.id, { keywords })
+    }
+    return { rebuilt: false, count: existing.length }
+  }
+
   const now = Date.now()
   const rows: RetrievalChunk[] = pieces.map((text, i) => stampNewRecord(scope, 'retrievalChunks', {
     projectId,
@@ -97,8 +103,56 @@ export async function rebuildChapterChunks(args: {
     sourceTextHash: hash,
     createdAt: now,
   }, { owner: 'work' }) as RetrievalChunk)
-  if (rows.length) await db.retrievalChunks.bulkAdd(rows)
+  await db.transaction('rw', db.chapters, db.retrievalChunks, async () => {
+    const current = await db.chapters.get(chapter.id!)
+    if (!current || current.content !== chapter.content) throw new Error('章节在本机索引准备期间已变化，请重新读取。')
+    if (existing.length) await db.retrievalChunks.bulkDelete(existing.map(row => row.id!).filter(Boolean))
+    if (rows.length) await db.retrievalChunks.bulkAdd(rows)
+  })
   return { rebuilt: true, count: rows.length }
+}
+
+const localIndexJobs = new Map<string, Promise<void>>()
+const localIndexVersions = new Map<string, { sources: string; cache: string }>()
+
+/** Derived caches are repaired on demand, entirely locally and within one Work. */
+export async function ensureLocalNarrativeIndexV1(args: { projectId: number; scope?: WorkspaceScope }): Promise<void> {
+  const scope = await resolveScopeLike(args.scope ?? args.projectId)
+  const key = `${scope.projectId}:${scope.worldId}:${scope.workId}`
+  const active = localIndexJobs.get(key)
+  if (active) return active
+  const cacheStamp = async () => {
+    const [chunks, summaries] = await Promise.all([
+      readOwnedRows<RetrievalChunk>(scope, 'retrievalChunks', { owner: 'work' }),
+      readOwnedRows<NarrativeSummaryNode>(scope, 'narrativeSummaryNodes', { owner: 'work' }),
+    ])
+    return sha256Text(JSON.stringify([
+      chunks.map(row => [row.id, row.sourceTextHash, row.worldGroupId, row.text, row.keywords]),
+      summaries.map(row => [row.id, row.sourceHash, row.status, row.summary]),
+    ]))
+  }
+  const operation = (async () => {
+    const sources = await Promise.all([
+      readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
+      readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
+      readOwnedRows<{name:string}>(scope, 'characters', { owner: 'world' }),
+      readOwnedRows<{name:string}>(scope, 'codexEntries', { owner: 'world' }),
+      readOwnedRows<{name:string}>(scope, 'importantLocations', { owner: 'world' }),
+    ])
+    const sourceStamp = await sha256Text(JSON.stringify([
+      sources[0].map(chapter => [chapter.id, chapter.outlineNodeId, chapter.title, chapter.content, chapter.summary, chapter.summarySourceTextHash, chapter.summaryTextNormalizationVersion]),
+      sources[1].map(node => [node.id, node.parentId, node.type, node.title, node.summary, node.worldGroupId, node.order]),
+      ...sources.slice(2).map(rows => rows.map(row => ({ name: (row as {name:string}).name }))),
+    ]))
+    const current = await cacheStamp(), previous = localIndexVersions.get(key)
+    if (previous?.sources === sourceStamp && previous.cache === current) return
+    await rebuildProjectRetrievalChunks({ projectId: scope.projectId, scope })
+    await rebuildProjectNarrativeSummaries({ projectId: scope.projectId, scope, preserveFreshChapterNodes: true })
+    if (localIndexVersions.size >= 32) localIndexVersions.delete(localIndexVersions.keys().next().value!)
+    localIndexVersions.set(key, { sources: sourceStamp, cache: await cacheStamp() })
+  })().finally(() => { if (localIndexJobs.get(key) === operation) localIndexJobs.delete(key) })
+  localIndexJobs.set(key, operation)
+  return operation
 }
 
 /**
@@ -111,12 +165,13 @@ export async function rebuildProjectRetrievalChunks(args: {
   scope?: WorkspaceScope
 }): Promise<{ chapters: number; rebuiltChapters: number; chunks: number }> {
   const scope = args.scope ?? await resolveScopeLike(args.projectId)
-  const [chapters, outlineNodes, characters, codexEntries, locations] = await Promise.all([
+  const [chapters, outlineNodes, characters, codexEntries, locations, ownedChunks] = await Promise.all([
     readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
     readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
     readOwnedRows<any>(scope, 'characters', { owner: 'world' }),
     readOwnedRows<any>(scope, 'codexEntries', { owner: 'world' }),
     readOwnedRows<any>(scope, 'importantLocations', { owner: 'world' }),
+    readOwnedRows<RetrievalChunk>(scope, 'retrievalChunks', { owner: 'work' }),
   ])
   const knownEntities = [
     ...characters.map(c => c.name),
@@ -139,13 +194,13 @@ export async function rebuildProjectRetrievalChunks(args: {
 
   for (let i = 0; i < sorted.length; i++) {
     const chapter = sorted[i]
-    const result = await rebuildChapterChunks({
+    const result = await rebuildChapterChunksWithSnapshotV1({
       projectId: args.projectId,
       chapter,
       worldGroupId: chapter.id != null ? worldByChapter.get(chapter.id) ?? null : null,
       knownEntities,
       scope,
-    })
+    }, ownedChunks)
     if (result.rebuilt) rebuiltChapters++
     chunks += result.count
     args.onProgress?.(i + 1, sorted.length)
@@ -239,6 +294,7 @@ async function chapterSummaryText(chapter: Chapter, outlineNode: OutlineNode | n
  * 这是派生记忆，不是 Canon；每次重建先把旧节点标为 rebuilding，再原子替换为新 verified/pending 节点。
  */
 export async function rebuildProjectNarrativeSummaries(args: {
+  preserveFreshChapterNodes?: boolean
   projectId: number
   onProgress?: (done: number, total: number) => void
   scope?: WorkspaceScope
@@ -280,7 +336,9 @@ export async function rebuildProjectNarrativeSummaries(args: {
     const entry = ordered[i]
     const chapter = entry.chapter
     if (chapter.id == null) continue
-    const source = await chapterSummaryText(chapter, entry.outlineNode)
+    const computed = await chapterSummaryText(chapter, entry.outlineNode)
+    const previous = args.preserveFreshChapterNodes ? existing.find(node => node.level === 'chapter' && node.sourceChapterId === chapter.id && node.sourceHash === computed.sourceHash && node.status === 'verified' && (node.worldGroupId ?? null) === (entry.worldGroupId ?? null)) : undefined
+    const source = previous && !chapter.summary?.trim() ? { ...computed, summary: previous.summary, status: previous.status } : computed
     const title = entry.outlineNode?.title || chapter.title || `章节#${chapter.id}`
     const summary = source.summary
     const volume = nearestVolume(entry.outlineNode, byId)
@@ -381,6 +439,7 @@ export async function readNarrativeSummaryContext(args: {
   scope?: WorkspaceScope
 }): Promise<string> {
   const scope = args.scope ?? await resolveReadScopeLike(args.projectId)
+  await ensureLocalNarrativeIndexV1({ projectId: args.projectId, scope })
   const [nodes, outlineNodes, chapters] = await Promise.all([
     readOwnedRows<NarrativeSummaryNode>(scope, 'narrativeSummaryNodes', { owner: 'work' })
       .then(rows => rows.filter(node => node.status === 'verified')),
@@ -468,6 +527,7 @@ export async function retrieveChunks(args: {
 }): Promise<RetrievedChunk[]> {
   const { projectId, currentChapterId, worldGroupId, queryTerms, queryEmbedding, queryEmbeddingModel, topK = 6 } = args
   const scope = args.scope ?? await resolveReadScopeLike(projectId)
+  await ensureLocalNarrativeIndexV1({ projectId, scope })
   const [chunks, outlineNodes, chapters] = await Promise.all([
     readOwnedRows<RetrievalChunk>(scope, 'retrievalChunks', { owner: 'work' }),
     readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
@@ -478,6 +538,9 @@ export async function retrieveChunks(args: {
   const { sequence } = resolveCanonicalChapterSequence(outlineNodes, chapters)
   const orderOf = new Map<number, number>()
   sequence.forEach((entry, i) => { if (entry.chapter.id != null) orderOf.set(entry.chapter.id, i) })
+  const chapterById = new Map(chapters.filter(row => row.id != null).map(row => [row.id!,row]))
+  const sourceById = new Map<number,{hash:string;pieces:string[]}>()
+  const groupById = new Map(sequence.filter(entry => entry.chapter.id != null).map(entry => [entry.chapter.id!,entry.worldGroupId]))
   const currentOrder = orderOf.get(currentChapterId)
   if (currentOrder == null) return []
 
@@ -487,6 +550,13 @@ export async function retrieveChunks(args: {
     const chunkOrder = orderOf.get(chunk.sourceChapterId)
     if (chunkOrder == null || chunkOrder >= currentOrder) continue          // 未来/当前章不召回
     if (chunk.worldGroupId != null && chunk.worldGroupId !== (worldGroupId ?? null)) continue // 世界隔离
+    const group = groupById.get(chunk.sourceChapterId)
+    if (group != null && group !== (worldGroupId ?? null)) continue
+    const chapter = chapterById.get(chunk.sourceChapterId)
+    if (!chapter) continue
+    let source = sourceById.get(chunk.sourceChapterId)
+    if (!source) { source = { hash: await hashChapterText(chapter.content || ''), pieces: splitIntoChunks(normalizeChapterText(chapter.content || '')) }; sourceById.set(chunk.sourceChapterId,source) }
+    if (chunk.sourceTextHash !== source.hash || chunk.text !== source.pieces[chunk.chunkIndex]) continue
     // 关键词重叠分（命中实体 + 命中文本词）
     let kw = 0
     for (const t of terms) {
@@ -532,17 +602,20 @@ export async function embedQuery(text: string, cfg: EmbeddingConfig | null | und
  * 任一批失败不丢已完成的，整体抛错由调用方提示。
  */
 export async function ensureChunkEmbeddings(args: {
+  chunkIds?: readonly number[]
+  chapterIds?: readonly number[]
   projectId: number
   cfg: EmbeddingConfig
   onProgress?: (done: number, total: number) => void
   signal?: AbortSignal
   scope?: WorkspaceScope
 }): Promise<{ embedded: number; total: number; skipped: number }> {
-  const { projectId, cfg, onProgress, signal } = args
+  const { projectId, onProgress, signal } = args
+  const cfg = { ...args.cfg }
   if (!isEmbeddingReady(cfg)) return { embedded: 0, total: 0, skipped: 0 }
   const scope = args.scope ?? await resolveScopeLike(projectId)
   const tag = embeddingModelTag(cfg)
-  const all = await readOwnedRows<RetrievalChunk>(scope, 'retrievalChunks', { owner: 'work' })
+  const all = (await readOwnedRows<RetrievalChunk>(scope, 'retrievalChunks', { owner: 'work' })).filter(row => (args.chunkIds === undefined || row.id != null && args.chunkIds.includes(row.id)) && (args.chapterIds === undefined || args.chapterIds.includes(row.sourceChapterId)))
   const pending = all.filter(c => c.id != null && (!c.embedding || !c.embedding.length || c.embeddingModel !== tag))
   const total = pending.length
   let embedded = 0
@@ -550,13 +623,18 @@ export async function ensureChunkEmbeddings(args: {
     if (signal?.aborted) break
     const batch = pending.slice(i, i + EMBED_BATCH)
     const vectors = await embedTexts(batch.map(c => c.text), cfg, projectId, signal)
-    await db.transaction('rw', db.retrievalChunks, async () => {
+    const written = await db.transaction('rw', db.retrievalChunks, async () => {
+      let count = 0
       for (let j = 0; j < batch.length; j++) {
+        const current = await db.retrievalChunks.get(batch[j].id!)
+        if (!current || current.sourceTextHash !== batch[j].sourceTextHash || current.text !== batch[j].text || current.workId !== batch[j].workId) continue
         await db.retrievalChunks.update(batch[j].id!, { embedding: vectors[j], embeddingModel: tag })
+        count++
       }
+      return count
     })
-    embedded += batch.length
+    embedded += written
     onProgress?.(embedded, total)
   }
-  return { embedded, total, skipped: all.length - total }
+  return { embedded, total, skipped: all.length - embedded }
 }
