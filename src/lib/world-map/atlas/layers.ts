@@ -5,6 +5,9 @@ export interface AtlasLayers extends Required<LayerVisibility> {
   forests: boolean
   fortresses: boolean
   walls: boolean
+  passages: boolean
+  rifts: boolean
+  waterBodies: boolean
 }
 
 export const DEFAULT_ATLAS_LAYERS: AtlasLayers = {
@@ -23,6 +26,9 @@ export const DEFAULT_ATLAS_LAYERS: AtlasLayers = {
   forests: true,
   fortresses: true,
   walls: true,
+  passages: true,
+  rifts: true,
+  waterBodies: true,
 }
 
 export const ATLAS_LAYER_LABELS: Record<keyof AtlasLayers, string> = {
@@ -37,6 +43,9 @@ export const ATLAS_LAYER_LABELS: Record<keyof AtlasLayers, string> = {
   burgIcons: '城镇图标',
   fortresses: '关隘与要塞',
   walls: '城墙与屏障',
+  passages: '跨空间通路',
+  rifts: '天壑与空间屏障',
+  waterBodies: '湖泊与水域',
   stateLabels: '区域名称',
   burgLabels: '地点与地貌名称',
   scaleBar: '比例尺',

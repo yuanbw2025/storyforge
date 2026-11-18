@@ -27,9 +27,11 @@ export function terrainWash(g: AtlasGeometry, seed: string): HTMLCanvasElement {
     return p * (1 - v) + (lattice[j] * (1 - u) + lattice[((b + 1) & 127) * 128 + next] * u) * v
   }
   const ridges = new Float32Array(w * h)
+  const cold = new Float32Array(w * h)
   for (const f of g.features)
     if (f.kind === 'ridge') {
-      const radius = Math.ceil(27 * ratio)
+      const radius = Math.ceil(27 * ratio),
+        snow = /雪|冰|霜|寒/.test(f.name)
       for (let n = 0; n < f.points.length; n++) {
         const [x, y] = f.points[n],
           [u, v] = f.points[n + 1] ?? f.points[n]
@@ -41,6 +43,7 @@ export function terrainWash(g: AtlasGeometry, seed: string): HTMLCanvasElement {
             for (let i = Math.max(0, cx - radius); i <= Math.min(w - 1, cx + radius); i++) {
               const fall = Math.max(0, 1 - ((i - cx) ** 2 + (j - cy) ** 2) / (radius * radius))
               ridges[j * w + i] = Math.max(ridges[j * w + i], fall * fall)
+              if (snow) cold[j * w + i] = Math.max(cold[j * w + i], fall)
             }
         }
       }
@@ -61,7 +64,6 @@ export function terrainWash(g: AtlasGeometry, seed: string): HTMLCanvasElement {
   for (let j = 0; j < h; j++)
     for (let i = 0; i < w; i++) {
       const k = j * w + i,
-        y = j / h,
         x = i / ratio,
         yy = j / ratio
       const shade =
@@ -71,15 +73,16 @@ export function terrainWash(g: AtlasGeometry, seed: string): HTMLCanvasElement {
       const biome = noise(x * 0.012 + 17, yy * 0.014) * 0.65 + noise(x * 0.047, yy * 0.043) * 0.35
       const grain = (rng() - 0.5) * 7,
         slope = Math.min(24, Math.max(-39, shade))
-      const north = Math.max(0, (0.36 - y) / 0.36),
-        arid = Math.max(0, (y - 0.48) * 2.3)
+      // Page position is not latitude, especially in a multiple-realm atlas.
+      // Snow color follows named cold terrain; desert washes are separate features.
+      const snow = cold[k]
       const z = ridges[k],
         fertile = biome - 0.5
       paper.data.set(
         [
-          202 + arid * 21 + north * 18 - fertile * 49 + z * 9 + slope + grain,
-          202 - arid * 13 + north * 22 - fertile * 9 - z * 1 + slope + grain,
-          157 - arid * 27 + north * 66 - fertile * 30 + z * 10 + slope + grain,
+          202 + snow * 18 - fertile * 49 + z * 9 + slope + grain,
+          202 + snow * 22 - fertile * 9 - z + slope + grain,
+          157 + snow * 66 - fertile * 30 + z * 10 + slope + grain,
           255,
         ],
         k * 4,

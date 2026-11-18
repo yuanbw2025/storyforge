@@ -1,6 +1,7 @@
 import { DEFAULT_ATLAS_LAYERS, type AtlasLayers } from './layers'
 import { stamp } from './symbols'
 import { terrainWash } from './relief'
+import { atlasIslandInsideWater } from './inspect'
 import { seedRandom } from '../engine/random'
 import type { AtlasGeometry, Point } from './geometry'
 
@@ -58,7 +59,14 @@ function watercourse(points: Point[], name: string) {
     const bend = Math.min(8, length * 0.16) * (rng() > 0.5 ? 1 : -1)
     const ox = (-dy / (length || 1)) * bend,
       oy = (dx / (length || 1)) * bend
-    p.bezierCurveTo(x + dx * 0.32 + ox, y + dy * 0.32 + oy, x + dx * 0.68 - ox, y + dy * 0.68 - oy, u, v)
+    p.bezierCurveTo(
+      x + dx * 0.32 + ox,
+      y + dy * 0.32 + oy,
+      x + dx * 0.68 - ox,
+      y + dy * 0.68 - oy,
+      u,
+      v,
+    )
   }
   return p
 }
@@ -278,16 +286,17 @@ export function drawTerrain(
   c.lineCap = 'round'
   const { width: w, height: h, features } = g,
     rng = seedRandom(seed)
+  const realms = features.some((f) => f.kind === 'realm')
   const sea = c.createLinearGradient(0, 0, w, h)
-  sea.addColorStop(0, '#638d90')
-  sea.addColorStop(0.38, '#94b3a9')
-  sea.addColorStop(0.68, '#81a5a0')
-  sea.addColorStop(1, '#4f7f83')
+  sea.addColorStop(0, realms ? '#4d4a59' : '#638d90')
+  sea.addColorStop(0.38, realms ? '#77747c' : '#94b3a9')
+  sea.addColorStop(0.68, realms ? '#656773' : '#81a5a0')
+  sea.addColorStop(1, realms ? '#3f4653' : '#4f7f83')
   c.fillStyle = sea
   c.fillRect(0, 0, w, h)
   for (let i = 0; i < 75; i++)
     wash(c, rng() * w, rng() * h, 35 + rng() * 100, rng() > 0.5 ? '#45787c26' : '#dfd8af36')
-  for (let i = 0; i < 3800; i++) {
+  for (let i = 0; i < (realms ? 0 : 3800); i++) {
     const x = rng() * w,
       y = rng() * h,
       length = 1 + rng() * 5
@@ -325,28 +334,54 @@ export function drawTerrain(
     )
   c.setLineDash([])
   const land = new Path2D()
+  const coast = new Path2D()
+  const realmEdges = new Path2D()
+  const waterEdges = new Path2D()
+  const outsideWaters: Path2D[] = []
+  const area = (points: Point[]) => points.reduce((sum, [x, y], i) => {
+    const [u, v] = points[(i + 1) % points.length]
+    return sum + x * v - u * y
+  }, 0)
+  const shore = (points: Point[]) => shoreline(points, seedRandom(seed + ':shore:' + JSON.stringify(points)))
+  if (layers.waterBodies) for (const f of features) if (f.kind === 'water') {
+    const outline = shore(area(f.points) > 0 ? [...f.points].reverse() : f.points)
+    waterEdges.addPath(outline)
+    const outsideWater = new Path2D()
+    outsideWater.rect(-8192, -8192, 16384, 16384)
+    outsideWater.addPath(outline)
+    for (const island of features.filter(land => atlasIslandInsideWater(land, f))) {
+      outsideWater.addPath(shore(area(island.points) < 0 ? [...island.points].reverse() : island.points))
+    }
+    outsideWaters.push(outsideWater)
+  }
   const fillRule = g.cellCoast ? 'evenodd' : 'nonzero'
   for (const f of features)
-    if (f.kind === 'land') {
-      const area = f.points.reduce((sum, [x, y], i) => {
-        const [u, v] = f.points[(i + 1) % f.points.length]
-        return sum + x * v - u * y
-      }, 0)
-      land.addPath(shoreline(!g.cellCoast && area < 0 ? [...f.points].reverse() : f.points, rng))
+    if (f.kind === 'land' || f.kind === 'realm') {
+      const points = !g.cellCoast && area(f.points) < 0 ? [...f.points].reverse() : f.points
+      const outline = f.kind === 'realm' ? line(points, true) : shore(points)
+      land.addPath(outline)
+      ;(f.kind === 'realm' ? realmEdges : coast).addPath(outline)
     }
   if (layers.coastlines) {
-    ink(c, land, '#cbd4b039', 20)
-    ink(c, land, '#d7d9b775', 12)
-    ink(c, land, '#72938c', 7)
-    ink(c, land, '#dce1be', 5.8)
-    ink(c, land, '#638583', 2.6)
+    ink(c, coast, '#cbd4b039', 20)
+    ink(c, coast, '#d7d9b775', 12)
+    ink(c, coast, '#72938c', 7)
+    ink(c, coast, '#dce1be', 5.8)
+    ink(c, coast, '#638583', 2.6)
   }
   c.save()
   c.clip(land, fillRule)
+  for (const outsideWater of outsideWaters) c.clip(outsideWater, 'nonzero')
   c.fillStyle = '#e3dcc0'
   c.fillRect(0, 0, w, h)
   if (layers.terrain) c.drawImage(terrainWash(g, seed), 0, 0, w, h)
-  const glyphs: { x: number; y: number; size: number; kind: 'ridge' | 'wood' }[] = []
+  const glyphs: {
+    x: number
+    y: number
+    size: number
+    kind: 'ridge' | 'wood'
+    snow: boolean
+  }[] = []
   for (const f of features) {
     const k = f.kind
     if (
@@ -363,13 +398,19 @@ export function drawTerrain(
           x,
           y,
           k === 'desert' ? 32 : 18,
-          { ridge: '#93846e18', wood: '#637f5832', desert: '#d7a36e29', marsh: '#67968b69' }[k],
+          {
+            ridge: '#93846e18',
+            wood: '#637f5832',
+            desert: '#d7a36e29',
+            marsh: '#67968b69',
+          }[k],
         )
         if (k === 'ridge' || k === 'wood') {
           const count = sheet ? (k === 'wood' ? 4 : 2) : k === 'wood' ? 9 : 3
           for (let j = 0; j < count; j++)
             glyphs.push({
               kind: k,
+              snow: /雪|冰|霜|寒/.test(f.name),
               x: x + (rng() - 0.5) * 24,
               y: y + (rng() - 0.5) * 19,
               size: k === 'wood' ? 3 + rng() * 4 : 5 + rng() * 10,
@@ -428,23 +469,18 @@ export function drawTerrain(
     if (f.kind === 'river' && layers.rivers) {
       const p = watercourse(f.points, f.name)
       ink(c, p, '#eae3c6', 2.7)
-      ink(c, p, '#648f94', 1.55)
-      ink(c, p, '#a8cbbe', 0.57)
-    } else if ((f.kind === 'road' || f.kind === 'seaRoute') && layers.roads) {
-      const p = line(f.points)
-      ink(c, p, '#d8c29f', 1.5)
-      c.setLineDash([2.5, 1.2])
-      ink(c, p, '#976e4d', 0.85)
-      c.setLineDash([])
+      ink(c, p, /血/.test(f.name) ? '#9a5c61' : '#648f94', 1.55)
+      ink(c, p, /血/.test(f.name) ? '#cf9391' : '#a8cbbe', 0.57)
     }
   }
   glyphs.sort((a, b) => a.y - b.y)
   for (const s of glyphs) {
     const rng = seedRandom(seed + s.kind + s.x + ',' + s.y)
     if (sheet) {
-      const index = s.kind === 'ridge' ? (s.y < h * 0.32 || s.size > 11 ? 0 : 1) : s.y < h * 0.48 ? 2 : 3
+      const index =
+        s.kind === 'ridge' ? (s.snow ? 0 : 1) : s.y < h * 0.48 ? 2 : 3
       stamp(c, sheet, index, s.x, s.y, s.size * (s.kind === 'ridge' ? 2.15 : 2.4))
-    } else if (s.kind === 'ridge') peak(c, rng, s.x, s.y, s.size, s.y < h * 0.22 || s.size > 12.5)
+    } else if (s.kind === 'ridge') peak(c, rng, s.x, s.y, s.size, s.snow)
     else tree(c, rng, s.x, s.y, s.size)
   }
   for (const f of features)
@@ -457,11 +493,48 @@ export function drawTerrain(
       c.setLineDash([])
     }
   c.restore()
-  if (layers.coastlines) ink(c, land, '#645f48', 0.95)
+  // Roads include bridges and sea routes, so their lines must cross water.
+  if (layers.roads) for (const f of features) if (f.kind === 'road' || f.kind === 'seaRoute') {
+    const path = line(f.points)
+    ink(c, path, '#e4d5b6', 2.2)
+    c.setLineDash([2.5, 1.2])
+    ink(c, path, /桥/.test(f.name) ? '#8a897d' : '#976e4d', 0.85)
+    c.setLineDash([])
+  }
+  if (layers.coastlines) ink(c, coast, '#645f48', 0.95)
+  if (layers.coastlines && layers.waterBodies) {
+    ink(c, waterEdges, '#71938b', 5)
+    ink(c, waterEdges, '#dce1be', 3.6)
+    ink(c, waterEdges, '#647b70', 0.9)
+  }
+  if (realms) {
+    ink(c, realmEdges, '#c7c1b84d', 9)
+    ink(c, realmEdges, '#a79b8b', 3)
+    ink(c, realmEdges, '#e7d9b8', 1.2)
+  }
   for (const f of features) {
+    if (f.kind === 'passage' && layers.passages) {
+      const path = line(f.points)
+      ink(c, path, '#dfd6b44d', 5)
+      c.setLineDash([5, 4])
+      ink(c, path, '#eee1bc', 1.5)
+      c.setLineDash([])
+    }
+    if (f.kind === 'rift' && layers.rifts) {
+      ink(c, line(f.points), '#b7a7c34d', 8)
+      ink(c, line(f.points), '#363347', 3.5)
+      c.setLineDash([1, 3])
+      ink(c, line(f.points), '#d3bddd', 0.8)
+      c.setLineDash([])
+    }
     if ((f.kind === 'border' && layers.borders) || (f.kind === 'province' && layers.provinces)) {
       c.setLineDash(f.kind === 'border' ? [5, 3] : [2, 3])
-      ink(c, line(f.points), f.kind === 'border' ? '#965e47' : '#95765c', f.kind === 'border' ? 1.15 : 0.65)
+      ink(
+        c,
+        line(f.points),
+        f.kind === 'border' ? '#965e47' : '#95765c',
+        f.kind === 'border' ? 1.15 : 0.65,
+      )
       c.setLineDash([])
     }
   }
@@ -480,11 +553,13 @@ export function drawTerrain(
     c.fillRect(0, 0, w, h)
   }
   // Place the rose only in a clear patch of water.
-  for (const [x, y] of [
-    [w * 0.065, h * 0.89],
-    [w * 0.93, h * 0.1],
-    [w * 0.08, h * 0.12],
-  ]) {
+  for (const [x, y] of realms
+    ? []
+    : [
+        [w * 0.065, h * 0.89],
+        [w * 0.93, h * 0.1],
+        [w * 0.08, h * 0.12],
+      ]) {
     if (
       [
         [0, 0],
@@ -518,24 +593,65 @@ export function drawLabels(
   g: AtlasGeometry,
   zoom: number,
   illustrated = false,
-  options: { layers?: AtlasLayers; sheet?: HTMLImageElement; kmPerPixel?: number } = {},
+  options: {
+    layers?: AtlasLayers
+    sheet?: HTMLImageElement
+    kmPerPixel?: number
+    fullDetail?: boolean
+  } = {},
 ) {
   const layers = options.layers ?? DEFAULT_ATLAS_LAYERS
 
   const occupied: Box[] = []
-  const order = { city: 1, fortress: 1, region: 2, sea: 3, wall: 4, river: 5, ridge: 6 }
+  const labeledNames = new Set<string>()
+  const order = {
+    city: 1,
+    fortress: 1,
+    landmark: 1,
+    region: 2,
+    sea: 3,
+    water: 3,
+    passage: 4,
+    rift: 4,
+    wall: 4,
+    river: 5,
+    ridge: 6,
+  }
   const list = g.features
     .filter((f) => f.name && f.kind in order)
     .sort(
-      (a, b) => a.rank - b.rank || order[a.kind as keyof typeof order] - order[b.kind as keyof typeof order],
+      (a, b) =>
+        a.rank - b.rank ||
+        order[a.kind as keyof typeof order] - order[b.kind as keyof typeof order],
     )
   for (const f of list) {
-    const [x, y] = f.points[Math.floor(f.points.length / 2)]
+    const [x, y] = f.kind === 'water'
+      ? f.points.reduce(([x, y], [u, v]) => [x + u / f.points.length, y + v / f.points.length], [0, 0])
+      : f.points[Math.floor(f.points.length / 2)]
     const fortress = f.kind === 'fortress'
     if (fortress && !layers.fortresses) continue
     const city = f.kind === 'city' || fortress,
+      landmark = f.kind === 'landmark',
       area = f.kind === 'region',
-      water = f.kind === 'sea'
+      water = f.kind === 'sea' || f.kind === 'water'
+    if (f.kind === 'water' && !layers.waterBodies) continue
+    if (landmark && layers.burgIcons) {
+      const r = 2.6 / Math.sqrt(zoom)
+      c.fillStyle = '#f2e4c0'
+      c.strokeStyle = '#675344'
+      c.lineWidth = 0.8 / Math.sqrt(zoom)
+      const marker = line(
+        [
+          [x, y - r],
+          [x + r, y],
+          [x, y + r],
+          [x - r, y],
+        ],
+        true,
+      )
+      c.fill(marker)
+      c.stroke(marker)
+    }
     if (city && layers.burgIcons && options.sheet && f.rank < 2)
       stamp(c, options.sheet, fortress ? 6 : f.rank === 0 ? 4 : 5, x, y, f.rank === 0 ? 24 : 15)
     if (city && layers.burgIcons && f.rank === 0 && !illustrated) {
@@ -561,32 +677,42 @@ export function drawLabels(
     if (
       (f.kind === 'river' && !layers.rivers) ||
       (f.kind === 'ridge' && !layers.mountains) ||
-      (f.kind === 'wall' && !layers.walls)
+      (f.kind === 'wall' && !layers.walls) ||
+      (f.kind === 'passage' && !layers.passages) ||
+      (f.kind === 'rift' && !layers.rifts)
     )
       continue
-    if ((f.rank === 2 && zoom < 1.65) || (!city && !area && !water && zoom < 1.45)) continue
-    const size = (water ? 17 : area ? 13 : city ? (f.rank === 0 ? 11 : 9) : 8) / Math.pow(zoom, 0.65)
+    if (labeledNames.has(f.name)) continue
+    if (!options.fullDetail && ((f.rank === 2 && zoom < 1.65) ||
+      (!city && !landmark && !area && !water && f.rank > 0 && zoom < 1.45)))
+      continue
+    const size =
+      (water ? 17 : area ? 13 : city ? (f.rank === 0 ? 11 : 9) : landmark ? 9 : 8) /
+      Math.pow(zoom, 0.65)
     c.font = (city && f.rank === 0 ? '600 ' : '') + size + 'px ' + serif
     const width = c.measureText(f.name).width
-    const labelPositions = city
-      ? [
-          [5, 1],
-          [-width - 5, 1],
-          [-width / 2, -size * 0.65],
-          [-width / 2, size * 1.4],
-        ]
-      : [[-width / 2, 0]]
+    const labelPositions =
+      city || landmark
+        ? [
+            [5, 1],
+            [-width - 5, 1],
+            [-width / 2, -size * 0.65],
+            [-width / 2, size * 1.4],
+          ]
+        : [[-width / 2, 0]]
     for (const [dx, dy] of labelPositions) {
       const tx = x + dx,
         ty = y + dy,
         box = { x: tx - 1.5, y: ty - size, w: width + 3, h: size + 2 }
       if (
         occupied.some(
-          (b) => box.x < b.x + b.w && box.x + box.w > b.x && box.y < b.y + b.h && box.y + box.h > b.y,
+          (b) =>
+            box.x < b.x + b.w && box.x + box.w > b.x && box.y < b.y + b.h && box.y + box.h > b.y,
         )
       )
         continue
       occupied.push(box)
+      labeledNames.add(f.name)
       c.lineJoin = 'round'
       c.lineWidth = size * 0.21
       c.strokeStyle = water ? '#bdd0bcba' : '#eee5c7e0'
@@ -596,7 +722,17 @@ export function drawLabels(
       break
     }
   }
-  if (layers.scaleBar && options.kmPerPixel && options.kmPerPixel > 0) {
+  const realms = g.features.some((f) => f.kind === 'realm')
+  if (realms) {
+    c.font = '9px ' + serif
+    const note = '诸天分区示意 · 分区间位置与大小仅用于排版 · 不共用比例尺'
+    const width = c.measureText(note).width
+    c.fillStyle = '#3c3d4bda'
+    c.fillRect((g.width - width) / 2 - 10, g.height - 29, width + 20, 20)
+    c.fillStyle = '#e8dec3'
+    c.fillText(note, (g.width - width) / 2, g.height - 15)
+  }
+  if (!realms && layers.scaleBar && options.kmPerPixel && options.kmPerPixel > 0) {
     const maxKm = g.width * 0.13 * options.kmPerPixel,
       power = 10 ** Math.floor(Math.log10(maxKm))
     const distance = [5, 2, 1].map((v) => v * power).find((v) => v <= maxKm) ?? power

@@ -377,7 +377,8 @@ export async function generateWorldMapConfigCandidateV1(input: {
           category: 'geography.world-map',
           projectId: input.scope.projectId,
           contextOverflowPolicy: 'reject',
-        }))
+          transportRetryPolicy: 'none',
+        }, undefined, undefined, input.atlasDraft ? { responseFormat: 'json_object' } : undefined))
   } catch (error) {
     await pauseUnsafeRun(input.scope, snapshot, 'world-map-model-outcome-unknown')
     throw error
@@ -396,7 +397,7 @@ export async function generateWorldMapConfigCandidateV1(input: {
 
   let mapConfig: MapGenConfig
   try {
-    mapConfig = input.atlasDraft ? parseAtlasDraft(raw, assembled.text) : parseVoronoiMapConfig(raw, assembled.text)
+    mapConfig = input.atlasDraft ? parseAtlasDraft(raw, assembled.text, { existingNamesOnly: true }) : parseVoronoiMapConfig(raw, assembled.text)
     if (mapConfig.mapName !== node.name) throw new Error('模型返回的 mapName 与冻结目标世界节点名称不一致。')
   } catch (error) {
     snapshot = await append(input.scope, snapshot, 'step.failed', {

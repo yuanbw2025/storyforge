@@ -149,12 +149,13 @@ describe.sequential('R-HARNESS66 · 世界地图 durable 配置候选与定点�
     const fixture=await seed()
     const generated=await generateWorldMapConfigCandidateV1({
       scope:fixture.scope,worldGroupId:fixture.worldGroupId,worldNodeId:fixture.worldNodeId,atlasDraft:true,
-      runAI:async()=>JSON.stringify({mapName:'潮钟界',features:[['land','陆地',0,'0,0 120,0 100,80'],['city','海城',1,'88,40']]}),
+      runAI:async()=>JSON.stringify({mapName:'潮钟界',features:[['land','陆地',0,'0,0 120,0 100,80'],['city','旧潮港',1,'88,40']]}),
     })
     expect((await db.worldNodes.get(fixture.worldNodeId))?.mapConfigJSON).toBeUndefined()
     const adopted=await adoptWorldMapConfigCandidateV1({scope:fixture.scope,worldGroupId:fixture.worldGroupId,runId:generated.snapshot.run.id})
     expect(adopted.receiptHash).toHaveLength(64)
     expect(adopted.candidate.mapConfig.atlasDraft?.features).toHaveLength(2)
+    expect(adopted.candidate.mapConfig.burgNames).toEqual(['旧潮港'])
     expect(adopted.candidate.mapConfig.atlasReference).toBeUndefined()
   })
 

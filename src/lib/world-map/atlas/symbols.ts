@@ -1,20 +1,22 @@
 import symbolUrl from '../../../assets/world-map/watercolor-symbols.webp?url'
+import inkSymbolUrl from '../../../assets/world-map/ink-mountains-symbols.png?url'
 
-let pending: Promise<HTMLImageElement> | undefined
+export type AtlasSymbolStyle = 'watercolor' | 'ink'
+const pending: Partial<Record<AtlasSymbolStyle, Promise<HTMLImageElement>>> = {}
 /** One bundled, same-origin sheet, shared by candidate, reader and exporter. */
-export function loadAtlasSymbols() {
-  if (!pending) {
+export function loadAtlasSymbols(style: AtlasSymbolStyle = 'watercolor') {
+  if (!pending[style]) {
     const image = new Image()
-    image.src = symbolUrl
-    pending = image
+    image.src = style === 'ink' ? inkSymbolUrl : symbolUrl
+    pending[style] = image
       .decode()
       .then(() => image)
       .catch((cause) => {
-        pending = undefined
+        delete pending[style]
         throw cause
       })
   }
-  return pending
+  return pending[style]!
 }
 export function stamp(
   ctx: CanvasRenderingContext2D,
