@@ -1,0 +1,23 @@
+.ai-config-panel{container-type:inline-size}
+.ai-connection-settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 20px}
+.ai-connection-settings>*{min-width:0;grid-column:1/-1}
+.ai-connection-settings>.ai-provider-field,.ai-connection-settings>.ai-key-field{grid-column:auto}
+.ai-connection-settings>.ai-connection-wide{grid-column:1/-1}
+.ai-connection-settings .ai-provider-field>select{width:100%;max-width:340px}
+.ai-connection-settings .ai-connection-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.ai-connection-settings .ai-connection-grid>div{min-width:0}
+.ai-connection-settings .ai-connection-heading{display:flex;align-items:center;min-height:28px;margin-bottom:4px}
+.ai-connection-settings input,.ai-connection-settings select{min-width:0;max-width:100%}
+.ai-config-panel .ai-connection-settings input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),.ai-config-panel .ai-connection-settings select{height:36px;font-size:13px;line-height:1.5;padding-top:7px;padding-bottom:7px}
+.ai-connection-settings .text-xs{font-size:13px;line-height:1.5}
+.ai-connection-settings p,.ai-connection-settings label,.ai-connection-settings [role=alert]{overflow-wrap:anywhere}
+.ai-connection-settings svg{flex-shrink:0}
+.ai-connection-settings .ai-context-window>div{max-width:600px}
+.ai-connection-settings section[aria-label="Codex 本机连接"]{padding:12px}
+.ai-connection-settings section[aria-label="Codex 本机连接"]>:not(:first-child){margin-top:8px}
+.ai-connection-settings section[aria-label="Codex 本机连接"] select{display:block;max-width:480px}
+@container(max-width:650px){
+  .ai-connection-settings,.ai-connection-settings .ai-connection-grid{grid-template-columns:minmax(0,1fr);gap:14px}
+  .ai-connection-settings>.ai-provider-field,.ai-connection-settings>.ai-key-field{grid-column:1}
+  .ai-connection-settings .ai-connection-heading{min-height:24px}
+}
