@@ -996,6 +996,7 @@ const ADOPTION_EXTENSION_REGISTRATIONS: readonly AdoptionExtensionSpec[] = [
     id: 'product-production-roots', target: 'productProductions',
     entrypoints: [
       'src/lib/product-production/commands.ts',
+      'src/lib/product-production/delete-draft.ts',
       'src/lib/product-production/artifact-store.ts',
       'src/lib/product-production/media-blob-store.ts',
       'src/lib/product-production/adoption.ts',
@@ -1003,7 +1004,7 @@ const ADOPTION_EXTENSION_REGISTRATIONS: readonly AdoptionExtensionSpec[] = [
       'src/lib/avg/author-artifacts.ts',
     ],
     policyRegistry: 'PRODUCT_PRODUCTION_COMMAND_POLICY + PRODUCT_PRODUCTION_ARTIFACT_POLICY + PROJECT_TABLES',
-    reason: 'Production 状态、Brief 授权、幂等命令、Build/Artifact 和共享媒资必须维持 CAS、hash、scope、epoch 与引用完整性，不能由组件或 provider 直接散写。',
+    reason: 'Production 状态、Brief 授权、幂等命令、Build/Artifact 和共享媒资必须维持 CAS、hash、scope、epoch 与引用完整性，不能由组件或 provider 直接散写。文字冒险未执行草稿删除另在单一事务复核 scope、revision、epoch、状态和无 Build/Release，再沿 PROJECT_TABLES 清理引用，保留宿主 Work。',
     reviewAfter: '2027-08-21',
   },
   {

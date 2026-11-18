@@ -29,6 +29,8 @@
 
 ## 3. 权威写入与数据生命周期
 
+作者可显式删除尚未执行的制作草稿（`consulting` / `brief-ready`）。删除在单一事务复核原 Work/World 作用域、Production 版本与状态，确认没有 Build 或 ProductRelease 后，沿注册表清理该 Production 的引用子项；不删除其所在小说 Work、世界或其他 Production。已有执行记录的版本使用现有归档路径，不按空草稿删除。
+
 玩家入口只能提交 `commitAdventureAction()`、`commitAdventureNarrativeChoice()` 或共享存档命令。命令必须带幂等 command id、基线序号和状态哈希；规则结算先纯函数预演，再在事务中追加小事件。播放器、AI 候选和叙述文本均无权直接改状态。
 
 第一批不新增表：内容随不可变 Product RuntimePackage/Release 冻结，运行数据继续使用已登记的产品会话、事件和检查点表。因此导出、导入、删除、分支、重放和迁移沿用 `PROJECT_TABLES` 派生生命周期，不创建旁路清单。

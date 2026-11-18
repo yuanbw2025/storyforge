@@ -1,6 +1,7 @@
 import { assertCurrentProductEntryV1, evaluateCurrentProductEntryV1 } from '../lib/product/product-catalog'
 import { saveTtrpgOpenPreviewEnabledV1, useTtrpgOpenPreviewEnabledV1 } from '../lib/ttrpg/open-preview-preferences'
 import BrandIcon from '../components/shared/BrandIcon'
+import { DeleteProductWorkButton } from '../components/product/ProductDeleteButton'
 import { useDialog } from '../components/shared/Dialog';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
@@ -700,6 +701,9 @@ export default function TtrpgPage() {
                               <Link className="lf-action" to={path("play", r)}>
                                 游玩与存档
                               </Link>
+                              <DeleteProductWorkButton work={r.work} disabled={busy} onDeleted={() => {
+                                if (workId === r.work.id) { setDirty(false); navigate('/ttrpg/library'); }
+                              }} />
                             </div>
                           </article>
                         ))}
