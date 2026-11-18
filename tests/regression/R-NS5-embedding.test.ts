@@ -1,3 +1,4 @@
+import { embeddingModelTag } from '../../src/lib/ai/adapters/embedding-adapter'
 /**
  * R-NS5-embedding · 语义检索通道（NS-5 embedding）
  * 守卫：① 混合打分让语义命中超过关键词未命中；② 跨模型向量不混算；
@@ -82,7 +83,7 @@ describe('NS-5 · embedding 语义检索通道', () => {
     expect(r3.embedded).toBe(r1.embedded)
     expect(calls).toBeGreaterThan(callsAfterFirst)
     const rows = await db.retrievalChunks.where('projectId').equals(pid).toArray()
-    expect(rows.every(c => c.embeddingModel === 'openai:text-embedding-3-small')).toBe(true)
+    expect(rows.every(c => c.embeddingModel === embeddingModelTag(cfg({ model: 'text-embedding-3-small', provider: 'openai', apiKey: 'sk-x' })))).toBe(true)
   })
 
   it('优雅降级：未启用→不嵌；接口失败→embedQuery 返回 null', async () => {

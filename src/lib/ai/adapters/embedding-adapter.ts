@@ -1,3 +1,6 @@
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex } from '@noble/hashes/utils.js'
+import { normalizeOpenAIBaseUrl } from '../openai-endpoint'
 /**
  * NS-5 · Embedding 适配器 — 语义检索通道的唯一出口。
  *
@@ -10,9 +13,9 @@ import { IS_MODEL_DISABLED_BUILD, assertGenerationAvailable } from '../../showca
 import { recordUsage } from '../usage-log'
 import { estimateTokens } from '../context-budget'
 
-/** 当前向量所属模型标识（换 provider/model 即视为失效，绝不跨模型混算余弦）。 */
+/** 当前向量所属连接标识（模型、端点及凭据作用域隔离；旧标签只作不可复用缓存）。 */
 export function embeddingModelTag(cfg: EmbeddingConfig): string {
-  return `${cfg.provider}:${cfg.model}`
+  return `embedding-v2:${bytesToHex(sha256(new TextEncoder().encode(JSON.stringify([cfg.provider, cfg.model, normalizeOpenAIBaseUrl(cfg.baseUrl).baseUrl, cfg.apiKey]))))}`
 }
 
 /** 配置是否可用于真正发起嵌入调用。 */
