@@ -1,0 +1,546 @@
+import { stamp } from './symbols'
+import { terrainWash } from './relief'
+import { seedRandom } from '../engine/random'
+import type { AtlasGeometry, Point } from './geometry'
+
+type Brush = CanvasRenderingContext2D
+type Random = () => number
+const serif = '"Songti SC","STSong","Noto Serif CJK SC",serif'
+function line(points: Point[], closed = false) {
+  const p = new Path2D()
+  if (points.length) {
+    p.moveTo(...points[0])
+    for (const [x, y] of points.slice(1)) p.lineTo(x, y)
+    if (closed) p.closePath()
+  }
+  return p
+}
+function ink(c: Brush, path: Path2D, color: string, width: number) {
+  c.strokeStyle = color
+  c.lineWidth = width
+  c.stroke(path)
+}
+function wash(c: Brush, x: number, y: number, r: number, color: string) {
+  const g = c.createRadialGradient(x, y, 0, x, y, r)
+  g.addColorStop(0, color)
+  g.addColorStop(1, color.slice(0, 7) + '00')
+  c.fillStyle = g
+  c.fillRect(x - r, y - r, r * 2, r * 2)
+}
+// Add fine shoreline detail without moving the supplied vertices.
+function shoreline(points: Point[], rng: Random) {
+  const shore: Point[] = []
+  points.forEach(([x, y], i) => {
+    const [u, v] = points[(i + 1) % points.length],
+      dx = u - x,
+      dy = v - y
+    const d = Math.hypot(dx, dy),
+      n = Math.max(1, Math.ceil(d / 2.7))
+    for (let j = 0; j < n; j++) {
+      const t = j / n,
+        off = Math.sin(t * Math.PI) * (rng() - 0.5) * Math.min(5, d / 5)
+      shore.push([x + dx * t - (dy / (d || 1)) * off, y + dy * t + (dx / (d || 1)) * off])
+    }
+  })
+  return line(shore, true)
+}
+function watercourse(points: Point[], name: string) {
+  const rng = seedRandom('river-' + name)
+  const p = new Path2D()
+  p.moveTo(...points[0])
+  for (let j = 1; j < points.length; j++) {
+    const [x, y] = points[j - 1],
+      [u, v] = points[j],
+      dx = u - x,
+      dy = v - y
+    const length = Math.hypot(dx, dy)
+    const bend = Math.min(8, length * 0.16) * (rng() > 0.5 ? 1 : -1)
+    const ox = (-dy / (length || 1)) * bend,
+      oy = (dx / (length || 1)) * bend
+    p.bezierCurveTo(x + dx * 0.32 + ox, y + dy * 0.32 + oy, x + dx * 0.68 - ox, y + dy * 0.68 - oy, u, v)
+  }
+  return p
+}
+function along(points: Point[], step: number, place: (x: number, y: number) => void) {
+  if (points.length === 1) {
+    place(...points[0])
+    return
+  }
+  for (let i = 1; i < points.length; i++) {
+    const [x, y] = points[i - 1],
+      [u, v] = points[i]
+    const n = Math.max(1, Math.ceil(Math.hypot(u - x, v - y) / step))
+    for (let j = 0; j < n; j++) place(x + ((u - x) * j) / n, y + ((v - y) * j) / n)
+  }
+}
+function peak(c: Brush, rng: Random, x: number, y: number, h: number, snow: boolean) {
+  const w = h * (0.62 + rng() * 0.3),
+    tip = x + (rng() - 0.52) * w * 0.6
+  const a: Point = [tip, y - h],
+    left: Point = [x - w, y + 1],
+    right: Point = [x + w, y + 2]
+  const fold: Point = [tip + w * 0.11, y - h * 0.54],
+    foot: Point = [x - w * 0.12, y + 2]
+  const outline = line(
+    [
+      left,
+      [x - w * 0.64, y - h * 0.27],
+      [x - w * 0.34, y - h * 0.58],
+      a,
+      [x + w * 0.36, y - h * 0.63],
+      [x + w * 0.54, y - h * 0.49],
+      right,
+      foot,
+    ],
+    true,
+  )
+  const fill = c.createLinearGradient(x, y - h, x + w * 0.3, y + 2)
+  fill.addColorStop(0, snow ? '#fff9e5' : '#e9dec0')
+  fill.addColorStop(0.58, '#c2aa80')
+  fill.addColorStop(1, '#a1946e')
+  c.fillStyle = fill
+  c.fill(outline)
+  c.fillStyle = snow ? '#879aa1' : '#877c63'
+  c.fill(
+    line(
+      [
+        a,
+        fold,
+        [x + w * 0.02, y - h * 0.31],
+        foot,
+        right,
+        [x + w * 0.54, y - h * 0.49],
+        [x + w * 0.36, y - h * 0.63],
+      ],
+      true,
+    ),
+  )
+  ink(c, outline, '#645f4b', 0.52)
+  for (let i = 1; i < 6; i++) {
+    const t = i / 7,
+      u = tip + (right[0] - tip) * t,
+      v = y - h + (h + 2) * t
+    ink(
+      c,
+      line([
+        [u, v],
+        [u - w * 0.09, v + h * 0.13],
+        [u - w * 0.22, v + h * 0.22],
+      ]),
+      '#6d6959',
+      0.31,
+    )
+  }
+  if (snow) {
+    c.fillStyle = '#f3f0dd'
+    c.fill(
+      line(
+        [
+          a,
+          [tip - w * 0.27, y - h * 0.66],
+          [tip - w * 0.1, y - h * 0.72],
+          fold,
+          [tip + w * 0.12, y - h * 0.76],
+          [tip + w * 0.25, y - h * 0.71],
+        ],
+        true,
+      ),
+    )
+  }
+}
+function tree(c: Brush, rng: Random, x: number, y: number, h: number) {
+  const w = h * 0.39
+  c.fillStyle = rng() > 0.5 ? '#637a57' : '#536d55'
+  const p = line(
+    [
+      [x, y - h],
+      [x + w * 0.58, y - h * 0.59],
+      [x + w * 0.32, y - h * 0.57],
+      [x + w, y - h * 0.18],
+      [x + w * 0.4, y],
+      [x - w, y - h * 0.15],
+      [x - w * 0.32, y - h * 0.57],
+      [x - w * 0.57, y - h * 0.54],
+    ],
+    true,
+  )
+  c.fill(p)
+  ink(c, p, '#495d46', 0.3)
+  ink(
+    c,
+    line([
+      [x, y - h * 0.86],
+      [x - w * 0.25, y - h * 0.58],
+      [x - w * 0.04, y - h * 0.53],
+      [x - w * 0.56, y - h * 0.23],
+    ]),
+    '#aabd86',
+    0.48,
+  )
+}
+function castle(c: Brush, x: number, y: number) {
+  c.save()
+  c.translate(x, y)
+  const silhouette = line(
+    [
+      [-5, 0],
+      [-5, -6],
+      [-5.8, -6],
+      [-5.8, -8],
+      [-4.6, -8],
+      [-4.6, -7],
+      [-3.6, -7],
+      [-3.6, -8],
+      [-2.3, -8],
+      [-2.3, -6],
+      [-3, -6],
+      [-3, -4],
+      [-1, -4],
+      [-1, -10],
+      [0.7, -13],
+      [2.4, -10],
+      [2.4, -4],
+      [3.6, -4],
+      [3.6, -7],
+      [5, -9],
+      [6.4, -7],
+      [6.4, 0],
+    ],
+    true,
+  )
+  c.fillStyle = '#e1cd9c'
+  c.fill(silhouette)
+  ink(c, silhouette, '#5e503d', 0.75)
+  c.fillStyle = '#78634c'
+  c.fillRect(0.6, -9, 0.8, 5)
+  c.fillRect(4.7, -6, 0.9, 3)
+  c.fillRect(-2, -2.7, 1.9, 2.7)
+  c.restore()
+}
+function compass(c: Brush, x: number, y: number, r: number) {
+  c.save()
+  c.translate(x, y)
+  c.strokeStyle = '#5d6b57'
+  c.lineWidth = 0.65
+  for (const radius of [r * 0.54, r * 0.63]) {
+    c.beginPath()
+    c.arc(0, 0, radius, 0, Math.PI * 2)
+    c.stroke()
+  }
+  for (let i = 0; i < 8; i++) {
+    c.save()
+    c.rotate((i * Math.PI) / 4)
+    const len = i % 2 ? r * 0.58 : r
+    const light = line(
+        [
+          [0, 0],
+          [-r * 0.11, -r * 0.14],
+          [0, -len],
+        ],
+        true,
+      ),
+      dark = line(
+        [
+          [0, 0],
+          [r * 0.11, -r * 0.14],
+          [0, -len],
+        ],
+        true,
+      )
+    c.fillStyle = '#e4d6ac'
+    c.fill(light)
+    c.fillStyle = '#596c61'
+    c.fill(dark)
+    ink(c, light, '#5d6b57', 0.5)
+    ink(c, dark, '#5d6b57', 0.5)
+    c.restore()
+  }
+  c.textAlign = 'center'
+  c.fillStyle = '#344e4c'
+  c.font = '9px ' + serif
+  c.fillText('北', 0, -r - 3)
+  c.restore()
+}
+export function drawTerrain(g: AtlasGeometry, seed: string, sheet?: HTMLImageElement) {
+  const canvas = document.createElement('canvas')
+  const scale = Math.min(3, 4096 / Math.max(g.width, g.height))
+  canvas.width = Math.round(g.width * scale)
+  canvas.height = Math.round(g.height * scale)
+  const c = canvas.getContext('2d')!
+  c.scale(scale, scale)
+  c.lineJoin = 'round'
+  c.lineCap = 'round'
+  const { width: w, height: h, features } = g,
+    rng = seedRandom(seed)
+  const sea = c.createLinearGradient(0, 0, w, h)
+  sea.addColorStop(0, '#638d90')
+  sea.addColorStop(0.38, '#94b3a9')
+  sea.addColorStop(0.68, '#81a5a0')
+  sea.addColorStop(1, '#4f7f83')
+  c.fillStyle = sea
+  c.fillRect(0, 0, w, h)
+  for (let i = 0; i < 75; i++)
+    wash(c, rng() * w, rng() * h, 35 + rng() * 100, rng() > 0.5 ? '#45787c26' : '#dfd8af36')
+  for (let i = 0; i < 3800; i++) {
+    const x = rng() * w,
+      y = rng() * h,
+      length = 1 + rng() * 5
+    ink(
+      c,
+      line([
+        [x, y],
+        [x + length * 0.45, y - 0.45],
+        [x + length, y],
+      ]),
+      '#e1e4c54d',
+      0.45,
+    )
+  }
+  c.setLineDash([1, 4])
+  for (let x = 32; x < w; x += 60)
+    ink(
+      c,
+      line([
+        [x, 0],
+        [x, h],
+      ]),
+      '#446e6f44',
+      0.4,
+    )
+  for (let y = 32; y < h; y += 60)
+    ink(
+      c,
+      line([
+        [0, y],
+        [w, y],
+      ]),
+      '#446e6f44',
+      0.4,
+    )
+  c.setLineDash([])
+  const land = new Path2D()
+  const fillRule = g.cellCoast ? 'evenodd' : 'nonzero'
+  for (const f of features)
+    if (f.kind === 'land') {
+      const area = f.points.reduce((sum, [x, y], i) => {
+        const [u, v] = f.points[(i + 1) % f.points.length]
+        return sum + x * v - u * y
+      }, 0)
+      land.addPath(shoreline(!g.cellCoast && area < 0 ? [...f.points].reverse() : f.points, rng))
+    }
+  ink(c, land, '#cbd4b039', 20)
+  ink(c, land, '#d7d9b775', 12)
+  ink(c, land, '#72938c', 7)
+  ink(c, land, '#dce1be', 5.8)
+  ink(c, land, '#638583', 2.6)
+  c.save()
+  c.clip(land, fillRule)
+  c.drawImage(terrainWash(g, seed), 0, 0, w, h)
+  const glyphs: { x: number; y: number; size: number; kind: 'ridge' | 'wood' }[] = []
+  for (const f of features) {
+    const k = f.kind
+    if (k === 'ridge' || k === 'wood' || k === 'desert' || k === 'marsh') {
+      const place = (x: number, y: number) => {
+        wash(
+          c,
+          x,
+          y,
+          k === 'desert' ? 32 : 18,
+          { ridge: '#93846e18', wood: '#637f5832', desert: '#d7a36e29', marsh: '#67968b69' }[k],
+        )
+        if (k === 'ridge' || k === 'wood') {
+          const count = sheet ? (k === 'wood' ? 4 : 2) : k === 'wood' ? 9 : 3
+          for (let j = 0; j < count; j++)
+            glyphs.push({
+              kind: k,
+              x: x + (rng() - 0.5) * 24,
+              y: y + (rng() - 0.5) * 19,
+              size: k === 'wood' ? 3 + rng() * 4 : 5 + rng() * 10,
+            })
+        } else
+          for (let j = 0; j < 7; j++) {
+            const u = x + (rng() - 0.5) * 35,
+              v = y + (rng() - 0.5) * 23
+            ink(
+              c,
+              line([
+                [u - 2, v],
+                [u, v - 0.6],
+                [u + 2.7, v + 0.2],
+              ]),
+              k === 'desert' ? '#a88658' : '#759c85',
+              0.45,
+            )
+          }
+      }
+      // Area-shaped brush strokes fill the interior; narrow ones follow the stroke.
+      const xs = f.points.map((p) => p[0]),
+        ys = f.points.map((p) => p[1])
+      const left = Math.min(...xs),
+        right = Math.max(...xs),
+        top = Math.min(...ys),
+        bottom = Math.max(...ys)
+      const patch = line(f.points, true)
+      if (k !== 'ridge' && f.points.length >= 5 && right - left > 22 && bottom - top > 20) {
+        const spacing = k === 'wood' ? 8 : 12
+        for (let v = top; v < bottom; v += spacing)
+          for (let u = left; u < right; u += spacing) {
+            const x = u + rng() * spacing,
+              y = v + rng() * spacing
+            if (c.isPointInPath(patch, x * scale, y * scale)) place(x, y)
+          }
+      } else along(f.points, k === 'ridge' ? 8 : 7, place)
+    }
+  }
+  // Short pen strokes give a continuous paper surface across biome boundaries.
+  for (let i = 0; i < 15000; i++) {
+    const x = rng() * w,
+      y = rng() * h
+    ink(
+      c,
+      line([
+        [x, y],
+        [x + rng() * 2 + 0.2, y - rng() * 0.8],
+      ]),
+      rng() > 0.5 ? '#776a442e' : '#fff2ca60',
+      0.34,
+    )
+  }
+  for (const f of features) {
+    if (f.kind === 'river') {
+      const p = watercourse(f.points, f.name)
+      ink(c, p, '#eae3c6', 2.7)
+      ink(c, p, '#648f94', 1.55)
+      ink(c, p, '#a8cbbe', 0.57)
+    } else if (f.kind === 'road') {
+      const p = line(f.points)
+      ink(c, p, '#d8c29f', 1.5)
+      c.setLineDash([2.5, 1.2])
+      ink(c, p, '#976e4d', 0.85)
+      c.setLineDash([])
+    }
+  }
+  glyphs.sort((a, b) => a.y - b.y)
+  for (const s of glyphs) {
+    if (sheet) {
+      const index = s.kind === 'ridge' ? (s.y < h * 0.32 || s.size > 11 ? 0 : 1) : s.y < h * 0.48 ? 2 : 3
+      stamp(c, sheet, index, s.x, s.y, s.size * (s.kind === 'ridge' ? 2.15 : 2.4))
+    } else if (s.kind === 'ridge') peak(c, rng, s.x, s.y, s.size, s.y < h * 0.22 || s.size > 12.5)
+    else tree(c, rng, s.x, s.y, s.size)
+  }
+  for (const f of features)
+    if (f.kind === 'wall') {
+      const p = line(f.points)
+      ink(c, p, '#647c81', 3.8)
+      ink(c, p, '#d5e5db', 2.55)
+      c.setLineDash([0.8, 3])
+      ink(c, p, '#758e94', 2.5)
+      c.setLineDash([])
+    }
+  c.restore()
+  ink(c, land, '#645f48', 0.95)
+  if (sheet)
+    for (const f of features)
+      if (f.kind === 'city' && f.rank < 2) {
+        const [x, y] = f.points[0]
+        stamp(c, sheet, f.rank === 0 ? 4 : 6, x, y, f.rank === 0 ? 24 : 13)
+      }
+  // Place the rose only in a clear patch of water.
+  for (const [x, y] of [
+    [w * 0.065, h * 0.89],
+    [w * 0.93, h * 0.1],
+    [w * 0.08, h * 0.12],
+  ]) {
+    if (
+      [
+        [0, 0],
+        [20, 20],
+        [-20, -20],
+        [-20, 20],
+        [20, -20],
+      ].every(([dx, dy]) => !c.isPointInPath(land, (x + dx) * scale, (y + dy) * scale, fillRule))
+    ) {
+      compass(c, x, y, 18)
+      break
+    }
+  }
+  c.strokeStyle = '#536d60'
+  c.lineWidth = 0.8
+  c.strokeRect(4, 4, w - 8, h - 8)
+  c.strokeStyle = '#ddcf9f'
+  c.lineWidth = 1.4
+  c.strokeRect(6, 6, w - 12, h - 12)
+  return canvas
+}
+
+interface Box {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+export function drawLabels(c: Brush, g: AtlasGeometry, zoom: number, illustrated = false) {
+  const occupied: Box[] = []
+  const order = { city: 1, region: 2, sea: 3, wall: 4, river: 5, ridge: 6 }
+  const list = g.features
+    .filter((f) => f.name && f.kind in order)
+    .sort(
+      (a, b) => a.rank - b.rank || order[a.kind as keyof typeof order] - order[b.kind as keyof typeof order],
+    )
+  for (const f of list) {
+    const [x, y] = f.points[Math.floor(f.points.length / 2)]
+    const city = f.kind === 'city',
+      area = f.kind === 'region',
+      water = f.kind === 'sea'
+    if (city && f.rank === 0 && !illustrated) {
+      castle(c, x, y)
+    }
+    if (city) {
+      const r = (f.rank === 0 ? 2.65 : 1.65) / Math.sqrt(zoom)
+      c.fillStyle = '#ffefc5'
+      c.strokeStyle = '#664e3d'
+      c.lineWidth = 0.8 / Math.sqrt(zoom)
+      c.beginPath()
+      c.arc(x, y, r, 0, 2 * Math.PI)
+      c.fill()
+      c.stroke()
+      if (f.rank === 0) {
+        c.fillStyle = '#84533e'
+        c.beginPath()
+        c.arc(x, y, r * 0.48, 0, 2 * Math.PI)
+        c.fill()
+      }
+    }
+    if ((f.rank === 2 && zoom < 1.65) || (!city && !area && !water && zoom < 1.45)) continue
+    const size = (water ? 17 : area ? 13 : city ? (f.rank === 0 ? 11 : 9) : 8) / Math.pow(zoom, 0.65)
+    c.font = (city && f.rank === 0 ? '600 ' : '') + size + 'px ' + serif
+    const width = c.measureText(f.name).width
+    const options = city
+      ? [
+          [5, 1],
+          [-width - 5, 1],
+          [-width / 2, -size * 0.65],
+          [-width / 2, size * 1.4],
+        ]
+      : [[-width / 2, 0]]
+    for (const [dx, dy] of options) {
+      const tx = x + dx,
+        ty = y + dy,
+        box = { x: tx - 1.5, y: ty - size, w: width + 3, h: size + 2 }
+      if (
+        occupied.some(
+          (b) => box.x < b.x + b.w && box.x + box.w > b.x && box.y < b.y + b.h && box.y + box.h > b.y,
+        )
+      )
+        continue
+      occupied.push(box)
+      c.lineJoin = 'round'
+      c.lineWidth = size * 0.21
+      c.strokeStyle = water ? '#bdd0bcba' : '#eee5c7e0'
+      c.strokeText(f.name, tx, ty)
+      c.fillStyle = water ? '#385f62' : area ? '#62543e' : city ? '#332f26' : '#536457'
+      c.fillText(f.name, tx, ty)
+      break
+    }
+  }
+}

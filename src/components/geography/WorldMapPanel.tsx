@@ -3,7 +3,7 @@
  * 顶层容器：世界树导航 + AI 生成按钮 + Voronoi/2D/3D 切换 + Canvas + 属性编辑器
  */
 
-import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { Check, Sparkles, Loader2, RefreshCw, Map, Box, Globe, X } from 'lucide-react'
 import { useWorldNodeStore } from '../../stores/world-node'
 import { useWorldGroupStore } from '../../stores/world-group'
@@ -30,17 +30,26 @@ interface Props {
   project: Project
 }
 
-type ViewMode = '3d' | 'voronoi'
+const WorldAtlasPreview = lazy(() => import('./WorldAtlasPreview'))
+type ViewMode = 'atlas' | 'voronoi' | 'saved'
 
 export default function WorldMapPanel({ project }: Props) {
   const { nodes, activeWorldId, loadNodes, ensureRootWorld, updateNode } = useWorldNodeStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const aiConfig = useAIConfigStore(state => state.config)
 
-  const [viewMode, setViewMode] = useState<ViewMode>('voronoi')
+  const atlasLab = import.meta.env.DEV && new URLSearchParams(window.location.search).has('atlas')
+  const [requestedView, setViewMode] = useState<ViewMode>('saved')
 
   // 当前活跃世界的 Voronoi 配置
-  const [voronoiConfig, setVoronoiConfig] = useState<Partial<MapGenConfig> | undefined>(undefined)
+  const activeNode = nodes.find(node => node.id === activeWorldId)
+  const configJSON = activeNode?.mapConfigJSON
+  const voronoiConfig = useMemo<MapGenConfig | undefined>(() => {
+    if (!configJSON) return undefined
+    try { return JSON.parse(configJSON) } catch { return undefined }
+  }, [configJSON])
+  const savedAtlas = Boolean(voronoiConfig?.atlasDraft || voronoiConfig?.atlasReference)
+  const viewMode = requestedView === 'saved' ? (atlasLab || savedAtlas ? 'atlas' : 'voronoi') : requestedView
   const [scope, setScope] = useState<WorkspaceScope | null>(null)
   const [candidate, setCandidate] = useState<WorldMapConfigCandidateV1 | null>(null)
   const [runId, setRunId] = useState<number | null>(null)
@@ -70,26 +79,6 @@ export default function WorldMapPanel({ project }: Props) {
     })
     return () => { cancelled = true }
   }, [project.id, scopedGroupId, ensureRootWorld, loadNodes])
-
-  // ── 切换世界时加载该世界的地图配置 ──
-  const activeNode = nodes.find(n => n.id === activeWorldId)
-
-  useEffect(() => {
-    if (!activeNode) {
-      setVoronoiConfig(undefined)
-      return
-    }
-    // 从世界节点加载地图配置
-    if (activeNode.mapConfigJSON) {
-      try {
-        setVoronoiConfig(JSON.parse(activeNode.mapConfigJSON))
-      } catch {
-        setVoronoiConfig(undefined)
-      }
-    } else {
-      setVoronoiConfig(undefined)
-    }
-  }, [activeNode])
 
   useEffect(() => {
     setCandidate(null)
@@ -142,6 +131,7 @@ export default function WorldMapPanel({ project }: Props) {
         worldGroupId: targetWorldGroupId,
         worldNodeId: targetWorldNodeId,
         aiConfig,
+        atlasDraft: (atlasLab || savedAtlas) && viewMode === 'atlas',
       })
       if (isCurrentTarget(targetWorldNodeId, targetWorldGroupId)) {
         setCandidate(generated.candidate)
@@ -181,7 +171,6 @@ export default function WorldMapPanel({ project }: Props) {
           : node),
       }))
       if (isCurrentTarget(targetWorldNodeId, targetWorldGroupId)) {
-        setVoronoiConfig(adopted.candidate.mapConfig)
         setCandidate(null)
         setRunId(null)
       }
@@ -244,6 +233,24 @@ export default function WorldMapPanel({ project }: Props) {
     // completion to another world selected while this write was in flight.
   }, [activeWorldId, updateNode, voronoiConfig])
 
+  const saveReference = async (atlasReference: NonNullable<MapGenConfig['atlasReference']>) => {
+    if (!scope || !activeNode?.id || !activeNode.mapConfigJSON) throw Error('地图配置尚未就绪。')
+    const { adopt, hashAdoptFieldValueV1 } = await import('../../lib/registry/adopt')
+    const mapConfigJSON = JSON.stringify({ ...JSON.parse(activeNode.mapConfigJSON), atlasReference })
+    const result = await adopt({
+      projectId: scope.projectId, scope, target: 'worldNodes', recordId: activeNode.id, mode: 'replace',
+      data: { mapConfigJSON },
+      compareAndSet: {
+        kind: 'record-field-value-hash', field: 'mapConfigJSON',
+        expectedHash: await hashAdoptFieldValueV1(activeNode.mapConfigJSON),
+      },
+    })
+    if (!result.written.some(row => row.id === activeNode.id && row.fields.includes('mapConfigJSON'))) {
+      throw Error('地图已改变或保存失败，请重新打开核对。')
+    }
+    if (isCurrentTarget(activeNode.id, scopedGroupId)) await loadNodes(scope, scopedGroupId)
+  }
+
   // ── 渲染 ─────────────────────────────────────────────────
   const generateButtonLabel = voronoiConfig ? 'AI 重新生成' : 'AI 生成地图'
 
@@ -275,6 +282,8 @@ export default function WorldMapPanel({ project }: Props) {
             >
               <Globe className="w-3 h-3" /> 奇幻
             </button>
+            {(atlasLab || savedAtlas) && <button type="button" aria-pressed={viewMode === 'atlas'} onClick={() => setViewMode('atlas')}
+              className="px-2.5 py-1 text-xs rounded">绘本图集 · 实验</button>}
             <button
               type="button"
               disabled
@@ -323,11 +332,12 @@ export default function WorldMapPanel({ project }: Props) {
         </div>
       )}
 
+      {candidate && voronoiConfig?.atlasReference && <p>采纳整张新地图将替换当前参考布局；可从原布局文件重新导入。</p>}
       {candidate && (
         <div className="mb-3 p-3 bg-accent/10 border border-accent/20 rounded-lg">
           <div className="text-xs text-amber-400 mb-1">地图候选尚未写入</div>
           <div className="text-sm text-text-primary mb-1">
-            {candidate.mapConfig.mapName} · {candidate.mapConfig.stateCount ?? 0} 国 · {candidate.mapConfig.heightmapTemplate}
+            {candidate.mapConfig.mapName} · {candidate.mapConfig.atlasDraft ? '实验图集 · 地理位置为模型推测' : (candidate.mapConfig.stateCount ?? 0) + ' 国 · ' + candidate.mapConfig.heightmapTemplate}
           </div>
           <div className="text-xs text-text-muted mb-2">
             命名实体 {candidate.mapConfig.spatialEntities?.length ?? 0} 个，空间关系 {candidate.mapConfig.spatialRelations?.length ?? 0} 条。确认前主地图和正式数据保持不变。
@@ -343,7 +353,7 @@ export default function WorldMapPanel({ project }: Props) {
             </button>
           </div>
           <details className="mt-3"><summary>预览候选地图与配置</summary>
-            <div className="h-[420px] mt-3"><Suspense fallback={<p>加载候选地图…</p>}><WorldMapVoronoi config={candidate.mapConfig} readOnly /></Suspense></div>
+            <div className="h-[420px] mt-3"><Suspense fallback={<p>加载候选地图…</p>}>{candidate.mapConfig.atlasDraft ? <WorldAtlasPreview config={candidate.mapConfig}/> : <WorldMapVoronoi config={candidate.mapConfig} readOnly />}</Suspense></div>
             <pre className="text-xs whitespace-pre-wrap overflow-auto max-h-64">{JSON.stringify(candidate.mapConfig,null,2)}</pre>
           </details>
         </div>
@@ -364,11 +374,13 @@ export default function WorldMapPanel({ project }: Props) {
               </div>
             </div>
           }>
-            <WorldMapVoronoi
+            {viewMode === 'atlas' && voronoiConfig
+              ? <WorldAtlasPreview key={activeWorldId} config={voronoiConfig} onReference={saveReference}/>
+              : <WorldMapVoronoi
               key={activeWorldId ?? 'default'}
               config={voronoiConfig}
               onConfigChange={handleMapConfigChange}
-            />
+            />}
           </Suspense>
         </div>
       </div>
