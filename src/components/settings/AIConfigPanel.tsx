@@ -1,3 +1,4 @@
+import './ai-connection-settings.css'
 import { IS_SHOWCASE } from '../../lib/showcase/policy'
 import ShowcaseNotice from '../showcase/ShowcaseNotice'
 import CodexConnectionCard from './CodexConnectionCard'
@@ -213,7 +214,7 @@ function AIConfigPanelFull() {
   }, [modelListSession])
 
   return (
-    <div className="w-full min-w-0">
+    <div className="ai-config-panel w-full min-w-0">
       <div className="mb-4"><ThemeSelector /></div>
 
       {/* AI 配置 */}
@@ -251,10 +252,11 @@ function AIConfigPanelFull() {
           onSetCreativeQualityMode={setCreativeQualityMode}
         />
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-text-secondary mb-1.5">提供商</label>
+        <div className="ai-connection-settings">
+          <div className={`ai-provider-field ${config.provider === 'codex' ? 'ai-connection-wide' : ''}`}>
+            <label className="ai-connection-heading block text-sm text-text-secondary mb-1.5">提供商</label>
             <select
+              aria-label="提供商"
               value={config.provider}
               onChange={(e) => switchProvider(e.target.value as AIProvider)}
               className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary focus:outline-none focus:border-accent transition-colors"
@@ -274,8 +276,8 @@ function AIConfigPanelFull() {
           </div>
 
           {config.provider === 'codex' ? <CodexConnectionCard /> : <>
-          <div>
-            <label className="block text-sm text-text-secondary mb-1.5">API Key</label>
+          <div className="ai-key-field">
+            <label className="ai-connection-heading block text-sm text-text-secondary mb-1.5">API Key</label>
             <div className="relative">
               <input
                 type={showKey ? 'text' : 'password'}
@@ -307,12 +309,14 @@ function AIConfigPanelFull() {
             </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="ai-connection-grid">
             <div>
-              <label className="block text-sm text-text-secondary mb-1.5">Base URL</label>
+              <label className="ai-connection-heading block text-sm text-text-secondary mb-1.5">Base URL</label>
               <input
                 type="text"
                 value={config.baseUrl}
+                title={config.baseUrl}
+                aria-label="Base URL"
                 onChange={(e) => setConfig({ baseUrl: e.target.value })}
                 className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
               />
@@ -368,7 +372,7 @@ function AIConfigPanelFull() {
               })()}
             </div>
             <div>
-              <div className="mb-1.5 flex items-center justify-between gap-2">
+              <div className="ai-connection-heading mb-1.5 flex items-center justify-between gap-2">
                 <label className="block text-sm text-text-secondary">模型</label>
                 {['custom', 'ollama', 'nvidia', 'deepseek', 'gemini', 'agnes'].includes(config.provider) && (
                   <button
@@ -406,6 +410,7 @@ function AIConfigPanelFull() {
                   <select
                     value={config.model}
                     aria-label="模型"
+                    title={config.model}
                     onChange={(e) => setConfig({ model: e.target.value })}
                     className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
                   >
@@ -430,6 +435,8 @@ function AIConfigPanelFull() {
                     type="text"
                     value={config.model}
                     onChange={(e) => setConfig({ model: e.target.value })}
+                    aria-label="手动输入模型名"
+                    title={config.model}
                     placeholder="或手动输入模型名（列表中没有的型号）"
                     className="mt-1.5 w-full px-3 py-1.5 bg-bg-base border border-border rounded-lg text-text-primary text-xs focus:outline-none focus:border-accent transition-colors"
                   />
@@ -439,6 +446,8 @@ function AIConfigPanelFull() {
                   type="text"
                   value={config.model}
                   onChange={(e) => setConfig({ model: e.target.value })}
+                  aria-label="手动输入模型名"
+                  title={config.model}
                   placeholder="手动输入模型名"
                   className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
                 />
@@ -456,7 +465,7 @@ function AIConfigPanelFull() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="ai-connection-grid">
             <div>
               <label className="block text-sm text-text-secondary mb-1.5">
                 Temperature: {config.temperature}
@@ -515,7 +524,7 @@ function AIConfigPanelFull() {
           </>}
 
           {/* FB-8: 上下文窗口(高级·可选) — 本地/自定义模型按实际填写,修"误报超出窗口" */}
-          <div className="mb-4">
+          <div className="ai-context-window">
             <label className="block text-sm text-text-secondary mb-1.5">
               上下文窗口 <span className="text-text-muted font-normal">(高级 · 可选)</span>
               {config.contextWindow
