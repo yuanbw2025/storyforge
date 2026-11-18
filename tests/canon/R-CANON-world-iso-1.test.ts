@@ -36,6 +36,11 @@ describe('CANON 覆盖基线 · 世界隔离', () => {
       createdAt: now,
       updatedAt: now,
     } as any) as number
+    const project = await db.projects.get(projectId)
+    const [foreignGroup, currentGroup] = await Promise.all(['异界', '当前世界'].map(name => db.worldGroups.add({
+      projectId, worldId: project!.activeWorldId, name, type: 'primary', description: '', order: 0,
+      createdAt: now, updatedAt: now,
+    } as any)))
     const chapterIds: number[] = []
     for (let index = 0; index < 2; index++) {
       const outlineNodeId = await db.outlineNodes.add({
@@ -45,6 +50,7 @@ describe('CANON 覆盖基线 · 世界隔离', () => {
         title: `第${index + 1}章`,
         summary: '',
         order: index,
+        worldGroupId: index === 0 ? foreignGroup : currentGroup,
         createdAt: now,
         updatedAt: now,
       } as any) as number
@@ -67,14 +73,14 @@ describe('CANON 覆盖基线 · 世界隔离', () => {
     await rebuildChapterChunks({
       projectId,
       chapter: sourceChapter!,
-      worldGroupId: 99,
+      worldGroupId: foreignGroup as number,
       knownEntities: ['苍岚'],
     })
 
     const retrieved = await retrieveChunks({
       projectId,
       currentChapterId: chapterIds[1],
-      worldGroupId: 7,
+      worldGroupId: currentGroup as number,
       queryTerms: ['苍岚'],
     })
 
