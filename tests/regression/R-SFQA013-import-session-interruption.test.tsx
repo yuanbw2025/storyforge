@@ -336,7 +336,7 @@ describe('BUG020 frozen import upgrade recovery', () => {
     const id = await store().create({ projectId, filename: 'fixture.txt', fileHash: quickHash(original), totalChars: original.length, totalChunks: 3,
       chunkSize: 5000, chunks, merged: {}, rollingContext: '', importTarget: 'project', status: 'pending' })
     ids.push(id); registerChunkTexts(id, plans)
-    useAIConfigStore.setState({ config: { ...useAIConfigStore.getState().config, provider: 'openai', model: 'gpt-4.1', contextWindow: 1048576 } })
+    // The shared fixture resolves a finite 32k service allocation through real metadata parsing.
     await runSession({ projectId, sessionId: id })
     expect(request, JSON.stringify(useImportStatusStore.getState())).toHaveBeenCalledTimes(1)
     const pending = await readPendingDocumentImportV1({ projectId, sessionId: id })
