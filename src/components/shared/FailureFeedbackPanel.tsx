@@ -1,76 +1,112 @@
 import { useRef, useState } from 'react'
 import { buildFailureSummary } from '../../lib/diagnostics/build-failure-summary'
-import { failureFeedbackLink, FAILURE_FEEDBACK_URL, type FailureSummary } from '../../lib/diagnostics/failure-summary'
-import { resetRuntimeDiagnostics } from '../../lib/diagnostics/runtime-errors'
+import type { FailureSummary } from '../../lib/diagnostics/failure-summary'
 import { clientMetadata, feedbackDiagnostics, submitClientFeedback, type ClientFeedback } from '../../lib/feedback/client-support'
+import { feedbackImageBytes, MAX_FEEDBACK_IMAGES, MAX_FEEDBACK_TOTAL_BYTES, readFeedbackImage, type FeedbackImage } from '../../lib/feedback/attachments'
 
-/** Works without a Router, project, database, or global dialog provider. */
+type Kind = ClientFeedback['kind']
+const emptyDraft = () => ({ title: '', description: '', steps: '', expected: '', module: '', browser: '', actual: '', model: '', requestType: '功能改进', workflow: '', workaround: '', references: '', extra: '', attachments: [] as FeedbackImage[] })
+const control = 'mt-1 w-full rounded border border-border bg-bg-base p-2'
+const button = 'rounded border border-border px-3 py-2 disabled:opacity-50'
 export default function FailureFeedbackPanel() {
+  const [kind, setKind] = useState<Kind>('bug')
+  const [open, setOpen] = useState(false)
+  const [drafts, setDrafts] = useState({ bug: emptyDraft(), feature: emptyDraft() })
+  const draft = drafts[kind]
+  const update = (value: Partial<ReturnType<typeof emptyDraft>>) => setDrafts(current => ({ ...current, [kind]: { ...current[kind], ...value } }))
   const [report, setReport] = useState<FailureSummary | null>(null)
   const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
-  const [kind, setKind] = useState<'bug' | 'feature'>('bug')
-  const [open, setOpen] = useState(false)
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [steps, setSteps] = useState('')
-  const [expected, setExpected] = useState('')
   const [includeDiagnostics, setIncludeDiagnostics] = useState(false)
-  const [confirmed, setConfirmed] = useState(false)
+  const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
+  const [reading, setReading] = useState(false)
+  const locked = useRef(false)
+  const readingFiles = useRef(false)
+  const preparing = useRef(false)
   const submission = useRef<{ signature: string; body: ClientFeedback } | null>(null)
-  const send = async (event: React.FormEvent) => {
+  const show = (next: Kind) => { if (locked.current || readingFiles.current) return; setKind(next); setOpen(true); setMessage('') }
+  const prepare = async () => {
+    if (locked.current || preparing.current) return
+    preparing.current = true
+    setKind('bug'); setOpen(true); setBusy(true); setMessage('正在整理本机故障摘要…')
+    try {
+      const summary = await buildFailureSummary()
+      setReport(summary); setIncludeDiagnostics(true)
+      setMessage(summary.errors.length ? `已整理 ${summary.errors.length} 条错误记录，请查看表单内的故障摘要预览。` : '故障摘要已生成，目前没有本地错误记录；仍可填写并报告 Bug。')
+    } catch { setMessage('故障摘要生成失败。可以重试整理，也可以直接填写 Bug；表单内容已保留。') }
+    finally { preparing.current = false; setBusy(false) }
+  }
+  const addImages = async (files: File[]) => {
+    if (!files.length || locked.current || readingFiles.current) return
+    readingFiles.current = true; setReading(true); setMessage('')
+    const target = kind
+    try {
+      if (draft.attachments.length + files.length > MAX_FEEDBACK_IMAGES) throw new Error('最多附带 3 张截图。')
+      if (draft.attachments.reduce((sum, row) => sum + feedbackImageBytes(row), 0) + files.reduce((sum, file) => sum + file.size, 0) > MAX_FEEDBACK_TOTAL_BYTES) throw new Error('截图合计不能超过 4 MB。')
+      const images = await Promise.all(files.map((file, i) => readFeedbackImage(file, draft.attachments.length + i)))
+      setDrafts(current => ({ ...current, [target]: { ...current[target], attachments: [...current[target].attachments, ...images] } }))
+      setMessage('截图已添加到本机草稿，提交反馈时才会发送。')
+    } catch (error) { setMessage(error instanceof Error ? error.message : '截图读取失败，原有草稿已保留。') }
+    finally { readingFiles.current = false; setReading(false) }
+  }
+  const send = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (sending || !confirmed) return
-    if (title.trim().length < 2 || description.trim().length < 5) { setMessage('请填写标题和至少 5 个字的问题描述或建议。'); return }
-    const contents = { kind, title: title.trim(), description: description.trim(), steps: kind === 'bug' ? steps : '', expected,
-      client: clientMetadata(), ...(kind === 'bug' && includeDiagnostics && report ? { diagnostics: feedbackDiagnostics(report.errors) } : {}) }
+    if (locked.current || readingFiles.current || preparing.current || !event.currentTarget.reportValidity()) return
+    locked.current = true; setSending(true); setMessage('')
+    const { title, description, steps, expected, attachments, ...details } = draft
+    const contents = { kind, title: title.trim(), description: description.trim(), steps: kind === 'bug' ? steps.trim() : '', expected: expected.trim(), details: { ...details, requestType: kind === 'feature' ? details.requestType : '' },
+      client: clientMetadata(), ...(attachments.length ? { attachments } : {}),
+      ...(kind === 'bug' && includeDiagnostics && report ? { diagnostics: feedbackDiagnostics(report.errors) } : {}) }
     const signature = JSON.stringify(contents)
     if (submission.current?.signature !== signature) submission.current = { signature, body: { version: 1, id: crypto.randomUUID(), ...contents } }
-    setSending(true); setMessage('')
     try {
       const receipt = await submitClientFeedback(submission.current.body)
-      setMessage(`提交成功，回执编号：${receipt}。反馈已进入维护者收件箱。`)
-      setTitle(''); setDescription(''); setSteps(''); setExpected(''); setConfirmed(false); setIncludeDiagnostics(false)
-      submission.current = null
-    } catch (error) { setMessage(error instanceof Error && error.name !== 'TimeoutError' ? error.message : '网络中断或超时，提交结果未确认。内容已保留，可以用同一编号重试。') }
-    finally { setSending(false) }
+      setMessage(`提交成功，回执编号：${receipt}。反馈${attachments.length ? `和 ${attachments.length} 张截图` : ''}已进入维护者收件箱。`)
+      setDrafts(current => ({ ...current, [kind]: emptyDraft() })); setOpen(false); setReport(null); setIncludeDiagnostics(false); submission.current = null
+    } catch (error) { setMessage(error instanceof Error && !['TimeoutError', 'TypeError'].includes(error.name) ? error.message : '网络中断或超时，提交结果未确认。内容与截图已保留，可以用同一编号重试。') }
+    finally { locked.current = false; setSending(false) }
   }
-  const prepare = async () => {
-    setBusy(true); setMessage('')
-    try { setReport(await buildFailureSummary()) }
-    catch { setMessage('诊断摘要暂不可用，仍可打开官方反馈页手动填写。') }
-    finally { setBusy(false) }
-  }
+  const disabled = sending || reading || busy
   return <section className="mt-5 w-full max-w-3xl rounded-xl border border-border bg-bg-surface p-4 text-left" aria-label="问题与故障反馈">
     <h3 className="text-sm font-semibold text-text-primary">问题与建议</h3>
-    <p className="mt-2 text-xs leading-6 text-text-muted">遇到 Bug、页面报错或启动失败，可以先查看诊断摘要再反馈。浏览器允许存储时，最近 7 天最多 20 条错误留在本机；空间或权限不足时只保留当前会话。此处的反馈需确认后发送；自动错误上报由统计设置单独控制。不读取手稿、提示词、API Key 或完整浏览记录。</p>
+    <p className="mt-2 text-[13px] leading-6 text-text-muted">报告 Bug 或提出功能建议。反馈由维护者私下处理，保存 90 天。请检查文字与截图，移除手稿、API Key 和其他私人信息。只有点击“提交反馈”才会发送本表单。</p>
     <div className="mt-3 flex flex-wrap gap-3 text-sm">
-      <button type="button" disabled={sending} onClick={() => { setKind('bug'); setOpen(true) }} className="rounded bg-accent px-3 py-2 text-white">报告问题</button>
-      <button type="button" disabled={sending} onClick={() => { setKind('feature'); setOpen(true); setIncludeDiagnostics(false) }} className="rounded border border-border px-3 py-2">功能建议</button>
-      <button type="button" disabled={busy} onClick={() => void prepare()} className="rounded border border-border px-3 py-2 disabled:opacity-50">{busy ? '正在整理…' : '查看故障摘要并反馈'}</button>
-      <a href={FAILURE_FEEDBACK_URL} target="_blank" rel="noopener noreferrer" className="rounded border border-border px-3 py-2">直接反馈问题</a>
-      <button type="button" onClick={() => { resetRuntimeDiagnostics(); setReport(null); setMessage('浏览器中的本地错误记录已清空；作品和模型配置未改变。') }} className="rounded border border-border px-3 py-2">清空本地错误记录</button>
+      <button type="button" disabled={disabled} onClick={() => show('bug')} className={button}>报告 Bug</button>
+      <button type="button" disabled={disabled} onClick={() => show('feature')} className={button}>功能建议</button>
+      <button type="button" disabled={disabled} onClick={() => void prepare()} className={button}>{busy ? '正在整理故障摘要…' : '查看故障摘要并反馈'}</button>
     </div>
-    {message && <p role="status" className="mt-3 text-xs text-text-muted">{message}</p>}
-    {open && <form onSubmit={event => void send(event)} className="mt-4 space-y-3 text-sm" aria-label={kind === 'bug' ? '报告问题表单' : '功能建议表单'}>
-      <p className="text-xs leading-6 text-text-muted">{kind === 'bug' ? '按钮无反应、结果不符合预期、界面显示错误等都可以报告，不需要先发生崩溃。' : '请描述使用场景、目前遇到的困难，以及希望怎样改进。'}提交后直接进入官方维护者收件箱，不会自动公开到 GitHub。反馈明细保存 90 天；不要填写私人手稿或凭证。</p>
-      <fieldset disabled={sending} className="space-y-3">
-        <label className="block">标题<input required minLength={2} maxLength={160} value={title} onChange={event => setTitle(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-base p-2" /></label>
-        <label className="block">{kind === 'bug' ? '问题描述' : '建议与使用场景'}<textarea aria-label={kind === 'bug' ? '问题描述' : '建议与使用场景'} required minLength={5} maxLength={5000} rows={4} value={description} onChange={event => setDescription(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-base p-2" /></label>
-        {kind === 'bug' && <label className="block">复现步骤（可选）<textarea maxLength={3000} rows={3} value={steps} onChange={event => setSteps(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-base p-2" /></label>}
-        <label className="block">{kind === 'bug' ? '期望结果（可选）' : '希望怎样改进（可选）'}<textarea maxLength={2000} rows={2} value={expected} onChange={event => setExpected(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-base p-2" /></label>
-        {kind === 'bug' && <label className="flex items-center gap-2"><input type="checkbox" checked={includeDiagnostics} onChange={event => { setIncludeDiagnostics(event.target.checked); if (event.target.checked) void prepare() }} />附带下方预览的脱敏错误记录（可选）</label>}
-        <p className="text-xs text-text-muted">自动附带应用版本、操作系统类别和客户端类型。没有错误记录也可以提交。</p>
-        <label className="flex items-center gap-2"><input required type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />我已检查填写内容，确认发送给维护者。</label>
-        <button type="submit" disabled={!confirmed || busy || (includeDiagnostics && !report)} className="rounded bg-accent px-4 py-2 text-white disabled:opacity-50">{sending ? '正在提交…' : '提交反馈'}</button>
+    {message && <p role="status" aria-live="polite" className="mt-3 text-[13px] text-text-muted">{message}</p>}
+    {open && <form onSubmit={event => void send(event)} onPaste={event => {
+      const images = [...event.clipboardData.items].filter(item => item.kind === 'file' && item.type.startsWith('image/')).map(item => item.getAsFile()).filter((file): file is File => !!file)
+      if (images.length) { event.preventDefault(); void addImages(images) }
+    }} className="mt-4 space-y-3 text-sm" aria-label={kind === 'bug' ? '报告 Bug 表单' : '功能建议表单'} aria-busy={disabled}>
+      <fieldset disabled={disabled} className="space-y-3">
+        <legend className="font-medium">{kind === 'bug' ? '报告 Bug' : '功能建议'}</legend>
+        <label className="block">标题<input aria-label="标题" required minLength={2} maxLength={160} value={draft.title} onChange={event => update({ title: event.target.value })} className={control} /></label>
+        <label className="block">涉及模块<input aria-label="涉及模块" required maxLength={120} placeholder="例如：世界引擎 / 自然地理" value={draft.module} onChange={event => update({ module: event.target.value })} className={control} /></label>
+        {kind === 'feature' && <label className="block">建议类型<select aria-label="建议类型" value={draft.requestType} onChange={event => update({ requestType: event.target.value })} className={control}><option>功能改进</option><option>新增功能</option><option>体验优化</option><option>其他</option></select></label>}
+        <label className="block">{kind === 'bug' ? '问题描述' : '建议与使用场景'}<textarea aria-label={kind === 'bug' ? '问题描述' : '建议与使用场景'} required minLength={5} maxLength={5000} rows={4} value={draft.description} onChange={event => update({ description: event.target.value })} className={control} /></label>
+        {kind === 'bug' && <>
+          <label className="block">复现步骤或触发场景<textarea aria-label="复现步骤或触发场景" required maxLength={3000} rows={3} placeholder="无法稳定复现时，请描述发生前的操作。" value={draft.steps} onChange={event => update({ steps: event.target.value })} className={control} /></label>
+          <label className="block">实际结果<textarea aria-label="实际结果" required maxLength={2000} rows={2} value={draft.actual} onChange={event => update({ actual: event.target.value })} className={control} /></label>
+          <label className="block">浏览器及版本（可选）<input aria-label="浏览器及版本（可选）" maxLength={120} value={draft.browser} onChange={event => update({ browser: event.target.value })} className={control} /></label>
+          <label className="block">模型名称（可选，请勿填写密钥或服务地址）<input aria-label="模型名称（可选，请勿填写密钥或服务地址）" maxLength={160} value={draft.model} onChange={event => update({ model: event.target.value })} className={control} /></label>
+        </>}
+        <label className="block">{kind === 'bug' ? '期望结果' : '希望怎样改进'}<textarea aria-label={kind === 'bug' ? '期望结果' : '希望怎样改进'} required maxLength={2000} rows={2} value={draft.expected} onChange={event => update({ expected: event.target.value })} className={control} /></label>
+        {kind === 'feature' && <details><summary>更多背景（可选）</summary>{(['workflow', 'workaround', 'references'] as const).map((key, i) => <label key={key} className="mt-2 block">{['期望的使用方式', '目前的替代办法', '参考产品或案例'][i]}<textarea aria-label={['期望的使用方式', '目前的替代办法', '参考产品或案例'][i]} maxLength={2000} rows={2} value={draft[key]} onChange={event => update({ [key]: event.target.value })} className={control} /></label>)}</details>}
+        <label className="block">补充信息（可选）<textarea aria-label="补充信息（可选）" maxLength={2000} rows={2} value={draft.extra} onChange={event => update({ extra: event.target.value })} className={control} /></label>
+        <div className="space-y-2">
+          <label className="block">截图（可选，可在表单中粘贴图片）<input aria-label="截图（可选，可在表单中粘贴图片）" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple onChange={event => { void addImages([...event.target.files ?? []]); event.target.value = '' }} className={control} /></label>
+          <p className="text-[13px] text-text-muted">最多 3 张，单张 2 MB，合计 4 MB。选择或粘贴后可预览、移除；取消会保留本页草稿。</p>
+          <ul className="flex flex-wrap gap-3">{draft.attachments.map((image, index) => <li key={index} className="max-w-44 rounded border border-border p-2"><img src={`data:${image.mime};base64,${image.data}`} alt={`待发送截图 ${index + 1}`} className="max-h-32 max-w-full object-contain" /><button type="button" className={button} onClick={() => update({ attachments: draft.attachments.filter((_, i) => i !== index) })} aria-label={`移除截图 ${index + 1}`}>移除</button></li>)}</ul>
+        </div>
+        {kind === 'bug' && <>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={includeDiagnostics} onChange={event => { setIncludeDiagnostics(event.target.checked); if (event.target.checked && !report) void prepare() }} />附带下方预览的脱敏错误记录</label>
+          {report && <div className="space-y-2 text-[13px] leading-6"><p>{report.errors.length ? `共 ${report.errors.length} 条本地错误记录。` : '没有本地错误记录。'}预览中的启动器信息仅用于本机查看；反馈附带所选错误记录。</p><pre aria-label="故障摘要预览" className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-bg-base p-3">{JSON.stringify(report, null, 2)}</pre>{report.launcher?.kind === 'interrupted' && <p>启动器可能被断电或强制关闭；检测时间不能证明崩溃发生的时刻。</p>}</div>}
+        </>}
+        <p className="text-[13px] text-text-muted">自动附带应用版本、操作系统类别和客户端类型。</p>
+        <div className="flex flex-wrap gap-3"><button type="submit" disabled={includeDiagnostics && kind === 'bug' && !report} className="rounded bg-accent px-4 py-2 text-white disabled:opacity-50">{sending ? '正在提交…' : '提交反馈'}</button><button type="button" className={button} onClick={() => { setOpen(false); setMessage('已取消填写，本页草稿和截图已保留，未发送新的反馈。') }}>取消</button></div>
       </fieldset>
     </form>}
-    {report && <div className="mt-4 space-y-3 text-xs leading-6">
-      <p>下方是本机故障摘要。应用内反馈只会附带你勾选的错误记录；也可以选择备用网页表单，网页表单提交的内容会进入公开 Issue。</p>
-      <pre aria-label="故障摘要预览" className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-bg-base p-3">{JSON.stringify(report, null, 2)}</pre>
-      {report.launcher?.kind === 'interrupted' && <p>上次启动器可能未正常结束，也可能是断电或强制关闭；记录时间是本次检测时间，不是已知的崩溃时刻，也不证明发生了程序崩溃。</p>}
-      <a href={failureFeedbackLink(report)} target="_blank" rel="noopener noreferrer" className="inline-block rounded bg-accent px-3 py-2 text-white">带摘要打开官方反馈表单</a>
-    </div>}
   </section>
 }
