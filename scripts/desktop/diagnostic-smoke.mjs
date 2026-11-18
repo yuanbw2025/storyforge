@@ -26,10 +26,18 @@ export async function verifyDiagnosticContext(app, page, launch) {
     })
     return {result}
   })
-  const session = await page.context().newCDPSession(page)
-  // CDP Page.crash exercises an actual renderer crash. forcefullyCrashRenderer
-  // can report `killed` on macOS, which must not be mislabeled as a crash.
-  void session.send('Page.crash').catch(() => {})
+  if (process.platform === 'linux') {
+    // Page.crash can leave the sandboxed Arch renderer alive without an exit
+    // event. Send a fatal signal to this isolated test window's exact OS PID.
+    // SIGABRT exercises a real crash; SIGKILL/forcefullyCrashRenderer may instead
+    // report `killed`, which must not be mislabeled or accepted as a crash.
+    const pid = await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].webContents.getOSProcessId())
+    assert.ok(Number.isInteger(pid) && pid > 1 && pid !== app.process().pid && pid !== process.pid)
+    process.kill(pid, 'SIGABRT')
+  } else {
+    const session = await page.context().newCDPSession(page)
+    void session.send('Page.crash').catch(() => {})
+  }
   const gone = await observed.evaluate(state => state.result).finally(() => observed.dispose())
   assert.equal(gone.reason, 'crashed')
   const stopped = new Promise(resolve => app.process().once('exit', () => resolve(undefined)))

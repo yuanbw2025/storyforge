@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Runs only inside the disposable Arch Linux CI container, with a synthetic user.
+ulimit -c 0 # Deliberate renderer-crash probes do not need memory dumps.
 pacman -Syu --noconfirm --needed nodejs npm sudo xorg-server-xvfb xorg-xauth dbus desktop-file-utils
 useradd --create-home --shell /bin/bash storyforge
 printf 'storyforge ALL=(ALL) NOPASSWD: /usr/bin/pacman\n' > /etc/sudoers.d/storyforge
