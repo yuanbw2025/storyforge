@@ -1,0 +1,49 @@
+name: Build and test Arch Linux client
+on:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  arch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      VITE_STORYFORGE_COMMUNITY_SHARING: ${{ vars.STORYFORGE_COMMUNITY_SHARING }}
+      VITE_STORYFORGE_COMMUNITY_API_URL: ${{ vars.STORYFORGE_COMMUNITY_API_URL }}
+      VITE_STORYFORGE_COMMUNITY_SUPABASE_URL: ${{ vars.STORYFORGE_COMMUNITY_SUPABASE_URL }}
+      VITE_STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY: ${{ vars.STORYFORGE_COMMUNITY_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_STORYFORGE_COMMUNITY_R2_ORIGIN: ${{ vars.STORYFORGE_COMMUNITY_R2_ORIGIN }}
+      VITE_STORYFORGE_COMMUNITY_R2_BUCKET: ${{ vars.STORYFORGE_COMMUNITY_R2_BUCKET }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node --test scripts/desktop/*updater.test.mjs
+      - run: npm run build:linux
+      - run: node scripts/desktop/build-upgrade-fixture.mjs
+      - name: Build package and exercise the installed desktop in Arch Linux
+        run: |
+          docker run --rm --cap-add=SYS_ADMIN --security-opt seccomp=unconfined --shm-size=2g \
+            -v "$PWD:/workspace" -w /workspace archlinux:base-devel \
+            bash scripts/distribution/arch/test-package.sh
+      - name: Preserve Arch package verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-test-results
+          path: |
+            release/arch/test-environment.txt
+            release/arch/test-result.txt
+            release/arch/package.sha256
+          if-no-files-found: ignore
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-arch-x64
+          path: release/arch/*.pkg.tar.zst
+          if-no-files-found: error
+          retention-days: 14

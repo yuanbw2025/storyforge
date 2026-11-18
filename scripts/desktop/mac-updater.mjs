@@ -8,12 +8,21 @@ const repository = 'https://github.com/yuanbw2025/storyforge'
 const latest = 'https://api.github.com/repos/yuanbw2025/storyforge/releases/latest'
 const versionParts = value => /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value) ? value.split('.').map(Number) : null
 export function selectMacUpdate(release, current, arch) {
+  return selectPackageUpdate(release, current, arch, 'darwin')
+}
+export function selectArchUpdate(release, current, arch) {
+  return selectPackageUpdate(release, current, arch, 'linux')
+}
+function selectPackageUpdate(release, current, arch, platform) {
   const version = String(release.tag_name ?? '').replace(/^v/, '')
   const next = versionParts(version), previous = versionParts(current)
-  if (release.draft || release.prerelease || !next || !previous || !['arm64', 'x64'].includes(arch)) return null
+  const supported = platform === 'linux' ? arch === 'x64' : ['arm64', 'x64'].includes(arch)
+  if (release.draft || release.prerelease || !next || !previous || !supported) return null
   const firstDifference = next.findIndex((value, index) => value !== previous[index])
   if (firstDifference < 0 || next[firstDifference] <= previous[firstDifference]) return null
-  const name = `StoryForge-${version}-macos-${arch}.dmg`
+  const name = platform === 'linux'
+    ? `StoryForge-${version}-arch-x64.pkg.tar.zst`
+    : `StoryForge-${version}-macos-${arch}.dmg`
   const matches = (release.assets ?? []).filter(asset => asset.name === name)
   if (matches.length !== 1) throw new Error('Missing exact architecture asset')
   const asset = matches[0]
@@ -24,7 +33,13 @@ export function selectMacUpdate(release, current, arch) {
 }
 
 /** Download in-app; macOS installs through a user-confirmed DMG replacement. */
-export function createMacUpdater({ app, shell, arch = process.arch, fetchImpl = fetch }) {
+export function createMacUpdater(options) {
+  return createPackageUpdater({ ...options, platform: 'darwin' })
+}
+export function createArchUpdater(options) {
+  return createPackageUpdater({ ...options, platform: 'linux' })
+}
+function createPackageUpdater({ app, shell, arch = process.arch, fetchImpl = fetch, platform }) {
   const updater = new EventEmitter()
   const directory = join(app.getPath('userData'), 'updates')
   let candidate, downloaded
@@ -35,7 +50,7 @@ export function createMacUpdater({ app, shell, arch = process.arch, fetchImpl = 
     try {
       const response = await fetchImpl(latest, { headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(30_000) })
       if (!response.ok) throw new Error('Release request failed')
-      candidate = selectMacUpdate(await response.json(), app.getVersion(), arch)
+      candidate = selectPackageUpdate(await response.json(), app.getVersion(), arch, platform)
       updater.emit(candidate ? 'update-available' : 'update-not-available', candidate)
     } catch (error) { updater.emit('error', error); throw error }
   }
@@ -77,6 +92,10 @@ export function createMacUpdater({ app, shell, arch = process.arch, fetchImpl = 
     const hash = createHash('sha256')
     for await (const chunk of createReadStream(downloaded.path)) hash.update(chunk)
     if (hash.digest('hex') !== downloaded.digest) throw new Error('Installer changed')
+    if (platform === 'linux') {
+      shell.showItemInFolder(downloaded.path)
+      return
+    }
     const error = await shell.openPath(downloaded.path)
     if (error) throw new Error('Installer could not be opened')
   }

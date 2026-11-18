@@ -1,0 +1,21 @@
+pkgname=storyforge
+pkgver="${STORYFORGE_PACKAGE_VERSION:?Missing version}"
+pkgrel=1
+pkgdesc='StoryForge local-first AI writing workspace'
+arch=('x86_64')
+url='https://storyforge-lab.com'
+license=('MIT')
+depends=('alsa-lib' 'at-spi2-core' 'cairo' 'dbus' 'expat' 'glib2' 'gtk3'
+         'libcups' 'libdrm' 'libx11' 'libxcb' 'libxcomposite' 'libxdamage'
+         'libxext' 'libxfixes' 'libxkbcommon' 'libxrandr' 'libxss' 'libxtst'
+         'mesa' 'nss' 'pango' 'xdg-utils')
+options=('!strip' '!debug')
+package() {
+  install -d "$pkgdir/opt/StoryForge" "$pkgdir/usr/bin"
+  cp -a "$startdir/payload/." "$pkgdir/opt/StoryForge/"
+  chmod 4755 "$pkgdir/opt/StoryForge/chrome-sandbox"
+  ln -s /opt/StoryForge/storyforge "$pkgdir/usr/bin/storyforge"
+  install -Dm644 "$startdir/storyforge.desktop" "$pkgdir/usr/share/applications/storyforge.desktop"
+  install -Dm644 "$startdir/icon-512.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/storyforge.png"
+  install -Dm644 "$startdir/LICENSE" "$pkgdir/usr/share/licenses/storyforge/LICENSE"
+}

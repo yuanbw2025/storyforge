@@ -5,7 +5,7 @@ import { createPortableServer } from '../distribution/server.mjs'
 import { installUpdater } from './updater.mjs'
 import updater from 'electron-updater'
 import { desktopDiagnostics } from './diagnostics.mjs'
-import { createMacUpdater } from './mac-updater.mjs'
+import { createMacUpdater, createArchUpdater } from './mac-updater.mjs'
 import { installHttpTransport } from './http-transport.mjs'
 import { installFileSystemPermissions } from './file-system-permissions.mjs'
 
@@ -76,7 +76,8 @@ else {
         message: '退出 StoryForge？', detail: '请先确认编辑已保存、生成任务已结束。退出会中断仍在运行的任务。',
       }).then(({ response }) => { if (response === 1) { exitApproved = true; app.quit() } })
     })
-    const autoUpdater = process.platform === 'darwin' ? createMacUpdater({ app, shell }) : updater.autoUpdater
+    const packageUpdater = { darwin: createMacUpdater, linux: createArchUpdater }[process.platform]
+    const autoUpdater = packageUpdater ? packageUpdater({ app, shell }) : updater.autoUpdater
     installUpdater({ app, window: mainWindow, ipcMain, dialog, origin, autoUpdater, approveExit: () => { exitApproved = true } })
     mainWindow.on('unresponsive', () => diagnostics.record('NativeUnresponsive', { process: 'renderer', reason: 'unresponsive' }))
     mainWindow.once('ready-to-show', () => mainWindow.show())

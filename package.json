@@ -76,6 +76,7 @@
     "build:adventure-player": "node scripts/build-adventure-player.mjs",
     "build:portable": "tsc -b && tsc -p ui-preview/tsconfig.json && npm run build:adventure-player && vite build --mode portable",
     "test:distribution": "node --test scripts/distribution/*.test.mjs",
+    "build:linux": "npm run build:portable && node scripts/distribution/notices.mjs && electron-builder --config electron-builder.config.cjs --linux dir --x64 --publish never --config.directories.output=release/linux",
     "build:windows": "npm run build:portable && node scripts/distribution/notices.mjs && electron-builder --config electron-builder.config.cjs --win --x64 --publish never",
     "desktop:dev": "npm run build:portable && electron scripts/desktop/main.mjs",
     "build:android:web": "tsc -b && npm run build:adventure-player && vite build --mode android && node scripts/distribution/prepare-android.mjs && cap sync android",

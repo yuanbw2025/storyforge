@@ -33,6 +33,8 @@ env:
   VITE_STORYFORGE_COMMUNITY_R2_ORIGIN: ${{ vars.STORYFORGE_COMMUNITY_R2_ORIGIN }}
   VITE_STORYFORGE_COMMUNITY_R2_BUCKET: ${{ vars.STORYFORGE_COMMUNITY_R2_BUCKET }}
 jobs:
+  arch:
+    uses: ./.github/workflows/arch-client.yml
   consent:
     runs-on: ubuntu-latest
     steps:
