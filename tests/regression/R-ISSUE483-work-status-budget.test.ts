@@ -21,7 +21,8 @@ describe('Issue483: saved chapter status remains admissible under its source bud
     const before = await db.outlineNodes.toArray()
     const assembled = await assembleContext({ projectId: scope.projectId, scope,
       worldGroupId: null, sourceKeys: ['workStatus'], inputBudgetMaxTokens: 12_000 })
-    const status = assembled.sourceEvidence?.find(source => source.key === 'workStatus')!
+    const status = assembled.sourceEvidence?.find(source => source.key === 'workStatus')
+    if (!status) throw new Error('Expected registered workStatus evidence from the real context assembler')
     expect(status).toMatchObject({ delivery: 'truncated', compression: {
       outcome: 'fallback', fallback: 'deterministic-truncation', attempts: 0,
     } })
