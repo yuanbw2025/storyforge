@@ -12,6 +12,7 @@ import { useCodexStore } from '../../stores/codex'
 import { usePromptStore } from '../../stores/prompt'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
 import { resolveRequestConfig, type ChatResult } from '../ai/client'
+import { trimMessagesToFit } from '../ai/context-budget'
 import { modelDispatchWasCancelledV1 } from '../ai/codex-transport'
 import { renderPrompt } from '../ai/prompt-engine'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
@@ -144,8 +145,13 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
   if (session.importTarget === 'project') await useCodexStore.getState().ensureBuiltIns(scope)
   const worldGroupId = session.targetWorldGroupId ?? null
   const sourceKeys = session.importTarget === 'project' ? ['manualText', CATEGORIES] : ['manualText']
+  // Use the same resolved window/output reservation as the actual transport.
+  // Custom model names may not exist in the built-in context preset catalog.
+  const inputBudgetTokens = Math.min(MAX_INPUT_TOKENS, trimMessagesToFit([], resolved.config.provider,
+    resolved.config.model, resolved.config.maxTokens, resolved.config.contextWindow).inputBudget)
+  if (inputBudgetTokens <= 0) fail('模型窗口不足以容纳输出预留，请调整上下文窗口或模型配置。')
   const assembled = await assembleContext({ scope, projectId: input.projectId, worldGroupId, sourceKeys,
-    documentImportSessionId: session.id, manualSourceText: text, inputBudgetMaxTokens: MAX_INPUT_TOKENS,
+    documentImportSessionId: session.id, manualSourceText: text, inputBudgetTokens,
     provider: resolved.config.provider, model: resolved.config.model })
   const originalSegment = assembled.segments[assembled.included.indexOf('manualText')]
   if (originalSegment?.content !== text)
@@ -211,14 +217,17 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
     throw retained.report
   }
   let raw: string
+  const providerOptions = resolved.config.provider === 'deepseek'
+    ? { responseFormat: 'json_object' as const, thinkingMode: 'disabled' as const }
+    : resolved.config.provider === 'custom' ? { responseFormat: 'json_object' as const } : undefined
   try {
     raw = entryId === 'import.reference-chunk.parse.private'
       ? await executeFrozenFormalAIEntryV1('import.reference-chunk.parse.private', formalEntry, skill,
       'src/lib/import/document-parse-durable.ts', messages, config, { ...metadata, category: 'import.parse-chunk' },
-      input.signal, result, resolved.config.provider === 'deepseek' ? { responseFormat: 'json_object', thinkingMode: 'disabled' } : undefined, resolved)
+      input.signal, result, providerOptions, resolved)
       : await executeFrozenFormalAIEntryV1('import.document-chunk.parse', formalEntry, skill,
       'src/lib/import/document-parse-durable.ts', messages, config, { ...metadata, category: 'import.parse-chunk' },
-      input.signal, result, resolved.config.provider === 'deepseek' ? { responseFormat: 'json_object', thinkingMode: 'disabled' } : undefined, resolved)
+      input.signal, result, providerOptions, resolved)
   } catch (error) {
     const retained = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
     if (modelDispatchWasCancelledV1(result) || result.requestLifecycle?.phase === 'pre-dispatch') {

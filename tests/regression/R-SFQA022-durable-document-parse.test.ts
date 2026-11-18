@@ -32,17 +32,17 @@ afterEach(() => {
 })
 
 async function fixture(target: 'project' | 'reference' = 'project', depth?: 'quick' | 'deep',
-  existing?: Awaited<ReturnType<typeof seedCurrentWorkspace>>) {
+  existing?: Awaited<ReturnType<typeof seedCurrentWorkspace>>, documentText = source) {
   const f = existing ?? await seedCurrentWorkspace('022 formal candidate isolated')
   const sessionId = await useImportSessionStore.getState().create({
-    projectId: f.scope.projectId, targetScope: f.scope, filename: 'synthetic.txt', fileHash: quickHash(source),
-    totalChars: source.length, totalChunks: 1, chunkSize: 1000,
-    chunks: [{ index: 0, startChar: 0, endChar: source.length, charCount: source.length,
-      sourceTextHash: await hashImportChunkTextV1(source), status: 'pending', attempts: 0 }],
+    projectId: f.scope.projectId, targetScope: f.scope, filename: 'synthetic.txt', fileHash: quickHash(documentText),
+    totalChars: documentText.length, totalChunks: 1, chunkSize: documentText.length,
+    chunks: [{ index: 0, startChar: 0, endChar: documentText.length, charCount: documentText.length,
+      sourceTextHash: await hashImportChunkTextV1(documentText), status: 'pending', attempts: 0 }],
     importTarget: target, analysisDepth: depth, targetWorldGroupId: null, status: 'pending', merged: {}, rollingContext: '',
   })
   sessions.push(sessionId)
-  registerChunkTexts(sessionId, [{ index: 0, text: source }])
+  registerChunkTexts(sessionId, [{ index: 0, text: documentText }])
   return { ...f, input: { projectId: f.scope.projectId, sessionId, chunkIndex: 0 } }
 }
 
@@ -50,6 +50,40 @@ const reply = (body: string, finish_reason = 'stop') => new Response(JSON.string
   choices: [{ message: { role: 'assistant', content: body }, finish_reason }],
   usage: { prompt_tokens: 31, completion_tokens: 17, total_tokens: 48 },
 }), { headers: { 'Content-Type': 'application/json' } })
+
+it('imports the exact long source with a configured custom-model context window', async () => {
+  const documentText = '北境有山川城池，原文必须逐字交付。\r\n'.repeat(2400)
+  const f = await fixture('project', undefined, undefined, documentText)
+  useAIConfigStore.getState().setConfig({ provider: 'custom', model: 'isolated-custom-model', contextWindow: 131_072 })
+  const post = vi.fn(async (_url: unknown, init?: RequestInit) => {
+    const request = JSON.parse(String(init?.body))
+    expect(request.response_format).toEqual({ type: 'json_object' })
+    expect(
+      request.messages.some((message: { content: string }) =>
+        message.content.includes(documentText),
+      ),
+    ).toBe(true)
+    return reply(raw)
+  })
+  vi.stubGlobal('fetch', post)
+  await createDocumentImportChunkCandidateV1(f.input)
+  expect(post).toHaveBeenCalledTimes(1)
+})
+
+it('rejects an oversized source before dispatch when the configured window is small', async () => {
+  const f = await fixture(
+    'project',
+    undefined,
+    undefined,
+    '原文必须完整交付，不可截断。'.repeat(3000),
+  )
+  useAIConfigStore.getState().setConfig({ model: 'isolated-custom-model', contextWindow: 32_768 })
+  const post = vi.fn()
+  vi.stubGlobal('fetch', post)
+  await expect(createDocumentImportChunkCandidateV1(f.input)).rejects.toThrow(/完整交付/)
+  expect(post).not.toHaveBeenCalled()
+  expect(await db.agentRuns.count()).toBe(0)
+})
 
 it('022 F2 persists a formal candidate plus exact raw answer and measured usage across reopen, without canonical writes', async () => {
   const f = await fixture()
