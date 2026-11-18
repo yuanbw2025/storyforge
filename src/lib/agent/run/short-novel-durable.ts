@@ -178,7 +178,7 @@ export async function generateShortNovelCandidateV1<K extends ShortNovelArtifact
       projectId: input.scope.projectId,
       scope: input.scope,
       sourceKeys: [...skill.contextSourceKeys],
-      provider: input.aiConfig?.provider,
+      modelConfig: input.aiConfig, provider: input.aiConfig?.provider,
       model: input.aiConfig?.model,
       inputBudgetMaxTokens: 64_000,
     })

@@ -1,3 +1,4 @@
+import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
 import 'fake-indexeddb/auto'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -33,8 +34,8 @@ import {
 } from '../../src/lib/evals/long-consistency'
 
 Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true)
-const config = { provider: 'openai' as const, model: 'gpt-4o-mini', apiKey: 'synthetic-only',
-  baseUrl: 'http://127.0.0.1:9/v1', temperature: 0, maxTokens: 6_000, contextWindow: 128_000 }
+const config = syntheticFrozenAllocationV1({ provider: 'openai' as const, model: 'gpt-4o-mini', apiKey: 'synthetic-only',
+  baseUrl: 'http://127.0.0.1:9/v1', temperature: 0, maxTokens: 6_000 }, 128_000, 16_384)
 let host: HTMLDivElement
 let root: ReturnType<typeof createRoot>
 let pendingUsage: Promise<unknown>[]

@@ -1,3 +1,4 @@
+import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
@@ -104,7 +105,7 @@ describe('LFQ5 · 正文的完整实际资料与预算', () => {
     const f = await seed(); const result = await assembly(f)
     const messages = buildChapterContentPrompt('第一章', '章纲', result.text, '', '', '', undefined, { requiredGatewayContext: result.text })
     const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock)
-    await expect(chat(messages, { ...useAIConfigStore.getState().config, provider: 'openai', model: 'window-test', apiKey: 'test-only', baseUrl: 'https://budget.invalid', contextWindow: 1500, maxTokens: 500 }, { contextOverflowPolicy: 'reject' })).rejects.toThrow('上下文窗口不足')
+    await expect(chat(messages, syntheticFrozenAllocationV1({ ...useAIConfigStore.getState().config, provider: 'openai', model: 'window-test', apiKey: 'test-only', baseUrl: 'https://budget.invalid', maxTokens: 500 }, 1500, 500), { contextOverflowPolicy: 'reject' })).rejects.toThrow('上下文窗口不足')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

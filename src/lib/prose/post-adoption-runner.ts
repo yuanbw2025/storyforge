@@ -98,7 +98,7 @@ export async function runChapterPostAdoptionV1(input: {
       worldGroupId: transitionWorldGroupId,
       chapterId: task.chapterId,
       outlineNodeId: transitionChapter?.outlineNodeId ?? null,
-      provider: requestConfig.provider,
+      modelConfig: requestConfig, provider: requestConfig.provider,
       model: requestConfig.model,
       sourceKeys: [...sourceKeys],
       stateReferenceText: task.chapterPlainText,

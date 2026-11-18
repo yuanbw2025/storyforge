@@ -1,3 +1,4 @@
+import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
 import { createProductProductionPlanV3 } from '../../src/lib/product-production/plan'
 /** Normal Plan, configured executor, fake native transport and real Run APIs.
  * No actual model, subscription request or independent author acceptance. */
@@ -19,6 +20,7 @@ beforeEach(async () => {
   await db.delete(); await db.open()
   window.location.href = 'http://localhost:4178/storyforge/'
   useAIConfigStore.getState().setConfig({ provider: 'codex', model: 'fixture-native-only', apiKey: '', contextWindow: 131072, maxTokens: 16000 })
+  useAIConfigStore.setState({config: syntheticFrozenAllocationV1(useAIConfigStore.getState().config, 131072, 16000)})
 })
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); db.close() })
 

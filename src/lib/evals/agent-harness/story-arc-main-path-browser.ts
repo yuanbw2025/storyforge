@@ -297,7 +297,7 @@ async function baselineGeneration(
     projectId: workspace.scope.projectId,
     scope: workspace.scope,
     worldGroupId: null,
-    provider: config.provider,
+    modelConfig: config, provider: config.provider,
     model: config.model,
     sourceKeys: [
       'canonAssertions',

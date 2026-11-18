@@ -387,7 +387,7 @@ export async function prepareCreativeRulesCopilotV1(
     projectId: input.projectId,
     scope,
     worldGroupId,
-    provider: config.provider,
+    modelConfig: config, provider: config.provider,
     model: config.model,
     sourceKeys: [...skill.contextSourceKeys],
     inputBudgetMaxTokens: contextPolicy.maxInputTokens,

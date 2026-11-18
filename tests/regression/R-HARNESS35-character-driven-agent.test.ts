@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createMasterAgentPlan,
@@ -143,6 +145,9 @@ describe('R-HARNESS35 · 角色驱动规划主入口契约', () => {
       presets: [],
       taskRoutes: {},
     })
+
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 64000)
   })
 
   afterEach(() => {

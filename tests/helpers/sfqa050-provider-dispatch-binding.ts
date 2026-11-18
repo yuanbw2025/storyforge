@@ -1,3 +1,4 @@
+import { syntheticFrozenAllocationV1 } from './model-capacity-fixture'
 import { putMediaBlobObject, sha256MediaData } from '../../src/lib/product-production/media-blob-store'
 import { resolveConfiguredTextCapabilityV1, type ConfiguredProductionVisionImageV1 } from '../../src/lib/product-production/capabilities'
 import type { AIConfig, ProductBuildArtifactRecordV1, ProductProductionBriefV3, WorkspaceScope } from '../../src/lib/types'
@@ -12,15 +13,15 @@ import { openProductionFixtureV1 } from './open-ttrpg-production'
 import type { ProductProductionTaskExecutionInputV1 } from '../../src/lib/product-production/scheduler'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 
-export const SFQA050_CONFIG_A: AIConfig = {
+export const SFQA050_CONFIG_A: AIConfig = syntheticFrozenAllocationV1({
   provider: 'agnes', apiKey: 'sfqa050-synthetic-secret-a', model: 'sfqa050-model-a',
-  baseUrl: 'https://sfqa050-a.invalid/v1', temperature: 0.7, maxTokens: 0, contextWindow: 32_768,
-}
+  baseUrl: 'https://sfqa050-a.invalid/v1', temperature: 0.7, maxTokens: 0,
+}, 65_536, 16_384)
 
-export const SFQA050_CONFIG_B: AIConfig = {
+export const SFQA050_CONFIG_B: AIConfig = syntheticFrozenAllocationV1({
   provider: 'openai', apiKey: 'sfqa050-synthetic-secret-b', model: 'sfqa050-model-b',
-  baseUrl: 'https://sfqa050-b.invalid/v1', temperature: 0.2, maxTokens: 0, contextWindow: 32_768,
-}
+  baseUrl: 'https://sfqa050-b.invalid/v1', temperature: 0.2, maxTokens: 0,
+}, 65_536, 16_384)
 
 export function installSFQA050RouteV1(config: AIConfig): void {
   useAIConfigStore.setState({

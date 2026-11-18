@@ -1,3 +1,4 @@
+import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, describe, expect, it } from 'vitest'
 import { buildChapterContentPrompt } from '../../src/lib/ai/adapters/chapter-adapter'
 import {
@@ -63,7 +64,11 @@ describe('NS-1 T6/T7 · minimum continuity envelope and template contract', () =
         },
       },
     )
-    const result = trimMessagesToFit(messages, 'custom', '8k-test', 2048, 8192)
+    const capacity = syntheticFrozenAllocationV1({
+      provider: 'custom', model: '8k-test', baseUrl: 'http://127.0.0.1:9/v1',
+      apiKey: '', temperature: 0, maxTokens: 2048,
+    }, 8192, 4096).modelCapacity
+    const result = trimMessagesToFit(messages, 'custom', '8k-test', 2048, undefined, 0, capacity)
     const finalUser = result.messages.at(-1)?.content ?? ''
 
     expect(result.trimmed).toBe(true)
@@ -99,7 +104,11 @@ describe('NS-1 T6/T7 · minimum continuity envelope and template contract', () =
         },
       },
     )
-    const result = trimMessagesToFit(messages, 'custom', 'target-window', maxOutput, contextWindow)
+    const capacity = syntheticFrozenAllocationV1({
+      provider: 'custom', model: 'target-window', baseUrl: 'http://127.0.0.1:9/v1',
+      apiKey: '', temperature: 0, maxTokens: maxOutput,
+    }, contextWindow, maxOutput).modelCapacity
+    const result = trimMessagesToFit(messages, 'custom', 'target-window', maxOutput, undefined, 0, capacity)
     const finalUser = result.messages.at(-1)?.content ?? ''
 
     expect(result.protectedEnvelopePreserved).toBe(true)

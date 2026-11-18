@@ -12,7 +12,6 @@
 .ai-connection-settings .text-xs{font-size:13px;line-height:1.5}
 .ai-connection-settings p,.ai-connection-settings label,.ai-connection-settings [role=alert]{overflow-wrap:anywhere}
 .ai-connection-settings svg{flex-shrink:0}
-.ai-connection-settings .ai-context-window>div{max-width:600px}
 .ai-connection-settings section[aria-label="Codex 本机连接"]{padding:12px}
 .ai-connection-settings section[aria-label="Codex 本机连接"]>:not(:first-child){margin-top:8px}
 .ai-connection-settings section[aria-label="Codex 本机连接"] select{display:block;max-width:480px}

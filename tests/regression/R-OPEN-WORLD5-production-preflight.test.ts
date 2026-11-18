@@ -470,7 +470,10 @@ describe('TOW-G5-03 · creator production preflight', () => {
     expect(oversized.ready).toBe(false)
     expect(oversized.blockers.join('')).toContain('模型温度配置无效')
     expect(oversized.blockers.join('')).toContain('模型输出上限配置无效')
-    expect(oversized.blockers.join('')).toContain('模型上下文窗口配置无效')
+    // Legacy manual windows no longer admit or reject a request. The real
+    // temperature/output guard and endpoint checks above remain mandatory.
+    expect(oversized.blockers.join('')).not.toContain('模型上下文窗口配置无效')
+    expect(oversized.providerBinding.contextWindow).toBeNull()
     await expect(verifyTextOpenWorldCreatorProductionPreflightV1(oversized, {
       brief: confirmedBrief,
       ...runtime(oversizedConfig),
@@ -483,6 +486,8 @@ describe('TOW-G5-03 · creator production preflight', () => {
       pricing: { mode: 'catalog' },
     })
     expect(boundary.ready).toBe(true)
+    expect(boundary.providerBinding.contextWindow).toBeNull()
+    expect(JSON.stringify(boundary)).not.toContain('1000000000')
     await expect(verifyTextOpenWorldCreatorProductionPreflightV1(boundary, {
       brief: confirmedBrief,
       ...runtime(supportedBoundary),

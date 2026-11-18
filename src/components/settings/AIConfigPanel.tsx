@@ -1,9 +1,10 @@
+import { invalidateModelCapacityV1 } from '../../lib/ai/model-capacity'
 import './ai-connection-settings.css'
 import { IS_SHOWCASE } from '../../lib/showcase/policy'
 import ShowcaseNotice from '../showcase/ShowcaseNotice'
 import CodexConnectionCard from './CodexConnectionCard'
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
-import { Eye, EyeOff, CheckCircle, RotateCcw, RefreshCw } from 'lucide-react'
+import { Eye, EyeOff, RefreshCw } from 'lucide-react'
 import { hasUnmatchedSessionCredentialV1, useAIConfigStore, type TestResult } from '../../stores/ai-config'
 import EmbeddingConfigCard from './EmbeddingConfigCard'
 import type { AIConfig, AIProvider } from '../../lib/types'
@@ -12,7 +13,6 @@ import { allowsSamplingTemperature, getModelRetirement } from '../../lib/ai/prov
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { getLogs, subscribeLogs, clearLogs } from '../../lib/ai/logger'
 import { useDialog } from '../shared/Dialog'
-import { parseContextWindowInput } from '../../lib/ai/context-window-input'
 import { fetchOpenAIModels } from '../../lib/ai/model-list'
 import { normalizeOpenAIBaseUrl } from '../../lib/ai/openai-endpoint'
 import { AI_PROXY_ENDPOINTS, hasLocalProviderProxy } from '../../lib/ai/proxy-endpoints'
@@ -77,12 +77,9 @@ function AIConfigPanelFull() {
   const [showLogs, setShowLogs] = useState(false)
   const [savingPreset, setSavingPreset] = useState(false)
   const [presetName, setPresetName] = useState('')
-  const [contextWindowDraft, setContextWindowDraft] = useState(() => config.contextWindow ? String(config.contextWindow) : '')
-  const [contextWindowError, setContextWindowError] = useState('')
   const [fetchedModels, setFetchedModels] = useState<string[]>([])
   const [refreshingModels, setRefreshingModels] = useState(false)
   const [modelListError, setModelListError] = useState('')
-  const submittedContextWindowRef = useRef(config.contextWindow)
   const modelListSession = useRef<{ active: boolean; generation: number; resultOwner: ModelListRequest | null }>({
     active: true, generation: 0, resultOwner: null,
   }).current
@@ -105,27 +102,6 @@ function AIConfigPanelFull() {
   const supportsTemperature = allowsSamplingTemperature(config)
   const editingPreset = editingPresetId ? presets.find(p => p.id === editingPresetId) : null
 
-  useEffect(() => {
-    if (config.contextWindow === submittedContextWindowRef.current) return
-    submittedContextWindowRef.current = config.contextWindow
-    setContextWindowDraft(config.contextWindow ? String(config.contextWindow) : '')
-    setContextWindowError('')
-  }, [config.contextWindow])
-
-  const handleContextWindowChange = (raw: string) => {
-    setContextWindowDraft(raw)
-    const parsed = parseContextWindowInput(raw)
-    if (parsed.kind === 'invalid') {
-      setContextWindowError(parsed.message)
-      return
-    }
-
-    const next = parsed.kind === 'valid' ? parsed.value : undefined
-    setContextWindowError('')
-    submittedContextWindowRef.current = next
-    setConfig({ contextWindow: next })
-  }
-
   const handleRefreshModels = async () => {
     if (!modelListSession.active) return
     const current = useAIConfigStore.getState().config
@@ -137,6 +113,7 @@ function AIConfigPanelFull() {
     try {
       const normalized = normalizeOpenAIBaseUrl(current.baseUrl)
       if (normalized.changed) setConfig({ baseUrl: normalized.baseUrl })
+      invalidateModelCapacityV1(current)
       const models = await fetchOpenAIModels({
         baseUrl: request.baseUrl,
         apiKey: request.apiKey,
@@ -522,50 +499,6 @@ function AIConfigPanelFull() {
           </div>
 
           </>}
-
-          {/* FB-8: 上下文窗口(高级·可选) — 本地/自定义模型按实际填写,修"误报超出窗口" */}
-          <div className="ai-context-window">
-            <label className="block text-sm text-text-secondary mb-1.5">
-              上下文窗口 <span className="text-text-muted font-normal">(高级 · 可选)</span>
-              {config.contextWindow
-                ? <span className="text-accent ml-1">{config.contextWindow.toLocaleString()} token</span>
-                : <span className="text-text-muted ml-1">按模型预设</span>}
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={contextWindowDraft}
-                onChange={(e) => handleContextWindowChange(e.target.value)}
-                aria-invalid={Boolean(contextWindowError)}
-                placeholder="本地/自定义模型请按实际填写，如 131072；留空 = 用内置预设"
-                className={`min-w-0 flex-1 px-3 py-2 bg-bg-base border rounded text-sm text-text-primary focus:outline-none ${contextWindowError ? 'border-red-400 focus:border-red-400' : 'border-border focus:border-accent'}`}
-              />
-              <button
-                type="button"
-                onClick={() => handleContextWindowChange('')}
-                disabled={!contextWindowDraft && !contextWindowError}
-                title="重置为模型预设"
-                aria-label="重置上下文窗口为模型预设"
-                className="p-2 rounded border border-border text-text-muted hover:text-accent hover:border-accent/50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-            </div>
-            {contextWindowError ? (
-              <p className="mt-1 text-xs text-red-400">{contextWindowError}；已保存值未改变。</p>
-            ) : (
-              <p className="mt-1 flex items-center gap-1 text-xs text-green-400/80">
-                <CheckCircle className="w-3 h-3" />
-                {editingPreset && activePresetId === null
-                  ? `已自动保存到当前配置，尚未写回「${editingPreset.name}」`
-                  : '已自动保存到当前配置'}
-              </p>
-            )}
-            <p className="text-xs text-text-muted mt-1">
-              识别不到的模型默认按 8K 计算,会误报「上下文超出窗口」。本地模型(LM Studio / Ollama)请在此填真实窗口,如 128000 / 262144。
-            </p>
-          </div>
 
           {/* 最小连接探活；不代表长输出或批量评测额度。 */}
           <AIConnectionTestSection

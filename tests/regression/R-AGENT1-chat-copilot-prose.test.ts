@@ -1,3 +1,4 @@
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ProseCopilotStaleError,
@@ -211,7 +212,7 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
         apiKey: '',
         model: 'qwen-prose-local',
         baseUrl: 'http://localhost:11434/v1',
-        contextWindow: 131_072,
+
       },
     }
     useAIConfigStore.setState({
@@ -219,7 +220,9 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
       presets: [prosePreset],
       taskRoutes: { 'agent-prose': prosePreset.id },
     })
+    resetModelCapacityForTestsV1()
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === 'http://localhost:11434/api/ps' && init?.method === 'GET') return Response.json({ models: [{ model: 'qwen-prose-local', context_length: 131_072 }] })
       expect(url).toBe('http://localhost:11434/v1/chat/completions')
       const body = JSON.parse(String(init?.body))
       expect(body.model).toBe('qwen-prose-local')
@@ -239,7 +242,9 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
     const result = await runGenerationNode(prepared.node, prepared.prepared)
 
     expect(result.gate?.status).toBe('pass')
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'GET')).toHaveLength(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
     await vi.waitFor(async () => {
       expect(await db.aiUsageLog.toCollection().last()).toMatchObject({
         projectId: project.id,

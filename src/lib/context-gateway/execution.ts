@@ -1,3 +1,5 @@
+import { prepareModelCapacityV1, modelInputBudgetV1, type ModelCapacityV1 } from '../ai/model-capacity'
+import type { AIConfig } from '../types'
 import { estimateTokens } from '../ai/context-budget'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { AGENT_TOOL_SCHEMA_HASH_V1 } from '../agent/execution-binding'
@@ -63,6 +65,7 @@ export type ContextGatewayExecutionPathV1 =
   | 'deterministic-fallback'
 
 export interface ExecuteContextGatewayInputV1 {
+  modelConfig?: AIConfig
   skill: AgentSkillDefinitionV1
   scope: WorkspaceScope
   worldGroupId?: number | null
@@ -102,6 +105,7 @@ export interface ExecuteContextGatewayInputV1 {
 }
 
 export interface ContextGatewayExecutionV1 {
+  modelBudget?: { capacity: ModelCapacityV1; inputBudget: number }
   version: 'context-gateway-execution-v1'
   path: ContextGatewayExecutionPathV1
   session: ContextGatewayToolSessionV1
@@ -402,6 +406,13 @@ async function validatedAgentRead(
 export async function executeContextGatewayV1(
   input: ExecuteContextGatewayInputV1,
 ): Promise<ContextGatewayExecutionV1> {
+  const prepared = input.modelConfig ? await prepareModelCapacityV1(input.modelConfig) : undefined
+  const modelBudget = prepared?.modelCapacity ? {
+    capacity: prepared.modelCapacity,
+    inputBudget: Math.max(1, modelInputBudgetV1(prepared.modelCapacity, prepared.maxTokens).inputBudget - 1024),
+  } : undefined
+  input = { ...input, ...(modelBudget ? { budgetTokens: Math.min(input.budgetTokens ?? Infinity, modelBudget.inputBudget) } : {}) }
+  delete input.modelConfig
   const gatewayPolicy = assertAgentSkillContextGatewayPolicyV1(input.skill)
   const accessPolicy = narrowedAccessPolicy(input)
   const session = await createContextGatewayToolSessionV1({

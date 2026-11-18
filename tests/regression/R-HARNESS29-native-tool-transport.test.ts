@@ -1,3 +1,5 @@
+import { syntheticFrozenAllocationV1, seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   NATIVE_READ_TOOLS_STORAGE_KEY_V1,
@@ -216,7 +218,7 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
     const result = await runReadOnlyAgentWithClient({
       goal: '核查项目',
       context: { projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId },
-      config: { ...OPENAI_CONFIG, contextWindow: 512, maxTokens: 128 },
+      config: syntheticFrozenAllocationV1({ ...OPENAI_CONFIG, maxTokens: 128 }, 512, 128),
       transport: 'native-tools-v1',
       allowedToolNames: ALL_READ_TOOL_NAMES,
     })
@@ -344,6 +346,8 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(ROUTED_CUSTOM_CONFIG, 32_000)
     await expect(runReadOnlyAgentWithClient({
       goal: '按真实 provider 选择 transport',
       context: { projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId },

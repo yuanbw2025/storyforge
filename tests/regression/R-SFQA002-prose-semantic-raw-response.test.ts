@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { chat, type ChatResult } from '../../src/lib/ai/client'
 import { hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
@@ -124,6 +126,9 @@ let expectedPosts = 0
 beforeEach(async () => {
   await db.delete(); await db.open(); expectedPosts = 0
   vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => { throw new Error('No real model/network authorized') }))
+
+  resetModelCapacityForTestsV1()
+  await seedModelAllocationFixtureV1(config, 32768)
 })
 afterEach(async () => {
   try { expect(fetch).toHaveBeenCalledTimes(expectedPosts) }

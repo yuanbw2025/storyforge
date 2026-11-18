@@ -170,8 +170,7 @@ export async function createConfiguredTextProviderExecutionIdentityV1(config: AI
     endpointRouteHash,
     temperature: config.temperature,
     configuredMaxTokens: config.maxTokens,
-    contextWindow: config.contextWindow == null || config.contextWindow === 0
-      ? null : config.contextWindow,
+    contextWindow: null,
   })
   return {
     adapterId: 'configured-text.v1' as const,

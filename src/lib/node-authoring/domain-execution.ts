@@ -604,6 +604,13 @@ async function executeDetail(input: DomainExecutionInput): Promise<DomainExecuti
     .filter(node => node.type === 'chapter' && node.parentId === outline.parentId && (node.worldGroupId ?? null) === input.worldGroupId)
     .sort((left, right) => left.order - right.order)
   const index = siblings.findIndex(node => node.id === outline.id)
+  const callMeta = {
+    category: 'detail.chapter-planning',
+    projectId: input.projectId,
+    configOverrides: generationOverrides(input.node, input.inputs),
+    contextOverflowPolicy: 'reject' as const,
+  }
+  const resolved = resolveRequestConfig(input.aiConfig, callMeta)
   const assembled = await assembleContext({
     projectId: input.projectId,
     scope,
@@ -611,8 +618,8 @@ async function executeDetail(input: DomainExecutionInput): Promise<DomainExecuti
     outlineNodeId: outlineId,
     sourceKeys: AUTHORING_NODE_BY_ID.get(input.node.templateId)?.reads?.sourceKeys,
     inputBudgetTokens: contextBudget(input.node, input.inputs, 16_000),
-    provider: input.aiConfig.provider,
-    model: input.aiConfig.model,
+    modelConfig: resolved.config, provider: resolved.config.provider,
+    model: resolved.config.model,
   })
   const binding = await readAuthoringCanonBinding({
     node: input.node,
@@ -636,13 +643,6 @@ async function executeDetail(input: DomainExecutionInput): Promise<DomainExecuti
     segmentText(assembled, 'foreshadows'),
   )
   const messages = [{ role: 'system' as const, content: formatNarrativeBriefForPromptV1(narrativeBrief) }, ...baseMessages]
-  const callMeta = {
-    category: 'detail.chapter-planning',
-    projectId: input.projectId,
-    configOverrides: generationOverrides(input.node, input.inputs),
-    contextOverflowPolicy: 'reject' as const,
-  }
-  const resolved = resolveRequestConfig(input.aiConfig, callMeta)
   const variants: string[] = []
   const creativeArtifacts: CreativeArtifactV1[] = []
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {

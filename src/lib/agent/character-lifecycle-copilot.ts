@@ -405,6 +405,7 @@ export async function prepareCharacterLifecycleCopilotV1(
     throw new Error('角色状态正式入口未启用 required Context Gateway。')
   }
   const execution = await executeContextGatewayV1({
+    modelConfig: config,
     skill,
     scope: readScope,
     worldGroupId: input.worldGroupId,

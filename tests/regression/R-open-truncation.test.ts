@@ -1,3 +1,4 @@
+import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
 /**
  * R-open-truncation · 放开内部截断(社区反馈:核心设定被静默硬截、想生成更多不支持)
  *
@@ -26,7 +27,11 @@ describe('R-open-truncation · 放开内部截断', () => {
     const r = await assembleContext({
       projectId,
       provider: 'deepseek',
-      model: 'deepseek-v4-pro', // maxContext 128000
+      model: 'deepseek-v4-pro',
+      modelConfig: syntheticFrozenAllocationV1({
+        provider: 'deepseek', model: 'deepseek-v4-pro', baseUrl: 'https://capacity-fixture.invalid/v1',
+        apiKey: 'synthetic', temperature: 0, maxTokens: 8192,
+      }, 128000, 16384),
       sourceKeys: [],
     } as any)
     expect(r.inputBudget).toBeGreaterThan(48000)

@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
@@ -24,7 +26,15 @@ async function seed() {
 }
 
 describe('LFQ7 · 正式全文评审持久证据', () => {
-  beforeEach(async () => { await db.delete(); await db.open(); useAIConfigStore.setState({ config: { ...old.config, provider: 'ollama', model: 'whole-review-test', temperature: 0, maxTokens: 4000, contextWindow: 128000 } }) })
+  beforeEach(async () => {
+    await db.delete(); await db.open()
+    useAIConfigStore.setState({ config: {
+      ...old.config, provider: 'ollama', baseUrl: 'http://127.0.0.1:9/v1', apiKey: '',
+      model: 'whole-review-test', temperature: 0, maxTokens: 4000,
+    } })
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 128000)
+  })
   afterEach(() => { useAIConfigStore.setState(old, true); db.close() })
 
   it('完整正文与登记原文送审一次，章末问题可定位；报告刷新恢复，手稿变化后只读过期，无Canon写回', async () => {

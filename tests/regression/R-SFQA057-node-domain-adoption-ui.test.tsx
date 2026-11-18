@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router'
@@ -102,6 +104,9 @@ describe.sequential('057 · actual node workspace uses the domain adoption bound
     vi.spyOn(usageLog, 'recordUsage').mockImplementation(function (this: unknown, input) {
       const pending = original.call(this, input); usage.push(pending); return pending
     })
+
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 128000)
   })
   afterEach(async () => {
     await act(async () => { root?.unmount(); root = null })

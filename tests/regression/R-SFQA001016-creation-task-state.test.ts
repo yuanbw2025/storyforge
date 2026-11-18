@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Dexie from 'dexie'
 import { MessageChannel } from 'node:worker_threads'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { db } from '../../src/lib/db/schema'
 import type { AgentEvent, AgentRunRecord, AIConfig, WorkspaceScope } from '../../src/lib/types'
 import { readOwnedRows } from '../../src/lib/workspace/scope'
@@ -69,7 +70,7 @@ async function freezeQualityAuthorIntent(medium: QualityCreationMedium, item: Aw
 describe('SFQA-001/016 · independent creation task recovery', () => {
   let expectedSyntheticFetches = 0
   beforeEach(async () => {
-    await db.delete(); await db.open(); expectedSyntheticFetches = 0
+    await db.delete(); await db.open(); expectedSyntheticFetches = 0; resetModelCapacityForTestsV1()
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => { throw new Error('Isolated creation tests prohibit real network') }))
   })
   afterEach(async () => {
@@ -81,14 +82,16 @@ describe('SFQA-001/016 · independent creation task recovery', () => {
     for (const failure of ['offline', 'abort', 'timeout', 'authorization', 'balance'] as const) {
       it(`${medium}: actual client ${failure} failure stays visible with one intercepted POST and no automatic resend`, async () => {
         const item = await createQualityCreationFixture(medium)
-        const send = vi.fn<typeof fetch>(async () => {
+        const send = vi.fn<typeof fetch>(async (url, options) => {
+          if (options?.method === 'GET' && String(url) === 'http://127.0.0.1:9/api/v1/models') return Response.json({ models: [{ type: 'llm', key: 'isolated-model', loaded_instances: [{ config: { context_length: 32_768 } }] }] })
+          expect(options?.method).toBe('POST')
           if (failure === 'authorization' || failure === 'balance') return new Response(JSON.stringify({ error: { message: `isolated ${failure} rejection` } }), { status: failure === 'authorization' ? 401 : 402 })
           if (failure === 'offline') throw new TypeError('isolated offline transport')
           throw new DOMException(`isolated ${failure} transport`, failure === 'timeout' ? 'TimeoutError' : 'AbortError')
         })
-        expectedSyntheticFetches = 1
+        expectedSyntheticFetches = 2
         vi.stubGlobal('fetch', send)
-        const aiConfig: AIConfig = { provider: 'custom', apiKey: '', model: 'isolated-model', baseUrl: 'http://127.0.0.1:9/v1', temperature: 0, maxTokens: 1_024, contextWindow: 128_000 }
+        const aiConfig: AIConfig = { provider: 'custom', apiKey: '', model: 'isolated-model', baseUrl: 'http://127.0.0.1:9/v1', temperature: 0, maxTokens: 1_024 }
         let error: unknown
         try {
           if (medium === 'comic') await generateComicProfessionalCandidateV1({ scope: item.scope, adaptationProjectId: item.adaptation.id!, stage: 'source-analysis', sourceUnitKeys: [item.unit.sourceUnitKey], aiConfig })
@@ -96,9 +99,11 @@ describe('SFQA-001/016 · independent creation task recovery', () => {
         } catch (cause) { error = cause }
         expect(error).toBeInstanceOf(Error)
         if (failure === 'authorization' || failure === 'balance') expect(error).toMatchObject({ status: failure === 'authorization' ? 401 : 402 })
-        expect(send.mock.calls.length, error instanceof Error ? error.message : String(error)).toBe(1)
-        expect(send.mock.calls[0][1]?.method).toBe('POST')
-        expect(String(send.mock.calls[0][0])).toBe('http://127.0.0.1:9/v1/chat/completions')
+        const posts = send.mock.calls.filter(([, options]) => options?.method === 'POST')
+        const metadata = send.mock.calls.filter(([, options]) => options?.method === 'GET')
+        expect(metadata).toHaveLength(1)
+        expect(posts.length, error instanceof Error ? error.message : String(error)).toBe(1)
+        expect(String(posts[0][0])).toBe('http://127.0.0.1:9/v1/chat/completions')
         const snapshot = await currentRun(item.scope)
         expect(snapshot.projection.state).toBe('paused')
         expect(snapshot.events.filter(event => event.type === 'model.requested')).toHaveLength(1)
@@ -109,7 +114,8 @@ describe('SFQA-001/016 · independent creation task recovery', () => {
         expect((await read(item.scope, snapshot.run.id)).task).toMatchObject({ hasUnresolvedRequest: true, candidateState: 'missing', requestedAttempts: 1 })
         expect(await pending(item.scope)).toBeNull()
         expect(await databaseBytes()).toBe(before)
-        expect(send).toHaveBeenCalledTimes(1)
+        expect(send.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1)
+        expect(send).toHaveBeenCalledTimes(2)
         expect(await db.adaptationSourceFacts.count()).toBe(0); expect(await db.motionDramaSeriesBibles.count()).toBe(0)
       })
     }

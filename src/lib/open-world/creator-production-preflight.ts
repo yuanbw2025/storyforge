@@ -551,9 +551,7 @@ async function currentProviderBinding(input: TextOpenWorldCreatorPreflightRuntim
     MAXIMUM_TEMPERATURE_V1,
   )
   const maxTokens = validExplicitMaxTokens(aiConfig.maxTokens) ? aiConfig.maxTokens : 0
-  const contextWindow = aiConfig.contextWindow == null || aiConfig.contextWindow === 0
-    ? null
-    : validContextWindow(aiConfig.contextWindow) ? aiConfig.contextWindow : null
+  const contextWindow = null
   if (credentialInEndpoint) {
     blockers.push('模型服务地址疑似包含凭证内容；已拒绝写入检查快照，请在设置中清理地址。')
   } else if (!endpoint) blockers.push('模型服务地址无效；请在设置中填写有效的 HTTP(S) 地址。')
@@ -569,10 +567,6 @@ async function currentProviderBinding(input: TextOpenWorldCreatorPreflightRuntim
   if (!Number.isFinite(aiConfig.temperature) || aiConfig.temperature < 0
     || aiConfig.temperature > MAXIMUM_TEMPERATURE_V1) blockers.push('模型温度配置无效。')
   if (!validExplicitMaxTokens(aiConfig.maxTokens)) blockers.push('模型输出上限配置无效。')
-  if (aiConfig.contextWindow != null && aiConfig.contextWindow !== 0
-    && !validContextWindow(aiConfig.contextWindow)) {
-    blockers.push('模型上下文窗口配置无效。')
-  }
   const endpointRouteHash = await hashConfiguredTextEndpointRouteV1(endpoint?.route ?? '')
   const providerBindingBody = {
     schema: 'storyforge.text-open-world-creator-provider-binding' as const,

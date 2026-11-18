@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 /** Real importer/controller and Panel handlers; provider replies and upload input
  * are synthetic. The real confirmation/discard buttons and stores are retained.
  */
@@ -111,6 +113,9 @@ beforeEach(async () => {
   useAIConfigStore.setState({ config: { provider: 'custom', contextWindow: 131072, model: 'synthetic-model', baseUrl: 'https://test.invalid/v1', apiKey: 'synthetic-test-only', maxTokens: 4096, temperature: 0 }, taskRoutes: {} })
   request = vi.fn().mockImplementation(async () => completion()); vi.stubGlobal('fetch', request)
   vi.spyOn(console, 'warn').mockImplementation(() => {}); vi.spyOn(console, 'error').mockImplementation(() => {})
+
+  resetModelCapacityForTestsV1()
+  await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 32768)
 })
 afterEach(async context => {
   await capture(`case-${context.task.name.replace(/[^a-z0-9]+/gi, '-').slice(0, 150)}`)

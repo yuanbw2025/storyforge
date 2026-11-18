@@ -431,6 +431,7 @@ export async function prepareStoryCoreCopilot(
     : undefined
   const contextGatewayExecution = gatewayRequired
     ? await executeContextGatewayV1({
+    modelConfig: config,
         skill,
         scope: scope!,
         worldGroupId,
@@ -451,7 +452,7 @@ export async function prepareStoryCoreCopilot(
         projectId: input.projectId,
         scope,
         worldGroupId,
-        provider: config.provider,
+        modelConfig: config, provider: config.provider,
         model: config.model,
         sourceKeys: [...skill.contextSourceKeys],
         inputBudgetMaxTokens: contextPolicy.maxInputTokens,

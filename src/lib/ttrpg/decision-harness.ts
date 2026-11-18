@@ -113,7 +113,7 @@ export async function generateTtrpgDecisionV1<T, V>(protocol: TtrpgDecisionProto
   try {
     const assembled = await assembleContext({ projectId: input.scope.projectId, scope: input.scope, worldGroupId: boundary.worldGroupId,
       productRuntimeSessionId: input.productRuntimeSessionId, ttrpgPlayerActorKey: input.actorKey,
-      sourceKeys: [protocol.sourceKey], provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 18000 })
+      sourceKeys: [protocol.sourceKey], modelConfig: input.aiConfig, provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 18000 })
     if (!assembled.included.includes(protocol.sourceKey)) fail('上下文装配为空')
     assertTtrpgCompleteContextV1(assembled, protocol.sourceKey)
     await fresh()

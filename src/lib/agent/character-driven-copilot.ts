@@ -445,7 +445,7 @@ export async function prepareCharacterDrivenCopilotV1(
     projectId: input.projectId,
     scope,
     worldGroupId: project.enableMultiWorld ? input.worldGroupId : null,
-    provider: config.provider,
+    modelConfig: config, provider: config.provider,
     model: config.model,
     sourceKeys: [...skill.contextSourceKeys],
     inputBudgetMaxTokens: foundationPolicy.maxInputTokens,
