@@ -32,6 +32,7 @@ import {
 
 const STORAGE_KEY = 'storyforge-ai-config'
 const PRESETS_KEY = 'storyforge-ai-presets'
+export const WORK_COVER_PRESET_KEY_V1 = 'storyforge-work-cover-preset-v1'
 const SESSION_API_KEY = 'storyforge-ai-api-key-session'
 const PRESET_SESSION_API_KEYS = 'storyforge-ai-preset-api-keys-session'
 const REMEMBER_API_KEY = 'storyforge-ai-api-key-remember'
@@ -339,6 +340,8 @@ interface AIConfigStore {
   config: AIConfig
   rememberApiKey: boolean
   presets: AIConfigPreset[]
+  workCoverPresetId: string | null
+  setWorkCoverPresetId: (id: string | null) => void
   taskRoutes: AITaskRoutes
   agentContextProfiles: AgentContextProfiles
   agentTeamBudgetProfile: AgentTeamBudgetProfile
@@ -378,6 +381,14 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   creativeQualityMode: loadCreativeQualityMode(),
   activePresetId: null,
   editingPresetId: null,
+  workCoverPresetId: IS_MODEL_DISABLED_BUILD ? null : localStorage.getItem(WORK_COVER_PRESET_KEY_V1),
+  setWorkCoverPresetId: id => {
+    if (IS_MODEL_DISABLED_BUILD) return
+    if (id && !get().presets.some(preset => preset.id === id)) throw new Error('图片连接预设不存在。')
+    if (id) localStorage.setItem(WORK_COVER_PRESET_KEY_V1, id)
+    else localStorage.removeItem(WORK_COVER_PRESET_KEY_V1)
+    set({ workCoverPresetId: id })
+  },
   embedding: IS_MODEL_DISABLED_BUILD ? { ...DEFAULT_EMBEDDING } : loadEmbeddingConfig(initial.rememberApiKey),
 
   setEmbeddingConfig: (partial: Partial<EmbeddingConfig>) => {

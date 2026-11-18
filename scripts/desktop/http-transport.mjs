@@ -37,15 +37,25 @@ export function installHttpTransport({ window, ipcMain, origin, fetch: nativeFet
     trusted(event); validId(options?.id)
     const { id, method } = options
     const url = new URL(options.url)
+    const supplied = new Headers(options.headers)
+    const imageRequest = supplied.get('x-storyforge-image-adapter') === 'work-cover-b64-sync-v1'
+      && method === 'POST' && url.protocol === 'https:' && url.hostname === 'apihub.agnes-ai.com'
+      && !url.port && url.pathname === '/v1/images/generations' && !/[?#]/.test(options.url)
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password
-        || url.origin === origin || !/\/(?:models|embeddings|chat\/completions|messages|responses)\/?$/.test(url.pathname)
+        || url.origin === origin || !(imageRequest || /\/(?:models|embeddings|chat\/completions|messages|responses)\/?$/.test(url.pathname))
         || !['GET', 'POST'].includes(method)) throw new Error('Unsupported model request')
     if (active.has(id) || active.size >= 32) throw new Error('Too many active model requests')
     if (options.body !== undefined && (typeof options.body !== 'string' || options.body.length > 44_739_244
         || options.body.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(options.body))) throw new Error('Invalid model request body')
     const body = options.body === undefined ? undefined : Buffer.from(options.body, 'base64')
     if (body && (body.length > 32 * 1024 * 1024 || method !== 'POST')) throw new Error('Invalid model request body')
-    const supplied = new Headers(options.headers)
+    if (imageRequest) {
+      let image
+      try { image = JSON.parse(body?.toString('utf8') ?? '') } catch { throw new Error('Invalid cover image request') }
+      if (!image || Object.keys(image).sort().join(',') !== 'model,prompt,ratio,return_base64,size'
+        || image.model !== 'agnes-image-2.1-flash' || image.size !== '1K' || image.ratio !== '2:3' || image.return_base64 !== true
+        || typeof image.prompt !== 'string' || !image.prompt.trim() || image.prompt.length > 16_000) throw new Error('Invalid cover image request')
+    }
     /** @type {Record<string,string>} */
     const headers = {}
     for (const key of ['authorization', 'content-type', 'accept', 'anthropic-version', 'anthropic-beta', 'x-api-key', 'x-goog-api-key']) {

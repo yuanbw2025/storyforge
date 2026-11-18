@@ -88,6 +88,7 @@ export type AgentSkillExecutionModeV1 =
   | 'reference-characters'
   | 'reference-analysis-private-chunk'
   | 'document-import-parse'
+  | 'work-cover-image'
   | 'reverse'
   | 'auto'
   | 'story-arcs'
@@ -2135,6 +2136,20 @@ export const AGENT_SKILLS = [
     writeTargets: [],
     lastVerifiedAt: '2026-11-04',
     regressionTests: ['R-SFQA022-durable-document-parse'],
+  },
+  {
+    version: 1, id: 'inspiration.work-cover-image-v1', agentId: 'inspiration', defaultForAgent: false,
+    label: '作品封面底图', owner: 'inspiration-agent', promptVersion: 'work-cover-image-v1', executionMode: 'work-cover-image',
+    contextTaskKind: 'agent-inspiration', readToolNames: [],
+    contextSourceKeys: ['workCoverMetadataV1', 'workCoverBriefV1', 'workCoverSelectedTextV1'], optionalContextSourceKeys: [],
+    inputPolicy: { sourceKeys: ['workCoverBriefV1'], states: {
+      empty: { handling: 'require-upstream', instruction: '作者须填写并明确发送本次封面提示词。' },
+      partial: { handling: 'grounded-transform', instruction: '只使用本次冻结提示词和已披露资料生成一张图片候选。' },
+      complete: { handling: 'grounded-transform', instruction: '生成图片候选；不自动采用，不生成章节或人物。' },
+    } },
+    contextCompression: compressionPolicy(['workCoverMetadataV1', 'workCoverBriefV1', 'workCoverSelectedTextV1']),
+    maxOutputTokens: 1, writeTargets: [{ table: 'works', fields: ['coverImage'] }],
+    lastVerifiedAt: '2026-11-18', regressionTests: ['R-WORK-COVER-lifecycle', 'R-WORK-COVER-dispatch'],
   },
   {
     version: 1,
@@ -6155,7 +6170,7 @@ export function validateAgentSkillDefinitionsV1(
   const executionModesByAgent: Record<RegisteredAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
     'world-origin': new Set(['worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'narrative-annotation-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
-    inspiration: new Set(['reference-summary', 'reference-characters', 'reference-analysis-private-chunk', 'document-import-parse', 'reverse', 'review']),
+    inspiration: new Set(['work-cover-image', 'reference-summary', 'reference-characters', 'reference-analysis-private-chunk', 'document-import-parse', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-source-analysis', 'adaptation-causal-graph', 'screenplay-adaptation-brief', 'screenplay-decision-pass', 'screenplay-beat-sheet', 'screenplay-scene-card', 'screenplay-grounding-review', 'screenplay-dramaturgy-review', 'comic-adaptation-brief', 'comic-decision-pass', 'comic-script-adaptation', 'comic-page-rhythm', 'comic-panel-plan', 'comic-visual-bible', 'comic-image-request', 'comic-visual-continuity-review', 'comic-targeted-repair', 'comic-page-review', 'motion-drama-series-bible', 'motion-drama-asset-bible', 'motion-drama-episode-outline', 'motion-drama-shot-design', 'motion-drama-image-prompts', 'motion-drama-video-prompts', 'motion-drama-quality-review', 'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-continuity-review', 'character-interaction-production', 'product-production']),
     prose: new Set(['extension-generate', 'auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'quality-revise', 'organize', 'memory', 'consistency', 'scene-director', 'ai-town-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'text-open-world-runtime-intent', 'text-open-world-runtime-dialogue', 'text-open-world-runtime-expression', 'text-open-world-runtime-quest-packaging', 'text-open-world-runtime-direction', 'text-open-world-runtime-memory', 'screenplay-scene-draft', 'screenplay-targeted-rewrite', 'motion-drama-episode-script', 'short-chapter-draft', 'short-targeted-rewrite', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent', 'ttrpg-open-intent', 'ttrpg-open-oracle-interpret', 'ttrpg-open-common-oracle-interpret', 'ttrpg-open-fact-normalize', 'ttrpg-open-companion', 'ttrpg-open-kp', 'ttrpg-open-local-voice', 'ttrpg-open-brief', 'ttrpg-open-situation-propose', 'ttrpg-open-public-situation-propose', 'ttrpg-open-entity-propose']),
     'text-adventure-showrunner': productProductionModes,

@@ -2094,6 +2094,15 @@ async function readCharacterPassages(projectId: number, name?: string, worldGrou
 }
 
 export const CONTEXT_SOURCES: ContextSource[] = [
+  ...([
+    ['workCoverMetadataV1', '封面作品元信息', 'readWorkCoverMetadataV1', 4_000],
+    ['workCoverBriefV1', '封面提示词', 'readWorkCoverBriefV1', 12_000],
+    ['workCoverSelectedTextV1', '作者选用的封面正文片段', 'readWorkCoverSelectedTextV1', 12_000],
+  ] as const).map(([key, label, reader, budgetTokens]): ContextSource => ({
+    key, label, scope: 'project', ownerFrom: 'work', layer: 'L0', budgetTokens,
+    atomic: true, protectedFromTrim: true,
+    read: async input => (await import('../work-cover/context'))[reader](input),
+  })),
   { key: 'extensionRecords', label: '插件冻结任务与自有记录', scope: 'project', layer: 'L0', ownerFrom: 'work', budgetTokens: 24000, protectedFromTrim: true, atomic: true,
     enabled: input => Boolean(input.extensionSnapshot),
     read: async input => { const loading = import('../extensions/ai-registry'); const module = await (Dexie.currentTransaction ? Dexie.waitFor(loading) : loading); return module.readExtensionContext(input) } },

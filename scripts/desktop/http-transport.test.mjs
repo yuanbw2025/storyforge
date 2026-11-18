@@ -84,3 +84,22 @@ test('duplicate IDs and bounded concurrency reject before another dispatch, dest
     await assert.rejects(f.call('read', f.options), /unavailable/)
   } finally { f.clear() }
 })
+test('cover image transport accepts only the registered synchronous Agnes recipe and consumes its internal marker', async () => {
+  const f = fixture(async () => new Response('{"data":[{"b64_json":"AAAA"}]}'))
+  const request = { model: 'agnes-image-2.1-flash', prompt: '合成图片传输验证', size: '1K', ratio: '2:3', return_base64: true }
+  const options = { ...f.options, url: 'https://apihub.agnes-ai.com/v1/images/generations',
+    headers: { ...f.options.headers, 'x-storyforge-image-adapter': 'work-cover-b64-sync-v1' }, body: Buffer.from(JSON.stringify(request)).toString('base64') }
+  try {
+    await f.call('open', options)
+    assert.equal(f.calls.length, 1)
+    assert.equal(f.calls[0][1].headers['x-storyforge-image-adapter'], undefined)
+    assert.equal(f.calls[0][1].credentials, 'omit'); assert.equal(f.calls[0][1].redirect, 'error')
+    await f.call('read', options); await f.call('read', options)
+    for (const body of [{ ...request, n: 1 }, { ...request, response_format: 'b64_json' }, { ...request, return_base64: false }, { ...request, model: 'agnes-text-model' }]) {
+      await assert.rejects(f.call('open', { ...options, body: Buffer.from(JSON.stringify(body)).toString('base64') }))
+    }
+    for (const change of [{ headers: f.options.headers }, { url: 'https://apihub.agnes-ai.com.attacker.invalid/v1/images/generations' },
+      { url: options.url + '?' }, { url: options.url + '#part' }, { method: 'GET' }]) await assert.rejects(f.call('open', { ...options, ...change }))
+    assert.equal(f.calls.length, 1)
+  } finally { f.clear() }
+})

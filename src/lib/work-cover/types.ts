@@ -98,12 +98,16 @@ export interface WorkCoverResponseBufferV1 extends WorkspaceScope {
   version: 1
   workCode: string
   runId: number
+  assetKey: string
   attempt: 1
   dispatchKey: string
   draftId: number
   draftRevision: number
   briefHash: string
   routeHash: string
+  routeJson: string
+  contextJson: string
+  contextManifestHash: string
   credentialIdentity: string
   requestJson: string
   state: 'prepared' | 'dispatch-intent' | 'response-observed' | 'materializing' | 'candidate-ready' | 'failed' | 'outcome-unknown'

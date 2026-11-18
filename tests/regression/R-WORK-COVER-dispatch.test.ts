@@ -1,0 +1,129 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { db } from '../../src/lib/db/schema'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { encodeFixtureRasterV1, installRasterDecoderForVitestV1 } from '../helpers/raster-decoder-vitest'
+import { saveWorkCoverDraftV1 } from '../../src/lib/work-cover/drafts'
+import { prepareCoverRunV1, submitCoverImageOnceV1, observeCoverResponseV1 } from '../../src/lib/work-cover/run'
+import type { CoverImageConnectionV1 } from '../../src/lib/work-cover/run'
+import { materializeCoverCandidateV1 } from '../../src/lib/work-cover/materialize'
+import { binaryDataUrlV1 } from '../../src/lib/media/blob-store'
+import { adoptWorkCoverV1, prepareWorkCoverAdoptionV1 } from '../../src/lib/work-cover/adoption'
+import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
+import { resolveWorkCoverImageRouteV1 } from '../../src/lib/work-cover/image-recipes'
+import { aiCredentialFingerprintV1 } from '../../src/lib/ai/credential-fingerprint'
+import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+
+installRasterDecoderForVitestV1()
+beforeEach(async () => { await db.delete(); await db.open() })
+afterEach(() => vi.unstubAllGlobals())
+const connection: CoverImageConnectionV1 = { presetId: 'test-image-preset', imageModel: 'agnes-image-2.1-flash',
+  config: { provider: 'agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', apiKey: 'fixture-provider-key', model: 'agnes-text-model-not-an-image-model', temperature: 0.7, maxTokens: 0 } }
+const payload = () => JSON.stringify({ data: [{ b64_json: binaryDataUrlV1(encodeFixtureRasterV1(12, 18), 'image/png').split(',')[1] }] })
+async function prepared(currentConnection = () => connection) {
+  const { scope, work } = await seedCurrentWorkspace('隔离图片流程')
+  const draft = await saveWorkCoverDraftV1({ scope, prompt: '海上灯塔，星空，无文字', expectedRevision: null, expectedWorkUpdatedAt: work.updatedAt })
+  const authorization = await prepareCoverRunV1({ scope, draftId: draft.id, expectedDraftRevision: draft.revision, connection, currentConnection })
+  return { scope, work, draft, authorization }
+}
+
+describe('035 image one-shot dispatch/materialization', () => {
+  it('prepares from prompt-only sources without querying chapters and emits only the Agnes recipe once', async () => {
+    const post = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(payload(), { status: 200, headers: { 'x-request-id': 'cover-fixture-1' } }))
+    vi.stubGlobal('fetch', post)
+    const fixture = await prepared()
+    expect(post).not.toHaveBeenCalled()
+    const get = vi.spyOn(db.chapters, 'get'), where = vi.spyOn(db.chapters, 'where')
+    const auth = await prepareCoverRunV1({ scope: fixture.scope, draftId: fixture.draft.id,
+      expectedDraftRevision: fixture.draft.revision, connection, currentConnection: () => connection })
+    expect(get).not.toHaveBeenCalled(); expect(where).not.toHaveBeenCalled()
+    get.mockRestore(); where.mockRestore()
+    await submitCoverImageOnceV1(auth)
+    expect(post).toHaveBeenCalledTimes(1)
+    const request = JSON.parse(post.mock.calls[0][1]!.body as string)
+    expect(request).toMatchObject({ model: 'agnes-image-2.1-flash', size: '1K', ratio: '2:3', return_base64: true })
+    expect(Object.keys(request).sort()).toEqual(['model', 'prompt', 'ratio', 'return_base64', 'size'])
+    expect(request.prompt).toContain('海上灯塔')
+    await expect(submitCoverImageOnceV1(auth)).rejects.toThrow('不会重复发送')
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+
+  it('persists original response before decode, then atomically freezes candidate/receipt and recovers with zero extra POST', async () => {
+    const post = vi.fn(async () => new Response(payload(), { status: 200 })); vi.stubGlobal('fetch', post)
+    const fixture = await prepared()
+    await submitCoverImageOnceV1(fixture.authorization)
+    const original = (await db.workCoverResponseBuffers.where('runId').equals(fixture.authorization.runId).first())!
+    expect(original.state).toBe('response-observed'); expect(original.payload).toBeInstanceOf(ArrayBuffer)
+    expect(await db.workCoverAssets.count()).toBe(0)
+    const asset = await materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })
+    expect(asset.sourceRunId).toBe(fixture.authorization.runId)
+    expect(asset.candidateJson).toContain('storyforge.work-cover.image-candidate@1')
+    expect((await db.workCoverResponseBuffers.get(original.id!))!.payload).toBeNull()
+    const run = await readAgentRunV1(fixture.scope, fixture.authorization.runId)
+    expect(run.projection.state).toBe('completed'); expect(run.projection.terminalReceiptHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(await materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })).toEqual(asset)
+    expect(post).toHaveBeenCalledTimes(1)
+    expect((await db.works.get(fixture.work.id!))!.coverImage ?? '').toBe('')
+    const draft = (await db.workCoverDrafts.get(fixture.draft.id))!
+    const confirmation = await prepareWorkCoverAdoptionV1({ scope: fixture.scope, draftId: draft.id!, expectedDraftRevision: draft.revision,
+      assetId: asset.id, expectedWorkUpdatedAt: fixture.work.updatedAt })
+    await adoptWorkCoverV1(fixture.scope, confirmation)
+    expect((await db.works.get(fixture.work.id!))!.coverImage).toMatch(/^data:image\/png;base64,/)
+    const backup = await exportProjectJSON(fixture.scope.projectId), imported = await importProjectJSON(backup)
+    expect(await db.workCoverAssets.where('projectId').equals(imported).count()).toBe(1)
+    expect(await db.workCoverResponseBuffers.where('projectId').equals(imported).count()).toBe(0)
+    const importedRun = (await db.agentRuns.where('projectId').equals(imported).first())!
+    const importedWork = (await db.works.where('projectId').equals(imported).first())!
+    await expect(materializeCoverCandidateV1({ scope: { projectId: imported, worldId: importedWork.worldId, workId: importedWork.id! }, runId: importedRun.id! })).rejects.toThrow('没有本机原答')
+    expect(post).toHaveBeenCalledTimes(1)
+  }, 30_000)
+
+  it('quota failure during materialization keeps the original buffer and old cover, and recovery never calls the provider again', async () => {
+    const post = vi.fn(async () => new Response(payload(), { status: 200 })); vi.stubGlobal('fetch', post)
+    const fixture = await prepared(); await submitCoverImageOnceV1(fixture.authorization)
+    const spy = vi.spyOn(db.workCoverAssets, 'add').mockRejectedValueOnce(new DOMException('quota', 'QuotaExceededError'))
+    try { await expect(materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })).rejects.toThrow('quota') } finally { spy.mockRestore() }
+    expect(await db.mediaBlobObjects.count()).toBe(0)
+    expect((await db.workCoverResponseBuffers.where('runId').equals(fixture.authorization.runId).first())!.payload).toBeInstanceOf(ArrayBuffer)
+    await materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })
+    expect(post).toHaveBeenCalledTimes(1)
+    expect((await db.works.get(fixture.work.id!))!.coverImage ?? '').toBe('')
+  }, 20_000)
+
+  it.each([
+    { data: [{ url: 'https://example.invalid/paid-image.png' }] },
+    { data: [{ b64_json: 'AAAA' }, { b64_json: 'AAAA' }] },
+    { data: [{ b64_json: 'AAAA' }], status: 'queued' },
+  ])('rejects URL/async/multiple results without download or replacement POST', async response => {
+    const post = vi.fn(async () => new Response(JSON.stringify(response), { status: 200 })); vi.stubGlobal('fetch', post)
+    const fixture = await prepared(); await submitCoverImageOnceV1(fixture.authorization)
+    await expect(materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })).rejects.toThrow('重发')
+    expect(post).toHaveBeenCalledTimes(1); expect(await db.workCoverAssets.count()).toBe(0)
+  })
+
+  it('does not dispatch after a preset/key/authority change and fingerprints remain salted and secret-free', async () => {
+    let current = connection
+    const fixture = await prepared(() => current)
+    const first = await aiCredentialFingerprintV1(connection.config)
+    expect(first).toBe(await aiCredentialFingerprintV1(connection.config)); expect(first).not.toContain(connection.config.apiKey)
+    current = { ...connection, presetId: 'other-preset' }
+    const post = vi.fn(); vi.stubGlobal('fetch', post)
+    await expect(submitCoverImageOnceV1(fixture.authorization)).rejects.toThrow('连接已变化')
+    expect(post).not.toHaveBeenCalled()
+    await expect(resolveWorkCoverImageRouteV1({ ...connection, config: { ...connection.config, baseUrl: 'https://apihub.agnes-ai.com.attacker.invalid/v1' } })).rejects.toThrow('官方连接')
+    const buffer = (await db.workCoverResponseBuffers.where('runId').equals(fixture.authorization.runId).first())!
+    expect(JSON.stringify(buffer)).not.toContain(connection.config.apiKey)
+  })
+
+  it('pauses an unknown outcome without resending; a subsequently observed original response can materialize locally', async () => {
+    const post = vi.fn(async () => { throw new TypeError('connection lost after dispatch') }); vi.stubGlobal('fetch', post)
+    const fixture = await prepared()
+    await expect(submitCoverImageOnceV1(fixture.authorization)).rejects.toThrow('结果未知')
+    const buffer = (await db.workCoverResponseBuffers.where('runId').equals(fixture.authorization.runId).first())!
+    expect(buffer.state).toBe('outcome-unknown')
+    await expect(submitCoverImageOnceV1(fixture.authorization)).rejects.toThrow('不会重复发送')
+    await observeCoverResponseV1({ scope: fixture.scope, bufferId: buffer.id!, dispatchKey: buffer.dispatchKey, status: 200,
+      requestId: 'late-original', payload: new TextEncoder().encode(payload()).buffer })
+    await materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })
+    expect(post).toHaveBeenCalledTimes(1)
+  }, 20_000)
+})

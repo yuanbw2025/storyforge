@@ -99,6 +99,7 @@ export function analyzeAIEntrySource(source, file = 'entry.tsx') {
       if (member === 'executeRegisteredAIEntryV1') return 'registered'
       if (member === 'executeFrozenFormalAIEntryV1') return 'frozen'
       if (member === 'executeFrozenFormalAudioEntryV1') return 'frozen-audio'
+      if (member === 'executeFrozenFormalImageEntryV1') return 'frozen-image'
       if (member === 'streamRegisteredAIEntryV1' && file !== 'src/hooks/useAIStream.ts') return 'hook-start'
     }
     if (member === 'assertVoiceTransport' && ['src/lib/longform-voice/contract', 'src/lib/agent/limited-ai-transport'].includes(origin.module)) {
@@ -148,7 +149,7 @@ export function analyzeAIEntrySource(source, file = 'entry.tsx') {
         // bound authority arguments. Coalesce identical proof inputs, not roles.
         const proof = role === 'registered' ? [args[0], args[3]]
           : role === 'frozen' ? [args[0], args[3], args[6]]
-          : role === 'frozen-audio' ? [args[0], args[3], args[5]]
+          : (role === 'frozen-audio' || role === 'frozen-image') ? [args[0], args[3], args[5]]
           : role === 'limited-voice' ? [args[0], args[1]]
           : role === 'hook-start' ? [args[2]] : []
         const key = JSON.stringify([role, ...proof.map(value => value?.getText(ast) ?? null)])
@@ -165,7 +166,7 @@ export function analyzeAIEntrySource(source, file = 'entry.tsx') {
           } else transports.push({ entryId: ids[0], file })
         } else if (role === 'registered') {
           registerGovernedCall(node, args[0], args[3])
-        } else if (role === 'frozen' || role === 'frozen-audio') {
+        } else if (role === 'frozen' || role === 'frozen-audio' || role === 'frozen-image') {
           registerGovernedCall(node, args[0], args[role === 'frozen' ? 6 : 5], args[3], true)
         } else {
           registerGovernedCall(node, objectProperty(args[2], 'formalEntryId'), args[2])
@@ -228,6 +229,7 @@ const scannedFiles = [
   'src/lib/reference-analysis/pipeline.ts',
   // Import candidate transport is governed even though its owner is not a UI component.
   'src/lib/import/document-parse-durable.ts',
+  'src/lib/work-cover/run.ts',
   'src/lib/open-world/creator-brief.ts',
   // G5-06 Creator Artifact Agent edits are a formal durable service; direct
   // edits share its candidate pipeline but never cross this AI entry.
