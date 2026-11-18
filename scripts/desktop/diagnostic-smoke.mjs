@@ -13,14 +13,24 @@ export async function verifyDiagnosticContext(app, page, launch) {
     if (!client?.diagnosticContext) throw new Error('Missing native diagnostic context')
     await client.diagnosticContext({enabled:true,trail:[{at:new Date().toISOString(),area:'longform',action:'save',text:'PRIVATE-SYNTHETIC'}]})
   })
-  const observed = app.evaluate(({BrowserWindow}) => new Promise(resolve => {
-    BrowserWindow.getAllWindows()[0].webContents.once('render-process-gone', (_event, details) => resolve({reason:details.reason,exitCode:details.exitCode}))
-  }))
+  // Await the handle so the main-process listener is installed before the CDP
+  // command can crash the renderer. The event may arrive before we read result.
+  const observed = await app.evaluateHandle(({BrowserWindow}) => {
+    /** @type {Promise<{reason:string,exitCode:number}>} */
+    const result = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Renderer crash event was not observed within 60 seconds')), 60_000)
+      BrowserWindow.getAllWindows()[0].webContents.once('render-process-gone', (_event, details) => {
+        clearTimeout(timeout)
+        resolve({reason:details.reason,exitCode:details.exitCode})
+      })
+    })
+    return {result}
+  })
   const session = await page.context().newCDPSession(page)
   // CDP Page.crash exercises an actual renderer crash. forcefullyCrashRenderer
   // can report `killed` on macOS, which must not be mislabeled as a crash.
   void session.send('Page.crash').catch(() => {})
-  const gone = await observed
+  const gone = await observed.evaluate(state => state.result).finally(() => observed.dispose())
   assert.equal(gone.reason, 'crashed')
   const stopped = new Promise(resolve => app.process().once('exit', () => resolve(undefined)))
   await app.evaluate(({app}) => app.exit(0))

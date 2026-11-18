@@ -8,13 +8,19 @@ import { verifyDesktopRelay } from './relay-smoke.mjs'
 import runtimePolicy from '../distribution/desktop-runtime.cjs'
 const profile = await mkdtemp(join(tmpdir(), 'storyforge-client-smoke-'))
 const executablePath = process.argv[2]
-const launch = async () => (app = await electron.launch({
-  chromiumSandbox: process.platform === 'linux',
-  ...(executablePath ? { executablePath: resolve(executablePath), args: [] } : { args: ['scripts/desktop/main.mjs'] }),
-  env: { ...process.env, STORYFORGE_TEST_USER_DATA: profile }, timeout: 60000,
-}))
+const launch = async () => {
+  app = await electron.launch({
+    chromiumSandbox: process.platform === 'linux',
+    ...(executablePath ? { executablePath: resolve(executablePath), args: [] } : { args: ['scripts/desktop/main.mjs'] }),
+    env: { ...process.env, STORYFORGE_TEST_USER_DATA: profile }, timeout: 60000,
+  })
+  nativeProcess = app.process()
+  return app
+}
 /** @type {import('@playwright/test').ElectronApplication | undefined} */
 let app
+/** @type {import('node:child_process').ChildProcess | undefined} */
+let nativeProcess
 try {
   app = await launch()
   console.log(JSON.stringify({ check: 'actual-desktop-runtime', ...await runtimePolicy.verifyRunningRuntime(app, { packaged: !!executablePath }) }))
@@ -72,12 +78,14 @@ try {
   if (app) {
     const directory = `release/native-smoke/${process.platform}`
     await mkdir(directory, { recursive: true })
-    await app.firstWindow().then(page => page.screenshot({ path: `${directory}/failure.png` })).catch(() => {})
+    await app.firstWindow().then(page => page.screenshot({ path: `${directory}/failure.png`, timeout: 5000 })).catch(() => {})
   }
   throw error
 } finally {
-  if (app) {
-    const child = app.process()
+  if (app && nativeProcess) {
+    // Keep the OS process captured at launch: Playwright's proxy may already be
+    // disposed after a timeout, and process() would then mask the original error.
+    const child = nativeProcess
     if (child.exitCode === null && child.signalCode === null) {
       const exited = new Promise(resolve => child.once('exit', resolve))
       await app.evaluate(({ app }) => app.exit(0)).catch(() => { child.kill() })
