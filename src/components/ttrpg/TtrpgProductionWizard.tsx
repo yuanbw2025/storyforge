@@ -114,7 +114,7 @@ export default function TtrpgProductionWizard(props: {
       className="rounded border border-accent/30 bg-accent/5 p-4 md:col-span-2"
       data-testid="ttrpg-production-wizard"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div hidden={props.activeStep !== undefined} className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <small className="font-mono text-[9px] text-accent">
             跑团制作配置 · 9 步

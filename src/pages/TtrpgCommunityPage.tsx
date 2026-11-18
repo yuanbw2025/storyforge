@@ -43,7 +43,7 @@ export default function TtrpgCommunityPage({ embedded = false }: { embedded?: bo
   const visible = gameKey ? games.filter(game => game.key === gameKey) : games
   const Content = 'section'
   const content = <div className="sf-community sf-community-embedded">
-    <Content className="sf-community-main" aria-label="跑团作品"><div className="sf-community-intro"><span>STORYFORGE ORIGINALS</span><h2>跑团作品</h2><p>{embedded ? '体验随项目提供的原创冒险，或继续已有的故事。无需先创建世界，配置自己的模型 API 即可开局。' : '你扮演角色，AI 担任主持人。带上自己的选择、疑问和秘密，走进一场由你改变的冒险。'}</p></div>
+    <Content className="sf-community-main" aria-label="跑团作品"><div className="sf-community-intro"><h2>示例冒险</h2><p>{embedded ? '体验随项目提供的原创冒险，或继续已有的故事。无需先创建世界，配置自己的模型 API 即可开局。' : '你扮演角色，AI 担任主持人。带上自己的选择、疑问和秘密，走进一场由你改变的冒险。'}</p></div>
       {loading && <p role="status">正在布置游戏桌面…</p>}
       {catalogError && <div className="sf-community-error" role="alert"><p>新冒险目录暂时无法加载。已有存档仍可在下方打开。</p><small>{catalogError}</small><button onClick={() => setCatalogAttempt(attempt => attempt + 1)}>重新加载游戏目录</button></div>}
       {error && <div className="sf-community-error" role="alert">{error}</div>}
