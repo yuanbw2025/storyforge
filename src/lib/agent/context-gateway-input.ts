@@ -24,6 +24,8 @@ export function assembleContextGatewayPacketV1(
   execution: ContextGatewayExecutionV1,
   inputBudget: number,
 ): AssembleContextResult {
+  inputBudget = Math.min(inputBudget, execution.modelBudget?.inputBudget ?? Infinity)
+  if (execution.contextPacket.tokenCount > inputBudget) throw new Error('必需资料超出本次模型输入预算，已停止发送；请调整读取范围或更换模型。')
   const content = execution.contextPacket.content
   const providerKeys = execution.session?.providers.map(binding => binding.source.key) ?? ['ragSelection']
   const blocks = execution.sourceBlocks ?? [{ sourceKey: 'ragSelection', content, contentHash: execution.contextPacket.contentHash, tokenCount: execution.contextPacket.tokenCount }]

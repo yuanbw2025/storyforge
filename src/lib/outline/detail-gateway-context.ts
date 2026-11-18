@@ -161,6 +161,7 @@ export async function prepareDetailedOutlineGatewayAssemblyV1(input: {
   ])
   const mandatoryResourceKeys = unique([...mandatoryOriginalResourceKeys, ...mandatoryFullResourceKeys])
   const execution = await executeContextGatewayV1({
+    modelConfig: input.config,
     skill,
     scope,
     worldGroupId: input.worldGroupId,

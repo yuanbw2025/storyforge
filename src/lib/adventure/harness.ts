@@ -367,7 +367,7 @@ export async function generateAdventureRuntimeCandidateV1(input: {
       worldGroupId: boundary.scope.worldGroupId,
       productRuntimeSessionId: input.productRuntimeSessionId,
       sourceKeys: ['adventureRuntime'],
-      provider: input.aiConfig?.provider, model: input.aiConfig?.model,
+      modelConfig: input.aiConfig, provider: input.aiConfig?.provider, model: input.aiConfig?.model,
       inputBudgetMaxTokens: 16_000,
     })
     if (!assembled.included.includes('adventureRuntime')) fail('文字冒险运行时上下文为空')

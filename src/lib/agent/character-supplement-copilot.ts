@@ -502,6 +502,7 @@ export async function prepareCharacterSupplementCopilotV1(
   const targetResourceKey = `character:${character.ragDocumentId}`
   const contextGatewayExecution = gatewayRequired
     ? await executeContextGatewayV1({
+    modelConfig: config,
         skill,
         scope: scope!,
         worldGroupId: project.enableMultiWorld ? input.worldGroupId : null,

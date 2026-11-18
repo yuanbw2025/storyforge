@@ -284,7 +284,7 @@ async function baselineGeneration(input: {
     projectId: input.workspace.scope.projectId,
     scope: input.workspace.scope,
     worldGroupId: null,
-    provider: input.config.provider,
+    modelConfig: input.config, provider: input.config.provider,
     model: input.config.model,
     sourceKeys: [
       'canonAssertions', 'worldview', 'storyCore', 'powerSystem', 'cultivationProgress',

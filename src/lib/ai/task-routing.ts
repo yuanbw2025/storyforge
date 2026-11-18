@@ -141,7 +141,7 @@ function preserveCallOverrides(
   explicitOverrides?: Partial<AIConfig>,
 ): AIConfig {
   const next = { ...routed }
-  for (const key of ['temperature', 'maxTokens', 'contextWindow'] as const) {
+  for (const key of ['temperature', 'maxTokens'] as const) {
     if (requested[key] !== globalConfig[key]) {
       next[key] = requested[key] as never
     }

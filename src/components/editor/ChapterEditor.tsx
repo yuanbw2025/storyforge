@@ -1,3 +1,4 @@
+import { getModelCapacityLimitsV1 } from '../../lib/ai/model-capacity'
 import { readStateCardFields, StateFieldsParseError } from '../../lib/types/state-card'
 import { prepareChapterPostAdoptionV1, runChapterPostAdoptionV1, type ChapterPostAdoptionTaskV1 } from '../../lib/prose/post-adoption-runner'
 import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react'
@@ -58,7 +59,7 @@ import ContextBudgetBar from '../shared/ContextBudgetBar'
 import { useDialog } from '../shared/Dialog'
 import { useReviewResultStore } from '../../stores/review-result'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { analyzeContextSegments, calculateBudget, estimateTokens, getModelPreset, type ContextBudget } from '../../lib/ai/context-budget'
+import { analyzeContextSegments, calculateBudget, estimateTokens, type ContextBudget } from '../../lib/ai/context-budget'
 import {
   prepareGenerationNode,
   runGenerationNode,
@@ -1384,9 +1385,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
     console.log(`[ContextGateway] ${taskType} 模式 — path:${assembled.contextGatewayExecution.path} selected:${assembled.contextGatewayExecution.retrievalTrace.mandatory.length + assembled.contextGatewayExecution.retrievalTrace.autoSelected.length} tokens:${assembled.totalInputTokens}`)
 
-    const maxContext = aiConfig.contextWindow && aiConfig.contextWindow > 0
-      ? aiConfig.contextWindow
-      : getModelPreset(aiConfig.provider, aiConfig.model).maxContext
+    const maxContext = getModelCapacityLimitsV1(aiConfig).maxContext
     const continuityBudgetTokens = maxContext <= 8_192 ? 3000 : maxContext <= 32_768 ? 6000 : 10_000
     return {
       text: assembled.text,
@@ -1763,7 +1762,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         ...assembledSegments,
         { label: 'User Prompt', content: messages.find(m => m.role === 'user')?.content || '', layer: 'L1' },
       ])
-      setContextBudget(calculateBudget(aiConfig.provider, aiConfig.model, segments, aiConfig.contextWindow))
+      setContextBudget(calculateBudget(aiConfig.provider, aiConfig.model, segments, aiConfig))
 
       prepareOrRunChapterGeneration(
         'generate',

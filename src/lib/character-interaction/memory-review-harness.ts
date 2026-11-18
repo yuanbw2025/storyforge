@@ -1,5 +1,5 @@
 import {boundedChatOutputTokensV1} from './action-output-contract'
-import {chat} from '../ai/client'
+import {chat, resolveRequestConfig} from '../ai/client'
 import {appendAgentRunEventV1, readInstanceAgentRunV1, type AgentRunSnapshotV1} from '../agent/run/event-store'
 import {createAgentRunCheckpointV1} from '../agent/run/checkpoint'
 import {createContextManifestFromAssemblyV1} from '../agent/run/context-manifest'
@@ -47,7 +47,7 @@ export async function reviewChatMemoryCandidateV1(input: InteractionRuntimeGener
       const sourceKeys = ['chatMemoryReview']
       const assembled = await assembleContext({projectId: input.scope.projectId, scope: input.scope,
         worldGroupId: snapshot.contract.scope.worldGroupId, productRuntimeSessionId: input.productRuntimeSessionId,
-        chatMemoryCandidateRunId: snapshot.run.id, sourceKeys, provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 24_000})
+        chatMemoryCandidateRunId: snapshot.run.id, sourceKeys, modelConfig: input.aiConfig ? resolveRequestConfig(input.aiConfig, {category: `runtime.${CHAT_MEMORY_REVIEW_SKILL}`}).config : undefined, provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 24_000})
       if (!assembled.included.includes('chatMemoryReview')) fail('记忆正文与共同来源不完整，不能截断后审查')
       await assertRuntimeHarnessFreshV1(freshness)
       const manifest = await createContextManifestFromAssemblyV1({runId: snapshot.run.id, stepId, attempt: 1,

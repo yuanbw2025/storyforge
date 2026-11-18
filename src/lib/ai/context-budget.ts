@@ -1,3 +1,4 @@
+import { getModelCapacityV1, modelInputBudgetV1, type ModelCapacityV1 } from './model-capacity'
 /**
  * 上下文窗口预算管理
  *
@@ -8,7 +9,7 @@
  * - 预算计算与自动裁剪
  */
 
-import type { AIProvider, ChatMessage } from '../types'
+import type { AIConfig, AIProvider, ChatMessage } from '../types'
 import { normalizeProviderModel } from '../types/ai'
 import {
   CONTINUITY_CORE_END,
@@ -24,8 +25,8 @@ export interface ModelContextPreset {
 }
 
 /**
- * 各模型的上下文窗口大小（单位：token）
- * 键 = provider:model 或 provider（作为该 provider 的默认值）
+ * @deprecated 历史兼容目录，不再用于生产预算或模型能力判定。
+ * 当前唯一能力事实源与端点绑定策略见 model-capacity.ts。
  */
 export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
   codex: { label: 'Codex 本地保守预算', maxContext: 32_768, maxOutput: 8_192 },
@@ -128,7 +129,7 @@ export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
   'wenxin': { label: '文心默认', maxContext: 8_000, maxOutput: 4_096 },
 }
 
-/** 获取模型的上下文窗口预设 */
+/** @deprecated Historical name-only catalog, retained for compatibility. Active budgeting uses model-capacity.ts and the exact connection. */
 export function getModelPreset(provider: AIProvider, model: string): ModelContextPreset {
   // 先精确匹配 provider:model
   const exact = MODEL_CONTEXT_PRESETS[`${provider}:${normalizeProviderModel(provider, model)}`]
@@ -210,24 +211,17 @@ export interface ContextBudget {
   safetyMargin: number
 }
 
-/** 计算上下文预算
- * @param contextWindowOverride FB-8:用户为本地/自定义模型手填的上下文窗口(token)。
- *   优先级:用户显式设置(>0) > 内置预设 > 8K 兜底。修复"本地256K模型被当8K、误报超窗"。
- */
+/** Budget previews use the same automatic capability decision as dispatch. Legacy numeric overrides are ignored. */
 export function calculateBudget(
   provider: AIProvider,
   model: string,
   segments: ContextSegment[],
-  contextWindowOverride?: number,
+  config?: AIConfig | number,
 ): ContextBudget {
-  const preset = getModelPreset(provider, model)
-  const maxContext = (contextWindowOverride && contextWindowOverride > 0)
-    ? contextWindowOverride
-    : preset.maxContext
-  // 输出预留不超过窗口一半(用户填的窗口若较小时收敛,避免 inputBudget 变负)
-  const maxOutput = Math.min(preset.maxOutput, Math.floor(maxContext * 0.5))
-  const safetyMargin = Math.round(maxContext * 0.05) // 5% 安全边际
-  const inputBudget = maxContext - maxOutput - safetyMargin
+  const selected = typeof config === 'object' ? config : { provider, model, baseUrl: '', apiKey: '', temperature: 0, maxTokens: 0 }
+  const capacity = getModelCapacityV1(selected)
+  const { inputBudget, outputBudget: maxOutput, safetyMargin } = modelInputBudgetV1(capacity, selected.maxTokens)
+  const maxContext = capacity.totalWindow ?? capacity.inputLimit!
   const totalInputTokens = segments.reduce((sum, s) => sum + s.tokens, 0)
 
   return {
@@ -288,19 +282,18 @@ export function trimMessagesToFit(
   maxOutput?: number,
   contextWindowOverride?: number,
   reservedInputTokens = 0,
+  capacity?: ModelCapacityV1,
 ): TrimmedMessagesResult {
-  const preset = getModelPreset(provider, model)
-  const maxContext = (contextWindowOverride && contextWindowOverride > 0)
-    ? contextWindowOverride
-    : preset.maxContext
-  const outputBudget = maxOutput && maxOutput > 0 ? maxOutput : Math.min(preset.maxOutput, Math.floor(maxContext * 0.5))
-  const safetyMargin = Math.round(maxContext * 0.05)
-  const inputBudget = maxContext - outputBudget - safetyMargin
+  // Legacy hand-entered values are accepted for source compatibility, but never govern dispatch.
+  void contextWindowOverride
+  const decision = capacity ?? getModelCapacityV1({ provider, model, baseUrl: '', apiKey: '', temperature: 0, maxTokens: maxOutput ?? 0 })
+  const { inputBudget } = modelInputBudgetV1(decision, maxOutput)
   const copy = messages.map(message => ({ ...message }))
   const reserved = Number.isFinite(reservedInputTokens)
     ? Math.max(0, Math.floor(reservedInputTokens))
     : 0
-  let messageTokens = copy.reduce((sum, message) => sum + estimateTokens(message.content), 0)
+  const envelopeTokens = copy.length * 6 + 3
+  let messageTokens = copy.reduce((sum, message) => sum + estimateTokens(message.content), 0) + envelopeTokens
   let trimmed = false
 
   let guard = 0
@@ -316,7 +309,7 @@ export function trimMessagesToFit(
       const keepTokens = Math.max(64, tokens - overflow - 128)
       copy[index].content = trimTextToApproxTokensPreservingContinuity(copy[index].content, keepTokens)
     }
-    messageTokens = copy.reduce((sum, message) => sum + estimateTokens(message.content), 0)
+    messageTokens = copy.reduce((sum, message) => sum + estimateTokens(message.content), 0) + envelopeTokens
     trimmed = true
   }
 

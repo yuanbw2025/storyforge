@@ -453,7 +453,7 @@ export async function generateScreenplayProfessionalCandidateV1(input: {
   const assembled = await assembleContext({
     projectId: input.scope.projectId, scope: input.scope, sourceKeys: [...skill.contextSourceKeys], adaptationProjectId: selected.root.id!,
     adaptationSourceManifestVersion: selected.root.activeSourceManifestVersion, adaptationSourceUnitKeys: selected.sourceUnitKeys,
-    screenplaySceneIds: selected.scenes.map(scene => scene.id!), provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 48_000,
+    screenplaySceneIds: selected.scenes.map(scene => scene.id!), modelConfig: input.aiConfig, provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 48_000,
   })
   const contextManifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId: config.stepId, attempt: 1, projectId: input.scope.projectId, worldGroupId: null, declaredSourceKeys: [...skill.contextSourceKeys], assembled, readerVersion: `screenplay-${input.stage}-context-v1` })
   snapshot = await append(input.scope, snapshot, 'context.assembled', { stepId: config.stepId, attempt: 1, manifestHash: contextManifest.manifestHash })

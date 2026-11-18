@@ -437,7 +437,7 @@ export async function generateTtrpgGmActorActionCandidateV1(input: {
       worldGroupId: boundary.scope.worldGroupId,
       productRuntimeSessionId: input.productRuntimeSessionId,
       sourceKeys: ["ttrpgNpcRuntime"],
-      provider: input.aiConfig?.provider,
+      modelConfig: input.aiConfig, provider: input.aiConfig?.provider,
       model: input.aiConfig?.model,
       inputBudgetMaxTokens: 18_000,
     });

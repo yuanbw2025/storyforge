@@ -608,7 +608,7 @@ async function dispatchReferenceAttempt(input: ReferenceChunkInput, source: Boun
   const formalEntry = await freezeFormalAIEntryBindingV1(PRIVATE_ENTRY)
   const assembled = await assembleContext({ scope, projectId: scope.projectId, sourceKeys: [SOURCE],
     referenceAnalysisRunId: input.runId, referenceAnalysisChunkIndex: source.chunk.index, inputBudgetMaxTokens: INPUT_BUDGET,
-    provider: resolved.config.provider, model: resolved.config.model })
+    modelConfig: resolved.config, provider: resolved.config.provider, model: resolved.config.model })
   if (assembled.segments[assembled.included.indexOf(SOURCE)]?.content !== source.chunk.text)
     throw new Error('正式来源必须是完整的已确认参考原文。')
   const messages = referenceChunkMessages({ ...input, ref: source.ref, chunk: source.chunk })

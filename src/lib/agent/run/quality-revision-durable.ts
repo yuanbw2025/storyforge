@@ -16,7 +16,7 @@ import { buildQualityRecheckRequestV1, parseQualityRecheckV1 } from '../../prose
 import { QUALITY_RECHECK_STEP_V1, type QualityRevisionEvidenceV1 } from '../../prose/quality-revision-evidence'
 import type { QualityReviewModeV1 } from '../../prose/quality-review'
 import { proseRenderedRequestV1 } from '../../prose/request-evidence'
-import { boundedQualityResolutionV1 } from '../../prose/quality-request-budget'
+import { prepareQualityResolutionV1 } from '../../prose/quality-request-budget'
 import { getAgentSkillV1, resolveAgentSkillContextSourceKeysV1 } from '../skill-registry'
 import { createAgentSkillExecutionBindingV2 } from '../execution-binding'
 import { freezeFormalAIEntryBindingV1 } from '../formal-ai-entry'
@@ -83,7 +83,7 @@ async function runQualityRevisionLockedV1(input: QualityRevisionInputV1): Promis
   const checker = getAgentSkillV1('prose.quality-recheck', 'prose')
   const writerBinding = await createAgentSkillExecutionBindingV2(writer, { optionalContextActivations: [], writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'], mode: 'author-confirmed' }] })
   const checkerBinding = await createAgentSkillExecutionBindingV2(checker, { optionalContextActivations: [], writeTargets: [] })
-  const resolution = boundedQualityResolutionV1(resolveRequestConfig(input.configOverride ?? useAIConfigStore.getState().config, { category: 'review.revise', projectId: input.scope.projectId, configOverrides: input.generationOverrides }))
+  const resolution = await prepareQualityResolutionV1(resolveRequestConfig(input.configOverride ?? useAIConfigStore.getState().config, { category: 'review.revise', projectId: input.scope.projectId, configOverrides: input.generationOverrides }))
   const settings = describeResolvedAIRequestSettingsV1(resolution, false, { responseFormat: 'json_object' })
   if (resolution.config.maxTokens > writer.maxOutputTokens) throw new Error('修订输出上限超过本轮预算。')
   const assembly = await prepareProseGatewayAssemblyV1({ ...input, projectId: input.scope.projectId, operation: 'revise', qualityRevision: true, authorRequest: `只处理作者选中的问题，保留保护文字、其它段落和停笔位置。${plan.authorRequest ? `\n${plan.authorRequest}` : ''}`, config: resolution.config, allowOutlineOnlyAgentDraft: true })
@@ -119,7 +119,7 @@ async function runQualityRevisionLockedV1(input: QualityRevisionInputV1): Promis
     if (protectionError) throw new Error(protectionError)
     await assertWorkspaceContentRevisionFreshV1(revision, { scope: input.scope, worldGroupId: input.worldGroupId })
     if (input.signal?.aborted) throw new Error('修订已停止，预演结果已保留，未继续复核。')
-    const recheckResolution = boundedQualityResolutionV1(resolveRequestConfig(input.configOverride ?? useAIConfigStore.getState().config, { category: 'review.quality', projectId: input.scope.projectId, configOverrides: input.generationOverrides }))
+    const recheckResolution = await prepareQualityResolutionV1(resolveRequestConfig(input.configOverride ?? useAIConfigStore.getState().config, { category: 'review.quality', projectId: input.scope.projectId, configOverrides: input.generationOverrides }))
     const recheckSettings = describeResolvedAIRequestSettingsV1(recheckResolution, false, { responseFormat: 'json_object' })
     if (recheckResolution.config.maxTokens > checker.maxOutputTokens) throw new Error('复核输出上限超过本轮预算。')
     const recheckAssembly = await prepareProseGatewayAssemblyV1({ ...input, projectId: input.scope.projectId, operation: 'review', qualityRecheck: true, authorRequest: '只复核一次修订候选，检查所选问题与新问题。', config: recheckResolution.config, allowOutlineOnlyAgentDraft: true })

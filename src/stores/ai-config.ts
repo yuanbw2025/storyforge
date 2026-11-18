@@ -90,7 +90,7 @@ function loadPresets(): AIConfigPreset[] {
           ...preset,
           config: normalizeConfigModel(preset.config),
         }))
-        if (normalized.some((preset, index) => preset.config.model !== arr[index]?.config?.model)) {
+        if (normalized.some((preset, index) => preset.config.model !== arr[index]?.config?.model || arr[index]?.config?.contextWindow !== undefined || arr[index]?.config?.modelCapacity !== undefined)) {
           savePresets(normalized)
         }
         return normalized
@@ -101,7 +101,7 @@ function loadPresets(): AIConfigPreset[] {
 }
 
 function savePresets(presets: AIConfigPreset[]) {
-  localStorage.setItem(PRESETS_KEY, JSON.stringify(presets))
+  localStorage.setItem(PRESETS_KEY, JSON.stringify(presets.map(preset => ({ ...preset, config: normalizeConfigModel(preset.config) }))))
 }
 
 function loadPresetSessionApiKeys(): Record<string, unknown> {
@@ -268,7 +268,15 @@ function loadInitialConfig(): { config: AIConfig; rememberApiKey: boolean } {
   let savedConfig: Partial<AIConfig> & { _sessionCredentialId?: string } = {}
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) savedConfig = JSON.parse(saved)
+    if (saved) {
+      savedConfig = JSON.parse(saved)
+      if (savedConfig.contextWindow !== undefined || savedConfig.modelCapacity !== undefined) {
+        delete savedConfig.contextWindow
+        delete savedConfig.modelCapacity
+        // Preserve the credential reference and every unrelated setting verbatim.
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(savedConfig))
+      }
+    }
   } catch { /* ignore */ }
 
   const rememberRaw = localStorage.getItem(REMEMBER_API_KEY)
@@ -283,7 +291,7 @@ function loadInitialConfig(): { config: AIConfig; rememberApiKey: boolean } {
     ...fields,
     apiKey: rememberApiKey ? (fields.apiKey || '') : sessionKey,
   })
-  if (fields.model && config.model !== fields.model && (rememberApiKey || !rawSession || sessionKey)) {
+  if ((fields.contextWindow !== undefined || fields.modelCapacity !== undefined || (fields.model && config.model !== fields.model)) && (rememberApiKey || !rawSession || sessionKey || !fields.apiKey)) {
     persistConfig(config, rememberApiKey)
   }
 
@@ -294,6 +302,9 @@ function loadInitialConfig(): { config: AIConfig; rememberApiKey: boolean } {
 }
 
 function normalizeConfigModel(config: AIConfig): AIConfig {
+  config = { ...config }
+  delete config.contextWindow
+  delete config.modelCapacity
   if (config.provider === 'codex') return { ...config, apiKey: '', baseUrl: '/storyforge/local-codex/v1' }
   const model = normalizeProviderModel(config.provider, config.model)
   return model === config.model ? config : { ...config, model }
@@ -301,7 +312,7 @@ function normalizeConfigModel(config: AIConfig): AIConfig {
 
 function persistConfig(config: AIConfig, rememberApiKey: boolean): void {
   const referenceId = nanoid()
-  const persisted = { ...config, apiKey: rememberApiKey ? config.apiKey : '', _sessionCredentialId: referenceId }
+  const persisted = { ...normalizeConfigModel(config), apiKey: rememberApiKey ? config.apiKey : '', _sessionCredentialId: referenceId }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted))
   localStorage.setItem(REMEMBER_API_KEY, String(rememberApiKey))
   if (rememberApiKey) {

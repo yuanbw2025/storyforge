@@ -8,7 +8,7 @@ import type { AuthoringInputEnvelope, AuthoringNodeInstance, AuthoringCandidateD
 import type { DomainExecutionInput, DomainExecutionResult } from './domain-execution'
 import { readAuthoringCanonBinding } from './bindings'
 import { describeResolvedAIRequestSettingsV1, resolveRequestConfig } from '../ai/client'
-import { boundedQualityResolutionV1 } from '../prose/quality-request-budget'
+import { prepareQualityResolutionV1 } from '../prose/quality-request-budget'
 import { wholeChapterQualityRequestOptionsV1 } from '../prose/quality-review-request-options'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { freezeQualityRevisionPlanV1 } from '../prose/quality-revision'
@@ -59,7 +59,7 @@ export async function executeQualityAuthoringNodeV1(input: DomainExecutionInput)
   const generationOverrides = qualityAuthoringGenerationOverridesV1(input.node, input.inputs)
   const authorRequest = qualityAuthoringRequestV1(input.node, input.inputs)
   const categories = { quality: 'review.quality', style: 'review.anti-ai', readability: 'review.readability' } as const
-  const resolution = boundedQualityResolutionV1(resolveRequestConfig(input.aiConfig, { category: categories[mode], projectId: input.projectId, configOverrides: generationOverrides }))
+  const resolution = await prepareQualityResolutionV1(resolveRequestConfig(input.aiConfig, { category: categories[mode], projectId: input.projectId, configOverrides: generationOverrides }))
   const settings = describeResolvedAIRequestSettingsV1(resolution, false, wholeChapterQualityRequestOptionsV1(resolution.config))
   const identity = (value: typeof settings) => ({ provider: value.provider, model: value.model, parameters: value.parameters })
   const reusable = cached?.current && (cached.authorRequest ?? '') === authorRequest.trim() && await hashCanonicalValue(identity(cached.report.reviewer.settings)) === await hashCanonicalValue(identity(settings))
@@ -99,7 +99,7 @@ export async function executeQualityRevisionAuthoringNodeV1(input: DomainExecuti
     const reader = result.candidate.qualityRevision!.recheck.review.reviewer.settings
     const identity = (value: { provider: string; model: string; parameters: unknown }) => ({ provider: value.provider, model: value.model, parameters: value.parameters })
     for (const [category, actual] of [['review.revise', writer], ['review.quality', reader]] as const) {
-      const expected = describeResolvedAIRequestSettingsV1(boundedQualityResolutionV1(resolveRequestConfig(input.aiConfig, { category, projectId: input.projectId, configOverrides: generationOverrides })), false, { responseFormat: 'json_object' })
+      const expected = describeResolvedAIRequestSettingsV1(await prepareQualityResolutionV1(resolveRequestConfig(input.aiConfig, { category, projectId: input.projectId, configOverrides: generationOverrides })), false, { responseFormat: 'json_object' })
       if (await hashCanonicalValue(identity(expected)) !== await hashCanonicalValue(identity(actual))) throw new Error('已保存修订的模型参数与当前选择不同，请先处理原候选，再明确开启新一轮。')
     }
   }

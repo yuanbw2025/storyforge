@@ -219,7 +219,7 @@ export async function generateOpenWorldEvolutionRuntimeCandidateV1(input: {
       worldGroupId: boundary.scope.worldGroupId,
       productRuntimeSessionId: input.productRuntimeSessionId,
       sourceKeys: ['textOpenWorldEvolutionRuntime'],
-      provider: input.aiConfig?.provider,
+      modelConfig: input.aiConfig, provider: input.aiConfig?.provider,
       model: input.aiConfig?.model,
       inputBudgetMaxTokens: 16_000,
     })

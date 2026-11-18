@@ -742,7 +742,7 @@ export async function prepareCharacterRevisionCopilotV1(
     worldGroupId: project.enableMultiWorld ? input.worldGroupId : null,
     chapterId: before.snapshot.revision.lastWrittenChapterId,
     subjectCharacterName: before.snapshot.request.characterName,
-    provider: config.provider,
+    modelConfig: config, provider: config.provider,
     model: config.model,
     sourceKeys: [...skill.contextSourceKeys],
     manualSourceText: before.manualSourceText,

@@ -28,7 +28,7 @@ import {assertChatMemoryReconciliationReviewsV1, supportsChatMemoryReconciliatio
 import {chatActionReviewPromptRulesV1} from './narrative-action-prompt'
 import {interactionRetrievalView} from './runtime'
 import {readProductRuntimeState} from './runtime-api'
-import {chat, type ChatResult} from '../ai/client'
+import {chat, resolveRequestConfig, type ChatResult} from '../ai/client'
 import {recordChatActionOutputBudgetV1, readChatActionOutputBudgetV1} from './action-choice-output-budget'
 import {appendAgentRunEventV1, readInstanceAgentRunV1, type AgentRunSnapshotV1} from '../agent/run/event-store'
 import {createAgentRunCheckpointV1} from '../agent/run/checkpoint'
@@ -118,7 +118,7 @@ export async function reviewRuntimeChatCandidateV1<T extends ChatSituationCandid
       const sourceKeys = ['chatSituationRuntime', situation ? 'chatSituationCandidate' : 'chatActionCandidate']
       const assembled = await assembleContext({projectId: input.scope.projectId, scope: input.scope,
         worldGroupId: snapshot.contract.scope.worldGroupId, productRuntimeSessionId: input.productRuntimeSessionId,
-        ...(situation ? {chatSituationCandidateRunId: snapshot.run.id} : {chatActionCandidateRunId: snapshot.run.id}), sourceKeys, provider: input.aiConfig?.provider, model: input.aiConfig?.model,
+        ...(situation ? {chatSituationCandidateRunId: snapshot.run.id} : {chatActionCandidateRunId: snapshot.run.id}), sourceKeys, modelConfig: input.aiConfig ? resolveRequestConfig(input.aiConfig, {category: `runtime.${reviewSkill}`}).config : undefined, provider: input.aiConfig?.provider, model: input.aiConfig?.model,
         inputBudgetMaxTokens: 24_000})
       if (sourceKeys.some(key => !assembled.included.includes(key))) fail('叙事审查上下文不完整')
       if (control) {
