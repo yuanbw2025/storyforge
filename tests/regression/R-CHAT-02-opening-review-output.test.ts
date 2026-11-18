@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { modelInputBudgetV1, resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import {createHash} from 'node:crypto'
 import budgetCase from '../fixtures/character-chat-opening-review-budget.json'
 import {afterEach, beforeEach, expect, it, vi} from 'vitest'
@@ -199,7 +201,13 @@ it.each(['accepted', 'provider-ignored-schema', 'semantic-rejection', 'schema-bu
 )
 
 
-it('fits the complete real overflow case without reducing output allowance, source text or the review schema', () => {
+it('fits the complete real overflow case at a 32K allocation without reducing its 10K output allowance, source text or review schema', async () => {
+  resetModelCapacityForTestsV1()
+  const config = { provider: 'ollama' as const, model: 'budget-fixture', baseUrl: 'http://127.0.0.1:9/v1', apiKey: '', temperature: 0, maxTokens: 10_000 }
+  // Keep the historical 32K/10K regression precise. Codex's unknown-capacity
+  // fallback has an 8K policy output cap and cannot represent that premise.
+  const capacity = await seedModelAllocationFixtureV1(config, 32_768)
+  expect(modelInputBudgetV1(capacity, 10_000).outputBudget).toBe(10_000)
   const artifacts = JSON.parse(budgetCase.contextText).artifacts as Array<{artifactKey: string; payload: unknown}>
   const source = artifacts.find(a => a.artifactKey === 'design.game')!.payload as Parameters<typeof chatOpeningReviewOutputSchemaV3>[0]
   const candidates = artifacts.find(a => a.artifactKey === 'content.chat-candidates')!.payload as Parameters<typeof chatOpeningReviewOutputSchemaV3>[1]
@@ -208,14 +216,14 @@ it('fits the complete real overflow case without reducing output allowance, sour
   const previous = chatOpeningBackgroundReviewPromptV2()
   expect(createHash('sha256').update(previous).digest('hex')).toBe(budgetCase.priorSystemSha256)
   const original = [{role: 'system' as const, content: previous}, {role: 'user' as const, content: budgetCase.contextText}]
-  expect(trimMessagesToFit(original, 'codex', 'gpt-6.1-sol', 10_000, undefined, schemaTokens).trimmed).toBe(true)
+  expect(trimMessagesToFit(original, config.provider, config.model, 10_000, undefined, schemaTokens, capacity).trimmed).toBe(true)
   const messages = [{role: 'system' as const, content: chatOpeningBackgroundReviewPromptV3()}, original[1]]
-  const result = trimMessagesToFit(messages, 'codex', 'gpt-6.1-sol', 10_000, undefined, schemaTokens)
+  const result = trimMessagesToFit(messages, config.provider, config.model, 10_000, undefined, schemaTokens, capacity)
   expect(result.trimmed).toBe(false)
   expect(result.protectedEnvelopePreserved).toBe(true)
   expect(result.messages).toEqual(messages)
   expect(result.inputBudget - result.totalInputTokens).toBeGreaterThan(1000)
   // The physical limit still applies to genuinely larger complete inputs.
   const larger = [messages[0], {...original[1], content: budgetCase.contextText + '额外完整资料'.repeat(10_000)}]
-  expect(trimMessagesToFit(larger, 'codex', 'gpt-6.1-sol', 10_000, undefined, schemaTokens).trimmed).toBe(true)
+  expect(trimMessagesToFit(larger, config.provider, config.model, 10_000, undefined, schemaTokens, capacity).trimmed).toBe(true)
 })

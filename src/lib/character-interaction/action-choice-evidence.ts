@@ -44,7 +44,8 @@ async function contextPacket(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1
     || !await verifyContextManifestIntegrityV1(manifest) || manifest.stepId !== stepId || manifest.attempt !== 1
     || manifest.runId !== snapshot.run.id || manifest.scope.projectId !== scope.projectId
     || manifest.scope.worldGroupId !== (snapshot.run.worldGroupId ?? null) || manifest.manifestHash !== assembled.payload.manifestHash
-    || assembled.sequence >= saved.event.sequence || manifest.inputBudget !== CHAT_ACTION_CHOICE_INPUT_TOKENS_V1
+    || assembled.sequence >= saved.event.sequence || manifest.inputBudget > CHAT_ACTION_CHOICE_INPUT_TOKENS_V1
+    || manifest.totalInputTokens > manifest.inputBudget
     || manifest.totalInputTokens > CHAT_ACTION_CHOICE_INPUT_TOKENS_V1 || manifest.sources.length !== 1
     || manifest.sources[0].key !== 'interactionRuntime' || manifest.sources[0].status !== 'included'
     || manifest.sources[0].readerVersion !== chatActionContextVersionsV1(snapshot.contract.executionBindings?.find(binding => binding.stepId === expressionStep)?.promptVersion).readerVersion

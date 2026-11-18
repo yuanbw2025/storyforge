@@ -43,7 +43,7 @@ import {CHAT_ACTION_TERMINAL_VERIFIER_V2, readChatActionTerminalReceiptV1, retai
 import { createAgentSkillExecutionBindingV1, createAgentSkillExecutionBindingV2 } from '../agent/execution-binding'
 import { getAgentSkillV1, type AgentSkillId } from '../agent/skill-registry'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
-import { createContextManifestFromAssemblyV1 } from '../agent/run/context-manifest'
+import { createContextManifestFromAssemblyV1, parseContextManifestV1 } from '../agent/run/context-manifest'
 import {
   appendAgentRunEventV1,
   appendRuntimeCandidateAdoptedV1,
@@ -671,7 +671,10 @@ export async function resumeChatNarrativeActionV1(input: Pick<InteractionRuntime
       const assembled = await assembleContext({projectId: input.scope.projectId, scope: input.scope, worldGroupId: snapshot.run.worldGroupId ?? null,
         productRuntimeSessionId: sessionId, interactionParticipantKey: participantKey, sourceKeys: ['interactionRuntime'],
         ...(usesChatActionBoundContextV1(binding) ? {chatActionContextRunId: snapshot.run.id} : {}),
-        modelConfig: input.aiConfig ? resolveRequestConfig(input.aiConfig, {category: `runtime.${binding.skillId}`}).config : undefined, provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: CHAT_ACTION_CHOICE_INPUT_TOKENS_V1})
+        // Revalidate the immutable source under its original assembly budget. A
+        // new model allocation governs remaining dispatch, never historical evidence.
+        inputBudgetTokens: Math.min(parseContextManifestV1(packet.manifest).inputBudget, CHAT_ACTION_CHOICE_INPUT_TOKENS_V1),
+        inputBudgetMaxTokens: CHAT_ACTION_CHOICE_INPUT_TOKENS_V1})
       snapshot = (await chooseRuntimeChatActionV1({scope: input.scope, snapshot, participantKey, assembled, actorMessages: packet.actorMessages,
         aiConfig: input.aiConfig, runAI: input.runAI, signal: input.signal})).snapshot
       const proof = await readChatActionChoiceEvidenceV1({scope: input.scope, snapshot, participantKey})
@@ -756,8 +759,10 @@ async function generateRuntimeCandidate(input: InteractionRuntimeGenerationInput
       ...(revision ? {chatActionRevisionCurrentRunId: snapshot.run.id} : {}),
       ...(situation ? {chatSituationConstructionRunId: snapshot.run.id} : {}),
       ...(usesChatActionBoundContextV1(executionBinding) ? {chatActionContextRunId: snapshot.run.id} : {}),
-      modelConfig: input.aiConfig ? resolveRequestConfig(input.aiConfig, {category: `runtime.${input.skillId}`}).config : undefined, provider: input.aiConfig?.provider,
-      model: input.aiConfig?.model,
+      // Injected adapters have their own frozen contract; they do not use
+      // this connection. Only the real chat transport admits its capacity.
+      ...(!input.runAI && input.aiConfig ? {modelConfig: resolveRequestConfig(input.aiConfig, {category: `runtime.${input.skillId}`}).config,
+        provider: input.aiConfig.provider, model: input.aiConfig.model} : {}),
       inputBudgetMaxTokens: 16_000,
     })
     if (revision && !assembled.included.includes('chatActionRevision')) fail('缺少完整修订来源')

@@ -118,7 +118,7 @@ export async function reviewRuntimeChatCandidateV1<T extends ChatSituationCandid
       const sourceKeys = ['chatSituationRuntime', situation ? 'chatSituationCandidate' : 'chatActionCandidate']
       const assembled = await assembleContext({projectId: input.scope.projectId, scope: input.scope,
         worldGroupId: snapshot.contract.scope.worldGroupId, productRuntimeSessionId: input.productRuntimeSessionId,
-        ...(situation ? {chatSituationCandidateRunId: snapshot.run.id} : {chatActionCandidateRunId: snapshot.run.id}), sourceKeys, modelConfig: input.aiConfig ? resolveRequestConfig(input.aiConfig, {category: `runtime.${reviewSkill}`}).config : undefined, provider: input.aiConfig?.provider, model: input.aiConfig?.model,
+        ...(situation ? {chatSituationCandidateRunId: snapshot.run.id} : {chatActionCandidateRunId: snapshot.run.id}), sourceKeys, ...(!(input.runReviewAI ?? input.runAI) && input.aiConfig ? {modelConfig: resolveRequestConfig(input.aiConfig, {category: `runtime.${reviewSkill}`}).config, provider: input.aiConfig.provider, model: input.aiConfig.model} : {}),
         inputBudgetMaxTokens: 24_000})
       if (sourceKeys.some(key => !assembled.included.includes(key))) fail('叙事审查上下文不完整')
       if (control) {

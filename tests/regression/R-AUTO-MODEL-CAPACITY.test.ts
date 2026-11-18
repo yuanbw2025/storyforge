@@ -118,3 +118,23 @@ describe('010 automatic capacity decisions', () => {
     db.close()
   })
 })
+
+it.each(['missing-metadata', 'small-allocation'] as const)('rejects an oversized formal request before POST under %s despite a large legacy preference', async mode => {
+  const cfg = config({ maxTokens: 1024, contextWindow: 1_000_000 })
+  const metadata = vi.fn(async () => mode === 'small-allocation' ? lm(4096) : Response.json({}, { status: 503 }))
+  let posts = 0
+  vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (_url, init) => {
+    if (init?.method === 'GET') return metadata()
+    posts++
+    return Response.json({error: 'must not reach transport'}, {status: 401})
+  }))
+  const result: import('../../src/lib/ai/client').ChatResult = {}
+  const request = () => chat([{role: 'user', content: '完整原文不允许静默裁剪。'.repeat(600)}], cfg, {contextOverflowPolicy: 'reject'}, undefined, result)
+  await expect(request()).rejects.toThrow('拒绝静默裁剪')
+  expect(result.requestLifecycle).toEqual({phase: 'pre-dispatch', responseStatus: null})
+  expect(getModelCapacityV1(cfg)).toMatchObject({totalWindow: 4096, confidence: mode === 'small-allocation' ? 'service' : 'fallback'})
+  await expect(request()).rejects.toThrow('拒绝静默裁剪')
+  expect(metadata).toHaveBeenCalledTimes(1)
+  expect(posts).toBe(0)
+  expect(cfg.maxTokens).toBe(1024)
+})

@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../src/lib/ai/client', async () => {
@@ -119,6 +121,8 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
     }, { owner: 'work' }) as any)
     await stampCurrentFixtureResourceUidsV1(project.id!)
     vi.mocked(chat).mockReset()
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(aiConfig, 32_768)
     useAIConfigStore.setState({
       config: aiConfig,
       creativeQualityMode: 'balanced',
