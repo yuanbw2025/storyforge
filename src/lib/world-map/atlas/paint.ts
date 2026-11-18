@@ -1,3 +1,4 @@
+import { DEFAULT_ATLAS_LAYERS, type AtlasLayers } from './layers'
 import { stamp } from './symbols'
 import { terrainWash } from './relief'
 import { seedRandom } from '../engine/random'
@@ -261,7 +262,12 @@ function compass(c: Brush, x: number, y: number, r: number) {
   c.fillText('北', 0, -r - 3)
   c.restore()
 }
-export function drawTerrain(g: AtlasGeometry, seed: string, sheet?: HTMLImageElement) {
+export function drawTerrain(
+  g: AtlasGeometry,
+  seed: string,
+  sheet?: HTMLImageElement,
+  layers: AtlasLayers = DEFAULT_ATLAS_LAYERS,
+) {
   const canvas = document.createElement('canvas')
   const scale = Math.min(3, 4096 / Math.max(g.width, g.height))
   canvas.width = Math.round(g.width * scale)
@@ -328,17 +334,28 @@ export function drawTerrain(g: AtlasGeometry, seed: string, sheet?: HTMLImageEle
       }, 0)
       land.addPath(shoreline(!g.cellCoast && area < 0 ? [...f.points].reverse() : f.points, rng))
     }
-  ink(c, land, '#cbd4b039', 20)
-  ink(c, land, '#d7d9b775', 12)
-  ink(c, land, '#72938c', 7)
-  ink(c, land, '#dce1be', 5.8)
-  ink(c, land, '#638583', 2.6)
+  if (layers.coastlines) {
+    ink(c, land, '#cbd4b039', 20)
+    ink(c, land, '#d7d9b775', 12)
+    ink(c, land, '#72938c', 7)
+    ink(c, land, '#dce1be', 5.8)
+    ink(c, land, '#638583', 2.6)
+  }
   c.save()
   c.clip(land, fillRule)
-  c.drawImage(terrainWash(g, seed), 0, 0, w, h)
+  c.fillStyle = '#e3dcc0'
+  c.fillRect(0, 0, w, h)
+  if (layers.terrain) c.drawImage(terrainWash(g, seed), 0, 0, w, h)
   const glyphs: { x: number; y: number; size: number; kind: 'ridge' | 'wood' }[] = []
   for (const f of features) {
     const k = f.kind
+    if (
+      (k === 'ridge' && !layers.mountains) ||
+      (k === 'wood' && !layers.forests) ||
+      ((k === 'desert' || k === 'marsh') && !layers.terrain)
+    )
+      continue
+    const rng = seedRandom(seed + JSON.stringify([f.kind, f.name, f.rank, f.points]))
     if (k === 'ridge' || k === 'wood' || k === 'desert' || k === 'marsh') {
       const place = (x: number, y: number) => {
         wash(
@@ -392,27 +409,28 @@ export function drawTerrain(g: AtlasGeometry, seed: string, sheet?: HTMLImageEle
       } else along(f.points, k === 'ridge' ? 8 : 7, place)
     }
   }
+  const grain = seedRandom(seed + 'grain')
   // Short pen strokes give a continuous paper surface across biome boundaries.
   for (let i = 0; i < 15000; i++) {
-    const x = rng() * w,
-      y = rng() * h
+    const x = grain() * w,
+      y = grain() * h
     ink(
       c,
       line([
         [x, y],
-        [x + rng() * 2 + 0.2, y - rng() * 0.8],
+        [x + grain() * 2 + 0.2, y - grain() * 0.8],
       ]),
-      rng() > 0.5 ? '#776a442e' : '#fff2ca60',
+      grain() > 0.5 ? '#776a442e' : '#fff2ca60',
       0.34,
     )
   }
   for (const f of features) {
-    if (f.kind === 'river') {
+    if (f.kind === 'river' && layers.rivers) {
       const p = watercourse(f.points, f.name)
       ink(c, p, '#eae3c6', 2.7)
       ink(c, p, '#648f94', 1.55)
       ink(c, p, '#a8cbbe', 0.57)
-    } else if (f.kind === 'road') {
+    } else if ((f.kind === 'road' || f.kind === 'seaRoute') && layers.roads) {
       const p = line(f.points)
       ink(c, p, '#d8c29f', 1.5)
       c.setLineDash([2.5, 1.2])
@@ -422,6 +440,7 @@ export function drawTerrain(g: AtlasGeometry, seed: string, sheet?: HTMLImageEle
   }
   glyphs.sort((a, b) => a.y - b.y)
   for (const s of glyphs) {
+    const rng = seedRandom(seed + s.kind + s.x + ',' + s.y)
     if (sheet) {
       const index = s.kind === 'ridge' ? (s.y < h * 0.32 || s.size > 11 ? 0 : 1) : s.y < h * 0.48 ? 2 : 3
       stamp(c, sheet, index, s.x, s.y, s.size * (s.kind === 'ridge' ? 2.15 : 2.4))
@@ -429,7 +448,7 @@ export function drawTerrain(g: AtlasGeometry, seed: string, sheet?: HTMLImageEle
     else tree(c, rng, s.x, s.y, s.size)
   }
   for (const f of features)
-    if (f.kind === 'wall') {
+    if (f.kind === 'wall' && layers.walls) {
       const p = line(f.points)
       ink(c, p, '#647c81', 3.8)
       ink(c, p, '#d5e5db', 2.55)
@@ -438,13 +457,28 @@ export function drawTerrain(g: AtlasGeometry, seed: string, sheet?: HTMLImageEle
       c.setLineDash([])
     }
   c.restore()
-  ink(c, land, '#645f48', 0.95)
-  if (sheet)
-    for (const f of features)
-      if (f.kind === 'city' && f.rank < 2) {
-        const [x, y] = f.points[0]
-        stamp(c, sheet, f.rank === 0 ? 4 : 6, x, y, f.rank === 0 ? 24 : 13)
-      }
+  if (layers.coastlines) ink(c, land, '#645f48', 0.95)
+  for (const f of features) {
+    if ((f.kind === 'border' && layers.borders) || (f.kind === 'province' && layers.provinces)) {
+      c.setLineDash(f.kind === 'border' ? [5, 3] : [2, 3])
+      ink(c, line(f.points), f.kind === 'border' ? '#965e47' : '#95765c', f.kind === 'border' ? 1.15 : 0.65)
+      c.setLineDash([])
+    }
+  }
+  if (layers.vignette) {
+    const shade = c.createRadialGradient(
+      w / 2,
+      h / 2,
+      Math.min(w, h) * 0.22,
+      w / 2,
+      h / 2,
+      Math.hypot(w, h) * 0.5,
+    )
+    shade.addColorStop(0, '#1f332100')
+    shade.addColorStop(1, '#1f332167')
+    c.fillStyle = shade
+    c.fillRect(0, 0, w, h)
+  }
   // Place the rose only in a clear patch of water.
   for (const [x, y] of [
     [w * 0.065, h * 0.89],
@@ -479,9 +513,17 @@ interface Box {
   w: number
   h: number
 }
-export function drawLabels(c: Brush, g: AtlasGeometry, zoom: number, illustrated = false) {
+export function drawLabels(
+  c: Brush,
+  g: AtlasGeometry,
+  zoom: number,
+  illustrated = false,
+  options: { layers?: AtlasLayers; sheet?: HTMLImageElement; kmPerPixel?: number } = {},
+) {
+  const layers = options.layers ?? DEFAULT_ATLAS_LAYERS
+
   const occupied: Box[] = []
-  const order = { city: 1, region: 2, sea: 3, wall: 4, river: 5, ridge: 6 }
+  const order = { city: 1, fortress: 1, region: 2, sea: 3, wall: 4, river: 5, ridge: 6 }
   const list = g.features
     .filter((f) => f.name && f.kind in order)
     .sort(
@@ -489,13 +531,17 @@ export function drawLabels(c: Brush, g: AtlasGeometry, zoom: number, illustrated
     )
   for (const f of list) {
     const [x, y] = f.points[Math.floor(f.points.length / 2)]
-    const city = f.kind === 'city',
+    const fortress = f.kind === 'fortress'
+    if (fortress && !layers.fortresses) continue
+    const city = f.kind === 'city' || fortress,
       area = f.kind === 'region',
       water = f.kind === 'sea'
-    if (city && f.rank === 0 && !illustrated) {
+    if (city && layers.burgIcons && options.sheet && f.rank < 2)
+      stamp(c, options.sheet, fortress ? 6 : f.rank === 0 ? 4 : 5, x, y, f.rank === 0 ? 24 : 15)
+    if (city && layers.burgIcons && f.rank === 0 && !illustrated) {
       castle(c, x, y)
     }
-    if (city) {
+    if (city && layers.burgIcons) {
       const r = (f.rank === 0 ? 2.65 : 1.65) / Math.sqrt(zoom)
       c.fillStyle = '#ffefc5'
       c.strokeStyle = '#664e3d'
@@ -511,11 +557,18 @@ export function drawLabels(c: Brush, g: AtlasGeometry, zoom: number, illustrated
         c.fill()
       }
     }
+    if ((area && !layers.stateLabels) || (!area && !layers.burgLabels)) continue
+    if (
+      (f.kind === 'river' && !layers.rivers) ||
+      (f.kind === 'ridge' && !layers.mountains) ||
+      (f.kind === 'wall' && !layers.walls)
+    )
+      continue
     if ((f.rank === 2 && zoom < 1.65) || (!city && !area && !water && zoom < 1.45)) continue
     const size = (water ? 17 : area ? 13 : city ? (f.rank === 0 ? 11 : 9) : 8) / Math.pow(zoom, 0.65)
     c.font = (city && f.rank === 0 ? '600 ' : '') + size + 'px ' + serif
     const width = c.measureText(f.name).width
-    const options = city
+    const labelPositions = city
       ? [
           [5, 1],
           [-width - 5, 1],
@@ -523,7 +576,7 @@ export function drawLabels(c: Brush, g: AtlasGeometry, zoom: number, illustrated
           [-width / 2, size * 1.4],
         ]
       : [[-width / 2, 0]]
-    for (const [dx, dy] of options) {
+    for (const [dx, dy] of labelPositions) {
       const tx = x + dx,
         ty = y + dy,
         box = { x: tx - 1.5, y: ty - size, w: width + 3, h: size + 2 }
@@ -542,5 +595,25 @@ export function drawLabels(c: Brush, g: AtlasGeometry, zoom: number, illustrated
       c.fillText(f.name, tx, ty)
       break
     }
+  }
+  if (layers.scaleBar && options.kmPerPixel && options.kmPerPixel > 0) {
+    const maxKm = g.width * 0.13 * options.kmPerPixel,
+      power = 10 ** Math.floor(Math.log10(maxKm))
+    const distance = [5, 2, 1].map((v) => v * power).find((v) => v <= maxKm) ?? power
+    const width = distance / options.kmPerPixel,
+      x = g.width - 22 - width,
+      y = g.height - 22
+    c.fillStyle = '#e9dfbcdd'
+    c.fillRect(x - 7, y - 23, width + 14, 33)
+    c.fillStyle = '#394b45'
+    c.fillRect(x, y, width / 2, 3)
+    c.strokeStyle = '#394b45'
+    c.lineWidth = 0.7
+    c.strokeRect(x, y, width, 3)
+    c.font = '9px ' + serif
+    c.fillText('0', x, y - 5)
+    c.textAlign = 'right'
+    c.fillText(distance + ' km', x + width, y - 5)
+    c.textAlign = 'start'
   }
 }

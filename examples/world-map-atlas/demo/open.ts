@@ -4,7 +4,7 @@ import { importProjectJSON } from '../../../src/lib/export/json-export'
 // This branch-only Vite example restores a user-owned workspace in each browser.
 async function openSample() {
   if (!import.meta.env.DEV) throw Error('请使用本机地图工作树打开示例。')
-  const key = 'storyforge-local-demo-world-atlas-20261118'
+  const key = 'storyforge-local-demo-world-atlas-layers-20261118'
   await navigator.locks.request(key, async () => {
     const saved = JSON.parse(localStorage.getItem(key) || 'null')
     const previous = saved && (await db.projects.get(saved.id))

@@ -1,3 +1,4 @@
+import { collectMapBoundarySegments } from '../engine/boundaries'
 import type { VoronoiMapData } from '../engine/types'
 export type Point = [number, number]
 const kinds = [
@@ -12,6 +13,10 @@ const kinds = [
   'sea',
   'region',
   'city',
+  'fortress',
+  'border',
+  'province',
+  'seaRoute',
 ] as const
 export type AtlasKind = (typeof kinds)[number]
 export interface AtlasFeature {
@@ -43,13 +48,13 @@ export function parseAtlasReference(input: unknown): AtlasGeometry {
   let totalLength = 0
   let brushArea = 0
   const features = doc.features.map((f) => {
-    const minimum = f?.kind === 'land' ? 3 : ['city', 'region', 'sea'].includes(f?.kind) ? 1 : 2
+    const minimum = f?.kind === 'land' ? 3 : ['city', 'fortress', 'region', 'sea'].includes(f?.kind) ? 1 : 2
     if (
       !f ||
       !kinds.includes(f.kind) ||
       typeof f.name !== 'string' ||
       f.name.length > 120 ||
-      (['city', 'sea', 'region'].includes(f.kind) && f.points?.length !== 1) ||
+      (['city', 'fortress', 'sea', 'region'].includes(f.kind) && f.points?.length !== 1) ||
       ![0, 1, 2].includes(f.rank) ||
       !Array.isArray(f.points) ||
       f.points.length < minimum ||
@@ -134,13 +139,19 @@ export function geometryFromMap(data: VoronoiMapData): AtlasGeometry {
     else if (cells.biome[i] === 1 && i % 9 === 0) add('desert', '', [[x, y]])
   }
   for (const r of data.rivers) if (r.points.length > 1) add('river', r.name, r.points, 2)
-  for (const r of data.roads) if (r.type !== 'sea' && r.points.length > 1) add('road', r.name, r.points, 2)
-  for (const b of data.burgs) if (b.i) add('city', b.name, [[b.x, b.y]], b.capital ? 0 : 2)
+  for (const r of data.roads)
+    if (r.points.length > 1) add(r.type === 'sea' ? 'seaRoute' : 'road', r.name, r.points, 2)
+  for (const segment of collectMapBoundarySegments(data, 'state')) add('border', '', segment.points)
+  for (const segment of collectMapBoundarySegments(data, 'province')) add('province', '', segment.points)
+  const fortresses = new Set(data.spatialPlacements?.filter((p) => p.kind === 'fortress').map((p) => p.name))
+  for (const b of data.burgs)
+    if (b.i) add(fortresses.has(b.name) ? 'fortress' : 'city', b.name, [[b.x, b.y]], b.capital ? 0 : 2)
   for (const s of data.states) {
     const b = data.burgs[s.capital]
     if (s.i && b) add('region', s.name, [[b.x, b.y - 16]])
   }
   const named = new Set(features.map((f) => f.name))
-  for (const p of data.spatialPlacements ?? []) if (!named.has(p.name)) add('region', p.name, [[p.x, p.y]], 2)
+  for (const p of data.spatialPlacements ?? [])
+    if (!named.has(p.name)) add(p.kind === 'fortress' ? 'fortress' : 'region', p.name, [[p.x, p.y]], 2)
   return { version: 1, cellCoast: true, width: data.width, height: data.height, features }
 }

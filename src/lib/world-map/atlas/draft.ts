@@ -10,7 +10,7 @@ export function atlasDraftPrompt(source: string, target: string): ChatMessage[] 
       role: 'system',
       content: `你是二维小说地图制图师。只输出 JSON 对象 {"mapName":"目标名称","features":[["land","大陆名",0,"120,40 180,60 210,120 150,180 105,100"],["city","城名",0,"152,109"]]}。例子只解释格式。不得输出 markdown、代码、注释或其它键。
 图幅为1200×700，左上是0,0，右下是1200,700，北向上。所有坐标是推测的制图布局。按下列登记资料构图，尊重已有名称、沿岸/岛屿/河口/山口/道路/疆域关系，缺处按地理规律补全。大洲和每座海岛以 land 闭环表现，主大陆至少30个轮廓折点，布置海湾、狭颈和半岛；沿图幅边缘裁切合理。每个点格式为 x,y，点之间用空格。
-features每行固定四项：类型、中文地名、标注级别0/1/2（0最重要）、坐标字符串。land=陆岛面；ridge=山脊线；wood=林带；marsh=湿地；desert=荒漠；river=河流折线自源到口；road=道路折线；wall=长城类人工屏障线；sea=水域标注点；region=区域标注点；city=城镇、城堡或关隘点。面至少三点，线至少两点，点类单点。关键城市和关口都给city点，放在陆地上，用地标、河流和路网共用端点来表达关系。河港就在河的入海口，海峡两岸分属不同陆块，城墙以线横过它保护的走廊。大地区配置region标注。照顾整图和局部，优先完成关键地理事实，勿让同一座城市重复。每条河、山和陆块有自己的坐标；不要用现成图像。没有坐标资料时自行推测，并将全部几何留给作者确认。`,
+features每行固定四项：类型、中文地名、标注级别0/1/2（0最重要）、坐标字符串。land=陆岛面；ridge=山脊线；wood=林带；marsh=湿地；desert=荒漠；river=河流折线自源到口；road=道路折线；wall=长城类人工屏障线；sea=水域标注点；region=区域标注点；city=城镇点；fortress=城堡、关隘或要塞点。面至少三点，线至少两点，点类单点。关键城市和关口都给city点，放在陆地上，用地标、河流和路网共用端点来表达关系。河港就在河的入海口，海峡两岸分属不同陆块，城墙以线横过它保护的走廊。大地区配置region标注。照顾整图和局部，优先完成关键地理事实，勿让同一座城市重复。每条河、山和陆块有自己的坐标；不要用现成图像。没有坐标资料时自行推测，并将全部几何留给作者确认。`,
     },
     { role: 'user', content: '目标名称：' + target + '\n已登记的作品资料：\n' + source },
   ]
@@ -20,6 +20,7 @@ const semanticKind: Partial<Record<AtlasKind, SpatialEntityKind>> = {
   sea: 'region',
   region: 'region',
   city: 'settlement',
+  fortress: 'fortress',
   ridge: 'mountain',
   river: 'river',
   wall: 'landmark',
@@ -67,7 +68,7 @@ export function parseAtlasDraft(raw: string, source: string): MapGenConfig {
     width: 1200,
     height: 700,
     atlasDraft,
-    burgNames: names('city'),
+    burgNames: [...names('city'), ...names('fortress')],
     riverNames: names('river'),
     spatialEntities: Array.from(entities, ([name, kind]) => ({
       name,

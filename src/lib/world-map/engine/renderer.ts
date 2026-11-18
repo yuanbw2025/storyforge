@@ -3,6 +3,7 @@
  * 支持风格预设、图层显隐、省份、道路
  */
 
+import { collectMapBoundarySegments } from './boundaries'
 import type { VoronoiMapData, LayerVisibility, BiomeOverride, MapStylePreset } from './types'
 import { BIOMES } from './climate'
 import { getStyleConfig, type StyleConfig } from './style-presets'
@@ -286,54 +287,15 @@ function drawRoads(ctx: CanvasRenderingContext2D, data: VoronoiMapData, style: S
 // ── 省份边界 ────────────────────────────────────────
 
 function drawProvinceBorders(ctx: CanvasRenderingContext2D, data: VoronoiMapData, style: StyleConfig): void {
-  // 省份边界需要 province 分配到 cells 上
-  // 由于我们没有在 cells 上存省份 ID，这里用城镇最近归属来画
-  if (!data.provinces || data.provinces.length <= 1) return
-
-  const { cells, vertices, burgs } = data
-
-  // 构建每个单元格所属的省份（按最近城镇）
-  const cellProv = new Uint16Array(cells.length)
-  const activeBurgs = burgs.filter(b => b.i > 0)
-
-  for (let i = 0; i < cells.length; i++) {
-    if (cells.h[i] < 20 || cells.state[i] === 0) continue
-    const myState = cells.state[i]
-    const stateBurgs = activeBurgs.filter(b => b.state === myState)
-    if (stateBurgs.length === 0) continue
-
-    let bestBurg = stateBurgs[0]
-    let bestDist = Infinity
-    for (const b of stateBurgs) {
-      const dx = cells.p[i * 2] - b.x
-      const dy = cells.p[i * 2 + 1] - b.y
-      const d = dx * dx + dy * dy
-      if (d < bestDist) { bestDist = d; bestBurg = b }
-    }
-    cellProv[i] = bestBurg.i
-  }
-
-  // 画省界
   ctx.strokeStyle = style.provinceBorder
   ctx.lineWidth = 0.8
   ctx.setLineDash([3, 3])
   ctx.lineCap = 'round'
-
-  for (let i = 0; i < cells.length; i++) {
-    if (cellProv[i] === 0) continue
-    for (const neighbor of cells.c[i]) {
-      if (cellProv[neighbor] === cellProv[i]) continue
-      if (cells.state[neighbor] !== cells.state[i]) continue // 国界不画省界
-      if (cells.h[neighbor] < 20) continue
-
-      const shared = cells.v[i].filter(v => cells.v[neighbor]?.includes(v))
-      if (shared.length >= 2) {
-        ctx.beginPath()
-        ctx.moveTo(vertices.p[shared[0] * 2], vertices.p[shared[0] * 2 + 1])
-        ctx.lineTo(vertices.p[shared[1] * 2], vertices.p[shared[1] * 2 + 1])
-        ctx.stroke()
-      }
-    }
+  for (const { points } of collectMapBoundarySegments(data, 'province')) {
+    ctx.beginPath()
+    ctx.moveTo(...points[0])
+    ctx.lineTo(...points[1])
+    ctx.stroke()
   }
   ctx.setLineDash([])
 }
@@ -341,29 +303,15 @@ function drawProvinceBorders(ctx: CanvasRenderingContext2D, data: VoronoiMapData
 // ── 国界 ────────────────────────────────────────────
 
 function drawBorders(ctx: CanvasRenderingContext2D, data: VoronoiMapData, style: StyleConfig): void {
-  const { cells, vertices, states } = data
-
   ctx.lineWidth = 1.2
   ctx.setLineDash([5, 3])
   ctx.lineCap = 'round'
-
-  for (let i = 0; i < cells.length; i++) {
-    if (cells.state[i] === 0) continue
-    for (const neighbor of cells.c[i]) {
-      if (cells.state[neighbor] === cells.state[i]) continue
-      if (cells.h[neighbor] < 20) continue
-
-      const stateColor = states[cells.state[i]]?.color || '#666'
-      ctx.strokeStyle = hexToRgba(stateColor, style.borderAlpha)
-
-      const shared = cells.v[i].filter(v => cells.v[neighbor]?.includes(v))
-      if (shared.length >= 2) {
-        ctx.beginPath()
-        ctx.moveTo(vertices.p[shared[0] * 2], vertices.p[shared[0] * 2 + 1])
-        ctx.lineTo(vertices.p[shared[1] * 2], vertices.p[shared[1] * 2 + 1])
-        ctx.stroke()
-      }
-    }
+  for (const { state, points } of collectMapBoundarySegments(data, 'state')) {
+    ctx.strokeStyle = hexToRgba(data.states[state]?.color || '#666', style.borderAlpha)
+    ctx.beginPath()
+    ctx.moveTo(...points[0])
+    ctx.lineTo(...points[1])
+    ctx.stroke()
   }
   ctx.setLineDash([])
 }

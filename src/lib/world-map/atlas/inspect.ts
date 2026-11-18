@@ -16,7 +16,7 @@ export function inspectCityPlacement(g: AtlasGeometry): string[] {
   return g.features
     .filter(
       (f) =>
-        f.kind === 'city' &&
+        (f.kind === 'city' || f.kind === 'fortress') &&
         !(g.cellCoast
           ? rings.reduce((land, r) => (contains(f.points[0], r.points) ? !land : land), false)
           : rings.some((r) => contains(f.points[0], r.points))),

@@ -1,8 +1,9 @@
+import { ATLAS_LAYER_LABELS, DEFAULT_ATLAS_LAYERS, type AtlasLayers } from '../../lib/world-map/atlas/layers'
 import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { generateMap, type MapGenConfig } from '../../lib/world-map/engine'
 import { geometryFromMap, parseAtlasReference, type AtlasGeometry } from '../../lib/world-map/atlas/geometry'
-import {inspectCityPlacement} from '../../lib/world-map/atlas/inspect'
+import { inspectCityPlacement } from '../../lib/world-map/atlas/inspect'
 import { loadAtlasSymbols } from '../../lib/world-map/atlas/symbols'
 import { drawLabels, drawTerrain } from '../../lib/world-map/atlas/paint'
 
@@ -29,7 +30,8 @@ export default function WorldAtlasPreview({ config, onReference }: Props) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [revision, redraw] = useState(0)
-  const [showLabels, setShowLabels] = useState(true)
+  const [layers, setLayers] = useState<AtlasLayers>({ ...DEFAULT_ATLAS_LAYERS })
+  const [showLayers, setShowLayers] = useState(false)
   const reference = !auto && config.atlasReference
   const [sheet, setSheet] = useState<HTMLImageElement>()
   useEffect(() => {
@@ -52,13 +54,28 @@ export default function WorldAtlasPreview({ config, onReference }: Props) {
         : config.atlasDraft
           ? parseAtlasReference(config.atlasDraft)
           : geometryFromMap(generateMap(config))
-      return { geometry, terrain: drawTerrain(geometry, config.seed || 'atlas', sheet) }
+      return { geometry }
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
     }
-  }, [config, reference, sheet])
-  const { geometry, terrain } = result
-  const offshore = useMemo(()=>geometry?inspectCityPlacement(geometry):[],[geometry])
+  }, [config, reference])
+  const { geometry } = result
+  const terrain = useMemo(
+    () => (geometry ? drawTerrain(geometry, config.seed || 'atlas', sheet, layers) : undefined),
+    [geometry, config.seed, sheet, layers],
+  )
+  const kmPerPixel =
+    config.kmPerPixel ?? (config.mapWidthKm && geometry ? config.mapWidthKm / geometry.width : undefined)
+  const hasLayer = (key: keyof AtlasLayers) => {
+    const kinds: Partial<Record<keyof AtlasLayers, string>> = {
+      borders: 'border',
+      provinces: 'province',
+      fortresses: 'fortress',
+    }
+    const kind = kinds[key]
+    return !kind || Boolean(geometry?.features.some((f) => f.kind === kind))
+  }
+  const offshore = useMemo(() => (geometry ? inspectCityPlacement(geometry) : []), [geometry])
   const fit = () => {
     camera.current = { zoom: 1, x: 0, y: 0 }
     redraw((n) => n + 1)
@@ -149,8 +166,8 @@ export default function WorldAtlasPreview({ config, onReference }: Props) {
     c.rect(0, 0, geometry.width, geometry.height)
     c.clip()
     c.drawImage(terrain, 0, 0, geometry.width, geometry.height)
-    if (showLabels) drawLabels(c, geometry, cam.zoom, !!sheet)
-  }, [geometry, terrain, revision, showLabels, sheet, expanded])
+    drawLabels(c, geometry, cam.zoom, !!sheet, { layers, sheet, kmPerPixel })
+  }, [geometry, terrain, revision, layers, sheet, expanded, kmPerPixel])
   const exportMap = () => {
     if (!terrain || !geometry) return
     const out = document.createElement('canvas')
@@ -159,7 +176,7 @@ export default function WorldAtlasPreview({ config, onReference }: Props) {
     const c = out.getContext('2d')!
     c.drawImage(terrain, 0, 0)
     c.scale(out.width / geometry.width, out.height / geometry.height)
-    if (showLabels) drawLabels(c, geometry, 1, !!sheet)
+    drawLabels(c, geometry, 1, !!sheet, { layers, sheet, kmPerPixel })
     out.toBlob((blob) => {
       if (!blob) return
       const url = URL.createObjectURL(blob),
@@ -184,9 +201,52 @@ export default function WorldAtlasPreview({ config, onReference }: Props) {
         {config.atlasReference && (
           <button onClick={() => setAuto((v) => !v)}>{reference ? '查看纯自动结果' : '查看参考布局'}</button>
         )}
-        {offshore.length>0 && <details className="relative"><summary className="cursor-pointer">核对 {offshore.length} 处离岸地点</summary><div className="absolute z-10 mt-2 w-56 bg-bg-base border border-border p-3 rounded">{offshore.join('、')} 位于当前陆地轮廓外，请核对是海上地点还是落点偏差。</div></details>}
+        {offshore.length > 0 && (
+          <details className="relative">
+            <summary className="cursor-pointer">核对 {offshore.length} 处离岸地点</summary>
+            <div className="absolute z-10 mt-2 w-56 bg-bg-base border border-border p-3 rounded">
+              {offshore.join('、')} 位于当前陆地轮廓外，请核对是海上地点还是落点偏差。
+            </div>
+          </details>
+        )}
         <button onClick={fit}>全图</button>
-        <button onClick={() => setShowLabels((v) => !v)}>{showLabels ? '隐藏地名' : '显示地名'}</button>
+        <div className="relative">
+          <button
+            aria-expanded={showLayers}
+            aria-controls="atlas-layers"
+            onClick={() => setShowLayers((v) => !v)}
+          >
+            图层筛选
+          </button>
+          {showLayers && (
+            <fieldset
+              id="atlas-layers"
+              aria-label="地图图层"
+              className="absolute top-full mt-3 right-0 z-20 w-60 max-h-[75vh] overflow-y-auto rounded-lg border border-border bg-bg-base p-4 shadow-xl"
+            >
+              <legend className="sr-only">地图图层</legend>
+              {(Object.entries(ATLAS_LAYER_LABELS) as [keyof AtlasLayers, string][]).map(([key, label]) => {
+                const available = hasLayer(key) && (key !== 'scaleBar' || Boolean(kmPerPixel))
+                return (
+                  <label key={key} className="flex items-center gap-2 py-1.5">
+                    <input
+                      type="checkbox"
+                      checked={available && layers[key]}
+                      disabled={!available}
+                      onChange={() => setLayers((prev) => ({ ...prev, [key]: !prev[key] }))}
+                    />
+                    <span>{label}</span>
+                    {!available && (
+                      <span className="ml-auto text-xs text-text-muted">
+                        {key === 'scaleBar' ? '未设定距离' : '无此类数据'}
+                      </span>
+                    )}
+                  </label>
+                )
+              })}
+            </fieldset>
+          )}
+        </div>
         <button onClick={() => setExpanded((v) => !v)}>{expanded ? '返回工作台' : '展开地图'}</button>
         <button onClick={exportMap} disabled={!terrain}>
           导出图集
