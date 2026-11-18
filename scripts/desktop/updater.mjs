@@ -3,7 +3,8 @@ export function installUpdater({ app, window, ipcMain, dialog, origin, approveEx
   autoUpdater.autoInstallOnAppQuit = false
   autoUpdater.allowDowngrade = false
   autoUpdater.allowPrerelease = false
-  let state = { platform: { darwin: 'macos', linux: 'linux', win32: 'windows' }[platform], currentVersion: app.getVersion(), status: 'idle' }
+  /** @type {{platform:string,currentVersion:string,status:string,version?:string,progress?:number,error?:string}} */
+  let state = { platform: platform === 'darwin' ? 'macos' : platform === 'linux' ? 'linux' : 'windows', currentVersion: app.getVersion(), status: 'idle' }
   const set = patch => {
     state = { ...state, error: undefined, ...patch }
     if (!window.isDestroyed()) window.webContents.send('client-update:changed', state)

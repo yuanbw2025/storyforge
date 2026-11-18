@@ -14,7 +14,9 @@ const asset = {
 }
 const release = { tag_name: 'v4.0.9', assets: [asset] }
 test('Arch selects only increasing stable x64 packages from the official release', () => {
-  assert.equal(selectArchUpdate(release, '4.0.8', 'x64').name, name)
+  const selected = selectArchUpdate(release, '4.0.8', 'x64')
+  assert.ok(selected)
+  assert.equal(selected.name, name)
   for (const current of ['4.0.9', '4.1.0', '5.0.0']) assert.equal(selectArchUpdate(release, current, 'x64'), null)
   assert.equal(selectArchUpdate(release, '4.0.8', 'arm64'), null)
   assert.equal(selectArchUpdate({ ...release, draft: true }, '4.0.8', 'x64'), null)
@@ -27,12 +29,13 @@ test('Arch selects only increasing stable x64 packages from the official release
 test('Arch verifies the full download and rechecks bytes before showing the package', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'sf-arch-update-'))
   try {
+    /** @type {string[]} */
     const shown = []
     let body = bytes
     const updater = createArchUpdater({
       app: { getPath: () => dir, getVersion: () => '4.0.8' }, arch: 'x64',
       shell: { showItemInFolder: path => shown.push(path) },
-      fetchImpl: async url => url.includes('api.github.com') ? Response.json(release) : new Response(body),
+      fetchImpl: async url => String(url).includes('api.github.com') ? Response.json(release) : new Response(body),
     })
     updater.on('error', () => {})
     await updater.checkForUpdates()

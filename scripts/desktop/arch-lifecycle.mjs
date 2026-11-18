@@ -10,20 +10,22 @@ const profile = join(homedir(), '.config', 'StoryForge-arch-ci')
 await mkdir(profile, { recursive: true })
 const source = await readFile('release/test-fixtures/native-upgrade.js', 'utf8')
 const app = await electron.launch({
-  executablePath: '/usr/bin/storyforge', args: [],
+  executablePath: '/usr/bin/storyforge', args: [], chromiumSandbox: true,
   env: { ...process.env, STORYFORGE_TEST_USER_DATA: profile }, timeout: 60000,
 })
 try {
   const page = await app.firstWindow()
   await page.waitForSelector('#root main, #root button', { timeout: 60000 })
-  if (phase === 'seed') {
-    await page.getByLabel('我已阅读并同意《用户协议》').check()
-    await page.getByRole('button', { name: '同意协议并继续', exact: true }).click()
-  }
   await page.evaluate(value => { (0, eval)(value) }, source)
-  if (phase === 'seed') await page.evaluate(() => window.__nativeUpgrade.seed())
-  else await page.evaluate(() => window.__nativeUpgrade.verify())
-  const state = await page.evaluate(() => window.storyforgeClient.getState())
+  await page.evaluate(async operation => {
+    const browser = /** @type {Window & {__nativeUpgrade:{seed():Promise<unknown>,verify():Promise<unknown>}}} */ (/** @type {unknown} */ (globalThis))
+    if (operation === 'seed') await browser.__nativeUpgrade.seed()
+    else await browser.__nativeUpgrade.verify()
+  }, phase)
+  const state = await page.evaluate(() => {
+    const browser = /** @type {Window & {storyforgeClient:{getState():Promise<{platform:string}>}}} */ (/** @type {unknown} */ (globalThis))
+    return browser.storyforgeClient.getState()
+  })
   assert.equal(state.platform, 'linux')
   assert.equal(await app.evaluate(({ app }) => app.getPath('userData')), profile)
   console.log(JSON.stringify({ platform: 'arch-x64', phase, productionData: 'passed' }))

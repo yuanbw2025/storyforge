@@ -6,6 +6,8 @@ useradd --create-home --shell /bin/bash storyforge
 printf 'storyforge ALL=(ALL) NOPASSWD: /usr/bin/pacman\n' > /etc/sudoers.d/storyforge
 chmod 440 /etc/sudoers.d/storyforge
 cd /workspace
+mkdir -p release/arch
+trap 'pacman -Q > release/arch/test-environment.txt' EXIT
 version=$(node -p "require('./package.json').version")
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 mkdir -p release/arch/package

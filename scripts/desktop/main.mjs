@@ -76,7 +76,7 @@ else {
         message: '退出 StoryForge？', detail: '请先确认编辑已保存、生成任务已结束。退出会中断仍在运行的任务。',
       }).then(({ response }) => { if (response === 1) { exitApproved = true; app.quit() } })
     })
-    const packageUpdater = { darwin: createMacUpdater, linux: createArchUpdater }[process.platform]
+    const packageUpdater = /** @type {Partial<Record<NodeJS.Platform, typeof createMacUpdater>>} */ ({ darwin: createMacUpdater, linux: createArchUpdater })[process.platform]
     const autoUpdater = packageUpdater ? packageUpdater({ app, shell }) : updater.autoUpdater
     installUpdater({ app, window: mainWindow, ipcMain, dialog, origin, autoUpdater, approveExit: () => { exitApproved = true } })
     mainWindow.on('unresponsive', () => diagnostics.record('NativeUnresponsive', { process: 'renderer', reason: 'unresponsive' }))

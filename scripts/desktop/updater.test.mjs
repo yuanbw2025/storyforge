@@ -2,13 +2,16 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { installUpdater } from './updater.mjs'
+/** @param {NodeJS.Platform} [platform] */
 function fixture(platform = 'win32') {
   const handlers = new Map(), calls = []
-  const autoUpdater = new EventEmitter()
-  autoUpdater.checkForUpdates = async () => { calls.push('check'); autoUpdater.emit('update-available', { version: '4.0.1' }) }
-  autoUpdater.downloadUpdate = async () => { calls.push('download'); autoUpdater.emit('update-downloaded') }
-  autoUpdater.quitAndInstall = () => calls.push('install')
-  autoUpdater.openInstaller = async () => calls.push('open-installer')
+  const autoUpdater = Object.assign(new EventEmitter(), {
+    checkForUpdates: async () => { calls.push('check'); autoUpdater.emit('update-available', { version: '4.0.1' }) },
+    downloadUpdate: async () => { calls.push('download'); autoUpdater.emit('update-downloaded') },
+    quitAndInstall: () => calls.push('install'),
+    openInstaller: async () => { calls.push('open-installer') },
+    autoDownload: true, autoInstallOnAppQuit: true, allowDowngrade: true, allowPrerelease: true,
+  })
   const mainFrame = { url: 'http://localhost:17831/storyforge/' }
   const window = { isDestroyed: () => false, webContents: { mainFrame, send() {} } }
   let response = 0
@@ -22,7 +25,7 @@ function fixture(platform = 'win32') {
 }
 test('no automatic download, exit installation, downgrade or prerelease', () => {
   const { autoUpdater } = fixture()
-  for (const key of ['autoDownload', 'autoInstallOnAppQuit', 'allowDowngrade', 'allowPrerelease']) assert.equal(autoUpdater[key], false)
+  for (const key of /** @type {const} */ (['autoDownload', 'autoInstallOnAppQuit', 'allowDowngrade', 'allowPrerelease'])) assert.equal(autoUpdater[key], false)
 })
 test('OS confirmation gates download and install; unavailable installs have no effect', async () => {
   const f = fixture()
