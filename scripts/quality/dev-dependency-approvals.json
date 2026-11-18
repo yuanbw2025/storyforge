@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "approvals": [
+    {
+      "advisoryId": "GHSA-fc5q-39xc-vjpf",
+      "packageName": "picomatch",
+      "lockPath": "node_modules/@rollup/pluginutils/node_modules/picomatch",
+      "version": "4.0.7",
+      "severity": "high",
+      "expiresOn": "2026-11-25",
+      "owner": "yuanbw2025",
+      "reason": "Maintainer approved on 2026-11-18 for release preparation: dev-only trusted repository glob patterns; runtime audit clean; upstream has no fixed version. Reassess before expiry."
+    },
+    {
+      "advisoryId": "GHSA-fc5q-39xc-vjpf",
+      "packageName": "picomatch",
+      "lockPath": "node_modules/picomatch",
+      "version": "2.3.2",
+      "severity": "high",
+      "expiresOn": "2026-11-25",
+      "owner": "yuanbw2025",
+      "reason": "Maintainer approved on 2026-11-18 for release preparation: dev-only trusted repository glob patterns; runtime audit clean; upstream has no fixed version. Reassess before expiry."
+    },
+    {
+      "advisoryId": "GHSA-fc5q-39xc-vjpf",
+      "packageName": "picomatch",
+      "lockPath": "node_modules/tinyglobby/node_modules/picomatch",
+      "version": "4.0.7",
+      "severity": "high",
+      "expiresOn": "2026-11-25",
+      "owner": "yuanbw2025",
+      "reason": "Maintainer approved on 2026-11-18 for release preparation: dev-only trusted repository glob patterns; runtime audit clean; upstream has no fixed version. Reassess before expiry."
+    },
+    {
+      "advisoryId": "GHSA-fc5q-39xc-vjpf",
+      "packageName": "picomatch",
+      "lockPath": "node_modules/vite/node_modules/picomatch",
+      "version": "4.0.7",
+      "severity": "high",
+      "expiresOn": "2026-11-25",
+      "owner": "yuanbw2025",
+      "reason": "Maintainer approved on 2026-11-18 for release preparation: dev-only trusted repository glob patterns; runtime audit clean; upstream has no fixed version. Reassess before expiry."
+    },
+    {
+      "advisoryId": "GHSA-fc5q-39xc-vjpf",
+      "packageName": "picomatch",
+      "lockPath": "node_modules/vitest/node_modules/picomatch",
+      "version": "4.0.7",
+      "severity": "high",
+      "expiresOn": "2026-11-25",
+      "owner": "yuanbw2025",
+      "reason": "Maintainer approved on 2026-11-18 for release preparation: dev-only trusted repository glob patterns; runtime audit clean; upstream has no fixed version. Reassess before expiry."
+    }
+  ]
+}

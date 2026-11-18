@@ -86,7 +86,7 @@
     "check:engineering": "node scripts/quality/check-engineering.mjs",
     "test:engineering-gate": "node --test scripts/quality/check-engineering.test.mjs scripts/quality/check-dev-dependency-report.test.mjs",
     "check:types:open-world-experience": "tsc --noEmit -p tsconfig.tests.open-world-experience.json",
-    "check:dev-dependencies": "node scripts/quality/check-dev-dependency-report.mjs"
+    "check:dev-dependencies": "node scripts/quality/check-dev-dependency-report.mjs --approved scripts/quality/dev-dependency-approvals.json"
   },
   "dependencies": {
     "@capacitor/android": "8.5.3",

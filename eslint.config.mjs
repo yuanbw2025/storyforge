@@ -3,6 +3,7 @@
 // 策略:规则严重度仍按风险分 error/warn/off,但 npm script 使用 --max-warnings=0，
 // 当前零 warning 基线进入 CI；新增 warning 也会阻断，防止观察期债务回潮。
 import js from '@eslint/js'
+import globals from 'globals'
 import tseslint from 'typescript-eslint'
 import reactHooks from 'eslint-plugin-react-hooks'
 
@@ -17,6 +18,10 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    files: ['services/feedback/*.mjs', 'website-docs/.vitepress/check-feedback-followup.mjs'],
+    languageOptions: { globals: globals.nodeBuiltin },
+  },
   {
     // Historical Node diagnostic sources keep their original bytes and lint
     // rules; declare only the runtime globals those archived probes used.
