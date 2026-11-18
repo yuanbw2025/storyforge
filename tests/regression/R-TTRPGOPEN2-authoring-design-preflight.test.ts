@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import type { ChatMessage } from '../../src/lib/types'
+import type { AIConfig, ChatMessage } from '../../src/lib/types'
 import { createSavedOpenDesignFixtureV1, openDesignResponseFixtureV1 } from '../helpers/ttrpg-open-design'
 import { openCampaignFixture } from '../helpers/ttrpg-open-content'
 import { generateTtrpgOpenAuthoringDesignCandidateV1, composeTtrpgOpenAuthoringDesignV1,
@@ -13,8 +13,15 @@ import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import * as skills from '../../src/lib/agent/skill-registry'
 import * as artifacts from '../../src/lib/memory/artifact-store'
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
 
 const sections = ['situationTemplates', 'openingSituationKeys', 'effectPlanTemplates', 'pressure']
+async function serviceConfig(window: number): Promise<AIConfig> {
+  const config: AIConfig = { provider: 'custom', model: `fixture-model-${window}`, baseUrl: 'https://fixture.invalid/v1',
+    apiKey: 'fixture-only', temperature: 0.7, maxTokens: 0, contextWindow: 0 }
+  await seedModelAllocationFixtureV1(config, window)
+  return config
+}
 async function fullResponse(messages: ChatMessage[]): Promise<string> {
   const keys = JSON.parse(messages[1].content.match(/【实际读取资源闭集】([^\n]+)/)![1]) as string[]
   // The response has only the exact messages, with no out-of-band descriptor
@@ -60,11 +67,9 @@ describe('R-TTRPGOPEN2 initial design fact dependency and pre-dispatch capacity'
   })
   it('uses the original client capacity calculation and rejects a known small window before transport or an unknown Run exists', async () => {
     const f = await createSavedOpenDesignFixtureV1(), before = await rows(), transport = vi.fn()
+    const aiConfig = await serviceConfig(16000)
     vi.stubGlobal('fetch', transport)
-    await expect(generateTtrpgOpenAuthoringDesignCandidateV1({ ...f, aiConfig: {
-      provider: 'codex', model: 'gpt-6.1-sol', apiKey: '', baseUrl: '/storyforge/local-codex/v1', temperature: 0.7,
-      maxTokens: 0, contextWindow: 16000,
-    } })).rejects.toThrow('输入预算不足以容纳完整设计请求')
+    await expect(generateTtrpgOpenAuthoringDesignCandidateV1({ ...f, aiConfig })).rejects.toThrow('输入预算不足以容纳完整设计请求')
     expect(transport).not.toHaveBeenCalled(); expect(await db.agentRuns.count()).toBe(0); expect(await db.agentRunEvents.count()).toBe(0)
     expect(await rows()).toBe(before)
   })
@@ -104,9 +109,7 @@ describe('R-TTRPGOPEN2 initial design fact dependency and pre-dispatch capacity'
         usage: { prompt_tokens: 100, completion_tokens: outputTokens, total_tokens: 100 + outputTokens } }), { status: 200 })
     })
     vi.stubGlobal('fetch', transport)
-    const candidate = await generateTtrpgOpenAuthoringDesignCandidateV1({ ...f, request: { ...f.request, sections: [...sections, 'factProposals'] }, aiConfig: {
-      provider: 'custom', model: 'fixture-model', baseUrl: 'https://fixture.invalid/v1', apiKey: 'fixture-only', temperature: 0.7, maxTokens: 16000, contextWindow: 131072,
-    } })
+    const candidate = await generateTtrpgOpenAuthoringDesignCandidateV1({ ...f, request: { ...f.request, sections: [...sections, 'factProposals'] }, aiConfig: await serviceConfig(131072) })
     const snapshot = await readAgentRunV1(f.scope, candidate.runId)
     expect(snapshot.contract.budget).toMatchObject({ maxModelCalls: 1, maxAttemptsPerStep: 1, maxInputTokens: 64000, maxOutputTokens: 24000 })
     const base = getAgentSkillV1('ttrpg.open.authoring-design.v1'), full = getAgentSkillV1('ttrpg.open.authoring-design.full.v1')
@@ -138,9 +141,7 @@ describe('R-TTRPGOPEN2 initial design fact dependency and pre-dispatch capacity'
       if (input.artifactKind === 'source-snapshot' && input.content.includes('storyforge.ttrpg-open-authoring-design-candidate')) throw new Error('candidate-write-interrupted')
       return record(input)
     })
-    await expect(generateTtrpgOpenAuthoringDesignCandidateV1({ ...f, aiConfig: {
-      provider: 'custom', model: 'fixture-model', baseUrl: 'https://fixture.invalid/v1', apiKey: 'fixture-only', temperature: 0.7, maxTokens: 24000, contextWindow: 131072,
-    } })).rejects.toThrow('candidate-write-interrupted')
+    await expect(generateTtrpgOpenAuthoringDesignCandidateV1({ ...f, aiConfig: await serviceConfig(131072) })).rejects.toThrow('candidate-write-interrupted')
     interrupted.mockRestore()
     const original = (await db.agentRuns.toArray())[0], snapshot = await readAgentRunV1(f.scope, original.id)
     expect(snapshot.run.status).toBe('paused'); expect(snapshot.contract.budget.maxOutputTokens).toBe(16000)
