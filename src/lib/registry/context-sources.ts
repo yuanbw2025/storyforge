@@ -12,7 +12,7 @@ import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-
 import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
 import { getFactPredicate } from './fact-predicate-registry'
 import { resolveProjectionBoundary } from '../consistency/projection-boundary'
-import { retrieveChunks, embedQuery, readNarrativeSummaryContext } from '../retrieval/retrieval'
+import { retrieveChunks, embedQuery, readNarrativeSummaryContext, ensureChunkEmbeddings } from '../retrieval/retrieval'
 import { isEmbeddingReady, embeddingModelTag } from '../ai/adapters/embedding-adapter'
 import { useAIConfigStore } from '../../stores/ai-config'
 import {CHAT_CONTEXT_SOURCE_TOKENS_V1, CHAT_COORDINATOR_SOURCE_TOKENS_V1} from '../character-interaction/source-budgets'
@@ -2018,10 +2018,10 @@ async function readRetrievedPassages(projectId: number, chapterId?: number | nul
     readOwnedRows<Character>(resolved, 'characters', { owner: 'world' }),
     outlineNodeId != null ? db.outlineNodes.get(outlineNodeId) : Promise.resolve(undefined),
   ])
-  const charNames = characters.map(c => c.name).filter(n => n && n.length >= 2)
+  const charNames = characters.filter(character => character.isCrossWorld || (character.homeWorldGroupId ?? null) === (worldGroupId ?? null)).map(c => c.name).filter(n => n && n.length >= 2)
   const summary = node?.summary || ''
   const mentioned = charNames.filter(n => summary.includes(n))
-  const queryTerms = mentioned.length ? mentioned : charNames // 摘要没提具体角色 → 用全部角色作宽召回
+  const queryTerms = mentioned.length ? mentioned : [...new Set(summary.split(/[\s，。！？；：、,.;:!?]+/u).filter(term => term.length >= 2 && term.length <= 40))].slice(0,8)
   if (!queryTerms.length) {
     return await readNarrativeSummaryContext({ projectId, currentChapterId: chapterId, worldGroupId, scope: resolved })
   }
@@ -2032,10 +2032,16 @@ async function readRetrievedPassages(projectId: number, chapterId?: number | nul
     ? await embedQuery([summary, ...queryTerms].filter(Boolean).join(' ').slice(0, 1000), embCfg, projectId)
     : null
 
-  const got = await retrieveChunks({
+  let got = await retrieveChunks({
     projectId, currentChapterId: chapterId, worldGroupId, queryTerms, queryEmbedding,
     queryEmbeddingModel: queryEmbedding ? embeddingModelTag(embCfg) : null, topK: 6, scope: resolved,
   })
+  if (queryEmbedding && isEmbeddingReady(embCfg) && got.length) {
+    try {
+      await ensureChunkEmbeddings({ projectId, scope: resolved, cfg: embCfg, chunkIds: got.flatMap(row => row.chunk.id == null ? [] : [row.chunk.id]) })
+      got = await retrieveChunks({ projectId, currentChapterId: chapterId, worldGroupId, queryTerms, queryEmbedding, queryEmbeddingModel: embeddingModelTag(embCfg), topK: 6, scope: resolved })
+    } catch { /* Optional vectors cannot block the existing verified local retrieval. */ }
+  }
   const hierarchy = await readNarrativeSummaryContext({ projectId, currentChapterId: chapterId, worldGroupId, scope: resolved })
   if (!got.length) return hierarchy
   const chapters = await readOwnedRows<Chapter>(resolved, 'chapters', { owner: 'work' })

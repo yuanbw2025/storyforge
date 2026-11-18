@@ -152,10 +152,12 @@ describe('NS-5 · retrieval', () => {
   })
 
   it('世界隔离：别的世界的块不召回', async () => {
-    const { pid, chaps } = await seedChapters(['第一章：林飞在洛阳。', '第二章：当前。'])
+    const { pid, chaps, scope } = await seedChapters(['第一章：林飞在洛阳。', '第二章：当前。'])
     const ch0 = await db.chapters.get(chaps[0])
-    await rebuildChapterChunks({ projectId: pid, chapter: ch0!, worldGroupId: 99, knownEntities: ['林飞'] })
-    const got = await retrieveChunks({ projectId: pid, currentChapterId: chaps[1], worldGroupId: 7, queryTerms: ['林飞'] })
+    const foreignGroup = await db.worldGroups.add({ projectId: pid, worldId: scope.worldId, name: '隔离世界', type: 'primary', description: '', order: 0, createdAt: now, updatedAt: now } as any) as number
+    await db.outlineNodes.update(ch0!.outlineNodeId, { worldGroupId: foreignGroup })
+    await rebuildChapterChunks({ projectId: pid, chapter: ch0!, worldGroupId: foreignGroup, knownEntities: ['林飞'] })
+    const got = await retrieveChunks({ projectId: pid, currentChapterId: chaps[1], worldGroupId: null, queryTerms: ['林飞'] })
     expect(got.length).toBe(0) // 块在世界99，当前世界7 → 不召回
   })
 })

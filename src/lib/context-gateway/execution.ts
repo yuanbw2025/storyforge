@@ -1,3 +1,4 @@
+import { ensureLocalNarrativeIndexV1 } from '../retrieval/retrieval'
 import { prepareModelCapacityV1, modelInputBudgetV1, type ModelCapacityV1 } from '../ai/model-capacity'
 import type { AIConfig } from '../types'
 import { estimateTokens } from '../ai/context-budget'
@@ -415,6 +416,11 @@ export async function executeContextGatewayV1(
   delete input.modelConfig
   const gatewayPolicy = assertAgentSkillContextGatewayPolicyV1(input.skill)
   const accessPolicy = narrowedAccessPolicy(input)
+  const indexScope = frozenScope(input)
+  if (accessPolicy.allowedResourceKinds.includes('chapter') && indexScope.worldReleaseId == null && indexScope.productRuntimeSessionId == null) {
+    // Repair derived caches before opening the immutable catalog read session.
+    await ensureLocalNarrativeIndexV1({ projectId: input.scope.projectId, scope: input.scope })
+  }
   const session = await createContextGatewayToolSessionV1({
     scope: frozenScope(input),
     policy: accessPolicy,

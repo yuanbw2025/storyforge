@@ -44,7 +44,8 @@ for (const scenario of ['preset', 'embedding', 'partial-storage'] as const) {
         useAIConfigStore.getState().setEmbeddingConfig({ enabled: true, provider: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'text-embedding-3-small', apiKey: keyA })
         return id
       }, { keyA: KEY_A, keyB: KEY_B })
-      const embedding = page.locator('div.bg-bg-surface').filter({ has: page.getByRole('heading', { name: /语义检索/ }) })
+      const embedding = page.locator('details').filter({ has: page.locator('summary').filter({ hasText: '独立语义检索服务' }) })
+      await embedding.locator('summary').click()
       const chatKey = page.locator('label:has-text("API Key") + div input').first()
       const embeddingKey = embedding.locator('label:has-text("API Key") + input')
       if (scenario === 'preset') {
@@ -54,6 +55,7 @@ for (const scenario of ['preset', 'embedding', 'partial-storage'] as const) {
         await page.getByRole('button', { name: 'QUALITY053 临时 A', exact: true }).click()
         await expect(chatKey).toHaveValue(KEY_A)
         await page.reload()
+        await embedding.locator('summary').click()
         await expect(chatKey).toHaveValue(KEY_A)
         const after = await readNodeSelection(page, presetId)
         expect(after.selected).toMatchObject({ baseUrl: 'https://provider-a.invalid/v1', apiKey: KEY_A })
@@ -62,9 +64,11 @@ for (const scenario of ['preset', 'embedding', 'partial-storage'] as const) {
         await embedding.getByRole('button', { name: /通义 · v3/ }).click()
         await expect(embeddingKey).toHaveValue('')
         await page.reload()
+        await embedding.locator('summary').click()
         await expect(embeddingKey).toHaveValue('')
         await embeddingKey.fill(KEY_B)
         await page.reload()
+        await embedding.locator('summary').click()
         await expect(embeddingKey).toHaveValue(KEY_B)
         await expect(embedding.locator('label:has-text("Base URL") + input')).toHaveValue('/qwen-proxy/compatible-mode/v1')
       } else {
@@ -90,6 +94,7 @@ for (const scenario of ['preset', 'embedding', 'partial-storage'] as const) {
         }, { keyA: KEY_A, keyB: KEY_B })
         expect(failures).toEqual(['QuotaExceededError', 'QuotaExceededError'])
         await page.reload()
+        await embedding.locator('summary').click()
         await expect(chatKey).toHaveValue('')
         await expect(embeddingKey).toHaveValue('')
         await expect(page.getByText(/临时 API Key 未能与当前配置匹配/)).toHaveCount(2)
