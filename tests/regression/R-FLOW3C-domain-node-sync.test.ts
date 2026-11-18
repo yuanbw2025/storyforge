@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as usageLog from '../../src/lib/ai/usage-log'
@@ -67,6 +69,9 @@ describe('FLOW-3C · Canon 绑定概览与下游失效', () => {
       createdAt: 1,
       updatedAt: 1,
     }, { owner: 'work' }) as any)
+
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 32768)
   })
 
   afterEach(async () => { await Promise.allSettled(usage); vi.unstubAllGlobals(); vi.restoreAllMocks(); db.close() })

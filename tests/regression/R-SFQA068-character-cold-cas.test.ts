@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import Dexie from 'dexie'
 import { db } from '../../src/lib/db/schema'
@@ -28,6 +30,9 @@ beforeEach(async () => {
     return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 23, completion_tokens: 17, total_tokens: 40 } }), { headers: { 'Content-Type': 'application/json' } })
   }))
+
+  resetModelCapacityForTestsV1()
+  await seedModelAllocationFixtureV1(config, 32768)
 })
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); db.close() })
 

@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { readOwnedRows, stampNewRecord } from '../../src/lib/workspace/scope'
@@ -116,6 +118,9 @@ describe.sequential('SFQA-002 Master raw response boundaries', () => {
     await db.delete(); await db.open()
     useAIConfigStore.setState({ config, presets: [], taskRoutes: {}, creativeQualityMode: 'balanced' })
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => { throw new Error('No external network or real model is authorized') }))
+
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(config, 128000)
   })
   afterEach(async () => {
     vi.restoreAllMocks(); vi.unstubAllGlobals(); useAIConfigStore.setState(original); await db.delete()

@@ -1,3 +1,4 @@
+import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
 import { createProductProductionPlanV3 } from '../../src/lib/product-production/plan'
 /** Real owner/DB/Harness and explicit fake native transport; no actual provider or author data. */
 import { beforeEach, afterEach, expect, it, vi } from "vitest"
@@ -18,6 +19,7 @@ let previousLocks: PropertyDescriptor | undefined
 beforeEach(async () => {
  await db.delete(); await db.open(); window.location.href='http://localhost:4178/storyforge/'
  useAIConfigStore.getState().setConfig({provider:'codex',model:'fixture-native-only',apiKey:'',contextWindow:131072,maxTokens:16000})
+  useAIConfigStore.setState({config: syntheticFrozenAllocationV1(useAIConfigStore.getState().config, 131072, 16000)})
  previousLocks=Object.getOwnPropertyDescriptor(navigator,'locks')
  const active=new Set<string>()
  Object.defineProperty(navigator,'locks',{configurable:true,value:{request:async (name:string,_options:unknown,callback:(lock:object|null)=>Promise<unknown>)=>{

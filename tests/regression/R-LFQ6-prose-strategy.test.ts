@@ -1,3 +1,4 @@
+import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
@@ -58,7 +59,7 @@ describe('LFQ6 · 共用正文任务与文风控制', () => {
     const f = await seed()
     const template = { ...oldPrompts.getActive('chapter.content'), modelOverride: { temperature: 0, maxTokens: 3200 } }
     usePromptStore.setState({ getActive: key => key === 'chapter.content' ? template : oldPrompts.getActive(key) })
-    const config = { ...oldConfig, provider: 'deepseek' as const, model: 'deepseek-chat', apiKey: 'test-only', baseUrl: 'http://localhost:1234/v1', temperature: 0.7, maxTokens: 0 }
+    const config = syntheticFrozenAllocationV1({ ...oldConfig, provider: 'deepseek' as const, model: 'deepseek-chat', apiKey: 'test-only', baseUrl: 'http://localhost:1234/v1', temperature: 0.7, maxTokens: 0 }, 128_000, 16384)
     useAIConfigStore.setState({ config })
     const bodies: any[] = []
     vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init: RequestInit) => {
