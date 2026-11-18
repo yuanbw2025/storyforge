@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { db } from '../../src/lib/db/schema'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
-import { chunkDocument, splitDocumentChapters } from '../../src/lib/import/chunker'
+import { splitDocumentChapters } from '../../src/lib/import/chunker'
 import { extractTextFromFile, FILE_SIZE_LIMITS } from '../../src/lib/doc-parser'
 import { createAdaptation, listActiveSourceUnits, readAdaptationSourceContent } from '../../src/lib/adaptation/source-manifest'
 import { htmlToPlainText, plainTextToHtml } from '../../src/lib/utils/html'
@@ -42,10 +42,9 @@ it('preserves prefix whitespace and CRLF at recognized chapter boundaries', asyn
   }
 })
 
-it('keeps line-local labels in AI chunks, and exact character ranges in persisted chapters', () => {
+it('uses line-local labels only in persisted chapters and preserves all source character ranges', () => {
   const text = `第一章 标题\n正文第一句。\n${'大段正文。'.repeat(7000)}\n第二章 尾章\n独特尾标记。`
-  const chunks = chunkDocument(text, { targetChars: 5000, overlapChars: 0 })
-  expect(chunks.map(chunk => chunk.label)).toEqual(['第一章 标题', '第二章 尾章'])
+  expect(splitDocumentChapters(text).map(chunk => chunk.label)).toEqual(['第一章 标题', '第二章 尾章'])
   expect(splitDocumentChapters(text).map(ch => ch.text).join('')).toBe(text)
 })
 
