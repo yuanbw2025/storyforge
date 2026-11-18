@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { act, createElement, StrictMode, type ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -161,6 +163,9 @@ beforeEach(async () => {
     expect(String(input)).toBe('http://127.0.0.1:9/v1/chat/completions')
     return new Promise<Response>(resolve => { releaseResponse = resolve })
   }))
+
+  resetModelCapacityForTestsV1()
+  await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 32768)
 })
 
 afterEach(async () => {

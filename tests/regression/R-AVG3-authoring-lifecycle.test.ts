@@ -59,7 +59,7 @@ it("keeps a pre-world AVG draft, rejects stale writes, and roundtrips a frozen s
     (await db.worldReleases.get(restored!.worldReleaseId!))?.releaseUid,
   ).toBe(frozen?.releaseUid);
   expect(JSON.parse(restored!.settingsJson).playerRole).toBe("守灯人");
-  await deleteWork(imported, restored!.workId);
+  await deleteWork(restored!.workId);
   expect(
     await db.avgAuthoringDrafts.where("projectId").equals(imported).count(),
   ).toBe(0);
@@ -130,6 +130,6 @@ it('protects uploaded draft media across backup, scope checks and Work deletion'
  const id=await importProjectJSON(await exportProjectJSON(avg.scope.projectId));const draft=await db.avgAuthoringDrafts.where('projectId').equals(id).first()
  const scope={projectId:id,worldId:draft!.worldId,workId:draft!.workId}
  expect(new Uint8Array(await readAvgDraftMediaV1(scope,asset))).toEqual(new Uint8Array(data))
- await deleteWork(id,scope.workId);expect(await db.avgDraftMedia.where('workId').equals(scope.workId).count()).toBe(0)
+ await deleteWork(scope.workId);expect(await db.avgDraftMedia.where('workId').equals(scope.workId).count()).toBe(0)
  expect(await db.avgDraftMedia.where('workId').equals(avg.scope.workId).count()).toBe(1)
 })

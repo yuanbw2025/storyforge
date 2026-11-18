@@ -1,3 +1,5 @@
+import { ensureLocalNarrativeIndexV1, ensureChunkEmbeddings } from '../../src/lib/retrieval/retrieval'
+import type { WorkspaceScope } from '../../src/lib/types'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -56,11 +58,10 @@ async function click(label: string) {
   expect(button, label).toBeTruthy()
   await act(async () => button!.click())
 }
-async function waitForIndexCompletion() {
-  await vi.waitFor(async () => {
-    await act(async () => {})
-    expect(host!.textContent).toMatch(/检索索引已就绪|完成:扫描/)
-  })
+async function runAutomaticScopedIndex(scope: WorkspaceScope) {
+  await ensureLocalNarrativeIndexV1({ projectId: scope.projectId, scope })
+  const chunks = await db.retrievalChunks.where('projectId').equals(scope.projectId).filter(row => row.workId === scope.workId).toArray()
+  await ensureChunkEmbeddings({ projectId: scope.projectId, scope, cfg: useAIConfigStore.getState().embedding, chunkIds: chunks.slice(0,6).flatMap(row => row.id == null ? [] : [row.id]) })
 }
 
 beforeEach(async () => {
@@ -106,7 +107,8 @@ describe('SFQA053 preset and transport keep one credential authority', () => {
     const selected = requestedAIConfig(node(id))
     const resolved = resolveRequestConfig(selected, { category: 'node.creation' })
     await expect(chat([{ role: 'user', content: 'synthetic owned text' }], selected, { category: 'node.creation', transportRetryPolicy: 'none' })).resolves.toBe('synthetic reply')
-    expect(sent).toEqual([{ url: 'https://provider-a.invalid/v1/chat/completions', authorization: `Bearer ${KEY_A}` }])
+    expect(sent.filter(row => row.url.endsWith('/chat/completions'))).toEqual([{ url: 'https://provider-a.invalid/v1/chat/completions', authorization: `Bearer ${KEY_A}` }])
+    expect(sent.every(row => row.url.startsWith('https://provider-a.invalid/') && row.authorization === `Bearer ${KEY_A}`)).toBe(true)
     expect(resolved.config.apiKey).toBe(KEY_A)
     expect(JSON.stringify(node(id))).not.toContain(KEY_A)
     expect(JSON.stringify(getLogs())).not.toContain(KEY_A)
@@ -209,17 +211,17 @@ describe('SFQA102 actual embedding controls and downstream index requests', () =
   it('the supported local destination remains ready without an Authorization header', async () => {
     const created = await createWorkspace({ name: '合成本地检索', description: '', genres: [], targetWordCount: 10_000, status: 'drafting' }, { kind: 'novel', novelProfile: 'long', importedNovelText: '林岚收好车票，走进旧车站。' })
     useProjectStore.setState({ currentProjectId: created.scope.projectId })
-    await mountEmbeddingCard(); await click('本地 Ollama · bge-m3'); await click('为当前项目历史章节建立检索索引'); await waitForIndexCompletion()
+    await mountEmbeddingCard(); await click('本地 Ollama · bge-m3'); await runAutomaticScopedIndex(created.scope)
     expect(sent.length).toBeGreaterThan(0)
     expect(sent.every(item => item.url === 'http://localhost:11434/v1/embeddings' && item.authorization === null)).toBe(true)
   })
   it('a cloud switch sends no old key, then the actual index uses only its newly supplied key', async () => {
     const created = await createWorkspace({ name: '合成云检索', description: '', genres: [], targetWordCount: 10_000, status: 'drafting' }, { kind: 'novel', novelProfile: 'long', importedNovelText: '林岚收好车票，走进旧车站。' })
     useProjectStore.setState({ currentProjectId: created.scope.projectId })
-    await mountEmbeddingCard(); await click('通义 · v3'); await click('为当前项目历史章节建立检索索引'); await waitForIndexCompletion()
+    await mountEmbeddingCard(); await click('通义 · v3'); await runAutomaticScopedIndex(created.scope)
     expect(sent).toEqual([])
     await act(async () => useAIConfigStore.getState().setEmbeddingConfig({ apiKey: KEY_QWEN }))
-    await click('为当前项目历史章节建立检索索引'); await waitForIndexCompletion()
+    await runAutomaticScopedIndex(created.scope)
     expect(sent.length).toBeGreaterThan(0)
     expect(sent.every(item => item.authorization === `Bearer ${KEY_QWEN}` && /(?:qwen-proxy|dashscope\.aliyuncs\.com)/.test(item.url))).toBe(true)
   })

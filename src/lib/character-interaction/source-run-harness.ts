@@ -256,7 +256,7 @@ async function generate(input: {
     const resolved = input.config ? resolveRequestConfig({...structuredClone(input.config), maxTokens: 6000}, {category: CATEGORY, projectId: scope.projectId, contextOverflowPolicy: 'reject'}) : null
     if (!input.runAI && !resolved) throw new Error('请先配置全局 AI')
     const assembled = await assembleContext({...(protocol.source ? protocol.source.options(request) : {chatSourceReviewRequest: request as ChatSourceReviewRequestV1}), projectId: scope.projectId, scope, sourceKeys: [SOURCE],
-      provider: resolved?.config.provider, model: resolved?.config.model, inputBudgetMaxTokens: 20_000})
+      ...(!input.runAI && resolved ? {modelConfig: resolved.config, provider: resolved.config.provider, model: resolved.config.model} : {}), inputBudgetMaxTokens: 20_000})
     if (assembled.included.join(',') !== SOURCE || assembled.trimmed.length || assembled.overBudgetAfterTrim
       || assembled.sourceEvidence?.some(row => row.delivery !== 'full')) throw new Error('本次原文不能完整交付，请减少选中资料')
     const context = JSON.parse(assembled.segments[0].content) as C

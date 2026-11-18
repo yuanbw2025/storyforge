@@ -1,3 +1,4 @@
+import { prepareModelCapacityV1, modelInputBudgetV1 } from '../ai/model-capacity'
 import { canonRowResourceKeysV1 } from '../context-gateway/canon-provider'
 import { db } from '../db/schema'
 import { executeContextGatewayV1, type ContextGatewayExecutionV1 } from '../context-gateway/execution'
@@ -106,6 +107,7 @@ export async function prepareOutlineGatewayAssemblyV1(input: {
   priorOutlineCandidateText?: string
   signal?: AbortSignal
 }): Promise<OutlineGatewayAssemblyV1> {
+  input = { ...input, config: await prepareModelCapacityV1(input.config) }
   const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
   await assertOutlineRequestTargetsUnwrittenFutureV1({
     scope,
@@ -117,7 +119,7 @@ export async function prepareOutlineGatewayAssemblyV1(input: {
     throw new Error(`${skill.id} 尚未进入 required Context Gateway。`)
   }
   const policy = resolveAgentContextPolicy(skill.contextTaskKind, input.contextProfile ?? 'full')
-  const inputBudget = Math.min(policy.maxInputTokens, skill.contextGateway.maxRetrievedTokens)
+  const inputBudget = Math.min(policy.maxInputTokens, skill.contextGateway.maxRetrievedTokens, Math.max(1, modelInputBudgetV1(input.config.modelCapacity!, input.config.maxTokens).inputBudget - 1024))
   const priorText = input.priorOutlineCandidateText?.trim() ?? ''
   const prior = priorText
     ? await assembleContext({
@@ -125,7 +127,7 @@ export async function prepareOutlineGatewayAssemblyV1(input: {
         scope,
         worldGroupId: input.worldGroupId,
         priorOutlineCandidateText: priorText,
-        provider: input.config.provider,
+        modelConfig: input.config, provider: input.config.provider,
         model: input.config.model,
         sourceKeys: ['priorOutlineCandidate'],
         inputBudgetTokens: inputBudget,
@@ -256,6 +258,7 @@ export async function prepareOutlineGatewayAssemblyV1(input: {
     ...intentOriginalKeys,
   ])
   const execution = await executeContextGatewayV1({
+    modelConfig: input.config,
     skill,
     scope,
     worldGroupId: input.worldGroupId,

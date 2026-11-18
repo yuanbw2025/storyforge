@@ -189,7 +189,7 @@ describe('AVG optional inventory and evidence: real adoption, commands, player p
     const importedId = await importProjectJSON(await exportProjectJSON(s.scope.projectId))
     const restored = (await db.productRuntimeSessions.where('projectId').equals(importedId).toArray()).find(row => row.parentSessionId != null)!
     expect(projectAvgInventoryV1(await readProductRuntimeState(restored.id!))).toEqual(projectAvgInventoryV1(await readProductRuntimeState(child.id!)))
-    await deleteWork(importedId, restored.workId!)
+    await deleteWork(restored.workId!)
     expect(await db.productRuntimeEvents.where('sessionId').equals(restored.id!).count()).toBe(0)
     expect(await db.productRuntimeSessions.get(s.sessionId)).toBeDefined()
     expect(await db.agentRuns.count()).toBe(0)

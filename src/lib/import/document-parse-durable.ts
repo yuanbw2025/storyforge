@@ -152,7 +152,7 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
   if (inputBudgetTokens <= 0) fail('模型窗口不足以容纳输出预留，请调整上下文窗口或模型配置。')
   const assembled = await assembleContext({ scope, projectId: input.projectId, worldGroupId, sourceKeys,
     documentImportSessionId: session.id, manualSourceText: text, inputBudgetTokens,
-    provider: resolved.config.provider, model: resolved.config.model })
+    modelConfig: resolved.config, provider: resolved.config.provider, model: resolved.config.model })
   const originalSegment = assembled.segments[assembled.included.indexOf('manualText')]
   if (originalSegment?.content !== text)
     fail('正式来源必须完整交付本块原文，不能以截断材料发送。')

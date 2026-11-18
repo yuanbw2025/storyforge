@@ -1,6 +1,7 @@
 import { assertCurrentProductEntryV1, evaluateCurrentProductEntryV1 } from '../lib/product/product-catalog'
 import { saveTtrpgOpenPreviewEnabledV1, useTtrpgOpenPreviewEnabledV1 } from '../lib/ttrpg/open-preview-preferences'
 import BrandIcon from '../components/shared/BrandIcon'
+import { DeleteProductWorkButton } from '../components/product/ProductDeleteButton'
 import { useDialog } from '../components/shared/Dialog';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
@@ -116,6 +117,7 @@ export default function TtrpgPage() {
   };
   const activeMutation = useRef(false);
   const seatApprovalDraft = useSyncExternalStore(subscribeSeatApprovalDraft, readSeatApprovalDraft);
+  const visibleRows = rows.filter(r => r.work.title.includes(search));
   const [worlds, setWorlds] = useState<
     Awaited<ReturnType<typeof listLocalWorldReferenceChoicesV1>>
   >([]);
@@ -477,9 +479,7 @@ export default function TtrpgPage() {
         </nav>
       </header>
       <aside className="lf-sidebar">
-        <small>TABLETOP ROLEPLAY</small>
         <h1>跑团</h1>
-        <p>让想象，聚在同一张桌上。</p>
         <button className="lf-current" disabled={busy} onClick={() => go("library")}>
           <BookOpen />
           {row?.work.title ?? "选择或新建战役"}
@@ -516,7 +516,7 @@ export default function TtrpgPage() {
             {page[1]}
             {row ? ` · ${row.work.title}` : ""}
           </small>
-          <h2>{TTRPG_PRIMARY.find((p) => p[0] === primary)?.[1]}</h2>
+          <h2>{page[1]}</h2>
             {!["library", "player", "community"].includes(primary) && (
               <nav className="avg-phases" aria-label="制作阶段">
                 {[
@@ -641,7 +641,7 @@ export default function TtrpgPage() {
               <Suspense fallback={<p>打开功能…</p>}>
                 {page[0] === "library" ? (
                   <>
-                    <section className="lf-paper">
+                    <section className="ttrpg-library-tools" aria-label="战役工具">
                       <div className="avg-actions">
                         <button
                           className="lf-action lf-action-primary"
@@ -668,17 +668,19 @@ export default function TtrpgPage() {
                           onChange={(e) => setSearch(e.target.value)}
                         />
                       </div>
-                      <p>先规划，再制作。作品版本与每一场冒险分别保存。</p>
-                      {import.meta.env.VITE_ENABLE_TTRPG_OPEN_PREVIEW !== '1' && <label className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" aria-label="启用开放跑团试用" checked={openPreview} disabled={busy || draftConflict} onChange={event => {
-                          if (!saveTtrpgOpenPreviewEnabledV1(event.target.checked)) setError('未能保存试用偏好，请检查浏览器存储。');
-                        }} />启用开放跑团试用（实验性）
-                      </label>}
-                      <p className="text-xs text-text-muted">试用选择只在当前浏览器保存。开启后仍需确认制作方案和每次模型调用；长局体验与不同设备的配音效果待你实际试玩。</p>
+                      <div className="ttrpg-library-options">
+                        {import.meta.env.VITE_ENABLE_TTRPG_OPEN_PREVIEW !== '1' && <label className="flex items-center gap-2 text-sm">
+                          <input type="checkbox" aria-label="启用开放跑团试用" checked={openPreview} disabled={busy || draftConflict} onChange={event => {
+                            if (!saveTtrpgOpenPreviewEnabledV1(event.target.checked)) setError('未能保存试用偏好，请检查浏览器存储。');
+                          }} />启用开放跑团试用（实验性）
+                        </label>}
+                        <details><summary>试用说明</summary><p>试用选择只在当前浏览器保存。开启后仍需确认制作方案和每次模型调用；长局体验与不同设备的配音效果待你实际试玩。</p></details>
+                      </div>
+                      {!rows.length ? <p className="ttrpg-library-empty">还没有自己的战役，可新建制作或体验下方冒险。作品版本与冒险存档分别保存。</p>
+                        : !visibleRows.length && <p className="ttrpg-library-empty" role="status">没有找到匹配的战役，请更换搜索词。</p>}
                     </section>
                     <div className="lf-library-grid">
-                      {rows
-                        .filter((r) => r.work.title.includes(search))
+                      {visibleRows
                         .map((r) => (
                           <article className="lf-paper" key={r.work.id}>
                             <small>
@@ -700,25 +702,19 @@ export default function TtrpgPage() {
                               <Link className="lf-action" to={path("play", r)}>
                                 游玩与存档
                               </Link>
+                              <DeleteProductWorkButton work={r.work} disabled={busy} onDeleted={() => {
+                                if (workId === r.work.id) { setDirty(false); navigate('/ttrpg/library'); }
+                              }} />
                             </div>
                           </article>
                         ))}
                     </div>
-                    {!rows.length && (
-                      <section className="lf-paper">
-                        <h3>你的第一场冒险</h3>
-                        <p>
-                          还没有自己的战役，可以先进入制作台填写，或者游玩社区作品。
-                        </p>
-                      </section>
-                    )}
                     <button className="lf-action" onClick={() => navigate(`/community/market${scope ? `?project=${scope.projectId}&work=${scope.workId}` : ""}`)}>打开社区市场与在线招募</button>
                     <Community embedded />
                   </>
                 ) : step >= 0 ? (
                   <>
                     <section className="lf-paper">
-                      <h3>{page[1]}</h3>
                       <p>
                         保存配置不会调用模型或开始制作。未选择世界时也可以填写。
                       </p>
@@ -1073,7 +1069,6 @@ export default function TtrpgPage() {
                     {scope && productionId ? (
                       <>
                         <section className="lf-paper">
-                          <h3>{page[1]}</h3>
                           {row?.draft &&
                             row.draft.preparedRevision !==
                               row.draft.revision && (
@@ -1134,7 +1129,6 @@ export default function TtrpgPage() {
                       needsSource
                     ) : (
                       <section className="lf-paper">
-                        <h3>{page[1]}</h3>
                         <p>这里将显示实际制作步骤、质量检查与发布版本。</p>
                         <button
                           className="lf-action"

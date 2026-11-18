@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useAIConfigStore } from '../../src/stores/ai-config'
@@ -31,6 +33,9 @@ beforeEach(async () => {
     return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: JSON.stringify(response) }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 29, completion_tokens: 11, total_tokens: 40 } }), { headers: { 'Content-Type': 'application/json' } })
   }))
+
+  resetModelCapacityForTestsV1()
+  await seedModelAllocationFixtureV1(config, 128000)
 })
 afterEach(() => {
   vi.restoreAllMocks(); vi.unstubAllGlobals(); db.close()

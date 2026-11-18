@@ -1,11 +1,11 @@
-/** Bundled, offline-readable legal copy. Change versions when consent must be renewed. */
+/** Bundled, offline-readable legal copy. The document is available on demand; application startup is never gated. */
 export const CLIENT_LEGAL_VERSION = '2026-10-16.1'
 export const CLIENT_AGREEMENT_KEY = 'storyforge-client-agreement-v1'
 export const clientAgreementRequired = () => !import.meta.env.DEV && ['portable', 'android'].includes(import.meta.env.MODE)
 export const USAGE_NOTICE = '在您同意本协议后，我们会处理必要的软件使用情况及故障诊断信息，用于维护软件运行、排查问题和改善使用体验。相关信息限于软件版本、系统类型、发行渠道、使用日期、随机生成的标识及经过处理的错误摘要，不收集您的作品正文、提示词、模型回复或 API 密钥。您主动提交的问题或建议，将用于处理反馈和改进产品。'
 export interface LegalSection { title: string; text: string }
 export const CLIENT_TERMS: LegalSection[] = [
-  { title: '一、协议范围与接受', text: '本协议适用于北京悬象科技有限公司提供的 StoryForge 故事熔炉官方客户端及相关支持服务。请在使用前阅读本协议（含个人信息与隐私保护条款），尤其是内容规范、第三方服务、责任限制及信息处理条款。点击同意表示您接受本协议；不同意时可停止使用官方客户端。开源代码及第三方组件仍按各自许可证授权，本协议不撤销或缩减您已依法取得的开源许可权利。' },
+  { title: '一、协议范围与接受', text: '本协议适用于北京悬象科技有限公司提供的 StoryForge 故事熔炉官方客户端及相关支持服务。请在使用前阅读本协议（含个人信息与隐私保护条款），尤其是内容规范、第三方服务、责任限制及信息处理条款。您可以在设置页底部随时查阅本协议；继续使用本软件表示您接受本协议；不同意时可停止使用官方客户端。开源代码及第三方组件仍按各自许可证授权，本协议不撤销或缩减您已依法取得的开源许可权利。' },
   { title: '二、软件用途与使用条件', text: 'StoryForge 是辅助创作、整理和管理叙事作品的软件。功能范围以实际版本及页面说明为准，实验性功能可能调整。请使用与设备兼容的版本，并自行保管设备、备份和服务凭据。未成年人应在监护人的指导下使用；涉及未成年人个人信息的事项，请由监护人与我们联系。' },
   { title: '三、第三方 AI 与外部服务', text: '使用 AI 功能时，您自行选择并配置第三方服务。软件会将完成您所请求任务所需的输入及相关上下文发送给该服务。服务可用性、模型输出、费用及信息处理遵循该服务提供方的规则。我们不销售模型调用额度，也不保证第三方服务持续可用。请勿提供无权提交的材料、个人信息或保密资料。' },
   { title: '四、作品与知识产权', text: '您原有作品及材料的权利不因使用软件而转移。您应确保输入、导入、使用和发布的材料具有合法来源和相应授权。我们不会仅因您使用软件而取得作品的公开发布、销售或模型训练授权。AI 生成内容的权利归属、独创性及可商用性应结合适用法律、输入材料和服务条款判断，软件不作统一保证。软件源代码适用仓库中的 MIT 许可证，第三方组件和插件适用各自许可。' },

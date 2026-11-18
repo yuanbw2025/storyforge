@@ -1,8 +1,8 @@
+import { getModelCapacityLimitsV1 } from '../../lib/ai/model-capacity'
 import { useState } from 'react'
 import { ChevronDown, ChevronUp, RotateCcw, Save, Settings2 } from 'lucide-react'
 import { usePromptStore } from '../../stores/prompt'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { getModelPreset } from '../../lib/ai/context-budget'
 import type { PromptModuleKey, PromptParameter, PromptTemplate } from '../../lib/types/prompt'
 import { useDialog } from './Dialog'
 import { useToast } from './Toast'
@@ -229,7 +229,7 @@ function ParamControl({
 
   // 字数类滑块:上限动态 = 当前模型最大输出换算字数(token×1.5);否则用静态 param.max
   const sliderMax = param.maxFromModelOutput
-    ? Math.max(param.min ?? 0, Math.round((getModelPreset(aiConfig.provider, aiConfig.model).maxOutput * 1.5) / 100) * 100)
+    ? Math.max(param.min ?? 0, Math.round((getModelCapacityLimitsV1(aiConfig).maxOutput * 1.5) / 100) * 100)
     : param.max
 
   return (

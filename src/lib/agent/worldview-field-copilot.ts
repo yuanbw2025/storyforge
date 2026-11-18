@@ -1,6 +1,6 @@
+import { getModelCapacityLimitsV1 } from '../ai/model-capacity'
 import { resolveFieldGenerationRequestModeV1 } from './field-generation-request-mode'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { getModelPreset } from '../ai/context-budget'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import type { FieldGenerationMode } from '../ai/field-generation-context'
 import { db } from '../db/schema'
@@ -327,7 +327,7 @@ export function resolveWorldviewFieldOutputBudgetV1(input: {
   skillMaxOutputTokens: number
   requestedMaxTokens?: number
 }): WorldviewFieldOutputBudgetV1 {
-  const modelCapTokens = getModelPreset(input.config.provider, input.config.model).maxOutput
+  const modelCapTokens = getModelCapacityLimitsV1(input.config).maxOutput
   const authorConfigCapTokens = input.config.maxTokens > 0
     ? input.config.maxTokens
     : modelCapTokens
@@ -756,6 +756,7 @@ export async function prepareWorldviewFieldCopilot(
   })
   const contextGatewayExecution = gatewayRequired
     ? await executeContextGatewayV1({
+    modelConfig: config,
         skill,
         scope: scope!,
         worldGroupId,
@@ -780,7 +781,7 @@ export async function prepareWorldviewFieldCopilot(
         projectId: input.projectId,
         scope,
         worldGroupId,
-        provider: config.provider,
+        modelConfig: config, provider: config.provider,
         model: config.model,
         sourceKeys: [...skill.contextSourceKeys],
         inputBudgetMaxTokens: contextPolicy.maxInputTokens,
@@ -919,7 +920,7 @@ export function createWorldviewFieldCopilotNode(
         apiKey: input.config.apiKey,
         baseUrl: input.config.baseUrl,
         model: input.config.model,
-        contextWindow: input.config.contextWindow,
+        modelCapacity: input.config.modelCapacity,
         maxTokens: input.outputBudget?.effectiveMaxTokens
           ?? WORLDVIEW_FIELD_DEFAULT_OUTPUT_TOKENS_V1,
         temperature: input.generationOverrides?.temperature ?? 0.5,

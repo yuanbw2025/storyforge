@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import ExtensionSurface from '../components/extensions/ExtensionOutlet'
 import { canonicalPowerModule } from '../lib/workspace/module-alias'
 import { resolveLongformChapterNavigationV1, type LongformChapterModuleV1 } from '../lib/authoring/longform-chapter-navigation'
@@ -94,7 +95,7 @@ import LongformLayout from '../components/longform/LongformLayout'
 import { LONGFORM_SECTIONS, sectionForModule, type LongformSection, type LongformMode } from '../components/longform/navigation'
 const LongformWorlds = lazy(() => import('../components/longform/LongformWorlds'))
 
-export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { embeddedProjectId?: number; embeddedModule?: SidebarModule } = {}) {
+export default function WorkspacePage({ embeddedProjectId, embeddedModule, embeddedToolsTarget }: { embeddedProjectId?: number; embeddedModule?: SidebarModule; embeddedToolsTarget?: HTMLElement | null } = {}) {
   const routeParams = useParams()
   const projectId = embeddedProjectId != null ? String(embeddedProjectId) : routeParams.projectId
   const location = useLocation()
@@ -620,6 +621,22 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
     const product = activeWork ? ({ comic: 'comic', 'motion-drama': 'motion', avg: 'avg', ttrpg: 'ttrpg', 'character-interaction': 'chat', 'ai-town': 'town', 'text-adventure': 'adventure', 'text-open-world': 'openworld' } as Record<string,string>)[effectiveWorkKind(activeWork)] : undefined
     return <Navigate replace to={product ? `/${product}/library?project=${project.id}&work=${activeWork?.id}` : '/long'}/>
   }
+  const copilotButton = (
+    <button
+      onClick={() => {
+        if (isLongform && window.matchMedia('(max-width: 1050px)').matches) { changeLongMode('agent'); return }
+        setShowCopilot(value => {
+          if (!value) setShowProperties(false)
+          return !value
+        })
+      }}
+      title={showCopilot ? '关闭 AI 对话副驾' : '打开 AI 对话副驾'}
+      aria-label={showCopilot ? '关闭 AI 对话副驾' : '打开 AI 对话副驾'}
+      className={`shrink-0 rounded p-1.5 text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary ${showCopilot ? 'text-accent' : ''}`}
+    >
+      <MessageSquare className="h-4 w-4" />
+    </button>
+  )
   const Layout = isLongform ? LongformLayout : Fragment
   const layoutProps = isLongform ? { title: activeWork.title, section: longSection, mode: longMode, module: activeModule, hiddenModules, onSection: changeLongSection, onMode: changeLongMode, onModule: selectModule, onNavigate: (path: string) => afterPendingEdits(() => navigate(path), '编辑保存失败'), onHome: () => afterPendingEdits(() => navigate('/'), '编辑保存失败') } : {}
   return (
@@ -635,26 +652,14 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
             : ''
         }`}
       >
+        {embeddedProjectId ? (embeddedToolsTarget ? createPortal(copilotButton, embeddedToolsTarget) : null) : (
         <div className={`${isLongform && longMode === 'agent' ? 'hidden' : 'flex'} h-11 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-bg-surface/70 px-4`}>
           <div className="flex min-w-0 items-center gap-2">
             <ContentTypeBadge contentType={getModuleContentType(activeModule)} showDescription />
             {activeWork && !embeddedProjectId && <WorkKindBadge work={activeWork} />}
           </div>
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => {
-                if (isLongform && window.matchMedia('(max-width: 1050px)').matches) { changeLongMode('agent'); return }
-                setShowCopilot(value => {
-                  if (!value) setShowProperties(false)
-                  return !value
-                })
-              }}
-              title={showCopilot ? '关闭 AI 对话副驾' : '打开 AI 对话副驾'}
-              aria-label={showCopilot ? '关闭 AI 对话副驾' : '打开 AI 对话副驾'}
-              className={`shrink-0 rounded p-1.5 text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary ${showCopilot ? 'text-accent' : ''}`}
-            >
-              <MessageSquare className="h-4 w-4" />
-            </button>
+            {copilotButton}
             <button
               onClick={() => {
                 setShowProperties(value => {
@@ -670,6 +675,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
             </button>
           </div>
         </div>
+        )}
         {impactHandoff && (
           <div className="shrink-0 border-b border-amber-400/25 bg-amber-400/5 px-4 py-2 text-xs text-text-secondary">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -730,7 +736,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
       </main>
 
       {/* 右侧属性面板 */}
-      {showProperties && (
+      {!embeddedProjectId && showProperties && (
         <PropertiesPanel
           activeModule={activeModule}
           onClose={() => setShowProperties(false)}

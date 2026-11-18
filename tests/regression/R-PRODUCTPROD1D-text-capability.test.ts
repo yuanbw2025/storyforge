@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { describe, expect, it, vi } from 'vitest'
 import {
   ConfiguredProductionTextCallErrorV1,
@@ -245,6 +247,7 @@ describe('R-PRODUCTPROD-1D · reuse existing text provider configuration', () =>
     provider, model, thinkingMode, expectedAgnesThinking,
   ) => {
     const config: AIConfig = { ...configured, provider, model }
+    if (provider === 'custom') { resetModelCapacityForTestsV1(); await seedModelAllocationFixtureV1(config, 32768) }
     const frozen = await resolveConfiguredTextCapabilityV1({
       projectId: 7, category: 'product-production', requirementKey: 'text.primary',
     }, { resolveConfig: () => config })
@@ -371,7 +374,6 @@ describe('R-PRODUCTPROD-1D · reuse existing text provider configuration', () =>
     ['请求查询参数', { baseUrl: 'https://apihub.agnes-ai.com/v1?route=other' }],
     ['温度', { temperature: 0.2 }],
     ['配置输出上限', { maxTokens: 4_096 }],
-    ['上下文窗口', { contextWindow: 128_000 }],
   ] as const)('冻结后改变%s会在模型 dispatch 前失败', async (_label, changed) => {
     const frozen = await resolveConfiguredTextCapabilityV1({
       projectId: 7,
@@ -392,6 +394,18 @@ describe('R-PRODUCTPROD-1D · reuse existing text provider configuration', () =>
       now: () => 101,
     })).rejects.toThrow(/provider binding 与授权 capability 不一致/)
     expect(runAI).not.toHaveBeenCalled()
+  })
+
+  it('旧手填窗口不改变冻结的连接授权，实际调用仍只有一次', async () => {
+    const request = { projectId: 7, category: 'product-production', requirementKey: 'text.runtime-package' }
+    const frozen = await resolveConfiguredTextCapabilityV1(request, { resolveConfig: () => configured })
+    const runAI = vi.fn(async () => '{"ok":true}')
+    const result = await runConfiguredProductionTextV1({
+      ...request, expectedCapabilityHash: frozen.receipt.capabilityHash,
+      messages: [{ role: 'user', content: '已授权的结果' }], maximumOutputTokens: 2000,
+    }, { resolveConfig: () => ({ ...configured, contextWindow: 128000 }), runAI })
+    expect(result.bindingReceipt.capabilityHash).toBe(frozen.receipt.capabilityHash)
+    expect(runAI).toHaveBeenCalledOnce()
   })
 
   it('没有现有配置时明确阻塞，不静默切 provider 或要求生产页另存 Key', async () => {

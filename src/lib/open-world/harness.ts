@@ -134,7 +134,7 @@ export async function generateOpenWorldRuntimeCandidateV1(input: {
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1 })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1, attempt: 1 })
   try {
-    const assembled = await assembleContext({ projectId: input.scope.projectId, scope: input.scope, worldGroupId: boundary.scope.worldGroupId, productRuntimeSessionId: input.productRuntimeSessionId, sourceKeys: ['openWorldRuntime'], provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 16_000 })
+    const assembled = await assembleContext({ projectId: input.scope.projectId, scope: input.scope, worldGroupId: boundary.scope.worldGroupId, productRuntimeSessionId: input.productRuntimeSessionId, sourceKeys: ['openWorldRuntime'], modelConfig: input.aiConfig, provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 16_000 })
     if (!assembled.included.includes('openWorldRuntime')) fail('开放世界运行时上下文为空')
     await assertOpenWorldRuntimeHarnessFreshV1({ scope: input.scope, contractScope: snapshot.contract.scope })
     const contextManifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1, attempt: 1, projectId: input.scope.projectId, worldGroupId: boundary.scope.worldGroupId, declaredSourceKeys: ['openWorldRuntime'], assembled, readerVersion: 'text-open-world-player-view-v1' })

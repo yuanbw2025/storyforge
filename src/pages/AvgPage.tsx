@@ -1,5 +1,6 @@
 import { assertCurrentProductEntryV1, evaluateCurrentProductEntryV1 } from '../lib/product/product-catalog'
 import BrandIcon from '../components/shared/BrandIcon'
+import { DeleteProductWorkButton } from '../components/product/ProductDeleteButton'
 import ExampleLibrary from '../components/examples/ExampleLibrary'
 import {
   lazy,
@@ -440,6 +441,9 @@ export default function AvgPage() {
                               <Link className="lf-action" to={path("play", r)}>
                                 游玩与存档
                               </Link>
+                              <DeleteProductWorkButton work={r.work} disabled={busy} onDeleted={() => {
+                                if (workId === r.work.id) { setDirty(false); navigate('/avg/library'); }
+                              }} />
                             </div>
                           </article>
                         ))}

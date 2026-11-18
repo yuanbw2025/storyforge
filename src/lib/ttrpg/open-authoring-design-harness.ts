@@ -1,3 +1,4 @@
+import { prepareModelCapacityV1 } from '../ai/model-capacity'
 /** One explicit S2 request. Exact raw output is durable before parsing.
  * Recovery materializes retained bytes only; it never obtains a send permit. */
 import { readOwnedRows } from '../workspace/scope'
@@ -274,10 +275,11 @@ async function generateOwned(input: Parameters<typeof generateTtrpgOpenAuthoring
     // Assert with the same pure request-side budget calculation as the original
     // client. Never pass the returned trimmed copy to the model. A known local
     // capacity failure must not create an apparently unknown dispatched Run.
-    const config = resolved.config
-    const fit = trimMessagesToFit(messages, config.provider, config.model, config.maxTokens, config.contextWindow)
+    const config = await prepareModelCapacityV1(resolved.config)
+    resolved.config = config
+    const fit = trimMessagesToFit(messages, config.provider, config.model, config.maxTokens, undefined, 0, config.modelCapacity)
     if (fit.trimmed || !fit.protectedEnvelopePreserved || requestTokens > fit.inputBudget)
-      fail(`当前连接输入预算不足以容纳完整设计请求（原始约 ${requestTokens} / 可用 ${fit.inputBudget} tokens）。请在通用设置核对上下文窗口，或明确调整读取范围与分区；尚未发送请求`)
+      fail(`当前连接输入预算不足以容纳完整设计请求（原始约 ${requestTokens} / 可用 ${fit.inputBudget} tokens）。请调整读取范围与分区，或更换模型；尚未发送请求`)
   }
   const modelIdentity = input.runAI ? { provider: 'test-adapter', model: 'injected' }
     : { provider: resolved!.config.provider, model: resolved!.config.model }

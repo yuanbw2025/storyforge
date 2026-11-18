@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   appendAgentEvent,
@@ -103,6 +105,8 @@ describe('AGENT-2 · 主 Agent 编排与持久会话', () => {
       presets: [plannerPreset],
       taskRoutes: { 'agent-orchestrator': plannerPreset.id },
     })
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(plannerPreset.config, 131_072)
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       expect(url).toBe('http://localhost:11434/v1/chat/completions')
       expect(JSON.parse(String(init?.body)).model).toBe('planner-local')

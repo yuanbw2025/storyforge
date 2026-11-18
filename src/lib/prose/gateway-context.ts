@@ -271,6 +271,7 @@ export async function prepareProseGatewayAssemblyV1(input: {
   ])
   const mandatoryResourceKeys = unique([...mandatoryOriginalResourceKeys, ...mandatoryFullResourceKeys])
   const execution = await executeContextGatewayV1({
+    modelConfig: input.config,
     skill,
     scope,
     worldGroupId: input.worldGroupId,
@@ -304,7 +305,6 @@ export async function prepareProseGatewayAssemblyV1(input: {
     signal: input.signal,
   })
   const assembled = assembleContextGatewayPacketV1(execution, budget)
-  void input.config // provider/model do not affect deterministic Gateway selection.
   const result: ProseGatewayAssemblyV1 = { ...assembled, contextGatewayExecution: execution }
   projectContextGatewayInputStateV1(skill, execution, result)
   return result

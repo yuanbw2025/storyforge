@@ -29,8 +29,10 @@ export interface ChunkOptions {
 const DEFAULT_TARGET = 30000
 const DEFAULT_OVERLAP = 500
 
-/** 匹配中文章节标题（行首，可前后有空格） */
+// Legacy AI plan identity: keep byte-for-byte chunk semantics for frozen paid sessions.
+// A future matcher change needs versioned recovery; new novel chapters use their own matcher.
 const CHAPTER_REGEX = /^\s*第\s*[一二三四五六七八九十百千万零〇两\d０-９]+\s*[章回节卷部篇][\s\S]{0,30}$/gm
+const NOVEL_CHAPTER_REGEX = /^[^\S\r\n\u2028\u2029]*第[^\S\r\n\u2028\u2029]*[一二三四五六七八九十百千万零〇两\d０-９]+[^\S\r\n\u2028\u2029]*[章回节卷部篇][^\r\n\u2028\u2029]{0,200}$/gm
 
 export function chunkDocument(text: string, opts: ChunkOptions = {}): ChunkPlan[] {
   const target = Math.max(5000, opts.targetChars ?? DEFAULT_TARGET)
@@ -64,15 +66,32 @@ export function chunkDocument(text: string, opts: ChunkOptions = {}): ChunkPlan[
   return chunkByCharacters(text, target, overlap)
 }
 
-function findChapterBoundaries(text: string): Array<{ start: number; title: string }> {
+/** Recognized novel chapters follow headings, never the model processing budget.
+ * Every input character belongs to exactly one range; unstructured text retains the existing fallback.
+ */
+export function splitDocumentChapters(text: string): ChunkPlan[] {
+  if (!text) return []
+  const headings = findChapterBoundaries(text, NOVEL_CHAPTER_REGEX)
+  if (!headings.length) return chunkDocument(text, { targetChars: 20_000, overlapChars: 0 })
+  const starts = headings.map(heading => ({ ...heading }))
+  if (text.slice(0, starts[0].start).trim()) starts.unshift({ start: 0, title: '前言' })
+  else starts[0].start = 0
+  return starts.map((heading, index) => {
+    const endChar = starts[index + 1]?.start ?? text.length
+    return { index, startChar: heading.start, endChar, charCount: endChar - heading.start,
+      label: heading.title, text: text.slice(heading.start, endChar) }
+  })
+}
+
+function findChapterBoundaries(text: string, matcher = CHAPTER_REGEX): Array<{ start: number; title: string }> {
   const out: Array<{ start: number; title: string }> = []
   // 重置 lastIndex
-  CHAPTER_REGEX.lastIndex = 0
+  matcher.lastIndex = 0
   let m: RegExpExecArray | null
-  while ((m = CHAPTER_REGEX.exec(text)) !== null) {
+  while ((m = matcher.exec(text)) !== null) {
     out.push({ start: m.index, title: m[0].trim() })
     // 避免零宽无限循环
-    if (m.index === CHAPTER_REGEX.lastIndex) CHAPTER_REGEX.lastIndex++
+    if (m.index === matcher.lastIndex) matcher.lastIndex++
   }
   return out
 }

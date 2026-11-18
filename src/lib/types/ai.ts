@@ -28,11 +28,10 @@ export interface AIConfig {
   baseUrl: string
   temperature: number
   maxTokens: number
-  /**
-   * FB-8:用户手填的「上下文窗口大小」(token),用于本地/自定义模型(LM Studio/Ollama/中转/新模型)。
-   * 设了就以它为准,否则按内置预设、再否则 8K 兜底。0/undefined = 用预设。
-   */
+  /** @deprecated Read only for legacy import compatibility; automatic capability policy ignores it. */
   contextWindow?: number
+  /** Runtime-only, connection-bound capability decision; never a user setting. */
+  modelCapacity?: import('../ai/model-capacity').ModelCapacityV1
 }
 
 /**
@@ -160,7 +159,7 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
 
 /** 提供商预设 */
 export const PROVIDER_PRESETS: Record<string, Partial<AIConfig>> = {
-  codex: { baseUrl: '/storyforge/local-codex/v1', model: '', apiKey: '', contextWindow: 32_768, maxTokens: 8_192 },
+  codex: { baseUrl: '/storyforge/local-codex/v1', model: '', apiKey: '', maxTokens: 8_192 },
   deepseek: {
     baseUrl: 'https://api.deepseek.com/v1',
     model: 'deepseek-v4-flash',

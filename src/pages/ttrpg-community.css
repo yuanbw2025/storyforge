@@ -14,3 +14,26 @@
 .sf-community-embedded.sf-community-playing{margin:0}.sf-community-embedded .sf-community-table{padding:16px;max-width:none}.sf-community-embedded .sf-community-nav{padding:18px 22px;gap:20px;border-color:var(--border)}.sf-community-embedded .sf-community-nav a{color:var(--accent)}
 .sf-ttrpg{--ink:var(--text-primary);--muted:var(--text-muted);--gold:var(--accent);--line:var(--border);background:var(--bg-surface);border-radius:28px;box-shadow:none}.sf-ttrpg :is(h2,h3,h4,strong){color:var(--text-primary)}.sf-ttrpg :is(.sf-ttrpg-character,.sf-ttrpg-modes button,.sf-ttrpg-agreement,.sf-ttrpg-party,.sf-ttrpg-notebook,.sf-ttrpg-ruling){background:var(--bg-elevated);color:var(--text-primary);border-color:var(--border);border-radius:20px}.sf-ttrpg :is(.sf-ttrpg-character.selected,.sf-ttrpg-modes .selected){background:var(--bg-hover);border-color:var(--accent)}.sf-ttrpg :is(.sf-ttrpg-banner,.sf-ttrpg-toolbar,.sf-ttrpg-scene,.sf-ttrpg-progress,.sf-ttrpg-composer,.sf-ttrpg-transcript,.sf-ttrpg-story){background:var(--bg-surface);color:var(--text-primary);border-color:var(--border)}.sf-ttrpg :is(p,small,label){color:inherit}.sf-ttrpg :is(.sf-ttrpg-primary,.sf-ttrpg-send){background:var(--accent);color:white;border-color:var(--accent);border-radius:99px}.sf-ttrpg :is(textarea,select){color:var(--text-primary);background:var(--bg-elevated);border-color:var(--border);border-radius:16px}.sf-ttrpg :is(.sf-ttrpg-scene h3,.sf-ttrpg-goals li,.sf-ttrpg-private,.sf-ttrpg-meta,.sf-ttrpg-agreement label){color:var(--text-primary)}
 .sf-ttrpg .sf-ttrpg-private{background:var(--bg-elevated);border-color:var(--border);border-radius:18px}.sf-ttrpg .sf-ttrpg-private>button{color:var(--accent)}.sf-ttrpg .sf-ttrpg-primary:hover:not(:disabled){background:var(--accent-hover)}
+
+/* Compact catalog cards, including the author's embedded example library. */
+.sf-community-embedded{margin-top:14px;border-radius:16px}
+.sf-community-embedded .sf-community-main{padding:16px}
+.sf-community-embedded .sf-community-intro{max-width:none;margin-bottom:14px}
+.sf-community-embedded .sf-community-intro h2{font-size:24px;margin:0 0 8px}
+.sf-community-embedded .sf-community-intro p{max-width:none;margin:0}
+.sf-community-embedded .sf-community-game{grid-template-columns:minmax(160px,24%) minmax(0,1fr);border-radius:16px;margin-bottom:14px}
+.sf-community-embedded .sf-community-game>img{min-height:0;height:180px;object-fit:cover;border-radius:0}
+.sf-community-embedded .sf-community-game>div{padding:16px;min-width:0;overflow-wrap:anywhere}
+.sf-community-embedded .sf-community-game h2{font-size:24px;margin:6px 0}
+.sf-community-embedded .sf-community-game p{margin:8px 0}
+.sf-community-embedded .sf-community-details{margin:10px 0}
+.sf-community-embedded .sf-community-game button{width:auto;max-width:100%;border-radius:12px}
+.sf-community-embedded .sf-community-saves{margin-top:20px}
+.sf-community-embedded footer{padding:12px 0}
+@media(max-width:700px){
+  .sf-community-embedded .sf-community-main{padding:12px}
+  .sf-community-embedded .sf-community-game{grid-template-columns:minmax(0,1fr)}
+  .sf-community-embedded .sf-community-game>img{height:120px;width:100%}
+  .sf-community-embedded .sf-community-game>div{padding:12px}
+}
+.sf-community-embedded .sf-community-game:not(:has(>img)){grid-template-columns:minmax(0,1fr)}

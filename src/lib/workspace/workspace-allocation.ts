@@ -1,5 +1,5 @@
 /** Internal root allocation; authoring and verified installation are its only callers. */
-import { chunkDocument } from '../import/chunker'
+import { splitDocumentChapters } from '../import/chunker'
 import { db } from '../db/schema'
 import { generateWorkspaceUid } from '../memory/identity'
 import { generateWorkspaceScopeCode, generateWorldCode } from './identity'
@@ -160,7 +160,7 @@ export async function allocateWorkspace(
       await db.shortNovelProductions.add(buildShortNovelProductionRecordV1(scope, now))
     }
     if (importedNovelText) {
-      const chunks = chunkDocument(importedNovelText, { targetChars: 20_000, overlapChars: 0 })
+      const chunks = splitDocumentChapters(importedNovelText)
       for (let index = 0; index < chunks.length; index++) {
         // Use original offsets to retain paragraph separators and any preface exactly once.
         const content = importedNovelText.slice(index === 0 ? 0 : chunks[index].startChar, index + 1 < chunks.length ? chunks[index + 1].startChar : importedNovelText.length)

@@ -1,3 +1,4 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { readPendingDocumentImportV1, runSession, registerChunkTexts, clearChunkTexts, retryFailedChunks } from '../../src/lib/import/pipeline'
@@ -19,7 +20,7 @@ beforeEach(async () => {
   usePromptStore.setState({ loaded: false, templates: [] })
   await usePromptStore.getState().init()
   useAIConfigStore.setState({ config: {
-    provider: 'deepseek', model: 'deepseek-v4-flash', baseUrl: 'https://test.invalid/v1',
+    provider: 'deepseek', model: 'deepseek-v4-flash', baseUrl: 'https://api.deepseek.com/v1',
     apiKey: 'test-only-key', maxTokens: 4096, temperature: 0.7,
   }, taskRoutes: {} })
   const workspace = await createWorkspace({ name: '解析测试', genres: [], description: '', status: 'drafting', targetWordCount: 10000 }, { kind: 'novel', novelProfile: 'long' })
@@ -70,6 +71,7 @@ describe('Feedback #56: bounded, diagnosable import failures', () => {
     useAIConfigStore.setState({ config: { ...useAIConfigStore.getState().config, provider: 'custom', contextWindow: 131072 } })
     const fetch = vi.fn().mockImplementation(async () => completion('{"worldview":{}}'))
     vi.stubGlobal('fetch', fetch)
+    await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 32768)
     await runSession({ projectId, sessionId })
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(JSON.parse(fetch.mock.calls[0][1].body)).not.toHaveProperty('thinking')

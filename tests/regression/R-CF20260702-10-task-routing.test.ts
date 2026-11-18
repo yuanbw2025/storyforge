@@ -294,6 +294,7 @@ describe('R-CF20260702-10 · route storage and client boundary', () => {
       contextWindow: 131_072,
     })
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'GET') return Response.json({ models: [{ model: 'qwen-local', context_length: 100000 }] })
       expect(url).toBe('http://localhost:11434/v1/chat/completions')
       const body = JSON.parse(String(init?.body))
       expect(body.model).toBe('qwen-local')
@@ -331,31 +332,35 @@ describe('R-CF20260702-10 · route storage and client boundary', () => {
         outputTokens: 7,
       })
     })
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
-  it('无路由时输出预留真实参与窗口检查；小窗口拒绝发送，大窗口发送完整请求', async () => {
+  it('旧手填窗口不控制发送；实际服务小窗口拒绝裁剪，刷新后大窗口可发送完整输入', async () => {
     const { useAIConfigStore } = await import('../../src/stores/ai-config')
+    const { invalidateModelCapacityV1 } = await import('../../src/lib/ai/model-capacity')
     const config: AIConfig = {
       ...globalConfig, provider: 'ollama', apiKey: '', model: 'isolated-budget-test',
-      baseUrl: 'http://localhost:11434/v1', maxTokens: 0, contextWindow: 8_000,
+      baseUrl: 'http://localhost:11434/v1', maxTokens: 0, contextWindow: 2000000,
     }
     useAIConfigStore.setState({ config, presets: [], taskRoutes: {} })
+    let window = 4000, sends = 0
+    const messages = [{ role: 'user' as const, content: '作者要求：保留完整输入。'.repeat(1000) }]
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'GET') return Response.json({models:[{model:config.model,context_length:window}]})
+      sends++
       const body = JSON.parse(String(init?.body))
-      expect(body.max_tokens).toBe(16_000)
-      expect(body.messages).toEqual([{ role: 'user', content: '作者要求：保留完整输入。' }])
-      return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 })
+      expect(body.max_tokens).toBe(16000)
+      expect(body.messages).toEqual(messages)
+      return Response.json({choices:[{message:{content:'ok'}}]})
     })
     vi.stubGlobal('fetch', fetchMock)
     const { chat } = await import('../../src/lib/ai/client')
-    const messages = [{ role: 'user' as const, content: '作者要求：保留完整输入。' }]
-    const meta = { category: 'chapter.content', configOverrides: { maxTokens: 16_000 }, contextOverflowPolicy: 'reject' as const }
-
+    const meta = { category: 'chapter.content', configOverrides: { maxTokens: 16000 }, contextOverflowPolicy: 'reject' as const }
     await expect(chat(messages, config, meta)).rejects.toThrow('上下文窗口不足')
-    expect(fetchMock).not.toHaveBeenCalled()
-    await expect(chat(messages, { ...config, contextWindow: 100_000 }, meta)).resolves.toBe('ok')
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(sends).toBe(0)
+    window = 100000; invalidateModelCapacityV1(config)
+    await expect(chat(messages, { ...config, contextWindow: 100 }, meta)).resolves.toBe('ok')
+    expect(sends).toBe(1)
   })
 
   it('routes through an inactive session-only preset without leaking its Key to localStorage', async () => {

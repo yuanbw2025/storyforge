@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
@@ -23,7 +25,10 @@ async function prepare(f: Awaited<ReturnType<typeof fixture>>, operation: StoryA
   return { p, runAI }
 }
 describe.sequential('STAB · rich manual arcs remain usable by the shared transform workflow', () => {
-  beforeEach(async () => { await db.delete(); await db.open(); useAIConfigStore.setState({ config: { ...config.config, provider: 'ollama', model: 'rich-arc-test', baseUrl: 'http://localhost:11434', contextWindow: 128000 }, presets: [], taskRoutes: {} }) })
+  beforeEach(async () => { await db.delete(); await db.open(); useAIConfigStore.setState({ config: { ...config.config, provider: 'ollama', model: 'rich-arc-test', baseUrl: 'http://localhost:11434', contextWindow: 128000 }, presets: [], taskRoutes: {} })
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 128000)
+  })
   afterEach(() => { useAIConfigStore.setState(config, true); db.close() })
   it.each(['expand', 'rewrite', 'polish', 'replan'] as const)('%s: one existing stage with seven events survives candidate, restore, adoption and readback', async operation => {
     const f = await fixture(); const { p, runAI } = await prepare(f, operation)

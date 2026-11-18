@@ -203,15 +203,15 @@ jobs:
             git push origin "${RELEASE_TAG}"
           fi
           cd release-assets
-          sha256sum *.zip *.exe *.dmg *.apk *.yml *.blockmap > SHA256SUMS.txt
+          sha256sum *.zip *.exe *.dmg *.apk *.pkg.tar.zst *.yml *.blockmap > SHA256SUMS.txt
           sha256sum --check SHA256SUMS.txt
           cd ..
           notes=".github/release-notes/${RELEASE_TAG}.md"
           test -f "$notes"
           if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release create "${RELEASE_TAG}" --draft --verify-tag --title "StoryForge ${RELEASE_TAG} · Windows / macOS / Android" --notes-file "$notes"
+            gh release create "${RELEASE_TAG}" --draft --verify-tag --title "StoryForge ${RELEASE_TAG} · Windows / macOS / Android / Arch Linux" --notes-file "$notes"
           fi
-          gh release upload "${RELEASE_TAG}" release-assets/*.zip release-assets/*.exe release-assets/*.dmg release-assets/*.apk release-assets/*.yml release-assets/*.blockmap release-assets/SHA256SUMS.txt --clobber
+          gh release upload "${RELEASE_TAG}" release-assets/*.zip release-assets/*.exe release-assets/*.dmg release-assets/*.apk release-assets/*.pkg.tar.zst release-assets/*.yml release-assets/*.blockmap release-assets/SHA256SUMS.txt --clobber
           for asset in upgrade-test-old.apk upgrade-test-new.apk upgrade-test-runner.apk; do
             gh release delete-asset "${RELEASE_TAG}" "$asset" --yes 2>/dev/null || true
           done

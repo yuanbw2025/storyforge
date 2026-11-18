@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import type { AIConfig, AgentRunRecord, Chapter, ChatMessage, ScreenplayTargetSpecV1, ShortNovelBriefV1, WorkspaceScope } from '../../src/lib/types'
@@ -27,7 +29,7 @@ interface Fixture {
   close?: (runId: number) => Promise<unknown>
 }
 const kinds: Kind[] = ['comic', 'motion-drama', 'screenplay', 'short-novel']
-const aiConfig: AIConfig = { provider: 'custom', apiKey: '', model: 'isolated-model', baseUrl: 'http://127.0.0.1:9/v1', temperature: 0, maxTokens: 1_024, contextWindow: 128_000 }
+const aiConfig: AIConfig = { provider: 'custom', apiKey: '', model: 'isolated-model', baseUrl: 'http://127.0.0.1:9/v1', temperature: 0, maxTokens: 1_024 }
 const screenplayTarget: ScreenplayTargetSpecV1 = {
   format: 'film', language: 'zh-CN', episodeCount: null, targetMinutesPerEpisode: 2, rating: 'PG-13', dialogueDensity: 'balanced', productionScale: 'contained', preserveVoiceOver: false,
   titlePage: { creditLine: '改编', authorDisplayName: '002 synthetic', contactText: '', copyrightNotice: 'Synthetic only', draftLabel: '002 raw evidence' }, exportDefaults: ['fountain', 'fdx', 'pdf'],
@@ -94,6 +96,8 @@ function containsCause(value: unknown, target: unknown): boolean {
 let expectedSyntheticPosts = 0
 beforeEach(async () => {
   await db.delete(); await db.open(); expectedSyntheticPosts = 0
+  resetModelCapacityForTestsV1()
+  await seedModelAllocationFixtureV1(aiConfig, 32_768)
   vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => { throw Error('No real model or network is authorized') }))
 })
 afterEach(async () => {

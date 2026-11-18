@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 
+/** @param {{githubToken:string,uploadDir:string,publicUploadPrefix?:string,githubFetch?:typeof fetch,receiptDir?:string}} options */
 export function createFeedbackApp({ githubToken, uploadDir, publicUploadPrefix, githubFetch = fetch, receiptDir = path.join(uploadDir, '../receipts') }) {
 const app = express()
 const GITHUB_TOKEN = githubToken
@@ -19,6 +20,7 @@ const MAX_FILES = 3
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true })
 
+/** @type {Record<string,{type:string,mimes:string[]}>} */
 const fileRules = {
   '.png':  { type: 'image', mimes: ['image/png'] },
   '.jpg':  { type: 'image', mimes: ['image/jpeg'] },
@@ -36,6 +38,7 @@ const fileRules = {
   '.zip':  { type: 'other', mimes: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'] }
 }
 
+/** @param {Express.Multer.File} file */
 function getRule(file) {
   const ext = path.extname(file.originalname || '').toLowerCase()
   const rule = fileRules[ext]
@@ -46,8 +49,12 @@ function getRule(file) {
   return { ...rule, ext }
 }
 
+/** @param {Express.Request['files']} files */
+const filesOf = files => Array.isArray(files) ? files : Object.values(files ?? {}).flat()
+
+/** @param {Express.Request['files']} [files] */
 function removeFiles(files = []) {
-  for (const file of files) {
+  for (const file of filesOf(files)) {
     try {
       if (file?.path && fs.existsSync(file.path)) {
         fs.unlinkSync(file.path)
@@ -67,7 +74,7 @@ const storage = multer.diskStorage({
     const rule = getRule(file)
 
     if (!rule) {
-      return cb(new Error('不支持的附件类型'))
+      return cb(new Error('不支持的附件类型'), '')
     }
 
     cb(
@@ -94,9 +101,11 @@ const upload = multer({
   }
 })
 
+/** @type {Map<string,number[]>} */
 const rateMap = new Map()
 
-function rateLimit(req, res, next) {
+/** @type {import('express').RequestHandler} */
+const rateLimit = (req, res, next) => {
   const forwarded = req.headers['x-forwarded-for']
 
   const ip = req.method + ':' + String(
@@ -144,7 +153,8 @@ setInterval(() => {
   }
 }, 30 * 60 * 1000).unref()
 
-function originCheck(req, res, next) {
+/** @type {import('express').RequestHandler} */
+const originCheck = (req, res, next) => {
   const origin = req.headers.origin
 
   if (
@@ -160,6 +170,7 @@ function originCheck(req, res, next) {
   next()
 }
 
+/** @param {unknown} value */
 function clean(value, max = 10000) {
   return String(value ?? '')
     .replace(/\0/g, '')
@@ -167,6 +178,7 @@ function clean(value, max = 10000) {
     .slice(0, max)
 }
 
+/** @param {string} type */
 function typeConfig(type) {
   if (type === 'bug') {
     return {
@@ -195,10 +207,11 @@ function typeConfig(type) {
   return null
 }
 
+/** @param {Express.Request['files']} [files] */
 function validateFiles(files = []) {
   let total = 0
 
-  for (const file of files) {
+  for (const file of filesOf(files)) {
     const rule = getRule(file)
 
     if (!rule) {
@@ -235,12 +248,15 @@ app.get('/health', (_req, res) => {
 
 const headers = { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'StoryForge-Feedback' }
 const base = `https://api.github.com/repos/${GITHUB_REPO}`
+/** @param {unknown} value */
 const issueNumber = value => /^[1-9][0-9]{0,8}$/.test(String(value ?? '')) ? Number(value) : null
+/** @param {{number:number,title:string,state:string,locked:boolean,html_url:string,body:string}} row */
 const publicIssue = row => ({ number: row.number, title: row.title, state: row.state, locked: row.locked, url: row.html_url, body: row.body })
+/** @param {string} url @param {RequestInit} [options] */
 async function github(url, options = {}) {
   const response = await githubFetch(url, { ...options, headers: { ...headers, ...options.headers }, signal: AbortSignal.timeout(20000), redirect: 'error' })
   const data = await response.json()
-  if (!response.ok) { const error = new Error('GitHub unavailable'); error.status = response.status; throw error }
+  if (!response.ok) { const error = Object.assign(new Error('GitHub unavailable'), { status: response.status }); throw error }
   return data
 }
 app.use(express.json({ limit: '64kb' }))
@@ -252,7 +268,7 @@ app.get('/feedback', originCheck, rateLimit, async (req, res) => {
     // Quote each word: input cannot override the fixed repository or is:issue.
     const words = search.split(/\s+/).filter(Boolean).map(word => '"' + word.replace(/["\\]/g, '') + '"').join(' ')
     const data = await github('https://api.github.com/search/issues?' + new URLSearchParams({ q: `repo:${GITHUB_REPO} is:issue ${words}`, per_page: '10', page: String(page), sort: 'updated' }))
-    res.json({ ok: true, issues: data.items.filter(x => !x.pull_request && x.repository_url === base).map(publicIssue), total: data.total_count, page })
+    res.json({ ok: true, issues: data.items.filter(/** @param {{pull_request?:unknown,repository_url:string}} x */ x => !x.pull_request && x.repository_url === base).map(publicIssue), total: data.total_count, page })
   } catch { res.status(502).json({ ok: false, error: '问题查询暂时失败，请保留草稿稍后查询。' }) }
 })
 app.get('/feedback/:number', originCheck, rateLimit, async (req, res) => {
@@ -264,8 +280,8 @@ app.get('/feedback/:number', originCheck, rateLimit, async (req, res) => {
     const page = issueNumber(req.query.page ?? '1')
     if (!page || page > 100) return res.status(400).json({ ok: false, error: 'Invalid page' })
     const comments = await github(`${base}/issues/${number}/comments?per_page=20&page=${page}`)
-    res.json({ ok: true, issue: publicIssue(row), comments: comments.map(x => ({ body: x.body, url: x.html_url, createdAt: x.created_at, author: x.user?.login })), page, hasMore: comments.length === 20 })
-  } catch (e) { res.status(e.status === 404 ? 404 : 502).json({ ok: false, error: '无法读取工单，请核对编号。' }) }
+    res.json({ ok: true, issue: publicIssue(row), comments: comments.map(/** @param {{body:string,html_url:string,created_at:string,user?:{login:string}}} x */ x => ({ body: x.body, url: x.html_url, createdAt: x.created_at, author: x.user?.login })), page, hasMore: comments.length === 20 })
+  } catch (e) { res.status(e instanceof Error && 'status' in e && e.status === 404 ? 404 : 502).json({ ok: false, error: '无法读取工单，请核对编号。' }) }
 })
 
 app.post(
@@ -376,12 +392,12 @@ app.post(
         body += `\n## ${heading}\n\n${value}\n`
       }
 
-      if (req.files?.length) {
+      if (filesOf(req.files).length) {
         body +=
           '\n## 附件\n\n' +
           '> 附件由 StoryForge 官方反馈系统临时保存，提交约 10 天后链接可能失效。\n\n'
 
-        for (const file of req.files) {
+        for (const file of filesOf(req.files)) {
           const url =
             `${PUBLIC_UPLOAD_PREFIX}/${encodeURIComponent(file.filename)}`
 
@@ -400,9 +416,9 @@ app.post(
       if (req.body.requestId) {
         if (!/^[0-9a-f-]{36}$/i.test(req.body.requestId)) { removeFiles(req.files); return res.status(400).json({ ok: false, error: 'Invalid requestId' }) }
         receiptPath = path.join(receiptDir, req.body.requestId + '.json')
-        const { requestId: _, ...input } = req.body
+        const input = { ...req.body }; delete input.requestId
         const digest = crypto.createHash('sha256').update(JSON.stringify(Object.entries(input).sort()))
-        for (const file of req.files || []) { digest.update(JSON.stringify([file.originalname, file.mimetype, file.size])); for await (const chunk of fs.createReadStream(file.path)) digest.update(chunk) }
+        for (const file of filesOf(req.files)) { digest.update(JSON.stringify([file.originalname, file.mimetype, file.size])); for await (const chunk of fs.createReadStream(file.path)) digest.update(chunk) }
         const hash = digest.digest('hex')
         if (fs.existsSync(receiptPath)) {
           const prior = JSON.parse(fs.readFileSync(receiptPath, 'utf8')); removeFiles(req.files)
@@ -453,7 +469,7 @@ app.post(
       }
       if (receiptPath) { const prior = JSON.parse(fs.readFileSync(receiptPath, 'utf8')); const temporary = receiptPath + '.tmp'; fs.writeFileSync(temporary, JSON.stringify({ hash: prior.hash, result }), { mode: 0o600 }); fs.renameSync(temporary, receiptPath) }
       res.json(result)
-    } catch (error) {
+    } catch {
       console.error('feedback request failed')
 
       if (!dispatched) removeFiles(req.files)
@@ -466,7 +482,9 @@ app.post(
   }
 )
 
-app.use((error, req, res, _next) => {
+/** @type {import('express').ErrorRequestHandler} */
+const handleError = (error, req, res, next) => {
+  void next // Express identifies error middleware by its four parameters.
   console.error('feedback request failed')
 
   removeFiles(req.files)
@@ -489,8 +507,8 @@ app.use((error, req, res, _next) => {
     ok: false,
     error: error?.message || '上传失败'
   })
-})
-
+}
+app.use(handleError)
 
 return app
 }

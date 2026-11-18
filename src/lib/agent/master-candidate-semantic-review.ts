@@ -511,7 +511,7 @@ export async function runMasterCandidateSemanticReviewV1(input: {
     scope: input.scope,
     worldGroupId: input.worldGroupId,
     sourceKeys,
-    provider: input.reviewerConfig.provider,
+    modelConfig: input.reviewerConfig, provider: input.reviewerConfig.provider,
     model: input.reviewerConfig.model,
     inputBudgetMaxTokens: policy.maxInputTokens,
     sourceBudgetScale: policy.sourceBudgetScale,

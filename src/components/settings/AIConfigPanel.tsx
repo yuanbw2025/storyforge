@@ -1,8 +1,10 @@
+import { invalidateModelCapacityV1 } from '../../lib/ai/model-capacity'
+import './ai-connection-settings.css'
 import { IS_SHOWCASE } from '../../lib/showcase/policy'
 import ShowcaseNotice from '../showcase/ShowcaseNotice'
 import CodexConnectionCard from './CodexConnectionCard'
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
-import { Eye, EyeOff, CheckCircle, RotateCcw, RefreshCw } from 'lucide-react'
+import { Eye, EyeOff, RefreshCw } from 'lucide-react'
 import { hasUnmatchedSessionCredentialV1, useAIConfigStore, type TestResult } from '../../stores/ai-config'
 import EmbeddingConfigCard from './EmbeddingConfigCard'
 import type { AIConfig, AIProvider } from '../../lib/types'
@@ -11,7 +13,6 @@ import { allowsSamplingTemperature, getModelRetirement } from '../../lib/ai/prov
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { getLogs, subscribeLogs, clearLogs } from '../../lib/ai/logger'
 import { useDialog } from '../shared/Dialog'
-import { parseContextWindowInput } from '../../lib/ai/context-window-input'
 import { fetchOpenAIModels } from '../../lib/ai/model-list'
 import { normalizeOpenAIBaseUrl } from '../../lib/ai/openai-endpoint'
 import { AI_PROXY_ENDPOINTS, hasLocalProviderProxy } from '../../lib/ai/proxy-endpoints'
@@ -76,12 +77,9 @@ function AIConfigPanelFull() {
   const [showLogs, setShowLogs] = useState(false)
   const [savingPreset, setSavingPreset] = useState(false)
   const [presetName, setPresetName] = useState('')
-  const [contextWindowDraft, setContextWindowDraft] = useState(() => config.contextWindow ? String(config.contextWindow) : '')
-  const [contextWindowError, setContextWindowError] = useState('')
   const [fetchedModels, setFetchedModels] = useState<string[]>([])
   const [refreshingModels, setRefreshingModels] = useState(false)
   const [modelListError, setModelListError] = useState('')
-  const submittedContextWindowRef = useRef(config.contextWindow)
   const modelListSession = useRef<{ active: boolean; generation: number; resultOwner: ModelListRequest | null }>({
     active: true, generation: 0, resultOwner: null,
   }).current
@@ -104,27 +102,6 @@ function AIConfigPanelFull() {
   const supportsTemperature = allowsSamplingTemperature(config)
   const editingPreset = editingPresetId ? presets.find(p => p.id === editingPresetId) : null
 
-  useEffect(() => {
-    if (config.contextWindow === submittedContextWindowRef.current) return
-    submittedContextWindowRef.current = config.contextWindow
-    setContextWindowDraft(config.contextWindow ? String(config.contextWindow) : '')
-    setContextWindowError('')
-  }, [config.contextWindow])
-
-  const handleContextWindowChange = (raw: string) => {
-    setContextWindowDraft(raw)
-    const parsed = parseContextWindowInput(raw)
-    if (parsed.kind === 'invalid') {
-      setContextWindowError(parsed.message)
-      return
-    }
-
-    const next = parsed.kind === 'valid' ? parsed.value : undefined
-    setContextWindowError('')
-    submittedContextWindowRef.current = next
-    setConfig({ contextWindow: next })
-  }
-
   const handleRefreshModels = async () => {
     if (!modelListSession.active) return
     const current = useAIConfigStore.getState().config
@@ -136,6 +113,7 @@ function AIConfigPanelFull() {
     try {
       const normalized = normalizeOpenAIBaseUrl(current.baseUrl)
       if (normalized.changed) setConfig({ baseUrl: normalized.baseUrl })
+      invalidateModelCapacityV1(current)
       const models = await fetchOpenAIModels({
         baseUrl: request.baseUrl,
         apiKey: request.apiKey,
@@ -213,14 +191,13 @@ function AIConfigPanelFull() {
   }, [modelListSession])
 
   return (
-    <div className="w-full min-w-0">
-      <h2 className="text-xl font-bold text-text-primary mb-6">设置</h2>
-      <div className="mb-8"><ThemeSelector /></div>
+    <div className="ai-config-panel w-full min-w-0">
+      <div className="mb-4"><ThemeSelector /></div>
 
       {/* AI 配置 */}
       <div className="bg-bg-surface border border-border rounded-xl p-5 mb-6">
         <h3 className="text-base font-semibold text-text-primary mb-4">AI 模型配置</h3>
-        <p className="text-[11px] text-text-muted mb-4 rounded-lg border border-border bg-bg-base px-3 py-2">
+        <p className="text-xs text-text-muted mb-4 rounded-lg border border-border bg-bg-base px-3 py-2">
           API Key 默认仅保存在本次浏览器会话；勾选“记住在本机”才会写入 localStorage。发起 AI 生成、测试连接或使用自定义 baseUrl 时，相关提示词和上下文会发送到你配置的模型服务。
         </p>
 
@@ -252,10 +229,11 @@ function AIConfigPanelFull() {
           onSetCreativeQualityMode={setCreativeQualityMode}
         />
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-text-secondary mb-1.5">提供商</label>
+        <div className="ai-connection-settings">
+          <div className={`ai-provider-field ${config.provider === 'codex' ? 'ai-connection-wide' : ''}`}>
+            <label className="ai-connection-heading block text-sm text-text-secondary mb-1.5">提供商</label>
             <select
+              aria-label="提供商"
               value={config.provider}
               onChange={(e) => switchProvider(e.target.value as AIProvider)}
               className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary focus:outline-none focus:border-accent transition-colors"
@@ -275,8 +253,8 @@ function AIConfigPanelFull() {
           </div>
 
           {config.provider === 'codex' ? <CodexConnectionCard /> : <>
-          <div>
-            <label className="block text-sm text-text-secondary mb-1.5">API Key</label>
+          <div className="ai-key-field">
+            <label className="ai-connection-heading block text-sm text-text-secondary mb-1.5">API Key</label>
             <div className="relative">
               <input
                 type={showKey ? 'text' : 'password'}
@@ -295,7 +273,7 @@ function AIConfigPanelFull() {
             {hasUnmatchedSessionCredentialV1('chat') && (
               <p className="mt-2 text-xs text-text-secondary" role="status">临时 API Key 未能与当前配置匹配。请确认服务地址后重新填写；使用预设时，再保存修改到该预设。</p>
             )}
-            <label className="mt-2 flex items-start gap-2 text-[11px] text-text-secondary cursor-pointer">
+            <label className="mt-2 flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
               <input
                 type="checkbox"
                 checked={rememberApiKey}
@@ -308,12 +286,14 @@ function AIConfigPanelFull() {
             </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="ai-connection-grid">
             <div>
-              <label className="block text-sm text-text-secondary mb-1.5">Base URL</label>
+              <label className="ai-connection-heading block text-sm text-text-secondary mb-1.5">Base URL</label>
               <input
                 type="text"
                 value={config.baseUrl}
+                title={config.baseUrl}
+                aria-label="Base URL"
                 onChange={(e) => setConfig({ baseUrl: e.target.value })}
                 className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
               />
@@ -334,7 +314,7 @@ function AIConfigPanelFull() {
                 </div>
               )}
               {['custom', 'ollama'].includes(config.provider) && (
-                <p className="mt-1 text-[11px] text-text-muted">
+                <p className="mt-1 text-xs text-text-muted">
                   本地模型请选择 OpenAI 兼容接口，Base URL 填到 /v1；Ollama 常用 :11434/v1，LM Studio 常用 :1234/v1。不要填 /v1/models 或 /chat/completions，测试时会自动修正常见误填。
                 </p>
               )}
@@ -369,7 +349,7 @@ function AIConfigPanelFull() {
               })()}
             </div>
             <div>
-              <div className="mb-1.5 flex items-center justify-between gap-2">
+              <div className="ai-connection-heading mb-1.5 flex items-center justify-between gap-2">
                 <label className="block text-sm text-text-secondary">模型</label>
                 {['custom', 'ollama', 'nvidia', 'deepseek', 'gemini', 'agnes'].includes(config.provider) && (
                   <button
@@ -407,6 +387,7 @@ function AIConfigPanelFull() {
                   <select
                     value={config.model}
                     aria-label="模型"
+                    title={config.model}
                     onChange={(e) => setConfig({ model: e.target.value })}
                     className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
                   >
@@ -431,6 +412,8 @@ function AIConfigPanelFull() {
                     type="text"
                     value={config.model}
                     onChange={(e) => setConfig({ model: e.target.value })}
+                    aria-label="手动输入模型名"
+                    title={config.model}
                     placeholder="或手动输入模型名（列表中没有的型号）"
                     className="mt-1.5 w-full px-3 py-1.5 bg-bg-base border border-border rounded-lg text-text-primary text-xs focus:outline-none focus:border-accent transition-colors"
                   />
@@ -440,11 +423,13 @@ function AIConfigPanelFull() {
                   type="text"
                   value={config.model}
                   onChange={(e) => setConfig({ model: e.target.value })}
+                  aria-label="手动输入模型名"
+                  title={config.model}
                   placeholder="手动输入模型名"
                   className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
                 />
               )}
-              {modelListError && <p className="mt-1 text-[11px] text-amber-400">{modelListError}</p>}
+              {modelListError && <p className="mt-1 text-xs text-amber-400">{modelListError}</p>}
               {modelRetirement && (
                 <p role="alert" className="mt-2 rounded border border-border bg-bg-elevated p-2 text-xs text-text-secondary">
                   该型号在官方 API 已于 {modelRetirement.retiredOn} 下线。当前配置已保留，请手动选择可用型号后测试连接。{' '}
@@ -452,12 +437,12 @@ function AIConfigPanelFull() {
                 </p>
               )}
               {config.provider === 'ollama' && (
-                <p className="mt-1 text-[11px] text-text-muted">未安装的模型请先在 Ollama 中拉取，完成后回到这里刷新。</p>
+                <p className="mt-1 text-xs text-text-muted">未安装的模型请先在 Ollama 中拉取，完成后回到这里刷新。</p>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="ai-connection-grid">
             <div>
               <label className="block text-sm text-text-secondary mb-1.5">
                 Temperature: {config.temperature}
@@ -514,50 +499,6 @@ function AIConfigPanelFull() {
           </div>
 
           </>}
-
-          {/* FB-8: 上下文窗口(高级·可选) — 本地/自定义模型按实际填写,修"误报超出窗口" */}
-          <div className="mb-4">
-            <label className="block text-sm text-text-secondary mb-1.5">
-              上下文窗口 <span className="text-text-muted font-normal">(高级 · 可选)</span>
-              {config.contextWindow
-                ? <span className="text-accent ml-1">{config.contextWindow.toLocaleString()} token</span>
-                : <span className="text-text-muted ml-1">按模型预设</span>}
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={contextWindowDraft}
-                onChange={(e) => handleContextWindowChange(e.target.value)}
-                aria-invalid={Boolean(contextWindowError)}
-                placeholder="本地/自定义模型请按实际填写，如 131072；留空 = 用内置预设"
-                className={`min-w-0 flex-1 px-3 py-2 bg-bg-base border rounded text-sm text-text-primary focus:outline-none ${contextWindowError ? 'border-red-400 focus:border-red-400' : 'border-border focus:border-accent'}`}
-              />
-              <button
-                type="button"
-                onClick={() => handleContextWindowChange('')}
-                disabled={!contextWindowDraft && !contextWindowError}
-                title="重置为模型预设"
-                aria-label="重置上下文窗口为模型预设"
-                className="p-2 rounded border border-border text-text-muted hover:text-accent hover:border-accent/50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-            </div>
-            {contextWindowError ? (
-              <p className="mt-1 text-[11px] text-red-400">{contextWindowError}；已保存值未改变。</p>
-            ) : (
-              <p className="mt-1 flex items-center gap-1 text-[11px] text-green-400/80">
-                <CheckCircle className="w-3 h-3" />
-                {editingPreset && activePresetId === null
-                  ? `已自动保存到当前配置，尚未写回「${editingPreset.name}」`
-                  : '已自动保存到当前配置'}
-              </p>
-            )}
-            <p className="text-[11px] text-text-muted mt-1">
-              识别不到的模型默认按 8K 计算,会误报「上下文超出窗口」。本地模型(LM Studio / Ollama)请在此填真实窗口,如 128000 / 262144。
-            </p>
-          </div>
 
           {/* 最小连接探活；不代表长输出或批量评测额度。 */}
           <AIConnectionTestSection

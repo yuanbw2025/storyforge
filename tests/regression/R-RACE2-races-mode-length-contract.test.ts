@@ -47,14 +47,14 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
   })
 
   it('“不限”只采用模型有限上限；default/custom 与四类 cap 可复算', () => {
-    const agnes = { ...useAIConfigStore.getState().config, provider: 'agnes' as const, model: 'agnes-2.5-flash', maxTokens: 0 }
+    const agnes = { ...useAIConfigStore.getState().config, provider: 'agnes' as const, model: 'agnes-2.5-flash', baseUrl: 'https://apihub.agnes-ai.com/v1', maxTokens: 0 }
     const defaultBudget = resolveWorldviewFieldOutputBudgetV1({
       config: agnes, targetField: 'races', skillMaxOutputTokens: 6_000,
     })
     expect(defaultBudget).toMatchObject({
       source: 'default', requestedTokens: 6_000, effectiveMaxTokens: 6_000,
-      effectiveCapTokens: 6_000, modelCapTokens: 65_536,
-      authorConfigCapTokens: 65_536, longOutputMode: 'disabled',
+      effectiveCapTokens: 6_000, modelCapTokens: 65_500,
+      authorConfigCapTokens: 65_500, longOutputMode: 'disabled',
     })
     expect(parseWorldviewFieldOutputBudgetV1(defaultBudget)).toEqual(defaultBudget)
 
@@ -67,7 +67,7 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
       config: { ...agnes, provider: 'kimi', model: 'moonshot-v1-8k' },
       targetField: 'races', skillMaxOutputTokens: 6_000,
     })
-    expect(kimi).toMatchObject({ effectiveCapTokens: 4_096, effectiveMaxTokens: 4_096 })
+    expect(kimi).toMatchObject({ effectiveCapTokens: 4_000, effectiveMaxTokens: 4_000 })
     expect(() => resolveWorldviewFieldOutputBudgetV1({
       config: agnes, targetField: 'races', skillMaxOutputTokens: 6_000, requestedMaxTokens: 6_001,
     })).toThrow('LONGOUT-1 尚未启用')
@@ -81,6 +81,7 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
       ...useAIConfigStore.getState().config,
       provider: 'agnes' as const,
       model: 'agnes-2.5-flash',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
       maxTokens: 0,
     }
     const empty = await prepareWorldviewFieldCopilot({

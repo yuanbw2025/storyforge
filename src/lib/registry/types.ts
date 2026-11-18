@@ -686,6 +686,8 @@ export interface AssembleContextInput {
   chapterId?: number | null
   currentChapterOrder?: number
   sourceKeys?: string[]
+  /** Final routed connection; capacity snapshots stay bound to this exact request. */
+  modelConfig?: import('../types/ai').AIConfig | null
   provider?: AIProvider
   model?: string
   /** Test/override hook. When set, this is the real input budget used for trimming. */
