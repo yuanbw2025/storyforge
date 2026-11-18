@@ -59,7 +59,7 @@ it("persists an independent pre-world draft, rejects stale/cross-work writes and
   expect(
     (await db.worldReleases.get(restored!.worldReleaseId!))?.releaseUid,
   ).toBe(original?.releaseUid);
-  await deleteWork(copy, restored!.workId);
+  await deleteWork(restored!.workId);
   expect(
     await db.ttrpgAuthoringDrafts.where("projectId").equals(copy).count(),
   ).toBe(0);

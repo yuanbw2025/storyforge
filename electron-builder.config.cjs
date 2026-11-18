@@ -12,6 +12,7 @@ module.exports = {
   afterExtract: preserveDesktopNotices,
   win: { target: [{ target: 'nsis', arch: ['x64'] }], artifactName: 'StoryForge-${version}-windows-x64-setup.${ext}', icon: 'public/icon-512.png' },
   mac: { target: ['dmg'], category: 'public.app-category.productivity', identity: '-', notarize: false, artifactName: 'StoryForge-${version}-macos-${arch}.${ext}', icon: 'public/icon-512.png' },
+  linux: { target: ['dir'], executableName: 'storyforge', category: 'Office', icon: 'public/icon-512.png' },
   nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true, deleteAppDataOnUninstall: false },
   publish: [{ provider: 'github', owner: 'yuanbw2025', repo: 'storyforge', releaseType: 'release' }],
 }

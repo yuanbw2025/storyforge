@@ -150,7 +150,7 @@ describe('AVG-05A explicit author assembly and portable workspace', () => {
     expect((await readAvgDraftV1(scope)).editorJson).toBe((await readAvgDraftV1(s.scope)).editorJson)
     expect(parseAvgAuthorWorkspaceV1((await readAvgDraftV1(scope)).editorJson).mediaBatch).toEqual(workspace.mediaBatch)
     expect(build.id).not.toBe(s.buildId)
-    await deleteWork(projectId, scope.workId)
+    await deleteWork(scope.workId)
     expect(await db.avgAuthoringDrafts.where('projectId').equals(projectId).count()).toBe(0)
     expect((await db.productBuildArtifacts.get(candidate.id!))!.status).toBe('accepted')
   })

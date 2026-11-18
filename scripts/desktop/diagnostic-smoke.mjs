@@ -13,15 +13,37 @@ export async function verifyDiagnosticContext(app, page, launch) {
     if (!client?.diagnosticContext) throw new Error('Missing native diagnostic context')
     await client.diagnosticContext({enabled:true,trail:[{at:new Date().toISOString(),area:'longform',action:'save',text:'PRIVATE-SYNTHETIC'}]})
   })
-  const observed = app.evaluate(({BrowserWindow}) => new Promise(resolve => {
-    BrowserWindow.getAllWindows()[0].webContents.once('render-process-gone', (_event, details) => resolve({reason:details.reason,exitCode:details.exitCode}))
-  }))
-  const session = await page.context().newCDPSession(page)
-  // CDP Page.crash exercises an actual renderer crash. forcefullyCrashRenderer
-  // can report `killed` on macOS, which must not be mislabeled as a crash.
-  void session.send('Page.crash').catch(() => {})
-  const gone = await observed
-  assert.equal(gone.reason, 'crashed')
+  // Await the handle so the main-process listener is installed before the CDP
+  // command can crash the renderer. The event may arrive before we read result.
+  const observed = await app.evaluateHandle(({BrowserWindow}) => {
+    /** @type {Promise<{reason:string,exitCode:number}>} */
+    const result = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Renderer crash event was not observed within 60 seconds')), 60_000)
+      BrowserWindow.getAllWindows()[0].webContents.once('render-process-gone', (_event, details) => {
+        clearTimeout(timeout)
+        resolve({reason:details.reason,exitCode:details.exitCode})
+      })
+    })
+    return {result}
+  })
+  if (process.platform === 'linux') {
+    // Page.crash can leave the sandboxed Arch renderer alive without an exit
+    // event. Send a fatal signal to this isolated test window's exact OS PID.
+    // SIGABRT exercises a fatal exit; SIGKILL/forcefullyCrashRenderer may instead
+    // report `killed`, which must not be mislabeled or accepted as a crash.
+    const pid = await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].webContents.getOSProcessId())
+    assert.ok(Number.isInteger(pid) && pid > 1 && pid !== app.process().pid && pid !== process.pid)
+    process.kill(pid, 'SIGABRT')
+  } else {
+    const session = await page.context().newCDPSession(page)
+    void session.send('Page.crash').catch(() => {})
+  }
+  const gone = await observed.evaluate(state => state.result).finally(() => observed.dispose())
+  if (process.platform === 'linux') assert.ok(['crashed', 'abnormal-exit'].includes(gone.reason))
+  else assert.equal(gone.reason, 'crashed')
+  const expectedName = gone.reason === 'abnormal-exit' ? 'NativeInterrupted' : 'NativeCrash'
+  const expectedReason = gone.reason === 'abnormal-exit' ? 'interrupted' : 'crashed'
+  console.log('Native diagnostic observed fatal renderer exit:', JSON.stringify(gone))
   const stopped = new Promise(resolve => app.process().once('exit', () => resolve(undefined)))
   await app.evaluate(({app}) => app.exit(0))
   await stopped
@@ -34,9 +56,9 @@ export async function verifyDiagnosticContext(app, page, launch) {
     const client = /** @type {Window & {storyforgeClient?: {diagnostics?():Promise<unknown[]>}}} */ (window).storyforgeClient
     return await client?.diagnostics?.() ?? []
   })
-  const row = /** @type {{name?:string,details?:{trail?:{action:string}[],native?:{process:string,reason:string,exitCode:number}}}|undefined} */ (rows.find(value => value && typeof value === 'object' && 'name' in value && value.name === 'NativeCrash'))
+  const row = /** @type {{name?:string,details?:{trail?:{action:string}[],native?:{process:string,reason:string,exitCode:number}}}|undefined} */ (rows.find(value => value && typeof value === 'object' && 'name' in value && value.name === expectedName))
   assert.ok(row?.details?.native)
-  assert.equal(row.details.native.process, 'renderer'); assert.equal(row.details.native.reason, 'crashed')
+  assert.equal(row.details.native.process, 'renderer'); assert.equal(row.details.native.reason, expectedReason)
   assert.equal(row.details.native.exitCode, gone.exitCode)
   assert.ok(row.details.trail?.some(step => step.action === 'save'))
   assert.equal(JSON.stringify(rows).includes('PRIVATE-SYNTHETIC'), false)
@@ -46,6 +68,6 @@ export async function verifyDiagnosticContext(app, page, launch) {
     const rows = await client?.diagnostics?.() ?? []
     return rows.every(value => value && typeof value === 'object' && !('details' in value))
   })
-  console.log('Native diagnostic context: real isolated renderer crash, bounded prior action, reason/exit code, reload and opt-out cleanup passed; no model or report upload.')
+  console.log('Native diagnostic context: real isolated fatal renderer exit, classified diagnostic, bounded prior action, exit code, reload and opt-out cleanup passed; no model or report upload.')
   return { app, page }
 }

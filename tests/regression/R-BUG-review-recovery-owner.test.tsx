@@ -5,7 +5,7 @@ import ReviewPanel from '../../src/components/editor/ReviewPanel'
 import { useReviewResultStore } from '../../src/stores/review-result'
 import type { QualityRevisionViewV1 } from '../../src/lib/agent/run/quality-revision-durable'
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const service = vi.hoisted(() => ({ view: vi.fn(), unfinished: vi.fn(), adopt: vi.fn(), end: vi.fn(), review: vi.fn() }))
 vi.mock('../../src/lib/workspace/scope', async original => ({
   ...await original<typeof import('../../src/lib/workspace/scope')>(),

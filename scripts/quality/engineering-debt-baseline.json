@@ -79,7 +79,7 @@
       "tsconfig.tests.open-world-experience.json": "7596a50c2d283b59660b6402b2c2a421c73b6d6482eb2b7a7a1612006622db31",
       "tsconfig.tooling.json": "2f8f44cd11e5314602f6a753d8898590d0e8b75f227de3cf4b0394f7df54761a"
     },
-    "lockfileHash": "eb3db4a47bdcef1f7716813cac7f1ac1f4391e6740b5ee78da7c7bab81ecd2d0"
+    "lockfileHash": "47ebd20ced657453ac590d653c7b3f8d10402b3f8b57bafc917d4fa2db95d6e9"
   },
   "entries": [
     {
@@ -410,21 +410,6 @@
         "column": 21,
         "start": 1685,
         "length": 9
-      }
-    },
-    {
-      "identity": "[\"eslint\",\"scripts/desktop/smoke.mjs\",\"no-undef\",\"'localStorage' is not defined.\",\"86c27b2a13d8589dd69de84f2f4f4fce6ccd7bae54d84bafcf38bd571209a1a4\",55,12]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "eslint",
-        "file": "scripts/desktop/smoke.mjs",
-        "code": "no-undef",
-        "message": "'localStorage' is not defined.",
-        "anchor": "86c27b2a13d8589dd69de84f2f4f4fce6ccd7bae54d84bafcf38bd571209a1a4",
-        "line": 46,
-        "column": 55,
-        "start": 2626,
-        "length": 12
       }
     },
     {
@@ -4163,291 +4148,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS2339\",\"Property 'checkForUpdates' does not exist on type 'EventEmitter<any>'.\",\"7b89d72d418a58286cf4b02c95c88cfaeed4845be8a2bd8a556a4c35a3253f69\",11,15]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS2339",
-        "message": "Property 'checkForUpdates' does not exist on type 'EventEmitter<any>'.",
-        "anchor": "7b89d72d418a58286cf4b02c95c88cfaeed4845be8a2bd8a556a4c35a3253f69",
-        "line": 31,
-        "column": 11,
-        "start": 1920,
-        "length": 15
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS2339\",\"Property 'downloadUpdate' does not exist on type 'EventEmitter<any>'.\",\"b0f5b01b82b577da3a6ddbeb2b621959fed4aea1f167409a0f9b948d8448065d\",11,14]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS2339",
-        "message": "Property 'downloadUpdate' does not exist on type 'EventEmitter<any>'.",
-        "anchor": "b0f5b01b82b577da3a6ddbeb2b621959fed4aea1f167409a0f9b948d8448065d",
-        "line": 42,
-        "column": 11,
-        "start": 2509,
-        "length": 14
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS2339\",\"Property 'openInstaller' does not exist on type 'EventEmitter<any>'.\",\"2b5b4433f98893a7bcb3598cd3acd13027d29c95905088cb83c31c29b16c7402\",11,13]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS2339",
-        "message": "Property 'openInstaller' does not exist on type 'EventEmitter<any>'.",
-        "anchor": "2b5b4433f98893a7bcb3598cd3acd13027d29c95905088cb83c31c29b16c7402",
-        "line": 75,
-        "column": 11,
-        "start": 3955,
-        "length": 13
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS7005\",\"Variable 'candidate' implicitly has an 'any' type.\",\"c91c9eddbfb1cd92d91aaccd6f2427591944fe8d8f271047e11ff0d5d22a632b\",10,9]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS7005",
-        "message": "Variable 'candidate' implicitly has an 'any' type.",
-        "anchor": "c91c9eddbfb1cd92d91aaccd6f2427591944fe8d8f271047e11ff0d5d22a632b",
-        "line": 43,
-        "column": 10,
-        "start": 2549,
-        "length": 9
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS7005\",\"Variable 'downloaded' implicitly has an 'any' type.\",\"f41eabf078779076913109e5348008b420ed48006db44b85dd1003942861666c\",10,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS7005",
-        "message": "Variable 'downloaded' implicitly has an 'any' type.",
-        "anchor": "f41eabf078779076913109e5348008b420ed48006db44b85dd1003942861666c",
-        "line": 76,
-        "column": 10,
-        "start": 3994,
-        "length": 10
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS7006\",\"Parameter 'arch' implicitly has an 'any' type.\",\"0dcd399715997b0395e49b85dc807121f07cf9fd9ad50e6850f5f2255a764151\",51,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'arch' implicitly has an 'any' type.",
-        "anchor": "0dcd399715997b0395e49b85dc807121f07cf9fd9ad50e6850f5f2255a764151",
-        "line": 10,
-        "column": 51,
-        "start": 541,
-        "length": 4
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS7006\",\"Parameter 'asset' implicitly has an 'any' type.\",\"dca4c57e9a7cf64e6d6c0241855f4f295b22a2629ba0c74f8831f69756bfdca9\",49,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'asset' implicitly has an 'any' type.",
-        "anchor": "dca4c57e9a7cf64e6d6c0241855f4f295b22a2629ba0c74f8831f69756bfdca9",
-        "line": 17,
-        "column": 49,
-        "start": 1084,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS7006\",\"Parameter 'current' implicitly has an 'any' type.\",\"0dcd399715997b0395e49b85dc807121f07cf9fd9ad50e6850f5f2255a764151\",42,7]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'current' implicitly has an 'any' type.",
-        "anchor": "0dcd399715997b0395e49b85dc807121f07cf9fd9ad50e6850f5f2255a764151",
-        "line": 10,
-        "column": 42,
-        "start": 532,
-        "length": 7
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS7006\",\"Parameter 'index' implicitly has an 'any' type.\",\"8fc23d7fd8281199e8006863b344f3137fbd7d01318c8a71a06b42c7b26a7bef\",50,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'index' implicitly has an 'any' type.",
-        "anchor": "8fc23d7fd8281199e8006863b344f3137fbd7d01318c8a71a06b42c7b26a7bef",
-        "line": 14,
-        "column": 50,
-        "start": 849,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS7006\",\"Parameter 'release' implicitly has an 'any' type.\",\"0dcd399715997b0395e49b85dc807121f07cf9fd9ad50e6850f5f2255a764151\",33,7]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'release' implicitly has an 'any' type.",
-        "anchor": "0dcd399715997b0395e49b85dc807121f07cf9fd9ad50e6850f5f2255a764151",
-        "line": 10,
-        "column": 33,
-        "start": 523,
-        "length": 7
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS7006\",\"Parameter 'value' implicitly has an 'any' type.\",\"2b2f5c6eb2089d36a6bb0f4ae9be1bf7f78c91b949a7fe93cbf5065d6b0d4d42\",22,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'value' implicitly has an 'any' type.",
-        "anchor": "2b2f5c6eb2089d36a6bb0f4ae9be1bf7f78c91b949a7fe93cbf5065d6b0d4d42",
-        "line": 9,
-        "column": 22,
-        "start": 387,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS7006\",\"Parameter 'value' implicitly has an 'any' type.\",\"8fc23d7fd8281199e8006863b344f3137fbd7d01318c8a71a06b42c7b26a7bef\",43,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'value' implicitly has an 'any' type.",
-        "anchor": "8fc23d7fd8281199e8006863b344f3137fbd7d01318c8a71a06b42c7b26a7bef",
-        "line": 14,
-        "column": 43,
-        "start": 842,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS7031\",\"Binding element 'app' implicitly has an 'any' type.\",\"107d44aa5d41e0dcfaac6c4b7ab5f484fa14466b42fb8b6141245e2be713cd47\",36,3]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS7031",
-        "message": "Binding element 'app' implicitly has an 'any' type.",
-        "anchor": "107d44aa5d41e0dcfaac6c4b7ab5f484fa14466b42fb8b6141245e2be713cd47",
-        "line": 27,
-        "column": 36,
-        "start": 1728,
-        "length": 3
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS7031\",\"Binding element 'shell' implicitly has an 'any' type.\",\"107d44aa5d41e0dcfaac6c4b7ab5f484fa14466b42fb8b6141245e2be713cd47\",41,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS7031",
-        "message": "Binding element 'shell' implicitly has an 'any' type.",
-        "anchor": "107d44aa5d41e0dcfaac6c4b7ab5f484fa14466b42fb8b6141245e2be713cd47",
-        "line": 27,
-        "column": 41,
-        "start": 1733,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS7034\",\"Variable 'candidate' implicitly has type 'any' in some locations where its type cannot be determined.\",\"78a7bdae5a9222b4dc6e75f9aa048b008fb85489b4746b2c83313b11fb8417de\",7,9]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS7034",
-        "message": "Variable 'candidate' implicitly has type 'any' in some locations where its type cannot be determined.",
-        "anchor": "78a7bdae5a9222b4dc6e75f9aa048b008fb85489b4746b2c83313b11fb8417de",
-        "line": 30,
-        "column": 7,
-        "start": 1888,
-        "length": 9
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.mjs\",\"TS7034\",\"Variable 'downloaded' implicitly has type 'any' in some locations where its type cannot be determined.\",\"78a7bdae5a9222b4dc6e75f9aa048b008fb85489b4746b2c83313b11fb8417de\",18,10]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.mjs",
-        "code": "TS7034",
-        "message": "Variable 'downloaded' implicitly has type 'any' in some locations where its type cannot be determined.",
-        "anchor": "78a7bdae5a9222b4dc6e75f9aa048b008fb85489b4746b2c83313b11fb8417de",
-        "line": 30,
-        "column": 18,
-        "start": 1899,
-        "length": 10
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.test.mjs\",\"TS2339\",\"Property 'checkForUpdates' does not exist on type 'EventEmitter<any>'.\",\"56944dbe4c394560b24ecb8da5473cd45ebf941cd4009cdf51e6d42f4d26eba3\",19,15]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.test.mjs",
-        "code": "TS2339",
-        "message": "Property 'checkForUpdates' does not exist on type 'EventEmitter<any>'.",
-        "anchor": "56944dbe4c394560b24ecb8da5473cd45ebf941cd4009cdf51e6d42f4d26eba3",
-        "line": 30,
-        "column": 19,
-        "start": 2066,
-        "length": 15
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.test.mjs\",\"TS2339\",\"Property 'downloadUpdate' does not exist on type 'EventEmitter<any>'.\",\"18cfdfab3303dff32d13c19d53bb59d1172e0087f20afb2ff13e4fcc16ed2947\",19,14]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.test.mjs",
-        "code": "TS2339",
-        "message": "Property 'downloadUpdate' does not exist on type 'EventEmitter<any>'.",
-        "anchor": "18cfdfab3303dff32d13c19d53bb59d1172e0087f20afb2ff13e4fcc16ed2947",
-        "line": 36,
-        "column": 19,
-        "start": 2283,
-        "length": 14
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.test.mjs\",\"TS2339\",\"Property 'downloadUpdate' does not exist on type 'EventEmitter<any>'.\",\"7d64efa727d9b407611760a5260ebbf35ee18dc26bd39b05ab098277e6c4bd46\",34,14]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.test.mjs",
-        "code": "TS2339",
-        "message": "Property 'downloadUpdate' does not exist on type 'EventEmitter<any>'.",
-        "anchor": "7d64efa727d9b407611760a5260ebbf35ee18dc26bd39b05ab098277e6c4bd46",
-        "line": 32,
-        "column": 34,
-        "start": 2151,
-        "length": 14
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/desktop/mac-updater.test.mjs\",\"TS2339\",\"Property 'includes' does not exist on type 'RequestInfo | URL'.\\n  Property 'includes' does not exist on type 'URL'.\",\"449c85f46f451f6f4f4b579e60d82fd291a9e0c70bcf75dbaa19794533e6e738\",208,8]",
       "count": 1,
       "diagnostic": {
@@ -4460,36 +4160,6 @@
         "column": 208,
         "start": 1808,
         "length": 8
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.test.mjs\",\"TS2339\",\"Property 'openInstaller' does not exist on type 'EventEmitter<any>'.\",\"497e91ff38f4b60af32df1f119fb9df69032fc24500108f71d8da5e0107765f6\",19,13]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.test.mjs",
-        "code": "TS2339",
-        "message": "Property 'openInstaller' does not exist on type 'EventEmitter<any>'.",
-        "anchor": "497e91ff38f4b60af32df1f119fb9df69032fc24500108f71d8da5e0107765f6",
-        "line": 39,
-        "column": 19,
-        "start": 2400,
-        "length": 13
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.test.mjs\",\"TS2339\",\"Property 'openInstaller' does not exist on type 'EventEmitter<any>'.\",\"f0b5d1e752bcd708a4f5647c0c812bb702287068ac2babf10f8fd541d6c89057\",34,13]",
-      "count": 3,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.test.mjs",
-        "code": "TS2339",
-        "message": "Property 'openInstaller' does not exist on type 'EventEmitter<any>'.",
-        "anchor": "f0b5d1e752bcd708a4f5647c0c812bb702287068ac2babf10f8fd541d6c89057",
-        "line": 29,
-        "column": 34,
-        "start": 2033,
-        "length": 13
       }
     },
     {
@@ -4535,21 +4205,6 @@
         "column": 22,
         "start": 2236,
         "length": 6
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/mac-updater.test.mjs\",\"TS7006\",\"Parameter 'path' implicitly has an 'any' type.\",\"449c85f46f451f6f4f4b579e60d82fd291a9e0c70bcf75dbaa19794533e6e738\",136,4]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/mac-updater.test.mjs",
-        "code": "TS7006",
-        "message": "Parameter 'path' implicitly has an 'any' type.",
-        "anchor": "449c85f46f451f6f4f4b579e60d82fd291a9e0c70bcf75dbaa19794533e6e738",
-        "line": 26,
-        "column": 136,
-        "start": 1736,
-        "length": 4
       }
     },
     {
@@ -4715,36 +4370,6 @@
         "column": 31,
         "start": 573,
         "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/smoke.mjs\",\"TS2345\",\"Argument of type 'null | string' is not assignable to parameter of type 'string'.\\n  Type 'null' is not assignable to type 'string'.\",\"86c27b2a13d8589dd69de84f2f4f4fce6ccd7bae54d84bafcf38bd571209a1a4\",55,54]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/smoke.mjs",
-        "code": "TS2345",
-        "message": "Argument of type 'string | null' is not assignable to parameter of type 'string'.\n  Type 'null' is not assignable to type 'string'.",
-        "anchor": "86c27b2a13d8589dd69de84f2f4f4fce6ccd7bae54d84bafcf38bd571209a1a4",
-        "line": 46,
-        "column": 55,
-        "start": 2626,
-        "length": 54
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/updater.mjs\",\"TS2339\",\"Property 'version' does not exist on type '{ platform: string; currentVersion: any; status: string; }'.\",\"71ef5fcc9da829b04c5455012d4a45730ace0def9f3554b485e0ca73d4b9c336\",39,7]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/updater.mjs",
-        "code": "TS2339",
-        "message": "Property 'version' does not exist on type '{ platform: string; currentVersion: any; status: string; }'.",
-        "anchor": "71ef5fcc9da829b04c5455012d4a45730ace0def9f3554b485e0ca73d4b9c336",
-        "line": 34,
-        "column": 39,
-        "start": 2221,
-        "length": 7
       }
     },
     {
@@ -4973,51 +4598,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"scripts/desktop/updater.test.mjs\",\"TS2339\",\"Property 'checkForUpdates' does not exist on type 'EventEmitter<any>'.\",\"346367fc6aed06fc53051eba1f717f57dbd84ff6589d9ed3ecd310f4b744b053\",15,15]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/updater.test.mjs",
-        "code": "TS2339",
-        "message": "Property 'checkForUpdates' does not exist on type 'EventEmitter<any>'.",
-        "anchor": "346367fc6aed06fc53051eba1f717f57dbd84ff6589d9ed3ecd310f4b744b053",
-        "line": 8,
-        "column": 15,
-        "start": 276,
-        "length": 15
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/updater.test.mjs\",\"TS2339\",\"Property 'downloadUpdate' does not exist on type 'EventEmitter<any>'.\",\"27b4bf5a4f563a6daecd1ab4ee6865341ed6789d80686b7a0435c730087ba504\",15,14]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/updater.test.mjs",
-        "code": "TS2339",
-        "message": "Property 'downloadUpdate' does not exist on type 'EventEmitter<any>'.",
-        "anchor": "27b4bf5a4f563a6daecd1ab4ee6865341ed6789d80686b7a0435c730087ba504",
-        "line": 9,
-        "column": 15,
-        "start": 404,
-        "length": 14
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/updater.test.mjs\",\"TS2339\",\"Property 'quitAndInstall' does not exist on type 'EventEmitter<any>'.\",\"dd2a5e24628bbec21dfa1b34b7be3e812ae55085c2f14d89b6bcd6fe3e764847\",15,14]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/updater.test.mjs",
-        "code": "TS2339",
-        "message": "Property 'quitAndInstall' does not exist on type 'EventEmitter<any>'.",
-        "anchor": "dd2a5e24628bbec21dfa1b34b7be3e812ae55085c2f14d89b6bcd6fe3e764847",
-        "line": 10,
-        "column": 15,
-        "start": 513,
-        "length": 14
-      }
-    },
-    {
       "identity": "[\"typescript\",\"scripts/desktop/updater.test.mjs\",\"TS2739\",\"Type '{}' is missing the following properties from type '{ mainFrame: { url: string; }; send(): void; }': mainFrame, send\",\"fcd3b701d2057a45c16f446e4a6fe61c1c88602a5d9cb2cdee3f68e5ec9634e3\",62,6]",
       "count": 1,
       "diagnostic": {
@@ -5105,21 +4685,6 @@
         "column": 31,
         "start": 210,
         "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"scripts/desktop/updater.test.mjs\",\"TS7053\",\"Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'EventEmitter<any>'.\\n  No index signature with a parameter of type 'string' was found on type 'EventEmitter<any>'.\",\"5936e3a7f9629ddace45d6c974dded85327373f930476867426447805176ab3b\",113,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "scripts/desktop/updater.test.mjs",
-        "code": "TS7053",
-        "message": "Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'EventEmitter<any>'.\n  No index signature with a parameter of type 'string' was found on type 'EventEmitter<any>'.",
-        "anchor": "5936e3a7f9629ddace45d6c974dded85327373f930476867426447805176ab3b",
-        "line": 24,
-        "column": 113,
-        "start": 1522,
-        "length": 16
       }
     },
     {
@@ -35393,21 +34958,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AITOWN5-authoring.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"a2fb77752efed04a9231631cbaeb59d06f6cbfbc1099bcf32d7df288cb6a2c23\",26,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AITOWN5-authoring.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "a2fb77752efed04a9231631cbaeb59d06f6cbfbc1099bcf32d7df288cb6a2c23",
-        "line": 62,
-        "column": 26,
-        "start": 2163,
-        "length": 16
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-APHELION-builtin.test.ts\",\"TS2550\",\"Property 'at' does not exist on type 'Point[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.\",\"7ace20a30e8bf0057dffa31dc6cc1eca31fb2af0530407c4dc8554bd01193f53\",204,2]",
       "count": 1,
       "diagnostic": {
@@ -36293,36 +35843,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-02A1-author-system.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"9f1a2a64c1174e2a86f1134b7adf59f7cf73bf95774db3677310acbdb1adfea2\",34,21]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-02A1-author-system.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "9f1a2a64c1174e2a86f1134b7adf59f7cf73bf95774db3677310acbdb1adfea2",
-        "line": 106,
-        "column": 34,
-        "start": 8719,
-        "length": 21
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-02A2-native-runtime.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"c73ff74a4330d5a94d5c8d23d5814b0a5d3a07b7942f8de91b15f0b0ed7d91e6\",34,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-02A2-native-runtime.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "c73ff74a4330d5a94d5c8d23d5814b0a5d3a07b7942f8de91b15f0b0ed7d91e6",
-        "line": 163,
-        "column": 34,
-        "start": 13429,
-        "length": 16
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-AVG-02B1-inventory.test.ts\",\"TS2345\",\"Argument of type '\\\"inspect.once\\\"' is not assignable to parameter of type '`${string}-${string}-${string}-${string}-${string}`'.\",\"58bc2f85a9626fcca9369d6e0459e2be741df67dad4317bfb418255d00aa2a98\",116,14]",
       "count": 1,
       "diagnostic": {
@@ -36338,36 +35858,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-02B1-inventory.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"c73ff74a4330d5a94d5c8d23d5814b0a5d3a07b7942f8de91b15f0b0ed7d91e6\",34,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-02B1-inventory.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "c73ff74a4330d5a94d5c8d23d5814b0a5d3a07b7942f8de91b15f0b0ed7d91e6",
-        "line": 192,
-        "column": 34,
-        "start": 16853,
-        "length": 16
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-03A-once-audio.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"ae9166765055de012d6b64467b0ada225e2cac23292377feea437b1a3ecd835c\",30,12]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-03A-once-audio.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "ae9166765055de012d6b64467b0ada225e2cac23292377feea437b1a3ecd835c",
-        "line": 121,
-        "column": 30,
-        "start": 9403,
-        "length": 12
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-AVG-03A-player-scope.test.ts\",\"TS2352\",\"Conversion of type '() => Promise<never>' to type '{ (): PromiseExtended<ProductRelease[]>; <R>(thenShortcut: ThenShortcut<ProductRelease[], R>): PromiseExtended<R>; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.\\n  Property 'timeout' is missing in type 'Promise<never>' but required in type 'PromiseExtended<ProductRelease[]>'.\",\"7e05ecc210fcad9897ac05b76cd58f311457b250dfebbbc6246f65e1e2d0b37c\",172,119]",
       "count": 1,
       "diagnostic": {
@@ -36380,21 +35870,6 @@
         "column": 172,
         "start": 3360,
         "length": 119
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-03A-reading.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"c73ff74a4330d5a94d5c8d23d5814b0a5d3a07b7942f8de91b15f0b0ed7d91e6\",34,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-03A-reading.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "c73ff74a4330d5a94d5c8d23d5814b0a5d3a07b7942f8de91b15f0b0ed7d91e6",
-        "line": 95,
-        "column": 34,
-        "start": 8414,
-        "length": 16
       }
     },
     {
@@ -39278,36 +38753,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-visual-planning-harness.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"7796efc2c7b2c52e8f4d688d436854c8810c54984dfc845718725e5ef8e08b2d\",38,5]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-04A5-visual-planning-harness.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "7796efc2c7b2c52e8f4d688d436854c8810c54984dfc845718725e5ef8e08b2d",
-        "line": 1623,
-        "column": 38,
-        "start": 148186,
-        "length": 5
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-visual-planning-harness.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"f164b229a46653b6ba04b79b1586e62b45955683a0d9c2639ae605c6a3e3e6e7\",42,9]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-04A5-visual-planning-harness.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "f164b229a46653b6ba04b79b1586e62b45955683a0d9c2639ae605c6a3e3e6e7",
-        "line": 1308,
-        "column": 42,
-        "start": 116996,
-        "length": 9
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-AVG-04A5-visual-planning-harness.test.ts\",\"TS7005\",\"Variable 'single' implicitly has an 'any[]' type.\",\"41cc4b1831df5f1b332b43db70ed4aaa323a1ce4b06f84a2f2decb6ef3b1e8d4\",73,6]",
       "count": 1,
       "diagnostic": {
@@ -40148,21 +39593,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-05A-author-assembly.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"a4cdee066440c9c34055860f7bb9cfdd2f80cd09f184fc019451d32ff5238f27\",33,12]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-05A-author-assembly.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "a4cdee066440c9c34055860f7bb9cfdd2f80cd09f184fc019451d32ff5238f27",
-        "line": 153,
-        "column": 33,
-        "start": 12413,
-        "length": 12
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-AVG-05A-combined-media-stage.test.ts\",\"TS18047\",\"'preview' is possibly 'null'.\",\"03a9b2483633f1eab096fd3dedfc85eca79f03f85133fd1a36c1d20def9314c9\",35,7]",
       "count": 1,
       "diagnostic": {
@@ -40250,36 +39680,6 @@
         "column": 62,
         "start": 5864,
         "length": 25
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-BASE00B-author-adoption.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"d9e98e7a8aebdc9294c7d92937c9aae87f5fdef6816abae1a28031044a6748c2\",34,15]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-BASE00B-author-adoption.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "d9e98e7a8aebdc9294c7d92937c9aae87f5fdef6816abae1a28031044a6748c2",
-        "line": 44,
-        "column": 34,
-        "start": 3494,
-        "length": 15
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG-BASE01-reference-ownership.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"d9e98e7a8aebdc9294c7d92937c9aae87f5fdef6816abae1a28031044a6748c2\",34,15]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG-BASE01-reference-ownership.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "d9e98e7a8aebdc9294c7d92937c9aae87f5fdef6816abae1a28031044a6748c2",
-        "line": 60,
-        "column": 34,
-        "start": 4957,
-        "length": 15
       }
     },
     {
@@ -40565,36 +39965,6 @@
         "column": 21,
         "start": 9376,
         "length": 2
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG3-authoring-lifecycle.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"b8b4878a048232064ba9c13542521484f4bb69afc2aa6edc474c711476cf8407\",22,12]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG3-authoring-lifecycle.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "b8b4878a048232064ba9c13542521484f4bb69afc2aa6edc474c711476cf8407",
-        "line": 133,
-        "column": 22,
-        "start": 4876,
-        "length": 12
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-AVG3-authoring-lifecycle.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"f656f66a2f7a023cd73d3ddf24efd50872cae5722c088597beb413bf5d6fe239\",30,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-AVG3-authoring-lifecycle.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "f656f66a2f7a023cd73d3ddf24efd50872cae5722c088597beb413bf5d6fe239",
-        "line": 62,
-        "column": 30,
-        "start": 2241,
-        "length": 16
       }
     },
     {
@@ -46519,36 +45889,6 @@
         "line": 133,
         "column": 165,
         "start": 11466,
-        "length": 2
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-CHAT-UI-lifecycle.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"dbb72597e592cab31024e64ac8e7dd7759a95cf27e7dbb6ad5d2fbbb3ed9802a\",32,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CHAT-UI-lifecycle.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "dbb72597e592cab31024e64ac8e7dd7759a95cf27e7dbb6ad5d2fbbb3ed9802a",
-        "line": 38,
-        "column": 32,
-        "start": 2211,
-        "length": 16
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-CLIENT-LEGAL1-consent.test.tsx\",\"TS2769\",\"No overload matches this call.\\n  The last overload gave the following error.\\n    Argument of type '{}' is not assignable to parameter of type 'Attributes & { children: ReactNode; }'.\\n      Property 'children' is missing in type '{}' but required in type '{ children: ReactNode; }'.\",\"a7149833178331eb5b467dfb5bb988310e37b2b5afc0662b87c7027e50b44b1c\",81,2]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-CLIENT-LEGAL1-consent.test.tsx",
-        "code": "TS2769",
-        "message": "No overload matches this call.\n  The last overload gave the following error.\n    Argument of type '{}' is not assignable to parameter of type 'Attributes & { children: ReactNode; }'.\n      Property 'children' is missing in type '{}' but required in type '{ children: ReactNode; }'.",
-        "anchor": "a7149833178331eb5b467dfb5bb988310e37b2b5afc0662b87c7027e50b44b1c",
-        "line": 16,
-        "column": 81,
-        "start": 1207,
         "length": 2
       }
     },
@@ -59063,21 +58403,6 @@
       }
     },
     {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPG5-authoring.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"a2fb77752efed04a9231631cbaeb59d06f6cbfbc1099bcf32d7df288cb6a2c23\",26,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPG5-authoring.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "a2fb77752efed04a9231631cbaeb59d06f6cbfbc1099bcf32d7df288cb6a2c23",
-        "line": 62,
-        "column": 26,
-        "start": 2207,
-        "length": 16
-      }
-    },
-    {
       "identity": "[\"typescript\",\"tests/regression/R-TTRPGNW1-migration-compatibility.test.ts\",\"TS2339\",\"Property 'chapters' does not exist on type '{ version: number; }'.\",\"5af14e6adb5a277a0315b2509df2e481e8a4b490d9946e668ff0c80e19ff84d1\",27,8]",
       "count": 1,
       "diagnostic": {
@@ -59135,21 +58460,6 @@
         "column": 66,
         "start": 2618,
         "length": 7
-      }
-    },
-    {
-      "identity": "[\"typescript\",\"tests/regression/R-TTRPGOPEN1-authoring-version.test.ts\",\"TS2554\",\"Expected 1 arguments, but got 2.\",\"88c6979854a55d9bcdc39f4a5fbe693115de9018390c462a9601effe44f850e8\",39,16]",
-      "count": 1,
-      "diagnostic": {
-        "kind": "typescript",
-        "file": "tests/regression/R-TTRPGOPEN1-authoring-version.test.ts",
-        "code": "TS2554",
-        "message": "Expected 1 arguments, but got 2.",
-        "anchor": "88c6979854a55d9bcdc39f4a5fbe693115de9018390c462a9601effe44f850e8",
-        "line": 264,
-        "column": 39,
-        "start": 14135,
-        "length": 16
       }
     },
     {

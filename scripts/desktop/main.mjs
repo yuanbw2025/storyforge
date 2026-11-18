@@ -5,7 +5,7 @@ import { createPortableServer } from '../distribution/server.mjs'
 import { installUpdater } from './updater.mjs'
 import updater from 'electron-updater'
 import { desktopDiagnostics } from './diagnostics.mjs'
-import { createMacUpdater } from './mac-updater.mjs'
+import { createMacUpdater, createArchUpdater } from './mac-updater.mjs'
 import { installHttpTransport } from './http-transport.mjs'
 import { installFileSystemPermissions } from './file-system-permissions.mjs'
 
@@ -25,12 +25,10 @@ else {
   diagnostics.start()
   process.on('uncaughtExceptionMonitor', () => diagnostics.record('NativeCrash', { process: 'browser', reason: 'uncaught' }))
   app.on('render-process-gone', (_event, _contents, details) => {
-    if (details.reason === 'crashed') diagnostics.record('NativeCrash', { process: 'renderer', reason: 'crashed', exitCode: details.exitCode })
-    if (details.reason === 'oom') diagnostics.record('NativeOutOfMemory', { process: 'renderer', reason: 'oom', exitCode: details.exitCode })
+    diagnostics.recordExit({ process: 'renderer', reason: details.reason, exitCode: details.exitCode })
   })
   app.on('child-process-gone', (_event, details) => {
-    if (details.reason === 'crashed') diagnostics.record('NativeCrash', { process: details.type, reason: 'crashed', exitCode: details.exitCode })
-    if (details.reason === 'oom') diagnostics.record('NativeOutOfMemory', { process: details.type, reason: 'oom', exitCode: details.exitCode })
+    diagnostics.recordExit({ process: details.type, reason: details.reason, exitCode: details.exitCode })
   })
   app.on('second-instance', () => { window?.restore(); window?.focus() })
   app.whenReady().then(async () => {
@@ -76,7 +74,8 @@ else {
         message: '退出 StoryForge？', detail: '请先确认编辑已保存、生成任务已结束。退出会中断仍在运行的任务。',
       }).then(({ response }) => { if (response === 1) { exitApproved = true; app.quit() } })
     })
-    const autoUpdater = process.platform === 'darwin' ? createMacUpdater({ app, shell }) : updater.autoUpdater
+    const packageUpdater = /** @type {Partial<Record<NodeJS.Platform, typeof createMacUpdater>>} */ ({ darwin: createMacUpdater, linux: createArchUpdater })[process.platform]
+    const autoUpdater = packageUpdater ? packageUpdater({ app, shell }) : updater.autoUpdater
     installUpdater({ app, window: mainWindow, ipcMain, dialog, origin, autoUpdater, approveExit: () => { exitApproved = true } })
     mainWindow.on('unresponsive', () => diagnostics.record('NativeUnresponsive', { process: 'renderer', reason: 'unresponsive' }))
     mainWindow.once('ready-to-show', () => mainWindow.show())

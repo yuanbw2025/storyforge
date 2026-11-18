@@ -35,7 +35,7 @@ it("keeps a pre-world CHAT draft, rejects stale writes, and roundtrips a frozen 
     expect(restored?.workId).not.toBe(avg.scope.workId);
     expect((await db.worldReleases.get(restored!.worldReleaseId!))?.releaseUid).toBe(frozen?.releaseUid);
     expect(JSON.parse(restored!.settingsJson).playerRole).toBe("守灯人");
-    await deleteWork(imported, restored!.workId);
+    await deleteWork(restored!.workId);
     expect(await db.chatAuthoringDrafts.where("projectId").equals(imported).count()).toBe(0);
     expect(await db.worldReleases.get(source.worldReleaseId)).toBeDefined();
 });

@@ -103,7 +103,7 @@ describe('AVG-02A1 author-owned rules, actual confirmation and compilation evide
     const secondBuild = (await db.productBuilds.where('projectId').equals(secondId).first())!
     const again = { ...restored, scope: { projectId: secondId, worldId: secondBuild.worldId, workId: secondBuild.workId }, productionId: secondBuild.productionId, buildId: secondBuild.id! }
     expect((await readAvgSystemPlanForCompilationV1(await compilationInput(again))).validation).toEqual(actual.validation)
-    await deleteWork(importedId, restored.scope.workId)
+    await deleteWork(restored.scope.workId)
     expect(await db.productBuildArtifacts.where('projectId').equals(importedId).count()).toBe(0)
     expect((await db.productBuildArtifacts.get(candidate.id!))!.status).toBe('pending')
   })

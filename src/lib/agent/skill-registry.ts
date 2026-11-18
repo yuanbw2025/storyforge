@@ -1545,7 +1545,7 @@ export const AGENT_SKILLS = [
       table: 'worldGroups',
       fields: ['name', 'type', 'description', 'icon', 'order', 'entryCondition', 'powerRestriction', 'plannedChapterCount'],
     }],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS68-world-suggest-durable'],
   },
   {
@@ -1575,7 +1575,7 @@ export const AGENT_SKILLS = [
       table: 'worldviews',
       fields: ['worldOrigin', 'powerHierarchy', 'continentLayout', 'climateByRegion', 'races', 'factionLayout'],
     }],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS67-worldview-expand-durable'],
   },
   {
@@ -1602,7 +1602,7 @@ export const AGENT_SKILLS = [
     contextCompression: CONSTITUTION_EXTRACT_COMPRESSION_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'temporalFacts', fields: [], adoptionExtension: 'fact-ledger' }],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS69-constitution-extraction-durable'],
   },
   {
@@ -1849,7 +1849,7 @@ export const AGENT_SKILLS = [
       table: 'importantLocations',
       fields: ['name', 'tags', 'description', 'significance', 'parentId', 'sortOrder'],
     }],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS62-location-extraction-durable'],
   },
   {
@@ -1869,7 +1869,7 @@ export const AGENT_SKILLS = [
     contextCompression: WORLD_MAP_COMPRESSION_POLICY,
     maxOutputTokens: 6_000,
     writeTargets: [{ table: 'worldNodes', fields: ['mapConfigJSON'] }],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS66-world-map-durable'],
   },
   {
@@ -1892,7 +1892,7 @@ export const AGENT_SKILLS = [
       { table: 'historicalTimelineEvents', fields: ['aiConsult'] },
       { table: 'historicalKeywords', fields: ['aiConsult'] },
     ],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS73-history-agent-durable'],
   },
   {
@@ -1915,7 +1915,7 @@ export const AGENT_SKILLS = [
       { table: 'historicalTimelineEvents', fields: ['aiBrainstorm'] },
       { table: 'historicalKeywords', fields: ['aiBrainstorm'] },
     ],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS73-history-agent-durable'],
   },
   {
@@ -2035,7 +2035,7 @@ export const AGENT_SKILLS = [
       { table: 'characterRelations', fields: ['fromCharacterId', 'toCharacterId', 'relationType', 'label', 'description', 'isBidirectional'] },
       { table: 'characters', fields: ['relationships'] },
     ],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS60-character-relationship-durable'],
   },
   {
@@ -2058,7 +2058,7 @@ export const AGENT_SKILLS = [
       { table: 'referenceAnalysisRuns', fields: ['analysisSummary'] },
       { table: 'references', fields: ['analysisSummary'], adoptionExtension: 'reference-analysis-reference-lifecycle' },
     ],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS74-reference-derived-durable'],
   },
   {
@@ -2081,7 +2081,7 @@ export const AGENT_SKILLS = [
       { table: 'referenceAnalysisRuns', fields: ['mergedCharacters'] },
       { table: 'references', fields: ['mergedCharacters'], adoptionExtension: 'reference-analysis-reference-lifecycle' },
     ],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS74-reference-derived-durable'],
   },
   {
@@ -2319,7 +2319,7 @@ export const AGENT_SKILLS = [
     contextCompression: OUTLINE_IMPACT_REGENERATION_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['summary'] }],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS77-impact-outline-regeneration'],
   },
   {
@@ -2961,7 +2961,7 @@ export const AGENT_SKILLS = [
       table: 'emotionBeatCards',
       fields: ['chapterId', 'chapterTitle', 'overallArc', 'beats', 'source'],
     }],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS61-emotion-beat-durable'],
   },
   {
@@ -2984,7 +2984,7 @@ export const AGENT_SKILLS = [
       table: 'itemLedger',
       fields: ['itemName', 'action', 'quantity', 'heldByName', 'characterId', 'chapterId', 'chapterTitle', 'note'],
     }],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS63-inventory-extraction-durable'],
   },
   {
@@ -3007,7 +3007,7 @@ export const AGENT_SKILLS = [
       table: 'storyTimelineEvents',
       fields: ['title', 'storyTime', 'importance', 'description', 'chapterId', 'chapterTitle', 'order'],
     }],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: [
       'R-HARNESS64-story-timeline-extraction-durable',
       'R-HARNESS79-impact-story-timeline-regeneration',
@@ -3039,7 +3039,7 @@ export const AGENT_SKILLS = [
       ],
       adoptionExtension: 'cultivation-progress-lifecycle',
     }],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS71-cultivation-progress-extraction-durable'],
   },
   {
@@ -3069,7 +3069,7 @@ export const AGENT_SKILLS = [
       table: 'foreshadows',
       fields: ['name', 'type', 'status', 'description', 'plantChapterId', 'echoChapterIds', 'resolveChapterId', 'notes'],
     }],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS72-foreshadow-suggestions-durable'],
   },
   {
@@ -3092,7 +3092,7 @@ export const AGENT_SKILLS = [
       table: 'userStyleProfiles',
       fields: ['profile', 'enabled', 'sourceChapterIds', 'sampleCount', 'sampleWords'],
     }],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS76-style-learning-durable'],
   },
   {
@@ -3112,7 +3112,7 @@ export const AGENT_SKILLS = [
     contextCompression: PROSE_SELECTION_COMPRESSION_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'] }],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS65-selection-edit-durable'],
   },
   {
@@ -3132,7 +3132,7 @@ export const AGENT_SKILLS = [
     contextCompression: PROSE_SELECTION_COMPRESSION_POLICY,
     maxOutputTokens: 4_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS65-selection-edit-durable'],
   },
   {
@@ -3330,7 +3330,7 @@ export const AGENT_SKILLS = [
     contextCompression: INTERACTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS-RUNTIME1-instance-ledger'],
   },
   {
@@ -3420,7 +3420,7 @@ export const AGENT_SKILLS = [
     contextCompression: AI_TOWN_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-10-03',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-AITOWN1-runtime'],
   },
   {
@@ -3440,7 +3440,7 @@ export const AGENT_SKILLS = [
     contextCompression: INTERACTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS-RUNTIME1-instance-ledger'],
   },
   {
@@ -3493,7 +3493,7 @@ export const AGENT_SKILLS = [
     contextCompression: INTERACTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-29',
+    lastVerifiedAt: '2026-11-18',
     regressionTests: ['R-HARNESS-RUNTIME1-instance-ledger'],
   },
   {
