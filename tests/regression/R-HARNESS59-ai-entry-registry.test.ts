@@ -8,6 +8,7 @@ import {
   freezeFormalAIEntryBindingV1,
   assertFormalAIEntrySnapshotIntegrityV1,
   executeFrozenFormalAudioEntryV1,
+  executeFrozenFormalImagePreviewV1,
   executeFrozenFormalAIEntryV1,
   executeRegisteredAIEntryV1,
   streamRegisteredAIEntryV1,
@@ -30,6 +31,27 @@ const registry = JSON.parse(readFileSync('src/lib/agent/ai-entry-registry.json',
 }
 
 describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
+  it('临时地图图片入口绑定冻结 caller，拒绝采纳、错误入口和取消，不改旧文本绑定', async () => {
+    const entry = await freezeFormalAIEntryBindingV1('world.map.paint-preview')
+    const skill = getAgentSkillV1('world-origin.map-config')
+    const caller = 'src/lib/world-map/atlas/paint-preview.ts'
+    const meta = { category: 'geography.world-map-paint' }
+    let calls = 0
+    const invoke = async () => { calls++; return 'image-bytes' }
+    expect(await assertFormalAIEntrySnapshotIntegrityV1(entry)).toMatchObject({ outputModality: 'image', executionBoundary: 'authoring-draft', adoptAllowed: false })
+    await expect(executeFrozenFormalImagePreviewV1('world.map.paint-preview', entry, skill, 'other.ts', invoke, meta)).rejects.toThrow(/caller/)
+    await expect(executeFrozenFormalImagePreviewV1('world.map.paint-preview', entry, skill, caller, invoke, { category: 'other' })).rejects.toThrow()
+    const controller = new AbortController(); controller.abort()
+    await expect(executeFrozenFormalImagePreviewV1('world.map.paint-preview', entry, skill, caller, invoke, meta, controller.signal)).rejects.toThrow()
+    expect(calls).toBe(0)
+    expect(await executeFrozenFormalImagePreviewV1('world.map.paint-preview', entry, skill, caller, invoke, meta)).toBe('image-bytes')
+    expect(calls).toBe(1)
+    for (const patch of [{ adoptAllowed: true }, { executionBoundary: 'durable-run' }, { entryKind: 'formal' }]) {
+      const value = structuredClone(registry)
+      Object.assign(value.entries.find(row => row.entryId === 'world.map.paint-preview')!, patch)
+      expect(() => parseFormalAIEntryRegistryV1(value)).toThrow()
+    }
+  })
   it('音频模式显式冻结，旧文本绑定没有新增默认字段或改变 hash', async () => {
     const old = await freezeFormalAIEntryBindingV1('ttrpg.open.kp'), oldBody = JSON.parse(old.bindingJson)
     expect(oldBody).not.toHaveProperty('outputModality')
@@ -66,13 +88,13 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
     // SFQA-022/044 added the two governed import candidate entries and the
     // auxiliary private reference analysis entry; every registry row still has
     // one real AST binding, so the counts move with them.
-    expect(output).toContain('71 bindings / 74 calls')
-    expect(output).toContain('formal 48, auxiliary 16, evaluation 6, experimental 1')
+    expect(output).toContain('72 bindings / 75 calls')
+    expect(output).toContain('formal 48, auxiliary 17, evaluation 6, experimental 1')
   })
 
   it('唯一注册表严格解析且每项连接 Skill、执行器、候选和调用方', () => {
     expect(registry.version).toBe(2)
-    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(71)
+    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(72)
     for (const retiredId of ['world.setting.lookup.qa', 'world.setting.lookup.extract']) {
       expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.some(entry => entry.entryId === retiredId)).toBe(false)
     }
@@ -137,9 +159,9 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
     expect(() => parseFormalAIEntryRegistryV1(full)).not.toThrow()
     expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.some((entry) => entry.entryId.startsWith('longform.voice'))).toBe(false)
     delete full.limitedTransports
-    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(71)
+    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(72)
     const legacy = { ...full, entries: full.entries.filter((entry: Entry) => !['ttrpg.open.local-voice', 'ttrpg.open.brief', 'ttrpg.open.situation-propose', 'ttrpg.open.public-situation-propose', 'ttrpg.open.entity-propose', 'ttrpg.open.common-oracle-interpret', 'ttrpg.open.authoring-design', 'ttrpg.open.authoring-design.full'].includes(entry.entryId)) }
-    expect(parseFormalAIEntryRegistryV1(legacy).entries).toHaveLength(63)
+    expect(parseFormalAIEntryRegistryV1(legacy).entries).toHaveLength(64)
     expect(legacy.entries.some((entry: Entry) => entry.entryId.startsWith('ttrpg.open.authoring-design'))).toBe(false)
     for (const patch of [{ adoptAllowed: true }, { adoptionTargets: ['chapters'] }, { boundary: 'durable-run' }]) {
       const invalid = JSON.parse(JSON.stringify(registry))
