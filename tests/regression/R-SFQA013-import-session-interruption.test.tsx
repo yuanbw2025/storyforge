@@ -5,13 +5,14 @@ import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
  */
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Blob as NativeBlob } from 'node:buffer'
+import { Blob as NativeBlob, File as NativeFile } from 'node:buffer'
 import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
-import { quickHash } from '../../src/lib/import/chunker'
+import { getChunkText } from '../../src/lib/import/chunk-text-registry'
+import { chunkDocument, quickHash } from '../../src/lib/import/chunker'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 import * as importAuthority from '../../src/stores/import-session'
 import * as modelEvidence from '../../src/lib/agent/run/creation-response-evidence'
@@ -26,12 +27,12 @@ import { ToastProvider } from '../../src/components/shared/Toast'
 import ImportDocPanel from '../../src/components/system/ImportDocPanel'
 import type { ImportSession, Project } from '../../src/lib/types'
 
-const upload = vi.hoisted(() => ({ showConfirm: false, sourceBlob: () => ({ blob: null as Blob | null, filename: 'fixture.txt' }) }))
+const upload = vi.hoisted(() => ({ showConfirm: false, text: '海港的灯塔照亮归航的人。', sourceBlob: () => ({ blob: null as Blob | null, filename: 'fixture.txt' }) }))
 vi.mock('../../src/components/system/import/useImportDocumentPreparation', async () => {
   const { useState } = await import('react')
   return { default: function useSyntheticImportPreparation() {
     const [showConfirm, setShowConfirm] = useState(upload.showConfirm)
-    const text = '海港的灯塔照亮归航的人。'
+    const text = upload.text
     const plans = [{ index: 0, startChar: 0, endChar: text.length, charCount: text.length, text }]
     return { filename: 'fixture.txt', rawText: text, fileError: '', loadingFile: false,
       extractInfo: null, plans, chunkSize: 1000, showConfirm, volumeDetect: null,
@@ -106,6 +107,7 @@ beforeEach(async () => {
   await db.delete(); await db.open()
   store().clear(); useImportStatusStore.getState().reset(); ids.length = 0
   upload.showConfirm = false
+  upload.text = text
   upload.sourceBlob = () => ({ blob: new NativeBlob([Buffer.from(text, 'utf8')], { type: 'text/plain' }) as unknown as Blob, filename: 'fixture.txt' })
   const created = await createWorkspace({ name: '合成导入中断', description: '', genres: [], status: 'drafting', targetWordCount: 1000 })
   project = created.project; projectId = created.scope.projectId
@@ -318,5 +320,45 @@ describe('SFQA013 real Panel buttons with real session persistence', () => {
     expect((await store().findReusableCompleted(projectId))?.id).toBe(id)
     expect(request).not.toHaveBeenCalled()
     await capture(`panel-report-close-${mode}`)
+  })
+})
+
+
+describe('BUG020 frozen import upgrade recovery', () => {
+  it.each(['blob', 'same-file-upload'] as const)('restores old paid candidate via %s without changing ranges, hashes or sending another POST', async mode => {
+    // Frozen by the pre-BUG020 chunker, including its leading newline ownership.
+    const original = Array.from({ length: 3 }, (_, i) => `第${i + 1}章 标题${i + 1}\n${'文'.repeat(6100)}`).join('\n\n')
+    const oldRanges = [[0, 6109], [6109, 12219], [12219, 18328]]
+    const plans = oldRanges.map(([startChar, endChar], index) => ({ index, startChar, endChar, charCount: endChar - startChar, text: original.slice(startChar, endChar) }))
+    expect(chunkDocument(original, { targetChars: 5000 }).map(p => [p.startChar, p.endChar])).toEqual(oldRanges)
+    const chunks = await Promise.all(plans.map(async plan => ({ index: plan.index, startChar: plan.startChar, endChar: plan.endChar, charCount: plan.charCount,
+      status: 'pending' as const, attempts: 0, sourceTextHash: await hashImportChunkTextV1(plan.text) })))
+    const id = await store().create({ projectId, filename: 'fixture.txt', fileHash: quickHash(original), totalChars: original.length, totalChunks: 3,
+      chunkSize: 5000, chunks, merged: {}, rollingContext: '', importTarget: 'project', status: 'pending' })
+    ids.push(id); registerChunkTexts(id, plans)
+    // The shared fixture resolves a finite 32k service allocation through real metadata parsing.
+    await runSession({ projectId, sessionId: id })
+    expect(request, JSON.stringify(useImportStatusStore.getState())).toHaveBeenCalledTimes(1)
+    const pending = await readPendingDocumentImportV1({ projectId, sessionId: id })
+    expect(pending?.candidate).toBeTruthy()
+    const artifacts = await db.agentRunArtifacts.toArray()
+    expect(artifacts.length).toBeGreaterThan(0)
+    const frozen = (await store().load(id))!
+    clearChunkTexts(id); request.mockClear(); useImportStatusStore.getState().reset()
+    vi.stubGlobal('File', NativeFile)
+    upload.text = original
+    upload.sourceBlob = () => ({ blob: new NativeBlob([Buffer.from(original, 'utf8')], { type: 'text/plain' }) as unknown as Blob, filename: 'fixture.txt' })
+    if (mode === 'blob') await store().saveBlob(id, 'fixture.txt', upload.sourceBlob().blob!, frozen.fileHash)
+    await mount()
+    if (mode === 'same-file-upload') await click(await findButton(/用当前文件继续/))
+    await eventually(() => expect(hasChunkTexts(id)).toBe(true))
+    for (const plan of plans) {
+      expect(getChunkText(id, plan.index)).toBe(plan.text)
+      expect(await hashImportChunkTextV1(getChunkText(id, plan.index)!)).toBe(chunks[plan.index].sourceTextHash)
+    }
+    expect((await store().load(id))!.chunks.map(c => [c.startChar, c.endChar, c.sourceTextHash])).toEqual(chunks.map(c => [c.startChar, c.endChar, c.sourceTextHash]))
+    expect((await readPendingDocumentImportV1({ projectId, sessionId: id }))?.candidate).toEqual(pending?.candidate)
+    expect(await db.agentRunArtifacts.toArray()).toEqual(artifacts)
+    expect(request).not.toHaveBeenCalled()
   })
 })
