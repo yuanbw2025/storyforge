@@ -19,3 +19,50 @@
 @media(max-width:1250px){.we-overview-layout{grid-template-columns:minmax(0,1fr)}.we-overview-context{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}}
 @media(max-width:650px){.we-overview-context{grid-template-columns:minmax(0,1fr);gap:0}.we-setting-card{gap:12px;padding:20px 0}.we-setting-card strong{font-size:19px}.we-setting-icon{width:36px;height:36px}.we-setting-overview>h3{font-size:25px}}
 .world-engine-app .lf-sidebar nav button[aria-current]:hover{background:linear-gradient(95deg,var(--skin-selected, #cbdcc6),var(--skin-selected, #e0e5ce));color:var(--skin-selected-ink, #244842)}
+
+/* World-only geometry: content tools and editors take priority over repeated wrappers. */
+.world-engine-app .we-actions{gap:8px;margin:8px 0 12px}
+.world-engine-app label{gap:6px;margin-bottom:8px}
+.world-engine-app .we-library-tools input{width:320px;max-width:100%;min-width:0;flex:0 1 320px}
+.world-engine-app .we-library-tools>p{font-size:14px;line-height:1.7;margin-bottom:12px;color:var(--text-muted)}
+.world-engine-app .lf-library-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:12px}
+.world-engine-app .lf-library-grid article{min-width:0;overflow-wrap:anywhere}
+.world-engine-app .lf-current{overflow-wrap:anywhere}
+.world-engine-app .we-editor-tools{display:flex;align-items:center;margin-left:auto}
+.world-engine-app .we-editor-tools:empty{display:none}
+.world-engine-app .we-editor-tools button{min-width:34px;min-height:34px}
+.world-engine-app .we-overview-layout{gap:12px}
+.world-engine-app .we-setting-overview>h3{margin-top:0}
+.world-engine-app .we-setting-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}
+.world-engine-app .we-setting-card{gap:10px;padding:12px 0}
+.world-engine-app .we-setting-card small{margin-top:4px}
+.world-engine-app .we-setting-icon{width:34px;height:34px}
+.world-engine-app .we-overview-context .lf-paper{padding:16px;border-radius:12px}
+.world-engine-app .we-overview-context summary{cursor:pointer}
+.world-engine-app .we-overview-context dl{margin:10px 0}
+.world-engine-app .we-overview-context dl>div{padding:8px 0}
+.world-engine-app .sf-world-pipeline-grid,.world-engine-app .sf-sharing-grid{gap:12px}
+.world-engine-app .sf-world-pipeline-stage{padding:12px}
+.world-engine-app .lf-content .we-outlet-grid{gap:12px;grid-template-columns:minmax(220px,1fr) minmax(0,1.4fr)}
+@media(max-width:1000px){.world-engine-app .lf-content .we-outlet-grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:650px){.world-engine-app .we-setting-grid{grid-template-columns:minmax(0,1fr)}}
+.world-engine-app :is(.we-module-worldview-natural,.we-module-worldview-humanity) .workspace-module-body .p-6{padding:12px;min-width:0}
+.world-engine-app :is(.we-module-worldview-natural,.we-module-worldview-humanity) .workspace-module-body .px-6.pt-4{padding:12px}
+@media(max-width:700px){
+  .world-engine-app :is(.we-module-worldview-natural,.we-module-worldview-humanity) .workspace-module-body div:has(>nav.w-max){flex-direction:column;overflow:visible}
+  .world-engine-app :is(.we-module-worldview-natural,.we-module-worldview-humanity) .workspace-module-body nav.w-max{display:flex;flex-wrap:wrap;width:100%;min-width:0;max-width:none;border-right:0;border-bottom:1px solid var(--border);padding:4px;gap:4px}
+  .world-engine-app :is(.we-module-worldview-natural,.we-module-worldview-humanity) .workspace-module-body nav.w-max>button{width:auto;min-height:40px;padding:8px}
+  .world-engine-app .worldview-origin-layout{flex-direction:column}
+}
+@media(max-width:700px){
+  .world-engine-app .we-module-world-rules .workspace-module-body .flex.gap-0{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;align-content:start}
+  .world-engine-app .we-module-world-rules .workspace-module-body .flex.gap-0>div{width:auto;min-width:0;max-width:100%}
+  .world-engine-app .we-module-world-rules .workspace-module-body .flex.gap-0>div:not(:last-child){max-height:220px;overflow:auto}
+  .world-engine-app .we-module-world-rules .workspace-module-body .flex.gap-0>div:last-child{grid-column:1/-1;padding:12px}
+  .world-engine-app .we-module-world-rules .workspace-module-body .flex.items-center.justify-between{flex-wrap:wrap;gap:8px}
+  .world-engine-app .worldview-origin-nav{display:flex;flex-wrap:wrap;width:100%;max-width:none;gap:4px}
+  .world-engine-app .worldview-origin-nav>button{width:auto;min-height:40px}
+}
+.world-engine-app .we-library-empty{font-size:14px;line-height:1.7;margin:12px 0;color:var(--text-muted)}
+.world-engine-app .we-overview-context details>.lf-paper{padding:0;margin:12px 0 0;border:0;background:none}
+.world-engine-app .we-overview-context details dl.grid{grid-template-columns:minmax(0,1fr)}
