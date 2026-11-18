@@ -5,6 +5,10 @@ import {
 } from './schema'
 
 export const REQUIRED_TABLES = [
+  'workCoverDrafts',
+  'workCoverAssets',
+  'workCoverAdoptions',
+  'workCoverResponseBuffers',
   'ttrpgNarrativeMemories',
   'worldNarrativeIndexCaches',
   'extensionPackages',

@@ -1,3 +1,4 @@
+import type { WorkCoverDraftV1, WorkCoverAssetV1, WorkCoverAdoptionV1 } from '../work-cover/types'
 import { saveFile } from '../platform/save-file'
 import type { ExtensionProfile, ExtensionRecord, ExtensionContract, ExtensionOperation } from '../extensions/types'
 import type { AvgAuthoringDraftV1, AvgDraftMediaV1 } from '../avg/authoring-contract'
@@ -116,7 +117,20 @@ type HomeWorldGroupExportRef = {
  */
 type PortableExtension<T> = Omit<T, 'id' | 'projectId' | 'worldId' | 'workId' | 'profileId' | 'chapterId' | 'historyEventId'> & { _exportId: number; _worldExportId: number | null; _workExportId: number | null; _profileExportId?: number; _chapterExportId?: number | null; _historyEventExportId?: number | null }
 
+type PortableWorkCover<T, K extends keyof T> = Omit<T, K | 'id' | 'projectId' | 'worldId' | 'workId'> & {
+  _exportId: number; _workOwnerExportId: number; _workExportId: number; _worldExportId: number
+}
+
 export interface ProjectExportData {
+  workCoverAssets: (PortableWorkCover<WorkCoverAssetV1, 'blobObjectId' | 'sourceRunId' | 'parentAssetId'> & {
+    _blobObjectExportId: number; _sourceRunExportId: number | null; _parentAssetExportId: number | null
+  })[]
+  workCoverDrafts: (PortableWorkCover<WorkCoverDraftV1, 'selectedAssetId' | 'adoptedAssetId' | 'lastRunId' | 'briefJson'> & {
+    _selectedAssetExportId: number | null; _adoptedAssetExportId: number | null; _lastRunExportId: number | null; _selectedChapterRefs: string
+  })[]
+  workCoverAdoptions: (PortableWorkCover<WorkCoverAdoptionV1, 'draftId' | 'originalAssetId' | 'finalAssetId' | 'sourceRunId'> & {
+    _draftExportId: number; _originalAssetExportId: number; _finalAssetExportId: number; _sourceRunExportId: number | null
+  })[]
   extensionProfiles: PortableExtension<ExtensionProfile>[]
   extensionRecords: PortableExtension<ExtensionRecord>[]
   extensionContracts: PortableExtension<ExtensionContract>[]
