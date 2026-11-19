@@ -195,6 +195,7 @@ function ScopedNaturalPanel({ project, activeGroupId, resizableInputs = false, c
                 resizableInputs={resizableInputs}
                 field={f}
                 value={values[f.key] ?? ''}
+                markdownRead={confirmedLocalSaves}
                 localSave={confirmedLocalSaves ? {
                   identity: { ...authorScope, table: 'worldviews', field: f.key, worldGroupId: targetWorldGroupId },
                   witness: localSaveWitnesses[f.key] ?? null,
@@ -318,6 +319,7 @@ function SimpleFieldEditor({
   value,
   onChange,
   localSave,
+  markdownRead = false,
   project,
   agentField,
   activeGroupId,
@@ -333,6 +335,7 @@ function SimpleFieldEditor({
   value: string
   onChange: InlineSave
   localSave?: LocalSaveContractV1
+  markdownRead?: boolean
   project: Project
   agentField: WorldviewAgentField
   activeGroupId: number | null
@@ -352,7 +355,7 @@ function SimpleFieldEditor({
       </div>
 
       <div className="bg-bg-surface border border-border rounded-lg p-4">
-        <InlineTextarea inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(agentField))} value={value} onChange={onChange} localSave={localSave} placeholder={field.desc} />
+        <InlineTextarea inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(agentField))} value={value} onChange={onChange} localSave={localSave} markdownRead={markdownRead} placeholder={field.desc} />
       </div>
       <WorldviewAgentControls
         field={agentField}
