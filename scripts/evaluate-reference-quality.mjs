@@ -21,7 +21,7 @@ const hash = x=>createHash('sha256').update(x).digest('hex')
 try {
   const {referenceChunkMessages} = await server.ssrLoadModule('/src/lib/reference-analysis/chunk-prompt.ts')
   const {REFERENCE_APPLICATION_SKILL} = await server.ssrLoadModule('/src/lib/reference-analysis/content-skill.ts')
-  const baselineSource = await readFile('tests/fixtures/reference-quality/baseline-prompt.txt','utf8')
+  const baselineSource = JSON.parse(await readFile('tests/fixtures/reference-quality/baseline-prompt.json','utf8'))
   const baseline = new Function(ts.transpile(baselineSource)+';return referenceChunkMessages')()
   const fixture = process.env.REFERENCE_EVAL_PUBLIC ? 'tests/fixtures/reference-quality/public-cases.json' : 'tests/fixtures/reference-quality/cases.json'
   const allCases = JSON.parse(await readFile(fixture,'utf8'))
