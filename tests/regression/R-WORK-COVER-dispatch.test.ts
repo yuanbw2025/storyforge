@@ -16,6 +16,7 @@ import { executeFrozenFormalImageEntryV1, executeFrozenFormalImagePreviewV1, fre
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { readWorkCoverCardStateV1 } from '../../src/lib/work-cover/card-state'
 import { selectReturnedWorkCoverCandidateV1 } from '../../src/lib/work-cover/select-candidate'
+import { failCoverRunV1 } from '../../src/lib/work-cover/run-evidence'
 
 installRasterDecoderForVitestV1()
 beforeEach(async () => { await db.delete(); await db.open() })
@@ -172,16 +173,106 @@ describe('035 image one-shot dispatch/materialization', () => {
     expect((await db.works.get(fixture.work.id!))!.coverImage ?? '').toBe('')
   }, 20_000)
 
-  it.each([
-    { data: [{ url: 'https://example.invalid/paid-image.png' }] },
-    { data: [{ b64_json: 'AAAA' }, { b64_json: 'AAAA' }] },
-    { data: [{ b64_json: 'AAAA' }], status: 'queued' },
-    { ...JSON.parse(payload()), task_id: 'synthetic-async-task' },
-    { ...JSON.parse(payload()), status: 'pending' },
-  ])('rejects URL/async/multiple results without download or replacement POST', async response => {
-    const post = vi.fn(async () => new Response(JSON.stringify(response), { status: 200 })); vi.stubGlobal('fetch', post)
+  it.each([undefined, null, ''].flatMap((url, urlIndex) => [undefined, 'x', 'receipt-12345678901234567890123456789012', 'x'.repeat(128)]
+    .map((taskId, receiptIndex) => ({ name: `url-${urlIndex}/receipt-${receiptIndex}`, url, taskId,
+      status: [undefined, 'success', 'succeeded', 'completed'][receiptIndex] }))))(
+    'accepts complete synchronous bytes with ignored receipt metadata: $name', async ({ url, taskId, status }) => {
+      const response = { created: 123, task_id: taskId, status,
+        data: [{ ...JSON.parse(payload()).data[0], url, status }] }
+      const post = vi.fn(async () => new Response(JSON.stringify(response), { status: 200 })); vi.stubGlobal('fetch', post)
+      const fixture = await prepared(); await submitCoverImageOnceV1(fixture.authorization)
+      const original = (await db.workCoverResponseBuffers.where('runId').equals(fixture.authorization.runId).first())!
+      expect(original.state).toBe('response-observed'); expect(original.payload).toBeInstanceOf(ArrayBuffer)
+      const asset = await materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })
+      expect(asset.sourceRunId).toBe(fixture.authorization.runId)
+      expect(asset.candidateJson).toContain('storyforge.work-cover.image-candidate@1')
+      expect(await materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })).toEqual(asset)
+      expect(await db.workCoverAssets.count()).toBe(1); expect(await db.mediaBlobObjects.count()).toBe(1)
+      const run = await readAgentRunV1(fixture.scope, fixture.authorization.runId)
+      expect(run.projection.state).toBe('completed'); expect(run.projection.terminalReceiptHash).toMatch(/^[a-f0-9]{64}$/)
+      const saved = (await db.workCoverResponseBuffers.get(original.id!))!
+      expect(saved.state).toBe('candidate-ready'); expect(saved.payload).toBeNull()
+      expect(saved.rawResponseHash).toBe(original.rawResponseHash)
+      expect((await db.works.get(fixture.work.id!))!.coverImage ?? '').toBe('')
+      expect(await db.workCoverAdoptions.count()).toBe(0); expect(post).toHaveBeenCalledTimes(1)
+    })
+
+  const withImage = (top: Record<string, unknown> = {}, item: Record<string, unknown> = {}) => ({
+    ...top, data: [{ ...JSON.parse(payload()).data[0], ...item }],
+  })
+  it('leaves a terminal failed run and its now-compatible saved raw response unchanged', async () => {
+    const post = vi.fn(async () => new Response(JSON.stringify(withImage({ task_id: 'original-receipt' }, { url: '' })), { status: 200 }))
+    vi.stubGlobal('fetch', post)
     const fixture = await prepared(); await submitCoverImageOnceV1(fixture.authorization)
-    await expect(materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })).rejects.toThrow('重发')
+    const buffer = (await db.workCoverResponseBuffers.where('runId').equals(fixture.authorization.runId).first())!
+    // Reproduce the former parser's terminal observation without changing its raw bytes.
+    await db.workCoverResponseBuffers.update(buffer.id!, { state: 'failed', errorCode: 'image-response-rejected' })
+    await failCoverRunV1(fixture.scope, fixture.authorization.runId, 'image-response-rejected')
+    const beforeRun = await readAgentRunV1(fixture.scope, fixture.authorization.runId)
+    const beforeBuffer = await db.workCoverResponseBuffers.get(buffer.id!)
+    expect(beforeRun.projection.state).toBe('failed')
+    await expect(materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })).rejects.toThrow('不会自动重发')
+    expect(await readAgentRunV1(fixture.scope, fixture.authorization.runId)).toEqual(beforeRun)
+    expect(await db.workCoverResponseBuffers.get(buffer.id!)).toEqual(beforeBuffer)
+    expect(await db.workCoverAssets.count()).toBe(0); expect(await db.mediaBlobObjects.count()).toBe(0)
+    expect(await db.workCoverAdoptions.count()).toBe(0)
+    expect((await db.works.get(fixture.work.id!))!.coverImage ?? '').toBe(''); expect(post).toHaveBeenCalledTimes(1)
+  })
+  const rejectedResponses: Array<{ name: string; body: () => string | Uint8Array<ArrayBuffer>; error?: string }> = [
+    ...['https://example.invalid/paid-image.png', ' ', 1, false, {}, []].map((url, index) => ({
+      name: `item-url-${index}`, body: () => JSON.stringify(withImage({}, { url })),
+    })),
+    ...['task', 'taskId', 'job_id', 'jobId', 'polling_url', 'status_url', 'result_url', 'url'].map(key => ({
+      name: `top-${key}`, body: () => JSON.stringify(withImage({ [key]: null })),
+    })),
+    ...['task', 'task_id', 'taskId', 'job_id', 'jobId', 'polling_url', 'status_url', 'result_url'].map(key => ({
+      name: `item-${key}`, body: () => JSON.stringify(withImage({}, { [key]: null })),
+    })),
+    ...['polling_url', 'status_url', 'result_url', 'task'].flatMap(key => [
+      { name: `top-active-${key}`, body: () => JSON.stringify(withImage({ [key]: key === 'task' ? { status: 'pending' } : 'https://example.invalid/poll' })) },
+      { name: `item-active-${key}`, body: () => JSON.stringify(withImage({}, { [key]: key === 'task' ? { status: 'pending' } : 'https://example.invalid/poll' })) },
+    ]),
+    ...['pending', 'queued', 'running', 'incomplete', 'failed', 'unknown', '', null, 1, {}, ['completed']].flatMap((status, index) => [
+      { name: `top-status-${index}`, body: () => JSON.stringify(withImage({ status })) },
+      { name: `item-status-${index}`, body: () => JSON.stringify(withImage({}, { status })) },
+    ]),
+    ...[null, '', ' ', 'a b', '\t', '\n', 'x\n', 'x\r', 'x\r\n', '\u0000', '\u007f', '中文', 1, {}, [], 'x'.repeat(129)].map((taskId, index) => ({
+      name: `invalid-top-receipt-${index}`, body: () => JSON.stringify(withImage({ task_id: taskId })),
+    })),
+    ...[
+      { task_id: 'receipt-only' }, { data: [{ url: null }] }, { data: [{ b64_json: '' }] },
+      { data: [{ b64_json: 1 }] }, { data: [{ b64_json: 'AAA' }] }, { data: [{ b64_json: 'AA?=' }] },
+      { data: [{ b64_json: 'AB==' }] }, { data: [{ b64_json: 'AAAA' }] },
+      { data: [{ b64_json: 'AAAA' }, { b64_json: 'AAAA' }] }, { data: [] }, { data: [null] }, { data: [[]] },
+      { data: {} }, [], null,
+    ].map((value, index) => ({ name: `invalid-shape-or-bytes-${index}`, body: () => JSON.stringify(value) })),
+    { name: 'truncated-json', body: () => '{"data":[' },
+    { name: 'invalid-utf8', body: () => new Uint8Array([0xff]) },
+    { name: 'base64-over-cap', error: '超过原图上限', body: () => JSON.stringify({ data: [{ b64_json: 'A'.repeat(35_000_004) }] }) },
+    { name: 'decoded-bytes-over-cap', error: '原图大小', body: () => JSON.stringify({ data: [{ b64_json: 'A'.repeat(4 * Math.ceil((25 * 1024 * 1024 + 1) / 3)) }] }) },
+    ...[[16_385, 1], [8192, 4097]].map(([width, height]) => ({
+      name: `raster-dimensions-${width}x${height}`, error: '尺寸或总像素', body: () => {
+        // The shared container validator must reject dimensions before bitmap allocation.
+        const bytes = encodeFixtureRasterV1(12, 18), header = new DataView(bytes)
+        header.setUint32(16, width); header.setUint32(20, height)
+        return JSON.stringify({ data: [{ b64_json: binaryDataUrlV1(bytes, 'image/png').split(',')[1] }] })
+      },
+    })),
+  ]
+  it.each(rejectedResponses)('rejects unsafe or incomplete response without fetching again: $name', async ({ body, error }) => {
+    const post = vi.fn(async () => new Response(body(), { status: 200 })); vi.stubGlobal('fetch', post)
+    const fixture = await prepared(); await submitCoverImageOnceV1(fixture.authorization)
+    const original = (await db.workCoverResponseBuffers.where('runId').equals(fixture.authorization.runId).first())!
+    await expect(materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })).rejects.toThrow(error)
+    const rejected = (await db.workCoverResponseBuffers.get(original.id!))!
+    expect(rejected.state).toBe('failed'); expect(rejected.errorCode).toBe('image-response-rejected')
+    expect(rejected.payload).toEqual(original.payload); expect(rejected.rawResponseHash).toBe(original.rawResponseHash)
+    const terminal = await readAgentRunV1(fixture.scope, fixture.authorization.runId)
+    expect(terminal.projection.state).toBe('failed')
+    await expect(materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })).rejects.toThrow('不会自动重发')
+    expect(await readAgentRunV1(fixture.scope, fixture.authorization.runId)).toEqual(terminal)
+    expect((await db.works.get(fixture.work.id!))!.coverImage ?? '').toBe('')
+    expect(await db.workCoverAdoptions.count()).toBe(0); expect(await db.mediaBlobObjects.count()).toBe(0)
     expect(post).toHaveBeenCalledTimes(1); expect(await db.workCoverAssets.count()).toBe(0)
   })
 

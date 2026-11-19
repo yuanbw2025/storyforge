@@ -19,15 +19,24 @@ import { storeWorkCoverOriginalAssetInTransactionV1 } from './assets'
 function imageBytes(payload: ArrayBuffer): ArrayBuffer {
   let value: unknown
   try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(payload)) } catch { throw new Error('图片服务未返回完整 JSON；原答已保留，不会重发。') }
-  const result = value as Record<string, unknown> & { data?: Array<Record<string, unknown>>; status?: unknown }
-  const asyncKeys = ['task', 'task_id', 'taskId', 'job_id', 'jobId', 'polling_url', 'status_url', 'result_url', 'url']
-  const asynchronous = result && typeof result === 'object' && (asyncKeys.some(key => Object.prototype.hasOwnProperty.call(result, key))
-    || (result.status !== undefined && !['success', 'succeeded', 'completed'].includes(String(result.status))))
-  if (!result || typeof result !== 'object' || !Array.isArray(result.data) || result.data.length !== 1
-    || !result.data[0] || typeof result.data[0] !== 'object' || result.data[0].url !== undefined
-    || asyncKeys.some(key => Object.prototype.hasOwnProperty.call(result.data![0], key)) || asynchronous
-    || typeof result.data[0].b64_json !== 'string') throw new Error('此配方只接收同步单张 base64 图片；原答已保留，不下载或重发。')
-  const base64 = result.data[0].b64_json
+  const isRecord = (entry: unknown): entry is Record<string, unknown> => entry !== null && typeof entry === 'object' && !Array.isArray(entry)
+  const has = (entry: Record<string, unknown>, key: string) => Object.prototype.hasOwnProperty.call(entry, key)
+  const successStatus = (entry: Record<string, unknown>) => !has(entry, 'status')
+    || (typeof entry.status === 'string' && ['success', 'succeeded', 'completed'].includes(entry.status))
+  const asyncKeys = ['task', 'taskId', 'job_id', 'jobId', 'polling_url', 'status_url', 'result_url']
+  if (!isRecord(value) || !Array.isArray(value.data) || value.data.length !== 1 || !isRecord(value.data[0])) {
+    throw new Error('此配方只接收同步单张 base64 图片；原答已保留，不下载或重发。')
+  }
+  const item = value.data[0]
+  // A bounded top-level receipt is ignored, never a polling locator. Only
+  // complete canonical image bytes below can establish a synchronous result.
+  const receipt = !has(value, 'task_id') || (typeof value.task_id === 'string'
+    && value.task_id.length >= 1 && value.task_id.length <= 128 && !/[^\x21-\x7e]/.test(value.task_id))
+  const noImageUrl = !has(item, 'url') || item.url === null || item.url === ''
+  if (!receipt || !noImageUrl || has(value, 'url') || has(item, 'task_id')
+    || asyncKeys.some(key => has(value, key) || has(item, key)) || !successStatus(value) || !successStatus(item)
+    || typeof item.b64_json !== 'string') throw new Error('此配方只接收同步单张 base64 图片；原答已保留，不下载或重发。')
+  const base64 = item.b64_json
   if (!base64 || base64.length > 35_000_000 || base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new Error('图片 base64 非法或超过原图上限；不会重发。')
   let binary: string
   try { binary = atob(base64) } catch { throw new Error('图片 base64 无法解码；不会重发。') }
