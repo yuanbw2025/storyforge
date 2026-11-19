@@ -65,7 +65,7 @@ export function currentWorldOriginCandidateFixtureV1(
   return {
     payload: {
       worldviewField: 'worldOrigin' as const,
-      worldviewFieldOperation: (snapshotInput.worldOrigin?.trim() ? 'expand' : 'create') as const,
+      worldviewFieldOperation: snapshotInput.worldOrigin?.trim() ? 'expand' as const : 'create' as const,
       worldviewFieldOutputBudget: {
         version: 1 as const,
         source: 'default' as const,
