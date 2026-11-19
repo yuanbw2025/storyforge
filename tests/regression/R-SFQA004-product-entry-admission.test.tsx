@@ -806,6 +806,9 @@ describe('SFQA004 · real authoring and production boundaries', () => {
         })).rejects.toThrow('004 controlled paid-result interruption')
       }, 30_000)
 
+      // This functional replay verifies the complete imported Build under V8
+      // coverage; it is not a 30s performance gate. Give this one heavy replay
+      // a bounded CI budget while retaining the local limit and all assertions.
       it('Creator edit restores an already retained paid result after maturity changes with zero redispatch', async () => {
         const restored = await readLatestTextOpenWorldCreatorArtifactEditStateV1(f.selection)
         if (!restored || 'kind' in restored) throw new Error('004 expected restored paid candidate')
@@ -818,7 +821,7 @@ describe('SFQA004 · real authoring and production boundaries', () => {
         expect(await readAgentRunArtifactExactV1({ projectId: f.scope.projectId, artifactKind: 'raw-response', contentHash: raw.payload.contentHash })).toBe(f.raw)
         expect(runAI).toHaveBeenCalledOnce()
         expect(fetch).not.toHaveBeenCalled()
-      }, 30_000)
+      }, process.env.CI ? 60_000 : 30_000)
     })
 
     it('Creator edit explicit pre-request intake resume denies new execution while cancel stays available', async () => {
