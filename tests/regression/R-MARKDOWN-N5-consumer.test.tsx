@@ -47,6 +47,8 @@ it('makes real registered N5 content readable without a competing parent click: 
   const anchor = ui.host.querySelector('a')!; anchor.addEventListener('click', event => event.preventDefault())
   await act(async () => { anchor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })); vi.advanceTimersByTime(300) })
   expect(ui.host.querySelector('textarea')).toBeNull(); expect(write).not.toHaveBeenCalled()
+  await act(async () => { paragraph.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })); vi.advanceTimersByTime(300) })
+  expect(ui.host.querySelector('textarea')).not.toBeNull(); expect(write).not.toHaveBeenCalled()
 })
 it('keeps original CRLF and the entire row unchanged when source editing only selects then flushes without author input', async () => {
   const scope = await fixture(); const before = JSON.stringify(await db.worldviews.toArray()); const write = vi.fn()

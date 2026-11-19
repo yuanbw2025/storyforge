@@ -101,7 +101,8 @@ test('actual parent source/copy/selection/double-click/ctrl/middle/link stay sep
   if (process.platform === 'darwin') { await link.click({ modifiers: ['Control'] }); await page.keyboard.press('Escape'); await expect(reader(page)).toBeVisible() }
   expect(linkReceipts).toHaveLength(4); await reader(page).getByRole('link', { name: '页内', exact: true }).click(); await expect(reader(page)).toBeVisible()
   expect(JSON.stringify(await rows(page))).toBe(before)
-  const area = await enter(page); await area.evaluate(el => (el as HTMLTextAreaElement).setSelectionRange(2, 9)); await flush(page)
+  await reader(page).locator('p').first().click()
+  const area = pane(page).locator('[data-input-area-layout] textarea').first(); await expect(area).toBeVisible(); await area.evaluate(el => (el as HTMLTextAreaElement).setSelectionRange(2, 9)); await flush(page)
   await expect(reader(page)).toBeVisible(); expect(JSON.stringify(await rows(page))).toBe(before)
 })
 test('actual original textarea survives held old ack/new dirty/IME, resize/reset/window return and storage failure until latest real confirmation', async ({ page }) => {
