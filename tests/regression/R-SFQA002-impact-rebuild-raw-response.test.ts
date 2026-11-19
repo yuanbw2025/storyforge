@@ -1,3 +1,4 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import type { AIConfig, AgentRunRecord, Chapter, ChatMessage, OutlineNode, StoryCore, StoryTimelineEvent, TemporalFact, WorldGroup } from '../../src/lib/types'
@@ -21,7 +22,7 @@ type Kind = 'outline' | 'timeline'
 type GenerateInput = Parameters<typeof generateImpactOutlineRegenerationCandidateV1>[0]
 type GenerateOptions = Pick<GenerateInput, 'runAI' | 'aiConfig' | 'onDurableBoundary'>
 const kinds: Kind[] = ['outline', 'timeline']
-const aiConfig: AIConfig = { provider: 'custom', apiKey: '', model: 'isolated-model', baseUrl: 'http://127.0.0.1:9/v1', temperature: 0, maxTokens: 2_000, contextWindow: 128_000 }
+const aiConfig: AIConfig = { provider: 'custom', apiKey: '', model: 'isolated-model', baseUrl: 'http://127.0.0.1:9/v1', temperature: 0, maxTokens: 2_000 }
 
 async function fixture(kind: Kind, dependency: 'acknowledged' | null = 'acknowledged') {
   const created = await seedCurrentWorkspace(`002 impact ${kind}`, { enableMultiWorld: true })
@@ -114,10 +115,17 @@ function containsCause(value: unknown, target: unknown): boolean {
 let expectedSyntheticPosts = 0
 beforeEach(async () => {
   await db.delete(); await db.open(); expectedSyntheticPosts = 0
+  await seedModelAllocationFixtureV1(aiConfig, 128_000)
   vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => { throw Error('No real network or model is authorized') }))
 })
 afterEach(async () => {
-  try { expect(fetch).toHaveBeenCalledTimes(expectedSyntheticPosts) }
+  try {
+    expect(fetch).toHaveBeenCalledTimes(expectedSyntheticPosts)
+    for (const [url, init] of vi.mocked(fetch).mock.calls) {
+      expect(String(url)).toBe('http://127.0.0.1:9/v1/chat/completions')
+      expect(init?.method).toBe('POST')
+    }
+  }
   finally { vi.restoreAllMocks(); vi.unstubAllGlobals(); await db.delete() }
 })
 

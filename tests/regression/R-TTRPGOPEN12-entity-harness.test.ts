@@ -1,3 +1,4 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { setupOpenEntityModelV1 } from '../helpers/open-entity-model'
@@ -27,7 +28,11 @@ describe('R-TTRPGOPEN12 model entity transport, candidate and no creation author
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); db.close() })
   it('uses the actual formal entry/client with exact HTTP messages and no private prompt layer', async () => {
     const s = await setup({ provider: 'custom', model: 'entity-wire-test-model' })
+    const aiConfig = { provider: 'custom' as const, model: 'entity-wire-test-model',
+      apiKey: '', baseUrl: 'https://entity-wire.example.invalid/v1', maxTokens: 9999, temperature: 0.2 }
+    await seedModelAllocationFixtureV1(aiConfig, 64_000)
     const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(init?.method).toBe('POST')
       expect(String(url)).toBe('https://entity-wire.example.invalid/v1/chat/completions')
       const body = JSON.parse(String(init?.body)); expect(body.messages).toEqual(s.prepared.messages)
       expect(body.max_tokens).toBe(1000); expect(body.stream).toBe(false); expect(body).not.toHaveProperty('tools')
@@ -36,8 +41,7 @@ describe('R-TTRPGOPEN12 model entity transport, candidate and no creation author
         { status: 200, headers: { 'Content-Type': 'application/json' } })
     })
     vi.stubGlobal('fetch', fetch)
-    const result = await executeTtrpgOpenEntityRequestV1({ ...s.read, aiConfig: { provider: 'custom', model: 'entity-wire-test-model',
-      apiKey: '', baseUrl: 'https://entity-wire.example.invalid/v1', maxTokens: 9999, temperature: 0.2, contextWindow: 64000 } })
+    const result = await executeTtrpgOpenEntityRequestV1({ ...s.read, aiConfig })
     expect(result.status === 'candidate' && result.candidate.artifact.status).toBe('usable-with-warnings')
     expect(fetch).toHaveBeenCalledTimes(1)
   })
