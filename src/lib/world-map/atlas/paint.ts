@@ -1,23 +1,14 @@
 import { DEFAULT_ATLAS_LAYERS, type AtlasLayers } from './layers'
 import { stamp } from './symbols'
 import { terrainWash } from './relief'
-import { atlasIslandInsideWater } from './inspect'
-import { atlasShorelinePoints } from './shoreline'
+import { line, along, watercourse, atlasSurfacePaths } from './paths'
+import { drawSketchTerrain } from './sketch'
 import { seedRandom } from '../engine/random'
 import type { AtlasGeometry, Point } from './geometry'
 
 type Brush = CanvasRenderingContext2D
 type Random = () => number
 const serif = '"Songti SC","STSong","Noto Serif CJK SC",serif'
-function line(points: Point[], closed = false) {
-  const p = new Path2D()
-  if (points.length) {
-    p.moveTo(...points[0])
-    for (const [x, y] of points.slice(1)) p.lineTo(x, y)
-    if (closed) p.closePath()
-  }
-  return p
-}
 function ink(c: Brush, path: Path2D, color: string, width: number) {
   c.strokeStyle = color
   c.lineWidth = width
@@ -29,42 +20,6 @@ function wash(c: Brush, x: number, y: number, r: number, color: string) {
   g.addColorStop(1, color.slice(0, 7) + '00')
   c.fillStyle = g
   c.fillRect(x - r, y - r, r * 2, r * 2)
-}
-function watercourse(points: Point[], name: string) {
-  const rng = seedRandom('river-' + name)
-  const p = new Path2D()
-  p.moveTo(...points[0])
-  for (let j = 1; j < points.length; j++) {
-    const [x, y] = points[j - 1],
-      [u, v] = points[j],
-      dx = u - x,
-      dy = v - y
-    const length = Math.hypot(dx, dy)
-    const bend = Math.min(8, length * 0.16) * (rng() > 0.5 ? 1 : -1)
-    const ox = (-dy / (length || 1)) * bend,
-      oy = (dx / (length || 1)) * bend
-    p.bezierCurveTo(
-      x + dx * 0.32 + ox,
-      y + dy * 0.32 + oy,
-      x + dx * 0.68 - ox,
-      y + dy * 0.68 - oy,
-      u,
-      v,
-    )
-  }
-  return p
-}
-function along(points: Point[], step: number, place: (x: number, y: number) => void) {
-  if (points.length === 1) {
-    place(...points[0])
-    return
-  }
-  for (let i = 1; i < points.length; i++) {
-    const [x, y] = points[i - 1],
-      [u, v] = points[i]
-    const n = Math.max(1, Math.ceil(Math.hypot(u - x, v - y) / step))
-    for (let j = 0; j < n; j++) place(x + ((u - x) * j) / n, y + ((v - y) * j) / n)
-  }
 }
 function peak(c: Brush, rng: Random, x: number, y: number, h: number, snow: boolean) {
   const w = h * (0.62 + rng() * 0.3),
@@ -260,7 +215,9 @@ export function drawTerrain(
   sheet?: HTMLImageElement,
   layers: AtlasLayers = DEFAULT_ATLAS_LAYERS,
   painted?: HTMLImageElement,
+  style: 'illustrated' | 'sketch' = 'illustrated',
 ) {
+  if (style === 'sketch') return drawSketchTerrain(g, seed, layers)
   const canvas = document.createElement('canvas')
   const scale = Math.min(3, 4096 / Math.max(g.width, g.height))
   canvas.width = Math.round(g.width * scale)
@@ -318,35 +275,7 @@ export function drawTerrain(
       0.4,
     )
   c.setLineDash([])
-  const land = new Path2D()
-  const coast = new Path2D()
-  const realmEdges = new Path2D()
-  const waterEdges = new Path2D()
-  const outsideWaters: Path2D[] = []
-  const area = (points: Point[]) => points.reduce((sum, [x, y], i) => {
-    const [u, v] = points[(i + 1) % points.length]
-    return sum + x * v - u * y
-  }, 0)
-  const shore = (points: Point[]) => line(atlasShorelinePoints(points, seed), true)
-  if (layers.waterBodies) for (const f of features) if (f.kind === 'water') {
-    const outline = shore(area(f.points) > 0 ? [...f.points].reverse() : f.points)
-    waterEdges.addPath(outline)
-    const outsideWater = new Path2D()
-    outsideWater.rect(-8192, -8192, 16384, 16384)
-    outsideWater.addPath(outline)
-    for (const island of features.filter(land => atlasIslandInsideWater(land, f))) {
-      outsideWater.addPath(shore(area(island.points) < 0 ? [...island.points].reverse() : island.points))
-    }
-    outsideWaters.push(outsideWater)
-  }
-  const fillRule = g.cellCoast ? 'evenodd' : 'nonzero'
-  for (const f of features)
-    if (f.kind === 'land' || f.kind === 'realm') {
-      const points = !g.cellCoast && area(f.points) < 0 ? [...f.points].reverse() : f.points
-      const outline = f.kind === 'realm' ? line(points, true) : shore(points)
-      land.addPath(outline)
-      ;(f.kind === 'realm' ? realmEdges : coast).addPath(outline)
-    }
+  const { land, coast, realmEdges, waterEdges, outsideWaters, fillRule } = atlasSurfacePaths(g, seed, layers.waterBodies)
   if (layers.coastlines) {
     // Keep shoreline ink on the water side of the union. Overlapping land
     // polygons are one landmass, not artificial coastlines across its interior.
@@ -595,9 +524,11 @@ export function drawLabels(
     fullDetail?: boolean
     screenScale?: number
     textScale?: number
+    style?: 'illustrated' | 'sketch'
   } = {},
 ) {
   const layers = options.layers ?? DEFAULT_ATLAS_LAYERS
+  const sketch = options.style === 'sketch'
 
   const occupied: Box[] = []
   const labeledNames = new Set<string>()
@@ -613,6 +544,9 @@ export function drawLabels(
     wall: 4,
     river: 5,
     ridge: 6,
+    wood: 6,
+    marsh: 6,
+    desert: 6,
   }
   const list = g.features
     .filter((f) => f.name && f.kind in order)
@@ -622,7 +556,7 @@ export function drawLabels(
         order[a.kind as keyof typeof order] - order[b.kind as keyof typeof order],
     )
   for (const f of list) {
-    const [x, y] = f.kind === 'water'
+    const [x, y] = f.kind === 'water' || (['wood', 'marsh', 'desert'].includes(f.kind) && f.points.length >= 5)
       ? f.points.reduce(([x, y], [u, v]) => [x + u / f.points.length, y + v / f.points.length], [0, 0])
       : f.points[Math.floor(f.points.length / 2)]
     const fortress = f.kind === 'fortress'
@@ -649,20 +583,23 @@ export function drawLabels(
       c.fill(marker)
       c.stroke(marker)
     }
-    if (city && layers.burgIcons && options.sheet && f.rank < 2)
+    if (!sketch && city && layers.burgIcons && options.sheet && f.rank < 2)
       stamp(c, options.sheet, fortress ? 6 : f.rank === 0 ? 4 : 5, x, y, f.rank === 0 ? 24 : 15)
-    if (city && layers.burgIcons && f.rank === 0 && !illustrated) {
+    if (!sketch && city && layers.burgIcons && f.rank === 0 && !illustrated) {
       castle(c, x, y)
     }
     if (city && layers.burgIcons) {
       const r = (f.rank === 0 ? 2.65 : 1.65) / Math.sqrt(zoom)
-      c.fillStyle = '#ffefc5'
-      c.strokeStyle = '#664e3d'
+      c.fillStyle = sketch ? '#ebddb9' : '#ffefc5'
+      c.strokeStyle = sketch ? '#584833' : '#664e3d'
       c.lineWidth = 0.8 / Math.sqrt(zoom)
       c.beginPath()
       c.arc(x, y, r, 0, 2 * Math.PI)
       c.fill()
       c.stroke()
+      if (sketch && fortress) {
+        c.strokeRect(x - r * 1.8, y - r * 1.8, r * 3.6, r * 3.6)
+      }
       if (f.rank === 0) {
         c.fillStyle = '#84533e'
         c.beginPath()
@@ -674,6 +611,8 @@ export function drawLabels(
     if (
       (f.kind === 'river' && !layers.rivers) ||
       (f.kind === 'ridge' && !layers.mountains) ||
+      (f.kind === 'wood' && !layers.forests) ||
+      ((f.kind === 'desert' || f.kind === 'marsh') && !layers.terrain) ||
       (f.kind === 'wall' && !layers.walls) ||
       (f.kind === 'passage' && !layers.passages) ||
       (f.kind === 'rift' && !layers.rifts)
@@ -713,10 +652,10 @@ export function drawLabels(
       occupied.push(box)
       labeledNames.add(f.name)
       c.lineJoin = 'round'
-      c.lineWidth = size * 0.34
-      c.strokeStyle = '#fff4dfeF'
+      c.lineWidth = size * (sketch ? 0.14 : 0.22)
+      c.strokeStyle = sketch ? '#ebddb9ef' : '#fff4dfdf'
       c.strokeText(f.name, tx, ty)
-      c.fillStyle = water ? '#154555' : area ? '#3d3020' : city ? '#201c18' : '#263d36'
+      c.fillStyle = water ? (sketch ? '#365b61' : '#154555') : area ? '#3d3020' : city ? '#201c18' : sketch ? '#5d513b' : '#263d36'
       c.fillText(f.name, tx, ty)
       break
     }
