@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type FocusEventHandler, type ReactNode, type RefObject } from 'react'
 import {
-  clampInputAreaBoxV1, isInputAreaLayoutKeyV1, loadInputAreaBoxV1, normalizeInputAreaDesiredBoxV1, saveInputAreaBoxV1,
+  clampInputAreaBoxV1, isInputAreaLayoutKeyV1, readInputAreaBoxV1, normalizeInputAreaDesiredBoxV1, saveInputAreaBoxV1,
   type InputAreaBoundsV1, type InputAreaDesiredBoxV1, type InputAreaLayoutOptionsV1,
 } from '../../lib/input-area-layout'
 import { parseCssPixels } from './textarea-scroll'
@@ -35,9 +35,15 @@ const sameBox = (a: InputAreaDesiredBoxV1 | null, b: InputAreaDesiredBoxV1 | nul
  * content events, refs and owner. No global CSS or narrative storage. */
 export default function ResizableInputArea({ options, children, autoHeight, onExternalLeave }: Props) {
   const frame = useRef<HTMLDivElement>(null), textarea = useRef<HTMLTextAreaElement>(null)
-  const [desired, setDesired] = useState<InputAreaDesiredBoxV1 | null>(() => loadInputAreaBoxV1(options.preferenceKey))
+  const [initialPreference] = useState(() => readInputAreaBoxV1(options.preferenceKey))
+  const [desired, setDesired] = useState<InputAreaDesiredBoxV1 | null>(initialPreference.box)
   const desiredRef = useRef(desired), keyRef = useRef(options.preferenceKey)
+  const storageBaseline = useRef({ key: options.preferenceKey, persistable: initialPreference.persistable })
   desiredRef.current = desired; keyRef.current = options.preferenceKey
+  // An unsupported initial read remains session-only until this field reopens.
+  // A timer cannot acquire write authority merely because another page later
+  // replaces the storage with a recognized format.
+  const persistKey = useCallback(() => storageBaseline.current.key === keyRef.current && storageBaseline.current.persistable ? keyRef.current : undefined, [])
   const [bounds, setBounds] = useState<InputAreaBoundsV1>({ width: 0, height: 0, minWidth: 160, minHeight: 64 })
   const [composing, setComposing] = useState(false), composingRef = useRef(false)
   const [dragging, setDragging] = useState(false), drag = useRef<DragV1 | null>(null)
@@ -66,9 +72,9 @@ export default function ResizableInputArea({ options, children, autoHeight, onEx
     if (update) {
       setDragging(false)
       if (cancel) updateDesired(active.before)
-      else if (active.moved) { suppressClick.current = true; saveInputAreaBoxV1(keyRef.current, desiredRef.current) }
+      else if (active.moved) { suppressClick.current = true; saveInputAreaBoxV1(persistKey(), desiredRef.current) }
     }
-  }, [updateDesired])
+  }, [updateDesired, persistKey])
   const notifyLeave = useCallback((relatedTarget: EventTarget | null = null) => {
     if (!focusInside.current) return
     focusInside.current = false
@@ -104,7 +110,11 @@ export default function ResizableInputArea({ options, children, autoHeight, onEx
 
   useEffect(() => {
     finishDrag(true); clearPersist()
-    updateDesired(loadInputAreaBoxV1(options.preferenceKey))
+    if (storageBaseline.current.key !== options.preferenceKey) {
+      const preference = readInputAreaBoxV1(options.preferenceKey)
+      storageBaseline.current = { key: options.preferenceKey, persistable: preference.persistable }
+      updateDesired(preference.box)
+    }
     return () => { finishDrag(true, false); clearPersist() }
   }, [options.preferenceKey, clearPersist, finishDrag, updateDesired])
   useEffect(() => { const leave = () => { finishDrag(true); notifyLeave() }; window.addEventListener('blur', leave); return () => window.removeEventListener('blur', leave) }, [finishDrag, notifyLeave])
@@ -127,15 +137,17 @@ export default function ResizableInputArea({ options, children, autoHeight, onEx
   }
   const nudge = (width: number, height: number) => {
     if (composingRef.current || drag.current || bounds.width <= 0) return
-    const before = currentBox(), next = normalizeInputAreaDesiredBoxV1({ width: before.width + width, height: before.height + height })
+    const before = currentBox(), remembered = desiredRef.current ?? normalizeInputAreaDesiredBoxV1(before)
+    const adjusted = normalizeInputAreaDesiredBoxV1({ width: before.width + width, height: before.height + height })
+    const next = { width: width === 0 ? remembered.width : adjusted.width, height: height === 0 ? remembered.height : adjusted.height }
     updateDesired(next); clearPersist()
-    const key = keyRef.current
+    const key = persistKey()
     pendingPersist.current = { key, box: next }
     persistTimer.current = setTimeout(flushPersist, 250)
   }
   const reset = () => {
     if (composingRef.current) return
-    finishDrag(true); clearPersist(); updateDesired(null); saveInputAreaBoxV1(keyRef.current, null)
+    finishDrag(true); clearPersist(); updateDesired(null); saveInputAreaBoxV1(persistKey(), null)
   }
   const beginDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
     event.preventDefault()
@@ -151,7 +163,9 @@ export default function ResizableInputArea({ options, children, autoHeight, onEx
       const dx = (e.clientX - active.x) / active.scale, dy = (e.clientY - active.y) / active.scale
       if (Math.abs(dx) + Math.abs(dy) < 2 && !active.moved) return
       active.moved = true
-      updateDesired(normalizeInputAreaDesiredBoxV1({ width: active.start.width + dx, height: active.start.height + dy }))
+      const remembered = active.before ?? normalizeInputAreaDesiredBoxV1(active.start)
+      const adjusted = normalizeInputAreaDesiredBoxV1({ width: active.start.width + dx, height: active.start.height + dy })
+      updateDesired({ width: Math.abs(dx) < 2 ? remembered.width : adjusted.width, height: Math.abs(dy) < 2 ? remembered.height : adjusted.height })
     }
     const up = (e: PointerEvent) => { if (e.pointerId === active.pointerId) finishDrag(false) }
     const cancel = (e: PointerEvent) => { if (e.pointerId === active.pointerId) finishDrag(true) }

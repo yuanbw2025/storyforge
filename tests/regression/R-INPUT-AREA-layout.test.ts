@@ -46,6 +46,19 @@ describe('047 device-only input area preference', () => {
     expect(loadInputAreaBoxV1('world.origin/current', target)).toEqual(box)
     expect(target.setItem).toHaveBeenCalledOnce()
   })
+  it.each([
+    ' { "version": 2, "boxes": { "world.origin/current": {"width":800,"height":600}, "world.origin/candidate": {"width":700,"height":500} } } ',
+    '{damaged-original',
+    '{"version":1,"boxes":{"world.origin/current":{"width":"800","height":600},"world.origin/candidate":{"width":700,"height":500}}}',
+  ])('keeps unsupported or damaged storage bytes intact on save/reset: %s', raw => {
+    const target = storage(raw)
+    expect(loadInputAreaBoxV1('world.origin/current', target)).toBeNull()
+    saveInputAreaBoxV1('world.origin/current', { width: 400, height: 200 }, target)
+    expect(target.values.get(INPUT_AREA_STORAGE_KEY_V1)).toBe(raw)
+    saveInputAreaBoxV1('world.origin/current', null, target)
+    expect(target.values.get(INPUT_AREA_STORAGE_KEY_V1)).toBe(raw)
+    expect(target.setItem).not.toHaveBeenCalled(); expect(target.removeItem).not.toHaveBeenCalled()
+  })
   it('normalizes user actions to finite desired values and makes blocked storage optional', () => {
     expect(normalizeInputAreaDesiredBoxV1({ width: NaN, height: Infinity })).toEqual({ width: 160, height: 64 })
     const blocked = { getItem: () => { throw new Error('blocked') }, setItem: () => { throw new Error('blocked') }, removeItem: () => { throw new Error('blocked') } }

@@ -183,6 +183,83 @@ test('zero/tiny parent and CSS zoom clamp without preference overwrite; cancelle
   expect(await page.evaluate(() => window.__layoutObserverCalls)).toBeLessThan(100)
 })
 
+for (const raw of [
+  ' {"version":2,"boxes":{"world.origin/candidate":{"width":800,"height":600},"world.origin/original":{"width":500,"height":200}}} ',
+  '{damaged-original',
+]) test(`unsupported original storage stays session-only including delayed persistence: ${raw.startsWith(' {') ? 'future' : 'damaged'}`, async ({ page }) => {
+  await page.evaluate(value => localStorage.setItem('storyforge-input-area-layout-v1', value), raw)
+  await page.reload(); await page.addScriptTag({ content: bundle })
+  const shell = page.locator('#right [data-input-area-layout]')
+  await shell.getByRole('button', { name: '调整输入区大小' }).click()
+  await shell.getByRole('button', { name: '窄一点' }).click()
+  await page.waitForTimeout(280)
+  expect(await page.evaluate(() => localStorage.getItem('storyforge-input-area-layout-v1'))).toBe(raw)
+  await shell.getByRole('button', { name: '恢复自适应' }).click()
+  expect(await page.evaluate(() => localStorage.getItem('storyforge-input-area-layout-v1'))).toBe(raw)
+  // Even if another page replaces the storage later, this already unsupported
+  // session must not publish its delayed box or reset into that new baseline.
+  await shell.getByRole('button', { name: '窄一点' }).click()
+  const external = ' {"version":1,"boxes":{"world.origin/candidate":{"width":900,"height":650},"world.origin/original":{"width":500,"height":200}}} '
+  await page.evaluate(value => localStorage.setItem('storyforge-input-area-layout-v1', value), external)
+  await page.waitForTimeout(280)
+  expect(await page.evaluate(() => localStorage.getItem('storyforge-input-area-layout-v1'))).toBe(external)
+  await shell.getByRole('button', { name: '恢复自适应' }).click()
+  expect(await page.evaluate(() => localStorage.getItem('storyforge-input-area-layout-v1'))).toBe(external)
+  expect(await page.evaluate(() => window.__inputAreaFixture.counts.changes)).toEqual([])
+})
+
+test('single-axis nudges and drags preserve the other desired axis across viewport clamps and return', async ({ page }, info) => {
+  await page.setViewportSize({ width: 1920, height: 1000 })
+  const seeded = { version: 1, boxes: { 'world.origin/candidate': { width: 800, height: 600 }, 'world.origin/original': { width: 500, height: 200 } } }
+  await page.evaluate(value => localStorage.setItem('storyforge-input-area-layout-v1', JSON.stringify(value)), seeded)
+  await page.reload(); await page.addScriptTag({ content: bundle })
+  const input = page.locator('#candidate'), shell = page.locator('#right [data-input-area-layout]'), handle = shell.getByRole('button', { name: '调整输入区大小' })
+  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('storyforge-input-area-layout-v1')!).boxes['world.origin/candidate'])
+  await expect.poll(async () => (await input.boundingBox())!.height).toBe(600)
+  await page.setViewportSize({ width: 1920, height: 400 })
+  await expect.poll(async () => (await input.boundingBox())!.height).toBe(300)
+  await handle.focus(); await page.keyboard.press('ArrowLeft')
+  expect(await stored()).toEqual({ width: 784, height: 600 })
+  const drag = async (dx: number, dy: number) => {
+    await handle.scrollIntoViewIfNeeded()
+    const box = await handle.boundingBox(); if (!box) throw new Error('missing handle')
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy, { steps: 4 }); await page.mouse.up()
+  }
+  await drag(-16, 0)
+  expect(await stored()).toEqual({ width: 768, height: 600 })
+  await page.setViewportSize({ width: 1920, height: 1000 })
+  await expect.poll(async () => (await input.boundingBox())!.height).toBe(600)
+  await page.setViewportSize({ width: 600, height: 1000 })
+  await expect.poll(async () => (await input.boundingBox())!.width).toBeLessThan(768)
+  await handle.focus(); await page.keyboard.press('ArrowUp')
+  expect(await stored()).toEqual({ width: 768, height: 584 })
+  await drag(0, -16)
+  expect(await stored()).toEqual({ width: 768, height: 568 })
+  await page.setViewportSize({ width: 1920, height: 1000 })
+  await expect.poll(async () => (await input.boundingBox())!.width).toBe(768)
+  await expect.poll(async () => (await input.boundingBox())!.height).toBe(568)
+  const beforeReset = await stored()
+  await shell.getByRole('button', { name: '恢复自适应' }).click()
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('storyforge-input-area-layout-v1')!).boxes)).toEqual({ 'world.origin/original': { width: 500, height: 200 } })
+  expect(await page.evaluate(() => window.__inputAreaFixture.counts.changes)).toEqual([])
+  await writeFile(info.outputPath('single-axis-proof.json'), JSON.stringify({ seeded, beforeReset, expectedOtherRecord: { width: 500, height: 200 } }, null, 2))
+})
+
+test('an untouched fractional desired axis is preserved exactly rather than normalized', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 400 })
+  await page.evaluate(() => localStorage.setItem('storyforge-input-area-layout-v1', JSON.stringify({ version: 1, boxes: {
+    'world.origin/candidate': { width: 800.5, height: 600.5 }, 'world.origin/original': { width: 800.5, height: 600.5 },
+  } })))
+  await page.reload(); await page.addScriptTag({ content: bundle })
+  await page.locator('#right').getByRole('button', { name: '调整输入区大小' }).focus(); await page.keyboard.press('ArrowLeft')
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('storyforge-input-area-layout-v1')!).boxes['world.origin/candidate'])).toEqual({ width: 785, height: 600.5 })
+  await page.setViewportSize({ width: 600, height: 1000 })
+  await expect.poll(async () => (await page.locator('#original').boundingBox())!.height).toBe(600.5)
+  await page.locator('#left').getByRole('button', { name: '调整输入区大小' }).focus(); await page.keyboard.press('ArrowUp')
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('storyforge-input-area-layout-v1')!).boxes['world.origin/original'])).toEqual({ width: 800.5, height: 585 })
+})
+
 test.describe('Chromium emulated touch foundation', () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
   test('offers width/height buttons without editing text, submitting, or unlocking readonly content', async ({ page }) => {

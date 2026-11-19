@@ -48,22 +48,33 @@ function validBox(value: unknown): value is InputAreaDesiredBoxV1 {
   return typeof box.width === 'number' && Number.isFinite(box.width) && box.width >= MIN_WIDTH && box.width <= MAX_WIDTH
     && typeof box.height === 'number' && Number.isFinite(box.height) && box.height >= MIN_HEIGHT && box.height <= MAX_HEIGHT
 }
-function readBoxes(storage: LayoutStorage | null): Partial<Record<InputAreaLayoutKeyV1, InputAreaDesiredBoxV1>> {
+/** null means an unreadable/unsupported baseline, not an empty writable file. */
+function readBoxes(storage: LayoutStorage | null): Partial<Record<InputAreaLayoutKeyV1, InputAreaDesiredBoxV1>> | null {
   try {
-    const raw = storage?.getItem(INPUT_AREA_STORAGE_KEY_V1)
-    if (!raw || raw.length > 32768) return {}
+    if (!storage) return null
+    const raw = storage.getItem(INPUT_AREA_STORAGE_KEY_V1)
+    if (raw === null) return {}
+    if (typeof raw !== 'string' || raw.length > 32768) return null
     const parsed: unknown = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
     const data = parsed as Record<string, unknown>
-    if (data.version !== 1 || !data.boxes || typeof data.boxes !== 'object' || Array.isArray(data.boxes)) return {}
+    if (data.version !== 1 || Object.keys(data).some(key => key !== 'version' && key !== 'boxes')
+      || !data.boxes || typeof data.boxes !== 'object' || Array.isArray(data.boxes)) return null
     const result: Partial<Record<InputAreaLayoutKeyV1, InputAreaDesiredBoxV1>> = {}
-    for (const [key, value] of Object.entries(data.boxes)) if (isInputAreaLayoutKeyV1(key) && validBox(value)) result[key] = { width: value.width, height: value.height }
+    for (const [key, value] of Object.entries(data.boxes)) {
+      if (!isInputAreaLayoutKeyV1(key) || !validBox(value) || Object.keys(value).some(property => property !== 'width' && property !== 'height')) return null
+      result[key] = { width: value.width, height: value.height }
+    }
     return result
-  } catch { return {} }
+  } catch { return null }
+}
+export function readInputAreaBoxV1(key?: InputAreaLayoutKeyV1, storage?: LayoutStorage | null): { box: InputAreaDesiredBoxV1 | null; persistable: boolean } {
+  if (!isInputAreaLayoutKeyV1(key)) return { box: null, persistable: false }
+  const boxes = readBoxes(storage === undefined ? browserStorage() : storage)
+  return { box: boxes?.[key] ?? null, persistable: boxes !== null }
 }
 export function loadInputAreaBoxV1(key?: InputAreaLayoutKeyV1, storage?: LayoutStorage | null): InputAreaDesiredBoxV1 | null {
-  if (!isInputAreaLayoutKeyV1(key)) return null
-  return readBoxes(storage === undefined ? browserStorage() : storage)[key] ?? null
+  return readInputAreaBoxV1(key, storage).box
 }
 /** Only explicit completed layout actions call this; observers never persist. */
 export function saveInputAreaBoxV1(key: InputAreaLayoutKeyV1 | undefined, box: InputAreaDesiredBoxV1 | null, storage?: LayoutStorage | null): void {
@@ -72,6 +83,7 @@ export function saveInputAreaBoxV1(key: InputAreaLayoutKeyV1 | undefined, box: I
     const target = storage === undefined ? browserStorage() : storage
     if (!target) return
     const boxes = readBoxes(target)
+    if (boxes === null) return
     if (box) boxes[key] = { width: box.width, height: box.height }
     else delete boxes[key]
     if (Object.keys(boxes).length) target.setItem(INPUT_AREA_STORAGE_KEY_V1, JSON.stringify({ version: 1, boxes }))
