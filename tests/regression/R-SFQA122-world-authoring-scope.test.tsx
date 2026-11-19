@@ -174,25 +174,56 @@ describe('SFQA-122 · actual world editors', () => {
     expect(await db.geographies.get(before[0].id!)).toEqual(before[0])
   })
 
-  it('Geography direct World/Work prop changes save an unblurred overview to the original owner', async () => {
+  for (const heldSave of [false, true]) it(`Geography direct World/Work prop changes save an unblurred overview to the original owner${heldSave ? ' while the real save is gated' : ''}`, async () => {
     const made = await fixture()
     const world = await addCurrentWorldFixtureV1({ projectId: made.scope.projectId, name: '同壳另一World' })
     const work = await addCurrentWorkFixtureV1({ projectId: made.scope.projectId, worldId: world.id!, create: { title: '另一Work', kind: 'novel', novelProfile: 'long' } })
     const nextProject = { ...made.project, activeWorldId: world.id!, activeWorkId: work.id!, enableMultiWorld: false }
-    await render('geography', made.project)
-    await settle(() => host.querySelector('textarea')?.value === 'A地理总述')
-    await input(host.querySelector('textarea')!, '原World未失焦输入')
-    // Workspace preloads may move the shared store before this panel receives its new props.
-    await act(async () => useGeographyStore.getState().loadAll({ projectId: made.scope.projectId, worldId: world.id!, workId: work.id! }))
-    await render('geography', nextProject)
-    await settle(() => useGeographyStore.getState().loadedScope?.worldId === world.id && !useGeographyStore.getState().loading)
-    expect(host.querySelector('textarea')?.value).toBe('')
-    expect((await db.geographies.toArray())[0].overview).toBe('原World未失焦输入')
-    await click('添加地点')
-    await act(async () => { await flushPendingEditsV1() })
-    const rows = await db.geographies.toArray()
-    expect(rows).toHaveLength(2)
-    expect(rows.find(row => row.id !== rows[0].id)?.locations).not.toContain('only-A')
+    let releaseSave: () => void = () => undefined
+    let pendingSave: Promise<void> | null = null
+    if (heldSave) {
+      const gate = new Promise<void>(resolve => { releaseSave = resolve })
+      const originalSave = useGeographyStore.getState().save
+      vi.spyOn(useGeographyStore.getState(), 'save').mockImplementation((...args) => {
+        pendingSave = gate.then(() => originalSave(...args))
+        return pendingSave
+      })
+    }
+    try {
+      await render('geography', made.project)
+      await settle(() => host.querySelector('textarea')?.value === 'A地理总述')
+      await input(host.querySelector('textarea')!, '原World未失焦输入')
+      // Workspace preloads may move the shared store before this panel receives its new props.
+      await act(async () => useGeographyStore.getState().loadAll({ projectId: made.scope.projectId, worldId: world.id!, workId: work.id! }))
+      await render('geography', nextProject)
+      const boundary = () => host.querySelector<HTMLFieldSetElement>('[aria-label="世界编辑作用域保护"]')
+      const nextViewReady = () => boundary()?.disabled === false
+        && useGeographyStore.getState().loadedScope?.worldId === world.id
+        && !useGeographyStore.getState().loading && host.querySelector('textarea')?.value === ''
+      if (heldSave) {
+        await settle(() => pendingSave !== null)
+        expect(useGeographyStore.getState().loadedScope?.worldId).toBe(world.id)
+        expect(boundary()?.disabled).toBe(true)
+        expect(boundary()?.hasAttribute('inert')).toBe(true)
+        expect(nextViewReady()).toBe(false)
+        expect(host.querySelector('textarea')?.value).toBe('原World未失焦输入')
+        expect((await db.geographies.toArray())[0].overview).toBe('A地理总述')
+        releaseSave()
+      }
+      // The preloaded store can already point at the next owner while the
+      // boundary still retains the disabled original editor until its save ends.
+      await settle(nextViewReady)
+      expect(host.querySelector('textarea')?.value).toBe('')
+      expect((await db.geographies.toArray())[0].overview).toBe('原World未失焦输入')
+      await click('添加地点')
+      await act(async () => { await flushPendingEditsV1() })
+      const rows = await db.geographies.toArray()
+      expect(rows).toHaveLength(2)
+      expect(rows.find(row => row.id !== rows[0].id)?.locations).not.toContain('only-A')
+    } finally {
+      releaseSave()
+      await pendingSave
+    }
   })
 
   it('Geography retains a failed overview save and retries before switching groups', async () => {

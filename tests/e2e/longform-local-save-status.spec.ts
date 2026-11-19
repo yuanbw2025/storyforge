@@ -33,7 +33,14 @@ async function flush(page: Page) {
   })
 }
 const pane = (page: Page) => page.locator('.lf-world-field:visible').first()
-async function enter(page: Page) { await pane(page).locator('.cursor-text').first().click(); return pane(page).locator('textarea').first() }
+async function enter(page: Page) {
+  const field = pane(page)
+  const entry = field.getByRole('button', { name: '编辑源码', exact: true }).or(field.locator('.cursor-text').first()).first()
+  // Re-evaluate the live entry if DB loading swaps an empty placeholder for
+  // the explicit Markdown source action; never choose via a premature probe.
+  await expect(entry).toBeVisible(); await entry.click()
+  return field.locator('textarea').first()
+}
 async function select(page: Page, index: number) { await page.locator('nav button').filter({ hasText: labels[index] }).first().click() }
 test('N5 native input → dirty → committed saved → reload → closed tab and new tab retain exact submitted source', async ({ page, context }, info) => {
   const scope = await seed(page); const url = `./workspace/${scope.projectId}?module=worldview-natural`
