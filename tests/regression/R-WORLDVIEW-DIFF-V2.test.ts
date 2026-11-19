@@ -73,7 +73,9 @@ describe('054-A exact canonical diff', () => {
     }
     const r = check(left, right, { segmentation: { ...segmentation, expected: { ...actual, left: [0, left.length] } } })
     expect(r.profile).toBeNull(); expect(r.coarseReasons).toContain('segmentation-replay-mismatch')
-    const spy = vi.spyOn(Intl, 'Segmenter').mockImplementation(() => { throw new Error('unavailable') })
+    const spy = vi.spyOn(Intl as typeof Intl & { Segmenter: new (locale: string, options: { granularity: string }) => {
+      segment(raw: string): Iterable<{ index: number; segment: string }>; resolvedOptions(): { locale: string }
+    } }, 'Segmenter').mockImplementation(() => { throw new Error('unavailable') })
     try { expect(check(left, right).profile).toBeNull() } finally { spy.mockRestore() }
   })
   it.each(['maxScanUnits', 'maxAnchorUnits', 'maxDiffSteps', 'maxTraceCells'] as const)('exhausting %s retains full coverage', key => {
