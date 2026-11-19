@@ -184,6 +184,98 @@ describe.each(['character', 'standalone'] as const)('SFQA-126 · %s author buffe
     expect((await realGet(f.id))?.fields).toBe(stringifyFields([{ key: '状态', value: draft }]))
   })
 
+  it.each(['reload', 'replace'] as const)('preserves conflict through metadata repaint after returning to original, then explicit %s', async decision => {
+    const f = await fixture(kind)
+    await typeDraft()
+    const committed = stringifyFields([{ key: '状态', value: external }])
+    await act(async () => { await useStateCardStore.getState().updateCard(f.id, { fields: committed }, { scope: f.scope }) })
+    await typeDraft(original)
+    const chapter = await db.chapters.where('projectId').equals(f.scope.projectId).first()
+    expect(chapter?.id).toBeDefined()
+    await act(async () => { await useStateCardStore.getState().updateCard(f.id, { lastChapterId: chapter!.id! }, { scope: f.scope }) })
+    const beforeSaveGuard = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(beforeSaveGuard)
+    expect(beforeSaveGuard.defaultPrevented).toBe(true)
+    await save()
+    expect(valueInput().value).toBe(original)
+    expect((await db.stateCards.get(f.id))?.fields).toBe(committed)
+    expect(host.textContent).toContain(external)
+    await act(async () => { await expect(flushPendingEditsV1()).rejects.toThrow('其他页面') })
+    const blocked = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(blocked)
+    expect(blocked.defaultPrevented).toBe(true)
+    await act(async () => { await useStateCardStore.getState().updateCard(f.id, { lastChapterId: null }, { scope: f.scope }) })
+    expect(valueInput().value).toBe(original)
+    if (decision === 'reload') {
+      await click('重载外部版本（舍弃本地输入）')
+      expect(valueInput().value).toBe(external)
+      const latest = '明确重载后收到的新正式状态'
+      await act(async () => { await useStateCardStore.getState().updateCard(f.id, { fields: stringifyFields([{ key: '状态', value: latest }]) }, { scope: f.scope }) })
+      expect(valueInput().value).toBe(latest)
+    } else {
+      await click('用本地输入替换已查看版本')
+      expect(valueInput()).toBeNull()
+      expect((await db.stateCards.get(f.id))?.fields).toBe(stringifyFields([{ key: '状态', value: original }]))
+    }
+    await act(async () => { await flushPendingEditsV1() })
+    expect(host.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it.each([false, true])('does not invent conflict on metadata refresh with an idle or reverted clean draft (%s)', async reverted => {
+    const f = await fixture(kind)
+    if (reverted) { await typeDraft(); await typeDraft(original) }
+    const chapter = await db.chapters.where('projectId').equals(f.scope.projectId).first()
+    await act(async () => { await useStateCardStore.getState().updateCard(f.id, { lastChapterId: chapter!.id! }, { scope: f.scope }) })
+    expect(valueInput().value).toBe(original)
+    expect(host.querySelector('[role="alert"]')).toBeNull()
+    const before = await db.stateCards.get(f.id)
+    await save()
+    expect(valueInput()).toBeNull(); expect(await db.stateCards.get(f.id)).toEqual(before)
+    await act(async () => (host.querySelector('button[title="编辑状态"]') as HTMLButtonElement).click())
+    await vi.waitFor(() => expect(valueInput().value).toBe(original))
+    await act(async () => { await useStateCardStore.getState().updateCard(f.id, {
+      fields: stringifyFields([{ key: '状态', value: external }]),
+    }, { scope: f.scope }) })
+    expect(valueInput().value).toBe(external)
+    expect(host.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('preserves conflict if the peer field update and local return share a render batch', async () => {
+    const f = await fixture(kind)
+    await typeDraft()
+    await act(async () => {
+      await useStateCardStore.getState().updateCard(f.id, { fields: stringifyFields([{ key: '状态', value: external }]) }, { scope: f.scope })
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(valueInput(), original)
+      valueInput().dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    const chapter = await db.chapters.where('projectId').equals(f.scope.projectId).first()
+    await act(async () => { await useStateCardStore.getState().updateCard(f.id, { lastChapterId: chapter!.id! }, { scope: f.scope }) })
+    await save()
+    expect(valueInput().value).toBe(original)
+    expect((await db.stateCards.get(f.id))?.fields).toBe(stringifyFields([{ key: '状态', value: external }]))
+  })
+
+  it('does not no-op close a reverted unresolved draft after an external owner-pointer redraw', async () => {
+    const f = await fixture(kind)
+    await typeDraft()
+    await act(async () => { await useStateCardStore.getState().updateCard(f.id, {
+      fields: stringifyFields([{ key: '状态', value: external }]),
+    }, { scope: f.scope }) })
+    await typeDraft(original)
+    const next = await createWorldWork(f.scope.projectId, { title: '不能接收旧冲突的作品', kind: 'novel', novelProfile: 'long' })
+    await act(async () => {
+      await switchActiveWork(f.scope.projectId, next.id!)
+      const project = await db.projects.get(f.scope.projectId)
+      if (!project) throw Error('owner fixture project missing')
+      mounted!.render(createElement(StatePanel, { project, ...(kind === 'standalone' ? { initialStateCardId: f.id } : {}) }))
+    })
+    expect(valueInput().value).toBe(original)
+    await save()
+    expect(valueInput().value).toBe(original)
+    expect((await db.stateCards.get(f.id))?.fields).toBe(stringifyFields([{ key: '状态', value: external }]))
+    expect((await db.stateCards.toArray()).filter(card => Reflect.get(card, 'workId') === next.id)).toHaveLength(0)
+    await click('放弃未保存输入')
+    expect(valueInput()).toBeNull()
+  })
+
   it('flushes the pending exact draft before navigation or a normal Work switch', async () => {
     const f = await fixture(kind)
     await typeDraft()

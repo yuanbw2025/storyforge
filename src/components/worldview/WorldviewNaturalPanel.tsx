@@ -9,14 +9,16 @@ import { useWorldGroupStore } from '../../stores/world-group'
 import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
 import CodexPanel from '../codex/CodexPanel'
 import CodexSearchBar from '../codex/CodexSearchBar'
-import { InlineTextarea } from '../shared/InlineEdit'
+import { InlineTextarea, type InlineSave } from '../shared/InlineEdit'
 import { useMasterCopilot, type PendingMasterCandidate } from '../agent/useMasterCopilot'
 import WorldviewAgentControls from './WorldviewAgentControls'
 import { useWorldSettingsLayout, WorldSettingsToolbar } from '../longform/WorldSettingsLayout'
 import type { Project, NaturalResources } from '../../lib/types'
 import type { WorldviewAgentField } from '../../lib/agent/worldview-field-copilot'
 
-interface Props { project: Project; resizableInputs?: boolean }
+import type { LocalSaveContractV1 } from '../../lib/authoring/local-save-evidence'
+
+interface Props { project: Project; resizableInputs?: boolean; confirmedLocalSaves?: boolean }
 
 // ── 字段定义（统一标签，兼容幻想与历史） ─────────────────────────
 
@@ -53,16 +55,16 @@ const NATURAL_CODEX_KEYS: Record<string, string[] | undefined> = {
 
 // ── 主面板 ─────────────────────────────────────────────────────
 
-export default function WorldviewNaturalPanel({ project, resizableInputs = false }: Props) {
+export default function WorldviewNaturalPanel({ project, resizableInputs = false, confirmedLocalSaves = false }: Props) {
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   return <ScopedWorldAuthoringBoundary project={project} activeGroupId={activeGroupId}>
-    {view => <ScopedNaturalPanel {...view} resizableInputs={resizableInputs} />}
+    {view => <ScopedNaturalPanel {...view} resizableInputs={resizableInputs} confirmedLocalSaves={confirmedLocalSaves} />}
   </ScopedWorldAuthoringBoundary>
 }
 
-function ScopedNaturalPanel({ project, activeGroupId, resizableInputs = false }: Props & { activeGroupId: number | null }) {
+function ScopedNaturalPanel({ project, activeGroupId, resizableInputs = false, confirmedLocalSaves = false }: Props & { activeGroupId: number | null }) {
   const compact = useWorldSettingsLayout()
-  const { worldview, saveWorldview, loadedScope, activeWorldGroupId, loading, loadError } = useWorldviewStore()
+  const { worldview, saveWorldview, loadedScope, activeWorldGroupId, loading, loadError, localSaveWitnesses } = useWorldviewStore()
   const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
   const readReady = !loading && !loadError && loadedScope?.projectId === authorScope.projectId
     && loadedScope.worldId === authorScope.worldId && loadedScope.workId === authorScope.workId
@@ -193,7 +195,13 @@ function ScopedNaturalPanel({ project, activeGroupId, resizableInputs = false }:
                 resizableInputs={resizableInputs}
                 field={f}
                 value={values[f.key] ?? ''}
-                onChange={v => {
+                localSave={confirmedLocalSaves ? {
+                  identity: { ...authorScope, table: 'worldviews', field: f.key, worldGroupId: targetWorldGroupId },
+                  witness: localSaveWitnesses[f.key] ?? null,
+                } : undefined}
+                onChange={(v, intent) => {
+                  if (intent) return saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, [f.key]: v }, authorScope, intent)
+                    .then(ack => { setValues(prev => ({ ...prev, [f.key]: v })); return ack })
                   setValues(prev => ({ ...prev, [f.key]: v }))
                   return save({ [f.key]: v })
                 }}
@@ -309,6 +317,7 @@ function SimpleFieldEditor({
   field,
   value,
   onChange,
+  localSave,
   project,
   agentField,
   activeGroupId,
@@ -322,7 +331,8 @@ function SimpleFieldEditor({
   resizableInputs?: boolean
   field: { key: string; emoji: string; label: string; desc: string }
   value: string
-  onChange: (v: string) => void | Promise<void>
+  onChange: InlineSave
+  localSave?: LocalSaveContractV1
   project: Project
   agentField: WorldviewAgentField
   activeGroupId: number | null
@@ -342,7 +352,7 @@ function SimpleFieldEditor({
       </div>
 
       <div className="bg-bg-surface border border-border rounded-lg p-4">
-        <InlineTextarea inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(agentField))} value={value} onChange={onChange} placeholder={field.desc} />
+        <InlineTextarea inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(agentField))} value={value} onChange={onChange} localSave={localSave} placeholder={field.desc} />
       </div>
       <WorldviewAgentControls
         field={agentField}

@@ -1,13 +1,21 @@
+import Dexie from 'dexie'
+import { isPortableResourceUidV1 } from '../lib/context-gateway/resource-uid'
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { Worldview, StoryCore, PowerSystem, WorkspaceScope, DivineDesign, NaturalResources, WorldGroup } from '../lib/types'
 import { EMPTY_DIVINE_DESIGN, EMPTY_NATURAL_RESOURCES } from '../lib/types/worldview'
 import type { AdoptResult } from '../lib/registry/types'
-import { adopt } from '../lib/registry/adopt'
+import { adopt, adoptionTransactionTablesV1, hashAdoptFieldValueV1 } from '../lib/registry/adopt'
 import { refreshSettingAssertionSourceStatus } from '../lib/fact-ledger/setting-assertions'
-import { readOwnedRows, resolveScope, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { assertRecordInScope, scopeTransactionTables, readOwnedRows, resolveScope, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
+import { LOCAL_SAVE_NATURAL_FIELDS_V1, type LocalSaveAckV1, type LocalSaveIntentV1, type LocalSaveWitnessV1, type LocalSaveNaturalFieldV1 } from '../lib/authoring/local-save-evidence'
+
+interface SaveWorldview {
+  (data: WorldviewAuthorPatch, scope?: WorkspaceScope): Promise<void>
+  (data: WorldviewAuthorPatch, scope: WorkspaceScope, confirmation: LocalSaveIntentV1): Promise<LocalSaveAckV1>
+}
 export type WorldviewAuthorPatch = Partial<Omit<Worldview, 'divineDesign' | 'naturalResources'>> & {
   divineDesign?: Partial<DivineDesign>
   naturalResources?: Partial<NaturalResources>
@@ -26,7 +34,8 @@ interface WorldviewStore {
 
   loadAll: (scope: WorkspaceScopeLike, worldGroupId?: number | null) => Promise<void>
 
-  saveWorldview: (data: WorldviewAuthorPatch, scope?: WorkspaceScope) => Promise<void>
+  localSaveWitnesses: Partial<Record<LocalSaveNaturalFieldV1, LocalSaveWitnessV1>>
+  saveWorldview: SaveWorldview
   saveStoryCore: (data: Partial<StoryCore>, scope?: WorkspaceScope) => Promise<void>
   savePowerSystem: (data: Partial<PowerSystem>, scope?: WorkspaceScope) => Promise<void>
 }
@@ -73,8 +82,113 @@ function mergeAuthorWorldviewObjects(current: Worldview | undefined, patch: Reco
   return patch
 }
 
+async function naturalWitness(row: Worldview | undefined, scope: WorkspaceScope, worldGroupId: number | null,
+  field: LocalSaveNaturalFieldV1, source: LocalSaveWitnessV1['source']): Promise<LocalSaveWitnessV1> {
+  const value = row?.[field]
+  if (value !== undefined && typeof value !== 'string') throw new Error('字段格式异常，不能确认本机保存。')
+  if (row && (row.id == null || !isPortableResourceUidV1(row.ragDocumentId, 'worldview'))) throw new Error('字段记录身份不完整，不能确认本机保存。')
+  return { version: 1, source, identity: { ...scope, table: 'worldviews', field, worldGroupId },
+    recordId: row?.id ?? null, resourceUid: row?.ragDocumentId ?? null,
+    present: row != null && Object.prototype.hasOwnProperty.call(row, field), value, valueHash: await hashAdoptFieldValueV1(value), confirmedAt: Date.now() }
+}
+async function naturalWitnesses(row: Worldview | undefined, scope: WorkspaceScope, group: number | null) {
+  const pairs = await Promise.all(LOCAL_SAVE_NATURAL_FIELDS_V1.map(async field => {
+    try { return [field, await naturalWitness(row, scope, group, field, 'database-read')] as const }
+    catch { return [field, undefined] as const }
+  }))
+  return Object.fromEntries(pairs) as WorldviewStore['localSaveWitnesses']
+}
+
+/** One opt-in branch of the existing writer, never a second UI write callback.
+ * Keep every transactional continuation on the original Dexie transaction;
+ * native promises are bridged only for the existing scoped reads/hashes. */
+function saveConfirmedNaturalField(data: WorldviewAuthorPatch, scope: WorkspaceScope, intent: LocalSaveIntentV1) {
+  if (Dexie.currentTransaction) return Promise.reject(new Error('本机保存确认需要独立提交事务。'))
+  scope = { ...scope }
+  const request = structuredClone(intent)
+  const { expected } = request
+  const identity = expected?.identity
+  const field = identity?.field
+  if (request.kind !== 'natural-field-local-save-v1' || !identity || identity.table !== 'worldviews'
+    || !LOCAL_SAVE_NATURAL_FIELDS_V1.includes(field) || !request.session || !Number.isSafeInteger(request.generation)
+    || request.generation < 0 || expected.version !== 1
+    || !['database-read', 'committed-write'].includes(expected.source)
+    || identity.projectId !== scope.projectId || identity.worldId !== scope.worldId || identity.workId !== scope.workId
+    || data.projectId !== scope.projectId || (data.worldGroupId ?? null) !== identity.worldGroupId
+    || Object.keys(data).some(key => !['projectId', 'worldGroupId', field].includes(key)) || typeof data[field] !== 'string') {
+    return Promise.reject(new Error('本机保存字段或作用域凭据无效。'))
+  }
+  const raw = data[field]!
+  const patch = { [field]: raw }
+  const group = identity.worldGroupId
+  const tables = scopeTransactionTables(...adoptionTransactionTablesV1('worldviews', patch, { callerOwned: true }), db.worldGroups)
+  return coordinatePendingEditV1({ key: `worldview:${scope.projectId}:${group ?? 'default'}`, persist: () => {
+    if (Dexie.currentTransaction) throw new Error('本机保存确认需要独立提交事务。')
+    return db.transaction('rw', tables, () => {
+      const transaction = Dexie.currentTransaction!
+      const owned = { transaction }
+      const base = { projectId: scope.projectId, scope, worldGroupId: group, target: 'worldviews', mode: 'replace' as const, data: patch }
+      return Dexie.Promise.resolve(Dexie.waitFor(resolveScope({ projectId: scope.projectId, scope }))).then(() => {
+        return transaction.table('projects').get(scope.projectId)
+      }).then(project => {
+        if (project?.workspacePurpose !== 'independent-work') throw new Error('本机保存确认仅开放独立长篇。')
+        return transaction.table('works').get(scope.workId)
+      }).then(work => {
+        if (work?.kind !== 'novel' || work.novelProfile !== 'long') throw new Error('本机保存确认仅开放独立长篇。')
+        return group == null ? undefined : transaction.table('worldGroups').get(group).then(row =>
+          Dexie.waitFor(assertRecordInScope(scope, 'worldGroups', row, { owner: 'world' })).then(valid => {
+            if (!valid) throw new Error('世界组已失效，已保留草稿。')
+          }))
+      }).then(() => Dexie.waitFor(readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' }))).then(rows => {
+        const matches = rows.filter(row => (row.worldGroupId ?? null) === group)
+        if (matches.length > 1) throw new Error('世界设定记录不唯一，已保留草稿。')
+        const row = matches[0]
+        if ((row?.id ?? null) !== expected.recordId || (row?.ragDocumentId ?? null) !== expected.resourceUid
+          || (row != null && Object.prototype.hasOwnProperty.call(row, field)) !== expected.present || row?.[field] !== expected.value) {
+          throw new Error('此字段已被修改或记录已变化，已保留草稿；请核对后重新读取。')
+        }
+        return Dexie.waitFor(hashAdoptFieldValueV1(row?.[field])).then(hash => {
+          if (hash !== expected.valueHash) throw new Error('字段预像已变化，已保留草稿。')
+          if (row?.id != null) {
+            if (row[field] === raw) return row.id
+            return Dexie.Promise.resolve(adopt({ ...base, recordId: row.id, preserveAuthorText: true }, owned)).then(result => {
+              requireWritten(result, [field]); return row.id!
+            })
+          }
+          if (raw === '') throw new Error('尚未填写：空字段未创建记录，不能确认已保存。')
+          return Dexie.Promise.resolve(adopt(base, owned)).then(created => {
+            requireWritten(created, [field])
+            if (created.written.length !== 1) throw new Error('首建记录不唯一。')
+            const id = created.written[0].id
+            return Dexie.Promise.resolve(adopt({ ...base, recordId: id, preserveAuthorText: true }, owned)).then(exact => {
+              requireWritten(exact, [field]); return id
+            })
+          })
+        })
+      }).then(id => transaction.table('worldviews').get(id).then(row => {
+        if (!row || row[field] !== raw || !row.ragDocumentId || (row.worldGroupId ?? null) !== group) throw new Error('事务内精确保存校验失败。')
+        return { id, uid: row.ragDocumentId as string }
+      }))
+    }).then(async committed => {
+      // The root promise resolves after commit. Read the original identity,
+      // never select whatever record happens to be current in the UI now.
+      await resolveScope({ projectId: scope.projectId, scope })
+      const rows = (await readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' }))
+        .filter(row => (row.worldGroupId ?? null) === group)
+      const row = rows[0]
+      if (rows.length !== 1 || row.id !== committed.id || row.ragDocumentId !== committed.uid || row[field] !== raw) {
+        throw new Error('提交后字段已变化，未确认保存；已保留草稿。')
+      }
+      return { kind: 'natural-field-local-save-ack-v1' as const, session: request.session, generation: request.generation,
+        witness: await naturalWitness(row, scope, group, field, 'committed-write'), row,
+        witnesses: await naturalWitnesses(row, scope, group) }
+    })
+  } })
+}
+
 export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
   worldview: null,
+  localSaveWitnesses: {},
   storyCore: null,
   powerSystem: null,
   loading: false,
@@ -85,7 +199,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
 
   loadAll: async (scopeInput: WorkspaceScopeLike, worldGroupId: number | null = null) => {
     const request = ++worldviewLoadRequest
-    set({ loading: true, loadError: null, activeWorldGroupId: worldGroupId })
+    set({ loading: true, loadError: null, activeWorldGroupId: worldGroupId, localSaveWitnesses: {} })
     try {
       const scope = await resolveScopeLike(scopeInput)
       if (request !== worldviewLoadRequest) return
@@ -106,7 +220,10 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
       const ps = worldGroupId == null
         ? psList.find(p => p.worldGroupId == null) ?? psList.find(p => p.worldGroupId === primaryId)
         : psList.find(p => p.worldGroupId === worldGroupId)
+      const witnesses = await naturalWitnesses(wv, scope, wv?.worldGroupId ?? worldGroupId)
+      if (request !== worldviewLoadRequest || !sameScope(get().loadedScope, scope) || get().activeWorldGroupId !== worldGroupId) return
       set({
+        localSaveWitnesses: witnesses,
         worldview: wv ?? null,
         storyCore: sc || null,   // 故事核心归当前作品，不分世界组
         powerSystem: ps || null,
@@ -120,7 +237,23 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
     }
   },
 
-  saveWorldview: (data: WorldviewAuthorPatch, frozenScope?: WorkspaceScope) => {
+  saveWorldview: ((data: WorldviewAuthorPatch, frozenScope?: WorkspaceScope, confirmation?: LocalSaveIntentV1) => {
+    if (confirmation) {
+      if (!frozenScope) return Promise.reject(new Error('缺少冻结的工作区。'))
+      const confirmedScope = { ...frozenScope }
+      return saveConfirmedNaturalField(data, confirmedScope, confirmation).then(({ row, witnesses, ...ack }) => {
+        const current = get()
+        if (sameScope(current.loadedScope, confirmedScope) && (current.activeWorldGroupId === ack.witness.identity.worldGroupId
+          || (current.activeWorldGroupId == null && current.worldview?.id === row.id))) {
+          worldviewLoadRequest++
+          set({ loading: false, loadError: null, worldview: row, localSaveWitnesses: { ...witnesses, [ack.witness.identity.field]: ack.witness } })
+        } else if (sameScope(current.loadedScope, confirmedScope) && current.activeWorldGroupId == null && row.worldGroupId == null) {
+          worldviewLoadRequest++
+          set({ loading: false, loadError: null, worldview: row, localSaveWitnesses: { ...witnesses, [ack.witness.identity.field]: ack.witness } })
+        }
+        return ack
+      })
+    }
     const { worldview, activeWorldGroupId } = get()
     const projectId = data.projectId ?? worldview?.projectId
     if (projectId == null) return Promise.reject(new Error('编辑未保存：缺少工作区'))
@@ -144,10 +277,10 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
           .find(row => (row.worldGroupId ?? null) === targetWorldGroupId) ?? null
         const current = get()
         if (sameScope(current.loadedScope, scope) && (current.activeWorldGroupId === targetWorldGroupId
-          || (current.activeWorldGroupId == null && target?.id != null && current.worldview?.id === target.id))) set({ worldview: next })
+          || (current.activeWorldGroupId == null && target?.id != null && current.worldview?.id === target.id))) set({ worldview: next, localSaveWitnesses: {} })
       },
     })
-  },
+  }) as SaveWorldview,
 
   saveStoryCore: (data: Partial<StoryCore>, frozenScope?: WorkspaceScope) => {
     const { storyCore } = get()
