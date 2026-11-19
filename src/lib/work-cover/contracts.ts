@@ -1,7 +1,7 @@
 import { hashCanonicalValue } from '../agent/run/hash'
 import { extractExactArtifactOwnerRootsV1 } from '../memory/artifact-roots'
 import { isWorkCode } from '../memory/identity'
-import type { WorkCoverImageCandidateV1 } from './types'
+import type { WorkCoverCandidateV1 } from './types'
 
 export const WORK_COVER_MAX_RESPONSE_BYTES_V1 = 36 * 1024 * 1024
 export const WORK_COVER_MAX_PROMPT_CHARS_V1 = 8_000
@@ -40,17 +40,25 @@ export function parseWorkCoverBriefV1(raw: string) {
   return brief as unknown as import('./types').WorkCoverBriefV1
 }
 
-export function parseWorkCoverImageCandidateV1(raw: string): WorkCoverImageCandidateV1 {
+export function parseWorkCoverImageCandidateV1(raw: string): WorkCoverCandidateV1 {
   const row = parse(raw)
-  if (Object.keys(row).sort().join(',') !== 'assetKey,attempt,blobHash,briefHash,candidateHash,dispatchKey,ordinal,providerReceiptHash,responseHash,rights,routeHash,schema,workCode'
-    || row.schema !== 'storyforge.work-cover.image-candidate@1' || row.attempt !== 1 || row.ordinal !== 0
+  const repaired = row.schema === 'storyforge.work-cover.repaired-image-candidate@1'
+  const keys = repaired
+    ? 'assetKey,attempt,blobHash,briefHash,candidateHash,decoderVersion,dispatchKey,ordinal,repairProofHash,responseHash,rights,routeHash,schema,sourceWitnessHash,workCode'
+    : 'assetKey,attempt,blobHash,briefHash,candidateHash,dispatchKey,ordinal,providerReceiptHash,responseHash,rights,routeHash,schema,workCode'
+  if (Object.keys(row).sort().join(',') !== keys
+    || (!repaired && row.schema !== 'storyforge.work-cover.image-candidate@1') || row.attempt !== 1 || row.ordinal !== 0
     || !isWorkCode(row.workCode) || row.rights !== 'provider-terms-unverified') fail()
   uuid(row, 'assetKey'); uuid(row, 'dispatchKey')
-  for (const field of ['blobHash', 'briefHash', 'candidateHash', 'providerReceiptHash', 'responseHash', 'routeHash']) hash(row, field)
-  return row as unknown as WorkCoverImageCandidateV1
+  for (const field of ['blobHash', 'briefHash', 'candidateHash', 'responseHash', 'routeHash']) hash(row, field)
+  if (repaired) {
+    hash(row, 'sourceWitnessHash'); hash(row, 'repairProofHash')
+    if (row.decoderVersion !== 'work-cover-sync-image-v2') fail()
+  } else hash(row, 'providerReceiptHash')
+  return row as unknown as WorkCoverCandidateV1
 }
 
-export async function assertWorkCoverCandidateHashV1(candidate: WorkCoverImageCandidateV1) {
+export async function assertWorkCoverCandidateHashV1(candidate: WorkCoverCandidateV1) {
   parseWorkCoverImageCandidateV1(JSON.stringify(candidate))
   const { candidateHash, ...preimage } = candidate
   if (await hashCanonicalValue(preimage) !== candidateHash) fail()
@@ -92,8 +100,17 @@ export function assertWorkCoverPortableRowV1(kind: 'draft' | 'asset' | 'adoption
     integer(row, 'adoptedAt')
   }
   if (kind !== 'draft') {
-    // Foundation admission remains closed until the repaired typed origin is validated.
-    if (row.materializationRunId != null || row._materializationRunExportId != null || row.repairEvidenceJson != null) fail()
+    const repaired = kind === 'asset' && typeof row.candidateJson === 'string'
+      && parseWorkCoverImageCandidateV1(row.candidateJson).schema === 'storyforge.work-cover.repaired-image-candidate@1'
+    if (kind === 'asset' && repaired) {
+      if (row.role !== 'generated-original' || typeof row.repairEvidenceJson !== 'string' || row.repairEvidenceJson.length > 2_000_000) fail()
+      if (row.materializationRunId != null) integer(row, 'materializationRunId', 1)
+      else integer(row, '_materializationRunExportId')
+    } else if (kind === 'asset' && (row.materializationRunId != null || row._materializationRunExportId != null || row.repairEvidenceJson != null)) fail()
+    if (kind === 'adoption') {
+      if (row.materializationRunId != null) integer(row, 'materializationRunId', 1)
+      if (row._materializationRunExportId != null) integer(row, '_materializationRunExportId')
+    }
     if (typeof row.exactArtifactRefsJson !== 'string') fail()
     extractExactArtifactOwnerRootsV1(row, [{ field: 'exactArtifactRefsJson', path: [] }])
   }

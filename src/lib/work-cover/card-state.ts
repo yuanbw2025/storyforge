@@ -4,11 +4,13 @@ import { readVerifiedMediaBlobV1 } from '../media/blob-store'
 import { resolveScope, scopeTransactionTables } from '../workspace/scope'
 import { assertLongformCoverWorkV1, coverRecordInScopeV1 } from './drafts'
 import { assertWorkCoverPortableRowV1, parseWorkCoverBriefV1 } from './contracts'
-import type { WorkCoverAssetV1 } from './types'
+import type { WorkCoverAssetV1, WorkCoverLocalRepairIntentV1 } from './types'
+import { assertLiveRepairedCoverAssetV1 } from './repair-proof'
 
 /** Product view only. This read cannot acquire credentials or send a request. */
 export async function readWorkCoverCardStateV1(scope: WorkspaceScope, includeRun: boolean) {
-  return db.transaction('r', scopeTransactionTables(db.workCoverDrafts, db.workCoverAssets, db.workCoverResponseBuffers), async () => {
+  return db.transaction('r', scopeTransactionTables(db.workCoverDrafts, db.workCoverAssets, db.workCoverResponseBuffers,
+    db.agentRuns, db.agentRunEvents, db.agentRunArtifacts), async () => {
     await resolveScope({ scope })
     const work = await db.works.get(scope.workId)
     assertLongformCoverWorkV1(work, scope)
@@ -17,6 +19,7 @@ export async function readWorkCoverCardStateV1(scope: WorkspaceScope, includeRun
     const asset = draft?.selectedAssetId == null ? null : await db.workCoverAssets.get(draft.selectedAssetId)
     if (asset && (!coverRecordInScopeV1(scope, asset) || asset.workCode !== work.code)) throw new Error('封面候选不属于这部作品。')
     if (asset) assertWorkCoverPortableRowV1('asset', asset as unknown as Record<string, unknown>)
+    if (asset?.materializationRunId != null) await assertLiveRepairedCoverAssetV1(scope, asset)
     const run = includeRun && draft?.lastRunId != null ? await db.workCoverResponseBuffers.where('runId').equals(draft.lastRunId).first() : null
     if (run && !coverRecordInScopeV1(scope, run)) throw new Error('图片运行不属于这部作品。')
     const returnedAsset = run?.state === 'candidate-ready' && run.assetId != null && run.assetId !== draft?.selectedAssetId
@@ -26,7 +29,10 @@ export async function readWorkCoverCardStateV1(scope: WorkspaceScope, includeRun
     if (returnedAsset) assertWorkCoverPortableRowV1('asset', returnedAsset as unknown as Record<string, unknown>)
     return { work, draft: draft ?? null, brief: draft ? parseWorkCoverBriefV1(draft.briefJson) : null,
       asset: asset ?? null, returnedAsset: returnedAsset ?? null, run: run ? { runId: run.runId, state: run.state, errorCode: run.errorCode,
-        httpStatus: run.httpStatus, updatedAt: run.updatedAt } : null }
+        httpStatus: run.httpStatus, updatedAt: run.updatedAt,
+        localRepair: run.localRepairJson ? JSON.parse(run.localRepairJson) as WorkCoverLocalRepairIntentV1 : null,
+        canRepairLocally: run.state === 'failed' && run.errorCode === 'image-response-rejected' && run.httpStatus != null
+          && run.httpStatus >= 200 && run.httpStatus < 300 && Boolean(run.payload && run.rawResponseHash) } : null }
   })
 }
 
@@ -37,6 +43,7 @@ export function canAdoptWorkCoverImageV1(asset: Pick<WorkCoverAssetV1, 'byteSize
 
 export async function readWorkCoverPreviewBlobV1(scope: WorkspaceScope, asset: WorkCoverAssetV1) {
   if (!coverRecordInScopeV1(scope, asset)) throw new Error('封面预览不能跨作品。')
+  if (asset.materializationRunId != null) await assertLiveRepairedCoverAssetV1(scope, asset)
   const blob = await readVerifiedMediaBlobV1({ scope, blobObjectId: asset.blobObjectId })
   if (blob.contentHash !== asset.blobHash || blob.byteSize !== asset.byteSize || blob.width !== asset.width
     || blob.height !== asset.height || blob.mimeType !== asset.mimeType) throw new Error('封面原图与候选证据不一致。')

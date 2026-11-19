@@ -25,6 +25,27 @@ export interface WorkCoverImageCandidateV1 {
   candidateHash: string
 }
 
+export interface WorkCoverRepairedImageCandidateV1 extends Omit<WorkCoverImageCandidateV1, 'schema' | 'providerReceiptHash'> {
+  schema: 'storyforge.work-cover.repaired-image-candidate@1'
+  sourceWitnessHash: string
+  repairProofHash: string
+  decoderVersion: 'work-cover-sync-image-v2'
+}
+export type WorkCoverCandidateV1 = WorkCoverImageCandidateV1 | WorkCoverRepairedImageCandidateV1
+
+export interface WorkCoverLocalRepairIntentV1 {
+  version: 1
+  operationKey: string
+  nonce: string
+  phase: 'reserved' | 'creating-root' | 'bound' | 'candidate-ready'
+  runId: number | null
+  assetId: number | null
+  sourceWitnessHash: string
+  repairProofHash: string
+  draftRevision: number
+  expectedWorkUpdatedAt: number
+}
+
 export interface WorkCoverDraftV1 extends WorkspaceScope {
   id?: number
   version: 1
@@ -121,6 +142,8 @@ export interface WorkCoverResponseBufferV1 extends WorkspaceScope {
   payload: ArrayBuffer | null
   assetId: number | null
   errorCode: string | null
+  /** Local intent/result only; original observation and failure remain immutable. */
+  localRepairJson?: string | null
   createdAt: number
   updatedAt: number
 }

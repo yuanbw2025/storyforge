@@ -9,6 +9,7 @@ import { binaryDataUrlV1, readVerifiedMediaBlobV1, sha256BinaryV1 } from '../med
 import { assertLongformCoverWorkV1, coverRecordInScopeV1 } from './drafts'
 import { assertWorkCoverCandidateHashV1, assertWorkCoverPortableRowV1, parseWorkCoverImageCandidateV1 } from './contracts'
 import type { WorkCoverAdoptionV1 } from './types'
+import { assertLiveRepairedCoverAssetV1 } from './repair-proof'
 
 export interface WorkCoverIdentityV1 {
   rendererId: 'identity-v1'
@@ -41,6 +42,7 @@ export async function renderWorkCoverV1(input: { scope: WorkspaceScope; assetId:
   const asset = await db.workCoverAssets.get(input.assetId)
   if (!asset?.id || !coverRecordInScopeV1(scope, asset) || !await assertRecordInScope(scope, 'workCoverAssets', asset, { owner: 'work' })) throw new Error('封面候选不存在或不属于此作品。')
   assertWorkCoverPortableRowV1('asset', asset as unknown as Record<string, unknown>)
+  if (asset.materializationRunId != null) await assertLiveRepairedCoverAssetV1(scope, asset)
   const blob = await readVerifiedMediaBlobV1({ scope, blobObjectId: asset.blobObjectId })
   if (blob.contentHash !== asset.blobHash || blob.byteSize !== asset.byteSize || blob.mimeType !== asset.mimeType
     || blob.width !== asset.width || blob.height !== asset.height) throw new Error('封面原图与候选证据不一致。')
@@ -116,7 +118,8 @@ export async function commitWorkCoverAdoptionV1(input: AdoptInput): Promise<Adop
     : await hashCanonicalValue({ origin: 'upload', assetKey: rendered.asset.assetKey, blobHash: rendered.asset.blobHash })
   if (intent.candidateHash !== actualCandidateHash || intent.assetKey !== rendered.asset.assetKey || intent.newCoverHash !== rendered.asset.blobHash
     || intent.renderManifestJson !== rendered.renderManifestJson || intent.renderManifestHash !== rendered.renderManifestHash) throw new Error('封面采用内容与冻结确认不一致。')
-  return db.transaction('rw', scopeTransactionTables(db.workCoverDrafts, db.workCoverAssets, db.mediaBlobObjects, db.workCoverAdoptions), async () => {
+  return db.transaction('rw', scopeTransactionTables(db.workCoverDrafts, db.workCoverAssets, db.mediaBlobObjects, db.workCoverAdoptions,
+    ...(rendered.asset.materializationRunId != null ? [db.agentRuns, db.agentRunEvents, db.agentRunArtifacts] : [])), async () => {
     const prior = await db.workCoverAdoptions.where('[workId+operationKey]').equals([scope.workId, intent.operationKey]).first()
     if (prior) { await verifyExisting(prior); return result() }
     await resolveScope({ scope })
@@ -132,11 +135,13 @@ export async function commitWorkCoverAdoptionV1(input: AdoptInput): Promise<Adop
       || await Dexie.waitFor(sha256BinaryV1(blob.data!)) !== intent.newCoverHash
       || await Dexie.waitFor(hashCanonicalValue(work.coverImage ?? '')) !== intent.oldCoverHash) throw new Error('作品已修改，旧封面已保留；请重读后重新确认候选。')
     const adoptedAt = Date.now()
+    if (asset?.materializationRunId != null) await assertLiveRepairedCoverAssetV1(scope, asset)
     const receipt: WorkCoverAdoptionV1 = {
       ...scope, version: 1, workCode: work.code, operationKey: intent.operationKey,
       draftId: confirmation.draftId, draftKey: intent.draftKey, draftRevision: intent.draftRevision,
       originalAssetId: rendered.asset.id!, finalAssetId: rendered.asset.id!, candidateHash: intent.candidateHash, layoutHash: null,
       oldCoverHash: intent.oldCoverHash, newCoverHash: intent.newCoverHash, sourceRunId: rendered.asset.sourceRunId,
+      ...(rendered.asset.materializationRunId != null ? { materializationRunId: rendered.asset.materializationRunId } : {}),
       adoptedAt, expectedWorkUpdatedAt: intent.expectedWorkUpdatedAt, renderManifestJson: intent.renderManifestJson,
       renderManifestHash: intent.renderManifestHash, receiptHash: await Dexie.waitFor(hashCanonicalValue({ ...intent, adoptedAt })),
       exactArtifactRefsJson: rendered.asset.exactArtifactRefsJson,
@@ -165,6 +170,8 @@ async function verifyWorkCoverReceiptV1(scope: WorkspaceScope, draftId: number, 
     || receipt.draftId !== draftId || receipt.draftKey !== draft.draftKey || receipt.workCode !== work.code
     || receipt.originalAssetId !== receipt.finalAssetId || receipt.newCoverHash !== asset.blobHash) throw new Error('采用回执作用域或原图不匹配。')
   const candidate = asset.candidateJson ? parseWorkCoverImageCandidateV1(asset.candidateJson) : null
+  if (asset.materializationRunId != null) await assertLiveRepairedCoverAssetV1(scope, asset)
+  if ((receipt.materializationRunId ?? null) !== (asset.materializationRunId ?? null) || receipt.sourceRunId !== asset.sourceRunId) throw new Error('采用回执与来源运行不匹配。')
   if (candidate) await assertWorkCoverCandidateHashV1(candidate)
   const actualCandidateHash = candidate?.candidateHash ?? await hashCanonicalValue({ origin: 'upload', assetKey: asset.assetKey, blobHash: asset.blobHash })
   const descriptor = { rendererId: 'identity-v1', sourceBlobHash: asset.blobHash, outputBlobHash: asset.blobHash,

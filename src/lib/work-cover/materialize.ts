@@ -16,7 +16,7 @@ import { failCoverRunV1, WORK_COVER_STEP_V1 as STEP } from './run-evidence'
 import type { WorkCoverAssetV1, WorkCoverImageCandidateV1 } from './types'
 import { storeWorkCoverOriginalAssetInTransactionV1 } from './assets'
 
-function imageBytes(payload: ArrayBuffer): ArrayBuffer {
+export function readWorkCoverImageBytesV1(payload: ArrayBuffer): ArrayBuffer {
   let value: unknown
   try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(payload)) } catch { throw new Error('图片服务未返回完整 JSON；原答已保留，不会重发。') }
   const isRecord = (entry: unknown): entry is Record<string, unknown> => entry !== null && typeof entry === 'object' && !Array.isArray(entry)
@@ -70,7 +70,7 @@ export async function materializeCoverCandidateV1(input: { scope: WorkspaceScope
     || buffer.httpStatus < 200 || buffer.httpStatus >= 300 || !buffer.rawResponseHash) throw new Error('图片结果尚未确认或不能物化；不会自动重发。')
   if (await sha256BinaryV1(buffer.payload) !== buffer.rawResponseHash) throw new Error('已保存原答损坏；旧封面已保留。')
   let prepared: Awaited<ReturnType<typeof prepareMediaBlobV1>>
-  try { prepared = await prepareMediaBlobV1(imageBytes(buffer.payload)) } catch (error) {
+  try { prepared = await prepareMediaBlobV1(readWorkCoverImageBytesV1(buffer.payload)) } catch (error) {
     await db.workCoverResponseBuffers.update(buffer.id!, { state: 'failed', errorCode: 'image-response-rejected', updatedAt: Date.now() })
     await failCoverRunV1(scope, input.runId, 'image-response-rejected')
     throw error
