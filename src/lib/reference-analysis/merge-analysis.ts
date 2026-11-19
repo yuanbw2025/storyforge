@@ -1,7 +1,7 @@
 /**
  * Phase 28.1 — 分析结果去重、合并与结构化
  *
- * - 维度合并：每个维度聚合所有 chunk 的分析，去重后按 chunk 顺序排列（本地，纯展示去重）
+ * - 维度合并：每个维度聚合所有 chunk 的分析，按 chunk 顺序排列并保留每条来源证据
  * - 角色合并：由 AI 完成（见 buildCharacterMergePrompt / parseCharacterMergeOutput）。
  *   原 Phase 28.1 用正则从分析文本抠人名 + 句子切分，准确率低、同一角色会重复，
  *   现按"文本提取一律用 AI 不用正则"原则改为 AI 聚合。
@@ -56,25 +56,6 @@ export interface MergedAnalysisResult {
 }
 
 /**
- * 文本相似度（Jaccard on character 2-gram）
- * 返回 0~1，越大越相似
- */
-function textSimilarity(a: string, b: string): number {
-  if (!a || !b) return 0
-  const ngram = (s: string) => {
-    const set = new Set<string>()
-    for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2))
-    return set
-  }
-  const sa = ngram(a)
-  const sb = ngram(b)
-  let inter = 0
-  for (const g of sa) if (sb.has(g)) inter++
-  const union = sa.size + sb.size - inter
-  return union === 0 ? 0 : inter / union
-}
-
-/**
  * 核心：合并分析结果
  */
 export function mergeAnalysisResults(
@@ -97,7 +78,6 @@ export function mergeAnalysisResults(
 
   for (const dim of visibleDimensions) {
     const items: MergedAnalysisItem[] = []
-    const seen: string[] = [] // 已收录文本的前 60 字，用于去重
 
     for (const chunk of sorted) {
       const raw = chunk[dim]
@@ -105,12 +85,8 @@ export function mergeAnalysisResults(
       const text = raw.trim()
       if (!text || text === '本块未涉及') continue
 
-      // 去重：与已有条目的相似度超过 0.6 则跳过
-      const prefix = text.slice(0, 60)
-      const isDup = seen.some(s => textSimilarity(s, prefix) > 0.6)
-      if (isDup) continue
-
-      seen.push(prefix)
+      // Repeated observations at different source locations remain evidence;
+      // a common opening must not hide a later qualification or counterexample.
       items.push({
         text,
         sourceLabel: chunk.label
@@ -238,11 +214,11 @@ export function buildSummaryPrompt(
   merged: MergedAnalysisResult,
   isHistorical: boolean,
 ): { system: string; user: string } {
-  // 把每个维度的前 3 条拼成概述
+  // Legacy pure formatter: keep complete source-labelled evidence.
   const dimSummaries = merged.dimensions
     .filter(d => d.items.length > 0)
     .map(d => {
-      const samples = d.items.slice(0, 3).map(i => i.text.slice(0, 200)).join('\n')
+      const samples = d.items.map(i => `【${i.sourceLabel}】\n${i.text}`).join('\n')
       return `【${d.label}】\n${samples}`
     })
     .join('\n\n')

@@ -60,6 +60,25 @@ async function seed(suffix = '', status: 'active' | 'ready' = 'active') {
   }
 }
 
+it('summary baseline keeps late evidence and qualifications even with a shared opening', async () => {
+  await db.delete(); await db.open()
+  try {
+    const fixture = await seed('全范围')
+    const shared = '限知视角与环境观察。'.repeat(30)
+    await db.referenceChunkAnalysis.bulkAdd([2,3,4].map(chunkIndex => ({
+      projectId: fixture.projectId, workId: fixture.workId, referenceId: fixture.referenceId,
+      analysisRunId: fixture.analysisRunId, chunkIndex,
+      narrativeStyle: shared + `第${chunkIndex}块独立证据；反例：不得提前赋予人物知情。`, createdAt: Date.now(),
+    })) as any)
+    const baseline = await readReferenceDerivedBaselineV1({scope: fixture.scope, runId: fixture.analysisRunId, mode: 'summary'})
+    if (baseline.input.kind !== 'summary') throw Error('wrong mode')
+    const samples = baseline.input.dimensions.find(row => row.dimension === 'narrativeStyle')!.samples
+    expect(samples).toHaveLength(5)
+    expect(samples[4]).toContain('块 5')
+    expect(samples[4]).toContain('第4块独立证据；反例：不得提前赋予人物知情。')
+  } finally { db.close() }
+})
+
 function summaryResult(tag = '可核查') {
   return JSON.stringify({
     narrativeStyle: `${tag}：以限知视角、感官线索和短句留白控制信息释放。`,
@@ -81,6 +100,19 @@ function characterResult(tag = '阿澄') {
 describe.sequential('R-HARNESS74 · 参考分析派生 durable 候选与双投影采纳', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => { vi.restoreAllMocks(); db.close() })
+
+  it('rejects an oversized complete baseline before dispatch instead of cutting its evidence', async () => {
+    const fixture = await seed('预算保护')
+    const first = await db.referenceChunkAnalysis.where('analysisRunId').equals(fixture.analysisRunId).first()
+    await db.referenceChunkAnalysis.update(first!.id!, {narrativeStyle: '证据'.repeat(30000)})
+    let calls = 0
+    await expect(generateReferenceDerivedCandidateV1({
+      scope: fixture.scope, mode: 'summary', runId: fixture.analysisRunId,
+      runAI: async () => { calls++; return summaryResult() },
+    })).rejects.toThrow()
+    expect(calls).toBe(0)
+    expect((await db.referenceAnalysisRuns.get(fixture.analysisRunId))?.analysisSummary).toBeUndefined()
+  })
 
   it('三注册表闭合，版本化分块 baseline 实际进入一次模型调用，确认前双表零写入', async () => {
     expect(CONTEXT_SOURCE_BY_KEY.get('referenceDerivedBaseline')).toMatchObject({ ownerFrom: 'work', protectedFromTrim: true })

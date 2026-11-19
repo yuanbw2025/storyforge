@@ -3382,6 +3382,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
   },
   {
     key: 'referenceDerivedBaseline',
+    atomic: true,
     label: '参考分析派生 Agent 正式输入基线',
     scope: 'project',
     layer: 'L0',
@@ -3967,6 +3968,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
   },
   {
     key: 'references',
+    atomic: true,
     label: '引用手法',
     scope: 'project',
     ownerFrom: 'work',

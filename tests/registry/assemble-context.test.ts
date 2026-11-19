@@ -338,8 +338,20 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
     expect(assembled.overBudgetBeforeTrim).toBe(true)
     expect(assembled.included).toEqual(['previousChapterEnding'])
     expect(assembled.trimmed).toContain('references')
+    expect(assembled.sourceEvidence?.find(row => row.key === 'references')).toMatchObject({
+      status: 'trimmed', delivery: 'none', inputCharacters: 0, inputTokens: 0,
+    })
     expect(assembled.text).toContain('旧王印记')
     expect(assembled.text).not.toContain('非常长的叙事手法分析')
+    const scaled = await assembleContext({
+      projectId, sourceKeys: ['previousChapterEnding', 'references'],
+      previousChapterEnding: '主角在城门前发现旧王印记。', citedReferenceIds: [refId],
+      inputBudgetTokens: 4000, sourceBudgetScale: 0.1,
+    })
+    expect(scaled.included).toEqual(['previousChapterEnding'])
+    expect(scaled.trimmed).toContain('references')
+    expect(scaled.sourceEvidence?.find(row => row.key === 'references')).toMatchObject({delivery: 'none', inputTokens: 0})
+
   })
 
   it('确定性截断时保留可验签的回退证据和瞬时 exact snapshot', async () => {

@@ -5,10 +5,10 @@ import type {
   ReferenceChunkAnalysis,
   WorkspaceScope,
 } from '../types'
+import { ANALYSIS_DIMENSIONS, DIMENSION_LABELS, HISTORY_DIMENSIONS } from '../types/reference'
 import { readOwnedRows } from '../workspace/scope'
 import {
   collectCharacterCraftTexts,
-  mergeAnalysisResults,
 } from './merge-analysis'
 
 export type ReferenceDerivedModeV1 = 'summary' | 'characters'
@@ -103,16 +103,21 @@ function summaryInput(
   chunks: ReferenceChunkAnalysis[],
   isHistorical: boolean,
 ): ReferenceSummaryInputV1 {
-  const merged = mergeAnalysisResults(chunks, isHistorical)
+  const sorted = [...chunks].sort((a, b) => a.chunkIndex - b.chunkIndex)
   return {
     kind: 'summary',
-    dimensions: merged.dimensions
-      .filter(dimension => dimension.items.length > 0)
+    dimensions: ANALYSIS_DIMENSIONS
+      .filter(dimension => isHistorical || !HISTORY_DIMENSIONS.includes(dimension as typeof HISTORY_DIMENSIONS[number]))
       .map(dimension => ({
-        dimension: dimension.dimension,
-        label: dimension.label,
-        samples: dimension.items.slice(0, 3).map(item => item.text.slice(0, 200)),
-      })),
+        dimension,
+        label: DIMENSION_LABELS[dimension],
+        samples: sorted.flatMap(chunk => {
+          const value = chunk[dimension]?.trim()
+          return value && value !== '本块未涉及'
+            ? [`【块 ${chunk.chunkIndex + 1}${chunk.label ? ` · ${chunk.label}` : ''}】\n${value}`]
+            : []
+        }),
+      })).filter(dimension => dimension.samples.length > 0),
   }
 }
 

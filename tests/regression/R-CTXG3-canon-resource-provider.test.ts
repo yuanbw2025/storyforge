@@ -218,6 +218,19 @@ async function seedSixDomains() {
 describe('CTXG-3 · Canon resource provider', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
+  it('presents reference application boundaries in full Gateway reads while retaining original evidence', async () => {
+    const fixture = await seedSixDomains()
+    const scope = frozen(fixture.scope, fixture.primaryGroupId)
+    const descriptors = await allDescriptors(scope)
+    const ref = descriptors.find(row => row.kind === 'reference' && row.title === '参考资料 · 航海叙事参考')
+      ?? descriptors.find(row => row.kind === 'reference' && row.title.includes('航海叙事参考') && !row.resourceKey.includes(':field:'))!
+    const read = await CANON_RESOURCE_PROVIDER_V1.read({ scope, resourceKey: ref.resourceKey, depth: 'full', maxTokens: 5000 })
+    expect(read.content).toContain('参考方法的原创运用')
+    expect(read.content).toContain('不换名复刻')
+    expect(read.content).toContain('由慢到快')
+    expect(read.sourceRefs.some(row => row.table === 'references')).toBe(true)
+  })
+
   it('same-titled stage occurrences and their ordered events keep distinct portable Canon identities', async () => {
     const { projectId, scope } = await seedWorkspace('同名阶段保持独立')
     const stages = ['a-b', 'ab'].map((id, i) => ({ id, title: '返乡', description: `第${i + 1}次返乡`, keyEvents: [`第${i + 1}次核验`] }))
