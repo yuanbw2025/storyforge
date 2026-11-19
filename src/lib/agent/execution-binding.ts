@@ -12,10 +12,10 @@ import type {
 import type { AssembleContextResult } from '../registry/types'
 
 export const AGENT_EXECUTION_BINDING_VERSION_V1 = 1 as const
-export const AGENT_TOOL_SCHEMA_VERSION_V1 = 'agent-read-tools-v21-narrative-query-v1' as const
+export const AGENT_TOOL_SCHEMA_VERSION_V1 = 'agent-read-tools-v22-creation-preparation-v1' as const
 // Updated only together with AGENT_TOOL_SCHEMA_VERSION_V1 after the runtime
 // snapshot and regression evidence have been reviewed.
-export const AGENT_TOOL_SCHEMA_HASH_V1 = '78723a81dfb12f89ca7ab15e579fa4056508eec8694834f557ace62753d419d0'
+export const AGENT_TOOL_SCHEMA_HASH_V1 = '3672ecfc10d949b52c7518f9600d9887bc32290d6982115a6a579b95f636673b'
 
 export type AgentSkillDefinitionV2 = Omit<AgentSkillDefinitionV1, 'version'> & {
   version: 2
