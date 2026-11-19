@@ -1,3 +1,4 @@
+import { appendPreparationSystemGuidance, STYLE_LEARNING_CONTENT_GUIDANCE, STYLE_CALIBRATION_CONTENT_GUIDANCE } from '../../creation/preparation-content-skill'
 import type { ChatMessage } from '../../types'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../prompt-engine'
@@ -28,7 +29,7 @@ export function buildStyleLearnPrompt(
     calibrationFeedback: advanced?.calibrationFeedback || '',
     userHint: advanced?.userHint || '',
   }, options)
-  return messages
+  return appendPreparationSystemGuidance(messages, STYLE_LEARNING_CONTENT_GUIDANCE)
 }
 
 /** 用当前画像和有界改稿样本重写短文，结果必须由作者确认后才会沉淀为新样本。 */
@@ -48,5 +49,5 @@ export function buildStyleCalibrationPrompt(
     calibrationFeedback: input.calibrationFeedback || '',
     sourceText: input.sourceText,
   }, options)
-  return messages
+  return appendPreparationSystemGuidance(messages, STYLE_CALIBRATION_CONTENT_GUIDANCE)
 }

@@ -451,7 +451,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:271` |
 | `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:134` |
 | `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:310` |
-| `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
+| `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:99` |
 | `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:688`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:760` |
 | `style.learn` | `src/lib/agent/run/style-learning-durable.ts:493` |
 | `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:466` |
@@ -466,7 +466,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/character-revision-copilot.ts:796 · chat`
 - `src/lib/agent/character-supplement-copilot.ts:582 · chat`
 - `src/lib/agent/context-compression.ts:355 · chat`
-- `src/lib/agent/creative-rules-copilot.ts:448 · chat`
+- `src/lib/agent/creative-rules-copilot.ts:449 · chat`
 - `src/lib/agent/inspiration-copilot.ts:357 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
 - `src/lib/agent/outline-copilot.ts:521 · chat`
@@ -592,4 +592,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `024c5f49f`
+生成时间基准:commit `0f63b52fe`
