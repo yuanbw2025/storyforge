@@ -4,6 +4,7 @@ import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { seedCurrentWorkspace } from './current-workspace'
 import { currentWorldOriginCandidateFixtureV1 } from './current-worldview-field'
 import { prepareRequiredMasterGatewayFixtureV1 } from './master-agent-gateway'
+import type { ExecutedMasterCandidate } from '../../src/lib/agent/orchestrator'
 
 /**
  * Creates a native current workspace and one real durable Master candidate.
@@ -43,21 +44,25 @@ export async function seedCurrentMasterCandidate(
     budget,
   }, {
     execute: async options => {
+      const scope = options.scope, budget = options.budget, trace = options.executionTrace
+      if (!scope || !budget || !trace?.taskStarted || !trace.candidateReady) {
+        throw new Error('Current Master fixture requires its actual scope, budget and durable candidate trace.')
+      }
       const task = options.plan.tasks[0]
-      await options.executionTrace.taskStarted(task)
-      const reservation = options.budget.reserveCall({
+      await trace.taskStarted(task)
+      const reservation = budget.reserveCall({
         label: task.id,
         messages: [{ role: 'user', content: task.instruction }],
         maxOutputTokens: 200,
       })
-      options.budget.settleCall(reservation, draft)
+      budget.settleCall(reservation, draft)
       const currentWorld = currentWorldOriginCandidateFixtureV1(draft)
       const gateway = await prepareRequiredMasterGatewayFixtureV1({
-        scope: options.scope,
+        scope,
         worldGroupId: options.worldGroupId,
-        executionTrace: options.executionTrace!,
+        executionTrace: trace,
       }, task, currentWorld.draft)
-      await options.executionTrace.candidateReady(task, {
+      const candidate: ExecutedMasterCandidate = {
         payload: {
           version: 1,
           taskId: task.id,
@@ -67,15 +72,17 @@ export async function seedCurrentMasterCandidate(
           contextSources: gateway.contextSources,
           contextEvidence: gateway.contextEvidence,
           ...currentWorld.payload,
-          workspaceScope: options.scope,
+          workspaceScope: scope,
           dependsOnTaskIds: [],
-          teamBudgetEvidence: options.budget.snapshot(),
+          teamBudgetEvidence: budget.snapshot(),
         },
         draft: currentWorld.draft,
         runtimeNode: {} as any,
         runtimeOutput: currentWorld.runtimeOutput,
         contextGatewayRuntime: gateway.contextGatewayRuntime,
-      })
+      }
+      await trace.candidateReady(task, candidate)
+      return [candidate]
     },
   })
   return {
