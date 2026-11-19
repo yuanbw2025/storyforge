@@ -13,10 +13,9 @@ import {
 } from '../../lib/world-map/atlas/geometry'
 import { inspectCityPlacement } from '../../lib/world-map/atlas/inspect'
 import { loadAtlasSymbols, type AtlasSymbolStyle } from '../../lib/world-map/atlas/symbols'
+import { resolveAtlasStyle, type AtlasViewStyle } from '../../lib/world-map/atlas/view-style'
 import { drawLabels, drawTerrain } from '../../lib/world-map/atlas/paint'
 import AtlasPaintControls from './AtlasPaintControls'
-
-type AtlasViewStyle = AtlasSymbolStyle | 'painted'
 
 interface Props {
   config: MapGenConfig
@@ -48,21 +47,28 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
   const [showLayers, setShowLayers] = useState(false)
   const reference = !auto && config.atlasReference
   const [sheet, setSheet] = useState<HTMLImageElement>()
-  const [viewStyle, setViewStyle] = useState<AtlasViewStyle>(() => {
+  const [initialStyle] = useState(() => {
     let saved = new URLSearchParams(location.search).get('art')
-    try { saved ||= localStorage.getItem('storyforge-atlas-art') } catch { /* View-only preference. */ }
-    return saved === 'ink' || saved === 'painted' ? saved : 'watercolor'
+    let symbols: string | null = null
+    try {
+      saved ||= localStorage.getItem('storyforge-atlas-art')
+      symbols = localStorage.getItem('storyforge-atlas-symbols')
+    } catch { /* View-only preference. */ }
+    return resolveAtlasStyle(saved, symbols)
   })
-  const symbolStyle = viewStyle === 'painted' ? 'watercolor' : viewStyle
+  const [viewStyle, setViewStyle] = useState<AtlasViewStyle>(initialStyle.style)
+  const [symbolStyle, setSymbolStyle] = useState<AtlasSymbolStyle>(initialStyle.symbols)
   const [painted, setPainted] = useState<HTMLImageElement>()
   const handlePaintedChange = useCallback((image: HTMLImageElement | undefined) => {
     setPainted(image)
     if (image) setLayers(previous => ({ ...previous, terrain: true, mountains: true, forests: true, waterBodies: true }))
   }, [])
   const [textScale, setTextScale] = useState(1)
+  const usesSymbols = viewStyle !== 'sketch'
   useEffect(() => {
     let active = true
     setSheet(undefined)
+    if (!usesSymbols) return
     loadAtlasSymbols(symbolStyle)
       .then((img) => {
         if (active) setSheet(img)
@@ -73,7 +79,7 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
     return () => {
       active = false
     }
-  }, [symbolStyle])
+  }, [symbolStyle, usesSymbols])
   const result = useMemo(() => {
     try {
       const geometry = reference
@@ -89,7 +95,7 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
   const { geometry } = result
   const terrain = useMemo(
     () => (geometry ? drawTerrain(geometry, config.seed || 'atlas', sheet, layers,
-      viewStyle === 'painted' ? painted : undefined) : undefined),
+      viewStyle === 'painted' ? painted : undefined, viewStyle === 'sketch' ? 'sketch' : 'illustrated') : undefined),
     [geometry, config.seed, sheet, layers, viewStyle, painted],
   )
   const kmPerPixel =
@@ -197,8 +203,9 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
     c.rect(0, 0, geometry.width, geometry.height)
     c.clip()
     c.drawImage(terrain, 0, 0, geometry.width, geometry.height)
-    drawLabels(c, geometry, cam.zoom, !!sheet, { layers, sheet, kmPerPixel, screenScale: k, textScale })
-  }, [geometry, terrain, revision, layers, sheet, expanded, kmPerPixel, textScale])
+    drawLabels(c, geometry, cam.zoom, !!sheet, { layers, sheet, kmPerPixel, screenScale: k, textScale,
+      style: viewStyle === 'sketch' ? 'sketch' : 'illustrated' })
+  }, [geometry, terrain, revision, layers, sheet, expanded, kmPerPixel, textScale, viewStyle])
   const exportMap = () => {
     if (!terrain || !geometry) return
     const out = document.createElement('canvas')
@@ -207,13 +214,14 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
     const c = out.getContext('2d')!
     c.drawImage(terrain, 0, 0)
     c.scale(out.width / geometry.width, out.height / geometry.height)
-    drawLabels(c, geometry, 1, !!sheet, { layers, sheet, kmPerPixel, fullDetail: true, screenScale: 1, textScale })
+    drawLabels(c, geometry, 1, !!sheet, { layers, sheet, kmPerPixel, fullDetail: true, screenScale: 1, textScale,
+      style: viewStyle === 'sketch' ? 'sketch' : 'illustrated' })
     out.toBlob((blob) => {
       if (!blob) return
       const url = URL.createObjectURL(blob),
         a = document.createElement('a')
       a.href = url
-      a.download = (config.mapName || '世界') + '-绘本图集.png'
+      a.download = (config.mapName || '世界') + '-' + ({ sketch: '简笔地图', illustrated: '绘本地图', painted: '连续绘画' }[viewStyle]) + '.png'
       a.click()
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     })
@@ -238,11 +246,21 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
               setViewStyle(style)
               try { localStorage.setItem('storyforge-atlas-art', style) } catch { /* View-only preference. */ }
             }}>
-            <option value="watercolor">水彩奇幻</option>
-            <option value="ink">水墨山河</option>
+            <option value="sketch">简笔地图</option>
+            <option value="illustrated">绘本地图</option>
             <option value="painted">连续绘画</option>
           </select>
         </label>
+        {viewStyle === 'illustrated' && <label className="flex items-center gap-2">山林素材
+          <select aria-label="绘本山林素材" className="bg-bg-base border border-border rounded px-2 py-1"
+            value={symbolStyle} onChange={event => {
+              const style = event.target.value as AtlasSymbolStyle
+              setSymbolStyle(style)
+              try { localStorage.setItem('storyforge-atlas-symbols', style) } catch { /* View-only preference. */ }
+            }}>
+            <option value="watercolor">欧式插画</option><option value="ink">中式插画</option>
+          </select>
+        </label>}
         <label className="flex items-center gap-2">文字大小
           <input aria-label="地图文字大小" type="range" min="1" max="1.8" step="0.1" value={textScale}
             onChange={event => setTextScale(Number(event.target.value))} className="w-20" />

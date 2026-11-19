@@ -99,6 +99,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
     nextCallIndex: number
     totalCalls: number
     safeToResume: boolean
+    requiresNewRequestBinding?: boolean
   } | null>(null)
   const [extractError, setExtractError] = useState<string | null>(null)
 
@@ -283,7 +284,8 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
           runId: result.recoverable.snapshot.run.id,
           nextCallIndex: result.recoverable.nextCallIndex,
           totalCalls: result.recoverable.totalCalls,
-          safeToResume: result.recoverable.safeToResume,
+          safeToResume: result.recoverable.safeToResume && !result.recoverable.requiresNewRequestBinding,
+          requiresNewRequestBinding: result.recoverable.requiresNewRequestBinding,
         })
         if (result.recoverable.request) {
           setExtractText((result.recoverable.request.operation ?? 'extract') === 'extract'
@@ -329,7 +331,8 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
       runId: recovery.snapshot.run.id,
       nextCallIndex: recovery.nextCallIndex,
       totalCalls: recovery.totalCalls,
-      safeToResume: recovery.safeToResume,
+      safeToResume: recovery.safeToResume && !recovery.requiresNewRequestBinding,
+      requiresNewRequestBinding: recovery.requiresNewRequestBinding,
     } : null)
     if (recovery?.request) {
       setExtractText((recovery.request.operation ?? 'extract') === 'extract'
@@ -695,7 +698,8 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-text-secondary">
                 <p>
                   已恢复分块进度 {recoverable.nextCallIndex}/{recoverable.totalCalls}。
-                  {recoverable.safeToResume ? '可从下一分块继续，不重复已有模型调用。' : '模型结果不可判定，系统不会自动重试。'}
+                  {recoverable.requiresNewRequestBinding ? '旧计划未冻结实际模型配置，输入已保留；请结束旧运行后明确开始新的提取。'
+                    : recoverable.safeToResume ? '可从下一分块继续，不重复已有模型调用。' : '模型结果不可判定，系统不会自动重试。'}
                 </p>
                 <div className="mt-2 flex gap-2">
                   {recoverable.safeToResume && (

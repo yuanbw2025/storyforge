@@ -6,9 +6,11 @@
 
 [实际使用的符号表](../../src/assets/world-map/watercolor-symbols.webp)
 
-水墨山河画风使用另一套原创透明符号：[素材](../../src/assets/world-map/ink-mountains-symbols.png)。同样由内建 imagegen 生成，保留原始透明通道，四列两行；地图画风选择只更换符号，不改变地理几何、图层或来源。城镇与关隘使用中式建筑，诸天分区和天壑由程序绘制。
+绘本地图的中式山林素材使用另一套原创透明符号：[素材](../../src/assets/world-map/ink-mountains-symbols.png)。同样由内建 imagegen 生成，保留原始透明通道，四列两行；素材选择只更换符号，不改变地理几何、图层或来源。城镇与关隘使用中式建筑，诸天分区和天壑由程序绘制。旧名称“水墨山河”不代表一套独立水墨渲染。
 
-### 水墨山河素材提示
+简笔地图由 [sketch.ts](../../src/lib/world-map/atlas/sketch.ts) 原生 Canvas 线绘，不使用上述位图素材。纸纹、山链、树林、沙丘与湿地符号均为确定性绘制；与绘本共用水陆裁剪和河道曲线。山脉仅跟随现有 ridge，不能将制图符号当成真实海拔等高线。字体、点状城镇和要塞符号随简笔样式绘制，图层与导出仍走同一地图组件。
+
+### 中式插画素材提示
 
 Use case: stylized-concept. Asset type: original transparent sprite sheet for a programmable 2D Chinese xianxia world atlas. Create ONE impeccably detailed hand-painted watercolor-and-fine-ink CARTOGRAPHIC SPRITE SHEET, transparent background, exactly FOUR equal columns by TWO equal rows, eight separate centered illustrations, every illustration fully contained within its cell with generous transparent margins, no text, no grid lines, no labels, no shadows on background. All viewed from the same elevated 3/4 map perspective, top-left soft light, muted mineral pigments, antique silk/ink cartography, rich restrained sage green, ochre, faded cinnabar, blue slate. Tiny intricate linework legible at map scale, soft edges fade to transparency but solid objects remain crisp. Top row left to right: (1) one dramatic cluster of tall blue-grey snow-tipped Chinese karst mountains; (2) one low ochre rocky mountain ridge with winding fold lines; (3) a tight cluster of elegant deep jade pine trees and conifers, no ground patch; (4) a tight cluster of lush moss-green broadleaf forest trees, no ground patch. Bottom row left to right: (5) a compact majestic ancient Chinese walled city with red walls, layered grey-green tiled roofs and a central grand palace, no surrounding landscape; (6) a compact ancient Chinese village of varied roofs and a slender pagoda with some trees, no surrounding landscape; (7) a fortified ancient Chinese mountain-pass gate with two squat stone towers, crenellated wall and watchtower, no European castles; (8) an elegant ancient Chinese mountain monastery of wooden pavilions, terraces and stone steps on a small isolated rock, no surrounding landscape. Eight distinct objects only, one per cell. NO readable writing, NO letters, NO borders, NO parchment background, NO checkerboard, NO western fantasy turrets. This is a reusable asset sheet, NOT a finished map, NOT a diagram.
 
