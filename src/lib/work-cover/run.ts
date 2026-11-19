@@ -209,8 +209,9 @@ export async function submitCoverImageOnceV1(authorization: CoverRunAuthorizatio
         signal: timeout.signal, credentials: 'omit', redirect: 'error' })
       const payload = await readBoundedResponse(response)
       if (new TextDecoder().decode(payload).includes(current.config.apiKey)) throw new Error('图片原答包含敏感凭据，未保存。')
+      const providerRequestId = response.headers.get('x-request-id')
       await observeCoverResponseV1({ scope, bufferId, dispatchKey: authorization.dispatchKey,
-        status: response.status, requestId: response.headers.get('x-request-id'), payload })
+        status: response.status, requestId: providerRequestId?.includes(current.config.apiKey) ? null : providerRequestId, payload })
       if (!response.ok) {
         const code = `image-http-${response.status}`
         await db.workCoverResponseBuffers.update(bufferId, { state: 'failed', errorCode: code, updatedAt: Date.now() })

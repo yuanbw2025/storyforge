@@ -130,11 +130,12 @@ describe('035 image one-shot dispatch/materialization', () => {
   })
 
   it('persists original response before decode, then atomically freezes candidate/receipt and recovers with zero extra POST', async () => {
-    const post = vi.fn(async () => new Response(payload(), { status: 200 })); vi.stubGlobal('fetch', post)
+    const post = vi.fn(async () => new Response(payload(), { status: 200, headers: { 'x-request-id': connection.config.apiKey } })); vi.stubGlobal('fetch', post)
     const fixture = await prepared()
     await submitCoverImageOnceV1(fixture.authorization)
     const original = (await db.workCoverResponseBuffers.where('runId').equals(fixture.authorization.runId).first())!
     expect(original.state).toBe('response-observed'); expect(original.payload).toBeInstanceOf(ArrayBuffer)
+    expect(original.requestId).toBeNull(); expect(JSON.stringify(original)).not.toContain(connection.config.apiKey)
     expect(await db.workCoverAssets.count()).toBe(0)
     const asset = await materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })
     expect(asset.sourceRunId).toBe(fixture.authorization.runId)

@@ -10,8 +10,8 @@ export function readWorkCoverConnectionV1(): CoverImageConnectionV1 {
   const preset = presetId ? readPersistedAIConfigPresetV1(presetId) : null
   if (!preset) throw new Error('请先在设置中选择一个图片连接预设。')
   workCoverAgnesBaseV1(preset.config)
-  const apiKey = getAIConfigPresetApiKeyV1(preset)
-  if (!apiKey.trim()) throw new Error('图片连接没有可用凭据，请在设置中重新填写。')
+  const apiKey = getAIConfigPresetApiKeyV1(preset).trim()
+  if (!apiKey) throw new Error('图片连接没有可用凭据，请在设置中重新填写。')
   return { presetId: preset.id, imageModel: 'agnes-image-2.1-flash', config: { ...preset.config, apiKey } }
 }
 
