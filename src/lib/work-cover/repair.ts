@@ -93,10 +93,22 @@ export async function repairSavedWorkCoverImageV1(input: {
     const repairProofHash = await hashCanonicalValue(descriptor)
     const proposed: WorkCoverLocalRepairIntentV1 = { version: 1, operationKey, nonce, phase: 'reserved', runId: null, assetId: null,
       sourceWitnessHash, repairProofHash, draftRevision: input.expectedDraftRevision, expectedWorkUpdatedAt: input.expectedWorkUpdatedAt }
+    const assertFrozenInputs = async () => {
+      const work = await db.works.get(scope.workId), draft = await db.workCoverDrafts.get(input.draftId)
+      const source = await db.agentRuns.get(input.sourceRunId)
+      assertLongformCoverWorkV1(work, scope)
+      if (work.code !== frozen.work.code || work.updatedAt !== input.expectedWorkUpdatedAt || !draft
+        || !coverRecordInScopeV1(scope, draft) || draft.revision !== input.expectedDraftRevision || draft.draftKey !== frozen.draft.draftKey
+        || draft.briefHash !== frozen.draft.briefHash || draft.lastRunId !== input.sourceRunId || draft.expectedWorkUpdatedAt !== work.updatedAt
+        || !source || source.workId !== scope.workId || source.projectId !== scope.projectId || source.status !== 'failed'
+        || source.contractJson !== frozen.source.ledger.contractJson || source.contractHash !== frozen.source.ledger.contractHash
+        || source.projectionHash !== frozen.source.ledger.projectionHash) fail('准备期间作品、草稿或原运行已变化')
+    }
     let intent = await db.transaction('rw', tables(), async () => {
       const buffer = await db.workCoverResponseBuffers.get(initial.id!)
       eligible(buffer, scope)
       if (buffer.localRepairJson !== frozen.buffer.localRepairJson || buffer.rawResponseHash !== initial.rawResponseHash) fail('恢复意图已由另一处修改')
+      await Dexie.Promise.resolve(assertFrozenInputs())
       if (priorIntent) {
         for (const key of ['operationKey', 'nonce', 'sourceWitnessHash', 'repairProofHash', 'draftRevision', 'expectedWorkUpdatedAt'] as const) {
           if (priorIntent[key] !== proposed[key]) fail('旧恢复输入已变化，不能重置或另建运行')
@@ -112,6 +124,9 @@ export async function repairSavedWorkCoverImageV1(input: {
       await db.transaction('rw', tables(), async () => {
         const row = await db.workCoverResponseBuffers.get(initial.id!)
         if (!row || row.localRepairJson !== canonicalStringify(intent)) fail('恢复意图 CAS 失败')
+        eligible(row, scope)
+        if (row.rawResponseHash !== initial.rawResponseHash) fail('原答绑定已变化')
+        await Dexie.Promise.resolve(assertFrozenInputs())
         if (intent.phase === 'reserved' && await db.agentRuns.where('workId').equals(scope.workId).filter(run => run.contractHash === contractHash).count()) fail('保留意图已有运行，创建结果待检查')
         await db.workCoverResponseBuffers.update(initial.id!, { localRepairJson: canonicalStringify(next) })
       })

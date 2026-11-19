@@ -103,6 +103,20 @@ describe('035 saved local response repair', () => {
     expect(f.post).toHaveBeenCalledTimes(1)
   })
 
+  it.each(['work', 'draft'] as const)('rechecks %s after native decode and before reserving/root creation', async changed => {
+    const f = await failedImage(), decode = globalThis.createImageBitmap
+    const spy = vi.spyOn(globalThis, 'createImageBitmap').mockImplementationOnce(async (...args) => {
+      if (changed === 'work') await db.works.update(f.scope.workId, { updatedAt: f.work.updatedAt + 1 })
+      else await db.workCoverDrafts.update(f.draft.id, { revision: f.draft.revision + 1 })
+      return (decode as (...values: typeof args) => Promise<ImageBitmap>)(...args)
+    })
+    try { await expect(repairSavedWorkCoverImageV1(f.input)).rejects.toThrow('准备期间') } finally { spy.mockRestore() }
+    expect(await db.agentRuns.count()).toBe(1); expect(await db.workCoverAssets.count()).toBe(0)
+    const buffer = (await db.workCoverResponseBuffers.get(f.buffer.id!))!
+    expect(buffer.localRepairJson).toBeUndefined(); expect(buffer.payload).toEqual(f.buffer.payload)
+    expect(await readAgentRunV1(f.scope, f.source.run.id)).toEqual(f.source); expect(f.post).toHaveBeenCalledTimes(1)
+  })
+
   it.each(['reserved', 'creating-root', 'root-committed'] as const)('reconciles the %s crash boundary conservatively', async boundary => {
     const f = await failedImage(), update = db.workCoverResponseBuffers.update.bind(db.workCoverResponseBuffers)
     const spy = boundary === 'creating-root'
