@@ -28,13 +28,17 @@ async function seed(global: AIConfig, routed: AIConfig) {
   await stampCurrentFixtureResourceUidsV1(scope.projectId)
   return { scope, aiConfig: global, request: { categoryId, worldGroupId: null, sourceText, supplementTags: false } }
 }
-function transport(status = 200, failure?: Error, answer = raw, inputLimit = 32_768) {
+function transport(status = 200, failure?: Error, answer = raw, inputLimit = 32_768, bodyFailure?: Error) {
   const posts: Array<{ url: string; body: Record<string, any> }> = []
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     if (init?.method === 'GET') return new Response(JSON.stringify({ name: `models/${gemini.model}`, inputTokenLimit: inputLimit, outputTokenLimit: 8_192 }))
     posts.push({ url, body: JSON.parse(init?.body as string) })
     if (failure) throw failure
+    if (bodyFailure) return new Response(new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"choices":['))
+      queueMicrotask(() => controller.error(bodyFailure))
+    } }), { status: 200 })
     return new Response(status === 200 ? JSON.stringify({ choices: [{ message: { content: answer }, finish_reason: 'stop' }] })
       : JSON.stringify({ error: { message: `do-not-display:${agnes.apiKey}:${sourceText}` } }), { status })
   })
@@ -185,6 +189,16 @@ describe('045 actual routed extraction request', () => {
     const stored = JSON.parse(await readAgentRunArtifactExactV1({ projectId: fixture.scope.projectId,
       artifactKind: 'tool-result', contentHash: observation.payload.contentHash }))
     expect(stored.observation.requestLifecycle).toMatchObject({ phase: 'response-observed', responseStatus: status })
+    await expect(resumeCodexExtractionCandidateV1({ scope: fixture.scope, runId: row.id!, aiConfig: agnes })).rejects.toThrow('不可判定窗口')
+    expect(wire.posts).toHaveLength(1); expect(await db.codexEntries.count()).toBe(0)
+  })
+
+  it.each([new TypeError('synthetic-partial-body'), new DOMException('synthetic-body-abort', 'AbortError')])('does not mistake HTTP200 headers with interrupted body for a complete rejected response: $name', async bodyFailure => {
+    const fixture = await seed(agnes, gemini), wire = transport(200, undefined, raw, 32_768, bodyFailure)
+    await expect(generateCodexExtractionCandidateV1(fixture)).rejects.toThrow('HTTP 200，但上游结果未知')
+    const row = (await db.agentRuns.toArray())[0], state = await readAgentRunV1(fixture.scope, row.id!)
+    expect(state.projection.state).toBe('paused')
+    expect(state.events.some(event => event.type === 'run.failed')).toBe(false)
     await expect(resumeCodexExtractionCandidateV1({ scope: fixture.scope, runId: row.id!, aiConfig: agnes })).rejects.toThrow('不可判定窗口')
     expect(wire.posts).toHaveLength(1); expect(await db.codexEntries.count()).toBe(0)
   })

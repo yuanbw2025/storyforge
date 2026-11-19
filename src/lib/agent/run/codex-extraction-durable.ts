@@ -843,7 +843,7 @@ async function continueExtraction(input: {
       const observedStatus = result.requestLifecycle?.phase === 'response-observed' ? result.requestLifecycle.responseStatus
         : error instanceof AIError ? error.status : null
       if ((observedStatus != null && DEFINITIVE_HTTP_REFUSALS.has(observedStatus))
-        || (observedStatus === 200 && error instanceof AICompletionResponseErrorV1)
+        || (observedStatus === 200 && error instanceof AICompletionResponseErrorV1 && error.problem !== 'invalid-json')
         || result.requestLifecycle?.phase === 'pre-dispatch') {
         const code = cause instanceof CodexExtractionRequestBudgetErrorV1 ? 'codex-extraction-input-budget'
           : observedStatus != null ? `codex-extraction-http-${observedStatus}` : 'codex-extraction-not-dispatched'
