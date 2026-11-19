@@ -31,16 +31,58 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release-checks:
+  coverage-shards:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - id: cli
-            script: ci
-          - id: browser
-            script: ci:e2e
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Run isolated coverage component
+        run: node scripts/run-coverage-shard.mjs "${{ matrix.shard }}" "${{ runner.temp }}/coverage-shard-${{ matrix.shard }}"
+      - name: Preserve completed coverage component
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/coverage-shard-${{ matrix.shard }}/
+          if-no-files-found: error
+          retention-days: 5
+
+  release-checks:
+    needs: coverage-shards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Record exact source
+        run: git rev-parse HEAD
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-shard-*
+          path: ${{ runner.temp }}/coverage-input/
+      - name: Complete release checks and enforce aggregate coverage
+        env:
+          STORYFORGE_COVERAGE_SHARDS: ${{ runner.temp }}/coverage-input
+        run: npm run ci
+
+  browser-checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       PLAYWRIGHT_FROZEN_WORKSPACE: "1"
     steps:
@@ -55,24 +97,24 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Install browser runtime
-        if: matrix.id == 'browser'
         run: npx playwright install --with-deps chromium
       - name: Build production preview
-        if: matrix.id == 'browser'
         run: npm run build
       - name: Verify production model and embedding proxies
-        if: matrix.id == 'browser'
+        if: matrix.shard == 1
         run: PLAYWRIGHT_PRODUCTION_PREVIEW=1 npx playwright test tests/e2e/settings-proxy.spec.ts tests/e2e/codex-provider.spec.ts
-      - name: Complete release checks
-        run: npm run ${{ matrix.script }}
+      - name: Complete browser release checks
+        # Forward through both npm scripts without changing evaluated package metadata.
+        run: npm run ci:e2e -- -- --shard=${{ matrix.shard }}/4 --reporter=github,blob
       - name: Preserve browser evidence
-        if: ${{ !cancelled() && matrix.id == 'browser' }}
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: release-browser-${{ github.sha }}
+          name: release-browser-${{ matrix.shard }}-${{ github.sha }}
           path: |
             test-results/
             playwright-report/
+            blob-report/
           if-no-files-found: ignore
           retention-days: 14
   clients:
@@ -83,7 +125,7 @@ jobs:
       release: true
     secrets: inherit
   build:
-    needs: release-checks
+    needs: [release-checks, browser-checks]
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}

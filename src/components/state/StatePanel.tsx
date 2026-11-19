@@ -263,6 +263,9 @@ function StateFieldsEditor({ rawFields, sourceKey, onSave, onClose }: {
   const draftRef = useRef(draft), baselineDraft = useRef(stringifyFields(initial))
   const baseline = useRef(rawFields), originalSource = useRef(sourceKey), commit = useRef(onSave)
   const dirty = useRef(false), errorRef = useRef(''), composingRef = useRef(false)
+  // Returning to baseline text does not acknowledge a peer conflict or release
+  // the session's original owner/writer before the author makes a decision.
+  const editedSession = useRef(false)
   const inFlight = useRef<Promise<void> | null>(null)
   const latest = useRef({ rawFields, sourceKey })
   latest.current = { rawFields, sourceKey }
@@ -270,6 +273,7 @@ function StateFieldsEditor({ rawFields, sourceKey, onSave, onClose }: {
   const conflict = !changedOwner && rawFields !== baseline.current
 
   const changeDraft = (fields: StateField[]) => {
+    editedSession.current = true
     draftRef.current = fields
     dirty.current = stringifyFields(fields) !== baselineDraft.current
     setDraft(fields)
@@ -277,10 +281,16 @@ function StateFieldsEditor({ rawFields, sourceKey, onSave, onClose }: {
   const saveDraft = useCallback((retry = false, reviewedFields?: string): Promise<void> => {
     if (inFlight.current) return inFlight.current
     const externallyChanged = latest.current.sourceKey === originalSource.current && latest.current.rawFields !== baseline.current
-    if (!dirty.current && !composingRef.current && !errorRef.current && !externallyChanged && reviewedFields === undefined) return Promise.resolve()
     const fail = (message: string) => {
       errorRef.current = message; setError(message)
       return Promise.reject(new Error(message))
+    }
+    if (editedSession.current && !dirty.current && !composingRef.current && latest.current.sourceKey !== originalSource.current) {
+      return fail('编辑目标已变化，本地编辑会话仍保留；请明确放弃输入后再打开当前目标。')
+    }
+    if (!dirty.current && !composingRef.current && !errorRef.current && !externallyChanged && reviewedFields === undefined) {
+      editedSession.current = false
+      return Promise.resolve()
     }
     if (composingRef.current) return fail('输入法仍在组合文字，请完成后保存；输入已保留。')
     if (errorRef.current && !retry) return Promise.reject(new Error(errorRef.current))
@@ -299,6 +309,7 @@ function StateFieldsEditor({ rawFields, sourceKey, onSave, onClose }: {
       baseline.current = stringifyFields(fields)
       baselineDraft.current = submittedDraft
       dirty.current = stringifyFields(draftRef.current) !== submittedDraft
+      editedSession.current = dirty.current
       if (dirty.current) throw new Error('保存期间收到新输入，前一版本已保存；新输入仍保留，请再次保存。')
     }).catch(cause => {
       dirty.current = true
@@ -311,7 +322,7 @@ function StateFieldsEditor({ rawFields, sourceKey, onSave, onClose }: {
   }, [])
   useEffect(() => registerPendingDraftFlusherV1(saveDraft), [saveDraft])
   useEffect(() => {
-    if (dirty.current || inFlight.current || composingRef.current || errorRef.current) return
+    if (editedSession.current || dirty.current || inFlight.current || composingRef.current || errorRef.current) return
     const result = inspectStateFields(rawFields)
     if (!result.ok) return
     const fields = result.fields.length ? result.fields : [{ key: '当前状态', value: '' }]
@@ -319,7 +330,7 @@ function StateFieldsEditor({ rawFields, sourceKey, onSave, onClose }: {
     originalSource.current = sourceKey; commit.current = onSave
     draftRef.current = fields; setDraft(fields)
   }, [rawFields, sourceKey, onSave, saving])
-  useBeforeUnload(dirty.current || saving || composing || Boolean(error))
+  useBeforeUnload(dirty.current || (editedSession.current && (conflict || changedOwner)) || saving || composing || Boolean(error))
 
   return <div className="mt-4 space-y-2"
     onCompositionStartCapture={() => { composingRef.current = true; setComposing(true) }}
@@ -342,7 +353,7 @@ function StateFieldsEditor({ rawFields, sourceKey, onSave, onClose }: {
             if (!readable.ok) return
             const fields = readable.fields.length ? readable.fields : [{ key: '当前状态', value: '' }]
             baseline.current = rawFields; baselineDraft.current = stringifyFields(fields)
-            draftRef.current = fields; dirty.current = false; errorRef.current = ''
+            draftRef.current = fields; dirty.current = false; editedSession.current = false; errorRef.current = ''
             setDraft(fields); setError('')
           }}>重载外部版本（舍弃本地输入）</button>
         <button type="button" className="underline"
@@ -353,7 +364,7 @@ function StateFieldsEditor({ rawFields, sourceKey, onSave, onClose }: {
         <button type="button" className="text-xs text-accent" onClick={() => changeDraft([...draftRef.current, { key: '', value: '' }])}>+ 添加字段</button>
         <div className="flex items-center gap-3">
           {(dirty.current || error) && <button type="button" className="text-xs text-text-muted" onClick={() => {
-            dirty.current = false; errorRef.current = ''; onClose()
+            dirty.current = false; editedSession.current = false; errorRef.current = ''; onClose()
           }}>放弃未保存输入</button>}
           <button type="button" onClick={() => { void saveDraft(true).then(onClose).catch(() => undefined) }}
             className="inline-flex items-center gap-1 rounded bg-accent px-2.5 py-1.5 text-xs text-white">

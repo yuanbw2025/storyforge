@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { completedTestFiles, prepareCoverageMerge } from './coverage-shards.mjs'
 
 // Vitest cleans <reportsDirectory> before a coverage run. A shared
 // `coverage/.tmp` lets concurrent CI/tasks delete files that another run is
@@ -18,10 +19,13 @@ const executable = path.join(
   'vitest.mjs',
 )
 const workers = process.env.CI ? 1 : 2
+const merge = process.env.STORYFORGE_COVERAGE_SHARDS
+  ? prepareCoverageMerge(process.env.STORYFORGE_COVERAGE_SHARDS)
+  : null
 
 const result = spawnSync(process.execPath, [
   executable,
-  'run',
+  ...(merge ? [`--merge-reports=${merge.destination}`] : ['run']),
   '--coverage',
   '--reporter=default',
   '--reporter=json',
@@ -52,6 +56,9 @@ if (!existsSync(resultsFile) || !existsSync(path.join(reportsDirectory, 'coverag
   process.exit(1)
 }
 const report = JSON.parse(readFileSync(resultsFile, 'utf8'))
+if (merge && JSON.stringify(completedTestFiles(report)) !== JSON.stringify(merge.expectedFiles)) {
+  throw new Error('[coverage] Merged report is missing expected test files')
+}
 if (report.success !== true || report.numTotalTests < 1
   || report.numFailedTests !== 0 || report.numFailedTestSuites !== 0
   || !Array.isArray(report.testResults) || report.testResults.length === 0) {
