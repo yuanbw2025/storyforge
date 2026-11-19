@@ -4,6 +4,8 @@
  * 三列布局：L1 大类导航 → L2 子类列表 → 编辑区（双文本框 + 优先级）
  * 底部：规则预览 + Token 估算
  */
+import ResizableInputArea, { type AreaControlV1 } from '../shared/ResizableInputArea'
+import { inputAreaLayoutV1 } from '../../lib/input-area-layout'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { useWorldSettingsLayout } from '../longform/WorldSettingsLayout'
@@ -40,6 +42,7 @@ import {
 } from '../shared/initial-record-target'
 
 interface Props {
+  resizableInputs?: boolean
   project: Project
   initialProfileId?: number | null
 }
@@ -70,7 +73,7 @@ function getL2Nodes(
 
 // ── 主面板 ─────────────────────────────────────────────────────────
 
-export default function WorldRulesPanel({ project, initialProfileId }: Props) {
+export default function WorldRulesPanel({ project, initialProfileId, resizableInputs = false }: Props) {
   const compact = useWorldSettingsLayout()
   const dialog = useDialog()
   const {
@@ -367,6 +370,21 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
     )
   }
 
+  const noteLayout = inputAreaLayoutV1(resizableInputs, 'rules.note')
+  const renderNote = (control?: AreaControlV1) => (
+    <textarea
+      ref={control?.ref}
+      style={control?.style}
+      onCompositionStart={control?.compositionStart}
+      onCompositionEnd={control?.compositionEnd}
+      value={profile.globalNote || ''}
+      onChange={event => { const note = event.target.value; void runEdit(() => updateGlobalNote(note)) }}
+      placeholder="例如：本作以唐代为蓝本但加入仙侠元素，凡是涉及朝堂制度的一律遵循史实，力量体系完全虚构。"
+      rows={3}
+      className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-bg-base text-text-primary placeholder:text-text-muted/50 focus:ring-1 focus:ring-accent focus:border-accent resize-y"
+    />
+  )
+
   const filled = filledCount()
 
   return (
@@ -452,6 +470,7 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
           onDeleteCustomNode={(nodeId, label) => { void handleDeleteCustomNode(nodeId, label) }}
         />
         <WorldRuleEntryEditor
+          resizableInputs={resizableInputs}
           selectedNode={selectedNode}
           currentLabel={currentLabel}
           currentHints={currentHints}
@@ -471,13 +490,7 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
         <label className="block text-sm font-medium text-text-secondary mb-1.5">
           📝 全局补充说明（对 AI 的额外约束，适用于所有维度）
         </label>
-        <textarea
-          value={profile.globalNote || ''}
-          onChange={event => { const note = event.target.value; void runEdit(() => updateGlobalNote(note)) }}
-          placeholder="例如：本作以唐代为蓝本但加入仙侠元素，凡是涉及朝堂制度的一律遵循史实，力量体系完全虚构。"
-          rows={3}
-          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-bg-base text-text-primary placeholder:text-text-muted/50 focus:ring-1 focus:ring-accent focus:border-accent resize-y"
-        />
+        {noteLayout ? <ResizableInputArea options={noteLayout}>{renderNote}</ResizableInputArea> : renderNote()}
       </div>
 
       {/* 预览面板 */}

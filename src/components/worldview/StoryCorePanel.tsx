@@ -1,3 +1,4 @@
+import { inputAreaLayoutV1 } from '../../lib/input-area-layout'
 import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
 import WorldviewReadBoundary from './WorldviewReadBoundary'
 import { useState, useEffect } from 'react'
@@ -58,10 +59,11 @@ const FIELDS = STORY_CORE_PANEL_FIELDS
 
 interface Props {
   project: Project
+  resizableInputs?: boolean
   initialStoryCoreId?: number | null
 }
 
-export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
+export default function StoryCorePanel({ project, initialStoryCoreId, resizableInputs = false }: Props) {
   const { storyCore, saveStoryCore } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
@@ -161,6 +163,7 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
         {FIELDS.map(f => (
           <div key={f.key} className={activeKey === f.key ? '' : 'hidden'}>
             <FieldEditor
+              resizableInputs={resizableInputs}
               field={f}
               value={values[f.key] ?? ''}
               onChange={v => {
@@ -192,6 +195,7 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
 // ── 单字段编辑器（各自独立的 AI 流） ──────────────────────────
 
 function FieldEditor({
+  resizableInputs = false,
   field,
   value,
   onChange,
@@ -205,6 +209,7 @@ function FieldEditor({
   onAdopted,
 }: {
   field: FieldDef
+  resizableInputs?: boolean
   value: string
   onChange: (v: string) => void | Promise<void>
   project: Project
@@ -264,6 +269,7 @@ function FieldEditor({
       {/* 内容区 — 行内编辑 */}
       <div className="bg-bg-surface border border-border rounded-lg p-4">
         <InlineTextarea
+          inputAreaLayout={inputAreaLayoutV1(resizableInputs, `story.${field.key}`)}
           value={value}
           onChange={onChange}
           placeholder={`点击填写${field.label}…`}
@@ -331,6 +337,8 @@ function FieldEditor({
               </span>
             </div>
             <CandidateDraftEditor
+              resizableInputs={resizableInputs}
+              inputAreaField={`story.${field.key}`}
               payload={candidate.payload}
               value={candidate.event.content}
               disabled={copilot.busy}

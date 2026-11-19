@@ -5,6 +5,10 @@ lastVerified: 2026-11-13
 ---
 # Novel to comic
 
+## November 19: long source titles
+
+Source titles retain their natural height with type and word count in separate columns. The list and original text scroll independently and stack on narrow screens, preventing long titles from overlapping. Source reads retain frozen identities. Based on [#473](https://github.com/yuanbw2025/storyforge/pull/473).
+
 ## November 13: saving, recovery and usage checks
 
 Selected images are checked for actual decoding and original bytes during import/publication; a file header alone or corrupt content is not a usable final image. Unselected old damaged images do not block other valid content. Character/location display names can change while stable identity remains. Appearance, binding or visual-setting edits require reviewing affected panels again; renaming alone keeps existing reviews. Switching/reparsing sources preserves the original ownership of author drafts being saved. Sources: [#306](https://github.com/yuanbw2025/storyforge/pull/306), [#345](https://github.com/yuanbw2025/storyforge/pull/345), [#385](https://github.com/yuanbw2025/storyforge/pull/385).

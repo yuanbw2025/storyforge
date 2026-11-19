@@ -1,5 +1,9 @@
 # Local memory workspace
 
+## November 19: automatic local retrieval maintenance
+
+Longform context reads maintain keyword blocks and chapter/volume summaries for the current work without a manual indexing button. Independent embedding services are in collapsed advanced options. Only an enabled service receives the query and selected historical passages. Changed text, sources or connection credentials invalidate old vectors. This does not rewrite author prose or rebuild frozen-world/game-runtime sources from a live work. Based on [#478](https://github.com/yuanbw2025/storyforge/pull/478).
+
 ## External edits and interrupted writes
 
 Data management checks actual bytes before adopting external files or confirming writes; unchanged size and modification time do not prove unchanged content. If the project version wins, original disk bytes are preserved before writing and readback. Concurrent external edits or a nonempty partial file after interruption retain the file and binding for conflict review instead of forced overwrite. The existing 64 MiB per-file and 256 MiB per-check read budgets reject oversized operations explicitly. Source: [#330](https://github.com/yuanbw2025/storyforge/pull/330).

@@ -3,6 +3,7 @@ import { CTextarea } from '../shared/CompositionInput'
 import { FIELD_REGISTRY } from '../../lib/registry/field-registry'
 import { MORAL_AXIS_LABELS, ORDER_AXIS_LABELS, ROLE_WEIGHT_LABELS } from '../../lib/character/character-axes'
 import type { MasterCandidatePayload } from '../../lib/agent/orchestrator'
+import { inputAreaLayoutV1, type InputAreaFieldV1 } from '../../lib/input-area-layout'
 
 const ENUM_LABELS: Record<string, Record<string, string>> = {
   roleWeight: ROLE_WEIGHT_LABELS,
@@ -16,11 +17,15 @@ export default function CandidateDraftEditor({
   value,
   disabled,
   onChange,
+  resizableInputs = false,
+  inputAreaField,
 }: {
   payload: MasterCandidatePayload
   value: string
   disabled: boolean
   onChange: (value: string) => void
+  resizableInputs?: boolean
+  inputAreaField?: InputAreaFieldV1
 }) {
   const [raw, setRaw] = useState(false)
   const textField = useMemo(() => {
@@ -91,6 +96,7 @@ export default function CandidateDraftEditor({
       )}
       {textField && !raw ? (
         <CTextarea
+          inputAreaLayout={inputAreaLayoutV1(resizableInputs, inputAreaField, 'candidate')}
           aria-label={`${payload.label}候选内容`}
           value={textField.value}
           disabled={disabled}
@@ -167,6 +173,7 @@ export default function CandidateDraftEditor({
         <CTextarea
           aria-label={`${payload.label}候选内容`}
           value={value}
+          inputAreaLayout={inputAreaLayoutV1(resizableInputs, inputAreaField, 'raw')}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
           className="agent-candidate-editor w-full resize-y rounded border border-border bg-bg-surface p-3 text-sm leading-7 text-text-primary outline-none focus:border-accent disabled:opacity-60"

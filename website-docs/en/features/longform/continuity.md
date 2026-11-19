@@ -1,5 +1,9 @@
 # Longform: continuity, post-chapter review, and revision
 
+## November 19: inventory/timeline adoption stalls
+
+A shared digest-ordering path that could leave inventory or story-timeline adoption waiting indefinitely is fixed. Atomic writes/rollback, source checks and author confirmation remain. For unknown outcomes, inspect the original task's candidate and receipt rather than dispatching another model request over the evidence. This does not establish one cause for every historical stall. Based on #498.
+
 ## November 13: saving, recovery and usage checks
 
 Re-saving chapter reconciliation no longer appends entries already synchronized to the outline. Reload to continue remaining choices; changed prose, outline or report requires another review. Consistency citations are checked against original content, position and source; repeated or untraceable quotations cannot confirm a finding. Recovered character/setting/inventory adoption uses the existing candidate and saved receipt. Changed sources pause for review instead of resending an old request. Sources: [#374](https://github.com/yuanbw2025/storyforge/pull/374), [#385](https://github.com/yuanbw2025/storyforge/pull/385), [#405](https://github.com/yuanbw2025/storyforge/pull/405).

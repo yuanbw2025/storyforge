@@ -1,5 +1,11 @@
 # 安装与启动
 
+## 11月19日：主干安装行为与 Arch 准备
+
+主干将用户协议放在设置底部，默认折叠、可离线阅读，不再强制首启勾选；查看协议不自动开启上报。主题卡片和设置标题更紧凑。已发布 v4.0.7 的首启流程仍按该版本执行。依据 #467/#468。
+
+Arch Linux x86_64 桌面 `.pkg.tar.zst` 与 pacman 安装、更新验证已进入 v4.0.8 准备，当前尚未正式发行；v4.0.7 的 Linux 下载仍选择便携 ZIP。不要从草稿版本推断可下载包，见[版本兼容](/updates/compatibility)。依据 #476。
+
 从[最新版本下载页](https://github.com/yuanbw2025/storyforge/releases/latest)选择客户端安装包或便携 ZIP。Windows 和 Mac 可安装桌面客户端，Android 使用 APK；Linux 使用便携 ZIP。便携包自带运行环境和内置媒资，无需先安装开发环境。
 
 ## Windows / macOS / Android 客户端 {#开发中的-windows-android-客户端}

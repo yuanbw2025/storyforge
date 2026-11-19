@@ -1,5 +1,11 @@
 # Install and launch
 
+## November 19: mainline startup and Arch preparation
+
+Mainline places the offline-readable agreement in a collapsed settings footer instead of a mandatory first-launch checkbox. Viewing it does not enable reporting. Theme cards and headings are more compact. Released v4.0.7 retains its own startup flow. Based on #467/#468.
+
+Arch Linux x86_64 `.pkg.tar.zst` desktop packages and pacman installation/update validation are in v4.0.8 preparation, not a formal release. Linux users of v4.0.7 still choose the portable ZIP. Do not infer a downloadable package from a draft version; see [compatibility](/en/updates/compatibility). Based on #476.
+
 Choose an installer or portable ZIP from the [latest release page](https://github.com/yuanbw2025/storyforge/releases/latest). Windows and Mac have desktop installers; Android uses an APK, and Linux uses a portable ZIP. Portable packages include the runtime and built-in media without requiring a development environment.
 
 ## Windows / macOS / Android clients {#windows-android-clients-in-development}

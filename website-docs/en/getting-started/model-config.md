@@ -1,5 +1,11 @@
 # Models and APIs
 
+## November 19: automatic capacity and compact configuration
+
+Context capacity is discovered from evidence for the actual selected connection; the manual window field is removed. Preview and dispatch share input/output allocations. If capacity is unknown or insufficient, check the connection and model rather than entering a larger number. Task routing, provider/key/endpoint fields and the main Agent's six roles use compact rows, stacking on narrow screens and wrapping long names while retaining saved choices. Based on #469/#470/#471/#472.
+
+Expand / Rewrite / Polish selection is clearer across themes. Legacy Gemini descriptions now point to Google official API retirement/automatic-routing notices. Check official notices, parameters and costs; do not apply them to private compatible endpoints. Saved models are not automatically replaced. Based on #494/#502.
+
 ## November 13: saving, recovery and usage checks
 
 After changing a service endpoint, a late model list from the old endpoint does not overwrite the current catalog. Check the current endpoint, model and capabilities when refreshing. Text and vision tasks use the provider/configuration actually authorized for that operation. Observed usage remains after interrupted/stopped streaming; estimates stay separate from provider measurements, and unknown usage is not shown as verified zero cost. Sources: [#340](https://github.com/yuanbw2025/storyforge/pull/340), [#358](https://github.com/yuanbw2025/storyforge/pull/358), [#402](https://github.com/yuanbw2025/storyforge/pull/402), [#314](https://github.com/yuanbw2025/storyforge/pull/314).
@@ -21,7 +27,7 @@ Credentials follow the saved provider-configuration identity. Recheck the select
 
 1. Open “Models and local settings” (模型与本地设置) at the top right of Home, or “General settings” (通用设置) within a product.
 2. Select a provider. For API services, enter the API key, base URL, and model supported by your account; for local Codex, follow the subscription steps below.
-3. Check context and output settings rather than copying another model's parameters unchanged.
+3. Check automatically discovered capacity and output settings rather than copying another model's parameters unchanged.
 4. Test the connection, then run a small generation task.
 5. Inspect the actual model, output, and usage before starting long production tasks.
 

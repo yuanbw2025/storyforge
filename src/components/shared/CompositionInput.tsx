@@ -10,6 +10,8 @@
  */
 import { useState, useEffect, useRef, forwardRef } from 'react'
 import { containTextareaWheel } from './textarea-scroll'
+import ResizableInputArea, { type AreaControlV1 } from './ResizableInputArea'
+import type { InputAreaLayoutOptionsV1 } from '../../lib/input-area-layout'
 
 /* ── CInput ────────────────────────────────────────────────── */
 
@@ -54,8 +56,8 @@ CInput.displayName = 'CInput'
 
 export const CTextarea = forwardRef<
   HTMLTextAreaElement,
-  React.TextareaHTMLAttributes<HTMLTextAreaElement>
->(({ value: externalValue, onChange, onWheel, ...rest }, ref) => {
+  React.TextareaHTMLAttributes<HTMLTextAreaElement> & { inputAreaLayout?: InputAreaLayoutOptionsV1 }
+>(({ value: externalValue, onChange, onWheel, onBlur, inputAreaLayout, ...rest }, ref) => {
   const [localValue, setLocalValue] = useState(String(externalValue ?? ''))
   const composingRef = useRef(false)
 
@@ -65,17 +67,24 @@ export const CTextarea = forwardRef<
     }
   }, [externalValue])
 
-  return (
+  const renderTextarea = (area?: AreaControlV1) => (
     <textarea
-      ref={ref}
+      ref={area ? element => {
+        area.ref.current = element
+        if (typeof ref === 'function') return ref(element)
+        if (ref) ref.current = element
+      } : ref}
       {...rest}
+      style={area ? { ...rest.style, ...area.style } : rest.style}
       value={localValue}
-      onCompositionStart={() => { composingRef.current = true }}
+      onBlur={area ? event => area.blur(event, onBlur) : onBlur}
+      onCompositionStart={() => { composingRef.current = true; area?.compositionStart() }}
       onCompositionEnd={(e) => {
         composingRef.current = false
         const val = (e.target as HTMLTextAreaElement).value
         setLocalValue(val)
         onChange?.({ ...e, target: { ...e.target, value: val } } as unknown as React.ChangeEvent<HTMLTextAreaElement>)
+        area?.compositionEnd()
       }}
       onChange={(e) => {
         setLocalValue(e.target.value)
@@ -89,5 +98,6 @@ export const CTextarea = forwardRef<
       }}
     />
   )
+  return inputAreaLayout?.enabled === true ? <ResizableInputArea options={inputAreaLayout}>{renderTextarea}</ResizableInputArea> : renderTextarea()
 })
 CTextarea.displayName = 'CTextarea'
