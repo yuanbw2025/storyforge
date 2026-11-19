@@ -90,7 +90,7 @@ export default function WorldRulesNavigation({
 
   return (
     <>
-      <div className="w-48 shrink-0 bg-bg-elevated border-r border-border overflow-y-auto">
+      <div className="lf-world-rule-nav w-48 shrink-0 bg-bg-elevated border-r border-border overflow-y-auto">
         <div className="p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider px-3 pt-3">
           大类
         </div>
@@ -125,7 +125,7 @@ export default function WorldRulesNavigation({
         )}
       </div>
 
-      <div className="w-52 shrink-0 border-r border-border overflow-y-auto">
+      <div className="lf-world-rule-nav w-52 shrink-0 border-r border-border overflow-y-auto">
         <div className="p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider px-3 pt-3">子类</div>
         <button
           onClick={() => onSelectNode(selectedL1)}
