@@ -33,7 +33,7 @@ function renderMarkdown(value: string): ReactNode {
       case 'del': node = <del>{children(t.tokens)}</del>; break
       case 'br': node = <br />; break
       case 'hr': node = <hr />; break
-      case 'codespan': node = <code style={codeStyle}>{t.text}</code>; break
+      case 'codespan': node = <code data-markdown-inline-code style={{ ...codeStyle, display: 'inline-block', maxWidth: '100%', overflowX: 'auto', verticalAlign: 'bottom' }}>{t.text}</code>; break
       case 'code': node = <pre style={{ ...codeStyle, maxWidth: '100%', overflowX: 'auto', padding: '.75em', background: 'rgba(127,127,127,.08)' }}><code>{t.text}</code></pre>; break
       case 'html': node = t.block ? <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{t.raw}</pre> : literal; break
       case 'image': node = <span data-markdown-image-alt>［图片：{markdownReadTextV1(t.text || '无描述')}］</span>; break
