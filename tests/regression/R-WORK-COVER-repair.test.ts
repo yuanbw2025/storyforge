@@ -55,7 +55,16 @@ describe('035 local repair foundation', () => {
   it.each([['sourceRunId'], ['missingIndex'], ['bad.field']])('refuses duplicate/unindexed/unregistered retention metadata: %s', async fields => {
     const spec = PROJECT_TABLES.find(row => row.name === 'workCoverAssets')!, old = spec.sourceRunRetention
     try {
-      spec.sourceRunRetention = { field: 'sourceRunId', additionalFields: fields }
+      spec.sourceRunRetention = { field: 'sourceRunId', additionalFields: [fields] }
+      await expect(db.transaction('r', exactArtifactOwnerTablesV1(), () => assertRegisteredSourceRunsUnreferencedV1([21]))).rejects.toThrow('登记')
+    } finally { spec.sourceRunRetention = old }
+  })
+
+  it('rejects a malformed string retention list', async () => {
+    const spec = PROJECT_TABLES.find(row => row.name === 'workCoverAssets')!, old = spec.sourceRunRetention
+    try {
+      // Deliberately exercise this malformed JavaScript metadata value at runtime.
+      spec.sourceRunRetention = { field: 'sourceRunId', additionalFields: 'sourceRunId' as unknown as readonly string[] }
       await expect(db.transaction('r', exactArtifactOwnerTablesV1(), () => assertRegisteredSourceRunsUnreferencedV1([21]))).rejects.toThrow('登记')
     } finally { spec.sourceRunRetention = old }
   })
