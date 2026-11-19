@@ -57,7 +57,7 @@ describe('CURRENT-SCHEMA · v1-v14 to v15 additive migration', () => {
 
   it('数据库使用独立当前命名空间和 v15 schema', () => {
     expect(STORYFORGE_DATABASE_NAME).toBe('storyforge-core')
-    expect(STORYFORGE_SCHEMA_VERSION).toBe(15)
+    expect(STORYFORGE_SCHEMA_VERSION).toBe(16)
     expect(db.name).toBe(STORYFORGE_DATABASE_NAME)
     expect(db.verno).toBe(STORYFORGE_SCHEMA_VERSION)
   })

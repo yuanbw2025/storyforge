@@ -12,11 +12,13 @@ export function exactArtifactOwnerTablesV1() { return owners().map(spec => spec.
  * event is removed. Owners opt in; other products retain their prior policy. */
 export async function assertRegisteredSourceRunsUnreferencedV1(runIds: readonly number[]): Promise<void> {
   for (const spec of PROJECT_TABLES.filter(row => row.sourceRunRetention)) {
-    const field = spec.sourceRunRetention!.field
-    if (!spec.exactArtifactRoots?.length || !spec.table.schema.indexes.some(index => index.name === field)) {
+    const fields = [spec.sourceRunRetention!.field, ...(spec.sourceRunRetention!.additionalFields ?? [])]
+    if (!spec.exactArtifactRoots?.length || new Set(fields).size !== fields.length || fields.some(field =>
+      !/^[A-Za-z_$][\w$]*$/.test(field) || !spec.table.schema.indexes.some(index => index.name === field)
+      || !spec.exportRemap?.some(ref => ref.field === field && ref.remapVia === 'agentRuns'))) {
       throw new Error('来源运行保留字段必须登记逐字证据拥有者与外键索引。')
     }
-    if (await spec.table.where(field).anyOf([...runIds]).count()) {
+    for (const field of fields) if (await spec.table.where(field).anyOf([...runIds]).count()) {
       throw new Error('来源运行仍被已保存的内容或采用历史引用；请先按所属作品生命周期处理。')
     }
   }
