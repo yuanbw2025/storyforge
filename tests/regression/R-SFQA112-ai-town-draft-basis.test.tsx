@@ -469,6 +469,75 @@ function sourceCheckbox() {
   return input
 }
 
+it('keeps loaded source choices when native draft hydration finishes in the same React batch', async () => {
+  const { default: Dexie } = await import('dexie')
+  const { seedCurrentProductWorld } = await import('../helpers/current-product-world')
+  const productionService = await import('../../src/lib/product-production/service')
+  const source = await seedCurrentProductWorld('112 batched source', { minimumCharacters: 4 })
+  const owner = await createAiTownDraft('112 batched hydration')
+  await townService.selectAiTownWorld(owner.scope, 0, source.release.id!)
+  const frozenSource = await db.worldReleases.get(source.release.id!)
+  let releaseDraft = () => {}, releaseSources = () => {}
+  const draftGate = new Promise<void>(resolve => { releaseDraft = resolve })
+  const sourceGate = new Promise<void>(resolve => { releaseSources = resolve })
+  let finishHydrationRead = () => {}
+  const hydrationReadComplete = new Promise<void>(resolve => { finishHydrationRead = resolve })
+  let draftReady = false, sourceReady = false, heldOnce = false
+  let heldRead: Promise<unknown> | undefined
+  const nativeRead = townService.readAiTownDraft
+  const nativeConsult = productionService.consultProductProductionStartV1
+  const readObserver = vi.spyOn(townService, 'readAiTownDraft').mockImplementation((...args) => {
+    const reading = nativeRead(...args)
+    if (heldOnce || args[0].workId !== owner.scope.workId) return reading
+    heldOnce = true
+    const transaction = Dexie.currentTransaction
+    if (!transaction) throw new Error('Expected the real draft hydration transaction')
+    transaction.on('complete', finishHydrationRead)
+    const delayed = Dexie.waitFor(reading.then(async actual => {
+      draftReady = true
+      await draftGate
+      return actual
+    }), 5000)
+    heldRead = Promise.resolve(delayed)
+    return delayed
+  })
+  const sourceObserver = vi.spyOn(productionService, 'consultProductProductionStartV1').mockImplementation(async (...args) => {
+    const actual = await nativeConsult(...args)
+    sourceReady = true
+    await sourceGate
+    return actual
+  })
+  host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+  const router = createMemoryRouter([{ path: '/town/:pageId', element: createElement(AiTownPage) }], {
+    initialEntries: [`/town/source?project=${owner.scope.projectId}&work=${owner.scope.workId}`],
+  })
+  try {
+    await act(async () => root!.render(createElement(RouterProvider, { router, flushSync })))
+    await waitForUi(() => { expect(draftReady && sourceReady).toBe(true) })
+    await act(async () => {
+      releaseSources()
+      await Promise.resolve()
+      releaseDraft()
+      await heldRead
+      await hydrationReadComplete
+      // Drain the completed read's promise continuations before act renders.
+      await new Promise<void>(resolve => setTimeout(resolve, 0))
+    })
+    await waitForUi(() => { expect(sourceCheckbox()).not.toBeNull() })
+    const original = (await readAiTownDraft(owner.scope)).selectionJson
+    await act(async () => { sourceCheckbox().click() })
+    await click('保存出口范围')
+    await waitForUi(async () => { expect((await readAiTownDraft(owner.scope)).revision).toBe(2) })
+    expect((await readAiTownDraft(owner.scope)).selectionJson).not.toBe(original)
+    expect(await db.worldReleases.get(source.release.id!)).toEqual(frozenSource)
+    expect(await db.productBuilds.count()).toBe(0)
+  } finally {
+    releaseDraft(); releaseSources()
+    await heldRead?.catch(() => {})
+    readObserver.mockRestore(); sourceObserver.mockRestore(); router.dispose()
+  }
+}, 15_000)
+
 it.each(['go', 'leave', 'compile'] as const)('rejects a stale real %s entry before navigation or another product write', async entry => {
   const owner = await createAiTownDraft('112 action original', {
     ...defaultAiTownSettings(), openingSituation: '112 action original opening',
