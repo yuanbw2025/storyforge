@@ -1908,31 +1908,56 @@ if (!productRuntimeMediaLibrarySource.includes('productRuntimeSessionId: number'
   || !productRuntimeMediaLibrarySource.includes("ownerKind: 'runtime'")) {
   violations.push('[㉝B运行媒资隔离] 运行中新生成的媒资必须绑定具体 ProductRuntimeSession')
 }
-if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'")
-  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 15')
-  || !currentSchemaSource.includes('this.version(1).stores(STORYFORGE_STORES_V1)')
-  || !currentSchemaSource.includes('this.version(2).stores(STORYFORGE_STORES_V2)')
-  || !currentSchemaSource.includes('this.version(3).stores(STORYFORGE_STORES_V3)')
-  || !currentSchemaSource.includes('this.version(4).stores(STORYFORGE_STORES_V4)')
-  || !currentSchemaSource.includes('this.version(5).stores(STORYFORGE_STORES_V5)')
-  || !currentSchemaSource.includes('this.version(6).stores(STORYFORGE_STORES_V6)')
-  || !currentSchemaSource.includes('this.version(7).stores(STORYFORGE_STORES_V7)')
-  || !currentSchemaSource.includes('this.version(8).stores({ ...STORYFORGE_STORES_V8, chatAuthoringDrafts: STORYFORGE_STORES.chatAuthoringDrafts })')
-  || !currentSchemaSource.includes('this.version(10).stores(STORYFORGE_STORES_V10)')
-  || !currentSchemaSource.includes('this.version(11).stores(STORYFORGE_STORES_V11)')
-  || !currentSchemaSource.includes('this.version(12).stores(STORYFORGE_STORES_V12)')
-  || !currentSchemaSource.includes('this.version(13).stores(STORYFORGE_STORES_V13)')
-  || !/export const STORYFORGE_STORES_V13\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V12,?\s*\}/.test(currentSchemaSource)
-  || !/export const STORYFORGE_STORES_V14\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V13,/.test(currentSchemaSource)
-  || !currentSchemaSource.includes('this.version(14).stores(STORYFORGE_STORES_V14)')
-  || !/export const STORYFORGE_STORES\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V14,/.test(currentSchemaSource)
-  || !currentSchemaSource.includes("worldSourceReceipts: '++id, projectId, worldId, worldReleaseId, &[worldId+declarationHash], [worldId+packageDigest], [worldId+releaseUid]'" )
-  || !currentSchemaSource.includes('this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)')
-  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 15
-  || currentSchemaSource.includes('.upgrade(')
-  || !currentSchemaSource.includes("productMediaAssets: '++id, projectId, worldId, workId, ownerKind, productType, productReleaseId, productRuntimeSessionId, &[productReleaseId+assetKey+version], &[productRuntimeSessionId+assetKey+version]")) {
-  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v15、保留 v1 至 v14 兼容桥与独立 v13 形状、零数据改写 upgrade，并保留新来源回执与当前根/媒资隔离索引')
+/** Exact current baseline, including every frozen compatibility bridge.
+ * @param {string} schemaSource */
+function hasCurrentSchemaV16V1(schemaSource) {
+  return !(!schemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'")
+  || !schemaSource.includes('STORYFORGE_SCHEMA_VERSION = 16')
+  || !schemaSource.includes('this.version(1).stores(STORYFORGE_STORES_V1)')
+  || !schemaSource.includes('this.version(2).stores(STORYFORGE_STORES_V2)')
+  || !schemaSource.includes('this.version(3).stores(STORYFORGE_STORES_V3)')
+  || !schemaSource.includes('this.version(4).stores(STORYFORGE_STORES_V4)')
+  || !schemaSource.includes('this.version(5).stores(STORYFORGE_STORES_V5)')
+  || !schemaSource.includes('this.version(6).stores(STORYFORGE_STORES_V6)')
+  || !schemaSource.includes('this.version(7).stores(STORYFORGE_STORES_V7)')
+  || !schemaSource.includes('this.version(8).stores({ ...STORYFORGE_STORES_V8, chatAuthoringDrafts: STORYFORGE_STORES.chatAuthoringDrafts })')
+  || !schemaSource.includes('this.version(10).stores(STORYFORGE_STORES_V10)')
+  || !schemaSource.includes('this.version(11).stores(STORYFORGE_STORES_V11)')
+  || !schemaSource.includes('this.version(12).stores(STORYFORGE_STORES_V12)')
+  || !schemaSource.includes('this.version(13).stores(STORYFORGE_STORES_V13)')
+  || !/export const STORYFORGE_STORES_V13\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V12,?\s*\}/.test(schemaSource)
+  || !/export const STORYFORGE_STORES_V14\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V13,/.test(schemaSource)
+  || !schemaSource.includes('this.version(14).stores(STORYFORGE_STORES_V14)')
+  || !/export const STORYFORGE_STORES_V15\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V14,/.test(schemaSource)
+  || !schemaSource.includes('this.version(15).stores(STORYFORGE_STORES_V15)')
+  || !/export const STORYFORGE_STORES\s*=\s*\{\s*\.\.\.STORYFORGE_STORES_V15,/.test(schemaSource)
+  || !schemaSource.includes("workCoverAssets: STORYFORGE_STORES_V15.workCoverAssets + ', materializationRunId'")
+  || !schemaSource.includes("workCoverAdoptions: STORYFORGE_STORES_V15.workCoverAdoptions + ', materializationRunId'")
+  || !schemaSource.includes("worldSourceReceipts: '++id, projectId, worldId, worldReleaseId, &[worldId+declarationHash], [worldId+packageDigest], [worldId+releaseUid]'" )
+  || !schemaSource.includes('this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)')
+  || (schemaSource.match(/\.version\(/g) ?? []).length !== 16
+  || schemaSource.includes('.upgrade(')
+  || !schemaSource.includes("productMediaAssets: '++id, projectId, worldId, workId, ownerKind, productType, productReleaseId, productRuntimeSessionId, &[productReleaseId+assetKey+version], &[productRuntimeSessionId+assetKey+version]"))
 }
+if (!hasCurrentSchemaV16V1(currentSchemaSource)) {
+  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v16、保留 v1 至 v15 兼容桥与独立 v13 形状、冻结 v15、零数据改写 upgrade，并保留新来源回执与当前根/媒资及两处修复运行索引')
+}
+// Keep the version bump strict: a stale baseline or missing frozen/index
+// declaration must still fail this guard. No product or database writes here.
+const currentSchemaControlsV16 = [
+  ['current-v16', currentSchemaSource, true],
+  ['stale-current-v15', currentSchemaSource.replace('STORYFORGE_SCHEMA_VERSION = 16', 'STORYFORGE_SCHEMA_VERSION = 15'), false],
+  ['missing-v15-bridge', currentSchemaSource.replace('this.version(15).stores(STORYFORGE_STORES_V15)', ''), false],
+  ['wrong-v15-inheritance', currentSchemaSource.replace('export const STORYFORGE_STORES_V15 = {\n  ...STORYFORGE_STORES_V14,', 'export const STORYFORGE_STORES_V15 = {\n  ...STORYFORGE_STORES_V13,'), false],
+  ['missing-asset-repair-index', currentSchemaSource.replace("workCoverAssets: STORYFORGE_STORES_V15.workCoverAssets + ', materializationRunId'", 'workCoverAssets: STORYFORGE_STORES_V15.workCoverAssets'), false],
+  ['missing-adoption-repair-index', currentSchemaSource.replace("workCoverAdoptions: STORYFORGE_STORES_V15.workCoverAdoptions + ', materializationRunId'", 'workCoverAdoptions: STORYFORGE_STORES_V15.workCoverAdoptions'), false],
+]
+for (const [name, source, expected] of currentSchemaControlsV16) {
+  if ((!expected && source === currentSchemaSource) || hasCurrentSchemaV16V1(source) !== expected) {
+    violations.push(`[㉝B版本守卫自测] ${name} 未能区分当前基线与缺失桥/索引`)
+  }
+}
+
 if (!deriveImportSrc.includes('ProductMedia 必须具有唯一、有效的产品所有者')
   || !deriveImportSrc.includes("asset.ownerKind === 'release'")
   || !deriveImportSrc.includes("asset.ownerKind === 'runtime'")) {
