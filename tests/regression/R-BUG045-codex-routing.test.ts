@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import type { AIConfig } from '../../src/lib/types'
+import type { AIConfig, CodexCategory } from '../../src/lib/types'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { estimateTokens } from '../../src/lib/ai/context-budget'
@@ -22,9 +22,10 @@ async function seed(global: AIConfig, routed: AIConfig) {
   useAIConfigStore.setState({ config: global, presets: [{ id: '045-route', name: '合成路由', config: routed }], taskRoutes: { extraction: '045-route' } })
   const { scope } = await seedCurrentWorkspace('045 隔离拆分')
   const now = Date.now()
-  const categoryId = await db.codexCategories.add({ projectId: scope.projectId, worldId: scope.worldId, domain: 'natural',
+  const category: CodexCategory & { worldId: number; worldGroupId: null } = { projectId: scope.projectId, worldId: scope.worldId, domain: 'natural',
     parentId: null, name: '灵植草药', icon: '🌿', builtInKey: 'herb', fieldSchema: '[]', hidden: false,
-    order: 0, worldGroupId: null, createdAt: now, updatedAt: now })
+    order: 0, worldGroupId: null, createdAt: now, updatedAt: now }
+  const categoryId = await db.codexCategories.add(category)
   await stampCurrentFixtureResourceUidsV1(scope.projectId)
   return { scope, aiConfig: global, request: { categoryId, worldGroupId: null, sourceText, supplementTags: false } }
 }
@@ -185,7 +186,7 @@ describe('045 actual routed extraction request', () => {
     expect(state.projection.state).toBe('paused')
     expect(state.events.some(event => event.type === 'run.paused' && event.payload.reason === 'codex-extraction-model-outcome-unknown')).toBe(true)
     expect(state.events.some(event => event.type === 'run.failed')).toBe(false)
-    const observation = state.events.find(event => event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'tool-result')!
+    const observation = state.events.find((event): event is Extract<(typeof state.events)[number], { type: 'evidence.artifact.recorded' }> => event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'tool-result')!
     const stored = JSON.parse(await readAgentRunArtifactExactV1({ projectId: fixture.scope.projectId,
       artifactKind: 'tool-result', contentHash: observation.payload.contentHash }))
     expect(stored.observation.requestLifecycle).toMatchObject({ phase: 'response-observed', responseStatus: status })
