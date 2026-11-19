@@ -10,6 +10,7 @@ import CodexPanel from '../codex/CodexPanel'
 import CodexSearchBar from '../codex/CodexSearchBar'
 import { useMasterCopilot, type PendingMasterCandidate } from '../agent/useMasterCopilot'
 import WorldviewAgentControls from './WorldviewAgentControls'
+import { useWorldSettingsLayout, WorldSettingsToolbar } from '../longform/WorldSettingsLayout'
 import WorldviewOriginSidebar, {
   WORLDVIEW_ORIGIN_FIELDS,
   type WorldviewOriginFieldKey,
@@ -44,6 +45,7 @@ interface Props {
 
 /** v3 §2.1 — 世界观.世界起源（三个子模块） */
 export default function WorldviewOriginPanel({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget }: Props) {
+  const compact = useWorldSettingsLayout()
   const { worldview, saveWorldview } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
@@ -104,12 +106,12 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
     <WorldviewReadBoundary onRetry={reloadCurrent}>
     <div
       {...initialRecordTargetAttributes(worldview?.id === initialWorldviewId, worldview?.id)}
-      className={`worldview-origin-panel flex flex-col w-full max-w-5xl space-y-4 rounded-xl ${
+      className={`worldview-origin-panel flex flex-col w-full ${compact ? 'lf-world-panel' : 'max-w-5xl space-y-4'} rounded-xl ${
         worldview?.id === initialWorldviewId ? INITIAL_RECORD_TARGET_CLASS : ''
       }`}
     >
       {/* 顶部 */}
-      <div className="pb-4 border-b border-border/40">
+      {!compact && <div className="pb-4 border-b border-border/40">
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
             🌌 世界起源与核心设定
@@ -125,9 +127,9 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
             onJump={(catKey) => setActive(catKey === 'originDeity' ? 'divine' : 'power')}
           />
         </div>
-      </div>
+      </div>}
 
-      <div className="worldview-origin-layout flex gap-4">
+      <div className={`worldview-origin-layout ${compact ? 'lf-world-columns' : 'flex gap-4'}`}>
         {/* ── 左侧边栏 ── */}
         <WorldviewOriginSidebar
           active={active}
@@ -141,7 +143,12 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
         />
 
         {/* ── 右侧：所有字段同时渲染，hidden 控制显示 ── */}
-        <div className="flex-1 min-w-0">
+        <div className={compact ? 'lf-world-content' : 'flex-1 min-w-0'}>
+          {compact && <WorldSettingsToolbar title={<>{WORLDVIEW_ORIGIN_FIELDS.find(field => field.key === active)?.icon} {WORLDVIEW_ORIGIN_FIELDS.find(field => field.key === active)?.label}</>}
+            actions={project.enableMultiWorld && <WorldGroupSwitcher />}
+            search={<CodexSearchBar compact scope={authorScope} worldGroupId={targetWorldGroupId}
+              categoryKeys={['originPower', 'originDeity']} onJump={key => setActive(key === 'originDeity' ? 'divine' : 'power')} />}
+          />}
           {/* 世界来源 */}
           <div className={active === 'origin' ? '' : 'hidden'}>
             <TextFieldEditor
@@ -268,12 +275,13 @@ function TextFieldEditor({
   onRunningChange: (running: boolean) => void
   onAdopted: (candidate: PendingMasterCandidate) => Promise<void>
 }) {
+  const compact = useWorldSettingsLayout()
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
+        {!compact && <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
           <span>{field.icon}</span> {field.label}
-        </h2>
+        </h2>}
         <p className="text-xs text-text-muted mt-0.5">{field.desc}</p>
       </div>
 
@@ -323,6 +331,7 @@ function DivineFieldEditor({
   onAdopted: (candidate: PendingMasterCandidate) => Promise<void>
 }) {
   const [toggleSaving, setToggleSaving] = useState(false)
+  const compact = useWorldSettingsLayout()
   const [toggleFailure, setToggleFailure] = useState<{ message: string; retry: () => Promise<void> } | null>(null)
   const saveDivinity = async (hasDivinity: boolean, writer = onDivineChange) => {
     setToggleSaving(true)
@@ -339,9 +348,9 @@ function DivineFieldEditor({
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
+        {!compact && <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
           <span>{field.icon}</span> {field.label}
-        </h2>
+        </h2>}
         <p className="text-xs text-text-muted mt-0.5">{field.desc}</p>
       </div>
 

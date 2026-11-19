@@ -6,6 +6,7 @@
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
+import { useWorldSettingsLayout } from '../longform/WorldSettingsLayout'
 import { useWorldRulesStore } from '../../stores/world-rules'
 import { useWorldGroupStore } from '../../stores/world-group'
 import {
@@ -70,6 +71,7 @@ function getL2Nodes(
 // ── 主面板 ─────────────────────────────────────────────────────────
 
 export default function WorldRulesPanel({ project, initialProfileId }: Props) {
+  const compact = useWorldSettingsLayout()
   const dialog = useDialog()
   const {
     profile, loading, loadProfile,
@@ -370,12 +372,12 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
   return (
     <div
       {...initialRecordTargetAttributes(profile.id === initialProfileId, profile.id)}
-      className={`max-w-7xl mx-auto space-y-4 rounded-xl ${
+      className={`${compact ? 'lf-world-panel' : 'max-w-7xl mx-auto'} space-y-4 rounded-xl ${
         profile.id === initialProfileId ? INITIAL_RECORD_TARGET_CLASS : ''
       }`}
     >
       {/* 标题栏 */}
-      <div className="flex items-center justify-between">
+      {!compact && <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
             <span>⚖️</span> 真实与幻想
@@ -392,7 +394,7 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
           {showPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           {showPreview ? '关闭预览' : 'AI 清单预览'}
         </button>
-      </div>
+      </div>}
 
       {(dirty || pendingSaves > 0 || actionError || saveError || loadError) && <div className="space-y-2 rounded border border-amber-500/30 p-3 text-xs">
         {(dirty || pendingSaves > 0 || actionError || saveError) && <p role={actionError || saveError ? 'alert' : 'status'} className="text-amber-400">
@@ -435,7 +437,7 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
       )}
 
       {/* 三列布局 */}
-      <div className="flex gap-0 border border-border rounded-xl overflow-hidden bg-bg-base" style={{ minHeight: 520 }}>
+      <div className={`flex gap-0 border border-border rounded-xl overflow-hidden bg-bg-base ${compact ? 'lf-world-rules-layout' : ''}`} style={{ minHeight: 520 }}>
         <WorldRulesNavigation
           l1Nodes={l1Nodes}
           l2Nodes={l2Nodes}
@@ -458,6 +460,9 @@ export default function WorldRulesPanel({ project, initialProfileId }: Props) {
           onFieldChange={(field, value) => { void handleFieldChange(field, value) }}
           onDeleteNode={() => { if (selectedNode) void handleDeleteCustomNode(selectedNode, currentLabel) }}
           onClearEntry={() => { if (selectedNode) void handleClearEntry(selectedNode) }}
+          toolbarActions={compact && <button type="button" onClick={handleTogglePreview} className="text-xs text-accent underline">
+            {showPreview ? '关闭预览' : 'AI 清单预览'}
+          </button>}
         />
       </div>
 

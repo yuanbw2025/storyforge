@@ -89,6 +89,7 @@ import { flushPendingEditsV1 } from '../lib/authoring/pending-edit-coordinator'
 import { useToast } from '../components/shared/Toast'
 import { useActiveWork } from '../hooks/useActiveWork'
 import WorkKindBadge from '../components/work/WorkKindBadge'
+import { WorldSettingsLayoutProvider } from '../components/longform/WorldSettingsLayout'
 import { effectiveNovelProfile, effectiveWorkKind } from '../lib/workspace/work-kind'
 
 import LongformLayout from '../components/longform/LongformLayout'
@@ -638,6 +639,10 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
     </button>
   )
   const Layout = isLongform ? LongformLayout : Fragment
+  const compactWorldSettings = isLongform
+    && activeWork.id === project?.activeWorkId && activeWork.projectId === project.id
+    && longMode === 'steps'
+    && ['world-rules', 'worldview-origin', 'worldview-natural', 'worldview-humanity', 'history'].includes(activeModule)
   const layoutProps = isLongform ? { title: activeWork.title, section: longSection, mode: longMode, module: activeModule, hiddenModules, onSection: changeLongSection, onMode: changeLongMode, onModule: selectModule, onNavigate: (path: string) => afterPendingEdits(() => navigate(path), '编辑保存失败'), onHome: () => afterPendingEdits(() => navigate('/'), '编辑保存失败') } : {}
   return (
     <Layout {...layoutProps as React.ComponentProps<typeof LongformLayout>}>
@@ -652,7 +657,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
             : ''
         }`}
       >
-        {embeddedProjectId ? (embeddedToolsTarget ? createPortal(copilotButton, embeddedToolsTarget) : null) : (
+        {embeddedProjectId ? (embeddedToolsTarget ? createPortal(copilotButton, embeddedToolsTarget) : null) : !compactWorldSettings && (
         <div className={`${isLongform && longMode === 'agent' ? 'hidden' : 'flex'} h-11 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-bg-surface/70 px-4`}>
           <div className="flex min-w-0 items-center gap-2">
             <ContentTypeBadge contentType={getModuleContentType(activeModule)} showDescription />
@@ -722,21 +727,23 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
             )}
           </div>
         )}
-        <div className={`workspace-module-body min-h-0 flex-1 overflow-y-auto ${isImmersiveModule ? '' : 'p-3'}`}>
+        <div className={`workspace-module-body min-h-0 flex-1 overflow-y-auto ${isImmersiveModule ? '' : 'p-3'} ${compactWorldSettings ? 'lf-world-settings' : ''}`}>
           {/* Phase 3.5: 懒加载面板(地图类)加载时显示 fallback */}
           <Suspense fallback={<div className="flex items-center justify-center h-64 text-text-muted text-sm">面板加载中…</div>}>
             {isLongform && longSection === 'versions' && <nav className="lf-subtabs" aria-label="版本与导出">{([['version-history', '版本历史'], ['export', '导出与备份']] as const).map(([id, label]) => <button key={id} aria-current={activeModule === id ? 'page' : undefined} onClick={() => selectModule(id)}>{label}</button>)}</nav>}
             {isLongform && longSection === 'versions' && <><LongformCompletion project={project}/><ShortNovelHistory project={project}/></>}
             {isLongform && longSection === 'settings' && <nav className="lf-subtabs" aria-label="通用设置">{([['settings', '通用设置'], ['usage-stats', '用量统计']] as const).map(([id, label]) => <button key={id} aria-current={activeModule === id ? 'page' : undefined} onClick={() => selectModule(id)}>{label}</button>)}</nav>}
+            <WorldSettingsLayoutProvider value={compactWorldSettings ? { tools: copilotButton } : null}>
             <ExtensionSurface projectId={project.id!} owner={activeModule === 'history' || project.workspacePurpose === 'world-engine' && activeModule !== 'story-timeline' ? 'world' : 'work'} workId={activeWork?.id} target={activeModule}>
             {isLongform && ['derive', 'community'].includes(longSection) ? <LongformWorlds project={project} community={longSection === 'community'} onOpen={id => navigate(`/workspace/${id}`)} /> : isLongform && longMode === 'agent' ? <ChatCopilotPanel initialDiscussionMode={query.get('discussion') === 'free' ? 'free' : 'plan'} embedded project={project} worldGroupId={copilotWorldGroupId} worldName={copilotWorldName} onClose={() => changeLongMode('steps')} onOpenModule={(module, chapter) => afterPendingEdits(() => navigate(`/workspace/${project.id}?module=${module}${chapter ? `&chapter=${chapter}` : ''}`), '编辑保存失败')} /> : renderMainPanel()}
             </ExtensionSurface>
+            </WorldSettingsLayoutProvider>
           </Suspense>
         </div>
       </main>
 
       {/* 右侧属性面板 */}
-      {!embeddedProjectId && showProperties && (
+      {!embeddedProjectId && !compactWorldSettings && showProperties && (
         <PropertiesPanel
           activeModule={activeModule}
           onClose={() => setShowProperties(false)}
