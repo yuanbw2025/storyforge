@@ -1,3 +1,4 @@
+import { selectAgentSkillIdV1 } from '../../src/lib/agent/workflow-catalog'
 import { beforeEach, afterEach, describe, it, expect } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
@@ -15,6 +16,7 @@ describe('R-PREPARATION-inspiration · 轻量准备沿原候选与版本生命�
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
   it.each(INSPIRATION_PREPARATION_MODES)('%s只读取选择素材，确认前零版本，确认后按原版本库回读', async mode => {
+    expect(selectAgentSkillIdV1('inspiration', `灵感准备任务=${mode}。保留阿照。`)).toBe('inspiration.prepare')
     const { project, scope } = await seedCurrentWorkspace('阿照修船铺')
     if (mode === 'compare') await db.projects.update(project.id!, { enableMultiWorld: true })
     const store = useInspirationWorkspaceStore.getState()
