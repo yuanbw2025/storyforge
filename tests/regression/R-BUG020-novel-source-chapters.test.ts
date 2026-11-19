@@ -27,7 +27,7 @@ it('does not consume following body lines or blank lines in a chapter label', as
   const f = await create(text)
   const chapters = await db.chapters.where('projectId').equals(f.scope.projectId).sortBy('order')
   expect(chapters.map(ch => ch.title)).toEqual(['前言', '第一章 开始', '第二章 结束'])
-  expect(chapters.at(-1)!.content).toBe(plainTextToHtml('第二章 结束\n独特尾标记。\n'))
+  expect(chapters[chapters.length - 1]!.content).toBe(plainTextToHtml('第二章 结束\n独特尾标记。\n'))
 })
 
 it('preserves prefix whitespace and CRLF at recognized chapter boundaries', async () => {
