@@ -135,7 +135,7 @@ export async function commitWorkCoverAdoptionV1(input: AdoptInput): Promise<Adop
       || await Dexie.waitFor(sha256BinaryV1(blob.data!)) !== intent.newCoverHash
       || await Dexie.waitFor(hashCanonicalValue(work.coverImage ?? '')) !== intent.oldCoverHash) throw new Error('作品已修改，旧封面已保留；请重读后重新确认候选。')
     const adoptedAt = Date.now()
-    if (asset?.materializationRunId != null) await assertLiveRepairedCoverAssetV1(scope, asset)
+    if (asset?.materializationRunId != null) await Dexie.Promise.resolve(assertLiveRepairedCoverAssetV1(scope, asset))
     const receipt: WorkCoverAdoptionV1 = {
       ...scope, version: 1, workCode: work.code, operationKey: intent.operationKey,
       draftId: confirmation.draftId, draftKey: intent.draftKey, draftRevision: intent.draftRevision,

@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { db } from '../db/schema'
 import type { WorkspaceScope } from '../types'
 import { readVerifiedMediaBlobV1 } from '../media/blob-store'
@@ -19,7 +20,7 @@ export async function readWorkCoverCardStateV1(scope: WorkspaceScope, includeRun
     const asset = draft?.selectedAssetId == null ? null : await db.workCoverAssets.get(draft.selectedAssetId)
     if (asset && (!coverRecordInScopeV1(scope, asset) || asset.workCode !== work.code)) throw new Error('封面候选不属于这部作品。')
     if (asset) assertWorkCoverPortableRowV1('asset', asset as unknown as Record<string, unknown>)
-    if (asset?.materializationRunId != null) await assertLiveRepairedCoverAssetV1(scope, asset)
+    if (asset?.materializationRunId != null) await Dexie.Promise.resolve(assertLiveRepairedCoverAssetV1(scope, asset))
     const run = includeRun && draft?.lastRunId != null ? await db.workCoverResponseBuffers.where('runId').equals(draft.lastRunId).first() : null
     if (run && !coverRecordInScopeV1(scope, run)) throw new Error('图片运行不属于这部作品。')
     const returnedAsset = run?.state === 'candidate-ready' && run.assetId != null && run.assetId !== draft?.selectedAssetId

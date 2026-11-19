@@ -117,3 +117,52 @@ test('another page reconciles a committed root after creator closes before Buffe
   expect(result).toMatchObject({ phase: 'candidate-ready', assets: 1, raw: false, cover: '' })
   expect(result.runs).toHaveLength(2); expect(posts).toBe(1)
 })
+
+test('large raster UI adoption returns success, rolls back after receipt fault, and reopens exactly once', async ({ context, page }) => {
+  const large = createCanvas(832, 1248), drawing = large.getContext('2d'), pixels = drawing.createImageData(832, 1248)
+  let random = 0x953a21
+  for (let offset = 0; offset < pixels.data.length; offset += 4) {
+    random ^= random << 13; random ^= random >>> 17; random ^= random << 5
+    pixels.data[offset] = random & 255; pixels.data[offset + 1] = (random >>> 8) & 255
+    pixels.data[offset + 2] = (random >>> 16) & 255; pixels.data[offset + 3] = 255
+  }
+  drawing.putImageData(pixels, 0, 0)
+  const png = large.toBuffer('image/png')
+  expect(png.length).toBeGreaterThan(1_472_928); expect(png.length).toBeLessThan(5 * 1024 * 1024)
+  let posts = 0
+  await context.route('https://apihub.agnes-ai.com/v1/images/generations', route => {
+    posts++; return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ task_id: 'large-fixture-receipt', data: [{ url: '', b64_json: png.toString('base64') }] }) })
+  })
+  await page.goto('long')
+  const input = await seed(page)
+  await page.reload()
+  const card = page.locator('.sf-cover-card').filter({ hasText: '同存储双标签页封面恢复' })
+  await card.getByRole('button', { name: 'AI封面', exact: true }).click()
+  await card.getByRole('button', { name: '从已保存原答恢复图片', exact: true }).click()
+  await expect(card.getByRole('button', { name: '用作封面', exact: true })).toBeVisible()
+  const rollback = await page.evaluate(async input => {
+    const root = '/storyforge/src/lib/', { db } = await import(root + 'db/schema.ts')
+    const { adoptWorkCoverV1, prepareWorkCoverAdoptionV1 } = await import(root + 'work-cover/adoption.ts')
+    const draft = await db.workCoverDrafts.get(input.draftId), work = await db.works.get(input.scope.workId)
+    const confirmation = await prepareWorkCoverAdoptionV1({ scope: input.scope, draftId: draft.id,
+      expectedDraftRevision: draft.revision, expectedWorkUpdatedAt: work.updatedAt, assetId: draft.selectedAssetId })
+    const before = { work: await db.works.get(work.id), draft: await db.workCoverDrafts.get(draft.id) }
+    const add = db.workCoverAdoptions.add.bind(db.workCoverAdoptions)
+    db.workCoverAdoptions.add = async row => { await add(row); throw Error('fixture-adoption-after-receipt') }
+    let error = ''
+    try { await adoptWorkCoverV1(input.scope, confirmation) } catch (cause) { error = String(cause) }
+    finally { db.workCoverAdoptions.add = add }
+    const after = { work: await db.works.get(work.id), draft: await db.workCoverDrafts.get(draft.id) }
+    return { error, sameWork: JSON.stringify(before.work) === JSON.stringify(after.work), sameDraft: JSON.stringify(before.draft) === JSON.stringify(after.draft),
+      receiptCount: await db.workCoverAdoptions.where('workId').equals(work.id).count() }
+  }, input)
+  expect(rollback).toMatchObject({ error: expect.stringContaining('fixture-adoption-after-receipt'), sameWork: true, sameDraft: true, receiptCount: 0 })
+  await card.getByRole('button', { name: '用作封面', exact: true }).click()
+  await expect(card.getByRole('status')).toHaveText('封面已保存。')
+  await expect(card.getByRole('alert')).toHaveCount(0)
+  const adopted = await state(page, input)
+  expect(adopted.cover).toMatch(/^data:image\/png;base64,/)
+  await page.reload()
+  expect(await state(page, input)).toEqual(adopted)
+  expect(posts).toBe(1)
+})
