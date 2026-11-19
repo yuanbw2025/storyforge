@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { atlasPaintGeometryHash, prepareAtlasPaintPreview, readAtlasPaintFile } from '../../src/lib/world-map/atlas/paint-preview'
-import { requestOpenAICompatibleImageEditV1 } from '../../src/lib/media/transport'
+import { requestAgnesReferenceImageV1, requestOpenAICompatibleImageEditV1 } from '../../src/lib/media/transport'
+import { referenceImageBindingFromAIConfigV1 } from '../../src/lib/media/capability'
+import { atlasPaintFrame } from '../../src/lib/world-map/atlas/paint-frame'
 import { parseAtlasReference } from '../../src/lib/world-map/atlas/geometry'
 
 const decoder = vi.hoisted(() => vi.fn(async () => ({ width: 1200, height: 700, mimeType: 'image/png' })))
@@ -43,5 +45,47 @@ describe('地图绘画底图属于显式视图候选', () => {
     await expect(readAtlasPaintFile(new File([JSON.stringify({ ...art, image: 'data:image/svg+xml;base64,PHN2Zz4=' })], 'map.json'), hash, geometry)).rejects.toThrow()
     decoder.mockResolvedValue({ width: 1024, height: 1024, mimeType: 'image/png' })
     await expect(prepareAtlasPaintPreview(new ArrayBuffer(8), hash, geometry)).rejects.toThrow(/纵横比/)
+  })
+  it('Agnes 参考图使用 image 单数数组和专用模型，不丢参考或降级成文生图', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ data: [{ b64_json: btoa('image-bytes') }] })))
+    vi.stubGlobal('fetch', fetcher)
+    const config = { provider: 'agnes' as const, baseUrl: 'https://fixture.invalid/v1/chat/completions', apiKey: 'synthetic-key', model: 'agnes-2.5-flash', temperature: 0.7, maxTokens: 0 }
+    const binding = referenceImageBindingFromAIConfigV1(config, 'agnes-image-2.1-flash')
+    expect(binding.provider).toBe('agnes')
+    if (binding.provider !== 'agnes') throw Error('wrong binding')
+    await requestAgnesReferenceImageV1({ binding, reference: new Blob(['png-reference'], { type: 'image/png' }), prompt: 'map', ratio: '16:9' })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    const [url, request] = fetcher.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('https://fixture.invalid/v1/images/generations')
+    expect(JSON.parse(request.body as string)).toMatchObject({ model: 'agnes-image-2.1-flash', ratio: '16:9', size: '2K',
+      image: ['data:image/png;base64,' + btoa('png-reference')], return_base64: true })
+    expect(JSON.parse(request.body as string).images).toBeUndefined()
+    expect(config.model).toBe('agnes-2.5-flash')
+    expect(() => referenceImageBindingFromAIConfigV1(config, 'gpt-image-2')).toThrow(/Agnes/)
+  })
+  it('Agnes 失败不自动重发；无效参考与比例在网络前拒绝', async () => {
+    const binding = { provider: 'agnes' as const, model: 'agnes-image-2.1-flash' as const, baseUrl: 'https://fixture.invalid/v1', apiKey: 'synthetic-key' }
+    for (const status of [401, 402, 429, 503]) {
+      const fetcher = vi.fn(async () => new Response('', { status })); vi.stubGlobal('fetch', fetcher)
+      const input = { binding, reference: new Blob(['png'], { type: 'image/png' }), prompt: 'map', ratio: '16:9' }
+      await expect(requestAgnesReferenceImageV1(input)).rejects.toThrow(String(status))
+      expect(fetcher).toHaveBeenCalledTimes(1)
+      await expect(requestAgnesReferenceImageV1({ ...input, ratio: '12:7' })).rejects.toThrow(/画幅/)
+      await expect(requestAgnesReferenceImageV1({ ...input, reference: new Blob(['svg'], { type: 'image/svg+xml' }) })).rejects.toThrow()
+      expect(fetcher).toHaveBeenCalledTimes(1)
+    }
+  })
+  it('原地图等比放入原生画幅，裁去的仅是留边；横竖图不拉伸', () => {
+    for (const [width, height] of [[1200, 700], [700, 1200], [1000, 1000], [1800, 700]]) {
+      const frame = atlasPaintFrame(width, height)
+      expect(frame.width * frame.contentWidth / (frame.height * frame.contentHeight)).toBeCloseTo(width / height, 10)
+      expect(frame.x + frame.contentWidth / 2).toBeCloseTo(0.5, 10)
+      expect(frame.y + frame.contentHeight / 2).toBeCloseTo(0.5, 10)
+      expect(frame.x).toBeGreaterThanOrEqual(0)
+      expect(frame.y).toBeGreaterThanOrEqual(0)
+    }
+    expect(atlasPaintFrame(1200, 700).ratio).toBe('16:9')
+    expect(() => atlasPaintFrame(0, 700)).toThrow()
+    expect(() => atlasPaintFrame(NaN, 700)).toThrow()
   })
 })

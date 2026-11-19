@@ -3,6 +3,8 @@ import { stamp } from './symbols'
 import { terrainWash } from './relief'
 import { line, along, watercourse, atlasSurfacePaths } from './paths'
 import { drawSketchTerrain } from './sketch'
+import { continuousTerrain } from './continuous'
+import { paintedSurface } from './painted-surface'
 import { seedRandom } from '../engine/random'
 import type { AtlasGeometry, Point } from './geometry'
 
@@ -215,9 +217,13 @@ export function drawTerrain(
   sheet?: HTMLImageElement,
   layers: AtlasLayers = DEFAULT_ATLAS_LAYERS,
   painted?: HTMLImageElement,
-  style: 'illustrated' | 'sketch' = 'illustrated',
+  style: 'illustrated' | 'sketch' | 'painted' = 'illustrated',
+  decorations = true,
 ) {
   if (style === 'sketch') return drawSketchTerrain(g, seed, layers)
+  const continuous = style === 'painted' && !painted
+  const rich = continuous || !!painted
+  const surface = painted ? paintedSurface(painted, g, seed) : undefined
   const canvas = document.createElement('canvas')
   const scale = Math.min(3, 4096 / Math.max(g.width, g.height))
   canvas.width = Math.round(g.width * scale)
@@ -230,15 +236,16 @@ export function drawTerrain(
     rng = seedRandom(seed)
   const realms = features.some((f) => f.kind === 'realm')
   const sea = c.createLinearGradient(0, 0, w, h)
-  sea.addColorStop(0, realms ? '#4d4a59' : painted ? '#063e49' : '#638d90')
-  sea.addColorStop(0.38, realms ? '#77747c' : painted ? '#12656a' : '#94b3a9')
-  sea.addColorStop(0.68, realms ? '#656773' : painted ? '#075563' : '#81a5a0')
-  sea.addColorStop(1, realms ? '#3f4653' : painted ? '#073a48' : '#4f7f83')
+  sea.addColorStop(0, realms ? '#4d4a59' : rich ? '#063e49' : '#638d90')
+  sea.addColorStop(0.38, realms ? '#77747c' : rich ? '#12656a' : '#94b3a9')
+  sea.addColorStop(0.68, realms ? '#656773' : rich ? '#075563' : '#81a5a0')
+  sea.addColorStop(1, realms ? '#3f4653' : rich ? '#073a48' : '#4f7f83')
   c.fillStyle = sea
   c.fillRect(0, 0, w, h)
-  for (let i = 0; i < 75; i++)
+  if (surface) c.drawImage(surface.water, 0, 0, w, h)
+  for (let i = 0; i < (painted ? 0 : 75); i++)
     wash(c, rng() * w, rng() * h, 35 + rng() * 100, rng() > 0.5 ? '#45787c26' : '#dfd8af36')
-  for (let i = 0; i < (realms ? 0 : 3800); i++) {
+  for (let i = 0; i < (realms || painted ? 0 : 3800); i++) {
     const x = rng() * w,
       y = rng() * h,
       length = 1 + rng() * 5
@@ -254,7 +261,7 @@ export function drawTerrain(
     )
   }
   c.setLineDash([1, 4])
-  for (let x = 32; x < w; x += 60)
+  for (let x = 32; !rich && x < w; x += 60)
     ink(
       c,
       line([
@@ -264,7 +271,7 @@ export function drawTerrain(
       '#446e6f44',
       0.4,
     )
-  for (let y = 32; y < h; y += 60)
+  for (let y = 32; !rich && y < h; y += 60)
     ink(
       c,
       line([
@@ -283,12 +290,18 @@ export function drawTerrain(
     shoreCanvas.width = canvas.width; shoreCanvas.height = canvas.height
     const sc = shoreCanvas.getContext('2d')!
     sc.scale(scale, scale); sc.lineJoin = 'round'
-    ink(sc, coast, '#cbd4b039', 20)
-    ink(sc, coast, '#d7d9b775', 12)
-    ink(sc, coast, '#72938c', 7)
-    ink(sc, coast, '#dce1be', 5.8)
-    ink(sc, coast, '#638583', 2.6)
-    ink(sc, coast, '#645f48', 0.95)
+    if (rich) {
+      ink(sc, coast, '#6cb4a53c', 9)
+      ink(sc, coast, '#8fc4ab8a', 3.4)
+      ink(sc, coast, '#e1d4a1c7', 1.1)
+    } else {
+      ink(sc, coast, '#cbd4b039', 20)
+      ink(sc, coast, '#d7d9b775', 12)
+      ink(sc, coast, '#72938c', 7)
+      ink(sc, coast, '#dce1be', 5.8)
+      ink(sc, coast, '#638583', 2.6)
+      ink(sc, coast, '#645f48', 0.95)
+    }
     sc.globalCompositeOperation = 'destination-out'
     sc.fill(land, fillRule)
     c.drawImage(shoreCanvas, 0, 0, w, h)
@@ -298,7 +311,10 @@ export function drawTerrain(
   for (const outsideWater of outsideWaters) c.clip(outsideWater, 'nonzero')
   c.fillStyle = '#e3dcc0'
   c.fillRect(0, 0, w, h)
-  if (layers.terrain) c.drawImage(painted ?? terrainWash(g, seed), 0, 0, w, h)
+  if (layers.terrain || continuous) {
+    c.drawImage(surface?.base ?? (continuous ? continuousTerrain(g, seed, layers) : terrainWash(g, seed)), 0, 0, w, h)
+    if (surface) c.drawImage(surface.land, 0, 0, w, h)
+  }
   const glyphs: {
     x: number
     y: number
@@ -308,7 +324,7 @@ export function drawTerrain(
   }[] = []
   for (const f of features) {
     const k = f.kind
-    if (painted && layers.terrain && ['ridge', 'wood', 'desert', 'marsh'].includes(k)) continue
+    if ((continuous || painted && layers.terrain) && ['ridge', 'wood', 'desert', 'marsh'].includes(k)) continue
     if (
       (k === 'ridge' && !layers.mountains) ||
       (k === 'wood' && !layers.forests) ||
@@ -377,7 +393,7 @@ export function drawTerrain(
   }
   const grain = seedRandom(seed + 'grain')
   // Short pen strokes give a continuous paper surface across biome boundaries.
-  for (let i = 0; i < (painted ? 0 : 15000); i++) {
+  for (let i = 0; i < (rich ? 0 : 15000); i++) {
     const x = grain() * w,
       y = grain() * h
     ink(
@@ -477,7 +493,7 @@ export function drawTerrain(
     c.fillRect(0, 0, w, h)
   }
   // Place the rose only in a clear patch of water.
-  for (const [x, y] of realms
+  for (const [x, y] of !decorations || realms
     ? []
     : [
         [w * 0.065, h * 0.89],
@@ -497,12 +513,14 @@ export function drawTerrain(
       break
     }
   }
+  if (decorations) {
   c.strokeStyle = '#536d60'
   c.lineWidth = 0.8
   c.strokeRect(4, 4, w - 8, h - 8)
   c.strokeStyle = '#ddcf9f'
   c.lineWidth = 1.4
   c.strokeRect(6, 6, w - 12, h - 12)
+  }
   return canvas
 }
 

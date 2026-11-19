@@ -58,11 +58,7 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
   })
   const [viewStyle, setViewStyle] = useState<AtlasViewStyle>(initialStyle.style)
   const [symbolStyle, setSymbolStyle] = useState<AtlasSymbolStyle>(initialStyle.symbols)
-  const [painted, setPainted] = useState<HTMLImageElement>()
-  const handlePaintedChange = useCallback((image: HTMLImageElement | undefined) => {
-    setPainted(image)
-    if (image) setLayers(previous => ({ ...previous, terrain: true, mountains: true, forests: true, waterBodies: true }))
-  }, [])
+  const [paintedState, setPainted] = useState<{ key: string; image: HTMLImageElement }>()
   const [textScale, setTextScale] = useState(1)
   const usesSymbols = viewStyle !== 'sketch'
   useEffect(() => {
@@ -93,9 +89,15 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
     }
   }, [config, reference])
   const { geometry } = result
+  const geometryKey = JSON.stringify(geometry) + (config.seed || 'atlas')
+  const painted = paintedState?.key === geometryKey ? paintedState.image : undefined
+  const handlePaintedChange = useCallback((image: HTMLImageElement | undefined) => {
+    setPainted(image ? { key: geometryKey, image } : undefined)
+    if (image) setLayers(previous => ({ ...previous, terrain: true, mountains: true, forests: true, waterBodies: true }))
+  }, [geometryKey])
   const terrain = useMemo(
     () => (geometry ? drawTerrain(geometry, config.seed || 'atlas', sheet, layers,
-      viewStyle === 'painted' ? painted : undefined, viewStyle === 'sketch' ? 'sketch' : 'illustrated') : undefined),
+      viewStyle === 'painted' ? painted : undefined, viewStyle) : undefined),
     [geometry, config.seed, sheet, layers, viewStyle, painted],
   )
   const kmPerPixel =
@@ -203,9 +205,9 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
     c.rect(0, 0, geometry.width, geometry.height)
     c.clip()
     c.drawImage(terrain, 0, 0, geometry.width, geometry.height)
-    drawLabels(c, geometry, cam.zoom, !!sheet, { layers, sheet, kmPerPixel, screenScale: k, textScale,
+    drawLabels(c, geometry, cam.zoom, !!sheet, { layers, sheet: viewStyle === 'painted' && !painted ? undefined : sheet, kmPerPixel, screenScale: k, textScale,
       style: viewStyle === 'sketch' ? 'sketch' : 'illustrated' })
-  }, [geometry, terrain, revision, layers, sheet, expanded, kmPerPixel, textScale, viewStyle])
+  }, [geometry, terrain, revision, layers, sheet, expanded, kmPerPixel, textScale, viewStyle, painted])
   const exportMap = () => {
     if (!terrain || !geometry) return
     const out = document.createElement('canvas')
@@ -214,7 +216,7 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
     const c = out.getContext('2d')!
     c.drawImage(terrain, 0, 0)
     c.scale(out.width / geometry.width, out.height / geometry.height)
-    drawLabels(c, geometry, 1, !!sheet, { layers, sheet, kmPerPixel, fullDetail: true, screenScale: 1, textScale,
+    drawLabels(c, geometry, 1, !!sheet, { layers, sheet: viewStyle === 'painted' && !painted ? undefined : sheet, kmPerPixel, fullDetail: true, screenScale: 1, textScale,
       style: viewStyle === 'sketch' ? 'sketch' : 'illustrated' })
     out.toBlob((blob) => {
       if (!blob) return

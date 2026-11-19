@@ -1,5 +1,6 @@
 import type { AIConfig, MediaProviderReceiptV1 } from '../types'
 import { hashCanonicalValue } from '../agent/run/hash'
+import { normalizeOpenAIBaseUrl } from '../ai/openai-endpoint'
 
 export interface ImageProviderCapabilityV1 {
   version: 1
@@ -20,6 +21,22 @@ export interface ImageGenerationBindingV1 {
   baseUrl: string
   apiKey: string
   model: string
+}
+
+export interface AgnesReferenceImageBindingV1 extends Omit<ImageGenerationBindingV1, 'provider'> {
+  provider: 'agnes'
+  model: 'agnes-image-2.1-flash' | 'agnes-image-2.5-flash'
+}
+
+export function referenceImageBindingFromAIConfigV1(config: AIConfig, imageModel: string): ImageGenerationBindingV1 | AgnesReferenceImageBindingV1 {
+  const model = imageModel.trim()
+  if (config.provider === 'agnes' || (config.provider === 'custom' && model.startsWith('agnes-image-'))) {
+    if (!['agnes-image-2.1-flash', 'agnes-image-2.5-flash'].includes(model)) throw Error('[media] 请选择已支持参考图的 Agnes Image 2.1 或 2.5 Flash')
+    if (!config.baseUrl.trim() || !config.apiKey.trim()) throw Error('[media] 请先配置 Agnes 连接地址和 API Key')
+    const baseUrl = normalizeOpenAIBaseUrl(config.baseUrl).baseUrl
+    return { provider: 'agnes', baseUrl, apiKey: config.apiKey, model: model as AgnesReferenceImageBindingV1['model'] }
+  }
+  return imageBindingFromAIConfigV1(config, model)
 }
 
 export const OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1: ImageProviderCapabilityV1 = {
