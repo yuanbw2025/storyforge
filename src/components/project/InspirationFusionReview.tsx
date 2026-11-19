@@ -119,7 +119,7 @@ export default function InspirationFusionReview({
         <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
           <div className="flex items-center gap-1.5 text-sm font-medium text-amber-400">
             <GitCompareArrows className="h-4 w-4" />
-            待确认的融合版本
+            {isInspirationPreparationMode(mode) ? '待确认的准备版本' : '待确认的融合版本'}
           </div>
           <p className="text-xs text-text-muted">
             候选尚未写入版本历史，也不能采纳到项目。你可以先编辑结构化 JSON，再检查差异。
@@ -129,7 +129,7 @@ export default function InspirationFusionReview({
           )}
           {candidateDraft != null && (
             <textarea
-              aria-label="灵感反推候选内容"
+              aria-label={isInspirationPreparationMode(mode) ? '准备候选内容' : '灵感反推候选内容'}
               value={candidateDraft}
               onChange={event => onCandidateChange?.(event.target.value)}
               disabled={confirming}

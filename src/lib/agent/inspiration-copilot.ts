@@ -1,5 +1,5 @@
 import { supportsVerifiedJsonObjectResponseForModelV1 } from '../ai/provider-capabilities'
-import { buildInspirationPreparationPrompt, inspirationPreparationModeFromRequest, isInspirationPreparationMode, parseInspirationPreparationDraft, type InspirationPreparationResult } from '../inspiration/preparation'
+import { buildInspirationPreparationPrompt, inspirationPreparationModeFromRequest, inspirationDirectionIndexFromRequest, isInspirationPreparationMode, parseInspirationPreparationDraft, type InspirationPreparationResult } from '../inspiration/preparation'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useInspirationWorkspaceStore } from '../../stores/inspiration-workspace'
 import {
@@ -269,6 +269,7 @@ export async function prepareInspirationCopilot(input: {
         runtime: input.contextCompressionRuntime,
       })
     : undefined
+  const directionIndex = ['deepen', 'position-defined'].includes(mode) ? inspirationDirectionIndexFromRequest(authorRequest) : undefined
   const [readToolName] = skill.readToolNames
   if (!readToolName || skill.readToolNames.length !== 1) {
     throw new Error(`Agent Skill ${skill.id} 的只读工具契约无效`)
@@ -284,7 +285,7 @@ export async function prepareInspirationCopilot(input: {
       contextPolicy,
       sourceTransformer: compression?.sourceTransformer,
     },
-    { fragmentIds: selectedFragmentIds, mode, ...(mode === 'deepen' && /灵感方向选择\s*=\s*(\d+)\b/.test(authorRequest) ? { directionIndex: Number(/灵感方向选择\s*=\s*(\d+)\b/.exec(authorRequest)![1]) } : {}) },
+    { fragmentIds: selectedFragmentIds, mode, ...(directionIndex != null ? { directionIndex } : {}) },
   )
   if (!context.ok || !context.meta.included.includes('inspirationWorkspace')) {
     throw new Error(context.error || '当前选择没有可用的灵感上下文。')

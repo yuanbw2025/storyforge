@@ -202,4 +202,17 @@ describe('R-HARNESS34 · 分步骤灵感面板接入 inspiration.reverse Skill',
     expect(host.textContent).toContain('不自动创建世界、人物或完整大纲')
   })
 
+  it('定位比较可显式选择一项，并保留作者补充要求', async () => {
+    mocks.fusion.action = 'position-open'; mocks.fusion.mode = 'position-open'
+    mocks.fusion.userHint = '3万字一次成稿，不写大阴谋。'
+    mocks.fusion.preparationResult = { summary: '两种定位', authorMaterial: '作者的书店', proposals: [{ title: '手艺与委托', content: '手艺生活' }, { title: '关系与归客', content: '邻里往来' }], openQuestions: [] }
+    const host = await renderPanel()
+    expect(host.textContent).toContain('创作定位·方向未定')
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>('button')].filter(button => button.textContent?.includes('采用此定位继续深化'))
+    await act(async () => buttons[1].click())
+    expect(mocks.fusion.setAction).toHaveBeenCalledWith('position-defined')
+    expect(mocks.fusion.setUserHint).toHaveBeenCalledWith(expect.stringContaining('灵感方向选择=2'))
+    expect(mocks.fusion.setUserHint).toHaveBeenCalledWith(expect.stringContaining('3万字一次成稿，不写大阴谋。'))
+  })
+
 })

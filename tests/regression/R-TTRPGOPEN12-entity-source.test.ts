@@ -48,7 +48,7 @@ describe('R-TTRPGOPEN12 read-only entity source, original consultation and recip
     expect(await hashCanonicalValue(ttrpgV19)).toBe('4efc0b11ea06cac242c56c3648ff2d4627ed238f51e029044a18e53717a09545')
     const old = JSON.parse(JSON.stringify(ttrpgV19), (_key, value) => Array.isArray(value) ? value.filter(item => item !== 'ttrpgOpenLearnedIdentities' && item !== 'ttrpgOpenCommonIdentities' && item !== sourceKey && item !== 'ttrpgOpenCommonOracleInput') : value)
     expect(await hashCanonicalValue(old)).toBe('8cf80c48035160cdfdd3fccce3f24e005041a89efaf26f40f30cf8aa8b58417e')
-    expect(await hashCanonicalValue(snapshot)).toBe(AGENT_TOOL_SCHEMA_HASH_V1); expect(AGENT_TOOL_SCHEMA_VERSION_V1).toBe('agent-read-tools-v22-creation-preparation-v1')
+    expect(await hashCanonicalValue(snapshot)).toBe(AGENT_TOOL_SCHEMA_HASH_V1); expect(AGENT_TOOL_SCHEMA_VERSION_V1).toBe('agent-read-tools-v23-positioning-preparation-v1')
     expect(CONTEXT_SOURCE_BY_KEY.size).toBe(CONTEXT_SOURCES.length)
     expect(CONTEXT_SOURCE_BY_KEY.get(sourceKey)!.resources!.providerId).toBe(`storyforge.${sourceKey}`)
     for (const skill of ['prose.ttrpg-open-intent', 'prose.ttrpg-open-oracle-interpret', 'prose.ttrpg-open-public-situation-propose', 'prose.ttrpg-open-kp']) {

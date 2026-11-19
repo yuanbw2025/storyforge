@@ -1,0 +1,395 @@
+{
+  "boundary": "eval-only, original synthetic material; existing inactive P02 asset versus new registered preparation method; no browser author data/adoption",
+  "baselineCommit": "01b237d5d",
+  "conditions": "deepseek-flash, temperature0.3, same pair budgets6000/1600, plain text transport for both; whole old/new material in same downstream task",
+  "limitations": [
+    "Old P02 is an inactive asset, not an already shipped positioning UI",
+    "Three development pairs plus one new holdout case, not independent repeats or a reader study",
+    "Structural failures retained; no downstream run for rejected pairs",
+    "Browser actual formal calls and failures are tracked separately outside checkout"
+  ],
+  "records": [
+    {
+      "study": "positioning-round1",
+      "id": "defined-author-change-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "0d97b4c87b2df008954625f5b30666084d8881255eb37759badbd68268b30f65",
+      "usage": {
+        "prompt_tokens": 639,
+        "completion_tokens": 708,
+        "total_tokens": 1347,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        },
+        "prompt_cache_hit_tokens": 256,
+        "prompt_cache_miss_tokens": 383
+      }
+    },
+    {
+      "study": "positioning-round1",
+      "id": "defined-author-change-new.validation-failure",
+      "failure": {
+        "error": "invalid-candidate",
+        "originalRetained": true
+      }
+    },
+    {
+      "study": "positioning-round1",
+      "id": "defined-author-change-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "37dff6de9ed6eb472ad48368dc6e3f1e36898f09c54a4367a0096526fbfcdd74",
+      "usage": {
+        "prompt_tokens": 828,
+        "completion_tokens": 2105,
+        "total_tokens": 2933,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 828
+      }
+    },
+    {
+      "study": "positioning-round1",
+      "id": "defined-complete-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "d9df8277bbc0a94ac22ea90f808cf9ca0646a31a193c74912abab8001bd8c429",
+      "usage": {
+        "prompt_tokens": 637,
+        "completion_tokens": 1074,
+        "total_tokens": 1711,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 637
+      }
+    },
+    {
+      "study": "positioning-round1",
+      "id": "defined-complete-new.validation-failure",
+      "failure": {
+        "error": "invalid-candidate",
+        "originalRetained": true
+      }
+    },
+    {
+      "study": "positioning-round1",
+      "id": "defined-complete-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "0426e51c7eeced05709593cc60dbd66e5fa0c65a4c95ff57111768edd56749a9",
+      "usage": {
+        "prompt_tokens": 827,
+        "completion_tokens": 2320,
+        "total_tokens": 3147,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 827
+      }
+    },
+    {
+      "study": "positioning-round1",
+      "id": "open-reading-experience-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "82f8fbc72fef0dfb4f6be99644273fda4b66534ab15322ba979b9f1ae45647d5",
+      "usage": {
+        "prompt_tokens": 1857,
+        "completion_tokens": 106,
+        "total_tokens": 1963,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1857
+      }
+    },
+    {
+      "study": "positioning-round1",
+      "id": "open-reading-experience-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "71458eb037071094a971cd99e8699571b1aa93d3351b0ddd9af0a77d6fb33e7f",
+      "usage": {
+        "prompt_tokens": 2784,
+        "completion_tokens": 123,
+        "total_tokens": 2907,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 2784
+      }
+    },
+    {
+      "study": "positioning-round1",
+      "id": "open-reading-experience-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "f632248630d64545995413d21362648a03cc792982b3b9996e4f2ca98ea029cd",
+      "usage": {
+        "prompt_tokens": 636,
+        "completion_tokens": 1777,
+        "total_tokens": 2413,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 636
+      }
+    },
+    {
+      "study": "positioning-round1",
+      "id": "open-reading-experience-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "11da8a46045cb55deadf17e0aeab5300505741279c52bdb7c9b52823ae639b1d",
+      "usage": {
+        "prompt_tokens": 814,
+        "completion_tokens": 2704,
+        "total_tokens": 3518,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 814
+      }
+    },
+    {
+      "study": "positioning-round2-one-brief",
+      "id": "defined-author-change-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "949478af9a0a6c80a97f4b925ddac10d627fb30bdf66de21d54bf7179ed740bc",
+      "usage": {
+        "prompt_tokens": 700,
+        "completion_tokens": 597,
+        "total_tokens": 1297,
+        "prompt_tokens_details": {
+          "cached_tokens": 384
+        },
+        "prompt_cache_hit_tokens": 384,
+        "prompt_cache_miss_tokens": 316
+      }
+    },
+    {
+      "study": "positioning-round2-one-brief",
+      "id": "defined-author-change-new.validation-failure",
+      "failure": {
+        "error": "invalid-candidate",
+        "originalRetained": true
+      }
+    },
+    {
+      "study": "positioning-round2-one-brief",
+      "id": "defined-author-change-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "ed0bdd8cf10a9e1bc590bfb43174d5764adf7be40aca02726e05eea79cee9acc",
+      "usage": {
+        "prompt_tokens": 828,
+        "completion_tokens": 2279,
+        "total_tokens": 3107,
+        "prompt_tokens_details": {
+          "cached_tokens": 640
+        },
+        "prompt_cache_hit_tokens": 640,
+        "prompt_cache_miss_tokens": 188
+      }
+    },
+    {
+      "study": "positioning-round2-one-brief",
+      "id": "defined-complete-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "72b070286f0d840999e09bd0f8bfc56262091681125e114f907820abf0e5861c",
+      "usage": {
+        "prompt_tokens": 1014,
+        "completion_tokens": 120,
+        "total_tokens": 1134,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1014
+      }
+    },
+    {
+      "study": "positioning-round2-one-brief",
+      "id": "defined-complete-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "187a0c931b6a71d47b34de1903f0ef3e6a2d11764a1a8ea6e9a3edf0c8f129ec",
+      "usage": {
+        "prompt_tokens": 2223,
+        "completion_tokens": 122,
+        "total_tokens": 2345,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 2223
+      }
+    },
+    {
+      "study": "positioning-round2-one-brief",
+      "id": "defined-complete-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "8d358b534065506611630274e430ef2c672d530dff6c989ec202d526ccd58d3e",
+      "usage": {
+        "prompt_tokens": 698,
+        "completion_tokens": 928,
+        "total_tokens": 1626,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 698
+      }
+    },
+    {
+      "study": "positioning-round2-one-brief",
+      "id": "defined-complete-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "04f345fa9c2fb6454d35ebff6cae2449dfb6f7095004dec4f1d4e75c72102eef",
+      "usage": {
+        "prompt_tokens": 827,
+        "completion_tokens": 2136,
+        "total_tokens": 2963,
+        "prompt_tokens_details": {
+          "cached_tokens": 640
+        },
+        "prompt_cache_hit_tokens": 640,
+        "prompt_cache_miss_tokens": 187
+      }
+    },
+    {
+      "study": "positioning-holdout-round1",
+      "id": "holdout-two-returns-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "210ac23b707554766a7c167cf8497dd0849a6cd631d363ded80ad5636756e196",
+      "usage": {
+        "prompt_tokens": 1936,
+        "completion_tokens": 147,
+        "total_tokens": 2083,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1936
+      }
+    },
+    {
+      "study": "positioning-holdout-round1",
+      "id": "holdout-two-returns-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "3f42b91cf672876d88ae2b4ded14c5315a226122d458735dffdfe323ff6ce8e0",
+      "usage": {
+        "prompt_tokens": 2664,
+        "completion_tokens": 104,
+        "total_tokens": 2768,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 2664
+      }
+    },
+    {
+      "study": "positioning-holdout-round1",
+      "id": "holdout-two-returns-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "408596db433d913dc84e6b0b5af0cf661b213868ef56ef9a85e57833192c37c3",
+      "usage": {
+        "prompt_tokens": 757,
+        "completion_tokens": 1847,
+        "total_tokens": 2604,
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        },
+        "prompt_cache_hit_tokens": 128,
+        "prompt_cache_miss_tokens": 629
+      }
+    },
+    {
+      "study": "positioning-holdout-round1",
+      "id": "holdout-two-returns-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "e0cf2bfb64b042784db632bc7defae2c5da399deecebb2326f9968056b99e3d2",
+      "usage": {
+        "prompt_tokens": 854,
+        "completion_tokens": 2575,
+        "total_tokens": 3429,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 854
+      }
+    }
+  ],
+  "browserRecords": [
+    {
+      "artifact": "browser-positioning-attempt2-evidence.json",
+      "result": "failed",
+      "realModelCalls": 1,
+      "requestMessageHashes": [
+        "6d10d0588f1cafd07def52c7a9677de6e1ccfbfb7d8f9fbabac3f12cf7821de3"
+      ],
+      "candidateHash": null,
+      "restoredWithoutRepeat": null,
+      "confirmationSurvivedReload": null,
+      "nativeAfterModes": []
+    },
+    {
+      "artifact": "browser-positioning-attempt7-evidence.json",
+      "result": "failed",
+      "realModelCalls": 1,
+      "requestMessageHashes": [
+        "6d10d0588f1cafd07def52c7a9677de6e1ccfbfb7d8f9fbabac3f12cf7821de3"
+      ],
+      "candidateHash": "20e59603229498a425f3a5dc53b8d1043c7c2f204324cb82fa8afafc6b03e370",
+      "restoredWithoutRepeat": true,
+      "confirmationSurvivedReload": null,
+      "nativeAfterModes": []
+    },
+    {
+      "artifact": "browser-positioning-fresh-evidence.json",
+      "result": "failed",
+      "realModelCalls": 1,
+      "requestMessageHashes": [
+        "6d10d0588f1cafd07def52c7a9677de6e1ccfbfb7d8f9fbabac3f12cf7821de3"
+      ],
+      "candidateHash": "4e5ca413d1f1685de0f3bb6c5d3538fc9c573341440552a927584b2ee7f65ac0",
+      "restoredWithoutRepeat": true,
+      "confirmationSurvivedReload": true,
+      "nativeAfterModes": []
+    },
+    {
+      "artifact": "browser-positioning-replay-commit-evidence.json",
+      "result": "passed",
+      "realModelCalls": 0,
+      "requestMessageHashes": [
+        "6d10d0588f1cafd07def52c7a9677de6e1ccfbfb7d8f9fbabac3f12cf7821de3"
+      ],
+      "candidateHash": "4e5ca413d1f1685de0f3bb6c5d3538fc9c573341440552a927584b2ee7f65ac0",
+      "restoredWithoutRepeat": true,
+      "confirmationSurvivedReload": true,
+      "nativeAfterModes": [
+        "position-defined"
+      ]
+    }
+  ]
+}

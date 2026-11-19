@@ -7,14 +7,14 @@ import { runGenerationNode, adoptGenerationNodeOutput } from '../../src/lib/gene
 import { parseInspirationVersions } from '../../src/lib/inspiration/workspace'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
-import { type InspirationPreparationMode } from '../../src/lib/inspiration/preparation'
+import { INSPIRATION_PREPARATION_MODES, inspirationDirectionIndexFromRequest, type InspirationPreparationMode } from '../../src/lib/inspiration/preparation'
 
-const candidate = (mode: InspirationPreparationMode) => ({ summary: '阿照修船铺保留雾中归船与温暖经营。', authorMaterial: '作者原创：阿照、修船铺、雾中归船。', proposals: mode === 'organize' ? [] : mode === 'compare' ? [{ title: '经营', content: '围绕不同修船委托与铺子成长，重在手艺和经营。' }, { title: '离人与归客', content: '围绕船带回的关系与人的去留，重在重逢。' }] : [{ title: '委托与排期', content: '深入一次修船排期的商量，保留归船未知，不补全世界史。' }], openQuestions: [] })
+const candidate = (mode: InspirationPreparationMode) => ({ summary: '阿照修船铺保留雾中归船与温暖经营。', authorMaterial: '作者原创：阿照、修船铺、雾中归船。', proposals: mode === 'organize' ? [] : mode === 'compare' || mode === 'position-open' ? [{ title: '经营', content: '围绕不同修船委托与铺子成长，重在手艺和经营。' }, { title: '离人与归客', content: '围绕船带回的关系与人的去留，重在重逢。' }] : [{ title: '委托与排期', content: '深入一次修船排期的商量，保留归船未知，不补全世界史。' }], openQuestions: [] })
 
 describe('R-PREPARATION-inspiration · 轻量准备沿原候选与版本生命周期', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
-  it.each(['organize', 'compare', 'deepen'] as const)('%s只读取选择素材，确认前零版本，确认后按原版本库回读', async mode => {
+  it.each(INSPIRATION_PREPARATION_MODES)('%s只读取选择素材，确认前零版本，确认后按原版本库回读', async mode => {
     const { project, scope } = await seedCurrentWorkspace('阿照修船铺')
     if (mode === 'compare') await db.projects.update(project.id!, { enableMultiWorld: true })
     const store = useInspirationWorkspaceStore.getState()
@@ -23,6 +23,7 @@ describe('R-PREPARATION-inspiration · 轻量准备沿原候选与版本生命�
     let prompt = ''
     const prepared = await prepareInspirationCopilot({ projectId: project.id!, scope, selectedFragmentIds: [fragment!.id], skillId: 'inspiration.prepare', authorRequest: `灵感准备任务=${mode}。保留阿照。` }, { runAI: async messages => { prompt = messages.map(m => m.content).join('\n'); return JSON.stringify(candidate(mode)) } })
     expect(prepared.mode).toBe(mode)
+    const workBefore = await db.works.get(scope.workId)
     const generated = await runGenerationNode(prepared.node, prepared.prepared)
     expect(generated.gate?.status).toBe('pass')
     expect(prompt).toContain('阿照修船铺')
@@ -35,29 +36,36 @@ describe('R-PREPARATION-inspiration · 轻量准备沿原候选与版本生命�
     expect(await db.worldviews.count()).toBe(0)
     expect(await db.characters.count()).toBe(0)
     expect(await db.storyCores.count()).toBe(0)
+    expect(await db.works.get(scope.workId)).toEqual(workBefore)
+  })
+  it('最后的方向标记非法时拒绝，不把小数截成另一个有效选择或回退旧选择', () => {
+    expect(() => inspirationDirectionIndexFromRequest('灵感方向选择=1。现改灵感方向选择=1.5。')).toThrow('方向序号')
+    expect(() => inspirationDirectionIndexFromRequest('灵感方向选择=2。现改灵感方向选择=。')).toThrow('方向序号')
   })
   it('结构拒绝完整世界空壳、额外字段及不符动作的方向数量', () => {
     expect(() => parseInspirationCandidateDraft('{"worldview":{},"characters":[]}', 'organize')).toThrow()
     expect(() => parseInspirationCandidateDraft(JSON.stringify({ ...candidate('deepen'), worldOrigin: '不允许写入' }), 'deepen')).toThrow()
     expect(() => parseInspirationCandidateDraft(JSON.stringify(candidate('organize')), 'compare')).toThrow()
+    expect(() => parseInspirationCandidateDraft(JSON.stringify(candidate('deepen')), 'position-open')).toThrow()
+    expect(() => parseInspirationCandidateDraft(JSON.stringify(candidate('compare')), 'position-defined')).toThrow()
   })
-  it('所选素材变化后拒绝旧候选，准备版本随项目导出导入和删除保持隔离', async () => {
+  it.each(['organize', 'position-open', 'position-defined'] as const)('%s素材变化后拒绝旧候选，准备版本随项目导出导入和删除保持隔离', async mode => {
     const { project, scope } = await seedCurrentWorkspace('准备生命周期')
     const store = useInspirationWorkspaceStore.getState()
     const fragment = await store.addFragment(scope, { text: '阿照要修一条不认得主人的旧船' })
-    const input = { projectId: project.id!, scope, selectedFragmentIds: [fragment!.id], skillId: 'inspiration.prepare' as const, authorRequest: '灵感准备任务=organize。先整理。' }
-    const deps = { runAI: async () => JSON.stringify(candidate('organize')) }
+    const input = { projectId: project.id!, scope, selectedFragmentIds: [fragment!.id], skillId: 'inspiration.prepare' as const, authorRequest: `灵感准备任务=${mode}。先整理。` }
+    const deps = { runAI: async () => JSON.stringify(candidate(mode)) }
     const stale = await prepareInspirationCopilot(input, deps)
     await store.addFragment(scope, { text: '作者新增的材料' })
-    await expect(adoptGenerationNodeOutput(stale.node, candidate('organize'))).rejects.toBeInstanceOf(InspirationCopilotStaleError)
+    await expect(adoptGenerationNodeOutput(stale.node, candidate(mode))).rejects.toBeInstanceOf(InspirationCopilotStaleError)
     const fresh = await prepareInspirationCopilot(input, deps)
     const generated = await runGenerationNode(fresh.node, fresh.prepared)
     await adoptGenerationNodeOutput(fresh.node, generated.output)
     const exported = await exportProjectJSON(project.id!)
     const importedId = await importProjectJSON(exported)
     const imported = await db.inspirationWorkspaces.where('projectId').equals(importedId).first()
-    expect(parseInspirationVersions(imported!.versions)[0].mode).toBe('organize')
-    expect(JSON.parse(parseInspirationVersions(imported!.versions)[0].resultJson)).toEqual(candidate('organize'))
+    expect(parseInspirationVersions(imported!.versions)[0].mode).toBe(mode)
+    expect(JSON.parse(parseInspirationVersions(imported!.versions)[0].resultJson)).toEqual(candidate(mode))
     await cascadeDeleteProject(project.id!)
     expect(await db.inspirationWorkspaces.where('projectId').equals(project.id!).count()).toBe(0)
     expect(await db.inspirationWorkspaces.where('projectId').equals(importedId).count()).toBe(1)
@@ -74,12 +82,12 @@ describe('R-PREPARATION-inspiration · 轻量准备沿原候选与版本生命�
     expect(calls).toBe(0)
   })
 
-  it('比较版本向深化显式交接，备选方向不自动成为世界事实', async () => {
+  it.each([{ compareMode: 'compare', deepenMode: 'deepen' }, { compareMode: 'position-open', deepenMode: 'position-defined' }] as const)('$compareMode向$deepenMode显式交接，备选方向不自动成为世界事实', async ({ compareMode, deepenMode }) => {
     const { project, scope } = await seedCurrentWorkspace('方向交接')
     const store = useInspirationWorkspaceStore.getState()
     const fragment = await store.addFragment(scope, { text: '阿照修船铺，方向待选' })
-    await store.saveVersion(scope, { mode: 'compare', fragmentIds: [fragment!.id], result: candidate('compare') })
-    const prepared = await prepareInspirationCopilot({ projectId: project.id!, scope, selectedFragmentIds: [fragment!.id], skillId: 'inspiration.prepare', authorRequest: '灵感准备任务=deepen。灵感方向选择=2。从最近已确认方向比较中选择第2项，沿离人与归客深化。' })
+    await store.saveVersion(scope, { mode: compareMode, fragmentIds: [fragment!.id], result: candidate(compareMode) })
+    const prepared = await prepareInspirationCopilot({ projectId: project.id!, scope, selectedFragmentIds: [fragment!.id], skillId: 'inspiration.prepare', authorRequest: `灵感准备任务=${deepenMode}。之前灵感方向选择=1；作者本次改选：灵感方向选择=2。从最近已确认方向比较中选择第2项，沿离人与归客深化。` })
     const prompt = prepared.prepared.messages.map(message => message.content).join('\n')
     expect(prompt).toContain('最近已确认的方向比较')
     expect(prompt).toContain('离人与归客')

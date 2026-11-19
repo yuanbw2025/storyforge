@@ -1,5 +1,5 @@
 import { isInspirationPreparationMode, parseInspirationPreparationDraft, type InspirationPreparationMode, type InspirationPreparationResult } from '../lib/inspiration/preparation'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInspirationWorkspaceStore } from '../stores/inspiration-workspace'
 import {
   parseReverseMultiWorldOutput,
@@ -26,7 +26,7 @@ export function useIncrementalInspiration(
   onGenerationStarted: () => void,
 ) {
   const isMultiWorld = !!project.enableMultiWorld
-  const [action, setAction] = useState<'full' | InspirationPreparationMode>('full')
+  const [action, setActionState] = useState<'full' | InspirationPreparationMode>('full')
   const mode: InspirationResultMode = action === 'full' ? (isMultiWorld ? 'multiworld' : 'single') : action
   const workspaceScope = useMemo<WorkspaceScope | undefined>(() => (
     project.id != null && project.activeWorldId != null && project.activeWorkId != null
@@ -45,6 +45,17 @@ export function useIncrementalInspiration(
   const workspace = useInspirationWorkspaceStore()
   const draftKey = `sf-inspiration-draft-v2-${project.id}-${scopeKey}`
   const draftLoaded = useRef(false)
+  // Persist the selected task before a fast confirmation/reload; the text draft
+  // keeps its existing debounce and must not be replaced with empty state here.
+  const setAction = useCallback((next: 'full' | InspirationPreparationMode) => {
+    setActionState(next)
+    try {
+      const saved = JSON.parse(localStorage.getItem(draftKey) || '{}')
+      if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+        localStorage.setItem(draftKey, JSON.stringify({ ...saved, action: next }))
+      }
+    } catch { /* Preserve an unreadable draft; do not overwrite it to save a preference. */ }
+  }, [draftKey])
 
   const [inspiration, setInspiration] = useState('')
   const [userHint, setUserHint] = useState('')
@@ -71,7 +82,7 @@ export function useIncrementalInspiration(
   useEffect(() => {
     const restored = copilot.pendingCandidates.find(candidate => candidate.payload.skillId === 'inspiration.prepare')
     if (isInspirationPreparationMode(restored?.payload.mode)) setAction(restored.payload.mode)
-  }, [copilot.pendingCandidates])
+  }, [copilot.pendingCandidates, setAction])
 
   const ai = useMemo(() => ({
     isStreaming: copilot.busy,

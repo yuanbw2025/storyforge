@@ -176,10 +176,10 @@ const READ_TOOL_SPECS: readonly ReadToolSpec[] = [
         },
         mode: {
           type: 'string',
-          enum: ['single', 'multiworld', 'organize', 'compare', 'deepen'],
+          enum: ['single', 'multiworld', 'organize', 'compare', 'deepen', 'position-open', 'position-defined'],
           description: '完整反推模式或独立准备动作；准备动作不受多世界开关限制',
         },
-        directionIndex: { type: 'integer', minimum: 1, maximum: 4, description: '深化时作者明确选择的已确认比较方向序号' },
+        directionIndex: { type: 'integer', minimum: 1, maximum: 4, description: '深化或明确定位时作者选择的已确认同类比较方向序号' },
       },
       required: ['fragmentIds', 'mode'],
       additionalProperties: false,
@@ -293,8 +293,8 @@ function validateArgs(spec: ReadToolSpec, raw: Record<string, unknown>): Record<
     ) throw new Error('fragmentIds 必须包含 1-24 个有效碎片 ID')
     args.fragmentIds = [...new Set(args.fragmentIds.map(id => String(id).trim()))]
   }
-  if ('directionIndex' in args && (args.mode !== 'deepen' || !Number.isInteger(args.directionIndex) || Number(args.directionIndex) < 1 || Number(args.directionIndex) > 4)) throw new Error('方向序号只能用于深化，且须为1—4的整数')
-  if ('mode' in args && !['single', 'multiworld', 'organize', 'compare', 'deepen'].includes(String(args.mode))) {
+  if ('directionIndex' in args && (!['deepen', 'position-defined'].includes(String(args.mode)) || !Number.isInteger(args.directionIndex) || Number(args.directionIndex) < 1 || Number(args.directionIndex) > 4)) throw new Error('方向序号只能用于深化或明确定位，且须为1—4的整数')
+  if ('mode' in args && !['single', 'multiworld', 'organize', 'compare', 'deepen', 'position-open', 'position-defined'].includes(String(args.mode))) {
     throw new Error('mode 必须是有效灵感动作')
   }
   return args

@@ -114,12 +114,12 @@ async function prepare(page: Page, full: boolean) {
   }, full)
   expect(fixture.directory).toEqual({ name: 'quality059060-isolated', kind: 'directory' })
   await openLongformLeaf(page, '灵感反推')
-  await expect(page.getByRole('heading', { name: '灵感反推', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '灵感与创作定位', exact: true })).toBeVisible()
   return fixture
 }
 
 function panel(page: Page) {
-  return page.getByRole('heading', { name: '灵感反推', exact: true }).locator('..').locator('..')
+  return page.getByRole('heading', { name: '灵感与创作定位', exact: true }).locator('..').locator('..')
 }
 function input(page: Page) { return panel(page).getByPlaceholder(/随便写点什么/) }
 function add(page: Page) { return panel(page).getByRole('button', { name: '加入素材库', exact: true }) }
