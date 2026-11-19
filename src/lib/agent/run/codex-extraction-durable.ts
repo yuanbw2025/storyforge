@@ -1,4 +1,6 @@
-import { chat, type ChatRequestOptions } from '../../ai/client'
+import { chat, type ChatRequestOptions, type ChatResult } from '../../ai/client'
+import { AIError } from '../../types'
+import { ModelDispatchGuardRejectedV1 } from '../../ai/codex-transport'
 import { estimateTokens } from '../../ai/context-budget'
 import {
   buildCodexExtractPromptFromRegisteredContextV1,
@@ -39,6 +41,10 @@ import { createContextManifestFromAssemblyV1 } from './context-manifest'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from './checkpoint'
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { canonicalStringify, hashCanonicalValue } from './hash'
+import { assertCodexExtractionRequestBudgetV1, CodexExtractionRequestChangedErrorV1, CodexExtractionRequestBudgetErrorV1,
+  parseCodexExtractionRequestBindingV1, prepareCodexExtractionRequestV1,
+  type CodexExtractionRequestBindingV1, type FrozenCodexExtractionRequestV1 } from './codex-extraction-request'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from './creation-response-evidence'
 
 export const CODEX_EXTRACTION_STEP_ID_V1 = 'world-origin:codex-extract' as const
 export const CODEX_EXTRACTION_VERIFIER_SET_V1 = 'codex-extraction-terminal-v1' as const
@@ -88,6 +94,7 @@ interface CodexExtractionPlanV1 {
   gatewayPacket: ContextPacketV1
   baseline: CodexExtractionBaselineV1
   baselineHash: string
+  requestBinding?: CodexExtractionRequestBindingV1
   chunks: CodexExtractionChunkV1[]
   planHash: string
 }
@@ -351,6 +358,7 @@ async function createPlan(input: {
   snapshot: AgentRunSnapshotV1
   request: NormalizedCodexCandidateRequestV1
   prepared: PreparedSourcesV1
+  requestBinding?: CodexExtractionRequestBindingV1
 }): Promise<{ snapshot: AgentRunSnapshotV1; plan: CodexExtractionPlanV1 }> {
   let snapshot = input.snapshot
   const baselineManifest = await createContextManifestFromAssemblyV1({
@@ -396,6 +404,7 @@ async function createPlan(input: {
     gatewayPacket: input.prepared.gatewayPacket,
     baseline: input.prepared.baseline,
     baselineHash: input.prepared.baselineHash,
+    ...(input.requestBinding ? { requestBinding: input.requestBinding } : {}),
     chunks,
   }
   return { snapshot, plan: { ...body, planHash: await hashCanonicalValue(body) } }
@@ -413,6 +422,7 @@ function contract(
   categoryId: number,
   maxModelCalls: number,
   operation: 'extract' | 'enrich',
+  requestBinding?: CodexExtractionRequestBindingV1,
 ) {
   const skill = getAgentSkillV1(
     operation === 'extract' ? 'world-origin.codex-extract' : 'world-origin.codex-enrich',
@@ -430,10 +440,11 @@ function contract(
       })),
     },
     executionBindings: [{ stepId: CODEX_EXTRACTION_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(skill) }],
+    ...(requestBinding ? { runtimeBindingHash: requestBinding.bindingHash } : {}),
     budget: {
       maxModelCalls, maxToolCalls: 0,
-      maxInputTokens: maxModelCalls * 8_000,
-      maxOutputTokens: maxModelCalls * 4_000,
+      maxInputTokens: maxModelCalls * (requestBinding?.inputBudgetTokens ?? 8_000),
+      maxOutputTokens: maxModelCalls * (requestBinding?.outputBudgetTokens ?? 4_000),
       maxAttemptsPerStep: 1, maxProtocolErrors: 0,
     },
     acceptance: [
@@ -462,7 +473,7 @@ async function parsePlan(value: unknown): Promise<CodexExtractionPlanV1> {
     'promptTemplateHash', 'baselineContextManifestHash', 'baselineContextHash',
     'sourceContextManifestHash', 'sourceContextHash', 'sourceTextHash',
     'gatewaySelectorHash', 'gatewayTraceHash', 'gatewayPacket', 'baseline', 'baselineHash',
-    'chunks', 'planHash',
+    'chunks', 'planHash', ...(Object.prototype.hasOwnProperty.call(row, 'requestBinding') ? ['requestBinding'] : []),
   ], 'Codex 提取计划 ')
   if (
     row.version !== 1 || row.kind !== 'codex-extraction-plan' || row.portable !== false
@@ -547,6 +558,7 @@ async function parsePlan(value: unknown): Promise<CodexExtractionPlanV1> {
   if (new Set(entries.map(entry => entry.id)).size !== entries.length) throw new Error('Codex 原始词条 ID 重复。')
   const typedBaseline = { category: category as unknown as CodexExtractionBaselineV1['category'], entries }
   if (await hashCanonicalValue(typedBaseline) !== row.baselineHash) throw new Error('Codex 提取基线 hash 不匹配。')
+  if (Object.prototype.hasOwnProperty.call(row, 'requestBinding')) await parseCodexExtractionRequestBindingV1(row.requestBinding, typedBaseline.category.fields, request)
   const chunks = row.chunks.map((value: unknown, index: number) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Codex 提取分块 ${index + 1} 无效。`)
     const chunk = value as Record<string, unknown>
@@ -652,6 +664,7 @@ async function latestState(scope: WorkspaceScope, runId: number): Promise<{
   const kind = (value as Record<string, unknown>).kind
   if (kind === 'codex-extraction-progress') {
     const progress = await parseProgress(value)
+    assertCodexPlanRunBinding(checkpoint.snapshot, progress.plan)
     const snapshot = await readAgentRunV1(scope, runId)
     const candidateHash = snapshot.projection.steps[CODEX_EXTRACTION_STEP_ID_V1]?.candidateHash
     if (
@@ -665,7 +678,11 @@ async function latestState(scope: WorkspaceScope, runId: number): Promise<{
     }
     return { progress, candidate: null, intent: null }
   }
-  if (kind === 'codex-extraction-candidate') return { progress: null, candidate: await parseCandidate(value), intent: null }
+  if (kind === 'codex-extraction-candidate') {
+    const candidate = await parseCandidate(value)
+    assertCodexPlanRunBinding(checkpoint.snapshot, candidate.plan)
+    return { progress: null, candidate, intent: null }
+  }
   if (kind !== 'codex-extraction-adoption-intent') throw new Error('Codex 提取检查点类型无效。')
   const row = value as Record<string, any>
   assertExactKeys(row, ['version', 'kind', 'portable', 'candidate', 'selectedIndexes', 'formalItems', 'intentHash'], 'Codex 采纳意图 ')
@@ -674,6 +691,7 @@ async function latestState(scope: WorkspaceScope, runId: number): Promise<{
     || !Array.isArray(row.formalItems) || !isHash(row.intentHash)
   ) throw new Error('Codex 采纳意图不完整。')
   const candidate = await parseCandidate(row.candidate)
+  assertCodexPlanRunBinding(checkpoint.snapshot, candidate.plan)
   const emptySelectionIsValid = candidate.entries.length === 0 && row.selectedIndexes.length === 0
   if (
     (!emptySelectionIsValid && row.selectedIndexes.length < 1)
@@ -726,17 +744,25 @@ async function pauseUnsafeRun(scope: WorkspaceScope, snapshot: AgentRunSnapshotV
   return snapshot
 }
 
+function assertCodexPlanRunBinding(snapshot: AgentRunSnapshotV1, plan: CodexExtractionPlanV1) {
+  if (plan.requestBinding && (plan.runId !== snapshot.run.id || snapshot.contract.runtimeBindingHash !== plan.requestBinding.bindingHash)) {
+    throw new Error('词条拆分的模型绑定与原 RunContract 不一致。')
+  }
+}
+
 async function continueExtraction(input: {
   scope: WorkspaceScope
   snapshot: AgentRunSnapshotV1
   progress: CodexExtractionProgressV1
   prepared: PreparedSourcesV1
+  frozenRequest?: FrozenCodexExtractionRequestV1
   aiConfig?: AIConfig
   runAI?: RunAI
   onDurableBoundary?: (boundary: CodexExtractionBoundaryV1, snapshot: AgentRunSnapshotV1, callIndex: number) => void | Promise<void>
 }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: CodexExtractionCandidateV1 }> {
   let snapshot = input.snapshot
   let progress = input.progress
+  assertCodexPlanRunBinding(snapshot, progress.plan)
   const chunkTexts = input.prepared.chunks
   const existingNames = new Set(progress.plan.baseline.entries.map(entry => entry.name.toLocaleLowerCase()))
   for (let callIndex = progress.nextCallIndex; callIndex < progress.plan.chunks.length; callIndex++) {
@@ -760,7 +786,8 @@ async function continueExtraction(input: {
           authorRequest: progress.plan.request.authorRequest,
           supplementTags: progress.plan.request.supplementTags,
         })
-    const responseOptions = codexEntryTransportOptionsV1(input.aiConfig, progress.plan.baseline.category.fields, progress.plan.request)
+    const responseOptions = input.frozenRequest ? input.frozenRequest.binding.responseOptions
+      : codexEntryTransportOptionsV1(input.aiConfig, progress.plan.baseline.category.fields, progress.plan.request)
     const promptInputHash = await hashCanonicalValue({
       promptTemplateHash: progress.plan.promptTemplateHash,
       baselineContextHash: progress.plan.baselineContextHash,
@@ -770,24 +797,61 @@ async function continueExtraction(input: {
       operation: progress.plan.request.operation,
       authorRequest: progress.plan.request.authorRequest,
       responseOptions: responseOptions ?? null,
+      ...(progress.plan.requestBinding ? { requestBindingHash: progress.plan.requestBinding.bindingHash } : {}),
     })
-    snapshot = await append(input.scope, snapshot, 'model.requested', {
-      stepId: CODEX_EXTRACTION_STEP_ID_V1, attempt: 1,
-      bindingHash: await hashCanonicalValue({
-        executionBinding: snapshot.contract.executionBindings?.[0], callIndex, promptInputHash,
-      }),
-    })
+    const bindingHash = await hashCanonicalValue({ executionBinding: snapshot.contract.executionBindings?.[0], callIndex, promptInputHash,
+      ...(progress.plan.requestBinding ? { requestBindingHash: progress.plan.requestBinding.bindingHash } : {}) })
+    let requestEvidence: Awaited<ReturnType<typeof recordCreationModelRequestV1>>['request'] | undefined
+    const result: ChatResult = { requestLifecycle: { phase: 'pre-dispatch', responseStatus: null }, beforeModelDispatch: async () => {
+      input.frozenRequest?.assertCurrent()
+      if (input.frozenRequest) {
+        const saved = await recordCreationModelRequestV1({ scope: input.scope, snapshot, stepId: CODEX_EXTRACTION_STEP_ID_V1,
+          attempt: 1, contextManifestHash: progress.plan.sourceContextManifestHash, messages })
+        snapshot = saved.snapshot; requestEvidence = saved.request
+      }
+      snapshot = await append(input.scope, snapshot, 'model.requested', { stepId: CODEX_EXTRACTION_STEP_ID_V1, attempt: 1, bindingHash })
+      input.frozenRequest?.assertCurrent()
+    } }
     let raw: string
     try {
-      raw = await (input.runAI
-        ? input.runAI(messages, callIndex, responseOptions)
-        : chat(messages, input.aiConfig!, {
+      if (input.frozenRequest) assertCodexExtractionRequestBudgetV1(messages, input.frozenRequest.binding)
+      if (input.runAI) {
+        await result.beforeModelDispatch!()
+        result.requestLifecycle = { phase: 'request-dispatched', responseStatus: null }
+        raw = await input.runAI(messages, callIndex, responseOptions ?? undefined)
+        result.requestLifecycle = { phase: 'response-observed', responseStatus: 200 }
+      } else {
+        raw = await chat(messages, input.frozenRequest!.resolution.config, {
             category: progress.plan.request.operation === 'extract' ? 'codex.extract' : 'codex.enrich',
-            projectId: input.scope.projectId,
-          }, undefined, undefined, responseOptions))
+            projectId: input.scope.projectId, transportRetryPolicy: 'none', contextOverflowPolicy: 'reject',
+          }, undefined, result, responseOptions ?? undefined, input.frozenRequest!.resolution)
+      }
+      if (requestEvidence) snapshot = await recordCreationModelResponseV1({ snapshot, request: requestEvidence, raw, result })
     } catch (error) {
-      snapshot = await pauseUnsafeRun(input.scope, snapshot, 'codex-extraction-model-outcome-unknown')
-      throw error
+      if (requestEvidence) snapshot = (await recordUnavailableCreationResponseV1({ snapshot, request: requestEvidence, result, error })).snapshot
+      snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
+      if (['cancelled', 'failed', 'completed'].includes(snapshot.projection.state)) throw new Error('原词条运行已结束，结果未自动采用，不会重新发送。')
+      const cause = error instanceof ModelDispatchGuardRejectedV1 ? error.cause : error
+      if (cause instanceof CodexExtractionRequestChangedErrorV1) {
+        await pauseUnsafeRun(input.scope, snapshot, 'codex-extraction-request-binding-stale')
+        throw cause
+      }
+      const observedStatus = result.requestLifecycle?.phase === 'response-observed' ? result.requestLifecycle.responseStatus
+        : error instanceof AIError ? error.status : null
+      if ((observedStatus != null && observedStatus >= 100 && observedStatus <= 599) || result.requestLifecycle?.phase === 'pre-dispatch') {
+        const code = cause instanceof CodexExtractionRequestBudgetErrorV1 ? 'codex-extraction-input-budget'
+          : observedStatus != null ? `codex-extraction-http-${observedStatus}` : 'codex-extraction-not-dispatched'
+        snapshot = await append(input.scope, snapshot, 'step.failed', { stepId: CODEX_EXTRACTION_STEP_ID_V1, attempt: 1,
+          code, retryable: false, category: cause instanceof CodexExtractionRequestBudgetErrorV1 ? 'budget'
+            : observedStatus === 200 ? 'protocol' : 'deterministic', action: 'fail' })
+        await append(input.scope, snapshot, 'run.failed', { code, retryable: false })
+        if (cause instanceof CodexExtractionRequestBudgetErrorV1) throw cause
+        throw new Error(observedStatus != null ? `词条拆分收到 HTTP ${observedStatus}，未取得有效候选；已停止本次运行，未自动重发。`
+          : '词条拆分在发送前已停止；请检查输入与模型配置，再明确开始新的提取。')
+      }
+      await pauseUnsafeRun(input.scope, snapshot, 'codex-extraction-model-outcome-unknown')
+      if (input.runAI) throw error
+      throw new Error('词条拆分请求结果未知；原运行与输入已保留，不会自动重发。请先核对原请求。')
     }
     const outputHash = await hashCanonicalValue({ raw })
     snapshot = await append(input.scope, snapshot, 'model.responded', {
@@ -816,7 +880,8 @@ async function continueExtraction(input: {
         category: 'protocol', action: 'fail',
       })
       await append(input.scope, snapshot, 'run.failed', { code: 'codex-extraction-protocol-failed', retryable: false })
-      throw error
+      if (input.runAI) throw error
+      throw new Error('词条拆分输出未通过字段、类型或逐字来源校验；原答已保留，已停止且未重发。')
     }
     const found = [...progress.found, ...parsed]
     if (found.length > MAX_CANDIDATES) {
@@ -867,15 +932,18 @@ export async function generateCodexExtractionCandidateV1(input: {
 }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: CodexExtractionCandidateV1 }> {
   const request = normalizeRequest(input.request)
   const prepared = await prepareSources(input.scope, request)
+  if (!input.aiConfig && !input.runAI) throw new Error('词条拆分缺少 AI 配置。')
+  const frozenRequest = input.aiConfig ? await prepareCodexExtractionRequestV1({ config: input.aiConfig,
+    fields: prepared.baseline.category.fields, policy: request }) : undefined
   let snapshot = await createAgentRunV1({
     scope: input.scope, worldGroupId: request.worldGroupId,
     contract: contract(
-      input.scope, request.worldGroupId, request.categoryId, prepared.chunks.length, request.operation,
+      input.scope, request.worldGroupId, request.categoryId, prepared.chunks.length, request.operation, frozenRequest?.binding,
     ),
   })
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: CODEX_EXTRACTION_STEP_ID_V1 })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: CODEX_EXTRACTION_STEP_ID_V1, attempt: 1 })
-  const created = await createPlan({ scope: input.scope, snapshot, request, prepared })
+  const created = await createPlan({ scope: input.scope, snapshot, request, prepared, requestBinding: frozenRequest?.binding })
   snapshot = created.snapshot
   const progressBody = {
     version: 1 as const, kind: 'codex-extraction-progress' as const, portable: false as const,
@@ -885,7 +953,7 @@ export async function generateCodexExtractionCandidateV1(input: {
   const saved = await createAgentRunCheckpointV1({ scope: input.scope, runId: snapshot.run.id, resumePayload: progress })
   snapshot = saved.snapshot
   await input.onDurableBoundary?.('plan.checkpoint', snapshot, -1)
-  return continueExtraction({ ...input, snapshot, progress, prepared })
+  return continueExtraction({ ...input, snapshot, progress, prepared, frozenRequest })
 }
 
 export interface CodexEnrichmentRequestV1 {
@@ -925,6 +993,7 @@ export async function readRecoverableCodexExtractionV1(input: {
   nextCallIndex: number
   totalCalls: number
   safeToResume: boolean
+  requiresNewRequestBinding?: boolean
   request?: CodexExtractionRequestV1
 } | null> {
   const rows = (await readOwnedRows<any>(input.scope, 'agentRuns', { owner: 'work' }))
@@ -943,6 +1012,7 @@ export async function readRecoverableCodexExtractionV1(input: {
       const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope, row.id)
       if (!checkpoint) throw new Error('缺少 Codex 提取检查点。')
       const progress = await parseProgress(checkpoint.resumePayload)
+      assertCodexPlanRunBinding(checkpoint.snapshot, progress.plan)
       if (input.categoryId != null && progress.plan.request.categoryId !== input.categoryId) continue
       if (input.operation && progress.plan.request.operation !== input.operation) continue
       if (Object.prototype.hasOwnProperty.call(input, 'worldGroupId')
@@ -953,6 +1023,7 @@ export async function readRecoverableCodexExtractionV1(input: {
         nextCallIndex: progress.nextCallIndex,
         totalCalls: progress.plan.chunks.length,
         safeToResume: checkpoint.snapshot.projection.state === 'running' && safeTail,
+        requiresNewRequestBinding: !progress.plan.requestBinding && progress.nextCallIndex < progress.plan.chunks.length,
         request: progress.plan.request,
       }
     } catch {
@@ -985,10 +1056,24 @@ export async function resumeCodexExtractionCandidateV1(input: {
   const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope, input.runId)
   if (!checkpoint) throw new Error('Codex 提取运行缺少可恢复检查点。')
   const progress = await parseProgress(checkpoint.resumePayload)
+  assertCodexPlanRunBinding(checkpoint.snapshot, progress.plan)
   if (
     checkpoint.snapshot.projection.state !== 'running'
     || checkpoint.snapshot.projection.lastSequence !== checkpoint.checkpoint.throughSequence + 1
   ) throw new Error('Codex 提取停在模型结果不可判定窗口，不会自动重试。')
+  const remainingCalls = progress.nextCallIndex < progress.plan.chunks.length
+  if (remainingCalls && !input.runAI && !progress.plan.requestBinding) throw new Error('旧词条计划未冻结实际模型配置，仅可查看已有证据；请明确开始新的提取，不会重发旧请求。')
+  let frozenRequest: FrozenCodexExtractionRequestV1 | undefined
+  if (remainingCalls && input.aiConfig && progress.plan.requestBinding) {
+    try {
+      frozenRequest = await prepareCodexExtractionRequestV1({ config: input.aiConfig, fields: progress.plan.baseline.category.fields,
+        policy: progress.plan.request, previous: progress.plan.requestBinding })
+    } catch (error) {
+      await pauseUnsafeRun(input.scope, checkpoint.snapshot, 'codex-extraction-request-binding-stale')
+      throw error
+    }
+  }
+  if (remainingCalls && !input.runAI && !frozenRequest) throw new Error('词条拆分缺少原模型配置；未发送请求。')
   let prepared: PreparedSourcesV1
   try {
     prepared = await verifyCurrentPlan(input.scope, progress.plan)
@@ -996,7 +1081,7 @@ export async function resumeCodexExtractionCandidateV1(input: {
     await pauseUnsafeRun(input.scope, checkpoint.snapshot, 'codex-extraction-source-stale-before-resume')
     throw error
   }
-  return continueExtraction({ ...input, snapshot: checkpoint.snapshot, progress, prepared })
+  return continueExtraction({ ...input, snapshot: checkpoint.snapshot, progress, prepared, frozenRequest })
 }
 
 export async function readPendingCodexExtractionCandidateV1(input: {
