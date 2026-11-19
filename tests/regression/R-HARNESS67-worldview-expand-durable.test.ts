@@ -99,6 +99,34 @@ describe.sequential('R-HARNESS67 · 世界组六字段扩写 durable 候选与�
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => { vi.restoreAllMocks(); db.close() })
 
+  it('读取当前世界的真实与幻想规则，规则改变使旧候选stale，兄弟世界规则不混入', async () => {
+    const fixture = await seed('规则读取')
+    const now = Date.now()
+    const profileId = await db.worldRulesProfiles.add({ projectId: fixture.projectId, worldId: fixture.worldId, worldGroupId: fixture.worldGroupId, entries: { custom: { historicalAnchors: '', fictionalAdaptations: '目标规则：进入后物件始终保留。', priority: 'fictional' } }, customNodes: [], globalNote: '', createdAt: now, updatedAt: now } as any)
+    await db.worldRulesProfiles.add({ projectId: fixture.projectId, worldId: fixture.worldId, worldGroupId: fixture.siblingGroupId, entries: { custom: { historicalAnchors: '', fictionalAdaptations: '兄弟世界专属且本轮不可混入的规则', priority: 'fictional' } }, customNodes: [], globalNote: '', createdAt: now, updatedAt: now } as any)
+    await stampCurrentFixtureResourceUidsV1(fixture.projectId)
+    const generated = await generateWorldviewExpandCandidateV1({ scope: fixture.scope, worldGroupId: fixture.worldGroupId, runAI: async messages => {
+      const prompt = messages.map(message => message.content).join('\n')
+      expect(prompt).toContain('目标规则：进入后物件始终保留')
+      expect(prompt).not.toContain('兄弟世界专属且本轮不可混入')
+      return response()
+    } })
+    const row = await db.worldRulesProfiles.get(profileId)
+    await db.worldRulesProfiles.update(profileId, { ...row!, globalNote: '作者新增加预约限制', updatedAt: now + 1 })
+    await expect(adoptWorldviewExpandCandidateV1({ scope: fixture.scope, worldGroupId: fixture.worldGroupId, runId: generated.snapshot.run.id })).rejects.toThrow('已变化')
+    expect((await targetRow(fixture))?.worldOrigin).toBe('旧起源')
+  })
+
+  it('硬规则被预算裁剪时在模型前拒绝，不能拿不完整规则生成', async () => {
+    const fixture = await seed('规则预算')
+    const now = Date.now()
+    await db.worldRulesProfiles.add({ projectId: fixture.projectId, worldId: fixture.worldId, worldGroupId: fixture.worldGroupId, entries: { custom: { historicalAnchors: '', fictionalAdaptations: '作者硬规则不可丢弃'.repeat(8000), priority: 'fictional' } }, customNodes: [], globalNote: '', createdAt: now, updatedAt: now } as any)
+    const runAI = vi.fn(async () => response())
+    await expect(generateWorldviewExpandCandidateV1({ scope: fixture.scope, worldGroupId: fixture.worldGroupId, runAI })).rejects.toThrow('未完整进入上下文预算')
+    expect(runAI).not.toHaveBeenCalled()
+    expect((await targetRow(fixture))?.worldOrigin).toBe('旧起源')
+  })
+
   it('requests a single JSON object from the provider without a fallback call', async () => {
     const fixture = await seed()
     const request = vi.spyOn(aiClient, 'chat').mockResolvedValueOnce(response())
@@ -110,13 +138,13 @@ describe.sequential('R-HARNESS67 · 世界组六字段扩写 durable 候选与�
   })
 
   it('Skill/Context/Field 三注册表闭合，四个登记来源进入模型且候选确认前零正式写入', async () => {
-    expect(['manualText', 'worldGroups', 'storyCore', 'worldview'].map(key => CONTEXT_SOURCE_BY_KEY.has(key))).toEqual([true, true, true, true])
+    expect(['manualText', 'worldGroups', 'storyCore', 'worldview', 'worldRules'].map(key => CONTEXT_SOURCE_BY_KEY.has(key))).toEqual([true, true, true, true, true])
     expect(FIELD_BY_TARGET.get('worldviews')?.map(field => field.field)).toEqual(expect.arrayContaining([
       'worldOrigin', 'powerHierarchy', 'continentLayout', 'climateByRegion', 'races', 'factionLayout',
     ]))
     expect(getAgentSkillV1('world-origin.worldview-expand')).toMatchObject({
       agentId: 'world-origin', executionMode: 'worldview-expand',
-      contextSourceKeys: ['manualText', 'worldGroups', 'storyCore', 'worldview'],
+      contextSourceKeys: ['manualText', 'worldGroups', 'storyCore', 'worldview', 'worldRules'],
       writeTargets: [{
         table: 'worldviews',
         fields: ['worldOrigin', 'powerHierarchy', 'continentLayout', 'climateByRegion', 'races', 'factionLayout'],
@@ -125,7 +153,7 @@ describe.sequential('R-HARNESS67 · 世界组六字段扩写 durable 候选与�
     const fixture = await seed()
     const assembled = await assembleContext({
       projectId: fixture.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId,
-      sourceKeys: ['manualText', 'worldGroups', 'storyCore', 'worldview'],
+      sourceKeys: ['manualText', 'worldGroups', 'storyCore', 'worldview', 'worldRules'],
       manualSourceText: '【目标世界草稿】\n盐雾吞食记忆',
     })
     expect(assembled.text).toContain('盐雾吞食记忆')

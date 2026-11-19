@@ -176,16 +176,17 @@ const READ_TOOL_SPECS: readonly ReadToolSpec[] = [
         },
         mode: {
           type: 'string',
-          enum: ['single', 'multiworld'],
-          description: '与当前项目一致的反推结果模式',
+          enum: ['single', 'multiworld', 'organize', 'compare', 'deepen', 'position-open', 'position-defined'],
+          description: '完整反推模式或独立准备动作；准备动作不受多世界开关限制',
         },
+        directionIndex: { type: 'integer', minimum: 1, maximum: 4, description: '深化或明确定位时作者选择的已确认同类比较方向序号' },
       },
       required: ['fragmentIds', 'mode'],
       additionalProperties: false,
     },
     sourceKeys: ['inspirationWorkspace'],
     inputBudgetTokens: 11_000,
-    argRules: { allowed: ['fragmentIds', 'mode'], required: ['fragmentIds', 'mode'] },
+    argRules: { allowed: ['fragmentIds', 'mode', 'directionIndex'], required: ['fragmentIds', 'mode'] },
   },
   {
     name: 'read_character_driven_plan',
@@ -292,8 +293,9 @@ function validateArgs(spec: ReadToolSpec, raw: Record<string, unknown>): Record<
     ) throw new Error('fragmentIds 必须包含 1-24 个有效碎片 ID')
     args.fragmentIds = [...new Set(args.fragmentIds.map(id => String(id).trim()))]
   }
-  if ('mode' in args && args.mode !== 'single' && args.mode !== 'multiworld') {
-    throw new Error('mode 必须是 single 或 multiworld')
+  if ('directionIndex' in args && (!['deepen', 'position-defined'].includes(String(args.mode)) || !Number.isInteger(args.directionIndex) || Number(args.directionIndex) < 1 || Number(args.directionIndex) > 4)) throw new Error('方向序号只能用于深化或明确定位，且须为1—4的整数')
+  if ('mode' in args && !['single', 'multiworld', 'organize', 'compare', 'deepen', 'position-open', 'position-defined'].includes(String(args.mode))) {
+    throw new Error('mode 必须是有效灵感动作')
   }
   return args
 }
@@ -308,9 +310,9 @@ async function resolveScope(
   const project = await db.projects.get(projectId)
   if (!project) throw new Error('项目不存在')
   const fragmentIds = args.fragmentIds as string[] | undefined
-  const inspirationMode = args.mode as 'single' | 'multiworld' | undefined
+  const inspirationMode = args.mode as import('../types/inspiration-workspace').InspirationResultMode | undefined
   if (
-    inspirationMode
+    inspirationMode && ['single', 'multiworld'].includes(inspirationMode)
     && inspirationMode !== (project.enableMultiWorld ? 'multiworld' : 'single')
   ) throw new Error('灵感反推模式与当前项目不一致')
   if (fragmentIds) {
@@ -413,6 +415,7 @@ async function resolveScope(
     searchKinds: args.kinds as string[] | undefined,
     inspirationFragmentIds: fragmentIds,
     inspirationMode,
+    inspirationDirectionIndex: args.directionIndex as number | undefined,
     characterDrivenPlanId,
     provider: context.provider,
     model: context.model,

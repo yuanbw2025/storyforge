@@ -1,0 +1,70 @@
+{
+  "commit": "01b237d5d",
+  "boundary": "Existing inactive P02 template asset, not a previously shipped positioning entry",
+  "seed": {
+    "scope": "system",
+    "moduleKey": "story.positioning",
+    "promptType": "decision",
+    "name": "小说内容-P02-A-定位阶段：题材、读者承诺与差异化",
+    "description": "定位 · 定位 · 定位阶段：题材、读者承诺与差异化。 使用现有模板或工作流运行。",
+    "systemPrompt": "你是 StoryForge 的小说创作助手。严格执行用户消息中的单一任务。\n\n事实优先级：当前项目中已确认的正文与事实 > 已确认设定和大纲 > 作者本次补充 > 类型惯例。资料缺失时明确标注，不得把推测写成事实；资料冲突时先指出冲突，不得静默裁决。只处理当前 Prompt 负责的阶段，不越权生成下游成品。",
+    "userPromptTemplate": "你是小说定位编辑。请依据作者的故事方向，建立“题材—目标读者—阅读承诺—兑现方式”的可检验契约。\n\n## 输入\n\n<story_direction>\n{{story_direction}}\n</story_direction>\n\n<length_and_delivery>\n- 篇幅：{{length_mode}}\n- 完整稿或连载：{{delivery_mode}}\n</length_and_delivery>\n\n<author_preferences>\n{{author_preferences}}\n</author_preferences>\n\n<candidate_genres>\n{{candidate_genres}}\n</candidate_genres>\n\n## 规则\n\n1. 题材不是装饰标签。每个候选题材都要写出读者预期的核心体验、作品必须兑现的内容、可以变化的惯例和不适配风险。\n2. 将规则分层：\n   - U：跨题材的叙事清晰与因果要求；\n   - G：该题材的读者期待；\n   - S：仅连载模式使用的分章阅读策略；\n   - P：作者明确偏好，优先级最高。\n3. 若作品混合多个题材，必须指定“主承诺”和“辅助效果”。不能让所有标签并列争夺主导。\n4. 差异化必须来自人物立场、冲突机制、叙事视角、环境压力或价值选择，不使用“更宏大、更烧脑、更治愈”等空词。\n5. 不使用真实市场数据或成功概率。只能分析概念与承诺是否匹配。\n6. 输出 2-3 个互斥定位方案，并明确各自会牺牲什么。\n\n## 输出格式\n\n# 定位决策表\n\n## 1. 当前概念的稳定内核\n- 不随定位变化的内容：\n- 作者最可能珍视的内容：\n- 当前最大含糊处：\n\n## 2. 互斥定位方案\n\n### 方案 A：[定位名称]\n- 主题材 / 子题材：\n- 目标读者画像：只写阅读偏好，不虚构人口统计。\n- 一句话阅读承诺：\n- 必须兑现的 3 项内容：\n- 可有意偏离的惯例：\n- 差异化机制：\n- 篇幅与结构影响：\n- 主要风险：\n- 选择该方案将牺牲：\n\n## 3. 方案比较\n| 维度 | 方案 A | 方案 B | 方案 C |\n|---|---|---|---|\n| 与作者意图匹配 | | | |\n| 与故事内核匹配 | | | |\n| 长/短篇适配 | | | |\n| 连载适配 | | | |\n| 创作难点 | | | |\n\n## 4. 推荐与保留意见\n- 推荐方案：\n- 推荐依据：只引用输入与上表。\n- 仍需作者决定：\n\n## 5. 承诺-兑现初表\n| 承诺 | 最早何时让读者感知 | 中段如何发展 | 结尾如何兑现 | 失败信号 |\n|---|---|---|---|---|\n\n## 自检\n- 没有把体裁惯例写成普遍定律。\n- 主承诺只有一个，辅助效果不抢主轴。\n- 差异化来自故事机制，不是形容词。\n- 连载策略仅在连载模式出现。\n\n{{#if userHint}}\n## 作者本次补充\n{{userHint}}\n{{/if}}",
+    "variables": [
+      "story_direction",
+      "length_mode",
+      "delivery_mode",
+      "author_preferences",
+      "candidate_genres",
+      "userHint"
+    ],
+    "isActive": false,
+    "assetId": "P02-A",
+    "variableBindings": [
+      {
+        "variable": "story_direction",
+        "label": "故事 · 方向",
+        "sourceKeys": [
+          "storyCore"
+        ],
+        "manual": true,
+        "required": false,
+        "placeholder": "可补充或修正自动读取的项目资料"
+      },
+      {
+        "variable": "length_mode",
+        "label": "篇幅模式",
+        "workField": "lengthMode",
+        "manual": true,
+        "required": false,
+        "placeholder": "可补充或修正自动读取的项目资料"
+      },
+      {
+        "variable": "delivery_mode",
+        "label": "交付 · 模式",
+        "workField": "serializationMode",
+        "manual": true,
+        "required": false,
+        "placeholder": "可补充或修正自动读取的项目资料"
+      },
+      {
+        "variable": "author_preferences",
+        "label": "作者 · 偏好",
+        "sourceKeys": [
+          "creativeRules",
+          "userStyleProfile"
+        ],
+        "manual": true,
+        "required": false,
+        "placeholder": "可补充或修正自动读取的项目资料"
+      },
+      {
+        "variable": "candidate_genres",
+        "label": "候选题材",
+        "workField": "genres",
+        "manual": true,
+        "required": false,
+        "placeholder": "可补充或修正自动读取的项目资料"
+      }
+    ]
+  }
+}

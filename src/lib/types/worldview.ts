@@ -4,7 +4,7 @@ import type { RagDocumentMetadata } from './rag-library'
  * 神明设定（嵌入 Worldview.divineDesign）
  */
 export interface DivineDesign {
-  hasDivinity: boolean       // 是否存在神明
+  hasDivinity: boolean       // 是否包含神明或宗教信仰设定；不等于证实有神，未知与居民解释写入正文
   divineRank: string         // 神明层级体系（自由文本）
   divineNames: string        // 主要神明列表（自由文本）
   divineRules: string        // 神明的规则/限制

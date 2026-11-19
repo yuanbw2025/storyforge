@@ -96,7 +96,7 @@ export default function WorldRuleEntryEditor({
 
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1.5">
-              📜 取自真实（历史考据 / 现实原型）
+              📜 现实参照（作者选定，可注明来源与待考点）
             </label>
             {historicalAnchorsLayout ? <ResizableInputArea options={historicalAnchorsLayout}>{renderHistoricalAnchors}</ResizableInputArea> : renderHistoricalAnchors()}
           </div>

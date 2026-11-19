@@ -1,5 +1,5 @@
 export type InspirationSourceKind = 'author' | 'reference' | 'research' | 'other'
-export type InspirationResultMode = 'single' | 'multiworld'
+export type InspirationResultMode = 'single' | 'multiworld' | import('../inspiration/preparation').InspirationPreparationMode
 
 export interface InspirationFragment {
   id: string

@@ -1,3 +1,4 @@
+import { legacyAgentToolsV21 } from '../helpers/legacy-agent-tools-v21'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { setupIdentityKnowledgeRuntimeV1, identityKnowledgeWindowV1 } from '../helpers/open-identity-knowledge-runtime'
@@ -45,11 +46,13 @@ const provider = () => CONTEXT_SOURCE_BY_KEY.get(TTRPG_OPEN_COMMON_IDENTITY_SOUR
 describe('R-TTRPGOPEN9 all-current-player model identity intersection', { timeout: 60000 }, () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => { vi.restoreAllMocks(); db.close() })
-  it('freezes legacy v20/v19/v18 and verifies the current v21 world-query binding', async () => {
+  it('freezes legacy v20/v19/v18 and verifies the current v22 preparation binding', async () => {
     const snapshot = getAgentToolSchemaSnapshotV1()
     // World-query v21 adds one independently gated tool. Keep every v20
     // declaration and historical TTRPG source-permission assertion exact.
-    const mergedV20 = (snapshot as Array<{ name: string }>).filter(tool => tool.name !== 'query_world_release')
+    const legacyV21 = legacyAgentToolsV21(snapshot)
+    expect(await hashCanonicalValue(legacyV21)).toBe('78723a81dfb12f89ca7ab15e579fa4056508eec8694834f557ace62753d419d0')
+    const mergedV20 = legacyV21.filter(tool => tool.name !== 'query_world_release')
     expect(await hashCanonicalValue(mergedV20)).toBe('c40157ac5f31d8edae7cfa90c7749e93580a7095040afdc0b97bd7eb8ec4485d')
     // Main added only its author-confirmed Work intent source. Removing that
     // new enum member must retain the complete prior TTRPG v19 declaration.
@@ -57,7 +60,7 @@ describe('R-TTRPGOPEN9 all-current-player model identity intersection', { timeou
     expect(await hashCanonicalValue(ttrpgV19)).toBe('4efc0b11ea06cac242c56c3648ff2d4627ed238f51e029044a18e53717a09545')
     const previous = JSON.parse(JSON.stringify(ttrpgV19), (_key, value) => Array.isArray(value) ? value.filter(item => !['ttrpgOpenLearnedIdentities', 'ttrpgOpenCommonIdentities'].includes(item)) : value)
     expect(await hashCanonicalValue(snapshot)).toBe(AGENT_TOOL_SCHEMA_HASH_V1)
-    expect(AGENT_TOOL_SCHEMA_VERSION_V1).toBe('agent-read-tools-v21-narrative-query-v1')
+    expect(AGENT_TOOL_SCHEMA_VERSION_V1).toBe('agent-read-tools-v23-positioning-preparation-v1')
     expect(await hashCanonicalValue(previous)).toBe('633a1385e92901aa1bba03f99abe413a68161577954917bd4073394fad9fdc18')
     for (const skill of AGENT_SKILLS.filter(skill => !['prose.ttrpg-open-kp', 'prose.ttrpg-open-brief'].includes(skill.id))) expect(resolveAgentSkillContextSourceKeysV1(skill, { includeOptional: true, includeGatewayProviders: true }), skill.id).not.toContain(TTRPG_OPEN_COMMON_IDENTITY_SOURCE_V1)
   })

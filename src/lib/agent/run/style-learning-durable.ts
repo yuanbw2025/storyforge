@@ -162,7 +162,7 @@ async function prepareInput(
     throw new Error('文风学习登记 baseline 在读取期间变化；未调用模型，请重试。')
   }
   const template = readStyleLearningPromptTemplateV1()
-  const messages = buildStyleLearningAgentMessagesV1({ registeredContext: assembled.text, template })
+  const messages = buildStyleLearningAgentMessagesV1({ registeredContext: assembled.text, template, sampleCount: baseline.sampleCount, sampleWords: baseline.sampleWords })
   const modelInput = messages.map(message => message.content).join('\n')
   const missing = assembled.segments.find(segment => !modelInput.includes(segment.content))
   if (missing) throw new Error(`文风学习登记来源“${missing.label}”未实际进入模型 Prompt。`)

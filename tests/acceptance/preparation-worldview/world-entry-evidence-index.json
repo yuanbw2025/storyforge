@@ -1,0 +1,1256 @@
+{
+  "boundary": "Eval only; synthetic fixtures; no browser manuscripts, adoption or transport retries. Baseline production builders frozen at56a595ac1; new builders read from production modules.",
+  "conditions": "Within each pair same model, input, temperature0.3 and budgets6000/1600; plain-text wire in these studies, not full formal transport/Gateway; actual production parsers normalize before identical downstream task.",
+  "limitations": [
+    "Development cases, not reader evaluation or stable literary quality proof.",
+    "Round1 manifest pair invalid due evaluation compiler target; other9 old requests checked byte-identical after ES2020 fix.",
+    "Derived manifests are deterministic outputs, not model calls.",
+    "Invalid candidate pairs skipped downstream, original responses retained; no weakened parser or field stripping.",
+    "Full reverse parser retains existing nested-field normalization; normalized candidates rather than raw output feed downstream."
+  ],
+  "studies": [
+    {
+      "directory": "world-entry-round1",
+      "study": "world-entries",
+      "calls": 20,
+      "selectedCaseIds": [
+        "full-origins",
+        "suggest-everyday",
+        "expand-bounded",
+        "history-source",
+        "codex-tool",
+        "manifest-boundary"
+      ],
+      "model": "deepseek-flash",
+      "baselineCommit": "56a595ac1",
+      "sourceHashes": {
+        "src/lib/creation/worldview-content-skill.ts": "0932c049164cd8988005b1a9b686048603d3589de4f7ddd3dacde71719aa0313",
+        "src/lib/agent/worldview-field-copilot.ts": "b7f9decbb083a1ddf9263e8526afc10db096dafd3fccb1bde80abe46d1a7c537",
+        "tests/fixtures/preparation-worldview/cases.json": "b8b9db3b4034d4222d3e19a09e74f32b2280591efbd5cfdc7bec0b44f5d8d24e",
+        "tests/fixtures/preparation-worldview/world-entry-cases.json": "fbf2ada517d137778af3a797eabd5f86a4bad3aca88947819b74b1f7561af9e1",
+        "scripts/preparation-world-entry-evaluation.mjs": "0ebbbcad0a9b0d049c73dfb3b0539735461979a2f7735c6702c9c04ba4e4763f",
+        "tests/fixtures/preparation-worldview/baseline-world-entry-sources.json": "be5d66d2214b4cf0f40fa353b3b98793957a77441e69242c8a88f7c78cdcb080",
+        "src/lib/creation/world-entry-content-skill.ts": "61bb04cb19006ea97449b159403cd0c4b89518ed02ddd10f492ce94ba14df659",
+        "src/lib/ai/inspiration-reverse.ts": "eed80f69fbb13a8b47695391103b851c1840ada62d6db685cf12a192a388ddec",
+        "src/lib/ai/world-group-ai.ts": "457bb04ef7486d7488e3d46a046be4844eeaba913f6ddfd6de5c30ce41d0fc13",
+        "src/lib/history/ai-plan.ts": "5401eb748babae011cd4748a9915fe5e46c129c731575b2ee0ecd977e8546fe7",
+        "src/lib/ai/adapters/structured-extract-adapter.ts": "1bbd5c4b3a8b4f2d09f16ba1511fc8de156bf635f0832ecc79d15700991aa8a7",
+        "src/lib/ai/world-rules-manifest.ts": "279a73c958a7b7a8b46ca63fbda046a920af881b823d646f3f4d9b38f677268b",
+        "src/lib/ai/prompt-seeds-tools.ts": "2a41b67e8e4c44e08dbedd80cb9ca550bc94124f5e1b65e4b35d865e80445797"
+      },
+      "limitations": "Exploratory developer reading; no human author/reader study; single sample per condition; no literary or market guarantee."
+    },
+    {
+      "directory": "world-entry-round2",
+      "study": "world-entries",
+      "calls": 14,
+      "selectedCaseIds": [
+        "full-return",
+        "historical-life",
+        "codex-place",
+        "codex-source"
+      ],
+      "model": "deepseek-flash",
+      "baselineCommit": "56a595ac1",
+      "sourceHashes": {
+        "src/lib/creation/worldview-content-skill.ts": "0932c049164cd8988005b1a9b686048603d3589de4f7ddd3dacde71719aa0313",
+        "src/lib/agent/worldview-field-copilot.ts": "b7f9decbb083a1ddf9263e8526afc10db096dafd3fccb1bde80abe46d1a7c537",
+        "tests/fixtures/preparation-worldview/cases.json": "b8b9db3b4034d4222d3e19a09e74f32b2280591efbd5cfdc7bec0b44f5d8d24e",
+        "tests/fixtures/preparation-worldview/world-entry-cases.json": "fbf2ada517d137778af3a797eabd5f86a4bad3aca88947819b74b1f7561af9e1",
+        "scripts/preparation-world-entry-evaluation.mjs": "0ebbbcad0a9b0d049c73dfb3b0539735461979a2f7735c6702c9c04ba4e4763f",
+        "tests/fixtures/preparation-worldview/baseline-world-entry-sources.json": "be5d66d2214b4cf0f40fa353b3b98793957a77441e69242c8a88f7c78cdcb080",
+        "src/lib/creation/world-entry-content-skill.ts": "61bb04cb19006ea97449b159403cd0c4b89518ed02ddd10f492ce94ba14df659",
+        "src/lib/ai/inspiration-reverse.ts": "eed80f69fbb13a8b47695391103b851c1840ada62d6db685cf12a192a388ddec",
+        "src/lib/ai/world-group-ai.ts": "457bb04ef7486d7488e3d46a046be4844eeaba913f6ddfd6de5c30ce41d0fc13",
+        "src/lib/history/ai-plan.ts": "5401eb748babae011cd4748a9915fe5e46c129c731575b2ee0ecd977e8546fe7",
+        "src/lib/ai/adapters/structured-extract-adapter.ts": "1bbd5c4b3a8b4f2d09f16ba1511fc8de156bf635f0832ecc79d15700991aa8a7",
+        "src/lib/ai/world-rules-manifest.ts": "279a73c958a7b7a8b46ca63fbda046a920af881b823d646f3f4d9b38f677268b",
+        "src/lib/ai/prompt-seeds-tools.ts": "2a41b67e8e4c44e08dbedd80cb9ca550bc94124f5e1b65e4b35d865e80445797"
+      },
+      "limitations": "Exploratory developer reading; no human author/reader study; single sample per condition; no literary or market guarantee."
+    },
+    {
+      "directory": "world-entry-round3-focused",
+      "study": "world-entries",
+      "calls": 20,
+      "evaluationCompilerTarget": "ES2020",
+      "selectedCaseIds": [
+        "full-origins",
+        "suggest-everyday",
+        "expand-bounded",
+        "history-source",
+        "codex-place",
+        "manifest-boundary"
+      ],
+      "model": "deepseek-flash",
+      "baselineCommit": "56a595ac1",
+      "sourceHashes": {
+        "src/lib/creation/worldview-content-skill.ts": "0932c049164cd8988005b1a9b686048603d3589de4f7ddd3dacde71719aa0313",
+        "src/lib/agent/worldview-field-copilot.ts": "b7f9decbb083a1ddf9263e8526afc10db096dafd3fccb1bde80abe46d1a7c537",
+        "tests/fixtures/preparation-worldview/cases.json": "b8b9db3b4034d4222d3e19a09e74f32b2280591efbd5cfdc7bec0b44f5d8d24e",
+        "tests/fixtures/preparation-worldview/world-entry-cases.json": "fbf2ada517d137778af3a797eabd5f86a4bad3aca88947819b74b1f7561af9e1",
+        "scripts/preparation-world-entry-evaluation.mjs": "1784cc27c3e3ca29983cde7ddd6e8315a8cd051f51bea764023599c9ac491e4f",
+        "tests/fixtures/preparation-worldview/baseline-world-entry-sources.json": "be5d66d2214b4cf0f40fa353b3b98793957a77441e69242c8a88f7c78cdcb080",
+        "src/lib/creation/world-entry-content-skill.ts": "2f09ddf4c4642e0170ea7cf8711330324dc7e26a9b835717c7d4878894d90fe9",
+        "src/lib/ai/inspiration-reverse.ts": "eed80f69fbb13a8b47695391103b851c1840ada62d6db685cf12a192a388ddec",
+        "src/lib/ai/world-group-ai.ts": "457bb04ef7486d7488e3d46a046be4844eeaba913f6ddfd6de5c30ce41d0fc13",
+        "src/lib/history/ai-plan.ts": "5401eb748babae011cd4748a9915fe5e46c129c731575b2ee0ecd977e8546fe7",
+        "src/lib/ai/adapters/structured-extract-adapter.ts": "1bbd5c4b3a8b4f2d09f16ba1511fc8de156bf635f0832ecc79d15700991aa8a7",
+        "src/lib/ai/world-rules-manifest.ts": "279a73c958a7b7a8b46ca63fbda046a920af881b823d646f3f4d9b38f677268b",
+        "src/lib/ai/prompt-seeds-tools.ts": "2a41b67e8e4c44e08dbedd80cb9ca550bc94124f5e1b65e4b35d865e80445797"
+      },
+      "limitations": "Exploratory developer reading; no human author/reader study; single sample per condition; no literary or market guarantee."
+    },
+    {
+      "directory": "world-entry-round4-agnes-format",
+      "study": "world-entries",
+      "calls": 4,
+      "evaluationCompilerTarget": "ES2020",
+      "selectedCaseIds": [
+        "expand-bounded"
+      ],
+      "model": "agnes-2.5-flash",
+      "baselineCommit": "56a595ac1",
+      "sourceHashes": {
+        "src/lib/creation/worldview-content-skill.ts": "0932c049164cd8988005b1a9b686048603d3589de4f7ddd3dacde71719aa0313",
+        "src/lib/agent/worldview-field-copilot.ts": "b7f9decbb083a1ddf9263e8526afc10db096dafd3fccb1bde80abe46d1a7c537",
+        "tests/fixtures/preparation-worldview/cases.json": "b8b9db3b4034d4222d3e19a09e74f32b2280591efbd5cfdc7bec0b44f5d8d24e",
+        "tests/fixtures/preparation-worldview/world-entry-cases.json": "fbf2ada517d137778af3a797eabd5f86a4bad3aca88947819b74b1f7561af9e1",
+        "scripts/preparation-world-entry-evaluation.mjs": "1784cc27c3e3ca29983cde7ddd6e8315a8cd051f51bea764023599c9ac491e4f",
+        "tests/fixtures/preparation-worldview/baseline-world-entry-sources.json": "be5d66d2214b4cf0f40fa353b3b98793957a77441e69242c8a88f7c78cdcb080",
+        "src/lib/creation/world-entry-content-skill.ts": "c1d66b1bd85c44db13fe7bcb45a7712fa016be44b3f0da7a207d9ce07bcd8cb6",
+        "src/lib/ai/inspiration-reverse.ts": "eed80f69fbb13a8b47695391103b851c1840ada62d6db685cf12a192a388ddec",
+        "src/lib/ai/world-group-ai.ts": "457bb04ef7486d7488e3d46a046be4844eeaba913f6ddfd6de5c30ce41d0fc13",
+        "src/lib/history/ai-plan.ts": "5401eb748babae011cd4748a9915fe5e46c129c731575b2ee0ecd977e8546fe7",
+        "src/lib/ai/adapters/structured-extract-adapter.ts": "1bbd5c4b3a8b4f2d09f16ba1511fc8de156bf635f0832ecc79d15700991aa8a7",
+        "src/lib/ai/world-rules-manifest.ts": "279a73c958a7b7a8b46ca63fbda046a920af881b823d646f3f4d9b38f677268b",
+        "src/lib/ai/prompt-seeds-tools.ts": "2a41b67e8e4c44e08dbedd80cb9ca550bc94124f5e1b65e4b35d865e80445797"
+      },
+      "limitations": "Exploratory developer reading; no human author/reader study; single sample per condition; no literary or market guarantee."
+    }
+  ],
+  "records": [
+    {
+      "study": "world-entry-round1",
+      "id": "codex-tool-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "21690c1cb5b82eed6400a8603c7078b2c8f639c668b2f18a92e7f34b54c9197d",
+      "usage": {
+        "prompt_tokens": 487,
+        "completion_tokens": 113,
+        "total_tokens": 600,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 487
+      },
+      "promptHash": "a1119bb227b823851d624ff3b2acc8d1610f9f2d47098707a312aaf579f69ea1"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "codex-tool-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "12773998fa44ae5cb8e23032890c9c02d49e1356695e1798679f72fc5a503745",
+      "usage": {
+        "prompt_tokens": 388,
+        "completion_tokens": 96,
+        "total_tokens": 484,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 388
+      },
+      "promptHash": "c5c19a598103c43379fb7678b7619a92c4e5532661a5875cd0553461e3b381cb"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "codex-tool-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "f6a4a50fa0be94e770abbb06204e25e0164674e1f18425cf4709709b74ae8b86",
+      "usage": {
+        "prompt_tokens": 858,
+        "completion_tokens": 411,
+        "total_tokens": 1269,
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        },
+        "prompt_cache_hit_tokens": 128,
+        "prompt_cache_miss_tokens": 730
+      },
+      "promptHash": "a5be9f152a059192cf6fcd76784175e788d5d70a48595c846ac898c99e330ecb",
+      "normalizedCandidateHash": "f6a4a50fa0be94e770abbb06204e25e0164674e1f18425cf4709709b74ae8b86"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "codex-tool-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "d67b58ac803e15e8d8a98f9819e1eefe65a89b3ab03086559b5698e91755c04b",
+      "usage": {
+        "prompt_tokens": 673,
+        "completion_tokens": 312,
+        "total_tokens": 985,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 673
+      },
+      "promptHash": "1dcec4df89a16ccce00a18ef2e26d62f9e14297e7f0058b63c2c152d16011b2d",
+      "normalizedCandidateHash": "d67b58ac803e15e8d8a98f9819e1eefe65a89b3ab03086559b5698e91755c04b"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "expand-bounded-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "cb2a5bab9fc136e1565913888ba13af097fd6f31cd6cd0e7d63b79d26f262599",
+      "usage": {
+        "prompt_tokens": 826,
+        "completion_tokens": 933,
+        "total_tokens": 1759,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        },
+        "prompt_cache_hit_tokens": 256,
+        "prompt_cache_miss_tokens": 570
+      },
+      "promptHash": "23489e5dd355add16eccabe36b99391efe2cc5b5a81d228ad3f3025b43bd40a2"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "expand-bounded-new.validation-failure",
+      "failure": {
+        "error": "invalid-candidate",
+        "reason": "世界扩写候选只能包含 climateByRegion、continentLayout、factionLayout、powerHierarchy、races、worldOrigin。",
+        "originalRetained": true
+      }
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "expand-bounded-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "dbfc6c015fae8cb311a0d8af1c492e6cf815c1bf67b01d2adbc3879697ab4cf1",
+      "usage": {
+        "prompt_tokens": 601,
+        "completion_tokens": 815,
+        "total_tokens": 1416,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 601
+      },
+      "promptHash": "59cd9eee07385fd2dac6e1ec11e268240bd82ac50094945b626ae96cde495e6d",
+      "normalizedCandidateHash": "25177477705909d8912626dac05d68ec922d01d2e571988cacc4c2ae5c43aa49"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "full-origins-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "0adca6a9fbfb2ec161789420cd76af33fb689ed9863d786f89ece5e9ab742ce1",
+      "usage": {
+        "prompt_tokens": 1678,
+        "completion_tokens": 127,
+        "total_tokens": 1805,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1678
+      },
+      "promptHash": "fb281f8bf44200625fc3f33c8a4a25da246ec734c7d2de35c6f77dcadedf6265"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "full-origins-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "5d630853df275bc03eefd69ace76b775e3ae3f9d70a476550afc78a3aef21b8f",
+      "usage": {
+        "prompt_tokens": 1723,
+        "completion_tokens": 92,
+        "total_tokens": 1815,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1723
+      },
+      "promptHash": "11e7cdc397a1b055d88f100809158fd3d33e686c883363c65ec7f5d2ce6f4289"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "full-origins-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "933c96fbb270ed356f4e739a2598704d4fded5bf2762875ecdff6da414f096bd",
+      "usage": {
+        "prompt_tokens": 1227,
+        "completion_tokens": 1718,
+        "total_tokens": 2945,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1227
+      },
+      "promptHash": "0509c995eb2f8507cb88464089ecc1a4847bbf3595016fe7fb4fa018f9b58c0b",
+      "normalizedCandidateHash": "ac06948855bf241c47eff6dc8cb9a3361ae887d01bf33696fa82613a493fbf24"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "full-origins-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "6f8baf8c242cfecd8c42043072c1c5368063d9f62a9b268b5039b63ae582e92f",
+      "usage": {
+        "prompt_tokens": 903,
+        "completion_tokens": 1796,
+        "total_tokens": 2699,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "prompt_cache_hit_tokens": 512,
+        "prompt_cache_miss_tokens": 391
+      },
+      "promptHash": "03f5ed43da288f728dc6b8f573bd0d586d5283f608efed9fdc357ce599f2b550",
+      "normalizedCandidateHash": "ebe380d285628360ffc0777bb176c674e2bd56f905af4296f44295cbf2a25f26"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "history-source-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "53e958c3ab1f65166cf4b2340f891a24f0f191f6c3044f271ceff28085296224",
+      "usage": {
+        "prompt_tokens": 2135,
+        "completion_tokens": 111,
+        "total_tokens": 2246,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 2135
+      },
+      "promptHash": "3c80acb90c057f853eb25de4246bd6832c0f257f8d528b55cd795ce33d748e5a"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "history-source-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "c1bf006cf7d55ff6799dbded76bfe5c67f4e2b66b8aa5282f1bf43419e609285",
+      "usage": {
+        "prompt_tokens": 1608,
+        "completion_tokens": 120,
+        "total_tokens": 1728,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1608
+      },
+      "promptHash": "f7fabcde0d7cf8088e07e5ab1aa2febf388bb9f44e202a06dc08b10a009e4335"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "history-source-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "29f088c3079c869b3c9b33251560b90f4df95edb8b17ac5d9a5e5c1728274eaa",
+      "usage": {
+        "prompt_tokens": 1281,
+        "completion_tokens": 2054,
+        "total_tokens": 3335,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1281
+      },
+      "promptHash": "03d7d49e316dee0e8edaec4cec6f9c746232773b557b9f911fe57eb6c3421ef6",
+      "normalizedCandidateHash": "29f088c3079c869b3c9b33251560b90f4df95edb8b17ac5d9a5e5c1728274eaa"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "history-source-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "a39604d9325e85a42320e212aa78ea5e3c2c4daaa07815ac142a64bf7d34d2c0",
+      "usage": {
+        "prompt_tokens": 1017,
+        "completion_tokens": 1528,
+        "total_tokens": 2545,
+        "prompt_tokens_details": {
+          "cached_tokens": 384
+        },
+        "prompt_cache_hit_tokens": 384,
+        "prompt_cache_miss_tokens": 633
+      },
+      "promptHash": "5d40044f43d2afda0634801a43f562260a507b919c74d3df13f0f312ff1fde11",
+      "normalizedCandidateHash": "a39604d9325e85a42320e212aa78ea5e3c2c4daaa07815ac142a64bf7d34d2c0"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "manifest-boundary-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "05b2443a2a5c487de42b755a332be3a2b83e708904dc5ba4cf9d3b6e830f0cb8",
+      "usage": {
+        "prompt_tokens": 479,
+        "completion_tokens": 66,
+        "total_tokens": 545,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 479
+      },
+      "promptHash": "b9dea30638b2d45f8e06b635fd54d7135e2f0e1c24152f84834c7a5b4c5e471a",
+      "excludedFromControlledComparison": "Old formatter ES5 Map iteration omitted author rule entries; retained, corrected in round3."
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "manifest-boundary-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "3f1e7bd7e059df25bce844af11fcf172580e04e733a091141a1b7f252e926c65",
+      "usage": {
+        "prompt_tokens": 264,
+        "completion_tokens": 65,
+        "total_tokens": 329,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 264
+      },
+      "promptHash": "1a284d27c0f3a03617ba231cf6ff275e8efa84e5536530f557a34855b6b9b54d",
+      "excludedFromControlledComparison": "Old formatter ES5 Map iteration omitted author rule entries; retained, corrected in round3."
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "manifest-boundary-new",
+      "kind": "derived-manifest",
+      "model": null,
+      "materialHash": "a5733ddc0c0e77487bd810d179b7e7d33fbab2c2590ba987c5cb07c7213d2907",
+      "excludedFromControlledComparison": "Old formatter ES5 Map iteration omitted author rule entries; retained, corrected in round3."
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "manifest-boundary-old",
+      "kind": "derived-manifest",
+      "model": null,
+      "materialHash": "0029fe85b7c6e222092f0ee9c0de188a96a872af6aa378b06553e68facaa02e6",
+      "excludedFromControlledComparison": "Old formatter ES5 Map iteration omitted author rule entries; retained, corrected in round3."
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "suggest-everyday-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "6a548bc9da70696b47902756c3107fcc80af460a396a14897248feeb25376f2d",
+      "usage": {
+        "prompt_tokens": 764,
+        "completion_tokens": 120,
+        "total_tokens": 884,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 764
+      },
+      "promptHash": "05e38b39e7591cbda56288bccb4d394b0432f1fc605b06dc9531b5b7568ddcd7"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "suggest-everyday-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "8b08b3128110824d4cf085f77674f0420df2d8096c7c0260edd02819d6057d65",
+      "usage": {
+        "prompt_tokens": 665,
+        "completion_tokens": 108,
+        "total_tokens": 773,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 665
+      },
+      "promptHash": "934670ea8d00f3b0d30925b6a18d7036d78a7d541159d06a1596a770db549df2"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "suggest-everyday-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "c5d72d337b4b886778de3bf5e560ba371a6a507f83b2d0c5049af4b89c9eafda",
+      "usage": {
+        "prompt_tokens": 666,
+        "completion_tokens": 771,
+        "total_tokens": 1437,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 666
+      },
+      "promptHash": "21aab98b8d591702adc8c9db11ff9729f292a09a2009b3609cb12888220453ec",
+      "normalizedCandidateHash": "4eb091e6a69ee0f8f8c7844b90a355407c3ba5280fad8ce8b9c4e5e7e7165f23"
+    },
+    {
+      "study": "world-entry-round1",
+      "id": "suggest-everyday-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "b666312c774f7794d2b7d3789861251af63a5465b72c527a9e825b2cdf517c79",
+      "usage": {
+        "prompt_tokens": 456,
+        "completion_tokens": 672,
+        "total_tokens": 1128,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 456
+      },
+      "promptHash": "07c3e6e00039bef0222dec1474aee6743fe25c831ff958ea7ec402a4dcd65605",
+      "normalizedCandidateHash": "32185f7882933b10b5f03b276655a11e189ea9cffc24be43911859a2e00aaff6"
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "codex-place-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "e883e704970de79860571ea6c2c43bc99fc275bedbd02fd7cb021fef5538aefa",
+      "usage": {
+        "prompt_tokens": 819,
+        "completion_tokens": 844,
+        "total_tokens": 1663,
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        },
+        "prompt_cache_hit_tokens": 128,
+        "prompt_cache_miss_tokens": 691
+      },
+      "promptHash": "012ca5647fd538d060b0eec207b1a04b9848bbd9f84c157d8a7fc38500f83a3f"
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "codex-place-new.validation-failure",
+      "failure": {
+        "error": "invalid-candidate",
+        "reason": "词条提取输出不是严格 JSON。",
+        "originalRetained": true
+      }
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "codex-place-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "d7d0c856f99300dbc296068fbcee9ec13febc71fb09ee0fea03c0197575384e2",
+      "usage": {
+        "prompt_tokens": 634,
+        "completion_tokens": 328,
+        "total_tokens": 962,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        },
+        "prompt_cache_hit_tokens": 256,
+        "prompt_cache_miss_tokens": 378
+      },
+      "promptHash": "2464543a7938da88ce838125f30882258d942d72443bf7fa59197226f59b1d1f",
+      "normalizedCandidateHash": "d7d0c856f99300dbc296068fbcee9ec13febc71fb09ee0fea03c0197575384e2"
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "codex-source-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "7853d0bc3e267b06e9cec3151b2c3a64a5d87ceb5b55de8191f698dabae19bc2",
+      "usage": {
+        "prompt_tokens": 393,
+        "completion_tokens": 108,
+        "total_tokens": 501,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 393
+      },
+      "promptHash": "4d25ccad34f6096dba429ade46db805a54372429b58e7a820ea0c3ed577826c6"
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "codex-source-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "3af023992cfd4702038bc7d9c90b1c7a9c36f80110aa6c35d4e7f29f9ab62deb",
+      "usage": {
+        "prompt_tokens": 292,
+        "completion_tokens": 94,
+        "total_tokens": 386,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 292
+      },
+      "promptHash": "c2cb5658913ad9b7f46e6cf2898c6a606e4680cbac25de00097caa2855b9df82"
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "codex-source-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "0f557833f6399584731c7c97f74dea6e40ae1889b9cba540abc022f0fd5de323",
+      "usage": {
+        "prompt_tokens": 967,
+        "completion_tokens": 392,
+        "total_tokens": 1359,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 967
+      },
+      "promptHash": "9c11260d4fe015d0e8890d9951f37fd7683b6ae0e6af1dbcbacf0be195a1d5f4",
+      "normalizedCandidateHash": "24747ce955ea1ff4b4bac4a6d6cb03ae1360d6bc22b94f5c9d8e1bde93e69bd0"
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "codex-source-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "d341f3e7d03cdd5b36197962635afe2e4626f93c29edcf8b0528a25640b48583",
+      "usage": {
+        "prompt_tokens": 768,
+        "completion_tokens": 214,
+        "total_tokens": 982,
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        },
+        "prompt_cache_hit_tokens": 128,
+        "prompt_cache_miss_tokens": 640
+      },
+      "promptHash": "572a77f808cbbe3c090ed6e7089d07836dfa7108fa9f263f220d96ba1ea2c2e7",
+      "normalizedCandidateHash": "d341f3e7d03cdd5b36197962635afe2e4626f93c29edcf8b0528a25640b48583"
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "full-return-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "53cd31625c93e2bee640607062ced848bf74a5e9f8465ed9a9fc66dd61af4993",
+      "usage": {
+        "prompt_tokens": 837,
+        "completion_tokens": 113,
+        "total_tokens": 950,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 837
+      },
+      "promptHash": "4b074cb7ad6af3e6cd2ed92edd0c1222b4e490cdfda57d5bb9651bed4d3b7562"
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "full-return-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "36fa379d43a8fa7b1f09fc9ab84a5506e980f8bc8d97d79780a64ab35c5d721e",
+      "usage": {
+        "prompt_tokens": 1115,
+        "completion_tokens": 113,
+        "total_tokens": 1228,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1115
+      },
+      "promptHash": "c0b05dc055df61291c392d70793b8e46470e63c879e76358c24a7269ac60d75f"
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "full-return-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "c7bc90ad292a5d9d6a6f16216b0248bd877290c663a48432ee0fed0bae033dfd",
+      "usage": {
+        "prompt_tokens": 1098,
+        "completion_tokens": 919,
+        "total_tokens": 2017,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1098
+      },
+      "promptHash": "621921eecf0e491caf64ec73d7fd8e4481da12b58208db82f770010e5cbe21fa",
+      "normalizedCandidateHash": "20f5f57a2d177a8826f55a62589c15c285bd837f41749b4c9e5634409a72403b"
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "full-return-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "389f692d1429a8bf0ffe3ddba092067642987b4d37d88a61f4a4eb259ca9fbb3",
+      "usage": {
+        "prompt_tokens": 799,
+        "completion_tokens": 1197,
+        "total_tokens": 1996,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 799
+      },
+      "promptHash": "d3bc4863adb2b08bdd82f5798c976b99b45f703edcbadef02d308108be1e2255",
+      "normalizedCandidateHash": "8d3b50a1dcd56ee56d5d425a1e9f0663dfaaa8fb11b09a2da9024cd5fd26b4e3"
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "historical-life-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "e0a7c679621f2b9884611a637fbd2769e391cba894a594f40d419eb8507f2904",
+      "usage": {
+        "prompt_tokens": 1015,
+        "completion_tokens": 130,
+        "total_tokens": 1145,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1015
+      },
+      "promptHash": "343b4072d601ee0d6362af7e7915517dc31c26532762fc188ad5de2468586f80"
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "historical-life-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "a223dce56809bec433ec590b188dde78f6c8db16201d6a804c7d58c34c2303e1",
+      "usage": {
+        "prompt_tokens": 1050,
+        "completion_tokens": 127,
+        "total_tokens": 1177,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1050
+      },
+      "promptHash": "0172d9fd16fa24280bef79de0e53c8ff5050df0173ff6fcf5d1b2eadc18b0df0"
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "historical-life-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "41acf07d9b32d158d78beec399f325a3922b4bfc958cbfba19ed0e984c00e732",
+      "usage": {
+        "prompt_tokens": 896,
+        "completion_tokens": 938,
+        "total_tokens": 1834,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 896
+      },
+      "promptHash": "e023b2e952a8d200d8f35c6d573cf52dc5ee2344ab6ba12eb3595df8ef836d10",
+      "normalizedCandidateHash": "41acf07d9b32d158d78beec399f325a3922b4bfc958cbfba19ed0e984c00e732"
+    },
+    {
+      "study": "world-entry-round2",
+      "id": "historical-life-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "c178fc3d616fd9ea6abd1ae96519ebcf8427b811df4ace45724bcd74c46383cc",
+      "usage": {
+        "prompt_tokens": 625,
+        "completion_tokens": 973,
+        "total_tokens": 1598,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 625
+      },
+      "promptHash": "b42046928e8c81d2730475f3a326328f2c572f62cc45280290c7d663b5dbb578",
+      "normalizedCandidateHash": "c178fc3d616fd9ea6abd1ae96519ebcf8427b811df4ace45724bcd74c46383cc"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "codex-place-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "5d53edcc088f017ab3860ed1d84096a99afcf45a93f1271cb1f22454baa6a70e",
+      "usage": {
+        "prompt_tokens": 446,
+        "completion_tokens": 106,
+        "total_tokens": 552,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 446
+      },
+      "promptHash": "c2ba876995821e0b811401b36e53d0209bde5ae82326e4dcdf1731793c7b11e2"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "codex-place-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "59d080bc20812418481afd85faf241a74eec4093978193fa5fb0210cb64b4ad4",
+      "usage": {
+        "prompt_tokens": 365,
+        "completion_tokens": 91,
+        "total_tokens": 456,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 365
+      },
+      "promptHash": "9a7472bc03ddb7f4716f029f1c2f15ea6b56153d36e76f208a25989ef626b5a1"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "codex-place-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "17a3339114a61f7e73b26470da9437cd605d9d70ebb871501893bcfdd3cb37c8",
+      "usage": {
+        "prompt_tokens": 854,
+        "completion_tokens": 375,
+        "total_tokens": 1229,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        },
+        "prompt_cache_hit_tokens": 256,
+        "prompt_cache_miss_tokens": 598
+      },
+      "promptHash": "1235014c98a68586be44429d98722b41be7179a8a2d0e06d255e75d3701c30db",
+      "normalizedCandidateHash": "17a3339114a61f7e73b26470da9437cd605d9d70ebb871501893bcfdd3cb37c8"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "codex-place-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "c3a0137227384a09e53c68d4e12a7001f41706558ced7d0eddbab66c16c2fee6",
+      "usage": {
+        "prompt_tokens": 634,
+        "completion_tokens": 294,
+        "total_tokens": 928,
+        "prompt_tokens_details": {
+          "cached_tokens": 384
+        },
+        "prompt_cache_hit_tokens": 384,
+        "prompt_cache_miss_tokens": 250
+      },
+      "promptHash": "2464543a7938da88ce838125f30882258d942d72443bf7fa59197226f59b1d1f",
+      "normalizedCandidateHash": "c3a0137227384a09e53c68d4e12a7001f41706558ced7d0eddbab66c16c2fee6"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "expand-bounded-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "f1bc07c92feea8b9c0e70750185fc173161d6eedee46959f8b4df0e8e4066534",
+      "usage": {
+        "prompt_tokens": 853,
+        "completion_tokens": 1059,
+        "total_tokens": 1912,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "prompt_cache_hit_tokens": 512,
+        "prompt_cache_miss_tokens": 341
+      },
+      "promptHash": "1b0966b4fed380d331ecd8827c4e0a0c065e1255e73f72f9b9cbe1a8e60e0832"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "expand-bounded-new.validation-failure",
+      "failure": {
+        "error": "invalid-candidate",
+        "reason": "世界扩写候选只能包含 climateByRegion、continentLayout、factionLayout、powerHierarchy、races、worldOrigin。",
+        "originalRetained": true
+      }
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "expand-bounded-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "3b59e3df35faeeb3f3418ad1f5b01e7ccde6490f92cf36f2f7c226f0c5915063",
+      "usage": {
+        "prompt_tokens": 601,
+        "completion_tokens": 882,
+        "total_tokens": 1483,
+        "prompt_tokens_details": {
+          "cached_tokens": 384
+        },
+        "prompt_cache_hit_tokens": 384,
+        "prompt_cache_miss_tokens": 217
+      },
+      "promptHash": "59cd9eee07385fd2dac6e1ec11e268240bd82ac50094945b626ae96cde495e6d",
+      "normalizedCandidateHash": "100acd65995333437d8e0000317ffc9d66e96bb8b1d82f2b449bdc167ce33c36"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "full-origins-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "9d1c61207b05fe1c40268676ff97c592f0c9d236a77ffd67d834f03cfc5e6837",
+      "usage": {
+        "prompt_tokens": 1305,
+        "completion_tokens": 100,
+        "total_tokens": 1405,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1305
+      },
+      "promptHash": "2b83b02c4851cae191caa7a86ae9e928fe1dbdc89aa592ec9b66bc642afbd91b"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "full-origins-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "78b26641b7e94113fec47a005fbb6e2a9869f910cbd3716e1ae849aca0686431",
+      "usage": {
+        "prompt_tokens": 2065,
+        "completion_tokens": 127,
+        "total_tokens": 2192,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 2065
+      },
+      "promptHash": "1f79320563cfa81ef49b67d8fe1219b02481f40f320cba3e992cad77fa0c6698"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "full-origins-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "960e7a1e0dab55499ee1b014711bda54bddad7dbbe274b9d434117f0fb89b603",
+      "usage": {
+        "prompt_tokens": 1284,
+        "completion_tokens": 1346,
+        "total_tokens": 2630,
+        "prompt_tokens_details": {
+          "cached_tokens": 640
+        },
+        "prompt_cache_hit_tokens": 640,
+        "prompt_cache_miss_tokens": 644
+      },
+      "promptHash": "ab1624d3cd6a86b80ad518c442b3ee01e9ea068ccee756926508ee06a2c1d30b",
+      "normalizedCandidateHash": "6f33324d794d3f6e6e7bf88bd4361c1933b8a5005357ec77399a2706a79cf95e"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "full-origins-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "d8f032fa4f042ca80ada947610b4ce1ea06d5fd3c65894ae69cae88cccb25261",
+      "usage": {
+        "prompt_tokens": 903,
+        "completion_tokens": 2169,
+        "total_tokens": 3072,
+        "prompt_tokens_details": {
+          "cached_tokens": 768
+        },
+        "prompt_cache_hit_tokens": 768,
+        "prompt_cache_miss_tokens": 135
+      },
+      "promptHash": "03f5ed43da288f728dc6b8f573bd0d586d5283f608efed9fdc357ce599f2b550",
+      "normalizedCandidateHash": "07084a69cc6c7a5995c854af28cf2863feb2faaf4e49cdc9ce4e26741195dea7"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "history-source-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "953bcafef0a3dc2863ab6e458fc56ea5b043cf5c89d3dde9693c113d66e56dd8",
+      "usage": {
+        "prompt_tokens": 2392,
+        "completion_tokens": 116,
+        "total_tokens": 2508,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 2392
+      },
+      "promptHash": "d9b10744d06cd8eb533cf6e0736357f135ea74906b9ece573dd188d4c72600c6"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "history-source-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "c09a347ca2dbe43e7210357b834d19525f3740b4b719bc3edba7d80bcd16c9a1",
+      "usage": {
+        "prompt_tokens": 1670,
+        "completion_tokens": 137,
+        "total_tokens": 1807,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1670
+      },
+      "promptHash": "ae9eec0aa8d42b76c2d3664d3c06b7d68feacfc17ad1eb365e6fa762a4ac54d9"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "history-source-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "d4065477a3b8a2230027d822b6d2bb4f7741a3346b1379ec4d624d95a72545b7",
+      "usage": {
+        "prompt_tokens": 1315,
+        "completion_tokens": 2313,
+        "total_tokens": 3628,
+        "prompt_tokens_details": {
+          "cached_tokens": 640
+        },
+        "prompt_cache_hit_tokens": 640,
+        "prompt_cache_miss_tokens": 675
+      },
+      "promptHash": "2e6f69050fde39a6d76e26ada1c49a86ea16348542bb1b6460e9f36db6e87059",
+      "normalizedCandidateHash": "d4065477a3b8a2230027d822b6d2bb4f7741a3346b1379ec4d624d95a72545b7"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "history-source-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "48cc84e7b925d68c196969c0f0f2043664bdbec366f897bdf88dd4a7187c1803",
+      "usage": {
+        "prompt_tokens": 1017,
+        "completion_tokens": 1590,
+        "total_tokens": 2607,
+        "prompt_tokens_details": {
+          "cached_tokens": 768
+        },
+        "prompt_cache_hit_tokens": 768,
+        "prompt_cache_miss_tokens": 249
+      },
+      "promptHash": "5d40044f43d2afda0634801a43f562260a507b919c74d3df13f0f312ff1fde11",
+      "normalizedCandidateHash": "48cc84e7b925d68c196969c0f0f2043664bdbec366f897bdf88dd4a7187c1803"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "manifest-boundary-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "31788f8aa9083c06d131d322ff1869ee7f59926cc5d08b7a49aa02d7e86f7b5a",
+      "usage": {
+        "prompt_tokens": 479,
+        "completion_tokens": 67,
+        "total_tokens": 546,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        },
+        "prompt_cache_hit_tokens": 256,
+        "prompt_cache_miss_tokens": 223
+      },
+      "promptHash": "b9dea30638b2d45f8e06b635fd54d7135e2f0e1c24152f84834c7a5b4c5e471a"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "manifest-boundary-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "1c23cc9b2445ae245dcfa28a7c81ac1afc8e16e75c9508bd98b92800bcacab61",
+      "usage": {
+        "prompt_tokens": 322,
+        "completion_tokens": 56,
+        "total_tokens": 378,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 322
+      },
+      "promptHash": "22d3073771eb5ec814e71f17d53c30b2a3f941a9efa72bd7244d76f5cd49d3db"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "manifest-boundary-new",
+      "kind": "derived-manifest",
+      "model": null,
+      "materialHash": "a5733ddc0c0e77487bd810d179b7e7d33fbab2c2590ba987c5cb07c7213d2907"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "manifest-boundary-old",
+      "kind": "derived-manifest",
+      "model": null,
+      "materialHash": "30ddc1f7a8bc14dfd583ca13eea2ca5260358806c9122022d24edb00966f3083"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "suggest-everyday-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "7abe416c8522a815005b187186e95f9e93953ce427524c810b9e1aa266ae7261",
+      "usage": {
+        "prompt_tokens": 601,
+        "completion_tokens": 131,
+        "total_tokens": 732,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 601
+      },
+      "promptHash": "e0b13e9630c877e44ea84cc462a5eff7dc462567e11f575d7dc754790695ce9c"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "suggest-everyday-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "3bfb78f913fe466960b6e206a59fc16a056c60a2967a640e6f57db05cf384909",
+      "usage": {
+        "prompt_tokens": 713,
+        "completion_tokens": 130,
+        "total_tokens": 843,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 713
+      },
+      "promptHash": "2b2689da6f8da9bd5b12a1abfdfbdb04bb9a5bfdb24ad477c0687f9fce702f8d"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "suggest-everyday-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "f3fc342a287b6ac8f1684f9abd700f7e4ea132811c0cea9ea4585fc722d48cef",
+      "usage": {
+        "prompt_tokens": 713,
+        "completion_tokens": 586,
+        "total_tokens": 1299,
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        },
+        "prompt_cache_hit_tokens": 128,
+        "prompt_cache_miss_tokens": 585
+      },
+      "promptHash": "394e7cbfc1407e602d76c246b66d25b182c883c28dff512593407caab13a1175",
+      "normalizedCandidateHash": "c685df8f0506c7463e4b6c5149c12778169bdfc2907d2e09287217c406e12fd2"
+    },
+    {
+      "study": "world-entry-round3-focused",
+      "id": "suggest-everyday-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "e5856d0058911962a586457d0c6955fd78dd03232c890669d8ea6b1b3c6d9b7b",
+      "usage": {
+        "prompt_tokens": 456,
+        "completion_tokens": 720,
+        "total_tokens": 1176,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        },
+        "prompt_cache_hit_tokens": 256,
+        "prompt_cache_miss_tokens": 200
+      },
+      "promptHash": "07c3e6e00039bef0222dec1474aee6743fe25c831ff958ea7ec402a4dcd65605",
+      "normalizedCandidateHash": "1cb80dd958d6bfdf79a3dc7525658de8dd46a91f59991e16517ea28dc91383a4"
+    },
+    {
+      "study": "world-entry-round4-agnes-format",
+      "id": "expand-bounded-apply-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "1529a8876a13ac5406097b76c6208d8d80092f083948f6996c072d5cfb0df5dc",
+      "usage": {
+        "completion_tokens": 161,
+        "prompt_tokens": 904,
+        "total_tokens": 1065,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      },
+      "promptHash": "81d2d8f8b211c9560965758af2b8b6bd73a1eee4865c456a828a17f968242457"
+    },
+    {
+      "study": "world-entry-round4-agnes-format",
+      "id": "expand-bounded-apply-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "ede562bcfa106d2c248264582fc7381200ae632db5b21d5f75780369a6edc9ae",
+      "usage": {
+        "completion_tokens": 162,
+        "prompt_tokens": 975,
+        "total_tokens": 1137,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      },
+      "promptHash": "59d89000e9a2df1d04a0568da0dd999abbf56920140f9621cd7cff942013c44f"
+    },
+    {
+      "study": "world-entry-round4-agnes-format",
+      "id": "expand-bounded-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "6f015d90bfc3cf1f08f7f796a0fb16d59bcdef151c1536aae4c021f6fbac907e",
+      "usage": {
+        "completion_tokens": 562,
+        "prompt_tokens": 1152,
+        "total_tokens": 1714,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      },
+      "promptHash": "ef78d164378c24a51e4ddb858c9f7f8c63340951348fc5846366484617867ea0",
+      "normalizedCandidateHash": "2fa656d3b909a53bd52df4ed2db1e54290db205dfcee304fc74a12d762d67031"
+    },
+    {
+      "study": "world-entry-round4-agnes-format",
+      "id": "expand-bounded-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "5c965b13f962aa8fdc6d8f9af3b5ef8085da25ca42d284d362fac33b2e82cc76",
+      "usage": {
+        "completion_tokens": 632,
+        "prompt_tokens": 892,
+        "total_tokens": 1524,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      },
+      "promptHash": "59cd9eee07385fd2dac6e1ec11e268240bd82ac50094945b626ae96cde495e6d",
+      "normalizedCandidateHash": "d3369d4586475d5ae4e2601b93c1bc0d01c417ca267e1ca5a80597bdbe7eaf4e"
+    }
+  ]
+}

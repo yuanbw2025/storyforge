@@ -1,3 +1,4 @@
+import { isInspirationPreparationMode, parseInspirationPreparationDraft } from '../inspiration/preparation'
 import { isCanonFactV1 } from '../fact-ledger/canon-eligibility'
 /**
  * CONTEXT_SOURCES · AI 上下文读取源的唯一注册表。
@@ -1482,8 +1483,9 @@ async function readUserStyleProfile(projectId: number, scope?: WorkspaceScope): 
 async function readInspirationWorkspaceContext(
   projectId: number,
   selectedIds: string[] | undefined,
-  mode: 'single' | 'multiworld' = 'single',
+  mode: import('../types/inspiration-workspace').InspirationResultMode = 'single',
   scope?: WorkspaceScope,
+  directionIndex?: number,
 ): Promise<string> {
   if (!selectedIds?.length) return ''
   const resolved = scope ?? await resolveScope({ projectId })
@@ -1491,10 +1493,21 @@ async function readInspirationWorkspaceContext(
   if (!workspace) return ''
   const fragments = parseInspirationFragments(workspace.fragments)
   const versions = parseInspirationVersions(workspace.versions)
+  const comparisonMode = mode === 'position-defined' ? 'position-open' : 'compare'
+  let comparison = mode === 'deepen' || (mode === 'position-defined' && directionIndex != null) ? latestInspirationVersion(versions, comparisonMode) : null
+  if (directionIndex != null) {
+    if (!comparison) throw new Error('没有可引用的已确认方向比较，请先确认比较版本。')
+    const parsed = parseInspirationPreparationDraft(comparison.resultJson, comparisonMode)
+    const selected = parsed.proposals[directionIndex - 1]
+    if (!selected) throw new Error('选择的方向已不存在，请重新选择。')
+    comparison = { ...comparison, resultJson: JSON.stringify({ ...parsed, proposals: [selected] }) }
+  }
   return buildInspirationFusionInput({
     fragments,
     selectedIds: new Set(selectedIds),
     previousVersion: latestInspirationVersion(versions, mode),
+    completeInput: isInspirationPreparationMode(mode),
+    comparisonVersion: comparison,
   })
 }
 
@@ -4001,6 +4014,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
       input.inspirationFragmentIds,
       input.inspirationMode,
       input.scope,
+      input.inspirationDirectionIndex,
     ),
   },
   {

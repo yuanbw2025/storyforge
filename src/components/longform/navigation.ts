@@ -8,7 +8,7 @@ export type LongformSection = typeof LONGFORM_SECTIONS[number][0]
 export type LongformMode = 'steps' | 'nodes' | 'agent'
 export const LONGFORM_STEPS: { label: string; modules: [SidebarModule, string][]; auxiliary?: boolean }[] = [
   { label: '作品概况', modules: [['info', '基本信息'], ['world-overview', '多世界设置']] },
-  { label: '灵感与参考', modules: [['inspiration', '灵感反推'], ['references', '项目参考与分析']] },
+  { label: '灵感与参考', modules: [['inspiration', '灵感与定位'], ['references', '项目参考与分析']] },
   { label: '世界与设定', modules: [['world-rules', '真实与幻想'], ['worldview-origin', '世界起源'], ['worldview-natural', '自然环境'], ['worldview-humanity', '人文环境'], ['history', '历史年表']] },
   { label: '故事设计', modules: [['story-design', '故事核心'], ['rules', '创作规则']] },
   { label: '人物与关系', modules: [['characters', '角色生成'], ['characters-main', '主要角色'], ['characters-minor', '次要角色'], ['characters-npc', 'NPC'], ['characters-extra', '路人']] },

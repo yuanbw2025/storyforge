@@ -94,6 +94,7 @@ function createFusionState() {
     },
     isMultiWorld: false,
     mode: 'single',
+    action: 'full', setAction: vi.fn(), preparationResult: null,
     workspace: { fragments: [fragment], versions: [] },
     inspiration: '',
     setInspiration: vi.fn(),
@@ -160,6 +161,7 @@ describe('R-HARNESS34 · 分步骤灵感面板接入 inspiration.reverse Skill',
         agentId: 'inspiration',
         skillId: 'inspiration.reverse',
         mode: 'single',
+    action: 'full', setAction: vi.fn(), preparationResult: null,
         contextEvidence: {
           included: ['inspirationWorkspace'],
           estimatedInputTokens: 320,
@@ -188,4 +190,29 @@ describe('R-HARNESS34 · 分步骤灵感面板接入 inspiration.reverse Skill',
     await act(async () => buttons.find(item => item.textContent?.includes('确认融合版本'))!.click())
     expect(mocks.confirmFusion).toHaveBeenCalledOnce()
   })
+  it('展示可读的轻量准备与确认入口，不显示完整反推采纳控件', async () => {
+    mocks.fusion.action = 'organize'; mocks.fusion.mode = 'organize'
+    mocks.fusion.preparationResult = { summary: '保留南枝的铃壳', authorMaterial: '南枝、铃壳', proposals: [{ title: '邻家生活', content: '只深入门边的声音' }], openQuestions: [] }
+    const host = await renderPanel()
+    expect(host.querySelector('[aria-label="灵感准备结果"]')?.textContent).toContain('保留南枝的铃壳')
+    expect(host.querySelector('[data-testid="single-result"]')).toBeNull()
+    const select = host.querySelector<HTMLSelectElement>('[aria-label="灵感任务"]')!
+    await act(async () => { select.value = 'deepen'; select.dispatchEvent(new Event('change', { bubbles: true })) })
+    expect(mocks.fusion.setAction).toHaveBeenCalledWith('deepen')
+    expect(host.textContent).toContain('不自动创建世界、人物或完整大纲')
+  })
+
+  it('定位比较可显式选择一项，并保留作者补充要求', async () => {
+    mocks.fusion.action = 'position-open'; mocks.fusion.mode = 'position-open'
+    mocks.fusion.userHint = '3万字一次成稿，不写大阴谋。'
+    mocks.fusion.preparationResult = { summary: '两种定位', authorMaterial: '作者的书店', proposals: [{ title: '手艺与委托', content: '手艺生活' }, { title: '关系与归客', content: '邻里往来' }], openQuestions: [] }
+    const host = await renderPanel()
+    expect(host.textContent).toContain('创作定位·方向未定')
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>('button')].filter(button => button.textContent?.includes('采用此定位继续深化'))
+    await act(async () => buttons[1].click())
+    expect(mocks.fusion.setAction).toHaveBeenCalledWith('position-defined')
+    expect(mocks.fusion.setUserHint).toHaveBeenCalledWith(expect.stringContaining('灵感方向选择=2'))
+    expect(mocks.fusion.setUserHint).toHaveBeenCalledWith(expect.stringContaining('3万字一次成稿，不写大阴谋。'))
+  })
+
 })

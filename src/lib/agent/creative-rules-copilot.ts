@@ -1,3 +1,4 @@
+import { CREATIVE_RULES_CONTENT_GUIDANCE, appendPreparationSystemGuidance } from '../creation/preparation-content-skill'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { usePromptStore } from '../../stores/prompt'
 import { appendSimplifiedChineseOutputConstraint, appendUserConstraint } from '../ai/adapters/prompt-guards'
@@ -258,7 +259,7 @@ function buildMessages(input: CreativeRulesCopilotInputV1): ChatMessage[] {
   const supplemental = input.supplementalContext.trim()
     ? `\n\n【本轮已验证上游候选（尚未采纳，不属于 Canon）】\n${input.supplementalContext.trim()}`
     : ''
-  return appendSimplifiedChineseOutputConstraint(appendUserConstraint(rendered, [
+  return appendSimplifiedChineseOutputConstraint(appendUserConstraint(appendPreparationSystemGuidance(rendered, CREATIVE_RULES_CONTENT_GUIDANCE), [
     input.inputGuidance,
     `【作者要求】\n${input.authorRequest}${supplemental}`,
     `【正式上下文】\n${input.assembled.text || '（当前没有已填写的正式设定）'}`,

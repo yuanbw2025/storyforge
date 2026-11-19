@@ -1,0 +1,87 @@
+[
+  {
+    "id": "learn-scene-voice",
+    "kind": "learn",
+    "module": "style.learn",
+    "vars": {
+      "samples": "【作者认可样本1·修灯】\n陶安把螺丝放进碟子里。‘得嘞。’他说，又把碟子往里挪了半寸。客人伸手接灯，他却先按了一下开关，照出客人鞋尖上的泥。‘这回亮了。’\n【作者认可样本2·等雨】\n屋檐下没有人说话。林遥望着街口，那盏灯在雨里晕开，晕到第二层台阶时，她把凳子往后拖了一点。陶安在屋里喊：‘得嘞，水烧好了。’她没回头，伸手把另一张凳子拉到身边。",
+      "sampleCount": 2,
+      "sampleWords": 144,
+      "revisionPairs": "",
+      "calibrationFeedback": "",
+      "userHint": "不要把陶安的口头禅变成旁白和所有角色的习惯。没有统计数据。"
+    },
+    "apply": "写200字以内原创场景：两位没有名字的园丁傍晚收工具，保持安静与具体观察，不出现得嘞、灯、螺丝或雨。只用适合这个场景的文风倾向。"
+  },
+  {
+    "id": "learn-plot-change",
+    "kind": "learn",
+    "module": "style.learn",
+    "vars": {
+      "samples": "",
+      "sampleCount": 0,
+      "sampleWords": 0,
+      "revisionPairs": "【作者改稿对照】\n改前：她把纸推到桌边，说：‘我答应。’\n改后：她把纸收回来，说：‘我不答应。’\n作者说明：我改的是人物决定，不是希望全书人物都拒绝别人。",
+      "calibrationFeedback": "",
+      "userHint": "只有这一组对照，证据不足要说清，不能宣称学到完整个人文风。"
+    },
+    "apply": "写150字以内原创片段：一名店员明确答应替同事看店一小时。保留这一决定，不受样本中的拒绝情节影响。"
+  },
+  {
+    "id": "calibrate-refusal",
+    "kind": "calibrate",
+    "module": "style.calibrate",
+    "vars": {
+      "profile": "温暖、含蓄，注意人物之间留余地；这是当前场景偏好，没有统计或永久口头禅要求。",
+      "revisionPairs": "",
+      "calibrationFeedback": "不要为了温暖擅自和解，也不要改变人物决定。",
+      "sourceText": "明岳没有接那把钥匙。‘我不答应。’他说。阿禾把钥匙放回口袋，转身走了。明岳留在门边，没有追过去。"
+    }
+  },
+  {
+    "id": "rules-warmth",
+    "kind": "rules",
+    "module": "rules.generate",
+    "vars": {
+      "projectName": "换班时分",
+      "genres": "现实日常",
+      "dimension": "写作风格",
+      "worldContext": "",
+      "storyCore": "夜班司机与家人的日常，不需要大阴谋。",
+      "userHint": "温暖、轻幽默，但允许人物生气、直说感受，也允许必要的概述。请给能实际使用的写作规则，别堆绝对禁令。"
+    },
+    "apply": "写200字以内场景：司机下班回家，家人因为他忘买酱油生气，他承认忘了，两人仍有分歧。保持温暖和轻幽默，不把生气改成原谅。"
+  },
+  {
+    "id": "research-no-sources",
+    "kind": "research",
+    "module": "scene.verify",
+    "mode": "plan",
+    "hasSources": false,
+    "vars": {
+      "worldContext": "无资料。",
+      "historyContext": "",
+      "worldRulesContext": "作者希望接近现实，不想把猜测当史实。",
+      "scene": "想写1895年一名普通女性邮差的日常。时代和地区都还没具体选定。请给研究计划；没有提供原始材料，不能编造参考书目、工资数字或假装已经检索。",
+      "sceneEra": "1895年（候选）",
+      "sceneLocation": "未定"
+    },
+    "apply": "写150字以内准备笔记：哪些细节目前可以作为创作提议，哪些需要查证后才能写成事实。不要虚构实际检索结果或参考文献。"
+  },
+  {
+    "id": "research-source-boundary",
+    "kind": "research",
+    "module": "scene.verify",
+    "mode": "sources",
+    "hasSources": true,
+    "vars": {
+      "worldContext": "【评测虚构材料，作者提供，未经系统核验】\n资料A：兰桥镇1901年码头登记摘录：雨季每三日停航一次，船主自备桐油。\n资料B：溪岭镇1905年商会回忆摘录：雨季每日有船，船主不自备桐油。\n两份都没有原件、页码或馆藏号，不能称为已核实史料。",
+      "historyContext": "",
+      "worldRulesContext": "作者允许局部架空，但希望标明取舍。",
+      "scene": "我想写兰桥镇1901年的船主去买桐油。这两份资料冲突吗？能确认什么，怎样用进普通生活？",
+      "sceneEra": "1901",
+      "sceneLocation": "兰桥镇"
+    },
+    "apply": "用150字以内写一个船主问店家是否有桐油的场景方案；标明哪些细节来自作者给的虚构材料，哪些仍是创作提议，不写已考证。"
+  }
+]

@@ -16,7 +16,7 @@ import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { FIELD_BY_TARGET } from '../../src/lib/registry/field-registry'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
-import { parseStyleLearningResultStrictV1 } from '../../src/lib/style/learning-agent'
+import { parseStyleLearningResultStrictV1, readStyleLearningBaselineV1 } from '../../src/lib/style/learning-agent'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { generateWorkCode } from '../../src/lib/memory/identity'
 import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
@@ -91,6 +91,7 @@ describe.sequential('R-HARNESS76 · 文风学习 durable 候选与校准风险�
     expect(getAgentSkillV1('prose.style-learn')).toMatchObject({ agentId: 'prose', executionMode: 'style-learn' })
     const fixture = await seed()
     const before = await db.userStyleProfiles.get(fixture.profileId!)
+    const expectedBaseline = await readStyleLearningBaselineV1({ scope: fixture.scope, chapterIds: [fixture.chapterId] })
     let calls = 0
     const generated = await generateStyleLearningCandidateV1({
       scope: fixture.scope,
@@ -102,6 +103,8 @@ describe.sequential('R-HARNESS76 · 文风学习 durable 候选与校准风险�
         expect(prompt).toContain('少解释情绪。')
         expect(prompt).toContain('短句方向对。')
         expect(prompt).toContain('HARNESS-76 严格输出协议')
+        expect(prompt).toContain(`共 ${expectedBaseline.sampleCount} 章、约 ${expectedBaseline.sampleWords} 字`)
+        expect(prompt).not.toContain('共 0 章、约 0 字')
         expect(prompt.split('【文风学习正式输入基线】')).toHaveLength(2)
         return styleResult()
       },

@@ -122,6 +122,7 @@ export default function StyleCalibrationPanel({ projectId, profile }: Props) {
         </p>
       </div>
 
+      {!profile.profile.trim() && <p className="text-xs text-text-muted">尚无已确认文风画像，本轮仅为表达试写，不代表已学到个人文风。</p>}
       <textarea
         value={sourceText}
         onChange={event => setSourceText(event.target.value.slice(0, MAX_CALIBRATION_SOURCE_CHARS))}
