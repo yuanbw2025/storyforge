@@ -195,8 +195,13 @@ export default function AiTownPage() {
     frameRef.current = frame;
     setFormKey(frame.key); setBasis(frame.basis); setEditingTarget(frame.target);
     setTitle(frame.title); setSettings(frame.settings); setDirtyState(frame.dirty);
-    setSourceDirtyState(frame.sourceDirty); setSelection(frame.selection);
-    setSuggestionKey(frame.suggestionKey);
+    // Source loading can have queued a newer selection in this React batch.
+    // Preserving it means leaving those state queues untouched, not writing
+    // the previous render's frameRef values back over the queued result.
+    if (!preserveSource) {
+      setSourceDirtyState(frame.sourceDirty); setSelection(frame.selection);
+      setSuggestionKey(frame.suggestionKey);
+    }
   }, []);
   const formReady = formKey === viewKey && (viewKey === "new" || basis != null);
   const hasRetainedEdits = [...retained.current.values()].some(frame => frame.dirty || frame.sourceDirty);
