@@ -3,6 +3,7 @@
   "bindingVersion": 1,
   "scope": "formal-ai-execution-entry",
   "offlineEvaluations": [
+    {"entryId": "eval.longform.preparation-worldview", "boundary": "eval-only", "adoptAllowed": false, "caller": "scripts/evaluate-preparation-worldview.mjs", "contract": "scripts/preparation-worldview-contract.mjs", "transport": "configured-chat-text-v1", "reason": "固定原创世界观单字段旧新对照与同指令场景消费，最多24次串行；不读作者数据库，不采纳，无重试，原文与失败留仓库外。"},
     {"entryId": "eval.reference.content-quality", "boundary": "eval-only", "adoptAllowed": false, "caller": "scripts/evaluate-reference-quality.mjs", "contract": "scripts/reference-quality-contract.mjs", "transport": "configured-chat-text-v1", "reason": "固定原创材料的拆书旧新与原创应用对照，最多28次串行，无重试、不读作者数据库、不采纳；失败与原始结果留仓库外，不代替真人阅读或长篇验收。"},
     {
       "entryId": "eval.avg.audio-input-calibration",
