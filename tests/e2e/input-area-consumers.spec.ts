@@ -292,6 +292,30 @@ for (const operation of ['rewrite', 'expand', 'polish'] as const) {
   })
 }
 
+test('047 native window return keeps composition draft on the real external-blur save path', async ({ page }) => {
+  const ids = await seed(page)
+  await page.goto(`./workspace/${ids.projectId}?module=story-design`)
+  await page.getByText(/^点击填写.*…$/).first().click()
+  const frame = page.locator('[data-input-area-layout="story.logline/current"]')
+  const area = frame.locator('textarea'), draft = '窗口返回后完成组合的作者草稿。'
+  await area.dispatchEvent('compositionstart', { bubbles: true })
+  await area.fill(draft)
+  const before = await snapshot(page)
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+  expect(await snapshot(page)).toBe(before)
+  await expect(area).toHaveValue(draft)
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  await area.dispatchEvent('compositionend', { bubbles: true })
+  await page.locator('h2:visible').first().click()
+  await expect.poll(() => page.evaluate(async projectId => {
+    const load = new Function('path', 'return import(path)')
+    const { db } = await load('/storyforge/src/lib/db/schema.ts')
+    return (await db.storyCores.where('projectId').equals(projectId).first())?.logline
+  }, ids.projectId)).toBe(draft)
+  await page.reload()
+  await expect(page.getByText(draft, { exact: true })).toBeVisible()
+})
+
 test('047 native corrupted candidate remains blocked by its hash guard without a layout bypass', async ({ page }) => {
   const ids = await seed(page)
   await page.evaluate(async () => {

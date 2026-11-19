@@ -117,7 +117,14 @@ export default function ResizableInputArea({ options, children, autoHeight, onEx
     }
     return () => { finishDrag(true, false); clearPersist() }
   }, [options.preferenceKey, clearPersist, finishDrag, updateDesired])
-  useEffect(() => { const leave = () => { finishDrag(true); notifyLeave() }; window.addEventListener('blur', leave); return () => window.removeEventListener('blur', leave) }, [finishDrag, notifyLeave])
+  useEffect(() => {
+    const leave = () => { finishDrag(true); notifyLeave() }
+    // Window focus can return to the same textarea without a new focusin.
+    // Re-arm true leave when composition or a failed save kept it mounted.
+    const enter = () => { focusInside.current = Boolean(frame.current?.contains(document.activeElement)) }
+    window.addEventListener('blur', leave); window.addEventListener('focus', enter)
+    return () => { window.removeEventListener('blur', leave); window.removeEventListener('focus', enter) }
+  }, [finishDrag, notifyLeave])
   useLayoutEffect(() => {
     const el = textarea.current
     if (!el || desired || !autoHeight || composing) return

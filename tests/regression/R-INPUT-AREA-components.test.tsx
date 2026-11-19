@@ -135,6 +135,26 @@ describe('047 default-off shared seams', () => {
     })
     expect(save).toHaveBeenCalledExactlyOnceWith('外离前的草稿')
   })
+  it('saves on true leave after a window return completes a composition draft', async () => {
+    const save = vi.fn().mockResolvedValue(undefined)
+    const ui = await mount(<><InlineTextarea value="原稿" onChange={save} inputAreaLayout={{ enabled: true }} /><button data-outside>外部</button></>)
+    await act(async () => (ui.host.firstElementChild as HTMLElement).click())
+    await admitBounds(ui.host)
+    const textarea = ui.host.querySelector('textarea')!
+    await act(async () => textarea.focus())
+    await act(async () => textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })))
+    await edit(textarea, '窗口返回后完成的组合草稿')
+    await act(async () => window.dispatchEvent(new Event('blur')))
+    expect(save).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(textarea)
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'))
+      textarea.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }))
+    })
+    expect(save).not.toHaveBeenCalled()
+    await act(async () => ui.host.querySelector<HTMLButtonElement>('[data-outside]')!.focus())
+    expect(save).toHaveBeenCalledExactlyOnceWith('窗口返回后完成的组合草稿')
+  })
   it('persists only finalized pointer actions, cancels/lost-capture revert and unmount removes pending writes/listeners', async () => {
     // Happy DOM binds Storage methods on first access; a later prototype spy
     // misses that cached bound method. Count the actual storage boundary here.
