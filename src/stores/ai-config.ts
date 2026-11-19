@@ -134,6 +134,18 @@ export function getAIConfigPresetApiKeyV1(preset: AIConfigPreset): string {
   return preset.config.apiKey || readSessionCredentialV1(loadPresetSessionApiKeys()[preset.id], preset.config, preset.sessionCredentialId)
 }
 
+/** Paid dispatch must re-read the persisted preset: another tab may have
+ * replaced its authority or paired credential since this store was loaded. */
+export function readPersistedAIConfigPresetV1(id: string): AIConfigPreset | null {
+  const rows: unknown = JSON.parse(localStorage.getItem(PRESETS_KEY) ?? '[]')
+  if (!Array.isArray(rows)) throw new Error('连接预设数据无效，请重新配置。')
+  const preset = rows.find(row => row && typeof row === 'object' && row.id === id) as AIConfigPreset | undefined
+  if (!preset) return null
+  if (!preset.config || typeof preset.config.provider !== 'string' || typeof preset.config.baseUrl !== 'string'
+    || typeof preset.config.apiKey !== 'string') throw new Error('连接预设数据无效，请重新配置。')
+  return preset
+}
+
 /** Retained but unpaired temporary keys need an explicit author re-entry. */
 export function hasUnmatchedSessionCredentialV1(kind: 'chat' | 'embedding'): boolean {
   const state = useAIConfigStore.getState()

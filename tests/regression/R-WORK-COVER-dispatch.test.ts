@@ -3,7 +3,7 @@ import { db } from '../../src/lib/db/schema'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import { encodeFixtureRasterV1, installRasterDecoderForVitestV1 } from '../helpers/raster-decoder-vitest'
 import { saveWorkCoverDraftV1 } from '../../src/lib/work-cover/drafts'
-import { prepareCoverRunV1, submitCoverImageOnceV1, observeCoverResponseV1 } from '../../src/lib/work-cover/run'
+import { prepareCoverRunV1, submitCoverImageOnceV1, observeCoverResponseV1, acknowledgeExpiredCoverWaitV1, WORK_COVER_RESPONSE_WAIT_MS_V1 } from '../../src/lib/work-cover/run'
 import type { CoverImageConnectionV1 } from '../../src/lib/work-cover/run'
 import { materializeCoverCandidateV1 } from '../../src/lib/work-cover/materialize'
 import { binaryDataUrlV1 } from '../../src/lib/media/blob-store'
@@ -11,6 +11,8 @@ import { adoptWorkCoverV1, prepareWorkCoverAdoptionV1 } from '../../src/lib/work
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { resolveWorkCoverImageRouteV1 } from '../../src/lib/work-cover/image-recipes'
 import { aiCredentialFingerprintV1 } from '../../src/lib/ai/credential-fingerprint'
+import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
+import { executeFrozenFormalImageEntryV1, executeFrozenFormalImagePreviewV1, freezeFormalAIEntryBindingV1 } from '../../src/lib/agent/formal-ai-entry'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 
 installRasterDecoderForVitestV1()
@@ -27,6 +29,60 @@ async function prepared(currentConnection = () => connection) {
 }
 
 describe('035 image one-shot dispatch/materialization', () => {
+  it('refuses oversized sources before creating a run and terminalizes a pre-dispatch preparation failure', async () => {
+    const post = vi.fn(); vi.stubGlobal('fetch', post)
+    const { scope, work } = await seedCurrentWorkspace('超限原料')
+    await db.works.update(work.id!, { description: '完整资料不得截断。'.repeat(10_000) })
+    const draft = await saveWorkCoverDraftV1({ scope, prompt: '灯塔', expectedRevision: null, expectedWorkUpdatedAt: work.updatedAt })
+    await expect(prepareCoverRunV1({ scope, draftId: draft.id, expectedDraftRevision: draft.revision, connection,
+      currentConnection: () => connection })).rejects.toThrow()
+    expect(await db.agentRuns.count()).toBe(0); expect(post).not.toHaveBeenCalled()
+    await db.works.update(work.id!, { description: '' })
+    const write = vi.spyOn(db.workCoverResponseBuffers, 'add').mockRejectedValueOnce(new DOMException('quota-before-send', 'QuotaExceededError'))
+    try {
+      await expect(prepareCoverRunV1({ scope, draftId: draft.id, expectedDraftRevision: draft.revision, connection,
+        currentConnection: () => connection })).rejects.toThrow('quota-before-send')
+    } finally { write.mockRestore() }
+    const run = (await db.agentRuns.toArray())[0]
+    expect((await readAgentRunV1(scope, run.id!)).projection.state).toBe('failed')
+    expect(await db.workCoverResponseBuffers.count()).toBe(0); expect(post).not.toHaveBeenCalled()
+  })
+
+  it('explicitly ends an expired waiting page without another POST and can still save the original late response', async () => {
+    let complete!: (response: Response) => void
+    const post = vi.fn(() => new Promise<Response>(resolve => { complete = resolve })); vi.stubGlobal('fetch', post)
+    const fixture = await prepared(), sending = submitCoverImageOnceV1(fixture.authorization)
+    await vi.waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+    await expect(acknowledgeExpiredCoverWaitV1(fixture.scope, fixture.authorization.runId)).rejects.toThrow('等待窗口')
+    const buffer = (await db.workCoverResponseBuffers.where('runId').equals(fixture.authorization.runId).first())!
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(buffer.updatedAt + WORK_COVER_RESPONSE_WAIT_MS_V1 + 1)
+    try {
+      await acknowledgeExpiredCoverWaitV1(fixture.scope, fixture.authorization.runId)
+      await acknowledgeExpiredCoverWaitV1(fixture.scope, fixture.authorization.runId)
+    } finally { clock.mockRestore() }
+    expect((await readAgentRunV1(fixture.scope, fixture.authorization.runId)).projection.state).toBe('paused')
+    expect((await db.workCoverResponseBuffers.get(buffer.id!))!.state).toBe('outcome-unknown')
+    expect(post).toHaveBeenCalledTimes(1)
+    complete(new Response(payload(), { status: 200 })); await sending
+    await materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })
+    expect((await readAgentRunV1(fixture.scope, fixture.authorization.runId)).projection.state).toBe('completed')
+    expect(post).toHaveBeenCalledTimes(1)
+  }, 20_000)
+
+  it('keeps durable cover and temporary map-preview execution authorities separate', async () => {
+    const invoke = vi.fn(async () => 'fixture-only')
+    const cover = await freezeFormalAIEntryBindingV1('work-cover.image.generate'), coverSkill = getAgentSkillV1('inspiration.work-cover-image-v1')
+    await expect(executeFrozenFormalImagePreviewV1('work-cover.image.generate', cover, coverSkill,
+      'src/lib/work-cover/run.ts', invoke, { category: 'work-cover.image.generate' })).rejects.toThrow('图片预览入口')
+    const preview = await freezeFormalAIEntryBindingV1('world.map.paint-preview'), previewSkill = getAgentSkillV1('world-origin.map-config')
+    await expect(executeFrozenFormalImageEntryV1('world.map.paint-preview', preview, previewSkill,
+      'src/lib/world-map/atlas/paint-preview.ts', invoke, { category: 'geography.world-map-paint' })).rejects.toThrow('封面图片入口')
+    expect(invoke).not.toHaveBeenCalled()
+    expect(await executeFrozenFormalImagePreviewV1('world.map.paint-preview', preview, previewSkill,
+      'src/lib/world-map/atlas/paint-preview.ts', invoke, { category: 'geography.world-map-paint' })).toBe('fixture-only')
+    expect(invoke).toHaveBeenCalledTimes(1)
+  })
+
   it('prepares from prompt-only sources without querying chapters and emits only the Agnes recipe once', async () => {
     const post = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(payload(), { status: 200, headers: { 'x-request-id': 'cover-fixture-1' } }))
     vi.stubGlobal('fetch', post)

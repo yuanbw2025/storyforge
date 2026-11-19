@@ -1,4 +1,4 @@
-import { getAIConfigPresetApiKeyV1, useAIConfigStore } from '../../stores/ai-config'
+import { getAIConfigPresetApiKeyV1, readPersistedAIConfigPresetV1, useAIConfigStore, WORK_COVER_PRESET_KEY_V1 } from '../../stores/ai-config'
 import { workCoverAgnesBaseV1 } from './image-recipes'
 import type { CoverImageConnectionV1 } from './run'
 
@@ -6,8 +6,8 @@ import type { CoverImageConnectionV1 } from './run'
  * an unrelated current key never supplies the image model or permission. */
 export function readWorkCoverConnectionV1(): CoverImageConnectionV1 {
   const state = useAIConfigStore.getState()
-  const presetId = state.workCoverPresetId ?? state.activePresetId
-  const preset = state.presets.find(item => item.id === presetId)
+  const presetId = localStorage.getItem(WORK_COVER_PRESET_KEY_V1) ?? state.activePresetId
+  const preset = presetId ? readPersistedAIConfigPresetV1(presetId) : null
   if (!preset) throw new Error('请先在设置中选择一个图片连接预设。')
   workCoverAgnesBaseV1(preset.config)
   const apiKey = getAIConfigPresetApiKeyV1(preset)

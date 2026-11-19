@@ -88,13 +88,14 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
     // SFQA-022/044 added the two governed import candidate entries and the
     // auxiliary private reference analysis entry; every registry row still has
     // one real AST binding, so the counts move with them.
-    expect(output).toContain('72 bindings / 75 calls')
-    expect(output).toContain('formal 48, auxiliary 17, evaluation 6, experimental 1')
+    // 035 adds a separately governed formal image candidate entry; map preview remains auxiliary.
+    expect(output).toContain('73 bindings / 76 calls')
+    expect(output).toContain('formal 49, auxiliary 17, evaluation 6, experimental 1')
   })
 
   it('唯一注册表严格解析且每项连接 Skill、执行器、候选和调用方', () => {
     expect(registry.version).toBe(2)
-    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(72)
+    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(73)
     for (const retiredId of ['world.setting.lookup.qa', 'world.setting.lookup.extract']) {
       expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.some(entry => entry.entryId === retiredId)).toBe(false)
     }
@@ -159,9 +160,9 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
     expect(() => parseFormalAIEntryRegistryV1(full)).not.toThrow()
     expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.some((entry) => entry.entryId.startsWith('longform.voice'))).toBe(false)
     delete full.limitedTransports
-    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(72)
+    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(73)
     const legacy = { ...full, entries: full.entries.filter((entry: Entry) => !['ttrpg.open.local-voice', 'ttrpg.open.brief', 'ttrpg.open.situation-propose', 'ttrpg.open.public-situation-propose', 'ttrpg.open.entity-propose', 'ttrpg.open.common-oracle-interpret', 'ttrpg.open.authoring-design', 'ttrpg.open.authoring-design.full'].includes(entry.entryId)) }
-    expect(parseFormalAIEntryRegistryV1(legacy).entries).toHaveLength(64)
+    expect(parseFormalAIEntryRegistryV1(legacy).entries).toHaveLength(65)
     expect(legacy.entries.some((entry: Entry) => entry.entryId.startsWith('ttrpg.open.authoring-design'))).toBe(false)
     for (const patch of [{ adoptAllowed: true }, { adoptionTargets: ['chapters'] }, { boundary: 'durable-run' }]) {
       const invalid = JSON.parse(JSON.stringify(registry))

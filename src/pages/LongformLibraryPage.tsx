@@ -4,7 +4,7 @@ import { bindCreatedProjectStorageWorkspace } from '../lib/storage/project-stora
 import ExampleLibrary from '../components/examples/ExampleLibrary'
 import { useDialog } from '../components/shared/Dialog'
 import { useEffect, useRef, useState } from 'react'
-import { ArrowRight, BookOpen, ImagePlus, MoreHorizontal, Plus, Search } from 'lucide-react'
+import { ArrowRight, BookOpen, MoreHorizontal, Plus, Search } from 'lucide-react'
 import { liveQuery } from 'dexie'
 import { useNavigate, useSearchParams } from 'react-router'
 import { db } from '../lib/db/schema'
@@ -18,6 +18,7 @@ import { useProjectStore } from '../stores/project'
 import { LONGFORM_SECTIONS, LONGFORM_STEPS, sectionForModule, type LongformSection, type LongformMode } from '../components/longform/navigation'
 import type { SidebarModule } from '../components/layout/sidebar-tree'
 import LongformBrowsePage from '../components/longform/LongformBrowsePage'
+import WorkCoverCard from '../components/longform/WorkCoverCard'
 import LongformLayout from '../components/longform/LongformLayout'
 import { useBeforeUnload } from '../hooks/useBeforeUnload'
 import type { WorkspaceScope } from '../lib/types'
@@ -153,13 +154,9 @@ export default function LongformLibraryPage() {
       {error && <p role="alert">{error}</p>}
     </section>
     {loading ? <p role="status">正在读取作品库…</p> : !rows.length ? <section className="lf-paper lf-library-empty"><BookOpen size={30} aria-hidden="true"/><div><h3>从你的第一个故事开始</h3><p>新建长篇后，就可以逐步完善世界、故事与人物，写下正文。</p></div></section> : !visibleRows.length ? <section className="lf-paper lf-library-empty" role="status"><Search size={28} aria-hidden="true"/><div><h3>没有找到匹配的长篇</h3><p>试试其他书名或简介关键词。</p><button className="lf-action" onClick={() => setSearch('')}>清除搜索</button></div></section> : <div className="lf-library-books">{visibleRows.map(({ project, work }) => <article className="lf-paper lf-library-card" key={work.id} aria-label={work.title}>
-      <div className="lf-library-book">
-        <button type="button" className="lf-library-cover" aria-label={`修改封面：${work.title}`} onClick={() => void open(project, work, `/home/cover?work=${work.id}`)}>
-          {work.coverImage ? <img src={work.coverImage} alt=""/> : <span className="lf-library-cover-placeholder"><BookOpen size={28} aria-hidden="true"/><span>暂无封面</span></span>}
-          <span className="lf-library-cover-action"><ImagePlus size={14} aria-hidden="true"/>{work.coverImage ? '更换封面' : '上传封面'}</span>
-        </button>
+      <WorkCoverCard work={work} onManual={() => void open(project, work, `/home/cover?work=${work.id}`)}>
         <div className="lf-library-book-info"><h3>{work.title}</h3><p className="lf-library-description">{work.description || '尚未填写作品简介'}</p><div className="lf-library-meta"><span>{work.currentWordCount.toLocaleString()} 字</span><span>最近编辑 <time dateTime={new Date(work.updatedAt).toJSON() ?? undefined}>{new Date(work.updatedAt).toLocaleDateString('zh-CN')}</time></span></div></div>
-      </div>
+      </WorkCoverCard>
       <div className="lf-library-card-actions">
         <button className="lf-action lf-action-primary" onClick={() => void open(project, work, `/workspace/${project.id}?module=info`)}>进入长篇工作台<ArrowRight size={16} aria-hidden="true"/></button>
         <details className="lf-library-more" onKeyDown={event => { if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus() } }}>

@@ -8,12 +8,13 @@ import { beginAgentRunRecoveryV1, completeAgentRunRecoveryV1, createAgentRunChec
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { recordAgentRunArtifactV1 } from '../memory/artifact-store'
-import { prepareMediaBlobV1, putPreparedMediaBlobV1, readVerifiedMediaBlobV1, sha256BinaryV1 } from '../media/blob-store'
+import { prepareMediaBlobV1, readVerifiedMediaBlobV1, sha256BinaryV1 } from '../media/blob-store'
 import { resolveScope, scopeTransactionTables } from '../workspace/scope'
 import { assertLongformCoverWorkV1, coverRecordInScopeV1 } from './drafts'
 import { assertWorkCoverCandidateHashV1, parseWorkCoverImageCandidateV1 } from './contracts'
 import { failCoverRunV1, WORK_COVER_STEP_V1 as STEP } from './run-evidence'
 import type { WorkCoverAssetV1, WorkCoverImageCandidateV1 } from './types'
+import { storeWorkCoverOriginalAssetInTransactionV1 } from './assets'
 
 function imageBytes(payload: ArrayBuffer): ArrayBuffer {
   let value: unknown
@@ -101,15 +102,9 @@ export async function materializeCoverCandidateV1(input: { scope: WorkspaceScope
     if (work.code !== buffer.workCode) throw new Error('原请求不属于此作品身份。')
     let live = await readVerifiedAgentRunInTransactionV1(scope, input.runId)
     if (live.contract.runtimeBindingHash !== buffer.routeHash || !live.events.some(item => item.type === 'model.requested')) throw new Error('图片候选缺少实际原运行派发证据。')
-    const blob = await putPreparedMediaBlobV1(scope, prepared)
-    const refs = live.events.flatMap(item => item.type === 'evidence.artifact.recorded'
-      ? [{ artifactKind: item.payload.artifactKind, contentHash: item.payload.contentHash }] : [])
-    const row: WorkCoverAssetV1 = { ...scope, version: 1, workCode: buffer.workCode, assetKey: buffer.assetKey,
-      role: 'generated-original', blobObjectId: blob.id, blobHash: prepared.contentHash, mimeType: prepared.mimeType,
-      width: prepared.width, height: prepared.height, byteSize: prepared.data.byteLength, sourceRunId: input.runId,
-      ordinal: 0, parentAssetId: null, layoutHash: null, rights: 'provider-terms-unverified', candidateJson: canonicalStringify(candidate),
-      exactArtifactRefsJson: canonicalStringify(refs), createdAt: buffer.createdAt }
-    const id = await db.workCoverAssets.add(row)
+    const asset = await storeWorkCoverOriginalAssetInTransactionV1(scope, prepared, { kind: 'model', runId: input.runId, candidate })
+    const id = asset.id
+    const row = asset
     live = await appendPrivilegedAgentRunEventInTransactionV1(live, event(live, 'model.responded', { stepId: STEP, attempt: 1, outputHash: providerReceiptHash }))
     live = await appendPrivilegedAgentRunEventInTransactionV1(live, event(live, 'candidate.persisted', { stepId: STEP, attempt: 1, candidateHash: candidate.candidateHash, requiresConfirmation: false }))
     live = await appendPrivilegedAgentRunEventInTransactionV1(live, event(live, 'step.succeeded', { stepId: STEP, attempt: 1, outputHash: candidate.candidateHash }))

@@ -9,6 +9,17 @@ function fixture() {
   return { native, browser, fetch: createDesktopFetch(native, browser, 'http://localhost:17831') }
 }
 describe('Desktop model transport selection', () => {
+  it('uses native image transport only for the explicit dedicated cover marker', async () => {
+    const f = fixture(), endpoint = 'https://apihub.agnes-ai.com/v1/images/generations'
+    await (await f.fetch(endpoint, { method: 'POST' })).text()
+    expect(f.browser).toHaveBeenCalledTimes(1); expect(f.native.open).not.toHaveBeenCalled()
+    await (await f.fetch(endpoint, { method: 'POST', headers: { 'X-Storyforge-Image-Adapter': 'work-cover-b64-sync-v1' } })).text()
+    expect(f.native.open).toHaveBeenCalledTimes(1); expect(f.browser).toHaveBeenCalledTimes(1)
+    for (const url of ['https://other.invalid/v1/images/generations', 'http://apihub.agnes-ai.com/v1/images/generations', `${endpoint}?secret=none`]) {
+      expect(() => f.fetch(url, { method: 'POST', headers: { 'X-Storyforge-Image-Adapter': 'work-cover-b64-sync-v1' } })).toThrow('同步协议')
+    }
+    expect(f.native.open).toHaveBeenCalledTimes(1); expect(f.browser).toHaveBeenCalledTimes(1)
+  })
   it.each(['models', 'chat/completions', 'embeddings', 'messages', 'responses'])('uses desktop networking for custom %s only once', async endpoint => {
     const f = fixture(); const response = await f.fetch(`https://custom.example/prefix/v1/${endpoint}`, {
       method: endpoint === 'models' ? 'GET' : 'POST', headers: { Authorization: 'Bearer synthetic-only' },

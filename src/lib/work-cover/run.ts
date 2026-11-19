@@ -7,7 +7,7 @@ import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { executeFrozenFormalImageEntryV1, freezeFormalAIEntryBindingV1 } from '../agent/formal-ai-entry'
 import { agentRunScopeTransactionTablesV1, appendPrivilegedAgentRunEventInTransactionV1, createAgentRunV1, readVerifiedAgentRunInTransactionV1 } from '../agent/run/event-store'
 import { createContextManifestFromAssemblyV1 } from '../agent/run/context-manifest'
-import { createAgentRunCheckpointV1 } from '../agent/run/checkpoint'
+import { createAgentRunCheckpointInTransactionV1, createAgentRunCheckpointV1 } from '../agent/run/checkpoint'
 import { canonicalStringify } from '../agent/run/hash'
 import { recordAgentRunArtifactV1 } from '../memory/artifact-store'
 import { sha256BinaryV1 } from '../media/blob-store'
@@ -25,6 +25,34 @@ const permits = new WeakMap<CoverRunAuthorizationV1, {
   scope: WorkspaceScope; bufferId: number; currentConnection: () => CoverImageConnectionV1; consumed: boolean
   skill: AgentSkillDefinitionV1; formalEntry: AgentRunFormalAIEntryBindingV1
 }>()
+export const WORK_COVER_RESPONSE_WAIT_MS_V1 = 180_000
+
+/** Explicit local recovery after the waiting page was closed. This grants no
+ * dispatch permit; an eventual original response may still be saved locally. */
+export async function acknowledgeExpiredCoverWaitV1(scope: WorkspaceScope, runId: number) {
+  await db.transaction('rw', agentRunScopeTransactionTablesV1(runId, db.workCoverResponseBuffers,
+    db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints), async () => {
+    await resolveScope({ scope })
+    const row = await db.workCoverResponseBuffers.where('runId').equals(runId).first()
+    if (!row || !coverRecordInScopeV1(scope, row)) throw new Error('图片请求不属于这部作品。')
+    if (row.state === 'outcome-unknown') return
+    if (row.state !== 'dispatch-intent') throw new Error('图片状态已变化，请重新载入。')
+    const now = Date.now()
+    if (now - row.updatedAt < WORK_COVER_RESPONSE_WAIT_MS_V1) throw new Error('原请求仍在等待窗口内，请稍后查看。')
+    const snapshot = await readVerifiedAgentRunInTransactionV1(scope, runId)
+    if (snapshot.contract.runtimeBindingHash !== row.routeHash || !snapshot.events.some(event => event.type === 'model.requested'
+      && event.payload.stepId === STEP && event.payload.bindingHash === row.routeHash)) throw new Error('图片请求缺少发送证据。')
+    const paused = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, {
+      version: 1, runId, projectId: scope.projectId, worldGroupId: null, generation: snapshot.run.generation,
+      contractHash: snapshot.run.contractHash, sequence: snapshot.projection.lastSequence + 1, createdAt: now,
+      type: 'run.paused', payload: { reason: 'image-outcome-unknown-no-resend', recoverable: true },
+    })
+    await createAgentRunCheckpointInTransactionV1({ snapshot: paused, now, resumePayload: {
+      kind: 'work-cover.awaiting-response', version: 1, portable: false, dispatchKey: row.dispatchKey, authorizedPost: false,
+    } })
+    await db.workCoverResponseBuffers.update(row.id!, { state: 'outcome-unknown', errorCode: 'image-outcome-unknown', updatedAt: now })
+  })
+}
 
 export async function prepareCoverRunV1(input: {
   scope: WorkspaceScope; draftId: number; expectedDraftRevision: number
@@ -36,7 +64,8 @@ export async function prepareCoverRunV1(input: {
   const assembled = await assembleContext({ projectId: scope.projectId, scope, worldGroupId: null,
     sourceKeys: [...WORK_COVER_SOURCES_V1], workCoverDraftId: input.draftId,
     workCoverDraftRevision: input.expectedDraftRevision, inputBudgetTokens: 16_000 })
-  if (assembled.sourceEvidence?.some(source => source.delivery === 'truncated' || source.delivery === 'compressed')) throw new Error('封面来源未完整交付，请缩短输入后重新生成。')
+  if (assembled.overBudgetAfterTrim || assembled.trimmed.length
+    || assembled.sourceEvidence?.some(source => source.delivery === 'truncated' || source.delivery === 'compressed')) throw new Error('封面来源未完整交付或超出预算，请缩短输入后重新生成。')
   const prompt = `Create one book-cover image from the following author-approved sources. Do not add lettering unless the author prompt explicitly asks for it.\n${assembled.text}`
   const requestJson = canonicalStringify(buildCoverImageRequestV1(route, prompt))
   const skill = getAgentSkillV1('inspiration.work-cover-image-v1')
@@ -52,40 +81,45 @@ export async function prepareCoverRunV1(input: {
     failurePolicy: { onProtocolError: 'fail', onVerificationFailure: 'fail', onStaleInput: 'pause-for-author' },
   } })
   const runId = snapshot.run.id
-  await appendCoverEvidenceOnceV1(scope, runId, 'step.scheduled', { stepId: STEP })
-  await appendCoverEvidenceOnceV1(scope, runId, 'step.started', { stepId: STEP, attempt: 1 })
-  const manifest = await createContextManifestFromAssemblyV1({ runId, stepId: STEP, attempt: 1,
-    projectId: scope.projectId, worldGroupId: null, declaredSourceKeys: WORK_COVER_SOURCES_V1, assembled, readerVersion: 'work-cover-context-v1' })
-  await appendCoverEvidenceOnceV1(scope, runId, 'context.assembled', { stepId: STEP, attempt: 1, manifestHash: manifest.manifestHash })
-  const dispatchKey = crypto.randomUUID(), contextJson = canonicalStringify(manifest)
-  for (const [artifactKind, content] of [
-    ['context-manifest', contextJson], ['source-snapshot', assembled.text],
-    ['rendered-request', canonicalStringify({ schema: 'storyforge.work-cover.image-request@1', route, dispatchKey, request: JSON.parse(requestJson) })],
-  ] as const) await recordAgentRunArtifactV1({ scope, runId, stepId: STEP, attempt: 1, artifactKind, content })
-  await createAgentRunCheckpointV1({ scope, runId, resumePayload: { kind: 'work-cover.prepared', version: 1, portable: false, dispatchKey, routeHash: route.routeHash } })
-  input.signal?.throwIfAborted()
-  const bufferId = await db.transaction('rw', scopeTransactionTables(db.workCoverDrafts, db.workCoverResponseBuffers), async () => {
-    const work = await db.works.get(scope.workId)
-    assertLongformCoverWorkV1(work, scope)
-    const draft = await db.workCoverDrafts.get(input.draftId)
-    if (!draft || !coverRecordInScopeV1(scope, draft) || draft.revision !== input.expectedDraftRevision || draft.expectedWorkUpdatedAt !== work.updatedAt) throw new Error('作品或提示词已修改，本次尚未发送。')
-    const active = await db.workCoverResponseBuffers.where('workId').equals(scope.workId).filter(row => row.state === 'dispatch-intent').first()
-    if (active) throw new Error('此作品已有等待结果的图片请求，请先查看原请求。')
-    const now = Date.now()
-    const row: WorkCoverResponseBufferV1 = {
-      ...scope, version: 1, workCode: work.code, runId, assetKey: crypto.randomUUID(), attempt: 1, dispatchKey,
-      draftId: input.draftId, draftRevision: draft.revision, briefHash: draft.briefHash,
-      routeHash: route.routeHash, routeJson: canonicalStringify(route), contextJson, contextManifestHash: manifest.manifestHash,
-      credentialIdentity: route.credentialIdentity, requestJson, state: 'prepared', httpStatus: null, requestId: null,
-      rawResponseHash: null, payload: null, assetId: null, errorCode: null, createdAt: now, updatedAt: now,
-    }
-    const id = await db.workCoverResponseBuffers.add(row)
-    await db.workCoverDrafts.update(input.draftId, { lastRunId: runId, updatedAt: now })
-    return id
-  })
-  const authorization = Object.freeze({ runId, dispatchKey, route: Object.freeze(route) })
-  permits.set(authorization, { scope, bufferId, currentConnection: input.currentConnection, consumed: false, skill: structuredClone(skill), formalEntry })
-  return authorization
+  try {
+    await appendCoverEvidenceOnceV1(scope, runId, 'step.scheduled', { stepId: STEP })
+    await appendCoverEvidenceOnceV1(scope, runId, 'step.started', { stepId: STEP, attempt: 1 })
+    const manifest = await createContextManifestFromAssemblyV1({ runId, stepId: STEP, attempt: 1,
+      projectId: scope.projectId, worldGroupId: null, declaredSourceKeys: WORK_COVER_SOURCES_V1, assembled, readerVersion: 'work-cover-context-v1' })
+    await appendCoverEvidenceOnceV1(scope, runId, 'context.assembled', { stepId: STEP, attempt: 1, manifestHash: manifest.manifestHash })
+    const dispatchKey = crypto.randomUUID(), contextJson = canonicalStringify(manifest)
+    for (const [artifactKind, content] of [
+      ['context-manifest', contextJson], ['source-snapshot', assembled.text],
+      ['rendered-request', canonicalStringify({ schema: 'storyforge.work-cover.image-request@1', route, dispatchKey, request: JSON.parse(requestJson) })],
+    ] as const) await recordAgentRunArtifactV1({ scope, runId, stepId: STEP, attempt: 1, artifactKind, content })
+    await createAgentRunCheckpointV1({ scope, runId, resumePayload: { kind: 'work-cover.prepared', version: 1, portable: false, dispatchKey, routeHash: route.routeHash } })
+    input.signal?.throwIfAborted()
+    const bufferId = await db.transaction('rw', scopeTransactionTables(db.workCoverDrafts, db.workCoverResponseBuffers), async () => {
+      const work = await db.works.get(scope.workId)
+      assertLongformCoverWorkV1(work, scope)
+      const draft = await db.workCoverDrafts.get(input.draftId)
+      if (!draft || !coverRecordInScopeV1(scope, draft) || draft.revision !== input.expectedDraftRevision || draft.expectedWorkUpdatedAt !== work.updatedAt) throw new Error('作品或提示词已修改，本次尚未发送。')
+      const active = await db.workCoverResponseBuffers.where('workId').equals(scope.workId).filter(row => row.state === 'dispatch-intent').first()
+      if (active) throw new Error('此作品已有等待结果的图片请求，请先查看原请求。')
+      const now = Date.now()
+      const row: WorkCoverResponseBufferV1 = {
+        ...scope, version: 1, workCode: work.code, runId, assetKey: crypto.randomUUID(), attempt: 1, dispatchKey,
+        draftId: input.draftId, draftRevision: draft.revision, briefHash: draft.briefHash,
+        routeHash: route.routeHash, routeJson: canonicalStringify(route), contextJson, contextManifestHash: manifest.manifestHash,
+        credentialIdentity: route.credentialIdentity, requestJson, state: 'prepared', httpStatus: null, requestId: null,
+        rawResponseHash: null, payload: null, assetId: null, errorCode: null, createdAt: now, updatedAt: now,
+      }
+      const id = await db.workCoverResponseBuffers.add(row)
+      await db.workCoverDrafts.update(input.draftId, { lastRunId: runId, updatedAt: now })
+      return id
+    })
+    const authorization = Object.freeze({ runId, dispatchKey, route: Object.freeze(route) })
+    permits.set(authorization, { scope, bufferId, currentConnection: input.currentConnection, consumed: false, skill: structuredClone(skill), formalEntry })
+    return authorization
+  } catch (error) {
+    await failCoverRunV1(scope, runId, 'image-preparation-failed')
+    throw error
+  }
 }
 
 async function readBoundedResponse(response: Response): Promise<ArrayBuffer> {
@@ -138,7 +172,7 @@ export async function submitCoverImageOnceV1(authorization: CoverRunAuthorizatio
   const timeout = new AbortController()
   const abort = () => timeout.abort(signal?.reason)
   signal?.addEventListener('abort', abort, { once: true })
-  const timer = setTimeout(() => timeout.abort(new DOMException('图片响应等待超时', 'TimeoutError')), 180_000)
+  const timer = setTimeout(() => timeout.abort(new DOMException('图片响应等待超时', 'TimeoutError')), WORK_COVER_RESPONSE_WAIT_MS_V1)
   try {
     signal?.throwIfAborted()
     const current = permit.currentConnection(), route = await resolveWorkCoverImageRouteV1(current)
