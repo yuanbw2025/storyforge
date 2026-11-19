@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFailed } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
@@ -84,7 +84,12 @@ function response(...rows: ReturnType<typeof event>[]) {
 }
 
 describe.sequential('R-HARNESS64 · 故事年表 durable 分块提取与原子替换', () => {
+  // Keep failure evidence without wrapping promises or changing scheduling,
+  // assertions, timeouts, or retries. These labels contain only fixture phases.
+  let phase = 'setup'
   beforeEach(async () => {
+    phase = 'setup'
+    onTestFailed(() => { console.error('R-HARNESS64 unfinished phase:', phase) })
     usePromptStore.setState({ templates: [], loaded: false })
     await db.delete()
     await db.open()
@@ -269,15 +274,18 @@ describe.sequential('R-HARNESS64 · 故事年表 durable 分块提取与原子�
 
   it('空候选或作者空选择在明确确认后清理所有目标已写章节', async () => {
     for (const mode of ['empty-candidate', 'empty-selection'] as const) {
+      phase = `${mode}: reset fixture`
       await db.delete()
       await db.open()
       const fixture = await seed()
+      phase = `${mode}: generate`
       const generated = await generateStoryTimelineExtractionCandidateV1({
         scope: fixture.scope,
         runAI: async (_messages, callIndex) => mode === 'empty-candidate'
           ? response()
           : response(event(callIndex ? '议会封港' : '潮门苏醒')),
       })
+      phase = `${mode}: adopt`
       await adoptStoryTimelineExtractionCandidateV1({
         scope: fixture.scope, runId: generated.snapshot.run.id, selectedIndexes: [],
       })
@@ -293,16 +301,20 @@ describe.sequential('R-HARNESS64 · 故事年表 durable 分块提取与原子�
       'adoption.committed', 'step.succeeded', 'verification.started', 'verification.accepted',
     ]
     for (const boundary of boundaries) {
+      phase = `${boundary}: reset fixture`
       await db.delete()
       await db.open()
       const fixture = await seed()
+      phase = `${boundary}: generate`
       const generated = await generateStoryTimelineExtractionCandidateV1({
         scope: fixture.scope,
         runAI: async (_messages, callIndex) => response(event(callIndex ? '议会封港' : '潮门苏醒')),
       })
+      phase = `${boundary}: interrupted adoption`
       await expect(adoptStoryTimelineExtractionCandidateV1({
         scope: fixture.scope, runId: generated.snapshot.run.id, selectedIndexes: [0, 1],
         onDurableBoundary: (reached, _snapshot, chapterIndex) => {
+          phase = `${boundary}: reached ${reached}`
           if (reached === boundary && (reached !== 'formal.chapter' || chapterIndex === 0)) {
             throw new Error(`interrupt:${boundary}`)
           }
@@ -311,9 +323,11 @@ describe.sequential('R-HARNESS64 · 故事年表 durable 分块提取与原子�
       const beforeResume = boundary === 'formal.chapter'
         ? await db.storyTimelineEvents.where('chapterId').equals(fixture.chapterIds[0]).first()
         : null
+      phase = `${boundary}: read pending`
       const recovered = await readPendingStoryTimelineExtractionCandidateV1({ scope: fixture.scope })
       if (boundary === 'verification.accepted') expect(recovered).toBeNull()
       else expect(recovered?.snapshot.run.id, boundary).toBe(generated.snapshot.run.id)
+      phase = `${boundary}: resume adoption`
       const completed = await adoptStoryTimelineExtractionCandidateV1({
         scope: fixture.scope, runId: generated.snapshot.run.id, selectedIndexes: [0, 1],
       })
@@ -331,9 +345,11 @@ describe.sequential('R-HARNESS64 · 故事年表 durable 分块提取与原子�
 
   it('portable:false 的 progress 与 candidate 导入后明确取消', async () => {
     for (const state of ['progress', 'candidate'] as const) {
+      phase = `${state}: reset fixture`
       await db.delete()
       await db.open()
       const fixture = await seed({ long: state === 'progress' })
+      phase = `${state}: generate`
       if (state === 'progress') {
         await expect(generateStoryTimelineExtractionCandidateV1({
           scope: fixture.scope, runAI: async () => response(event()),
@@ -346,6 +362,7 @@ describe.sequential('R-HARNESS64 · 故事年表 durable 分块提取与原子�
           scope: fixture.scope, runAI: async (_messages, callIndex) => response(event(callIndex ? '议会封港' : '潮门苏醒')),
         })
       }
+      phase = `${state}: export/import`
       const importedId = await importProjectJSON(await exportProjectJSON(fixture.projectId))
       const imported = (await db.agentRuns.where('projectId').equals(importedId).toArray())
         .find(run => run.contractJson.includes('prose.story-timeline-extraction'))!
@@ -383,16 +400,20 @@ describe.sequential('R-HARNESS64 · 故事年表 durable 分块提取与原子�
 
   it('terminal 后正文、目标章正式行或范围外正式行漂移都会令旧 receipt stale', async () => {
     for (const drift of ['chapter', 'target', 'outside'] as const) {
+      phase = `${drift}: reset fixture`
       await db.delete()
       await db.open()
       const fixture = await seed()
+      phase = `${drift}: generate`
       const generated = await generateStoryTimelineExtractionCandidateV1({
         scope: fixture.scope,
         runAI: async (_messages, callIndex) => response(event(callIndex ? '议会封港' : '潮门苏醒')),
       })
+      phase = `${drift}: adopt`
       await adoptStoryTimelineExtractionCandidateV1({
         scope: fixture.scope, runId: generated.snapshot.run.id, selectedIndexes: [0, 1],
       })
+      phase = `${drift}: mutate formal evidence`
       if (drift === 'chapter') {
         await db.chapters.update(fixture.chapterIds[0], { content: '<p>终验后作者重写了潮门事件。</p>' })
       } else if (drift === 'target') {
@@ -401,6 +422,7 @@ describe.sequential('R-HARNESS64 · 故事年表 durable 分块提取与原子�
       } else {
         await db.storyTimelineEvents.update(fixture.originalIds[2], { description: '作者修改范围外人工事件' })
       }
+      phase = `${drift}: reject stale receipt`
       await expect(adoptStoryTimelineExtractionCandidateV1({
         scope: fixture.scope, runId: generated.snapshot.run.id, selectedIndexes: [0, 1],
       }), drift).rejects.toThrow('完成回执已过期')
