@@ -27,7 +27,7 @@ function pending(operation: 'create' | 'expand' | 'rewrite' | 'polish' = 'expand
   } as any
 }
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
 
 async function renderReview(operation: 'create' | 'expand' | 'rewrite' | 'polish', onUpdate = vi.fn()) {
