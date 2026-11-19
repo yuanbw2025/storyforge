@@ -1,3 +1,4 @@
+import { selectReferenceMethods, spreadReferenceItems } from '../reference-analysis/context-selection'
 import type { Worldview, StoryCore, PowerSystem, Character, CreativeRules } from '../types'
 import { formatSystemFictionElementsV1 } from '../prose/system-fiction-contract'
 import type { HistoricalKeyword, HistoricalKeywordCategory } from '../types/history'
@@ -269,26 +270,32 @@ export async function buildRefAnalysisContext(refIds: number[]): Promise<string>
 
     if (!chunks.length) continue
 
-    // 按维度汇总：每个维度取各块的结论合并（截取精华）
-    const dimSummaries: string[] = []
-    for (const dim of ANALYSIS_DIMENSIONS) {
-      const dimContents = chunks
-        .map(c => c[dim])
-        .filter((v): v is string => !!v && v !== '本块未涉及')
-      if (!dimContents.length) continue
-
-      // 每块取前 150 字，最多取 3 块，避免 prompt 过长
-      const selected = dimContents.slice(0, 3).map(t => t.slice(0, 150))
-      dimSummaries.push(`· ${DIMENSION_LABELS[dim]}：${selected.join('；')}`)
-    }
-
-    if (dimSummaries.length) {
-      parts.push(`【参考手法 — ${ref.title}${ref.author ? `（${ref.author}）` : ''}】\n${dimSummaries.join('\n')}`)
+    // Use the author-adopted summary of this exact active run when present.
+    // Legacy and unsummarized runs retain complete, source-labelled analysis units.
+    let summary: Record<string, unknown> = {}
+    try {
+      const parsed: unknown = JSON.parse(activeRun.analysisSummary || '{}')
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) summary = parsed as Record<string, unknown>
+    } catch { /* Historical invalid summary: fall back to this run's chunks. */ }
+    const byDimension = ANALYSIS_DIMENSIONS.map(dim => {
+      const adopted = summary[dim]
+      const header = `【${ref.title} · v${activeRun.version} · ${DIMENSION_LABELS[dim]}】`
+      if (typeof adopted === 'string' && adopted.trim()) return [`${header}\n已采纳综合（分析解释，非原文）：${adopted.trim()}`]
+      return spreadReferenceItems([...chunks].sort((a, b) => a.chunkIndex - b.chunkIndex))
+        .flatMap(chunk => {
+          const value = chunk[dim]?.trim()
+          return value && value !== '本块未涉及'
+            ? [`${header} 块 ${chunk.chunkIndex + 1}${chunk.label ? ` · ${chunk.label}` : ''}\n${value}`]
+            : []
+        })
+    })
+    // One unit per dimension per pass; longer evidence is skipped whole, not cut.
+    for (let index = 0; index < Math.max(0, ...byDimension.map(items => items.length)); index++) {
+      for (const items of byDimension) if (items[index]) parts.push(items[index])
     }
   }
 
-  if (!parts.length) return ''
-  return `【引用手法 — 请参考以下大师创作方法论来指导写作】\n\n${parts.join('\n\n')}\n\n【引用手法结束 — 请灵活运用上述方法论，不要生搬硬套】`
+  return selectReferenceMethods(parts)
 }
 
 /** 构建世界观各维度已有内容（用于 AI 生成时做参考） */

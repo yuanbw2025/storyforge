@@ -19,7 +19,7 @@ const offlineIds = new Set()
 for (const entry of registry.offlineEvaluations ?? []) {
   if (!entry.entryId?.startsWith('eval.') || offlineIds.has(entry.entryId)
     || entry.boundary !== 'eval-only' || entry.adoptAllowed !== false || entry.adoptionTargets?.length
-    || !['local-codex-subscription', 'configured-chat-audio-input-v1'].includes(entry.transport) || !entry.reason
+    || !['local-codex-subscription', 'configured-chat-audio-input-v1', 'configured-chat-text-v1'].includes(entry.transport) || !entry.reason
     || !/^scripts\/evaluate-[a-z-]+\.mjs$/.test(entry.caller ?? '')
     || !/^scripts\/[a-z-]+-contract\.mjs$/.test(entry.contract ?? '')
     || !fs.existsSync(path.join(root, entry.caller ?? '')) || !fs.existsSync(path.join(root, entry.contract ?? ''))) {
@@ -31,7 +31,9 @@ for (const entry of registry.offlineEvaluations ?? []) {
   const contract = fs.readFileSync(path.join(root, entry.contract), 'utf8')
   const bound = entry.transport === 'local-codex-subscription'
     ? caller.includes('assertOfflineEntry()') && caller.includes('runtime.generate(')
-    : caller.includes('assertOfflineAudioEntry()') && caller.includes('calibrateAudioInputs(')
+    : entry.transport === 'configured-chat-text-v1'
+      ? caller.includes('assertOfflineReferenceEntry(registry)') && caller.includes('REFERENCE_QUALITY_MAX_CALLS')
+      : caller.includes('assertOfflineAudioEntry()') && caller.includes('calibrateAudioInputs(')
   if (!contract.includes(`'${entry.entryId}'`) || !bound) failures.push('离线评测缺少实际合同绑定: ' + entry.entryId)
 }
 

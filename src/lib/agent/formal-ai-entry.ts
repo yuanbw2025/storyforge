@@ -199,7 +199,7 @@ export function parseFormalAIEntryRegistryV1(
       const entry = asRecord(raw, '离线评测入口')
       if (JSON.stringify(Object.keys(entry).sort()) !== JSON.stringify(keys)
         || entry.adoptAllowed !== false || entry.boundary !== 'eval-only'
-        || (entry.transport !== 'local-codex-subscription' && entry.transport !== 'configured-chat-audio-input-v1')) {
+        || (entry.transport !== 'local-codex-subscription' && entry.transport !== 'configured-chat-audio-input-v1' && entry.transport !== 'configured-chat-text-v1')) {
         fail('离线评测入口不得获得作品采纳或正式执行权限')
       }
       const id = readString(entry, 'entryId', '离线评测入口')

@@ -10,6 +10,7 @@
  *   · 每轮写入独立 ReferenceAnalysisRun + scoped referenceChunkAnalysis。
  *   · 只有作者激活的 run 同步 Reference 当前投影并进入创作上下文。
  */
+import { referenceChunkMessages, type ReferenceChunkInput } from './chunk-prompt'
 import { db } from '../db/schema'
 import { resolveRequestConfig, type ChatResult } from '../ai/client'
 import { isConfirmedProviderThrottleV1 } from '../ai/provider-rejection'
@@ -31,7 +32,7 @@ import type { WorkspaceScope } from '../types/world-ownership'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chunkDocument, quickHash, type ChunkPlan } from '../import/chunker'
-import type { ChatMessage, Reference, ReferenceChunkAnalysis, ReferenceAnalysisDepth } from '../types'
+import type { ReferenceChunkAnalysis, ReferenceAnalysisDepth } from '../types'
 import { adopt } from '../registry/adopt'
 import {
   completeReferenceAnalysisRun,
@@ -341,110 +342,6 @@ interface RawAnalysis {
   rawExcerpt?: string
 }
 
-type ReferenceChunkInput = {
-  runId: number
-  ref: Reference
-  depth: ReferenceAnalysisDepth
-  chunk: ChunkPlan
-  totalChunks: number
-  maxTokens: number
-  signal?: AbortSignal
-}
-
-function referenceChunkMessages(args: ReferenceChunkInput): ChatMessage[] {
-  const { ref, depth, chunk, totalChunks } = args
-
-  const depthGuide = depth === 'deep'
-    ? '【深层·拆成模板】请逐维度详尽论述（每维 300-500 字），并引用原文片段佐证。'
-    : '【浅层·快速摸底】请快速提炼，每维 50-100 字抓核心套路，不必引用原文。'
-
-  const isHistorical = ref.type === 'historical'
-
-  const systemPrompt = isHistorical
-    ? `你是一位极其严谨、精通全球物质文化史、社会制度史和文学创作的历史学家与小说考证顾问。你正在逐块分析一部【历史考证资料/文献】，提炼其中可用于小说创作的时代细节与方法论。
-
-**资料信息**：
-- 标题：${ref.title}
-- 作者：${ref.author || '未知'}
-- 类型：历史考证资料 / 文献
-
-**当前进度**：第 ${chunk.index + 1}/${totalChunks} 块（${chunk.label || ''}，约 ${chunk.charCount} 字）
-
-**分析要求**：
-${depthGuide}
-
-请从以下 18 个维度分析本块文本（前 13 个为文学创作维度，后 5 个为历史考证维度），输出**纯 JSON**（不要 markdown 包裹）：
-
-{
-  "narrativeStyle": "叙事视角与手法 —— 叙事视角、时间线安排、POV 切换（若为纯史料，分析其史料叙述视角与可信度）",
-  "openingTechnique": "开篇技法 / 黄金三章 —— 本块的场景切入方式、信息引入节奏",
-  "plotStructure": "情节结构与套路 —— 本块所记录历史事件的起承转合、因果布局",
-  "pacingControl": "节奏控制 —— 张弛有度的处理、信息释放速率",
-  "climaxDesign": "高潮设计 —— 历史事件的高潮/转折点的铺垫与呈现",
-  "conflictEscalation": "冲突设计与升级 —— 历史事件中外在冲突（政治/战争/阶级）与内在冲突（心理/道德）、冲突升级节奏",
-  "characterCraft": "人物塑造 —— 历史人物的多维刻画、关系动态、性格特征提炼",
-  "dialogueTechnique": "对话技巧 —— 历史人物的言论/对话风格、潜台词",
-  "proseStyle": "文笔风格 —— 史料的修辞、叙述密度、氛围营造",
-  "emotionalBeats": "爽点 / 情绪节拍 —— 历史叙述中的情绪张力与读者代入",
-  "foreshadowing": "伏笔与回收 —— 历史事件的因果链条、前兆与后续影响、历史悬念",
-  "worldBuilding": "世界观构建 —— 历史设定如何融入叙事、细节沉浸感、文化/政治/经济体系暗示",
-  "otherTechniques": "其他值得学习的技巧 —— 上述未覆盖的史料写作手法",
-
-  "historicalContext": "历史背景与时代特征 —— 提炼本块中体现的时代大势、历史转折点、政治气候、重大历史事件的真实背景",
-  "socialInstitutions": "社会制度与等级 —— 提炼本块中体现的官制、科举、法律、阶层划分、社会流动性、行会/组织运作机制",
-  "dailyLife": "日常生活细节 —— 提炼本块中体现的衣食住行、岁时节日、娱乐消遣、民间信仰、日常消费水平",
-  "materialCulture": "物质文化（器物/科技） —— 提炼本块中体现的器物、工具、建筑、科技水平、生产工艺、武器装备细节",
-  "languageCustoms": "语言习惯与称谓 —— 提炼本块中体现的时代特色词汇、避讳、人际称谓、书面/口语风格、行话",
-  
-  "rawExcerpt": "（选取本块中最具历史质感或写作技巧的精彩片段，约100-200字原文引用）"
-}
-
-**注意**：
-- 如果某个维度在本块中无明显体现，写"本块未涉及"即可
-- 重点提炼真实、地道、能直接丰富小说细节的历史考证内容，而非简单复述情节
-- 分析应当具体、可操作，让作者能直接作为写作素材使用`
-    : `你是一位资深文学评论家和网文创作方法论研究者。你正在逐块分析一部小说，从 13 个维度提炼创作方法论。
-
-**作品信息**：
-- 标题：${ref.title}
-- 作者：${ref.author || '未知'}
-- 流派：${ref.genre || '未知'}
-
-**当前进度**：第 ${chunk.index + 1}/${totalChunks} 块（${chunk.label || ''}，约 ${chunk.charCount} 字）
-
-**分析要求**：
-${depthGuide}
-
-请从以下 13 个维度分析本块文本，输出**纯 JSON**（不要 markdown 包裹）：
-
-{
-  "narrativeStyle": "叙事视角与手法 —— 第几人称、全知/限知、时间线安排、POV 切换、叙事距离调控",
-  "openingTechnique": "开篇技法 / 黄金三章 —— 若为开头：钩子设计、角色引入、世界展示节奏、信息密度；否则：本块的段落/场景切入技巧",
-  "plotStructure": "情节结构与套路 —— 起承转合、伏笔回收布局、悬念设置、情节推进的动力机制",
-  "pacingControl": "节奏控制 —— 快慢交替、张弛有度、信息释放速率、章末钩子",
-  "climaxDesign": "高潮设计 —— 爽点/高潮的铺垫与引爆、情绪峰值的制造",
-  "conflictEscalation": "冲突设计与升级 —— 外在冲突（人vs人/环境/势力）与内在冲突（心理/道德）、冲突升级节奏、压力曲线",
-  "characterCraft": "人物塑造 —— 多维刻画（行为/对话/内心/他人视角）、弧线推进、标签化与去标签化、关系动态",
-  "dialogueTechnique": "对话技巧 —— 对话的个性化与功能性（推动情节/揭示人物/传递信息）、潜台词、节奏",
-  "proseStyle": "文笔风格 —— 修辞手法、句式变化、叙述密度、语言特色、氛围营造",
-  "emotionalBeats": "爽点 / 情绪节拍 —— 情绪起伏的设计、读者代入与情绪出口、节拍布置",
-  "foreshadowing": "伏笔与回收 —— 本块埋设的伏笔、回收的前文伏笔、悬念管理、读者预期的建立与打破",
-  "worldBuilding": "世界观构建 —— 设定如何融入叙事（而非 info-dump）、规则展示时机、细节沉浸感、文化/政治/经济体系暗示",
-  "otherTechniques": "其他值得学习的技巧 —— 上述未覆盖但有特色的写作手法",
-  "rawExcerpt": "（选取本块中最能体现写作技巧的精彩片段，约100-200字原文引用）"
-}
-
-**注意**：
-- 如果某个维度在本块中无明显体现，写"本块未涉及"即可
-- 重点分析有特色、值得学习的写作手法，而非简单复述情节
-- 分析应当具体、可操作，让读者能学以致用`
-
-  return [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: `请分析以下文本：\n\n${chunk.text}` },
-  ]
-
-}
 
 const PRIVATE_ENTRY = 'reference.analysis.private-chunk'
 const PRIVATE_SKILL = 'inspiration.reference-analysis-private-chunk'

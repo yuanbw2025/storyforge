@@ -82,6 +82,17 @@ describe('R-FB5b · 13 维统一作品分析 + 浅档', () => {
     expect(ctx).toContain('斗气大陆')
   })
 
+  it('uses the adopted summary of the active run rather than an old projection', async () => {
+    const refId = await createProjectAndRef()
+    await writeShallowAnalysisFromTechniques(refId, WT)
+    const run = await db.referenceAnalysisRuns.where('referenceId').equals(refId).first()
+    await db.referenceAnalysisRuns.update(run!.id!, {analysisSummary: JSON.stringify({narrativeStyle: '块 4：读者知道而人物误信；仅适用已展示的证据。'})})
+    await db.references.update(refId, {analysisSummary: JSON.stringify({narrativeStyle: '旧版不该进入'})})
+    const ctx = await buildRefAnalysisContext([refId])
+    expect(ctx).toContain('块 4：读者知道而人物误信；仅适用已展示的证据。')
+    expect(ctx).not.toContain('旧版不该进入')
+  })
+
   it('空写作技法 → 不产行,ref 置 failed(提示重跑)', async () => {
     const refId = await createProjectAndRef()
     await writeShallowAnalysisFromTechniques(refId, {})
