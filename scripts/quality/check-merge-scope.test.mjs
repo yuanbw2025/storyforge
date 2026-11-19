@@ -34,6 +34,52 @@ test('finishes the other selected files when isolated admission fails and keeps 
   ]))
 })
 
+test('isolates sound repair and admission in every selection order without losing a shard file', () => {
+  const admission = 'tests/regression/R-SFQA004-product-entry-admission.test.tsx'
+  const sound = 'tests/regression/R-AVG-04B-sound-local-repair-flow.test.ts'
+  const first = 'tests/a.test.ts'
+  const second = 'tests/b.test.ts'
+  assert.deepEqual(runnerBatches([sound]), [[sound]])
+  assert.deepEqual(runnerBatches([first, sound, second]), [[sound], [first, second]])
+  assert.deepEqual(runnerBatches([sound, admission]), [[admission], [sound]])
+  /** @param {string[]} files @returns {string[][]} */
+  const permutations = files => files.length ? files.flatMap((file, i) =>
+    permutations(files.filter((_, j) => i !== j)).map(rest => [file, ...rest])) : [[]]
+  for (const files of permutations([admission, sound, first, second])) {
+    const batches = runnerBatches(files)
+    assert.deepEqual(batches, [[admission], [sound], files.filter(file => file === first || file === second)])
+    assert.deepEqual(batches.flat().sort(), files.slice().sort())
+    assert.equal(new Set(batches.flat()).size, files.length)
+  }
+  const selected = [admission, sound, ...Array.from({ length: 300 }, (_, i) => `tests/shard-${i}.test.ts`)]
+  const groups = partitionUnits(selected)
+  const executed = groups.flatMap(group => runnerBatches(group).flat())
+  assert.deepEqual(executed.sort(), selected.slice().sort())
+  assert.equal(new Set(executed).size, selected.length)
+})
+
+test('aggregates both isolated failures, continues ordinary work and preserves every CLI option', () => {
+  const admission = 'tests/regression/R-SFQA004-product-entry-admission.test.tsx'
+  const sound = 'tests/regression/R-AVG-04B-sound-local-repair-flow.test.ts'
+  const other = 'tests/registry/project-tables.test.ts'
+  const errors = [new Error('admission failed'), new Error('sound repair failed')]
+  /** @type {string[][]} */
+  const calls = []
+  assert.throws(() => runUnits([other, sound, admission], ['--maxWorkers=2'], (command, args) => {
+    assert.equal(command, 'node_modules/.bin/vitest')
+    calls.push(args)
+    if (args.includes(admission)) throw errors[0]
+    if (args.includes(sound)) throw errors[1]
+  }), error => {
+    assert.ok(error instanceof AggregateError)
+    assert.deepEqual(error.errors, errors)
+    return true
+  })
+  assert.deepEqual(calls, [admission, sound, other].map(file => [
+    'run', '--tagsFilter', '!manual-media', '--maxWorkers=2', file,
+  ]))
+})
+
 test('documentation and workflow-only changes avoid dependency installation', () => {
   assert.equal(plan(['README.md'], present).npm, false)
   const workflow = plan(['.github/workflows/ci.yml'], present)
