@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { adopt, hashAdoptFieldValueV1 } from '../../src/lib/registry/adopt'
 import { useWorldviewStore } from '../../src/stores/worldview'
-import { resetPendingEditCoordinatorForTestsV1 } from '../../src/lib/authoring/pending-edit-coordinator'
+import { coordinatePendingEditV1, resetPendingEditCoordinatorForTestsV1 } from '../../src/lib/authoring/pending-edit-coordinator'
 import { LOCAL_SAVE_NATURAL_FIELDS_V1, type LocalSaveIntentV1, type LocalSaveNaturalFieldV1 } from '../../src/lib/authoring/local-save-evidence'
 import { fingerprintSettingSource } from '../../src/lib/fact-ledger/setting-assertions'
 import { CANON_RESOURCE_PROVIDER_V1 } from '../../src/lib/context-gateway/canon-provider'
@@ -125,4 +125,20 @@ it('rejects a real group owned by another World and keeps a single-world primary
   const before = (await row()).id
   await useWorldviewStore.getState().saveWorldview({ projectId: scope.projectId, worldGroupId: primary, worldStructure: raw }, scope, intent())
   expect(await db.worldviews.count()).toBe(1); expect((await row()).id).toBe(before); expect((await row()).worldStructure).toBe(raw)
+})
+
+it('captures caller scope before queueing and never publishes an old target into a newly selected workspace', async () => {
+  const originalScope = await fixture(); const expected = intent(); const other = await seedCurrentWorkspace('new view')
+  let release!: () => void
+  const barrier = coordinatePendingEditV1({ key: `worldview:${originalScope.projectId}:default`, persist: () => new Promise<void>(resolve => { release = resolve }) })
+  await Promise.resolve(); await Promise.resolve()
+  const mutableScope = { ...originalScope }
+  const save = useWorldviewStore.getState().saveWorldview({ projectId: originalScope.projectId, worldStructure: raw }, mutableScope, expected)
+  await useWorldviewStore.getState().loadAll(other.scope)
+  Object.assign(mutableScope, other.scope)
+  release(); await barrier; const ack = await save
+  expect(ack.witness.identity.projectId).toBe(originalScope.projectId)
+  expect(useWorldviewStore.getState().loadedScope).toEqual(other.scope)
+  expect(useWorldviewStore.getState().worldview).toBeNull()
+  expect((await db.worldviews.get(ack.witness.recordId!))?.worldId).toBe(originalScope.worldId)
 })

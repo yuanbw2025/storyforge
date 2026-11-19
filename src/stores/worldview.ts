@@ -240,13 +240,14 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
   saveWorldview: ((data: WorldviewAuthorPatch, frozenScope?: WorkspaceScope, confirmation?: LocalSaveIntentV1) => {
     if (confirmation) {
       if (!frozenScope) return Promise.reject(new Error('缺少冻结的工作区。'))
-      return saveConfirmedNaturalField(data, frozenScope, confirmation).then(({ row, witnesses, ...ack }) => {
+      const confirmedScope = { ...frozenScope }
+      return saveConfirmedNaturalField(data, confirmedScope, confirmation).then(({ row, witnesses, ...ack }) => {
         const current = get()
-        if (sameScope(current.loadedScope, frozenScope) && (current.activeWorldGroupId === ack.witness.identity.worldGroupId
+        if (sameScope(current.loadedScope, confirmedScope) && (current.activeWorldGroupId === ack.witness.identity.worldGroupId
           || (current.activeWorldGroupId == null && current.worldview?.id === row.id))) {
           worldviewLoadRequest++
           set({ loading: false, loadError: null, worldview: row, localSaveWitnesses: { ...witnesses, [ack.witness.identity.field]: ack.witness } })
-        } else if (sameScope(current.loadedScope, frozenScope) && current.activeWorldGroupId == null && row.worldGroupId == null) {
+        } else if (sameScope(current.loadedScope, confirmedScope) && current.activeWorldGroupId == null && row.worldGroupId == null) {
           worldviewLoadRequest++
           set({ loading: false, loadError: null, worldview: row, localSaveWitnesses: { ...witnesses, [ack.witness.identity.field]: ack.witness } })
         }
