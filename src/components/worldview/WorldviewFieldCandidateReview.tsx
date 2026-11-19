@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CompositionEvent, type FormEvent, type UIEvent } from 'react'
 import { CTextarea } from '../shared/CompositionInput'
+import { inputAreaLayoutV1, worldviewInputAreaFieldV1 } from '../../lib/input-area-layout'
 import type { PendingMasterCandidate, VisibleMasterCandidateDraftV1 } from '../agent/useMasterCopilot'
 import {
   parseWorldviewFieldCandidateDraft,
@@ -34,18 +35,21 @@ export default function WorldviewFieldCandidateReview({
   visibleDraft,
   onUpdate,
   onInvalidEdit,
+  resizableInputs = false,
 }: {
   candidate: PendingMasterCandidate
   busy: boolean
   visibleDraft?: VisibleMasterCandidateDraftV1
   onUpdate: (content: string, rawValue: string) => void
   onInvalidEdit?: (rawValue: string, error: string) => void
+  resizableInputs?: boolean
 }) {
   const parsed = useMemo(() => {
     try { return parseWorldviewFieldCandidateDraft(candidate.event.content) }
     catch { return null }
   }, [candidate.event.content])
   const savedValue = typeof parsed?.value === 'string' ? parsed.value : JSON.stringify(parsed?.value ?? {}, null, 2)
+  const layoutField = worldviewInputAreaFieldV1(parsed?.field ?? candidate.payload.worldviewField ?? '')
   const [localValue, setLocalValue] = useState(savedValue)
   const draftValue = visibleDraft?.rawValue ?? (onInvalidEdit ? savedValue : localValue)
   const [showChangesOnly, setShowChangesOnly] = useState(false)
@@ -94,6 +98,7 @@ export default function WorldviewFieldCandidateReview({
       <div className="space-y-2">
         <p className="text-xs text-error">历史候选无法解析为字段 artifact；请修复结构后再采纳。</p>
         <CTextarea
+          inputAreaLayout={inputAreaLayoutV1(resizableInputs, layoutField, 'raw')}
           aria-label={`${candidate.payload.label}候选原始内容`}
           value={visibleDraft?.rawValue ?? candidate.event.content}
           disabled={busy}
@@ -111,6 +116,7 @@ export default function WorldviewFieldCandidateReview({
         <p className="text-[10px] text-text-muted">只编辑当前字段的 value 对象；外层 field 合同由 Harness 保管。</p>
         <CTextarea
           aria-label={`${candidate.payload.label}候选内容`}
+          inputAreaLayout={inputAreaLayoutV1(resizableInputs, layoutField, 'json')}
           value={draftValue}
           disabled={busy}
           aria-invalid={visibleDraft?.status === 'blocked'}
@@ -142,6 +148,7 @@ export default function WorldviewFieldCandidateReview({
   const editor = (
     <CTextarea
       ref={rightRef}
+      inputAreaLayout={inputAreaLayoutV1(resizableInputs, layoutField, 'candidate')}
       aria-label={`${candidate.payload.label}候选内容`}
       value={draftValue}
       disabled={busy}
@@ -183,6 +190,7 @@ export default function WorldviewFieldCandidateReview({
             <span className="text-[10px] text-text-muted">原文（只读）</span>
             <CTextarea
               ref={leftRef}
+              inputAreaLayout={inputAreaLayoutV1(resizableInputs, layoutField, 'original')}
               aria-label={`${candidate.payload.label}原文`}
               value={original}
               readOnly

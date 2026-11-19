@@ -5,6 +5,10 @@ lastVerified: 2026-11-13
 ---
 # Text adventure
 
+## November 19: draft deletion and libraries
+
+TTRPG and AVG libraries provide confirmed deletion; text-adventure production permits deletion only of unexecuted drafts. Back up and check the target first: confirmation is irreversible. Original worlds/novels and other works are retained. Executed, changed or out-of-scope targets are rejected; refreshing does not bypass those checks. Based on #466.
+
 ## November 13: saving, recovery and usage checks
 
 If an action starts in save A before switching to B, its late intent remains owned by A and neither switches the view back nor clears B's input. Main-location conflicts recover within the correct original task/scope; review saved characters/locations before continuing. Usage already observed after stopping production or changing rounds remains charged to the original task. Unknown outcomes stay pending rather than automatically resending. Preference-save failures retain the current selection. Sources: [#315](https://github.com/yuanbw2025/storyforge/pull/315), [#320](https://github.com/yuanbw2025/storyforge/pull/320), [#362](https://github.com/yuanbw2025/storyforge/pull/362), [#384](https://github.com/yuanbw2025/storyforge/pull/384).

@@ -5,6 +5,12 @@ lastVerified: 2026-11-13
 ---
 # TTRPGs and AI game mastering
 
+## November 19: draft deletion and libraries
+
+TTRPG and AVG libraries provide confirmed deletion; text-adventure production permits deletion only of unexecuted drafts. Back up and check the target first: confirmation is irreversible. Original worlds/novels and other works are retained. Executed, changed or out-of-scope targets are rejected; refreshing does not bypass those checks. Based on #466.
+
+TTRPG library creation, search and trial controls are compact, keeping works/examples visible. Help expands on demand and narrow screens retain controls. Production, frozen versions, saves and start confirmation are unchanged. Based on #475.
+
 ## November 13: saving, recovery and usage checks
 
 A continuation session inherits its parent campaign's workspace and world group; different groups cannot be mixed. Repeated/concurrent confirmation creates one valid child save, and failure to save initial events rolls back the operation. Wait for save confirmation before leaving; the leave action stays unavailable during saving. Resuming paused production retains completed results rather than resending old requests. Sources: [#326](https://github.com/yuanbw2025/storyforge/pull/326), [#320](https://github.com/yuanbw2025/storyforge/pull/320), [#429](https://github.com/yuanbw2025/storyforge/pull/429).

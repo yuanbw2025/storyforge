@@ -20,12 +20,13 @@ import { useHistoryAI } from './useHistoryAI'
 import { useWorldSettingsLayout, WorldSettingsToolbar } from '../longform/WorldSettingsLayout'
 
 interface Props {
+  resizableInputs?: boolean
   project: Project
 }
 
 type TabKey = 'overview' | 'timeline' | 'keywords'
 
-export default function HistoryPanel({ project }: Props) {
+export default function HistoryPanel({ project, resizableInputs = false }: Props) {
   const compact = useWorldSettingsLayout()
   const dialog = useDialog()
   const toast = useToast()
@@ -321,6 +322,7 @@ export default function HistoryPanel({ project }: Props) {
       {/* Tab 内容：历史总述 */}
       {activeTab === 'overview' && (
         <HistoryOverviewTab
+          resizableInputs={resizableInputs}
           overview={overview}
           eraSystem={eraSystem}
           onOverviewChange={setOverview}
@@ -381,6 +383,7 @@ export default function HistoryPanel({ project }: Props) {
                     : undefined
                   return (
                     <HistoryTimelineEventCard
+                      resizableInputs={resizableInputs}
                       key={event.id}
                       event={event}
                       chapters={chapters}
@@ -488,6 +491,7 @@ export default function HistoryPanel({ project }: Props) {
                   const expanded = expandedKeywordId === keyword.id
                   return (
                     <HistoryKeywordCard
+                      resizableInputs={resizableInputs}
                       key={keyword.id}
                       keyword={keyword}
                       chapters={chapters}

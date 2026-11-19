@@ -1,3 +1,4 @@
+import { inputAreaLayoutV1, worldviewInputAreaFieldV1 } from '../../lib/input-area-layout'
 import ScopedWorldAuthoringBoundary from '../world-group/ScopedWorldAuthoringBoundary'
 import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
 import WorldviewReadBoundary from './WorldviewReadBoundary'
@@ -59,16 +60,17 @@ const HUMANITY_CODEX_KEYS: Record<string, string[] | undefined> = {
 interface Props {
   project: Project
   onOpenHistory: () => void
+  resizableInputs?: boolean
 }
 
-export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props) {
+export default function WorldviewHumanityPanel({ project, onOpenHistory, resizableInputs = false }: Props) {
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   return <ScopedWorldAuthoringBoundary project={project} activeGroupId={activeGroupId}>
-    {view => <ScopedHumanityPanel {...view} onOpenHistory={onOpenHistory} />}
+    {view => <ScopedHumanityPanel {...view} onOpenHistory={onOpenHistory} resizableInputs={resizableInputs} />}
   </ScopedWorldAuthoringBoundary>
 }
 
-function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory }: Props & { activeGroupId: number | null }) {
+function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory, resizableInputs = false }: Props & { activeGroupId: number | null }) {
   const compact = useWorldSettingsLayout()
   const { worldview, saveWorldview, loadedScope, activeWorldGroupId, loading, loadError } = useWorldviewStore()
   const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
@@ -239,6 +241,7 @@ function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory }: Props & 
             <div key={f.key} className={activeKey === f.key ? '' : 'hidden'}>
               {/* 全貌（上）：现有字段本身就是这个方面的整体概述，带 AI 生成 */}
               <HumanityFieldEditor
+                resizableInputs={resizableInputs}
                 meta={f}
                 value={values[f.key] ?? ''}
                 onChange={v => {
@@ -287,6 +290,7 @@ function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory }: Props & 
 // ── 单字段编辑器（各自独立的 AI 流） ──────────────────────────
 
 function HumanityFieldEditor({
+  resizableInputs = false,
   meta,
   value,
   onChange,
@@ -300,6 +304,7 @@ function HumanityFieldEditor({
   onAdopted,
 }: {
   meta: FieldMeta
+  resizableInputs?: boolean
   value: string
   onChange: (v: string) => void | Promise<void>
   project: Project
@@ -325,10 +330,11 @@ function HumanityFieldEditor({
       </div>
 
       <div className="bg-bg-surface border border-border rounded-xl p-4">
-        <InlineTextarea value={value} onChange={onChange} placeholder={meta.description} />
+        <InlineTextarea inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(meta.field))} value={value} onChange={onChange} placeholder={meta.description} />
       </div>
       <WorldviewAgentControls
         field={meta.field}
+        resizableInputs={resizableInputs}
         project={project}
         activeGroupId={activeGroupId}
         copilot={copilot}

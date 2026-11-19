@@ -1,5 +1,16 @@
 # 更新日志
 
+## 2026-11-19 · 地图、模型容量与长篇编辑更新
+
+- **世界地图**：二维图集提供简笔、绘本、连续绘画，支持 18 图层、文字大小和当前画风 PNG；底图图片另存底图包。修复相邻陆块接缝，见[地图](/features/longform/worlds-maps)（#493/#495/#501）。
+- **模型与检索**：自动发现所选连接容量、共享预览/发送预算；本机索引随作品维护，向量配置移入高级选项；任务路由在结构化提取前冻结。见[模型配置](/getting-started/model-config)、[工作区检索](/features/memory-workspace)、[导入](/guides/import)（#472/#478/#503/#502）。
+- **长篇**：作品库卡片与已有手动封面入口整理；世界设定局部紧凑布局，输入区可调尺寸并保留原保存/候选路径；修复工作状态压缩误拒绝及物品/年表采纳挂起。见[规划](/features/longform/planning)、[连续性](/features/longform/continuity)（#480/#504/#505/#485/#498）。
+- **来源与互动**：原作按真实标题分章、保留前言；漫画长来源标题不重叠；跑团库和世界编辑优先显示内容；跑团/AVG及未执行的冒险制作草稿提供受约束的删除。见[导入](/guides/import)、[漫画](/features/comic)、[跑团](/features/interactive/ttrpg)、[世界引擎](/features/world-engine)、[AVG](/features/interactive/avg)、[冒险](/features/interactive/text-adventure)（#479/#473/#475/#482/#466）。
+- **设置与反馈**：主题/路由/提供商/六角色布局更紧凑，扩写等模式选中态更清楚；协议在设置底部可选查看；反馈表单支持截图草稿和明确重试，Linux 异常退出诊断补全。见[安装](/getting-started/install)、[模型配置](/getting-started/model-config)、[故障排查](/guides/troubleshooting)（#467～#471/#494/#488/#476/#487）。
+- **数据与准备**：封面存储基础使主干进入数据库 v15 / 备份 v19，完整 AI 封面与 Markdown 编辑仍未交付；Arch 桌面包随 v4.0.8 准备，正式版仍 v4.0.7。见[备份](/guides/backup-restore)、[兼容](/updates/compatibility)、[开发记录](/updates/development-status)（#492/#489/#496）。
+
+核对范围为 `6b8e1e42…a06d83ba`；发行夹具、日期化测量回执与流量归档不另算用户功能（#477/#481/#491/#497/#498/#499）。
+
 ## 2026-11-17 · 历史删除反馈与目录授权排查
 
 - 历史事件、关键词删除等待实际存储结果；失败显示错误并保留原记录，可在同一面板重试。见[世界与历史规划](/features/longform/planning)，依据 [#463](https://github.com/yuanbw2025/storyforge/pull/463)。
