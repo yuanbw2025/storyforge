@@ -174,6 +174,21 @@ describe('045 actual routed extraction request', () => {
     expect(wire.posts).toHaveLength(1); expect(await db.codexEntries.count()).toBe(0)
   })
 
+  it.each([408, 500, 502, 504])('keeps observed HTTP %s upstream outcome unknown, without another POST on recovery', async status => {
+    const fixture = await seed(agnes, gemini), wire = transport(status)
+    await expect(generateCodexExtractionCandidateV1(fixture)).rejects.toThrow(`HTTP ${status}，但上游结果未知`)
+    const row = (await db.agentRuns.toArray())[0], state = await readAgentRunV1(fixture.scope, row.id!)
+    expect(state.projection.state).toBe('paused')
+    expect(state.events.some(event => event.type === 'run.paused' && event.payload.reason === 'codex-extraction-model-outcome-unknown')).toBe(true)
+    expect(state.events.some(event => event.type === 'run.failed')).toBe(false)
+    const observation = state.events.find(event => event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'tool-result')!
+    const stored = JSON.parse(await readAgentRunArtifactExactV1({ projectId: fixture.scope.projectId,
+      artifactKind: 'tool-result', contentHash: observation.payload.contentHash }))
+    expect(stored.observation.requestLifecycle).toMatchObject({ phase: 'response-observed', responseStatus: status })
+    await expect(resumeCodexExtractionCandidateV1({ scope: fixture.scope, runId: row.id!, aiConfig: agnes })).rejects.toThrow('不可判定窗口')
+    expect(wire.posts).toHaveLength(1); expect(await db.codexEntries.count()).toBe(0)
+  })
+
   it.each(['', '[{"secret":"invalid-local-fields"}]'])('retains observed no-candidate evidence and never retries HTTP 200 output %j', async answer => {
     const fixture = await seed(agnes, gemini), wire = transport(200, undefined, answer)
     await expect(generateCodexExtractionCandidateV1(fixture)).rejects.toThrow()

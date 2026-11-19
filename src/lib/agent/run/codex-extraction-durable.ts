@@ -1,6 +1,7 @@
 import { chat, type ChatRequestOptions, type ChatResult } from '../../ai/client'
 import { AIError } from '../../types'
 import { ModelDispatchGuardRejectedV1 } from '../../ai/codex-transport'
+import { AICompletionResponseErrorV1 } from '../../ai/completion-response'
 import { estimateTokens } from '../../ai/context-budget'
 import {
   buildCodexExtractPromptFromRegisteredContextV1,
@@ -50,6 +51,9 @@ export const CODEX_EXTRACTION_STEP_ID_V1 = 'world-origin:codex-extract' as const
 export const CODEX_EXTRACTION_VERIFIER_SET_V1 = 'codex-extraction-terminal-v1' as const
 const MAX_MODEL_CALLS = 64
 const MAX_CANDIDATES = 200
+// An observed proxy/server timeout is not evidence that the upstream rejected
+// the model request. These explicit client refusals never grant retry authority.
+const DEFINITIVE_HTTP_REFUSALS = new Set([400, 401, 402, 403, 404, 405, 413, 414, 415, 422, 429])
 
 type RunAI = (messages: ChatMessage[], callIndex: number, options?: ChatRequestOptions) => Promise<string>
 
@@ -838,7 +842,9 @@ async function continueExtraction(input: {
       }
       const observedStatus = result.requestLifecycle?.phase === 'response-observed' ? result.requestLifecycle.responseStatus
         : error instanceof AIError ? error.status : null
-      if ((observedStatus != null && observedStatus >= 100 && observedStatus <= 599) || result.requestLifecycle?.phase === 'pre-dispatch') {
+      if ((observedStatus != null && DEFINITIVE_HTTP_REFUSALS.has(observedStatus))
+        || (observedStatus === 200 && error instanceof AICompletionResponseErrorV1)
+        || result.requestLifecycle?.phase === 'pre-dispatch') {
         const code = cause instanceof CodexExtractionRequestBudgetErrorV1 ? 'codex-extraction-input-budget'
           : observedStatus != null ? `codex-extraction-http-${observedStatus}` : 'codex-extraction-not-dispatched'
         snapshot = await append(input.scope, snapshot, 'step.failed', { stepId: CODEX_EXTRACTION_STEP_ID_V1, attempt: 1,
@@ -851,7 +857,7 @@ async function continueExtraction(input: {
       }
       await pauseUnsafeRun(input.scope, snapshot, 'codex-extraction-model-outcome-unknown')
       if (input.runAI) throw error
-      throw new Error('词条拆分请求结果未知；原运行与输入已保留，不会自动重发。请先核对原请求。')
+      throw new Error(`${observedStatus != null ? `词条拆分收到 HTTP ${observedStatus}，但上游结果未知` : '词条拆分请求结果未知'}；原运行与输入已保留，不会自动重发。请先核对原请求。`)
     }
     const outputHash = await hashCanonicalValue({ raw })
     snapshot = await append(input.scope, snapshot, 'model.responded', {
