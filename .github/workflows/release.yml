@@ -104,7 +104,8 @@ jobs:
         if: matrix.shard == 1
         run: PLAYWRIGHT_PRODUCTION_PREVIEW=1 npx playwright test tests/e2e/settings-proxy.spec.ts tests/e2e/codex-provider.spec.ts
       - name: Complete browser release checks
-        run: npm run ci:e2e -- --shard=${{ matrix.shard }}/4 --reporter=github,blob
+        # Forward through both npm scripts without changing evaluated package metadata.
+        run: npm run ci:e2e -- -- --shard=${{ matrix.shard }}/4 --reporter=github,blob
       - name: Preserve browser evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
