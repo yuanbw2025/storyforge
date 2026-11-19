@@ -1,3 +1,4 @@
+import { inputAreaLayoutV1, worldviewInputAreaFieldV1 } from '../../lib/input-area-layout'
 import ScopedWorldAuthoringBoundary from '../world-group/ScopedWorldAuthoringBoundary'
 import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
 import WorldviewReadBoundary from './WorldviewReadBoundary'
@@ -15,7 +16,7 @@ import { useWorldSettingsLayout, WorldSettingsToolbar } from '../longform/WorldS
 import type { Project, NaturalResources } from '../../lib/types'
 import type { WorldviewAgentField } from '../../lib/agent/worldview-field-copilot'
 
-interface Props { project: Project }
+interface Props { project: Project; resizableInputs?: boolean }
 
 // ── 字段定义（统一标签，兼容幻想与历史） ─────────────────────────
 
@@ -52,14 +53,14 @@ const NATURAL_CODEX_KEYS: Record<string, string[] | undefined> = {
 
 // ── 主面板 ─────────────────────────────────────────────────────
 
-export default function WorldviewNaturalPanel({ project }: Props) {
+export default function WorldviewNaturalPanel({ project, resizableInputs = false }: Props) {
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   return <ScopedWorldAuthoringBoundary project={project} activeGroupId={activeGroupId}>
-    {view => <ScopedNaturalPanel {...view} />}
+    {view => <ScopedNaturalPanel {...view} resizableInputs={resizableInputs} />}
   </ScopedWorldAuthoringBoundary>
 }
 
-function ScopedNaturalPanel({ project, activeGroupId }: Props & { activeGroupId: number | null }) {
+function ScopedNaturalPanel({ project, activeGroupId, resizableInputs = false }: Props & { activeGroupId: number | null }) {
   const compact = useWorldSettingsLayout()
   const { worldview, saveWorldview, loadedScope, activeWorldGroupId, loading, loadError } = useWorldviewStore()
   const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
@@ -189,6 +190,7 @@ function ScopedNaturalPanel({ project, activeGroupId }: Props & { activeGroupId:
           {FIELDS.map(f => (
             <div key={f.key} className={activeKey === f.key ? '' : 'hidden'}>
               <SimpleFieldEditor
+                resizableInputs={resizableInputs}
                 field={f}
                 value={values[f.key] ?? ''}
                 onChange={v => {
@@ -226,6 +228,7 @@ function ScopedNaturalPanel({ project, activeGroupId }: Props & { activeGroupId:
           <div className={activeKey === 'naturalResources' ? 'space-y-4' : 'hidden'}>
             {/* 全貌(上):自然资源整体概述,带 AI 生成,与其它方面一致 */}
             <SimpleFieldEditor
+              resizableInputs={resizableInputs}
               field={{ key: 'naturalResourceOverview', emoji: '🌿', label: '自然资源', desc: '矿产 / 灵材 / 动植物等自然产出的总体分布、丰饶程度与特点' }}
               value={values.naturalResourceOverview ?? ''}
               onChange={v => {
@@ -267,6 +270,7 @@ function ScopedNaturalPanel({ project, activeGroupId }: Props & { activeGroupId:
               <summary className="text-xs text-text-muted cursor-pointer hover:text-text-secondary">自然资源分类明细（原生结构）</summary>
               <div className="mt-2">
                 <NaturalResourcesEditor
+                  resizableInputs={resizableInputs}
                   naturalResources={naturalResources}
                   setNaturalResources={setNaturalResources}
                   save={save}
@@ -301,6 +305,7 @@ function ScopedNaturalPanel({ project, activeGroupId }: Props & { activeGroupId:
 // ── 单字段编辑器（各自独立的 AI 流） ──────────────────────────
 
 function SimpleFieldEditor({
+  resizableInputs = false,
   field,
   value,
   onChange,
@@ -314,6 +319,7 @@ function SimpleFieldEditor({
   onRunningChange,
   onAdopted,
 }: {
+  resizableInputs?: boolean
   field: { key: string; emoji: string; label: string; desc: string }
   value: string
   onChange: (v: string) => void | Promise<void>
@@ -336,10 +342,11 @@ function SimpleFieldEditor({
       </div>
 
       <div className="bg-bg-surface border border-border rounded-lg p-4">
-        <InlineTextarea value={value} onChange={onChange} placeholder={field.desc} />
+        <InlineTextarea inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(agentField))} value={value} onChange={onChange} placeholder={field.desc} />
       </div>
       <WorldviewAgentControls
         field={agentField}
+        resizableInputs={resizableInputs}
         project={project}
         activeGroupId={activeGroupId}
         copilot={copilot}
@@ -355,8 +362,9 @@ function SimpleFieldEditor({
 
 // ── 自然资源编辑器 ─────────────────────────────────────────────
 
-function NaturalResourcesEditor({ naturalResources, setNaturalResources, save }: {
+function NaturalResourcesEditor({ naturalResources, setNaturalResources, save, resizableInputs = false }: {
   naturalResources: NaturalResources
+  resizableInputs?: boolean
   setNaturalResources: React.Dispatch<React.SetStateAction<NaturalResources>>
   save: (patch: WorldviewAuthorPatch) => Promise<void>
 }) {
@@ -384,7 +392,7 @@ function NaturalResourcesEditor({ naturalResources, setNaturalResources, save }:
           <div key={r.key} className={`flex items-start gap-3 ${compact ? 'lf-world-resource-row' : ''}`}>
             <span className="text-sm text-text-secondary w-28 flex-shrink-0 pt-0.5">{r.label}</span>
             <div className="flex-1">
-              <InlineTextarea value={naturalResources[r.key]} onChange={v => update(r.key, v)} placeholder={r.placeholder} />
+              <InlineTextarea inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(r.key))} value={naturalResources[r.key]} onChange={v => update(r.key, v)} placeholder={r.placeholder} />
             </div>
           </div>
         ))}

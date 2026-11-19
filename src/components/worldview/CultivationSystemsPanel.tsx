@@ -1,3 +1,4 @@
+import { inputAreaLayoutV1 } from '../../lib/input-area-layout'
 import { useEffect, useMemo, useState } from 'react'
 import { GitBranch, Plus, Trash2 } from 'lucide-react'
 import type { Project } from '../../lib/types'
@@ -27,8 +28,10 @@ function nextStageId(): string {
 export default function CultivationSystemsPanel({
   project,
   initialSystemId,
+  resizableInputs = false,
 }: {
   project: Project
+  resizableInputs?: boolean
   initialSystemId?: number | null
 }) {
   const dialog = useDialog()
@@ -136,6 +139,7 @@ export default function CultivationSystemsPanel({
           </div>
           {selected && (
             <CultivationSystemEditor
+              resizableInputs={resizableInputs}
               key={selected.id}
               system={selected}
               onUpdate={patch => updateSystem(selected.id!, patch)}
@@ -149,11 +153,13 @@ export default function CultivationSystemsPanel({
 }
 
 function CultivationSystemEditor({
+  resizableInputs = false,
   system,
   onUpdate,
   onDelete,
 }: {
   system: CultivationSystem
+  resizableInputs?: boolean
   onUpdate: (patch: Partial<CultivationSystem>) => Promise<void>
   onDelete: () => void
 }) {
@@ -207,6 +213,7 @@ function CultivationSystemEditor({
             className="text-lg font-semibold text-text-primary"
           />
           <InlineTextarea
+            inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'cultivation.description')}
             value={system.description}
             onChange={description => onUpdate({ description })}
             placeholder="点击说明这套体系的核心原理、适用者和代价…"
@@ -291,6 +298,7 @@ function CultivationSystemEditor({
           <div>
             <label className="block text-[11px] text-text-muted mb-1">境界特征 / 战力边界</label>
             <InlineTextarea
+              inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'power.stageFeatures')}
               value={selectedStage.features || ''}
               onChange={features => patchStage(selectedStage.id, { features })}
               placeholder="能做到什么、不能做到什么…"
@@ -299,6 +307,7 @@ function CultivationSystemEditor({
           <div>
             <label className="block text-[11px] text-text-muted mb-1">突破到此阶的条件</label>
             <InlineTextarea
+              inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'power.breakthrough')}
               value={selectedStage.breakthrough || ''}
               onChange={breakthrough => patchStage(selectedStage.id, { breakthrough })}
               placeholder="资源、领悟、仪式、代价…"

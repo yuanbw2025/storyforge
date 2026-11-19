@@ -1,3 +1,4 @@
+import { inputAreaLayoutV1, worldviewInputAreaFieldV1 } from '../../lib/input-area-layout'
 import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
 import WorldviewReadBoundary from './WorldviewReadBoundary'
 import { useState, useEffect } from 'react'
@@ -35,6 +36,7 @@ export const WORLDVIEW_ORIGIN_AGENT_FIELDS = Object.values(AGENT_FIELD_BY_ORIGIN
 
 interface Props {
   project: Project
+  resizableInputs?: boolean
   initialWorldviewId?: number | null
   initialField?: WorldviewOriginFieldKey
   onFieldChange?: (field: WorldviewOriginFieldKey, activate: () => void) => void
@@ -44,7 +46,7 @@ interface Props {
 // ── 主面板 ─────────────────────────────────────────────────────
 
 /** v3 §2.1 — 世界观.世界起源（三个子模块） */
-export default function WorldviewOriginPanel({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget }: Props) {
+export default function WorldviewOriginPanel({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget, resizableInputs = false }: Props) {
   const compact = useWorldSettingsLayout()
   const { worldview, saveWorldview } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
@@ -152,6 +154,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
           {/* 世界来源 */}
           <div className={active === 'origin' ? '' : 'hidden'}>
             <TextFieldEditor
+              resizableInputs={resizableInputs}
               field={WORLDVIEW_ORIGIN_FIELDS[0]}
               value={worldOrigin}
               onChange={v => { setWorldOrigin(v); return save({ worldOrigin: v }) }}
@@ -173,6 +176,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
           {/* 力量体系:全貌(上) + 具体词条(下) */}
           <div className={active === 'power' ? '' : 'hidden'}>
             <TextFieldEditor
+              resizableInputs={resizableInputs}
               field={WORLDVIEW_ORIGIN_FIELDS[1]}
               value={powerHierarchy}
               onChange={v => { setPowerHierarchy(v); return save({ powerHierarchy: v }) }}
@@ -189,8 +193,8 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
                 await reloadCurrent()
               }}
             />
-            <PowerSystemDetails project={project} initialRecordId={initialPowerTarget?.table === 'powerSystems' ? initialPowerTarget.recordId : null}/>
-            <CultivationSystemsPanel project={project} initialSystemId={initialPowerTarget?.table === 'cultivationSystems' ? initialPowerTarget.recordId : null}/>
+            <PowerSystemDetails resizableInputs={resizableInputs} project={project} initialRecordId={initialPowerTarget?.table === 'powerSystems' ? initialPowerTarget.recordId : null}/>
+            <CultivationSystemsPanel resizableInputs={resizableInputs} project={project} initialSystemId={initialPowerTarget?.table === 'cultivationSystems' ? initialPowerTarget.recordId : null}/>
             <div className="mt-6">
               <h3 className="text-sm font-semibold text-text-primary mb-1">📚 力量层级 · 具体词条</h3>
               <p className="text-xs text-text-muted mb-3">在上面写完力量体系「全貌」后，这里把各等级/层级逐条登记，可自定义字段、打重要度星级，并进入 AI 生成上下文。</p>
@@ -206,6 +210,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
           {/* 神明与信仰:全貌(上) + 具体词条(下) */}
           <div className={active === 'divine' ? '' : 'hidden'}>
             <DivineFieldEditor
+              resizableInputs={resizableInputs}
               field={WORLDVIEW_ORIGIN_FIELDS[2]}
               divineDesign={divineDesign}
               onDivineChange={async (next) => {
@@ -249,6 +254,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
 // ── 文本字段编辑器（世界来源 / 力量体系） ────────────────────────
 
 function TextFieldEditor({
+  resizableInputs = false,
   field,
   value,
   onChange,
@@ -263,6 +269,7 @@ function TextFieldEditor({
   onAdopted,
 }: {
   field: typeof WORLDVIEW_ORIGIN_FIELDS[number]
+  resizableInputs?: boolean
   value: string
   onChange: (v: string) => void | Promise<void>
   project: Project
@@ -286,10 +293,11 @@ function TextFieldEditor({
       </div>
 
       <div className="bg-bg-surface border border-border rounded-lg p-4">
-        <InlineTextarea value={value} onChange={onChange} placeholder={field.desc} />
+        <InlineTextarea inputAreaLayout={inputAreaLayoutV1(resizableInputs, worldviewInputAreaFieldV1(agentField))} value={value} onChange={onChange} placeholder={field.desc} />
       </div>
       <WorldviewAgentControls
         field={agentField}
+        resizableInputs={resizableInputs}
         project={project}
         activeGroupId={activeGroupId}
         copilot={copilot}
@@ -306,6 +314,7 @@ function TextFieldEditor({
 // ── 神明与信仰编辑器（人工字段 + 受治理结构化候选） ────────────────
 
 function DivineFieldEditor({
+  resizableInputs = false,
   field,
   divineDesign,
   onDivineChange,
@@ -319,6 +328,7 @@ function DivineFieldEditor({
   onAdopted,
 }: {
   field: typeof WORLDVIEW_ORIGIN_FIELDS[number]
+  resizableInputs?: boolean
   divineDesign: DivineDesign
   onDivineChange: (next: Partial<DivineDesign>) => Promise<void>
   project: Project
@@ -377,6 +387,7 @@ function DivineFieldEditor({
             <span className="w-24 shrink-0 text-xs text-text-muted pt-0.5 text-right">信仰层级</span>
             <div className="flex-1 min-w-0">
               <InlineTextarea
+                inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'world.divineRank')}
                 value={divineDesign.divineRank}
                 onChange={v => onDivineChange({ divineRank: v })}
                 placeholder="例：主神 / 次神 / 半神 / 国教 / 民间信仰 ..."
@@ -387,6 +398,7 @@ function DivineFieldEditor({
             <span className="w-24 shrink-0 text-xs text-text-muted pt-0.5 text-right">名号与职司</span>
             <div className="flex-1 min-w-0">
               <InlineTextarea
+                inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'world.divineNames')}
                 value={divineDesign.divineNames}
                 onChange={v => onDivineChange({ divineNames: v })}
                 placeholder="例：天帝 · 创世神；关帝信仰；妈祖信仰 ..."
@@ -397,6 +409,7 @@ function DivineFieldEditor({
             <span className="w-24 shrink-0 text-xs text-text-muted pt-0.5 text-right">规则与禁忌</span>
             <div className="flex-1 min-w-0">
               <InlineTextarea
+                inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'world.divineRules')}
                 value={divineDesign.divineRules}
                 onChange={v => onDivineChange({ divineRules: v })}
                 placeholder="例：不可直接干涉凡间 / 避讳字 / 祭祀风俗 ..."
@@ -408,6 +421,7 @@ function DivineFieldEditor({
 
       <WorldviewAgentControls
         field="divineDesign"
+        resizableInputs={resizableInputs}
         project={project}
         activeGroupId={activeGroupId}
         copilot={copilot}
