@@ -283,7 +283,7 @@ export default function WorldMapPanel({ project }: Props) {
               <Globe className="w-3 h-3" /> 奇幻
             </button>
             <button type="button" aria-pressed={viewMode === 'atlas'} onClick={() => setViewMode('atlas')}
-              className="px-2.5 py-1 text-xs rounded">绘本与绘画</button>
+              className="px-2.5 py-1 text-xs rounded">地图图集</button>
             <button
               type="button"
               disabled
