@@ -1,6 +1,9 @@
 import { createWorldPackage } from '../../src/lib/world-engine/world-package'
 import { installWorldSourcePackageV1 } from '../../src/lib/world-engine/source-receipt'
 import { encodeFixtureRasterV1, installRasterDecoderForVitestV1 } from './raster-decoder-vitest'
+import { saveWorkCoverDraftV1 } from '../../src/lib/work-cover/drafts'
+import { uploadWorkCoverAssetV1 } from '../../src/lib/work-cover/assets'
+import { adoptWorkCoverV1, prepareWorkCoverAdoptionV1 } from '../../src/lib/work-cover/adoption'
 import { defaultAiTownSettings, serializeAiTownSettings } from '../../src/lib/ai-town/authoring-contract'
 import { defaultTtrpgSettings, serializeTtrpgSettings } from '../../src/lib/ttrpg/authoring-contract'
 import {DEFAULT_CHAT_SETTINGS} from '../../src/lib/character-interaction/authoring-contract'
@@ -1551,6 +1554,19 @@ export async function seedFullProject() {
     allowedUses: { 'world-remix': false, ttrpg: true, 'character-interaction': false,
       'ai-town': false, 'text-adventure': false, avg: false, 'text-open-world': false } })
   await installWorldSourcePackageV1({ projectId, worldId }, sourcePackage)
+
+  // Populate the v19 Work-owned cover tables through the actual upload and
+  // explicit adoption boundary. No model Run or generated-image evidence is forged.
+  const coverWork = await db.works.get(workId)
+  if (!coverWork) throw new Error('Full cover fixture requires its longform Work')
+  const coverScope = { projectId, worldId, workId }
+  const coverDraft = await saveWorkCoverDraftV1({ scope: coverScope, prompt: '全表往返的灯塔封面',
+    expectedRevision: null, expectedWorkUpdatedAt: coverWork.updatedAt })
+  const coverAsset = await uploadWorkCoverAssetV1({ scope: coverScope, draftId: coverDraft.id,
+    expectedDraftRevision: coverDraft.revision, data: encodeFixtureRasterV1(12, 18) })
+  const coverConfirmation = await prepareWorkCoverAdoptionV1({ scope: coverScope, draftId: coverDraft.id,
+    expectedDraftRevision: coverDraft.revision + 1, assetId: coverAsset.id, expectedWorkUpdatedAt: coverWork.updatedAt })
+  await adoptWorkCoverV1(coverScope, coverConfirmation)
 
   return {
     projectId, wgA, wgB, char1, char2, vol, chapNode, chapter, temporalFact, ref1,
