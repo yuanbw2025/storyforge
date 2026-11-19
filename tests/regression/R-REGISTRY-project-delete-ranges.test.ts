@@ -1,10 +1,21 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
+import { cascadeDeleteProject, transactionTablesFor } from '../../src/lib/registry/lifecycle'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { clearAtlasWorkspaceViews, readAtlasView, saveAtlasView } from '../../src/lib/authoring/atlas-view-cache'
+import { authorViewCache } from '../../src/lib/storage/author-view-cache'
+import type { AtlasPaintPackageV2 } from '../../src/lib/world-map/atlas/paint-package'
 
 beforeEach(async () => { await db.delete(); await db.open() })
-afterEach(async () => { vi.restoreAllMocks(); await db.delete() })
+afterEach(async () => {
+  vi.restoreAllMocks()
+  for (const project of await db.projects.toArray()) if (project.workspaceUid) await clearAtlasWorkspaceViews(project.workspaceUid)
+  await db.delete()
+})
+
+const paint: AtlasPaintPackageV2 = { kind: 'storyforge.atlas-paint', version: 2, geometryHash: 'a'.repeat(64),
+  style: 'sketch', symbols: 'watercolor', rendering: 'masked-v2', image: 'data:image/png;base64,eA==',
+  source: { provider: 'fixture', model: 'image', createdAt: 1, promptRevision: 'v2' } }
 
 async function fixture() {
   const a = (await seedCurrentWorkspace('range-delete-owned')).scope.projectId
@@ -27,6 +38,31 @@ async function fixture() {
   }
   return { a, b, row }
 }
+
+it('clears only the deleted workspace view while an enclosing caller holds root identity locks', async () => {
+  const { a, b } = await fixture()
+  const ownerA = (await db.projects.get(a))!.workspaceUid!, ownerB = (await db.projects.get(b))!.workspaceUid!
+  await saveAtlasView(ownerA + ':map:1', paint)
+  await saveAtlasView(ownerB + ':map:1', paint)
+  await db.transaction('rw', transactionTablesFor('deleteProject'), async () => {
+    await cascadeDeleteProject(a)
+    expect(await db.projects.get(a)).toBeUndefined()
+    expect(await db.projects.get(b)).toBeDefined()
+  })
+  expect(await readAtlasView(ownerA + ':map:1', 'sketch', 'watercolor')).toBeUndefined()
+  expect((await readAtlasView(ownerB + ':map:1', 'sketch', 'watercolor'))?.art).toEqual(paint)
+})
+
+it('retains the workspace and its view when cache cleanup fails before deletion', async () => {
+  const { a, b } = await fixture()
+  const owner = (await db.projects.get(a))!.workspaceUid!
+  await saveAtlasView(owner + ':map:1', paint)
+  vi.spyOn(authorViewCache, 'removePrefix').mockRejectedValueOnce(Error('cache-cleanup-blocked'))
+  await expect(cascadeDeleteProject(a)).rejects.toThrow('cache-cleanup-blocked')
+  expect(await db.projects.get(a)).toBeDefined()
+  expect(await db.projects.get(b)).toBeDefined()
+  expect((await readAtlasView(owner + ':map:1', 'sketch', 'watercolor'))?.art).toEqual(paint)
+})
 
 it('deletes only the owned scope across integer gaps and foreign fractional keys, including indirect rows and blobs', async () => {
   const { a, b } = await fixture()
