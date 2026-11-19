@@ -119,16 +119,17 @@ export function readUnitShard(file, index, head) {
   return plan.groups[Number(index)]
 }
 
-// Edit admission replays complete governed Builds, including the initial and
-// final data checks. A sibling file on the same runner can exhaust its bounded
-// recovery time. Give it that runner alone, then continue the selected files.
+// These suites replay complete governed Builds with bounded recovery/production
+// cases. Give each its own process, then continue every other selected file.
 const editAdmissionSuite = 'tests/regression/R-SFQA004-product-entry-admission.test.tsx'
+const soundLocalRepairSuite = 'tests/regression/R-AVG-04B-sound-local-repair-flow.test.ts'
 
 /** @param {string[]} files */
 export function runnerBatches(files) {
-  if (!files.includes(editAdmissionSuite)) return files.length ? [files] : []
-  const others = files.filter(file => file !== editAdmissionSuite)
-  return others.length ? [[editAdmissionSuite], others] : [[editAdmissionSuite]]
+  const isolated = [editAdmissionSuite, soundLocalRepairSuite]
+  const batches = isolated.filter(file => files.includes(file)).map(file => [file])
+  const others = files.filter(file => !isolated.includes(file))
+  return others.length ? [...batches, others] : batches
 }
 
 /** @param {string[]} files @param {string[]} [options] @param {typeof run} [execute] */
