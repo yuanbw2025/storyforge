@@ -1,5 +1,11 @@
 # Changelog
 
+## November 19, 2026 · Optional world-map art enhancement
+
+- Sketch, illustrated, and continuous-painting maps can use their native rendering directly or request an enhancement candidate through a reference-image connection. Image and writing connections can be selected separately; text-only, vision-only, and text-to-image-only connections cannot repaint the map.
+- Compare the candidate with the original before choosing to use it. Labels, settlements, rivers, roads, and layer filters remain program-controlled. Enhancement is composited within the original terrain footprints; model details still require review.
+- Adopted enhancements can be restored locally. Terrain changes suspend the old image, while renaming places does not require repainting. Export a separate paint package for backup or another device. Failed saves retain the current image; stopping the wait or receiving an API failure never resends automatically. See [world maps](/en/features/longform/worlds-maps), based on the [feature commit](https://github.com/yuanbw2025/storyforge/commit/8ef1cbe03).
+
 ## November 19, 2026 · Maps, model capacity and longform editing
 
 - **Maps:** Sketch, Illustrated and Continuous painting atlas styles, 18 layers, label sizes and current-style PNG exports; painted images require separate base-map packages. Shared coastline seams are fixed. See [maps](/en/features/longform/worlds-maps) (#493/#495/#501).
