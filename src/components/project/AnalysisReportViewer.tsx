@@ -137,7 +137,7 @@ export default function AnalysisReportViewer({ reference, run, chunks, isHistori
             }}
             className="px-2 py-1 text-xs rounded-md border border-accent/30 hover:bg-accent/10 text-accent transition-colors whitespace-nowrap"
           >
-            📋 全书总结
+            📋 已读范围综合
           </button>
         )}
 
@@ -185,6 +185,9 @@ export default function AnalysisReportViewer({ reference, run, chunks, isHistori
 
       {/* 内容区（全宽） */}
       <div className="space-y-4">
+        <p className="text-xs text-text-muted">
+          分析只覆盖本版本提供的材料；块号是原文定位线索，不等于章节。综合总结需审查并采纳，引用创作时按预算选用完整方法，缺失材料与未核实解释不能当作作品事实。
+        </p>
         {/* 视图切换 + 总结按钮 */}
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex bg-bg-elevated rounded-lg p-0.5">
@@ -206,7 +209,7 @@ export default function AnalysisReportViewer({ reference, run, chunks, isHistori
             </button>
           </div>
 
-          {view === 'merged' && !summaryJSON && (
+          {view === 'merged' && (
             <button
               onClick={handleGenerateSummary}
               disabled={derivedAI.summary.busy || derivedAI.summary.candidate != null || nonEmptyDims.length === 0}
@@ -215,7 +218,7 @@ export default function AnalysisReportViewer({ reference, run, chunks, isHistori
               {derivedAI.summary.busy
                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 : <Sparkles className="w-3.5 h-3.5" />}
-              {derivedAI.summary.busy ? '生成中…' : 'AI 全书总结'}
+              {derivedAI.summary.busy ? '生成中…' : summaryJSON ? '重新生成综合候选' : 'AI 已读范围综合'}
             </button>
           )}
         </div>
@@ -271,7 +274,7 @@ function ReferenceDerivedCandidatePanel({
   onAbandon: () => void
 }) {
   if (!lane.candidate && lane.unsafeRunId == null && !lane.message) return null
-  const label = mode === 'summary' ? '全书总结' : '角色卡聚合'
+  const label = mode === 'summary' ? '已读范围综合' : '角色卡聚合'
   let preview: unknown = null
   try { preview = lane.candidate ? JSON.parse(lane.candidate.resultJson) : null } catch { /* verified runner owns parsing */ }
 
@@ -371,12 +374,12 @@ function MergedView({
 
   return (
     <div className="space-y-4">
-      {/* AI 全书总结 */}
+      {/* AI 已读范围综合 */}
       {hasSummary && (
         <div id="section-summary" className="rounded-xl border border-accent/30 bg-accent/5 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-accent flex items-center gap-1.5">
             <Sparkles className="w-4 h-4" />
-            AI 全书总结
+            AI 已读范围综合
           </h3>
           <div className="space-y-2">
             {merged.dimensions

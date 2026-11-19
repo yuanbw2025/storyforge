@@ -166,6 +166,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
   const omitted: string[] = []
   const omittedEvidence: AssembleContextSourceEvidence[] = []
   const keyedSegments: KeyedContextSegment[] = []
+  const atomicBudgetTrimmed = new Map<string, AssembleContextSourceEvidence>()
 
   const omit = (key: string, sourceHash?: string): void => {
     omitted.push(key)
@@ -212,6 +213,16 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
     const sourceBudgetTokens = Math.min(scaledSourceBudget, inputBudget)
     const originalTokens = estimateTokens(content)
     if (source.atomic && originalTokens > sourceBudgetTokens) {
+      // Atomic forbids partial delivery. Optional sources may still be dropped
+      // whole; protected contracts must fail before dispatch instead.
+      if (source.layer !== 'L0' && !source.protectedFromTrim) {
+        atomicBudgetTrimmed.set(source.key, {
+          key: source.key, status: 'trimmed', delivery: 'none', sourceHash,
+          originalCharacters: content.length, inputCharacters: 0,
+          originalTokens, inputTokens: 0,
+        })
+        continue
+      }
       throw new AtomicContextSourceBudgetErrorV1(source.key, originalTokens, sourceBudgetTokens)
     }
     const transformed = originalTokens > sourceBudgetTokens && input.sourceTransformer
@@ -288,12 +299,16 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
   }
 
   const totalBeforeTrim = keyedSegments.reduce((sum, s) => sum + s.segment.tokens, 0)
+    + [...atomicBudgetTrimmed.values()].reduce((sum, evidence) => sum + evidence.originalTokens, 0)
   const overBudgetBeforeTrim = totalBeforeTrim > inputBudget
   const { kept, trimmed } = trimToFit(keyedSegments, inputBudget)
+  trimmed.push(...atomicBudgetTrimmed.keys())
   const segments = kept.map(s => s.segment)
   const totalInputTokens = segments.reduce((sum, s) => sum + s.tokens, 0)
   const keptKeys = new Set(kept.map(item => item.key))
   const sourceEvidence: AssembleContextSourceEvidence[] = selected.map(source => {
+    const atomicTrimmed = atomicBudgetTrimmed.get(source.key)
+    if (atomicTrimmed) return atomicTrimmed
     const omittedItem = omittedEvidence.find(item => item.key === source.key)
     if (omittedItem) return omittedItem
     const item = keyedSegments.find(segment => segment.key === source.key)

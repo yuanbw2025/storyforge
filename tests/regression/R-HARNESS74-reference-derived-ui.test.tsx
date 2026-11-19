@@ -122,17 +122,17 @@ describe('R-HARNESS74 · 参考分析派生 Agent 作者确认 UI', () => {
     host.remove()
   })
 
-  async function mount() {
+  async function mount(summary?: string) {
     await act(async () => root.render(createElement(ToastProvider, null,
       createElement(AnalysisReportViewer, {
-        reference: reference(), run: run(), chunks: chunks(), isHistorical: false,
+        reference: reference(), run: { ...run(), ...(summary ? { analysisSummary: summary } : {}) }, chunks: chunks(), isHistorical: false,
       }))))
   }
 
   it('总结和角色入口只启动各自 durable lane', async () => {
     await mount()
     const summary = Array.from(host.querySelectorAll('button'))
-      .find(button => button.textContent?.includes('AI 全书总结'))!
+      .find(button => button.textContent?.includes('AI 已读范围综合'))!
     const characters = Array.from(host.querySelectorAll('button'))
       .find(button => button.textContent?.includes('AI 整理角色卡'))!
 
@@ -140,6 +140,16 @@ describe('R-HARNESS74 · 参考分析派生 Agent 作者确认 UI', () => {
     await act(async () => characters.click())
 
     expect(controller.run.mock.calls).toEqual([['summary'], ['characters']])
+  })
+
+  it('can regenerate a candidate while the previous adopted summary remains visible', async () => {
+    await mount(JSON.stringify({ narrativeStyle: '作者已经采纳的旧综合。' }))
+    const button = Array.from(host.querySelectorAll('button')).find(row => row.textContent?.includes('重新生成综合候选'))!
+    expect(host.textContent).toContain('作者已经采纳的旧综合。')
+    await act(async () => button.click())
+    expect(controller.run).toHaveBeenCalledWith('summary')
+    expect(host.textContent).toContain('作者已经采纳的旧综合。')
+    expect(controller.accept).not.toHaveBeenCalled()
   })
 
   it('持久候选可预览，并把确认、拒绝和重试路由到原运行', async () => {
@@ -161,7 +171,7 @@ describe('R-HARNESS74 · 参考分析派生 Agent 作者确认 UI', () => {
     })
     await mount()
 
-    expect(host.textContent).toContain('全书总结持久候选')
+    expect(host.textContent).toContain('已读范围综合持久候选')
     expect(host.textContent).toContain('全书以受限视角维持证词悬念。')
     expect(host.textContent).toContain('角色卡聚合持久候选')
     expect(host.textContent).toContain('林照雪')
