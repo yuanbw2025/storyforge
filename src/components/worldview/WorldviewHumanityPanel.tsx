@@ -13,6 +13,7 @@ import type { Project } from '../../lib/types'
 import type { WorldviewAgentField } from '../../lib/agent/worldview-field-copilot'
 import CodexPanel from '../codex/CodexPanel'
 import CodexSearchBar from '../codex/CodexSearchBar'
+import { useWorldSettingsLayout, WorldSettingsToolbar } from '../longform/WorldSettingsLayout'
 import { useCodexStore } from '../../stores/codex'
 import { codexEntryInWorld } from '../../lib/types/codex'
 
@@ -68,6 +69,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
 }
 
 function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory }: Props & { activeGroupId: number | null }) {
+  const compact = useWorldSettingsLayout()
   const { worldview, saveWorldview, loadedScope, activeWorldGroupId, loading, loadError } = useWorldviewStore()
   const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
   const readReady = !loading && !loadError && loadedScope?.projectId === authorScope.projectId
@@ -126,9 +128,9 @@ function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory }: Props & 
 
   return (
     <WorldviewReadBoundary onRetry={reloadCurrent} ready={readReady}>
-    <div className="flex flex-col w-full h-full space-y-4">
+    <div className={compact ? 'lf-world-panel flex h-full flex-col' : 'flex flex-col w-full h-full space-y-4'}>
       {/* 顶部 */}
-      <div className="pb-4 border-b border-border/40 px-6 pt-4 shrink-0">
+      {!compact && <div className="pb-4 border-b border-border/40 px-6 pt-4 shrink-0">
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
             🏛️ 人文环境与社会
@@ -162,9 +164,9 @@ function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory }: Props & 
             }}
           />
         </div>
-      </div>
+      </div>}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className={compact ? 'lf-world-columns flex-1 min-h-0' : 'flex flex-1 overflow-hidden'}>
         {/* ── 左侧导航 ── */}
         <nav className="w-max min-w-32 max-w-44 flex-shrink-0 border-r border-border overflow-y-auto py-4 pr-1">
           {[HISTORY_NAV, ...FIELDS].map(f => {
@@ -198,22 +200,35 @@ function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory }: Props & 
         </nav>
 
         {/* ── 右侧：所有字段同时渲染，hidden 控制显示 ── */}
-        <div className="flex-1 min-w-0 overflow-y-auto p-6">
-          <div className={activeKey === 'history' ? 'max-w-3xl space-y-5' : 'hidden'}>
+        <div className={compact ? 'lf-world-content overflow-y-auto' : 'flex-1 min-w-0 overflow-y-auto p-6'}>
+          {compact && <WorldSettingsToolbar title={activeKey === 'history' ? '📜 历史年表'
+            : `${FIELDS.find(field => field.key === activeKey)?.emoji ?? ''} ${FIELDS.find(field => field.key === activeKey)?.label ?? ''}`}
+            actions={<>{project.enableMultiWorld && <WorldGroupSwitcher />}{activeKey === 'history' && onOpenHistory
+              && <button type="button" onClick={onOpenHistory} className="text-xs text-accent underline">打开正式历史年表</button>}</>}
+            search={<CodexSearchBar compact scope={authorScope} worldGroupId={targetWorldGroupId}
+              categoryKeys={[...new Set([...Object.values(HUMANITY_CODEX_KEYS).flat().filter(Boolean), 'humEra', 'humEvent', 'humSociety'] as string[])]}
+              onJump={catKey => {
+                if (catKey === 'humEra' || catKey === 'humEvent') { setLegacyHistoryFocus(catKey); setActiveKey('history'); return }
+                if (catKey === 'humSociety') { setActiveKey('politics'); return }
+                const sub = Object.keys(HUMANITY_CODEX_KEYS).find(key => HUMANITY_CODEX_KEYS[key]?.includes(catKey))
+                if (sub) setActiveKey(sub)
+              }} />}
+          />}
+          <div className={activeKey === 'history' ? `${compact ? 'lf-world-field' : 'max-w-3xl'} space-y-5` : 'hidden'}>
               <div>
-                <h3 className="text-lg font-semibold text-text-primary">📜 历史年表</h3>
+                {!compact && <h3 className="text-lg font-semibold text-text-primary">📜 历史年表</h3>}
                 <p className="mt-1 text-sm text-text-muted">
                   历史总述、纪年体系、正式事件和时代关键词统一由历史年表维护，避免两套入口互相覆盖。
                 </p>
               </div>
-              <button
+              {!compact && <button
                 type="button"
                 onClick={onOpenHistory}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent/10 text-accent hover:bg-accent/20 text-sm"
               >
                 <BookOpen className="w-4 h-4" />
                 打开正式历史年表
-              </button>
+              </button>}
               {legacyExists(['humEra', 'humEvent']) && <section aria-label="旧版历史词条" className="space-y-2">
                 <h3 className="text-sm font-semibold">旧版历史词条</h3>
                 <p className="text-xs text-text-muted">保留的旧词条可在此维护。新增历史内容请使用正式历史年表。</p>
@@ -296,11 +311,12 @@ function HumanityFieldEditor({
   onRunningChange: (running: boolean) => void
   onAdopted: (candidate: PendingMasterCandidate) => Promise<void>
 }) {
+  const compact = useWorldSettingsLayout()
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className={compact ? 'lf-world-field space-y-3' : 'max-w-3xl space-y-4'}>
       <div>
-        <h3 className="text-lg font-semibold text-text-primary">{meta.emoji} {meta.label}</h3>
-        <p className="mt-1 text-sm text-text-muted">{meta.description}</p>
+        {!compact && <h3 className="text-lg font-semibold text-text-primary">{meta.emoji} {meta.label}</h3>}
+        <p className={compact ? 'lf-world-field-description' : 'mt-1 text-sm text-text-muted'}>{meta.description}</p>
         {meta.hint && (
           <p className="mt-1.5 text-xs text-accent/80 bg-accent/5 border border-accent/15 rounded px-2 py-1">
             💡 {meta.hint}

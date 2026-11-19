@@ -74,10 +74,18 @@ export function assertWorkCoverPortableRowV1(kind: 'draft' | 'asset' | 'adoption
     for (const key of ['width', 'height', 'byteSize']) integer(row, key, 1)
     if ((row.width as number) > 16_384 || (row.height as number) > 16_384
       || (row.width as number) * (row.height as number) > 32 * 1024 * 1024 || (row.byteSize as number) > 25 * 1024 * 1024) fail()
+    if (row.role === 'uploaded-original') {
+      if (row.rights !== 'author-upload' || row.candidateJson !== null
+        || row.sourceRunId != null || row._sourceRunExportId != null) fail()
+    } else if (row.role === 'generated-original') {
+      if (row.rights !== 'provider-terms-unverified' || row.candidateJson === null) fail()
+      if (row.sourceRunId != null) integer(row, 'sourceRunId', 1)
+      else integer(row, '_sourceRunExportId') // Portable export coordinates start at zero.
+    } else fail() // No derived rendering mode is implemented by the identity-only foundation.
     if (row.candidateJson !== null) {
       const candidate = parseWorkCoverImageCandidateV1(row.candidateJson as string)
       if (candidate.workCode !== row.workCode || candidate.assetKey !== row.assetKey || candidate.blobHash !== row.blobHash) fail()
-    } else if (row.role === 'generated-original') fail()
+    }
   } else {
     uuid(row, 'operationKey'); uuid(row, 'draftKey'); integer(row, 'draftRevision', 1)
     for (const field of ['candidateHash', 'renderManifestHash', 'oldCoverHash', 'newCoverHash', 'receiptHash']) hash(row, field)

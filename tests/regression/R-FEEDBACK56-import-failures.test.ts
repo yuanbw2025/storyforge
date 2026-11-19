@@ -67,15 +67,21 @@ describe('Feedback #56: bounded, diagnosable import failures', () => {
     expect(body).toMatchObject({ response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 16384 })
   })
 
-  it('does not send DeepSeek-only options to another configured provider', async () => {
-    useAIConfigStore.setState({ config: { ...useAIConfigStore.getState().config, provider: 'custom', contextWindow: 131072 } })
-    const fetch = vi.fn().mockImplementation(async () => completion('{"worldview":{}}'))
+  it('keeps custom import JSON mode without DeepSeek thinking options', async () => {
+    useAIConfigStore.setState({ config: { ...useAIConfigStore.getState().config, provider: 'custom',
+      model: 'custom-import-model', baseUrl: 'https://custom-import.example.invalid/v1' } })
+    const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe('https://custom-import.example.invalid/v1/chat/completions')
+      expect(init?.method).toBe('POST')
+      expect(JSON.parse(String(init?.body))).toMatchObject({ model: 'custom-import-model', stream: false, max_tokens: 16384 })
+      return completion('{"worldview":{}}')
+    })
     vi.stubGlobal('fetch', fetch)
     await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 32768)
     await runSession({ projectId, sessionId })
     expect(fetch).toHaveBeenCalledTimes(1)
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).not.toHaveProperty('thinking')
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).not.toHaveProperty('response_format')
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).not.toHaveProperty('thinking')
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toMatchObject({ response_format: { type: 'json_object' } })
   })
 
   it('keeps confirmed chunks when the next attempt fails and never resends the charged block', async () => {

@@ -93,15 +93,15 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
     { value: 'deepseek-v4-pro-260425', label: 'DeepSeek V4 Pro', desc: '火山方舟官方计划于 2026-11-24 下线；请提前由作者选择迁移型号' },
     { value: 'deepseek-v4-flash-260425', label: 'DeepSeek V4 Flash', desc: '火山方舟官方 API 已于 2026-09-21 下线；已有配置保留' },
   ],
-  // Gemini lifecycle / OpenAI compatibility reviewed 2026-10-26; saved IDs remain author-owned.
+  // Gemini lifecycle labels reviewed 2026-11-19; saved IDs remain author-owned.
   gemini: [
     { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', desc: '兼容别名；官方 API 自动路由至 3.6，未关闭' },
     { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', desc: '官方稳定版；请先做当前任务预检' },
     { value: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite', desc: '高吞吐轻量版' },
     { value: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash', desc: '官方当前新一代 Flash；使用前先做任务预检' },
-    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', desc: '历史稳定版；官方限制新项目访问，未宣布下线' },
-    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite', desc: '历史稳定版；官方限制新项目访问，未宣布下线' },
-    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', desc: '历史稳定版；官方限制新项目访问，未宣布下线' },
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', desc: 'Google 官方 API 将于 2026-12-01 起自动路由至 3.5 Flash-Lite；请核对参数与费用' },
+    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite', desc: 'Google 官方 API 仍可用；暂未宣布下线日期' },
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', desc: 'Google 官方 API 将于 2026-12-01 起自动路由至 3.8 Flash；请核对参数与费用' },
     { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite', desc: '稳定版；官方 API 计划于 2027-05-07 下线' },
     { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Preview)', desc: '⚠️ 预览版，可能不稳定' },
     { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', desc: '官方 API 已于 2026-06-01 下线；已保存配置保留，需手动选择可用型号' },

@@ -1,6 +1,7 @@
 import Dexie from 'dexie'
 import { afterEach, describe, expect, it } from 'vitest'
 import { db, StoryForgeDB, STORYFORGE_STORES, STORYFORGE_STORES_V11, STORYFORGE_SCHEMA_VERSION } from '../../src/lib/db/schema'
+import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
 import { openCurrentSchema } from '../../src/lib/db/ensure-schema'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
@@ -57,7 +58,9 @@ describe('TTRPG/NW integration · preserve independent owners through version co
     const backup = await exportProjectJSON(created.scope.projectId)
     const legacy = { ...structuredClone(backup), version: 16 } as Record<string, unknown> & { version: number }
     // Both v16 branches predate source receipts. Only the TTRPG branch carries native memories.
-    delete legacy.worldSourceReceipts
+    for (const spec of PROJECT_TABLES.filter(spec => spec.exportable && (spec.introducedBackupVersion ?? 1) > 16)) {
+      delete legacy[spec.name]
+    }
     if (profile === 'world-v16') delete legacy.ttrpgNarrativeMemories
     const original = JSON.stringify(legacy)
     expect(inspectProjectBackup(legacy).valid).toBe(true)
@@ -78,10 +81,13 @@ describe('TTRPG/NW integration · preserve independent owners through version co
     const missing = { ...structuredClone(backup) } as Record<string, unknown>
     delete missing.ttrpgNarrativeMemories
     expect(inspectProjectBackup(missing).valid).toBe(false)
-    delete missing.worldSourceReceipts
+    for (const spec of PROJECT_TABLES.filter(spec => spec.exportable && (spec.introducedBackupVersion ?? 1) > 16)) {
+      delete missing[spec.name]
+    }
     const oldMissingCore = { ...missing, version: 16 }
     delete oldMissingCore.chapters
     expect(inspectProjectBackup(oldMissingCore).valid).toBe(false)
+    expect(inspectProjectBackup(oldMissingCore).missingTables).toContain('chapters')
     const malformed = { ...missing, version: 16, ttrpgNarrativeMemories: {} }
     expect(inspectProjectBackup(malformed).valid).toBe(false)
     const before = await db.projects.count()

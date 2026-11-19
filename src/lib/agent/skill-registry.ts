@@ -1049,11 +1049,13 @@ const STORY_CORE_COMPRESSION_POLICY = compressionPolicy([
   'existingVolumeOutlines',
 ])
 const CREATIVE_RULES_COMPRESSION_POLICY = compressionPolicy([
+  'workStatus',
   'worldview',
   'storyCore',
   'creativeRules',
 ])
 const WORLDVIEW_FIELD_COMPRESSION_POLICY = compressionPolicy([
+  'workStatus',
   'worldview',
   'storyCore',
   'powerSystem',

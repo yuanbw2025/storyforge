@@ -81,6 +81,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     validateImportRow: row => assertWorkCoverPortableRowV1('asset', row),
     mediaRef: { blobTable: 'mediaBlobObjects', field: 'blobObjectId' },
     exactArtifactRoots: [{ field: 'exactArtifactRefsJson', path: [] }],
+    sourceRunRetention: { field: 'sourceRunId' },
     refs: [
       { kind: 'simple', field: 'id', target: 'workCoverDrafts[selectedAssetId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'workCoverDrafts[adoptedAssetId]', onDelete: 'setNull' },
@@ -116,6 +117,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     owner: 'project', domainOwner: WORK_DOMAIN_OWNER, exportable: true, exportIdField: true, introducedBackupVersion: 19,
     validateImportRow: row => assertWorkCoverPortableRowV1('adoption', row),
     exactArtifactRoots: [{ field: 'exactArtifactRefsJson', path: [] }],
+    sourceRunRetention: { field: 'sourceRunId' },
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require', requiredOnImport: true },
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require', requiredOnImport: true },
@@ -1330,8 +1332,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'codexEntries[producerRunId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'workspaceDocuments[lastSyncRunId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'workCoverDrafts[lastRunId]', onDelete: 'setNull' },
-      { kind: 'simple', field: 'id', target: 'workCoverAssets[sourceRunId]', onDelete: 'setNull' },
-      { kind: 'simple', field: 'id', target: 'workCoverAdoptions[sourceRunId]', onDelete: 'setNull' },
+      { kind: 'simple', field: 'id', target: 'workCoverAssets[sourceRunId]', onDelete: 'keep' },
+      { kind: 'simple', field: 'id', target: 'workCoverAdoptions[sourceRunId]', onDelete: 'keep' },
       { kind: 'simple', field: 'id', target: 'workCoverResponseBuffers[runId]', onDelete: 'cascade' },
 
     ],

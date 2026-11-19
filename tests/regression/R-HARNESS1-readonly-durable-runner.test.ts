@@ -1,3 +1,4 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   buildReadOnlyAgentRunContractV1,
@@ -153,10 +154,18 @@ describe('R-HARNESS1 · 只读 Runner durable adapter', () => {
 
   it('真实 client adapter 锁定 agent.readonly 统计并复用同一 durable Runner', async () => {
     const fixture = await createWorkspace('真实客户端持久运行')
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      choices: [{ message: { content: '{"type":"final","answer":"客户端检查完成"}' } }],
-      usage: { prompt_tokens: 120, completion_tokens: 20, total_tokens: 140 },
-    }), { status: 200 }))
+    const config = { provider: 'custom' as const, apiKey: '', model: 'durable-agent-test',
+      baseUrl: 'https://example.invalid/v1', temperature: 0, maxTokens: 1024 }
+    await seedModelAllocationFixtureV1(config, 32_000)
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe('https://example.invalid/v1/chat/completions')
+      expect(init?.method).toBe('POST')
+      expect(JSON.parse(String(init?.body))).toMatchObject({ model: config.model, max_tokens: 1024, stream: false })
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '{"type":"final","answer":"客户端检查完成"}' } }],
+        usage: { prompt_tokens: 120, completion_tokens: 20, total_tokens: 140 },
+      }), { status: 200 })
+    })
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await runDurableReadOnlyAgentWithClientV1({
@@ -168,15 +177,7 @@ describe('R-HARNESS1 · 只读 Runner durable adapter', () => {
         scope: fixture.scope,
         worldGroupId: fixture.worldGroupId,
       },
-      config: {
-        provider: 'custom',
-        apiKey: '',
-        model: 'durable-agent-test',
-        baseUrl: 'https://example.invalid/v1',
-        temperature: 0,
-        maxTokens: 1024,
-        contextWindow: 32_000,
-      },
+      config,
       allowedToolNames: AGENT_READ_TOOLS.map(tool => tool.name),
       meta: {
         category: 'chapter.content',

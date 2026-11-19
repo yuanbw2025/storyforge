@@ -1,10 +1,10 @@
 import { Blob as NodeBlob } from 'node:buffer'
 import Dexie from 'dexie'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { db, StoryForgeDB, STORYFORGE_STORES_V13, STORYFORGE_STORES_V12, STORYFORGE_STORES } from '../../src/lib/db/schema'
+import { db, StoryForgeDB, STORYFORGE_STORES_V13, STORYFORGE_STORES_V12, STORYFORGE_STORES, STORYFORGE_SCHEMA_VERSION } from '../../src/lib/db/schema'
 import { REQUIRED_TABLES, openCurrentSchema } from '../../src/lib/db/ensure-schema'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
-import { inspectProjectBackup, normalizeProjectBackup } from '../../src/lib/export/backup-trust'
+import { CURRENT_BACKUP_VERSION, inspectProjectBackup, normalizeProjectBackup } from '../../src/lib/export/backup-trust'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { deriveImportProjectJSON } from '../../src/lib/export/registry-import'
 import { captureWorldSourceWireV1, createWorldPackage, importWorldPackage } from '../../src/lib/world-engine/world-package'
@@ -44,7 +44,7 @@ describe('SFQA021 F2 · registered receipt lifecycle foundation', () => {
     const upgraded = new StoryForgeDB(name)
     try {
       await upgraded.open()
-      expect(upgraded.verno).toBe(14)
+      expect(upgraded.verno).toBe(STORYFORGE_SCHEMA_VERSION)
       expect(await upgraded.projects.get(f.source.scope.projectId)).toEqual(project)
       expect(await upgraded.worlds.get(f.source.scope.worldId)).toEqual(world)
       expect(await upgraded.works.get(f.source.scope.workId)).toEqual(work)
@@ -53,14 +53,16 @@ describe('SFQA021 F2 · registered receipt lifecycle foundation', () => {
     } finally { await upgraded.delete() }
   })
 
-  it('converts supported v17 only by adding an empty receipt collection, keeping old full origin opaque', async () => {
+  it('converts supported v17 only by adding empty registered new collections, keeping old full origin opaque', async () => {
     const f = await fixture(3), current = await exportProjectJSON(f.target.scope.projectId)
-    expect(current.version).toBe(18)
+    expect(current.version).toBe(CURRENT_BACKUP_VERSION)
     const legacy = structuredClone(current)
     legacy.version = 17
-    Reflect.deleteProperty(legacy, 'worldSourceReceipts')
+    for (const spec of PROJECT_TABLES.filter(spec => spec.exportable && (spec.introducedBackupVersion ?? 1) > 17)) {
+      Reflect.deleteProperty(legacy, spec.name)
+    }
     const original = JSON.stringify(legacy), converted = normalizeProjectBackup(legacy)
-    expect(converted.version).toBe(18)
+    expect(converted.version).toBe(CURRENT_BACKUP_VERSION)
     expect(converted.worldSourceReceipts).toEqual([])
     expect(converted.worlds).toEqual(legacy.worlds)
     expect(JSON.stringify(legacy)).toBe(original)
@@ -201,7 +203,9 @@ describe('SFQA021 F2 · real wire/owner/binding round trips', () => {
       allowedUses: { ...f.pkg.manifest.allowedUses, 'world-remix': true } })
     const id = await importWorldPackage(packet), backup = await exportProjectJSON(id)
     const old = structuredClone(backup); old.version = 17
-    Reflect.deleteProperty(old, 'worldSourceReceipts')
+    for (const spec of PROJECT_TABLES.filter(spec => spec.exportable && (spec.introducedBackupVersion ?? 1) > 17)) {
+      Reflect.deleteProperty(old, spec.name)
+    }
     for (const row of old.worldDerivations) Reflect.deleteProperty(row, 'sourceReceiptBinding')
     const header = { packageId: packet.manifest.packageId, sourceWorldCode: packet.manifest.sourceWorldCode,
       sourceWorldVersion: packet.manifest.sourceWorldVersion, authorName: packet.manifest.authorName,
@@ -298,14 +302,14 @@ describe('SFQA021 F2 · owner remap and supported snapshot values', () => {
     if (!original) throw Error('Expected real author root')
     await db.delete()
     const future = new Dexie(name)
-    future.version(15).stores({ ...STORYFORGE_STORES, futureEvidence: '++id' })
+    future.version(STORYFORGE_SCHEMA_VERSION + 1).stores({ ...STORYFORGE_STORES, futureEvidence: '++id' })
     await future.open(); await future.table('projects').put(original); future.close()
     try {
       // Bare Dexie.open can read a newer native DB; the existing application
       // guard deliberately checks backendDB.version as well as declared verno.
-      await expect(openCurrentSchema()).rejects.toThrow('只支持当前 schema v14')
+      await expect(openCurrentSchema()).rejects.toThrow(`只支持当前 schema v${STORYFORGE_SCHEMA_VERSION}`)
       const readback = new Dexie(name)
-      try { await readback.open(); expect(readback.verno).toBe(15); expect(await readback.table('projects').get(original.id!)).toEqual(original); expect(readback.tables.some(table => table.name === 'futureEvidence')).toBe(true) }
+      try { await readback.open(); expect(readback.verno).toBe(STORYFORGE_SCHEMA_VERSION + 1); expect(await readback.table('projects').get(original.id!)).toEqual(original); expect(readback.tables.some(table => table.name === 'futureEvidence')).toBe(true) }
       finally { readback.close() }
     } finally { db.close(); future.close(); await Dexie.delete(name) }
   })

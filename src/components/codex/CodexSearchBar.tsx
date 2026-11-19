@@ -14,6 +14,7 @@ import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinato
 import { scoreCodexEntry } from '../../lib/codex/search'
 
 interface Props {
+  compact?: boolean
   /** 本面板包含的词条分类(builtInKey 列表) */
   categoryKeys: string[]
   scope?: WorkspaceScope
@@ -22,7 +23,7 @@ interface Props {
   onJump?: (categoryKey: string) => void
 }
 
-export default function CodexSearchBar({ categoryKeys, scope, worldGroupId, onJump }: Props) {
+export default function CodexSearchBar({ categoryKeys, scope, worldGroupId, onJump, compact = false }: Props) {
   const { categories, entries, loadedScope } = useCodexStore()
   const [q, setQ] = useState('')
   const [jumpError, setJumpError] = useState('')
@@ -59,13 +60,14 @@ export default function CodexSearchBar({ categoryKeys, scope, worldGroupId, onJu
 
   return (
     <div className="relative">
-      <div className="flex items-center gap-2 px-3 py-2 bg-bg-elevated border border-border rounded-lg">
+      <div className={`flex items-center gap-2 ${compact ? 'min-w-0 px-2 py-1' : 'px-3 py-2'} bg-bg-elevated border border-border rounded-lg`}>
         <Search className="w-4 h-4 text-text-muted shrink-0" />
         <input
           value={q}
           onChange={e => setQ(e.target.value)}
-          placeholder="搜索本面板词条（支持全字匹配 / 单字模糊定位）"
-          className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none"
+          aria-label="搜索本面板词条"
+          placeholder={compact ? '搜索词条' : '搜索本面板词条（支持全字匹配 / 单字模糊定位）'}
+          className={`flex-1 bg-transparent ${compact ? 'min-w-0 text-xs' : 'text-sm'} text-text-primary placeholder:text-text-muted outline-none`}
         />
         {q && (
           <button onClick={() => setQ('')} className="text-text-muted hover:text-text-primary shrink-0">

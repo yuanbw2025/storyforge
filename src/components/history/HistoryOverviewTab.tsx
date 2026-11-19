@@ -1,4 +1,5 @@
 import { CTextarea } from '../shared/CompositionInput'
+import { useWorldSettingsLayout } from '../longform/WorldSettingsLayout'
 
 interface Props {
   overview: string
@@ -17,8 +18,9 @@ export default function HistoryOverviewTab({
   onSaveOverview,
   onSaveEraSystem,
 }: Props) {
+  const compact = useWorldSettingsLayout()
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className={compact ? 'lf-world-field space-y-4' : 'space-y-6 max-w-4xl'}>
       <div className="bg-bg-surface border border-border rounded-xl p-5 space-y-2">
         <label className="block text-sm font-medium text-text-primary">历史总述</label>
         <p className="text-xs text-text-muted">描述这个世界的整体历史脉络、重大转折、文明兴衰等...</p>

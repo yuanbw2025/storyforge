@@ -40,8 +40,11 @@ export default function AtlasPaintControls({ geometry, seed, sheet, onChange }: 
   const prepare = async (art: AtlasPaintPreview, ticket: number) => {
     const image = new Image(); image.src = art.image; await image.decode()
     if (epoch.current !== ticket) return
-    const preview = drawTerrain(geometry, seed, sheet, DEFAULT_ATLAS_LAYERS, image)
+    const terrain = drawTerrain(geometry, seed, sheet, DEFAULT_ATLAS_LAYERS, image)
+    const preview = document.createElement('canvas')
+    preview.width = terrain.width; preview.height = terrain.height
     const c = preview.getContext('2d')!
+    c.drawImage(terrain, 0, 0)
     c.scale(preview.width / geometry.width, preview.height / geometry.height)
     drawLabels(c, geometry, 1, !!sheet, { sheet, fullDetail: true, screenScale: 1 })
     setCandidate({ art, image, preview: preview.toDataURL('image/jpeg', 0.85) })

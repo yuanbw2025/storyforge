@@ -13,6 +13,9 @@ import { collectUnreferencedMediaBlobObjects } from '../../src/lib/product-produ
 import { deleteWork } from '../../src/lib/workspace/lifecycle'
 import { updateWorkCover } from '../../src/lib/workspace/works'
 import { normalizeProjectBackup } from '../../src/lib/export/backup-trust'
+import { assertWorkCoverPortableRowV1 } from '../../src/lib/work-cover/contracts'
+import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
+import { appendAgentRunEventV1, createAgentRunV1, deleteAgentRunV1 } from '../../src/lib/agent/run/event-store'
 
 installRasterDecoderForVitestV1()
 beforeEach(async () => { await db.delete(); await db.open() })
@@ -28,6 +31,73 @@ async function uploaded(name = '封面隔离样例') {
 }
 
 describe('035 Work cover identity/CAS/lifecycle', () => {
+  it.each([false, true])('retains a cover source Run until Work/history deletion (parent tree: %s)', async withParent => {
+    const { scope, asset, draft } = await uploaded()
+    const contract = {
+      version: 1, objective: 'synthetic cover source retention only', workflowKind: 'read-only-audit', runtimeBindingHash: 'd'.repeat(64),
+      scope: { projectId: scope.projectId, worldGroupId: null }, permissions: { contextSourceKeys: ['manualText'], writeTargets: [] },
+      budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: 1000, maxOutputTokens: 100, maxAttemptsPerStep: 1 },
+      acceptance: [{ id: 'result', kind: 'output-present', required: true }],
+      verificationPlan: [{ id: 'terminal', kind: 'terminal', verifier: 'cover-retention-fixture', criterionIds: ['result'] }],
+      failurePolicy: { onProtocolError: 'fail', onVerificationFailure: 'fail', onStaleInput: 'pause-for-author' },
+    }
+    const parent = await createAgentRunV1({ scope, contract })
+    let source = parent
+    if (withParent) {
+      const stepId = 'cover-retention-fixture'
+      await appendAgentRunEventV1({ scope, runId: parent.run.id, type: 'step.scheduled', payload: { stepId } })
+      await appendAgentRunEventV1({ scope, runId: parent.run.id, type: 'step.started', payload: { stepId, attempt: 1 } })
+      await appendAgentRunEventV1({ scope, runId: parent.run.id, type: 'step.succeeded', payload: { stepId, attempt: 1, outputHash: 'e'.repeat(64) } })
+      await appendAgentRunEventV1({ scope, runId: parent.run.id, type: 'verification.started', payload: { verifierSetVersion: 'cover-retention-fixture' } })
+      const completed = await appendAgentRunEventV1({ scope, runId: parent.run.id, type: 'verification.accepted', payload: { receiptHash: 'f'.repeat(64) } })
+      source = await createAgentRunV1({ scope, contract: { ...contract, lineage: { parent: {
+        runId: parent.run.id, receiptHash: completed.projection.terminalReceiptHash!, relation: 'cover-retention-fixture',
+      } } } })
+    }
+    const candidate = {
+      schema: 'storyforge.work-cover.image-candidate@1', workCode: asset.workCode,
+      dispatchKey: crypto.randomUUID(), attempt: 1, ordinal: 0, briefHash: draft.briefHash,
+      routeHash: 'a'.repeat(64), assetKey: asset.assetKey, blobHash: asset.blobHash,
+      responseHash: 'b'.repeat(64), providerReceiptHash: 'c'.repeat(64), rights: 'provider-terms-unverified',
+    }
+    await db.workCoverAssets.update(asset.id, { role: 'generated-original', sourceRunId: source.run.id,
+      rights: 'provider-terms-unverified', candidateJson: JSON.stringify({ ...candidate, candidateHash: await hashCanonicalValue(candidate) }) })
+    const eventsBefore = await db.agentRunEvents.where('runId').equals(source.run.id).count()
+    const parentEventsBefore = await db.agentRunEvents.where('runId').equals(parent.run.id).count()
+    await expect(deleteAgentRunV1(scope, source.run.id)).rejects.toThrow(/来源运行/)
+    await expect(deleteAgentRunV1(scope, parent.run.id)).rejects.toThrow(/来源运行/)
+    expect(await db.agentRuns.get(parent.run.id)).toBeDefined()
+    expect(await db.agentRuns.get(source.run.id)).toBeDefined()
+    expect(await db.agentRunEvents.where('runId').equals(source.run.id).count()).toBe(eventsBefore)
+    expect(await db.agentRunEvents.where('runId').equals(parent.run.id).count()).toBe(parentEventsBefore)
+    await expect(renderWorkCoverV1({ scope, assetId: asset.id })).resolves.toMatchObject({ asset: { sourceRunId: source.run.id } })
+    await expect(exportProjectJSON(scope.projectId)).resolves.toMatchObject({ version: 19 })
+    const unreferenced = await createAgentRunV1({ scope, contract })
+    expect(await deleteAgentRunV1(scope, unreferenced.run.id)).toBe(true)
+    await deleteWork(scope.workId)
+    expect(await db.agentRuns.get(source.run.id)).toBeUndefined()
+    expect(await db.agentRuns.get(parent.run.id)).toBeUndefined()
+    expect(await db.workCoverAssets.where('workId').equals(scope.workId).count()).toBe(0)
+  }, 20_000)
+
+  it('rejects generated image evidence without a source Run and upload rows carrying model candidates', async () => {
+    const { asset, draft } = await uploaded()
+    const preimage = {
+      schema: 'storyforge.work-cover.image-candidate@1', workCode: asset.workCode,
+      dispatchKey: crypto.randomUUID(), attempt: 1, ordinal: 0,
+      briefHash: draft.briefHash, routeHash: 'a'.repeat(64), assetKey: asset.assetKey,
+      blobHash: asset.blobHash, responseHash: 'b'.repeat(64), providerReceiptHash: 'c'.repeat(64),
+      rights: 'provider-terms-unverified',
+    }
+    const candidateJson = JSON.stringify({ ...preimage, candidateHash: await hashCanonicalValue(preimage) })
+    const generated = { ...asset, role: 'generated-original', rights: 'provider-terms-unverified', candidateJson }
+    expect(() => assertWorkCoverPortableRowV1('asset', generated)).toThrow()
+    expect(() => assertWorkCoverPortableRowV1('asset', { ...asset, candidateJson })).toThrow()
+    expect(() => assertWorkCoverPortableRowV1('asset', { ...asset, role: 'rendered-cover' })).toThrow()
+    const portable = { ...generated, _sourceRunExportId: 0 }
+    expect(() => assertWorkCoverPortableRowV1('asset', portable)).not.toThrow()
+  })
+
   it('v14→v15 adds only empty cover stores and preserves existing author bytes', async () => {
     const name = `cover-upgrade-${crypto.randomUUID()}`
     const old = new Dexie(name); old.version(14).stores(STORYFORGE_STORES_V14)
