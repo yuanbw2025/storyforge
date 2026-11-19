@@ -1944,6 +1944,7 @@ if (!hasCurrentSchemaV16V1(currentSchemaSource)) {
 }
 // Keep the version bump strict: a stale baseline or missing frozen/index
 // declaration must still fail this guard. No product or database writes here.
+/** @type {Array<[string, string, boolean]>} */
 const currentSchemaControlsV16 = [
   ['current-v16', currentSchemaSource, true],
   ['stale-current-v15', currentSchemaSource.replace('STORYFORGE_SCHEMA_VERSION = 16', 'STORYFORGE_SCHEMA_VERSION = 15'), false],
