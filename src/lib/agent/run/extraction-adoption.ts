@@ -1,4 +1,4 @@
-import Dexie, { type Table } from 'dexie'
+import Dexie, { type Table, type Transaction } from 'dexie'
 import { db } from '../../db/schema'
 import type { WorkspaceScope } from '../../types'
 import { parseAgentRunEventV1 } from './event-schema'
@@ -10,10 +10,21 @@ import { hashCanonicalValue } from './hash'
 
 export class ExtractionEvidenceStaleError extends Error {}
 
+const transactionHashTails = new WeakMap<Transaction, Promise<string>>()
+
 export function hashExtractionValueV1(value: unknown): Promise<string> {
-  // Only WebCrypto needs a keep-alive. Database reads must stay in the transaction.
-  const digest = hashCanonicalValue(value)
-  return Dexie.currentTransaction ? Dexie.waitFor(digest) : digest
+  let transaction = Dexie.currentTransaction
+  if (!transaction) return hashCanonicalValue(value)
+  while (transaction.parent) transaction = transaction.parent
+  // Concurrent waitFor calls that settle out of order can stop the shared
+  // keep-alive with an unresolved callback still queued. Serialize only the
+  // external digests; database reads remain in their original transaction.
+  const prior = transactionHashTails.get(transaction)
+  const digest = Dexie.Promise.resolve(prior).then(() =>
+    Dexie.waitFor(Dexie.ignoreTransaction(() => hashCanonicalValue(value))),
+  )
+  transactionHashTails.set(transaction, digest)
+  return digest
 }
 
 export function withExtractionSourceTransactionV1<T>(
