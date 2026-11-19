@@ -59,6 +59,9 @@ export interface WorkCoverAssetV1 extends WorkspaceScope {
   height: number
   byteSize: number
   sourceRunId: number | null
+  /** Independent local verification; absent on legacy/upload/normal model assets. */
+  materializationRunId?: number | null
+  repairEvidenceJson?: string | null
   ordinal: 0
   parentAssetId: number | null
   layoutHash: null
@@ -83,6 +86,7 @@ export interface WorkCoverAdoptionV1 extends WorkspaceScope {
   oldCoverHash: string
   newCoverHash: string
   sourceRunId: number | null
+  materializationRunId?: number | null
   adoptedAt: number
   expectedWorkUpdatedAt: number
   renderManifestJson: string

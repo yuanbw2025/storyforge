@@ -101,7 +101,7 @@ it('actual mainline v17 dangling references are rejected without writing any tab
   }
 })
 
-it.each([16, 17, 18])('registered narrative annotations survive actual v%i restore/derive/reopen', async version => {
+it.each([16, 17, 18, 19])('registered narrative annotations survive actual v%i restore/derive/reopen', async version => {
   const fixture = await seedConfirmedNarrativeDomainV1()
   const wire = versionedBackup(await exportProjectJSON(fixture.scope.projectId), version)
   const beforeWire = JSON.stringify(wire)
@@ -158,7 +158,7 @@ it.each([14, 15, 16, 17])('v%i refuses the v18-only receipt table even when it i
 
 it('a future backup version is rejected before writing', async () => {
   const fixture = await seedConfirmedNarrativeDomainV1()
-  const bad = versionedBackup(await exportProjectJSON(fixture.scope.projectId), 20)
+  const bad = versionedBackup(await exportProjectJSON(fixture.scope.projectId), 21)
   const before = await counts()
   expect(inspectProjectBackup(bad).valid).toBe(false)
   await expect(importProjectJSON(bad)).rejects.toThrow(/备份预检失败/)
