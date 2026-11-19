@@ -1,4 +1,5 @@
 import { worldviewFieldContentGuidanceV1 } from '../creation/worldview-content-skill'
+import { supportsVerifiedJsonObjectResponseForModelV1 } from '../ai/provider-capabilities'
 import { getModelCapacityLimitsV1 } from '../ai/model-capacity'
 import { resolveFieldGenerationRequestModeV1 } from './field-generation-request-mode'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -931,10 +932,15 @@ export function createWorldviewFieldCopilotNode(
       },
       contextOverflowPolicy: 'reject' as const,
     }
+    const requestOptions = {
+      ...(supportsVerifiedJsonObjectResponseForModelV1(requestConfig) ? { responseFormat: 'json_object' as const } : {}),
+      ...(requestConfig.provider === 'agnes' && requestConfig.model === 'agnes-2.5-flash'
+        ? { thinkingMode: 'disabled' as const } : {}),
+    }
     if (dependencies.runModel) await assertCurrent()
     const content = await (dependencies.runModel
-      ? dependencies.runModel(assertCurrent, requestMessages, requestConfig, meta, signal, result)
-      : chat(requestMessages, requestConfig, meta, signal, result))
+      ? dependencies.runModel(assertCurrent, requestMessages, requestConfig, meta, signal, result, requestOptions)
+      : chat(requestMessages, requestConfig, meta, signal, result, requestOptions))
     // The durable invocation has saved the complete return and actual usage.
     // A late source edit/abort cannot make that evidence disappear.
     if (dependencies.runModel) {

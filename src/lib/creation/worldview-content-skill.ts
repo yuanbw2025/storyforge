@@ -23,13 +23,22 @@ const FIELD_METHODS = {
   itemDesign: '给物品可辨认的形态、材料、使用方式、获得或维护、适用边界及可能的个人意义；普通器具与纪念物也有价值。与现有能力经济相连，避免批量换名的神器清单，不要求每件物品付惨重代价或承担伏笔。',
 } satisfies Record<WorldviewGeneratableField, string>
 
+const FIELD_EXAMPLES: Partial<Record<WorldviewGeneratableField, string>> = {
+  powerHierarchy: '方法示例（只学推导，不移植设定）：若作者只给“碰到木料可使其弯曲，离手后固定”，先锁定对象、触碰、离手三个条件；差别可以来自弯曲精度、工具配合、多人协作和用途，不能变成高手能隔空弯钢铁或只有王族能学。每个新增社会安排都是提议，不能冒充作者给定。',
+  economyOverview: '方法示例（不要照抄）：一份修理委托可以串起材料预订、工位占用、客户出发时间、验收与结算。温暖可由协商和互助体现，成长可由减少返工或承接新需求体现；不需要取消价格与分歧，也不应凭一句“先补一下”保证严重损坏的设备安全。',
+  divineDesign: '信息边界示例：作者只说“有人听见井里唱歌”，可以设计邻居各自的解释与听歌时的习惯；hasDivinity表示是否包含神明或宗教信仰设定，与界面开关一致；有居民信仰时为true，并不证明有神。无证据时在divineRules中明确神明存在未获确认，不新加“其实是被封印的神”作为事实。',
+}
+
 export function worldviewFieldContentGuidanceV1(field: WorldviewGeneratableField): string {
-  return `【本字段的创作方法】\n${FIELD_METHODS[field]}\n
+  const changeNote = field === 'divineDesign'
+    ? '用根级temporaryAssumptions说明待作者调整之处；value仍仅含hasDivinity、divineRank、divineNames、divineRules四键，假设不得放进value中'
+    : '按现有合同在根级temporaryAssumptions说明待作者调整之处'
+  return `【本字段的创作方法】\n${FIELD_METHODS[field]}\n${FIELD_EXAMPLES[field] ?? ''}\n
 【按作者本轮需要取舍】
 保留作者原创的姓名、物件、意象和表达；参考作品只提供可迁移的方法，不混入本作事实。
 只深入当前字段，不为填满清单生成全部世界或人物。作者特别在意的现象即使暂不解释，也应保留其对当前生活的可感影响，不把温暖写成毫无变化的停滞日常。优先深化已有联系，用具体感知、活动或运作呈现，不堆新名词。
 世界可以提供生活、温暖、幽默、奇观、美感、归属与探索；不要求每条设定制造冲突或惨重代价。这些是可选价值，不要求逐项打卡。
 区分作者已给事实、本次创作提议、居民解释与有意未知；不把没有资料的推测称为已考证，不编书目和引文。现实职业的设备、安全操作和技术效果不能为追求生动而编造；不确定时选不依赖该技术断言的日常细节。
-作者明确要求改变方向时，给目标字段的变更候选；若与其它已确认字段有关，按现有合同在temporaryAssumptions说明待作者调整之处，不擅改其它字段，也不把旧方向当永久禁令。
+作者明确要求改变方向时，给目标字段的变更候选；若与其它已确认字段有关，${changeNote}，不擅改其它字段，也不把旧方向当永久禁令。
 上述方法服从本轮操作：润色保持事实，扩写沿原方向；不要为展示方法而强加示范、子标题或额外JSON键。`
 }

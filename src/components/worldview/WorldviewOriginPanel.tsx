@@ -373,7 +373,7 @@ function DivineFieldEditor({
           onChange={e => { void saveDivinity(e.target.checked) }}
           className="accent-accent"
         />
-        <span className="text-text-secondary">存在神明或宗教信仰</span>
+        <span className="text-text-secondary">包含神明或宗教信仰设定（神明是否存在可保留未知）</span>
       </label>
 
       {toggleFailure && <div className="text-xs text-error">
