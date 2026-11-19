@@ -1,3 +1,4 @@
+import type { WorkCoverDraftV1, WorkCoverAssetV1, WorkCoverAdoptionV1, WorkCoverResponseBufferV1 } from '../work-cover/types'
 import { IS_SHOWCASE, SHOWCASE_DATABASE } from '../showcase/policy'
 import { IS_ADVENTURE_WEB_PLAYER, adventureWebPlayerIdentity, adventureWebPlayerStorageName } from '../adventure/web-player-policy'
 import type { ExtensionPackage, ExtensionProfile, ExtensionRecord, ExtensionContract, ExtensionOperation } from '../extensions/types'
@@ -130,7 +131,7 @@ import type { RetrievalChunk } from '../types/retrieval-chunk'
 import type { TemporalFact } from '../types/temporal-fact'
 
 export const STORYFORGE_DATABASE_NAME = 'storyforge-core'
-export const STORYFORGE_SCHEMA_VERSION = 14
+export const STORYFORGE_SCHEMA_VERSION = 15
 
 /** The hard-cutover baseline released before independent creation releases. */
 export const STORYFORGE_STORES_V1 = {
@@ -324,12 +325,24 @@ export const STORYFORGE_STORES_V13 = {
   ...STORYFORGE_STORES_V12,
 } as const satisfies Record<string, string>
 
-export const STORYFORGE_STORES = {
+export const STORYFORGE_STORES_V14 = {
   ...STORYFORGE_STORES_V13,
   worldSourceReceipts: '++id, projectId, worldId, worldReleaseId, &[worldId+declarationHash], [worldId+packageDigest], [worldId+releaseUid]',
 } as const satisfies Record<string, string>
 
+export const STORYFORGE_STORES = {
+  ...STORYFORGE_STORES_V14,
+  workCoverDrafts: '++id, projectId, worldId, &workId, draftKey, selectedAssetId, adoptedAssetId, lastRunId, updatedAt',
+  workCoverAssets: '++id, projectId, worldId, workId, &[workId+assetKey], blobObjectId, sourceRunId, parentAssetId, createdAt',
+  workCoverAdoptions: '++id, projectId, worldId, workId, &[workId+operationKey], draftId, originalAssetId, finalAssetId, sourceRunId, adoptedAt',
+  workCoverResponseBuffers: '++id, projectId, worldId, workId, &runId, &dispatchKey, draftId, assetId, state, updatedAt',
+} as const satisfies Record<string, string>
+
 export class StoryForgeDB extends Dexie {
+  workCoverDrafts!: Table<WorkCoverDraftV1, number>
+  workCoverAssets!: Table<WorkCoverAssetV1, number>
+  workCoverAdoptions!: Table<WorkCoverAdoptionV1, number>
+  workCoverResponseBuffers!: Table<WorkCoverResponseBufferV1, number>
   extensionPackages!: Table<ExtensionPackage, number>
   extensionProfiles!: Table<ExtensionProfile, number>
   extensionRecords!: Table<ExtensionRecord, number>
@@ -479,6 +492,7 @@ export class StoryForgeDB extends Dexie {
     this.version(11).stores(STORYFORGE_STORES_V11)
     this.version(12).stores(STORYFORGE_STORES_V12)
     this.version(13).stores(STORYFORGE_STORES_V13)
+    this.version(14).stores(STORYFORGE_STORES_V14)
     this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)
   }
 }

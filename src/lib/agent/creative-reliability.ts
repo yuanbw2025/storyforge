@@ -435,3 +435,6 @@ export function parseCreativeAudioArtifactV1(value: unknown): CreativeAudioArtif
   return { schema: 'storyforge.creative-audio-artifact', version: 1, policyVersion: 'creative-audio-reliability-v1', modality: 'audio',
     status, evidence, audio, issues, requestEvidence, humanListening: 'unproven', adoptionAllowed: false, automaticRetryAllowed: false }
 }
+
+/** Image candidates preserve their own typed descriptor; text V1 remains unchanged. */
+export type CreativeArtifact = CreativeArtifactV1 | import('../work-cover/types').WorkCoverImageCandidateV1

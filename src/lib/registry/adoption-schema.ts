@@ -35,6 +35,7 @@ const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
   },
   {
     target: 'works',
+    fieldWritePolicies: { coverImage: 'work-cover-v1' },
     identity: 'id',
     recordOnly: true,
     duplicatePolicy: 'error',
@@ -672,6 +673,7 @@ const ADOPTION_EXTENSION_REGISTRATIONS: readonly AdoptionExtensionSpec[] = [
     id: 'work-root-lifecycle',
     target: 'works',
     entrypoints: [
+      'src/lib/work-cover/adoption.ts',
       'src/lib/memory/workspace-projection.ts',
       'src/lib/workspace/lifecycle.ts',
       'src/lib/workspace/ownership.ts',
@@ -684,8 +686,8 @@ const ADOPTION_EXTENSION_REGISTRATIONS: readonly AdoptionExtensionSpec[] = [
       'src/lib/screenplay/release.ts',
       'src/lib/comic/release.ts',
     ],
-    policyRegistry: 'PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle',
-    reason: 'Work 根创建、稳定 code 补齐和级联是受信生命周期；updateWorkCover 仅在作者明确确认后按显式 scope 和 updatedAt 更新封面，不接受模型写回。删除最后一个独占叙事蓝图时还必须原子清空 activeNarrativeModuleId。标题等作者内容仍经 adopt()。',
+    policyRegistry: 'PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle + FIELD_REGISTRY works.coverImage/work-cover-v1 candidate CAS',
+    reason: 'Work 根创建、稳定 code 补齐和级联是受信生命周期；updateWorkCover 仅在作者明确确认后按显式 scope 和 updatedAt 更新封面，不接受模型写回。删除最后一个独占叙事蓝图时还必须原子清空 activeNarrativeModuleId。AI封面仅经adoptWorkCoverV1原子采用候选并写回执；通用字段不能绕过。标题等作者内容仍经 adopt()。',
     reviewAfter: '2027-08-01',
   },
   {

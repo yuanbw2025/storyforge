@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261119-issue483-integrated-v5.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261119-035-cover-input-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261119-issue483-integrated-v5.json",
+        "workPackage": "BUG-035-S",
+        "note": "Preserved main input receipt before the Work-cover foundation; the separate035-S receipt binds its own reviewed inputs."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261118-client-release408-final-v1.json",
         "workPackage": "BUG-043",

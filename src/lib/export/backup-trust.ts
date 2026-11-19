@@ -14,7 +14,7 @@ import { assertNarrativeDomainReferenceRowsV1 } from '../narrative-domain/integr
 import { inspectPortableRequiredReferencesV1, inspectPortableTableStructure, readPortableOwnerShadowV1 } from './portable-table-structure'
 import { inspectCommunityWorldOriginV1 } from '../world-engine/source-declaration'
 
-export const CURRENT_BACKUP_VERSION = 18
+export const CURRENT_BACKUP_VERSION = 19
 
 export interface BackupTrustReport {
   valid: boolean
@@ -268,7 +268,7 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
   // 根项目记录在便携格式里使用 `project` 单独承载，其余表才是数组键。
   const exportableTables = PROJECT_TABLES
     .filter(spec => spec.exportable && spec.name !== 'projects' && (!isRecord(input)
-      || ![14, 15, 16, 17].includes(input.version as number)
+      || ![14, 15, 16, 17, 18].includes(input.version as number)
       || ((spec.introducedBackupVersion ?? 1) <= (input.version as number)
         && (!(spec.optionalInBackupVersions ?? []).includes(input.version as number) || spec.name in input))))
     .map(spec => spec.name)
@@ -289,13 +289,13 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
   const version = typeof input.version === 'number' && Number.isInteger(input.version)
     ? input.version
     : null
-  if (version !== CURRENT_BACKUP_VERSION && version !== 14 && version !== 15 && version !== 16 && version !== 17) {
-    errors.push(`只接受 v14、v15、v16、v17 或当前备份版本 v${CURRENT_BACKUP_VERSION}。`)
+  if (version !== CURRENT_BACKUP_VERSION && version !== 14 && version !== 15 && version !== 16 && version !== 17 && version !== 18) {
+    errors.push(`只接受 v14、v15、v16、v17、v18 或当前备份版本 v${CURRENT_BACKUP_VERSION}。`)
   }
 
-  if (version === 14 || version === 15 || version === 16 || version === 17) {
+  if (version === 14 || version === 15 || version === 16 || version === 17 || version === 18) {
     for (const row of Array.isArray(input.worldDerivations) ? input.worldDerivations : []) {
-      if (isRecord(row) && Object.prototype.hasOwnProperty.call(row, 'sourceReceiptBinding')) errors.push(`v${version} 不允许携带 v18 编辑来源绑定。`)
+      if (version < 18 && isRecord(row) && Object.prototype.hasOwnProperty.call(row, 'sourceReceiptBinding')) errors.push(`v${version} 不允许携带 v18 编辑来源绑定。`)
     }
     for (const spec of PROJECT_TABLES.filter(spec => spec.exportable && (spec.introducedBackupVersion ?? 1) > version)) {
       if (spec.name in input) errors.push(`v${version} 不允许携带 v${spec.introducedBackupVersion} 新增表 ${spec.name}。`)
@@ -355,7 +355,7 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
         const portable = `_${field}Portable`
         if (field in row) errors.push(`${tableName}[${index}].${field} 不允许携带本地叙事坐标。`)
         if (!(portable in row)) continue
-        if ((version !== 16 && version !== 17 && version !== CURRENT_BACKUP_VERSION) || !annotations.includes(field)) {
+        if ((version !== 16 && version !== 17 && version !== 18 && version !== CURRENT_BACKUP_VERSION) || !annotations.includes(field)) {
           errors.push(`${tableName}[${index}].${portable} 未在此备份版本/来源登记。`)
           continue
         }
@@ -409,12 +409,12 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
   }
 
   const detachedChapters: BackupReferenceIssue[] = []
-  if (version === CURRENT_BACKUP_VERSION || version === 14 || version === 15 || version === 16 || version === 17) {
+  if (version === CURRENT_BACKUP_VERSION || version === 14 || version === 15 || version === 16 || version === 17 || version === 18) {
     const present = new Set(['projects', ...exportableTables])
     errors.push(...inspectPortableRequiredReferencesV1(PROJECT_TABLES.filter(spec => present.has(spec.name)), recoverLegacyDetachedChapters(input, detachedChapters)))
   }
 
-  if ((version === 16 || version === 17 || version === CURRENT_BACKUP_VERSION) && errors.length === 0) {
+  if ((version === 16 || version === 17 || version === 18 || version === CURRENT_BACKUP_VERSION) && errors.length === 0) {
     try {
       assertNarrativeDomainReferenceRowsV1(new Map(PROJECT_TABLES.filter(spec => spec.exportable && spec.name !== 'projects')
         .map(spec => [spec.name, input[spec.name] as Record<string, unknown>[]])), 'portable')

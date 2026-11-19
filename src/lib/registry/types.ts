@@ -324,6 +324,8 @@ export type ExportRefRemap = {
  */
 export type PortableDataSpec = {
   /** Local seal/cache origin validated against the complete frozen owner chain. */
+  kind: 'work-cover-draft'
+} | {
   kind: 'world-revision-origin'
 } | {
   /** Actual immutable world package wire plus derived P/R/D indices. */
@@ -457,6 +459,9 @@ export interface TableSpec<T = any> {
   portableData?: PortableDataSpec
   /** Confirmed owners pin exact evidence through their own registered lifecycle, independently of source Runs. */
   exactArtifactRoots?: readonly ExactArtifactRootSpecV1[]
+  /** A registered exact-evidence owner also needs the source Run entity until
+   * its own lifecycle releases this indexed FK; single/tree Run deletion stops. */
+  sourceRunRetention?: { field: string }
   /** Product-neutral stable reference to a governed binary object table, used by shared GC. */
   mediaRef?: { blobTable: string; field: string }
   /**
@@ -482,7 +487,7 @@ export interface FieldSpec {
   /** Optional stable CreativeArtifact output id resolved through this same registry. */
   candidateId?: string
   /** This field requires the registered domain confirmation/CAS boundary. */
-  adoptionPolicy?: 'narrative-annotation-v1'
+  adoptionPolicy?: 'narrative-annotation-v1' | 'work-cover-v1'
   type: 'string' | 'longtext' | 'json' | 'object' | 'number' | 'boolean' | 'enum' | 'array'
   enums?: string[]
   worldScoped?: boolean
@@ -530,6 +535,7 @@ export interface CollectionAdoptionSpec {
   identity: 'id' | 'name' | CompositeIdentity
   /** 只允许通过 recordId 定点更新，禁止 AI 新增集合行。 */
   recordOnly?: boolean
+  fieldWritePolicies?: Readonly<Record<string, 'work-cover-v1'>>
   writePolicy?: 'extension-record-v1' | 'ttrpg-open-authoring-design-v1'
   duplicatePolicy: 'skip' | 'update' | 'merge' | 'error'
   /** 必填字段;缺失则跳过该条 */
@@ -567,6 +573,7 @@ export interface AdoptInput {
   /** NW-1C: author-selected durable candidate. Payload is loaded from verified
    * ledger state; caller-provided fields are never trusted on this route. */
   narrativeCandidate?: { runId: number; candidateHash: string }
+  workCoverAdoption?: { draftId: number; operationKey: string }
   /** Author-operated, registry-allowlisted exact text edits; never set from model payloads. */
   preserveAuthorText?: boolean
   extensionSnapshot?: import('../extensions/types').ExtensionRegistrySnapshot
