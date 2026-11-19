@@ -1,5 +1,11 @@
 # Troubleshooting
 
+## November 19: feedback forms and screenshot drafts
+
+Problems and suggestions provides complete Bug / Feature forms with screenshot selection/paste, preview and removal. Limits are three images, 2 MiB each and 4 MiB total. Check images for private manuscripts, keys and account data. Cancellation retains the page draft; failure/unknown outcomes retain the ID, text and image bytes. Check the receipt before explicitly retrying; no automatic resend under a new ID. Unsupported older backends block new fields/images rather than reporting success. Based on #488.
+
+The ordinary Clear local error records control is removed; bounded internal retention and expiry continue. Linux abnormal-exit diagnostics retain the exit code without treating normal exits or deliberate termination as crashes. Based on #476/#487. See [compatibility](/en/updates/compatibility) for release scope.
+
 ## Desktop folder selection does not create a binding
 
 Record the version, operating system, selected location and error. Retain the existing binding and a complete backup; do not clear app data or automatically move works. The mainline directory-permission fix [#462](https://github.com/yuanbw2025/storyforge/pull/462) displays a folder-permission confirmation for valid requests from the trusted current desktop window. Check the folder and choose Allow, or cancel. Protected locations permit only selecting an ordinary project subfolder or cancelling, without bypassing system protection. Verify the first write in data management after granting permission.
@@ -70,7 +76,7 @@ Add a title, description, and reproduction steps, then inspect Additional inform
 
 The summary contains only the application build, operating-system/browser family, error types/code locations, and available launcher failure types/timestamps. It excludes error messages, manuscripts, Prompts, API keys, full URLs, disk paths, and database contents.
 
-The browser retains at most twenty errors from the last seven days, including across refreshes. The summary contains at most the latest five errors and three code locations each. Clear local error records removes only browser diagnostics, not works or model configuration. Complete diagnostic JSON remains a separate download in Data and backup and is not automatically uploaded.
+The browser retains at most twenty errors from the last seven days, including across refreshes. The summary contains at most the latest five errors and three code locations each. The ordinary clear control is removed; bounded retention and expiry remain. Complete diagnostic JSON remains a separate download in Data and backup and is not automatically uploaded.
 
 When error reporting is enabled, the same native failure is not requeued merely because the local summary rotates or the page refreshes. A new occurrence at a different time remains separate. Turning error reporting off or deleting the records clears the corresponding local deduplication history. This prevents duplicate reports; it does not establish that the native crash itself is fixed.
 

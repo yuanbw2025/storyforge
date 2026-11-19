@@ -1,5 +1,16 @@
 # Changelog
 
+## November 19, 2026 · Maps, model capacity and longform editing
+
+- **Maps:** Sketch, Illustrated and Continuous painting atlas styles, 18 layers, label sizes and current-style PNG exports; painted images require separate base-map packages. Shared coastline seams are fixed. See [maps](/en/features/longform/worlds-maps) (#493/#495/#501).
+- **Models/retrieval:** discover selected-connection capacity with shared preview/dispatch allocations; maintain work-local indexes automatically and place embeddings in advanced options; freeze routing before typed extraction. See [models](/en/getting-started/model-config), [retrieval](/en/features/memory-workspace), [imports](/en/guides/import) (#472/#478/#503/#502).
+- **Longform:** organized library cards and existing manual covers; compact world-setting layouts and resizable fields preserve saving/candidate paths; work-status compression rejection and inventory/timeline adoption stalls are fixed. See [planning](/en/features/longform/planning), [continuity](/en/features/longform/continuity) (#480/#504/#505/#485/#498).
+- **Sources/interactive products:** import real chapter headings and prefaces; comic titles no longer overlap; compact TTRPG/world editors prioritize content; constrained deletion supports TTRPG/AVG and unexecuted adventure drafts. See [imports](/en/guides/import), [comics](/en/features/comic), [TTRPG](/en/features/interactive/ttrpg), [worlds](/en/features/world-engine), [AVG](/en/features/interactive/avg), [adventures](/en/features/interactive/text-adventure) (#479/#473/#475/#482/#466).
+- **Settings/feedback:** compact themes, routing, provider and six-role layouts; clearer AI modes; optional agreement footer; screenshot feedback drafts/explicit retries and Linux abnormal-exit diagnostics. See [installation](/en/getting-started/install), [models](/en/getting-started/model-config), [troubleshooting](/en/guides/troubleshooting) (#467–#471/#494/#488/#476/#487).
+- **Data/preparation:** cover storage foundations bring mainline to database v15/backup v19. Complete AI covers and Markdown editing remain unfinished. Arch desktop packaging is in v4.0.8 preparation; v4.0.7 remains the formal release. See [backups](/en/guides/backup-restore), [compatibility](/en/updates/compatibility), [development](/en/updates/development-status) (#492/#489/#496).
+
+Review covers `6b8e1e42…a06d83ba`. Release fixtures, dated measurement receipts and traffic archives are not counted as user features (#477/#481/#491/#497/#498/#499).
+
 ## November 17, 2026 · Historical deletion feedback and folder permissions
 
 - Historical event and keyword deletion waits for storage completion. Failures show an error and retain the original record for retry in the same panel. See [world and history planning](/en/features/longform/planning), based on [#463](https://github.com/yuanbw2025/storyforge/pull/463).

@@ -1,5 +1,13 @@
 # Multiple worlds, locations, and maps
 
+## November 19: 2D atlas and three visual styles
+
+Choose Sketch map / Illustrated map / Continuous painting in the world map. Sketch uses paper and line symbols; Illustrated offers Chinese or European assets. Existing settings produce a bounded geometry candidate for review and explicit adoption. Styles share the layout without adding geographic facts. Based on #493/#495/#501.
+
+Filter 18 layers, zoom/pan, return to the full map, adjust labels and export the current style as PNG. Lake holes/islands, shared coastlines and roads across water use shared geometry; authors must still review the image.
+
+Continuous painting supports reference-image editing, imported images and base-map packages. Results remain view-local until confirmed; map/layout changes isolate old results, and failures are not automatically resent. Natural features are combined in a painted image; use a procedural style for independent natural-layer filtering. **Images are excluded from complete project backups: export a base-map package before leaving and import it later.** Restoration checks geometry fingerprints and actual image data. This is not a 3D or game-publication feature.
+
 ## November 13: saving, recovery and usage checks
 
 Wait for worldview/geography drafts to save before switching worlds, works or groups. Failures retain the draft and offer retry; another group's successful save does not clear this draft's error. Empty groups do not show the preceding group's locations. Concept-map preview failures can retry local decoding without replacing the original image. World-rule save failures retain their current draft. Sources: [#332](https://github.com/yuanbw2025/storyforge/pull/332), [#367](https://github.com/yuanbw2025/storyforge/pull/367).
