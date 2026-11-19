@@ -1,7 +1,9 @@
+import { inputAreaLayoutV1 } from '../../lib/input-area-layout'
 import { CTextarea } from '../shared/CompositionInput'
 import { useWorldSettingsLayout } from '../longform/WorldSettingsLayout'
 
 interface Props {
+  resizableInputs?: boolean
   overview: string
   eraSystem: string
   onOverviewChange: (value: string) => void
@@ -11,6 +13,7 @@ interface Props {
 }
 
 export default function HistoryOverviewTab({
+  resizableInputs = false,
   overview,
   eraSystem,
   onOverviewChange,
@@ -25,6 +28,7 @@ export default function HistoryOverviewTab({
         <label className="block text-sm font-medium text-text-primary">历史总述</label>
         <p className="text-xs text-text-muted">描述这个世界的整体历史脉络、重大转折、文明兴衰等...</p>
         <CTextarea
+          inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'history.overview')}
           value={overview}
           onChange={event => onOverviewChange(event.target.value)}
           onBlur={onSaveOverview}
@@ -37,6 +41,7 @@ export default function HistoryOverviewTab({
         <label className="block text-sm font-medium text-text-primary">纪年体系</label>
         <p className="text-xs text-text-muted">描述这个世界的纪年方式，如：年号纪年、干支纪年等...</p>
         <CTextarea
+          inputAreaLayout={inputAreaLayoutV1(resizableInputs, 'history.eraSystem')}
           value={eraSystem}
           onChange={event => onEraSystemChange(event.target.value)}
           onBlur={onSaveEraSystem}

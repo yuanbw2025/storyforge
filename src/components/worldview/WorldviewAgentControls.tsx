@@ -28,6 +28,7 @@ export default function WorldviewAgentControls({
   onRunningChange,
   onAdopted,
   buttonLabel = 'AI 生成',
+  resizableInputs = false,
 }: {
   field: WorldviewAgentField
   project: Project
@@ -39,6 +40,7 @@ export default function WorldviewAgentControls({
   onRunningChange: (running: boolean) => void
   onAdopted: (candidate: PendingMasterCandidate) => Promise<void>
   buttonLabel?: string
+  resizableInputs?: boolean
 }) {
   const [hint, setHint] = useState('')
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
@@ -205,6 +207,7 @@ export default function WorldviewAgentControls({
             </span>
           </div>
           <WorldviewFieldCandidateReview
+            resizableInputs={resizableInputs}
             candidate={candidate}
             busy={copilot.busy || visibleDraft?.status === 'discarding'}
             visibleDraft={visibleDraft}

@@ -4,13 +4,18 @@
 export const INPUT_AREA_FIELDS_V1 = [
   'story.logline', 'story.concept', 'story.theme', 'story.centralConflict', 'story.plotPattern', 'story.mainPlot', 'story.subPlots',
   'world.origin', 'world.power', 'world.divine', 'world.structure', 'world.dimensions', 'world.continents', 'world.water', 'world.climate',
+  'world.divineRank', 'world.divineNames', 'world.divineRules', 'cultivation.description',
   'world.resources', 'world.creatures', 'world.herbs', 'world.minerals', 'world.otherResources',
   'world.races', 'world.factions', 'world.cities', 'world.politics', 'world.economy', 'world.culture', 'world.conflicts', 'world.items',
   'power.description', 'power.levels', 'power.rules', 'power.stageFeatures', 'power.breakthrough',
   'rules.historical', 'rules.fictional', 'rules.note',
+  'history.overview', 'history.eraSystem',
+  'history.keyword.description', 'history.keyword.conceptNote', 'history.keyword.consultPrompt', 'history.keyword.stormPrompt',
+  'history.timeline.description', 'history.timeline.impact', 'history.timeline.conceptNote', 'history.timeline.consultPrompt', 'history.timeline.stormPrompt',
 ] as const
 export const INPUT_AREA_ROLES_V1 = ['current', 'original', 'candidate', 'raw', 'json'] as const
 export type InputAreaLayoutKeyV1 = `${typeof INPUT_AREA_FIELDS_V1[number]}/${typeof INPUT_AREA_ROLES_V1[number]}`
+export type InputAreaFieldV1 = typeof INPUT_AREA_FIELDS_V1[number]
 export interface InputAreaLayoutOptionsV1 {
   /** Explicit opt-in only, passed from the resolved independent long-novel UI. */
   enabled: true
@@ -23,6 +28,24 @@ type LayoutStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 export const INPUT_AREA_STORAGE_KEY_V1 = 'storyforge-input-area-layout-v1'
 const allowedKeys = new Set<string>(INPUT_AREA_FIELDS_V1.flatMap(field => INPUT_AREA_ROLES_V1.map(role => `${field}/${role}`)))
 const MIN_WIDTH = 160, MIN_HEIGHT = 64, MAX_WIDTH = 4096, MAX_HEIGHT = 2048
+
+/** UI aliases only, not a second narrative field or admission registry. */
+const worldviewAliases: Readonly<Record<string, InputAreaFieldV1 | undefined>> = {
+  worldOrigin: 'world.origin', powerHierarchy: 'world.power', divineDesign: 'world.divine',
+  worldStructure: 'world.structure', worldDimensions: 'world.dimensions', continentLayout: 'world.continents',
+  mountainsRivers: 'world.water', climateByRegion: 'world.climate', naturalResourceOverview: 'world.resources', naturalResources: 'world.resources',
+  rareCreatures: 'world.creatures', herbs: 'world.herbs', minerals: 'world.minerals', others: 'world.otherResources',
+  races: 'world.races', factionLayout: 'world.factions', regionDimensions: 'world.cities', politicsOverview: 'world.politics',
+  economyOverview: 'world.economy', cultureOverview: 'world.culture', internalConflicts: 'world.conflicts', itemDesign: 'world.items',
+}
+export function worldviewInputAreaFieldV1(field: string): InputAreaFieldV1 | undefined {
+  return Object.prototype.hasOwnProperty.call(worldviewAliases, field) ? worldviewAliases[field] : undefined
+}
+export function inputAreaLayoutV1(enabled: boolean | undefined, field: InputAreaFieldV1 | undefined, role: typeof INPUT_AREA_ROLES_V1[number] = 'current'): InputAreaLayoutOptionsV1 | undefined {
+  if (enabled !== true) return undefined
+  const key = field === undefined ? undefined : `${field}/${role}`
+  return { enabled: true, ...(isInputAreaLayoutKeyV1(key) ? { preferenceKey: key } : {}) }
+}
 
 export function isInputAreaLayoutKeyV1(value: unknown): value is InputAreaLayoutKeyV1 {
   return typeof value === 'string' && allowedKeys.has(value)

@@ -165,6 +165,9 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
   }, [projects, currentProjectId])
   const activeWork = useActiveWork(project)
   const isLongform = !embeddedProjectId && project?.workspacePurpose === 'independent-work' && activeWork != null && effectiveWorkKind(activeWork) === 'novel' && effectiveNovelProfile(activeWork) === 'long'
+  // Product admission also covers StoryCore and node-side settings. The compact
+  // five-module layout below is a separate visual choice, not this permission.
+  const resizableInputs = isLongform && activeWork.id === project?.activeWorkId && activeWork.projectId === project.id
   const changeLongSection = (section: LongformSection) => afterPendingEdits(() => {
     if (section === 'library') { navigate('/long'); return }
     const module = section === 'versions' ? 'version-history' : section === 'import' ? 'import-doc' : section === 'settings' ? 'settings' : 'info'
@@ -425,6 +428,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
       // ── 设定库 - 世界观 ─────────────────────────────────────────────
       case 'world-rules':
         return <WorldRulesPanel
+          resizableInputs={resizableInputs}
           project={project}
           initialProfileId={impactHandoff?.targetModule === 'world-rules' && impactHandoffTarget?.table === 'worldRules'
             ? impactHandoffTarget.moduleRecordId
@@ -433,6 +437,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
       case 'power-system': // Read-only route alias; no separate editing surface.
       case 'worldview-origin':
         return <WorldviewOriginPanel
+          resizableInputs={resizableInputs}
           project={project}
           initialWorldviewId={impactHandoff?.targetModule === 'worldview-origin' && impactHandoffTarget?.table === 'worldviews'
             ? impactHandoffTarget.moduleRecordId
@@ -449,9 +454,9 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
             ? { table: impactHandoffTarget.table, recordId: impactHandoffTarget.moduleRecordId } : null}
         />
       case 'worldview-natural':
-        return <WorldviewNaturalPanel project={project} />
+        return <WorldviewNaturalPanel project={project} resizableInputs={resizableInputs} />
       case 'worldview-humanity':
-        return <WorldviewHumanityPanel project={project} onOpenHistory={() => selectModule('history')} />
+        return <WorldviewHumanityPanel project={project} resizableInputs={resizableInputs} onOpenHistory={() => selectModule('history')} />
       case 'geography':
       case 'world-map':
       case 'locations': {
@@ -460,10 +465,11 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
         return <PlacesWorkspace project={project} tab={tab} onTab={next => afterPendingEdits(() => navigate(`/workspace/${project.id}?module=locations&placeTab=${next}`), '地点编辑保存失败')} />
       }
       case 'history':
-        return <HistoryPanel project={project} />
+        return <HistoryPanel project={project} resizableInputs={resizableInputs} />
       // ── 设定库 - 故事设计 ─────────────────────────────────────────
       case 'story-design':
         return <StoryCorePanel
+          resizableInputs={resizableInputs}
           project={project}
           initialStoryCoreId={impactHandoff?.targetModule === 'story-design' && impactHandoffTarget?.table === 'storyCores'
             ? impactHandoffTarget.moduleRecordId

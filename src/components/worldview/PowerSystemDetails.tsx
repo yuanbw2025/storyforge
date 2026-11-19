@@ -1,3 +1,4 @@
+import { inputAreaLayoutV1 } from '../../lib/input-area-layout'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { InlineInput, InlineTextarea } from '../shared/InlineEdit'
@@ -10,8 +11,9 @@ import {
 
 /** Structured rules belong to the origin/power editor. Keep record IDs stable for
  * character references, source manifests, impact receipts and backup round trips. */
-export default function PowerSystemDetails({ project, initialRecordId }: {
+export default function PowerSystemDetails({ project, initialRecordId, resizableInputs = false }: {
   project: Project
+  resizableInputs?: boolean
   initialRecordId?: number | null
 }) {
   const { powerSystem, savePowerSystem, loading } = useWorldviewStore()
@@ -40,7 +42,7 @@ export default function PowerSystemDetails({ project, initialRecordId }: {
       ['rules', '体系规则', '修炼条件、突破瓶颈、禁忌…'],
     ] as const).map(([key, label, placeholder]) => <div key={key}>
       <h3 className="mb-1 text-sm font-medium">{label}</h3>
-      <InlineTextarea value={record?.[key] ?? ''} onChange={value => save({ [key]: value })} placeholder={placeholder}/>
+      <InlineTextarea inputAreaLayout={inputAreaLayoutV1(resizableInputs, `power.${key}`)} value={record?.[key] ?? ''} onChange={value => save({ [key]: value })} placeholder={placeholder}/>
     </div>)}
   </fieldset>
 }
