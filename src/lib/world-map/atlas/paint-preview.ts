@@ -1,11 +1,12 @@
 import { freezeFormalAIEntryBindingV1, executeFrozenFormalImagePreviewV1 } from '../../agent/formal-ai-entry'
 import { getAgentSkillV1 } from '../../agent/skill-registry'
 import { hashCanonicalValue } from '../../agent/run/hash'
-import { imageBindingFromAIConfigV1 } from '../../media/capability'
-import { requestOpenAICompatibleImageEditV1 } from '../../media/transport'
+import { referenceImageBindingFromAIConfigV1 } from '../../media/capability'
+import { requestAgnesReferenceImageV1, requestOpenAICompatibleImageEditV1 } from '../../media/transport'
 import { decodeRasterImageV1, MAX_RASTER_IMAGE_BYTES_V1 } from '../../media/raster-image'
 import type { AIConfig } from '../../types'
 import { parseAtlasReference, type AtlasGeometry } from './geometry'
+import { atlasPaintFrame, cropAtlasPaintFrame, frameAtlasPaintReference } from './paint-frame'
 
 export interface AtlasPaintPreview {
   kind: 'storyforge.atlas-paint'
@@ -14,7 +15,7 @@ export interface AtlasPaintPreview {
   image: string
 }
 
-export const ATLAS_PAINT_PROMPT = `Transform this exact top-down map into a richly detailed, continuous hand-painted fantasy atlas. Preserve the reference coastline, islands, lakes, mountain ranges and forest positions exactly. Keep north up, the same framing and aspect ratio. Paint naturally connected mountains, foothills, valleys and plains; forests fade into scattered trees; mineral greens, ochre grasslands and deep teal sea with turquoise coastal shallows, delicate engraved waves and directional light. All terrain must blend organically rather than look like pasted symbols. Do not add new named features or change geography. NO text, letters, numbers, labels, compass or border; the application overlays its own legible typography. NO cities, buildings, roads, borders or routes. Do not invent rivers: rivers, settlements and transport are independent application layers. This is a flat orthographic cartographic painting, never a tilted 3D scene.`
+export const ATLAS_PAINT_PROMPT = `Transform this exact top-down map into a richly detailed, continuous hand-painted fantasy atlas. Preserve the reference coastline, islands, lakes, mountain ranges and forest positions exactly. Keep north up, the same framing and aspect ratio. Paint dramatic, asymmetric mountain peaks, branching foothills and clear valleys blending into plains. Retain the reference's white snow on cold ridges, dark woodland canopies and ochre sand/desert zones; keep distinct regional palettes rather than covering everything in green. Forests fade into scattered trees; mineral greens, warm lowlands and deep teal sea with turquoise coastal shallows, delicate engraved waves and north-west directional light. Crisp small-scale relief must remain legible at whole-map scale. All terrain must blend organically rather than look like pasted symbols, embossed blobs or uniform noise. Do not add new named features or change geography. NO text, letters, numbers, labels, compass or border; the application overlays its own legible typography. NO cities, buildings, roads, borders or routes. Do not invent rivers: rivers, settlements and transport are independent application layers. This is a flat orthographic cartographic painting, never a tilted 3D scene.`
 
 export function atlasPaintGeometryHash(geometry: AtlasGeometry, seed: string): Promise<string> {
   return hashCanonicalValue({ geometry: parseAtlasReference(geometry), seed })
@@ -59,14 +60,23 @@ export async function generateAtlasPaintPreview(input: {
 }): Promise<AtlasPaintPreview> {
   const geometry = parseAtlasReference(structuredClone(input.geometry))
   const config = structuredClone(input.aiConfig)
-  const binding = imageBindingFromAIConfigV1(config, input.imageModel)
+  const binding = referenceImageBindingFromAIConfigV1(config, input.imageModel)
   const geometryHash = await atlasPaintGeometryHash(geometry, input.seed)
+  const frame = binding.provider === 'agnes' ? atlasPaintFrame(geometry.width, geometry.height) : undefined
+  const reference = frame ? await frameAtlasPaintReference(input.reference, frame) : input.reference
+  input.signal?.throwIfAborted()
   const entry = await freezeFormalAIEntryBindingV1('world.map.paint-preview')
   const data = await executeFrozenFormalImagePreviewV1('world.map.paint-preview', entry,
     getAgentSkillV1('world-origin.map-config'), 'src/lib/world-map/atlas/paint-preview.ts',
-    () => requestOpenAICompatibleImageEditV1({ binding, prompt: ATLAS_PAINT_PROMPT,
-      reference: input.reference, width: input.width, height: input.height, signal: input.signal }),
+    () => binding.provider === 'agnes'
+      ? requestAgnesReferenceImageV1({ binding, prompt: ATLAS_PAINT_PROMPT
+        + ' Preserve the entire reference frame, including narrow sea padding at the edges. Do not crop or zoom.',
+        reference, ratio: frame!.ratio, signal: input.signal })
+      : requestOpenAICompatibleImageEditV1({ binding, prompt: ATLAS_PAINT_PROMPT,
+        reference, width: input.width, height: input.height, signal: input.signal }),
     { category: 'geography.world-map-paint' }, input.signal)
   input.signal?.throwIfAborted()
-  return prepareAtlasPaintPreview(data, geometryHash, geometry)
+  const normalized = frame ? await cropAtlasPaintFrame(data, frame) : data
+  input.signal?.throwIfAborted()
+  return prepareAtlasPaintPreview(normalized, geometryHash, geometry)
 }

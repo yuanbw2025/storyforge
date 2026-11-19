@@ -1,4 +1,4 @@
-import type { ImageGenerationBindingV1 } from './capability'
+import type { AgnesReferenceImageBindingV1, ImageGenerationBindingV1 } from './capability'
 import { assertGenerationAvailable } from '../showcase/policy'
 
 const MAX_BYTES = 25 * 1024 * 1024
@@ -79,7 +79,39 @@ export async function requestOpenAICompatibleImageEditV1(input: {
     method: 'POST', body, signal: input.signal,
     headers: { Authorization: `Bearer ${input.binding.apiKey}` },
   })
-  if (!response.ok) throw new Error(`[media] 绘画底图生成失败：HTTP ${response.status}。未自动重试，请核对图片模型与参考图编辑接口。`)
+  return readReferenceImageResponse(response, input.signal)
+}
+
+/** Agnes uses singular `image: [dataURI]` on generations, not images/edits.
+ * https://agnes-ai.com/zh-Hans/docs/agnes-image-21-flash */
+export async function requestAgnesReferenceImageV1(input: {
+  binding: AgnesReferenceImageBindingV1
+  prompt: string
+  reference: Blob
+  ratio: string
+  signal?: AbortSignal
+}): Promise<ArrayBuffer> {
+  assertGenerationAvailable()
+  if (input.reference.type !== 'image/png' || !input.reference.size || input.reference.size > MAX_BYTES
+    || !input.prompt.trim() || input.prompt.length > 16_000
+    || !['1:1', '3:4', '4:3', '16:9', '9:16', '2:3', '3:2', '21:9'].includes(input.ratio)) {
+    throw Error('[media] Agnes 地图参考图或画幅无效')
+  }
+  const bytes = new Uint8Array(await input.reference.arrayBuffer())
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192))
+  input.signal?.throwIfAborted()
+  const response = await fetch(`${input.binding.baseUrl}/images/generations`, {
+    method: 'POST', signal: input.signal, credentials: 'omit',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${input.binding.apiKey}` },
+    body: JSON.stringify({ model: input.binding.model, prompt: input.prompt, size: '2K', ratio: input.ratio,
+      image: ['data:image/png;base64,' + btoa(binary)], return_base64: true, extra_body: { response_format: 'b64_json' } }),
+  })
+  return readReferenceImageResponse(response, input.signal)
+}
+
+async function readReferenceImageResponse(response: Response, signal?: AbortSignal): Promise<ArrayBuffer> {
+  if (!response.ok) throw new Error(`[media] 绘画底图生成失败：HTTP ${response.status}。未自动重试，请核对图片模型与参考图接口。`)
   const reader = response.body?.getReader()
   if (!reader) throw new Error('[media] 图片编辑响应为空')
   const chunks: Uint8Array[] = []
@@ -100,6 +132,6 @@ export async function requestOpenAICompatibleImageEditV1(input: {
   if (json.data?.length !== 1) throw new Error('[media] 图片编辑必须返回一个候选')
   const item = json.data[0]
   if (typeof item.b64_json === 'string') return decodeBase64(item.b64_json)
-  if (typeof item.url === 'string') return download(item.url, input.signal)
+  if (typeof item.url === 'string') return download(item.url, signal)
   throw new Error('[media] 图片编辑候选缺少内容')
 }
