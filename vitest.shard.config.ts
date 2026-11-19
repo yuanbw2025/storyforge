@@ -1,4 +1,4 @@
-import config from './vitest.config'
+import config from './vitest.config.ts'
 
 if (process.env.STORYFORGE_COVERAGE_SHARD_COMPONENT !== '1') {
   throw new Error('Run coverage shards through scripts/run-coverage-shard.mjs; aggregate acceptance is required.')
