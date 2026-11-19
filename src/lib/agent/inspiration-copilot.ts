@@ -1,3 +1,5 @@
+import { supportsVerifiedJsonObjectResponseForModelV1 } from '../ai/provider-capabilities'
+import { buildInspirationPreparationPrompt, inspirationPreparationModeFromRequest, isInspirationPreparationMode, parseInspirationPreparationDraft, type InspirationPreparationResult } from '../inspiration/preparation'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useInspirationWorkspaceStore } from '../../stores/inspiration-workspace'
 import {
@@ -56,7 +58,7 @@ import {
   type WorkspaceScopeLike,
 } from '../workspace/scope'
 
-export type InspirationCopilotResult = ReverseResult | ReverseMultiWorldResult
+export type InspirationCopilotResult = ReverseResult | ReverseMultiWorldResult | InspirationPreparationResult
 
 export interface InspirationWorkspaceSnapshot {
   id: number | null
@@ -152,6 +154,7 @@ export function hasInspirationCandidateMaterialV1(
   result: InspirationCopilotResult,
   mode: InspirationResultMode,
 ): boolean {
+  if (isInspirationPreparationMode(mode)) return !!(result as InspirationPreparationResult).summary.trim()
   if (mode === 'multiworld') {
     const candidate = result as ReverseMultiWorldResult
     return candidate.worlds.some(world => [
@@ -176,6 +179,7 @@ export function hasInspirationCandidateMaterialV1(
 }
 
 function parseResult(output: string, mode: InspirationResultMode): InspirationCopilotResult | null {
+  if (isInspirationPreparationMode(mode)) return parseInspirationPreparationDraft(output, mode)
   return mode === 'multiworld'
     ? parseReverseMultiWorldOutput(output)
     : parseReverseOutput(output)
@@ -185,6 +189,7 @@ export function parseInspirationCandidateDraft(
   draft: string,
   mode: InspirationResultMode,
 ): InspirationCopilotResult {
+  if (isInspirationPreparationMode(mode)) return parseInspirationPreparationDraft(draft, mode)
   const fields = mode === 'multiworld'
     ? ['storyCore', 'worlds', 'characters']
     : ['worldview', 'history', 'storyCore', 'characters']
@@ -223,10 +228,12 @@ export async function prepareInspirationCopilot(input: {
   contextProfile?: AgentContextProfile
   contextCompressionRuntime?: AgentContextCompressionRuntimeV1
   signal?: AbortSignal
-}): Promise<PreparedInspirationCopilot> {
+}, dependencies: InspirationCopilotDependencies = {}): Promise<PreparedInspirationCopilot> {
   const project = await db.projects.get(input.projectId)
   if (!project) throw new Error('项目不存在。')
-  const mode: InspirationResultMode = project.enableMultiWorld ? 'multiworld' : 'single'
+  const mode: InspirationResultMode = input.skillId === 'inspiration.prepare'
+    ? inspirationPreparationModeFromRequest(input.authorRequest)
+    : project.enableMultiWorld ? 'multiworld' : 'single'
   const readScope = await resolveReadScopeLike(input.scope ?? input.projectId)
   const scope = readScope
   const work = await db.works.get(scope.workId)
@@ -277,10 +284,15 @@ export async function prepareInspirationCopilot(input: {
       contextPolicy,
       sourceTransformer: compression?.sourceTransformer,
     },
-    { fragmentIds: selectedFragmentIds, mode },
+    { fragmentIds: selectedFragmentIds, mode, ...(mode === 'deepen' && /灵感方向选择\s*=\s*(\d+)\b/.test(authorRequest) ? { directionIndex: Number(/灵感方向选择\s*=\s*(\d+)\b/.exec(authorRequest)![1]) } : {}) },
   )
   if (!context.ok || !context.meta.included.includes('inspirationWorkspace')) {
     throw new Error(context.error || '当前选择没有可用的灵感上下文。')
+  }
+
+  if (isInspirationPreparationMode(mode) && (context.meta.trimmed.includes('inspirationWorkspace')
+    || context.meta.sourceEvidence?.some(source => source.key === 'inspirationWorkspace' && source.delivery === 'truncated'))) {
+    throw new Error('所选素材与上一版准备内容超过本次上下文预算，请减少选择或缩小任务；未截断材料生成。')
   }
 
   const versions = parseInspirationVersions(snapshot.versions)
@@ -310,7 +322,7 @@ export async function prepareInspirationCopilot(input: {
     routingCategory,
     signal: input.signal,
   }
-  const node = createInspirationCopilotNode(nodeInput)
+  const node = createInspirationCopilotNode(nodeInput, dependencies)
   return {
     node,
     prepared: prepareGenerationNode(node, nodeInput),
@@ -347,13 +359,18 @@ export function createInspirationCopilotNode(
     projectId: input.projectId,
     configOverrides: { maxTokens: 6000 },
     contextOverflowPolicy: 'reject',
-  }, input.signal))
+  }, input.signal, undefined, isInspirationPreparationMode(input.mode) ? {
+    ...(supportsVerifiedJsonObjectResponseForModelV1(input.config) ? { responseFormat: 'json_object' as const } : {}),
+    ...(input.config.provider === 'agnes' && input.config.model === 'agnes-2.5-flash' ? { thinkingMode: 'disabled' as const } : {}),
+  } : undefined))
 
   return {
     id: `agent.chat-copilot.inspiration:${input.projectId}:${input.mode}:${input.snapshot.updatedAt ?? 0}:${input.parentVersionId ?? 'root'}`,
-    kind: input.mode === 'multiworld' ? 'inspiration.reverse.multiworld' : 'inspiration.reverse',
+    kind: isInspirationPreparationMode(input.mode) ? 'inspiration.prepare' : input.mode === 'multiworld' ? 'inspiration.reverse.multiworld' : 'inspiration.reverse',
     editableInput: true,
-    assembleInput: current => current.mode === 'multiworld'
+    assembleInput: current => isInspirationPreparationMode(current.mode)
+      ? buildInspirationPreparationPrompt(current.mode, current.contextText, current.authorRequest)
+      : current.mode === 'multiworld'
       ? buildInspirationReverseMultiWorldPrompt(
           current.projectName,
           current.genres,

@@ -1,3 +1,4 @@
+import { isInspirationPreparationMode } from '../../lib/inspiration/preparation'
 import { Check, GitCompareArrows, History, Trash2, X } from 'lucide-react'
 import type { InspirationResultDiff } from '../../lib/inspiration/workspace'
 import type {
@@ -165,7 +166,7 @@ export default function InspirationFusionReview({
               className="flex items-center gap-1 rounded bg-green-600 px-3 py-1.5 text-xs text-white hover:bg-green-700 disabled:opacity-40"
             >
               <Check className="h-3.5 w-3.5" />
-              {confirming ? '保存中...' : '确认融合版本'}
+              {confirming ? '保存中...' : isInspirationPreparationMode(mode) ? '确认准备版本' : '确认融合版本'}
             </button>
             <button
               onClick={onDiscard}

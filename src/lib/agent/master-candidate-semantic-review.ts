@@ -480,7 +480,7 @@ export async function runMasterCandidateSemanticReviewV1(input: {
   generationContextManifestHash: string
   generator: MasterCandidateModelIdentityV1
   selectedFragmentIds?: string[]
-  inspirationMode?: 'single' | 'multiworld'
+  inspirationMode?: import('../types/inspiration-workspace').InspirationResultMode
   budget: AgentTeamBudgetTracker
   reviewerConfig: AIConfig
   review: (messages: ChatMessage[]) => Promise<string>

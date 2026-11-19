@@ -1,3 +1,4 @@
+import { INSPIRATION_PREPARATION_LABELS, isInspirationPreparationMode } from '../../lib/inspiration/preparation'
 /**
  * Phase 26.4 — 灵感反推面板
  *
@@ -36,6 +37,7 @@ export default function InspirationPanel({ project }: Props) {
   const fusion = useIncrementalInspiration(project, () => setAdoptedSections(new Set()))
   const {
     ai,
+    action, setAction, preparationResult,
     isMultiWorld: isMW,
     mode,
     workspace: inspirationWorkspace,
@@ -68,7 +70,7 @@ export default function InspirationPanel({ project }: Props) {
   } = fusion
   const hasOtherPendingCandidates = copilot.pendingCandidates.some(candidate => (
     candidate !== pendingCandidate
-      && (candidate.payload.agentId !== 'inspiration' || candidate.payload.skillId !== 'inspiration.reverse')
+      && (candidate.payload.agentId !== 'inspiration' || !['inspiration.reverse', 'inspiration.prepare'].includes(candidate.payload.skillId))
   ))
 
   // ── 多世界：一键采纳（创建世界组 + 各世界世界观 + 故事核心 + 角色归属）──
@@ -186,7 +188,11 @@ export default function InspirationPanel({ project }: Props) {
     const workTitle = activeWork?.title ?? '当前作品'
     const lines: string[] = [`# ${workTitle} — 灵感反推结果\n`]
     if (inspiration.trim()) lines.push(`## 原始灵感\n${inspiration}\n`)
-    if (mwResult) {
+    if (preparationResult) {
+      lines.push('## 整理与判断', preparationResult.summary, '## 作者原有内容', preparationResult.authorMaterial)
+      preparationResult.proposals.forEach(proposal => lines.push(`## ${proposal.title}`, proposal.content))
+      if (preparationResult.openQuestions.length) lines.push('## 待决定', ...preparationResult.openQuestions)
+    } else if (mwResult) {
       const sc = mwResult.storyCore
       lines.push(`## 故事主线`)
       if (sc.logline) lines.push(`- 一句话：${sc.logline}`)
@@ -353,8 +359,8 @@ export default function InspirationPanel({ project }: Props) {
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-bg-surface">
         <Lightbulb className="w-5 h-5 text-yellow-500" />
         <h2 className="text-lg font-semibold text-text-primary">灵感反推</h2>
-        <span className="text-xs text-text-muted ml-2">从碎片想法反推完整故事框架</span>
-        {(result || mwResult) && (
+        <span className="text-xs text-text-muted ml-2">整理灵感、比较方向、局部深化或完整反推</span>
+        {(result || mwResult || preparationResult) && (
           <button
             onClick={handleExportResult}
             className="ml-auto flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg bg-bg-elevated text-text-secondary border border-border hover:text-accent hover:border-accent/50 transition-colors"
@@ -429,6 +435,15 @@ export default function InspirationPanel({ project }: Props) {
           </p>
         )}
 
+        <label className="block text-sm text-text-secondary">
+          本轮想做什么
+          <select aria-label="灵感任务" value={action ?? 'full'} disabled={ai.isStreaming || inspirationWorkspace.loading || copilot.pendingCandidates.length > 0 || confirmingFusion}
+            onChange={event => setAction(event.target.value as typeof action)} className="ml-3 rounded border border-border bg-bg-base p-2">
+            <option value="organize">轻量整理</option><option value="compare">方向比较</option><option value="deepen">局部深化</option><option value="full">完整反推</option>
+          </select>
+        </label>
+        {isInspirationPreparationMode(mode) && <p className="text-xs text-text-muted">准备版本只保存本轮想法与提议，不自动创建世界、人物或完整大纲。</p>}
+
         <InspirationFusionReview
           fragments={inspirationWorkspace.fragments}
           versions={inspirationWorkspace.versions}
@@ -480,6 +495,7 @@ export default function InspirationPanel({ project }: Props) {
               || inspiration.trim().length > MAX_INSPIRATION_FRAGMENT_CHARS
               || ai.isStreaming
               || copilot.loading
+              || inspirationWorkspace.loading
               || copilot.pendingCandidates.length > 0
             }
             className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -489,7 +505,7 @@ export default function InspirationPanel({ project }: Props) {
             ) : (
               <Sparkles className="w-4 h-4" />
             )}
-            {ai.isStreaming ? '融合中...' : inspirationWorkspace.versions.some(version => version.mode === mode) ? '融合并更新' : '开始反推'}
+            {ai.isStreaming ? '融合中...' : isInspirationPreparationMode(mode) ? INSPIRATION_PREPARATION_LABELS[mode] : inspirationWorkspace.versions.some(version => version.mode === mode) ? '融合并更新' : '开始反推'}
           </button>
           {ai.isStreaming && (
             <button onClick={ai.stop} className="text-xs text-text-muted hover:text-red-500 transition-colors">
@@ -524,6 +540,14 @@ export default function InspirationPanel({ project }: Props) {
             moduleKey={isMW ? 'inspiration.reverse.multiworld' : 'inspiration.reverse'}
           />
         )}
+
+        {preparationResult && !ai.isStreaming && <section className="space-y-3 rounded border border-border p-4" aria-label="灵感准备结果">
+          <h3 className="font-semibold">{isInspirationPreparationMode(mode) ? INSPIRATION_PREPARATION_LABELS[mode] : '准备结果'}</h3>
+          <p className="whitespace-pre-wrap text-sm">{preparationResult.summary}</p>
+          <h4 className="text-sm font-medium">作者原有内容</h4><p className="whitespace-pre-wrap text-sm">{preparationResult.authorMaterial}</p>
+          {preparationResult.proposals.map((proposal, index) => <div key={index}><h4 className="text-sm font-medium">{proposal.title}</h4><p className="whitespace-pre-wrap text-sm">{proposal.content}</p>{mode === 'compare' && <button type="button" disabled={pendingCandidate != null || inspirationWorkspace.loading} onClick={() => { setUserHint(`灵感方向选择=${index + 1}。从最近已确认方向比较中选择第${index + 1}项“${proposal.title}”，沿此方向深化；保留作者原有要求。`); setAction('deepen') }} className="mt-2 text-xs text-accent disabled:opacity-40">沿此方向深化（先确认准备版本）</button>}</div>)}
+          {preparationResult.openQuestions.length > 0 && <div><h4 className="text-sm font-medium">待决定</h4>{preparationResult.openQuestions.map((question, index) => <p key={index} className="text-sm">{question}</p>)}</div>}
+        </section>}
 
         {/* ── 多世界反推结果预览 ─────────────────────── */}
         {isMW && mwResult && !ai.isStreaming && (

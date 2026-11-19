@@ -1,3 +1,4 @@
+import { isInspirationPreparationMode, parseInspirationPreparationDraft, type InspirationPreparationMode, type InspirationPreparationResult } from '../lib/inspiration/preparation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useInspirationWorkspaceStore } from '../stores/inspiration-workspace'
 import {
@@ -25,7 +26,8 @@ export function useIncrementalInspiration(
   onGenerationStarted: () => void,
 ) {
   const isMultiWorld = !!project.enableMultiWorld
-  const mode: InspirationResultMode = isMultiWorld ? 'multiworld' : 'single'
+  const [action, setAction] = useState<'full' | InspirationPreparationMode>('full')
+  const mode: InspirationResultMode = action === 'full' ? (isMultiWorld ? 'multiworld' : 'single') : action
   const workspaceScope = useMemo<WorkspaceScope | undefined>(() => (
     project.id != null && project.activeWorldId != null && project.activeWorkId != null
       ? { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }
@@ -47,6 +49,7 @@ export function useIncrementalInspiration(
   const [inspiration, setInspiration] = useState('')
   const [userHint, setUserHint] = useState('')
   const [result, setResult] = useState<ReverseResult | null>(null)
+  const [preparationResult, setPreparationResult] = useState<InspirationPreparationResult | null>(null)
   const [mwResult, setMwResult] = useState<ReverseMultiWorldResult | null>(null)
   const [mwAdopted, setMwAdopted] = useState(false)
   const [selectedChars, setSelectedChars] = useState<Set<number>>(new Set())
@@ -59,9 +62,16 @@ export function useIncrementalInspiration(
 
   const pendingCandidate = useMemo(() => copilot.pendingCandidates.find(candidate => (
     candidate.payload.agentId === 'inspiration'
-      && candidate.payload.skillId === 'inspiration.reverse'
+      && candidate.payload.skillId === (isInspirationPreparationMode(mode) ? 'inspiration.prepare' : 'inspiration.reverse')
       && (candidate.payload.mode ?? mode) === mode
   )) ?? null, [copilot.pendingCandidates, mode])
+
+  const activePending = useRef(pendingCandidate)
+  activePending.current = pendingCandidate
+  useEffect(() => {
+    const restored = copilot.pendingCandidates.find(candidate => candidate.payload.skillId === 'inspiration.prepare')
+    if (isInspirationPreparationMode(restored?.payload.mode)) setAction(restored.payload.mode)
+  }, [copilot.pendingCandidates])
 
   const ai = useMemo(() => ({
     isStreaming: copilot.busy,
@@ -71,7 +81,11 @@ export function useIncrementalInspiration(
     stop: copilot.stop,
   }), [copilot.busy, copilot.error, copilot.stop])
 
-  const applyResult = (parsed: ReverseResult | ReverseMultiWorldResult, targetMode = mode) => {
+  const applyResult = (parsed: ReverseResult | ReverseMultiWorldResult | InspirationPreparationResult, targetMode = mode) => {
+    if (isInspirationPreparationMode(targetMode)) {
+      setPreparationResult(parseInspirationPreparationDraft(JSON.stringify(parsed), targetMode)); setResult(null); setMwResult(null); return
+    }
+    setPreparationResult(null)
     if (targetMode === 'multiworld') {
       setMwResult(parsed as ReverseMultiWorldResult)
       setResult(null)
@@ -85,6 +99,7 @@ export function useIncrementalInspiration(
 
   useEffect(() => {
     let active = true
+    setPreparationResult(null)
     setResult(null)
     setMwResult(null)
     setMwAdopted(false)
@@ -94,9 +109,10 @@ export function useIncrementalInspiration(
       if (!active) return
       const state = useInspirationWorkspaceStore.getState()
       setSelectedFragmentIds(new Set(state.fragments.map(fragment => fragment.id)))
+      if (activePending.current) { acceptGeneratedResult(activePending.current.event.content); return }
       const latest = latestInspirationVersion(state.versions, mode)
       if (!latest) return
-      try { applyResult(JSON.parse(latest.resultJson), mode) } catch { /* ignore invalid data */ }
+      try { applyResult(JSON.parse(latest.resultJson), mode) } catch { setFusionError('已保存的灵感版本结构无法读取，原数据保留，请检查或导出备份。') }
     }).catch(error => {
       if (active) setFusionError(error instanceof Error ? error.message : '灵感素材读取失败')
     })
@@ -110,6 +126,7 @@ export function useIncrementalInspiration(
       const saved = localStorage.getItem(draftKey)
       if (saved) {
         const draft = JSON.parse(saved)
+        if ((draft.action === 'full' || isInspirationPreparationMode(draft.action)) && !copilot.pendingCandidates.some(candidate => candidate.payload.skillId === 'inspiration.prepare')) setAction(draft.action)
         setInspiration(draft.inspiration || '')
         setUserHint(draft.userHint || '')
         if (draft.result) applyResult(draft.result, 'single')
@@ -130,6 +147,7 @@ export function useIncrementalInspiration(
       try {
         localStorage.setItem(draftKey, JSON.stringify({
           inspiration,
+          action,
           userHint,
           result,
           mwResult,
@@ -138,7 +156,7 @@ export function useIncrementalInspiration(
       } catch { /* ignore */ }
     }, 500)
     return () => clearTimeout(timer)
-  }, [draftKey, inspiration, userHint, result, mwResult, mwAdopted])
+  }, [draftKey, action, inspiration, userHint, result, mwResult, mwAdopted])
 
   const acceptGeneratedResult = (output: string) => {
     const latest = latestInspirationVersion(
@@ -149,11 +167,13 @@ export function useIncrementalInspiration(
     if (latest) {
       try { previous = JSON.parse(latest.resultJson) } catch { previous = {} }
     }
-    const parsed = isMultiWorld
+    const parsed = isInspirationPreparationMode(mode)
+      ? parseInspirationPreparationDraft(output, mode)
+      : isMultiWorld
       ? parseReverseMultiWorldOutput(output)
       : parseReverseOutput(output)
     if (!parsed) {
-      throw new Error('Agnes 返回内容无法解析，请修正候选 JSON 或拒绝后重试')
+      throw new Error('模型返回内容无法解析，请修正候选 JSON 或拒绝后重试')
     }
     setFusionError('')
     applyResult(parsed)
@@ -198,6 +218,7 @@ export function useIncrementalInspiration(
   }
 
   const generate = async () => {
+    if (workspace.loading) return
     const operationView = viewKey
     if (inspiration.trim().length > MAX_INSPIRATION_FRAGMENT_CHARS) {
       setFusionError(`单条灵感最多 ${MAX_INSPIRATION_FRAGMENT_CHARS} 字，请拆成多个碎片`)
@@ -211,6 +232,7 @@ export function useIncrementalInspiration(
     }
     const state = useInspirationWorkspaceStore.getState()
     if (selectedIds.size === 0 || state.fragments.length === 0) return
+    setPreparationResult(null)
     setResult(null)
     setMwResult(null)
     setMwAdopted(false)
@@ -219,19 +241,19 @@ export function useIncrementalInspiration(
     onGenerationStarted()
 
     const request = [
-      '基于作者选择的灵感碎片生成结构化灵感反推候选。',
+      isInspirationPreparationMode(mode) ? `灵感准备任务=${mode}。基于所选素材生成准备候选。` : '基于作者选择的灵感碎片生成结构化灵感反推候选。',
       userHint.trim() ? '作者补充要求：' + userHint.trim() : '',
     ].filter(Boolean).join('\n')
     await copilot.submitTargetedRequest(request, {
       agentId: 'inspiration',
-      skillId: 'inspiration.reverse',
+      skillId: isInspirationPreparationMode(mode) ? 'inspiration.prepare' : 'inspiration.reverse',
       instruction: request,
       inspirationFragmentIds: [...selectedIds],
     })
   }
 
   const confirmFusion = async () => {
-    const pendingResult = mode === 'multiworld' ? mwResult : result
+    const pendingResult = isInspirationPreparationMode(mode) ? preparationResult : mode === 'multiworld' ? mwResult : result
     if (!pendingResult || pendingDiff === null || !pendingCandidate) return
     setConfirmingFusion(true)
     try {
@@ -260,8 +282,8 @@ export function useIncrementalInspiration(
     if (pendingCandidate) await copilot.rejectCandidate(pendingCandidate)
     const latest = latestInspirationVersion(useInspirationWorkspaceStore.getState().versions, mode)
     if (latest) {
-      try { applyResult(JSON.parse(latest.resultJson)) } catch { setResult(null); setMwResult(null) }
-    } else { setResult(null); setMwResult(null) }
+      try { applyResult(JSON.parse(latest.resultJson)) } catch { setPreparationResult(null); setResult(null); setMwResult(null); setFusionError('已保存的灵感版本无法读取，原数据保留。') }
+    } else { setPreparationResult(null); setResult(null); setMwResult(null) }
     setPendingDiff(null)
   }
 
@@ -283,6 +305,7 @@ export function useIncrementalInspiration(
 
   return {
     ai,
+    action, setAction, preparationResult,
     copilot,
     isMultiWorld,
     mode,

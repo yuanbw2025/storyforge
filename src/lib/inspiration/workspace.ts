@@ -1,3 +1,4 @@
+import { isInspirationPreparationMode } from './preparation'
 import type {
   InspirationFragment,
   InspirationResultMode,
@@ -73,7 +74,7 @@ export function parseInspirationVersions(raw: string | undefined): InspirationVe
       } catch {
         return []
       }
-      const mode: InspirationResultMode = item.mode === 'multiworld' ? 'multiworld' : 'single'
+      const mode: InspirationResultMode = isInspirationPreparationMode(item.mode) ? item.mode : item.mode === 'multiworld' ? 'multiworld' : 'single'
       return [{
         id: cleanText(item.id, 120) || createId('idea-version'),
         parentVersionId: typeof item.parentVersionId === 'string'
@@ -178,6 +179,8 @@ export function buildInspirationFusionInput(input: {
   fragments: InspirationFragment[]
   selectedIds: ReadonlySet<string>
   previousVersion?: InspirationVersion | null
+  completeInput?: boolean
+  comparisonVersion?: InspirationVersion | null
 }): string {
   const selected = input.fragments
     .filter(fragment => input.selectedIds.has(fragment.id))
@@ -188,20 +191,21 @@ export function buildInspirationFusionInput(input: {
   for (const [index, fragment] of selected.entries()) {
     const label = fragment.label || `碎片 ${index + 1}`
     const block = `\n[I-${index + 1}｜${fragment.sourceKind}｜${label}]\n${fragment.text}`
-    if (used + block.length > MAX_INSPIRATION_FUSION_CHARS) break
+    if (!input.completeInput && used + block.length > MAX_INSPIRATION_FUSION_CHARS) break
     parts.push(block)
     used += block.length
   }
   if (parts.length === 1) return ''
 
   if (input.previousVersion) {
-    const previous = input.previousVersion.resultJson.slice(0, MAX_INSPIRATION_PREVIOUS_RESULT_CHARS)
+    const previous = input.completeInput ? input.previousVersion.resultJson : input.previousVersion.resultJson.slice(0, MAX_INSPIRATION_PREVIOUS_RESULT_CHARS)
     parts.push(
-      '\n【上一版已确认框架】',
+      input.completeInput ? '\n【上一版已确认准备材料（不等于正式世界/人物事实）】' : '\n【上一版已确认框架】',
       previous,
       '\n【增量融合要求】保留未被新碎片否定的有效内容；明确吸收新增内容并解决冲突。不要简单覆盖，也不要重复堆砌。输出仍须严格遵守原 JSON 结构。',
     )
   }
+  if (input.comparisonVersion) parts.push(`\n【最近已确认的方向比较·版本${input.comparisonVersion.id}】以下仍是备选方向，只能采用作者本轮明确选择的方向，不自动全部混合：`, input.comparisonVersion.resultJson)
   return parts.join('\n')
 }
 

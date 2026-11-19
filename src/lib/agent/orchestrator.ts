@@ -1558,7 +1558,7 @@ async function executeSequentialMasterAgentPlan(
             agentId: task.agentId,
             skillId: skill.id as AgentSkillId,
             executionBinding,
-            label: '灵感反推版本',
+            label: skill.id === 'inspiration.prepare' ? '灵感准备版本' : '灵感反推版本',
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
             baseSnapshot: prepared.snapshot,
@@ -2459,7 +2459,7 @@ export async function adoptMasterCandidate(input: {
         ? `角色设定已补全 ${input.payload.characterSupplementRequest?.dimensions.length ?? 0} 个字段。`
         : `角色“${(parseCharacterCandidateDraft(input.draft) as CharacterCopilotCandidate).name}”已加入项目。`
       : input.payload.agentId === 'inspiration'
-        ? `已保存新的${input.payload.mode === 'multiworld' ? '多世界' : '单世界'}灵感版本。`
+        ? `已保存新的灵感版本（${input.payload.mode ?? 'single'}）。`
         : input.payload.agentId === 'outline'
           ? input.payload.skillId === 'outline.details' ? '场景细纲已写入当前章节，可在分步骤的场景细纲中继续编辑。' : input.payload.skillId === 'outline.character-revision'
             ? '选中的未来大纲 patch 已写入项目；已写正文、故事主线和只读影响建议均未修改。'

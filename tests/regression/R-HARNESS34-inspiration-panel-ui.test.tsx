@@ -94,6 +94,7 @@ function createFusionState() {
     },
     isMultiWorld: false,
     mode: 'single',
+    action: 'full', setAction: vi.fn(), preparationResult: null,
     workspace: { fragments: [fragment], versions: [] },
     inspiration: '',
     setInspiration: vi.fn(),
@@ -160,6 +161,7 @@ describe('R-HARNESS34 · 分步骤灵感面板接入 inspiration.reverse Skill',
         agentId: 'inspiration',
         skillId: 'inspiration.reverse',
         mode: 'single',
+    action: 'full', setAction: vi.fn(), preparationResult: null,
         contextEvidence: {
           included: ['inspirationWorkspace'],
           estimatedInputTokens: 320,
@@ -188,4 +190,16 @@ describe('R-HARNESS34 · 分步骤灵感面板接入 inspiration.reverse Skill',
     await act(async () => buttons.find(item => item.textContent?.includes('确认融合版本'))!.click())
     expect(mocks.confirmFusion).toHaveBeenCalledOnce()
   })
+  it('展示可读的轻量准备与确认入口，不显示完整反推采纳控件', async () => {
+    mocks.fusion.action = 'organize'; mocks.fusion.mode = 'organize'
+    mocks.fusion.preparationResult = { summary: '保留南枝的铃壳', authorMaterial: '南枝、铃壳', proposals: [{ title: '邻家生活', content: '只深入门边的声音' }], openQuestions: [] }
+    const host = await renderPanel()
+    expect(host.querySelector('[aria-label="灵感准备结果"]')?.textContent).toContain('保留南枝的铃壳')
+    expect(host.querySelector('[data-testid="single-result"]')).toBeNull()
+    const select = host.querySelector<HTMLSelectElement>('[aria-label="灵感任务"]')!
+    await act(async () => { select.value = 'deepen'; select.dispatchEvent(new Event('change', { bubbles: true })) })
+    expect(mocks.fusion.setAction).toHaveBeenCalledWith('deepen')
+    expect(host.textContent).toContain('不自动创建世界、人物或完整大纲')
+  })
+
 })
