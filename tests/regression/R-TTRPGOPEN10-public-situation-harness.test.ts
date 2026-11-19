@@ -1,3 +1,4 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { readyOpenTtrpgSessionV1, OPEN_HUMAN_VIEWER, openEnvelopeV1 } from '../helpers/open-ttrpg-session'
@@ -40,7 +41,11 @@ describe('R-TTRPGOPEN10 original public request transport and recoverable candid
   beforeEach(async () => { await db.delete(); await db.open() }); afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); db.close() })
   it('uses the actual formal entry and chat client, proving the complete HTTP message body has no private prompt layer', async () => {
     const { read, prepared, output } = await setup({ provider: 'custom', model: 'public-wire-engineering-model' })
+    const aiConfig = { provider: 'custom' as const, model: 'public-wire-engineering-model',
+      apiKey: '', baseUrl: 'https://public-wire.example.invalid/v1', maxTokens: 9999, temperature: 0.2 }
+    await seedModelAllocationFixtureV1(aiConfig, 64_000)
     const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(init?.method).toBe('POST')
       expect(String(url)).toBe('https://public-wire.example.invalid/v1/chat/completions')
       const body = JSON.parse(String(init?.body))
       expect(body.messages).toEqual(prepared.messages); expect(body.max_tokens).toBe(4000); expect(body.stream).toBe(false)
@@ -49,8 +54,7 @@ describe('R-TTRPGOPEN10 original public request transport and recoverable candid
         { status: 200, headers: { 'Content-Type': 'application/json' } })
     })
     vi.stubGlobal('fetch', fetch)
-    const result = await executeTtrpgOpenPublicSituationRequestV1({ ...read, aiConfig: { provider: 'custom', model: 'public-wire-engineering-model',
-      apiKey: '', baseUrl: 'https://public-wire.example.invalid/v1', maxTokens: 9999, temperature: 0.2, contextWindow: 64000 } })
+    const result = await executeTtrpgOpenPublicSituationRequestV1({ ...read, aiConfig })
     expect(result.status === 'candidate' && result.summary.status).toBe('usable-with-warnings'); expect(fetch).toHaveBeenCalledTimes(1)
     const run = await readInstanceAgentRunV1(read.scope, read.runId)
     expect(run.contract.executionBindings?.[0].formalEntry?.entryId).toBe('ttrpg.open.public-situation-propose')
