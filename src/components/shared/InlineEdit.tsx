@@ -3,6 +3,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { containTextareaWheel, parseCssPixels } from './textarea-scroll'
+import ResizableInputArea, { type AreaControlV1 } from './ResizableInputArea'
+import type { InputAreaLayoutOptionsV1 } from '../../lib/input-area-layout'
 
 type InlineSave = (value: string) => void | Promise<void>
 
@@ -143,8 +145,8 @@ export function InlineInput({ value, onChange, placeholder, className, prefix, s
   </div>
 }
 
-export function InlineTextarea({ value, onChange, placeholder, className, minRows = 2, maxRows = 16 }: {
-  value: string; onChange: InlineSave; placeholder?: string; className?: string; minRows?: number; maxRows?: number
+export function InlineTextarea({ value, onChange, placeholder, className, minRows = 2, maxRows = 16, inputAreaLayout }: {
+  value: string; onChange: InlineSave; placeholder?: string; className?: string; minRows?: number; maxRows?: number; inputAreaLayout?: InputAreaLayoutOptionsV1
 }) {
   const readable = value == null || typeof value === 'string'
   const editor = useInlineDraft(typeof value === 'string' ? value : '', onChange, readable)
@@ -162,16 +164,19 @@ export function InlineTextarea({ value, onChange, placeholder, className, minRow
     el.style.height = `${height}px`
     el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
   }, [maxRows, minRows])
-  useEffect(() => { if (editor.editing) resize() }, [editor.draft, editor.editing, resize])
+  useEffect(() => { if (editor.editing && inputAreaLayout?.enabled !== true) resize() }, [editor.draft, editor.editing, resize, inputAreaLayout?.enabled])
   if (!readable) return <InvalidInlineValue value={value} draft={editor.editing ? editor.draft : undefined} />
-  if (editor.editing) return <div className="min-w-0">
-    <textarea ref={ref} value={editor.draft} disabled={editor.saving}
-      onCompositionStart={() => { editor.composingRef.current = true }}
-      onCompositionEnd={event => { editor.composingRef.current = false; editor.change(event.currentTarget.value) }}
-      onChange={event => editor.change(event.target.value)} onWheel={containTextareaWheel} onBlur={editor.saveFromEvent}
+  const renderTextarea = (area?: AreaControlV1) => <textarea ref={area?.ref ?? ref} style={area?.style} value={editor.draft} disabled={editor.saving}
+      onCompositionStart={() => { editor.composingRef.current = true; area?.compositionStart() }}
+      onCompositionEnd={event => { editor.composingRef.current = false; editor.change(event.currentTarget.value); area?.compositionEnd() }}
+      onChange={event => editor.change(event.target.value)} onWheel={containTextareaWheel} onBlur={area ? undefined : editor.saveFromEvent}
       onKeyDown={event => { if (event.key === 'Escape' && !event.nativeEvent.isComposing) editor.cancel() }}
       placeholder={placeholder} autoFocus
       className={className || 'w-full bg-transparent border border-accent/30 rounded px-2 py-1 text-sm text-text-primary outline-none resize-none'} />
+  if (editor.editing) return <div className="min-w-0">
+    {inputAreaLayout?.enabled === true ? <ResizableInputArea options={inputAreaLayout} autoHeight={{ value: editor.draft, minRows, maxRows }} onExternalLeave={editor.saveFromEvent}>
+      {renderTextarea}
+    </ResizableInputArea> : renderTextarea()}
     <InlineSaveStatus error={editor.error} saving={editor.saving} retry={editor.saveFromEvent} />
   </div>
   return <div onClick={editor.begin} className={`text-sm cursor-text py-0.5 ${value ? 'text-text-primary leading-relaxed whitespace-pre-wrap' : 'text-text-muted/40'}`}>
