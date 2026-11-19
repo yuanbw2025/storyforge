@@ -5,6 +5,10 @@ lastVerified: 2026-11-13
 ---
 # AVG and visual novels
 
+## November 19: draft deletion and libraries
+
+TTRPG and AVG libraries provide confirmed deletion; text-adventure production permits deletion only of unexecuted drafts. Back up and check the target first: confirmation is irreversible. Original worlds/novels and other works are retained. Executed, changed or out-of-scope targets are rejected; refreshing does not bypass those checks. Based on #466.
+
 ## November 13: saving, recovery and usage checks
 
 Quick save reports completion only after its checkpoint is actually written, and remains available during audio-state updates. Recovery/continuation does not regenerate saved results; changed assets are rechecked against their version. Local foreground processing checks the actual installed tool and result; missing valid output cannot be represented by an old image or placeholder. Sources: [#320](https://github.com/yuanbw2025/storyforge/pull/320), [#401](https://github.com/yuanbw2025/storyforge/pull/401), [#429](https://github.com/yuanbw2025/storyforge/pull/429).

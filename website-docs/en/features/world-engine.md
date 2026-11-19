@@ -5,6 +5,10 @@ lastVerified: 2026-11-13
 ---
 # World engine
 
+## November 19: prioritize the editor
+
+The world library/editor removes repeated descriptions, badges and empty tool areas. Draft statistics move into an expandable overview and the AI copilot remains in the header. Mobile navigation is compact; independent longform properties retain their own layout. Save confirmation, sealed versions and sharing/copying keep existing paths. Based on #482. See [maps](/en/features/longform/worlds-maps) for styles and separate base-map saving.
+
 ## November 13: saving, recovery and usage checks
 
 When deriving a world from a novel, only chapter references proven to belong to the same work/scope are rebound in the new workspace. Uncertain references retain their values and review notes; historical sealed content stays unchanged. A read-only cached world is distinct from the author's local sealed version. Before production, check source purpose, version and required material, resolving missing/mismatched items as prompted. Material disabled by the author stays out of formal context. Sources: [#307](https://github.com/yuanbw2025/storyforge/pull/307), [#377](https://github.com/yuanbw2025/storyforge/pull/377), [#380](https://github.com/yuanbw2025/storyforge/pull/380), [#429](https://github.com/yuanbw2025/storyforge/pull/429).

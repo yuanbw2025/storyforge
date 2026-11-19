@@ -1,5 +1,11 @@
 # Import existing fiction and references
 
+## November 19: original chapters and extraction recovery
+
+New original-work imports detect chapter headings line by line and retain prefaces and original character ranges. Without headings, continuous chunks remain the fallback; existing works are not rewritten. TXT/MD files remain limited to 5 MiB and originals to 5,000,000 UTF-16 characters. Successful extraction/chapter detection does not prove complete model analysis. Based on #479.
+
+Structured extraction resolves the actual task route before binding that model's typed parameters, capacity and request. Explicit rejection stops; disconnected or unknown outcomes remain available for review without automatic resend. HTML-to-text extraction no longer loads image/video resources from temporary markup. This is not a complete Markdown editor. Based on #503/#496.
+
 ## Confirming and recovering import parsing
 
 Document parsing first creates a recoverable candidate. Review its target work, original file and content before adopting it. Reloading/opening failed tasks restores the original attempt rather than automatically making another paid send. Replaced files or changed sources require another check. Reference parsing does not automatically merge existing characters; source reference text remains private and local. See [reference analysis](/en/features/longform/references), based on [#307](https://github.com/yuanbw2025/storyforge/pull/307) and [#386](https://github.com/yuanbw2025/storyforge/pull/386).

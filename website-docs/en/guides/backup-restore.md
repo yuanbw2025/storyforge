@@ -1,5 +1,11 @@
 # Saving, backup, and recovery
 
+## November 19: mainline database v15 / backup v19
+
+Mainline adds Work-owned cover draft, asset and adoption-history lifecycles: database v15 and complete backup export v19, accepting validated v14–v19 imports. Cover records/Blobs restore with their work; temporary response buffers are excluded. Source tasks referenced by cover history cannot be directly deleted. Explicit adoption remains required; this does not open a complete AI-cover feature. Based on #492.
+
+Keep the old complete backup before upgrading. Older programs must not directly open upgraded databases; verify compatible backups in isolated copies before reverting. Released v4.0.7 remains database v14 / backup v18. View-local painted-map images require a separate base-map package; see [maps](/en/features/longform/worlds-maps).
+
 ## November 13: saving, recovery and usage checks
 
 Current main uses database **v14** and complete project backup **v18**; fixed v4.0.5's v13/v17 details remain in [compatibility](/en/updates/compatibility). Imports strictly validate legacy v14–v17 formats and current v18; do not edit version numbers manually. Damaged trees, missing required references or source conflicts reject the whole import while preserving the original file. After recovery, check outline order, parent relationships, original tasks and images. Moved old outline nodes and forward parent-task references restore through the complete mapping.

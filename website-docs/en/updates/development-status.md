@@ -1,5 +1,28 @@
 # Pending development and branch audit
 
+## November 19, 2026 · Integrated-source deduplication and unfinished work
+
+Review from successful baseline `6b8e1e42` through `a06d83ba` initially enumerated **57 branches, 22 worktrees (including detached), and 5 with uncommitted status**. Fifteen heads are outside main ancestry; no PRs were open. Branch counts are not missing-feature counts. Other development was not committed, pushed, merged or cleaned.
+
+### Integrated source branches
+
+Input sizing, Markdown dependencies, `fix/bug-audit-20261117`, and source branches for feedback 012, world layout 018, import 020, TTRPG layout 026, library 034, mode selection 042 and longform layout 039 have stable-patch equivalents in main. They are not additional undelivered features. The chat-plan branch has four historical commits but no net files from its merge base. Delivery follows integration PRs; source branches remain intact.
+
+### Items for their authors to review
+
+| Branch/worktree | Observed scope/state | Deduplication/limits |
+| --- | --- | --- |
+| `feat/work-cover-035-20261118` | Local follow-up generation/recovery commits, unpushed or unmerged | #492 delivers storage foundations only; full providers, generation and card UI remain unfinished |
+| `feat/markdown-authoring-prototype-20261118` | Local unmounted Markdown prototype and foundational reader changes | #489 dependencies/#496 HTML reading are separately merged, not a complete editor |
+| `feat/power-authoring-contract-048-a1-20261119` | Two local pure-contract/numeric-validation commits | No delivered interaction; not a completed power-system redesign |
+| `feat/luniang-3d-20261118` | Isolated character prototype/art direction; 131 untracked asset/project entries | Unintegrated; visual rejection evidence retained and private assets unpublished |
+| `fix/world-map-painted-completion` | Ten uncommitted painting/media/test entries | Do not recount merged styles; additional continuous-painting files are observations only |
+| `fix/bug-audit-20261117` | Six uncommitted feedback, screenshot-support and test entries | Deduplicate merged #488 source; remaining status is not a new completed feature |
+| `fix/client-release-4.0.8-20261117` | Five uncommitted release-workflow/package/lock/notes entries | Separate from the remote v4.0.8 draft; not formal publication |
+| `feat/community-works-library-20261029` | Two existing untracked tool temporary/connection metadata files | Not features/public configuration; original state retained |
+
+These are observed source/files/commits, not acceptance of tests, experience or release on their authors' behalf. Older dated sections are historical snapshots.
+
 ## November 17, 2026 · Mainline fixes and local development snapshot
 
 Review from successful baseline `ec9f8aed` through `35c38eab` enumerated **7 local branches, 11 registered worktrees (including detached), and 2 worktrees with uncommitted status**. Two branch heads are outside main ancestry; no PRs were open at the snapshot. Registration changes do not prove historical files were safely cleaned. This task neither cleaned nor restored other worktrees.

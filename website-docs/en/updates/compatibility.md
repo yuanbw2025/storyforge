@@ -1,5 +1,11 @@
 # Versions, upgrades, and data compatibility
 
+## November 19, 2026 · Mainline v15/v19 and the v4.0.8 draft
+
+The latest formal public release remains v4.0.7 (fixed `869a9ba7`, database v14, backup v18). v4.0.8 and v4.0.6 are unpublished drafts with no formal publication dates. Mainline `a06d83ba` adds cover-storage foundations at database v15/backup v19, validating v14–v19 imports. Keep original-environment backups; older programs must not directly open upgraded databases.
+
+This round's capacity/retrieval, maps, editor layouts, screenshot feedback and agreement changes are later than v4.0.7. Arch x86_64 desktop packaging is still release preparation. Complete AI covers, Markdown editing and new power-system interactions have only partial foundations/local prototypes, not released functionality. See [development](/en/updates/development-status).
+
 ## November 17, 2026 · Fixes after v4.0.7
 
 The latest formal stable release remains v4.0.7; its fixed source and data formats are listed below. Mainline `35c38eab` includes desktop folder permissions in [#462](https://github.com/yuanbw2025/storyforge/pull/462) and historical deletion-failure feedback in [#463](https://github.com/yuanbw2025/storyforge/pull/463), both after that release tag. Public feedback follow-ups in [#460](https://github.com/yuanbw2025/storyforge/pull/460) are delivered on the website.

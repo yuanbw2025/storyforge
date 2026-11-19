@@ -1,5 +1,13 @@
 # Longform: settings, characters, and story design
 
+## November 19: library, setting layout and input sizes
+
+The library displays an existing cover or placeholder, wraps long titles and groups secondary actions under More actions. Cover uploads are previews until explicitly saved for the current work; a complete AI-cover generation UI is not delivered here. Based on #480.
+
+Step-based longform rules, origin, natural/human settings and history use compact headings/toolbars and wider candidates. Resize setting text, source, candidate and raw-structure fields by their handle, keyboard or size controls, or restore automatic sizing. Local preferences store numeric sizes; narrow viewports constrain display. Switching works isolates old layouts; IME drafts, failed-save retention and adoption keep their original paths. Based on #504/#505.
+
+Creative-rule and worldview suggestions with many outlines no longer fail because their work-status compression declaration was missing. Source checks and author confirmation remain. Based on #485.
+
 ## November 17: deletion feedback for historical events and keywords
 
 In Worlds and settings → Historical timeline (历史年表), check the event or keyword before confirming deletion. If storage deletion fails, the panel shows an error and retains the original record. Read the error, confirm the record remains, and retry from the same panel. Treat the record as removed only after successful deletion; do not clear site data to resolve this. Based on [PR #463](https://github.com/yuanbw2025/storyforge/pull/463).
