@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261118-client-release408-final-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261119-client-release408-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261118-client-release408-final-v1.json",
+        "workPackage": "CLIENT-RELEASE-408",
+        "note": "Preserved measured receipt before refreshing domain input provenance and release regression fixes."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261113-client-release407-regressions-v1.json",
         "workPackage": "BUG-445",
