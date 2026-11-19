@@ -7,16 +7,19 @@ import { createHash } from 'node:crypto'
 import ts from 'typescript'
 import { assertOfflineReferenceEntry, REFERENCE_QUALITY_MAX_CALLS } from './reference-quality-contract.mjs'
 import { createServer } from 'vite'
+/** @typedef {{id: string, title: string, text: string, author?: string}} ReferenceEvalCase */
+/** @typedef {{role: 'system'|'user'|'assistant', content: string}} ReferenceEvalMessage */
 const root = process.cwd()
 const output = process.argv[2]
 if (!output || !output.startsWith('/') || output.startsWith(root + '/')) throw Error('Use an absolute output directory outside the checkout')
 const registry = JSON.parse(await readFile('src/lib/agent/ai-entry-registry.json','utf8'))
 assertOfflineReferenceEntry(registry)
-const local = await import(pathToFileURL(join(process.env.STORYFORGE_LOCAL_API_HOME || join(homedir(),'.config/storyforge/api'),'lib/local-api.mjs')))
+const local = await import(pathToFileURL(join(process.env.STORYFORGE_LOCAL_API_HOME || join(homedir(),'.config/storyforge/api'),'lib/local-api.mjs')).href)
 const {profile,apiKey} = local.loadProfile(process.argv[3] || 'agnes-primary',{purpose:'comparison'})
 const server = await createServer({server:{middlewareMode:true},appType:'custom'})
 await mkdir(output,{recursive:false})
 let calls=0
+/** @param {string | Uint8Array} x */
 const hash = x=>createHash('sha256').update(x).digest('hex')
 try {
   const {referenceChunkMessages} = await server.ssrLoadModule('/src/lib/reference-analysis/chunk-prompt.ts')
@@ -24,9 +27,16 @@ try {
   const baselineSource = JSON.parse(await readFile('tests/fixtures/reference-quality/baseline-prompt.json','utf8'))
   const baseline = new Function(ts.transpile(baselineSource)+';return referenceChunkMessages')()
   const fixture = process.env.REFERENCE_EVAL_PUBLIC ? 'tests/fixtures/reference-quality/public-cases.json' : 'tests/fixtures/reference-quality/cases.json'
+  /** @type {ReferenceEvalCase[]} */
   const allCases = JSON.parse(await readFile(fixture,'utf8'))
-  const cases = process.env.REFERENCE_EVAL_CASES ? allCases.filter(c => process.env.REFERENCE_EVAL_CASES.split(',').includes(c.id)) : allCases
+  const caseFilter = process.env.REFERENCE_EVAL_CASES
+  const cases = caseFilter ? allCases.filter(c => caseFilter.split(',').includes(c.id)) : allCases
   const sourceHashes=Object.fromEntries(await Promise.all(['src/lib/reference-analysis/chunk-prompt.ts','src/lib/reference-analysis/content-skill.ts',fixture].map(async p=>[p,hash(await readFile(p))])))
+  /**
+   * @param {string} id
+   * @param {ReferenceEvalMessage[]} messages
+   * @returns {Promise<string>}
+   */
   const request = async (id,messages,maxTokens=8192) => {
     if (++calls>REFERENCE_QUALITY_MAX_CALLS) throw Error('Evaluation call cap exceeded')
     const body={...profile.api.chat.requestDefaults,model:profile.modelOrCapability,messages,stream:false,max_tokens:maxTokens,temperature:0.3}
@@ -39,6 +49,7 @@ try {
     console.log(id+' saved')
     return text
   }
+  /** @type {Record<string, Record<string, string>>} */
   const analyses={}
   for(const c of cases) {
     const args={ref:{title:c.title,author:c.author || '评测原创',type:'story'},depth:'deep',chunk:{index:0,text:c.text,label:'仅本次提供范围',charCount:c.text.length},totalChunks:1}
