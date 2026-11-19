@@ -2,7 +2,9 @@
 
 原型使用内建 imagegen 工具生成透明水彩图集，转码为 WebP 后由 Canvas 读取网格区域。坐标、视角、文字及排布均由应用控制。默认符号与程序绘制降级路径共用地理几何。
 
-连续绘画可显式生成或导入当前地图的图片底图。产品使用的生成提示定义在 [paint-preview.ts](../../src/lib/world-map/atlas/paint-preview.ts) 的 `ATLAS_PAINT_PROMPT`；参考图由同一地图几何生成，去除程序河流、道路、边界与注记。模型不得生成文字，实际文字由地图组件叠加。返回图片须由作者核对，不能把模型的构图遵循程度当成确定性地理校验。绘画底图保存在作者显式导出的底图包中，不随世界语义保存。
+连续绘画默认使用 [continuous.ts](../../src/lib/world-map/atlas/continuous.ts) 的程序表面：按已有 ridge/wood/desert/marsh 绘制光照地形、山峰与林冠，山林可分别筛选。高度场仅为美术表现，不代表实测地形。
+
+连续绘画还可显式生成或导入当前地图的图片底图。产品使用的生成提示定义在 [paint-preview.ts](../../src/lib/world-map/atlas/paint-preview.ts) 的 `ATLAS_PAINT_PROMPT`；参考图由同一地图几何的程序连续绘画生成，去除河流、道路、边界、注记、指南针与边框。模型不得生成文字，实际文字由地图组件叠加。Agnes 参考图参数为单数 `image` 数组，走 `/images/generations`；按原生比例等比留边后只裁去留边，不隐式改为文生图。依据 [Agnes Image 2.1 官方协议](https://agnes-ai.com/zh-Hans/docs/agnes-image-21-flash)。返回图片须由作者核对，不能把模型的构图遵循程度当成确定性地理校验。合成以原几何限定海陆，并以程序表面填补错位水色；该配色分离不生成地理事实。绘画底图保存在作者显式导出的底图包中，不随世界语义保存。
 
 [实际使用的符号表](../../src/assets/world-map/watercolor-symbols.webp)
 
