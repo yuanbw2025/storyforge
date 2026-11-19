@@ -1,3 +1,5 @@
+import { codexContentGuidance, CODEX_CONTENT_METHODS } from '../../creation/world-entry-content-skill'
+import { appendPreparationSystemGuidance } from '../../creation/preparation-content-skill'
 import type { AIConfig, ChatMessage, LocationTag } from '../../types'
 import type { ChatRequestOptions } from '../client'
 import type { CodexFieldDef } from '../../types/codex'
@@ -30,13 +32,14 @@ export interface ExtractedLocation {
 
 export function buildCodexExtractPrompt(input: {
   categoryName: string
+  categoryBuiltInKey?: string | null
   sourceText: string
   fieldSchema: CodexFieldDef[]
   existingNames: string[]
   supplementTags: boolean
 }): ChatMessage[] {
   const template = usePromptStore.getState().getActive('codex.extract')
-  return renderPrompt(template, {
+  const rendered = renderPrompt(template, {
     categoryName: input.categoryName,
     fieldSchema: JSON.stringify(input.fieldSchema.map(field => ({
       key: field.key,
@@ -48,6 +51,7 @@ export function buildCodexExtractPrompt(input: {
     supplementTags: input.supplementTags ? '是' : '否',
     sourceText: input.sourceText,
   }).messages
+  return appendPreparationSystemGuidance(rendered, codexContentGuidance(input.categoryBuiltInKey, 'extract'))
 }
 
 export function parseCodexEntries(raw: string, allowedFieldKeys: string[]): ExtractedCodexEntry[] {
@@ -212,6 +216,7 @@ export function parseCodexEntriesStrictV1(
 export function buildCodexExtractPromptFromRegisteredContextV1(input: {
   sourceText: string
   baselineContext: string
+  categoryBuiltInKey?: string | null
   discoveredNames: readonly string[]
   supplementTags: boolean
 }): ChatMessage[] {
@@ -225,13 +230,15 @@ export function buildCodexExtractPromptFromRegisteredContextV1(input: {
   }).messages
   return [{
     role: 'system',
-    content: '不可覆盖的 Harness 输出合同：每项必须且只能包含 name/icon/summary/description/fields/tags/importance/evidenceQuotes/provenance；evidenceQuotes 须为原文逐字引文，provenance="verbatim-extraction"。fields 只允许登记为 AI 可填写的字段；ref 字段 key 必须完全省略。信息不足时返回 []，不得创造。' + codexLimitContract,
+    content: '不可覆盖的 Harness 输出合同：每项必须且只能包含 name/icon/summary/description/fields/tags/importance/evidenceQuotes/provenance；evidenceQuotes 须为原文逐字引文，provenance="verbatim-extraction"。fields 只允许登记为 AI 可填写的字段；ref 字段 key 必须完全省略。信息不足时返回 []，不得创造。' + codexLimitContract + '\n\n' + codexContentGuidance(input.categoryBuiltInKey, 'extract'),
   }, ...rendered]
 }
 
 export function readCodexExtractPromptTemplateSnapshotV1() {
   const template = usePromptStore.getState().getActive('codex.extract')
   return {
+    contentMethods: CODEX_CONTENT_METHODS,
+    contentGuidance: codexContentGuidance(null, 'extract'),
     moduleKey: template.moduleKey,
     systemPrompt: template.systemPrompt,
     userPromptTemplate: template.userPromptTemplate,
@@ -244,6 +251,7 @@ export function readCodexExtractPromptTemplateSnapshotV1() {
 
 export function buildCodexEnrichPromptFromRegisteredContextV1(input: {
   baselineContext: string
+  categoryBuiltInKey?: string | null
   worldContext: string
   authorRequest: string
   supplementTags: boolean
@@ -257,13 +265,15 @@ export function buildCodexEnrichPromptFromRegisteredContextV1(input: {
   }).messages
   return [{
     role: 'system',
-    content: '不可覆盖的 Harness 输出合同：每项必须且只能包含 name/icon/summary/description/fields/tags/importance/evidenceQuotes/provenance；evidenceQuotes=[]，provenance="ai-created-suggestion"。fields 只允许登记为 AI 可填写的字段，ref 字段 key 必须完全省略，不得输出空字符串、null 或数组。' + codexLimitContract,
+    content: '不可覆盖的 Harness 输出合同：每项必须且只能包含 name/icon/summary/description/fields/tags/importance/evidenceQuotes/provenance；evidenceQuotes=[]，provenance="ai-created-suggestion"。fields 只允许登记为 AI 可填写的字段，ref 字段 key 必须完全省略，不得输出空字符串、null 或数组。' + codexLimitContract + '\n\n' + codexContentGuidance(input.categoryBuiltInKey, 'enrich'),
   }, ...rendered]
 }
 
 export function readCodexEnrichPromptTemplateSnapshotV1() {
   const template = usePromptStore.getState().getActive('codex.enrich')
   return {
+    contentMethods: CODEX_CONTENT_METHODS,
+    contentGuidance: codexContentGuidance(null, 'enrich'),
     moduleKey: template.moduleKey,
     systemPrompt: template.systemPrompt,
     userPromptTemplate: template.userPromptTemplate,

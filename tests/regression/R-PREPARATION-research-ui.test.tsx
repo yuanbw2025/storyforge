@@ -36,6 +36,15 @@ describe('研究入口的实际资料状态与作用域', () => {
     expect(host.textContent).toContain('本次实际读取：本次作者资料；未联网核验')
     expect(host.querySelectorAll('button').length).toBe(1)
   })
+  it('没有新贴原文但实际读到登记参考时，不误报没有资料', async () => {
+    mocks.assemble.mockResolvedValue({ ...assembled, included: ['references'], segments: [{ label: '当前作品参考摘要', content: '作者已有参考的摘要，未经核验' }], sourceEvidence: [{ key: 'references', delivery: 'full' }] })
+    await mount()
+    await act(async () => { change(host.querySelectorAll('textarea')[1], '核对当前作品已有参考的支持范围') })
+    await act(async () => { [...host.querySelectorAll('button')].find(b => b.textContent === '生成研究建议')!.click(); await Promise.resolve() })
+    const messages = mocks.start.mock.calls[0][0] as Array<{ content: string }>
+    expect(messages.map(m => m.content).join('\n')).toContain('读取了登记参考或作者提供资料')
+    expect(messages.map(m => m.content).join('\n')).not.toContain('未读取到可用外部资料')
+  })
   it('切换作品后迟到读取不调用模型、不把旧草稿带给新作品', async () => {
     let release!: (value: typeof assembled) => void
     mocks.assemble.mockReturnValue(new Promise(resolve => { release = resolve }))

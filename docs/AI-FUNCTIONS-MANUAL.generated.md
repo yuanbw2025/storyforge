@@ -454,7 +454,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:99` |
 | `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:688`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:760` |
 | `style.learn` | `src/lib/agent/run/style-learning-durable.ts:493` |
-| `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:466` |
+| `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:471` |
 | `world-group.suggest` | `src/lib/agent/run/world-suggest-durable.ts:622` |
 
 ### 动态 category 调用
@@ -473,7 +473,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/outline-copilot.ts:773 · chat`
 - `src/lib/agent/prose-copilot.ts:704 · chat`
 - `src/lib/agent/prose-copilot.ts:985 · chat`
-- `src/lib/agent/run/codex-extraction-durable.ts:828 · chat`
+- `src/lib/agent/run/codex-extraction-durable.ts:830 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
 - `src/lib/agent/run/short-novel-durable.ts:195 · chat`
@@ -592,4 +592,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `01b237d5d`
+生成时间基准:commit `56a595ac1`

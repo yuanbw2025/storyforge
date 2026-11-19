@@ -66,9 +66,9 @@ function resolveL1Group(
 
 function priorityDirective(p: ConflictPriority): string {
   switch (p) {
-    case 'historical': return '⚠️ 当架空设定与史实冲突时，以史实为准'
-    case 'fictional': return '⚠️ 当架空设定与史实冲突时，以架空设定为准'
-    case 'balanced': return '当架空设定与史实冲突时，请智能权衡，尽量保持两者一致性'
+    case 'historical': return '当架空设定与作者选定的现实参照冲突时，保留现实参照；疑点另列待考，不编来源'
+    case 'fictional': return '当架空设定与现实参照冲突时，按作者的架空选择写作；不把架空说成现实史实'
+    case 'balanced': return '先核对时间、地区与定义，再列可选取舍；不为调和而编造共同制度或新史实'
   }
 }
 
@@ -118,7 +118,7 @@ export function buildWorldRulesManifest(
     }
 
     sections.push('【世界规则 — 真实与幻想】')
-    sections.push('以下是本作品的世界观真实性设定，AI 在生成内容时必须严格遵守。')
+    sections.push('以下是作者选定的现实参照与架空边界，按各维度意图写作；标记不等于系统已经核验。')
     sections.push('')
 
     for (const [groupLabel, items] of groups) {
@@ -128,14 +128,12 @@ export function buildWorldRulesManifest(
         groupLines.push(`  ${label}`)
 
         if (entry.historicalAnchors.trim()) {
-          groupLines.push(`    📜 取自真实：${entry.historicalAnchors.trim()}`)
+          groupLines.push(`    📜 作者选定的现实参照：${entry.historicalAnchors.trim()}`)
         }
         if (entry.fictionalAdaptations.trim()) {
           groupLines.push(`    ✨ 架空改造：${entry.fictionalAdaptations.trim()}`)
         }
-        if (entry.priority !== 'balanced') {
-          groupLines.push(`    ${priorityDirective(entry.priority)}`)
-        }
+        groupLines.push(`    ${priorityDirective(entry.priority)}`)
       }
 
       sections.push(groupLines.join('\n'))
@@ -147,12 +145,12 @@ export function buildWorldRulesManifest(
   const anchorEvents = timelineEvents?.filter(e => e.isHistorical) || []
   if (anchorEvents.length > 0) {
     const eventLines: string[] = [
-      '【历史锚点 — 以下真实事件不可违反】',
+      '【历史锚点 — 作者标记的现实参照，保持本作一致性】',
     ]
     // 按年份排序
     const sorted = [...anchorEvents].sort((a, b) => a.year - b.year)
     for (const e of sorted) {
-      const desc = e.description ? `——${e.description.slice(0, 120)}` : ''
+      const desc = e.description ? `——${e.description}` : ''
       eventLines.push(`  ⚓ ${e.date}：${e.title}${desc}`)
     }
     sections.push(eventLines.join('\n'))
@@ -163,11 +161,11 @@ export function buildWorldRulesManifest(
   const fictionalEvents = timelineEvents?.filter(e => !e.isHistorical) || []
   if (fictionalEvents.length > 0) {
     const eventLines: string[] = [
-      '【作者规划事件 — 以下虚构事件为作者设计，可灵活使用】',
+      '【本作虚构历史条目 — 时序按条目理解，不自动当成未来计划】',
     ]
     const sorted = [...fictionalEvents].sort((a, b) => a.year - b.year)
     for (const e of sorted) {
-      const desc = e.description ? `——${e.description.slice(0, 120)}` : ''
+      const desc = e.description ? `——${e.description}` : ''
       eventLines.push(`  ✨ ${e.date}：${e.title}${desc}`)
     }
     sections.push(eventLines.join('\n'))
@@ -189,7 +187,7 @@ export function buildWorldRulesManifest(
     for (const [cat, kws] of byCategory) {
       const label = KEYWORD_CATEGORY_LABELS[cat] || cat
       const items = kws.map(k => {
-        const desc = k.description ? `（${k.description.slice(0, 50)}）` : ''
+        const desc = k.description ? `（${k.description}）` : ''
         return `${k.keyword}${desc}`
       }).join('、')
       kwLines.push(`  · ${label}：${items}`)
@@ -217,7 +215,7 @@ export function buildWorldRulesManifest(
         '各维度设定了不同的冲突优先级（' +
         `${CONFLICT_PRIORITY_LABELS.historical} / ${CONFLICT_PRIORITY_LABELS.balanced} / ${CONFLICT_PRIORITY_LABELS.fictional}` +
         '），请按各维度的标注裁决。' +
-        '未标注的维度默认「均衡」——尽量保持真实与幻想的一致性。'
+        '未标注的维度默认「均衡」——先核对时间、地区与定义，列出取舍；不能为凑一致编造新史实。'
       )
     }
   }
@@ -226,6 +224,7 @@ export function buildWorldRulesManifest(
   if (sections.length === 0) return ''
 
   sections.push('【世界规则结束】')
+  if (sections.length) sections.unshift('【来源与创作边界】现实参照、来源名称与作者史实标记未经过本入口联网核验；模型常识、待考事项与创作提议须分开。作者可明确修改创作方向，变更须另作提议，不能据旧偏好自动否决或静默改写其它定稿。')
   return sections.join('\n\n')
 }
 

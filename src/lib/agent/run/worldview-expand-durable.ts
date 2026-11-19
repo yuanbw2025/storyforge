@@ -17,7 +17,7 @@ import {
   scopeTransactionTables,
 } from '../../workspace/scope'
 import { createAgentSkillExecutionBindingV1 } from '../execution-binding'
-import { getAgentSkillV1 } from '../skill-registry'
+import { getAgentSkillV1, WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS } from '../skill-registry'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from './checkpoint'
 import { createContextManifestFromAssemblyV1 } from './context-manifest'
 import {
@@ -32,7 +32,7 @@ import { createVerificationReceiptV1 } from './verification-receipt'
 
 export const WORLDVIEW_EXPAND_STEP_ID_V1 = 'world-origin:worldview-expand' as const
 export const WORLDVIEW_EXPAND_VERIFIER_SET_V1 = 'worldview-expand-terminal-v1' as const
-export const WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS_V1 = ['manualText', 'worldGroups', 'storyCore', 'worldview'] as const
+export const WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS_V1 = WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS
 
 type RunAI = (messages: ChatMessage[]) => Promise<string>
 
@@ -203,7 +203,7 @@ async function assembleWorldviewExpandContext(
   group: WorldGroup & { id: number },
   sourceKeys: readonly string[] = WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS_V1,
 ) {
-  return assembleContext({
+  const assembled = await assembleContext({
     projectId: scope.projectId,
     scope,
     worldGroupId: group.id,
@@ -211,6 +211,11 @@ async function assembleWorldviewExpandContext(
     manualSourceText: manualDraft(group),
     inputBudgetTokens: 32_000,
   })
+  const requiredFullSources = ['manualText', 'worldview', 'worldRules']
+  if (requiredFullSources.some(key => assembled.trimmed.includes(key) || assembled.sourceEvidence?.some(source => source.key === key && source.delivery === 'truncated'))) {
+    throw new Error('当前世界草稿、世界观或真实与幻想规则未完整进入上下文预算；请缩小材料后重试，未发起模型生成。')
+  }
+  return assembled
 }
 
 async function assemblyHash(assembled: Awaited<ReturnType<typeof assembleWorldviewExpandContext>>) {

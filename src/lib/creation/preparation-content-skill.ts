@@ -39,7 +39,7 @@ export function researchContentGuidance(mode: 'scene' | 'plan' | 'sources' = 'sc
       : '分析当前场景的设定兼容、待考证点与可用写作细节；不把未发现矛盾写成史实全部核实。'
   return `${RESEARCH_CONTENT_GUIDANCE}
 本轮动作：${task}
-本轮作者${hasSuppliedSources ? '提供了资料（仍未由本系统核验）' : '未提供外部资料'}；未执行联网检索。按本轮动作组织标题，不强填原模板中不适用的小节。`
+本轮${hasSuppliedSources ? '读取了登记参考或作者提供资料（仍未由本系统核验）' : '未读取到可用外部资料'}；未执行联网检索。按本轮动作组织标题，不强填原模板中不适用的小节。`
 }
 
 export function appendResearchTaskGuidance(

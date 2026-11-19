@@ -94,7 +94,7 @@ export default function SceneVerifyPanel({ project }: Props) {
         scene,
         sceneEra: sceneEra || undefined,
         sceneLocation: sceneLocation || undefined,
-        researchMode, hasSuppliedSources: !!sources.trim(),
+        researchMode, hasSuppliedSources: !!sources.trim() || assembled.included.includes('references'),
       })
       await ai.start(messages, undefined, {
         formalEntryId: 'world.scene.verify', category: 'scene.verify', projectId: project.id!,

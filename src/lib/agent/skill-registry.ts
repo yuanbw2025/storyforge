@@ -381,11 +381,12 @@ const WORLDVIEW_FIELD_CONTEXT_SOURCE_KEYS = [
   'references',
 ] as const
 
-const WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS = [
+export const WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS = [
   'manualText',
   'worldGroups',
   'storyCore',
   'worldview',
+  'worldRules',
 ] as const
 
 const WORLD_SUGGEST_CONTEXT_SOURCE_KEYS = [
@@ -1525,7 +1526,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '多世界建议',
     owner: 'world-foundation-agent',
-    promptVersion: 'world-suggest-v1',
+    promptVersion: 'world-suggest-v2',
     executionMode: 'world-suggest',
     contextTaskKind: 'agent-world-origin',
     readToolNames: [],
@@ -1545,7 +1546,7 @@ export const AGENT_SKILLS = [
       table: 'worldGroups',
       fields: ['name', 'type', 'description', 'icon', 'order', 'entryCondition', 'powerRestriction', 'plannedChapterCount'],
     }],
-    lastVerifiedAt: '2026-11-18',
+    lastVerifiedAt: '2026-11-20',
     regressionTests: ['R-HARNESS68-world-suggest-durable'],
   },
   {
@@ -1555,7 +1556,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '世界组六字段扩写',
     owner: 'world-foundation-agent',
-    promptVersion: 'worldview-expand-v2',
+    promptVersion: 'worldview-expand-v3',
     executionMode: 'worldview-expand',
     contextTaskKind: 'agent-world-origin',
     readToolNames: [],
@@ -1575,7 +1576,7 @@ export const AGENT_SKILLS = [
       table: 'worldviews',
       fields: ['worldOrigin', 'powerHierarchy', 'continentLayout', 'climateByRegion', 'races', 'factionLayout'],
     }],
-    lastVerifiedAt: '2026-11-18',
+    lastVerifiedAt: '2026-11-20',
     regressionTests: ['R-HARNESS67-worldview-expand-durable'],
   },
   {
@@ -1612,7 +1613,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: 'Codex 内容分块词条抽取',
     owner: 'world-foundation-agent',
-    promptVersion: 'codex-extract-v1',
+    promptVersion: 'codex-extract-v2',
     executionMode: 'codex-extract',
     contextTaskKind: 'agent-world-origin',
     readToolNames: [],
@@ -1648,7 +1649,7 @@ export const AGENT_SKILLS = [
       table: 'codexEntries',
       fields: [...CODEX_CANDIDATE_WRITE_FIELDS],
     }],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-20',
     regressionTests: [
       'R-HARNESS70-codex-extraction-durable',
       'R-RACE5-codex-extraction-enrichment',
@@ -1662,7 +1663,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: 'Codex AI 新建词条建议',
     owner: 'world-foundation-agent',
-    promptVersion: 'codex-enrich-v1',
+    promptVersion: 'codex-enrich-v2',
     executionMode: 'codex-enrich',
     contextTaskKind: 'agent-world-origin',
     readToolNames: [],
@@ -1702,7 +1703,7 @@ export const AGENT_SKILLS = [
       table: 'codexEntries',
       fields: [...CODEX_CANDIDATE_WRITE_FIELDS],
     }],
-    lastVerifiedAt: '2026-10-09',
+    lastVerifiedAt: '2026-11-20',
     regressionTests: ['R-RACE5-codex-extraction-enrichment', 'R-CODEX1-gateway-provenance'],
   },
   {
@@ -1879,7 +1880,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '历史条目考据',
     owner: 'world-foundation-agent',
-    promptVersion: 'history-consult-v1',
+    promptVersion: 'history-consult-v2',
     executionMode: 'history-consult',
     contextTaskKind: 'agent-world-origin',
     readToolNames: [],
@@ -1892,7 +1893,7 @@ export const AGENT_SKILLS = [
       { table: 'historicalTimelineEvents', fields: ['aiConsult'] },
       { table: 'historicalKeywords', fields: ['aiConsult'] },
     ],
-    lastVerifiedAt: '2026-11-18',
+    lastVerifiedAt: '2026-11-20',
     regressionTests: ['R-HARNESS73-history-agent-durable'],
   },
   {
@@ -1902,7 +1903,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '历史条目头脑风暴',
     owner: 'world-foundation-agent',
-    promptVersion: 'history-storm-v1',
+    promptVersion: 'history-storm-v2',
     executionMode: 'history-storm',
     contextTaskKind: 'agent-world-origin',
     readToolNames: [],
@@ -1915,7 +1916,7 @@ export const AGENT_SKILLS = [
       { table: 'historicalTimelineEvents', fields: ['aiBrainstorm'] },
       { table: 'historicalKeywords', fields: ['aiBrainstorm'] },
     ],
-    lastVerifiedAt: '2026-11-18',
+    lastVerifiedAt: '2026-11-20',
     regressionTests: ['R-HARNESS73-history-agent-durable'],
   },
   {
@@ -2145,7 +2146,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '灵感反推',
     owner: 'inspiration-agent',
-    promptVersion: 'inspiration-copilot-v1',
+    promptVersion: 'inspiration-copilot-v2',
     executionMode: 'reverse',
     contextTaskKind: 'agent-inspiration',
     readToolNames: ['read_inspiration_workspace'],
@@ -2155,7 +2156,7 @@ export const AGENT_SKILLS = [
     contextCompression: INSPIRATION_COMPRESSION_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'inspirationWorkspaces', fields: ['versions'] }],
-    lastVerifiedAt: '2026-11-10',
+    lastVerifiedAt: '2026-11-20',
     regressionTests: ['R-AGENT1-chat-copilot-inspiration', 'R-CM1-inspiration-fusion-ui', 'R-HARNESS34-inspiration-entry', 'R-HARNESS34-inspiration-panel-ui', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {

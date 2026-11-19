@@ -33,7 +33,7 @@ describe('准备内容方法进入实际模板路径', () => {
     expect(calibrated).toContain('作者自定：保持朴素口吻')
     expect(calibrated).toContain('温暖不等于擅自增加和解')
     const planned = buildSceneVerifyPrompt({ worldContext: '作者提供的原文', historyContext: '', worldRulesContext: '', scene: '码头生活', researchMode: 'plan', hasSuppliedSources: false }).map(m => m.content).join('\n')
-    expect(planned).toContain('未提供外部资料')
+    expect(planned).toContain('未读取到可用外部资料')
     expect(planned).toContain('未执行联网检索')
     expect(planned).toContain('制订研究计划')
     expect(planned).toContain('【本轮已选择任务】研究计划')
