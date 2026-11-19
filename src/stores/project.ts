@@ -75,7 +75,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const proceed = await requireBackupBefore({
       operation: '删除项目',
       projectId: id,
-      details: '此操作将清除该项目的全部数据(章节、世界观、角色、词条、状态卡等),不可恢复。',
+      details: '此操作将清除该项目的全部数据(章节、世界观、角色、词条、状态卡等),不可恢复。本机地图增强缓存也会清理；需要保留时请先另行导出底图包。',
     })
     if (!proceed) return  // 用户取消
 

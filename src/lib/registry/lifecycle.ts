@@ -152,6 +152,11 @@ async function deleteScopedRows(table: Table, rows: Collection): Promise<void> {
 }
 
 export async function cascadeDeleteProject(projectId: number): Promise<void> {
+  const atlasWorkspace = await db.projects.get(projectId)
+  if (atlasWorkspace?.workspaceUid) {
+    const { clearAtlasWorkspaceViews } = await import('../authoring/atlas-view-cache')
+    await clearAtlasWorkspaceViews(atlasWorkspace.workspaceUid)
+  }
   await db.transaction('rw', transactionTablesFor('deleteProject'), async () => {
     // 同一写事务内先固定全部父键，再删任何父行；并发新导入不得漏入快照。
     // 写入端也在相同父表锁内复验根，删除提交后的旧任务不能再建子项。

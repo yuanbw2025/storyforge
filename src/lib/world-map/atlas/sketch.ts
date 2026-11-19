@@ -56,7 +56,7 @@ export function drawSketchTerrain(g: AtlasGeometry, seed: string, layers: AtlasL
   const canvas = document.createElement('canvas')
   const scale = Math.min(3, 4096 / Math.max(g.width, g.height))
   canvas.width = Math.round(g.width * scale); canvas.height = Math.round(g.height * scale)
-  const c = canvas.getContext('2d')!, { width: w, height: h, features } = g
+  const c = canvas.getContext('2d', { willReadFrequently: true })!, { width: w, height: h, features } = g
   c.scale(scale, scale); c.lineJoin = 'round'; c.lineCap = 'round'
   c.fillStyle = water; c.fillRect(0, 0, w, h)
   const { land, coast, realmEdges, waterEdges, outsideWaters, fillRule } = atlasSurfacePaths(g, seed, layers.waterBodies)

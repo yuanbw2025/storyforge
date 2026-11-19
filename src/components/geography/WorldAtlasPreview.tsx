@@ -16,14 +16,17 @@ import { loadAtlasSymbols, type AtlasSymbolStyle } from '../../lib/world-map/atl
 import { resolveAtlasStyle, type AtlasViewStyle } from '../../lib/world-map/atlas/view-style'
 import { drawLabels, drawTerrain } from '../../lib/world-map/atlas/paint'
 import AtlasPaintControls from './AtlasPaintControls'
+import { drawEnhancedAtlas } from '../../lib/world-map/atlas/enhance'
+import type { AtlasPaintPreview } from '../../lib/world-map/atlas/paint-preview'
 
 interface Props {
   config: MapGenConfig
   onReference?: (reference: AtlasGeometry) => Promise<void>
   navigation?: ReactNode
+  ownerKey?: string
 }
 
-export default function WorldAtlasPreview({ config, onReference, navigation }: Props) {
+export default function WorldAtlasPreview({ config, onReference, navigation, ownerKey }: Props) {
   const viewport = useRef<HTMLCanvasElement>(null)
   const [expanded, setExpanded] = useState(
     Boolean(onReference) && new URLSearchParams(location.search).get('view') === 'map',
@@ -58,7 +61,7 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
   })
   const [viewStyle, setViewStyle] = useState<AtlasViewStyle>(initialStyle.style)
   const [symbolStyle, setSymbolStyle] = useState<AtlasSymbolStyle>(initialStyle.symbols)
-  const [paintedState, setPainted] = useState<{ key: string; image: HTMLImageElement }>()
+  const [paintedState, setPainted] = useState<{ key: string; image: HTMLImageElement; art?: AtlasPaintPreview }>()
   const [textScale, setTextScale] = useState(1)
   const usesSymbols = viewStyle !== 'sketch'
   useEffect(() => {
@@ -89,16 +92,16 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
     }
   }, [config, reference])
   const { geometry } = result
-  const geometryKey = JSON.stringify(geometry) + (config.seed || 'atlas')
+  const geometryKey = JSON.stringify(geometry) + (config.seed || 'atlas') + viewStyle + symbolStyle + (ownerKey || '')
   const painted = paintedState?.key === geometryKey ? paintedState.image : undefined
-  const handlePaintedChange = useCallback((image: HTMLImageElement | undefined) => {
-    setPainted(image ? { key: geometryKey, image } : undefined)
-    if (image) setLayers(previous => ({ ...previous, terrain: true, mountains: true, forests: true, waterBodies: true }))
+  const handlePaintedChange = useCallback((image: HTMLImageElement | undefined, art?: AtlasPaintPreview) => {
+    setPainted(image ? { key: geometryKey, image, art } : undefined)
   }, [geometryKey])
   const terrain = useMemo(
-    () => (geometry ? drawTerrain(geometry, config.seed || 'atlas', sheet, layers,
-      viewStyle === 'painted' ? painted : undefined, viewStyle) : undefined),
-    [geometry, config.seed, sheet, layers, viewStyle, painted],
+    () => (geometry ? painted && paintedState?.art?.version === 2
+      ? drawEnhancedAtlas(geometry, config.seed || 'atlas', painted, viewStyle, layers, sheet)
+      : drawTerrain(geometry, config.seed || 'atlas', sheet, layers, painted, viewStyle) : undefined),
+    [geometry, config.seed, sheet, layers, viewStyle, painted, paintedState?.art],
   )
   const kmPerPixel =
     config.kmPerPixel ??
@@ -299,7 +302,7 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
               <legend className="sr-only">地图图层</legend>
               {(Object.entries(ATLAS_LAYER_LABELS) as [keyof AtlasLayers, string][]).map(
                 ([key, label]) => {
-                  const baked = viewStyle === 'painted' && !!painted && ['terrain', 'mountains', 'forests', 'waterBodies'].includes(key)
+                  const baked = !!painted && paintedState?.art?.version !== 2 && ['terrain', 'mountains', 'forests', 'waterBodies'].includes(key)
                   const available = !baked &&
                     hasLayer(key) &&
                     (key !== 'scaleBar' ||
@@ -360,8 +363,8 @@ export default function WorldAtlasPreview({ config, onReference, navigation }: P
           </label>
         )}
       </div>
-      {geometry && <div hidden={viewStyle !== 'painted'}><AtlasPaintControls geometry={geometry}
-        seed={config.seed || 'atlas'} sheet={sheet} onChange={handlePaintedChange} /></div>}
+      {geometry && <AtlasPaintControls geometry={geometry} style={viewStyle} symbols={symbolStyle} ownerKey={ownerKey}
+        seed={config.seed || 'atlas'} sheet={sheet} onChange={handlePaintedChange} />}
       {(error || result.error) && <p role="alert">{error || result.error}</p>}
       <canvas
         ref={viewport}
