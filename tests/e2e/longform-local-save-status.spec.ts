@@ -87,7 +87,7 @@ test('native registered writer preserves first-create CRLF/edge whitespace, roll
   await page.reload(); expect((await snapshot(page))[0].worldStructure).toBe(result.raw)
   const beforeNoInput = JSON.stringify(await snapshot(page))
   const untouchedArea = await enter(page)
-  await untouchedArea.evaluate(element => element.setSelectionRange(2, 8))
+  await untouchedArea.evaluate(element => (element as HTMLTextAreaElement).setSelectionRange(2, 8))
   await select(page, 1); await flush(page)
   // Merely mounting/selecting a textarea normalizes DOM.value, but never
   // authorizes writing that DOM projection back into the original CRLF field.

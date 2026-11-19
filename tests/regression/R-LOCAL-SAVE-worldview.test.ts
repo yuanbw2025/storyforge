@@ -140,5 +140,5 @@ it('captures caller scope before queueing and never publishes an old target into
   expect(ack.witness.identity.projectId).toBe(originalScope.projectId)
   expect(useWorldviewStore.getState().loadedScope).toEqual(other.scope)
   expect(useWorldviewStore.getState().worldview).toBeNull()
-  expect((await db.worldviews.get(ack.witness.recordId!))?.worldId).toBe(originalScope.worldId)
+  expect(await db.worldviews.get(ack.witness.recordId!)).toMatchObject({ worldId: originalScope.worldId })
 })
