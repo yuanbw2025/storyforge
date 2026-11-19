@@ -639,7 +639,9 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
     </button>
   )
   const Layout = isLongform ? LongformLayout : Fragment
-  const compactWorldSettings = isLongform && longMode === 'steps'
+  const compactWorldSettings = isLongform
+    && activeWork.id === project?.activeWorkId && activeWork.projectId === project.id
+    && longMode === 'steps'
     && ['world-rules', 'worldview-origin', 'worldview-natural', 'worldview-humanity', 'history'].includes(activeModule)
   const layoutProps = isLongform ? { title: activeWork.title, section: longSection, mode: longMode, module: activeModule, hiddenModules, onSection: changeLongSection, onMode: changeLongMode, onModule: selectModule, onNavigate: (path: string) => afterPendingEdits(() => navigate(path), '编辑保存失败'), onHome: () => afterPendingEdits(() => navigate('/'), '编辑保存失败') } : {}
   return (
