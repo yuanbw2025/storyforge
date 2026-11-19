@@ -6,15 +6,25 @@ import { containTextareaWheel, parseCssPixels } from './textarea-scroll'
 import ResizableInputArea, { type AreaControlV1 } from './ResizableInputArea'
 import type { InputAreaLayoutOptionsV1 } from '../../lib/input-area-layout'
 
-type InlineSave = (value: string) => void | Promise<void>
+import { localSaveIdentityKeyV1, matchingLocalSaveAckV1, type LocalSaveContractV1, type LocalSaveIntentV1, type LocalSaveAckV1, type LocalSaveWitnessV1 } from '../../lib/authoring/local-save-evidence'
+
+export type InlineSave = (value: string, intent?: LocalSaveIntentV1) => void | Promise<void | LocalSaveAckV1>
 
 /** UI draft state only; persistence remains with the registered domain caller. */
-function useInlineDraft(value: string, onChange: InlineSave, readable = true) {
+function useInlineDraft(value: string, onChange: InlineSave, readable = true, localSave?: LocalSaveContractV1) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
   const [baseline, setBaseline] = useState(value)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [dirty, setDirty] = useState(false)
+  const [confirmed, setConfirmed] = useState<LocalSaveWitnessV1 | null>(null)
+  const contractRef = useRef(localSave)
+  const editContractRef = useRef(localSave)
+  const expectedRef = useRef<LocalSaveWitnessV1 | null>(null)
+  const generationRef = useRef(0)
+  const sessionRef = useRef('')
+  contractRef.current = localSave
   const composingRef = useRef(false)
   const editingRef = useRef(false)
   const draftRef = useRef(value)
@@ -35,13 +45,27 @@ function useInlineDraft(value: string, onChange: InlineSave, readable = true) {
     baselineRef.current = value
     setDraft(value)
     setBaseline(value)
-  }, [value])
+    setDirty(false)
+    const witness = localSave?.witness
+    setConfirmed(current => {
+      const matches = (candidate: LocalSaveWitnessV1 | null | undefined) => candidate?.present && candidate.recordId != null
+        && candidate.value === value && localSave != null
+        && localSaveIdentityKeyV1(candidate.identity) === localSaveIdentityKeyV1(localSave.identity)
+      if (matches(current) && current?.source === 'committed-write') return current
+      return matches(witness) ? witness! : null
+    })
+  }, [value, localSave])
   useBeforeUnload(saving || (editing && (draft !== baseline || Boolean(error))))
 
   const begin = () => {
     draftRef.current = latestValueRef.current
     baselineRef.current = latestValueRef.current
     editSaveRef.current = latestSaveRef.current
+    editContractRef.current = contractRef.current
+    expectedRef.current = contractRef.current?.witness ?? null
+    generationRef.current = 0
+    sessionRef.current = crypto.randomUUID()
+    setDirty(false)
     editingRef.current = true
     setDraft(draftRef.current)
     setBaseline(baselineRef.current)
@@ -49,26 +73,51 @@ function useInlineDraft(value: string, onChange: InlineSave, readable = true) {
     setError('')
     setEditing(true)
   }
-  const change = (next: string) => { draftRef.current = next; setDraft(next) }
+  const change = (next: string) => {
+    if (next !== draftRef.current) { generationRef.current++; setDirty(true); setConfirmed(null) }
+    draftRef.current = next; setDraft(next)
+  }
   const commit = useCallback((): Promise<void> => {
-    if (savingRef.current) return savingRef.current
+    if (savingRef.current) return savingRef.current.then(() => commit())
     if (!editingRef.current) return Promise.resolve()
     if (!readableRef.current) return Promise.reject(new Error('原始字段格式异常，已保留输入；请先恢复字段后再保存。'))
     if (composingRef.current) return Promise.reject(new Error('输入法仍在组合文字，请完成输入后再保存。'))
     const text = draftRef.current
-    if (text === baselineRef.current && !errorRef.current) {
+    if (text === baselineRef.current && !errorRef.current && (!editContractRef.current || generationRef.current === 0)) {
       editingRef.current = false
       setEditing(false)
+      setDirty(false)
+      setConfirmed(expectedRef.current?.present && expectedRef.current.value === text ? expectedRef.current : null)
       return Promise.resolve()
     }
     const save = editSaveRef.current
+    const contract = editContractRef.current
+    const expected = expectedRef.current
+    const generation = generationRef.current
+    const intent: LocalSaveIntentV1 | undefined = contract && expected ? {
+      kind: 'natural-field-local-save-v1', expected, session: sessionRef.current, generation,
+    } : undefined
     setSaving(true)
     errorRef.current = ''
     setError('')
-    const operation = Promise.resolve().then(() => save(text)).then(() => {
+    const operation = Promise.resolve().then(() => {
+      if (contract && (!intent || !contractRef.current
+        || localSaveIdentityKeyV1(contract.identity) !== localSaveIdentityKeyV1(contractRef.current.identity))) {
+        throw new Error('尚未取得当前字段的数据库凭据，已保留草稿；请重新读取。')
+      }
+      return intent ? save(text, intent) : save(text)
+    }).then(ack => {
+      if (contract) {
+        if (!intent || !matchingLocalSaveAckV1(ack, intent, text) || !contractRef.current
+          || localSaveIdentityKeyV1(contract.identity) !== localSaveIdentityKeyV1(contractRef.current.identity)) {
+          throw new Error('没有匹配当前编辑的本机保存凭据，已保留草稿。')
+        }
+        expectedRef.current = ack.witness
+        if (generationRef.current === generation && draftRef.current === text) setConfirmed(ack.witness)
+      }
       baselineRef.current = text
       setBaseline(text)
-      if (draftRef.current === text) { editingRef.current = false; setEditing(false) }
+      if (draftRef.current === text && generationRef.current === generation) { editingRef.current = false; setEditing(false); setDirty(false) }
     }).catch(cause => {
       const message = cause instanceof Error ? cause.message : '保存失败，请重试。'
       errorRef.current = message
@@ -78,7 +127,9 @@ function useInlineDraft(value: string, onChange: InlineSave, readable = true) {
       throw cause
     }).finally(() => { savingRef.current = null; setSaving(false) })
     savingRef.current = operation
-    return operation
+    // A flush waits for the latest draft, including text entered while the
+    // previous generation was being committed. Unfinished IME rejects it.
+    return operation.then(() => commit())
   }, [])
   useEffect(() => registerPendingDraftFlusherV1(commit), [commit])
   useEffect(() => () => {
@@ -94,9 +145,14 @@ function useInlineDraft(value: string, onChange: InlineSave, readable = true) {
     editingRef.current = false
     setDraft(draftRef.current)
     setEditing(false)
+    setDirty(false)
+    setConfirmed(contractRef.current?.witness ?? null)
   }
   const saveFromEvent = () => { void commit().catch(() => undefined) }
-  return { editing, draft, saving, error, begin, change, cancel, commit, saveFromEvent, composingRef }
+  const saved = !dirty && confirmed?.present && confirmed.recordId != null && confirmed.value === (editing ? draft : value)
+    && localSave != null && localSaveIdentityKeyV1(confirmed.identity) === localSaveIdentityKeyV1(localSave.identity)
+  return { editing, draft, saving, error, begin, change, cancel, commit, saveFromEvent, composingRef,
+    localStatus: error ? 'failed' : saving ? 'saving' : dirty ? 'dirty' : saved ? 'saved' : 'unconfirmed' }
 }
 
 function InvalidInlineValue({ value, draft }: { value: unknown; draft?: string }) {
@@ -145,11 +201,11 @@ export function InlineInput({ value, onChange, placeholder, className, prefix, s
   </div>
 }
 
-export function InlineTextarea({ value, onChange, placeholder, className, minRows = 2, maxRows = 16, inputAreaLayout }: {
-  value: string; onChange: InlineSave; placeholder?: string; className?: string; minRows?: number; maxRows?: number; inputAreaLayout?: InputAreaLayoutOptionsV1
+export function InlineTextarea({ value, onChange, placeholder, className, minRows = 2, maxRows = 16, inputAreaLayout, localSave }: {
+  value: string; onChange: InlineSave; placeholder?: string; className?: string; minRows?: number; maxRows?: number; inputAreaLayout?: InputAreaLayoutOptionsV1; localSave?: LocalSaveContractV1
 }) {
   const readable = value == null || typeof value === 'string'
-  const editor = useInlineDraft(typeof value === 'string' ? value : '', onChange, readable)
+  const editor = useInlineDraft(typeof value === 'string' ? value : '', onChange, readable, localSave)
   const ref = useRef<HTMLTextAreaElement>(null)
   const resize = useCallback(() => {
     const el = ref.current
@@ -166,7 +222,7 @@ export function InlineTextarea({ value, onChange, placeholder, className, minRow
   }, [maxRows, minRows])
   useEffect(() => { if (editor.editing && inputAreaLayout?.enabled !== true) resize() }, [editor.draft, editor.editing, resize, inputAreaLayout?.enabled])
   if (!readable) return <InvalidInlineValue value={value} draft={editor.editing ? editor.draft : undefined} />
-  const renderTextarea = (area?: AreaControlV1) => <textarea ref={area?.ref ?? ref} style={area?.style} value={editor.draft} disabled={editor.saving}
+  const renderTextarea = (area?: AreaControlV1) => <textarea ref={area?.ref ?? ref} style={area?.style} value={editor.draft} disabled={editor.saving && !localSave}
       onCompositionStart={() => { editor.composingRef.current = true; area?.compositionStart() }}
       onCompositionEnd={event => { editor.composingRef.current = false; editor.change(event.currentTarget.value); area?.compositionEnd() }}
       onChange={event => editor.change(event.target.value)} onWheel={containTextareaWheel} onBlur={area ? undefined : editor.saveFromEvent}
@@ -177,9 +233,20 @@ export function InlineTextarea({ value, onChange, placeholder, className, minRow
     {inputAreaLayout?.enabled === true ? <ResizableInputArea options={inputAreaLayout} autoHeight={{ value: editor.draft, minRows, maxRows }} onExternalLeave={editor.saveFromEvent}>
       {renderTextarea}
     </ResizableInputArea> : renderTextarea()}
-    <InlineSaveStatus error={editor.error} saving={editor.saving} retry={editor.saveFromEvent} />
+    {localSave ? <LocalSaveStatus status={editor.localStatus} error={editor.error} retry={editor.saveFromEvent} />
+      : <InlineSaveStatus error={editor.error} saving={editor.saving} retry={editor.saveFromEvent} />}
   </div>
-  return <div onClick={editor.begin} className={`text-sm cursor-text py-0.5 ${value ? 'text-text-primary leading-relaxed whitespace-pre-wrap' : 'text-text-muted/40'}`}>
+  const readView = <div onClick={editor.begin} className={`text-sm cursor-text py-0.5 ${value ? 'text-text-primary leading-relaxed whitespace-pre-wrap' : 'text-text-muted/40'}`}>
     {value || placeholder || '点击编辑…'}
+  </div>
+  return localSave ? <div className="min-w-0">{readView}<LocalSaveStatus status={editor.localStatus} error={editor.error} retry={editor.saveFromEvent} /></div> : readView
+}
+
+function LocalSaveStatus({ status, error, retry }: { status: string; error: string; retry: () => void }) {
+  const label = status === 'saved' ? '已保存到本机' : status === 'saving' ? '正在保存' : status === 'dirty' ? '未保存'
+    : status === 'failed' ? '保存失败' : '未确认'
+  return <div role="status" data-local-save-status={status} className="min-h-5 mt-1 text-xs text-text-muted"
+    title={error || '已保存到本机表示数据库已确认；在同一浏览器、同一站点重开可保留。云同步和外部备份需分别完成。'}>
+    {label}{status === 'failed' && <> · <button type="button" onClick={retry} className="underline">重试</button><span className="ml-1">{error}</span></>}
   </div>
 }
