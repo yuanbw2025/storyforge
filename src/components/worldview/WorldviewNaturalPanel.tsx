@@ -11,6 +11,7 @@ import CodexSearchBar from '../codex/CodexSearchBar'
 import { InlineTextarea } from '../shared/InlineEdit'
 import { useMasterCopilot, type PendingMasterCandidate } from '../agent/useMasterCopilot'
 import WorldviewAgentControls from './WorldviewAgentControls'
+import { useWorldSettingsLayout, WorldSettingsToolbar } from '../longform/WorldSettingsLayout'
 import type { Project, NaturalResources } from '../../lib/types'
 import type { WorldviewAgentField } from '../../lib/agent/worldview-field-copilot'
 
@@ -59,6 +60,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
 }
 
 function ScopedNaturalPanel({ project, activeGroupId }: Props & { activeGroupId: number | null }) {
+  const compact = useWorldSettingsLayout()
   const { worldview, saveWorldview, loadedScope, activeWorldGroupId, loading, loadError } = useWorldviewStore()
   const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
   const readReady = !loading && !loadError && loadedScope?.projectId === authorScope.projectId
@@ -112,9 +114,9 @@ function ScopedNaturalPanel({ project, activeGroupId }: Props & { activeGroupId:
 
   return (
     <WorldviewReadBoundary onRetry={reloadCurrent} ready={readReady}>
-    <div className="flex flex-col w-full h-full space-y-4">
+    <div className={compact ? 'lf-world-panel flex h-full flex-col' : 'flex flex-col w-full h-full space-y-4'}>
       {/* 顶部 */}
-      <div className="pb-4 border-b border-border/40 px-6 pt-4 shrink-0">
+      {!compact && <div className="pb-4 border-b border-border/40 px-6 pt-4 shrink-0">
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
             🏔️ 自然环境与地理
@@ -134,9 +136,9 @@ function ScopedNaturalPanel({ project, activeGroupId }: Props & { activeGroupId:
             }}
           />
         </div>
-      </div>
+      </div>}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className={compact ? 'lf-world-columns flex-1 min-h-0' : 'flex flex-1 overflow-hidden'}>
         {/* ── 左侧边栏 ── */}
         <nav className="w-max min-w-32 max-w-44 flex-shrink-0 border-r border-border bg-bg-surface/50 overflow-y-auto">
           {[...FIELDS.map(f => ({ key: f.key, emoji: f.emoji, label: f.label })),
@@ -172,7 +174,18 @@ function ScopedNaturalPanel({ project, activeGroupId }: Props & { activeGroupId:
         </nav>
 
         {/* ── 右侧：所有字段同时渲染，hidden 控制显示 ── */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className={compact ? 'lf-world-content overflow-y-auto' : 'flex-1 overflow-y-auto p-6'}>
+          {compact && <WorldSettingsToolbar title={activeKey === 'naturalResources' ? '🌿 自然资源'
+            : `${FIELDS.find(field => field.key === activeKey)?.emoji ?? ''} ${FIELDS.find(field => field.key === activeKey)?.label ?? ''}`}
+            actions={project.enableMultiWorld && <WorldGroupSwitcher />}
+            search={<CodexSearchBar compact scope={authorScope} worldGroupId={targetWorldGroupId}
+              categoryKeys={[...Object.values(NATURAL_CODEX_KEYS).flat().filter(Boolean) as string[], 'mineral', 'herb', 'beast']}
+              onJump={catKey => {
+                if (['mineral', 'herb', 'beast'].includes(catKey)) { setActiveKey('naturalResources'); return }
+                const sub = Object.keys(NATURAL_CODEX_KEYS).find(key => NATURAL_CODEX_KEYS[key]?.includes(catKey))
+                if (sub) setActiveKey(sub as FieldKey)
+              }} />}
+          />}
           {FIELDS.map(f => (
             <div key={f.key} className={activeKey === f.key ? '' : 'hidden'}>
               <SimpleFieldEditor
@@ -314,11 +327,12 @@ function SimpleFieldEditor({
   onRunningChange: (running: boolean) => void
   onAdopted: (candidate: PendingMasterCandidate) => Promise<void>
 }) {
+  const compact = useWorldSettingsLayout()
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className={compact ? 'lf-world-field space-y-3' : 'max-w-3xl space-y-4'}>
       <div>
-        <h3 className="text-lg font-semibold text-text-primary">{field.emoji} {field.label}</h3>
-        <p className="mt-1 text-sm text-text-muted">{field.desc}</p>
+        {!compact && <h3 className="text-lg font-semibold text-text-primary">{field.emoji} {field.label}</h3>}
+        <p className={compact ? 'lf-world-field-description' : 'mt-1 text-sm text-text-muted'}>{field.desc}</p>
       </div>
 
       <div className="bg-bg-surface border border-border rounded-lg p-4">
@@ -346,6 +360,7 @@ function NaturalResourcesEditor({ naturalResources, setNaturalResources, save }:
   setNaturalResources: React.Dispatch<React.SetStateAction<NaturalResources>>
   save: (patch: WorldviewAuthorPatch) => Promise<void>
 }) {
+  const compact = useWorldSettingsLayout()
   const rows: { key: keyof NaturalResources; label: string; placeholder: string }[] = [
     { key: 'rareCreatures', label: '🦅 珍禽异兽 / 牲畜', placeholder: '例：玄龟 / 火凤 / 战马 / 耕牛 ...' },
     { key: 'herbs',         label: '🌿 灵药 / 粮食作物', placeholder: '例：千年雪莲 / 灵参 / 稻麦 ...' },
@@ -359,14 +374,14 @@ function NaturalResourcesEditor({ naturalResources, setNaturalResources, save }:
   }
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className={compact ? 'lf-world-field space-y-3' : 'max-w-3xl space-y-4'}>
       <div>
         <h3 className="text-lg font-semibold text-text-primary">🌿 自然资源</h3>
         <p className="mt-1 text-sm text-text-muted">珍禽异兽 / 灵药草药 / 矿石宝石 / 其他特产</p>
       </div>
       <div className="bg-bg-surface border border-border rounded-lg p-4 space-y-4">
         {rows.map(r => (
-          <div key={r.key} className="flex items-start gap-3">
+          <div key={r.key} className={`flex items-start gap-3 ${compact ? 'lf-world-resource-row' : ''}`}>
             <span className="text-sm text-text-secondary w-28 flex-shrink-0 pt-0.5">{r.label}</span>
             <div className="flex-1">
               <InlineTextarea value={naturalResources[r.key]} onChange={v => update(r.key, v)} placeholder={r.placeholder} />

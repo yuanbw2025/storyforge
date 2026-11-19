@@ -1,4 +1,6 @@
 import { Trash2 } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { useWorldSettingsLayout, WorldSettingsToolbar } from '../longform/WorldSettingsLayout'
 import {
   CONFLICT_PRIORITY_LABELS,
   isEntryEmpty,
@@ -6,6 +8,7 @@ import {
 import type { ConflictPriority, WorldRuleEntry } from '../../lib/types/world-rules'
 
 interface Props {
+  toolbarActions?: ReactNode
   selectedNode: string | null
   currentLabel: string
   currentHints: string[]
@@ -25,26 +28,29 @@ export default function WorldRuleEntryEditor({
   onFieldChange,
   onDeleteNode,
   onClearEntry,
+  toolbarActions,
 }: Props) {
+  const compact = useWorldSettingsLayout()
+  const entryActions = selectedNode && <div className="flex items-center gap-2">
+    {isCustomNode && <button onClick={onDeleteNode} className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1">
+      <Trash2 className="w-3 h-3" /> 删除节点
+    </button>}
+    {!isEntryEmpty(currentEntry) && <button onClick={onClearEntry} className="text-xs text-text-muted hover:text-red-400 flex items-center gap-1">
+      <Trash2 className="w-3 h-3" /> 清空
+    </button>}
+  </div>
   return (
-    <div className="flex-1 overflow-y-auto p-5">
+    <div className={`flex-1 overflow-y-auto ${compact ? 'lf-world-rule-editor' : 'p-5'}`}>
+      {compact && <WorldSettingsToolbar title={selectedNode ? currentLabel : '选择规则维度'} actions={<>
+        {toolbarActions}
+        {entryActions}
+      </>} />}
       {selectedNode ? (
         <div className="space-y-5">
-          <div className="flex items-center justify-between">
+          {!compact && <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-text-primary">{currentLabel}</h3>
-            <div className="flex items-center gap-2">
-              {isCustomNode && (
-                <button onClick={onDeleteNode} className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1">
-                  <Trash2 className="w-3 h-3" /> 删除节点
-                </button>
-              )}
-              {!isEntryEmpty(currentEntry) && (
-                <button onClick={onClearEntry} className="text-xs text-text-muted hover:text-red-400 flex items-center gap-1">
-                  <Trash2 className="w-3 h-3" /> 清空
-                </button>
-              )}
-            </div>
-          </div>
+            {entryActions}
+          </div>}
 
           {currentHints.length > 0 && (
             <div className="flex flex-wrap gap-1.5">

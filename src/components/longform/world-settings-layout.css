@@ -1,0 +1,33 @@
+.lf-world-settings .lf-world-panel{width:100%;min-width:0;max-width:none}
+.lf-world-settings .lf-world-columns{display:flex;min-width:0;gap:12px}
+.lf-world-settings .lf-world-content{flex:1;min-width:0;padding:4px 8px 16px}
+.lf-world-settings .lf-world-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin-bottom:12px;min-width:0}
+.lf-world-settings .lf-world-toolbar-heading{flex:1 1 160px;min-width:0}
+.lf-world-settings .lf-world-toolbar-heading h3{font-size:16px;font-weight:600;line-height:1.5;color:var(--text-primary);margin:0}
+.lf-world-settings .lf-world-toolbar-heading p{font-size:11px;line-height:1.5;color:var(--text-muted);margin:1px 0 0}
+.lf-world-settings .lf-world-toolbar-search{flex:0 1 240px;min-width:120px;max-width:100%}
+.lf-world-settings .lf-world-toolbar-actions{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0}
+.lf-world-settings .lf-world-field{width:100%;min-width:0;max-width:none}
+.lf-world-settings .lf-world-field-description{font-size:12px;line-height:1.5;color:var(--text-muted);margin:0}
+.lf-world-settings .lf-world-rules-layout{min-width:0}
+.lf-world-settings .lf-world-rule-editor{min-width:0;padding:12px 16px}
+.lf-world-settings .lf-world-rule-nav{min-width:0}
+.lf-world-settings .lf-world-history-tabs{margin-bottom:12px;flex-wrap:wrap}
+@media(max-width:700px){
+ .lf-world-settings .lf-world-panel{height:auto;min-height:0}
+ .lf-world-settings .lf-world-columns{flex-direction:column;overflow:visible;gap:10px}
+ .lf-world-settings .lf-world-columns>nav,.lf-world-settings .lf-world-columns>.worldview-origin-nav{display:flex;flex-wrap:wrap;gap:3px;width:100%;min-width:0;max-width:none;padding:0;border-right:0}
+ .lf-world-settings .lf-world-columns>nav>button,.lf-world-settings .lf-world-columns>.worldview-origin-nav>button{width:auto;font-size:12px;padding:6px 8px}
+ .lf-world-settings .lf-world-content{padding:0;overflow:visible}
+ .lf-world-settings .lf-world-toolbar{gap:6px 8px;margin-bottom:10px}
+ .lf-world-settings .lf-world-toolbar-heading{flex-basis:140px}
+ .lf-world-settings .lf-world-toolbar-search{order:3;flex:1 1 160px}
+ .lf-world-settings .lf-world-rules-layout{flex-direction:column}
+ .lf-world-settings .lf-world-rule-nav{width:100%;max-width:none;border-right:0;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;padding:6px;gap:3px}
+ .lf-world-settings .lf-world-rule-nav>button{width:auto;padding:5px 8px;font-size:12px}
+ .lf-world-settings .lf-world-rule-nav>div{width:auto;max-width:100%;font-size:12px}
+ .lf-world-settings .lf-world-rule-editor{padding:12px;overflow:visible}
+ .lf-world-settings .lf-world-resource-row{flex-direction:column;gap:5px}
+ .lf-world-settings .lf-world-resource-row>div{width:100%;min-width:0}
+ .lf-world-settings .lf-world-history-tabs button{padding:6px 8px;font-size:12px}
+}
