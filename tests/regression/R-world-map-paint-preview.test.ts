@@ -58,7 +58,7 @@ describe('地图绘画底图属于显式视图候选', () => {
     const [url, request] = fetcher.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe('https://fixture.invalid/v1/images/generations')
     expect(JSON.parse(request.body as string)).toMatchObject({ model: 'agnes-image-2.1-flash', ratio: '16:9', size: '2K',
-      image: ['data:image/png;base64,' + btoa('png-reference')], return_base64: true })
+      extra_body: { image: ['data:image/png;base64,' + btoa('png-reference')], response_format: 'b64_json' } })
     expect(JSON.parse(request.body as string).images).toBeUndefined()
     expect(config.model).toBe('agnes-2.5-flash')
     expect(() => referenceImageBindingFromAIConfigV1(config, 'gpt-image-2')).toThrow(/Agnes/)

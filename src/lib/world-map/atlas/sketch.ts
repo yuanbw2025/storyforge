@@ -52,11 +52,11 @@ function paperGrain(c: Brush, seed: string, width: number, height: number) {
 }
 
 /** Flat cartographic line work. Relief symbols only follow authored ridge/biome features. */
-export function drawSketchTerrain(g: AtlasGeometry, seed: string, layers: AtlasLayers) {
+export function drawSketchTerrain(g: AtlasGeometry, seed: string, layers: AtlasLayers, decorations = true) {
   const canvas = document.createElement('canvas')
   const scale = Math.min(3, 4096 / Math.max(g.width, g.height))
   canvas.width = Math.round(g.width * scale); canvas.height = Math.round(g.height * scale)
-  const c = canvas.getContext('2d')!, { width: w, height: h, features } = g
+  const c = canvas.getContext('2d', { willReadFrequently: true })!, { width: w, height: h, features } = g
   c.scale(scale, scale); c.lineJoin = 'round'; c.lineCap = 'round'
   c.fillStyle = water; c.fillRect(0, 0, w, h)
   const { land, coast, realmEdges, waterEdges, outsideWaters, fillRule } = atlasSurfacePaths(g, seed, layers.waterBodies)
@@ -155,7 +155,7 @@ export function drawSketchTerrain(g: AtlasGeometry, seed: string, layers: AtlasL
     c.fillStyle = shade; c.fillRect(0, 0, w, h)
   }
   // The compass is a separate map ornament, never a geographic feature.
-  for (const [x, y] of [[w * 0.07, h * 0.89], [w * 0.92, h * 0.1]]) {
+  for (const [x, y] of decorations ? [[w * 0.07, h * 0.89], [w * 0.92, h * 0.1]] : []) {
     if (features.some(f => f.kind === 'realm') || c.isPointInPath(land, x * scale, y * scale, fillRule)) continue
     const radius = 15
     stroke(c, line([[x, y - radius], [x, y + radius], [x, y], [x - radius, y], [x + radius, y]]), pen, 0.7)
@@ -164,7 +164,9 @@ export function drawSketchTerrain(g: AtlasGeometry, seed: string, layers: AtlasL
     c.font = '9px "Songti SC",serif'; c.textAlign = 'center'; c.fillText('北', x, y - radius - 4); c.textAlign = 'start'
     break
   }
-  c.strokeStyle = '#8b7958'; c.lineWidth = 0.7; c.strokeRect(5, 5, w - 10, h - 10)
-  c.strokeStyle = '#e8d9b6'; c.lineWidth = 1.4; c.strokeRect(7, 7, w - 14, h - 14)
+  if (decorations) {
+    c.strokeStyle = '#8b7958'; c.lineWidth = 0.7; c.strokeRect(5, 5, w - 10, h - 10)
+    c.strokeStyle = '#e8d9b6'; c.lineWidth = 1.4; c.strokeRect(7, 7, w - 14, h - 14)
+  }
   return canvas
 }

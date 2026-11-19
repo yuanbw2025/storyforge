@@ -6,7 +6,13 @@ Choose Sketch map / Illustrated map / Continuous painting in the world map. Sket
 
 Filter 18 layers, zoom/pan, return to the full map, adjust labels and export the current style as PNG. Lake holes/islands, shared coastlines and roads across water use shared geometry; authors must still review the image.
 
-Continuous painting supports reference-image editing, imported images and base-map packages. Results remain view-local until confirmed; map/layout changes isolate old results, and failures are not automatically resent. Natural features are combined in a painted image; use a procedural style for independent natural-layer filtering. **Images are excluded from complete project backups: export a base-map package before leaving and import it later.** Restoration checks geometry fingerprints and actual image data. This is not a 3D or game-publication feature.
+All three styles offer Procedural rendering or AI art enhancement. Procedural maps require no image API. Enhancement first presents the original and a candidate side by side; it is applied only after you choose “Use this base map”. Mountain and woodland materials are constrained to their existing footprints. The application continues to control coastlines, water, roads, rivers, settlements and labels; mountains and forests remain independently filterable. Review the model's internal details.
+
+Under “Image connection and enhancement candidates”, choose a saved API preset, enter the image model, and select its image protocol and capability. The image connection can differ from the writing connection. Text-only, vision-only and text-to-image-only connections do not enable reference-image repainting. Adapters cover Agnes reference images, OpenAI-compatible image edits and Gemini native Interactions; actual availability depends on the service and account permissions. Each request produces one candidate and may consume the service's quota. Failure or cancellation never automatically resends a request or clears the current map.
+
+Adopted images can be saved in the local viewing cache and restored on refresh or when returning to the same map without generating again. Switching the production method back to procedural rendering retains the saved enhancement. Changes to land, mountains, woods or the seed pause the old enhancement and offer export or regeneration. Renaming labels or editing settlements and roads does not require repainting.
+
+**The local viewing cache is excluded from complete project backups. Export a base-map package before changing devices or clearing browser storage.** A failed save retains the current-session image and offers export. Package import checks terrain, style, image format and dimensions. Legacy whole-image packages remain importable in Continuous painting, but their baked-in natural features cannot be filtered separately. This is not a 3D or game-publication feature.
 
 ## November 13: saving, recovery and usage checks
 

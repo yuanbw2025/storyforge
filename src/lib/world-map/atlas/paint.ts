@@ -220,7 +220,7 @@ export function drawTerrain(
   style: 'illustrated' | 'sketch' | 'painted' = 'illustrated',
   decorations = true,
 ) {
-  if (style === 'sketch') return drawSketchTerrain(g, seed, layers)
+  if (style === 'sketch') return drawSketchTerrain(g, seed, layers, decorations)
   const continuous = style === 'painted' && !painted
   const rich = continuous || !!painted
   const surface = painted ? paintedSurface(painted, g, seed) : undefined
@@ -228,7 +228,7 @@ export function drawTerrain(
   const scale = Math.min(3, 4096 / Math.max(g.width, g.height))
   canvas.width = Math.round(g.width * scale)
   canvas.height = Math.round(g.height * scale)
-  const c = canvas.getContext('2d')!
+  const c = canvas.getContext('2d', { willReadFrequently: true })!
   c.scale(scale, scale)
   c.lineJoin = 'round'
   c.lineCap = 'round'

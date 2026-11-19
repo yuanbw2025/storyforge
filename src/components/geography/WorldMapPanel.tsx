@@ -376,6 +376,7 @@ export default function WorldMapPanel({ project }: Props) {
           }>
             {viewMode === 'atlas' && voronoiConfig
               ? <WorldAtlasPreview key={activeWorldId} config={voronoiConfig} onReference={saveReference}
+                  ownerKey={project.workspaceUid && activeWorldId != null ? project.workspaceUid + ':map:' + activeWorldId : undefined}
                   navigation={<select aria-label="选择地图" value={activeWorldId ?? ''}
                     className="bg-bg-base border border-border rounded px-2 py-1 max-w-64"
                     onChange={event => useWorldNodeStore.getState().setActiveWorld(Number(event.target.value))}>
