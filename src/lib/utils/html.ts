@@ -55,7 +55,7 @@ export function htmlToPlainText(html: string): string {
       .replace(/\n{3,}/g, '\n\n')
       .trim()
   }
-  const tmp = document.createElement('div')
+  const tmp = document.implementation.createHTMLDocument('').createElement('div')
   tmp.innerHTML = html
   // 将块级元素转为换行
   const blocks = tmp.querySelectorAll('p,div,h1,h2,h3,h4,h5,h6,li,blockquote,br')
