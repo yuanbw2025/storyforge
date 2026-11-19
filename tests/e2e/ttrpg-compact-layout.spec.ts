@@ -58,18 +58,19 @@ test('战役工具、空库、长标题和搜索在桌面与窄屏可用', async
   await expect(page.locator('.lf-library-grid article')).toHaveCount(0)
 })
 
-test('跑团全部作者与游玩子页保持可达和自然宽度', async ({ page }, info) => {
-  test.setTimeout(240000)
-  const seed = await seedCurrentTtrpgProduct(page, { title: '布局检查战役', gmMode: 'human', playerController: 'human' })
-  for (const size of sizes) {
-    await page.setViewportSize(size)
-    for (const [id] of TTRPG_PAGES) {
+// Keep every page/viewport pair independently bounded. A single 75-navigation
+// case exhausted its total deadline before the last page on shared CI runners.
+for (const size of sizes) {
+  for (const [id, title] of TTRPG_PAGES) {
+    test(`跑团 ${title}（${id}）在 ${size.width}px 保持可达和自然宽度`, async ({ page }, info) => {
+      await page.setViewportSize(size)
+      const seed = await seedCurrentTtrpgProduct(page, { title: '布局检查战役', gmMode: 'human', playerController: 'human' })
       await page.goto(`./ttrpg/${id}?project=${seed.projectId}&production=${seed.productionId}&session=${seed.sessionId}`)
       await expect(page.getByTestId('ttrpg-author-page')).toBeVisible()
       await expect(page.locator('.lf-content')).not.toContainText('打开功能…')
       await expect(page.locator('.lf-content')).not.toContainText('读取跑团作品…')
       await fits(page)
       await page.screenshot({ path: info.outputPath(`${id}-${size.width}.png`) })
-    }
+    })
   }
-})
+}
