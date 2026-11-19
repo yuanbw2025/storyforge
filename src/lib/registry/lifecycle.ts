@@ -2,7 +2,7 @@
  * 当前表生命周期派生 API。所有事务表集合从 PROJECT_TABLES 派生，
  * 禁止在 Store 或 service 中维护第二份手写清单。
  */
-import type { Collection, Table } from 'dexie'
+import Dexie, { type Collection, type Table } from 'dexie'
 import { db } from '../db/schema'
 import { removeCodexEntryReferences } from '../codex/references'
 import { clearCultivationSystemReferences } from '../cultivation/lifecycle'
@@ -152,6 +152,15 @@ async function deleteScopedRows(table: Table, rows: Collection): Promise<void> {
 }
 
 export async function cascadeDeleteProject(projectId: number): Promise<void> {
+  const atlasWorkspace = await db.projects.get(projectId)
+  if (atlasWorkspace?.workspaceUid) {
+    const cleanup = import('../authoring/atlas-view-cache')
+      .then(({ clearAtlasWorkspaceViews }) => clearAtlasWorkspaceViews(atlasWorkspace.workspaceUid!))
+    // Eval rollback can call this cascade while holding the root-identity locks.
+    // Separate IDB work/imports must not let that enclosing transaction expire.
+    if (Dexie.currentTransaction) await Dexie.waitFor(cleanup)
+    else await cleanup
+  }
   await db.transaction('rw', transactionTablesFor('deleteProject'), async () => {
     // 同一写事务内先固定全部父键，再删任何父行；并发新导入不得漏入快照。
     // 写入端也在相同父表锁内复验根，删除提交后的旧任务不能再建子项。

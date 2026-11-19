@@ -54,7 +54,8 @@ export function parseAtlasReference(input: unknown): AtlasGeometry {
   let brushArea = 0
   const features = doc.features.map((f, index) => {
     const pointKind = ['city', 'fortress', 'region', 'sea', 'landmark'].includes(f?.kind)
-    const minimum = ['land', 'realm', 'water'].includes(f?.kind) ? 3 : pointKind ? 1 : 2
+    const minimum = ['land', 'realm', 'water'].includes(f?.kind) ? 3
+      : pointKind || ['ridge', 'wood', 'desert', 'marsh'].includes(f?.kind) ? 1 : 2
     if (
       !f ||
       !kinds.includes(f.kind) ||
@@ -98,7 +99,7 @@ export function parseAtlasReference(input: unknown): AtlasGeometry {
   })
   if (!features.some((f) => f.kind === 'land' || f.kind === 'realm'))
     throw Error('参考布局缺少陆地或空间分区轮廓。')
-  return { version: 1, width: doc.width, height: doc.height, features }
+  return { version: 1, ...(doc.cellCoast === true ? { cellCoast: true as const } : {}), width: doc.width, height: doc.height, features }
 }
 
 // Cancel internal polygon edges to recover coast and lake rings from the actual grid.

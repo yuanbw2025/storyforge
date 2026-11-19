@@ -1,12 +1,13 @@
 import { decodeRasterImageV1 } from '../../media/raster-image'
 
-export function atlasPaintFrame(width: number, height: number) {
+export function atlasPaintFrame(width: number, height: number, protocol: 'native' | 'openai-edit' = 'native') {
   if (![width, height].every(n => Number.isFinite(n) && n > 0)) throw Error('地图画幅无效')
-  const ratios = [[1, 1], [3, 4], [4, 3], [16, 9], [9, 16], [2, 3], [3, 2], [21, 9]]
+  const ratios = protocol === 'openai-edit' ? [[1, 1], [3, 2], [2, 3]]
+    : [[1, 1], [3, 4], [4, 3], [16, 9], [9, 16], [2, 3], [3, 2], [21, 9]]
   const aspect = width / height
   const [a, b] = ratios.reduce((best, next) => Math.abs(Math.log(next[0] / next[1] / aspect))
     < Math.abs(Math.log(best[0] / best[1] / aspect)) ? next : best)
-  const unit = Math.floor(1536 / Math.max(a, b)), w = a * unit, h = b * unit
+  const unit = protocol === 'openai-edit' && a === b ? 1024 : Math.floor(1536 / Math.max(a, b)), w = a * unit, h = b * unit
   const contentWidth = Math.min(w, h * aspect), contentHeight = contentWidth / aspect
   return { ratio: `${a}:${b}`, width: w, height: h,
     x: (w - contentWidth) / 2 / w, y: (h - contentHeight) / 2 / h,
