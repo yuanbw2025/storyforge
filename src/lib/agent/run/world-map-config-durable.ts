@@ -5,6 +5,7 @@ import {
   readVoronoiMapPromptTemplateSnapshotV1,
 } from '../../ai/adapters/voronoi-map-adapter'
 import type { AIConfig, ChatMessage, WorkspaceScope, WorldNode } from '../../types'
+import { atlasDraftPrompt, parseAtlasDraft } from '../../world-map/atlas/draft'
 import type { MapGenConfig } from '../../world-map/engine'
 import { assembleContext } from '../../registry/assemble-context'
 import { adopt, hashAdoptFieldValueV1 } from '../../registry/adopt'
@@ -128,11 +129,11 @@ async function readTargetNode(
   return node as WorldNode & { id: number }
 }
 
-function contract(scope: WorkspaceScope, worldGroupId: number | null, node: WorldNode & { id: number }) {
+function contract(scope: WorkspaceScope, worldGroupId: number | null, node: WorldNode & { id: number }, atlas = false) {
   const skill = getAgentSkillV1('world-origin.map-config', 'world-origin')
   return {
     version: 1 as const,
-    objective: `为世界节点 #${node.id} “${node.name}”生成可确认地图配置`,
+    objective: `为世界节点 #${node.id} “${node.name}”生成可确认地图配置${atlas ? '（实验绘本草图）' : ''}`,
     workflowKind: 'plan-execute' as const,
     scope: { projectId: scope.projectId, worldGroupId },
     permissions: {
@@ -181,7 +182,16 @@ async function assembleWorldMapContext(scope: WorkspaceScope, worldGroupId: numb
   })
 }
 
-async function promptEvidence(contextText: string, nodeName: string) {
+async function promptEvidence(contextText: string, nodeName: string, atlas = false) {
+  if (atlas) {
+    const messages = atlasDraftPrompt(contextText, nodeName)
+    const template = atlasDraftPrompt('{{REGISTERED_CONTEXT}}', '{{TARGET_WORLD_NODE}}')
+    return {
+      messages,
+      promptTemplateHash: await hashCanonicalValue(template),
+      promptHash: await hashCanonicalValue(messages),
+    }
+  }
   const messages = buildVoronoiMapPromptFromRegisteredContextV1(contextText, nodeName)
   return {
     messages,
@@ -273,7 +283,7 @@ function assertCandidateTarget(
 async function currentEvidence(scope: WorkspaceScope, candidate: WorldMapConfigCandidateV1) {
   const node = await readTargetNode(scope, candidate.worldGroupId, candidate.worldNodeId)
   const assembled = await assembleWorldMapContext(scope, candidate.worldGroupId)
-  const prompt = await promptEvidence(assembled.text, node.name)
+  const prompt = await promptEvidence(assembled.text, node.name, !!candidate.mapConfig.atlasDraft)
   const currentConfigHash = await hashAdoptFieldValueV1(node.mapConfigJSON)
   return {
     node,
@@ -318,6 +328,7 @@ export async function generateWorldMapConfigCandidateV1(input: {
   scope: WorkspaceScope
   worldGroupId: number | null
   worldNodeId: number
+  atlasDraft?: boolean
   aiConfig?: AIConfig
   runAI?: RunAI
   onDurableBoundary?: (boundary: WorldMapConfigBoundaryV1, snapshot: AgentRunSnapshotV1) => void | Promise<void>
@@ -327,7 +338,7 @@ export async function generateWorldMapConfigCandidateV1(input: {
   let snapshot = await createAgentRunV1({
     scope: input.scope,
     worldGroupId: input.worldGroupId,
-    contract: contract(input.scope, input.worldGroupId, node),
+    contract: contract(input.scope, input.worldGroupId, node, input.atlasDraft),
   })
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: WORLD_MAP_CONFIG_STEP_ID_V1 })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: WORLD_MAP_CONFIG_STEP_ID_V1, attempt: 1 })
@@ -348,7 +359,7 @@ export async function generateWorldMapConfigCandidateV1(input: {
     attempt: 1,
     manifestHash: manifest.manifestHash,
   })
-  const prompt = await promptEvidence(assembled.text, node.name)
+  const prompt = await promptEvidence(assembled.text, node.name, input.atlasDraft)
   snapshot = await append(input.scope, snapshot, 'model.requested', {
     stepId: WORLD_MAP_CONFIG_STEP_ID_V1,
     attempt: 1,
@@ -357,13 +368,17 @@ export async function generateWorldMapConfigCandidateV1(input: {
   let raw: string
   try {
     await input.onDurableBoundary?.('model.requested', snapshot)
+    const aiConfig = input.aiConfig && input.atlasDraft
+      ? { ...input.aiConfig, maxTokens: Math.min(input.aiConfig.maxTokens || 6000, snapshot.contract.budget.maxOutputTokens ?? 6000) }
+      : input.aiConfig
     raw = await (input.runAI
       ? input.runAI(prompt.messages)
-      : chat(prompt.messages, input.aiConfig!, {
+      : chat(prompt.messages, aiConfig!, {
           category: 'geography.world-map',
           projectId: input.scope.projectId,
           contextOverflowPolicy: 'reject',
-        }))
+          transportRetryPolicy: 'none',
+        }, undefined, undefined, input.atlasDraft ? { responseFormat: 'json_object' } : undefined))
   } catch (error) {
     await pauseUnsafeRun(input.scope, snapshot, 'world-map-model-outcome-unknown')
     throw error
@@ -382,7 +397,7 @@ export async function generateWorldMapConfigCandidateV1(input: {
 
   let mapConfig: MapGenConfig
   try {
-    mapConfig = parseVoronoiMapConfig(raw, assembled.text)
+    mapConfig = input.atlasDraft ? parseAtlasDraft(raw, assembled.text, { existingNamesOnly: true }) : parseVoronoiMapConfig(raw, assembled.text)
     if (mapConfig.mapName !== node.name) throw new Error('模型返回的 mapName 与冻结目标世界节点名称不一致。')
   } catch (error) {
     snapshot = await append(input.scope, snapshot, 'step.failed', {

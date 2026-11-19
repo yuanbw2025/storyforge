@@ -100,6 +100,7 @@ export function analyzeAIEntrySource(source, file = 'entry.tsx') {
       if (member === 'executeFrozenFormalAIEntryV1') return 'frozen'
       if (member === 'executeFrozenFormalAudioEntryV1') return 'frozen-audio'
       if (member === 'executeFrozenFormalImageEntryV1') return 'frozen-image'
+      if (member === 'executeFrozenFormalImagePreviewV1') return 'frozen-audio'
       if (member === 'streamRegisteredAIEntryV1' && file !== 'src/hooks/useAIStream.ts') return 'hook-start'
     }
     if (member === 'assertVoiceTransport' && ['src/lib/longform-voice/contract', 'src/lib/agent/limited-ai-transport'].includes(origin.module)) {
@@ -206,6 +207,7 @@ for (const entry of registry.entries ?? []) {
 const actualCalls = []
 const actualTransports = []
 const scannedFiles = [
+  'src/lib/world-map/atlas/paint-preview.ts',
   ...['src/components', 'src/hooks', 'src/pages', 'src/lib/generation', 'src/lib/outline'].flatMap(dir => walk(dir)),
   // DETAIL-1: this service is itself a formal generation entry and must not
   // remain outside the UI/generation scanners merely because it predates them.
