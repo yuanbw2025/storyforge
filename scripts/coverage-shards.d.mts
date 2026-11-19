@@ -1,3 +1,5 @@
+/* eslint no-unused-vars: ["error", { "args": "none" }] -- Declaration signatures have no implementation bodies in which to use parameters; retain checks for unused type and variable declarations. */
+
 export interface CoverageSource {
   commit: string
   tree: string
