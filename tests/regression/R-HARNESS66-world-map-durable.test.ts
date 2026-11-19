@@ -145,6 +145,20 @@ describe.sequential('R-HARNESS66 · 世界地图 durable 配置候选与定点�
     expect(generated.snapshot.events.some(event => event.type === 'adoption.started')).toBe(false)
   })
 
+  it('绘本推测几何沿同一候选确认流程采纳，原参考布局权限不授予模型', async () => {
+    const fixture=await seed()
+    const generated=await generateWorldMapConfigCandidateV1({
+      scope:fixture.scope,worldGroupId:fixture.worldGroupId,worldNodeId:fixture.worldNodeId,atlasDraft:true,
+      runAI:async()=>JSON.stringify({mapName:'潮钟界',features:[['land','陆地',0,'0,0 120,0 100,80'],['city','旧潮港',1,'88,40']]}),
+    })
+    expect((await db.worldNodes.get(fixture.worldNodeId))?.mapConfigJSON).toBeUndefined()
+    const adopted=await adoptWorldMapConfigCandidateV1({scope:fixture.scope,worldGroupId:fixture.worldGroupId,runId:generated.snapshot.run.id})
+    expect(adopted.receiptHash).toHaveLength(64)
+    expect(adopted.candidate.mapConfig.atlasDraft?.features).toHaveLength(2)
+    expect(adopted.candidate.mapConfig.burgNames).toEqual(['旧潮港'])
+    expect(adopted.candidate.mapConfig.atlasReference).toBeUndefined()
+  })
+
   it('刷新恢复同一候选，作者确认后 exact-field CAS 写回并签发 terminal receipt', async () => {
     const fixture = await seed()
     const generated = await generate(fixture)
@@ -218,6 +232,7 @@ describe.sequential('R-HARNESS66 · 世界地图 durable 配置候选与定点�
     expect(() => parseVoronoiMapConfig(response('潮钟界', {
       mapWidthEvidenceQuote: '用户从未写过的三千公里',
     }), context)).toThrow('逐字引文')
+    expect(() => parseVoronoiMapConfig(response('潮钟界', {mapWidthKm: 6000, mapWidthEvidenceQuote: '南北狭长，两陆隔海'}), context + '南北狭长，两陆隔海')).toThrow('距离数值和单位')
     const missingSeed = JSON.parse(response())
     delete missingSeed.seed
     expect(() => parseVoronoiMapConfig(JSON.stringify(missingSeed), context)).toThrow('缺少字段 seed')

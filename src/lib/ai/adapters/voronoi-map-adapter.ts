@@ -387,6 +387,9 @@ export function parseVoronoiMapConfig(raw: string, sourceText: string): MapGenCo
   const mapWidthEvidenceQuote = parsed.mapWidthEvidenceQuote === undefined
     ? undefined
     : strictText(parsed.mapWidthEvidenceQuote, 'mapWidthEvidenceQuote', 300)
+  if (mapWidthEvidenceQuote && !/[0-9０-９一二三四五六七八九十百千万亿两〇零][0-9０-９一二三四五六七八九十百千万亿两〇零.,，．]*\s*(?:公里|千米|里|英里|kilomet(?:er|re)s?|km|miles?)/i.test(mapWidthEvidenceQuote)) {
+    throw new Error('地图横向尺寸的证据必须包含明确的距离数值和单位。')
+  }
   if (mapWidthEvidenceQuote && !hasExactEvidence(sourceText, mapWidthEvidenceQuote)) {
     throw new Error('mapWidthEvidenceQuote 不是登记来源逐字引文。')
   }
