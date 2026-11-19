@@ -18,6 +18,12 @@
 
 简笔地图由 [sketch.ts](../../src/lib/world-map/atlas/sketch.ts) 原生 Canvas 线绘，不使用上述位图素材。纸纹、山链、树林、沙丘与湿地符号均为确定性绘制；与绘本共用水陆裁剪和河道曲线。山脉仅跟随现有 ridge，不能将制图符号当成真实海拔等高线。字体、点状城镇和要塞符号随简笔样式绘制，图层与导出仍走同一地图组件。
 
+### 风格重绘实验（本地原型）
+
+`generateAtlasPaintPreview` 的可选 `style` 参数用于比较简笔线绘、绘本插画与连续地形的参考图重绘提示。默认仍为连续绘画，简笔／绘本专用重绘未接入正式菜单。实验复用同一登记的内存图片候选服务，不写入世界或作品数据。无装饰参考图现在也可由简笔渲染器导出。
+
+2026-11-19 权游参考布局实测 Agnes Image 2.1 Flash：简笔一版、绘本两版均成功返回。简笔出现森林弱化；绘本首版存在网格状树林，第二版优化树形后又把树散布到原林区之外。图片重绘不能仅凭提示词保证林地范围或地形事实，不能把这些实验当成已验证的正式地图能力。实验对照图沿用项目文字与曲线辅助叠加，未使用连续绘画专用的海陆配色分离合成，也不声称已完成所有几何贴合检查。
+
 ### 中式插画素材提示
 
 Use case: stylized-concept. Asset type: original transparent sprite sheet for a programmable 2D Chinese xianxia world atlas. Create ONE impeccably detailed hand-painted watercolor-and-fine-ink CARTOGRAPHIC SPRITE SHEET, transparent background, exactly FOUR equal columns by TWO equal rows, eight separate centered illustrations, every illustration fully contained within its cell with generous transparent margins, no text, no grid lines, no labels, no shadows on background. All viewed from the same elevated 3/4 map perspective, top-left soft light, muted mineral pigments, antique silk/ink cartography, rich restrained sage green, ochre, faded cinnabar, blue slate. Tiny intricate linework legible at map scale, soft edges fade to transparency but solid objects remain crisp. Top row left to right: (1) one dramatic cluster of tall blue-grey snow-tipped Chinese karst mountains; (2) one low ochre rocky mountain ridge with winding fold lines; (3) a tight cluster of elegant deep jade pine trees and conifers, no ground patch; (4) a tight cluster of lush moss-green broadleaf forest trees, no ground patch. Bottom row left to right: (5) a compact majestic ancient Chinese walled city with red walls, layered grey-green tiled roofs and a central grand palace, no surrounding landscape; (6) a compact ancient Chinese village of varied roofs and a slender pagoda with some trees, no surrounding landscape; (7) a fortified ancient Chinese mountain-pass gate with two squat stone towers, crenellated wall and watchtower, no European castles; (8) an elegant ancient Chinese mountain monastery of wooden pavilions, terraces and stone steps on a small isolated rock, no surrounding landscape. Eight distinct objects only, one per cell. NO readable writing, NO letters, NO borders, NO parchment background, NO checkerboard, NO western fantasy turrets. This is a reusable asset sheet, NOT a finished map, NOT a diagram.

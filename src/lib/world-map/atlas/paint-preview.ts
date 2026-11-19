@@ -17,6 +17,14 @@ export interface AtlasPaintPreview {
 
 export const ATLAS_PAINT_PROMPT = `Transform this exact top-down map into a richly detailed, continuous hand-painted fantasy atlas. Preserve the reference coastline, islands, lakes, mountain ranges and forest positions exactly. Keep north up, the same framing and aspect ratio. Paint dramatic, asymmetric mountain peaks, branching foothills and clear valleys blending into plains. Retain the reference's white snow on cold ridges, dark woodland canopies and ochre sand/desert zones; keep distinct regional palettes rather than covering everything in green. Forests fade into scattered trees; mineral greens, warm lowlands and deep teal sea with turquoise coastal shallows, delicate engraved waves and north-west directional light. Crisp small-scale relief must remain legible at whole-map scale. All terrain must blend organically rather than look like pasted symbols, embossed blobs or uniform noise. Do not add new named features or change geography. NO text, letters, numbers, labels, compass or border; the application overlays its own legible typography. NO cities, buildings, roads, borders or routes. Do not invent rivers: rivers, settlements and transport are independent application layers. This is a flat orthographic cartographic painting, never a tilted 3D scene.`
 
+/** Local style comparison prototype; the released UI still uses `painted`.
+ * Inputs and outputs retain the existing ephemeral, author-reviewed boundary. */
+export const ATLAS_STYLE_PAINT_PROMPTS = {
+  painted: ATLAS_PAINT_PROMPT,
+  sketch: `Refine this exact map as an elegant antique pen-and-ink geographic atlas on warm pale parchment. Preserve every coastline, island, lake and the positions and extents of mountain chains, woods, marsh and desert. Keep north up and the exact framing. Fine sepia contour-like hatching, asymmetric hand-drawn mountain silhouettes with delicate engraved slope strokes, individually inked tree symbols and restrained dune marks; quiet open plains, subtle paper grain, muted grey-green water and thin coastal ink. Enhance line craftsmanship and terrain legibility while keeping the image flat, sparse and distinctly drawn with a pen. Do not turn it into a colorful painted relief or a 3D terrain render. Slope strokes are artistic terrain marks, not surveyed elevation contours. NO new geography, text, labels, letters, numbers, compass, frame, cities, buildings, roads or rivers. All names, settlements, rivers and routes are separate application overlays.`,
+  illustrated: `Refine this exact map as a richly illustrated watercolor-and-gouache storybook fantasy atlas. Preserve every coastline, island, lake and the positions and extents of mountain chains, woods, marsh and desert. Keep north up and the exact framing. Paint connected craggy mountain groups with crisp miniature ink detail and snow where the reference shows it. Preserve the full footprint and density of EACH existing woodland: paint many recognizable little evergreen trees with triangular needle crowns, interspersed with rounded leafy trees. Distinct tree silhouettes and sunlit leafy canopies must read clearly from far away. Woodland is never a lattice, checkerboard, cobblestone, cracked-earth pattern, tiled rectangle or abstract dark hatching. Use soft sage-green and ochre lowlands, warm sand, pale turquoise and desaturated teal water. Let painted forms and watercolor edges blend into a restrained parchment ground. Avoid repeated identical stamp silhouettes, empty uniform terrain and photographic or embossed terrain. Keep a flat cartographic view and a handcrafted illustrated character, distinct from monochrome pen linework and from realistic shaded relief. NO new geography, text, labels, letters, numbers, compass, frame, cities, buildings, roads or rivers. All names, settlements, rivers and routes are separate application overlays.`,
+} as const
+
 export function atlasPaintGeometryHash(geometry: AtlasGeometry, seed: string): Promise<string> {
   return hashCanonicalValue({ geometry: parseAtlasReference(geometry), seed })
 }
@@ -54,6 +62,7 @@ export async function generateAtlasPaintPreview(input: {
   reference: Blob
   aiConfig: AIConfig
   imageModel: string
+  style?: keyof typeof ATLAS_STYLE_PAINT_PROMPTS
   width: number
   height: number
   signal?: AbortSignal
@@ -61,6 +70,8 @@ export async function generateAtlasPaintPreview(input: {
   const geometry = parseAtlasReference(structuredClone(input.geometry))
   const config = structuredClone(input.aiConfig)
   const binding = referenceImageBindingFromAIConfigV1(config, input.imageModel)
+  const prompt = ATLAS_STYLE_PAINT_PROMPTS[input.style ?? 'painted']
+  if (!prompt) throw Error('地图绘画风格无效。')
   const geometryHash = await atlasPaintGeometryHash(geometry, input.seed)
   const frame = binding.provider === 'agnes' ? atlasPaintFrame(geometry.width, geometry.height) : undefined
   const reference = frame ? await frameAtlasPaintReference(input.reference, frame) : input.reference
@@ -69,10 +80,10 @@ export async function generateAtlasPaintPreview(input: {
   const data = await executeFrozenFormalImagePreviewV1('world.map.paint-preview', entry,
     getAgentSkillV1('world-origin.map-config'), 'src/lib/world-map/atlas/paint-preview.ts',
     () => binding.provider === 'agnes'
-      ? requestAgnesReferenceImageV1({ binding, prompt: ATLAS_PAINT_PROMPT
+      ? requestAgnesReferenceImageV1({ binding, prompt: prompt
         + ' Preserve the entire reference frame, including narrow sea padding at the edges. Do not crop or zoom.',
         reference, ratio: frame!.ratio, signal: input.signal })
-      : requestOpenAICompatibleImageEditV1({ binding, prompt: ATLAS_PAINT_PROMPT,
+      : requestOpenAICompatibleImageEditV1({ binding, prompt,
         reference, width: input.width, height: input.height, signal: input.signal }),
     { category: 'geography.world-map-paint' }, input.signal)
   input.signal?.throwIfAborted()

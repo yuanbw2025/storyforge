@@ -220,7 +220,7 @@ export function drawTerrain(
   style: 'illustrated' | 'sketch' | 'painted' = 'illustrated',
   decorations = true,
 ) {
-  if (style === 'sketch') return drawSketchTerrain(g, seed, layers)
+  if (style === 'sketch') return drawSketchTerrain(g, seed, layers, decorations)
   const continuous = style === 'painted' && !painted
   const rich = continuous || !!painted
   const surface = painted ? paintedSurface(painted, g, seed) : undefined
