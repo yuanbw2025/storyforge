@@ -111,8 +111,10 @@ describe('R-TTRPGOPEN2 durable actual-source author design candidates', () => {
   })
   it('uses the frozen formal entry and one real client transport attempt, retaining an explicit non-retried HTTP denial', async () => {
     const f = await fixture(), before = await protectedRows()
-    const transport = vi.fn(async () => new Response(JSON.stringify({ error: { message: 'fixture unauthorized' } }), { status: 401 }))
-    vi.stubGlobal('fetch', transport)
+    const transport = vi.fn(async (_url: unknown, _init?: RequestInit) => new Response(JSON.stringify({ error: { message: 'fixture unauthorized' } }), { status: 401 }))
+    vi.stubGlobal('fetch', async (url: RequestInfo | URL, init?: RequestInit) => init?.method === 'GET'
+      ? Response.json({ models: [{ key: 'fixture-model', type: 'llm', loaded_instances: [{ config: { context_length: 131072 } }] }] })
+      : transport(url, init))
     await expect(generateTtrpgOpenAuthoringDesignCandidateV1({ ...f, aiConfig: {
       provider: 'custom', model: 'fixture-model', baseUrl: 'https://fixture.invalid/v1', apiKey: 'fixture-only',
       temperature: 0.7, maxTokens: 16_000, contextWindow: 131_072,
@@ -176,7 +178,9 @@ describe('R-TTRPGOPEN2 durable actual-source author design candidates', () => {
       return new Response(JSON.stringify({ choices: [{ message: { content: proposals(messages) }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 100, completion_tokens: 16001, total_tokens: 16101 } }), { status: 200 })
     })
-    vi.stubGlobal('fetch', transport)
+    vi.stubGlobal('fetch', async (url: RequestInfo | URL, init?: RequestInit) => init?.method === 'GET'
+      ? Response.json({ models: [{ key: 'fixture-model', type: 'llm', loaded_instances: [{ config: { context_length: 131072 } }] }] })
+      : transport(url, init))
     const candidate = await generateTtrpgOpenAuthoringDesignCandidateV1({ ...f, aiConfig: {
       provider: 'custom', model: 'fixture-model', baseUrl: 'https://fixture.invalid/v1', apiKey: 'fixture-only', temperature: 0.7, maxTokens: 16000, contextWindow: 131072,
     } })

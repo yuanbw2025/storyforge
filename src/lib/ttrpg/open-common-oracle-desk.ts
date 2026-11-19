@@ -1,3 +1,4 @@
+import { prepareModelCapacityV1, modelInputBudgetV1 } from '../ai/model-capacity'
 import { verifyTtrpgOpenOracleJournalV1 } from './open-oracle-contract'
 import { verifyTtrpgOpenFactLedger } from './open-fact-ledger'
 import { readAgentRunArtifactExactV1 } from '../memory/artifact-store'
@@ -228,7 +229,8 @@ async function requestDesk(input: Input & Transport & { expectedSequence: number
     configOverrides: { maxTokens: maximumOutputTokens }, contextOverflowPolicy: 'reject' }) : null
   const modelIdentity = input.runAI ? { provider: 'test-adapter', model: 'injected' } : { provider: resolved!.config.provider, model: resolved!.config.model }
   if (modelIdentity.provider === 'poe') throw new Error('当前模型不支持本次输出上限。')
-  const maximumInputTokens = Math.min(loaded.runtime.epochBudget.maximumTokens - maximumOutputTokens, (resolved?.config.contextWindow ?? 32000) - maximumOutputTokens)
+  if (resolved) resolved.config = await prepareModelCapacityV1(resolved.config)
+  const maximumInputTokens = Math.min(loaded.runtime.epochBudget.maximumTokens - maximumOutputTokens, resolved?.config.modelCapacity ? modelInputBudgetV1(resolved.config.modelCapacity, maximumOutputTokens).inputBudget : 32000 - maximumOutputTokens)
   const authorized = await startTtrpgOpenCommonOracleWindowV1({ ...input, sessionId: input.sessionId, commandId: 'common.oracle.desk.' + input.submissionKey,
     baseSequence: loaded.state.lastSequence, baseStateHash: loaded.stateHash, oracleInputHash: input.contentHash, modelIdentity, basisVersion: 2,maximumInputTokens, maximumOutputTokens })
   await input.onAuthorized?.(authorized.requestKey)

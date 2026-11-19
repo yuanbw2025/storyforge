@@ -118,7 +118,7 @@ export default function ChapterOutlineWorkshop({
           projectId: project.id,
           worldGroupId,
           outlineNodeId: chapter.id,
-          provider: aiConfig.provider,
+          modelConfig: aiConfig, provider: aiConfig.provider,
           model: aiConfig.model,
           sourceKeys: [
             'chapterOutline',
@@ -153,7 +153,7 @@ export default function ChapterOutlineWorkshop({
     } finally {
       if (requestRef.current === requestId) setInitializing(false)
     }
-  }, [aiConfig.model, aiConfig.provider, chapter.id, project.id, worldGroupId])
+  }, [aiConfig, chapter.id, project.id, worldGroupId])
 
   useEffect(() => {
     void initialize()

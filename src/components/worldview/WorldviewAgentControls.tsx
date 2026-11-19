@@ -1,3 +1,4 @@
+import { getModelCapacityLimitsV1 } from '../../lib/ai/model-capacity'
 import { useState } from 'react'
 import { Check, Loader2, Sparkles, Trash2 } from 'lucide-react'
 import type { PendingMasterCandidate } from '../agent/useMasterCopilot'
@@ -13,7 +14,6 @@ import type { FieldGenerationMode } from '../../lib/ai/field-generation-context'
 import type { Project } from '../../lib/types'
 import HarnessEvidencePanel from '../agent/HarnessEvidencePanel'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { getModelPreset } from '../../lib/ai/context-budget'
 import WorldviewFieldCandidateReview from './WorldviewFieldCandidateReview'
 import CopilotGenerationStatus from '../agent/CopilotGenerationStatus'
 
@@ -50,7 +50,7 @@ export default function WorldviewAgentControls({
   const candidateEventId = candidate?.event.id
   const visibleDraft = copilot.readVisibleCandidateDraft(candidateEventId)
   const aiConfig = useAIConfigStore(state => state.config)
-  const modelCap = getModelPreset(aiConfig.provider, aiConfig.model).maxOutput
+  const modelCap = getModelCapacityLimitsV1(aiConfig).maxOutput
   const configuredCap = aiConfig.maxTokens > 0 ? aiConfig.maxTokens : modelCap
   const visibleEffectiveCap = Math.min(
     modelCap,

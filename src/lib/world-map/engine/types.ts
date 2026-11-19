@@ -366,6 +366,9 @@ export interface BiomeOverride {
 
 /** 地图生成配置（可由 AI 控制） */
 export interface MapGenConfig {
+  /** Optional author-supplied geometry; excluded from the model output protocol. */
+  atlasDraft?: import('../atlas/geometry').AtlasGeometry
+  atlasReference?: import('../atlas/geometry').AtlasGeometry
   /** 画布宽度 */
   width?: number
   /** 画布高度 */

@@ -447,7 +447,7 @@ function buildMarkdown() {
   // 五、正式 AI 入口机器绑定
   lines.push('## 五、正式 AI 入口（FormalAIEntryBindingV1）')
   lines.push('')
-  lines.push(`共 ${formalEntries.length} 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio 使用独立冻结音频执行器，文本入口不补默认字段。`)
+  lines.push(`共 ${formalEntries.length} 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。`)
   lines.push('')
   lines.push('| entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |')
   lines.push('|---|---|---|---|---|---|---|')

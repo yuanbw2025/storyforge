@@ -239,7 +239,7 @@ export async function generateAiTownDirectorCandidateV1(input: {
       worldGroupId: boundary.scope.worldGroupId,
       productRuntimeSessionId: input.productRuntimeSessionId,
       sourceKeys: ['aiTownDirectorRuntime'],
-      provider: input.aiConfig?.provider,
+      modelConfig: input.aiConfig, provider: input.aiConfig?.provider,
       model: input.aiConfig?.model,
       inputBudgetMaxTokens: 20_000,
     })

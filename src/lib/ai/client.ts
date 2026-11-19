@@ -1,3 +1,4 @@
+import { inheritModelCapacityV1, prepareModelCapacityV1, freezeModelCapacityV1, modelInputBudgetV1 } from './model-capacity'
 import { assertGenerationAvailable } from '../showcase/policy'
 import { streamCodex, CODEX_BASE_URL, assertModelDispatchGuardV1, modelDispatchWasCancelledV1, ModelDispatchGuardRejectedV1, type CodexRequestRefV1 } from './codex-transport'
 import type { CodexTerminalFailureV1 } from './codex-terminal-failure'
@@ -31,7 +32,7 @@ export interface AICallMeta {
 
 export function resolveRequestConfig(config: AIConfig, meta?: AICallMeta) {
   const state = useAIConfigStore.getState()
-  return resolveAIConfigForTask({
+  const resolution = resolveAIConfigForTask({
     category: meta?.category,
     requestedConfig: config,
     globalConfig: state.config,
@@ -45,6 +46,7 @@ export function resolveRequestConfig(config: AIConfig, meta?: AICallMeta) {
     routes: state.taskRoutes,
     explicitOverrides: meta?.configOverrides,
   })
+  return { ...resolution, config: inheritModelCapacityV1(config, resolution.config) }
 }
 
 export type AIRequestConfigResolution = ReturnType<typeof resolveRequestConfig>
@@ -57,6 +59,7 @@ export interface AIRequestSettingsV1 {
   stream: boolean
   /** Configured values are distinct from provider-specific transmitted values. */
   requested: { temperature: number | null; maxTokens: number | null }
+  modelCapacity?: import('./model-capacity').ModelCapacityV1
   parameters: Record<string, unknown>
 }
 
@@ -68,6 +71,7 @@ export function describeResolvedAIRequestSettingsV1(
   options?: ChatRequestOptions,
 ): AIRequestSettingsV1 {
   const config = resolution.config
+  const modelCapacity = freezeModelCapacityV1(config)
   const parameters: Record<string, unknown> = {}
   if (config.provider !== 'codex') {
     const body = JSON.parse(buildRequest(config, [], stream, options).body) as Record<string, unknown>
@@ -83,7 +87,7 @@ export function describeResolvedAIRequestSettingsV1(
     version: 'ai-request-settings-v1', provider: config.provider, model: config.model,
     transport: config.provider === 'codex' ? 'codex-bridge' : 'openai-compatible', stream,
     requested: { temperature: config.temperature ?? null, maxTokens: config.maxTokens ?? null },
-    parameters,
+    parameters, modelCapacity,
   }
 }
 
@@ -201,6 +205,8 @@ function buildRequest(
   options?: ChatRequestOptions,
 ) {
   // 基础请求体：所有 provider 都需要的字段
+  const capacity = freezeModelCapacityV1(config)
+  config = { ...config, maxTokens: modelInputBudgetV1(capacity, config.maxTokens).outputBudget }
   const body: Record<string, unknown> = {
     model: config.model,
     messages,
@@ -323,12 +329,12 @@ export async function chatWithImagesV1(
   const parsedImages = images.map(parseChatImageInputV1)
   const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
   warnRouteFallback(resolved, meta)
-  config = resolved.config
+  config = await prepareModelCapacityV1(resolved.config)
   if (config.provider === 'codex') throw new CodexRequestError('Codex 本机连接目前只支持文本；图片审查请选择支持图片的 API 提供商。')
   const imageTokenReserve = parsedImages.reduce((sum, image) => sum + (image.detail === 'high' ? 1_200 : 300), 0)
   const trimmed = trimMessagesToFit(
-    messages, config.provider, config.model, config.maxTokens, config.contextWindow,
-    estimateChatRequestOptionsTokens(options) + imageTokenReserve,
+    messages, config.provider, config.model, config.maxTokens, undefined,
+    estimateChatRequestOptionsTokens(options) + imageTokenReserve, config.modelCapacity,
   )
   if (trimmed.trimmed && meta?.contextOverflowPolicy === 'reject') {
     throw new Error(
@@ -389,8 +395,8 @@ export async function* streamChat(
   assertGenerationAvailable()
   const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
   warnRouteFallback(resolved, meta)
-  config = resolved.config
-  const trimmed = trimMessagesToFit(messages, config.provider, config.model, config.maxTokens, config.contextWindow)
+  config = await prepareModelCapacityV1(resolved.config)
+  const trimmed = trimMessagesToFit(messages, config.provider, config.model, config.maxTokens, undefined, 0, config.modelCapacity)
   if (trimmed.trimmed && meta?.contextOverflowPolicy === 'reject') {
     throw new Error(
       `当前模型上下文窗口不足以容纳完整请求（${trimmed.totalInputTokens}/${trimmed.inputBudget} tokens）；已拒绝静默裁剪。`,
@@ -563,14 +569,14 @@ export async function chat(
   }
   const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
   warnRouteFallback(resolved, meta)
-  config = resolved.config
+  config = await prepareModelCapacityV1(resolved.config)
   const trimmed = trimMessagesToFit(
     messages,
     config.provider,
     config.model,
     config.maxTokens,
-    config.contextWindow,
-    estimateChatRequestOptionsTokens(options),
+    undefined,
+    estimateChatRequestOptionsTokens(options), config.modelCapacity,
   )
   if (trimmed.trimmed && meta?.contextOverflowPolicy === 'reject') {
     throw new Error(

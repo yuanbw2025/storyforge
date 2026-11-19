@@ -98,7 +98,7 @@ export async function runChapterPostAdoptionV1(input: {
       worldGroupId: transitionWorldGroupId,
       chapterId: task.chapterId,
       outlineNodeId: transitionChapter?.outlineNodeId ?? null,
-      provider: requestConfig.provider,
+      modelConfig: requestConfig, provider: requestConfig.provider,
       model: requestConfig.model,
       sourceKeys: [...sourceKeys],
       stateReferenceText: task.chapterPlainText,
@@ -342,7 +342,7 @@ export async function runChapterPostAdoptionV1(input: {
       const summaries = await rebuildProjectNarrativeSummaries({ projectId: project.id!, scope })
       const embCfg = useAIConfigStore.getState().embedding
       if (isEmbeddingReady(embCfg)) {
-        void ensureChunkEmbeddings({ projectId: project.id!, cfg: embCfg, scope })
+        void ensureChunkEmbeddings({ projectId: project.id!, cfg: embCfg, scope, chapterIds: [task.chapterId] })
           .catch(e => console.warn('[ChapterPostAdoption] 语义索引补建失败（关键词检索仍可用）:', e))
       }
       updateSnapshot(await succeedChapterPostAdoptionStepV1({

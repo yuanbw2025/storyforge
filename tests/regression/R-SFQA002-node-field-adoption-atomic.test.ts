@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import Dexie from 'dexie'
@@ -54,7 +56,9 @@ describe.sequential('D4a native first intent and attributable field write', () =
     await db.delete(); await db.open(); usage = []
     vi.stubGlobal('window', undefined)
     useAIConfigStore.getState().setConfig({ provider: 'custom', apiKey: '', model: 'isolated-node-model',
-      baseUrl: 'http://127.0.0.1:9/v1', temperature: .5, maxTokens: 8_000, contextWindow: 128_000 })
+      baseUrl: 'http://127.0.0.1:9/v1', temperature: .5, maxTokens: 8_000 })
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 32_768)
     const original = usageLog.recordUsage
     vi.spyOn(usageLog, 'recordUsage').mockImplementation(function (this: unknown, input) {
       const pending = original.call(this, input); usage.push(pending); return pending

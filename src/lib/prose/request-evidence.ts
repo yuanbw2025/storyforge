@@ -1,3 +1,4 @@
+import { parseModelCapacityV1 } from '../ai/model-capacity'
 import type { AIRequestSettingsV1 } from '../ai/client'
 import type { ChatMessage } from '../types'
 import { supportsAgnesThinkingModeV1 } from '../ai/agnes-parameters'
@@ -13,12 +14,16 @@ export function parseProseRequestSettingsV1(value: unknown): AIRequestSettingsV1
   const row = value as AIRequestSettingsV1
   const exact = (value: unknown, keys: string[]) => !!value && typeof value === 'object' && !Array.isArray(value)
     && Object.keys(value).sort().join('|') === keys.sort().join('|')
-  if (!exact(row, ['version', 'provider', 'model', 'transport', 'stream', 'requested', 'parameters'])
+  if (!exact(row, ['version', 'provider', 'model', 'transport', 'stream', 'requested', 'parameters', ...(row?.modelCapacity ? ['modelCapacity'] : [])])
     || row.version !== 'ai-request-settings-v1' || typeof row.provider !== 'string' || !row.provider || row.provider.length > 100
     || typeof row.model !== 'string' || !row.model || row.model.length > 300
     || !['openai-compatible', 'codex-bridge'].includes(row.transport) || typeof row.stream !== 'boolean'
     || !exact(row.requested, ['temperature', 'maxTokens'])
     || !row.parameters || typeof row.parameters !== 'object' || Array.isArray(row.parameters)) throw new Error('正文模型参数证据无效。')
+  if (row.modelCapacity) {
+    const capacity = parseModelCapacityV1(row.modelCapacity)
+    if (capacity.provider !== row.provider || capacity.model !== row.model) throw new Error('正文模型能力身份不匹配。')
+  }
   for (const [key, number] of Object.entries(row.requested)) {
     if (number !== null && (typeof number !== 'number' || !Number.isFinite(number) || number < 0 || (key === 'maxTokens' && !Number.isSafeInteger(number)))) throw new Error('正文要求参数无效。')
   }

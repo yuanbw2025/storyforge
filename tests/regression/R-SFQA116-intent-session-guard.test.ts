@@ -1,3 +1,5 @@
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -64,6 +66,9 @@ beforeEach(async () => {
   store.setState(store.getInitialState(), true)
   await db.delete(); await db.open()
   vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => { throw new Error('Unexpected network request') }))
+
+  resetModelCapacityForTestsV1()
+  await seedModelAllocationFixtureV1(config, 32768)
 })
 afterEach(async () => {
   store.getState().cancelPendingLoad()

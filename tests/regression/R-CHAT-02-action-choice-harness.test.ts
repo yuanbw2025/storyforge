@@ -1,3 +1,7 @@
+import * as artifactStore from '../../src/lib/memory/artifact-store'
+import { createContextManifestV1 } from '../../src/lib/agent/run/context-manifest'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
 import {chatActionOutcomeFixture, chatActionChoiceFixture} from '../helpers/chat-action-outcome'
 import {afterEach, beforeEach, expect, it, vi} from 'vitest'
 import {db} from '../../src/lib/db/schema'
@@ -638,4 +642,53 @@ it('rechecks cancellation in the command transaction after asynchronous choice p
   await expect(adoptInteractionRuntimeCandidateV1({scope: f.scope, runId: generated.snapshot.run.id})).rejects.toThrow('已取消、暂停或变化')
   expect(await readProductRuntimeState(f.sessionId)).toEqual(before)
   expect(run.calls).toHaveLength(2); expect(run.reviews).toHaveBeenCalledTimes(1)
+})
+
+it.each(['above-contract', 'below-source'] as const)('rejects a rehashed choice manifest whose budget is %s', async mode => {
+  const f = await start(), run = input(f), generated = await generateInteractionRuntimeCandidateV1(run.request)
+  const before = await readProductRuntimeState(f.sessionId)
+  const snapshot = structuredClone(generated.snapshot)
+  const event = snapshot.events.find(event => event.type === 'evidence.artifact.recorded'
+    && event.payload.stepId === CHAT_ACTION_CHOICE_STEP_V1 && event.payload.artifactKind === 'context-packet')!
+  if (event.type !== 'evidence.artifact.recorded') throw new Error('Missing actual source packet')
+  const actualRead = artifactStore.readAgentRunArtifactExactV1
+  const packet = JSON.parse(await actualRead({projectId: f.scope.projectId, artifactKind: 'context-packet', contentHash: event.payload.contentHash}))
+  const {manifestHash: _manifestHash, ...body} = packet.manifest
+  packet.manifest = await createContextManifestV1({...body, inputBudget: mode === 'above-contract' ? 16001 : body.totalInputTokens - 1})
+  const context = snapshot.events.find(event => event.type === 'context.assembled' && event.payload.stepId === CHAT_ACTION_CHOICE_STEP_V1)!
+  if (context.type !== 'context.assembled') throw new Error('Missing actual assembly')
+  context.payload.manifestHash = packet.manifest.manifestHash
+  vi.spyOn(artifactStore, 'readAgentRunArtifactExactV1').mockImplementation(request => request.contentHash === event.payload.contentHash
+    ? Promise.resolve(JSON.stringify(packet)) : actualRead(request))
+  await expect(choiceEvidence.readChatActionChoiceEvidenceV1({scope: f.scope, snapshot, participantKey: 'guard'})).rejects.toThrow('来源证据不一致')
+  expect(run.calls).toHaveLength(2); expect(run.reviews).toHaveBeenCalledTimes(1)
+  expect(await readProductRuntimeState(f.sessionId)).toEqual(before)
+})
+
+it('recovers the exact saved selection after a larger service allocation without rewriting historical budgets or repeating choice', async () => {
+  const config = {provider: 'custom' as const, model: 'allocation-recovery', baseUrl: 'http://127.0.0.1:9/v1', apiKey: '', temperature: 0, maxTokens: 9000}
+  resetModelCapacityForTestsV1()
+  await seedModelAllocationFixtureV1(config, 8192)
+  vi.spyOn(navigator, 'locks', 'get').mockReturnValue({request: async (_name: string, _options: unknown, callback: (lock: object) => unknown) => callback({})} as unknown as LockManager)
+  const chat = vi.spyOn(ai, 'chat').mockImplementation(async messages => JSON.stringify(messages[0].content.startsWith('这是尚未发生的角色行动选择草稿')
+    ? chatActionChoiceFixture(messages, choice) : JSON.stringify(messages).includes('本次持久化行动候选') ? chatActionReviewOutputFixture() : chatActionOutcomeFixture(messages, action)))
+  const f = await start(), run = input(f)
+  const {runAI: _runAI, runReviewAI: _runReviewAI, ...request} = run.request
+  await expect(generateInteractionRuntimeCandidateV1({...request, aiConfig: config, onActionChoiceBoundary: boundary => {
+    if (boundary === 'raw-response.saved') throw new Error('allocation-fixture-crash')
+  }})).rejects.toThrow('allocation-fixture-crash')
+  const saved = await current(f), before = await readProductRuntimeState(f.sessionId)
+  const packet = saved.events.find(event => event.type === 'evidence.artifact.recorded' && event.payload.stepId === CHAT_ACTION_CHOICE_STEP_V1 && event.payload.artifactKind === 'context-packet')!
+  if (packet.type !== 'evidence.artifact.recorded') throw new Error('Missing source packet')
+  const exact = await readAgentRunArtifactExactV1({projectId: f.scope.projectId, artifactKind: 'context-packet', contentHash: packet.payload.contentHash})
+  expect(JSON.parse(exact).manifest.inputBudget).toBeLessThan(16000)
+  resetModelCapacityForTestsV1()
+  await seedModelAllocationFixtureV1(config, 32768)
+  await resumeChatNarrativeActionV1({scope: f.scope, runId: saved.run.id, aiConfig: config})
+  const resumed = await current(f)
+  await expect(choiceEvidence.readChatActionChoiceEvidenceV1({scope: f.scope, snapshot: resumed, participantKey: 'guard'})).resolves.toBeDefined()
+  expect(chat).toHaveBeenCalledTimes(3)
+  expect(resumed.events.filter(event => event.type === 'model.requested' && event.payload.stepId === CHAT_ACTION_CHOICE_STEP_V1)).toHaveLength(1)
+  expect(await readAgentRunArtifactExactV1({projectId: f.scope.projectId, artifactKind: 'context-packet', contentHash: packet.payload.contentHash})).toBe(exact)
+  expect(await readProductRuntimeState(f.sessionId)).toEqual(before)
 })

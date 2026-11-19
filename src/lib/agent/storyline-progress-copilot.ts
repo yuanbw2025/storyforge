@@ -310,7 +310,7 @@ export async function prepareStorylineProgressCopilotV1(
     scope,
     worldGroupId,
     chapterId: input.chapterId,
-    provider: config.provider,
+    modelConfig: config, provider: config.provider,
     model: config.model,
     sourceKeys: [...skill.contextSourceKeys],
     inputBudgetMaxTokens: contextPolicy.maxInputTokens,

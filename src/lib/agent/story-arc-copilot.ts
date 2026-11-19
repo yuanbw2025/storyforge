@@ -1579,6 +1579,7 @@ export async function prepareStoryArcCopilot(
   ]
   const contextGatewayExecution = gatewayRequired
     ? await executeContextGatewayV1({
+    modelConfig: config,
         skill,
         scope: scope!,
         worldGroupId,
@@ -1609,7 +1610,7 @@ export async function prepareStoryArcCopilot(
         projectId: input.projectId,
         scope,
         worldGroupId,
-        provider: config.provider,
+        modelConfig: config, provider: config.provider,
         model: config.model,
         sourceKeys: [...skill.contextSourceKeys],
         inputBudgetMaxTokens: contextPolicy.maxInputTokens,

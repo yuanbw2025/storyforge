@@ -375,6 +375,7 @@ export async function prepareCharacterCopilot(input: {
   }
   const contextGatewayExecution = gatewayRequired
     ? await executeContextGatewayV1({
+    modelConfig: config,
         skill,
         scope: scope!,
         worldGroupId,

@@ -11,6 +11,7 @@ import { readAgentRunArtifactExactV1 } from '../../src/lib/memory/artifact-store
 import { chat, type ChatResult } from '../../src/lib/ai/client'
 import * as usageLog from '../../src/lib/ai/usage-log'
 import { estimateTokens } from '../../src/lib/ai/context-budget'
+import { discoverModelCapacityV1, resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { useNodeFlowStore } from '../../src/stores/node-flow'
 import { AUTHORING_NODE_BY_ID, defaultConfigForTemplate } from '../../src/lib/node-authoring/catalog'
@@ -25,7 +26,7 @@ import { seedCurrentWorkspace } from '../helpers/current-workspace'
 const OLD = 'SFQA051_OLD_CANON'
 const NEW = 'SFQA051_NEW_CANON'
 const config = { provider: 'custom' as const, apiKey: 'synthetic-only', model: 'isolated-sfqa051',
-  baseUrl: 'http://127.0.0.1:9/v1', temperature: 0, maxTokens: 6_000, contextWindow: 128_000 }
+  baseUrl: 'http://127.0.0.1:9/v1', temperature: 0, maxTokens: 6_000 }
 let requests: string[]
 let responseContent: string
 let usageWrites: Promise<unknown>[]
@@ -33,6 +34,7 @@ let usageWrites: Promise<unknown>[]
 beforeEach(async () => {
   await db.delete(); await db.open()
   requests = []; usageWrites = []; responseContent = ''
+  resetModelCapacityForTestsV1()
   useAIConfigStore.setState({ config, taskRoutes: {} })
   const recordUsage = usageLog.recordUsage
   vi.spyOn(usageLog, 'recordUsage').mockImplementation(input => {
@@ -41,11 +43,16 @@ beforeEach(async () => {
     return write
   })
   vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (url, options) => {
+    if (options?.method === 'GET' && String(url) === 'http://127.0.0.1:9/api/v1/models') return Response.json({ models: [{ type: 'llm', key: config.model, loaded_instances: [{ config: { context_length: 128_000 } }] }] })
     if (String(url) !== config.baseUrl + '/chat/completions' || options?.method !== 'POST') throw new Error('Unexpected real request in SFQA051')
     requests.push(String(options.body))
     return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: responseContent }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 29, completion_tokens: 11, total_tokens: 40 } }), { headers: { 'Content-Type': 'application/json' } })
   }))
+  // This recovery fixture needs a finite large allocation, now established by
+  // the actual service parser instead of the removed hand-entered preference.
+  expect(await discoverModelCapacityV1(config)).toMatchObject({ confidence: 'service', totalWindow: 128_000 })
+  expect(fetch).toHaveBeenCalledTimes(1)
 })
 
 afterEach(async () => {

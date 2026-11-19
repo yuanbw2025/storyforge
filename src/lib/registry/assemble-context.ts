@@ -1,6 +1,7 @@
+import { prepareModelCapacityV1, getModelCapacityV1, modelInputBudgetV1, type ModelCapacityV1 } from '../ai/model-capacity'
 /** assembleContext · 当前唯一上下文装配入口。 */
 import Dexie from 'dexie'
-import { estimateTokens, getModelPreset, type ContextLayer, type ContextSegment } from '../ai/context-budget'
+import { estimateTokens, type ContextLayer, type ContextSegment } from '../ai/context-budget'
 import { assertRuntimeContextOwner, CONTEXT_SOURCES, CONTEXT_SOURCE_BY_KEY } from './context-sources'
 import type {
   AssembleContextInput,
@@ -120,14 +121,15 @@ async function assertSourceTransformResult(
  * 输入预算 = 所选模型的上下文窗口(减输出预留与安全边际)。
  * 这样上下文只在「真的接近模型窗口」时才按优先级软裁,而不是被固定小预算提前砍。
  */
-function deriveInputBudget(input: AssembleContextInput): number {
-  if (input.inputBudgetTokens && input.inputBudgetTokens > 0) return input.inputBudgetTokens
+function deriveInputBudget(input: AssembleContextInput, capacity?: ModelCapacityV1): number {
+  if (!capacity && input.inputBudgetTokens && input.inputBudgetTokens > 0) return input.inputBudgetTokens
   let modelBudget = FALLBACK_INPUT_BUDGET
-  if (input.provider && input.model) {
-    const preset = getModelPreset(input.provider, input.model)
-    const budget = preset.maxContext - preset.maxOutput - Math.round(preset.maxContext * 0.05)
-    if (budget > 0) modelBudget = budget
+  if (capacity) {
+    modelBudget = Math.max(1, modelInputBudgetV1(capacity, input.modelConfig?.maxTokens).inputBudget - 1024)
+  } else if (input.provider && input.model) {
+    modelBudget = modelInputBudgetV1(getModelCapacityV1({ provider: input.provider, model: input.model, baseUrl: '', apiKey: '', temperature: 0, maxTokens: 0 })).inputBudget
   }
+  if (capacity && input.inputBudgetTokens && input.inputBudgetTokens > 0) modelBudget = Math.min(modelBudget, input.inputBudgetTokens)
   if (input.inputBudgetMaxTokens && input.inputBudgetMaxTokens > 0) {
     return Math.min(modelBudget, input.inputBudgetMaxTokens)
   }
@@ -139,9 +141,12 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
   input = { ...input, scope: input.scope && { ...input.scope } }
   const scope = await resolveReadScope(input)
   const resolvedBase: AssembleContextInput = { ...input, projectId: scope.projectId, scope }
+  // Connection credentials are used only by capability discovery, never by registered readers.
+  delete resolvedBase.modelConfig
   const selected = selectSources(resolvedBase)
   await assertContextAnchors(resolvedBase, selected)
-  const inputBudget = deriveInputBudget(input)
+  const preparedConfig = input.modelConfig ? await prepareModelCapacityV1(input.modelConfig) : undefined
+  const inputBudget = deriveInputBudget(input, preparedConfig?.modelCapacity)
   const needsContinuity = selected.some(source => (
     source.key === 'previousChapterEnding'
     || source.key === 'chapterContinuityHandoff'

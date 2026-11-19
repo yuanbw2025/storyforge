@@ -146,7 +146,7 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
   const sourceKeys = session.importTarget === 'project' ? ['manualText', CATEGORIES] : ['manualText']
   const assembled = await assembleContext({ scope, projectId: input.projectId, worldGroupId, sourceKeys,
     documentImportSessionId: session.id, manualSourceText: text, inputBudgetMaxTokens: MAX_INPUT_TOKENS,
-    provider: resolved.config.provider, model: resolved.config.model })
+    modelConfig: resolved.config, provider: resolved.config.provider, model: resolved.config.model })
   const originalSegment = assembled.segments[assembled.included.indexOf('manualText')]
   if (originalSegment?.content !== text)
     fail('正式来源必须完整交付本块原文，不能以截断材料发送。')
@@ -211,14 +211,17 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
     throw retained.report
   }
   let raw: string
+  const providerOptions = resolved.config.provider === 'deepseek'
+    ? { responseFormat: 'json_object' as const, thinkingMode: 'disabled' as const }
+    : resolved.config.provider === 'custom' ? { responseFormat: 'json_object' as const } : undefined
   try {
     raw = entryId === 'import.reference-chunk.parse.private'
       ? await executeFrozenFormalAIEntryV1('import.reference-chunk.parse.private', formalEntry, skill,
       'src/lib/import/document-parse-durable.ts', messages, config, { ...metadata, category: 'import.parse-chunk' },
-      input.signal, result, resolved.config.provider === 'deepseek' ? { responseFormat: 'json_object', thinkingMode: 'disabled' } : undefined, resolved)
+      input.signal, result, providerOptions, resolved)
       : await executeFrozenFormalAIEntryV1('import.document-chunk.parse', formalEntry, skill,
       'src/lib/import/document-parse-durable.ts', messages, config, { ...metadata, category: 'import.parse-chunk' },
-      input.signal, result, resolved.config.provider === 'deepseek' ? { responseFormat: 'json_object', thinkingMode: 'disabled' } : undefined, resolved)
+      input.signal, result, providerOptions, resolved)
   } catch (error) {
     const retained = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
     if (modelDispatchWasCancelledV1(result) || result.requestLifecycle?.phase === 'pre-dispatch') {

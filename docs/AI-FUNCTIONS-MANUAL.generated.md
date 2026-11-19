@@ -424,16 +424,16 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:796`<br/>`src/lib/node-authoring/domain-execution.ts:855` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1880` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1858` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1848` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1879` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1857` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1847` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:660` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:576` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:194` |
-| `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
+| `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:376` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:945` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
 | `node.creation` | `src/lib/node-authoring/executor.ts:408` |
@@ -460,11 +460,11 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 ### 动态 category 调用
 
 - `src/lib/adventure/harness.ts:396 · chat`
-- `src/lib/agent/character-copilot.ts:518 · chat`
+- `src/lib/agent/character-copilot.ts:519 · chat`
 - `src/lib/agent/character-driven-copilot.ts:505 · chat`
-- `src/lib/agent/character-lifecycle-copilot.ts:448 · chat`
+- `src/lib/agent/character-lifecycle-copilot.ts:449 · chat`
 - `src/lib/agent/character-revision-copilot.ts:796 · chat`
-- `src/lib/agent/character-supplement-copilot.ts:581 · chat`
+- `src/lib/agent/character-supplement-copilot.ts:582 · chat`
 - `src/lib/agent/context-compression.ts:355 · chat`
 - `src/lib/agent/creative-rules-copilot.ts:448 · chat`
 - `src/lib/agent/inspiration-copilot.ts:345 · chat`
@@ -477,12 +477,12 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
 - `src/lib/agent/run/short-novel-durable.ts:195 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1659 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1711 · chat`
-- `src/lib/agent/story-core-copilot.ts:579 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1660 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1712 · chat`
+- `src/lib/agent/story-core-copilot.ts:580 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
-- `src/lib/agent/worldview-field-copilot.ts:932 · chat`
-- `src/lib/character-interaction/harness.ts:894 · chat`
+- `src/lib/agent/worldview-field-copilot.ts:933 · chat`
+- `src/lib/character-interaction/harness.ts:899 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:73 · chat`
 - `src/lib/character-interaction/situation-harness.ts:189 · chat`
 - `src/lib/comic/durable-production.ts:487 · chat`
@@ -494,17 +494,18 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/open-world/evolution-harness.ts:251 · chat`
 - `src/lib/open-world/harness.ts:150 · chat`
 - `src/lib/product-production/authoring-consultation.ts:175 · chat`
-- `src/lib/product-production/capabilities.ts:330 · chat`
+- `src/lib/product-production/capabilities.ts:329 · chat`
 - `src/lib/screenplay/durable-production.ts:486 · chat`
 - `src/lib/ttrpg/gm-actor-harness.ts:481 · chat`
 - `src/lib/ttrpg/gm-harness.ts:550 · chat`
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 71 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio 使用独立冻结音频执行器，文本入口不补默认字段。
+共 72 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
+| `world.map.paint-preview` | `world-origin.map-config` | `geography.world-map-paint` | auxiliary / authoring-draft / image | `map-paint-image-preview` | 禁止 | `src/lib/world-map/atlas/paint-preview.ts` |
 | `node.worldview.field` | `world-origin.worldview-field` | `worldview.dimension` | formal / durable-run | `node-worldview-field-candidate` | `worldviews` | `src/lib/node-authoring/field-producer.ts` |
 | `node.story-core.field` | `world-origin.story-core` | `story.core` | formal / durable-run | `node-story-core-field-candidate` | `storyCores` | `src/lib/node-authoring/field-producer.ts` |
 | `chat.source-unit-confirmation` | `chat.source-unit-confirmation.v1` | `authoring.chat-source-unit-confirmation` | formal / durable-run | `chat-source-unit-confirmation` | `chatAuthoringDrafts` | `src/lib/character-interaction/source-unit-confirmation-harness.ts` |
@@ -591,4 +592,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `8132a0e38`
+生成时间基准:commit `c63ea888a`

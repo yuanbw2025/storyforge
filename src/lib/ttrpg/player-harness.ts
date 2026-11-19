@@ -280,7 +280,7 @@ export async function generateTtrpgPlayerActionCandidateV1(input: {
       productRuntimeSessionId: input.productRuntimeSessionId,
       ttrpgPlayerActorKey: view.seat.actorKey,
       sourceKeys: ['ttrpgPlayerRuntime'],
-      provider: input.aiConfig?.provider, model: input.aiConfig?.model,
+      modelConfig: input.aiConfig, provider: input.aiConfig?.provider, model: input.aiConfig?.model,
       inputBudgetMaxTokens: 15_000,
     })
     if (!assembled.included.includes('ttrpgPlayerRuntime')) fail('正式 TTRPG 玩家上下文为空')

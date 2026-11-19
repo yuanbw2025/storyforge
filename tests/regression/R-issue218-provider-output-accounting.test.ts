@@ -26,14 +26,17 @@ describe('issue218 · 官方兼容端点输出预算与流式用量', () => {
   ] as const)('仅实际支持的官方目标请求并读取 usage-only SSE：%s %s', async (provider, baseUrl) => {
     const config = { ...base, provider, baseUrl, model: provider === 'gemini' ? 'gemini-3.5-flash' : base.model }
     const { streamChat } = await client(config)
-    const fetch = vi.fn(async (_url: unknown, init: RequestInit) => sse(JSON.parse(String(init.body)).stream_options?.include_usage === true))
+    const fetch = vi.fn(async (_url: unknown, init: RequestInit) => init.method === 'GET'
+      ? Response.json({ name: 'models/gemini-3.5-flash', inputTokenLimit: 1048576, outputTokenLimit: 65536 })
+      : sse(JSON.parse(String(init.body)).stream_options?.include_usage === true))
     vi.stubGlobal('fetch', fetch)
     const result: import('../../src/lib/ai/client').StreamResult = {}
     let text = ''
     for await (const chunk of streamChat([{ role: 'user', content: '合成请求' }], config, undefined, result)) text += chunk
     expect(text).toBe('合成协议回执')
     expect(result.usage).toEqual({ inputTokens: 2, outputTokens: 3, totalTokens: 5 })
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch.mock.calls.filter(([, init]) => init.method === 'POST')).toHaveLength(1)
+    expect(fetch.mock.calls.filter(([, init]) => init.method === 'GET')).toHaveLength(provider === 'gemini' ? 1 : 0)
   })
 
   it('Poe 已配置的正数预算实际发送且记录，保留原采样策略', async () => {
@@ -71,11 +74,11 @@ describe('issue218 · 官方兼容端点输出预算与流式用量', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
-  it('Poe 的零预算保留原服务默认含义，不发送零或新的上限', async () => {
+  it('Poe 的自动预算发送软件计算的有限上限，保存偏好仍为零', async () => {
     const config = { ...base, maxTokens: 0 }
     const { chat } = await client(config)
     const fetch = vi.fn(async (_url: unknown, init: RequestInit) => {
-      expect(JSON.parse(String(init.body))).not.toHaveProperty('max_tokens')
+      expect(JSON.parse(String(init.body)).max_tokens).toBe(4000)
       return new Response('{"choices":[{"message":{"content":"合成协议回执"},"finish_reason":"stop"}]}')
     })
     vi.stubGlobal('fetch', fetch)

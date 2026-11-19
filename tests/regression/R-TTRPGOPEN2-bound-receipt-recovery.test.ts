@@ -1,3 +1,4 @@
+import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { createSavedOpenDesignFixtureV1, openDesignResponseFixtureV1 } from '../helpers/ttrpg-open-design'
@@ -10,9 +11,10 @@ import * as artifacts from '../../src/lib/memory/artifact-store'
 import { sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import type { CodexReceipt } from '../../src/lib/ai/codex-transport'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 
-const config = { provider: 'codex' as const, model: 'fixture-codex', apiKey: '', baseUrl: '/storyforge/local-codex/v1',
-  temperature: 0, maxTokens: 16_000, contextWindow: 131_072 }
+const config = syntheticFrozenAllocationV1({ provider: 'codex' as const, model: 'fixture-codex', apiKey: '', baseUrl: '/storyforge/local-codex/v1',
+  temperature: 0, maxTokens: 16_000 }, 131_072, 16_384)
 const bindingSchema = 'storyforge.ttrpg-open-design-local-request'
 async function protectedRows() {
   return JSON.stringify(await Promise.all([db.works.toArray(), db.ttrpgAuthoringDrafts.toArray(), db.ttrpgRulePacks.toArray(), db.worldReleases.toArray()]))
@@ -90,6 +92,19 @@ describe('R-TTRPGOPEN2 original local request recovery into its owned candidate'
     } } })
   })
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); db.close() })
+
+  it('keeps an unknown bridge bounded before any request despite a legacy manual window', async () => {
+    resetModelCapacityForTestsV1()
+    const f = await createSavedOpenDesignFixtureV1(), before = await protectedRows()
+    const fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
+    await expect(generateTtrpgOpenAuthoringDesignCandidateV1({ ...f,
+      aiConfig: { ...config, modelCapacity: undefined, contextWindow: 131_072 },
+    })).rejects.toThrow(/当前连接输入预算不足.*尚未发送请求/)
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(await protectedRows()).toBe(before)
+    expect(await db.agentRunEvents.toCollection().filter(row => row.type === 'model.requested').count()).toBe(0)
+  })
 
   it('saves the exact reference before one normal POST and raw plus usage before owner handoff; adoption is still separate', async () => {
     const b = await bridge(); b.normal()

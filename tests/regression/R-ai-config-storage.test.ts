@@ -156,28 +156,28 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     expect(useAIConfigStore.getState().activePresetId).toBe(id)
   })
 
-  it('上下文窗口即时持久化，修改模型和切换 provider 不会静默清除', async () => {
+  it('旧手填窗口不再持久化，修改模型和切换 provider 保持自动容量', async () => {
     const useAIConfigStore = await freshStore()
     useAIConfigStore.getState().setConfig({ contextWindow: 2_100_000 })
     useAIConfigStore.getState().setConfig({ model: 'custom-model' })
     useAIConfigStore.getState().switchProvider('ollama')
 
-    expect(useAIConfigStore.getState().config.contextWindow).toBe(2_100_000)
-    expect(JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}').contextWindow).toBe(2_100_000)
+    expect(useAIConfigStore.getState().config.contextWindow).toBeUndefined()
+    expect(JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}').contextWindow).toBeUndefined()
 
     const reloadedStore = await freshStore()
-    expect(reloadedStore.getState().config.contextWindow).toBe(2_100_000)
+    expect(reloadedStore.getState().config.contextWindow).toBeUndefined()
   })
 
-  it('保存和应用预设时明确采用预设中的上下文窗口', async () => {
+  it('保存和应用预设时移除旧手填窗口', async () => {
     const useAIConfigStore = await freshStore()
     useAIConfigStore.getState().setConfig({ contextWindow: 131_072 })
     const id = useAIConfigStore.getState().saveAsPreset('128K 本地模型')
     useAIConfigStore.getState().setConfig({ contextWindow: 2_100_000 })
     useAIConfigStore.getState().applyPreset(id)
 
-    expect(useAIConfigStore.getState().config.contextWindow).toBe(131_072)
-    expect(useAIConfigStore.getState().presets.find(preset => preset.id === id)?.config.contextWindow).toBe(131_072)
+    expect(useAIConfigStore.getState().config.contextWindow).toBeUndefined()
+    expect(useAIConfigStore.getState().presets.find(preset => preset.id === id)?.config.contextWindow).toBeUndefined()
   })
 
   it('LongCat provider 使用官方 OpenAI 兼容端点和 1M 上下文预设', async () => {

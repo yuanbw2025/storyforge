@@ -496,7 +496,7 @@ export async function generateTtrpgGmNarrationCandidateV1(input: {
       worldGroupId: boundary.scope.worldGroupId,
       productRuntimeSessionId: input.productRuntimeSessionId,
       sourceKeys: ["ttrpgPublicNarration"],
-      provider: input.aiConfig?.provider,
+      modelConfig: input.aiConfig, provider: input.aiConfig?.provider,
       model: input.aiConfig?.model,
       inputBudgetMaxTokens: 18_000,
     });
