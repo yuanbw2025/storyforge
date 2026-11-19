@@ -4,6 +4,7 @@ import { registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { containTextareaWheel, parseCssPixels } from './textarea-scroll'
 import ResizableInputArea, { type AreaControlV1 } from './ResizableInputArea'
+import MarkdownReadView from './MarkdownReadView'
 import type { InputAreaLayoutOptionsV1 } from '../../lib/input-area-layout'
 
 import { localSaveIdentityKeyV1, matchingLocalSaveAckV1, type LocalSaveContractV1, type LocalSaveIntentV1, type LocalSaveAckV1, type LocalSaveWitnessV1 } from '../../lib/authoring/local-save-evidence'
@@ -201,8 +202,8 @@ export function InlineInput({ value, onChange, placeholder, className, prefix, s
   </div>
 }
 
-export function InlineTextarea({ value, onChange, placeholder, className, minRows = 2, maxRows = 16, inputAreaLayout, localSave }: {
-  value: string; onChange: InlineSave; placeholder?: string; className?: string; minRows?: number; maxRows?: number; inputAreaLayout?: InputAreaLayoutOptionsV1; localSave?: LocalSaveContractV1
+export function InlineTextarea({ value, onChange, placeholder, className, minRows = 2, maxRows = 16, inputAreaLayout, localSave, markdownRead = false }: {
+  value: string; onChange: InlineSave; placeholder?: string; className?: string; minRows?: number; maxRows?: number; inputAreaLayout?: InputAreaLayoutOptionsV1; localSave?: LocalSaveContractV1; markdownRead?: boolean
 }) {
   const readable = value == null || typeof value === 'string'
   const editor = useInlineDraft(typeof value === 'string' ? value : '', onChange, readable, localSave)
@@ -236,7 +237,11 @@ export function InlineTextarea({ value, onChange, placeholder, className, minRow
     {localSave ? <LocalSaveStatus status={editor.localStatus} error={editor.error} retry={editor.saveFromEvent} />
       : <InlineSaveStatus error={editor.error} saving={editor.saving} retry={editor.saveFromEvent} />}
   </div>
-  const readView = <div onClick={editor.begin} className={`text-sm cursor-text py-0.5 ${value ? 'text-text-primary leading-relaxed whitespace-pre-wrap' : 'text-text-muted/40'}`}>
+  const readView = markdownRead && localSave && typeof value === 'string' && value.length > 0
+    ? <div className="min-w-0 text-sm text-text-primary leading-relaxed"><MarkdownReadView
+        key={localSaveIdentityKeyV1(localSave.identity)} value={value}
+        onRequestEdit={original => { if (original === value) editor.begin() }} /></div>
+    : <div onClick={editor.begin} className={`text-sm cursor-text py-0.5 ${value ? 'text-text-primary leading-relaxed whitespace-pre-wrap' : 'text-text-muted/40'}`}>
     {value || placeholder || '点击编辑…'}
   </div>
   return localSave ? <div className="min-w-0">{readView}<LocalSaveStatus status={editor.localStatus} error={editor.error} retry={editor.saveFromEvent} /></div> : readView
