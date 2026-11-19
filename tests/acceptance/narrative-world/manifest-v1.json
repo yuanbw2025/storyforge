@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261119-035-cover-input-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261119-035-repair-foundation-input-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261119-035-cover-input-v1.json",
+        "workPackage": "BUG-035-RF",
+        "note": "Preserve the035-S measured input receipt before the independent indexed local-repair foundation; no full035 or repaired-candidate acceptance is inferred."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261119-issue483-integrated-v5.json",
         "workPackage": "BUG-035-S",
