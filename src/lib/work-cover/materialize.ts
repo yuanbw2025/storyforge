@@ -19,10 +19,14 @@ import { storeWorkCoverOriginalAssetInTransactionV1 } from './assets'
 function imageBytes(payload: ArrayBuffer): ArrayBuffer {
   let value: unknown
   try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(payload)) } catch { throw new Error('图片服务未返回完整 JSON；原答已保留，不会重发。') }
-  const result = value as { data?: Array<{ b64_json?: unknown; url?: unknown }>; status?: unknown }
+  const result = value as Record<string, unknown> & { data?: Array<Record<string, unknown>>; status?: unknown }
+  const asyncKeys = ['task', 'task_id', 'taskId', 'job_id', 'jobId', 'polling_url', 'status_url', 'result_url', 'url']
+  const asynchronous = result && typeof result === 'object' && (asyncKeys.some(key => Object.prototype.hasOwnProperty.call(result, key))
+    || (result.status !== undefined && !['success', 'succeeded', 'completed'].includes(String(result.status))))
   if (!result || typeof result !== 'object' || !Array.isArray(result.data) || result.data.length !== 1
     || !result.data[0] || typeof result.data[0] !== 'object' || result.data[0].url !== undefined
-    || typeof result.data[0].b64_json !== 'string' || result.status === 'queued' || result.status === 'processing') throw new Error('此配方只接收同步单张 base64 图片；原答已保留，不下载或重发。')
+    || asyncKeys.some(key => Object.prototype.hasOwnProperty.call(result.data![0], key)) || asynchronous
+    || typeof result.data[0].b64_json !== 'string') throw new Error('此配方只接收同步单张 base64 图片；原答已保留，不下载或重发。')
   const base64 = result.data[0].b64_json
   if (!base64 || base64.length > 35_000_000 || base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new Error('图片 base64 非法或超过原图上限；不会重发。')
   let binary: string

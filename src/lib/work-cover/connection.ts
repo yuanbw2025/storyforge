@@ -17,6 +17,6 @@ export function readWorkCoverConnectionV1(): CoverImageConnectionV1 {
 
 export function workCoverConnectionLabelV1(): string {
   const connection = readWorkCoverConnectionV1()
-  const name = useAIConfigStore.getState().presets.find(item => item.id === connection.presetId)?.name ?? '图片连接'
+  const name = readPersistedAIConfigPresetV1(connection.presetId)?.name ?? '图片连接'
   return `${name} · ${connection.imageModel} · 单张，费用未知`
 }

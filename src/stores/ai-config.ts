@@ -137,7 +137,9 @@ export function getAIConfigPresetApiKeyV1(preset: AIConfigPreset): string {
 /** Paid dispatch must re-read the persisted preset: another tab may have
  * replaced its authority or paired credential since this store was loaded. */
 export function readPersistedAIConfigPresetV1(id: string): AIConfigPreset | null {
-  const rows: unknown = JSON.parse(localStorage.getItem(PRESETS_KEY) ?? '[]')
+  let rows: unknown
+  try { rows = JSON.parse(localStorage.getItem(PRESETS_KEY) ?? '[]') }
+  catch { throw new Error('连接预设数据无效，请重新配置。') }
   if (!Array.isArray(rows)) throw new Error('连接预设数据无效，请重新配置。')
   const preset = rows.find(row => row && typeof row === 'object' && row.id === id) as AIConfigPreset | undefined
   if (!preset) return null

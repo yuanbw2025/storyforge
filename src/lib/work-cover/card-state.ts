@@ -19,8 +19,13 @@ export async function readWorkCoverCardStateV1(scope: WorkspaceScope, includeRun
     if (asset) assertWorkCoverPortableRowV1('asset', asset as unknown as Record<string, unknown>)
     const run = includeRun && draft?.lastRunId != null ? await db.workCoverResponseBuffers.where('runId').equals(draft.lastRunId).first() : null
     if (run && !coverRecordInScopeV1(scope, run)) throw new Error('图片运行不属于这部作品。')
+    const returnedAsset = run?.state === 'candidate-ready' && run.assetId != null && run.assetId !== draft?.selectedAssetId
+      ? await db.workCoverAssets.get(run.assetId) : null
+    if (returnedAsset && (!coverRecordInScopeV1(scope, returnedAsset) || returnedAsset.workCode !== work.code
+      || returnedAsset.sourceRunId !== run?.runId)) throw new Error('已返回图片不属于原作品与请求。')
+    if (returnedAsset) assertWorkCoverPortableRowV1('asset', returnedAsset as unknown as Record<string, unknown>)
     return { work, draft: draft ?? null, brief: draft ? parseWorkCoverBriefV1(draft.briefJson) : null,
-      asset: asset ?? null, run: run ? { runId: run.runId, state: run.state, errorCode: run.errorCode,
+      asset: asset ?? null, returnedAsset: returnedAsset ?? null, run: run ? { runId: run.runId, state: run.state, errorCode: run.errorCode,
         httpStatus: run.httpStatus, updatedAt: run.updatedAt } : null }
   })
 }

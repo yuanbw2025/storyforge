@@ -105,6 +105,17 @@ export default function WorkCoverCard({ work, onManual, children }: { work: Work
     } catch (cause) { if (mounted.current) setError(message(cause)) }
     finally { busyRef.current = false; if (mounted.current) { setBusy(null); setRefresh(value => value + 1) } }
   }
+  const reviewReturned = async () => {
+    if (!snapshot?.draft || !snapshot.returnedAsset?.id || busyRef.current) return
+    busyRef.current = true; setBusy('recover'); setError('')
+    try {
+      const { selectReturnedWorkCoverCandidateV1 } = await import('../../lib/work-cover/select-candidate')
+      await selectReturnedWorkCoverCandidateV1({ scope, draftId: snapshot.draft.id!, expectedDraftRevision: snapshot.draft.revision,
+        expectedWorkUpdatedAt: snapshot.work.updatedAt, assetId: snapshot.returnedAsset.id })
+      if (mounted.current) { setShowCandidate(true); setNotice('已载入较早输入生成的图片供你查看；确认后才会用作封面。') }
+    } catch (cause) { if (mounted.current) setError(message(cause)) }
+    finally { busyRef.current = false; if (mounted.current) { setBusy(null); setRefresh(value => value + 1) } }
+  }
   const confirmCover = async () => {
     if (!snapshot?.draft || !candidate || !adoptable || !preview || busyRef.current) return
     busyRef.current = true; setBusy('adopt'); setError('')
@@ -156,10 +167,11 @@ export default function WorkCoverCard({ work, onManual, children }: { work: Work
         {recoverable && <button type="button" className="sf-cover-link" disabled={busy != null} onClick={() => void recover()}>恢复已返回图片</button>}
       </div>
       {connectionError ? <p className="sf-cover-note">{connectionError} <Link to="/home/settings">配置图片连接</Link></p> : <p className="sf-cover-note">{connectionLabel}</p>}
-      <details className="sf-cover-disclosure"><summary>本次发送内容</summary><p>作品名、简介、题材和上方提示词；不读取或发送正文。</p><pre>{JSON.stringify({ 作品名: sourceWork.title, 简介: sourceWork.description, 题材: sourceWork.genres, 提示词: prompt.trim() }, null, 2)}</pre></details>
+      <details className="sf-cover-disclosure"><summary>生成会发送哪些资料</summary><p>作品名、简介、题材和上方提示词；不读取或发送正文。</p><pre>{JSON.stringify({ 作品名: sourceWork.title, 简介: sourceWork.description, 题材: sourceWork.genres, 提示词: prompt.trim() }, null, 2)}</pre></details>
       {pending && !busy && <p className="sf-cover-note">原图片请求的结果尚未确认，不会自动重发。等待超过三分钟后可 <button type="button" className="sf-cover-link" onClick={() => void endWait()}>结束等待</button>。</p>}
       {run?.state === 'outcome-unknown' && <p className="sf-cover-note">上次请求结果未知；新生成是另一笔请求，费用未知。</p>}
       {run?.state === 'failed' && !error && <p className="sf-cover-note">{savedFailure(run.errorCode)}未自动重发，原封面已保留。</p>}
+      {snapshot?.returnedAsset && <p className="sf-cover-note">较早输入的图片已保存。<button type="button" className="sf-cover-link" disabled={busy != null} onClick={() => void reviewReturned()}>查看已保存图片</button></p>}
     </div>}
     {visiblePreview && <div className="sf-cover-candidate-actions">
       <button type="button" className="lf-action" disabled={!adoptable || busy != null} onClick={() => void confirmCover()}>{busy === 'adopt' ? '保存中…' : '用作封面'}</button>

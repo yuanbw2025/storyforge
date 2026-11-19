@@ -14,6 +14,8 @@ import { aiCredentialFingerprintV1 } from '../../src/lib/ai/credential-fingerpri
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import { executeFrozenFormalImageEntryV1, executeFrozenFormalImagePreviewV1, freezeFormalAIEntryBindingV1 } from '../../src/lib/agent/formal-ai-entry'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { readWorkCoverCardStateV1 } from '../../src/lib/work-cover/card-state'
+import { selectReturnedWorkCoverCandidateV1 } from '../../src/lib/work-cover/select-candidate'
 
 installRasterDecoderForVitestV1()
 beforeEach(async () => { await db.delete(); await db.open() })
@@ -29,6 +31,30 @@ async function prepared(currentConnection = () => connection) {
 }
 
 describe('035 image one-shot dispatch/materialization', () => {
+  it('retains a late stale candidate for explicit review with a new CAS, without adopting or resending', async () => {
+    const post = vi.fn(async () => new Response(payload(), { status: 200 })); vi.stubGlobal('fetch', post)
+    const fixture = await prepared(); await submitCoverImageOnceV1(fixture.authorization)
+    const updatedAt = fixture.work.updatedAt + 10
+    await db.works.update(fixture.work.id!, { title: '作者后来修改的作品名', updatedAt })
+    const newer = await saveWorkCoverDraftV1({ scope: fixture.scope, prompt: '作者后来修改的提示词',
+      expectedRevision: fixture.draft.revision, expectedWorkUpdatedAt: updatedAt })
+    const asset = await materializeCoverCandidateV1({ scope: fixture.scope, runId: fixture.authorization.runId })
+    const snapshot = await readWorkCoverCardStateV1(fixture.scope, true)
+    expect(snapshot.asset).toBeNull(); expect(snapshot.returnedAsset?.id).toBe(asset.id)
+    const input = { scope: fixture.scope, draftId: newer.id, expectedDraftRevision: newer.revision,
+      expectedWorkUpdatedAt: updatedAt, assetId: asset.id }
+    await expect(selectReturnedWorkCoverCandidateV1({ ...input, expectedWorkUpdatedAt: fixture.work.updatedAt })).rejects.toThrow('已变化')
+    const other = await seedCurrentWorkspace('不能借用迟到图片')
+    await expect(selectReturnedWorkCoverCandidateV1({ ...input, scope: other.scope })).rejects.toThrow('不属于')
+    expect((await db.workCoverDrafts.get(newer.id))!.selectedAssetId).toBeNull()
+    await selectReturnedWorkCoverCandidateV1(input)
+    const reviewed = await readWorkCoverCardStateV1(fixture.scope, true)
+    expect(reviewed.asset?.id).toBe(asset.id); expect(reviewed.returnedAsset).toBeNull()
+    expect(reviewed.brief?.prompt).toBe('作者后来修改的提示词')
+    expect(reviewed.work.coverImage ?? '').toBe(''); expect(await db.workCoverAdoptions.count()).toBe(0)
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+
   it('refuses oversized sources before creating a run and terminalizes a pre-dispatch preparation failure', async () => {
     const post = vi.fn(); vi.stubGlobal('fetch', post)
     const { scope, work } = await seedCurrentWorkspace('超限原料')
@@ -149,6 +175,8 @@ describe('035 image one-shot dispatch/materialization', () => {
     { data: [{ url: 'https://example.invalid/paid-image.png' }] },
     { data: [{ b64_json: 'AAAA' }, { b64_json: 'AAAA' }] },
     { data: [{ b64_json: 'AAAA' }], status: 'queued' },
+    { ...JSON.parse(payload()), task_id: 'synthetic-async-task' },
+    { ...JSON.parse(payload()), status: 'pending' },
   ])('rejects URL/async/multiple results without download or replacement POST', async response => {
     const post = vi.fn(async () => new Response(JSON.stringify(response), { status: 200 })); vi.stubGlobal('fetch', post)
     const fixture = await prepared(); await submitCoverImageOnceV1(fixture.authorization)
