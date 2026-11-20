@@ -77,6 +77,7 @@ function contract() {
 function generationDependency(scope: WorkspaceScope) {
   return {
     execute: async (options: Parameters<NonNullable<MasterAgentDurableDependenciesV1['execute']>>[0]) => {
+      if (!options.scope || !options.budget) throw new Error('版本绑定夹具需要明确的作品作用域与预算。')
       const task = options.plan.tasks[0]
       const currentWorld = currentWorldOriginCandidateFixtureV1('世界由周期性潮汐塑造。')
       await options.executionTrace?.taskStarted?.(task)
