@@ -154,29 +154,23 @@ describe('AUDIT-6 / HEALTH-4 · AI 设置分区', () => {
     expect(host.querySelector('[role=status]')?.textContent).toContain('青绿山水')
     expect(host.textContent).not.toContain('暖白编辑室')
   })
-  it('连接测试区准确展示忙碌、结果、日志计数和代理提示', async () => {
+  it('普通连接测试区保留结果和代理提示，不展示开发日志入口', async () => {
     const onTest = vi.fn()
-    const onToggleLogs = vi.fn()
     const host = await mount(AIConnectionTestSection as ComponentType<never>, {
       testing: false,
       result: { ok: false, message: 'CORS 网络错误', duration: 88 },
       configReady: true,
       provider: 'deepseek',
-      logCount: 3,
-      showLogs: false,
       isDevelopment: true,
       onTest,
-      onToggleLogs,
     })
     expect(host.textContent).toContain('CORS 网络错误')
     expect(host.textContent).toContain('耗时 88ms')
-    expect(host.textContent).toContain('日志 (3)')
+    expect(host.textContent).not.toContain('日志')
     expect(host.textContent).toContain('可尝试已有的本地代理')
     expect(host.textContent).toContain('仅转发到该服务商官方地址')
     const buttons = host.querySelectorAll('button')
     await act(async () => buttons[0].click())
-    await act(async () => buttons[1].click())
     expect(onTest).toHaveBeenCalledOnce()
-    expect(onToggleLogs).toHaveBeenCalledOnce()
   })
 })

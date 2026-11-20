@@ -3,7 +3,7 @@ import './ai-connection-settings.css'
 import { IS_SHOWCASE } from '../../lib/showcase/policy'
 import ShowcaseNotice from '../showcase/ShowcaseNotice'
 import CodexConnectionCard from './CodexConnectionCard'
-import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { Eye, EyeOff, RefreshCw } from 'lucide-react'
 import { hasUnmatchedSessionCredentialV1, useAIConfigStore, type TestResult } from '../../stores/ai-config'
 import EmbeddingConfigCard from './EmbeddingConfigCard'
@@ -11,14 +11,12 @@ import type { AIConfig, AIProvider } from '../../lib/types'
 import { PROVIDER_MODELS } from '../../lib/types'
 import { allowsSamplingTemperature, getModelRetirement } from '../../lib/ai/provider-model-lifecycle'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
-import { getLogs, subscribeLogs, clearLogs } from '../../lib/ai/logger'
 import { useDialog } from '../shared/Dialog'
 import { fetchOpenAIModels } from '../../lib/ai/model-list'
 import { normalizeOpenAIBaseUrl } from '../../lib/ai/openai-endpoint'
 import { AI_PROXY_ENDPOINTS, hasLocalProviderProxy } from '../../lib/ai/proxy-endpoints'
 import AIConfigPresetSection from './AIConfigPresetSection'
 import AITaskRoutingSection from './AITaskRoutingSection'
-import AIConnectionLogPanel from './AIConnectionLogPanel'
 import AIConnectionTestSection from './AIConnectionTestSection'
 import ThemeSelector from './ThemeSelector'
 
@@ -44,8 +42,13 @@ export const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean
   { value: 'custom', label: '自定义', cors: true, hint: '填写任何兼容 OpenAI 格式的 API' },
 ]
 
-export default function AIConfigPanel() {
-  return IS_SHOWCASE ? <ShowcaseNotice /> : <AIConfigPanelFull />
+// Explicit internal entry only; do not subscribe to connection logs in normal settings.
+const AIConnectionDeveloperTools = import.meta.env.DEV
+  ? lazy(() => import('./AIConnectionDeveloperTools'))
+  : null
+
+export default function AIConfigPanel({ showDeveloperTools = false }: { showDeveloperTools?: boolean }) {
+  return IS_SHOWCASE ? <ShowcaseNotice /> : <AIConfigPanelFull showDeveloperTools={import.meta.env.DEV && showDeveloperTools} />
 }
 
 interface ModelListOwner {
@@ -63,7 +66,7 @@ function sameModelListOwner(left: ModelListOwner, right: ModelListOwner): boolea
   return left.provider === right.provider && left.baseUrl === right.baseUrl && left.apiKey === right.apiKey
 }
 
-function AIConfigPanelFull() {
+function AIConfigPanelFull({ showDeveloperTools }: { showDeveloperTools: boolean }) {
   const { config, setConfig, switchProvider, testConnection,
     rememberApiKey, setRememberApiKey,
     presets, taskRoutes, agentContextProfiles, agentTeamBudgetProfile, creativeQualityMode,
@@ -74,7 +77,6 @@ function AIConfigPanelFull() {
   const [showKey, setShowKey] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<TestResult | null>(null)
-  const [showLogs, setShowLogs] = useState(false)
   const [savingPreset, setSavingPreset] = useState(false)
   const [presetName, setPresetName] = useState('')
   const [fetchedModels, setFetchedModels] = useState<string[]>([])
@@ -93,9 +95,6 @@ function AIConfigPanelFull() {
     setPresetName('')
     setSavingPreset(false)
   }
-
-  // 订阅日志变化
-  const logs = useSyncExternalStore(subscribeLogs, getLogs)
 
   const currentProviderInfo = PROVIDER_OPTIONS.find((p) => p.value === config.provider)
   const modelRetirement = getModelRetirement(config)
@@ -506,11 +505,8 @@ function AIConfigPanelFull() {
             result={testResult}
             configReady={isAIConfigReady(config)}
             provider={config.provider}
-            logCount={logs.length}
-            showLogs={showLogs}
             isDevelopment={hasLocalProviderProxy()}
             onTest={() => { void handleTest() }}
-            onToggleLogs={() => setShowLogs(!showLogs)}
           />
         </div>
       </div>
@@ -518,8 +514,9 @@ function AIConfigPanelFull() {
       {/* NS-5 · 语义检索(embedding) 配置卡 */}
       <EmbeddingConfigCard />
 
-      {/* 日志面板 */}
-      {showLogs && <AIConnectionLogPanel logs={logs} onClear={clearLogs} />}
+      {showDeveloperTools && AIConnectionDeveloperTools && (
+        <Suspense fallback={null}><AIConnectionDeveloperTools /></Suspense>
+      )}
 
     </div>
   )
