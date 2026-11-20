@@ -1,3 +1,5 @@
+import PromptRunPanel from '../shared/PromptRunPanel'
+import { INSPIRATION_PREPARATION_MODULES } from '../../lib/inspiration/preparation-contract'
 import { INSPIRATION_PREPARATION_LABELS, isInspirationPreparationMode } from '../../lib/inspiration/preparation'
 /**
  * Phase 26.4 — 灵感反推面板
@@ -68,6 +70,16 @@ export default function InspirationPanel({ project }: Props) {
     copilot,
     pendingCandidate,
   } = fusion
+  const preparationModuleKey = isInspirationPreparationMode(mode) ? INSPIRATION_PREPARATION_MODULES[mode] : isMW ? 'inspiration.reverse.multiworld' : 'inspiration.reverse'
+  const [promptEdits, setPromptEdits] = useState<Record<string, { parameters: Record<string, unknown>; system: string | null; user: string | null }>>({})
+  const promptEdit = promptEdits[preparationModuleKey ?? ''] ?? { parameters: {}, system: null, user: null }
+  const updatePromptEdit = (patch: Partial<typeof promptEdit>) => {
+    if (preparationModuleKey) setPromptEdits(current => ({ ...current, [preparationModuleKey]: { ...promptEdit, ...patch } }))
+  }
+  const generateWithPrompt = () => handleGenerate(preparationModuleKey ? {
+    version: 1, moduleKey: preparationModuleKey, parameterValues: promptEdit.parameters,
+    systemOverride: promptEdit.system, userOverride: promptEdit.user,
+  } : undefined)
   const hasOtherPendingCandidates = copilot.pendingCandidates.some(candidate => (
     candidate !== pendingCandidate
       && (candidate.payload.agentId !== 'inspiration' || !['inspiration.reverse', 'inspiration.prepare'].includes(candidate.payload.skillId))
@@ -475,6 +487,13 @@ export default function InspirationPanel({ project }: Props) {
           onDiscard={handleDiscardFusion}
         />
 
+        {preparationModuleKey && <PromptRunPanel
+          key={preparationModuleKey} moduleKey={preparationModuleKey}
+          parameterValues={promptEdit.parameters} onParamChange={parameters => updatePromptEdit({ parameters })}
+          systemOverride={promptEdit.system} onSystemOverrideChange={system => updatePromptEdit({ system })}
+          userOverride={promptEdit.user} onUserOverrideChange={user => updatePromptEdit({ user })}
+        />}
+
         {/* ── 补充说明 ────────────────────────────── */}
         <section>
           <label className="block text-xs text-text-muted mb-1">补充说明（可选）</label>
@@ -490,7 +509,7 @@ export default function InspirationPanel({ project }: Props) {
         {/* ── 生成按钮 ────────────────────────────── */}
         <div className="flex items-center gap-3">
           <button
-            onClick={handleGenerate}
+            onClick={generateWithPrompt}
             disabled={
               (!inspiration.trim() && selectedFragmentIds.size === 0)
               || inspiration.trim().length > MAX_INSPIRATION_FRAGMENT_CHARS
@@ -536,9 +555,9 @@ export default function InspirationPanel({ project }: Props) {
             error={ai.error}
             tokenUsage={ai.tokenUsage}
             onStop={ai.stop}
-            onRetry={handleGenerate}
+            onRetry={generateWithPrompt}
             placeholder="等待 AI 反推故事框架..."
-            moduleKey={isMW ? 'inspiration.reverse.multiworld' : 'inspiration.reverse'}
+            moduleKey={preparationModuleKey ?? (isMW ? 'inspiration.reverse.multiworld' : 'inspiration.reverse')}
           />
         )}
 

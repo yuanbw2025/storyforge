@@ -49,6 +49,7 @@ describe('R-HARNESS34 · 灵感反推主入口契约', () => {
   })
 
   it('定向灵感入口跳过重复规划，并把作者选择的碎片冻结进计划', async () => {
+    const { project } = await seedCurrentWorkspace('定向灵感模板冻结')
     const pinnedTask: PinnedMasterAgentTaskV1 = {
       agentId: 'inspiration',
       skillId: 'inspiration.reverse',
@@ -56,7 +57,7 @@ describe('R-HARNESS34 · 灵感反推主入口契约', () => {
       inspirationFragmentIds: ['idea-visible', 'idea-secondary', 'idea-visible'],
     }
     const plan = await createMasterAgentPlan({
-      projectId: 1,
+      projectId: project.id!,
       worldGroupId: null,
       request: pinnedTask.instruction,
       pinnedTask,

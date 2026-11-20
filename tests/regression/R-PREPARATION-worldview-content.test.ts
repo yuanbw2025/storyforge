@@ -20,7 +20,8 @@ describe('创作准备 · 世界方法实际冻结与作者模板', () => {
     const prepared = await prepareWorldviewFieldCopilot({ projectId: project.id!, scope, worldGroupId: null, authorRequest: formatWorldviewFieldGenerationRequestV1({ field: 'economyOverview', mode: 'expand', hint: '保留阿照修船铺，温暖经营' }), promptExecution: options }, { runAI: async messages => { sent = messages.map(m => m.content).join('\n'); return JSON.stringify({ field: 'economyOverview', value: '阿照提前预订晒干木料；公用船台按出航日期协商排期。' }) } })
     const result = await runGenerationNode(prepared.node, prepared.prepared)
     expect(result.gate?.status).toBe('pass')
-    expect(sent).toContain(worldviewFieldContentGuidanceV1('economyOverview'))
+    if (custom) expect(sent).not.toContain(worldviewFieldContentGuidanceV1('economyOverview'))
+    else expect(sent).toContain(worldviewFieldContentGuidanceV1('economyOverview'))
     expect(sent).not.toContain(worldviewFieldContentGuidanceV1('divineDesign'))
     expect(sent).toContain('只允许生成这个字段')
     if (custom) { expect(sent).toContain(template.systemPrompt); expect(prepared.promptExecutionEvidence?.templateId).toBe(71) }

@@ -1,3 +1,4 @@
+import { withPreparationContentMethods } from './prompt-seeds-content-methods'
 import { VOLUME_OUTLINE_PARAMETERS } from './prompt-seed-params'
 import type { PromptSeed } from './prompt-seed-type'
 
@@ -166,7 +167,7 @@ const DEAI_SYSTEM = `你是一位文字风格化专家。你的任务是将 AI �
 
 // ── 13 条种子 ────────────────────────────────────────────────────────────
 
-export const CORE_PROMPT_SEEDS: PromptSeed[] = [
+const CORE_PROMPT_BASE_SEEDS: PromptSeed[] = [
   // 1. 世界观-单维度生成
   {
     scope: 'system',
@@ -825,3 +826,5 @@ export const CORE_PROMPT_SEEDS: PromptSeed[] = [
   },
 
 ]
+
+export const CORE_PROMPT_SEEDS: PromptSeed[] = CORE_PROMPT_BASE_SEEDS.map(withPreparationContentMethods)

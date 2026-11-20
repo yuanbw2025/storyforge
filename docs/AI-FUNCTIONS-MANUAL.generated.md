@@ -8,7 +8,7 @@
 
 ## 一、Prompt 模板清单（PromptModuleKey 事实源）
 
-共 65 个唯一 moduleKey，210 条内置模板定义。
+共 70 个唯一 moduleKey，210 条内置模板定义。
 
 | moduleKey | 模板数 | 代表名称 | 说明 | 读取变量 |
 |---|---:|---|---|---|
@@ -65,6 +65,11 @@
 | `plot.character-revision` | 1 | 内置-角色变更影响分析 | 分析创作中途的角色变化，把已写区、过渡区和未写区分开，并输出可审查的大纲 patch。 | `revisionContext` |
 | `inspiration.reverse` | 1 | 内置-灵感反推 | 用户写碎片想法，AI 反向生成世界观草稿、故事核心、初始角色卡。 | `projectName` `genres` `inspiration` `userHint` |
 | `inspiration.reverse.multiworld` | 1 | 内置-多世界灵感反推 | 多世界题材：用户给出带有多个世界意图的灵感，AI 顺着思路反推故事主线 + 多个世界 + 角色。 | `projectName` `genres` `inspiration` `userHint` |
+| `inspiration.prepare.organize` | 0 | — | — | — |
+| `inspiration.prepare.compare` | 0 | — | — | — |
+| `inspiration.prepare.deepen` | 0 | — | — | — |
+| `inspiration.prepare.position-open` | 0 | — | — | — |
+| `inspiration.prepare.position-defined` | 0 | — | — | — |
 | `world-group.suggest` | 1 | 内置-AI建议世界 | 诸天流/无限流等多世界题材，根据故事概念和已有世界建议新的世界组。 | `projectName` `genres` `concept` `existingWorlds` `userHint` |
 | `world-group.expand` | 1 | 内置-AI扩写世界 | 根据世界的草稿描述，扩展出完整的世界观设定。 | `worldName` `worldType` `draft` `otherWorlds` `storyCore` `userHint` |
 | `inventory.extract` | 1 | 内置-物品栏提取 | 从章节正文提取各角色的物品获得/消耗事件，构建按角色归属的物品栏。 | `knownItemNames` `characterNames` `chapterTitle` `chapterText` |
@@ -415,8 +420,8 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:859` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:967` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:872` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:980` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:438` |
 | `canon.narrative.extract` | `src/lib/agent/run/narrative-annotation-durable.ts:218` |
@@ -466,8 +471,8 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/character-revision-copilot.ts:796 · chat`
 - `src/lib/agent/character-supplement-copilot.ts:582 · chat`
 - `src/lib/agent/context-compression.ts:355 · chat`
-- `src/lib/agent/creative-rules-copilot.ts:449 · chat`
-- `src/lib/agent/inspiration-copilot.ts:358 · chat`
+- `src/lib/agent/creative-rules-copilot.ts:448 · chat`
+- `src/lib/agent/inspiration-copilot.ts:387 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
 - `src/lib/agent/outline-copilot.ts:521 · chat`
 - `src/lib/agent/outline-copilot.ts:773 · chat`
@@ -481,7 +486,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/story-arc-copilot.ts:1712 · chat`
 - `src/lib/agent/story-core-copilot.ts:580 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
-- `src/lib/agent/worldview-field-copilot.ts:943 · chat`
+- `src/lib/agent/worldview-field-copilot.ts:952 · chat`
 - `src/lib/character-interaction/harness.ts:899 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:73 · chat`
 - `src/lib/character-interaction/situation-harness.ts:189 · chat`
@@ -592,4 +597,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `19ddb5455`
+生成时间基准:commit `607ea918b`

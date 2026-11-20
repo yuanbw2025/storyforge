@@ -1,6 +1,7 @@
+import { withPreparationContentMethods } from './prompt-seeds-content-methods'
 import type { PromptSeed } from './prompt-seed-type'
 
-export const TOOL_PROMPT_SEEDS: PromptSeed[] = [
+const TOOL_PROMPT_BASE_SEEDS: PromptSeed[] = [
   // 17. AI 导入解析-角色（Phase 10）
   {
     scope: 'system',
@@ -1266,3 +1267,5 @@ type 含义：traversal=穿越目标，instance=副本，parallel=平行世界�
   },
 
 ]
+
+export const TOOL_PROMPT_SEEDS: PromptSeed[] = TOOL_PROMPT_BASE_SEEDS.map(withPreparationContentMethods)

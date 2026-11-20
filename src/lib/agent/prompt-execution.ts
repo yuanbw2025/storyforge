@@ -1,3 +1,4 @@
+import { INSPIRATION_PREPARATION_MODULES, type InspirationPreparationPromptModuleKey } from '../inspiration/preparation-contract'
 import { renderPrompt } from '../ai/prompt-engine'
 import type { ChatMessage } from '../types'
 import type {
@@ -19,6 +20,9 @@ export type GovernedPromptModuleKeyV1 =
   | 'worldview.dimension'
   | 'story.generate'
   | 'character.generate'
+  | InspirationPreparationPromptModuleKey
+  | 'inspiration.reverse'
+  | 'inspiration.reverse.multiworld'
 
 export interface PromptExecutionRequestV1 {
   version: typeof PROMPT_EXECUTION_VERSION_V1
@@ -72,6 +76,8 @@ export interface PromptExecutionEvidenceV1 {
 }
 
 const GOVERNED_MODULES = new Set<PromptModuleKey>([
+  'inspiration.reverse', 'inspiration.reverse.multiworld',
+  ...Object.values(INSPIRATION_PREPARATION_MODULES),
   'worldview.dimension',
   'story.generate',
   'character.generate',

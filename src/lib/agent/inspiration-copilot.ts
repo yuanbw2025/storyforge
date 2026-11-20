@@ -1,3 +1,7 @@
+import { hashCanonicalValue } from './run/hash'
+import { usePromptStore } from '../../stores/prompt'
+import { INSPIRATION_PREPARATION_MODULES } from '../inspiration/preparation-contract'
+import { freezePromptExecutionOptionsV1, parsePromptExecutionOptionsV1, renderFrozenPromptExecutionV1, type PromptExecutionOptionsV1, type PromptExecutionEvidenceV1 } from './prompt-execution'
 import { supportsVerifiedJsonObjectResponseForModelV1 } from '../ai/provider-capabilities'
 import { buildInspirationPreparationPrompt, inspirationPreparationModeFromRequest, inspirationDirectionIndexFromRequest, isInspirationPreparationMode, parseInspirationPreparationDraft, type InspirationPreparationResult } from '../inspiration/preparation'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -81,6 +85,9 @@ export interface InspirationCopilotInput {
   snapshot: InspirationWorkspaceSnapshot
   config: AIConfig
   routingCategory?: string
+  frozenPromptMessages?: import('../types').ChatMessage[]
+  promptExecutionEvidence?: PromptExecutionEvidenceV1
+  generationOverrides?: { temperature?: number; maxTokens?: number }
   signal?: AbortSignal
 }
 
@@ -94,6 +101,7 @@ export interface PreparedInspirationCopilot {
   snapshot: InspirationWorkspaceSnapshot
   contextEvidence: AgentContextEvidence
   modelIdentity: MasterCandidateModelIdentityV1
+  promptExecutionEvidence?: PromptExecutionEvidenceV1
 }
 
 interface InspirationCopilotDependencies {
@@ -227,6 +235,7 @@ export async function prepareInspirationCopilot(input: {
   routingCategory?: string
   contextProfile?: AgentContextProfile
   contextCompressionRuntime?: AgentContextCompressionRuntimeV1
+  promptExecution?: PromptExecutionOptionsV1
   signal?: AbortSignal
 }, dependencies: InspirationCopilotDependencies = {}): Promise<PreparedInspirationCopilot> {
   const project = await db.projects.get(input.projectId)
@@ -323,6 +332,25 @@ export async function prepareInspirationCopilot(input: {
     routingCategory,
     signal: input.signal,
   }
+  if (isInspirationPreparationMode(mode) || input.promptExecution) {
+    const moduleKey = isInspirationPreparationMode(mode) ? INSPIRATION_PREPARATION_MODULES[mode] : mode === 'multiworld' ? 'inspiration.reverse.multiworld' : 'inspiration.reverse'
+    const options = input.promptExecution
+      ? parsePromptExecutionOptionsV1(input.promptExecution, moduleKey)
+      : await freezePromptExecutionOptionsV1({ request: { version: 1, moduleKey }, template: usePromptStore.getState().getActive(moduleKey) })
+    const rendered = await renderFrozenPromptExecutionV1({
+      options,
+      context: { inspiration: nodeInput.contextText, userHint: authorRequest, projectName: work.title, genres: work.genres.join('/') },
+      hardSystem: isInspirationPreparationMode(mode) ? `【准备候选输出合同】当前动作${mode}。只输出单个JSON对象，顶层键必须为summary、authorMaterial、proposals、openQuestions。proposals每项只有title/content；整理0—1项，比较及未定定位2—4项，深化1—4项兼容要点，明确定位恰好1项。准备结果只可经作者确认保存当前Work的准备版本，不能宣称写入世界、人物或作品元信息。` : `【完整反推输出合同】只输出单个JSON对象，顶层键为${mode === 'multiworld' ? 'worlds、primaryWorldIndex、storyCore、characters' : 'worldview、history、storyCore、characters'}。候选须经作者编辑确认，不能宣称已经写入世界、人物或故事核心。`,
+      authorInstruction: authorRequest,
+    })
+    if (!rendered.messages.some(message => message.content.includes(nodeInput.contextText))) {
+      rendered.messages.push({ role: 'user', content: `【登记读取的完整素材】\n${nodeInput.contextText}` })
+      rendered.evidence.renderedPromptHash = await hashCanonicalValue(rendered.messages)
+    }
+    nodeInput.frozenPromptMessages = rendered.messages
+    nodeInput.generationOverrides = rendered.generationOverrides
+    nodeInput.promptExecutionEvidence = rendered.evidence
+  }
   const node = createInspirationCopilotNode(nodeInput, dependencies)
   return {
     node,
@@ -334,6 +362,7 @@ export async function prepareInspirationCopilot(input: {
     snapshot,
     contextEvidence,
     modelIdentity: { provider: config.provider, model: config.model },
+    promptExecutionEvidence: nodeInput.promptExecutionEvidence,
   }
 }
 
@@ -358,7 +387,7 @@ export function createInspirationCopilotNode(
   const runAI = dependencies.runAI ?? (messages => chat(messages, input.config, {
     category: input.routingCategory ?? 'inspiration.reverse',
     projectId: input.projectId,
-    configOverrides: { maxTokens: 6000 },
+    configOverrides: { maxTokens: 6000, ...input.generationOverrides },
     contextOverflowPolicy: 'reject',
   }, input.signal, undefined, isInspirationPreparationMode(input.mode) ? {
     ...(supportsVerifiedJsonObjectResponseForModelV1(input.config) ? { responseFormat: 'json_object' as const } : {}),
@@ -369,7 +398,7 @@ export function createInspirationCopilotNode(
     id: `agent.chat-copilot.inspiration:${input.projectId}:${input.mode}:${input.snapshot.updatedAt ?? 0}:${input.parentVersionId ?? 'root'}`,
     kind: isInspirationPreparationMode(input.mode) ? 'inspiration.prepare' : input.mode === 'multiworld' ? 'inspiration.reverse.multiworld' : 'inspiration.reverse',
     editableInput: true,
-    assembleInput: current => isInspirationPreparationMode(current.mode)
+    assembleInput: current => current.frozenPromptMessages?.map(message => ({ ...message })) ?? (isInspirationPreparationMode(current.mode)
       ? buildInspirationPreparationPrompt(current.mode, current.contextText, current.authorRequest)
       : current.mode === 'multiworld'
       ? buildInspirationReverseMultiWorldPrompt(
@@ -383,7 +412,7 @@ export function createInspirationCopilotNode(
           current.genres,
           current.contextText,
           current.authorRequest,
-        ),
+        )),
     run: async messages => {
       return parseInspirationCandidateDraft(await runAI(messages), input.mode)
     },

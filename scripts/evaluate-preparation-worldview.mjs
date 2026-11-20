@@ -27,7 +27,17 @@ try {
   const current = await readFile('src/lib/agent/worldview-field-copilot.ts', 'utf8')
   const instructions = current.slice(current.indexOf('const MODE_INSTRUCTIONS:'), current.indexOf('\nexport class WorldviewFieldCopilotStaleError'))
   const builder = current.slice(current.indexOf('function outputContract('), current.indexOf('\nfunction buildWorldviewFieldMessages'))
-  const buildWorldviewFieldSystemV1 = new Function('WORLDVIEW_AGENT_FIELD_CAPABILITIES', 'WORLDVIEW_AGENT_FIELD_LABELS', 'worldviewFieldContentGuidanceV1', ts.transpile(instructions + '\n' + builder) + ';return worldviewFieldHardSystem')(WORLDVIEW_AGENT_FIELD_CAPABILITIES, WORLDVIEW_AGENT_FIELD_LABELS, worldviewFieldContentGuidanceV1)
+  const buildWorldviewFieldHardSystemV1 = new Function('WORLDVIEW_AGENT_FIELD_CAPABILITIES', 'WORLDVIEW_AGENT_FIELD_LABELS', 'worldviewFieldContentGuidanceV1', ts.transpile(instructions + '\n' + builder) + ';return worldviewFieldHardSystem')(WORLDVIEW_AGENT_FIELD_CAPABILITIES, WORLDVIEW_AGENT_FIELD_LABELS, worldviewFieldContentGuidanceV1)
+  const { SYSTEM_PROMPT_SEEDS } = await server.ssrLoadModule('/src/lib/ai/prompt-seeds.ts')
+  const { renderPrompt: renderLibraryPrompt } = await server.ssrLoadModule('/src/lib/ai/prompt-engine.ts')
+  const { worldviewContentTemplateVariablesV1 } = await server.ssrLoadModule('/src/lib/creation/worldview-content-skill.ts')
+  const buildWorldviewFieldSystemV1 = input => [
+    ...renderLibraryPrompt(SYSTEM_PROMPT_SEEDS.find(seed => seed.moduleKey === 'worldview.dimension'), {
+      ...worldviewContentTemplateVariablesV1(input.targetField), projectName: input.projectName,
+      dimension: WORLDVIEW_AGENT_FIELD_LABELS[input.targetField], worldContext: '', existingWorldview: '', userHint: '',
+    }).messages.filter(message => message.role === 'system').map(message => message.content),
+    buildWorldviewFieldHardSystemV1(input),
+  ].join('\n\n')
   const { parseStructuredOutputV1 } = await server.ssrLoadModule('/src/lib/agent/structured-output-pipeline.ts')
   const parserSource = current.slice(current.indexOf('function exactKeys('), current.indexOf('\nfunction sameValue(')).replace('export function parseWorldviewFieldCandidateDraft', 'function parseWorldviewFieldCandidateDraft')
   const parseCandidate = new Function('WORLDVIEW_AGENT_FIELDS', 'WORLDVIEW_AGENT_FIELD_CAPABILITIES', 'WORLDVIEW_FIELD_CANDIDATE_MAX_CHARS_V1', 'parseStructuredOutputV1', ts.transpile(parserSource) + ';return parseWorldviewFieldCandidateDraft')(specs.map(spec => spec.field), WORLDVIEW_AGENT_FIELD_CAPABILITIES, Math.max(...specs.map(spec => spec.aiGeneration.maxChars)) + 10000, parseStructuredOutputV1)
@@ -65,14 +75,8 @@ try {
   function editorialMessages(c, variant) {
     const templates = variant === 'old' ? editorialBaseline.seeds : [...TOOL_PROMPT_SEEDS, ...CORE_PROMPT_SEEDS]
     const template = templates.find(seed => seed.moduleKey === c.module)
-    let messages = renderPrompt(template, c.vars).messages
+    let messages = renderPrompt(template, { ...c.vars, ...(variant === 'new' && c.kind === 'research' ? { [`research_${c.mode}_${c.hasSources ? 'sources' : 'empty'}`]: '1' } : {}) }).messages
     if (c.kind === 'learn') messages = editorial.appendPreparationSystemGuidance(messages, editorialBaseline.styleProtocol)
-    if (variant === 'new' && c.kind === 'research') {
-      messages = editorial.appendResearchTaskGuidance(messages, c.mode, c.hasSources)
-    } else if (variant === 'new') {
-      const method = c.kind === 'learn' ? editorial.STYLE_LEARNING_CONTENT_GUIDANCE : c.kind === 'calibrate' ? editorial.STYLE_CALIBRATION_CONTENT_GUIDANCE : c.kind === 'rules' ? editorial.CREATIVE_RULES_CONTENT_GUIDANCE : editorial.researchContentGuidance(c.mode, c.hasSources)
-      messages = editorial.appendPreparationSystemGuidance(messages, method)
-    }
     if (c.kind === 'rules') messages.push({ role: 'user', content: '本轮只建议writingStyle，不写其它字段。只输出严格JSON：{"field":"writingStyle","value":"规则正文"}。' })
     return messages
   }
@@ -80,6 +84,7 @@ try {
     for (const p of [fixture, 'scripts/preparation-world-entry-evaluation.mjs', 'tests/fixtures/preparation-worldview/baseline-world-entry-sources.json', 'src/lib/creation/world-entry-content-skill.ts', 'src/lib/ai/inspiration-reverse.ts', 'src/lib/ai/world-group-ai.ts', 'src/lib/history/ai-plan.ts', 'src/lib/ai/adapters/structured-extract-adapter.ts', 'src/lib/ai/world-rules-manifest.ts', 'src/lib/ai/prompt-seeds-tools.ts']) sourceHashes[p] = hash(await readFile(p))
   }
   const allCases = JSON.parse(await readFile(fixture, 'utf8'))
+  for (const p of ['src/lib/ai/prompt-seeds-preparation.ts', 'src/lib/ai/prompt-seeds-content-methods.ts', 'src/lib/ai/prompt-seeds-core.ts', 'src/lib/ai/prompt-seeds-tools.ts']) sourceHashes[p] = hash(await readFile(p))
   const selectedIds = process.env.PREPARATION_EVAL_CASES?.split(',')
   if (selectedIds?.some(id => !allCases.some(c => c.id === id))) throw Error('Unknown case selection')
   const cases = selectedIds ? allCases.filter(c => selectedIds.includes(c.id)) : allCases

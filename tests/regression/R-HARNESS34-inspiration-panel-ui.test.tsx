@@ -1,3 +1,7 @@
+import { INSPIRATION_PREPARATION_MODES, INSPIRATION_PREPARATION_LABELS, INSPIRATION_PREPARATION_MODULES } from '../../src/lib/inspiration/preparation-contract'
+import { usePromptStore } from '../../src/stores/prompt'
+import { INSPIRATION_PREPARATION_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds-preparation'
+import { ToastProvider } from '../../src/components/shared/Toast'
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -71,7 +75,7 @@ async function renderPanel() {
   document.body.append(host)
   const root = createRoot(host)
   mounted.push({ host, root })
-  await act(async () => root.render(createElement(InspirationPanel, { project })))
+  await act(async () => root.render(createElement(ToastProvider, null, createElement(InspirationPanel, { project }))))
   return host
 }
 
@@ -125,6 +129,7 @@ function createFusionState() {
 }
 
 beforeEach(() => {
+  usePromptStore.setState({ templates: INSPIRATION_PREPARATION_PROMPT_SEEDS.map((seed, i) => ({ ...seed, id: i + 700, createdAt: 1, updatedAt: 1 })) })
   mocks.fusion = createFusionState()
 })
 
@@ -138,6 +143,27 @@ afterEach(async () => {
 })
 
 describe('R-HARNESS34 · 分步骤灵感面板接入 inspiration.reverse Skill', () => {
+  it.each(INSPIRATION_PREPARATION_MODES)('%s功能显示同模块激活模板，本次修改传给生成而不改库', async mode => {
+    mocks.fusion = { ...createFusionState(), mode, action: mode }
+    const active = usePromptStore.getState().getActive(INSPIRATION_PREPARATION_MODULES[mode])
+    const before = active.systemPrompt
+    const host = await renderPanel()
+    expect(host.textContent).toContain(active.name)
+    const current = [...host.querySelectorAll('button')].find(button => button.textContent?.includes('当前模板：'))!
+    await act(async () => current.click())
+    const details = [...host.querySelectorAll('details')].find(item => item.querySelector('summary')?.textContent?.includes('高级：临时修改'))!
+    await act(async () => { details.open = true; details.dispatchEvent(new Event('toggle')) })
+    const system = details.querySelector('textarea')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(system, '本轮可见System修改')
+      system.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    const generate = [...host.querySelectorAll('button')].find(button => button.textContent?.trim() === INSPIRATION_PREPARATION_LABELS[mode])!
+    await act(async () => generate.click())
+    expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ moduleKey: INSPIRATION_PREPARATION_MODULES[mode], systemOverride: '本轮可见System修改' }))
+    expect(usePromptStore.getState().getActive(INSPIRATION_PREPARATION_MODULES[mode]).systemPrompt).toBe(before)
+  })
+
   it('反推按钮只调用受治理生成控制器', async () => {
     const host = await renderPanel()
     const button = Array.from(host.querySelectorAll<HTMLButtonElement>('button'))

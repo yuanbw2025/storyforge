@@ -158,7 +158,7 @@ describe.sequential('R-HARNESS18 · Skill、Prompt 与 Tool 执行版本绑定',
       budget: new AgentTeamBudgetTracker('balanced'),
     }, generationDependency(scope))
     const candidate = result.candidates[0]
-    expect(candidate.payload.executionBinding?.promptVersion).toBe('worldview-field-copilot-v2')
+    expect(candidate.payload.executionBinding?.promptVersion).toBe('worldview-field-copilot-v3')
 
     const { executionBinding: _executionBinding, ...payloadWithoutBinding } = candidate.payload
     expect(await computeMasterCandidateHashV1(candidate.payload, candidate.draft))
