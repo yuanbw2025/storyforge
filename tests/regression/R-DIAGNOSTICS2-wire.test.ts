@@ -1,7 +1,7 @@
 import {beforeEach,expect,it,vi} from 'vitest'
 beforeEach(()=>{localStorage.clear();vi.resetModules();vi.restoreAllMocks()})
 it.each([false,true])('negotiates extended reports (%s) without losing errors arriving while capability read waits',async(supports)=>{
- const ctx=await import('../../src/lib/diagnostics/operation-trail');ctx.installOperationTrail();ctx.setDiagnosticContextEnabled(true)
+ const ctx=await import('../../src/lib/diagnostics/operation-trail');ctx.installOperationTrail();expect(ctx.diagnosticContextEnabled()).toBe(true)
  const telemetry=await import('../../src/lib/feedback/client-telemetry');telemetry.setTelemetryPreferences(false,true)
  const now=Date.now()
  const row={occurredAt:new Date(now).toISOString(),source:'react' as const,name:'TypeError',build:'v4.0.5+1234567',frames:['/assets/a.js:1:2'],details:{version:1 as const,code:'property-access' as const,trail:[]}}
@@ -53,4 +53,23 @@ it('keeps maximal valid enhanced events under the existing 32KiB server budget w
   expect(JSON.parse(localStorage.getItem(telemetry.TELEMETRY_KEY)!).queue).toEqual([])
   expect(bodies.every(raw=>new TextEncoder().encode(raw).byteLength<=30*1024)).toBe(true)
  }finally{vi.unstubAllGlobals();vi.useRealTimers()}
+})
+
+it('does not grant automatic reporting consent when local operation context defaults on', async () => {
+ const fetch = vi.fn()
+ vi.stubGlobal('fetch', fetch)
+ try {
+  const ctx = await import('../../src/lib/diagnostics/operation-trail'); ctx.installOperationTrail()
+  const telemetry = await import('../../src/lib/feedback/client-telemetry')
+  expect(ctx.diagnosticContextEnabled()).toBe(true)
+  expect(telemetry.telemetryPreferences()).toMatchObject({ analytics: false, errors: false })
+  telemetry.recordClientError({ occurredAt: new Date().toISOString(), source: 'react', name: 'TypeError', build: 'v4.0.5+1234567', frames: [] })
+  await telemetry.flushClientTelemetry()
+  expect(fetch).not.toHaveBeenCalled()
+  telemetry.setTelemetryPreferences(false, false)
+  expect(ctx.diagnosticContextEnabled()).toBe(false)
+  telemetry.setTelemetryPreferences(false, true)
+  expect(ctx.diagnosticContextEnabled()).toBe(false)
+  expect(ctx.readOperationTrail()).toEqual([])
+ } finally { vi.unstubAllGlobals() }
 })
