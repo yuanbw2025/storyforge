@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Plus, Upload, Download, Layers, FileText, Workflow } from 'lucide-react'
 import { usePromptStore } from '../../../stores/prompt'
 import type { PromptTemplate } from '../../../lib/types/prompt'
+import { isRetiredPromptModuleKey } from '../../../lib/types/prompt'
 import type { Project } from '../../../lib/types'
 import { GENRE_PACKS } from '../../../lib/ai/prompt-seeds-genre-packs'
 import { encodePromptTemplateExchange } from '../../../lib/ai/prompt-template-exchange'
@@ -24,6 +25,8 @@ export default function PromptManagerPanel({ project }: Props = {}) {
   const importTemplates = usePromptStore(s => s.importTemplates)
   const setActive = usePromptStore(s => s.setActive)
   const reload = usePromptStore(s => s.reload)
+  // 退役模板保留在原库和导出文件中，配置入口不再展示或批量激活。
+  const configurableTemplates = templates.filter(t => !isRetiredPromptModuleKey(t.moduleKey))
 
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('all')
@@ -44,7 +47,7 @@ export default function PromptManagerPanel({ project }: Props = {}) {
     setGenrePack(genreId)
     if (genreId === 'general') {
       // 默认包：把没 genres 字段或含 'general' 的 system 模板激活
-      const candidates = templates.filter(t =>
+      const candidates = configurableTemplates.filter(t =>
         t.scope === 'system' && (!t.genres || t.genres.length === 0 || t.genres.includes('general'))
       )
       const seenModuleKeys = new Set<string>()
@@ -56,7 +59,7 @@ export default function PromptManagerPanel({ project }: Props = {}) {
       }
     } else {
       // 题材包：找到该 genre 的模板批量激活
-      const packTpls = templates.filter(t => t.genres?.includes(genreId))
+      const packTpls = configurableTemplates.filter(t => t.genres?.includes(genreId))
       for (const t of packTpls) {
         if (!t.isActive) await setActive(t.id!)
       }
@@ -64,7 +67,7 @@ export default function PromptManagerPanel({ project }: Props = {}) {
   }
 
   // 过滤后的模板
-  const filtered = templates.filter(t => {
+  const filtered = configurableTemplates.filter(t => {
     const matchesScope = scopeFilter === 'all'
       || (scopeFilter === 'craft' ? t.assetId?.startsWith('CRAFT-') : t.scope === scopeFilter)
     const keywords = search.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
@@ -72,7 +75,7 @@ export default function PromptManagerPanel({ project }: Props = {}) {
     return matchesScope && keywords.every(keyword => searchable.includes(keyword))
   })
 
-  const selected = selectedId ? templates.find(t => t.id === selectedId) : null
+  const selected = selectedId ? configurableTemplates.find(t => t.id === selectedId) : null
 
   /** 新建一个空模板（user scope） */
   const handleNew = async () => {
@@ -153,7 +156,7 @@ export default function PromptManagerPanel({ project }: Props = {}) {
         </div>
       ) : (
         <PromptTemplatesView
-          templates={templates}
+          templates={configurableTemplates}
           filtered={filtered}
           selected={selected}
           selectedId={selectedId}

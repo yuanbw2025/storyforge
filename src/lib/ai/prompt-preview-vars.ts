@@ -9,8 +9,6 @@ import type { PromptVariableContext } from '../types'
  * 条件块变量（isSummary / hasNoForeshadows）默认空字符串 → 条件块默认隐藏。
  */
 export const PREVIEW_VARS: PromptVariableContext = {
-  deepAnalysis: '1',
-  quickAnalysis: '',
   // 项目级
   projectName: '示例小说·剑破苍穹',
   genres: '玄幻',
