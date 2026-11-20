@@ -461,7 +461,7 @@ export interface TableSpec<T = any> {
   exactArtifactRoots?: readonly ExactArtifactRootSpecV1[]
   /** A registered exact-evidence owner also needs the source Run entity until
    * its own lifecycle releases this indexed FK; single/tree Run deletion stops. */
-  sourceRunRetention?: { field: string }
+  sourceRunRetention?: { field: string; additionalFields?: readonly string[] }
   /** Product-neutral stable reference to a governed binary object table, used by shared GC. */
   mediaRef?: { blobTable: string; field: string }
   /**

@@ -56,7 +56,7 @@ describe('PRODUCT-1 · 备份可信预检', () => {
     })
     expect(report.valid).toBe(false)
     expect(report.missingTables.length).toBeGreaterThan(0)
-    expect(report.errors.join('；')).toContain('只接受 v14、v15、v16、v17、v18 或当前备份版本 v19')
+    expect(report.errors.join('；')).toContain('只接受 v14、v15、v16、v17、v18、v19 或当前备份版本 v20')
   })
 
   it('旧 Project 作品镜像字段在写库前被拒绝，不能借导入复活', async () => {

@@ -131,7 +131,7 @@ import type { RetrievalChunk } from '../types/retrieval-chunk'
 import type { TemporalFact } from '../types/temporal-fact'
 
 export const STORYFORGE_DATABASE_NAME = 'storyforge-core'
-export const STORYFORGE_SCHEMA_VERSION = 15
+export const STORYFORGE_SCHEMA_VERSION = 16
 
 /** The hard-cutover baseline released before independent creation releases. */
 export const STORYFORGE_STORES_V1 = {
@@ -330,12 +330,18 @@ export const STORYFORGE_STORES_V14 = {
   worldSourceReceipts: '++id, projectId, worldId, worldReleaseId, &[worldId+declarationHash], [worldId+packageDigest], [worldId+releaseUid]',
 } as const satisfies Record<string, string>
 
-export const STORYFORGE_STORES = {
+export const STORYFORGE_STORES_V15 = {
   ...STORYFORGE_STORES_V14,
   workCoverDrafts: '++id, projectId, worldId, &workId, draftKey, selectedAssetId, adoptedAssetId, lastRunId, updatedAt',
   workCoverAssets: '++id, projectId, worldId, workId, &[workId+assetKey], blobObjectId, sourceRunId, parentAssetId, createdAt',
   workCoverAdoptions: '++id, projectId, worldId, workId, &[workId+operationKey], draftId, originalAssetId, finalAssetId, sourceRunId, adoptedAt',
   workCoverResponseBuffers: '++id, projectId, worldId, workId, &runId, &dispatchKey, draftId, assetId, state, updatedAt',
+} as const satisfies Record<string, string>
+
+export const STORYFORGE_STORES = {
+  ...STORYFORGE_STORES_V15,
+  workCoverAssets: STORYFORGE_STORES_V15.workCoverAssets + ', materializationRunId',
+  workCoverAdoptions: STORYFORGE_STORES_V15.workCoverAdoptions + ', materializationRunId',
 } as const satisfies Record<string, string>
 
 export class StoryForgeDB extends Dexie {
@@ -493,6 +499,7 @@ export class StoryForgeDB extends Dexie {
     this.version(12).stores(STORYFORGE_STORES_V12)
     this.version(13).stores(STORYFORGE_STORES_V13)
     this.version(14).stores(STORYFORGE_STORES_V14)
+    this.version(15).stores(STORYFORGE_STORES_V15)
     this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)
   }
 }
