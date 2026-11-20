@@ -56,6 +56,7 @@ test('all fourteen themes persist, preserve prose and keep editor and dialog act
       expect(contrast(badge.ink, badge.background, badge.surface), `${theme.name} ${name}`).toBeGreaterThanOrEqual(4.5)
     }
     await page.goto('./long')
+    await page.getByLabel('更多操作：全部主题验收', { exact: true }).click()
     await page.getByRole('button', { name: '重命名', exact: true }).click()
     const button = page.getByRole('dialog').getByRole('button', { name: '保存名称', exact: true })
     const action = await button.evaluate(el => ({ ink: getComputedStyle(el).color, background: getComputedStyle(el).backgroundColor }))

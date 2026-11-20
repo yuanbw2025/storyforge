@@ -20,6 +20,11 @@ test.beforeEach(async ({ context, page }, info) => {
   }, origin)
   await context.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url())
+    if (url.origin === origin && url.pathname === '/storyforge/quality002-adoption-model/api/v1/models' && request.method() === 'GET') {
+      // Explicit finite local-service allocation, consumed by the real capacity resolver.
+      await route.fulfill({ json: { models: [{ type: 'llm', key: 'isolated-node-model', loaded_instances: [{ config: { context_length: 128_000 } }] }] } })
+      return
+    }
     if (url.origin === origin && url.pathname === '/storyforge/quality002-adoption-model/v1/chat/completions' && request.method() === 'POST') {
       const index = state.requests.length; state.requests.push(request.postData() ?? '')
       if (index >= 2) { state.blocked.push('Unexpected paid request resend'); await route.abort('blockedbyclient'); return }
@@ -65,7 +70,7 @@ async function prepare(page: Page, family: Family) {
     if (projectId == null) throw new Error('Actual wizard Project required')
     const scope = await resolveScopeLike(projectId)
     useAIConfigStore.getState().setConfig({ provider: 'custom', apiKey: 'synthetic-node-adoption-e2e', model: 'isolated-node-model',
-      baseUrl: `${location.origin}/storyforge/quality002-adoption-model/v1`, temperature: .5, maxTokens: 8_000, contextWindow: 128_000 })
+      baseUrl: `${location.origin}/storyforge/quality002-adoption-model/v1`, temperature: .5, maxTokens: 8_000 })
     await useWorldviewStore.getState().loadAll(scope, null)
     await useWorldviewStore.getState().saveWorldview({ projectId, worldGroupId: null, worldOrigin: '原世界起源。' }, scope)
     await useWorldviewStore.getState().saveStoryCore({ projectId, theme: '原主题', centralConflict: '原冲突', plotPattern: '线性' }, scope)
