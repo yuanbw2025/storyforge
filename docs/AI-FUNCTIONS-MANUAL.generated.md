@@ -73,8 +73,8 @@
 | `world-group.suggest` | 1 | 内置-AI建议世界 | 诸天流/无限流等多世界题材，根据故事概念和已有世界建议新的世界组。 | `projectName` `genres` `concept` `existingWorlds` `userHint` |
 | `world-group.expand` | 1 | 内置-AI扩写世界 | 根据世界的草稿描述，扩展出完整的世界观设定。 | `worldName` `worldType` `draft` `otherWorlds` `storyCore` `userHint` |
 | `inventory.extract` | 1 | 内置-物品栏提取 | 从章节正文提取各角色的物品获得/消耗事件，构建按角色归属的物品栏。 | `knownItemNames` `characterNames` `chapterTitle` `chapterText` |
-| `codex.extract` | 1 | 内置-词条拆分提取 | 把整段世界观内容拆成当前分类下可确认写入的结构化词条。 | `categoryName` `fieldSchema` `existingEntries` `supplementTags` `sourceText` `codex_mineral` `codex_herb` `codex_beast` `codex_race` `codex_faction` `codex_city` `codex_artifact` `codex_natStructure` `codex_natDimension` `codex_natTerrain` `codex_natWater` `codex_natClimate` `codex_humEra` `codex_humEvent` `codex_humSociety` `codex_humPolitics` `codex_humEconomy` `codex_humCulture` `codex_humConflict` `codex_originPower` `codex_originDeity` `codex_custom` |
-| `codex.enrich` | 1 | 内置-词条创意补全 | 根据已登记世界 Canon 为当前分类提出新词条建议。 | `baselineContext` `worldContext` `authorRequest` `supplementTags` `codex_mineral` `codex_herb` `codex_beast` `codex_race` `codex_faction` `codex_city` `codex_artifact` `codex_natStructure` `codex_natDimension` `codex_natTerrain` `codex_natWater` `codex_natClimate` `codex_humEra` `codex_humEvent` `codex_humSociety` `codex_humPolitics` `codex_humEconomy` `codex_humCulture` `codex_humConflict` `codex_originPower` `codex_originDeity` `codex_custom` |
+| `codex.extract` | 1 | 内置-词条拆分提取 | 把整段世界观内容拆成当前分类下可确认写入的结构化词条。 | `categoryName` `fieldSchema` `existingEntries` `supplementTags` `sourceText` `codex_mineral` `codex_herb` `codex_beast` `codex_race` `codex_faction` `codex_city` `codex_artifact` `codex_natStructure` `codex_natDimension` `codex_natTerrain` `codex_natWater` `codex_natClimate` `codex_humSociety` `codex_humPolitics` `codex_humEconomy` `codex_humCulture` `codex_humConflict` `codex_originPower` `codex_originDeity` `codex_custom` |
+| `codex.enrich` | 1 | 内置-词条创意补全 | 根据已登记世界 Canon 为当前分类提出新词条建议。 | `baselineContext` `worldContext` `authorRequest` `supplementTags` `codex_mineral` `codex_herb` `codex_beast` `codex_race` `codex_faction` `codex_city` `codex_artifact` `codex_natStructure` `codex_natDimension` `codex_natTerrain` `codex_natWater` `codex_natClimate` `codex_humSociety` `codex_humPolitics` `codex_humEconomy` `codex_humCulture` `codex_humConflict` `codex_originPower` `codex_originDeity` `codex_custom` |
 | `location.extract` | 1 | 内置-重要地点提取 | 从已写正文中提取反复出现或推动剧情的重要地点候选。 | `existingEntries` `allowedTags` `sourceText` |
 | `story-timeline.extract` | 1 | 内置-故事年表提取 | 从章节正文提取剧情大事，构建故事进程年表（区别于世界背景历史）。 | `chapterTitle` `chapterText` |
 | `scene.verify` | 1 | 内置-场景考证 | 用户描述当前场景，AI 结合世界观/历史年表/世界规则给出符合背景的细节、时代错乱警示与情节灵感。 | `worldContext` `historyContext` `worldRulesContext` `scene` `sceneEra` `sceneLocation` `research_scene_empty` `research_scene_sources` `research_plan_empty` `research_plan_sources` `research_sources_empty` `research_sources_sources` |
@@ -597,4 +597,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `c56555f39`
+生成时间基准:commit `d1770f4f1`
