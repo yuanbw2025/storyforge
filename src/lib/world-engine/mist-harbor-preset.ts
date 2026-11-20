@@ -324,37 +324,29 @@ async function ensureWorldAssets(scope: WorkspaceScope, characters: Map<string, 
       sortOrder,
     })),
   })
-  let loreCategory = (await readOwnedRows<CodexCategory>(scope, 'codexCategories')).find(
-    (item) => item.builtInKey === 'humEvent',
-  )
-  if (!loreCategory) {
-    await adopt({
-      projectId: scope.projectId,
-      scope,
-      target: 'codexCategories',
-      mode: 'add',
-      data: {
-        domain: 'humanity',
-        parentId: null,
-        name: '世界事件',
-        builtInKey: 'humEvent',
-        fieldSchema: [],
-        hidden: false,
-        order: 1,
-      },
-    })
-    loreCategory = (await readOwnedRows<CodexCategory>(scope, 'codexCategories')).find(
-      (item) => item.builtInKey === 'humEvent',
-    )
-  }
-  if (!loreCategory?.id) throw new Error('[mist-harbor] 世界事件分类采纳失败')
+  const loreCategory = await adopt({
+    projectId: scope.projectId,
+    scope,
+    target: 'codexCategories',
+    mode: 'add',
+    data: {
+      domain: 'humanity',
+      parentId: null,
+      name: '雾港世界知识',
+      fieldSchema: [],
+      hidden: false,
+      order: 1,
+    },
+  })
+  const loreCategoryId = loreCategory.written[0]?.id
+  if (loreCategory.written.length !== 1 || !loreCategoryId) throw new Error('[mist-harbor] 世界知识分类采纳失败')
   await adopt({
     projectId: scope.projectId,
     scope,
     target: 'codexEntries',
     mode: 'add-many',
     data: LORE_ROWS.map(([name, summary, description], order) => ({
-      categoryId: loreCategory!.id!,
+      categoryId: loreCategoryId,
       name,
       summary,
       description,

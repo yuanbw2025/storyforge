@@ -15,7 +15,16 @@ async function setup(page: Page) {
     await useCodexStore.getState().loadAll(projectId)
     const result: Array<{ key: string; name: string; id: number; categoryId: number }> = []
     for (const [key, name] of fixtures) {
-      const category = useCodexStore.getState().categories.find((row: { builtInKey: string }) => row.builtInKey === key)
+      let category = useCodexStore.getState().categories.find((row: { builtInKey: string }) => row.builtInKey === key)
+      // Explicit historical fixture: current production no longer seeds these two roots.
+      if (!category && (key === 'humEra' || key === 'humEvent')) {
+        const id = await useCodexStore.getState().addCategory({
+          projectId, domain: 'humanity', builtInKey: key, parentId: null,
+          name: key === 'humEra' ? '旧历史时代' : '旧历史事件', fieldSchema: '[]', order: 0,
+        })
+        category = useCodexStore.getState().categories.find((row: { id: number }) => row.id === id)
+      }
+      if (!category) throw new Error(`缺少测试分类：${key}`)
       const id = await useCodexStore.getState().addEntry({ projectId, categoryId: category.id, name, summary: '旧记录原简介', description: '应当可以查看、修改和保留的旧版作者数据', fields: '{}', refs: '{}', order: 0 })
       result.push({ key, name, id, categoryId: category.id })
     }

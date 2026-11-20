@@ -2,10 +2,10 @@ import { db } from '../db/schema'
 import { adopt as governedAdopt } from '../registry/adopt'
 import { buildWorldReleaseManifest, createWorldRevision, publishWorldRevision } from './releases'
 import { createWorkspace } from '../workspace/create-workspace'
-import { readOwnedRows, stampNewRecord } from '../workspace/scope'
+import { stampNewRecord } from '../workspace/scope'
 import { resolveWorkspaceScope } from '../workspace/ownership'
 import { readWorldReleaseEditionV3 } from './release-codec'
-import type { CodexCategory, WorkspaceScope } from '../types'
+import type { WorkspaceScope } from '../types'
 
 async function adopt(input: Parameters<typeof governedAdopt>[0]) {
   const result = await governedAdopt(input)
@@ -184,20 +184,18 @@ export async function createSaltRidgeWorldV1(name = '盐脊 · 断流之夜') {
     } as never, { owner: 'world' })
   )))
 
-  await adopt({
+  const loreCategory = await adopt({
     projectId: created.scope.projectId,
     scope: created.scope,
     target: 'codexCategories',
     mode: 'add',
     data: {
-      domain: 'humanity', parentId: null, name: '盐脊地方知识', builtInKey: 'humEvent',
+      domain: 'humanity', parentId: null, name: '盐脊地方知识',
       fieldSchema: [], hidden: false, order: 0,
     },
   })
-  const category = (await readOwnedRows<CodexCategory>(created.scope, 'codexCategories'))
-    .find(row => row.builtInKey === 'humEvent')
-  if (!category?.id) throw new Error('盐脊地方知识分类采纳失败')
-  const categoryId = category.id
+  const categoryId = loreCategory.written[0]?.id
+  if (loreCategory.written.length !== 1 || !categoryId) throw new Error('盐脊地方知识分类采纳失败')
   const codexSpecs = [
     ['潮脉与潮井', '潮脉在昼夜间推水，中央机与支井共享同一地下水路。', ['世界规则']],
     ['旧引潮机', '集中抽水能短期恢复港口供水，也可能再次压低盆地支井。', ['设施', '主线']],
@@ -279,6 +277,8 @@ const SALT_RIDGE_EDITION_HASHES = new Set([
   'dd6b658ff3646236e179782da0e2a921e3699cb397f6ac96c805a5c2f5edcd75', // Original frozen edition.
   // Same edition with portable character chapter and story arc group references.
   '3d5917b91c01073aab9ee9c093706e99d099f5014d89ba15a1259fc18e895390',
+  // Same semantic rows with the local-knowledge category using its custom identity.
+  '4f6e1d3cbfd94b83920ddf874f9dbe076e57471ff6cfb1f81d40ef3ba52453d3',
 ])
 
 export async function verifySaltRidgeShowcaseSourceV1(scope: WorkspaceScope, worldReleaseId: number) {
