@@ -16,15 +16,21 @@ async function configureMockedTextProvider(page: Page) {
     localStorage.setItem(
       "storyforge-ai-config",
       JSON.stringify({
-        provider: "agnes",
+        provider: "custom",
         apiKey: "browser-rehearsal-key",
-        model: "agnes-2.0-flash",
-        baseUrl: "https://apihub.agnes-ai.com/v1",
+        model: "fixture-ttrpg-model",
+        baseUrl: `${location.origin}/fixture-ttrpg-production/v1`,
         temperature: 0,
         maxTokens: 0,
       }),
     );
   });
+  // The fake loopback service has a finite allocation. Exercise the real
+  // metadata resolver rather than relying on an unverified vendor default.
+  await page.route("**/fixture-ttrpg-production/api/v1/models", (route) =>
+    route.fulfill({ json: { models: [{ type: "llm", key: "fixture-ttrpg-model",
+      loaded_instances: [{ config: { context_length: 131072 } }] }] } }),
+  );
   await page.route("**/chat/completions", async (route) => {
     const body = route.request().postDataJSON() as {
       messages?: Array<{ role?: string; content?: string }>;
@@ -72,7 +78,7 @@ async function configureMockedTextProvider(page: Page) {
         id: `ttrpg-browser-rehearsal-${Date.now()}`,
         object: "chat.completion",
         created: Math.floor(Date.now() / 1000),
-        model: "agnes-2.0-flash",
+        model: "fixture-ttrpg-model",
         choices: [
           {
             index: 0,
