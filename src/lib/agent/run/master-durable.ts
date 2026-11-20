@@ -530,10 +530,11 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       fail(`主 Agent 计划包含未知领域 ${String(item.agentId)}`)
     }
     const agentId = item.agentId as DomainAgentId
+    const instructionLimit = item.skillId === 'world-origin.story-core' ? Infinity : MAX_TASK_INSTRUCTION_CHARS
     const instruction = readString(
       item.instruction,
       `主 Agent 计划任务 ${id}.instruction`,
-      MAX_TASK_INSTRUCTION_CHARS,
+      instructionLimit,
     )
     if (!Array.isArray(item.dependsOn) || item.dependsOn.some(dep => typeof dep !== 'string')) {
       fail(`主 Agent 计划任务 ${id}.dependsOn 无效`)
@@ -544,8 +545,8 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       if (!isRecord(item.requestContext)) fail('任务 requestContext 必须是对象')
       assertExactKeys(item.requestContext, ['originalRequest', 'plannerInstruction'], '任务 requestContext')
       requestContext = {
-        originalRequest: readString(item.requestContext.originalRequest, '任务原始要求', MAX_TASK_INSTRUCTION_CHARS),
-        plannerInstruction: readString(item.requestContext.plannerInstruction, '任务规划解读', MAX_TASK_INSTRUCTION_CHARS),
+        originalRequest: readString(item.requestContext.originalRequest, '任务原始要求', instructionLimit),
+        plannerInstruction: readString(item.requestContext.plannerInstruction, '任务规划解读', instructionLimit),
       }
     }
     if (dependsOn.includes(id)) fail(`主 Agent 计划任务 ${id} 不得依赖自身`)

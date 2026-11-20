@@ -1,3 +1,5 @@
+import { createMasterAgentPlan } from '../../src/lib/agent/orchestrator'
+import { parseMasterAgentPlanV1 } from '../../src/lib/agent/run/master-durable'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { createContextAccessPolicyFromSkillV1 } from '../../src/lib/context-gateway/skill-policy'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
@@ -68,6 +70,10 @@ describe.sequential('故事核心可编辑方法与实际请求', () => {
     const { scope, project } = await seedCurrentWorkspace('候鸟时刻表')
     await db.works.update(scope.workId, { description: '车站调度员收集候鸟误点记录，温暖轻喜剧，无死亡与阴谋。' })
     const config = { provider: 'openai' as const, apiKey: '', baseUrl: '', model: 'gpt-4o', maxTokens: 4096, temperature: 0.5 }
+    const longInstruction = formatStoryCoreGenerationRequestV1({ field: 'concept', mode: 'expand', hint: '完整作者方向'.repeat(3000) })
+    expect(parseMasterAgentPlanV1({ summary: '故事核心', workflow: { version: 1, workflowId: 'single-domain-direct', reasonCodes: ['single-explicit-domain'] }, tasks: [{ id: 'core', agentId: 'world-origin', skillId: 'world-origin.story-core', instruction: longInstruction, requestContext: { originalRequest: longInstruction, plannerInstruction: longInstruction }, dependsOn: [] }] }).tasks[0].instruction).toBe(longInstruction)
+    const pinned = await createMasterAgentPlan({ projectId: project.id!, scope, worldGroupId: null, request: longInstruction, pinnedTask: { agentId: 'world-origin', skillId: 'world-origin.story-core', instruction: longInstruction } })
+    expect(pinned.tasks[0].instruction).toBe(longInstruction)
     const prepared = await prepareStoryCoreCopilot({ projectId: project.id!, scope, worldGroupId: null, configOverride: config, authorRequest: formatStoryCoreGenerationRequestV1({ field: 'concept', mode: 'expand', hint: '从一张被鸟啄破的时刻表出发。'.repeat(800) }) })
     const messages = prepared.prepared.messages.map(item => item.content).join('\n')
     expect(messages).toContain('车站调度员收集候鸟误点记录')

@@ -588,7 +588,7 @@ function sanitizePlan(
     tasks[0].instruction = request
     tasks[0].skillId = selectAgentSkillIdV1(tasks[0].agentId, request)
   }
-  if (tasks.some(task => task.instruction.length > 8_000 || task.requestContext!.originalRequest.length > 8_000 || task.requestContext!.plannerInstruction.length > 8_000)) {
+  if (tasks.some(task => task.skillId !== 'world-origin.story-core' && (task.instruction.length > 8_000 || task.requestContext!.originalRequest.length > 8_000 || task.requestContext!.plannerInstruction.length > 8_000))) {
     throw new Error('创作任务超过 8000 字符，请缩短后重试；不会截断作者要求。')
   }
   const knownIds = new Set(tasks.map(task => task.id))
@@ -736,7 +736,7 @@ export async function createMasterAgentPlan(input: {
       ? undefined
       : parseStoryArcMutationRequestV1(pinned.storyArcMutationRequest)
     const instruction = pinned.instruction.trim()
-    if (instruction.length > 8_000) {
+    if (pinnedSkillId !== 'world-origin.story-core' && instruction.length > 8_000) {
       throw new Error('固定领域任务的作者要求超过 8000 字符；已在模型调用前阻止，请缩短后重试。')
     }
     const task: MasterAgentTask = {
