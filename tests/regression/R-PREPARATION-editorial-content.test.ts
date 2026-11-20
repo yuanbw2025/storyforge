@@ -43,6 +43,7 @@ describe('准备内容方法进入实际模板路径', () => {
     const reviewed = buildSceneVerifyPrompt({ worldContext: '作者提供的原文', historyContext: '', worldRulesContext: '', scene: '码头生活', researchMode: 'sources', hasSuppliedSources: true })
     expect(reviewed.map(m => m.content).join('\n')).toContain('只审读作者提供资料')
     usePromptStore.setState({ templates: [calibration, research] })
+
     expect(JSON.stringify(usePromptStore.getState().templates)).toBe(before)
   })
   it('正式学习没有样本和改稿对照时仍在模型前拒绝', async () => {

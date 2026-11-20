@@ -298,7 +298,9 @@ describe.sequential('R-HARNESS70 · Codex 词条 durable 分块抽取与原子�
       expect(checkpoint).toBeTruthy()
     } else await mutate(fixture)
     if (_label === '来源请求') {
+      const templateSnapshot = codexAdapter.readCodexExtractPromptTemplateSnapshotV1()
       vi.spyOn(codexAdapter, 'readCodexExtractPromptTemplateSnapshotV1').mockReturnValue({
+        ...templateSnapshot,
         moduleKey: 'codex.extract', systemPrompt: '部署后协议', userPromptTemplate: '{{sourceText}}',
         variables: ['sourceText'], modelOverride: null, examples: null, parameters: null,
       })

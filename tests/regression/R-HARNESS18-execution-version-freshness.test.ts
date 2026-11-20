@@ -1,3 +1,5 @@
+import type { MasterAgentDurableDependenciesV1 } from '../../src/lib/agent/run/master-durable'
+import type { ExecutedMasterCandidate } from '../../src/lib/agent/orchestrator'
 import { legacyAgentToolsV22 } from '../helpers/legacy-agent-tools-v22'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { getAgentToolSchemaSnapshotV1 } from '../../src/lib/agent/tool-registry'
@@ -60,7 +62,7 @@ async function createConversation(scope: WorkspaceScope): Promise<number> {
     worldGroupId: null,
     purpose: 'master-authoring',
   })
-  return conversation.id
+  return conversation.id!
 }
 
 function contract() {
@@ -74,7 +76,7 @@ function contract() {
 
 function generationDependency(scope: WorkspaceScope) {
   return {
-    execute: async (options: Parameters<NonNullable<Parameters<typeof runDurableMasterAgentPlanV1>[1]['execute']>>[0]) => {
+    execute: async (options: Parameters<NonNullable<MasterAgentDurableDependenciesV1['execute']>>[0]) => {
       const task = options.plan.tasks[0]
       const currentWorld = currentWorldOriginCandidateFixtureV1('世界由周期性潮汐塑造。')
       await options.executionTrace?.taskStarted?.(task)
@@ -83,7 +85,7 @@ function generationDependency(scope: WorkspaceScope) {
         worldGroupId: options.worldGroupId,
         executionTrace: options.executionTrace!,
       }, task, currentWorld.draft)
-      await options.executionTrace?.candidateReady?.(task, {
+      const candidate: ExecutedMasterCandidate = {
         payload: {
           version: 1,
           taskId: task.id,
@@ -101,7 +103,9 @@ function generationDependency(scope: WorkspaceScope) {
         runtimeNode: {} as any,
         runtimeOutput: currentWorld.runtimeOutput,
         contextGatewayRuntime: gateway.contextGatewayRuntime,
-      })
+      }
+      await options.executionTrace?.candidateReady?.(task, candidate)
+      return [candidate]
     },
   }
 }
