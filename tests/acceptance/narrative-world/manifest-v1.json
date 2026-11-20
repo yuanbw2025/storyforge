@@ -21,9 +21,14 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261120-063-producer-input-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261121-063-main558-input-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261120-063-producer-input-v1.json",
+        "workPackage": "BUG-063-A2-MAIN558",
+        "note": "Preserve the actual producer-input v1 measurement and its source-qualified validation before main PR558 reference-service capacity inputs. The next dated receipt must measure and review the new shared input hashes without rewriting prior observations or claiming new product acceptance."
+      },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261120-story-core-content-input-v9.json",
         "workPackage": "BUG-063-A2",
