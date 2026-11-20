@@ -1,4 +1,5 @@
 import 'fake-indexeddb/auto'
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
@@ -127,16 +128,19 @@ describe.sequential('R-HARNESS23 · 主 Agent 有限 fan-out', { timeout: 15_000
     await db.delete()
     await db.open()
     globalThis.localStorage?.removeItem(MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY)
+    const config = {
+      ...originalConfig,
+      provider: 'custom' as const,
+      apiKey: '',
+      model: 'fan-out-test',
+      baseUrl: 'https://fan-out.invalid/v1',
+      maxTokens: 8_000,
+    }
+    // Preserve this transport fixture's intended finite 64K allocation using
+    // current metadata, so concurrency/recovery exercises actual dispatch.
+    const modelCapacity = await seedModelAllocationFixtureV1(config, 64_000)
     useAIConfigStore.setState({
-      config: {
-        ...originalConfig,
-        provider: 'custom',
-        apiKey: '',
-        model: 'fan-out-test',
-        baseUrl: 'https://fan-out.invalid/v1',
-        maxTokens: 8_000,
-        contextWindow: 64_000,
-      },
+      config: { ...config, modelCapacity },
       presets: [],
       taskRoutes: {},
     })

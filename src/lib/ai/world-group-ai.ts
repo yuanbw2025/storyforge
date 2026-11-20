@@ -1,3 +1,5 @@
+import { WORLD_SUGGEST_CONTENT_GUIDANCE, WORLD_EXPAND_CONTENT_GUIDANCE } from '../creation/world-entry-content-skill'
+import { appendPreparationSystemGuidance } from '../creation/preparation-content-skill'
 /**
  * Phase 25.4 — 多世界 AI 适配器
  * 世界建议（suggest）+ 世界扩写（expand）的 prompt 构建与输出解析
@@ -30,7 +32,7 @@ export const WORLD_SUGGEST_FIELDS_V1 = [
   'plannedChapterCount',
 ] as const
 
-export const WORLD_SUGGEST_PROMPT_VERSION_V1 = 'world-suggest-v1' as const
+export const WORLD_SUGGEST_PROMPT_VERSION_V1 = 'world-suggest-v2' as const
 
 export function buildWorldSuggestPrompt(args: {
   projectName: string
@@ -47,7 +49,7 @@ export function buildWorldSuggestPrompt(args: {
     existingWorlds: args.existingWorlds,
     userHint: args.userHint || '',
   })
-  return messages
+  return appendPreparationSystemGuidance(messages, WORLD_SUGGEST_CONTENT_GUIDANCE)
 }
 
 export function parseWorldSuggestOutput(output: string): SuggestedWorld[] {
@@ -152,7 +154,7 @@ export const WORLDVIEW_EXPAND_FIELDS_V1 = [
   'factionLayout',
 ] as const
 
-export const WORLDVIEW_EXPAND_PROMPT_VERSION_V1 = 'worldview-expand-v2' as const
+export const WORLDVIEW_EXPAND_PROMPT_VERSION_V1 = 'worldview-expand-v3' as const
 
 export function buildWorldExpandPrompt(args: {
   worldName: string
@@ -171,7 +173,7 @@ export function buildWorldExpandPrompt(args: {
     storyCore: args.storyCore || '',
     userHint: args.userHint || '',
   })
-  return messages
+  return appendPreparationSystemGuidance(messages, WORLD_EXPAND_CONTENT_GUIDANCE)
 }
 
 /** HARNESS-67: all model-visible project data has already passed through the

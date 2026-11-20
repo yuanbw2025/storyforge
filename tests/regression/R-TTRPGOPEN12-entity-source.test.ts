@@ -1,3 +1,4 @@
+import { legacyAgentToolsV21 } from '../helpers/legacy-agent-tools-v21'
 import { beforeEach, afterEach, describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
@@ -37,7 +38,9 @@ describe('R-TTRPGOPEN12 read-only entity source, original consultation and recip
     const snapshot = getAgentToolSchemaSnapshotV1()
     // World-query v21 adds one independently gated tool. Keep every v20
     // declaration and historical TTRPG source-permission assertion exact.
-    const mergedV20 = (snapshot as Array<{ name: string }>).filter(tool => tool.name !== 'query_world_release')
+    const legacyV21 = legacyAgentToolsV21(snapshot)
+    expect(await hashCanonicalValue(legacyV21)).toBe('78723a81dfb12f89ca7ab15e579fa4056508eec8694834f557ace62753d419d0')
+    const mergedV20 = legacyV21.filter(tool => tool.name !== 'query_world_release')
     expect(await hashCanonicalValue(mergedV20)).toBe('c40157ac5f31d8edae7cfa90c7749e93580a7095040afdc0b97bd7eb8ec4485d')
     // Preserve the pre-merge TTRPG declaration exactly; only Main's Work
     // intent enum is new, without granting it to any TTRPG Skill.
@@ -45,7 +48,7 @@ describe('R-TTRPGOPEN12 read-only entity source, original consultation and recip
     expect(await hashCanonicalValue(ttrpgV19)).toBe('4efc0b11ea06cac242c56c3648ff2d4627ed238f51e029044a18e53717a09545')
     const old = JSON.parse(JSON.stringify(ttrpgV19), (_key, value) => Array.isArray(value) ? value.filter(item => item !== 'ttrpgOpenLearnedIdentities' && item !== 'ttrpgOpenCommonIdentities' && item !== sourceKey && item !== 'ttrpgOpenCommonOracleInput') : value)
     expect(await hashCanonicalValue(old)).toBe('8cf80c48035160cdfdd3fccce3f24e005041a89efaf26f40f30cf8aa8b58417e')
-    expect(await hashCanonicalValue(snapshot)).toBe(AGENT_TOOL_SCHEMA_HASH_V1); expect(AGENT_TOOL_SCHEMA_VERSION_V1).toBe('agent-read-tools-v21-narrative-query-v1')
+    expect(await hashCanonicalValue(snapshot)).toBe(AGENT_TOOL_SCHEMA_HASH_V1); expect(AGENT_TOOL_SCHEMA_VERSION_V1).toBe('agent-read-tools-v23-positioning-preparation-v1')
     expect(CONTEXT_SOURCE_BY_KEY.size).toBe(CONTEXT_SOURCES.length)
     expect(CONTEXT_SOURCE_BY_KEY.get(sourceKey)!.resources!.providerId).toBe(`storyforge.${sourceKey}`)
     for (const skill of ['prose.ttrpg-open-intent', 'prose.ttrpg-open-oracle-interpret', 'prose.ttrpg-open-public-situation-propose', 'prose.ttrpg-open-kp']) {

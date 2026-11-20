@@ -9,13 +9,14 @@ import { useIncrementalInspiration } from '../../src/hooks/useIncrementalInspira
 import { MAX_INSPIRATION_FRAGMENTS, parseInspirationFragments } from '../../src/lib/inspiration/workspace'
 import type { Project } from '../../src/lib/types'
 
-const model = vi.hoisted(() => ({ submit: vi.fn() }))
+const model = vi.hoisted(() => ({ submit: vi.fn(), pending: [] as any[] }))
 vi.mock('../../src/components/agent/useMasterCopilot', () => ({
-  useMasterCopilot: () => ({ pendingCandidates: [], busy: false, error: null,
+  useMasterCopilot: () => ({ pendingCandidates: model.pending, busy: false, error: null,
     stop: () => undefined, submitTargetedRequest: model.submit }),
 }))
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { configurable: true, value: true })
 let root: Root | undefined, host: HTMLDivElement | undefined
+let expectedSubmissions = 0
 let controller: ReturnType<typeof useIncrementalInspiration>
 let saves: Array<ReturnType<typeof controller.addCurrentFragment>> = []
 const holds: Array<{ release: () => void; done: Promise<unknown> }> = []
@@ -51,14 +52,14 @@ const button = () => host!.querySelector('button')!
 beforeEach(async () => {
   await db.delete(); await db.open(); localStorage.clear(); sessionStorage.clear()
   store.setState({ scope: null, workspace: null, fragments: [], versions: [], loading: false })
-  saves = []; model.submit.mockReset()
+  saves = []; expectedSubmissions = 0; model.pending = []; model.submit.mockReset()
 })
 afterEach(async () => {
   for (const hold of holds) hold.release()
   await Promise.allSettled(holds.map(hold => hold.done)); holds.length = 0
   if (root) await act(async () => root!.unmount())
   host?.remove(); root = undefined; host = undefined
-  expect(model.submit).not.toHaveBeenCalled(); db.close()
+  expect(model.submit).toHaveBeenCalledTimes(expectedSubmissions); db.close()
 })
 
 describe('SFQA059/060 real hook and production admission', () => {
@@ -120,4 +121,31 @@ describe('SFQA059/060 real hook and production admission', () => {
     expect(parseInspirationFragments((await db.inspirationWorkspaces.toArray())[0].fragments).map(item => item.text))
       .toEqual(['Existing source', 'INPUT_SURVIVES_FAILURE'])
   })
+  it.each(['organize', 'position-defined'] as const)('恢复待确认的%s候选时自动选中原动作，不被后到的旧版本覆盖', async mode => {
+    const scope = await create()
+    await store.getState().load(scope)
+    const fragment = await store.getState().addFragment(scope, { text: '南枝的铃壳' })
+    const old = { summary: '旧整理', authorMaterial: '南枝', proposals: mode === 'position-defined' ? [{ title: '明确方向稿', content: '保持手艺日常与3万字完整稿。' }] : [], openQuestions: [] }
+    await store.getState().saveVersion(scope, { mode, fragmentIds: [fragment!.id], result: old })
+    const fresh = { ...old, summary: '待确认的新整理' }
+    model.pending = [{ payload: { agentId: 'inspiration', skillId: 'inspiration.prepare', mode }, event: { id: 901, content: JSON.stringify(fresh) } }]
+    await mount(scope.projectId)
+    await act(async () => { await vi.waitFor(() => expect(controller.preparationResult?.summary).toBe('待确认的新整理')) })
+    expect(controller.action).toBe(mode)
+    expect(controller.pendingCandidate?.event.id).toBe(901)
+    expect(controller.pendingDiff?.some(diff => diff.before === '旧整理' && diff.after === '待确认的新整理')).toBe(true)
+    expect(model.submit).not.toHaveBeenCalled()
+  })
+
+  it.each(['deepen', 'position-open', 'position-defined'] as const)('作者选择%s后，实际提交固定准备Skill、动作和所选碎片', async mode => {
+    const scope = await create()
+    const fragment = await store.getState().addFragment(scope, { text: '已定方向：南枝经营补伞铺' })
+    await mount(scope.projectId)
+    await act(async () => controller.setAction(mode))
+    await act(async () => { await vi.waitFor(() => expect(store.getState().loading).toBe(false)) })
+    expectedSubmissions = 1
+    await act(async () => { await controller.generate() })
+    expect(model.submit).toHaveBeenCalledWith(expect.stringContaining(`灵感准备任务=${mode}`), expect.objectContaining({ skillId: 'inspiration.prepare', inspirationFragmentIds: [fragment!.id] }))
+  })
+
 })

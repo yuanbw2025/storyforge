@@ -401,7 +401,7 @@ export default function WorldRulesPanel({ project, initialProfileId, resizableIn
             <span>⚖️</span> 真实与幻想
           </h2>
           <p className="text-sm text-text-muted mt-1">
-            按维度声明哪些设定取自真实历史、哪些是架空改造，AI 生成时会严格遵守这些约束。
+            按维度声明现实参照与架空改造，生成时作为作者约束读取；这些声明不等于系统已完成史实核验。
             <span className="ml-2 text-accent">{filled} 个维度已设定</span>
           </p>
         </div>

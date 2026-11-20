@@ -781,11 +781,13 @@ async function continueExtraction(input: {
       ? buildCodexExtractPromptFromRegisteredContextV1({
           sourceText: chunkText,
           baselineContext: input.prepared.baselineContext.text,
+          categoryBuiltInKey: progress.plan.baseline.category.builtInKey,
           discoveredNames,
           supplementTags: progress.plan.request.supplementTags,
         })
       : buildCodexEnrichPromptFromRegisteredContextV1({
           baselineContext: input.prepared.baselineContext.text,
+          categoryBuiltInKey: progress.plan.baseline.category.builtInKey,
           worldContext: chunkText,
           authorRequest: progress.plan.request.authorRequest,
           supplementTags: progress.plan.request.supplementTags,

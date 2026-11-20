@@ -1,0 +1,1039 @@
+{
+  "kind": "original-fixture-exploratory-evidence",
+  "limitations": "Raw requests/responses stay outside checkout. Schema/transport success is not literary success. See README for stopped studies, source snapshot timing and contradictions.",
+  "records": [
+    {
+      "study": "model-round1b",
+      "id": "hard-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "length",
+      "responseHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "usage": {
+        "completion_tokens": 2500,
+        "prompt_tokens": 987,
+        "total_tokens": 3487,
+        "completion_tokens_details": {
+          "reasoning_tokens": 2500,
+          "text_tokens": 0
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round1b",
+      "id": "hard-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "bed91a5d81f5bbccaf5ca7197a45ea62b282e636e0e85011d535c05b8b25aa20",
+      "usage": {
+        "completion_tokens": 697,
+        "prompt_tokens": 696,
+        "total_tokens": 1393,
+        "completion_tokens_details": {
+          "reasoning_tokens": 322,
+          "text_tokens": 375
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round1b",
+      "id": "ordinary-apply-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "99e84ab8628a81ef584ea88650583aaeffde476d81e00c3b4804993017808c64",
+      "usage": {
+        "completion_tokens": 687,
+        "prompt_tokens": 841,
+        "total_tokens": 1528,
+        "completion_tokens_details": {
+          "reasoning_tokens": 409,
+          "text_tokens": 278
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round1b",
+      "id": "ordinary-apply-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "34d0ac2604da2021c602f82fce166039719c507011820e7634d9a76429dca49a",
+      "usage": {
+        "completion_tokens": 705,
+        "prompt_tokens": 733,
+        "total_tokens": 1438,
+        "completion_tokens_details": {
+          "reasoning_tokens": 429,
+          "text_tokens": 276
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round1b",
+      "id": "ordinary-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "abb47c6749cd827d801ed0040a2d6f2082a938d26eb7b86e4861acdbc5e5613c",
+      "usage": {
+        "completion_tokens": 701,
+        "prompt_tokens": 974,
+        "total_tokens": 1675,
+        "completion_tokens_details": {
+          "reasoning_tokens": 205,
+          "text_tokens": 496
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round1b",
+      "id": "ordinary-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "e2e1ce63f65df0b72ba94d84fbe2327d13208ed74ecbeafa4b6a1f8fe73efcca",
+      "usage": {
+        "completion_tokens": 549,
+        "prompt_tokens": 689,
+        "total_tokens": 1238,
+        "completion_tokens_details": {
+          "reasoning_tokens": 161,
+          "text_tokens": 388
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round1b",
+      "id": "repair-apply-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "fae76ae7403e26aaa952360707a2223e9e4ae50f43e8a3733ed79d324582df10",
+      "usage": {
+        "completion_tokens": 519,
+        "prompt_tokens": 706,
+        "total_tokens": 1225,
+        "completion_tokens_details": {
+          "reasoning_tokens": 167,
+          "text_tokens": 352
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round1b",
+      "id": "repair-apply-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "5f029c88c6215700326380a352155c60f655f724038278202f5f8447687b65c7",
+      "usage": {
+        "completion_tokens": 425,
+        "prompt_tokens": 737,
+        "total_tokens": 1162,
+        "completion_tokens_details": {
+          "reasoning_tokens": 183,
+          "text_tokens": 242
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round1b",
+      "id": "repair-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "1795768cf1081f8be6d570185f33783fd4c7aad56e37c7175cf7d1ea3f37316f",
+      "usage": {
+        "completion_tokens": 754,
+        "prompt_tokens": 988,
+        "total_tokens": 1742,
+        "completion_tokens_details": {
+          "reasoning_tokens": 398,
+          "text_tokens": 356
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round1b",
+      "id": "repair-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "f6a3292b2b57667be15a48b05c6c349e6a24ec5d6497d2cc2e659fa5bc9b93a1",
+      "usage": {
+        "completion_tokens": 542,
+        "prompt_tokens": 694,
+        "total_tokens": 1236,
+        "completion_tokens_details": {
+          "reasoning_tokens": 154,
+          "text_tokens": 388
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round2",
+      "id": "hard-apply-old.failure",
+      "failure": {
+        "status": 429
+      }
+    },
+    {
+      "study": "model-round2",
+      "id": "hard-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "74346cae9e02314dd3b73f727d252cb5b16eb8667b9e89ba185ea7d5bf080cde",
+      "usage": {
+        "completion_tokens": 406,
+        "prompt_tokens": 1043,
+        "total_tokens": 1449,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round2",
+      "id": "hard-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "ad5866ddb726a9179682379918323c0f99424c7f951e96633f0b7a11823aec2e",
+      "usage": {
+        "completion_tokens": 391,
+        "prompt_tokens": 698,
+        "total_tokens": 1089,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round2",
+      "id": "ordinary-apply-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "e808ee09bbfa24f874d2616ae7e48e0ec6fe5d7f094ce6f4f702b125392afb33",
+      "usage": {
+        "completion_tokens": 308,
+        "prompt_tokens": 716,
+        "total_tokens": 1024,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round2",
+      "id": "ordinary-apply-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "97e489c3bb002c27f3af88238b64b03960f2463d96e52564c845ab82b3a0f3af",
+      "usage": {
+        "completion_tokens": 297,
+        "prompt_tokens": 719,
+        "total_tokens": 1016,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round2",
+      "id": "ordinary-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "30982043c25e04dfea768d5ee62cac3de1d7f90c145537ac28540fbb074b5cb9",
+      "usage": {
+        "completion_tokens": 368,
+        "prompt_tokens": 1030,
+        "total_tokens": 1398,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round2",
+      "id": "ordinary-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "127dcf0d494c83facf7fa0675904146d4b1cd24e1521a722ccb476c994dae51e",
+      "usage": {
+        "completion_tokens": 371,
+        "prompt_tokens": 691,
+        "total_tokens": 1062,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round2",
+      "id": "repair-apply-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "3f2597e82b92a8605637e5def71da1fd9fc338f4566a6be180249b54d1052a68",
+      "usage": {
+        "completion_tokens": 339,
+        "prompt_tokens": 726,
+        "total_tokens": 1065,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round2",
+      "id": "repair-apply-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "eae550eff396dcb5577b7f38e2795b4bdd1c5fd12f570b51595d0e4800990369",
+      "usage": {
+        "completion_tokens": 309,
+        "prompt_tokens": 710,
+        "total_tokens": 1019,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round2",
+      "id": "repair-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "5dffa590e736649fd0dc1f7657fa5f2ba70ece9e73ba54575cb448220a385b87",
+      "usage": {
+        "completion_tokens": 373,
+        "prompt_tokens": 1044,
+        "total_tokens": 1417,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round2",
+      "id": "repair-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "adf240e263afcec12d9283c43ad91dd03853886728707b3b55e71bb61b0ba6d6",
+      "usage": {
+        "completion_tokens": 358,
+        "prompt_tokens": 696,
+        "total_tokens": 1054,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round3",
+      "id": "hard-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "05c7531d68b870b607abd00228e2d3073d9e059c7a89b4d817958d318352dd1c",
+      "usage": {
+        "completion_tokens": 388,
+        "prompt_tokens": 1163,
+        "total_tokens": 1551,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round3",
+      "id": "hard-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "4f4ad7335baa5374bce55c1c0927234f18d2cf51aed5c518c89c964cb3c3b7f4",
+      "usage": {
+        "completion_tokens": 354,
+        "prompt_tokens": 698,
+        "total_tokens": 1052,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round3",
+      "id": "hard-old.validation-failure",
+      "failure": {
+        "error": "invalid-candidate",
+        "originalRetained": true
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "hard-apply-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "255271050cfa123386733cb900212445233252279b79f174066951b33b5586f6",
+      "usage": {
+        "completion_tokens": 302,
+        "prompt_tokens": 742,
+        "total_tokens": 1044,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "hard-apply-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "9337a5b6801355fd0cac6a51cb69bd7990622f434c79a527b221ecddbe853ff7",
+      "usage": {
+        "completion_tokens": 304,
+        "prompt_tokens": 781,
+        "total_tokens": 1085,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "hard-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "f04f1f5cf7ed8985a39dba820ee83b6811103609b0fd453c1a82ac6780298457",
+      "usage": {
+        "completion_tokens": 395,
+        "prompt_tokens": 1163,
+        "total_tokens": 1558,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "hard-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "0db0dd95a4ca06ed5c1364170b74e7d9761534c4d8ecd6d1caefb3dd39096264",
+      "usage": {
+        "completion_tokens": 434,
+        "prompt_tokens": 698,
+        "total_tokens": 1132,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "image-apply-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "8bbfc1df83b9dd4737717fbe8545f6a0e011532ed97202a714726aac13532dc4",
+      "usage": {
+        "completion_tokens": 267,
+        "prompt_tokens": 783,
+        "total_tokens": 1050,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "image-apply-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "2afa3d622699cd04fec8aa9d25dfbe253f92a5d70e3aafa2e30c720b3b72175e",
+      "usage": {
+        "completion_tokens": 223,
+        "prompt_tokens": 746,
+        "total_tokens": 969,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "image-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "9c61016cbde488f03b70ddcf8591f485510aaff0b27c598dc1298fd583029581",
+      "usage": {
+        "completion_tokens": 437,
+        "prompt_tokens": 978,
+        "total_tokens": 1415,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "image-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "6f8bbfe2f68a8c490ed764d868bef5223fccd49d6728692f13e8679a7ae252e4",
+      "usage": {
+        "completion_tokens": 400,
+        "prompt_tokens": 633,
+        "total_tokens": 1033,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "multi-apply-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "d5890483f4589c19b6ea832c224d6ac346202c544472aa3d27ab45b952a78f18",
+      "usage": {
+        "completion_tokens": 247,
+        "prompt_tokens": 649,
+        "total_tokens": 896,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "multi-apply-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "14f2132443f15a351565c2164ba63911a15d78ebfab1be76563fc42634776fe4",
+      "usage": {
+        "completion_tokens": 306,
+        "prompt_tokens": 730,
+        "total_tokens": 1036,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "multi-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "82ab5e9e2dd5acd2a0f48ecf35d3b4f56f7afea7997d81682427fd36be692c25",
+      "usage": {
+        "completion_tokens": 298,
+        "prompt_tokens": 1039,
+        "total_tokens": 1337,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "multi-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "0d9726471fe91103c0df1228b31e845a429c7cfd49d2d572a9b77127c3bfee76",
+      "usage": {
+        "completion_tokens": 378,
+        "prompt_tokens": 702,
+        "total_tokens": 1080,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "myth-apply-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "bd85d278e8006ab1c187aa892f2a446562cafd1b765688fbf5e4baeccc205d15",
+      "usage": {
+        "completion_tokens": 282,
+        "prompt_tokens": 547,
+        "total_tokens": 829,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "myth-apply-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "38f454d03eb5ebe68398792740e5b4248ba5504f374f32aef0b0cd69a0511191",
+      "usage": {
+        "completion_tokens": 264,
+        "prompt_tokens": 792,
+        "total_tokens": 1056,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "myth-new",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "2018ef685b123646ea0fbb73a8dd60c80f07ec88edab61d879debd0fba247bd8",
+      "usage": {
+        "completion_tokens": 197,
+        "prompt_tokens": 1103,
+        "total_tokens": 1300,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round4",
+      "id": "myth-old",
+      "model": "agnes-2.5-flash",
+      "finishReason": "stop",
+      "responseHash": "b85886b8f7bbd28172c7af24089ab18b57bced605fb8cfc60cba4ed526c3730a",
+      "usage": {
+        "completion_tokens": 442,
+        "prompt_tokens": 693,
+        "total_tokens": 1135,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "hard-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "9b06ff1b28860befd949f7d4485c6b97e6e3c1e6d6e45049135026ce29fed207",
+      "usage": {
+        "prompt_tokens": 612,
+        "completion_tokens": 196,
+        "total_tokens": 808,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 612
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "hard-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "40bc47bd81673f5f857d706d8e89b3bb98f32a0b2f18ae78e21a0ec2fb06ab3c",
+      "usage": {
+        "prompt_tokens": 546,
+        "completion_tokens": 206,
+        "total_tokens": 752,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 546
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "hard-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "7dddaf68e51b47f97dcd99f809127bde74758f29bcf23d467efc2bf39a005bed",
+      "usage": {
+        "prompt_tokens": 900,
+        "completion_tokens": 550,
+        "total_tokens": 1450,
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        },
+        "prompt_cache_hit_tokens": 128,
+        "prompt_cache_miss_tokens": 772
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "hard-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "aa62720b15174ee3da9910ecea59217c72558b0579cfb38b94f4658b69eed066",
+      "usage": {
+        "prompt_tokens": 434,
+        "completion_tokens": 484,
+        "total_tokens": 918,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 434
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "image-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "7a1b87daf878354ccc970447f504134283c6bfd5fad06824d2f8db6cc699e458",
+      "usage": {
+        "prompt_tokens": 685,
+        "completion_tokens": 183,
+        "total_tokens": 868,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 685
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "image-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "22e1545d34f61e365721a053fad169643fd5ba503fbd768164426687c0a2a629",
+      "usage": {
+        "prompt_tokens": 482,
+        "completion_tokens": 221,
+        "total_tokens": 703,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 482
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "image-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "207c181ea643af365f0a4e81943c6f96564dcb0f92a0aa572c837a6f3980da86",
+      "usage": {
+        "prompt_tokens": 714,
+        "completion_tokens": 625,
+        "total_tokens": 1339,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 714
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "image-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "c4dcf4798ff76d9a3e3af98abb21e04f218ad52fb08ef0fd2afe25eba8be428f",
+      "usage": {
+        "prompt_tokens": 366,
+        "completion_tokens": 421,
+        "total_tokens": 787,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 366
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "multi-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "4fef7efb44d982cfc34e8c8399d995accce214aa91ea927640ce0259502d6838",
+      "usage": {
+        "prompt_tokens": 468,
+        "completion_tokens": 232,
+        "total_tokens": 700,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 468
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "multi-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "f887605a2a073186dc20ee79d18b3f698b95237d79ab7098e7a4281f5b62f96f",
+      "usage": {
+        "prompt_tokens": 389,
+        "completion_tokens": 248,
+        "total_tokens": 637,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 389
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "multi-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "3a57cc017eadb83ca8b3442eeb69f7e2ac60158ae4b5ec0b3889aaaeb8b984d9",
+      "usage": {
+        "prompt_tokens": 780,
+        "completion_tokens": 401,
+        "total_tokens": 1181,
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        },
+        "prompt_cache_hit_tokens": 128,
+        "prompt_cache_miss_tokens": 652
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "multi-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "ce3246504340fd5cbe83f81d8b1e7e27b78752cd7555e88d21c813f2a2183fd4",
+      "usage": {
+        "prompt_tokens": 438,
+        "completion_tokens": 322,
+        "total_tokens": 760,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 438
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "myth-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "2f01245d2e97948e34d85bbb91ad7ec24efe5d41798b26557ac09fe9b97cb866",
+      "usage": {
+        "prompt_tokens": 669,
+        "completion_tokens": 268,
+        "total_tokens": 937,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 669
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "myth-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "56d5747afbd85394b59705bd36d688214d8a13f67e84d8aa60c23b2cb037e5b7",
+      "usage": {
+        "prompt_tokens": 109,
+        "completion_tokens": 184,
+        "total_tokens": 293,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 109
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "myth-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "6b8330e48f68b954c0e0333796cee2aba7ddf05a0d02cd1b1d46af14b85c7619",
+      "usage": {
+        "prompt_tokens": 839,
+        "completion_tokens": 603,
+        "total_tokens": 1442,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 839
+      }
+    },
+    {
+      "study": "model-round5-deepseek",
+      "id": "myth-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "86d9910245f2b794d4dbf00f2852727d4bc2512798ddb32d82f9e80b684a45d4",
+      "usage": {
+        "prompt_tokens": 426,
+        "completion_tokens": 43,
+        "total_tokens": 469,
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        },
+        "prompt_cache_hit_tokens": 128,
+        "prompt_cache_miss_tokens": 298
+      }
+    },
+    {
+      "study": "model-round6-myth",
+      "id": "myth-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "3c7ce46aea75dd3cee4ae3bbe0456f9a996d183997fbf607bc9996290ad17351",
+      "usage": {
+        "prompt_tokens": 539,
+        "completion_tokens": 193,
+        "total_tokens": 732,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 539
+      }
+    },
+    {
+      "study": "model-round6-myth",
+      "id": "myth-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "4f86b453e784cc5b985ce343b3c1674ed1f42ed2fb853d7031fc1f4cad4f13d1",
+      "usage": {
+        "prompt_tokens": 109,
+        "completion_tokens": 247,
+        "total_tokens": 356,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 109
+      }
+    },
+    {
+      "study": "model-round6-myth",
+      "id": "myth-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "937ad84bd0b8e7dd37ac3036746830f5c732b6d776a58bef806fad34a66e31c2",
+      "usage": {
+        "prompt_tokens": 869,
+        "completion_tokens": 473,
+        "total_tokens": 1342,
+        "prompt_tokens_details": {
+          "cached_tokens": 384
+        },
+        "prompt_cache_hit_tokens": 384,
+        "prompt_cache_miss_tokens": 485
+      }
+    },
+    {
+      "study": "model-round6-myth",
+      "id": "myth-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "86d9910245f2b794d4dbf00f2852727d4bc2512798ddb32d82f9e80b684a45d4",
+      "usage": {
+        "prompt_tokens": 426,
+        "completion_tokens": 43,
+        "total_tokens": 469,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        },
+        "prompt_cache_hit_tokens": 256,
+        "prompt_cache_miss_tokens": 170
+      }
+    },
+    {
+      "study": "model-round7-faith-contract",
+      "id": "myth-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "b22093adede5fd85a116c8cc98e57b6ce477dd268688ee8be8018675755a3f59",
+      "usage": {
+        "prompt_tokens": 350,
+        "completion_tokens": 183,
+        "total_tokens": 533,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 350
+      }
+    },
+    {
+      "study": "model-round7-faith-contract",
+      "id": "myth-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "986229ae2b61e6fe2391c4e4010b639beb916e4d122a0aeceb53d41d80bad587",
+      "usage": {
+        "prompt_tokens": 446,
+        "completion_tokens": 239,
+        "total_tokens": 685,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 446
+      }
+    },
+    {
+      "study": "model-round7-faith-contract",
+      "id": "myth-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "e2891a9a425388ec30c3e83e4b86ded65eef49f1552db2dd749285ad5408a9c3",
+      "usage": {
+        "prompt_tokens": 875,
+        "completion_tokens": 284,
+        "total_tokens": 1159,
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        },
+        "prompt_cache_hit_tokens": 128,
+        "prompt_cache_miss_tokens": 747
+      }
+    },
+    {
+      "study": "model-round7-faith-contract",
+      "id": "myth-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "1c40ed14b32d873848c5db17cf2e898b73bc22987f2a58992d4467386c5c440f",
+      "usage": {
+        "prompt_tokens": 426,
+        "completion_tokens": 381,
+        "total_tokens": 807,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        },
+        "prompt_cache_hit_tokens": 256,
+        "prompt_cache_miss_tokens": 170
+      }
+    }
+  ]
+}

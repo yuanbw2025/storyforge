@@ -1641,8 +1641,9 @@ test('神明与信仰面板一次生成结构化候选，刷新恢复后采纳�
   await expect(candidate).toHaveCount(0)
 })
 
-test('灵感反推主面板通过定向 durable Skill 生成、恢复、拒绝并确认版本', async ({ page }) => {
+for (const preparation of [false, true]) test(`${preparation ? '创作定位' : '灵感反推'}主面板通过定向 durable Skill 生成、恢复、拒绝并确认版本`, async ({ page }) => {
   let generationCalls = 0
+  const preparationResult = { summary: '模型版：明确单一定位', authorMaterial: '退潮后城市从海床升起，守灯人听见潮汐钟。', proposals: [{ title: '守灯人的日常与探索', content: '保留海床升起的城市，围绕不同来客和守灯日常展开，提供具体活动与相遇。篇幅与连载未定，不编市场数据。' }], openQuestions: [] }
   const modelResult = {
     worldview: {
       worldOrigin: '模型版：盐海退潮后，灯塔城从海床升起。',
@@ -1686,7 +1687,7 @@ test('灵感反推主面板通过定向 durable Skill 生成、恢复、拒绝�
       body: JSON.stringify({
         choices: [{
           message: {
-            content: JSON.stringify(modelResult),
+            content: JSON.stringify(preparation ? preparationResult : modelResult),
           },
         }],
         usage: { prompt_tokens: 140, completion_tokens: 60, total_tokens: 200 },
@@ -1697,6 +1698,7 @@ test('灵感反推主面板通过定向 durable Skill 生成、恢复、拒绝�
   await openCleanHome(page)
   await createProject(page, 'E2E 灵感副驾确认闭环')
   await openWorkspaceLeaf(page, '灵感反推')
+  if (preparation) await page.getByLabel('灵感任务').selectOption('position-defined')
   await page.getByPlaceholder(/随便写点什么/).fill('退潮后城市从海床升起，守灯人听见潮汐钟。')
   await page.getByPlaceholder('碎片标题（可选）').fill('潮汐灯塔')
   await page.getByRole('button', { name: /加入素材库/ }).click()
@@ -1704,20 +1706,20 @@ test('灵感反推主面板通过定向 durable Skill 生成、恢复、拒绝�
   await expect(page.getByText('0 个已确认版本', { exact: true })).toBeVisible()
 
   await page.getByPlaceholder('例如：偏黑暗风格、需要感情线、主角要有反转...').fill('强化灯塔意象和守灯人的核心冲突')
-  await page.getByRole('button', { name: '开始反推', exact: true }).click()
-  const candidate = page.getByRole('textbox', { name: '灵感反推候选内容' })
-  await expect(candidate).toContainText('模型版：盐海退潮后')
+  await page.getByRole('button', { name: preparation ? '创作定位·方向明确' : '开始反推', exact: true }).click()
+  const candidate = page.getByRole('textbox', { name: preparation ? '准备候选内容' : '灵感反推候选内容' })
+  await expect(candidate).toContainText(preparation ? '模型版：明确单一定位' : '模型版：盐海退潮后')
 
   await page.reload()
   await openWorkspaceLeaf(page, '灵感反推')
-  await expect(candidate).toContainText('模型版：盐海退潮后')
+  await expect(candidate).toContainText(preparation ? '模型版：明确单一定位' : '模型版：盐海退潮后')
   await page.getByRole('button', { name: '放弃本次结果', exact: true }).click()
   await expect(candidate).toHaveCount(0)
   await expect(page.getByText('0 个已确认版本', { exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: '开始反推', exact: true }).click()
-  await expect(candidate).toContainText('模型版：盐海退潮后')
-  const edited = {
+  await page.getByRole('button', { name: preparation ? '创作定位·方向明确' : '开始反推', exact: true }).click()
+  await expect(candidate).toContainText(preparation ? '模型版：明确单一定位' : '模型版：盐海退潮后')
+  const edited = preparation ? { ...preparationResult, summary: '作者确认版：明确单一定位' } : {
     ...modelResult,
     worldview: {
       ...modelResult.worldview,
@@ -1725,12 +1727,25 @@ test('灵感反推主面板通过定向 durable Skill 生成、恢复、拒绝�
     },
   }
   await candidate.fill(JSON.stringify(edited, null, 2))
-  await page.getByRole('button', { name: '确认融合版本', exact: true }).click()
+  await page.getByRole('button', { name: preparation ? '确认准备版本' : '确认融合版本', exact: true }).click()
   await expect(candidate).toHaveCount(0)
+  await expect(page.getByText('1 个已确认版本', { exact: true })).toBeVisible()
+  const persisted = await page.evaluate(async () => {
+    const load = new Function('path', 'return import(path)')
+    const { db } = await load('/storyforge/src/lib/db/schema.ts')
+    const { parseInspirationVersions } = await load('/storyforge/src/lib/inspiration/workspace.ts')
+    return { versions: (await db.inspirationWorkspaces.toArray()).flatMap((row: { versions?: string }) => parseInspirationVersions(row.versions)), worlds: await db.worldviews.count(), characters: await db.characters.count(), stories: await db.storyCores.count() }
+  })
+  expect(persisted.versions).toHaveLength(1)
+  expect(persisted.versions[0].mode).toBe(preparation ? 'position-defined' : 'single')
+  expect(JSON.parse(persisted.versions[0].resultJson)).toEqual(edited)
+  expect([persisted.worlds, persisted.characters, persisted.stories]).toEqual([0, 0, 0])
+  await page.reload()
+  await openWorkspaceLeaf(page, '灵感反推')
   await expect(page.getByText('1 个已确认版本', { exact: true })).toBeVisible()
 
   await openSidebarLeaf(page, '世界观', '世界起源')
-  await expect(page.locator('main').getByText(edited.worldview.worldOrigin, { exact: true }))
+  await expect(page.locator('main').getByText(modelResult.worldview.worldOrigin, { exact: true }))
     .toHaveCount(0)
   expect(generationCalls).toBe(2)
 })

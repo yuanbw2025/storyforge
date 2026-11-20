@@ -1,3 +1,4 @@
+import { appendResearchTaskGuidance } from '../../creation/preparation-content-skill'
 /**
  * 场景考证适配器 — Phase 27.2a
  * 用户描述场景 → AI 结合世界观/历史年表/世界规则给出考证建议。
@@ -13,6 +14,8 @@ export function buildSceneVerifyPrompt(args: {
   scene: string
   sceneEra?: string
   sceneLocation?: string
+  researchMode?: 'scene' | 'plan' | 'sources'
+  hasSuppliedSources?: boolean
 }): ChatMessage[] {
   const tpl = usePromptStore.getState().getActive('scene.verify')
   const { messages } = renderPrompt(tpl, {
@@ -23,5 +26,5 @@ export function buildSceneVerifyPrompt(args: {
     sceneEra: args.sceneEra || '',
     sceneLocation: args.sceneLocation || '',
   })
-  return messages
+  return appendResearchTaskGuidance(messages, args.researchMode, args.hasSuppliedSources)
 }

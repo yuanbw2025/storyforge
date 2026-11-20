@@ -1,0 +1,111 @@
+{
+  "boundary": "eval-only, original synthetic materials, no author database or adoption",
+  "records": [
+    {
+      "study": "inspiration-round1",
+      "id": "chosen-deepen-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "e63b4fdc19f5b0f3e33f8358e003595582ec1bd69461d9d6351ffef403c498c5"
+    },
+    {
+      "study": "inspiration-round1",
+      "id": "chosen-deepen-new.validation-failure",
+      "failure": {
+        "error": "invalid-candidate",
+        "originalRetained": true
+      }
+    },
+    {
+      "study": "inspiration-round1",
+      "id": "chosen-deepen-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "fa641baa4265e225d83816b000bfb95029182c89057c1e0b1cd3569bd2ee9dfe"
+    },
+    {
+      "study": "inspiration-round1",
+      "id": "image-organize-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "f7fa7a4cd16fa7ea93eedd77d0df952fb3a2491b7e13a7f02eb20bdd0674c6f9"
+    },
+    {
+      "study": "inspiration-round1",
+      "id": "image-organize-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "7668942cf9e88ec5cc02acef00b37763f27ccd6c8f204e84a67f4f08b4e5a62b"
+    },
+    {
+      "study": "inspiration-round1",
+      "id": "image-organize-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "9f18f176d1dfc51d761fcb4815ffaa1f2adb77033eea0df411b08bebf73cd0ee"
+    },
+    {
+      "study": "inspiration-round1",
+      "id": "image-organize-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "344eeb60f223a5231f666e605ec5c7603813f53961581e516699fde36592aaf4"
+    },
+    {
+      "study": "inspiration-round1",
+      "id": "shop-compare-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "236729aa15ee1ffaf34f605f5a34ea2c36c540b18be7e9961b20bb9113478e0a"
+    },
+    {
+      "study": "inspiration-round1",
+      "id": "shop-compare-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "6363a1cd8e37d9f01c5bbbc2dc4fb5a09779d4f1465ac92fa1f50b8cd71cc944"
+    },
+    {
+      "study": "inspiration-round1",
+      "id": "shop-compare-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "7c964213d0e487b8dab19176eb20515ab998624a9fefd2c2dc2ddf669cd247e2"
+    },
+    {
+      "study": "inspiration-round1",
+      "id": "shop-compare-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "be29f7ec92cc335acbfdc2050afef446074fc6701799cf6fa8351d0ed51dcea6"
+    },
+    {
+      "study": "inspiration-round2-deepen",
+      "id": "chosen-deepen-apply-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "e64d5d5bbfe9093c21480067a0b199e8ded2352457c5e9377c512213fa9d5714"
+    },
+    {
+      "study": "inspiration-round2-deepen",
+      "id": "chosen-deepen-apply-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "8ea84cd63e69de0c917f7b0e4d5e4bff2b96b805073512faf50e18de4777f4e7"
+    },
+    {
+      "study": "inspiration-round2-deepen",
+      "id": "chosen-deepen-new",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "1dc3eda1324bdfe0a655aa28be457becc2056882c50400d5079aa2195d4bc6c6"
+    },
+    {
+      "study": "inspiration-round2-deepen",
+      "id": "chosen-deepen-old",
+      "model": "deepseek-flash",
+      "finishReason": "stop",
+      "responseHash": "39a025df3eb433b690b5efb8c19b923204b3b0e77c1f853c1a0e7a596fdc4ffc"
+    }
+  ]
+}

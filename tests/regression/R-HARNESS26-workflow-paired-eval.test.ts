@@ -1,4 +1,5 @@
 import 'fake-indexeddb/auto'
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
@@ -93,16 +94,19 @@ describe.sequential('R-HARNESS26 · 顺序/fan-out 配对评测与发布门', { 
     await db.delete()
     await db.open()
     globalThis.localStorage?.removeItem(MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY)
+    const config = {
+      ...originalConfig,
+      provider: 'custom' as const,
+      apiKey: '',
+      model: EXECUTION.generator.model,
+      baseUrl: 'https://h26.invalid/v1',
+      maxTokens: 8_000,
+    }
+    // The paired synthetic transport has a finite 64K allocation. Declare it
+    // through the current metadata fixture, rather than ignored legacy config.
+    const modelCapacity = await seedModelAllocationFixtureV1(config, 64_000)
     useAIConfigStore.setState({
-      config: {
-        ...originalConfig,
-        provider: 'custom',
-        apiKey: '',
-        model: EXECUTION.generator.model,
-        baseUrl: 'https://h26.invalid/v1',
-        maxTokens: 8_000,
-        contextWindow: 64_000,
-      },
+      config: { ...config, modelCapacity },
       presets: [],
       taskRoutes: {},
     })

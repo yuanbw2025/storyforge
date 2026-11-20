@@ -1,3 +1,4 @@
+import { commitMasterAgentCandidateAdoptionV1 } from '../../src/lib/agent/run/master-adoption'
 import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
 import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +8,7 @@ import {
 } from '../../src/lib/agent/orchestrator'
 import {
   parseMasterAgentPlanV1,
+  restoreMasterAgentCandidatesV1,
   runDurableMasterAgentPlanV1,
 } from '../../src/lib/agent/run/master-durable'
 import { getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
@@ -84,7 +86,7 @@ describe('R-HARNESS34 · 灵感反推主入口契约', () => {
     })).rejects.toThrow('只有灵感领域任务')
   })
 
-  it('定向 durable 执行只读取冻结的碎片，确认前不写入灵感版本', async () => {
+  it.each([{ skillId: 'inspiration.reverse', mode: 'single' }, { skillId: 'inspiration.prepare', mode: 'organize' }, { skillId: 'inspiration.prepare', mode: 'position-defined' }] as const)('定向 durable $skillId/$mode只读取冻结碎片，确认前不写入版本且刷新不重发', async ({ skillId, mode }) => {
     const now = Date.now()
     const createdWorkspaceV1 = await seedCurrentWorkspace('灵感入口项目')
     const scope: WorkspaceScope = createdWorkspaceV1.scope
@@ -137,7 +139,7 @@ describe('R-HARNESS34 · 灵感反推主入口契约', () => {
       return new Response(JSON.stringify({
         choices: [{
           message: {
-            content: JSON.stringify({
+            content: JSON.stringify(skillId === 'inspiration.prepare' ? { summary: '整理旧城的遗忘意象', authorMaterial: '旧城每次下雨都会忘记一个人', proposals: mode === 'position-defined' ? [{ title: '明确定位', content: '围绕手艺与关系展开，不增加世界事实。' }] : [], openQuestions: [] } : {
               worldview: {
                 worldOrigin: '由遗忘诞生的旧城',
                 powerHierarchy: '记忆税决定城市权力',
@@ -172,8 +174,8 @@ describe('R-HARNESS34 · 灵感反推主入口契约', () => {
         tasks: [{
           id: 'inspiration-targeted',
           agentId: 'inspiration',
-          skillId: 'inspiration.reverse',
-          instruction: '反推选中的灵感碎片',
+          skillId,
+          instruction: skillId === 'inspiration.prepare' ? `灵感准备任务=${mode}。整理选中素材。` : '反推选中的灵感碎片',
           dependsOn: [],
           inspirationFragmentIds: ['selected'],
         }],
@@ -182,9 +184,18 @@ describe('R-HARNESS34 · 灵感反推主入口契约', () => {
       budget: new AgentTeamBudgetTracker('balanced'),
     })
 
+    const restored = await restoreMasterAgentCandidatesV1({ scope, runId: result.runId })
+    expect(restored.candidates[0].payload.mode).toBe(mode)
     expect(fetchMock).toHaveBeenCalledOnce()
     expect(result.candidates[0].payload.selectedFragmentIds).toEqual(['selected'])
     const workspace = (await db.inspirationWorkspaces.toArray())[0]
     expect(JSON.parse(workspace.versions)).toEqual([])
+    if (skillId === 'inspiration.prepare') {
+      await commitMasterAgentCandidateAdoptionV1({ scope, runId: result.runId, candidateEventId: restored.candidates[0].event.id! })
+      const saved = (await db.inspirationWorkspaces.toArray())[0]
+      expect(JSON.parse(saved.versions)[0].mode).toBe(mode)
+      expect(await db.worldviews.count()).toBe(0)
+      expect(await db.characters.count()).toBe(0)
+    }
   })
 })

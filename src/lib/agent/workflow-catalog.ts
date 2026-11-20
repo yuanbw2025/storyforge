@@ -240,7 +240,7 @@ export function selectAgentSkillIdV1(agentId: DomainAgentId, request: string): A
       : 'world-origin.worldview-field'
   }
   if (agentId === 'character') return /补全|完善|补充|修改|调整|更新/.test(request) && !/新建|新增|创建|新角色|(?:设计|生成|塑造).{0,10}(?:主角|角色|人物)/.test(request) ? 'character.supplement' : 'character.create'
-  return 'inspiration.reverse'
+  return /灵感准备任务\s*=\s*(?:organize|compare|deepen|position-open|position-defined)\b/.test(request) ? 'inspiration.prepare' : 'inspiration.reverse'
 }
 
 export function classifyMasterWorkflowV1(request: string): MasterWorkflowSelectionV1 {
