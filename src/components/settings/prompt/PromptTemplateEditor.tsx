@@ -13,6 +13,10 @@ import { useDialog } from '../../shared/Dialog'
 import { useToast } from '../../shared/Toast'
 
 const ALL_MODULE_KEYS: { value: PromptModuleKey; label: string }[] = [
+  { value: 'reference.analyze', label: '拆书 · 证据细读' },
+  { value: 'reference.summary', label: '拆书 · 已读范围综合' },
+  { value: 'reference.characters', label: '拆书 · 人物归并' },
+  { value: 'reference.application', label: '拆书 · 原创运用' },
   { value: 'worldview.dimension',         label: '世界观 · 维度生成' },
   { value: 'worldview.generate',          label: '世界观 · 完整生成（待启用）' },
   { value: 'worldview.worldbuilding',     label: '世界观 · 阶段任务' },
