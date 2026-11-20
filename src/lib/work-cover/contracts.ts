@@ -92,6 +92,8 @@ export function assertWorkCoverPortableRowV1(kind: 'draft' | 'asset' | 'adoption
     integer(row, 'adoptedAt')
   }
   if (kind !== 'draft') {
+    // Foundation admission remains closed until the repaired typed origin is validated.
+    if (row.materializationRunId != null || row._materializationRunExportId != null || row.repairEvidenceJson != null) fail()
     if (typeof row.exactArtifactRefsJson !== 'string') fail()
     extractExactArtifactOwnerRootsV1(row, [{ field: 'exactArtifactRefsJson', path: [] }])
   }

@@ -122,14 +122,14 @@ type PortableWorkCover<T, K extends keyof T> = Omit<T, K | 'id' | 'projectId' | 
 }
 
 export interface ProjectExportData {
-  workCoverAssets: (PortableWorkCover<WorkCoverAssetV1, 'blobObjectId' | 'sourceRunId' | 'parentAssetId'> & {
-    _blobObjectExportId: number; _sourceRunExportId: number | null; _parentAssetExportId: number | null
+  workCoverAssets: (PortableWorkCover<WorkCoverAssetV1, 'blobObjectId' | 'sourceRunId' | 'parentAssetId' | 'materializationRunId'> & {
+    _blobObjectExportId: number; _sourceRunExportId: number | null; _parentAssetExportId: number | null; _materializationRunExportId?: number | null
   })[]
   workCoverDrafts: (PortableWorkCover<WorkCoverDraftV1, 'selectedAssetId' | 'adoptedAssetId' | 'lastRunId' | 'briefJson'> & {
     _selectedAssetExportId: number | null; _adoptedAssetExportId: number | null; _lastRunExportId: number | null; _selectedChapterRefs: string
   })[]
-  workCoverAdoptions: (PortableWorkCover<WorkCoverAdoptionV1, 'draftId' | 'originalAssetId' | 'finalAssetId' | 'sourceRunId'> & {
-    _draftExportId: number; _originalAssetExportId: number; _finalAssetExportId: number; _sourceRunExportId: number | null
+  workCoverAdoptions: (PortableWorkCover<WorkCoverAdoptionV1, 'draftId' | 'originalAssetId' | 'finalAssetId' | 'sourceRunId' | 'materializationRunId'> & {
+    _draftExportId: number; _originalAssetExportId: number; _finalAssetExportId: number; _sourceRunExportId: number | null; _materializationRunExportId?: number | null
   })[]
   extensionProfiles: PortableExtension<ExtensionProfile>[]
   extensionRecords: PortableExtension<ExtensionRecord>[]
