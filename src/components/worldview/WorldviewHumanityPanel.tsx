@@ -3,7 +3,6 @@ import ScopedWorldAuthoringBoundary from '../world-group/ScopedWorldAuthoringBou
 import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
 import WorldviewReadBoundary from './WorldviewReadBoundary'
 import { useState, useEffect } from 'react'
-import { BookOpen } from 'lucide-react'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
 import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
@@ -41,7 +40,6 @@ const FIELDS: FieldMeta[] = [
   { key: 'items',     field: 'itemDesign',             emoji: '🗡', label: '道具与器物',     description: '武器 / 法器 / 工具 / 科技装备……物品的来源、品级、规则', hint: '这里写物品体系概述；具体道具在下方「📚 道具与器物 · 具体词条」逐条管理，主角实际获得与消耗的物品由创作区「🎒 物品栏」追踪。' },
 ]
 export const WORLDVIEW_HUMANITY_AGENT_FIELDS = FIELDS.map(field => field.field)
-const HISTORY_NAV = { key: 'history', emoji: '📜', label: '历史年表' }
 
 // 每个方面(子页) → 其专属词条分类(builtInKey)。下方只显示该方面对应的词条。
 const HUMANITY_CODEX_KEYS: Record<string, string[] | undefined> = {
@@ -59,18 +57,17 @@ const HUMANITY_CODEX_KEYS: Record<string, string[] | undefined> = {
 
 interface Props {
   project: Project
-  onOpenHistory: () => void
   resizableInputs?: boolean
 }
 
-export default function WorldviewHumanityPanel({ project, onOpenHistory, resizableInputs = false }: Props) {
+export default function WorldviewHumanityPanel({ project, resizableInputs = false }: Props) {
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   return <ScopedWorldAuthoringBoundary project={project} activeGroupId={activeGroupId}>
-    {view => <ScopedHumanityPanel {...view} onOpenHistory={onOpenHistory} resizableInputs={resizableInputs} />}
+    {view => <ScopedHumanityPanel {...view} resizableInputs={resizableInputs} />}
   </ScopedWorldAuthoringBoundary>
 }
 
-function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory, resizableInputs = false }: Props & { activeGroupId: number | null }) {
+function ScopedHumanityPanel({ project, activeGroupId, resizableInputs = false }: Props & { activeGroupId: number | null }) {
   const compact = useWorldSettingsLayout()
   const { worldview, saveWorldview, loadedScope, activeWorldGroupId, loading, loadError } = useWorldviewStore()
   const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
@@ -79,7 +76,6 @@ function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory, resizableI
     && activeWorldGroupId === (project.enableMultiWorld ? activeGroupId : null)
   const targetWorldGroupId = project.enableMultiWorld ? activeGroupId : (worldview?.worldGroupId ?? null)
   const codex = useCodexStore()
-  const [legacyHistoryFocus, setLegacyHistoryFocus] = useState('humEra')
   const legacyExists = (keys: string[]) => {
     if (!authorScope || codex.loadedScope?.projectId !== authorScope.projectId || codex.loadedScope.worldId !== authorScope.worldId) return false
     const ids = new Set(codex.categories.filter(category => keys.includes(category.builtInKey ?? '')).map(category => category.id))
@@ -92,7 +88,7 @@ function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory, resizableI
   })
 
   const [values, setValues] = useState<Record<string, string>>({})
-  const [activeKey, setActiveKey] = useState(HISTORY_NAV.key)
+  const [activeKey, setActiveKey] = useState(FIELDS[0].key)
   const [runningField, setRunningField] = useState<WorldviewAgentField | null>(null)
 
   useEffect(() => {
@@ -140,7 +136,7 @@ function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory, resizableI
           {project.enableMultiWorld && <WorldGroupSwitcher />}
         </div>
         <p className="text-xs text-text-muted mt-0.5">
-          定义世界的历史、势力、政经文化与社会矛盾。如需声明真实与幻想的规则，请前往「⚖️ 真实与幻想」面板。
+          定义世界的种族、势力、政经文化与社会矛盾。如需声明真实与幻想的规则，请前往「⚖️ 真实与幻想」面板。
         </p>
         {/* 词条搜索:跨本面板所有方面,点结果跳到对应子页 */}
         <div className="mt-3 max-w-xl">
@@ -148,15 +144,10 @@ function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory, resizableI
             categoryKeys={[
               ...new Set([
                 ...Object.values(HUMANITY_CODEX_KEYS).flat().filter(Boolean),
-                'humEra', 'humEvent', 'humSociety',
+                'humSociety',
               ] as string[]),
             ]}
             onJump={(catKey) => {
-              if (catKey === 'humEra' || catKey === 'humEvent') {
-                setLegacyHistoryFocus(catKey)
-                setActiveKey('history')
-                return
-              }
               if (catKey === 'humSociety') {
                 setActiveKey('politics')
                 return
@@ -171,7 +162,7 @@ function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory, resizableI
       <div className={compact ? 'lf-world-columns flex-1 min-h-0' : 'flex flex-1 overflow-hidden'}>
         {/* ── 左侧导航 ── */}
         <nav className="w-max min-w-32 max-w-44 flex-shrink-0 border-r border-border overflow-y-auto py-4 pr-1">
-          {[HISTORY_NAV, ...FIELDS].map(f => {
+          {FIELDS.map(f => {
             const isActive = f.key === activeKey
             const isFieldStreaming = streamingKeys.has(f.key)
             const hasPendingCandidate = pendingPanelKey === f.key
@@ -203,40 +194,16 @@ function ScopedHumanityPanel({ project, activeGroupId, onOpenHistory, resizableI
 
         {/* ── 右侧：所有字段同时渲染，hidden 控制显示 ── */}
         <div className={compact ? 'lf-world-content overflow-y-auto' : 'flex-1 min-w-0 overflow-y-auto p-6'}>
-          {compact && <WorldSettingsToolbar title={activeKey === 'history' ? '📜 历史年表'
-            : `${FIELDS.find(field => field.key === activeKey)?.emoji ?? ''} ${FIELDS.find(field => field.key === activeKey)?.label ?? ''}`}
-            actions={<>{project.enableMultiWorld && <WorldGroupSwitcher />}{activeKey === 'history' && onOpenHistory
-              && <button type="button" onClick={onOpenHistory} className="text-xs text-accent underline">打开正式历史年表</button>}</>}
+          {compact && <WorldSettingsToolbar title={`${FIELDS.find(field => field.key === activeKey)?.emoji ?? ''} ${FIELDS.find(field => field.key === activeKey)?.label ?? ''}`}
+            actions={project.enableMultiWorld && <WorldGroupSwitcher />}
             search={<CodexSearchBar compact scope={authorScope} worldGroupId={targetWorldGroupId}
-              categoryKeys={[...new Set([...Object.values(HUMANITY_CODEX_KEYS).flat().filter(Boolean), 'humEra', 'humEvent', 'humSociety'] as string[])]}
+              categoryKeys={[...new Set([...Object.values(HUMANITY_CODEX_KEYS).flat().filter(Boolean), 'humSociety'] as string[])]}
               onJump={catKey => {
-                if (catKey === 'humEra' || catKey === 'humEvent') { setLegacyHistoryFocus(catKey); setActiveKey('history'); return }
                 if (catKey === 'humSociety') { setActiveKey('politics'); return }
                 const sub = Object.keys(HUMANITY_CODEX_KEYS).find(key => HUMANITY_CODEX_KEYS[key]?.includes(catKey))
                 if (sub) setActiveKey(sub)
               }} />}
           />}
-          <div className={activeKey === 'history' ? `${compact ? 'lf-world-field' : 'max-w-3xl'} space-y-5` : 'hidden'}>
-              <div>
-                {!compact && <h3 className="text-lg font-semibold text-text-primary">📜 历史年表</h3>}
-                <p className="mt-1 text-sm text-text-muted">
-                  历史总述、纪年体系、正式事件和时代关键词统一由历史年表维护，避免两套入口互相覆盖。
-                </p>
-              </div>
-              {!compact && <button
-                type="button"
-                onClick={onOpenHistory}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent/10 text-accent hover:bg-accent/20 text-sm"
-              >
-                <BookOpen className="w-4 h-4" />
-                打开正式历史年表
-              </button>}
-              {legacyExists(['humEra', 'humEvent']) && <section aria-label="旧版历史词条" className="space-y-2">
-                <h3 className="text-sm font-semibold">旧版历史词条</h3>
-                <p className="text-xs text-text-muted">保留的旧词条可在此维护。新增历史内容请使用正式历史年表。</p>
-                <CodexPanel key={legacyHistoryFocus} project={project} fixedCategoryKeys={['humEra', 'humEvent']} initialCategoryKey={legacyHistoryFocus} embedded existingOnly />
-              </section>}
-            </div>
           {FIELDS.map(f => (
             <div key={f.key} className={activeKey === f.key ? '' : 'hidden'}>
               {/* 全貌（上）：现有字段本身就是这个方面的整体概述，带 AI 生成 */}
