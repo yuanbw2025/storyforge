@@ -5,7 +5,7 @@
  * 也不允许调用方把 AI 返回的 owner id 当成可信输入。
  */
 import { resolveWorkspaceScope } from './ownership'
-import type { Table } from 'dexie'
+import Dexie, { type Table, type Transaction } from 'dexie'
 import { db } from '../db/schema'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import type { DomainOwnerKind, TableSpec } from '../registry/types'
@@ -208,6 +208,18 @@ async function recordInScope(
   row: unknown,
   options: ScopeReadOptions = {},
 ): Promise<boolean> {
+  return recordInScopeWithReaderV1(scope, tableName, row, options, spec => spec.table)
+}
+
+type ScopeReadTableV1 = (spec: TableSpec) => Table<Record<string, unknown>, number>
+
+function recordInScopeWithReaderV1(
+  scope: WorldOwnerScope,
+  tableName: string,
+  row: unknown,
+  options: ScopeReadOptions,
+  readTable: ScopeReadTableV1,
+): boolean | Promise<boolean> {
   const spec = getTableSpec(tableName)
   assertOwnerScope(scope, spec, options)
   if (!row || typeof row !== 'object') return false
@@ -218,8 +230,8 @@ async function recordInScope(
     const parentSpec = getTableSpec(locator.table)
     const parentId = record[locator.field]
     if (parentId == null) return false
-    const parent = await parentSpec.table.get(parentId as number)
-    return !!parent && await recordInScope(scope, parentSpec.name, parent, { owner: options.owner })
+    return readTable(parentSpec).get(parentId as number).then(parent => !!parent
+      && recordInScopeWithReaderV1(scope, parentSpec.name, parent, { owner: options.owner }, readTable))
   }
   return directOwnerMatches(spec, record, scope, options.owner)
 }
@@ -232,24 +244,59 @@ export async function readOwnedRows<T = Record<string, unknown>>(
   tableName: string,
   options: ScopeReadOptions = {},
 ): Promise<T[]> {
+  return readOwnedRowsWithReaderV1(scope, tableName, options, spec => spec.table)
+}
+
+/** Opt-in author reads use the same registry and ownership decisions, but every
+ * physical request stays bound to the captured native transaction. No fallback. */
+export function readOwnedRowsInTransactionV1<T = Record<string, unknown>>(
+  transaction: Transaction,
+  scope: WorldOwnerScope,
+  tableName: 'histories' | 'worldGroups',
+  options: ScopeReadOptions & { owner: 'world' },
+): Promise<T[]> {
+  try {
+    if ((tableName !== 'histories' && tableName !== 'worldGroups') || options.owner !== 'world') {
+      fail('原事务读取只开放历史作者所需的 World 表')
+    }
+    const native = transaction.idbtrans
+    const readTable: ScopeReadTableV1 = spec => {
+      let root = transaction
+      while (root.parent) root = root.parent
+      if (transaction.db !== db || !transaction.active || !native || transaction.idbtrans !== native
+        || !root.active || root.idbtrans !== native
+        || !transaction.storeNames.includes(spec.table.name) || !native.objectStoreNames.contains(spec.table.name)) {
+        fail('历史作者读取的原事务已失效或缺少注册表')
+      }
+      return transaction.table<Record<string, unknown>, number>(spec.table.name)
+    }
+    return readOwnedRowsWithReaderV1(scope, tableName, options, readTable)
+  } catch (error) { return Dexie.Promise.reject(error) }
+}
+
+function readOwnedRowsWithReaderV1<T>(
+  scope: WorldOwnerScope,
+  tableName: string,
+  options: ScopeReadOptions,
+  readTable: ScopeReadTableV1,
+): Promise<T[]> {
   const spec = getTableSpec(tableName)
   assertOwnerScope(scope, spec, options)
-  if (spec.owner === 'global') return spec.table.toArray() as Promise<T[]>
+  const table = readTable(spec)
+  if (spec.owner === 'global') return table.toArray() as Promise<T[]>
   // The current schema keeps projectId on physical rows. Filtering in memory here is
   // intentional until each domain table receives a dedicated owner index; correctness
   // takes precedence over an unsafe project-wide query.
   const rows = spec.owner === 'project' || spec.owner === 'transient'
-    ? await spec.table.where('projectId').equals(scope.projectId).toArray()
-    : await spec.table.toArray()
+    ? table.where('projectId').equals(scope.projectId).toArray()
+    : table.toArray()
   // Keep this to one awaited Promise while callers may be inside a Dexie
   // transaction. Most direct-owner checks resolve without issuing another IDB
   // request; awaiting them one by one can let a browser auto-commit a large
   // transaction before the caller performs its write.
-  const records = rows as Record<string, unknown>[]
-  const ownership = await Promise.all(records.map(row => (
-    recordInScope(scope, tableName, row, options)
-  )))
-  return records.filter((_, index) => ownership[index]) as T[]
+  return rows.then(records => Dexie.Promise.all(records.map(row => (
+    recordInScopeWithReaderV1(scope, tableName, row, options, readTable)
+  ))).then(ownership => records.filter((_, index) => ownership[index]) as T[]))
 }
 
 /** Stamp a new row from trusted scope. Existing owner ids must agree or the write fails closed. */

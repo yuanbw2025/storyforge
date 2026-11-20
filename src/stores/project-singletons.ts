@@ -30,9 +30,10 @@ export const useGeographyStore = createProjectSingletonStore<'geography', Geogra
   },
 })
 
-export const useHistoryStore = createProjectSingletonStore<'history', History>({
+export const useHistoryStore = createProjectSingletonStore<'history', History, true>({
   table: 'histories',
   key: 'history',
+  historyAuthoring: true,
   defaults: {
     overview: '',
     eraSystem: '',

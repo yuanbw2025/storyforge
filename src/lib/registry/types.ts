@@ -5,7 +5,8 @@ import type { ContextLayer, ContextSegment } from '../ai/context-budget'
 import type { PreparedContinuityContext } from '../ai/chapter-memory/continuity-context'
 import type { InspirationResultMode } from '../types/inspiration-workspace'
 import type { RagAnnotationTargetSelectionV1, RagSelectionTraceCollector } from '../types/rag-library'
-import type { WorkspaceScope } from '../types/world-ownership'
+import type { WorkspaceScope, WorldOwnerScope } from '../types/world-ownership'
+import type { HistoryAuthorPartitionV1, HistoryTextPatchV1 } from '../types/history'
 import type { NarrativeDomainFieldsV1 } from '../types/narrative-domain'
 import type {
   ExactRunArtifactKindV1,
@@ -567,6 +568,15 @@ export interface AdoptionExtensionSpec {
   reason: string
   /** 到期后 CI 必须重新审查，而不是让例外永久沉积。ISO 日期。 */
   reviewAfter: string
+}
+
+/** Only the registered World history singleton, never a collection/create grant. */
+export interface AdoptWorldHistoryTextInputV1 {
+  target: 'histories'
+  ownerScope: WorldOwnerScope
+  selection: HistoryAuthorPartitionV1
+  data: HistoryTextPatchV1
+  mode: 'replace'
 }
 
 export interface AdoptInput {

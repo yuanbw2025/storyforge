@@ -1,5 +1,63 @@
 import type { NarrativeDomainMetadataV1, NarrativeDomainFieldsV1 } from './narrative-domain'
 import type { RagDocumentMetadata } from './rag-library'
+import type { WorkspaceScope, WorldOwnerScope } from './world-ownership'
+
+/** Explicit author entry; a World target does not erase a Work author's scope. */
+export type HistoryAuthorOriginV1 =
+  | { version: 1; kind: 'world'; scope: WorldOwnerScope }
+  | { version: 1; kind: 'work'; scope: WorkspaceScope }
+
+export type HistoryAuthorPartitionV1 = { kind: 'partition'; worldGroupId: number | null }
+export type HistoryAuthorSelectionV1 = HistoryAuthorPartitionV1 | { kind: 'all' }
+export type HistoryTextPatchV1 =
+  | { overview: string; eraSystem?: never }
+  | { eraSystem: string; overview?: never }
+  | { overview: string; eraSystem: string }
+
+export const HISTORY_TEXT_DEFAULTS_V1 = Object.freeze({ overview: '', eraSystem: '', events: '[]' })
+
+/** These parsers copy trusted action inputs before the first asynchronous boundary. */
+export function historyAuthorRecordV1(value: unknown, keys: readonly string[], label: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)
+    || Reflect.ownKeys(value).some(key => typeof key !== 'string' || !keys.includes(key))
+    || Object.values(Object.getOwnPropertyDescriptors(value)).some(descriptor => !('value' in descriptor))) {
+    throw new Error(`历史作者${label}包含无效字段`)
+  }
+  return value as Record<string, unknown>
+}
+
+export function copyHistoryAuthorOriginV1(value: unknown): HistoryAuthorOriginV1 {
+  const input = historyAuthorRecordV1(value, ['version', 'kind', 'scope'], '入口')
+  if (input.version !== 1 || (input.kind !== 'world' && input.kind !== 'work')) throw new Error('历史作者入口无效')
+  const scope = historyAuthorRecordV1(input.scope,
+    input.kind === 'work' ? ['projectId', 'worldId', 'workId'] : ['projectId', 'worldId'], '作用域')
+  for (const field of input.kind === 'work' ? ['projectId', 'worldId', 'workId'] : ['projectId', 'worldId']) {
+    if (!Number.isSafeInteger(scope[field]) || (scope[field] as number) < 1) throw new Error('历史作者作用域缺少有效身份')
+  }
+  const world = { projectId: scope.projectId as number, worldId: scope.worldId as number }
+  return input.kind === 'world'
+    ? { version: 1, kind: 'world', scope: world }
+    : { version: 1, kind: 'work', scope: { ...world, workId: scope.workId as number } }
+}
+
+export function copyHistoryAuthorSelectionV1(value: unknown): HistoryAuthorSelectionV1 {
+  const input = historyAuthorRecordV1(value, ['kind', 'worldGroupId'], '分区')
+  if (input.kind === 'all' && !Object.prototype.hasOwnProperty.call(input, 'worldGroupId')) return { kind: 'all' }
+  if (input.kind !== 'partition' || (input.worldGroupId !== null
+    && (!Number.isSafeInteger(input.worldGroupId) || (input.worldGroupId as number) < 1))) {
+    throw new Error('历史作者分区无效；一览不能作为可写默认分区')
+  }
+  return { kind: 'partition', worldGroupId: input.worldGroupId as number | null }
+}
+
+export function copyHistoryTextPatchV1(value: unknown): HistoryTextPatchV1 {
+  const input = historyAuthorRecordV1(value, ['overview', 'eraSystem'], '文字修改')
+  const fields = Object.keys(input)
+  if (!fields.length || fields.some(field => typeof input[field] !== 'string')) throw new Error('历史修改须明确选择总述或纪年文字字段')
+  // Empty strings are explicit author clearing, not an empty patch.
+  return Object.fromEntries(fields.map(field => [field, input[field]])) as HistoryTextPatchV1
+}
 
 /** 历史事件 */
 export interface HistoricalEvent {
