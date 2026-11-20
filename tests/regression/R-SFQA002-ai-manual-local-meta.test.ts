@@ -11,6 +11,7 @@ const fixtureFile = 'src/lib/manual-meta-fixture.ts'
 const declaredInputs = [
   'src/lib/types/prompt.ts',
   'src/lib/ai/prompt-seeds-core.ts', 'src/lib/ai/prompt-seeds-tools.ts',
+  'src/lib/ai/prompt-seeds-preparation.ts',
   'src/lib/ai/prompt-seeds-genre-packs.ts', 'src/lib/ai/prompt-seeds-genre-packs-extended.ts',
   'src/lib/ai/prompt-seeds-novel.ts', 'src/lib/registry/context-sources.ts',
   'src/lib/registry/project-tables.ts', 'src/lib/registry/field-registry.ts',
