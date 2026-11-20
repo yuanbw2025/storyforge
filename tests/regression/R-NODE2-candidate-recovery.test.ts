@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { db } from '../../src/lib/db/schema'
 import { chat } from '../../src/lib/ai/client'
 import * as aiClient from '../../src/lib/ai/client'
@@ -35,6 +37,8 @@ describe('NODE-2 candidate recovery and local authoring', () => {
     vi.stubGlobal('window', undefined)
     useAIConfigStore.getState().setConfig({ provider: 'custom', apiKey: '', model: 'isolated-node-recovery',
       baseUrl: 'http://127.0.0.1:9/v1', temperature: .5, maxTokens: 8_000, contextWindow: 128_000 })
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 32_768)
     const recordUsage = usageLog.recordUsage
     vi.spyOn(usageLog, 'recordUsage').mockImplementation(function (this: unknown, input) {
       const pending = recordUsage.call(this, input); usage.push(pending); return pending
@@ -46,7 +50,7 @@ describe('NODE-2 candidate recovery and local authoring', () => {
         usage: { prompt_tokens: 17, completion_tokens: 9, total_tokens: 26 } }), { status: 200 })
     }))
   })
-  afterEach(async () => { await Promise.allSettled(usage); vi.unstubAllGlobals(); vi.restoreAllMocks(); db.close() })
+  afterEach(async () => { resetModelCapacityForTestsV1(); await Promise.allSettled(usage); vi.unstubAllGlobals(); vi.restoreAllMocks(); db.close() })
   it('runs a selected branch with an unfinished sibling, while whole-graph execution fails before a model call', async () => {
     const flow = await setup(true)
     await expect(runAuthoringGraph({ flow })).rejects.toThrow('缺少必需输入')

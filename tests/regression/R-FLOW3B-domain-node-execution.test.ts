@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 
 import { chat } from '../../src/lib/ai/client'
 import * as aiClient from '../../src/lib/ai/client'
@@ -60,6 +62,8 @@ describe('FLOW-3B · 领域节点运行和显式采纳', () => {
     vi.stubGlobal('window', undefined)
     useAIConfigStore.getState().setConfig({ provider: 'custom', apiKey: '', model: 'isolated-domain-node',
       baseUrl: 'http://127.0.0.1:9/v1', temperature: .5, maxTokens: 8_000, contextWindow: 128_000 })
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 32_768)
     const recordUsage = usageLog.recordUsage
     vi.spyOn(usageLog, 'recordUsage').mockImplementation(function (this: unknown, input) {
       const pending = recordUsage.call(this, input); usage.push(pending); return pending
@@ -76,6 +80,7 @@ describe('FLOW-3B · 领域节点运行和显式采纳', () => {
   })
 
   afterEach(async () => {
+    resetModelCapacityForTestsV1()
     await Promise.allSettled(usage); vi.unstubAllGlobals(); vi.restoreAllMocks(); db.close()
   })
 

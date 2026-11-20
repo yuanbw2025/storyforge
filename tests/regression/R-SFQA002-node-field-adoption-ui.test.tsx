@@ -2,6 +2,8 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import type { NodeRunRecord } from '../../src/lib/types'
 import { db } from '../../src/lib/db/schema'
 import { useAIConfigStore } from '../../src/stores/ai-config'
@@ -55,8 +57,11 @@ describe.sequential('002 actual React author choice, adoption and refresh', () =
     })
     useAIConfigStore.getState().setConfig({ provider: 'custom', apiKey: 'synthetic-node-adoption-ui', model: 'isolated-node-model',
       baseUrl: 'http://127.0.0.1:9/v1', temperature: .5, maxTokens: 8_000, contextWindow: 128_000 })
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 32_768)
   })
   afterEach(async () => {
+    resetModelCapacityForTestsV1()
     await act(async () => { root?.unmount(); root = null }); host.remove(); restoreLocks()
     await Promise.allSettled(usage); vi.restoreAllMocks(); vi.unstubAllGlobals(); await db.delete(); localStorage.clear()
   })

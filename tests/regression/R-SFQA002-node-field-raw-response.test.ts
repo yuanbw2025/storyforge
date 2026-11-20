@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { db } from '../../src/lib/db/schema'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { useNodeFlowStore } from '../../src/stores/node-flow'
@@ -22,8 +24,11 @@ describe.sequential('SFQA002 actual Node field raw response ownership', () => {
     useAIConfigStore.getState().setConfig({ provider: 'custom', apiKey: 'synthetic-node-key',
       model: 'node002-synthetic', baseUrl: 'https://node002.invalid/v1', temperature: .5,
       maxTokens: 6_000, contextWindow: 128_000 })
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 32_768)
   })
   afterEach(async () => {
+    resetModelCapacityForTestsV1()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
     await db.delete()
