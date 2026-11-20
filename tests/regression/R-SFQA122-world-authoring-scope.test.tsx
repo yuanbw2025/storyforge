@@ -68,7 +68,7 @@ function visible(text: string) {
 }
 function render(variant: 'natural' | 'humanity' | 'geography', project: Project) {
   const panel = variant === 'natural' ? createElement(WorldviewNaturalPanel, { project })
-    : variant === 'humanity' ? createElement(WorldviewHumanityPanel, { project, onOpenHistory: () => undefined })
+    : variant === 'humanity' ? createElement(WorldviewHumanityPanel, { project })
     : createElement(GeographyPanel, { project })
   return act(async () => root.render(createElement(ToastProvider, null, panel)))
 }
@@ -96,7 +96,6 @@ describe('SFQA-122 · actual world editors', () => {
       const made = await fixture()
       const text = variant === 'natural' ? 'A世界结构' : 'A种族'
       await render(variant, made.project)
-      if (variant === 'humanity') await click('种族与民族')
       await settle(() => visible(text))
       await group(made.b)
       await settle(() => !useWorldviewStore.getState().loading && useWorldviewStore.getState().activeWorldGroupId === made.b)
@@ -107,7 +106,6 @@ describe('SFQA-122 · actual world editors', () => {
       await settle(() => !useWorldviewStore.getState().loading)
       expect(visible(text)).toBe(false)
       await group(made.a)
-      if (variant === 'humanity') await click('种族与民族')
       await settle(() => visible(text))
     })
 
@@ -115,7 +113,6 @@ describe('SFQA-122 · actual world editors', () => {
       const made = await fixture()
       const text = variant === 'natural' ? 'A世界结构' : 'A种族'
       await render(variant, made.project)
-      if (variant === 'humanity') await click('种族与民族')
       await settle(() => visible(text))
       const display = [...host.querySelectorAll<HTMLElement>('div.cursor-text')].find(node => node.textContent === text)!
       await act(async () => display.click())
@@ -132,7 +129,6 @@ describe('SFQA-122 · actual world editors', () => {
       const made = await fixture()
       const text = variant === 'natural' ? 'A世界结构' : 'A种族'
       await render(variant, made.project)
-      if (variant === 'humanity') await click('种族与民族')
       await settle(() => visible(text))
       await act(async () => [...host.querySelectorAll<HTMLElement>('div.cursor-text')].find(node => node.textContent === text)!.click())
       await input(host.querySelector('textarea')!, '不能丢的输入')

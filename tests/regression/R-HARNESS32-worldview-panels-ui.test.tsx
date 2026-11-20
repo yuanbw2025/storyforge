@@ -3,6 +3,7 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Project } from '../../src/lib/types'
+import { WorldSettingsLayoutProvider } from '../../src/components/longform/WorldSettingsLayout'
 
 const mocks = vi.hoisted(() => ({
   activeGroupId: null as number | null,
@@ -216,6 +217,28 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
     expect(originButton.getAttribute('aria-pressed')).toBe('true')
   })
 
+  it.each([false, true])('人文面板默认展示种族，且没有重复历史入口（compact=%s）', async compact => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    mounted.push({ host, root })
+    const panel = createElement(WorldviewHumanityPanel, { project })
+    await act(async () => root.render(compact
+      ? createElement(WorldSettingsLayoutProvider, { value: { tools: null } }, panel)
+      : panel))
+    const headings = Array.from(host.querySelectorAll('h3')).filter(heading => !heading.closest('.hidden'))
+    expect(headings.map(heading => heading.textContent)).toContain('🧬 种族与民族')
+    expect(host.querySelector('nav')?.textContent).not.toContain('历史年表')
+    expect(host.textContent).not.toContain('打开正式历史年表')
+    expect(host.querySelector('[aria-label="旧版历史词条"]')).toBeNull()
+    const raceField = host.querySelector<HTMLElement>(compact ? '.lf-world-field' : 'div.max-w-3xl')!
+    await act(async () => generateButton(raceField).click())
+    expect(mocks.copilot.submitTargetedRequest).toHaveBeenLastCalledWith(
+      expect.stringContaining('目标字段=races'),
+      expect.objectContaining({ agentId: 'world-origin', skillId: 'world-origin.worldview-field' }),
+    )
+  })
+
   it('世界起源、自然环境和人文环境都提交固定单字段 Skill 请求', async () => {
     const origin = await renderPanel(WorldviewOriginPanel)
     await act(async () => generateButton(origin).click())
@@ -225,7 +248,7 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
     await act(async () => generateButton(natural).click())
     expect(mocks.copilot.submitTargetedRequest.mock.calls.at(-1)?.[0]).toContain('目标字段=worldStructure')
 
-    const humanity = await renderPanel(WorldviewHumanityPanel, { onOpenHistory: vi.fn() })
+    const humanity = await renderPanel(WorldviewHumanityPanel)
     const politics = Array.from(humanity.querySelectorAll('button'))
       .find(button => button.textContent?.includes('政治制度'))!
     await act(async () => politics.click())
