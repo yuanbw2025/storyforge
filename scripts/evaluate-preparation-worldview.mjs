@@ -15,14 +15,14 @@ assertOfflineReferenceEntry(registry)
 const local = await import(pathToFileURL(join(process.env.STORYFORGE_LOCAL_API_HOME || join(homedir(), '.config/storyforge/api'), 'lib/local-api.mjs')).href)
 const { profile, apiKey } = local.loadProfile(process.argv[3] || 'agnes-primary', { purpose: 'comparison' })
 const server = await createServer({ server: { middlewareMode: true, hmr: false }, optimizeDeps: { noDiscovery: true, include: [] }, appType: 'custom' })
-/** @param {import('node:crypto').BinaryLike} value */
+/** @param {Parameters<import('node:crypto').Hash['update']>[0]} value */
 const hash = value => createHash('sha256').update(value).digest('hex')
 let calls = 0
 try {
   await mkdir(output, { recursive: false })
   // Extract only the production prompt builder: importing the copilot would initialize browser stores.
-  /** @type {Pick<typeof import('../src/lib/registry/field-registry'), 'WORLDVIEW_GENERATABLE_FIELD_SPECS'>} */
-  const { WORLDVIEW_GENERATABLE_FIELD_SPECS: specs } = await server.ssrLoadModule('/src/lib/registry/field-registry.ts')
+  /** @type {Array<{field:string, aiGeneration:{label:string, maxChars:number}}>} */
+  const specs = (await server.ssrLoadModule('/src/lib/registry/field-registry.ts')).WORLDVIEW_GENERATABLE_FIELD_SPECS
   const { worldviewFieldContentGuidanceV1 } = await server.ssrLoadModule('/src/lib/creation/worldview-content-skill.ts')
   const WORLDVIEW_AGENT_FIELD_CAPABILITIES = new Map(specs.map(spec => [spec.field, spec.aiGeneration]))
   const WORLDVIEW_AGENT_FIELD_LABELS = Object.fromEntries(specs.map(spec => [spec.field, spec.aiGeneration.label]))
@@ -96,7 +96,7 @@ try {
   const cases = selectedIds ? allCases.filter((/** @type {{id:string}} */ c) => selectedIds.includes(c.id)) : allCases
   /**
    * @param {string} id
-   * @param {import('../src/lib/types').ChatMessage[]} messages
+   * @param {Array<{role:'system'|'user'|'assistant', content:string}>} messages
    * @param {number} maxTokens
    */
   async function request(id, messages, maxTokens, structured = false) {
