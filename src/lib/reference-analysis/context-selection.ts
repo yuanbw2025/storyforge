@@ -1,10 +1,10 @@
 import { estimateTokens } from '../ai/context-budget'
-import { REFERENCE_APPLICATION_SKILL } from './content-skill'
+import { readReferenceApplicationGuidance } from './prompt-library'
 
 /** Budget whole evidence units, never prefixes that can lose a qualification. */
 export function selectReferenceMethods(units: string[], budgetTokens = 2000): string {
   if (!units.length) return ''
-  const prefix = `【引用手法：选读材料，不代表全书已核实】\n${REFERENCE_APPLICATION_SKILL}\n`
+  const prefix = `【引用手法：选读材料，不代表全书已核实】\n${readReferenceApplicationGuidance()}\n`
   const kept: string[] = []
   // Reserve space for an honest coverage notice before packing.
   for (const unit of units) {

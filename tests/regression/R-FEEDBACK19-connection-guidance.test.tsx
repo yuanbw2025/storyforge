@@ -12,7 +12,7 @@ async function render(provider: AIProvider, isDevelopment: boolean, message: str
   host = document.createElement('div'); document.body.append(host); root = createRoot(host)
   await act(async () => root!.render(createElement(AIConnectionTestSection, {
     testing: false, result: { ok: false, message }, configReady: true, provider,
-    logCount: 1, showLogs: false, isDevelopment, onTest() {}, onToggleLogs() {},
+    isDevelopment, onTest() {},
   })))
   return host.textContent!
 }

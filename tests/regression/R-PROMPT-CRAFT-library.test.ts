@@ -33,7 +33,7 @@ describe('原创小说写作工坊：可选内容、材料合同与正文兼容'
 
   it('新库安装与旧库升级均完整、幂等，并保留激活模板和用户副本', async () => {
     await usePromptStore.getState().init()
-    expect(await db.promptTemplates.count()).toBe(238)
+    expect(await db.promptTemplates.count()).toBe(SYSTEM_PROMPT_SEEDS.length + NOVEL_CONTENT_PROMPT_SEEDS.length + CRAFT_PROMPT_SEEDS.length)
     const builtIn = usePromptStore.getState().getActive('chapter.de-ai')
     const customId = await usePromptStore.getState().cloneTemplate(builtIn.id!, '我的保真规则')
     const custom = usePromptStore.getState().templates.find(item => item.id === customId)!
@@ -45,7 +45,7 @@ describe('原创小说写作工坊：可选内容、材料合同与正文兼容'
     for (let index = 0; index < 2; index++) {
       usePromptStore.setState({ loaded: false })
       await usePromptStore.getState().init()
-      expect(await db.promptTemplates.count()).toBe(239)
+      expect(await db.promptTemplates.count()).toBe(SYSTEM_PROMPT_SEEDS.length + NOVEL_CONTENT_PROMPT_SEEDS.length + CRAFT_PROMPT_SEEDS.length + 1)
       expect(usePromptStore.getState().getActive('chapter.de-ai').id).toBe(customId)
       expect((await db.promptTemplates.get(customId))?.systemPrompt).toBe('保留我的独特规则')
       expect((await db.promptTemplates.get(builtIn.id!))?.isActive).toBe(false)

@@ -9,6 +9,8 @@ import type { PromptVariableContext } from '../types'
  * 条件块变量（isSummary / hasNoForeshadows）默认空字符串 → 条件块默认隐藏。
  */
 export const PREVIEW_VARS: PromptVariableContext = {
+  deepAnalysis: '1',
+  quickAnalysis: '',
   // 项目级
   projectName: '示例小说·剑破苍穹',
   genres: '玄幻',
@@ -52,6 +54,7 @@ export const PREVIEW_VARS: PromptVariableContext = {
   locationNames: '昆仑山, 长安城, 剑宗, 紫云观, 落霞谷',
   locationTypes: 'mountain, city, faction',
   imageStyle: 'fantasy RPG world map, hand-drawn parchment style',
+  inspiration: '阿照经营一间修伞铺，作者想写3万字、一次成稿的温暖日常。',
   // 通用
   dimension: '地理环境',
   userHint: '风格偏向悬疑',

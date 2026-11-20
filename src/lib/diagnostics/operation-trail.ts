@@ -4,10 +4,16 @@ export const DIAGNOSTIC_CONTEXT_KEY = 'storyforge-diagnostic-context-v1'
 const TRAIL_KEY = 'storyforge-operation-trail-v1'
 let trail: DiagnosticStep[] = []
 let previousTrail: DiagnosticStep[] = []
-let enabled = false
+let enabled = true
 let installed = false
+// Only an absent preference adopts the default. Preserve explicit opt-out and
+// malformed stored values; callers retain their existing fail-closed catches.
+function storedContextEnabled(): boolean {
+  const value = localStorage.getItem(DIAGNOSTIC_CONTEXT_KEY)
+  return value === null || value === 'true'
+}
 export function diagnosticContextEnabled(): boolean {
-  try { return enabled && localStorage.getItem(DIAGNOSTIC_CONTEXT_KEY) === 'true' } catch { return false }
+  try { return enabled && storedContextEnabled() } catch { return false }
 }
 function syncNative() {
   try { void window.storyforgeClient?.diagnosticContext?.({ enabled: diagnosticContextEnabled(), trail: readOperationTrail() }).catch(() => {}) } catch { /* Optional diagnostics never block editing. */ }
@@ -41,7 +47,7 @@ export function installOperationTrail() {
   if (installed) return
   installed = true
   try {
-    enabled = localStorage.getItem(DIAGNOSTIC_CONTEXT_KEY) === 'true'
+    enabled = storedContextEnabled()
     const raw = localStorage.getItem(TRAIL_KEY)
     // Retain only for native events whose timestamps precede this startup, never new errors.
     const rows: unknown = raw && raw.length < 8192 ? JSON.parse(raw) : []
@@ -63,7 +69,7 @@ export function installOperationTrail() {
   window.addEventListener('popstate', () => recordOperation('navigate'))
   window.addEventListener('storage', event => {
     if (event.key === DIAGNOSTIC_CONTEXT_KEY || event.key === null) {
-      trail = []; previousTrail = []; try { enabled = localStorage.getItem(DIAGNOSTIC_CONTEXT_KEY) === 'true' } catch { enabled = false }
+      trail = []; previousTrail = []; try { enabled = storedContextEnabled() } catch { enabled = false }
       window.dispatchEvent(new Event('diagnostic-context-change')); syncNative()
     }
   })

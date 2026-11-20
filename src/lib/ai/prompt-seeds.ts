@@ -1,3 +1,6 @@
+import { REFERENCE_PROMPT_SEEDS } from './prompt-seeds-reference'
+import { withPreparationContentMethods } from './prompt-seeds-content-methods'
+import { INSPIRATION_PREPARATION_PROMPT_SEEDS } from './prompt-seeds-preparation'
 import { CORE_PROMPT_SEEDS } from './prompt-seeds-core'
 import { TOOL_PROMPT_SEEDS } from './prompt-seeds-tools'
 import { GENRE_PACK_SEEDS } from './prompt-seeds-genre-packs'
@@ -15,5 +18,7 @@ export type { PromptSeed } from './prompt-seed-type'
 export const SYSTEM_PROMPT_SEEDS: PromptSeed[] = [
   ...CORE_PROMPT_SEEDS,
   ...TOOL_PROMPT_SEEDS,
-  ...GENRE_PACK_SEEDS,
+  ...INSPIRATION_PREPARATION_PROMPT_SEEDS,
+  ...GENRE_PACK_SEEDS.map(withPreparationContentMethods),
+  ...REFERENCE_PROMPT_SEEDS,
 ]

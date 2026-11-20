@@ -3,7 +3,6 @@ import { BookOpen } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router'
 import AIConfigPanel from './AIConfigPanel'
 import ClientUpdatePanel from './ClientUpdatePanel'
-import ClientPrivacyPanel from './ClientPrivacyPanel'
 import { ClientLegalDocuments } from './ClientAgreement'
 import CreativeReliabilityCommunityPanel from './CreativeReliabilityCommunityPanel'
 import ProjectStorageWorkspacePanel from './ProjectStorageWorkspacePanel'
@@ -65,8 +64,8 @@ export default function SettingsPage({
         <h3 className="text-sm font-semibold text-text-primary mb-3">其他</h3>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-text-secondary">新手引导</p>
-            <p className="text-xs text-text-muted">浏览示例作品，了解各产品的创作与游玩方式</p>
+            <p className="text-sm text-text-secondary">示例作品库</p>
+            <p className="text-xs text-text-muted">阅读内置作品与前期制作包，或创建独立的体验副本与游戏存档</p>
           </div>
           <a
             href={`${import.meta.env.BASE_URL}home/examples`}
@@ -77,7 +76,6 @@ export default function SettingsPage({
           </a>
         </div>
       </div>
-      <ClientPrivacyPanel />
       <ClientLegalDocuments />
     </div>
   )

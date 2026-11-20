@@ -34,6 +34,8 @@ const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8')
 const PROMPT_SEED_FILES = [
   'src/lib/ai/prompt-seeds-core.ts',
   'src/lib/ai/prompt-seeds-tools.ts',
+  'src/lib/ai/prompt-seeds-reference.ts',
+  'src/lib/ai/prompt-seeds-preparation.ts',
   'src/lib/ai/prompt-seeds-genre-packs.ts',
   'src/lib/ai/prompt-seeds-genre-packs-extended.ts',
   'src/lib/ai/prompt-seeds-novel.ts',

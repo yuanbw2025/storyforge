@@ -49,6 +49,10 @@ afterEach(async () => {
 describe('R-CREL14 · 正式设置页社区反馈入口', () => {
   it('设置页直接挂载入口，并诚实展示实验边界、费用、回滚和隐私说明', async () => {
     const host = await mount(createElement(SettingsPage))
+    expect(host.querySelector('[aria-label="增强故障诊断"]')).toBeNull()
+    expect(host.textContent).not.toContain('附带最近操作轨迹')
+    expect(host.textContent).toContain('项目存储工作区')
+    expect(host.textContent).toContain('用户协议')
     expect(host.querySelector('[data-testid="harness-eval-placeholder"]')).toBeNull()
     const internal = await mount(createElement(SettingsPage, { showDeveloperTools: true }))
     expect(internal.querySelector('[data-testid="harness-eval-placeholder"]')).not.toBeNull()
