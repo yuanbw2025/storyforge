@@ -3,7 +3,6 @@ import { BookOpen } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router'
 import AIConfigPanel from './AIConfigPanel'
 import ClientUpdatePanel from './ClientUpdatePanel'
-import ClientPrivacyPanel from './ClientPrivacyPanel'
 import { ClientLegalDocuments } from './ClientAgreement'
 import CreativeReliabilityCommunityPanel from './CreativeReliabilityCommunityPanel'
 import ProjectStorageWorkspacePanel from './ProjectStorageWorkspacePanel'
@@ -77,7 +76,6 @@ export default function SettingsPage({
           </a>
         </div>
       </div>
-      <ClientPrivacyPanel />
       <ClientLegalDocuments />
     </div>
   )

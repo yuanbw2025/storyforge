@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { diagnosticCode, parseDiagnosticDetails } from '../../src/lib/diagnostics/diagnostic-context'
 import { DIAGNOSTIC_CONTEXT_KEY, installOperationTrail, readOperationTrail, recordOperation, setDiagnosticContextEnabled } from '../../src/lib/diagnostics/operation-trail'
 import { parseFailureEvent, failureFeedbackLink } from '../../src/lib/diagnostics/failure-summary'
@@ -6,7 +6,8 @@ import { installRuntimeDiagnostics, readRuntimeDiagnosticErrors, recordRuntimeDi
 import { diagnosticWireError } from '../../src/lib/feedback/diagnostic-wire'
 
 beforeEach(() => { localStorage.clear(); setDiagnosticContextEnabled(false); resetRuntimeDiagnostics(); vi.restoreAllMocks() })
-it('does not record before opt-in, records only closed codes, bounds history and clears on opt-out', () => {
+afterEach(() => vi.unstubAllGlobals())
+it('honors existing opt-out, records only closed codes, bounds history and clears on opt-out', () => {
   installOperationTrail(); recordOperation('save'); expect(readOperationTrail()).toEqual([])
   setDiagnosticContextEnabled(true)
   history.replaceState({}, '', '/storyforge/workspace/PRIVATE-WORK?key=SECRET')
@@ -54,4 +55,57 @@ it('storage denial fails closed, persisted objects cannot attach raw fields or i
   expect(setDiagnosticContextEnabled(true)).toBe(false);recordOperation('save');expect(readOperationTrail()).toEqual([]);set.mockRestore()
   expect(parseFailureEvent({occurredAt:new Date().toISOString(),source:'react',name:'TypeError',frames:[],build:'unknown',details:{version:1,code:'SECRET',trail:[]}})?.details).toBeUndefined()
   expect(localStorage.getItem(DIAGNOSTIC_CONTEXT_KEY)).not.toBe('true')
+})
+
+it('defaults an absent preference on without rewriting it, attaches bounded context and clears native context on opt-out', async () => {
+  localStorage.removeItem(DIAGNOSTIC_CONTEXT_KEY)
+  vi.resetModules()
+  const native = vi.fn(async () => {})
+  vi.stubGlobal('storyforgeClient', { diagnosticContext: native })
+  const ctx = await import('../../src/lib/diagnostics/operation-trail')
+  expect(ctx.diagnosticContextEnabled()).toBe(true)
+  ctx.installOperationTrail(); ctx.recordOperation('save')
+  expect(localStorage.getItem(DIAGNOSTIC_CONTEXT_KEY)).toBeNull()
+  expect(native).toHaveBeenLastCalledWith({ enabled: true, trail: ctx.readOperationTrail() })
+  const runtime = await import('../../src/lib/diagnostics/runtime-errors')
+  runtime.recordRuntimeDiagnosticError(new TypeError('Cannot read properties of null'), 'react')
+  const { buildFailureSummary } = await import('../../src/lib/diagnostics/build-failure-summary')
+  const { feedbackDiagnostics } = await import('../../src/lib/feedback/client-support')
+  const errors = feedbackDiagnostics((await buildFailureSummary()).errors)
+  expect(errors[errors.length - 1].details?.trail.some(step => step.action === 'save')).toBe(true)
+  ctx.setDiagnosticContextEnabled(false)
+  expect(ctx.readOperationTrail()).toEqual([])
+  expect(localStorage.getItem('storyforge-operation-trail-v1')).toBeNull()
+  expect(native).toHaveBeenLastCalledWith({ enabled: false, trail: [] })
+})
+it('retains stored opt-out on startup and applies the absent-key default consistently across tabs', async () => {
+  vi.resetModules()
+  const ctx = await import('../../src/lib/diagnostics/operation-trail')
+  expect(ctx.diagnosticContextEnabled()).toBe(false)
+  ctx.installOperationTrail(); ctx.recordOperation('save')
+  expect(ctx.readOperationTrail()).toEqual([])
+  localStorage.removeItem(DIAGNOSTIC_CONTEXT_KEY)
+  window.dispatchEvent(new StorageEvent('storage', { key: DIAGNOSTIC_CONTEXT_KEY }))
+  expect(ctx.diagnosticContextEnabled()).toBe(true)
+  ctx.recordOperation('save'); expect(ctx.readOperationTrail()).toHaveLength(1)
+  localStorage.setItem(DIAGNOSTIC_CONTEXT_KEY, 'false')
+  window.dispatchEvent(new StorageEvent('storage', { key: DIAGNOSTIC_CONTEXT_KEY }))
+  expect(ctx.readOperationTrail()).toEqual([])
+  localStorage.clear()
+  window.dispatchEvent(new StorageEvent('storage', { key: null }))
+  expect(ctx.diagnosticContextEnabled()).toBe(true)
+  localStorage.setItem(DIAGNOSTIC_CONTEXT_KEY, 'invalid')
+  window.dispatchEvent(new StorageEvent('storage', { key: DIAGNOSTIC_CONTEXT_KEY }))
+  expect(ctx.diagnosticContextEnabled()).toBe(false)
+})
+it('fails closed when storage cannot be read even with the new default', async () => {
+  localStorage.removeItem(DIAGNOSTIC_CONTEXT_KEY)
+  vi.resetModules()
+  const get = vi.spyOn(localStorage, 'getItem').mockImplementation(() => { throw new Error('denied') })
+  const ctx = await import('../../src/lib/diagnostics/operation-trail')
+  expect(ctx.diagnosticContextEnabled()).toBe(false)
+  ctx.installOperationTrail(); ctx.recordOperation('save')
+  expect(ctx.readOperationTrail()).toEqual([])
+  get.mockRestore()
+  expect(ctx.diagnosticContextEnabled()).toBe(false)
 })
