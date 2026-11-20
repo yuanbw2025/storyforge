@@ -2,7 +2,7 @@ import type { WorldviewGeneratableField } from '../registry/field-registry'
 
 // Content methods for the existing single-field contract, shared by step and Agent entry points.
 // These are creative guidance, not new required fields or a mechanical quality gate.
-const FIELD_METHODS = {
+export const FIELD_METHODS = {
   worldOrigin: '从作者最特别的现象、画面或日常出发，形成可辨认的世界气质。起源可以是作者真相、流传解释或有意未知，明确区分；不必补创世神战。让过去留下一处当下能感知的痕迹，给世界先行的作者留下故事萌芽空间，不预定全书结局。',
   powerHierarchy: '按题材选择技术、能力或力量关系；现实世界不强加修炼等级。规则明确时说明能做什么、条件、边界及普通人的接触方式，用一次具体使用表现差别；区分学习熟练度与新增超能力，不擅加血统觉醒、稀有体质、作用材质或计时规则，不能在temporaryAssumptions里把违反作者条件的改动当作兼容；神话或软魔法保留未知，但不能靠临时新增万能能力解决问题。实力不直接等于政治地位。',
   divineDesign: '区分神明确实存在的作者设定、居民信仰与读者所知。不把信仰一律解释成骗局，不为无神世界强造神谱。用仪式、节日、称呼或个人习惯表现信仰怎样被生活；同一信仰允许不同理解。遵守现有四键对象合同。',
@@ -41,4 +41,8 @@ export function worldviewFieldContentGuidanceV1(field: WorldviewGeneratableField
 区分作者已给事实、本次创作提议、居民解释与有意未知；不把没有资料的推测称为已考证，不编书目和引文。现实职业的设备、安全操作和技术效果不能为追求生动而编造；不确定时选不依赖该技术断言的日常细节。
 作者明确要求改变方向时，给目标字段的变更候选；若与其它已确认字段有关，${changeNote}，不擅改其它字段，也不把旧方向当永久禁令。
 上述方法服从本轮操作：润色保持事实，扩写沿原方向；不要为展示方法而强加示范、子标题或额外JSON键。`
+}
+
+export function worldviewContentTemplateVariablesV1(field: string): Record<string, string> {
+  return Object.fromEntries(Object.keys(FIELD_METHODS).map(key => [`field_${key}`, key === field ? '1' : '']))
 }

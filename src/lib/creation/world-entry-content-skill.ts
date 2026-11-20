@@ -54,3 +54,8 @@ ${operation === 'extract' ? '本轮是原文抽取：以上只是查找和组织
 保留作者原创专名与具体物件，区分作者事实、居民说法、未知与本次建议；命名贴合本作口吻。词条规模随用途取舍，不把每个背景小物件都写成传奇；温暖、幽默、美感、生活与探索同样有用。
 完整响应必须只有一个JSON数组，多项也放在同一数组内，不能连续输出多个数组；作者只要一项时不要按方法角度拆成多个新词条。只写当前合同的顶层键与登记允许的标量fields，ref字段完全省略。上述内容角度不意味着必须填满；schema没有对应属性时可在允许的description内组织已有依据，不能自造新key。`
 }
+
+export function codexContentTemplateVariablesV1(key: string | null | undefined): Record<string, string> {
+  const selected = key && Object.prototype.hasOwnProperty.call(CODEX_CONTENT_METHODS, key) ? key : 'custom'
+  return Object.fromEntries([...Object.keys(CODEX_CONTENT_METHODS), 'custom'].map(value => [`codex_${value}`, value === selected ? '1' : '']))
+}

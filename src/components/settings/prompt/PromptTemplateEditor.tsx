@@ -1,3 +1,4 @@
+import { INSPIRATION_PREPARATION_MODES, INSPIRATION_PREPARATION_LABELS, INSPIRATION_PREPARATION_MODULES } from '../../../lib/inspiration/preparation-contract'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Save, Trash2, Copy, Download, CheckCircle2, Lock, Plus, X,
@@ -13,6 +14,9 @@ import { useDialog } from '../../shared/Dialog'
 import { useToast } from '../../shared/Toast'
 
 const ALL_MODULE_KEYS: { value: PromptModuleKey; label: string }[] = [
+  { value: 'inspiration.reverse', label: '灵感 · 单世界完整反推' },
+  { value: 'inspiration.reverse.multiworld', label: '灵感 · 多世界完整反推' },
+  ...INSPIRATION_PREPARATION_MODES.map(mode => ({ value: INSPIRATION_PREPARATION_MODULES[mode], label: `灵感准备 · ${INSPIRATION_PREPARATION_LABELS[mode]}` })),
   { value: 'worldview.dimension',         label: '世界观 · 维度生成' },
   { value: 'worldview.generate',          label: '世界观 · 完整生成（待启用）' },
   { value: 'worldview.worldbuilding',     label: '世界观 · 阶段任务' },

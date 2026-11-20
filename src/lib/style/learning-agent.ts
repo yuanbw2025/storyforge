@@ -1,4 +1,3 @@
-import { STYLE_LEARNING_CONTENT_GUIDANCE } from '../creation/preparation-content-skill'
 import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from '../ai/prompt-engine'
 import type { Chapter, ChatMessage, PromptTemplate, WorkspaceScope } from '../types'
@@ -210,8 +209,7 @@ export async function readStyleLearningBaselineContextV1(input: {
 const STYLE_LEARNING_STRICT_PROTOCOL_V1 = `
 
 【HARNESS-76 严格输出协议】
-只输出 Markdown 文风画像正文，不得使用代码围栏、JSON、前后客套或复述输入。必须依次且各仅一次包含“## 用词习惯”“## 句式与节奏”“## 对话风格”“## 描写与画面”“## 标志性表达”“## 倾向与禁忌”六个标题；每节 1～5 条具体要点。样本不足时明确写“样本中体现不明显”，不得把样本中的剧情、人物名、地点名或专有名词当作文风规则。
-${STYLE_LEARNING_CONTENT_GUIDANCE}`
+只输出 Markdown 文风画像正文，不得使用代码围栏、JSON、前后客套或复述输入。必须依次且各仅一次包含“## 用词习惯”“## 句式与节奏”“## 对话风格”“## 描写与画面”“## 标志性表达”“## 倾向与禁忌”六个标题；每节 1～5 条具体要点。样本不足时明确写“样本中体现不明显”，不得把样本中的剧情、人物名、地点名或专有名词当作文风规则。`
 
 export function readStyleLearningPromptTemplateV1(): PromptTemplate {
   return usePromptStore.getState().getActive('style.learn')

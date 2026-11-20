@@ -1,5 +1,3 @@
-import { HISTORY_CONTENT_GUIDANCE } from '../creation/world-entry-content-skill'
-import { appendPreparationSystemGuidance } from '../creation/preparation-content-skill'
 import { renderPrompt } from '../ai/prompt-engine'
 import { usePromptStore } from '../../stores/prompt'
 import type {
@@ -87,20 +85,18 @@ export function buildHistoryAIMessages(input: {
       : { stormPrompt: (target.item.stormPrompt || '').trim() }),
     worldContext,
   }).messages
-  return appendPreparationSystemGuidance(rendered, HISTORY_CONTENT_GUIDANCE)
+  return rendered
 }
 
 const HISTORY_AGENT_STRICT_PROTOCOL_V1: Record<HistoryAIMode, string> = {
   consult: `
 
 【HARNESS-73 严格输出协议】
-只输出 Markdown 正文，不得使用代码围栏、JSON、前后客套或复述输入。输出必须依次包含“前提识别”“可能存在的问题”“修改方案 / 折中方案”“时代质感补充”四个标题；不确定的史实必须标“待考”，不得伪造出处。
-${HISTORY_CONTENT_GUIDANCE}`,
+只输出 Markdown 正文，不得使用代码围栏、JSON、前后客套或复述输入。输出必须依次包含“前提识别”“可能存在的问题”“修改方案 / 折中方案”“时代质感补充”四个标题；不确定的史实必须标“待考”，不得伪造出处。`,
   storm: `
 
 【HARNESS-73 严格输出协议】
-只输出 Markdown 正文，不得使用代码围栏、JSON、前后客套或复述输入。输出必须依次包含“场景画面”“人物与对白触点”“可写进小说的冲突灵感”“可选的史实补强”四个标题；不确定的史实必须标“待考”，不得伪造出处。
-${HISTORY_CONTENT_GUIDANCE}`,
+只输出 Markdown 正文，不得使用代码围栏、JSON、前后客套或复述输入。输出必须依次包含“场景画面”“人物与对白触点”“可写进小说的冲突灵感”“可选的史实补强”四个标题；不确定的史实必须标“待考”，不得伪造出处。`,
 }
 
 export function readHistoryAgentPromptTemplateV1(mode: HistoryAIMode): PromptTemplate {

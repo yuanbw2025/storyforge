@@ -1,5 +1,3 @@
-import { FULL_INSPIRATION_CONTENT_GUIDANCE } from '../creation/world-entry-content-skill'
-import { appendPreparationSystemGuidance } from '../creation/preparation-content-skill'
 /**
  * Phase 26.4 — 灵感反推
  *
@@ -147,7 +145,7 @@ export function buildInspirationReverseMultiWorldPrompt(
     inspiration,
     userHint: userHint || '',
   })
-  return appendPreparationSystemGuidance(messages, FULL_INSPIRATION_CONTENT_GUIDANCE)
+  return messages
 }
 
 export function parseReverseMultiWorldOutput(output: string): ReverseMultiWorldResult | null {
@@ -212,7 +210,7 @@ export function buildInspirationReversePrompt(
     inspiration,
     userHint: userHint || '',
   })
-  return appendPreparationSystemGuidance(messages, FULL_INSPIRATION_CONTENT_GUIDANCE)
+  return messages
 }
 
 // ── 解析输出 ─────────────────────────────────────────────────────────────
