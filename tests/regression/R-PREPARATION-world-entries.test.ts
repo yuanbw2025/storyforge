@@ -40,6 +40,30 @@ describe('准备与世界独立入口的方法及资料边界', () => {
     expect(custom).toContain('evidenceQuotes 须为原文逐字引文')
     expect(custom).toContain('分类名为物品，作者自定义schema')
   })
+  it('退役历史key按自定义schema理解，活跃方法及模板变量仍保持对应', () => {
+    usePromptStore.setState({ templates: TOOL_PROMPT_SEEDS.filter(seed => seed.moduleKey.startsWith('codex.')).map((seed, i) => ({ ...seed, id: i + 999, createdAt: 1, updatedAt: 1 })) })
+    for (const key of ['humEra', 'humEvent']) {
+      const prompt = text(buildCodexExtractPromptFromRegisteredContextV1({
+        baselineContext: '作者沿用旧分类存地方器物', categoryBuiltInKey: key,
+        sourceText: '旧灯是照明工具', discoveredNames: [], supplementTags: false,
+      }))
+      expect(prompt).toContain('不从分类名字猜定另一种内置类型')
+      expect(prompt).toContain('本轮是原文抽取')
+      expect(prompt).toContain('旧灯是照明工具')
+      expect(prompt).not.toContain('标清时期范围、变化与遗留')
+      expect(prompt).not.toContain('说明参与者及仍可见影响')
+    }
+    const society = text(buildCodexEnrichPromptFromRegisteredContextV1({
+      baselineContext: '保留政经文化schema', categoryBuiltInKey: 'humSociety', worldContext: '登记世界', authorRequest: '地方换班礼', supplementTags: false,
+    }))
+    expect(society).toContain('把制度落到日常办事、交换和交往')
+    for (const seed of TOOL_PROMPT_SEEDS.filter(seed => seed.moduleKey === 'codex.extract' || seed.moduleKey === 'codex.enrich')) {
+      expect(seed.variables).not.toContain('codex_humEra')
+      expect(seed.variables).not.toContain('codex_humEvent')
+      expect(seed.variables).toContain('codex_humSociety')
+      expect(seed.variables).toContain('codex_custom')
+    }
+  })
   it('作者史实标记不是检索证明，虚构条目不是自动未来计划，细节不在固定字数处裁掉', () => {
     const profile = { ...createEmptyProfile(1), createdAt: 1, updatedAt: 1, entries: { custom: { historicalAnchors: '作者提供的摘录，尚无原件', fictionalAdaptations: '允许局部架空', priority: 'balanced' as const } } }
     const fullEvent = '历史记录的细节'.repeat(40) + '【事件末尾仍须读取】'

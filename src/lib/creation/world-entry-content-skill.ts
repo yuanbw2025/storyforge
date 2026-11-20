@@ -1,4 +1,4 @@
-import type { BuiltInCodexKey } from '../types/codex'
+import type { ActiveBuiltInCodexKey } from '../types/codex'
 
 export const FULL_INSPIRATION_CONTENT_GUIDANCE = `【完整框架的内容方法】
 作者选了完整反推，可以给相连的世界、故事萌芽与初始人物，但保留作者原创专名、物件、画面、活动和已经明确的限制。参考只启发方法，不能把原作人物和情节改名搬入；没有检索不能冒称考证。
@@ -34,8 +34,6 @@ export const CODEX_CONTENT_METHODS = {
   natTerrain: '写地貌怎样影响行走、聚居、生产与感官；同样地形可有不同历史与社会选择。',
   natWater: '关注流向、季节、取水、交通与水边活动；不凭地名编不可验证的水文数据。',
   natClimate: '区分长期气候、季节与本次天气，落实生活和生产的变化；不把气候推成居民固定性格。',
-  humEra: '标清时期范围、变化与遗留，不把一个时代写成全体同一种生活。',
-  humEvent: '区分实际事件、传说与作者规划，说明参与者及仍可见影响；不强制大战或灾变。',
   humSociety: '把制度落到日常办事、交换和交往，有地区与群体差别；不冒充已核验历史。',
   humPolitics: '关注权力如何实际执行、公共事务与不同位置的人怎样参与，不只列头衔或把制度当统一性格。',
   humEconomy: '写生产、交换、分工、支付和维修等具体环节；尊重数量、供给与劳动，不凭一句互助消除所有成本。',
@@ -43,11 +41,11 @@ export const CODEX_CONTENT_METHODS = {
   humConflict: '说明分歧双方具体需要与影响，也可有协商、并存或长期未解，不强行升级为全世界大战。',
   originPower: '先明确对象、条件、范围和后果，应用差别来自用途与熟练；不能借高级使用者突破作者硬边界。',
   originDeity: '区分真相、居民信仰与未解现象；宗教存在不证明神真实，不替作者强解有意保留的神秘。',
-} satisfies Record<BuiltInCodexKey, string>
+} satisfies Record<ActiveBuiltInCodexKey, string>
 
 export function codexContentGuidance(builtInKey: string | null | undefined, operation: 'extract' | 'enrich'): string {
   const focus = builtInKey && Object.prototype.hasOwnProperty.call(CODEX_CONTENT_METHODS, builtInKey)
-    ? CODEX_CONTENT_METHODS[builtInKey as BuiltInCodexKey]
+    ? CODEX_CONTENT_METHODS[builtInKey as keyof typeof CODEX_CONTENT_METHODS]
     : '按作者自定义分类和登记schema理解该词条的用途与细节，不从分类名字猜定另一种内置类型，也不强塞通用人物卡。'
   return `【本类词条的内容方法】${focus}
 ${operation === 'extract' ? '本轮是原文抽取：以上只是查找和组织已有证据的角度，不是补写空白的清单。只抽取所给原文能支持的实体、属性和关系；逐字引文不得拼接改写，别名不凭相似猜合并，缺少信息就省略该属性或该项。' : '本轮是AI新建提议：结合已登记世界的生活与运行，给少量有用且各有区别的新词条，不复制已有词条换名字；提议不是原有事实，不给它伪造原文证据。'}

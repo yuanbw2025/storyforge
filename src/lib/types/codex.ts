@@ -54,6 +54,9 @@ export type BuiltInCodexKey =
   | 'humCulture' | 'humConflict'                                                // 人文环境各方面
   | 'originPower' | 'originDeity'                                              // 世界起源:力量体系/神明信仰
 
+/** 新分类播种与内容生产使用的内置类型；旧 key 仍可读取已有作者数据。 */
+export type ActiveBuiltInCodexKey = Exclude<BuiltInCodexKey, 'humEra' | 'humEvent'>
+
 /** 词条分类（树状，内置 + 用户自定义） */
 export interface CodexCategory extends RagDocumentMetadata {
   id?: number
@@ -214,7 +217,7 @@ export function filterCodexEntriesByWorld<T extends Pick<CodexEntry, 'worldGroup
 /** 内置分类的种子定义（不含 projectId/时间，落库时补全） */
 export interface BuiltInCategorySeed {
   domain: CodexDomain
-  builtInKey: BuiltInCodexKey
+  builtInKey: ActiveBuiltInCodexKey
   name: string
   icon: string
   fields: CodexFieldDef[]
@@ -358,21 +361,6 @@ export const BUILTIN_CATEGORIES: BuiltInCategorySeed[] = [
   },
 
   // ── 人文环境各方面 ──
-  {
-    domain: 'humanity', builtInKey: 'humEra', name: '历史时代', icon: '📜',
-    fields: [
-      { key: 'period', label: '时间/纪年', type: 'text' },
-      { key: 'feature', label: '时代特征/大事', type: 'longtext' },
-    ],
-  },
-  {
-    domain: 'humanity', builtInKey: 'humEvent', name: '重大事件', icon: '📅',
-    fields: [
-      { key: 'type', label: '类型', type: 'select', options: ['战争', '王朝兴替', '灾劫', '变法', '发现', '其他'] },
-      { key: 'time', label: '发生时间', type: 'text' },
-      { key: 'impact', label: '影响', type: 'longtext' },
-    ],
-  },
   {
     domain: 'humanity', builtInKey: 'humSociety', name: '政经文化', icon: '🏛️',
     fields: [
