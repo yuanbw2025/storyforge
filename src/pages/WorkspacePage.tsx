@@ -456,7 +456,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule, embed
       case 'worldview-natural':
         return <WorldviewNaturalPanel project={project} resizableInputs={resizableInputs} confirmedLocalSaves={isLongform && activeWork.id === project.activeWorkId && activeWork.projectId === project.id} />
       case 'worldview-humanity':
-        return <WorldviewHumanityPanel project={project} resizableInputs={resizableInputs} onOpenHistory={() => selectModule('history')} />
+        return <WorldviewHumanityPanel project={project} resizableInputs={resizableInputs} />
       case 'geography':
       case 'world-map':
       case 'locations': {
