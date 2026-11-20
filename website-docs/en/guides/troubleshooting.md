@@ -12,9 +12,9 @@ Record the version, operating system, selected location and error. Retain the ex
 
 Released v4.0.7 does not include this fix. The original machine's native picker, binding recovery and a subsequent formal client still await acceptance. [#300](https://github.com/yuanbw2025/storyforge/issues/300) and [#458](https://github.com/yuanbw2025/storyforge/issues/458) remain under investigation. Add evidence to the existing issue through the [feedback center](/en/feedback/) instead of creating duplicates.
 
-## Optional recent-operation traces
+## Recent-operation traces and failure summaries
 
-In general settings, open Enhanced failure diagnostics and select Include recent operation traces, which defaults to off. Failure summaries can then include up to 20 page categories, operation codes and technical error classifications from the last five minutes, plus supported native process/reason/numeric-exit-code information. Turning it off clears local traces and pending details. A failed preference save shows an error and stops collection for the current session.
+Current mainline records up to 20 bounded local page categories, operation codes, and technical error classifications from the last five minutes by default. The former enhanced-diagnostics switch has been removed. An existing explicit opt-out remains authoritative; malformed preferences or storage read failure disable recording. Summaries can include supported native process, reason, and numeric exit-code details. This does not enable automatic failure reporting. See [PR #535](https://github.com/yuanbw2025/storyforge/pull/535).
 
 Inspect the preview before sending under the existing failure-reporting choice. Older backends or failed capability negotiation continue with basic summaries. Public feedback links omit extended traces. Traces exclude input text, button labels, work titles, manuscripts, model responses, URLs and keys. See [PR #301](https://github.com/yuanbw2025/storyforge/pull/301) for delivery scope and backend integration status.
 

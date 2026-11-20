@@ -3,14 +3,16 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect } from '@playwright/test'
+import { buildDiagnosticOptOutFixture } from './diagnostic-fixture.mjs'
 /** Synthetic profile only. Exercise the real renderer-crash event and IPC, then recover.
  * @param {import('@playwright/test').ElectronApplication} app
  * @param {import('@playwright/test').Page} page
  * @param {() => Promise<import('@playwright/test').ElectronApplication>} launch */
 export async function verifyDiagnosticContext(app, page, launch) {
   await page.goto('http://localhost:17831/storyforge/home/settings')
-  const choice = page.getByLabel('附带最近操作轨迹（可选，默认关闭）')
-  await choice.waitFor(); await choice.check()
+  await page.getByRole('region', { name: '问题与故障反馈' }).waitFor()
+  assert.equal(await page.getByLabel('附带最近操作轨迹（可选，默认关闭）').count(), 0)
+  assert.equal(await page.evaluate(() => localStorage.getItem('storyforge-diagnostic-context-v1')), null)
   // Use the installed operation collector: a direct IPC fixture can be replaced
   // by a later real UI update. Button content must never enter the stored trail.
   await page.evaluate(() => {
@@ -66,8 +68,8 @@ export async function verifyDiagnosticContext(app, page, launch) {
   app = await launch(); page = await app.firstWindow()
   await page.waitForSelector('#root main, #root button', {timeout:60000})
   await page.goto('http://localhost:17831/storyforge/home/settings')
-  const restartedChoice = page.getByLabel('附带最近操作轨迹（可选，默认关闭）')
-  await restartedChoice.waitFor()
+  await page.getByRole('region', { name: '问题与故障反馈' }).waitFor()
+  assert.equal(await page.evaluate(() => localStorage.getItem('storyforge-diagnostic-context-v1')), null)
   const rows = await page.evaluate(async () => {
     const client = /** @type {Window & {storyforgeClient?: {diagnostics?():Promise<unknown[]>}}} */ (window).storyforgeClient
     return await client?.diagnostics?.() ?? []
@@ -78,12 +80,21 @@ export async function verifyDiagnosticContext(app, page, launch) {
   assert.equal(row.details.native.exitCode, gone.exitCode)
   assert.ok(row.details.trail?.some(step => step.action === 'save'))
   assert.equal(JSON.stringify(rows).includes('PRIVATE-SYNTHETIC'), false)
-  await restartedChoice.uncheck()
+  // Exercise the existing production preference/cleanup API in this synthetic
+  // profile, then let normal bootstrap preserve the stored legacy opt-out.
+  const optOutSource = await buildDiagnosticOptOutFixture()
+  assert.equal(await page.evaluate(source => {
+    (0, eval)(source)
+    return window.__storyforgeDiagnosticFixture.disable()
+  }, optOutSource), true)
+  await page.reload()
+  await page.getByRole('region', { name: '问题与故障反馈' }).waitFor()
+  assert.equal(await page.evaluate(() => localStorage.getItem('storyforge-operation-trail-v1')), null)
   await page.waitForFunction(async () => {
     const client = /** @type {Window & {storyforgeClient?: {diagnostics?():Promise<unknown[]>}}} */ (window).storyforgeClient
     const rows = await client?.diagnostics?.() ?? []
     return rows.every(value => value && typeof value === 'object' && !('details' in value))
   })
-  console.log('Native diagnostic context: real isolated fatal renderer exit, classified diagnostic, bounded prior action, exit code, reload and opt-out cleanup passed; no model or report upload.')
+  console.log('Native diagnostic context: real isolated fatal renderer exit, classified diagnostic, bounded prior action, exit code, reload and persisted legacy opt-out cleanup passed; no model or report upload.')
   return { app, page }
 }
