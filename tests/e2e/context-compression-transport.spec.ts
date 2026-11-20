@@ -1,6 +1,11 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 
+// This suite checks the Agnes-specific JSON/thinking protocol. Intercept its
+// actual official origin so the finite registered model capacity is applicable;
+// a third-party .invalid origin correctly has only conservative capacity.
+const fixtureRoute = 'https://apihub.agnes-ai.com/**'
+
 async function runCompression(page: Page, maxOutputTokens?: number) {
   return page.evaluate(async maxOutputTokens => {
     const imp = new Function('p', 'return import(p)')
@@ -11,7 +16,7 @@ async function runCompression(page: Page, maxOutputTokens?: number) {
     const content = ['【潮门规则】禁止触碰潮汐钟。', '主角尚未知晓旧港秘密，后续获知前不能据此行动。', '海历3021年，议会只允许十年开启一次潮门。', '潮汐推移形成盐晶层。'.repeat(1050)].join('\n')
     const policy = { ...getAgentSkillV1('world-origin.worldview-field', 'world-origin').contextCompression, ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }) }
     const session = createAgentContextCompressionSessionV1({
-      policy, config: { provider: 'agnes', model: 'agnes-2.5-flash', apiKey: 'isolated-test-token', baseUrl: 'https://compression.invalid/v1', maxTokens: 8000, temperature: 0.2 },
+      policy, config: { provider: 'agnes', model: 'agnes-2.5-flash', apiKey: 'isolated-test-token', baseUrl: 'https://apihub.agnes-ai.com/v1', maxTokens: 8000, temperature: 0.2 },
       projectId: 1, authorRequest: '根据既有内容补全', routingCategory: 'agent.world-origin',
       runtime: { budget: new AgentTeamBudgetTracker('balanced'), requiredFutureModelCalls: 1 },
     })
@@ -22,7 +27,7 @@ async function runCompression(page: Page, maxOutputTokens?: number) {
 test.beforeEach(async ({ page }) => { await createLongform(page, '压缩协议隔离验证') })
 test('actual bounded JSON transport preserves literal anchors and source budget', async ({ page }) => {
   const requests: Record<string, unknown>[] = []
-  await page.route('https://compression.invalid/**', async route => {
+  await page.route(fixtureRoute, async route => {
     const body = route.request().postDataJSON(); requests.push(body)
     const anchors = JSON.parse(body.messages[1].content.match(/【必须覆盖的逐字锚点】([^\n]+)/u)[1])
     const content = JSON.stringify({ version: 1, summary: '潮门规则、时间与认知边界均沿用原文。', coveredAnchorIds: anchors.map((anchor: { id: string }) => anchor.id), evidenceQuotes: anchors.map((anchor: { id: string; quote: string }) => ({ anchorId: anchor.id, quote: anchor.quote })) })
@@ -36,21 +41,21 @@ test('actual bounded JSON transport preserves literal anchors and source budget'
 })
 test('a rejected transport is one dispatch with explicit fallback evidence', async ({ page }) => {
   let requests = 0
-  await page.route('https://compression.invalid/**', async route => { requests++; await route.fulfill({ status: 503, json: { error: { message: 'temporarily unavailable' } } }) })
+  await page.route(fixtureRoute, async route => { requests++; await route.fulfill({ status: 503, json: { error: { message: 'temporarily unavailable' } } }) })
   const { result } = await runCompression(page)
   expect(requests).toBe(1)
   expect(result.compression).toMatchObject({ outcome: 'fallback', attempts: 1 })
 })
 test('an impossible JSON envelope falls back before dispatch', async ({ page }) => {
   let requests = 0
-  await page.route('https://compression.invalid/**', route => { requests++; return route.abort() })
+  await page.route(fixtureRoute, route => { requests++; return route.abort() })
   const { result } = await runCompression(page, 8)
   expect(requests).toBe(0)
   expect(result.compression).toMatchObject({ outcome: 'fallback', attempts: 0, failureCode: 'compression-envelope-exceeds-output-budget' })
 })
 test('only a completed invalid response uses the bounded semantic repair', async ({ page }) => {
   let requests = 0
-  await page.route('https://compression.invalid/**', async route => {
+  await page.route(fixtureRoute, async route => {
     requests++
     const body = route.request().postDataJSON()
     const anchors = JSON.parse(body.messages[1].content.match(/【必须覆盖的逐字锚点】([^\n]+)/u)[1])
