@@ -8,6 +8,7 @@ import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { db } from '../../src/lib/db/schema'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import { useAIConfigStore } from '../../src/stores/ai-config'
+import { usePromptStore } from '../../src/stores/prompt'
 import { useNodeFlowStore } from '../../src/stores/node-flow'
 import { useWorldviewStore } from '../../src/stores/worldview'
 import { AUTHORING_NODE_BY_ID, defaultConfigForTemplate } from '../../src/lib/node-authoring/catalog'
@@ -65,6 +66,7 @@ describe.sequential('SFQA002 saved field prefixes in the actual React workspace'
   let usagePromises: Promise<unknown>[]
   beforeEach(async () => {
     await db.delete(); await db.open(); localStorage.clear()
+    await usePromptStore.getState().init()
     restoreLocks = installCooperativeLocks()
     host = document.createElement('div'); document.body.append(host); root = createRoot(host)
     usagePromises = []
