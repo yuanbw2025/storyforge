@@ -107,7 +107,7 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
           previewVars[binding.variable] = `（示例：${binding.label}）`
         }
       }
-      return renderPrompt(draft, previewVars)
+      return renderPrompt(draft, previewVars, { parameterValues: draft.moduleKey === 'story.generate' ? {} : undefined })
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
     }

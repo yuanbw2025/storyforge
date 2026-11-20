@@ -79,6 +79,7 @@ describe.sequential('故事核心可编辑方法与实际请求', () => {
     expect(messages).toContain('车站调度员收集候鸟误点记录')
     expect(messages).toContain(STORY_CORE_CONTENT_METHODS.concept)
     expect(messages).toContain(STORY_CORE_MODE_METHODS.create)
+    expect(messages).not.toContain('作者所选基调：严肃')
     expect(prepared.contextSources).toContain('workAuthoringIntent')
     const frozen = await freezePromptExecutionOptionsV1({ request: { version: 1, moduleKey: 'story.generate', systemOverride: '临时方法：只处理一张时刻表。' }, template })
     const overridden = await prepareStoryCoreCopilot({ projectId: project.id!, scope, worldGroupId: null, configOverride: config, authorRequest: '目标字段=concept；生成模式=polish。', promptExecution: frozen })

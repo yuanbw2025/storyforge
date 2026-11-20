@@ -427,7 +427,7 @@ export async function renderFrozenPromptExecutionV1(input: {
     assertString(message, `additionalUserMessages[${index}]`, options.moduleKey === 'story.generate' ? Infinity : 500_000)
   ))
   const rendered = renderPrompt(options.template as PromptTemplate, input.context, {
-    parameterValues: options.parameterValues,
+    parameterValues: options.parameterValues ?? (options.moduleKey === 'story.generate' ? {} : undefined),
     overrides: {
       ...(options.systemOverride == null ? {} : { systemPrompt: options.systemOverride }),
       ...(options.userOverride == null ? {} : { userPromptTemplate: options.userOverride }),
