@@ -27,7 +27,6 @@ import {
 
 
 export const REFERENCE_ANALYSIS_RUN_POLICY = Object.freeze({
-  maxRunsPerReference: 6,
   sourceKinds: ['own-work', 'authorized', 'public-domain', 'research', 'unknown'] as const,
   usageScopes: ['analysis-only', 'creative-reference', 'continuation-authorized'] as const,
 })
@@ -85,23 +84,6 @@ async function requireRun(runId: number): Promise<{
   return { run, ref, scope }
 }
 
-async function pruneOneDisposableRun(referenceId: number, scope: WorkspaceScope): Promise<boolean> {
-  const runs = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
-    .filter(run => run.referenceId === referenceId)
-  if (runs.length < REFERENCE_ANALYSIS_RUN_POLICY.maxRunsPerReference) return true
-  const disposable = runs
-    .filter(run => run.status === 'failed' || run.status === 'cancelled' || run.status === 'superseded')
-    .sort((a, b) => a.updatedAt - b.updatedAt)
-  for (const row of disposable) {
-    if (!row.id) continue
-    // A prepared or observed Harness attempt is never disposable by age.
-    if ((await localSourceTable().get(row.id))?.durableChunkRunsV1?.length) continue
-    await discardReferenceAnalysisRun(row.id)
-    return true
-  }
-  return false
-}
-
 export interface ReferenceAnalysisFirstStartGuardV1 {
   /** Tables needed to validate and record the original author's first-start claim. */
   transactionTables: readonly Table[]
@@ -116,13 +98,10 @@ export async function createReferenceAnalysisRun(
   if (!input.sourceFilename.trim()) throw new Error('来源文件名不能为空')
   if (!input.fileHash.trim()) throw new Error('来源文件哈希不能为空')
   if (input.totalChars <= 0 || input.expectedChunks <= 0) throw new Error('来源文本或分块计划为空')
-  if (!firstStart && !await pruneOneDisposableRun(ref.id!, scope)) {
-    throw new Error(`每份参考最多保留 ${REFERENCE_ANALYSIS_RUN_POLICY.maxRunsPerReference} 个版本，请先删除未使用版本`)
-  }
 
   const existing = firstStart ? [] : (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
     .filter(run => run.referenceId === ref.id)
-  const version = Math.max(0, ...existing.map(run => run.version)) + 1
+  const version = existing.reduce((maximum, run) => Math.max(maximum, run.version), 0) + 1
   const now = Date.now()
   const row = stampNewRecord(scope, 'referenceAnalysisRuns', {
     projectId: ref.projectId,
@@ -135,7 +114,7 @@ export async function createReferenceAnalysisRun(
     totalChars: input.totalChars,
     sourceKind: input.sourceKind,
     usageScope: constrainUsageScope(input.sourceKind, input.usageScope),
-    rightsNote: (input.rightsNote ?? '').trim().slice(0, 1000),
+    rightsNote: (input.rightsNote ?? '').trim(),
     rightsConfirmed: input.rightsConfirmed,
     rightsDeclaredAt: now,
     expectedChunks: input.expectedChunks,

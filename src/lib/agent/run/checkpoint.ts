@@ -156,11 +156,11 @@ async function verifyCheckpointAgainstSnapshot(
   ) fail('checkpoint_projection_hash', '检查点投影与事件重放不一致')
 
   const maximumResumePayloadBytes = options.maximumResumePayloadBytes
-    ?? AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1
-  if (!Number.isSafeInteger(maximumResumePayloadBytes) || maximumResumePayloadBytes < 0) {
+    ?? (snapshot.contract.budget.capacityPolicy === 'service' ? null : AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1)
+  if (maximumResumePayloadBytes !== null && (!Number.isSafeInteger(maximumResumePayloadBytes) || maximumResumePayloadBytes < 0)) {
     fail('checkpoint_resume_budget', '检查点恢复载荷预算无效')
   }
-  if (checkpoint.resumePayloadJson != null
+  if (maximumResumePayloadBytes !== null && checkpoint.resumePayloadJson != null
     && agentRunUtf8ByteLengthV1(checkpoint.resumePayloadJson) > maximumResumePayloadBytes) {
     fail('checkpoint_resume_budget', '检查点恢复载荷超过安全读取预算')
   }
@@ -228,7 +228,7 @@ export async function createAgentRunCheckpointInTransactionV1(input: {
   const resumePayloadJson = input.resumePayload === undefined
     ? null
     : canonicalStringify(input.resumePayload)
-  if (resumePayloadJson != null
+  if (input.snapshot.contract.budget.capacityPolicy !== 'service' && resumePayloadJson != null
     && agentRunUtf8ByteLengthV1(resumePayloadJson) > AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1) {
     fail('checkpoint_resume_budget', '检查点恢复载荷超过安全写入预算')
   }

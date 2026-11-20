@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import {estimateChatRequestOptionsTokens, type ChatRequestOptions} from '../ai/client'
 import {estimateTokens} from '../ai/context-budget'
 import {hashCanonicalValue} from '../agent/run/hash'
@@ -43,9 +44,9 @@ export async function readChatActionChoiceInputBudgetV1(scope: WorkspaceScope, s
     calls.push({stepId, estimatedInputTokens})
   }
   const estimatedInputTokens = calls.reduce((total, call) => total + call.estimatedInputTokens, 0)
-  if (calls.length > snapshot.contract.budget.maxModelCalls || estimatedInputTokens > snapshot.contract.budget.maxInputTokens) fail('已发送请求超出冻结输入预算；保留原结果，不能继续采用')
+  if (calls.length > requireFixedBudgetValueV1(snapshot.contract.budget.maxModelCalls) || estimatedInputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens)) fail('已发送请求超出冻结输入预算；保留原结果，不能继续采用')
   return {version: 1 as const, estimator: 'chat-request-input-v1' as const, calls, estimatedInputTokens,
-    maximumInputTokens: snapshot.contract.budget.maxInputTokens, maximumModelCalls: snapshot.contract.budget.maxModelCalls}
+    maximumInputTokens: requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens), maximumModelCalls: requireFixedBudgetValueV1(snapshot.contract.budget.maxModelCalls)}
 }
 
 /** Call immediately before recording a new model.requested under the existing

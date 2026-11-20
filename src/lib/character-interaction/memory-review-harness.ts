@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import {boundedChatOutputTokensV1} from './action-output-contract'
 import {chat, resolveRequestConfig} from '../ai/client'
 import {appendAgentRunEventV1, readInstanceAgentRunV1, type AgentRunSnapshotV1} from '../agent/run/event-store'
@@ -71,7 +72,7 @@ export async function reviewChatMemoryCandidateV1(input: InteractionRuntimeGener
       const runAI = input.runReviewAI ?? input.runAI
       if (!runAI && !input.aiConfig) fail('缺少记忆审查 AI 配置')
       output = runAI ? await runAI(messages, input.signal) : await chat(messages,
-        {...input.aiConfig!, maxTokens: boundedChatOutputTokensV1(input.aiConfig!.maxTokens, binding.maxOutputTokens)},
+        {...input.aiConfig!, maxTokens: boundedChatOutputTokensV1(input.aiConfig!.maxTokens, requireFixedBudgetValueV1(binding.maxOutputTokens))},
         {category: `runtime.${CHAT_MEMORY_REVIEW_SKILL}`, projectId: input.scope.projectId, contextOverflowPolicy: 'reject'}, input.signal)
       snapshot = await append(input.scope, snapshot, 'model.responded', {stepId, attempt: 1, outputHash: await hashCanonicalValue(output)})
       snapshot = (await recordAgentRunArtifactV1({scope: input.scope, runId: snapshot.run.id,

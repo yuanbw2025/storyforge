@@ -205,3 +205,38 @@ test('historical unknown receipt is not inferred into a successful or failed tur
   const record = await (await f.request(`/requests/${id}`)).json()
   assert.equal(record.status, 'unknown'); assert.equal(record.providerTurn, undefined); assert.equal(calls, 0)
 })
+
+
+test('complete reference input and response beyond the former 2 MiB boundary remain intact', async t => {
+  const source = '完整原文和末段反证。'.repeat(80000)
+  const answer = '完整回答，身份因果与反证。'.repeat(80000)
+  assert.ok(Buffer.byteLength(source, 'utf8') > 2 * 1024 * 1024)
+  assert.ok(Buffer.byteLength(answer, 'utf8') > 2 * 1024 * 1024)
+  const f = await fixture(t, async (body, update) => {
+    assert.equal(body.messages[0].content, source)
+    update({ dispatched: true, text: answer })
+  })
+  const body = input(); body.messages[0].content = source
+  assert.equal((await f.request('/requests', body)).status, 202)
+  await tick()
+  const receipt = await (await f.request(`/requests/${body.id}`)).json()
+  assert.equal(receipt.status, 'completed')
+  assert.equal(receipt.text, answer)
+})
+
+test('reference policy preserves more than the former pinned receipt count without changing ordinary policy', async t => {
+  let calls = 0
+  const f = await fixture(t, async (_input, update) => { calls++; update({ dispatched: true, text: '完整原答' }) })
+  const ids = []
+  for (let i = 0; i < 35; i++) {
+    const body = { ...input(), capacityPolicy: 'reference-service', receiptRetention: 'until-owner-ack-v1' }
+    ids.push(body.id)
+    assert.equal((await f.request('/requests', body)).status, 202)
+  }
+  await tick()
+  assert.equal(calls, 35)
+  for (const id of ids) assert.equal((await (await f.request(`/requests/${id}`)).json()).text, '完整原答')
+  const extended = { ...input(), capacityPolicy: 'reference-service', model: 'm'.repeat(250), messages: Array.from({ length: 501 }, () => ({ role: 'user', content: '来源' })) }
+  assert.equal(validateInput(extended), extended)
+  assert.throws(() => validateInput({ ...extended, capacityPolicy: 'unrecognized' }))
+})

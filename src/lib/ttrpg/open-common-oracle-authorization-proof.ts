@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 /** Actual local Run + original human source decision. Imported proof is retained as history, never executable. */
 import type { WorkspaceScope } from '../types'
 import { db } from '../db/schema'
@@ -63,9 +64,9 @@ export async function verifyTtrpgOpenCommonOracleAuthorizationV1(input: {
     || projectFrozenAgentSkillDefinitionV1(binding).promptVersion !== 'ttrpg-open-common-oracle-interpret-v1'
     || binding.formalEntry?.entryId !== TTRPG_OPEN_COMMON_ORACLE_ENTRY_V1 || binding.writeTargets.length
     || stable(binding.contextSourceKeys) !== stable([TTRPG_OPEN_COMMON_ORACLE_SOURCE_V1])
-    || contract.budget.maxModelCalls !== 1 || contract.budget.maxToolCalls !== 0 || contract.budget.maxAttemptsPerStep !== 1
-    || contract.budget.maxInputTokens !== basis.budget.maximumInputTokens || contract.budget.maxOutputTokens !== binding.maxOutputTokens
-    || basis.budget.maximumOutputTokens > binding.maxOutputTokens
+    || requireFixedBudgetValueV1(contract.budget.maxModelCalls) !== 1 || contract.budget.maxToolCalls !== 0 || contract.budget.maxAttemptsPerStep !== 1
+    || requireFixedBudgetValueV1(contract.budget.maxInputTokens) !== basis.budget.maximumInputTokens || requireFixedBudgetValueV1(contract.budget.maxOutputTokens) !== requireFixedBudgetValueV1(binding.maxOutputTokens)
+    || basis.budget.maximumOutputTokens > requireFixedBudgetValueV1(binding.maxOutputTokens)
     || contract.runtimeBindingHash !== await ttrpgOpenCallBindingHashV1({ sessionKey: runtime.sessionKey, actorKey: 'gm', authorizationEpochKey: epochKey,
       admissionStateHash: grant.admissionStateHash, visibilityHash: basis.sourceVisibilityHash, runtimeSourceHash: basis.runtimeSourceHash, commonOracle: ttrpgOpenCommonOracleCallMarkerV1(grant) })
     || snapshot.projection.steps[TTRPG_OPEN_COMMON_ORACLE_STEP_V1]?.status !== (input.phase === 'review' ? 'awaiting_confirmation' : 'running')

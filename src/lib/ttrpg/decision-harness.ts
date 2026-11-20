@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 /** Shared durable protocol for TTRPG decisions. Product commands remain the only state writers. */
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
@@ -90,7 +91,7 @@ export async function generateTtrpgDecisionV1<T, V>(protocol: TtrpgDecisionProto
       scope: { projectId: input.scope.projectId, worldGroupId: boundary.worldGroupId, runtime },
       permissions: { contextSourceKeys: [protocol.sourceKey], writeTargets: [] }, runtimeBindingHash,
       executionBindings: [{ stepId: stepId(protocol.kind), ...createAgentSkillExecutionBindingV1(skill) }],
-      budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 36000, maxOutputTokens: skill.maxOutputTokens * 2, maxAttemptsPerStep: 2 },
+      budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 36000, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) * 2, maxAttemptsPerStep: 2 },
       acceptance: [
         { id: 'decision.candidate', kind: 'output-present', required: true },
         { id: 'decision.freshness', kind: 'deterministic-check', required: true },

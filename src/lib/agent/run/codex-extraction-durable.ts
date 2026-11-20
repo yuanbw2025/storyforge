@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import { chat, type ChatRequestOptions, type ChatResult } from '../../ai/client'
 import { AIError } from '../../types'
 import { ModelDispatchGuardRejectedV1 } from '../../ai/codex-transport'
@@ -1046,7 +1047,7 @@ export async function readRecoverableCodexExtractionV1(input: {
       return {
         snapshot,
         nextCallIndex: 0,
-        totalCalls: snapshot.contract.budget.maxModelCalls,
+        totalCalls: requireFixedBudgetValueV1(snapshot.contract.budget.maxModelCalls),
         safeToResume: false,
       }
     }

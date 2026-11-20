@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import {chatSituationDevelopmentReviewRulesV1} from './situation-development'
 import {CHAT_MAINTAINED_PAUSE_REVIEW_RULES_V1} from './maintained-pause-control'
 import {chatCoordinatorAudienceVersionV1} from './coordinator-audience'
@@ -182,7 +183,7 @@ export async function reviewRuntimeChatCandidateV1<T extends ChatSituationCandid
         bindingHash: await hashCanonicalValue({runtimeBindingHash: snapshot.contract.runtimeBindingHash, manifestHash: manifest.manifestHash, messages})})
       if (input.signal?.aborted) fail('叙事审查已取消')
       const runAI = input.runReviewAI ?? input.runAI
-      const reviewOutputTokens = reviewBinding.version === 2 ? reviewBinding.maxOutputTokens : fail('审查步骤缺少冻结输出预算')
+      const reviewOutputTokens = reviewBinding.version === 2 ? requireFixedBudgetValueV1(reviewBinding.maxOutputTokens) : fail('审查步骤缺少冻结输出预算')
       if (!runAI && !input.aiConfig) fail('缺少叙事审查 AI 配置')
       const result: ChatResult = {}
       const callConfig = input.aiConfig ? {...input.aiConfig, maxTokens: boundedChatOutputTokensV1(input.aiConfig.maxTokens, reviewOutputTokens)} : undefined

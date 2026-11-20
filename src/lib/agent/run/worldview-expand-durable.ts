@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import { chat } from '../../ai/client'
 import {
   buildWorldExpandPromptFromRegisteredContextV1,
@@ -251,7 +252,7 @@ function contract(scope: WorkspaceScope, group: WorldGroup & { id: number }) {
       maxModelCalls: 1,
       maxToolCalls: 0,
       maxInputTokens: 32_000,
-      maxOutputTokens: skill.maxOutputTokens,
+      maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
       maxAttemptsPerStep: 1,
       maxProtocolErrors: 0,
     },
@@ -471,7 +472,7 @@ export async function generateWorldviewExpandCandidateV1(input: {
       : chat(prompt.messages, input.aiConfig!, {
           category: 'world-group.expand',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: getAgentSkillV1('world-origin.worldview-expand').maxOutputTokens },
+          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1('world-origin.worldview-expand').maxOutputTokens) },
           contextOverflowPolicy: 'reject',
         }, undefined, undefined, { responseFormat: 'json_object' }))
   } catch (error) {

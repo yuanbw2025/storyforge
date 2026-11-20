@@ -3382,7 +3382,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L0',
     ownerFrom: 'work',
-    budgetTokens: 40_000,
+    budgetTokens: null,
     protectedFromTrim: true,
     enabled: input => Number.isSafeInteger(input.referenceAnalysisRunId)
       && Number.isSafeInteger(input.referenceAnalysisChunkIndex),
@@ -3399,7 +3399,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     label: '参考分析派生 Agent 正式输入基线',
     scope: 'project',
     layer: 'L0',
-    budgetTokens: 36_000,
+    budgetTokens: null,
     protectedFromTrim: true,
     ownerFrom: 'work',
     enabled: input => (
@@ -3986,7 +3986,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     ownerFrom: 'work',
     layer: 'L3',
-    budgetTokens: 2000,
+    budgetTokens: null,
     enabled: input => !!input.citedReferenceIds?.length,
     read: input => buildRefAnalysisContext(input.citedReferenceIds ?? []),
   },

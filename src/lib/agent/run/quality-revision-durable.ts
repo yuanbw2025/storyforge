@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import Dexie from 'dexie'
 import { db } from '../../db/schema'
 import type { AgentRunContractV3, AgentRunRecord, ChatMessage, WorkspaceScope } from '../../types'
@@ -85,7 +86,7 @@ async function runQualityRevisionLockedV1(input: QualityRevisionInputV1): Promis
   const checkerBinding = await createAgentSkillExecutionBindingV2(checker, { optionalContextActivations: [], writeTargets: [] })
   const resolution = await prepareQualityResolutionV1(resolveRequestConfig(input.configOverride ?? useAIConfigStore.getState().config, { category: 'review.revise', projectId: input.scope.projectId, configOverrides: input.generationOverrides }))
   const settings = describeResolvedAIRequestSettingsV1(resolution, false, { responseFormat: 'json_object' })
-  if (resolution.config.maxTokens > writer.maxOutputTokens) throw new Error('修订输出上限超过本轮预算。')
+  if (resolution.config.maxTokens > requireFixedBudgetValueV1(writer.maxOutputTokens)) throw new Error('修订输出上限超过本轮预算。')
   const assembly = await prepareProseGatewayAssemblyV1({ ...input, projectId: input.scope.projectId, operation: 'revise', qualityRevision: true, authorRequest: `只处理作者选中的问题，保留保护文字、其它段落和停笔位置。${plan.authorRequest ? `\n${plan.authorRequest}` : ''}`, config: resolution.config, allowOutlineOnlyAgentDraft: true })
   const messages = buildQualityRevisionRequestV1({ plan, report: review.report, originalText, registeredContext: assembly.text })
   const base = await buildProseGenerationRunContractV3({ projectId: input.scope.projectId, worldGroupId: input.worldGroupId, chapterId: input.chapterId, operation: 'quality-revise', generationBinding: writerBinding, formalEntry: await freezeFormalAIEntryBindingV1('prose.chapter.quality-revise') })
@@ -121,7 +122,7 @@ async function runQualityRevisionLockedV1(input: QualityRevisionInputV1): Promis
     if (input.signal?.aborted) throw new Error('修订已停止，预演结果已保留，未继续复核。')
     const recheckResolution = await prepareQualityResolutionV1(resolveRequestConfig(input.configOverride ?? useAIConfigStore.getState().config, { category: 'review.quality', projectId: input.scope.projectId, configOverrides: input.generationOverrides }))
     const recheckSettings = describeResolvedAIRequestSettingsV1(recheckResolution, false, { responseFormat: 'json_object' })
-    if (recheckResolution.config.maxTokens > checker.maxOutputTokens) throw new Error('复核输出上限超过本轮预算。')
+    if (recheckResolution.config.maxTokens > requireFixedBudgetValueV1(checker.maxOutputTokens)) throw new Error('复核输出上限超过本轮预算。')
     const recheckAssembly = await prepareProseGatewayAssemblyV1({ ...input, projectId: input.scope.projectId, operation: 'review', qualityRecheck: true, authorRequest: '只复核一次修订候选，检查所选问题与新问题。', config: recheckResolution.config, allowOutlineOnlyAgentDraft: true })
     const recheckMessages = await buildQualityRecheckRequestV1({ plan, originalReport: review.report, chapterTitle: chapter.title, candidateText: preview.outputText, registeredContext: recheckAssembly.text })
     const second = budget.reserveCall({ label: '范围修订一次复核', messages: recheckMessages, maxOutputTokens: recheckResolution.config.maxTokens || 16000 })

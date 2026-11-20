@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import { parseLegacyModelJsonV1 } from '../../ai/legacy-model-json'
 import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from './creation-response-evidence'
 import { chat, type ChatResult } from '../../ai/client'
@@ -121,7 +122,7 @@ function runContract(scope: WorkspaceScope, artifactKind: ShortNovelArtifactKind
       writeTargets: skill.writeTargets.map(target => ({ table: target.table, fields: [...target.fields], mode: 'author-confirmed' as const })),
     },
     executionBindings: [{ stepId: config.stepId, ...createAgentSkillExecutionBindingV1(skill) }],
-    budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: 64_000, maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 1, maxProtocolErrors: 0 },
+    budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: 64_000, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens), maxAttemptsPerStep: 1, maxProtocolErrors: 0 },
     acceptance: [
       { id: `${config.stepId}.candidate`, kind: 'output-present' as const, required: true },
       { id: `${config.stepId}.author`, kind: 'author-confirmed' as const, required: true },
@@ -192,7 +193,7 @@ export async function generateShortNovelCandidateV1<K extends ShortNovelArtifact
     const result: ChatResult = {}
     let raw: string
     try {
-      raw = await (runAI ? runAI.call(callbackReceiver, messages) : chat(messages, input.aiConfig!, { category: config.category, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, input.signal, result))
+      raw = await (runAI ? runAI.call(callbackReceiver, messages) : chat(messages, input.aiConfig!, { category: config.category, projectId: input.scope.projectId, configOverrides: { maxTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) }, contextOverflowPolicy: 'reject' }, input.signal, result))
     } catch (error) {
       const failed = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
       try { snapshot = await append(input.scope, failed.snapshot, 'run.paused', { reason: `short-${input.artifactKind}-model-outcome-unknown`, recoverable: false }) }

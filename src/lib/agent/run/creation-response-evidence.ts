@@ -1,4 +1,6 @@
-import type { ChatResult } from '../../ai/client'
+import { acknowledgeBoundCodexReceiptV1, type CodexRequestRefV1 } from '../../ai/codex-transport'
+import { sha256Text } from '../../ai/chapter-memory/text-normalization'
+import type { AIRequestSettingsV1, ChatResult } from '../../ai/client'
 import type { ChatMessage, WorkspaceScope } from '../../types'
 import { recordAgentRunArtifactV1 } from '../../memory/artifact-store'
 import type { AgentRunSnapshotV1 } from './event-store'
@@ -52,7 +54,18 @@ export async function recordCreationModelRequestV1(input: {
   attempt: number
   contextManifestHash: string
   messages: readonly ChatMessage[]
+  /** Audited selection from the existing registered reference source, not a second context reader. */
+  referenceSelection?: { rootSourceHash: string; start: number; end: number; sourceLength: number; phase: 'source' | 'review' }
+  requestSettings?: AIRequestSettingsV1
 }): Promise<{ snapshot: AgentRunSnapshotV1; request: CreationRequestEvidenceV1 }> {
+  if (input.referenceSelection) {
+    const selection = input.referenceSelection
+    if (input.snapshot.contract.budget.capacityPolicy !== 'service'
+      || !/^[a-f0-9]{64}$/.test(selection.rootSourceHash)
+      || ![selection.start, selection.end, selection.sourceLength].every(Number.isSafeInteger)
+      || selection.start < 0 || selection.end <= selection.start || selection.end > selection.sourceLength
+      || !['source', 'review'].includes(selection.phase)) throw new Error('拆书选读范围与运行策略不匹配。')
+  }
   const bound = {
     scope: Object.freeze({ ...input.scope }), runId: input.snapshot.run.id,
     ...(input.snapshot.run.productRuntimeSessionId == null ? {} : { productRuntimeSessionId: input.snapshot.run.productRuntimeSessionId }),
@@ -63,7 +76,9 @@ export async function recordCreationModelRequestV1(input: {
   // in this body, and never use Canon NFC normalization for received evidence.
   const content = JSON.stringify({ version: 'creation-model-request-v1', generation: bound.generation,
     contractHash: bound.contractHash, stepId: bound.stepId, attempt: bound.attempt,
-    contextManifestHash: bound.contextManifestHash, messages: input.messages })
+    contextManifestHash: bound.contextManifestHash, messages: input.messages,
+    ...(input.referenceSelection ? { referenceSelection: input.referenceSelection } : {}),
+    ...(input.requestSettings ? { requestSettings: input.requestSettings } : {}) })
   const saved = await recordAgentRunArtifactV1({ scope: bound.scope, runId: bound.runId,
     productRuntimeSessionId: bound.productRuntimeSessionId,
     stepId: bound.stepId, attempt: bound.attempt, artifactKind: 'rendered-request', content,
@@ -134,5 +149,35 @@ export async function recordUnavailableCreationResponseV1(input: {
         cause: error, persistenceFailures: [persistenceError], observation,
       }),
     }
+  }
+}
+
+/** Pin the original native request before dispatch, with the same Work/Run evidence owner. */
+export async function recordCreationNativeRequestV1(input: {
+  snapshot: AgentRunSnapshotV1; request: CreationRequestEvidenceV1; binding: Readonly<CodexRequestRefV1>
+}): Promise<AgentRunSnapshotV1> {
+  assertPrefix(input.snapshot, input.request)
+  const saved = await record(input.snapshot, input.request, 'tool-result', JSON.stringify({
+    version: 'creation-native-request-v1', requestArtifactHash: input.request.artifactHash,
+    contextManifestHash: input.request.contextManifestHash, binding: input.binding,
+  }))
+  return saved.snapshot
+}
+
+/** Only release the transport copy after exact owner storage succeeds. Failure retains it. */
+export async function handoffCreationNativeReceiptV1(input: {
+  snapshot: AgentRunSnapshotV1; request: CreationRequestEvidenceV1; raw: string; result?: ChatResult
+}): Promise<AgentRunSnapshotV1> {
+  if (!input.result?.localCodexRequest) return input.snapshot
+  const rawResponseHash = await sha256Text(input.raw)
+  try {
+    await acknowledgeBoundCodexReceiptV1({ request: input.result.localCodexRequest, rawResponseHash, confirmation: 'owner-record-saved-v1' })
+    return input.snapshot
+  } catch {
+    const saved = await record(input.snapshot, input.request, 'tool-result', JSON.stringify({
+      version: 'creation-native-handoff-pending-v1', requestArtifactHash: input.request.artifactHash,
+      contextManifestHash: input.request.contextManifestHash, binding: input.result.localCodexRequest, rawResponseHash,
+    }))
+    return saved.snapshot
   }
 }

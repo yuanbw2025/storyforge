@@ -1,4 +1,4 @@
-import { selectReferenceMethods, spreadReferenceItems } from '../reference-analysis/context-selection'
+import { selectReferenceMethods } from '../reference-analysis/context-selection'
 import type { Worldview, StoryCore, PowerSystem, Character, CreativeRules } from '../types'
 import { formatSystemFictionElementsV1 } from '../prose/system-fiction-contract'
 import type { HistoricalKeyword, HistoricalKeywordCategory } from '../types/history'
@@ -281,7 +281,7 @@ export async function buildRefAnalysisContext(refIds: number[]): Promise<string>
       const adopted = summary[dim]
       const header = `【${ref.title} · v${activeRun.version} · ${DIMENSION_LABELS[dim]}】`
       if (typeof adopted === 'string' && adopted.trim()) return [`${header}\n已采纳综合（分析解释，非原文）：${adopted.trim()}`]
-      return spreadReferenceItems([...chunks].sort((a, b) => a.chunkIndex - b.chunkIndex))
+      return [...chunks].sort((a, b) => a.chunkIndex - b.chunkIndex)
         .flatMap(chunk => {
           const value = chunk[dim]?.trim()
           return value && value !== '本块未涉及'
@@ -289,7 +289,7 @@ export async function buildRefAnalysisContext(refIds: number[]): Promise<string>
             : []
         })
     })
-    // One unit per dimension per pass; longer evidence is skipped whole, not cut.
+    // Complete units from every dimension are retained; no application packing cap.
     for (let index = 0; index < Math.max(0, ...byDimension.map(items => items.length)); index++) {
       for (const items of byDimension) if (items[index]) parts.push(items[index])
     }

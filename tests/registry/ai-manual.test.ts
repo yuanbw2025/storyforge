@@ -17,16 +17,16 @@ import { PROMPT_MODULE_KEYS, RETIRED_PROMPT_MODULE_KEYS } from '../../src/lib/ty
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
-type ManualContextRow = { key: string; label: string; scope: string; layer: string; budgetTokens: number }
+type ManualContextRow = { key: string; label: string; scope: string; layer: string; budgetTokens: number | null }
 
 // This test reads the rendered table and the actual runtime registry. It does
 // not import the generator/parser: the same omission in both cannot pass.
 function assertContextManualMatchesRuntime(manual: string): void {
   const section = manual.split('## 二、上下文源清单')[1]?.split('\n## 三、')[0] ?? ''
   const rows: ManualContextRow[] = section.split('\n').flatMap(line => {
-    const match = line.match(/^\| `([^`]+)` \| ([^|]*) \| ([^|]*) \| ([^|]*) \| (\d+) \|$/)
+    const match = line.match(/^\| `([^`]+)` \| ([^|]*) \| ([^|]*) \| ([^|]*) \| (\d+|完整任务基线|按请求容量选读) \|$/)
     return match ? [{ key: match[1] ?? '', label: match[2] ?? '', scope: match[3] ?? '',
-      layer: match[4] ?? '', budgetTokens: Number(match[5]) }] : []
+      layer: match[4] ?? '', budgetTokens: ['完整任务基线', '按请求容量选读'].includes(match[5] ?? '') ? null : Number(match[5]) }] : []
   })
   const keys = rows.map(row => row.key)
   expect(new Set(keys).size, '上下文表不能含重复 key').toBe(keys.length)

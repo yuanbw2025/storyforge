@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { verifyProductRuntimeSource } from '../product-production/preview-source'
 import { previewTtrpgOpenContinuationV1, createTtrpgOpenContinuationFromPlanV1 } from './continuity'
 import { verifyTtrpgOpenReleaseContinuationRuntimeV1 } from './open-release-continuation-proof'
@@ -568,7 +569,7 @@ export async function requestTtrpgOpenTableCandidateV1(input: TtrpgOpenTableInpu
     triggerKind: input.purpose === 'intent' ? 'submit-action' : 'continue-host', rawInput: input.rawInput })
   const request = { ...await envelope(input.sessionId, 'candidate'), scope: input.scope, viewerKey: input.viewerKey, rawInput: input.rawInput,
     maximumOutputTokens: Math.min(f.content.campaign.runtimePolicy.maximumOutputTokens,
-      getAgentSkillV1(TTRPG_OPEN_MODEL_PURPOSES_V1[input.purpose === 'kp' ? 'kp-narration' : input.purpose].skillId).maxOutputTokens),
+      requireFixedBudgetValueV1(getAgentSkillV1(TTRPG_OPEN_MODEL_PURPOSES_V1[input.purpose === 'kp' ? 'kp-narration' : input.purpose].skillId).maxOutputTokens)),
     maximumCostUsd: input.maximumCostUsd, aiConfig: input.aiConfig, signal: input.signal }
   if (input.purpose === 'kp') return generateTtrpgOpenKpCandidateV1(request)
   if (input.purpose === 'companion') {

@@ -314,7 +314,8 @@ function readExecutionBindingV2(value: unknown, path: string): AgentRunStepExecu
     contextSourceKeys,
     optionalContextActivations,
     writeTargets,
-    maxOutputTokens: readInteger(record.maxOutputTokens, `${path}.maxOutputTokens`, { min: 1 }),
+    maxOutputTokens: record.maxOutputTokens === null && ['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk'].includes(String(record.skillId))
+      ? null : readInteger(record.maxOutputTokens, `${path}.maxOutputTokens`, { min: 1 }),
     ...(formalEntry ? { formalEntry } : {}),
   }
 }
@@ -608,8 +609,33 @@ function parseAgentRunContractV1Base(
 
   const budgetRecord = readRecord(record.budget, 'contract.budget')
   const requiredBudgetKeys = ['maxModelCalls', 'maxToolCalls', 'maxInputTokens', 'maxOutputTokens', 'maxAttemptsPerStep'] as const
-  const budgetKeys = [...requiredBudgetKeys, 'maxReplans', 'maxToolResultTokens', 'maxProtocolErrors'] as const
+  const budgetKeys = [...requiredBudgetKeys, 'maxReplans', 'maxToolResultTokens', 'maxProtocolErrors', 'capacityPolicy'] as const
   assertExactKeys(budgetRecord, budgetKeys, requiredBudgetKeys, 'contract.budget')
+  const serviceManaged = budgetRecord.capacityPolicy === 'service'
+  if (budgetRecord.capacityPolicy !== undefined && (!serviceManaged
+    || contextSourceKeys.length !== 1
+    || !['referenceDerivedBaseline', 'referenceAnalysisPrivateChunk'].includes(contextSourceKeys[0])
+    || !(bindingCarriedBySkillSnapshot || executionBindings?.every(binding => ['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk'].includes(binding.skillId))))) {
+    failSchema('invalid_budget', 'contract.budget.capacityPolicy', '服务容量策略仅用于已登记的拆书任务')
+  }
+  if (serviceManaged) {
+    const privateSource = contextSourceKeys[0] === 'referenceAnalysisPrivateChunk'
+    const fields = writeTargets.flatMap(target => target.fields)
+    const validDerivedWrites = writeTargets.length === 2
+      && writeTargets.every(target => ['referenceAnalysisRuns', 'references'].includes(target.table)
+        && target.fields.length === 1 && target.mode === 'author-confirmed')
+      && new Set(writeTargets.map(target => target.table)).size === 2
+      && fields.every(field => field === fields[0]) && ['analysisSummary', 'mergedCharacters'].includes(fields[0])
+    if (budgetRecord.maxToolCalls !== 0 || (privateSource ? writeTargets.length !== 0 : !validDerivedWrites)) {
+      failSchema('invalid_permission', 'contract.permissions', '拆书服务容量策略不扩张工具或正式写回权限')
+    }
+  }
+  const readCeiling = (value: unknown, path: string, min: number, zeroForToolOnly = true) => {
+    if (serviceManaged && value === null) return null
+    if (serviceManaged) failSchema('invalid_budget', path, '服务容量任务不得携带应用层固定额度')
+    return readInteger(value, path, { min, ...(toolOnly && zeroForToolOnly ? { max: 0 } : {}) })
+  }
+
 
   const acceptance = readArray(record.acceptance, 'contract.acceptance')
     .map((item, index) => readAcceptance(item, `contract.acceptance[${index}]`))
@@ -675,10 +701,11 @@ function parseAgentRunContractV1Base(
     ...(candidateSemanticReviewPolicy ? { candidateSemanticReviewPolicy } : {}),
     ...(automationAuthorization ? { automationAuthorization } : {}),
     budget: {
-      maxModelCalls: readInteger(budgetRecord.maxModelCalls, 'contract.budget.maxModelCalls', { min: 0 }),
+      ...(serviceManaged ? { capacityPolicy: 'service' as const } : {}),
+      maxModelCalls: readCeiling(budgetRecord.maxModelCalls, 'contract.budget.maxModelCalls', 0, false),
       maxToolCalls: readInteger(budgetRecord.maxToolCalls, 'contract.budget.maxToolCalls', { min: toolOnly ? 1 : 0 }),
-      maxInputTokens: readInteger(budgetRecord.maxInputTokens, 'contract.budget.maxInputTokens', { min: toolOnly ? 0 : 1, ...(toolOnly ? { max: 0 } : {}) }),
-      maxOutputTokens: readInteger(budgetRecord.maxOutputTokens, 'contract.budget.maxOutputTokens', { min: toolOnly ? 0 : 1, ...(toolOnly ? { max: 0 } : {}) }),
+      maxInputTokens: readCeiling(budgetRecord.maxInputTokens, 'contract.budget.maxInputTokens', toolOnly ? 0 : 1),
+      maxOutputTokens: readCeiling(budgetRecord.maxOutputTokens, 'contract.budget.maxOutputTokens', toolOnly ? 0 : 1),
       maxAttemptsPerStep: readInteger(budgetRecord.maxAttemptsPerStep, 'contract.budget.maxAttemptsPerStep', { min: 1 }),
       ...(budgetRecord.maxReplans === undefined ? {} : {
         maxReplans: readInteger(budgetRecord.maxReplans, 'contract.budget.maxReplans', { min: 0 }),
@@ -813,7 +840,13 @@ function parseSkillBoundContract(
       'V2 Run permissions 必须等于所有 Skill binding 的实际写目标并集',
     )
   }
-  if (executionBindings.some(binding => binding.maxOutputTokens > base.budget.maxOutputTokens)) {
+  if (base.budget.capacityPolicy === 'service' && executionBindings.some(binding =>
+    !['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk'].includes(binding.skillId))) {
+    failSchema('invalid_budget', 'contract.budget.capacityPolicy', '服务容量策略仅用于已登记拆书 Skill')
+  }
+  if (executionBindings.some(binding => binding.maxOutputTokens === null
+    ? base.budget.capacityPolicy !== 'service'
+    : base.budget.maxOutputTokens !== null && binding.maxOutputTokens > base.budget.maxOutputTokens)) {
     failSchema(
       'invalid_execution_binding',
       'contract.budget.maxOutputTokens',

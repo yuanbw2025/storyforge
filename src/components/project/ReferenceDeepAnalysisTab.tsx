@@ -118,7 +118,7 @@ export default function ReferenceDeepAnalysisTab({ reference }: Props) {
         if (message) setStatusMessage(message)
       },
       onActivity: (level, message) => {
-        setActivityLog(current => [...current.slice(-20), { level, msg: message }])
+        setActivityLog(current => [...current, { level, msg: message }])
       },
       onDone: (referenceId, _success, runId) => {
         if (reference.id !== referenceId) return
@@ -281,7 +281,7 @@ export default function ReferenceDeepAnalysisTab({ reference }: Props) {
 
         <div className="space-y-2">
           <p className="text-xs font-medium text-text-primary flex items-center gap-1">
-            <History className="w-3.5 h-3.5" /> 分析版本（最多 6 个）
+            <History className="w-3.5 h-3.5" /> 分析版本
           </p>
           <div className="space-y-1 max-h-40 overflow-y-auto">
             {runs.length === 0 && <p className="text-xs text-text-muted">暂无分析版本</p>}

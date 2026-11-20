@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import { db } from '../../db/schema'
 import type { AIRequestSettingsV1 } from '../../ai/client'
 import type {
@@ -404,7 +405,7 @@ async function executeDurableConsistencyAuditV1(
     stepId: CONSISTENCY_AUDIT_DURABLE_STEP_ID_V1,
     modelCalls: 1,
     toolCalls: 0,
-    tokens: contract.budget.maxInputTokens + contract.budget.maxOutputTokens,
+    tokens: requireFixedBudgetValueV1(contract.budget.maxInputTokens) + requireFixedBudgetValueV1(contract.budget.maxOutputTokens),
   })
   let manifestHash = ''
   let modelRequested = false

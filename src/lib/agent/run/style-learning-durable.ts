@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import { chat, resolveRequestConfig } from '../../ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../ai/config-readiness'
 import { db } from '../../db/schema'
@@ -214,7 +215,7 @@ function contract(scope: WorkspaceScope, request: StyleLearningRequestV1) {
       maxModelCalls: 1,
       maxToolCalls: 0,
       maxInputTokens: 32_000,
-      maxOutputTokens: skill.maxOutputTokens,
+      maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
       maxAttemptsPerStep: 1,
       maxProtocolErrors: 0,
     },
@@ -452,7 +453,7 @@ export async function generateStyleLearningCandidateV1(input: {
   const requestMeta = {
     category: 'style.learn' as const,
     projectId: input.scope.projectId,
-    configOverrides: { maxTokens: getAgentSkillV1(STYLE_LEARNING_SKILL_ID_V1).maxOutputTokens },
+    configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1(STYLE_LEARNING_SKILL_ID_V1).maxOutputTokens) },
     contextOverflowPolicy: 'reject' as const,
   }
   if (!input.runAI) {
@@ -493,7 +494,7 @@ export async function generateStyleLearningCandidateV1(input: {
       : chat(prepared.messages, input.aiConfig!, {
           category: 'style.learn',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: getAgentSkillV1(STYLE_LEARNING_SKILL_ID_V1).maxOutputTokens },
+          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1(STYLE_LEARNING_SKILL_ID_V1).maxOutputTokens) },
           contextOverflowPolicy: 'reject',
         }))
   } catch (error) {

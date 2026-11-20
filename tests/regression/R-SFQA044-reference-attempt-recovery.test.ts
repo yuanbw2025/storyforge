@@ -173,7 +173,7 @@ it('044 reference retries only a confirmed throttle and freezes the two attempt 
   expect(transport).toHaveBeenCalledTimes(2)
 })
 
-it('044 max-six housekeeping cannot silently delete an unknown source and its Harness link', async () => {
+it('044 超过旧6版本数量也不删除未知请求的原文和Harness链接', async () => {
   const f = await fixture()
   vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => { throw new TypeError('isolated post-send disconnect') }))
   await runRefAnalysis(f.referenceId, f.runId)
@@ -182,7 +182,7 @@ it('044 max-six housekeeping cannot silently delete an unknown source and its Ha
     sourceFilename: `next-${index}.txt`, fileHash: `next-${index}`, totalChars: 10, expectedChunks: 1,
     sourceKind: 'own-work', usageScope: 'analysis-only', rightsConfirmed: true, sourceText: '原文不参与本次分析。' })
   for (let i = 1; i <= 5; i++) await next(i)
-  await expect(next(6)).rejects.toThrow()
+  expect((await next(6)).version).toBe(7)
   expect(await db.referenceAnalysisSources.get(f.runId)).toEqual(previous)
   expect(await db.agentRuns.count()).toBe(1)
 })
@@ -252,4 +252,57 @@ it('044 cancelled post-send reference cannot resume as a second request', async 
   expect(transport).toHaveBeenCalledTimes(1)
   expect(await db.agentRuns.count()).toBe(1)
   expect(await getActiveReferenceAnalysisRun(f.referenceId)).toBeUndefined()
+})
+
+it('044 实际长度未完后细分，完整保存原答与派生报告，不伪造聚合为原始模型回答', async () => {
+  const f = await fixture()
+  let calls = 0
+  vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (_url, options) => {
+    const body = JSON.parse(String(options?.body))
+    expect(body.max_tokens).toBeUndefined()
+    expect(body.response_format).toEqual({ type: 'json_object' })
+    calls++
+    if (calls === 1) return new Response(JSON.stringify({ choices: [{ message: { content: '{"narrativeStyle":"' }, finish_reason: 'length' }], usage }), { headers: { 'Content-Type': 'application/json' } })
+    const text = body.messages.map((m: { content: string }) => m.content).join('\n')
+    if (text.includes('跨范围综合层')) return wire('{"narrativeStyle":"跨范围确认身份与末段反证；材料边界仍在。"}')
+    const part = /【实际选读范围 [^\n]+\n([\s\S]*?)\n【边界】/.exec(text)![1]
+    return wire(JSON.stringify({ narrativeStyle: '完整观察：' + part, rawExcerpt: part }))
+  }))
+  await runRefAnalysis(f.referenceId, f.runId)
+  expect(calls).toBeGreaterThan(1)
+  expect((await db.referenceAnalysisRuns.get(f.runId))?.status).toBe('ready')
+  const reports = await getReferenceAnalysisRunChunks(f.referenceId, f.runId)
+  expect(reports[0].narrativeStyle).toContain('跨范围综合')
+  expect(reports[0].rawExcerpt).toContain('多处逐字引用')
+  const artifacts = await db.agentRunArtifacts.toArray()
+  expect(artifacts.filter(a => a.artifactKind === 'raw-response')).toHaveLength(calls)
+  expect(artifacts.some(a => a.artifactKind === 'tool-result' && a.content?.includes('reference-composed-report-v1'))).toBe(true)
+})
+
+it('044 已确认分批检查点可继续，原文和原答不复制进检查点，也不重发已完成分区', async () => {
+  const f = await fixture()
+  let calls = 0
+  let cancelled = false
+  vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (_url, options) => {
+    calls++
+    if (calls === 1) return new Response(JSON.stringify({ choices: [{ message: { content: '{' }, finish_reason: 'length' }], usage }), { headers: { 'Content-Type': 'application/json' } })
+    const body = JSON.parse(String(options?.body))
+    const text = body.messages.map((m: { content: string }) => m.content).join('\n')
+    if (text.includes('跨范围综合层')) return wire('{"narrativeStyle":"完整的全局联系"}')
+    const part = /【实际选读范围 [^\n]+\n([\s\S]*?)\n【边界】/.exec(text)![1]
+    return wire(JSON.stringify({ narrativeStyle: part, rawExcerpt: part }))
+  }))
+  setRefAnalysisPipelineListener({ onActivity: (_level, text) => {
+    if (!cancelled && text.includes('已保存 1 个原文')) { cancelled = true; cancelRefAnalysisPipeline() }
+  } })
+  await runRefAnalysis(f.referenceId, f.runId)
+  expect(calls).toBe(2)
+  expect((await db.referenceAnalysisRuns.get(f.runId))?.status).not.toBe('ready')
+  expect(JSON.stringify(await db.agentRunCheckpoints.toArray())).not.toContain('PRIVATE_SOURCE_044')
+  expect(await db.agentRuns.count()).toBe(1)
+  await runRefAnalysis(f.referenceId, f.runId)
+  expect(calls).toBe(4)
+  expect(await db.agentRuns.count()).toBe(1)
+  expect((await db.referenceAnalysisRuns.get(f.runId))?.status).toBe('ready')
+  expect((await getReferenceAnalysisRunChunks(f.referenceId, f.runId))[0].narrativeStyle).toContain('完整的全局联系')
 })

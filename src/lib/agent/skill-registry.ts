@@ -259,7 +259,7 @@ export interface AgentSkillDefinitionV1 {
    * not a compatibility or rollout state.
    */
   contextGateway?: AgentSkillContextGatewayPolicyV1
-  maxOutputTokens: number
+  maxOutputTokens: number | null
   writeTargets: readonly AgentSkillWriteTargetV1[]
   lastVerifiedAt: string
   regressionTests: readonly string[]
@@ -2044,9 +2044,9 @@ export const AGENT_SKILLS = [
     id: 'inspiration.reference-summary',
     agentId: 'inspiration',
     defaultForAgent: false,
-    label: '参考分析全书总结',
+    label: '参考分析已读范围综合',
     owner: 'inspiration-agent',
-    promptVersion: 'reference-derived-v1',
+    promptVersion: 'reference-derived-v2',
     executionMode: 'reference-summary',
     contextTaskKind: 'agent-inspiration',
     readToolNames: [],
@@ -2054,12 +2054,12 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: [],
     inputPolicy: REFERENCE_DERIVED_INPUT_POLICY,
     contextCompression: REFERENCE_DERIVED_COMPRESSION_POLICY,
-    maxOutputTokens: 4_096,
+    maxOutputTokens: null,
     writeTargets: [
       { table: 'referenceAnalysisRuns', fields: ['analysisSummary'] },
       { table: 'references', fields: ['analysisSummary'], adoptionExtension: 'reference-analysis-reference-lifecycle' },
     ],
-    lastVerifiedAt: '2026-11-18',
+    lastVerifiedAt: '2026-11-20',
     regressionTests: ['R-HARNESS74-reference-derived-durable'],
   },
   {
@@ -2069,7 +2069,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '参考分析角色卡聚合',
     owner: 'inspiration-agent',
-    promptVersion: 'reference-derived-v1',
+    promptVersion: 'reference-derived-v2',
     executionMode: 'reference-characters',
     contextTaskKind: 'agent-inspiration',
     readToolNames: [],
@@ -2077,12 +2077,12 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: [],
     inputPolicy: REFERENCE_DERIVED_INPUT_POLICY,
     contextCompression: REFERENCE_DERIVED_COMPRESSION_POLICY,
-    maxOutputTokens: 4_096,
+    maxOutputTokens: null,
     writeTargets: [
       { table: 'referenceAnalysisRuns', fields: ['mergedCharacters'] },
       { table: 'references', fields: ['mergedCharacters'], adoptionExtension: 'reference-analysis-reference-lifecycle' },
     ],
-    lastVerifiedAt: '2026-11-18',
+    lastVerifiedAt: '2026-11-20',
     regressionTests: ['R-HARNESS74-reference-derived-durable'],
   },
   {
@@ -2092,7 +2092,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '本机参考分析分块',
     owner: 'inspiration-agent',
-    promptVersion: 'reference-analysis-private-v1',
+    promptVersion: 'reference-analysis-private-v2',
     executionMode: 'reference-analysis-private-chunk',
     contextTaskKind: 'agent-inspiration',
     readToolNames: [],
@@ -2107,7 +2107,7 @@ export const AGENT_SKILLS = [
       },
     },
     contextCompression: compressionPolicy(['referenceAnalysisPrivateChunk']),
-    maxOutputTokens: 8_192,
+    maxOutputTokens: null,
     writeTargets: [],
     lastVerifiedAt: '2026-11-04',
     regressionTests: ['R-SFQA044-reference-attempt-recovery'],
@@ -6228,7 +6228,7 @@ export function validateAgentSkillDefinitionsV1(
     if (!/^\d{4}-\d{2}-\d{2}$/.test(skill.lastVerifiedAt)) {
       throw new Error(`Agent Skill ${skill.id} 的 lastVerifiedAt 无效`)
     }
-    if (!Number.isInteger(skill.maxOutputTokens) || skill.maxOutputTokens < 1) {
+    if (skill.maxOutputTokens === null ? !['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk'].includes(skill.id) : !Number.isInteger(skill.maxOutputTokens) || skill.maxOutputTokens < 1) {
       throw new Error(`Agent Skill ${skill.id} 的输出预算无效`)
     }
     if (skill.regressionTests.length === 0) throw new Error(`Agent Skill ${skill.id} 缺少回归证据`)

@@ -1,3 +1,4 @@
+import { referenceSelectionContextV1, REFERENCE_COMPRESSION_INDEX_INSTRUCTION_V1, type ReferenceRequestSelectionV1 } from './adaptive-requests'
 import type { ChatMessage } from '../types'
 import type {
   ReferenceDerivedBaselineV1,
@@ -19,6 +20,8 @@ export type ReferenceDerivedResultV1 =
       value: Array<{ name: string; role: string; summary: string; analysis: string }>
       resultJson: string
     }
+
+export const REFERENCE_CROSS_RANGE_TASK_V1 = '形成比输入更紧凑的跨范围综合：连接前后身份、时序因果、别称和跨章线索，保留反证、竞争解释、未确定身份及适用条件。合并重复论述，不能因压缩省掉独立角色或改变立场。原分批分析另行完整保留，当前不要重抄。没有证据的关系标明未确定，不编造原文引句。二手分析中的首次、尚未、并非等限定词要保持原有逻辑，不能反向改写为额外知情途径或已完成状态。将解释与材料明示区分，不补设人物动机或关系目标。'
 
 const SUMMARY_TEMPLATE: ReferenceDerivedPromptTemplateV1 = Object.freeze({
   version: 'reference-derived-v1',
@@ -52,12 +55,15 @@ export function readReferenceDerivedPromptTemplateSnapshotV1(
     system: template.system,
     task: template.task,
     outputContract: template.outputContract,
+    adaptivePolicy: { version: 'reference-service-capacity-v1', crossRangeTask: REFERENCE_CROSS_RANGE_TASK_V1,
+      compressionInstruction: REFERENCE_COMPRESSION_INDEX_INSTRUCTION_V1 },
   }
 }
 
 export function buildReferenceDerivedMessagesV1(input: {
   mode: ReferenceDerivedModeV1
   registeredContext: string
+  summaryKeys?: readonly string[]
   template?: ReferenceDerivedPromptTemplateV1
 }): ChatMessage[] {
   const template = input.template ?? readReferenceDerivedPromptTemplateV1(input.mode)
@@ -71,6 +77,7 @@ export function buildReferenceDerivedMessagesV1(input: {
         '',
         '【本次任务】',
         template.task,
+        ...(input.mode === 'summary' && input.summaryKeys ? [`本次只允许以下键，按此顺序且每项必须为非空字符串：${JSON.stringify(input.summaryKeys)}。不得另建 characters、events 或其他格式。输出外层只允许纯JSON对象，不允许Markdown围栏。`] : []),
         '',
         '再次确认：只处理上述登记基线；确认前结果只是候选，不代表当前作品事实。',
       ].join('\n'),
@@ -123,8 +130,8 @@ export function parseReferenceDerivedResultStrictV1(
   }
   if (mode === 'characters' && baseline.input.kind === 'characters') {
     exactKeys(root, ['characters'], '参考角色聚合')
-    if (!Array.isArray(root.characters) || root.characters.length === 0) {
-      throw new Error('参考角色聚合必须返回非空角色卡数组。')
+    if (!Array.isArray(root.characters)) {
+      throw new Error('参考角色聚合必须返回角色卡数组；没有可确认人物时返回空数组，不编造角色。')
     }
     const seen = new Set<string>()
     const value = root.characters.map((item, index) => {
@@ -147,4 +154,12 @@ export function parseReferenceDerivedResultStrictV1(
     return { mode, value, resultJson: JSON.stringify(value) }
   }
   throw new Error('参考派生 Agent 模式不受支持。')
+}
+
+/** One built-in cross-range prompt used by production, previews and capacity evaluations. */
+export function buildReferenceCrossRangeMessagesV1(selection: ReferenceRequestSelectionV1, keys: readonly string[]): ChatMessage[] {
+  return buildReferenceDerivedMessagesV1({ mode: 'summary', summaryKeys: keys,
+    registeredContext: `【跨范围综合层；以下是带来源的二手分析，不是原文】\n${referenceSelectionContextV1(selection)}\n登记维度：${keys.join('、')}`,
+    template: { ...SUMMARY_TEMPLATE, task: REFERENCE_CROSS_RANGE_TASK_V1 },
+  })
 }

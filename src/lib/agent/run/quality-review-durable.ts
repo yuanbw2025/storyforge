@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import Dexie from 'dexie'
 import { db } from '../../db/schema'
 import type { AgentRunContractV3, AgentRunRecord, ChatMessage, WorkspaceScope } from '../../types'
@@ -60,7 +61,7 @@ export async function runWholeChapterQualityReviewV1(input: {
   await assertWorkspaceContentRevisionFreshV1(revision, { scope: input.scope, worldGroupId: input.worldGroupId })
   const skill = getAgentSkillV1('prose.quality-review', 'prose')
   if (skill.promptVersion !== QUALITY_REVIEW_PROMPT_VERSION_V1) throw new Error('全文评审 Skill 与请求版本不一致。')
-  if (resolution.config.maxTokens > skill.maxOutputTokens) throw new Error('当前评审输出上限超过本轮预算，请先调低输出上限。')
+  if (resolution.config.maxTokens > requireFixedBudgetValueV1(skill.maxOutputTokens)) throw new Error('当前评审输出上限超过本轮预算，请先调低输出上限。')
   const binding = await createAgentSkillExecutionBindingV2(skill, { optionalContextActivations: [], writeTargets: [] })
   const formalEntry = await freezeFormalAIEntryBindingV1(entries[input.mode])
   const runtimeBindingHash = await hashCanonicalValue({ targetTextHash: request.targetTextHash, promptVersion: QUALITY_REVIEW_PROMPT_VERSION_V1, settings, mode: input.mode })

@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import { db } from '../../db/schema'
 import { chat } from '../../ai/client'
 import {
@@ -1080,7 +1081,7 @@ export async function readRecoverableInventoryExtractionV1(input: {
       return {
         snapshot,
         nextCallIndex: 0,
-        totalCalls: snapshot.contract.budget.maxModelCalls,
+        totalCalls: requireFixedBudgetValueV1(snapshot.contract.budget.maxModelCalls),
         safeToResume: false,
       }
     }

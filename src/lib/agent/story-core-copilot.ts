@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from './finite-budget'
 import { resolveFieldGenerationRequestModeV1 } from './field-generation-request-mode'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
@@ -435,7 +436,7 @@ export async function prepareStoryCoreCopilot(
         skill,
         scope: scope!,
         worldGroupId,
-        budgetTokens: Math.min(contextPolicy.maxInputTokens, skill.contextGateway!.maxRetrievedTokens),
+        budgetTokens: Math.min(requireFixedBudgetValueV1(contextPolicy.maxInputTokens), skill.contextGateway!.maxRetrievedTokens),
         query: `${STORY_CORE_FIELD_LABELS[targetField]} ${requestedMode}；检查已有世界观、角色、故事线和大纲作为兼容或反推证据。\n${request}`,
         ...(targetResourceKey ? {
           mandatoryResourceKeys: [targetResourceKey],
@@ -447,7 +448,7 @@ export async function prepareStoryCoreCopilot(
       })
     : undefined
   const assembled = contextGatewayExecution
-    ? assembleContextGatewayPacketV1(contextGatewayExecution, contextPolicy.maxInputTokens)
+    ? assembleContextGatewayPacketV1(contextGatewayExecution, requireFixedBudgetValueV1(contextPolicy.maxInputTokens))
     : await assembleContext({
         projectId: input.projectId,
         scope,
@@ -455,7 +456,7 @@ export async function prepareStoryCoreCopilot(
         modelConfig: config, provider: config.provider,
         model: config.model,
         sourceKeys: [...skill.contextSourceKeys],
-        inputBudgetMaxTokens: contextPolicy.maxInputTokens,
+        inputBudgetMaxTokens: requireFixedBudgetValueV1(contextPolicy.maxInputTokens),
         sourceBudgetScale: contextPolicy.sourceBudgetScale,
         sourceTransformer: compression?.sourceTransformer,
       })
@@ -517,8 +518,8 @@ export async function prepareStoryCoreCopilot(
       ...rendered.generationOverrides,
       ...input.generationOverrides,
     }
-    if ((generationOverrides.maxTokens ?? 0) > skill.maxOutputTokens) {
-      throw new Error(`Prompt 请求输出 ${generationOverrides.maxTokens} tokens，超过 Skill 上限 ${skill.maxOutputTokens}；已在模型调用前阻止。`)
+    if ((generationOverrides.maxTokens ?? 0) > requireFixedBudgetValueV1(skill.maxOutputTokens)) {
+      throw new Error(`Prompt 请求输出 ${generationOverrides.maxTokens} tokens，超过 Skill 上限 ${requireFixedBudgetValueV1(skill.maxOutputTokens)}；已在模型调用前阻止。`)
     }
     nodeInput.frozenPromptMessages = rendered.messages
     nodeInput.promptExecutionEvidence = {

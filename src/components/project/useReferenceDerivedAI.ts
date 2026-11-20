@@ -19,6 +19,7 @@ export interface ReferenceDerivedLaneState {
   message: string | null
   unsafeRunId: number | null
   adoptionPending: boolean
+  progressRunId?: number
 }
 
 interface Options {
@@ -97,10 +98,14 @@ export function useReferenceDerivedAI(options: Options) {
         adoptionPending: !!recoverable.adoptionPending,
       }
     }
+    if (recoverable?.safeToResume && recoverable.progress) {
+      return { ...emptyLane(), progressRunId: recoverable.snapshot.run.id,
+        message: '已恢复完整分批进度；再次生成会继续未处理范围，不重发已完成批次。' }
+    }
     if (recoverable && !recoverable.safeToResume) {
       return {
         ...emptyLane(),
-        message: '上次运行停在模型结果不可判定窗口，系统不会自动重试。请先放弃旧运行。',
+        message: '上次运行的来源或指令已变化，或模型结果不可判定；系统不会自动重试，请先放弃旧运行。',
         unsafeRunId: recoverable.snapshot.run.id,
       }
     }
@@ -137,6 +142,13 @@ export function useReferenceDerivedAI(options: Options) {
         mode,
         runId: analysisRunId,
         aiConfig,
+        resumeRunId: current.progressRunId,
+        onDurableBoundary: async (boundary, snapshot) => {
+          if (boundary === 'batch.checkpoint' && generationRef.current[mode] === token) {
+            const returned = snapshot.events.filter(event => event.type === 'model.responded').length
+            setLane(mode, current => ({ ...current, busy: true, message: `已保存 ${returned} 次模型返回，继续处理剩余范围或跨范围综合…` }))
+          }
+        },
       })
       if (generationRef.current[mode] !== token) return
       setLane(mode, {

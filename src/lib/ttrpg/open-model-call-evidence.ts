@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { reviewTtrpgOpenOracleRuntimeDeliveryV1, reviewTtrpgOpenNormalizationRuntimeDeliveryV1 } from './open-oracle-runtime-delivery'
 import { resolveTtrpgOpenNormalizationRuntimeOriginV1 } from './open-runtime-entity-references'
 import { assertTtrpgOpenNormalizationSourceV1 } from './open-model-calls'
@@ -115,7 +116,7 @@ export async function verifyTtrpgOpenModelCallEvidenceV1(input: {
   if (binding.version === 2) {
     await assertAgentSkillExecutionBindingIntegrityV2(binding)
     if (binding.contextSourceKeys.slice().sort().join(',') !== expectedSources
-      || binding.writeTargets.length || call.reservedOutputTokens > binding.maxOutputTokens) {
+      || binding.writeTargets.length || call.reservedOutputTokens > requireFixedBudgetValueV1(binding.maxOutputTokens)) {
       throw new Error('[ttrpg-open-call] 冻结 Skill 来源/写权限/预算不一致')
     }
     if (!binding.formalEntry) throw new Error('[ttrpg-open-call] 正式调用缺少冻结 AI 入口')
@@ -128,9 +129,9 @@ export async function verifyTtrpgOpenModelCallEvidenceV1(input: {
   if (input.mode === 'reserve') {
     const state = await readProductRuntimeState(input.sessionId)
     const alreadyCounted = parseTtrpgRuntimeStateV2(state.ttrpg)?.openRun?.coordination.calls.filter(previous => previous.runContractHash === call.runContractHash).length ?? 0
-    if (alreadyCounted >= snapshot.contract.budget.maxModelCalls || call.reservedInputTokens > snapshot.contract.budget.maxInputTokens
-      || call.reservedOutputTokens > Math.min(snapshot.contract.budget.maxOutputTokens,
-        binding.version === 2 ? binding.maxOutputTokens : getAgentSkillV1(call.skillId).maxOutputTokens)
+    if (alreadyCounted >= requireFixedBudgetValueV1(snapshot.contract.budget.maxModelCalls) || call.reservedInputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens)
+      || call.reservedOutputTokens > Math.min(requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens),
+        binding.version === 2 ? requireFixedBudgetValueV1(binding.maxOutputTokens) : requireFixedBudgetValueV1(getAgentSkillV1(call.skillId).maxOutputTokens))
       || call.attempt > snapshot.contract.budget.maxAttemptsPerStep) throw new Error('[ttrpg-open-call] 请求超过冻结 Run/Skill 硬预算')
   }
   if (!snapshot.events.some(event => event.type === 'model.requested' && event.payload.stepId === call.stepId

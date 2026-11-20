@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import type {AgentRunSnapshotV1} from '../agent/run/event-store'
 import {parseContextManifestV1, verifyContextManifestIntegrityV1} from '../agent/run/context-manifest'
 import {canonicalStringify, hashCanonicalValue} from '../agent/run/hash'
@@ -60,7 +61,7 @@ export async function readChatActionChoiceEvidenceV1(input: {scope: WorkspaceSco
   if (chatActionChoiceVersionForContractV1(snapshot.contract) !== 1 || !boundary
     || snapshot.run.productRuntimeSessionId !== boundary.productRuntimeSessionId) fail('缺少原选择运行合同')
   const binding = snapshot.contract.executionBindings!.find(item => item.stepId === CHAT_ACTION_CHOICE_STEP_V1)!
-  if (binding.version !== 2 || binding.maxOutputTokens !== CHAT_ACTION_CHOICE_OUTPUT_TOKENS_V1
+  if (binding.version !== 2 || requireFixedBudgetValueV1(binding.maxOutputTokens) !== CHAT_ACTION_CHOICE_OUTPUT_TOKENS_V1
     || binding.contextSourceKeys.join(',') !== 'interactionRuntime' || binding.writeTargets.length) fail('选择权限或冻结额度不一致')
   const original = await readChatRuntimeStateAtSequenceV1(boundary.productRuntimeSessionId, boundary.baseSequence)
   const state = original.interaction, profile = state?.profiles.find(item => item.participantKey === participantKey)

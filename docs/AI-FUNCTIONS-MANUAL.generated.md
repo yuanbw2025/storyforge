@@ -209,8 +209,8 @@
 | `documentImportCodexCategories` | 文档导入已登记词条类别目录 | world | L0 | 8000 |
 | `codexExtractionBaseline` | Codex 目标分类与既有词条闭集 | world | L0 | 8000 |
 | `historyAgentBaseline` | 历史 Agent 正式输入基线 | world | L0 | 12000 |
-| `referenceAnalysisPrivateChunk` | 已确认的本机参考分析原文块 | project | L0 | 40000 |
-| `referenceDerivedBaseline` | 参考分析派生 Agent 正式输入基线 | project | L0 | 36000 |
+| `referenceAnalysisPrivateChunk` | 已确认的本机参考分析原文块 | project | L0 | 完整任务基线 |
+| `referenceDerivedBaseline` | 参考分析派生 Agent 正式输入基线 | project | L0 | 完整任务基线 |
 | `styleLearningBaseline` | 文风学习正式输入基线 | project | L0 | 28000 |
 | `priorOutlineCandidate` | 同批次上一卷章纲候选 | runtime | L1 | 2400 |
 | `chapterContent` | 章节正文 | chapter | L0 | 100000 |
@@ -259,7 +259,7 @@
 | `storyTimeline` | 故事年表 | project | L2 | 2600 |
 | `storyTimelineTarget` | 目标故事年表事件 | project | L1 | 600 |
 | `characterRelations` | 角色关系 | project | L2 | 2200 |
-| `references` | 引用手法 | project | L3 | 2000 |
+| `references` | 引用手法 | project | L3 | 按请求容量选读 |
 | `userStyleProfile` | 我的文风 | project | L2 | 1800 |
 | `inspirationWorkspace` | 增量灵感工作区 | project | L0 | 11000 |
 | `characterFacts` | 该角色的剧情事实 | project | L1 | 1500 |
@@ -420,12 +420,12 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:872` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:980` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:873` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:981` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:438` |
 | `canon.narrative.extract` | `src/lib/agent/run/narrative-annotation-durable.ts:218` |
-| `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
+| `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:509` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:796`<br/>`src/lib/node-authoring/domain-execution.ts:855` |
@@ -433,17 +433,17 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1857` |
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1847` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
-| `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
+| `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:559` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:660` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
-| `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:576` |
+| `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:577` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:194` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:376` |
-| `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:945` |
-| `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
+| `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:946` |
+| `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:619` |
 | `node.creation` | `src/lib/node-authoring/executor.ts:408` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:200`<br/>`src/lib/outline/generation-node.ts:61` |
-| `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:666` |
+| `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:667` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:56` |
 | `outline.workshop.collision` | `src/lib/outline/workshop.ts:452` |
 | `outline.workshop.motivation` | `src/lib/outline/workshop.ts:447` |
@@ -452,57 +452,57 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:128` |
 | `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:299` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:457` |
-| `runtime.character.chat-narrative-action` | `src/lib/character-interaction/action-choice-harness.ts:131` |
+| `runtime.character.chat-narrative-action` | `src/lib/character-interaction/action-choice-harness.ts:132` |
 | `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:271` |
-| `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:134` |
-| `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:310` |
+| `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:135` |
+| `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:311` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:99` |
-| `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:688`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:760` |
-| `style.learn` | `src/lib/agent/run/style-learning-durable.ts:493` |
-| `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:471` |
-| `world-group.suggest` | `src/lib/agent/run/world-suggest-durable.ts:622` |
+| `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:689`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:761` |
+| `style.learn` | `src/lib/agent/run/style-learning-durable.ts:494` |
+| `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:472` |
+| `world-group.suggest` | `src/lib/agent/run/world-suggest-durable.ts:623` |
 
 ### 动态 category 调用
 
 - `src/lib/adventure/harness.ts:396 · chat`
-- `src/lib/agent/character-copilot.ts:519 · chat`
+- `src/lib/agent/character-copilot.ts:520 · chat`
 - `src/lib/agent/character-driven-copilot.ts:505 · chat`
 - `src/lib/agent/character-lifecycle-copilot.ts:449 · chat`
 - `src/lib/agent/character-revision-copilot.ts:796 · chat`
 - `src/lib/agent/character-supplement-copilot.ts:582 · chat`
 - `src/lib/agent/context-compression.ts:355 · chat`
 - `src/lib/agent/creative-rules-copilot.ts:448 · chat`
-- `src/lib/agent/inspiration-copilot.ts:389 · chat`
-- `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
+- `src/lib/agent/inspiration-copilot.ts:390 · chat`
+- `src/lib/agent/master-candidate-semantic-review.ts:602 · chat`
 - `src/lib/agent/outline-copilot.ts:521 · chat`
 - `src/lib/agent/outline-copilot.ts:773 · chat`
 - `src/lib/agent/prose-copilot.ts:704 · chat`
 - `src/lib/agent/prose-copilot.ts:985 · chat`
-- `src/lib/agent/run/codex-extraction-durable.ts:830 · chat`
-- `src/lib/agent/run/history-agent-durable.ts:514 · chat`
-- `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
-- `src/lib/agent/run/short-novel-durable.ts:195 · chat`
+- `src/lib/agent/run/codex-extraction-durable.ts:831 · chat`
+- `src/lib/agent/run/history-agent-durable.ts:515 · chat`
+- `src/lib/agent/run/reference-derived-durable.ts:588 · chat`
+- `src/lib/agent/run/short-novel-durable.ts:196 · chat`
 - `src/lib/agent/story-arc-copilot.ts:1660 · chat`
 - `src/lib/agent/story-arc-copilot.ts:1712 · chat`
-- `src/lib/agent/story-core-copilot.ts:580 · chat`
+- `src/lib/agent/story-core-copilot.ts:581 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
-- `src/lib/agent/worldview-field-copilot.ts:952 · chat`
-- `src/lib/character-interaction/harness.ts:899 · chat`
-- `src/lib/character-interaction/memory-review-harness.ts:73 · chat`
-- `src/lib/character-interaction/situation-harness.ts:189 · chat`
-- `src/lib/comic/durable-production.ts:487 · chat`
-- `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:98 · chat`
+- `src/lib/agent/worldview-field-copilot.ts:953 · chat`
+- `src/lib/character-interaction/harness.ts:900 · chat`
+- `src/lib/character-interaction/memory-review-harness.ts:74 · chat`
+- `src/lib/character-interaction/situation-harness.ts:190 · chat`
+- `src/lib/comic/durable-production.ts:488 · chat`
+- `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:99 · chat`
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:22 · ai.start`
-- `src/lib/motion-drama/durable-production.ts:348 · chat`
+- `src/lib/motion-drama/durable-production.ts:349 · chat`
 - `src/lib/node-authoring/executor.ts:472 · chat`
 - `src/lib/open-world/evolution-harness.ts:251 · chat`
 - `src/lib/open-world/harness.ts:150 · chat`
 - `src/lib/product-production/authoring-consultation.ts:175 · chat`
 - `src/lib/product-production/capabilities.ts:329 · chat`
-- `src/lib/screenplay/durable-production.ts:486 · chat`
-- `src/lib/ttrpg/gm-actor-harness.ts:481 · chat`
-- `src/lib/ttrpg/gm-harness.ts:550 · chat`
+- `src/lib/screenplay/durable-production.ts:487 · chat`
+- `src/lib/ttrpg/gm-actor-harness.ts:482 · chat`
+- `src/lib/ttrpg/gm-harness.ts:551 · chat`
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
@@ -597,4 +597,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `55139fd4c`
+生成时间基准:commit `ab3b811fb`

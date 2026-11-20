@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import Dexie from 'dexie'
 import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
 import { chat, type ChatResult } from '../ai/client'
@@ -229,7 +230,7 @@ function runContract(scope: WorkspaceScope, stage: ComicProfessionalStageV1) {
     scope: { projectId: scope.projectId, worldGroupId: null },
     permissions: { contextSourceKeys: [...skill.contextSourceKeys], writeTargets: skill.writeTargets.map(row => ({ table: row.table, fields: [...row.fields], mode: 'author-confirmed' as const })) },
     executionBindings: [{ stepId, ...createAgentSkillExecutionBindingV1(skill) }],
-    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 48_000, maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 2, maxProtocolErrors: 1 },
+    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 48_000, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens), maxAttemptsPerStep: 2, maxProtocolErrors: 1 },
     acceptance: [{ id: `${stepId}.candidate`, kind: 'output-present' as const, required: true }, { id: `${stepId}.author`, kind: 'author-confirmed' as const, required: true }, { id: `${stepId}.post-state`, kind: 'post-state-matches' as const, required: true }],
     verificationPlan: [{ id: `${stepId}.terminal`, kind: 'terminal' as const, verifier: `comic-${stage}-terminal-v1`, criterionIds: [`${stepId}.candidate`, `${stepId}.author`, `${stepId}.post-state`] }],
     failurePolicy: { onProtocolError: 'retry' as const, onVerificationFailure: 'fail' as const, onStaleInput: 'pause-for-author' as const },
@@ -484,7 +485,7 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
     snapshot = await authorizeComicModelRequest(input.scope, snapshot, input.stage, attempt, activeContextManifest.manifestHash, selected.root)
     const result: ChatResult = {}
     let output: string
-    try { output = await (runAI ? runAI.call(callbackReceiver, attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: `comic.${input.stage}`, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, AbortSignal.timeout(COMIC_MODEL_TIMEOUT_MS), result)) }
+    try { output = await (runAI ? runAI.call(callbackReceiver, attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: `comic.${input.stage}`, projectId: input.scope.projectId, configOverrides: { maxTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) }, contextOverflowPolicy: 'reject' }, AbortSignal.timeout(COMIC_MODEL_TIMEOUT_MS), result)) }
     catch (error) {
       const failed = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
       unavailableResponse = failed

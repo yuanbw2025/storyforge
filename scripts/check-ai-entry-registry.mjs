@@ -32,7 +32,9 @@ for (const entry of registry.offlineEvaluations ?? []) {
   const bound = entry.transport === 'local-codex-subscription'
     ? caller.includes('assertOfflineEntry()') && caller.includes('runtime.generate(')
     : entry.transport === 'configured-chat-text-v1'
-      ? caller.includes('assertOfflineReferenceEntry(registry)') && caller.includes('REFERENCE_QUALITY_MAX_CALLS')
+      ? entry.entryId === 'eval.reference.service-capacity'
+        ? caller.includes('assertOfflineReferenceCapacityEntry(') && caller.includes('runAdaptiveReferenceRequestsV1(') && caller.includes('reviewReferenceAcrossBatchesV1(')
+        : caller.includes('assertOfflineReferenceEntry(registry)') && caller.includes('REFERENCE_QUALITY_MAX_CALLS')
       : caller.includes('assertOfflineAudioEntry()') && caller.includes('calibrateAudioInputs(')
   if (!contract.includes(`'${entry.entryId}'`) || !bound) failures.push('离线评测缺少实际合同绑定: ' + entry.entryId)
 }

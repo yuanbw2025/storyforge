@@ -1,3 +1,9 @@
+import { storeReferenceProgressV1, restoreReferenceProgressV1, type StoredReferenceProgressV1 } from './progress-evidence'
+import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1, type VerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
+import { buildReferenceCrossRangeMessagesV1, readReferenceDerivedPromptTemplateSnapshotV1 } from './derived-agent-plan'
+import { runAdaptiveReferenceRequestsV1, referenceSelectionContextV1, reviewReferenceAcrossBatchesV1, type ReferenceGlobalProgressV1 } from './adaptive-requests'
+import { referenceServiceInputLimit } from './request-capacity'
+import { prepareModelCapacityV1 } from '../ai/model-capacity'
 /**
  * 参考作品·作品分析流水线（FB-5b — 13 维统一分析）
  *
@@ -12,7 +18,7 @@
  */
 import { referenceChunkMessages, type ReferenceChunkInput } from './chunk-prompt'
 import { db } from '../db/schema'
-import { resolveRequestConfig, type ChatResult } from '../ai/client'
+import { resolveRequestConfig, describeResolvedAIRequestSettingsV1, type ChatResult } from '../ai/client'
 import { isConfirmedProviderThrottleV1 } from '../ai/provider-rejection'
 import { assembleContext } from '../registry/assemble-context'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
@@ -20,18 +26,18 @@ import { executeFrozenFormalAIEntryV1, freezeFormalAIEntryBindingV1 } from '../a
 import { getAgentSkillV1 } from '../agent/skill-registry'
 import { createContextManifestFromAssemblyV1 } from '../agent/run/context-manifest'
 import { appendAgentRunEventV1, createAgentRunV1, readAgentRunV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
-import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1, recordCreationNativeRequestV1, handoffCreationNativeReceiptV1 } from '../agent/run/creation-response-evidence'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
-import { readAgentRunArtifactExactV1 } from '../memory/artifact-store'
+import { recordAgentRunArtifactV1, readAgentRunArtifactExactV1 } from '../memory/artifact-store'
 import { resolveWorkspaceScope } from '../workspace/ownership'
 import { ANALYSIS_DIMENSIONS } from '../types/reference'
 import type { AgentRunEventTypeV1 } from '../types/agent-run'
 import type { WorkspaceScope } from '../types/world-ownership'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { chunkDocument, quickHash, type ChunkPlan } from '../import/chunker'
+import { quickHash, type ChunkPlan } from '../import/chunker'
 import type { ReferenceChunkAnalysis, ReferenceAnalysisDepth } from '../types'
 import { adopt } from '../registry/adopt'
 import {
@@ -45,15 +51,6 @@ import {
   writeReferenceChunkRunLinkV1,
   type ReferenceChunkRunLinkV1,
 } from './lifecycle'
-
-/** 两档:浅层(大块·轻析) / 深层(小块·深析) */
-const DEPTH_PRESET: Record<ReferenceAnalysisDepth, {
-  targetChars: number
-  maxTokens: number
-}> = {
-  quick: { targetChars: 40000, maxTokens: 4096 },  // 浅层
-  deep:  { targetChars: 15000, maxTokens: 8192 },  // 深层
-}
 
 const MAX_ATTEMPTS = 2
 const RETRY_DELAY_MS = 1500
@@ -235,7 +232,6 @@ export async function runRefAnalysis(refId: number, requestedRunId?: number): Pr
     const existing = await getReferenceAnalysisRunChunks(refId, run.id)
     const doneSet = new Set(existing.map(r => r.chunkIndex))
 
-    const preset = DEPTH_PRESET[depth]
     let completed = doneSet.size
     const total = chunks.length
     for (const chunk of chunks) {
@@ -249,7 +245,7 @@ export async function runRefAnalysis(refId: number, requestedRunId?: number): Pr
 
       const analysis = await analyzeChunkDurably({
         runId: run.id, ref, depth, chunk, totalChunks: total,
-        maxTokens: preset.maxTokens, signal: activeController.signal,
+        maxTokens: 0, signal: activeController.signal,
       })
       const row: ReferenceChunkAnalysis = {
         referenceId: refId,
@@ -348,7 +344,6 @@ const PRIVATE_SKILL = 'inspiration.reference-analysis-private-chunk'
 const STEP = 'reference-analysis.chunk'
 const SOURCE = 'referenceAnalysisPrivateChunk'
 const VERIFIER = 'reference-analysis-private-chunk-v1'
-const INPUT_BUDGET = 48_000
 
 type BoundSource = Awaited<ReturnType<typeof readReferenceChunkAuthorityV1>>
 type PreparedRequest = Awaited<ReturnType<typeof recordCreationModelRequestV1>>['request']
@@ -411,8 +406,33 @@ async function failReferenceAttempt(scope: WorkspaceScope, snapshot: AgentRunSna
 async function readReferenceReport(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, source: BoundSource): Promise<RawAnalysis | null> {
   const pending = unsavedResponses.get(snapshot.run.id)
   if (pending) snapshot = await saveRawReferenceResponse(snapshot, pending)
-  const raw = await referenceEvidence(scope, snapshot, 'raw-response')
+  const compositionHash = exactEventHash(snapshot, 'tool-result')
+  const composition = compositionHash ? JSON.parse(await readAgentRunArtifactExactV1({
+    projectId: scope.projectId, artifactKind: 'tool-result', contentHash: compositionHash,
+  })) : null
+  const raw = composition?.version === 'reference-composed-report-v1'
+    ? { raw: composition.resultJson, contentHash: compositionHash!, observation: { finishReason: 'stop' } }
+    : await referenceEvidence(scope, snapshot, 'raw-response')
+  if (composition?.version === 'reference-composed-report-v1') {
+    if (composition.sourceHash !== await hashCanonicalValue(source.chunk.text) || composition.manifestHash !== manifestHash(snapshot))
+      throw new Error('分批报告来源不匹配。')
+    let offset = 0
+    for (const part of composition.parts) {
+      if (part.start !== offset || part.end <= offset || !snapshot.events.some(event => event.type === 'evidence.artifact.recorded'
+        && event.payload.artifactKind === 'raw-response' && event.payload.contentHash === part.responseHash)) throw new Error('分批报告有未处理范围或缺少原回答。')
+      offset = part.end
+    }
+    if (offset !== source.chunk.text.length) throw new Error('分批报告未覆盖完整原文。')
+  }
   if (!raw) return null
+  if ('requestArtifactHash' in raw && typeof raw.requestArtifactHash === 'string') {
+    const request = JSON.parse(await readAgentRunArtifactExactV1({ projectId: scope.projectId, artifactKind: 'rendered-request', contentHash: raw.requestArtifactHash }))
+    const selection = request.referenceSelection
+    if (selection && (selection.phase !== 'source' || selection.start !== 0 || selection.end !== source.chunk.text.length
+      || selection.sourceLength !== source.chunk.text.length || selection.rootSourceHash !== await hashCanonicalValue(source.chunk.text))) {
+      throw new PartialReferenceReportError('分批请求尚未形成覆盖全部原文的派生报告；原文和每次回答仍保留，不把局部结果当作完成。')
+    }
+  }
   if (typeof raw.raw !== 'string') throw new Error('原参考分析回答格式损坏。')
   if (!snapshot.events.some(event => event.type === 'model.responded') && snapshot.projection.state === 'running')
     snapshot = await appendReferenceEvent(scope, snapshot, 'model.responded',
@@ -470,8 +490,19 @@ async function analyzeChunkDurably(input: ReferenceChunkInput): Promise<RawAnaly
       if (original.contract.runtimeBindingHash !== await privateBinding(source, previous) ||
         original.contract.executionBindings?.find(item => item.stepId === STEP)?.formalEntry?.entryId !== PRIVATE_ENTRY)
         throw new Error('原参考分析运行不属于当前原文块。')
-      const parsed = await readReferenceReport(scope, original, source)
+      const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(scope, original.run.id)
+      const progress = checkpoint?.resumePayload as PrivateReferenceProgressV1 | null
+      const safeProgress = progress?.kind === 'reference-private-progress-v2' && original.projection.state === 'running'
+        && !original.events.some(event => event.sequence > checkpoint!.checkpoint.throughSequence + 1 && event.type === 'model.requested')
+      let parsed: RawAnalysis | null = null
+      try { parsed = await readReferenceReport(scope, original, source) }
+      catch (error) { if (!safeProgress || !(error instanceof PartialReferenceReportError)) throw error }
       if (parsed) return parsed
+      if (safeProgress) {
+        await dispatchReferenceAttempt(input, source, checkpoint!)
+        source = await readReferenceChunkAuthorityV1(scope, input.runId, input.chunk.index)
+        continue
+      }
       const observation = await referenceEvidence(scope, original, 'tool-result')
       const throttled = observation?.observation?.requestLifecycle?.phase === 'response-observed'
         && observation.observation.requestLifecycle.responseStatus === 429
@@ -494,59 +525,171 @@ async function analyzeChunkDurably(input: ReferenceChunkInput): Promise<RawAnaly
   }
 }
 
-async function dispatchReferenceAttempt(input: ReferenceChunkInput, source: BoundSource) {
+class PartialReferenceReportError extends Error {}
+
+interface PrivateReferenceProgressV1 {
+  kind: 'reference-private-progress-v2'
+  rootSourceHash: string
+  promptPlanHash: string
+  state: StoredReferenceProgressV1
+}
+
+async function dispatchReferenceAttempt(input: ReferenceChunkInput, source: BoundSource, resume?: VerifiedAgentRunCheckpointV1) {
   const scope = source.scope
-  const config = { ...useAIConfigStore.getState().config, maxTokens: input.maxTokens }
+  const config = { ...useAIConfigStore.getState().config, maxTokens: 0 }
   const metadata = { category: 'reference.analysis', projectId: scope.projectId, contextOverflowPolicy: 'reject' as const,
-    configOverrides: { maxTokens: input.maxTokens } }
-  const resolved = resolveRequestConfig(config, metadata)
+    configOverrides: { maxTokens: 0 } }
+  const routing = resolveRequestConfig(config, metadata)
+  const resolved = { ...routing, config: await prepareModelCapacityV1(routing.config) }
   if (!isAIConfigReady(resolved.config)) throw new Error(getAIConfigRequiredMessage(resolved.config))
   const skill = getAgentSkillV1(PRIVATE_SKILL, 'inspiration')
   const formalEntry = await freezeFormalAIEntryBindingV1(PRIVATE_ENTRY)
   const assembled = await assembleContext({ scope, projectId: scope.projectId, sourceKeys: [SOURCE],
-    referenceAnalysisRunId: input.runId, referenceAnalysisChunkIndex: source.chunk.index, inputBudgetMaxTokens: INPUT_BUDGET,
+    referenceAnalysisRunId: input.runId, referenceAnalysisChunkIndex: source.chunk.index,
     modelConfig: resolved.config, provider: resolved.config.provider, model: resolved.config.model })
   if (assembled.segments[assembled.included.indexOf(SOURCE)]?.content !== source.chunk.text)
     throw new Error('正式来源必须是完整的已确认参考原文。')
-  const messages = referenceChunkMessages({ ...input, ref: source.ref, chunk: source.chunk })
-  const link = { chunkIndex: source.chunk.index, ordinal: (source.latest?.ordinal ?? 0) + 1,
+  const rootSourceHash = await hashCanonicalValue(source.chunk.text)
+  const promptPlanHash = await hashCanonicalValue({ messages: referenceChunkMessages({ ...input, ref: source.ref, chunk: source.chunk }),
+    global: readReferenceDerivedPromptTemplateSnapshotV1('summary') })
+  const progress = resume?.resumePayload as PrivateReferenceProgressV1 | undefined
+  if (resume && (progress?.kind !== 'reference-private-progress-v2' || progress.rootSourceHash !== rootSourceHash
+    || progress.promptPlanHash !== promptPlanHash || progress.state?.version !== 1)) {
+    throw new Error('拆书原文或内置指令已变化；旧进度完整保留，未发送后续请求。')
+  }
+  const link = resume ? source.latest! : { chunkIndex: source.chunk.index, ordinal: (source.latest?.ordinal ?? 0) + 1,
     claimKey: crypto.randomUUID(), agentRunId: null }
   input.signal?.throwIfAborted()
-  await writeReferenceChunkRunLinkV1(scope, input.runId, source.chunk, source.latest, link)
+  if (!resume) await writeReferenceChunkRunLinkV1(scope, input.runId, source.chunk, source.latest, link)
   const runtimeBindingHash = await privateBinding(source, link)
-  let snapshot = await createAgentRunV1({ scope, contract: {
+  let snapshot = resume?.snapshot ?? await createAgentRunV1({ scope, contract: {
     version: 1, objective: '已确认本机原文的参考分析', workflowKind: 'read-only-audit',
     scope: { projectId: scope.projectId, worldGroupId: null }, runtimeBindingHash,
     permissions: { contextSourceKeys: [SOURCE], writeTargets: [] },
     executionBindings: [{ stepId: STEP, ...createAgentSkillExecutionBindingV1(skill), formalEntry }],
-    budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: INPUT_BUDGET, maxOutputTokens: input.maxTokens, maxAttemptsPerStep: 1 },
+    budget: { capacityPolicy: 'service', maxModelCalls: null, maxToolCalls: 0, maxInputTokens: null, maxOutputTokens: null, maxAttemptsPerStep: 1 },
     acceptance: [{ id: 'reference.output', kind: 'output-present', required: true }],
     verificationPlan: [{ id: 'reference.terminal', kind: 'terminal', verifier: VERIFIER, criterionIds: ['reference.output'] }],
     failurePolicy: { onProtocolError: 'fail', onVerificationFailure: 'fail', onStaleInput: 'pause-for-author' },
   } })
-  await writeReferenceChunkRunLinkV1(scope, input.runId, source.chunk, link, { ...link, agentRunId: snapshot.run.id })
-  snapshot = await appendReferenceEvent(scope, snapshot, 'step.scheduled', { stepId: STEP })
-  snapshot = await appendReferenceEvent(scope, snapshot, 'step.started', { stepId: STEP, attempt: 1 })
-  const manifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId: STEP, attempt: 1,
+  if (!resume) {
+    await writeReferenceChunkRunLinkV1(scope, input.runId, source.chunk, link, { ...link, agentRunId: snapshot.run.id })
+    snapshot = await appendReferenceEvent(scope, snapshot, 'step.scheduled', { stepId: STEP })
+    snapshot = await appendReferenceEvent(scope, snapshot, 'step.started', { stepId: STEP, attempt: 1 })
+  }
+  const manifest = resume ? { manifestHash: manifestHash(snapshot) } : await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId: STEP, attempt: 1,
     projectId: scope.projectId, worldGroupId: null, declaredSourceKeys: [SOURCE], assembled, readerVersion: VERIFIER })
-  snapshot = await appendReferenceEvent(scope, snapshot, 'context.assembled', { stepId: STEP, attempt: 1, manifestHash: manifest.manifestHash })
-  const prepared = await recordCreationModelRequestV1({ scope, snapshot, stepId: STEP, attempt: 1,
-    contextManifestHash: manifest.manifestHash, messages })
-  snapshot = await appendReferenceEvent(scope, prepared.snapshot, 'model.requested', { stepId: STEP, attempt: 1,
-    bindingHash: await hashCanonicalValue({ runtimeBindingHash, formalEntry, manifestHash: manifest.manifestHash,
-      provider: resolved.config.provider, model: resolved.config.model }) })
-  const result: ChatResult = { beforeModelDispatch: async () => {
+  if (!resume) snapshot = await appendReferenceEvent(scope, snapshot, 'context.assembled', { stepId: STEP, attempt: 1, manifestHash: manifest.manifestHash })
+  let result: ChatResult = { beforeModelDispatch: async () => {
     input.signal?.throwIfAborted()
     const live = await readReferenceChunkAuthorityV1(scope, input.runId, source.chunk.index)
     if (live.run.status !== 'analyzing' || live.latest?.agentRunId !== snapshot.run.id ||
       await privateBinding(live, live.latest) !== runtimeBindingHash) throw new Error('原文、作品或请求已变化，未发送。')
   } }
   let raw: string
+  let currentRequest: PreparedRequest | null = null
+  const restored = progress ? await restoreReferenceProgressV1({ scope, snapshot, state: progress.state, source: source.chunk.text, rootSourceHash }) : { completed: [] }
+  const responseHashes = new Map<string, string>(restored.completed.map(answer => [`${answer.selection.start}:${answer.selection.end}`, answer.artifactHash!]))
+  let completed = restored.completed
+  const saveProgress = async (globalProgress?: ReferenceGlobalProgressV1) => {
+    const stored = await storeReferenceProgressV1({ scope, snapshot, stepId: STEP, completed, globalProgress })
+    snapshot = stored.snapshot
+    const saved = await createAgentRunCheckpointV1({ scope, runId: snapshot.run.id,
+      resumePayload: { kind: 'reference-private-progress-v2', rootSourceHash, promptPlanHash, state: stored.state } satisfies PrivateReferenceProgressV1 })
+    snapshot = saved.snapshot
+    listener.onActivity?.('success', `已保存 ${completed.length} 个原文分批进度${globalProgress ? '及跨范围综合进度' : ''}`)
+  }
+  if (!resume) await saveProgress()
   try {
-    raw = await executeFrozenFormalAIEntryV1('reference.analysis.private-chunk', formalEntry, skill, 'src/lib/reference-analysis/pipeline.ts',
-      messages, config, { ...metadata, category: 'reference.analysis' }, input.signal, result, undefined, resolved)
+    let reviewing = false
+    const invoke = async (selectedMessages: import('../types').ChatMessage[], selection: import('./adaptive-requests').ReferenceRequestSelectionV1) => {
+        input.signal?.throwIfAborted()
+        const request = await recordCreationModelRequestV1({ scope, snapshot, stepId: STEP, attempt: 1,
+          contextManifestHash: manifest.manifestHash, messages: selectedMessages,
+          referenceSelection: { rootSourceHash: await hashCanonicalValue(source.chunk.text), start: selection.start, end: selection.end,
+            sourceLength: selection.sourceLength, phase: reviewing ? 'review' : 'source' },
+          requestSettings: describeResolvedAIRequestSettingsV1(resolved, false, { capacityPolicy: 'reference-service', responseFormat: 'json_object' }, selectedMessages),
+        })
+        snapshot = request.snapshot
+        currentRequest = request.request
+        snapshot = await appendReferenceEvent(scope, snapshot, 'model.requested', { stepId: STEP, attempt: 1,
+          bindingHash: await hashCanonicalValue(selectedMessages) })
+        listener.onActivity?.('info', reviewing ? '正在关联跨范围分析；原分批结果完整保留' : `正在细读原文字符 ${selection.start}—${selection.end}/${selection.sourceLength}`)
+        result = { beforeModelDispatch: result.beforeModelDispatch, onCodexRequestPrepared: async binding => {
+          snapshot = await recordCreationNativeRequestV1({ snapshot, request: request.request, binding })
+        } }
+        const answer = await executeFrozenFormalAIEntryV1('reference.analysis.private-chunk', formalEntry, skill, 'src/lib/reference-analysis/pipeline.ts',
+          selectedMessages, config, { ...metadata, category: 'reference.analysis', transportRetryPolicy: 'none' }, input.signal, result,
+          { capacityPolicy: 'reference-service', responseFormat: 'json_object' }, resolved)
+        snapshot = await saveRawReferenceResponse(snapshot, { request: request.request, raw: answer, result })
+        snapshot = await handoffCreationNativeReceiptV1({ snapshot, request: request.request, raw: answer, result })
+        if (!reviewing) responseHashes.set(`${selection.start}:${selection.end}`, exactEventHash(snapshot, 'raw-response')!)
+        snapshot = await appendReferenceEvent(scope, snapshot, 'model.responded', { stepId: STEP, attempt: 1,
+          outputHash: exactEventHash(snapshot, 'raw-response')! })
+        return { raw: answer, finishReason: result.finishReason, artifactHash: exactEventHash(snapshot, 'raw-response')! }
+      }
+    const answers = await runAdaptiveReferenceRequestsV1({
+      source: source.chunk.text,
+      completed,
+      onCheckpoint: async answers => { completed = answers; await saveProgress() },
+      inputLimit: referenceServiceInputLimit(resolved.config),
+      messages: selection => referenceChunkMessages({ ...input, ref: source.ref,
+        chunk: { ...source.chunk, text: referenceSelectionContextV1(selection) } }),
+      invoke,
+    })
+    if (answers.length === 1) raw = answers[0].raw
+    else {
+      const combined: Record<string, string> = {}
+      for (const answer of answers) {
+        const report = JSON.parse(answer.raw) as Record<string, string>
+        for (const [key, value] of Object.entries(report)) {
+          if (key === 'rawExcerpt') continue
+          if (typeof value !== 'string') throw new Error('分批结果字段必须为字符串。')
+          combined[key] = (combined[key] ?? '') + `【原文范围 ${answer.selection.start}—${answer.selection.end}】\n${value}\n`
+        }
+      }
+      reviewing = true
+      const keys = Object.keys(combined)
+      const excerpts = answers.flatMap(answer => {
+        const report = JSON.parse(answer.raw) as Record<string, string>
+        const quote = verifiedRawExcerpt(report.rawExcerpt, answer.selection.part)
+        return quote ? [quote] : []
+      })
+      const globalRaw = await reviewReferenceAcrossBatchesV1({ answers, invoke,
+        resume: restored.globalProgress,
+        checkpoint: saveProgress,
+        inputLimit: referenceServiceInputLimit(resolved.config),
+        messages: selection => buildReferenceCrossRangeMessagesV1(selection, keys),
+      })
+      input.signal?.throwIfAborted()
+      const global = JSON.parse(globalRaw) as Record<string, unknown>
+      if (Object.keys(global).sort().join('|') !== [...keys].sort().join('|') || !Object.values(global).every(value => typeof value === 'string' && value.trim()))
+        throw new Error('分批分析的跨范围综合协议无效；所有原回答已保留。')
+      for (const key of keys) combined[key] = `【跨范围综合，基于二手分析】\n${global[key]}\n【完整分批分析】\n${combined[key]}`
+      if (excerpts.length) combined.rawExcerpt = `【多处逐字引用；各段分别核实，非连续原文】\n\n${excerpts.join('\n\n')}`
+      raw = JSON.stringify(combined)
+      delete result.finishReason
+      const parts = answers.map(answer => ({ start: answer.selection.start, end: answer.selection.end,
+        responseHash: responseHashes.get(`${answer.selection.start}:${answer.selection.end}`) }))
+      // Raw provider answers stay unchanged; this is explicitly a derived composition.
+      const saved = await recordAgentRunArtifactV1({ scope, runId: snapshot.run.id, stepId: STEP, attempt: 1,
+        artifactKind: 'tool-result', expectedLastSequence: snapshot.projection.lastSequence,
+        content: JSON.stringify({ version: 'reference-composed-report-v1', resultJson: raw,
+          sourceHash: await hashCanonicalValue(source.chunk.text), manifestHash: manifest.manifestHash, parts }),
+      })
+      snapshot = saved.snapshot
+    }
+
   } catch (error) {
-    const saved = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
+    const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(scope, snapshot.run.id)
+    const safeCheckpoint = checkpoint?.resumePayload as PrivateReferenceProgressV1 | null
+    if (input.signal?.aborted && safeCheckpoint?.kind === 'reference-private-progress-v2'
+      && !snapshot.events.some(event => event.sequence > checkpoint!.checkpoint.throughSequence + 1 && event.type === 'model.requested')) return
+    if (!currentRequest) {
+      await failReferenceAttempt(scope, snapshot, 'reference-not-dispatched', 'deterministic')
+      return
+    }
+    const saved = await recordUnavailableCreationResponseV1({ snapshot, request: currentRequest, result, error })
     const lifecycle = result.requestLifecycle
     const status = lifecycle?.responseStatus ?? null
     if (lifecycle?.phase === 'pre-dispatch' || (lifecycle?.phase === 'response-observed' && status != null &&
@@ -561,7 +704,6 @@ async function dispatchReferenceAttempt(input: ReferenceChunkInput, source: Boun
     }
     return
   }
-  await saveRawReferenceResponse(snapshot, { request: prepared.request, raw, result })
 }
 
 async function writeAnalysisRow(projectId: number, row: ReferenceChunkAnalysis): Promise<void> {
@@ -594,7 +736,11 @@ export function verifiedRawExcerpt(excerpt: string | undefined, sourceText: stri
   const candidate = trim(excerpt)?.replace(/^[“"'‘]+|[”"'’]+$/g, '').trim()
   if (!candidate) return undefined
   const normalize = (value: string) => value.replace(/\s+/g, ' ').trim()
-  return normalize(sourceText).includes(normalize(candidate)) ? candidate.slice(0, 500) : undefined
+  if (candidate.startsWith('【多处逐字引用；各段分别核实，非连续原文】\n\n')) {
+    const quotes = candidate.slice('【多处逐字引用；各段分别核实，非连续原文】\n\n'.length).split(/\n\s*\n/)
+    return quotes.length && quotes.every(quote => normalize(sourceText).includes(normalize(quote))) ? candidate : undefined
+  }
+  return normalize(sourceText).includes(normalize(candidate)) ? candidate : undefined
 }
 
 function sleep(ms: number) {
@@ -612,8 +758,7 @@ export interface PlanChunksResult {
 
 /** 把文本按深度分块，用于 UI 预览块数 */
 export function planRefChunks(text: string, depth: ReferenceAnalysisDepth): PlanChunksResult {
-  const preset = DEPTH_PRESET[depth]
-  const chunks = chunkDocument(text, { targetChars: preset.targetChars })
+  const chunks: ChunkPlan[] = text ? [{ index: 0, startChar: 0, endChar: text.length, charCount: text.length, text }] : []
   return {
     chunks,
     totalChars: text.length,

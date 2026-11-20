@@ -278,7 +278,7 @@ export function checkRegistry(): RegistryValidationResult {
     if (source.scope !== 'manual' && !source.ownerFrom) {
       errors.push(`CONTEXT_SOURCES 必须登记 ownerFrom: ${source.key}`)
     }
-    if (source.budgetTokens <= 0) {
+    if (source.budgetTokens === null ? !['referenceDerivedBaseline', 'referenceAnalysisPrivateChunk', 'references'].includes(source.key) : source.budgetTokens <= 0) {
       errors.push(`CONTEXT_SOURCES budgetTokens 必须为正数: ${source.key}`)
     }
     if (source.resources) {

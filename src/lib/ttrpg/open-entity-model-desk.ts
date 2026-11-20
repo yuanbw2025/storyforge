@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 /** Human desk adapter for the registered entity request. Reads never send, repair, adopt or create. */
 import type { TtrpgOpenEntityDeskInputV1 } from './open-entity-desk'
 import type { TtrpgOpenEntityModelSelectionV1 } from './open-entity-model-contract'
@@ -152,7 +153,7 @@ export async function requestTtrpgOpenEntityModelDeskV1(input: Input & Transport
       && d.oracleSourceRef.sequence === selection.oracleSourceRef.sequence && d.epochInputRevision === selection.epochInputRevision)) throw new Error('实体起草的原咨询或资料已变化，请重新读取并确认。')
   const loaded = await loadTtrpgOpenMemoryReadStateV1({ ...input, reader: { kind: 'human', viewerKey: input.viewerKey } })
   if (loaded.state.lastSequence !== page.sequence) throw new TtrpgOpenReadConflictV1('准备实体起草期间进度已变化。')
-  const maximumOutputTokens = Math.min(getAgentSkillV1('prose.ttrpg-open-entity-propose').maxOutputTokens, loaded.content.campaign.runtimePolicy.maximumOutputTokens)
+  const maximumOutputTokens = Math.min(requireFixedBudgetValueV1(getAgentSkillV1('prose.ttrpg-open-entity-propose').maxOutputTokens), loaded.content.campaign.runtimePolicy.maximumOutputTokens)
   await loaded.assertCurrent()
   const result = await generateTtrpgOpenEntityCandidateV1({ ...input, selection, maximumCostUsd, maximumOutputTokens,
     commandId: 'entity.model.desk.' + input.submissionKey, baseSequence: loaded.state.lastSequence, baseStateHash: loaded.stateHash,

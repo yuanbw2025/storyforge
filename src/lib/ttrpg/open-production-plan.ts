@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { TTRPG_COMPATIBLE_OPENING_AUTHORED_TASKS_V1 } from './open-compatible-opening-contract'
 /** Open authoring tasks live in the existing production scheduler, with an explicit shared production budget. */
 import type { ProductProductionBriefV3, ProductProductionPlanV3, ProductProductionPlanTaskV3 } from '../types'
@@ -80,7 +81,7 @@ export function buildTtrpgOpenProductionPlanV3(input: {
     const model = definition.skillId !== null && !authoredOpening
     const inputWeight = modern ? [9, 12, 15, 3, 0, 0][index] : 1
     const outputWeight = modern ? [1, 2, 2, 1, 0, 0][index] : 1
-    const maximumOutput = model ? Math.min(outputTokens * outputWeight, getAgentSkillV1(definition.skillId!).maxOutputTokens) : 0
+    const maximumOutput = model ? Math.min(outputTokens * outputWeight, requireFixedBudgetValueV1(getAgentSkillV1(definition.skillId!).maxOutputTokens)) : 0
     const timeoutMs = Math.min(durationMs, modern && model ? 600_000 : 180_000)
     return { taskKey: definition.taskKey, lane: definition.lane, kind: definition.taskKey,
       skillId: authoredOpening ? null : definition.skillId, executionMode: model ? 'model' : 'deterministic', dependsOn: [...definition.dependsOn],

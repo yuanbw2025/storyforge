@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { admitsSaltRidgeInstall, type SaltRidgeInstallPermit } from '../salt-ridge/install-admission'
 import { parseProductRuntimePackage } from './runtime-package'
 import { assertCurrentProductEntryV1, productCatalogIdForProductionV1 } from '../product/product-catalog'
@@ -403,9 +404,9 @@ export async function prepareLegacyPausedProductBuildV1<T extends ProductBuildRe
       || binding.planHash !== build.planHash || plan.controlEpoch !== binding.controlEpoch
       || await hashProductProductionValueV2(plan) !== build.planHash
       || snapshot.run.parentRunId !== ledger.rootRunId
-      || snapshot.contract.budget.maxInputTokens !== (isTtrpgOpenEmptyMediaTaskV3(task) ? 0 : Math.max(1, task.budgetReservation.inputTokens))
-      || snapshot.contract.budget.maxOutputTokens !== (isTtrpgOpenEmptyMediaTaskV3(task) ? 0 : Math.max(1, task.budgetReservation.outputTokens))
-      || snapshot.contract.budget.maxModelCalls !== (isTtrpgOpenEmptyMediaTaskV3(task) ? 0 : Math.max(1, task.budgetReservation.modelCalls))) {
+      || requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens) !== (isTtrpgOpenEmptyMediaTaskV3(task) ? 0 : Math.max(1, task.budgetReservation.inputTokens))
+      || requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens) !== (isTtrpgOpenEmptyMediaTaskV3(task) ? 0 : Math.max(1, task.budgetReservation.outputTokens))
+      || requireFixedBudgetValueV1(snapshot.contract.budget.maxModelCalls) !== (isTtrpgOpenEmptyMediaTaskV3(task) ? 0 : Math.max(1, task.budgetReservation.modelCalls))) {
       throw new Error('[product-production-scheduler] 旧暂停 Run 与冻结 Plan/预算不一致，不能恢复')
     }
     // A complete task candidate deserves its original settlement path.
@@ -5315,7 +5316,7 @@ async function runClaimedTaskCore(input: {
     : isTtrpgOpenProductionTaskV2(input.task) ? ttrpgOpenProductionSystemPromptV2(input.task.taskKey) : null
   const openSystemTokens = openSystem ? openV3 ? estimateTtrpgOpenProductionTextV3(openSystem) : estimateTokens(openSystem) : 0
   const openMaximumOutputTokens = openSystem ? Math.min(input.task.budgetReservation.outputTokens,
-    getAgentSkillV1(input.task.skillId!).maxOutputTokens, attemptBudgetReservation.outputTokens) : null
+    requireFixedBudgetValueV1(getAgentSkillV1(input.task.skillId!).maxOutputTokens), attemptBudgetReservation.outputTokens) : null
   // This generation owns one task-lifetime budget. Previous paid attempts do
   // not grant another full input envelope. Human revisions remain zero-call.
   const openPaidAttempt = openSystem !== null && authorizedDirectResult == null

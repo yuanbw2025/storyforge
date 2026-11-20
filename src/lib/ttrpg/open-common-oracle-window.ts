@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { createAgentRunV1, appendAgentRunEventV1, readInstanceAgentRunV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
 import { createAgentSkillExecutionBindingV2 } from '../agent/execution-binding'
 import { getAgentSkillV1 } from '../agent/skill-registry'
@@ -76,7 +77,7 @@ export async function startTtrpgOpenCommonOracleWindowV1(input: FormalTtrpgComma
     || basis.budget.maximumCostUsd > runtime.epochBudget.maximumCostUsd || runtime.epochBudget.maximumCalls < 1
     || basis.budget.maximumOutputTokens > content.campaign.runtimePolicy.maximumOutputTokens) throw new Error('共同事实没有足够且明确的一次请求预算，完整正文不得截断')
   const skill = getAgentSkillV1(TTRPG_OPEN_COMMON_ORACLE_SKILL_V1)
-  if (basis.budget.maximumOutputTokens > skill.maxOutputTokens) throw new Error('共同事实输出上限超过本次独立 Skill')
+  if (basis.budget.maximumOutputTokens > requireFixedBudgetValueV1(skill.maxOutputTokens)) throw new Error('共同事实输出上限超过本次独立 Skill')
   const basisHash = await hashTtrpgOpenCommonOracleRequestBasisV1(basis), authorizationCommandId = p.key(input.commandId, 'common Oracle authorization command')
   const inputRevision = await ttrpgOpenCommonOracleInputRevisionV1({ basisHash, authorizationHash: await hashCanonicalValue(authorization), viewerKey: seat.viewerKey, authorizationCommandId })
   const epochKey = await ttrpgOpenScopedKeyV1(runtime.sessionKey, 'epoch', [String(state.lastSequence + 1), inputRevision])
@@ -94,7 +95,7 @@ export async function startTtrpgOpenCommonOracleWindowV1(input: FormalTtrpgComma
       runtimeBindingHash: await ttrpgOpenCallBindingHashV1({ sessionKey: runtime.sessionKey, actorKey: 'gm', authorizationEpochKey: epochKey,
         admissionStateHash: actual.admissionStateHash, visibilityHash: basis.sourceVisibilityHash, runtimeSourceHash: basis.runtimeSourceHash, commonOracle: ttrpgOpenCommonOracleCallMarkerV1(request) }),
       executionBindings: [{ stepId: TTRPG_OPEN_COMMON_ORACLE_STEP_V1, ...await createAgentSkillExecutionBindingV2(skill), formalEntry: await freezeFormalAIEntryBindingV1(TTRPG_OPEN_COMMON_ORACLE_ENTRY_V1) }],
-      budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: basis.budget.maximumInputTokens, maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 1 },
+      budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: basis.budget.maximumInputTokens, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens), maxAttemptsPerStep: 1 },
       acceptance: [{ id: 'common-oracle.protocol', kind: 'deterministic-check', required: true }],
       verificationPlan: [{ id: 'common-oracle.terminal', kind: 'terminal', verifier: skill.promptVersion, criterionIds: ['common-oracle.protocol'] }],
       failurePolicy: { onProtocolError: 'fail', onVerificationFailure: 'fail', onStaleInput: 'pause-for-author' } } })
