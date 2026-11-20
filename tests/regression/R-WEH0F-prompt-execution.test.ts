@@ -4,6 +4,7 @@ import {
   createPromptExecutionRequestV1,
   freezePromptExecutionOptionsV1,
   parsePromptExecutionEvidenceV1,
+  parsePromptExecutionOptionsV1,
   renderFrozenPromptExecutionV1,
   verifyPromptExecutionOptionsV1,
 } from '../../src/lib/agent/prompt-execution'
@@ -120,4 +121,52 @@ describe('WEH-0F Prompt execution contract', () => {
       template: template(),
     })).rejects.toThrow('未在冻结模板中声明')
   })
+
+  it('author selection overrides the current template and is consumed without changing legacy frozen bytes', async () => {
+    for (const moduleKey of ['inspiration.reverse', 'inspiration.reverse.multiworld'] as const) {
+      const selected = template({ moduleKey })
+      const request = createPromptExecutionRequestV1({ moduleKey, parameterValues: { tone: 'BOUND_TONE' } })
+      const legacy = await freezePromptExecutionOptionsV1({ request, template: selected })
+      const bound = await freezePromptExecutionOptionsV1({
+        request: createPromptExecutionRequestV1({ ...request, selection: { template: legacy.template, templateHash: legacy.templateHash } }),
+        template: template({ moduleKey, id: 999, systemPrompt: 'UNRELATED_GLOBAL_CONTENT' }),
+      })
+      expect(JSON.stringify(bound)).toBe(JSON.stringify(legacy))
+      expect(bound).not.toHaveProperty('selection')
+      expect(parsePromptExecutionOptionsV1(JSON.parse(JSON.stringify(bound)), moduleKey)).toEqual(legacy)
+      const renderInput = { context: { projectName: 'Owned work', dimension: 'D', worldContext: 'W' }, hardSystem: 'HARD_BOUNDARY', authorInstruction: 'Author request' }
+      const actual = await renderFrozenPromptExecutionV1({ options: bound, ...renderInput })
+      expect(actual).toEqual(await renderFrozenPromptExecutionV1({ options: legacy, ...renderInput }))
+      expect(actual.messages[0].content).toContain('BOUND_TONE')
+      expect(JSON.stringify(actual.messages)).not.toContain('UNRELATED_GLOBAL_CONTENT')
+      expect(await freezePromptExecutionOptionsV1({ request: { ...request, selection: { template: legacy.template, templateHash: legacy.templateHash } } })).toEqual(legacy)
+    }
+  })
+
+  it('rejects malformed, cross-module, undeclared-parameter and tampered selections before execution', async () => {
+    const options = await freezePromptExecutionOptionsV1({ request: { version: 1, moduleKey: 'inspiration.reverse' }, template: template({ moduleKey: 'inspiration.reverse' }) })
+    const selection = { template: options.template, templateHash: options.templateHash }
+    expect(() => createPromptExecutionRequestV1({ moduleKey: 'inspiration.reverse.multiworld', selection })).toThrow('moduleKey')
+    expect(() => createPromptExecutionRequestV1({ moduleKey: 'inspiration.reverse', selection: { ...selection, templateHash: 'invalid' } })).toThrow('hash')
+    expect(() => createPromptExecutionRequestV1({ moduleKey: 'inspiration.reverse', selection, parameterValues: { undeclared: true } })).toThrow('未在冻结模板中声明')
+    await expect(freezePromptExecutionOptionsV1({ request: { version: 1, moduleKey: 'inspiration.reverse', selection: { ...selection, template: { ...selection.template, systemPrompt: 'TAMPERED' } } } })).rejects.toThrow('hash')
+    await expect(freezePromptExecutionOptionsV1({ request: { version: 1, moduleKey: 'inspiration.reverse' } })).rejects.toThrow('缺少冻结模板')
+    expect(() => parsePromptExecutionOptionsV1({ ...options, selection })).toThrow('未声明字段')
+  })
+
+
+  it('keeps the pre-selection V1 frozen bytes, hashes and actual default messages unchanged', async () => {
+    const options = await freezePromptExecutionOptionsV1({ request: { version: 1, moduleKey: 'worldview.dimension' }, template: template() })
+    const baselineBytes = "{\"version\":1,\"moduleKey\":\"worldview.dimension\",\"template\":{\"id\":71,\"scope\":\"user\",\"moduleKey\":\"worldview.dimension\",\"promptType\":\"generate\",\"name\":\"作者模板 A\",\"description\":\"WEH-0F test\",\"systemPrompt\":\"模板系统：{{tone}} / {{dimension}}\",\"userPromptTemplate\":\"模板用户：{{projectName}} / {{worldContext}}\",\"variables\":[\"tone\",\"dimension\",\"projectName\",\"worldContext\"],\"modelOverride\":{\"temperature\":0.7,\"maxTokens\":3000},\"parameters\":[{\"key\":\"tone\",\"label\":\"基调\",\"type\":\"text\",\"default\":\"严肃\"}],\"createdAt\":10,\"updatedAt\":20},\"templateHash\":\"9d2ccc06e422cdf25159615471c36bf834cf346c9165972312d6ef6488eaacef\",\"parameterValuesHash\":\"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\",\"overridesHash\":\"78cdd5d5524a835ba92738f324d9a397736eb7a8337c069c7450c53ef6147813\"}"
+    expect(JSON.stringify(options)).toBe(baselineBytes)
+    const rendered = await renderFrozenPromptExecutionV1({ options,
+      context: { dimension: '维度', projectName: '雾港', worldContext: '正式事实' }, hardSystem: 'HARD', authorInstruction: '作者请求' })
+    expect(rendered.messages).toEqual([
+      { role: 'system', content: '模板系统：严肃 / 维度\n\nHARD' },
+      { role: 'user', content: '模板用户：雾港 / 正式事实' },
+      { role: 'user', content: '【作者本轮明确要求】\n作者请求' },
+    ])
+    expect(rendered.generationOverrides).toEqual({ temperature: 0.7, maxTokens: 3000 })
+  })
+
 })

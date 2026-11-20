@@ -1,3 +1,4 @@
+import { parseInspirationPromptConfigV1, verifyInspirationPromptConfigV1 } from '../inspiration/prompt-config'
 import { assertFrozenRuntimePackageSessionV1, parseProductRuntimeState } from '../product/runtime-core'
 import type { AnyProductBuildPreviewManifest } from '../types'
 import { avgExecutableModule } from '../avg/executable-module'
@@ -970,6 +971,10 @@ async function validateCurrentBackup(data: Record<string, unknown>): Promise<voi
     for (const row of rows) {
       if (!row || typeof row !== 'object') throw new Error(`[deriveImport] ${spec.name} 包含非法记录`)
       spec.validateImportRow?.(row)
+      if (spec.name === 'inspirationWorkspaces') {
+        const config = parseInspirationPromptConfigV1(row.promptConfig)
+        if (config) await verifyInspirationPromptConfigV1(config)
+      }
       if ('worldId' in row || 'workId' in row) throw new Error(`[deriveImport] ${spec.name} 泄露本地主键 owner`)
       const shadow = readPortableOwnerShadowV1(spec, row)
       if (!shadow) continue

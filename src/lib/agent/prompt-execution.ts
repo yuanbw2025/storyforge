@@ -32,6 +32,13 @@ export interface PromptExecutionRequestV1 {
   userOverride?: string | null
   temperature?: number
   maxTokens?: number
+  /** Author-selected immutable version; consumed by freeze, never persisted as a second channel. */
+  selection?: PromptTemplateSelectionV1
+}
+
+export interface PromptTemplateSelectionV1 {
+  template: PromptTemplateSnapshotV1
+  templateHash: string
 }
 
 export interface PromptTemplateSnapshotV1 {
@@ -52,7 +59,7 @@ export interface PromptTemplateSnapshotV1 {
 }
 
 /** Immutable plan input. The complete template is deliberately stored in the durable plan. */
-export interface PromptExecutionOptionsV1 extends PromptExecutionRequestV1 {
+export interface PromptExecutionOptionsV1 extends Omit<PromptExecutionRequestV1, 'selection'> {
   template: PromptTemplateSnapshotV1
   templateHash: string
   parameterValuesHash: string
@@ -310,6 +317,33 @@ function snapshotTemplate(
   })
 }
 
+/** Same snapshot codec as durable options; hash verification is deliberately asynchronous. */
+export function parsePromptTemplateSelectionV1(
+  value: unknown,
+  expectedModuleKey: GovernedPromptModuleKeyV1,
+): PromptTemplateSelectionV1 {
+  if (!isRecord(value) || Object.keys(value).some(key => key !== 'template' && key !== 'templateHash')) {
+    fail('selection 字段无效')
+  }
+  if (!isRecord(value.template) || !isHash(value.templateHash)) fail('selection 快照或 hash 无效')
+  return {
+    template: snapshotTemplate(value.template as unknown as PromptTemplate, expectedModuleKey),
+    templateHash: value.templateHash,
+  }
+}
+
+export async function verifyPromptTemplateSelectionV1(selection: PromptTemplateSelectionV1): Promise<void> {
+  const parsed = parsePromptTemplateSelectionV1(selection, selection.template.moduleKey)
+  if (await hashCanonicalValue(parsed.template) !== parsed.templateHash) fail('selection 内容与 hash 不一致')
+}
+
+function assertDeclaredParameters(template: PromptTemplateSnapshotV1, values: Record<string, unknown>): void {
+  const declared = new Set((template.parameters ?? []).map(parameter => parameter.key))
+  for (const key of Object.keys(values)) {
+    if (!declared.has(key)) fail(`参数 ${key} 未在冻结模板中声明`)
+  }
+}
+
 export function createPromptExecutionRequestV1(input: Omit<PromptExecutionRequestV1, 'version'>): PromptExecutionRequestV1 {
   const moduleKey = normalizeModuleKey(input.moduleKey)
   const parameterValues = normalizeParameterValues(input.parameterValues, moduleKey === 'story.generate')
@@ -317,6 +351,8 @@ export function createPromptExecutionRequestV1(input: Omit<PromptExecutionReques
   const userOverride = normalizeNullableOverride(input.userOverride, 'userOverride', moduleKey === 'story.generate' ? Infinity : MAX_PROMPT_OVERRIDE_CHARS_V1)
   const temperature = assertFiniteNumber(input.temperature, 'temperature', 0, 2)
   const maxTokens = assertFiniteNumber(input.maxTokens, 'maxTokens', 1, moduleKey === 'story.generate' ? Infinity : 2_000_000)
+  const selection = input.selection === undefined ? undefined : parsePromptTemplateSelectionV1(input.selection, moduleKey)
+  if (selection) assertDeclaredParameters(selection.template, parameterValues ?? {})
   return {
     version: 1,
     moduleKey,
@@ -325,20 +361,20 @@ export function createPromptExecutionRequestV1(input: Omit<PromptExecutionReques
     ...(userOverride === undefined ? {} : { userOverride }),
     ...(temperature === undefined ? {} : { temperature }),
     ...(maxTokens === undefined ? {} : { maxTokens }),
+    ...(selection === undefined ? {} : { selection }),
   }
 }
 
 export async function freezePromptExecutionOptionsV1(input: {
   request: PromptExecutionRequestV1
-  template: PromptTemplate
+  template?: PromptTemplate
 }): Promise<PromptExecutionOptionsV1> {
-  const request = createPromptExecutionRequestV1(input.request)
-  const template = snapshotTemplate(input.template, request.moduleKey)
+  const { selection, ...request } = createPromptExecutionRequestV1(input.request)
+  if (selection) await verifyPromptTemplateSelectionV1(selection)
+  const template = selection?.template
+    ?? (input.template ? snapshotTemplate(input.template, request.moduleKey) : fail('缺少冻结模板'))
   const parameterValues = request.parameterValues ?? {}
-  const declaredParameters = new Set((template.parameters ?? []).map(parameter => parameter.key))
-  for (const key of Object.keys(parameterValues)) {
-    if (!declaredParameters.has(key)) fail(`参数 ${key} 未在冻结模板中声明`)
-  }
+  assertDeclaredParameters(template, parameterValues)
   const overrides = {
     systemOverride: request.systemOverride ?? null,
     userOverride: request.userOverride ?? null,

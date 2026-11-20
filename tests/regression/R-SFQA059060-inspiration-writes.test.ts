@@ -1,3 +1,5 @@
+import { createInspirationCopilotNode, prepareInspirationCopilot, type InspirationWorkspaceSnapshot } from '../../src/lib/agent/inspiration-copilot'
+import { useAIConfigStore } from '../../src/stores/ai-config'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
@@ -21,6 +23,17 @@ async function row(scope: WorkspaceScope) {
 async function allRows() {
   return Object.fromEntries(await Promise.all(db.tables.map(async table => [table.name, await table.toArray()])))
 }
+const confirmedPreparation = { summary: 'Confirmed summary', authorMaterial: 'Authored material', proposals: [], openQuestions: [] }
+function nodeFor(scope: WorkspaceScope, snapshot: InspirationWorkspaceSnapshot, fragmentIds: string[] = []) {
+  return createInspirationCopilotNode({
+    projectId: scope.projectId, scope, projectName: 'Owned work', genres: '', mode: 'organize',
+    authorRequest: '整理已有碎片', contextText: '', inputGuidance: '', selectedFragmentIds: fragmentIds,
+    parentVersionId: null, snapshot, config: useAIConfigStore.getState().config,
+  })
+}
+function contentSnapshot(current: Awaited<ReturnType<typeof row>>): InspirationWorkspaceSnapshot {
+  return { id: current.id!, updatedAt: current.updatedAt, fragments: current.fragments, versions: current.versions ?? '[]' }
+}
 const outbound = vi.fn(() => { throw new Error('No model or external service belongs to this test') })
 beforeEach(async () => {
   await db.delete(); await db.open()
@@ -29,7 +42,7 @@ beforeEach(async () => {
 })
 afterEach(async () => {
   expect(outbound).not.toHaveBeenCalled()
-  vi.unstubAllGlobals(); db.close()
+  vi.restoreAllMocks(); vi.unstubAllGlobals(); db.close()
 })
 
 describe('SFQA059/060 actual public inspiration writes', () => {
@@ -245,4 +258,70 @@ describe('SFQA059/060 actual public inspiration writes', () => {
     expect(parseInspirationVersions(imported?.versions)).toEqual([version])
     expect(parseInspirationFragments((await row(scope)).fragments)).toEqual(fragments)
   })
+
+  it('configuration-only writes keep an existing candidate adoptable without changing its content snapshot', async () => {
+    const scope = await create(), fragment = await store.getState().addFragment(scope, { text: 'Saved prerequisite source' })
+    const original = await row(scope), snapshot = contentSnapshot(original)
+    expect(snapshot.versions).toBe('[]')
+    const candidate = nodeFor(scope, snapshot, [fragment!.id])
+    await store.getState().savePromptConfig(scope, { expected: original, modes: { 'inspiration.reverse': { kind: 'follow-default' } } })
+    expect(contentSnapshot(await row(scope))).toEqual(snapshot)
+    const adopted = await candidate.adopt!(confirmedPreparation)
+    expect(adopted.fragmentIds).toEqual([fragment!.id])
+    expect(JSON.parse(adopted.resultJson)).toEqual(confirmedPreparation)
+    expect((await row(scope)).promptConfig).toBeDefined()
+  })
+
+  it('rejects null/empty formal source snapshots and never equates a first config row with a null source', async () => {
+    const scope = await create()
+    const nullSnapshot = { id: null, updatedAt: null, fragments: '[]', versions: '[]' }
+    expect(await row(scope)).toBeUndefined()
+    for (const selectedFragmentIds of [[], ['nonexistent-source']]) {
+      await expect(prepareInspirationCopilot({ projectId: scope.projectId, scope, authorRequest: '整理已有碎片', selectedFragmentIds })).rejects.toThrow(/请选择|不存在/)
+    }
+    const syntheticNullCandidate = nodeFor(scope, nullSnapshot)
+    await store.getState().savePromptConfig(scope, { expected: null, modes: {} })
+    const configOnly = await row(scope)
+    expect(configOnly.fragments).toBe('[]')
+    expect(configOnly.versions).toBe('[]')
+    expect(contentSnapshot(configOnly)).not.toEqual(nullSnapshot)
+    await expect(prepareInspirationCopilot({ projectId: scope.projectId, scope, authorRequest: '整理已有碎片', selectedFragmentIds: ['nonexistent-source'] })).rejects.toThrow('不存在')
+    const before = await allRows()
+    await expect(syntheticNullCandidate.adopt!(confirmedPreparation)).rejects.toThrow('已在候选生成后发生变化')
+    expect(await allRows()).toEqual(before)
+  })
+
+  it('content ABA and formerly nonempty rows remain stale after config saves, even when both arrays return to empty', async () => {
+    const scope = await create()
+    await store.getState().savePromptConfig(scope, { expected: null, modes: {} })
+    const empty = await row(scope), snapshot = contentSnapshot(empty)
+    const candidate = nodeFor(scope, snapshot)
+    const now = vi.spyOn(Date, 'now').mockReturnValue(empty.updatedAt + 10)
+    const fragment = await store.getState().addFragment(scope, { text: 'Actual content existed' })
+    now.mockReturnValue(empty.updatedAt + 20)
+    await store.getState().removeFragment(scope, fragment!.id)
+    now.mockRestore()
+    const returnedEmpty = await row(scope)
+    expect(returnedEmpty.fragments).toBe(snapshot.fragments)
+    expect(returnedEmpty.versions).toBe(snapshot.versions)
+    expect(returnedEmpty.id).toBe(snapshot.id)
+    expect(returnedEmpty.updatedAt).not.toBe(snapshot.updatedAt)
+    await store.getState().savePromptConfig(scope, { expected: returnedEmpty, modes: { 'inspiration.reverse.multiworld': { kind: 'follow-default' } } })
+    expect(contentSnapshot(await row(scope))).toEqual(contentSnapshot(returnedEmpty))
+    const before = await allRows()
+    await expect(candidate.adopt!(confirmedPreparation)).rejects.toThrow('已在候选生成后发生变化')
+    expect(await allRows()).toEqual(before)
+  })
+
+  it('confirmed version changes still invalidate older candidates after independent configuration updates', async () => {
+    const scope = await create(), fragment = await store.getState().addFragment(scope, { text: 'Source shared by versions' })
+    const original = await row(scope), candidate = nodeFor(scope, contentSnapshot(original), [fragment!.id])
+    await store.getState().saveVersion(scope, { mode: 'single', fragmentIds: [fragment!.id], result: { newlyConfirmed: true } })
+    const changed = await row(scope)
+    await store.getState().savePromptConfig(scope, { expected: changed, modes: {} })
+    const before = await allRows()
+    await expect(candidate.adopt!(confirmedPreparation)).rejects.toThrow('已在候选生成后发生变化')
+    expect(await allRows()).toEqual(before)
+  })
+
 })

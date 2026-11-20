@@ -1,3 +1,4 @@
+import { parseInspirationPromptConfigV1 } from '../inspiration/prompt-config'
 import { assertWorkCoverPortableRowV1 } from '../work-cover/contracts'
 /**
  * PROJECT_TABLES 注册表·单一事实源
@@ -1287,7 +1288,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     resourceIdentity: RESOURCE_IDENTITY('inspiration-workspace', 'reference', '灵感工作区'),
     domainOwner: WORK_DOMAIN_OWNER,
     defaults: { fragments: '[]', versions: '[]' },
-    note: '每项目一份有界灵感碎片与确认版本；未确认 AI 预览不落库' },
+    validateImportRow: row => { parseInspirationPromptConfigV1(row.promptConfig) },
+    note: '每 Work 一份有界灵感碎片与确认版本；可选作者模板配置独立 revision，未确认 AI 预览不落库' },
 
   // ───────────────────── PLATFORM-2 创作过程层 ─────────────────────
   { table: db.agentConversations, name: 'agentConversations', owner: 'project',

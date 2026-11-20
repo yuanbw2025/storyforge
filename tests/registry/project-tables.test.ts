@@ -1,3 +1,5 @@
+import { ADOPTION_EXTENSIONS } from '../../src/lib/registry/adoption-schema'
+import { FIELD_REGISTRY } from '../../src/lib/registry/field-registry'
 /**
  * 当前 PROJECT_TABLES 注册表单元测试
  *
@@ -68,6 +70,21 @@ describe('PROJECT_TABLES 当前注册表', () => {
       expect(PROJECT_TABLES.find(spec => spec.name === 'chapters')?.domainOwner).toMatchObject({
         allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' },
       })
+    })
+
+    it('keeps inspiration config Work-owned, optional on import and author-only through one narrow extension', () => {
+      const spec = PROJECT_TABLES.find(item => item.name === 'inspirationWorkspaces')!
+      expect(spec.domainOwner).toMatchObject({ allowed: ['work'], locator: { kind: 'field', owner: 'work', field: 'workId' } })
+      expect(spec.exportable).toBe(true)
+      expect(spec.validateImportRow!({ fragments: '[]', versions: '[]' })).toBeUndefined()
+      expect(spec.validateImportRow!({ promptConfig: JSON.stringify({ version: 1, revision: 1, updatedAt: 0, modes: {} }) })).toBeUndefined()
+      for (const promptConfig of [null, '{', JSON.stringify({ version: 2, revision: 1, updatedAt: 0, modes: {} }), JSON.stringify({ version: 1, revision: 1, updatedAt: 0, modes: { 'story.generate': { kind: 'follow-default' } } })]) {
+        expect(() => spec.validateImportRow!({ promptConfig })).toThrow()
+      }
+      expect(FIELD_REGISTRY.filter(field => field.target === 'inspirationWorkspaces').map(field => field.field).sort()).toEqual(['fragments', 'versions'])
+      expect(ADOPTION_EXTENSIONS.filter(extension => extension.target === 'inspirationWorkspaces')).toMatchObject([
+        { id: 'inspiration-author-prompt-config', entrypoints: ['src/stores/inspiration-workspace.ts'] },
+      ])
     })
 
     it('世界发布资源只由 worldSemantic 声明，不含产品媒资、发布和运行数据', () => {

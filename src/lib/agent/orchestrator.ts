@@ -795,7 +795,9 @@ export async function createMasterAgentPlan(input: {
       }
       task.promptExecution = await freezePromptExecutionOptionsV1({
         request: pinned.promptExecution,
-        template: usePromptStore.getState().getActive(expectedPromptModule),
+        ...(pinned.promptExecution.selection === undefined
+          ? { template: usePromptStore.getState().getActive(expectedPromptModule) }
+          : {}),
       })
     }
     return freezeMasterAgentPlanPromptsV1({

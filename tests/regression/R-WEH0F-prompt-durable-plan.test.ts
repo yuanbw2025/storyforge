@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { freezePromptExecutionOptionsV1, renderFrozenPromptExecutionV1 } from '../../src/lib/agent/prompt-execution'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PromptTemplate } from '../../src/lib/types/prompt'
 import { usePromptStore } from '../../src/stores/prompt'
 import { createMasterAgentPlan } from '../../src/lib/agent/orchestrator'
@@ -93,4 +94,27 @@ describe('WEH-0F durable Prompt plan binding', () => {
     expect(binding?.parameterValuesHash).toBe(plan.tasks[0].promptExecution?.parameterValuesHash)
     expect(binding?.overridesHash).toBe(plan.tasks[0].promptExecution?.overridesHash)
   })
+
+  it('freezes the selected version through the sole pinned request and restores identical messages without rereading global state', async () => {
+    const frozen = await freezePromptExecutionOptionsV1({ request: { version: 1, moduleKey: 'worldview.dimension' }, template: worldviewTemplate(303, 'WORK_BOUND', 'WORK_BOUND_SYSTEM') })
+    const getActive = vi.spyOn(usePromptStore.getState(), 'getActive').mockImplementation(() => { throw new Error('selected version must not resolve a global id') })
+    try {
+      const plan = await createMasterAgentPlan({
+        projectId: 1, worldGroupId: null, request: '生成种族与民族',
+        pinnedTask: { agentId: 'world-origin', skillId: 'world-origin.worldview-field', instruction: '生成世界基座字段。目标字段=races；生成模式=expand。',
+          promptExecution: { version: 1, moduleKey: 'worldview.dimension', selection: { template: frozen.template, templateHash: frozen.templateHash } } },
+      })
+      expect(getActive).not.toHaveBeenCalled()
+      expect(plan.tasks[0].promptExecution).toEqual(frozen)
+      const bytes = JSON.stringify(plan)
+      expect(bytes).not.toContain('"selection"')
+      usePromptStore.setState({ templates: [worldviewTemplate(999, 'DIFFERENT_GLOBAL', 'DIFFERENT_GLOBAL_SYSTEM')] })
+      const restored = parseMasterAgentPlanV1(JSON.parse(bytes))
+      expect(JSON.stringify(restored.tasks[0].promptExecution)).toBe(JSON.stringify(frozen))
+      const rendering = { context: { projectName: 'Owned work', worldContext: 'Owned context' }, hardSystem: 'HARD_BOUNDARY', authorInstruction: '生成种族与民族' }
+      expect(await renderFrozenPromptExecutionV1({ options: restored.tasks[0].promptExecution!, ...rendering }))
+        .toEqual(await renderFrozenPromptExecutionV1({ options: frozen, ...rendering }))
+    } finally { getActive.mockRestore() }
+  })
+
 })

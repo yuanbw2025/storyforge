@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { parseInspirationPromptConfigV1, verifyInspirationPromptConfigV1, type InspirationPromptConfigV1 } from '../lib/inspiration/prompt-config'
 import { db } from '../lib/db/schema'
 import { adopt, adoptionTransactionTablesV1 } from '../lib/registry/adopt'
 import {
@@ -11,7 +12,7 @@ import type {
   InspirationWorkspace,
 } from '../lib/types/inspiration-workspace'
 import type { WorkspaceScope } from '../lib/types/world-ownership'
-import { readOwnedRows, resolveReadScopeLike, resolveScopeLike, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { readOwnedRows, resolveReadScopeLike, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 interface InspirationWorkspaceState {
   scope: WorkspaceScope | null
@@ -19,6 +20,11 @@ interface InspirationWorkspaceState {
   fragments: InspirationFragment[]
   versions: InspirationVersion[]
   loading: boolean
+  /** Author configuration only. expected is the exact last observed owned row/config, not a content revision. */
+  savePromptConfig: (scope: WorkspaceScope, input: {
+    expected: Pick<InspirationWorkspace, 'id' | 'promptConfig'> | null
+    modes: InspirationPromptConfigV1['modes']
+  }) => Promise<InspirationPromptConfigV1>
   load: (scope: WorkspaceScopeLike) => Promise<void>
   addFragment: (scope: WorkspaceScopeLike, input: {
     text: string; label?: string; sourceKind?: InspirationSourceKind
@@ -100,6 +106,41 @@ export const useInspirationWorkspaceStore = create<InspirationWorkspaceState>((s
         })
         if (generation === loadGeneration) publish(scope, observation.workspace, observation.sequence)
       } finally { if (generation === loadGeneration) set({ loading: false }) }
+    },
+    savePromptConfig: async (inputScope, input) => {
+      const capturedScope = snapshotScope(inputScope), captured = structuredClone(input)
+      if (captured.expected && (!Number.isSafeInteger(captured.expected.id) || captured.expected.id! < 1)) {
+        throw new Error('灵感模板配置缺少有效工作区身份；原数据未修改')
+      }
+      const scope = await prepare(capturedScope)
+      const previous = parseInspirationPromptConfigV1(captured.expected?.promptConfig)
+      if (previous) await verifyInspirationPromptConfigV1(previous)
+      const config = parseInspirationPromptConfigV1(JSON.stringify({
+        version: 1, revision: (previous?.revision ?? 0) + 1, updatedAt: Date.now(), modes: captured.modes,
+      }))!
+      await verifyInspirationPromptConfigV1(config)
+      const raw = JSON.stringify(config)
+      const observation = await db.transaction('rw', adoptionTransactionTablesV1('inspirationWorkspaces'), async () => {
+        await resolveScopeLike(scope)
+        const current = await readWorkspace(scope)
+        if ((current?.id ?? null) !== (captured.expected?.id ?? null)
+          || current?.promptConfig !== captured.expected?.promptConfig) {
+          throw new Error('灵感模板配置已变化，请重新读取后保存；原数据未修改')
+        }
+        if (current?.id != null) {
+          // Author config has its own revision. Never invalidate a candidate's content snapshot.
+          await db.inspirationWorkspaces.update(current.id, { promptConfig: raw })
+        } else {
+          const now = Date.now()
+          await db.inspirationWorkspaces.add(stampNewRecord(scope, 'inspirationWorkspaces', {
+            projectId: scope.projectId, fragments: '[]', versions: '[]', promptConfig: raw,
+            createdAt: now, updatedAt: now,
+          }, { owner: 'work' }))
+        }
+        return { workspace: await readWorkspace(scope), sequence: ++observationSequence }
+      })
+      publish(scope, observation.workspace, observation.sequence)
+      return config
     },
     addFragment: async (inputScope, input) => {
       const fragment = createInspirationFragment(input)

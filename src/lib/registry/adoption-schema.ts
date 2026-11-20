@@ -483,6 +483,13 @@ const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
 
 const ADOPTION_EXTENSION_REGISTRATIONS: readonly AdoptionExtensionSpec[] = [
   {
+    id: 'inspiration-author-prompt-config', target: 'inspirationWorkspaces',
+    entrypoints: ['src/stores/inspiration-workspace.ts'],
+    policyRegistry: 'PROJECT_TABLES + WorkspaceScope + inspiration/prompt-config V1 codec/hash + exact row/raw-config/revision CAS',
+    reason: '仅作者模板选择与恢复默认：唯一 store 入口只写 promptConfig；碎片和版本继续 adopt，不改变内容 updatedAt 或候选 stale 身份，不接受 AI 字段写回。',
+    reviewAfter: '2027-02-20',
+  },
+  {
     id: 'chat-authoring-draft-lifecycle', target: 'chatAuthoringDrafts',
     entrypoints: ['src/lib/character-interaction/draft-service.ts', 'src/lib/character-interaction/role-profile-store.ts', 'src/lib/character-interaction/consultation-store.ts', 'src/lib/character-interaction/source-unit-store.ts'],
     policyRegistry: 'PROJECT_TABLES + WorkspaceScope + draft revision CAS + FIELD_REGISTRY roleProfilesJson/settingsJson/sourceUnitsJson + immutable identity/source/permission guard',
