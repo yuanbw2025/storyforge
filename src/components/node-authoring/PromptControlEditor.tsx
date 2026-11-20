@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { PromptTemplate } from '../../lib/types'
+import { isRetiredPromptModuleKey } from '../../lib/types/prompt'
 import type { AuthoringNodeInstance } from '../../lib/node-authoring/contracts'
 import { usePromptStore } from '../../stores/prompt'
 
@@ -22,7 +23,7 @@ export default function PromptControlEditor(props: { node: AuthoringNodeInstance
     }} className="mt-1 w-full rounded border border-border bg-bg-base p-2">
       <option value="">请选择提示词</option>
       {snapshot && !selected && <option value="snapshot">{snapshot.name} · 图内保存版本</option>}
-      {templates.filter(item => item === selected || `${item.name} ${item.description} ${item.moduleKey}`.toLowerCase().includes(query.toLowerCase())).map(item => <option key={item.id} value={String(item.id)}>{item.name} · {item.scope === 'user' ? '我的模板' : '内置'}</option>)}
+      {templates.filter(item => !isRetiredPromptModuleKey(item.moduleKey) && (item === selected || `${item.name} ${item.description} ${item.moduleKey}`.toLowerCase().includes(query.toLowerCase()))).map(item => <option key={item.id} value={String(item.id)}>{item.name} · {item.scope === 'user' ? '我的模板' : '内置'}</option>)}
     </select></label>
     {error && <p role="alert" className="text-error">提示词加载失败：{error}</p>}
     {snapshot && <>

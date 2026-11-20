@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { SYSTEM_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds'
 import { NOVEL_CONTENT_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds-novel'
 import { CONTEXT_SOURCES } from '../../src/lib/registry/context-sources'
-import { PROMPT_MODULE_KEYS } from '../../src/lib/types/prompt'
+import { PROMPT_MODULE_KEYS, RETIRED_PROMPT_MODULE_KEYS } from '../../src/lib/types/prompt'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -46,17 +46,22 @@ describe('Phase 3.1 · AI 说明书自动生成', () => {
     }).not.toThrow()
   })
 
-  it('generated.md 含全部运行时 moduleKey', () => {
-    const keys = PROMPT_MODULE_KEYS
+  it('generated.md 含全部现行 moduleKey，退役兼容标识不冒充可用模板', () => {
+    const keys = PROMPT_MODULE_KEYS.filter(key => !RETIRED_PROMPT_MODULE_KEYS.some(retired => retired === key))
     expect(keys.length).toBeGreaterThan(0)
     const manual = fs.readFileSync(path.join(root, 'docs/AI-FUNCTIONS-MANUAL.generated.md'), 'utf8')
     for (const k of keys) {
       expect(manual, `说明书应含 moduleKey ${k}`).toContain(`\`${k}\``)
     }
+    for (const key of RETIRED_PROMPT_MODULE_KEYS) {
+      expect(PROMPT_MODULE_KEYS).toContain(key)
+      expect(SYSTEM_PROMPT_SEEDS.some(seed => seed.moduleKey === key)).toBe(false)
+      expect(manual).not.toContain(`| \`${key}\` |`)
+    }
   })
 
   it('moduleKey 唯一，说明书独立匹配运行时模板元数据与数字预算', () => {
-    const keys = PROMPT_MODULE_KEYS
+    const keys = PROMPT_MODULE_KEYS.filter(key => !RETIRED_PROMPT_MODULE_KEYS.some(retired => retired === key))
     expect(keys.length).toBeGreaterThan(0)
     expect(new Set(keys).size).toBe(keys.length)
 

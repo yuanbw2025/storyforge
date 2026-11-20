@@ -1,4 +1,3 @@
-import { usePromptStore } from '../../src/stores/prompt'
 import { beforeEach, afterEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
@@ -230,19 +229,6 @@ describe('CTXG-3 · Canon resource provider', () => {
     expect(read.content).toContain('不换名复刻')
     expect(read.content).toContain('由慢到快')
     expect(read.sourceRefs.some(row => row.table === 'references')).toBe(true)
-    try {
-      await usePromptStore.getState().init()
-      const base = usePromptStore.getState().getActive('reference.application')
-      const id = await usePromptStore.getState().cloneTemplate(base.id!, '缓存切换验收')
-      const copy = usePromptStore.getState().templates.find(row => row.id === id)!
-      await usePromptStore.getState().saveTemplate({...copy, systemPrompt: '缓存切换后只保留当前人物边界'})
-      await usePromptStore.getState().setActive(id)
-      const changed = await CANON_RESOURCE_PROVIDER_V1.read({scope, resourceKey: ref.resourceKey, depth: 'full', maxTokens: 5000})
-      expect(changed.content).toContain('缓存切换后只保留当前人物边界')
-      expect(changed.content).toContain('固定参考边界')
-      expect(changed.contentHash).not.toBe(read.contentHash)
-    } finally { usePromptStore.setState({templates: [], loaded: false}) }
-
   })
 
   it('same-titled stage occurrences and their ordered events keep distinct portable Canon identities', async () => {

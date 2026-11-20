@@ -34,7 +34,6 @@ const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8')
 const PROMPT_SEED_FILES = [
   'src/lib/ai/prompt-seeds-core.ts',
   'src/lib/ai/prompt-seeds-tools.ts',
-  'src/lib/ai/prompt-seeds-reference.ts',
   'src/lib/ai/prompt-seeds-preparation.ts',
   'src/lib/ai/prompt-seeds-genre-packs.ts',
   'src/lib/ai/prompt-seeds-genre-packs-extended.ts',
@@ -118,7 +117,13 @@ function readPromptModuleKeys(sourceFile) {
 }
 
 function extractModuleKeys() {
-  return readPromptModuleKeys(parseSource('src/lib/types/prompt.ts'))
+  const source = parseSource('src/lib/types/prompt.ts')
+  const retired = source.statements.flatMap(node => ts.isVariableStatement(node)
+    ? [...node.declarationList.declarations].filter(item => ts.isIdentifier(item.name)
+      && item.name.text === 'RETIRED_PROMPT_MODULE_KEYS')
+    : []).flatMap(item => stringArrayValue(ts.isAsExpression(item.initializer)
+      ? item.initializer.expression : item.initializer))
+  return readPromptModuleKeys(source).filter(key => !retired.includes(key))
 }
 
 // ── ② prompt 种子 ──

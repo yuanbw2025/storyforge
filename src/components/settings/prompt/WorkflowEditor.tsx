@@ -3,6 +3,7 @@ import { AlertTriangle, GitBranch, List, Plus, Save, Trash2, X } from 'lucide-re
 import { nanoid } from 'nanoid'
 import { useWorkflowStore } from '../../../stores/workflow'
 import { usePromptStore } from '../../../stores/prompt'
+import { isRetiredPromptModuleKey } from '../../../lib/types/prompt'
 import type {
   PromptWorkflow,
   PromptWorkflowGraph,
@@ -445,7 +446,7 @@ export default function WorkflowEditor({
                   className="w-full rounded border border-border bg-bg-base px-2 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"
                 >
                   <option value="">跟随当前激活模板</option>
-                  {templates.filter(item => item.moduleKey === selectedStep.promptModuleKey).map(item => (
+                  {templates.filter(item => item.moduleKey === selectedStep.promptModuleKey && !isRetiredPromptModuleKey(item.moduleKey)).map(item => (
                     <option key={item.id} value={item.id}>{item.name}</option>
                   ))}
                 </select>
