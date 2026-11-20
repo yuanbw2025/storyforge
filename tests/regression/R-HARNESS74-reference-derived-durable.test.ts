@@ -176,6 +176,28 @@ describe.sequential('R-HARNESS74 · 参考分析派生 durable 候选与双投�
     expect(() => parseReferenceDerivedResultStrictV1('characters', duplicate, characterBaseline)).toThrow('重复角色')
   })
 
+  it('完整保留超过旧篇幅和角色数量限制的合法候选，仍拒绝空字段', async () => {
+    const fixture = await seed('不截取')
+    const summaryBaseline = await readReferenceDerivedBaselineV1({
+      scope: fixture.scope, runId: fixture.analysisRunId, mode: 'summary',
+    })
+    const long = '跨章证据与相反解释；'.repeat(1500) + '末段反证不可丢失'
+    const summary = JSON.stringify({ narrativeStyle: long, characterCraft: long })
+    expect(parseReferenceDerivedResultStrictV1('summary', summary, summaryBaseline).resultJson).toBe(summary)
+    const characterBaseline = await readReferenceDerivedBaselineV1({
+      scope: fixture.scope, runId: fixture.analysisRunId, mode: 'characters',
+    })
+    const characters = Array.from({ length: 123 }, (_, index) => ({
+      name: `${index}号人物${'长身份'.repeat(80)}`, role: '关系和职责'.repeat(80),
+      summary: long, analysis: long,
+    }))
+    const parsed = parseReferenceDerivedResultStrictV1('characters', JSON.stringify({ characters }), characterBaseline)
+    expect(parsed.resultJson).toBe(JSON.stringify(characters))
+    expect(() => parseReferenceDerivedResultStrictV1('characters', JSON.stringify({
+      characters: [{ ...characters[0], analysis: ' ' }],
+    }), characterBaseline)).toThrow('为空')
+  })
+
   it('候选 checkpoint 后可恢复；模型请求或响应未知窗口不会自动重试', async () => {
     for (const boundary of ['model.requested', 'model.responded'] satisfies ReferenceDerivedBoundaryV1[]) {
       const fixture = await seed(boundary)
