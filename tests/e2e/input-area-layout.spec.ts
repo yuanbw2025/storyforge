@@ -56,10 +56,12 @@ test.beforeEach(async ({ page }) => {
     const Original = window.ResizeObserver
     window.ResizeObserver = class extends Original { constructor(callback: ResizeObserverCallback) { super((entries, observer) => { window.__layoutObserverCalls++; callback(entries, observer) }) } }
   })
-  await page.route('**/*', route => route.request().url() === 'http://input-area.fixture.invalid/'
+  await page.route('**/*', route => route.request().url() === 'https://input-area.fixture.invalid/'
     ? route.fulfill({ contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><style>*{box-sizing:border-box}body{margin:0;font:14px sans-serif}#fixture{padding:24px;width:100%;min-width:0}.comparison{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}.comparison label{display:block;min-width:0}#inline{margin-bottom:16px}@media(max-width:700px){.comparison{grid-template-columns:1fr}}</style><div id="fixture"></div>' })
     : route.abort('blockedbyclient'))
-  await page.goto('http://input-area.fixture.invalid/')
+  await page.goto('https://input-area.fixture.invalid/')
+  // Match secure localhost/packaged contexts required by the real edit session UUID.
+  expect(await page.evaluate(() => isSecureContext && typeof crypto.randomUUID === 'function')).toBe(true)
   await page.addScriptTag({ content: bundle })
   await expect(page.locator('#candidate')).toBeVisible()
 })

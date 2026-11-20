@@ -22,6 +22,11 @@ test.beforeEach(async ({ context, page }, info) => {
   }, origin)
   await context.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url())
+    if (url.origin === origin && url.pathname === '/storyforge/quality002-model/api/v1/models' && request.method() === 'GET') {
+      // Explicit finite local-service allocation, consumed by the real capacity resolver.
+      await route.fulfill({ json: { models: [{ type: 'llm', key: 'isolated-node-model', loaded_instances: [{ config: { context_length: 128_000 } }] }] } })
+      return
+    }
     if (url.origin === origin && url.pathname === '/storyforge/quality002-model/v1/chat/completions' && request.method() === 'POST') {
       const index = state.requests.length
       state.requests.push(request.postData() ?? '')
@@ -88,7 +93,7 @@ async function prepare(page: Page, mode: Mode) {
     if (projectId == null) throw new Error('FIXTURE_READINESS: real wizard Project missing')
     const scope = await resolveScopeLike(projectId)
     useAIConfigStore.getState().setConfig({ provider: 'custom', apiKey: 'synthetic-node-prefix-e2e', model: 'isolated-node-model',
-      baseUrl: `${location.origin}/storyforge/quality002-model/v1`, temperature: .5, maxTokens: 8_000, contextWindow: 128_000 })
+      baseUrl: `${location.origin}/storyforge/quality002-model/v1`, temperature: .5, maxTokens: 8_000 })
     await useWorldviewStore.getState().loadAll(scope, null)
     await useWorldviewStore.getState().saveWorldview({ projectId, worldGroupId: null,
       worldOrigin: '原作品世界起源，恢复保存结果不能改写。' }, scope)
