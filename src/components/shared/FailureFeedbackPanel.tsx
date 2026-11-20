@@ -1,3 +1,5 @@
+import FeedbackInbox from './FeedbackInbox'
+import { createFeedbackToken } from '../../lib/feedback/followup-storage'
 import { useRef, useState } from 'react'
 import { buildFailureSummary } from '../../lib/diagnostics/build-failure-summary'
 import type { FailureSummary } from '../../lib/diagnostics/failure-summary'
@@ -11,6 +13,7 @@ const button = 'rounded border border-border px-3 py-2 disabled:opacity-50'
 export default function FailureFeedbackPanel() {
   const [kind, setKind] = useState<Kind>('bug')
   const [open, setOpen] = useState(false)
+  const [wantsFollowup, setWantsFollowup] = useState(false)
   const [drafts, setDrafts] = useState({ bug: emptyDraft(), feature: emptyDraft() })
   const draft = drafts[kind]
   const update = (value: Partial<ReturnType<typeof emptyDraft>>) => setDrafts(current => ({ ...current, [kind]: { ...current[kind], ...value } }))
@@ -57,8 +60,8 @@ export default function FailureFeedbackPanel() {
     const contents = { kind, title: title.trim(), description: description.trim(), steps: kind === 'bug' ? steps.trim() : '', expected: expected.trim(), details: { ...details, requestType: kind === 'feature' ? details.requestType : '' },
       client: clientMetadata(), ...(attachments.length ? { attachments } : {}),
       ...(kind === 'bug' && includeDiagnostics && report ? { diagnostics: feedbackDiagnostics(report.errors) } : {}) }
-    const signature = JSON.stringify(contents)
-    if (submission.current?.signature !== signature) submission.current = { signature, body: { version: 1, id: crypto.randomUUID(), ...contents } }
+    const signature = JSON.stringify({ contents, wantsFollowup })
+    if (submission.current?.signature !== signature) submission.current = { signature, body: { version: 1, id: crypto.randomUUID(), ...contents, ...(wantsFollowup ? { followup: { token: createFeedbackToken() } } : {}) } }
     try {
       const receipt = await submitClientFeedback(submission.current.body)
       setMessage(`提交成功，回执编号：${receipt}。反馈${attachments.length ? `和 ${attachments.length} 张截图` : ''}已进入维护者收件箱。`)
@@ -75,6 +78,7 @@ export default function FailureFeedbackPanel() {
       <button type="button" disabled={disabled} onClick={() => show('feature')} className={button}>功能建议</button>
       <button type="button" disabled={disabled} onClick={() => void prepare()} className={button}>{busy ? '正在整理故障摘要…' : '查看故障摘要并反馈'}</button>
     </div>
+    <div className="mt-3"><FeedbackInbox /></div>
     {message && <p role="status" aria-live="polite" className="mt-3 text-[13px] text-text-muted">{message}</p>}
     {open && <form onSubmit={event => void send(event)} onPaste={event => {
       const images = [...event.clipboardData.items].filter(item => item.kind === 'file' && item.type.startsWith('image/')).map(item => item.getAsFile()).filter((file): file is File => !!file)
@@ -105,6 +109,8 @@ export default function FailureFeedbackPanel() {
           {report && <div className="space-y-2 text-[13px] leading-6"><p>{report.errors.length ? `共 ${report.errors.length} 条本地错误记录。` : '没有本地错误记录。'}预览中的启动器信息仅用于本机查看；反馈附带所选错误记录。</p><pre aria-label="故障摘要预览" className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-bg-base p-3">{JSON.stringify(report, null, 2)}</pre>{report.launcher?.kind === 'interrupted' && <p>启动器可能被断电或强制关闭；检测时间不能证明崩溃发生的时刻。</p>}</div>}
         </>}
         <p className="text-[13px] text-text-muted">自动附带应用版本、操作系统类别和客户端类型。</p>
+        <label className="block"><input type="checkbox" checked={wantsFollowup} onChange={event => setWantsFollowup(event.target.checked)} />接收本条反馈的处理进展</label>
+        <p className="text-xs text-text-muted">选择后在本机保存独立跟进凭据，最长 90 天；下次打开应用可补收。不会开启自动错误上报，也不会把反馈原文放进通知。清除浏览器数据后无法自动找回旧凭据。</p>
         <div className="flex flex-wrap gap-3"><button type="submit" disabled={includeDiagnostics && kind === 'bug' && !report} className="rounded bg-accent px-4 py-2 text-white disabled:opacity-50">{sending ? '正在提交…' : '提交反馈'}</button><button type="button" className={button} onClick={() => { setOpen(false); setMessage('已取消填写，本页草稿和截图已保留，未发送新的反馈。') }}>取消</button></div>
       </fieldset>
     </form>}

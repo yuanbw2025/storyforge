@@ -1,7 +1,7 @@
 {
   "name": "storyforge",
   "private": true,
-  "version": "4.0.8",
+  "version": "4.0.9",
   "license": "MIT",
   "type": "module",
   "scripts": {

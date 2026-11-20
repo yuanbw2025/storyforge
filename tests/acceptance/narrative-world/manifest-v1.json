@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261120-035-repair-foundation-input-v7.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261120-035-repair-foundation-input-v8.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -1416,6 +1416,22 @@
         "workPackage": "BUG-035-RF-main536-input-renewal",
         "implementationCommit": "722795c5a13889336fc8dea96c74665bdb33ef69",
         "note": "Preserve the v6 input measurement at F1 before PR536 reference prompt retirement, the independent finite-capacity test fixtures, and the document-parse request foundation. New measurements require an approved fixed source; observations and raw failures remain preserved."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261119-035-cover-input-v1.json",
+        "workPackage": "release-4.0.9-feedback541",
+        "note": "Preserves the previous main input measurement; new receipt remeasures current inputs without changing corpus or acceptance."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261120-035-repair-foundation-input-v7.json",
+        "workPackage": "BUG-035-RF-release409-current-source-renewal",
+        "implementationCommit": "437fcaef9884ac6bc2f3219bcea51f1602ca23b0",
+        "note": "Preserve the original v7 measurement and source-qualified green CI before independent PR545/546 feedback and client4.0.9 inputs. No historical receipt is rewritten or relabeled as the new source."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261120-client-release409-v1.json",
+        "workPackage": "release-4.0.9-feedback541",
+        "note": "Preserve the independent release4.0.9 input measurement and its complete dated receipt before the renewed repair-foundation input measurement. Corpus, observations and earlier lineage remain preserved."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

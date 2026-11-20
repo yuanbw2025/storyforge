@@ -107,11 +107,11 @@ flowchart TB
 
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
-| 应用语义版本 | `4.0.8` | `package.json` |
+| 应用语义版本 | `4.0.9` | `package.json` |
 | TypeScript 生产源码 | 运行 `npm run gen:project-metrics -- --source-size` 查看当前文件数和行数 | `tsconfig.json` |
-| IndexedDB schema | v14 / 131 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
-| PROJECT_TABLES | 131 张表 | `project-tables.ts` |
-| Prompt 主线 | 65 个 moduleKey / 238 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
+| IndexedDB schema | v15 / 135 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
+| PROJECT_TABLES | 135 张表 | `project-tables.ts` |
+| Prompt 主线 | 74 个 moduleKey / 238 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
 | CONTEXT_SOURCES | 175 个上下文源 | `context-sources.ts` |
 | 写回治理 | 59 个通用 adopt target / 68 个领域扩展 | `adoption-schema.ts` |
 <!-- project-metrics:end -->

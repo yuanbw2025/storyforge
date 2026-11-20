@@ -1,5 +1,9 @@
 # Pending development and branch audit
 
+## 2026-11-20 · Feedback progress notifications (#541)
+
+Implementation has started for in-app “My feedback”: per-report opt-in, reviewed public progress, verified repair versions, offline catch-up, and read receipts. The client is merged through [PR #545](https://github.com/yuanbw2025/storyforge/pull/545), and the platform is deployed with live readback verified. Formal client packages still await release acceptance. Older reports without opt-in are not claimed automatically, and immediate delivery while the app is closed is not guaranteed.
+
 ## November 19, 2026 · Integrated-source deduplication and unfinished work
 
 Review from successful baseline `6b8e1e42` through `a06d83ba` initially enumerated **57 branches, 22 worktrees (including detached), and 5 with uncommitted status**. Fifteen heads are outside main ancestry; no PRs were open. Branch counts are not missing-feature counts. Other development was not committed, pushed, merged or cleaned.
