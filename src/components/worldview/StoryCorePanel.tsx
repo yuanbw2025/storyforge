@@ -40,8 +40,8 @@ const FIELD_PRESENTATION: Record<StoryCoreField, Pick<FieldDef, 'emoji' | 'descr
   logline: { emoji: '📜', description: '用一句话讲清楚你的故事是什么。', dimension: '一句话故事（logline）' },
   concept: { emoji: '💡', description: "独特设定或反差点：'如果……会怎么样？'", dimension: '故事概念（high concept）' },
   theme: { emoji: '🎯', description: '想探讨的人性/价值观主题。', dimension: '故事主题' },
-  centralConflict: { emoji: '⚔️', description: '主角面对的最大矛盾（外在 + 内在）。', dimension: '核心冲突' },
-  plotPattern: { emoji: '📊', description: '线性 / 莲花地图 / 多线并行 / 蒙太奇 等。', dimension: '故事模式' },
+  centralConflict: { emoji: '⚔️', description: '人物想获得或守住什么、阻力来自哪里，以及怎样主动应对。', dimension: '核心冲突' },
+  plotPattern: { emoji: '📊', description: '事件怎样反复而变化、成果怎样积累，以及视角与信息如何呈现。', dimension: '故事模式' },
   mainPlot: { emoji: '🛤', description: '核心情节意图 — 主角的目标与阻碍；确认后可投影为多条可执行故事线。', dimension: '故事主线意图' },
   subPlots: { emoji: '🎼', description: '副线意图（情感线 / 配角线 / 暗线 / 悬念线），可投影为多条故事线。', dimension: '故事复线意图' },
 }

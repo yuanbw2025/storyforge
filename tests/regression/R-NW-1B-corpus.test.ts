@@ -46,6 +46,7 @@ describe('NW-1B · unchanged corpus with explicit fixture author annotations', (
       'src/lib/agent/run/ledger-portability.ts', 'src/lib/import/document-parse-backup-privacy.ts',
       'src/lib/import/document-parse-binding.ts',
       'src/lib/context-gateway/canon-provider.ts', 'src/lib/context-gateway/provider-cache.ts',
+      'src/lib/reference-analysis/content-skill.ts',
       'src/lib/narrative-domain/semantic-export-references.ts',
       'src/lib/world-engine/publication-authority-rows.ts',
       'src/lib/world-engine/publication-origin-contract.ts',
@@ -63,6 +64,6 @@ describe('NW-1B · unchanged corpus with explicit fixture author annotations', (
       modelCalls: 0, independentHumanReviews: 0, queryProviderChanged: false,
       cases: observations, inputHashes: Object.fromEntries(paths.sort().map(file => [file, createHash('sha256').update(fs.readFileSync(file)).digest('hex')])) }
     if (process.env.NW_DOMAIN_REPORT) fs.writeFileSync(process.env.NW_DOMAIN_REPORT, JSON.stringify(receipt, null, 2) + '\n')
-    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/domain-projection-20261120-client-release409-v1.json', 'utf8')))
+    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/domain-projection-20261120-story-core-content-input-v9.json', 'utf8')))
   })
 })

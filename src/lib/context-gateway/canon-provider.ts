@@ -71,7 +71,6 @@ const PROVIDER_SOURCE_KEY = 'ragSelection'
 const PROVIDER_VERSION = 'canon-resource-provider-v12'
 const NORMALIZATION_VERSION = 'canon-resource-normalization-v1'
 const MAX_PAGE_SIZE = 100
-const MAX_READ_TOKENS = 100_000
 const SYSTEM_FIELDS = new Set([
   'id', 'projectId', 'worldId', 'workId', 'worldGroupId', 'homeWorldGroupId',
   'createdAt', 'updatedAt', 'ragDocumentId', 'ragPolicy', 'ragPolicyRevision',
@@ -1458,8 +1457,8 @@ async function findProjectionFromDescriptor(input: {
 }
 
 function assertReadBudget(maxTokens: number): void {
-  if (!Number.isSafeInteger(maxTokens) || maxTokens < 1 || maxTokens > MAX_READ_TOKENS) {
-    fail('read-budget', `maxTokens 必须在 1..${MAX_READ_TOKENS}`)
+  if (!Number.isSafeInteger(maxTokens) || maxTokens < 1) {
+    fail('read-budget', 'maxTokens 必须是正安全整数')
   }
 }
 

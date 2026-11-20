@@ -430,7 +430,7 @@ function parseAgentRunContractV1Base(
     permissionsRecord.contextSourceKeys,
     'contract.permissions.contextSourceKeys',
   ).map((item, index) => readString(item, `contract.permissions.contextSourceKeys[${index}]`, { max: 120 }))
-  const toolOnly = readRecord(record.budget, 'contract.budget').maxModelCalls === 0
+  const toolOnly = readRecord(record.budget, 'contract.budget').maxModelCalls === 0 && readRecord(record.budget, 'contract.budget').serviceCapacityOnly !== true
   if (contextSourceKeys.length === 0 && !toolOnly) {
     failSchema('invalid_permission', 'contract.permissions.contextSourceKeys', '不得为空')
   }
@@ -609,10 +609,11 @@ function parseAgentRunContractV1Base(
 
   const budgetRecord = readRecord(record.budget, 'contract.budget')
   const requiredBudgetKeys = ['maxModelCalls', 'maxToolCalls', 'maxInputTokens', 'maxOutputTokens', 'maxAttemptsPerStep'] as const
-  const budgetKeys = [...requiredBudgetKeys, 'maxReplans', 'maxToolResultTokens', 'maxProtocolErrors', 'capacityPolicy'] as const
+  const budgetKeys = [...requiredBudgetKeys, 'maxReplans', 'maxToolResultTokens', 'maxProtocolErrors', 'capacityPolicy', 'serviceCapacityOnly'] as const
   assertExactKeys(budgetRecord, budgetKeys, requiredBudgetKeys, 'contract.budget')
   const serviceManaged = budgetRecord.capacityPolicy === 'service'
   if (budgetRecord.capacityPolicy !== undefined && (!serviceManaged
+    || budgetRecord.serviceCapacityOnly !== undefined
     || contextSourceKeys.length !== 1
     || !['referenceDerivedBaseline', 'referenceAnalysisPrivateChunk'].includes(contextSourceKeys[0])
     || !(bindingCarriedBySkillSnapshot || executionBindings?.every(binding => ['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk'].includes(binding.skillId))))) {
@@ -636,6 +637,8 @@ function parseAgentRunContractV1Base(
     return readInteger(value, path, { min, ...(toolOnly && zeroForToolOnly ? { max: 0 } : {}) })
   }
 
+
+  if (budgetRecord.serviceCapacityOnly !== undefined && budgetRecord.serviceCapacityOnly !== true) failSchema('invalid_budget', 'contract.budget.serviceCapacityOnly', '只能为 true')
 
   const acceptance = readArray(record.acceptance, 'contract.acceptance')
     .map((item, index) => readAcceptance(item, `contract.acceptance[${index}]`))
@@ -701,11 +704,12 @@ function parseAgentRunContractV1Base(
     ...(candidateSemanticReviewPolicy ? { candidateSemanticReviewPolicy } : {}),
     ...(automationAuthorization ? { automationAuthorization } : {}),
     budget: {
+      ...(budgetRecord.serviceCapacityOnly === true ? { serviceCapacityOnly: true as const } : {}),
       ...(serviceManaged ? { capacityPolicy: 'service' as const } : {}),
       maxModelCalls: readCeiling(budgetRecord.maxModelCalls, 'contract.budget.maxModelCalls', 0, false),
       maxToolCalls: readInteger(budgetRecord.maxToolCalls, 'contract.budget.maxToolCalls', { min: toolOnly ? 1 : 0 }),
-      maxInputTokens: readCeiling(budgetRecord.maxInputTokens, 'contract.budget.maxInputTokens', toolOnly ? 0 : 1),
-      maxOutputTokens: readCeiling(budgetRecord.maxOutputTokens, 'contract.budget.maxOutputTokens', toolOnly ? 0 : 1),
+      maxInputTokens: readCeiling(budgetRecord.maxInputTokens, 'contract.budget.maxInputTokens', toolOnly || budgetRecord.serviceCapacityOnly === true ? 0 : 1),
+      maxOutputTokens: readCeiling(budgetRecord.maxOutputTokens, 'contract.budget.maxOutputTokens', toolOnly || budgetRecord.serviceCapacityOnly === true ? 0 : 1),
       maxAttemptsPerStep: readInteger(budgetRecord.maxAttemptsPerStep, 'contract.budget.maxAttemptsPerStep', { min: 1 }),
       ...(budgetRecord.maxReplans === undefined ? {} : {
         maxReplans: readInteger(budgetRecord.maxReplans, 'contract.budget.maxReplans', { min: 0 }),
@@ -846,7 +850,7 @@ function parseSkillBoundContract(
   }
   if (executionBindings.some(binding => binding.maxOutputTokens === null
     ? base.budget.capacityPolicy !== 'service'
-    : base.budget.maxOutputTokens !== null && binding.maxOutputTokens > base.budget.maxOutputTokens)) {
+    : !base.budget.serviceCapacityOnly && base.budget.maxOutputTokens !== null && binding.maxOutputTokens > base.budget.maxOutputTokens)) {
     failSchema(
       'invalid_execution_binding',
       'contract.budget.maxOutputTokens',

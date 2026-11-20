@@ -252,6 +252,8 @@ export interface AgentRunContractV1 {
     /** Explicit reference task policy: null token/call ceilings are service-managed, never numeric sentinels. */
     capacityPolicy?: 'service'
     maxModelCalls: number | null
+    /** Existing story-core service policy; its original numeric contract remains supported. */
+    serviceCapacityOnly?: true
     maxToolCalls: number
     maxInputTokens: number | null
     maxOutputTokens: number | null

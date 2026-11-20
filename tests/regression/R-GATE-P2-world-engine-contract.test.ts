@@ -18,7 +18,7 @@ describe('GATE-P2 · world engine domain contracts', () => {
     ({ skillId, agentId, tables }) => {
       const skill = getAgentSkillV1(skillId, agentId)
       expect(skill.contextGateway?.rollout).toBe('required')
-      expect(skill.contextGateway?.providerSourceKeys).toEqual(['ragSelection'])
+      expect(skill.contextGateway?.providerSourceKeys).toEqual(skillId === 'world-origin.story-core' ? ['ragSelection', 'workAuthoringIntent'] : ['ragSelection'])
       expect(new Set(skill.writeTargets.map(target => target.table))).toEqual(new Set(tables))
       const required = new Set(skill.contextGateway?.requiredWriteTargets ?? [])
       expect(required.size).toBeGreaterThan(0)

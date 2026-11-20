@@ -415,7 +415,10 @@ export async function executeContextGatewayV1(
   input = { ...input, ...(modelBudget ? { budgetTokens: Math.min(input.budgetTokens ?? Infinity, modelBudget.inputBudget) } : {}) }
   delete input.modelConfig
   const gatewayPolicy = assertAgentSkillContextGatewayPolicyV1(input.skill)
-  const accessPolicy = narrowedAccessPolicy(input)
+  const declaredAccessPolicy = narrowedAccessPolicy(input)
+  const accessPolicy = declaredAccessPolicy.retrievalBudgetMode === 'model-capacity' && modelBudget
+    ? { ...declaredAccessPolicy, maxRetrievedTokens: modelBudget.inputBudget }
+    : declaredAccessPolicy
   const indexScope = frozenScope(input)
   if (accessPolicy.allowedResourceKinds.includes('chapter') && indexScope.worldReleaseId == null && indexScope.productRuntimeSessionId == null) {
     // Repair derived caches before opening the immutable catalog read session.

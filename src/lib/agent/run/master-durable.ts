@@ -1,3 +1,5 @@
+import { usePromptStore } from '../../../stores/prompt'
+import { freezePromptExecutionOptionsV1 } from '../prompt-execution'
 import { INSPIRATION_PREPARATION_MODULES, inspirationPreparationModeFromRequest } from '../../inspiration/preparation'
 import Dexie from 'dexie'
 import type {
@@ -528,10 +530,11 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       fail(`主 Agent 计划包含未知领域 ${String(item.agentId)}`)
     }
     const agentId = item.agentId as DomainAgentId
+    const instructionLimit = item.skillId === 'world-origin.story-core' ? Infinity : MAX_TASK_INSTRUCTION_CHARS
     const instruction = readString(
       item.instruction,
       `主 Agent 计划任务 ${id}.instruction`,
-      MAX_TASK_INSTRUCTION_CHARS,
+      instructionLimit,
     )
     if (!Array.isArray(item.dependsOn) || item.dependsOn.some(dep => typeof dep !== 'string')) {
       fail(`主 Agent 计划任务 ${id}.dependsOn 无效`)
@@ -542,8 +545,8 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       if (!isRecord(item.requestContext)) fail('任务 requestContext 必须是对象')
       assertExactKeys(item.requestContext, ['originalRequest', 'plannerInstruction'], '任务 requestContext')
       requestContext = {
-        originalRequest: readString(item.requestContext.originalRequest, '任务原始要求', MAX_TASK_INSTRUCTION_CHARS),
-        plannerInstruction: readString(item.requestContext.plannerInstruction, '任务规划解读', MAX_TASK_INSTRUCTION_CHARS),
+        originalRequest: readString(item.requestContext.originalRequest, '任务原始要求', instructionLimit),
+        plannerInstruction: readString(item.requestContext.plannerInstruction, '任务规划解读', instructionLimit),
       }
     }
     if (dependsOn.includes(id)) fail(`主 Agent 计划任务 ${id} 不得依赖自身`)
@@ -836,6 +839,7 @@ export function buildMasterAgentRunContractV1(input: {
       },
     } : {}),
     budget: {
+      ...(policy.profile === 'service-capacity' ? { serviceCapacityOnly: true as const } : {}),
       maxModelCalls: policy.maxCalls,
       maxToolCalls: 0,
       maxInputTokens: policy.maxTokens,
@@ -875,8 +879,8 @@ function budgetEvidence(value: unknown, label: string): AgentTeamBudgetEvidence 
     evidence.maxTokens !== policy.maxTokens
     || evidence.maxCalls !== policy.maxCalls
     || evidence.maxCanonRetries !== policy.maxCanonRetries
-    || evidence.usedTokens > policy.maxTokens
-    || evidence.calls > policy.maxCalls
+    || (profile !== 'service-capacity' && evidence.usedTokens > policy.maxTokens)
+    || (profile !== 'service-capacity' && evidence.calls > policy.maxCalls)
     || evidence.canonRetries > policy.maxCanonRetries
   ) fail(`${label} 与团队预算策略不一致`)
   return evidence
@@ -1671,7 +1675,7 @@ async function readPersistedCandidates(input: {
     if (payload.contextSources.some(source => !allowedSources.has(source))) {
       fail(`候选事件 ${event.id} 使用了契约未授权的上下文源`)
     }
-    if (event.content.length > MAX_CANDIDATE_CHARS) fail(`候选事件 ${event.id} 超出持久化上限`)
+    if (payload.skillId !== 'world-origin.story-core' && event.content.length > MAX_CANDIDATE_CHARS) fail(`候选事件 ${event.id} 超出持久化上限`)
     const expectedHash = await computeCandidateHash(payload, event.content)
     if (expectedHash !== payload.candidateHash) fail(`候选事件 ${event.id} candidateHash 校验失败`)
     const semanticRequired = input.snapshot.contract.candidateSemanticReviewPolicy
@@ -1884,7 +1888,14 @@ export async function runDurableMasterAgentPlanV1(
     if (!input.plan) fail('新建主 Agent durable run 必须提供计划')
     if (input.conversationId == null) fail('新建主 Agent durable run 必须绑定候选对话')
     plan = parseMasterAgentPlanV1(input.plan)
-    budget = input.budget ?? new AgentTeamBudgetTracker('balanced')
+    if (plan.tasks.some(task => resolveAgentSkillV1(task.agentId, task.skillId).executionMode === 'story-core' && !task.promptExecution) && !usePromptStore.getState().loaded) await usePromptStore.getState().init()
+    // Freeze defaults for newly started story-core tasks before creating the run.
+    // Recovery keeps the historical plan and its original prompt evidence.
+    plan = { ...plan, tasks: await Promise.all(plan.tasks.map(async task =>
+      resolveAgentSkillV1(task.agentId, task.skillId).executionMode === 'story-core' && !task.promptExecution
+        ? { ...task, promptExecution: await freezePromptExecutionOptionsV1({ request: { version: 1, moduleKey: 'story.generate' }, template: usePromptStore.getState().getActive('story.generate') }) }
+        : task)) }
+    budget = plan.tasks.some(task => resolveAgentSkillV1(task.agentId, task.skillId).executionMode === 'story-core') ? new AgentTeamBudgetTracker('service-capacity') : input.budget ?? new AgentTeamBudgetTracker('balanced')
     const evidence = budget.snapshot()
     const contract = buildMasterAgentRunContractV1({
       scope: input.scope,
@@ -2441,7 +2452,7 @@ export async function runDurableMasterAgentPlanV1(
         candidateHash: undefined,
       }
       const draft = candidate.draft
-      if (!draft || draft.length > MAX_CANDIDATE_CHARS) fail(`主 Agent 任务 ${task.id} 候选长度无效`)
+      if (!draft || (payload.skillId !== 'world-origin.story-core' && draft.length > MAX_CANDIDATE_CHARS)) fail(`主 Agent 任务 ${task.id} 候选长度无效`)
       const outputHash = await hashCanonicalValue(candidate.runtimeOutput)
       const gatewayRequired = isMasterCandidateContextGatewayRequiredV1(payload)
       let contextManifestHash: string | null = null

@@ -47,6 +47,7 @@ const CONTEXT_PROFILE_META: Record<AgentContextProfile, { label: string; descrip
 }
 
 const TEAM_BUDGET_META: Record<AgentTeamBudgetProfile, { label: string; description: string }> = {
+  'service-capacity': { label: '按服务容量', description: '不设应用层总 token 和调用额度，单次请求遵从实际服务容量' },
   economy: { label: '节省', description: '每轮最多约 80K tokens' },
   balanced: { label: '均衡（推荐）', description: '每轮最多约 160K tokens' },
   expanded: { label: '充分', description: '每轮最多约 240K tokens' },

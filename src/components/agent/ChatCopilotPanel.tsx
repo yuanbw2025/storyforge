@@ -569,10 +569,10 @@ export default function ChatCopilotPanel({
                 {candidate.payload.teamBudgetEvidence && (
                   <p className="mt-2 rounded border border-border/60 bg-bg-surface px-2 py-1.5 text-[10px] text-text-muted">
                     本轮团队预算约 {candidate.payload.teamBudgetEvidence.usedTokens.toLocaleString()} /{' '}
-                    {candidate.payload.teamBudgetEvidence.maxTokens.toLocaleString()} tokens
+                    {candidate.payload.teamBudgetEvidence.profile === 'service-capacity' ? '按服务容量' : candidate.payload.teamBudgetEvidence.maxTokens.toLocaleString()} tokens
                     {' · '}
                     {candidate.payload.teamBudgetEvidence.calls}/
-                    {candidate.payload.teamBudgetEvidence.maxCalls} 次调用
+                    {candidate.payload.teamBudgetEvidence.profile === 'service-capacity' ? '无应用额度上限' : candidate.payload.teamBudgetEvidence.maxCalls} 次调用
                     {' · '}Canon 打回 {candidate.payload.teamBudgetEvidence.canonRetries}/
                     {candidate.payload.teamBudgetEvidence.maxCanonRetries}
                   </p>
