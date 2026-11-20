@@ -1,3 +1,4 @@
+import FeedbackInbox from './components/shared/FeedbackInbox'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
@@ -91,7 +92,7 @@ async function bootstrap() {
         <ErrorBoundary>
           <BrowserRouter basename="/storyforge/">
             <ToastProvider>
-              {IS_SHOWCASE ? <ShowcaseShell><App /></ShowcaseShell> : <><App /><ClientUpdatePanel notice /></>}
+              {IS_SHOWCASE ? <ShowcaseShell><App /></ShowcaseShell> : <><App /><ClientUpdatePanel notice /><FeedbackInbox monitor /></>}
             </ToastProvider>
           </BrowserRouter>
         </ErrorBoundary>
