@@ -119,10 +119,10 @@ function assertFiniteNumber(
   return value
 }
 
-function normalizeNullableOverride(value: unknown, label: string): string | null | undefined {
+function normalizeNullableOverride(value: unknown, label: string, max = MAX_PROMPT_OVERRIDE_CHARS_V1): string | null | undefined {
   if (value === undefined) return undefined
   if (value === null) return null
-  const result = assertString(value, label, MAX_PROMPT_OVERRIDE_CHARS_V1, true)
+  const result = assertString(value, label, max, true)
   return result.trim() ? result : null
 }
 
@@ -260,13 +260,13 @@ function snapshotTemplate(
   const systemPrompt = assertString(
     template.systemPrompt,
     'template.systemPrompt',
-    MAX_PROMPT_TEMPLATE_CHARS_V1,
+    expectedModuleKey === 'story.generate' ? Infinity : MAX_PROMPT_TEMPLATE_CHARS_V1,
     true,
   )
   const userPromptTemplate = assertString(
     template.userPromptTemplate,
     'template.userPromptTemplate',
-    MAX_PROMPT_TEMPLATE_CHARS_V1,
+    expectedModuleKey === 'story.generate' ? Infinity : MAX_PROMPT_TEMPLATE_CHARS_V1,
     true,
   )
   if (!systemPrompt.trim() && !userPromptTemplate.trim()) fail('模板 system/user 不能同时为空')
@@ -313,8 +313,8 @@ function snapshotTemplate(
 export function createPromptExecutionRequestV1(input: Omit<PromptExecutionRequestV1, 'version'>): PromptExecutionRequestV1 {
   const moduleKey = normalizeModuleKey(input.moduleKey)
   const parameterValues = normalizeParameterValues(input.parameterValues)
-  const systemOverride = normalizeNullableOverride(input.systemOverride, 'systemOverride')
-  const userOverride = normalizeNullableOverride(input.userOverride, 'userOverride')
+  const systemOverride = normalizeNullableOverride(input.systemOverride, 'systemOverride', moduleKey === 'story.generate' ? Infinity : MAX_PROMPT_OVERRIDE_CHARS_V1)
+  const userOverride = normalizeNullableOverride(input.userOverride, 'userOverride', moduleKey === 'story.generate' ? Infinity : MAX_PROMPT_OVERRIDE_CHARS_V1)
   const temperature = assertFiniteNumber(input.temperature, 'temperature', 0, 2)
   const maxTokens = assertFiniteNumber(input.maxTokens, 'maxTokens', 1, 2_000_000)
   return {
@@ -422,9 +422,9 @@ export async function renderFrozenPromptExecutionV1(input: {
   const options = parsePromptExecutionOptionsV1(input.options, input.options.moduleKey)
   await verifyPromptExecutionOptionsV1(options)
   const hardSystem = assertString(input.hardSystem, 'Harness hardSystem', 120_000)
-  const authorInstruction = assertPromptAuthorInstructionV1(input.authorInstruction)
+  const authorInstruction = options.moduleKey === 'story.generate' ? assertString(input.authorInstruction, '作者要求', Infinity).trim() : assertPromptAuthorInstructionV1(input.authorInstruction)
   const additional = (input.additionalUserMessages ?? []).map((message, index) => (
-    assertString(message, `additionalUserMessages[${index}]`, 500_000)
+    assertString(message, `additionalUserMessages[${index}]`, options.moduleKey === 'story.generate' ? Infinity : 500_000)
   ))
   const rendered = renderPrompt(options.template as PromptTemplate, input.context, {
     parameterValues: options.parameterValues,

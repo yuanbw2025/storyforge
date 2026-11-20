@@ -232,15 +232,22 @@ function providerSnapshot(sources: readonly ContextSource[]) {
   return providers
 }
 
+/** Retrieval capacity varies per request; permission identity remains stable.
+ * Snapshot hashes still bind the exact numeric allocation separately. */
+export function contextAccessPolicyHashV1(policy: ContextAccessPolicyV1): Promise<string> {
+  return hashCanonicalValue(policy.retrievalBudgetMode === 'model-capacity' ? { ...policy, maxRetrievedTokens: 0 } : policy)
+}
+
 export function normalizeContextAccessPolicyV1(
   policy: ContextAccessPolicyV1,
   sources: readonly ContextSource[],
 ): ContextAccessPolicyV1 {
   assertExactKeys(policy, [
     'version', 'policyId', 'mandatorySourceKeys', 'allowedSourceKeys', 'allowedResourceKinds',
-    'allowedDepths', 'selectorPolicyId', 'maxReadCalls', 'maxRetrievedTokens',
+    'allowedDepths', 'selectorPolicyId', 'maxReadCalls', 'maxRetrievedTokens', 'retrievalBudgetMode',
     'perKindMinimumTokens', 'allowOriginalRead', 'candidateAccess',
   ], 'ContextAccessPolicyV1')
+  if (policy.retrievalBudgetMode !== undefined && policy.retrievalBudgetMode !== 'model-capacity') fail('invalid-policy', 'retrievalBudgetMode 无效')
   if (policy.version !== 'context-access-policy-v1') fail('unsupported-policy', '只支持 ContextAccessPolicyV1')
   if (policy.allowOriginalRead !== true && policy.allowOriginalRead !== false) {
     fail('invalid-policy', 'allowOriginalRead 必须是 boolean')
@@ -443,7 +450,7 @@ export async function createContextGatewayContractSnapshotV1(input: {
 }): Promise<ContextGatewayContractSnapshotV1> {
   requireHash(input.toolSchemaHash, 'toolSchemaHash')
   const policy = normalizeContextAccessPolicyV1(input.policy, input.sources)
-  const policyHash = await hashCanonicalValue(policy)
+  const policyHash = await contextAccessPolicyHashV1(policy)
   const providers = providerSnapshot(input.sources)
   const providerSetHash = await hashCanonicalValue(providers)
   const gatewayBody = {
@@ -477,7 +484,7 @@ export async function parseContextGatewayContractSnapshotV1(
   if (!snapshot.policy || !Array.isArray(snapshot.providers) || !snapshot.gateway) fail('invalid-snapshot', 'Gateway snapshot 字段缺失')
   assertExactKeys(snapshot.policy, [
     'version', 'policyId', 'mandatorySourceKeys', 'allowedSourceKeys', 'allowedResourceKinds',
-    'allowedDepths', 'selectorPolicyId', 'maxReadCalls', 'maxRetrievedTokens',
+    'allowedDepths', 'selectorPolicyId', 'maxReadCalls', 'maxRetrievedTokens', 'retrievalBudgetMode',
     'perKindMinimumTokens', 'allowOriginalRead', 'candidateAccess',
   ], 'Gateway policy')
   if (snapshot.policy.version !== 'context-access-policy-v1'
@@ -513,7 +520,7 @@ export async function parseContextGatewayContractSnapshotV1(
     'providerSetHash', 'sufficiencyObligationsVersion', 'toolSchemaHash',
     'normalizationVersion', 'versionHash',
   ], 'Gateway version')
-  const policyHash = await hashCanonicalValue(snapshot.policy)
+  const policyHash = await contextAccessPolicyHashV1(snapshot.policy)
   if (policyHash !== snapshot.policyHash) fail('policy-hash-mismatch', 'Gateway policy hash 不匹配')
   const providers = [...snapshot.providers].sort((left, right) => left.sourceKey.localeCompare(right.sourceKey))
   const providerSetHash = await hashCanonicalValue(providers)

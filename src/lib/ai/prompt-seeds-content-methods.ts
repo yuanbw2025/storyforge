@@ -1,3 +1,4 @@
+import { STORY_CORE_COMMON_METHOD, STORY_CORE_CONTENT_METHODS, STORY_CORE_MODE_METHODS, STORY_CORE_GENRE_METHOD } from '../creation/story-core-content-skill'
 import type { PromptSeed } from './prompt-seed-type'
 import { FIELD_METHODS, worldviewFieldContentGuidanceV1 } from '../creation/worldview-content-skill'
 import { FULL_INSPIRATION_CONTENT_GUIDANCE, WORLD_SUGGEST_CONTENT_GUIDANCE, WORLD_EXPAND_CONTENT_GUIDANCE, HISTORY_CONTENT_GUIDANCE, CODEX_CONTENT_METHODS, codexContentGuidance } from '../creation/world-entry-content-skill'
@@ -6,6 +7,15 @@ import { STYLE_LEARNING_CONTENT_GUIDANCE, STYLE_CALIBRATION_CONTENT_GUIDANCE, CR
 /** Build editable seed content once. Runtime only renders the author's active
  * template; content methods are never appended behind that template. */
 export function withPreparationContentMethods(seed: PromptSeed): PromptSeed {
+  if (seed.moduleKey === 'story.generate') {
+    const sections = { ...Object.fromEntries(Object.entries(STORY_CORE_CONTENT_METHODS).map(([key, value]) => [`field_${key}`, value])), ...Object.fromEntries(Object.entries(STORY_CORE_MODE_METHODS).map(([key, value]) => [`mode_${key}`, value])) }
+    return { ...seed,
+      description: '故事核心七字段内容方法第一版；按目标字段和新建、扩写、重写、润色自动选择，可编辑与克隆。',
+      systemPrompt: [STORY_CORE_COMMON_METHOD, ...Object.entries(sections).map(([key, value]) => `{{#if ${key}}}\n${value}\n{{/if}}`), STORY_CORE_GENRE_METHOD, '{{#if usesTone}}作者所选基调：{{tone}}{{/if}}', '{{#if usesDetailLevel}}作者所选详尽度：{{detailLevel}}{{/if}}'].join('\n\n'),
+      userPromptTemplate: `作品：{{projectName}}（{{genres}}）\n目标字段：{{dimension}}\n操作：{{generationMode}}\n【当前字段原文】\n{{currentValue}}\n【登记读取的作品资料（含作者意图、人物与世界等）】\n{{worldContext}}\n{{#if userHint}}作者补充：{{userHint}}{{/if}}`,
+      variables: [...new Set([...seed.variables, 'currentValue', 'generationMode', ...Object.keys(sections)])],
+    }
+  }
   const simple: Partial<Record<PromptSeed['moduleKey'], string>> = {
     'inspiration.reverse': FULL_INSPIRATION_CONTENT_GUIDANCE, 'inspiration.reverse.multiworld': FULL_INSPIRATION_CONTENT_GUIDANCE,
     'world-group.suggest': WORLD_SUGGEST_CONTENT_GUIDANCE, 'world-group.expand': WORLD_EXPAND_CONTENT_GUIDANCE,

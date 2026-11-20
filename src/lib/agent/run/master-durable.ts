@@ -1,3 +1,5 @@
+import { usePromptStore } from '../../../stores/prompt'
+import { freezePromptExecutionOptionsV1 } from '../prompt-execution'
 import { INSPIRATION_PREPARATION_MODULES, inspirationPreparationModeFromRequest } from '../../inspiration/preparation'
 import Dexie from 'dexie'
 import type {
@@ -836,6 +838,7 @@ export function buildMasterAgentRunContractV1(input: {
       },
     } : {}),
     budget: {
+      ...(policy.profile === 'service-capacity' ? { serviceCapacityOnly: true as const } : {}),
       maxModelCalls: policy.maxCalls,
       maxToolCalls: 0,
       maxInputTokens: policy.maxTokens,
@@ -875,8 +878,8 @@ function budgetEvidence(value: unknown, label: string): AgentTeamBudgetEvidence 
     evidence.maxTokens !== policy.maxTokens
     || evidence.maxCalls !== policy.maxCalls
     || evidence.maxCanonRetries !== policy.maxCanonRetries
-    || evidence.usedTokens > policy.maxTokens
-    || evidence.calls > policy.maxCalls
+    || (profile !== 'service-capacity' && evidence.usedTokens > policy.maxTokens)
+    || (profile !== 'service-capacity' && evidence.calls > policy.maxCalls)
     || evidence.canonRetries > policy.maxCanonRetries
   ) fail(`${label} 与团队预算策略不一致`)
   return evidence
@@ -1884,7 +1887,14 @@ export async function runDurableMasterAgentPlanV1(
     if (!input.plan) fail('新建主 Agent durable run 必须提供计划')
     if (input.conversationId == null) fail('新建主 Agent durable run 必须绑定候选对话')
     plan = parseMasterAgentPlanV1(input.plan)
-    budget = input.budget ?? new AgentTeamBudgetTracker('balanced')
+    if (plan.tasks.some(task => resolveAgentSkillV1(task.agentId, task.skillId).executionMode === 'story-core' && !task.promptExecution) && !usePromptStore.getState().loaded) await usePromptStore.getState().init()
+    // Freeze defaults for newly started story-core tasks before creating the run.
+    // Recovery keeps the historical plan and its original prompt evidence.
+    plan = { ...plan, tasks: await Promise.all(plan.tasks.map(async task =>
+      resolveAgentSkillV1(task.agentId, task.skillId).executionMode === 'story-core' && !task.promptExecution
+        ? { ...task, promptExecution: await freezePromptExecutionOptionsV1({ request: { version: 1, moduleKey: 'story.generate' }, template: usePromptStore.getState().getActive('story.generate') }) }
+        : task)) }
+    budget = plan.tasks.some(task => resolveAgentSkillV1(task.agentId, task.skillId).executionMode === 'story-core') ? new AgentTeamBudgetTracker('service-capacity') : input.budget ?? new AgentTeamBudgetTracker('balanced')
     const evidence = budget.snapshot()
     const contract = buildMasterAgentRunContractV1({
       scope: input.scope,

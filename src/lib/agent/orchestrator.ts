@@ -1110,7 +1110,7 @@ async function executeSequentialMasterAgentPlan(
   const outputs = new Map<string, string>()
   const runtimeAssumptions = new Map<string, CreativeAssumptionV1[]>()
   const contextProfiles = useAIConfigStore.getState().agentContextProfiles
-  const budget = input.budget ?? new AgentTeamBudgetTracker(
+  const budget = input.budget?.policy.profile === 'service-capacity' ? input.budget : input.plan.tasks.some(task => resolveAgentSkillV1(task.agentId, task.skillId).executionMode === 'story-core') ? new AgentTeamBudgetTracker('service-capacity') : input.budget ?? new AgentTeamBudgetTracker(
     useAIConfigStore.getState().agentTeamBudgetProfile,
   )
   for (const [taskId, output] of Object.entries(input.completedTaskOutputs ?? {})) {
@@ -1266,7 +1266,7 @@ async function executeSequentialMasterAgentPlan(
             prepared: prepared.prepared,
             budget,
             callLabel: '故事核心 Skill',
-            maxOutputTokens: skill.maxOutputTokens,
+            maxOutputTokens: prepared.input.generationOverrides!.maxTokens!,
           })
           const draft = JSON.stringify(result.output, null, 2)
           candidates.push({
@@ -1992,7 +1992,7 @@ function compareCandidateBudgetEvidence(
 async function executeFanOutMasterAgentPlan(
   input: ExecuteMasterAgentPlanInput,
 ): Promise<ExecutedMasterCandidate[]> {
-  const budget = input.budget ?? new AgentTeamBudgetTracker(
+  const budget = input.budget?.policy.profile === 'service-capacity' ? input.budget : input.plan.tasks.some(task => resolveAgentSkillV1(task.agentId, task.skillId).executionMode === 'story-core') ? new AgentTeamBudgetTracker('service-capacity') : input.budget ?? new AgentTeamBudgetTracker(
     useAIConfigStore.getState().agentTeamBudgetProfile,
   )
   const outputs = new Map<string, string>()

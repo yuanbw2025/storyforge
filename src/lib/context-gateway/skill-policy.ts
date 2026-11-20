@@ -73,6 +73,7 @@ export function createContextAccessPolicyFromSkillV1(
     allowedDepths: [...gateway.allowedDepths],
     selectorPolicyId: getContextSelectorPolicyV1(skill.contextTaskKind).selectorPolicyId,
     maxReadCalls: gateway.maxReadCalls,
+    ...(gateway.retrievalBudgetMode ? { retrievalBudgetMode: gateway.retrievalBudgetMode } : {}),
     maxRetrievedTokens: gateway.maxRetrievedTokens,
     allowOriginalRead: gateway.allowOriginalRead,
     candidateAccess: 'forbidden',

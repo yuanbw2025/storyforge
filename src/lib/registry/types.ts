@@ -1010,6 +1010,7 @@ export interface ContextAccessPolicyV1 {
   allowedDepths: ContextResourceDepthV1[]
   selectorPolicyId: string
   maxReadCalls: number
+  retrievalBudgetMode?: 'model-capacity'
   maxRetrievedTokens: number
   perKindMinimumTokens?: Partial<Record<ContextResourceKind, number>>
   allowOriginalRead: boolean

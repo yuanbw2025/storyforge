@@ -227,6 +227,7 @@ export interface AgentSkillContextGatewayPolicyV1 {
   allowedResourceKinds: readonly ContextResourceKind[]
   allowedDepths: readonly ContextResourceDepthV1[]
   maxReadCalls: number
+  retrievalBudgetMode?: 'model-capacity'
   maxRetrievedTokens: number
   maxPlanningSteps: number
   maxPlanningModelTokens: number
@@ -347,6 +348,7 @@ const SHORT_NOVEL_DESIGN_COMPRESSION_POLICY = compressionPolicy(SHORT_NOVEL_DESI
 const SHORT_NOVEL_MANUSCRIPT_COMPRESSION_POLICY = compressionPolicy(SHORT_NOVEL_MANUSCRIPT_CONTEXT_SOURCE_KEYS)
 
 const STORY_CORE_CONTEXT_SOURCE_KEYS = [
+  'workAuthoringIntent',
   'workStatus',
   'canonAssertions',
   'worldview',
@@ -1713,7 +1715,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '故事核心单字段生成',
     owner: 'world-foundation-agent',
-    promptVersion: 'story-core-copilot-v1',
+    promptVersion: 'story-core-copilot-v2',
     executionMode: 'story-core',
     contextTaskKind: 'agent-world-origin',
     readToolNames: [],
@@ -1725,7 +1727,7 @@ export const AGENT_SKILLS = [
       version: 1,
       rollout: 'required',
       requiredWriteTargets: STORY_CORE_GENERATABLE_FIELD_SPECS.map(spec => `storyCores.${spec.field}`),
-      providerSourceKeys: ['ragSelection'],
+      providerSourceKeys: ['ragSelection', 'workAuthoringIntent'],
       allowedResourceKinds: [
         'world', 'worldview-field', 'story-core-field', 'character',
         'character-relation', 'story-arc', 'storyline-progress', 'outline-node',
@@ -1734,6 +1736,7 @@ export const AGENT_SKILLS = [
       ],
       allowedDepths: ['index', 'summary', 'focused', 'full', 'original'],
       maxReadCalls: 4,
+      retrievalBudgetMode: 'model-capacity',
       maxRetrievedTokens: 24_000,
       maxPlanningSteps: 5,
       maxPlanningModelTokens: 24_000,
