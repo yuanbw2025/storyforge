@@ -1,3 +1,4 @@
+import { REFERENCE_PROMPT_SEEDS } from './prompt-seeds-reference'
 import { withPreparationContentMethods } from './prompt-seeds-content-methods'
 import { INSPIRATION_PREPARATION_PROMPT_SEEDS } from './prompt-seeds-preparation'
 import { CORE_PROMPT_SEEDS } from './prompt-seeds-core'
@@ -19,4 +20,5 @@ export const SYSTEM_PROMPT_SEEDS: PromptSeed[] = [
   ...TOOL_PROMPT_SEEDS,
   ...INSPIRATION_PREPARATION_PROMPT_SEEDS,
   ...GENRE_PACK_SEEDS.map(withPreparationContentMethods),
+  ...REFERENCE_PROMPT_SEEDS,
 ]

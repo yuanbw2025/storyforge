@@ -14,6 +14,10 @@ import { useDialog } from '../../shared/Dialog'
 import { useToast } from '../../shared/Toast'
 
 const ALL_MODULE_KEYS: { value: PromptModuleKey; label: string }[] = [
+  { value: 'reference.analyze', label: '拆书 · 证据细读' },
+  { value: 'reference.summary', label: '拆书 · 已读范围综合' },
+  { value: 'reference.characters', label: '拆书 · 人物归并' },
+  { value: 'reference.application', label: '拆书 · 原创运用' },
   { value: 'inspiration.reverse', label: '灵感 · 单世界完整反推' },
   { value: 'inspiration.reverse.multiworld', label: '灵感 · 多世界完整反推' },
   ...INSPIRATION_PREPARATION_MODES.map(mode => ({ value: INSPIRATION_PREPARATION_MODULES[mode], label: `灵感准备 · ${INSPIRATION_PREPARATION_LABELS[mode]}` })),

@@ -1,3 +1,4 @@
+import { usePromptStore } from '../../src/stores/prompt'
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
@@ -99,7 +100,7 @@ function characterResult(tag = '阿澄') {
 
 describe.sequential('R-HARNESS74 · 参考分析派生 durable 候选与双投影采纳', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
-  afterEach(() => { vi.restoreAllMocks(); db.close() })
+  afterEach(() => { vi.restoreAllMocks(); usePromptStore.setState({ templates: [], loaded: false }); db.close() })
 
   it('rejects an oversized complete baseline before dispatch instead of cutting its evidence', async () => {
     const fixture = await seed('预算保护')
@@ -228,6 +229,14 @@ describe.sequential('R-HARNESS74 · 参考分析派生 durable 候选与双投�
     }],
     ['参考标题', async (fixture: Awaited<ReturnType<typeof seed>>) => {
       await db.references.update(fixture.referenceId, { title: '作者更名后的参考作品' })
+    }],
+    ['激活模板', async () => {
+      await usePromptStore.getState().init()
+      const tpl = usePromptStore.getState().getActive('reference.summary')
+      const id = await usePromptStore.getState().cloneTemplate(tpl.id!, '改过的综合模板')
+      const cloned = usePromptStore.getState().templates.find(row => row.id === id)!
+      await usePromptStore.getState().saveTemplate({...cloned, systemPrompt: '新的作者分析指令'})
+      await usePromptStore.getState().setActive(id)
     }],
     ['版本结果字段', async (fixture: Awaited<ReturnType<typeof seed>>) => {
       await db.referenceAnalysisRuns.update(fixture.analysisRunId, { analysisSummary: '{"author":"new"}' })

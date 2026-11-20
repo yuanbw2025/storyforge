@@ -68,6 +68,10 @@ export const PROMPT_MODULE_KEYS = [
   // —— STORY-1 / CF-12 角色变更影响分析 ——
   'plot.character-revision',
   // —— Phase 26.4 灵感反推 ——
+  'reference.analyze',
+  'reference.summary',
+  'reference.characters',
+  'reference.application',
   'inspiration.reverse',
   'inspiration.reverse.multiworld',
   'inspiration.prepare.organize',
