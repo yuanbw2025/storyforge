@@ -49,6 +49,9 @@ afterEach(async () => {
 describe('R-CREL14 · 正式设置页社区反馈入口', () => {
   it('设置页直接挂载入口，并诚实展示实验边界、费用、回滚和隐私说明', async () => {
     const host = await mount(createElement(SettingsPage))
+    expect(host.querySelector('[data-testid="harness-eval-placeholder"]')).toBeNull()
+    const internal = await mount(createElement(SettingsPage, { showDeveloperTools: true }))
+    expect(internal.querySelector('[data-testid="harness-eval-placeholder"]')).not.toBeNull()
     expect(host.querySelector('[data-testid="creative-reliability-community"]')).not.toBeNull()
     expect(host.textContent).toContain('实验性社区观察期')
     expect(host.textContent).toContain('不代表已经证明“替作者完成 80%”')

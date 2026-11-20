@@ -19,6 +19,8 @@ const HarnessEvalPanel = import.meta.env.DEV
   : null
 
 interface Props {
+  /** Internal opt-in; ordinary settings stay free of development tools. */
+  showDeveloperTools?: boolean
   project?: Project
   onOpenDataManagement?: () => void
   textOpenWorldCreatorReturn?: TextOpenWorldSettingsReturnV1 | null
@@ -31,6 +33,7 @@ interface Props {
  * 项目内设置同时承载存储工作区；全局设置会诚实显示“先进入项目”。
  */
 export default function SettingsPage({
+  showDeveloperTools = false,
   project,
   onOpenDataManagement,
   textOpenWorldCreatorReturn,
@@ -45,13 +48,13 @@ export default function SettingsPage({
         onClick={() => onReturnToTextOpenWorldCreator(textOpenWorldCreatorReturn)}
       >返回开放世界制作</button>}
       <ClientUpdatePanel />
-      <AIConfigPanel />
+      <AIConfigPanel showDeveloperTools={import.meta.env.DEV && showDeveloperTools} />
       <div className="mt-6">
         <ProjectStorageWorkspacePanel project={project} onOpenDataManagement={onOpenDataManagement} />
       </div>
       <CreativeReliabilityCommunityPanel />
       <FailureFeedbackPanel />
-      {HarnessEvalPanel && (
+      {import.meta.env.DEV && showDeveloperTools && HarnessEvalPanel && (
         <Suspense fallback={null}>
           <HarnessEvalPanel />
         </Suspense>
@@ -88,6 +91,7 @@ export function RoutedSettingsPage(props: Props) {
   const creatorReturn = parseTextOpenWorldSettingsReturnV1(location.state)
   return <SettingsPage
     {...props}
+    showDeveloperTools={import.meta.env.DEV && new URLSearchParams(location.search).get('developerTools') === '1'}
     textOpenWorldCreatorReturn={creatorReturn}
     onReturnToTextOpenWorldCreator={(resume) => {
       const params = new URLSearchParams({ mode: 'production' })
