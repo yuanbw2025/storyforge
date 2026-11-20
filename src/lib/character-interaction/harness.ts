@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import {CHAT_PLAYER_ACKNOWLEDGEMENT_PRODUCER_V1, CHAT_PLAYER_ACKNOWLEDGEMENT_RULES_V1, supportsChatPlayerAcknowledgementV1} from './player-acknowledgement-control'
 import {CHAT_INQUIRY_SETTLEMENT_ACTION_PRODUCER_V1, chatInquirySettlementActionPromptV1, CHAT_CONSOLIDATED_ACTION_PRODUCER_V1, CHAT_REVIEWED_DISCLOSURE_ACTION_PRODUCER_V1, chatConsolidatedActionPromptV1, chatReviewedDisclosureActionPromptV1} from './action-instructions'
 import {chatSituationDevelopmentGenerationRulesV1} from './situation-development'
@@ -462,7 +463,7 @@ async function buildContract(input: {
       maxModelCalls: (reviewed ? 2 : 1) + (input.actionChoice ? 1 : 0),
       maxToolCalls: 0,
       maxInputTokens: (reviewed ? 40_000 : 16_000) + (input.actionChoice ? CHAT_ACTION_CHOICE_INPUT_TOKENS_V1 : 0),
-      maxOutputTokens: skill.maxOutputTokens + (reviewed ? getAgentSkillV1(reviewSkill).maxOutputTokens : 0) + (input.actionChoice ? CHAT_ACTION_CHOICE_OUTPUT_TOKENS_V1 : 0),
+      maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) + (reviewed ? requireFixedBudgetValueV1(getAgentSkillV1(reviewSkill).maxOutputTokens) : 0) + (input.actionChoice ? CHAT_ACTION_CHOICE_OUTPUT_TOKENS_V1 : 0),
       maxAttemptsPerStep: 1,
     },
     acceptance: [
@@ -680,7 +681,7 @@ export async function resumeChatNarrativeActionV1(input: Pick<InteractionRuntime
       const proof = await readChatActionChoiceEvidenceV1({scope: input.scope, snapshot, participantKey})
       const expressed = await executeRuntimeExpressionV1({input: generation, snapshot, messages: proof.messages,
         contextManifestHash: proof.expressionManifest.manifestHash, promptVersion: binding.promptVersion,
-        maxOutputTokens: binding.maxOutputTokens, resumeProof: proof})
+        maxOutputTokens: requireFixedBudgetValueV1(binding.maxOutputTokens), resumeProof: proof})
       snapshot = expressed.snapshot
       if (input.signal?.aborted) fail('运行已取消')
       await retainRuntimeCandidateV1({input: generation, snapshot, output: expressed.output, promptVersion: binding.promptVersion,
@@ -813,7 +814,7 @@ async function generateRuntimeCandidate(input: InteractionRuntimeGenerationInput
       await assertRuntimeHarnessFreshV1({scope: input.scope, contractScope: snapshot.contract.scope, participantKey})
     }
     const expressed = await executeRuntimeExpressionV1({input, snapshot, messages, contextManifestHash: manifest.manifestHash,
-      promptVersion: executionBinding.promptVersion, maxOutputTokens: skill.maxOutputTokens, choice})
+      promptVersion: executionBinding.promptVersion, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens), choice})
     snapshot = expressed.snapshot
     const output = expressed.output
     if (input.signal?.aborted) fail('运行已取消')

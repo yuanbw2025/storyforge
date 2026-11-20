@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../../agent/finite-budget'
 import { chat, type ChatResult } from '../../ai/client'
 import { estimateTokens } from '../../ai/context-budget'
 import { supportsVerifiedJsonObjectResponseV1 } from '../../ai/provider-capabilities'
@@ -424,7 +425,7 @@ async function agentHarnessGeneration(
         prepared: prepared.prepared,
         budget: taskBudget,
         callLabel: 'H86 故事线编排 Skill',
-        maxOutputTokens: skill.maxOutputTokens,
+        maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
         validate: output => validateDomainCandidateCanon({
           agentId: 'outline',
           projectId: workspace.scope.projectId,

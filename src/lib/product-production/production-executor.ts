@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import {CHAT_DESIGNED_CHARACTER_CONSTRAINTS_V1, CHAT_VISUAL_DESIGN_PROMPT_V1, compileChatVisualDesignV1, type ChatVisualContextV1} from '../character-interaction/visual-design'
 import {chatOpeningPerspectiveProductionPromptV1, chatOpeningPerspectiveReviewPromptV1, chatOpeningPerspectiveReviewSchemaV1, parseChatOpeningPerspectiveReviewV1} from '../character-interaction/opening-perspectives'
 import {chatOpeningRelationalReviewPromptV1, chatOpeningRelationalReviewSchemaV1} from '../character-interaction/opening-review-relations'
@@ -238,7 +239,7 @@ export function productProductionProviderOutputLimitV1(
     fail('文本任务 output token 预留无效')
   }
   if (!task.skillId) return reserved
-  const registered = Math.min(reserved, getAgentSkillV1(task.skillId).maxOutputTokens)
+  const registered = Math.min(reserved, requireFixedBudgetValueV1(getAgentSkillV1(task.skillId).maxOutputTokens))
   // The first Dialogue Editor pass may legitimately spend substantial hidden
   // reasoning over a whole act. A repair packet is different: it contains a
   // bounded list of already-located defects and asks only for ordinal deltas.

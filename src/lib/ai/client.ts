@@ -1,3 +1,4 @@
+import { referenceServiceOutputLimit } from '../reference-analysis/request-capacity'
 import { inheritModelCapacityV1, prepareModelCapacityV1, freezeModelCapacityV1, modelInputBudgetV1 } from './model-capacity'
 import { assertGenerationAvailable } from '../showcase/policy'
 import { streamCodex, CODEX_BASE_URL, assertModelDispatchGuardV1, modelDispatchWasCancelledV1, ModelDispatchGuardRejectedV1, type CodexRequestRefV1 } from './codex-transport'
@@ -60,6 +61,7 @@ export interface AIRequestSettingsV1 {
   /** Configured values are distinct from provider-specific transmitted values. */
   requested: { temperature: number | null; maxTokens: number | null }
   modelCapacity?: import('./model-capacity').ModelCapacityV1
+  capacityPolicy?: 'reference-service'
   parameters: Record<string, unknown>
 }
 
@@ -69,12 +71,13 @@ export function describeResolvedAIRequestSettingsV1(
   resolution: AIRequestConfigResolution,
   stream: boolean,
   options?: ChatRequestOptions,
+  messages: ReadonlyArray<{ role: ChatMessage['role']; content: unknown }> = [],
 ): AIRequestSettingsV1 {
   const config = resolution.config
   const modelCapacity = freezeModelCapacityV1(config)
   const parameters: Record<string, unknown> = {}
   if (config.provider !== 'codex') {
-    const body = JSON.parse(buildRequest(config, [], stream, options).body) as Record<string, unknown>
+    const body = JSON.parse(buildRequest(config, messages, stream, options).body) as Record<string, unknown>
     for (const key of ['temperature', 'max_tokens', 'reasoning_effort', 'thinking', 'chat_template_kwargs']) {
       if (body[key] !== undefined) parameters[key] = body[key]
     }
@@ -87,7 +90,7 @@ export function describeResolvedAIRequestSettingsV1(
     version: 'ai-request-settings-v1', provider: config.provider, model: config.model,
     transport: config.provider === 'codex' ? 'codex-bridge' : 'openai-compatible', stream,
     requested: { temperature: config.temperature ?? null, maxTokens: config.maxTokens ?? null },
-    parameters, modelCapacity,
+    parameters, modelCapacity, ...(options?.capacityPolicy ? { capacityPolicy: options.capacityPolicy } : {}),
   }
 }
 
@@ -165,6 +168,9 @@ export interface ChatToolDefinition {
 }
 
 export interface ChatRequestOptions {
+  /** Registered reference executors retain full input and use only evidenced service limits. */
+  capacityPolicy?: 'reference-service'
+
   tools?: readonly ChatToolDefinition[]
   toolChoice?: 'auto'
   responseFormat?: 'json_object'
@@ -206,7 +212,9 @@ function buildRequest(
 ) {
   // 基础请求体：所有 provider 都需要的字段
   const capacity = freezeModelCapacityV1(config)
-  config = { ...config, maxTokens: modelInputBudgetV1(capacity, config.maxTokens).outputBudget }
+  config = { ...config, maxTokens: options?.capacityPolicy === 'reference-service'
+    ? referenceServiceOutputLimit(config, messages) ?? 0
+    : modelInputBudgetV1(capacity, config.maxTokens).outputBudget }
   const body: Record<string, unknown> = {
     model: config.model,
     messages,
@@ -560,6 +568,9 @@ export async function chat(
   options?: ChatRequestOptions,
   frozenResolution?: AIRequestConfigResolution,
 ): Promise<string> {
+  if (options?.capacityPolicy === 'reference-service' && !['reference.analysis', 'reference.summary', 'reference.characters'].includes(meta?.category ?? '')) {
+    throw new Error('服务容量策略只适用于已登记的拆书请求。')
+  }
   if (result?.captureProviderTokenUsage) result.providerTokenUsage = {}
   if (result) delete result.modelDispatchGuardCancelled
   assertGenerationAvailable()
@@ -570,7 +581,9 @@ export async function chat(
   const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
   warnRouteFallback(resolved, meta)
   config = await prepareModelCapacityV1(resolved.config)
-  const trimmed = trimMessagesToFit(
+  const trimmed = options?.capacityPolicy === 'reference-service'
+    ? { messages, trimmed: false, protectedEnvelopePreserved: true, totalInputTokens: estimateTokens(JSON.stringify(messages)), inputBudget: estimateTokens(JSON.stringify(messages)) }
+    : trimMessagesToFit(
     messages,
     config.provider,
     config.model,
@@ -592,7 +605,7 @@ export async function chat(
   if (config.provider === 'codex') {
     if (options?.tools?.length) throw new CodexRequestError('Codex 连接不支持原生 tool_calls；请使用 StoryForge 文本 Agent 协议。')
     let text = ''
-    for await (const delta of loggedCodex(trimmed.messages, config, resolved.taskKind, meta, signal, result, options?.jsonSchema?.schema, options?.responseFormat)) text += delta
+    for await (const delta of loggedCodex(trimmed.messages, config, resolved.taskKind, meta, signal, result, options?.jsonSchema?.schema, options?.responseFormat, options?.capacityPolicy)) text += delta
     if (options?.responseFormat === 'json_object') {
       try { const value: unknown = JSON.parse(text); if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('not object') }
       catch { throw new CodexRequestError('Codex 没有返回有效 JSON 对象；保留请求记录，未自动重发。') }
@@ -676,7 +689,7 @@ export async function chat(
 
 async function* loggedCodex(
   messages: ChatMessage[], config: AIConfig, taskKind: AITaskKind | null,
-  meta?: AICallMeta, signal?: AbortSignal, result?: ChatResult, schema?: Record<string, unknown>, responseFormat?: 'json_object',
+  meta?: AICallMeta, signal?: AbortSignal, result?: ChatResult, schema?: Record<string, unknown>, responseFormat?: 'json_object', capacityPolicy?: 'reference-service',
 ): AsyncGenerator<string> {
   assertGenerationAvailable()
   if (meta?.category?.startsWith('eval.')) throw new CodexRequestError('Codex 订阅暂不支持当前带 API 金额统计的模型评测；请显式选择 API 评测预设。')
@@ -685,7 +698,7 @@ async function* loggedCodex(
   let refusedBeforeDispatch = false
   const log = createLog({ type: 'chat', provider: 'codex', model: config.model, url: CODEX_BASE_URL, status: 'pending' })
   try {
-    yield* streamCodex(messages, config.model, signal, receipt, schema, responseFormat)
+    yield* streamCodex(messages, config.model, signal, receipt, schema, responseFormat, capacityPolicy)
     updateLog(log.id, { status: 'success', duration: Date.now() - startedAt, usage: receipt.usage })
   } catch (error) {
     updateLog(log.id, { status: 'error', duration: Date.now() - startedAt, errorMessage: error instanceof Error ? error.message : 'Codex 连接失败' })

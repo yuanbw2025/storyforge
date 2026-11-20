@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import { chat } from '../../ai/client'
 import {
   adoptCultivationProgressExtractionAtomicV1,
@@ -216,7 +217,7 @@ function contract(scope: WorkspaceScope, chapterId: number, worldGroupId: number
       maxModelCalls: 1,
       maxToolCalls: 0,
       maxInputTokens: 130_000,
-      maxOutputTokens: skill.maxOutputTokens,
+      maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
       maxAttemptsPerStep: 1,
       maxProtocolErrors: 0,
     },
@@ -558,7 +559,7 @@ export async function generateCultivationProgressExtractionCandidateV1(input: {
       : chat(prepared.messages, input.aiConfig!, {
           category: 'cultivation.progress',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: getAgentSkillV1('prose.cultivation-progress-extraction').maxOutputTokens },
+          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1('prose.cultivation-progress-extraction').maxOutputTokens) },
           contextOverflowPolicy: 'reject',
         }))
   } catch (error) {

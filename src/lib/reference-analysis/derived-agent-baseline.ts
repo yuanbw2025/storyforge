@@ -218,7 +218,7 @@ export function formatReferenceDerivedBaselineV1(baseline: ReferenceDerivedBasel
       ])
   return [
     '【参考分析派生 Agent 正式输入基线】',
-    `任务：${baseline.mode === 'summary' ? '生成全书分析总结' : '聚合去重角色卡'}`,
+    `任务：${baseline.mode === 'summary' ? '生成已读范围综合' : '聚合去重角色卡'}`,
     ...sourceStatement(baseline),
     '',
     ...body,

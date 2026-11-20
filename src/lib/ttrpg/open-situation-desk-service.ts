@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 /** Human situation desk. Reading never sends, repairs, confirms or activates. */
 import type { WorkspaceScope } from '../types'
 import { readProductRuntimeStateVersion } from '../product/runtime-core'
@@ -110,7 +111,7 @@ export async function requestTtrpgOpenSituationDeskV1(input: TtrpgOpenSituationD
     if (!references.references.length) throw new Error('本局尚无实际创建实例；可以按原冻结资料请求局势。')
     runtimeEntityReferencePolicy = { schema: 'storyforge.ttrpg-open-situation-runtime-reference-policy', version: 1, consumer: 'private-gm', references }
   }
-  const maximumOutputTokens = Math.min(getAgentSkillV1('prose.ttrpg-open-situation-propose').maxOutputTokens, loaded.content.campaign.runtimePolicy.maximumOutputTokens)
+  const maximumOutputTokens = Math.min(requireFixedBudgetValueV1(getAgentSkillV1('prose.ttrpg-open-situation-propose').maxOutputTokens), loaded.content.campaign.runtimePolicy.maximumOutputTokens)
   await startTtrpgOpenEpochV1({ ...await envelope(input.sessionId, 'situation.desk.' + key), viewerKey: input.viewerKey, triggerKind: 'request-situation', rawInput: input.rawInput,
     ...(runtimeEntityReferencePolicy ? { runtimeEntityReferencePolicy } : {}) })
   return generateTtrpgOpenSituationCandidateV1({ ...input, ...await envelope(input.sessionId, 'situation.prepare.' + key), maximumOutputTokens })

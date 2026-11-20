@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from './finite-budget'
 import { hashCanonicalValue } from './run/hash'
 import { usePromptStore } from '../../stores/prompt'
 import { INSPIRATION_PREPARATION_MODULES } from '../inspiration/preparation-contract'
@@ -348,7 +349,7 @@ export async function prepareInspirationCopilot(input: {
       rendered.evidence.renderedPromptHash = await hashCanonicalValue(rendered.messages)
     }
     const maxTokens = rendered.generationOverrides.maxTokens ?? 6000
-    if (maxTokens > skill.maxOutputTokens) throw new Error(`模板配置的输出上限超过当前任务预算${skill.maxOutputTokens} tokens，请降低后重新生成；未调用模型。`)
+    if (maxTokens > requireFixedBudgetValueV1(skill.maxOutputTokens)) throw new Error(`模板配置的输出上限超过当前任务预算${requireFixedBudgetValueV1(skill.maxOutputTokens)} tokens，请降低后重新生成；未调用模型。`)
     nodeInput.frozenPromptMessages = rendered.messages
     nodeInput.generationOverrides = { ...rendered.generationOverrides, maxTokens }
     nodeInput.promptExecutionEvidence = { ...rendered.evidence, effectiveMaxTokens: maxTokens }

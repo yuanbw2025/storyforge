@@ -112,7 +112,7 @@ export async function assertModelDispatchGuardV1(result: ChatResult, signal?: Ab
 
 /** One ID, one submission. Polling reads receipts; it never resubmits inference. */
 export async function* streamCodex(
-  messages: ChatMessage[], model: string, signal?: AbortSignal, result?: ChatResult, outputSchema?: Record<string, unknown>, responseFormat?: 'json_object',
+  messages: ChatMessage[], model: string, signal?: AbortSignal, result?: ChatResult, outputSchema?: Record<string, unknown>, responseFormat?: 'json_object', capacityPolicy?: 'reference-service',
 ): AsyncGenerator<string> {
   if (result) {
     result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }
@@ -134,7 +134,7 @@ export async function* streamCodex(
   // Freeze exact wire bytes before an async persistence hook. A caller changing
   // its message/schema objects while that hook waits must not change the POST.
   const wire = JSON.stringify({ id, model, messages, ...(onPrepared ? { receiptRetention: CODEX_DURABLE_RECEIPT_RETENTION_V1 } : {}),
-    ...(outputSchema ? { outputSchema } : {}), ...(responseFormat ? { responseFormat } : {}) })
+    ...(outputSchema ? { outputSchema } : {}), ...(responseFormat ? { responseFormat } : {}), ...(capacityPolicy ? { capacityPolicy } : {}) })
   const binding: Readonly<CodexRequestRefV1> = Object.freeze({ version: 1, provider: 'codex', requestId: id, model,
     requestHash: await sha256Text(wire), requestHashAlgorithm: CODEX_REQUEST_HASH_ALGORITHM_V1 })
   if (result) result.localCodexRequest = binding

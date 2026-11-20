@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 /** Explicit human request → one original local Run → domain authorization. No model transport. */
 import type { WorkspaceScope } from '../types'
 import { db } from '../db/schema'
@@ -77,7 +78,7 @@ export async function createTtrpgOpenPublicSituationAuthorizationV1(input: Ttrpg
   // The old 16k ceiling could reject complete JSON requests despite capacity.
   // Replayed grants return above with their exact original limits unchanged.
   const maximumInputTokens = epochBudget.maximumTokens - maximumOutputTokens - 2000
-  if (epochBudget.maximumCalls !== 1 || maximumInputTokens < 1 || maximumOutputTokens > skill.maxOutputTokens
+  if (epochBudget.maximumCalls !== 1 || maximumInputTokens < 1 || maximumOutputTokens > requireFixedBudgetValueV1(skill.maxOutputTokens)
     || maximumCostUsd > epochBudget.maximumCostUsd) throw new Error('[ttrpg-public-situation] 本次请求没有明确且足够的一次调用预算')
   const budget = { maximumInputTokens, maximumOutputTokens, maximumCostUsd }
   const inputRevision = await ttrpgOpenPublicSituationInputRevisionV1({ sessionKey: runtime.sessionKey, viewerKey,
@@ -113,7 +114,7 @@ export async function createTtrpgOpenPublicSituationAuthorizationV1(input: Ttrpg
         admissionStateHash: context.admissionStateHash, visibilityHash: context.visibilityHash, runtimeSourceHash: context.readEvidence.runtimeSourceHash }),
       executionBindings: [{ stepId: TTRPG_OPEN_PUBLIC_SITUATION_STEP_V1, ...await createAgentSkillExecutionBindingV2(skill),
         formalEntry: await freezeFormalAIEntryBindingV1(TTRPG_OPEN_PUBLIC_SITUATION_ENTRY_V1) }],
-      budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: maximumInputTokens, maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 1 },
+      budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: maximumInputTokens, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens), maxAttemptsPerStep: 1 },
       acceptance: [{ id: 'public-situation.protocol', kind: 'deterministic-check', required: true }],
       verificationPlan: [{ id: 'public-situation.terminal', kind: 'terminal', verifier: skill.promptVersion, criterionIds: ['public-situation.protocol'] }],
       failurePolicy: { onProtocolError: 'fail', onVerificationFailure: 'fail', onStaleInput: 'pause-for-author' } } })

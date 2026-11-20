@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 /** Human recap desk. Reads never send, repair, adopt, or inherit an imported Run's authority. */
 import { db } from '../db/schema'
 import type { WorkspaceScope } from '../types'
@@ -59,7 +60,7 @@ export async function requestTtrpgOpenBriefDeskV1(input: TtrpgOpenBriefDeskInput
   if (!/^[a-zA-Z0-9._-]{1,96}$/.test(input.submissionKey) || !Number.isFinite(input.maximumCostUsd) || input.maximumCostUsd < 0 || input.maximumCostUsd > 1000) throw new Error('请填写有效的调用预留上限。')
   if (!input.aiConfig && !input.runAI) throw new Error('请先配置明确的模型。')
   const loaded = await loadTtrpgOpenMemoryReadStateV1({ ...input, reader: { kind: 'human', viewerKey: input.viewerKey } })
-  const maximumOutputTokens = Math.min(getAgentSkillV1('prose.ttrpg-open-brief').maxOutputTokens, loaded.content.campaign.runtimePolicy.maximumOutputTokens)
+  const maximumOutputTokens = Math.min(requireFixedBudgetValueV1(getAgentSkillV1('prose.ttrpg-open-brief').maxOutputTokens), loaded.content.campaign.runtimePolicy.maximumOutputTokens)
   await startTtrpgOpenEpochV1({ ...await envelope(input.sessionId, `brief.desk.${input.submissionKey}`), viewerKey: input.viewerKey, triggerKind: 'request-brief', rawInput: input.rawInput })
   return generateTtrpgOpenBriefCandidateV1({ ...input, ...await envelope(input.sessionId, `brief.prepare.${input.submissionKey}`), maximumOutputTokens })
 }

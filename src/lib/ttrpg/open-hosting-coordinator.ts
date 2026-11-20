@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { readTtrpgOpenModelCallRunsV1 } from './open-model-call-evidence'
 import { getAgentSkillV1 } from '../agent/skill-registry'
 import { TTRPG_OPEN_MODEL_PURPOSES_V1 } from './open-model-purpose-contract'
@@ -153,7 +154,7 @@ export async function resumeTtrpgOpenHostingV1(input: TtrpgOpenHostingInputV1): 
       if (input.signal?.aborted) return handoff('stopped')
       const request = { ...await envelope(input.sessionId, purpose), scope: input.scope, viewerKey: input.viewerKey,
         rawInput: '只依据自己本轮实际已知资料，提出一次协作行动。', maximumOutputTokens: Math.min(frozenContent.campaign.runtimePolicy.maximumOutputTokens,
-          getAgentSkillV1(TTRPG_OPEN_MODEL_PURPOSES_V1[purpose === 'kp' ? 'kp-narration' : purpose].skillId).maxOutputTokens),
+          requireFixedBudgetValueV1(getAgentSkillV1(TTRPG_OPEN_MODEL_PURPOSES_V1[purpose === 'kp' ? 'kp-narration' : purpose].skillId).maxOutputTokens)),
         maximumCostUsd: epoch!.hostingDelegation!.maximumCostUsdPerCall, hostingDelegationRef: input.hostingDelegationRef,
         aiConfig: input.aiConfig, runAI: input.runAI, signal: input.signal }
       if (purpose === 'kp') await generateTtrpgOpenKpCandidateV1(request)

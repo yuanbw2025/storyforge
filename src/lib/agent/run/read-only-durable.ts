@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import type {
   AgentRunContractV1,
   AgentRunEventTypeV1,
@@ -472,9 +473,9 @@ async function prepareAttempt(input: {
     type: 'budget.reserved',
     payload: {
       stepId: READ_ONLY_AGENT_DURABLE_STEP_ID_V1,
-      modelCalls: snapshot.contract.budget.maxModelCalls,
+      modelCalls: requireFixedBudgetValueV1(snapshot.contract.budget.maxModelCalls),
       toolCalls: snapshot.contract.budget.maxToolCalls,
-      tokens: snapshot.contract.budget.maxInputTokens,
+      tokens: requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens),
     },
     expectedLastSequence: snapshot.projection.lastSequence,
     now: input.request.now?.(),

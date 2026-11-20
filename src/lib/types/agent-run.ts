@@ -109,7 +109,7 @@ export interface AgentSkillExecutionBindingV2 {
   contextSourceKeys: string[]
   optionalContextActivations: AgentOptionalContextActivationV2[]
   writeTargets: AgentRunWriteTargetV1[]
-  maxOutputTokens: number
+  maxOutputTokens: number | null
 }
 
 export interface AgentRunStepExecutionBindingV2 extends AgentSkillExecutionBindingV2 {
@@ -249,12 +249,14 @@ export interface AgentRunContractV1 {
     }
   }
   budget: {
-    /** Service capacity governs requests; zero aggregate counters are not quotas. */
+    /** Explicit reference task policy: null token/call ceilings are service-managed, never numeric sentinels. */
+    capacityPolicy?: 'service'
+    maxModelCalls: number | null
+    /** Existing story-core service policy; its original numeric contract remains supported. */
     serviceCapacityOnly?: true
-    maxModelCalls: number
     maxToolCalls: number
-    maxInputTokens: number
-    maxOutputTokens: number
+    maxInputTokens: number | null
+    maxOutputTokens: number | null
     maxAttemptsPerStep: number
     /** Bounded contract-generation changes for workflows that support replanning. */
     maxReplans?: number

@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { parseStructuredOutputV1, StructuredOutputPipelineErrorV1 } from '../agent/structured-output-pipeline';
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
@@ -182,7 +183,7 @@ function contract(input: {
     permissions: { contextSourceKeys: ['ttrpgPlayerRuntime'], writeTargets: [] },
     runtimeBindingHash: input.runtimeBindingHash,
     executionBindings: [{ stepId: TTRPG_PLAYER_RUNTIME_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(skill) }],
-    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 30_000, maxOutputTokens: skill.maxOutputTokens * 2, maxAttemptsPerStep: 2 },
+    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 30_000, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) * 2, maxAttemptsPerStep: 2 },
     acceptance: [
       { id: 'runtime.player-candidate', kind: 'output-present' as const, required: true },
       { id: 'runtime.player-freshness', kind: 'deterministic-check' as const, required: true },

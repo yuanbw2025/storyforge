@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from './finite-budget'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { buildCharacterPrompt } from '../ai/adapters/character-adapter'
 import { chat, resolveRequestConfig } from '../ai/client'
@@ -379,7 +380,7 @@ export async function prepareCharacterCopilot(input: {
         skill,
         scope: scope!,
         worldGroupId,
-        budgetTokens: Math.min(contextPolicy.maxInputTokens, skill.contextGateway!.maxRetrievedTokens),
+        budgetTokens: Math.min(requireFixedBudgetValueV1(contextPolicy.maxInputTokens), skill.contextGateway!.maxRetrievedTokens),
         query: [
           '创建一名与现有世界、故事核心、故事线和角色关系兼容但不重复的新角色。',
           '按任务选择相关种族、地点、力量体系和角色认知证据，不要围绕已有材料复述。',
@@ -394,7 +395,7 @@ export async function prepareCharacterCopilot(input: {
   }
   const assembled = assembleContextGatewayPacketV1(
     contextGatewayExecution,
-    contextPolicy.maxInputTokens,
+    requireFixedBudgetValueV1(contextPolicy.maxInputTokens),
   )
   const afterRead = await readCharacterRosterSnapshot(input.projectId, worldGroupId, scope)
   if (beforeRead.serialized !== afterRead.serialized) throw new CharacterCopilotStaleError()
@@ -454,8 +455,8 @@ export async function prepareCharacterCopilot(input: {
       ...rendered.generationOverrides,
       ...input.generationOverrides,
     }
-    if ((generationOverrides.maxTokens ?? 0) > skill.maxOutputTokens) {
-      throw new Error(`Prompt 请求输出 ${generationOverrides.maxTokens} tokens，超过 Skill 上限 ${skill.maxOutputTokens}；已在模型调用前阻止。`)
+    if ((generationOverrides.maxTokens ?? 0) > requireFixedBudgetValueV1(skill.maxOutputTokens)) {
+      throw new Error(`Prompt 请求输出 ${generationOverrides.maxTokens} tokens，超过 Skill 上限 ${requireFixedBudgetValueV1(skill.maxOutputTokens)}；已在模型调用前阻止。`)
     }
     nodeInput.frozenPromptMessages = rendered.messages
     nodeInput.promptExecutionEvidence = {

@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import { chat } from '../../ai/client'
 import {
   adoptSettingAssertionCandidatesAtomicV1,
@@ -224,7 +225,7 @@ function contract(scope: WorkspaceScope) {
       maxModelCalls: 1,
       maxToolCalls: 0,
       maxInputTokens: 30_000,
-      maxOutputTokens: skill.maxOutputTokens,
+      maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
       maxAttemptsPerStep: 1,
       maxProtocolErrors: 0,
     },
@@ -508,7 +509,7 @@ export async function generateConstitutionExtractionCandidateV1(input: {
       : chat(prompt.messages, input.aiConfig!, {
           category: 'canon.setting.extract',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: getAgentSkillV1('world-origin.constitution-extract').maxOutputTokens },
+          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1('world-origin.constitution-extract').maxOutputTokens) },
           contextOverflowPolicy: 'reject',
         }))
   } catch (error) {

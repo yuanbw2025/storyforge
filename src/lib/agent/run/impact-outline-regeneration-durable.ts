@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import Dexie from 'dexie'
 import { chat, resolveRequestConfig, type ChatResult } from '../../ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../ai/config-readiness'
@@ -352,7 +353,7 @@ function contract(input: {
     }],
     budget: {
       maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: 32_000,
-      maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 1, maxProtocolErrors: 0,
+      maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens), maxAttemptsPerStep: 1, maxProtocolErrors: 0,
     },
     acceptance: [
       { id: 'impact-outline.candidate', kind: 'output-present' as const, required: true },
@@ -601,7 +602,7 @@ export async function generateImpactOutlineRegenerationCandidateV1(input: {
   const requestMeta = {
     category: 'outline.impact-regenerate' as const,
     projectId: input.scope.projectId,
-    configOverrides: { maxTokens: getAgentSkillV1(IMPACT_OUTLINE_REGENERATION_SKILL_ID_V1).maxOutputTokens },
+    configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1(IMPACT_OUTLINE_REGENERATION_SKILL_ID_V1).maxOutputTokens) },
     contextOverflowPolicy: 'reject' as const,
   }
   if (!input.runAI) {
@@ -666,7 +667,7 @@ export async function generateImpactOutlineRegenerationCandidateV1(input: {
       : chat(prepared.messages, input.aiConfig!, {
           category: 'outline.impact-regenerate',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: getAgentSkillV1(IMPACT_OUTLINE_REGENERATION_SKILL_ID_V1).maxOutputTokens },
+          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1(IMPACT_OUTLINE_REGENERATION_SKILL_ID_V1).maxOutputTokens) },
           contextOverflowPolicy: 'reject',
         }, undefined, resultMeta))
   } catch (error) {

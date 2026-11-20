@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import Dexie from 'dexie'
 import { chat } from '../../ai/client'
 import {
@@ -280,7 +281,7 @@ function contract(scope: WorkspaceScope, request: ForeshadowSuggestionRequestV1)
       maxModelCalls: 1,
       maxToolCalls: 0,
       maxInputTokens: 130_000,
-      maxOutputTokens: skill.maxOutputTokens,
+      maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
       maxAttemptsPerStep: 1,
       maxProtocolErrors: 0,
     },
@@ -576,7 +577,7 @@ export async function generateForeshadowSuggestionCandidateV1(input: {
       : chat(prepared.messages, input.aiConfig!, {
           category: 'foreshadow.suggest',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: getAgentSkillV1('outline.foreshadow-suggestions').maxOutputTokens },
+          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1('outline.foreshadow-suggestions').maxOutputTokens) },
           contextOverflowPolicy: 'reject',
         }))
   } catch (error) {

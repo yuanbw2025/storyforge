@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { hashDocumentImportChunkBindingV1 } from './document-parse-binding'
 /** Candidate-only foundation. The current import UI does not dispatch through
  * this entry until it can show and explicitly adopt its recovered candidate. */
@@ -137,7 +138,7 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
   const config = structuredClone(useAIConfigStore.getState().config)
   const skill = getAgentSkillV1(SKILL, 'inspiration')
   const metadata = { category: 'import.parse-chunk', projectId: input.projectId, contextOverflowPolicy: 'reject' as const,
-    configOverrides: { maxTokens: skill.maxOutputTokens } }
+    configOverrides: { maxTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) } }
   const routed = resolveRequestConfig(config, metadata)
   if (!isAIConfigReady(routed.config)) fail(getAIConfigRequiredMessage(routed.config))
   const resolved = { ...routed, config: await prepareModelCapacityV1(routed.config) }
@@ -169,7 +170,7 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
   })
   if (!messages.some(message => message.content.includes(text))) fail('原分块没有逐字进入请求。')
   const admission = assessDocumentParseRequestV1({ config: resolved.config, messages, options: providerOptions,
-    maxInputTokens: MAX_INPUT_TOKENS, maxOutputTokens: skill.maxOutputTokens })
+    maxInputTokens: MAX_INPUT_TOKENS, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) })
   if (!admission.fits) fail('完整请求超出当前模型或文档解析任务预算；未创建付费尝试，原文分块保持不变。')
   const frozenResolution = { ...resolved, config: admission.config }
   input.signal?.throwIfAborted()
@@ -184,7 +185,7 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
       runtimeBindingHash,
       executionBindings: [{ stepId: STEP, ...createAgentSkillExecutionBindingV1(skill), formalEntry }],
       budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: MAX_INPUT_TOKENS,
-        maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 1 },
+        maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens), maxAttemptsPerStep: 1 },
       acceptance: [{ id: 'document-import.candidate', kind: 'output-present', required: true },
         { id: 'document-import.author', kind: 'author-confirmed', required: true }],
       verificationPlan: [{ id: 'document-import.terminal', kind: 'terminal', verifier: 'document-import-terminal-v1',

@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import {
   acceptAgentRunContract,
   appendAgentRunEventV1,
@@ -142,7 +143,7 @@ async function outlineRunContract(input: {
       maxModelCalls: 1,
       maxToolCalls: 0,
       maxInputTokens: input.assembled.inputBudget,
-      maxOutputTokens: binding.maxOutputTokens,
+      maxOutputTokens: requireFixedBudgetValueV1(binding.maxOutputTokens),
       maxAttemptsPerStep: 1,
     },
     acceptance: input.executionBoundary === 'formal' ? [

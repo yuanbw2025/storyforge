@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 /** Current human-GM adapter. Reading never sends, starts a window, confirms facts or repairs a receipt. */
 import { loadTtrpgOpenFactDeskOwnerV1, type TtrpgOpenFactDeskInputV1 } from './open-fact-desk'
 import { createTtrpgOpenOracleRuntimeReferencePolicyV1, ttrpgOpenOracleRuntimeReferenceKeysV1,
@@ -219,7 +220,7 @@ async function requestModelDesk(input: OracleRequest & { purpose: 'oracle' } | N
   }
   const { purpose, ...args } = input
   const common = { ...args, ...await envelope(input.sessionId, input.purpose + '.model.desk.prepare.' + input.submissionKey), maximumCostUsd: cost,
-    maximumOutputTokens: Math.min(getAgentSkillV1(purpose === 'oracle' ? 'prose.ttrpg-open-oracle-interpret' : 'prose.ttrpg-open-fact-normalize').maxOutputTokens, loaded.content.campaign.runtimePolicy.maximumOutputTokens),
+    maximumOutputTokens: Math.min(requireFixedBudgetValueV1(getAgentSkillV1(purpose === 'oracle' ? 'prose.ttrpg-open-oracle-interpret' : 'prose.ttrpg-open-fact-normalize').maxOutputTokens), loaded.content.campaign.runtimePolicy.maximumOutputTokens),
     onPrepared: (prepared: { requestKey: string }) => input.onPrepared?.(prepared.requestKey) }
   const result = input.purpose === 'oracle' ? await generateTtrpgOpenOracleCandidateV2({ ...common, oracleSourceRef: input.oracleSourceRef, referencePolicy: 'recorded-oracle-instances-v1' })
     : await generateTtrpgOpenFactNormalizationCandidateV2({ ...common, reviewSourceRef: input.reviewSourceRef, referencePolicy: 'accepted-interpretation-instances-v1' })

@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from './finite-budget'
 import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from '../ai/prompt-engine'
 import { worldviewContentTemplateVariablesV1 } from '../creation/worldview-content-skill'
@@ -773,7 +774,7 @@ export async function prepareWorldviewFieldCopilot(
         skill,
         scope: scope!,
         worldGroupId,
-        budgetTokens: Math.min(contextPolicy.maxInputTokens, skill.contextGateway!.maxRetrievedTokens),
+        budgetTokens: Math.min(requireFixedBudgetValueV1(contextPolicy.maxInputTokens), skill.contextGateway!.maxRetrievedTokens),
         query: [
           `${WORLDVIEW_AGENT_FIELD_LABELS[targetField]} ${resolveWorldviewFieldModeV1(request)}`,
           request,
@@ -789,7 +790,7 @@ export async function prepareWorldviewFieldCopilot(
       })
     : undefined
   const assembled = contextGatewayExecution
-    ? assembleContextGatewayPacketV1(contextGatewayExecution, contextPolicy.maxInputTokens)
+    ? assembleContextGatewayPacketV1(contextGatewayExecution, requireFixedBudgetValueV1(contextPolicy.maxInputTokens))
     : await assembleContext({
         projectId: input.projectId,
         scope,
@@ -797,7 +798,7 @@ export async function prepareWorldviewFieldCopilot(
         modelConfig: config, provider: config.provider,
         model: config.model,
         sourceKeys: [...skill.contextSourceKeys],
-        inputBudgetMaxTokens: contextPolicy.maxInputTokens,
+        inputBudgetMaxTokens: requireFixedBudgetValueV1(contextPolicy.maxInputTokens),
         sourceBudgetScale: contextPolicy.sourceBudgetScale,
         sourceTransformer: compression?.sourceTransformer,
       })
@@ -877,7 +878,7 @@ export async function prepareWorldviewFieldCopilot(
   nodeInput.outputBudget = resolveWorldviewFieldOutputBudgetV1({
     config,
     targetField,
-    skillMaxOutputTokens: skill.maxOutputTokens,
+    skillMaxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
     requestedMaxTokens: nodeInput.generationOverrides?.maxTokens,
   })
   nodeInput.generationOverrides = {

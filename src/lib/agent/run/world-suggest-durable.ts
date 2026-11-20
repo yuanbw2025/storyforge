@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import { chat } from '../../ai/client'
 import {
   buildWorldSuggestPromptFromRegisteredContextV1,
@@ -337,7 +338,7 @@ function contract(scope: WorkspaceScope) {
       maxModelCalls: 1,
       maxToolCalls: 0,
       maxInputTokens: 24_000,
-      maxOutputTokens: skill.maxOutputTokens,
+      maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
       maxAttemptsPerStep: 1,
       maxProtocolErrors: 0,
     },
@@ -622,7 +623,7 @@ export async function generateWorldSuggestCandidateV1(input: {
       : chat(prompt.messages, input.aiConfig!, {
           category: 'world-group.suggest',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: getAgentSkillV1('world-origin.world-suggest').maxOutputTokens },
+          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1('world-origin.world-suggest').maxOutputTokens) },
           contextOverflowPolicy: 'reject',
         }))
   } catch (error) {

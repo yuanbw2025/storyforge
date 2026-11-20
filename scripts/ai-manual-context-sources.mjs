@@ -123,6 +123,10 @@ export function readStaticContextSources(sourcePath) {
     if (!key.trim() || keys.has(key)) fail(source, element, key, 'empty or duplicate source key')
     keys.add(key)
     const budgetExpression = property(element, 'budgetTokens', source, key)
+    if (budgetExpression.kind === ts.SyntaxKind.NullKeyword) {
+      if (!['referenceDerivedBaseline', 'referenceAnalysisPrivateChunk', 'references'].includes(key)) fail(source, budgetExpression, key, 'complete task budget is restricted to registered reference executors')
+      return { key, label: text('label', key), scope: text('scope', key), layer: text('layer', key), budget: key === 'references' ? '按请求容量选读' : '完整任务基线' }
+    }
     const budget = number(source, budgetExpression, key, new Set())
     if (!Number.isSafeInteger(budget) || budget <= 0) fail(source, budgetExpression, key, 'budget must be a positive safe integer')
     return { key, label: text('label', key), scope: text('scope', key), layer: text('layer', key), budget: String(budget) }

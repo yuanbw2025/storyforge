@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { loadTtrpgOpenSituationKernelInputV1 } from './open-generated-situation-context'
 import { reviewTtrpgOpenOracleRuntimeDeliveryV1, reviewTtrpgOpenNormalizationRuntimeDeliveryV1 } from './open-oracle-runtime-delivery'
 import { resolveTtrpgOpenNormalizationRuntimeOriginV1 } from './open-runtime-entity-references'
@@ -249,7 +250,7 @@ async function prepareTtrpgOpenModelInputV1(input: TtrpgOpenRuntimeModelInputV1,
   const remainingTokens = epoch.budget.maximumTokens - budget.committedOrReservedTokens
   if (budget.pending || budget.blockedByUnknown || budget.blockedByDenial || budget.countedRequests >= epoch.budget.maximumCalls
     || !Number.isSafeInteger(input.maximumOutputTokens) || input.maximumOutputTokens < 1
-    || input.maximumOutputTokens > skill.maxOutputTokens || !Number.isFinite(input.maximumCostUsd)
+    || input.maximumOutputTokens > requireFixedBudgetValueV1(skill.maxOutputTokens) || !Number.isFinite(input.maximumCostUsd)
     || input.maximumCostUsd < 0 || input.maximumCostUsd + budget.committedOrReservedCostUsd > epoch.budget.maximumCostUsd) {
     throw new Error('[ttrpg-open-input] 缺少明确调用预算或上次请求回执')
   }
@@ -383,7 +384,7 @@ async function prepareTtrpgOpenModelInputV1(input: TtrpgOpenRuntimeModelInputV1,
       executionBindings: [{ stepId, ...await createAgentSkillExecutionBindingV2(skill),
         formalEntry: await freezeFormalAIEntryBindingV1(definition.entryId) }],
       budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: requestTokens,
-        maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 1 },
+        maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens), maxAttemptsPerStep: 1 },
       acceptance: [{ id: entity ? 'entity.protocol' : intentPurpose ? 'intent.protocol' : purpose === 'situation-proposal' ? 'situation.protocol' : purpose === 'stage-brief' ? 'brief.protocol' : purpose === 'kp-narration' ? 'kp.protocol' : purpose === 'oracle-interpret' ? 'oracle.protocol' : 'fact.protocol', kind: 'deterministic-check', required: true }],
       verificationPlan: [{ id: entity ? 'entity.terminal' : intentPurpose ? 'intent.terminal' : purpose === 'situation-proposal' ? 'situation.terminal' : purpose === 'stage-brief' ? 'brief.terminal' : purpose === 'kp-narration' ? 'kp.terminal' : purpose === 'oracle-interpret' ? 'oracle.terminal' : 'fact.terminal', kind: 'terminal', verifier: skill.promptVersion, criterionIds: [entity ? 'entity.protocol' : intentPurpose ? 'intent.protocol' : purpose === 'situation-proposal' ? 'situation.protocol' : purpose === 'stage-brief' ? 'brief.protocol' : purpose === 'kp-narration' ? 'kp.protocol' : purpose === 'oracle-interpret' ? 'oracle.protocol' : 'fact.protocol'] }],
       failurePolicy: { onProtocolError: 'fail', onVerificationFailure: 'fail', onStaleInput: 'pause-for-author' } } })

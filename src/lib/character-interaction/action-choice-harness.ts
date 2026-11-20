@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import {chat, type ChatResult} from '../ai/client'
 import {recordChatActionOutputBudgetV1, readChatActionOutputBudgetV1} from './action-choice-output-budget'
 import {appendAgentRunEventV1, readInstanceAgentRunV1, type AgentRunSnapshotV1} from '../agent/run/event-store'
@@ -42,7 +43,7 @@ export async function chooseRuntimeChatActionV1(input: {
   if (snapshot.projection.state !== 'running' || chatActionChoiceVersionForContractV1(snapshot.contract) !== 1) fail('缺少当前可执行的选择合同')
   const sessionId = snapshot.run.productRuntimeSessionId ?? fail('选择步骤缺少实例owner')
   const binding = snapshot.contract.executionBindings!.find(item => item.stepId === stepId)!
-  if (binding.version !== 2 || binding.maxOutputTokens !== CHAT_ACTION_CHOICE_OUTPUT_TOKENS_V1
+  if (binding.version !== 2 || requireFixedBudgetValueV1(binding.maxOutputTokens) !== CHAT_ACTION_CHOICE_OUTPUT_TOKENS_V1
     || binding.contextSourceKeys.join(',') !== 'interactionRuntime' || binding.writeTargets.length) fail('选择步骤必须冻结只读来源与输出上限')
   const freshness = {scope: input.scope, contractScope: snapshot.contract.scope, participantKey: input.participantKey}
   await assertRuntimeHarnessFreshV1(freshness)
@@ -126,7 +127,7 @@ export async function chooseRuntimeChatActionV1(input: {
           messages, ...(requestOptions ? {requestOptions} : {})})})
       await boundary('model.requested')
       const result: ChatResult = {}
-      const callConfig = input.aiConfig ? {...input.aiConfig, maxTokens: boundedChatOutputTokensV1(input.aiConfig.maxTokens, binding.maxOutputTokens)} : undefined
+      const callConfig = input.aiConfig ? {...input.aiConfig, maxTokens: boundedChatOutputTokensV1(input.aiConfig.maxTokens, requireFixedBudgetValueV1(binding.maxOutputTokens))} : undefined
       output = input.runAI ? await input.runAI(messages, input.signal)
         : await chat(messages, callConfig!,
           {category: 'runtime.character.chat-narrative-action', projectId: input.scope.projectId, contextOverflowPolicy: 'reject'}, input.signal, result, requestOptions)

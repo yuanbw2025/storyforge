@@ -1,0 +1,201 @@
+{
+  "kind": "reference-capacity-evidence-index-v1",
+  "date": "2026-11-20",
+  "privateEvidenceRoot": "local-only Downloads archive",
+  "iterations": [
+    {
+      "iteration": 1,
+      "localEvidenceDirectory": "拆书容量实测-20261120-1",
+      "indexSha256": "432529553534dafa113b46bb26323948c58ecaafeb1b99681f7763e52000ffec",
+      "calls": 1,
+      "sourceHashes": {},
+      "evidence": [
+        {
+          "name": "large-complete",
+          "outcome": "failed",
+          "calls": 1,
+          "error": "Unexpected token '`', \"\n\n```json\n{\n\"... is not valid JSON"
+        }
+      ]
+    },
+    {
+      "iteration": 2,
+      "localEvidenceDirectory": "拆书容量实测-20261120-2",
+      "indexSha256": "94cc87c761e2fb829b87fa498c21721507043c077177c9f541c25979ec5658f4",
+      "calls": 8,
+      "sourceHashes": {
+        "src/lib/reference-analysis/adaptive-requests.ts": "0d06fed0fc3a134700760a38e1ad9c4f989ea6588862adcea7863079453a32e4",
+        "src/lib/reference-analysis/request-capacity.ts": "b1f5acd679b69e2dd382ff5e69a79801d3223742e7f1709b8c07736d309426ff",
+        "src/lib/reference-analysis/derived-agent-plan.ts": "41afa73da797137cdaaed886bf606d4852acbd8674dccde96c85d631c15dc94a",
+        "scripts/evaluate-reference-capacity.mjs": "dc4fa034db77c98628e242d0987119aa21e045c5a4f8226ed91dda857767acba"
+      },
+      "evidence": [
+        {
+          "name": "large-complete",
+          "outcome": "returned",
+          "calls": 1,
+          "completeCoverage": true,
+          "sourceHash": "874629c7fb10d6f3eb0fab832b155e51aae81ec353a044c8eeb2c77afbd7154d"
+        },
+        {
+          "name": "small-complete",
+          "outcome": "returned",
+          "calls": 1,
+          "completeCoverage": true,
+          "sourceHash": "0f886c969e6ec911b849bbdcea73d53297eb694a60a9c5019fe55588cdea8f7f"
+        },
+        {
+          "name": "small-window-stress",
+          "outcome": "failed",
+          "calls": 6,
+          "error": "Provider rejected evaluation; no retry"
+        }
+      ]
+    },
+    {
+      "iteration": 3,
+      "localEvidenceDirectory": "拆书容量实测-20261120-3",
+      "indexSha256": "f5162918b065c0e0816820f7ac3b219a8da6e5b4d9a67784520e1dcf78c608f9",
+      "calls": 27,
+      "sourceHashes": {
+        "src/lib/reference-analysis/adaptive-requests.ts": "0d06fed0fc3a134700760a38e1ad9c4f989ea6588862adcea7863079453a32e4",
+        "src/lib/reference-analysis/request-capacity.ts": "b1f5acd679b69e2dd382ff5e69a79801d3223742e7f1709b8c07736d309426ff",
+        "src/lib/reference-analysis/derived-agent-plan.ts": "b3711d48ba6d27c8e8148168f8b9b1db768b9a2187fc19a8ae2f1c35e86fd5df",
+        "scripts/evaluate-reference-capacity.mjs": "e50375623e0aecb1351cad79d899d5da0f831a107d79b2f41384a9c3d1b5df66"
+      },
+      "evidence": [
+        {
+          "name": "small-complete",
+          "outcome": "returned",
+          "calls": 1,
+          "completeCoverage": true,
+          "sourceHash": "0f886c969e6ec911b849bbdcea73d53297eb694a60a9c5019fe55588cdea8f7f"
+        },
+        {
+          "name": "small-window-stress",
+          "outcome": "failed",
+          "calls": 26,
+          "error": "服务窗口内的分层综合没有取得压缩进展；原资料及所有分层回答已保留，整体综合尚未完成。"
+        }
+      ]
+    },
+    {
+      "iteration": 4,
+      "localEvidenceDirectory": "拆书容量实测-20261120-4",
+      "indexSha256": "94b9d295f44e815f41695d4fce4838c49375b8dfc8fb06807caa9cb0486e40f8",
+      "calls": 12,
+      "sourceHashes": {
+        "src/lib/reference-analysis/adaptive-requests.ts": "9c590f4584f57d5f2d81e82bbe74343965e1bc3ee03ba9fc15ea85f0845fc65f",
+        "src/lib/reference-analysis/request-capacity.ts": "b1f5acd679b69e2dd382ff5e69a79801d3223742e7f1709b8c07736d309426ff",
+        "src/lib/reference-analysis/derived-agent-plan.ts": "b3711d48ba6d27c8e8148168f8b9b1db768b9a2187fc19a8ae2f1c35e86fd5df",
+        "scripts/evaluate-reference-capacity.mjs": "e50375623e0aecb1351cad79d899d5da0f831a107d79b2f41384a9c3d1b5df66"
+      },
+      "evidence": [
+        {
+          "name": "small-complete",
+          "outcome": "returned",
+          "calls": 1,
+          "completeCoverage": true,
+          "sourceHash": "0f886c969e6ec911b849bbdcea73d53297eb694a60a9c5019fe55588cdea8f7f"
+        },
+        {
+          "name": "small-window-stress",
+          "outcome": "returned",
+          "calls": 11,
+          "completeCoverage": true,
+          "sourceHash": "0f886c969e6ec911b849bbdcea73d53297eb694a60a9c5019fe55588cdea8f7f"
+        }
+      ]
+    },
+    {
+      "iteration": 5,
+      "localEvidenceDirectory": "拆书容量实测-20261120-5",
+      "indexSha256": "e5aa25a7b01c519301a525cdbf2121ad94f7da7fbb9125ff3691f265d6c9b4dd",
+      "calls": 23,
+      "sourceHashes": {
+        "src/lib/reference-analysis/adaptive-requests.ts": "d7b9febae832d9772dd19c7725677ad12343f6696a4dc1d640c60d3fddbde93a",
+        "src/lib/reference-analysis/request-capacity.ts": "b1f5acd679b69e2dd382ff5e69a79801d3223742e7f1709b8c07736d309426ff",
+        "src/lib/reference-analysis/derived-agent-plan.ts": "76ef8d05afd8f8efe188c6458a316b4ef513ff93158addf3e0c4b9f966c23093",
+        "scripts/evaluate-reference-capacity.mjs": "e50375623e0aecb1351cad79d899d5da0f831a107d79b2f41384a9c3d1b5df66"
+      },
+      "evidence": [
+        {
+          "name": "small-complete",
+          "outcome": "returned",
+          "calls": 1,
+          "completeCoverage": true,
+          "sourceHash": "0f886c969e6ec911b849bbdcea73d53297eb694a60a9c5019fe55588cdea8f7f"
+        },
+        {
+          "name": "small-window-stress",
+          "outcome": "failed",
+          "calls": 22,
+          "error": "服务窗口内的分层综合没有取得压缩进展；原资料及所有分层回答已保留，整体综合尚未完成。"
+        }
+      ]
+    },
+    {
+      "iteration": 6,
+      "localEvidenceDirectory": "拆书容量实测-20261120-6",
+      "indexSha256": "5d909812c5b955b0c4f56d195b1c8a7a0a492ae1733720554f4c573e48708350",
+      "calls": 8,
+      "sourceHashes": {
+        "src/lib/reference-analysis/adaptive-requests.ts": "d7b9febae832d9772dd19c7725677ad12343f6696a4dc1d640c60d3fddbde93a",
+        "src/lib/reference-analysis/request-capacity.ts": "b1f5acd679b69e2dd382ff5e69a79801d3223742e7f1709b8c07736d309426ff",
+        "src/lib/reference-analysis/derived-agent-plan.ts": "76ef8d05afd8f8efe188c6458a316b4ef513ff93158addf3e0c4b9f966c23093",
+        "scripts/evaluate-reference-capacity.mjs": "9800cd54747f6e0c8377b2c4a4e250c21442bcbf002c843d101a7a3d1bc6d283"
+      },
+      "evidence": [
+        {
+          "name": "small-complete",
+          "outcome": "returned",
+          "calls": 1,
+          "completeCoverage": true,
+          "sourceHash": "e3272f5876f4dd73e590bc4682456bba298f5df2944c44d7a1effbc82c3f8490"
+        },
+        {
+          "name": "small-window-stress",
+          "outcome": "returned",
+          "calls": 7,
+          "completeCoverage": true,
+          "sourceHash": "e3272f5876f4dd73e590bc4682456bba298f5df2944c44d7a1effbc82c3f8490"
+        }
+      ]
+    },
+    {
+      "iteration": 7,
+      "localEvidenceDirectory": "拆书容量实测-20261120-7",
+      "indexSha256": "787c19fa036d6c38bb447652e9c8d29d69be1f582e5d5a702d64959a66185bed",
+      "calls": 9,
+      "sourceHashes": {
+        "src/lib/reference-analysis/adaptive-requests.ts": "185ead830d856e1791294e2f91c28eca445323d4573d2f0e434430d9e14ebbec",
+        "src/lib/reference-analysis/request-capacity.ts": "b1f5acd679b69e2dd382ff5e69a79801d3223742e7f1709b8c07736d309426ff",
+        "src/lib/reference-analysis/derived-agent-plan.ts": "1d58e62f5ffb93bb03c3039e88c563cfe9e7b5bf8ee8315dbbd300a6821bc1cf",
+        "scripts/evaluate-reference-capacity.mjs": "cef47dfdf62024b7d281a57c73b85fee20f3330906ed6af96883a52d43a6c2e4"
+      },
+      "evidence": [
+        {
+          "name": "large-complete",
+          "outcome": "returned",
+          "calls": 1,
+          "completeCoverage": true,
+          "sourceHash": "874629c7fb10d6f3eb0fab832b155e51aae81ec353a044c8eeb2c77afbd7154d"
+        },
+        {
+          "name": "small-complete",
+          "outcome": "returned",
+          "calls": 1,
+          "completeCoverage": true,
+          "sourceHash": "e3272f5876f4dd73e590bc4682456bba298f5df2944c44d7a1effbc82c3f8490"
+        },
+        {
+          "name": "small-window-stress",
+          "outcome": "returned",
+          "calls": 7,
+          "completeCoverage": true,
+          "sourceHash": "e3272f5876f4dd73e590bc4682456bba298f5df2944c44d7a1effbc82c3f8490"
+        }
+      ]
+    }
+  ]
+}

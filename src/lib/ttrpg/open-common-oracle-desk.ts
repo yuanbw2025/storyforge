@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { prepareModelCapacityV1, modelInputBudgetV1 } from '../ai/model-capacity'
 import { verifyTtrpgOpenOracleJournalV1 } from './open-oracle-contract'
 import { verifyTtrpgOpenFactLedger } from './open-fact-ledger'
@@ -224,7 +225,7 @@ async function requestDesk(input: Input & Transport & { expectedSequence: number
   if (!input.aiConfig && !input.runAI) throw new Error('请先配置本次模型。')
   const loaded = await owner(input)
   if (!loaded || loaded.state.lastSequence !== page.sequence) throw new TtrpgOpenReadConflictV1('共同事实准备期间进度已变化。')
-  const maximumOutputTokens = Math.min(getAgentSkillV1('prose.ttrpg-open-common-oracle-interpret').maxOutputTokens, loaded.content.campaign.runtimePolicy.maximumOutputTokens)
+  const maximumOutputTokens = Math.min(requireFixedBudgetValueV1(getAgentSkillV1('prose.ttrpg-open-common-oracle-interpret').maxOutputTokens), loaded.content.campaign.runtimePolicy.maximumOutputTokens)
   const resolved = input.aiConfig ? resolveRequestConfig(input.aiConfig, { category: 'runtime.ttrpg-open.common-oracle-interpret', projectId: input.scope.projectId,
     configOverrides: { maxTokens: maximumOutputTokens }, contextOverflowPolicy: 'reject' }) : null
   const modelIdentity = input.runAI ? { provider: 'test-adapter', model: 'injected' } : { provider: resolved!.config.provider, model: resolved!.config.model }

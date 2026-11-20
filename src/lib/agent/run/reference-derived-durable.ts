@@ -1,4 +1,11 @@
-import { chat, resolveRequestConfig } from '../../ai/client'
+import { storeReferenceProgressV1, restoreReferenceProgressV1, type StoredReferenceProgressV1 } from '../../reference-analysis/progress-evidence'
+import { readAgentRunArtifactExactV1 } from '../../memory/artifact-store'
+import { runAdaptiveReferenceRequestsV1, isReferenceContextRejectionV1, referenceSelectionContextV1, reviewReferenceAcrossBatchesV1, type ReferenceGlobalProgressV1, type ReferenceCompletedAnswerV1 } from '../../reference-analysis/adaptive-requests'
+import { referenceServiceInputLimit } from '../../reference-analysis/request-capacity'
+import { prepareModelCapacityV1 } from '../../ai/model-capacity'
+import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1, recordCreationNativeRequestV1, handoffCreationNativeReceiptV1 } from './creation-response-evidence'
+import type { ChatResult } from '../../ai/client'
+import { chat, resolveRequestConfig, describeResolvedAIRequestSettingsV1 } from '../../ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../ai/config-readiness'
 import {
   formatReferenceDerivedBaselineV1,
@@ -8,6 +15,7 @@ import {
 } from '../../reference-analysis/derived-agent-baseline'
 import {
   buildReferenceDerivedMessagesV1,
+  buildReferenceCrossRangeMessagesV1,
   parseReferenceDerivedResultStrictV1,
   readReferenceDerivedPromptTemplateSnapshotV1,
   readReferenceDerivedPromptTemplateV1,
@@ -58,6 +66,15 @@ export interface ReferenceDerivedCandidateV1 {
   promptTemplateHash: string
   promptHash: string
   modelOutputHash: string
+  /** promptHash is the immutable initial plan; these are the actual transmitted request/response roots. */
+  execution?: {
+    version: 1
+    kind: 'reference-batch-execution'
+    requestHashes: string[]
+    responseHashes: string[]
+    ranges: Array<{ start: number; end: number }>
+    resultKind: 'model-response' | 'derived-composition'
+  }
   resultJson: string
   resultHash: string
   candidateHash: string
@@ -74,6 +91,7 @@ interface ReferenceDerivedAdoptionIntentV1 {
 export type ReferenceDerivedBoundaryV1 =
   | 'model.requested'
   | 'model.responded'
+  | 'batch.checkpoint'
   | 'candidate.checkpoint'
   | 'candidate.persisted'
 
@@ -176,6 +194,7 @@ function registeredBaselineSegment(assembled: Awaited<ReturnType<typeof assemble
 async function prepareInput(
   scope: WorkspaceScope,
   request: ReferenceDerivedRequestV1,
+  modelConfig?: AIConfig,
 ): Promise<PreparedReferenceDerivedInputV1> {
   const [baseline, assembled] = await Promise.all([
     readReferenceDerivedBaselineV1({ scope, runId: request.runId, mode: request.mode }),
@@ -185,7 +204,7 @@ async function prepareInput(
       referenceDerivedMode: request.mode,
       referenceAnalysisRunId: request.runId,
       sourceKeys: [...REFERENCE_DERIVED_CONTEXT_SOURCE_KEYS_V1],
-      inputBudgetMaxTokens: 40_000,
+      modelConfig,
     }),
   ])
   if (registeredBaselineSegment(assembled) !== formatReferenceDerivedBaselineV1(baseline)) {
@@ -195,6 +214,7 @@ async function prepareInput(
   const messages = buildReferenceDerivedMessagesV1({
     mode: request.mode,
     registeredContext: assembled.text,
+    summaryKeys: baseline.input.kind === 'summary' ? baseline.input.dimensions.map(d => d.dimension) : undefined,
     template,
   })
   const modelInput = messages.map(message => message.content).join('\n')
@@ -234,7 +254,7 @@ function contract(scope: WorkspaceScope, request: ReferenceDerivedRequestV1) {
   const field = outputField(request.mode)
   return {
     version: 1 as const,
-    objective: `为参考分析版本 ${request.runId} 生成可确认的${request.mode === 'summary' ? '全书总结' : '角色聚合卡'}`,
+    objective: `为参考分析版本 ${request.runId} 生成可确认的${request.mode === 'summary' ? '已读范围综合' : '角色聚合卡'}`,
     workflowKind: 'generate-verify-revise' as const,
     scope: { projectId: scope.projectId, worldGroupId: null },
     permissions: {
@@ -246,10 +266,11 @@ function contract(scope: WorkspaceScope, request: ReferenceDerivedRequestV1) {
     },
     executionBindings: [{ stepId: stepId(request.mode), ...createAgentSkillExecutionBindingV1(skill) }],
     budget: {
-      maxModelCalls: 1,
+      capacityPolicy: 'service' as const,
+      maxModelCalls: null,
       maxToolCalls: 0,
-      maxInputTokens: 40_000,
-      maxOutputTokens: skill.maxOutputTokens,
+      maxInputTokens: null,
+      maxOutputTokens: null,
       maxAttemptsPerStep: 1,
       maxProtocolErrors: 0,
     },
@@ -310,7 +331,7 @@ async function parseCandidate(value: unknown): Promise<ReferenceDerivedCandidate
     'version', 'kind', 'portable', 'projectId', 'worldId', 'workId', 'request', 'baseline',
     'baselineHash', 'sourceBaselineHash', 'originalRunOutputHash', 'originalReferenceOutputHash',
     'contextManifestHash', 'contextInputHash', 'promptTemplateHash', 'promptHash', 'modelOutputHash',
-    'resultJson', 'resultHash', 'candidateHash',
+    'resultJson', 'resultHash', 'candidateHash', ...(row.execution === undefined ? [] : ['execution']),
   ], '参考派生 Agent 候选 ')
   if (row.version !== 1 || row.kind !== 'reference-derived-candidate' || row.portable !== false
     || ![row.projectId, row.worldId, row.workId].every((id: unknown) => Number.isInteger(id) && (id as number) > 0)
@@ -334,6 +355,22 @@ async function parseCandidate(value: unknown): Promise<ReferenceDerivedCandidate
     || await hashAdoptFieldValueV1(referenceOutputValue(row.baseline)) !== row.originalReferenceOutputHash
     || await hashCanonicalValue({ resultJson: row.resultJson }) !== row.resultHash) {
     throw new Error('参考派生 Agent 候选 baseline 或结果不匹配。')
+  }
+  if (row.execution !== undefined) {
+    const execution = row.execution
+    if (!execution || typeof execution !== 'object' || Array.isArray(execution)) throw new Error('拆书执行证据无效。')
+    exactKeys(execution, ['version', 'kind', 'requestHashes', 'responseHashes', 'ranges', 'resultKind'], '拆书执行证据')
+    if (execution.version !== 1 || execution.kind !== 'reference-batch-execution'
+      || !['model-response', 'derived-composition'].includes(execution.resultKind)
+      || ![execution.requestHashes, execution.responseHashes].every(hashes => Array.isArray(hashes) && hashes.length && hashes.every(isHash))
+      || !Array.isArray(execution.ranges) || !execution.ranges.length) throw new Error('拆书执行证据不完整。')
+    let offset = 0
+    for (const range of execution.ranges) {
+      exactKeys(range, ['start', 'end'], '拆书范围')
+      if (range.start !== offset || !Number.isSafeInteger(range.end) || range.end <= offset) throw new Error('拆书执行范围不连续。')
+      offset = range.end
+    }
+    if (offset !== formatReferenceDerivedBaselineV1(row.baseline).length) throw new Error('拆书执行未覆盖完整登记范围。')
   }
   const { candidateHash, ...body } = row
   if (await hashCanonicalValue(body) !== candidateHash) throw new Error('参考派生 Agent 候选 hash 不匹配。')
@@ -376,6 +413,12 @@ function assertCandidateScope(
     || snapshot.contract.permissions.writeTargets.length !== 2) {
     throw new Error('参考派生 Agent 候选与当前 World/Work 或运行权限不匹配。')
   }
+  if (candidate.execution) {
+    for (const [kind, hashes] of [['rendered-request', candidate.execution.requestHashes], ['raw-response', candidate.execution.responseHashes]] as const) {
+      for (const hash of hashes) if (!snapshot.events.some(event => event.type === 'evidence.artifact.recorded'
+        && event.payload.artifactKind === kind && event.payload.contentHash === hash)) throw new Error('拆书执行原始证据缺失或不属于此运行。')
+    }
+  }
   const field = outputField(candidate.request.mode)
   const actual = snapshot.contract.permissions.writeTargets
   if (actual[0]?.table !== 'referenceAnalysisRuns' || !sameValue(actual[0]?.fields, [field])
@@ -411,6 +454,11 @@ async function pauseUnsafeRun(scope: WorkspaceScope, snapshot: AgentRunSnapshotV
 async function currentEvidence(scope: WorkspaceScope, candidate: ReferenceDerivedCandidateV1) {
   let prepared: PreparedReferenceDerivedInputV1 | null = null
   try { prepared = await prepareInput(scope, candidate.request) } catch { /* stale */ }
+  if (candidate.execution) {
+    for (const [artifactKind, hashes] of [['rendered-request', candidate.execution.requestHashes], ['raw-response', candidate.execution.responseHashes]] as const) {
+      for (const contentHash of hashes) await readAgentRunArtifactExactV1({ projectId: scope.projectId, artifactKind, contentHash })
+    }
+  }
   const baseline = prepared?.baseline
   const runValue = baseline ? runOutputValue(baseline) : undefined
   const referenceValue = baseline ? referenceOutputValue(baseline) : undefined
@@ -454,6 +502,7 @@ export async function generateReferenceDerivedCandidateV1(input: {
   runId: number
   aiConfig?: AIConfig
   runAI?: RunAI
+  resumeRunId?: number
   onDurableBoundary?: (
     boundary: ReferenceDerivedBoundaryV1,
     snapshot: AgentRunSnapshotV1,
@@ -464,21 +513,36 @@ export async function generateReferenceDerivedCandidateV1(input: {
   const requestMeta = {
     category,
     projectId: input.scope.projectId,
-    configOverrides: { maxTokens: getAgentSkillV1(skillId(input.mode)).maxOutputTokens },
+    configOverrides: { maxTokens: 0 },
     contextOverflowPolicy: 'reject' as const,
   }
-  if (!input.runAI) {
-    const effective = resolveRequestConfig(input.aiConfig!, requestMeta).config
-    if (!isAIConfigReady(effective)) throw new Error(getAIConfigRequiredMessage(effective))
-  }
+  const resolution = input.aiConfig ? resolveRequestConfig(input.aiConfig, requestMeta) : undefined
+  const effective = resolution ? await prepareModelCapacityV1(resolution.config) : undefined
+  if (!input.runAI && !isAIConfigReady(effective!)) throw new Error(getAIConfigRequiredMessage(effective!))
   const request: ReferenceDerivedRequestV1 = { mode: input.mode, runId: input.runId }
   assertRequest(request)
-  const prepared = await prepareInput(input.scope, request)
-  let snapshot = await createAgentRunV1({ scope: input.scope, contract: contract(input.scope, request) })
+  const prepared = await prepareInput(input.scope, request, effective)
+  let completed: ReferenceCompletedAnswerV1[] = []
+  let globalProgress: ReferenceGlobalProgressV1 | undefined
+  let snapshot: AgentRunSnapshotV1
+  if (input.resumeRunId != null) {
+    const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope, input.resumeRunId)
+    const state = checkpoint?.resumePayload as { kind?: string; baselineHash?: string; promptHash?: string; promptTemplateHash?: string; request?: ReferenceDerivedRequestV1; state?: StoredReferenceProgressV1 } | null
+    if (!checkpoint || state?.kind !== 'reference-adaptive-progress-v2' || state.baselineHash !== prepared.baselineHash || state.promptHash !== prepared.promptHash || state.promptTemplateHash !== prepared.promptTemplateHash
+      || !sameValue(state.request, request) || state.state?.version !== 1
+      || checkpoint.snapshot.events.some(event => event.sequence > checkpoint.checkpoint.throughSequence + 1 && event.type === 'model.requested')
+      || checkpoint.snapshot.projection.state !== 'running') throw new Error('此分批检查点存在未知请求、来源变化或模式不匹配，未自动重发。')
+    snapshot = checkpoint.snapshot
+    const restored = await restoreReferenceProgressV1({ scope: input.scope, snapshot, state: state.state!, source: prepared.assembled.text, rootSourceHash: prepared.sourceBaselineHash })
+    completed = restored.completed
+    globalProgress = restored.globalProgress
+  } else snapshot = await createAgentRunV1({ scope: input.scope, contract: contract(input.scope, request) })
   const currentStepId = stepId(input.mode)
-  snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: currentStepId })
-  snapshot = await append(input.scope, snapshot, 'step.started', { stepId: currentStepId, attempt: 1 })
-  const manifest = await createContextManifestFromAssemblyV1({
+  if (input.resumeRunId == null) {
+    snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: currentStepId })
+    snapshot = await append(input.scope, snapshot, 'step.started', { stepId: currentStepId, attempt: 1 })
+  }
+  const manifest = input.resumeRunId == null ? await createContextManifestFromAssemblyV1({
     runId: snapshot.run.id,
     stepId: currentStepId,
     attempt: 1,
@@ -487,42 +551,138 @@ export async function generateReferenceDerivedCandidateV1(input: {
     declaredSourceKeys: [...REFERENCE_DERIVED_CONTEXT_SOURCE_KEYS_V1],
     assembled: prepared.assembled,
     readerVersion: 'reference-derived-context-v1',
-  })
-  snapshot = await append(input.scope, snapshot, 'context.assembled', {
+  }) : { manifestHash: snapshot.events.flatMap(event => event.type === 'context.assembled' ? [event.payload.manifestHash] : [])[0] }
+  if (!manifest.manifestHash) throw new Error('原分批上下文回执缺失。')
+  if (input.resumeRunId == null) snapshot = await append(input.scope, snapshot, 'context.assembled', {
     stepId: currentStepId,
     attempt: 1,
     manifestHash: manifest.manifestHash,
   })
-  snapshot = await append(input.scope, snapshot, 'model.requested', {
-    stepId: currentStepId,
-    attempt: 1,
-    bindingHash: await hashCanonicalValue(snapshot.contract.executionBindings?.[0]),
-  })
-  let raw: string
-  try {
-    await input.onDurableBoundary?.('model.requested', snapshot)
-    raw = await (input.runAI
-      ? input.runAI(prepared.messages)
-      : chat(prepared.messages, input.aiConfig!, {
-          category: input.mode === 'summary' ? 'reference.summary' : 'reference.characters',
-          projectId: input.scope.projectId,
-          configOverrides: { maxTokens: getAgentSkillV1(skillId(input.mode)).maxOutputTokens },
-          contextOverflowPolicy: 'reject',
-        }))
-  } catch (error) {
-    await pauseUnsafeRun(input.scope, snapshot, 'reference-derived-model-outcome-unknown')
-    throw error
+  if (input.resumeRunId == null) {
+    const saved = await createAgentRunCheckpointV1({ scope: input.scope, runId: snapshot.run.id,
+      resumePayload: { kind: 'reference-adaptive-progress-v2', baselineHash: prepared.baselineHash, promptHash: prepared.promptHash, promptTemplateHash: prepared.promptTemplateHash, request, state: { version: 1, completed: [] } } })
+    snapshot = saved.snapshot
   }
-  snapshot = await append(input.scope, snapshot, 'model.responded', {
-    stepId: currentStepId,
-    attempt: 1,
-    outputHash: await hashCanonicalValue({ raw }),
+  let raw: string
+  let reviewing = false
+  const invoke = async (messages: ChatMessage[], selection: import('../../reference-analysis/adaptive-requests').ReferenceRequestSelectionV1) => {
+      const recorded = await recordCreationModelRequestV1({ scope: input.scope, snapshot, stepId: currentStepId,
+        attempt: 1, contextManifestHash: manifest.manifestHash, messages,
+        referenceSelection: { rootSourceHash: prepared.sourceBaselineHash, start: selection.start, end: selection.end,
+          sourceLength: selection.sourceLength, phase: reviewing ? 'review' : 'source' },
+        requestSettings: resolution && !input.runAI ? describeResolvedAIRequestSettingsV1({ ...resolution, config: effective! }, false,
+          { capacityPolicy: 'reference-service', responseFormat: 'json_object' }, messages) : undefined,
+      })
+      snapshot = recorded.snapshot
+      snapshot = await append(input.scope, snapshot, 'model.requested', {
+        stepId: currentStepId, attempt: 1, bindingHash: await hashCanonicalValue(snapshot.contract.executionBindings?.[0]),
+      })
+      const result: ChatResult = { onCodexRequestPrepared: async binding => {
+        snapshot = await recordCreationNativeRequestV1({ snapshot, request: recorded.request, binding })
+      }, beforeModelDispatch: async () => {
+        const live = await readReferenceDerivedBaselineV1({ scope: input.scope, runId: input.runId, mode: input.mode })
+        if (await hashCanonicalValue(live) !== prepared.baselineHash) throw new Error('拆书来源或目标版本已变化，未发送后续批次。')
+      } }
+      try {
+        await input.onDurableBoundary?.('model.requested', snapshot)
+        const answer = input.runAI ? await input.runAI(messages) : await chat(messages, effective!,
+          { ...requestMeta, category: input.mode === 'summary' ? 'reference.summary' : 'reference.characters', transportRetryPolicy: 'none' }, undefined, result,
+          { capacityPolicy: 'reference-service', responseFormat: 'json_object' }, resolution ? { ...resolution, config: effective! } : undefined)
+        const saved = await recordCreationModelResponseV1({ snapshot, request: recorded.request, raw: answer, result })
+        snapshot = await handoffCreationNativeReceiptV1({ snapshot: saved, request: recorded.request, raw: answer, result })
+        snapshot = await append(input.scope, snapshot, 'model.responded', {
+          stepId: currentStepId, attempt: 1, outputHash: await hashCanonicalValue({ raw: answer }),
+        })
+        await input.onDurableBoundary?.('model.responded', snapshot)
+        const responses = snapshot.events.flatMap(event => event.type === 'evidence.artifact.recorded'
+          && event.payload.artifactKind === 'raw-response' ? [event.payload.contentHash] : [])
+        return { raw: answer, finishReason: result.finishReason, artifactHash: responses[responses.length - 1] }
+      } catch (error) {
+        const saved = await recordUnavailableCreationResponseV1({ snapshot, request: recorded.request, result, error })
+        snapshot = saved.snapshot
+        if (result.terminalFailure?.providerTurn.status === 'failed' && /context_length_exceeded|maximum context length|context window.*exceed/i.test(error instanceof Error ? error.message : '')) {
+          Object.assign(error as object, { referenceConfirmedContextRejection: true })
+        }
+        const rejected = result.requestLifecycle?.phase === 'pre-dispatch' ||
+          (result.requestLifecycle?.phase === 'response-observed' && result.requestLifecycle.responseStatus === 400)
+        if (!rejected && !isReferenceContextRejectionV1(error)) await pauseUnsafeRun(input.scope, snapshot, 'reference-derived-model-outcome-unknown')
+        throw error
+      }
+    }
+  const answers = await runAdaptiveReferenceRequestsV1({
+    source: prepared.assembled.text,
+    completed,
+    validateAnswer: answer => { parseReferenceDerivedResultStrictV1(input.mode, answer.raw, prepared.baseline) },
+    onCheckpoint: async answers => {
+      const stored = await storeReferenceProgressV1({ scope: input.scope, snapshot, stepId: currentStepId, completed: answers })
+      snapshot = stored.snapshot
+      const saved = await createAgentRunCheckpointV1({ scope: input.scope, runId: snapshot.run.id,
+        resumePayload: { kind: 'reference-adaptive-progress-v2', baselineHash: prepared.baselineHash, promptHash: prepared.promptHash, promptTemplateHash: prepared.promptTemplateHash, request, state: stored.state } })
+      snapshot = saved.snapshot
+      completed = answers
+      await input.onDurableBoundary?.('batch.checkpoint', snapshot)
+    },
+    inputLimit: effective ? referenceServiceInputLimit(effective) : null,
+    messages: selection => selection.start === 0 && selection.end === selection.sourceLength
+      ? prepared.messages
+      : buildReferenceDerivedMessagesV1({ mode: input.mode,
+          summaryKeys: prepared.baseline.input.kind === 'summary' ? prepared.baseline.input.dimensions.map(d => d.dimension) : undefined,
+          registeredContext: referenceSelectionContextV1(selection) + '\n登记维度：' +
+            (prepared.baseline.input.kind === 'summary' ? prepared.baseline.input.dimensions.map(d => d.dimension).join('、') : 'characters'),
+        }),
+    invoke,
   })
-  try {
-    await input.onDurableBoundary?.('model.responded', snapshot)
-  } catch (error) {
-    await pauseUnsafeRun(input.scope, snapshot, 'reference-derived-model-result-uncheckpointed')
-    throw error
+  let globalReview: Record<string, string> | null = null
+  if (answers.length > 1) {
+    reviewing = true
+    const keys = prepared.baseline.input.kind === 'summary'
+      ? prepared.baseline.input.dimensions.map(d => d.dimension) : ['characterCraft']
+    const reviewed = await reviewReferenceAcrossBatchesV1({ answers, resume: globalProgress,
+      inputLimit: effective ? referenceServiceInputLimit(effective) : null, invoke,
+      messages: selection => buildReferenceCrossRangeMessagesV1(selection, keys),
+      checkpoint: async progress => {
+        const stored = await storeReferenceProgressV1({ scope: input.scope, snapshot, stepId: currentStepId, completed: answers, globalProgress: progress })
+        snapshot = stored.snapshot
+        const saved = await createAgentRunCheckpointV1({ scope: input.scope, runId: snapshot.run.id,
+          resumePayload: { kind: 'reference-adaptive-progress-v2', baselineHash: prepared.baselineHash, promptHash: prepared.promptHash, promptTemplateHash: prepared.promptTemplateHash,
+            request, state: stored.state } })
+        snapshot = saved.snapshot
+        await input.onDurableBoundary?.('batch.checkpoint', snapshot)
+      },
+    })
+    const value: unknown = JSON.parse(reviewed)
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('跨范围综合协议错误。')
+    exactKeys(value as Record<string, unknown>, keys, '跨范围综合')
+    if (!Object.values(value).every(text => typeof text === 'string' && text.trim())) throw new Error('跨范围综合缺失内容。')
+    globalReview = value as Record<string, string>
+  }
+  if (answers.length === 1) raw = answers[0].raw
+  else if (input.mode === 'summary' && prepared.baseline.input.kind === 'summary') {
+    const complete: Record<string, string> = {}
+    for (const dimension of prepared.baseline.input.dimensions) complete[dimension.dimension] = `【跨范围关系综合（原分批证据完整附后）】\n${globalReview?.[dimension.dimension] ?? ''}\n`
+    for (const answer of answers) {
+      const parsed = parseReferenceDerivedResultStrictV1('summary', answer.raw, prepared.baseline)
+      if (parsed.mode !== 'summary') throw new Error('综合模式错误')
+      for (const [key, value] of Object.entries(parsed.value)) {
+        complete[key] += `【完整分批综合：来源字符 ${answer.selection.start}—${answer.selection.end}；跨批解释参见关系综合；原始分批观察完整保留】\n${value}\n`
+      }
+    }
+    raw = JSON.stringify(complete)
+  } else {
+    const cards: Array<{ name: string; role: string; summary: string; analysis: string }> = []
+    for (const answer of answers) {
+      const parsed = parseReferenceDerivedResultStrictV1('characters', answer.raw, prepared.baseline)
+      if (parsed.mode !== 'characters') throw new Error('人物模式错误')
+      for (const card of parsed.value) cards.push({ ...card,
+        name: card.name,
+        analysis: `【登记分析范围 ${answer.selection.start}—${answer.selection.end}】原始称谓：${card.name}。跨批身份须按证据确认，不据同名强行合并。\n${card.analysis}\n【全局人物关系参考；不自动确认本卡身份】\n${globalReview?.characterCraft ?? ''}`,
+      })
+    }
+    const identities = new Map<string, number>()
+    const identityKey = (name: string) => name.replace(/[\s·・\-—_]+/g, '').toLocaleLowerCase()
+    for (const card of cards) identities.set(identityKey(card.name), (identities.get(identityKey(card.name)) ?? 0) + 1)
+    cards.forEach((card, index) => { if ((identities.get(identityKey(card.name)) ?? 0) > 1) card.name += `【身份待核实·分组${index + 1}】` })
+    raw = JSON.stringify({ characters: cards })
   }
   let resultJson: string
   try {
@@ -557,6 +717,13 @@ export async function generateReferenceDerivedCandidateV1(input: {
     promptTemplateHash: prepared.promptTemplateHash,
     promptHash: prepared.promptHash,
     modelOutputHash: await hashCanonicalValue({ raw }),
+    execution: {
+      version: 1 as const, kind: 'reference-batch-execution' as const,
+      requestHashes: snapshot.events.flatMap(event => event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'rendered-request' ? [event.payload.contentHash] : []),
+      responseHashes: snapshot.events.flatMap(event => event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'raw-response' ? [event.payload.contentHash] : []),
+      ranges: answers.map(answer => ({ start: answer.selection.start, end: answer.selection.end })),
+      resultKind: answers.length === 1 ? 'model-response' as const : 'derived-composition' as const,
+    },
     resultJson,
     resultHash: await hashCanonicalValue({ resultJson }),
   }
@@ -612,6 +779,7 @@ export async function readRecoverableReferenceDerivedRunV1(input: {
   safeToResume: boolean
   candidate?: ReferenceDerivedCandidateV1
   adoptionPending?: boolean
+  progress?: boolean
 } | null> {
   const rows = (await readOwnedRows<any>(input.scope, 'agentRuns', { owner: 'work' }))
     .filter(row => ['running', 'paused', 'awaiting_confirmation', 'verifying'].includes(row.status)
@@ -621,6 +789,16 @@ export async function readRecoverableReferenceDerivedRunV1(input: {
     if (!row.id) continue
     const snapshot = await readAgentRunV1(input.scope, row.id)
     try {
+      const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope, row.id)
+      const progress = checkpoint?.resumePayload as { kind?: string; request?: ReferenceDerivedRequestV1; baselineHash?: string; promptHash?: string } | null
+      if (progress?.kind === 'reference-adaptive-progress-v2') {
+        if (input.analysisRunId != null && progress.request?.runId !== input.analysisRunId) continue
+        let fresh = false
+        try { const current = await prepareInput(input.scope, progress.request!); fresh = current.baselineHash === progress.baselineHash && current.promptHash === progress.promptHash } catch { /* stale */ }
+        const known = fresh && snapshot.projection.state === 'running' && !snapshot.events.some(event =>
+          event.sequence > checkpoint!.checkpoint.throughSequence + 1 && event.type === 'model.requested')
+        return { snapshot, safeToResume: known, progress: true }
+      }
       const state = await latestState(input.scope, row.id)
       assertCandidateScope(input.scope, snapshot, state.candidate)
       if (input.analysisRunId != null && state.candidate.request.runId !== input.analysisRunId) continue

@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import { chat } from '../../ai/client'
 import {
   buildHistoryAgentMessagesV1,
@@ -264,7 +265,7 @@ function contract(scope: WorkspaceScope, request: HistoryAgentRequestV1) {
       maxModelCalls: 1,
       maxToolCalls: 0,
       maxInputTokens: 40_000,
-      maxOutputTokens: skill.maxOutputTokens,
+      maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
       maxAttemptsPerStep: 1,
       maxProtocolErrors: 0,
     },
@@ -514,7 +515,7 @@ export async function generateHistoryAgentCandidateV1(input: {
       : chat(prepared.messages, input.aiConfig!, {
           category: input.mode === 'consult' ? 'history.consult' : 'history.storm',
           projectId: input.scope.projectId,
-          configOverrides: { maxTokens: getAgentSkillV1(skillId(input.mode)).maxOutputTokens },
+          configOverrides: { maxTokens: requireFixedBudgetValueV1(getAgentSkillV1(skillId(input.mode)).maxOutputTokens) },
           contextOverflowPolicy: 'reject',
         }))
   } catch (error) {

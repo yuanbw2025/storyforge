@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from './finite-budget'
 import { INSPIRATION_PREPARATION_MODULES, inspirationPreparationModeFromRequest } from '../inspiration/preparation'
 import { INSPIRATION_PREPARATION_LABELS, isInspirationPreparationMode } from '../inspiration/preparation'
 import { CHARACTER_DIMENSIONS } from '../character/character-dimensions'
@@ -1203,7 +1204,7 @@ async function executeSequentialMasterAgentPlan(
             prepared: prepared.prepared,
             budget,
             callLabel: '世界基座字段 Skill',
-            maxOutputTokens: skill.maxOutputTokens,
+            maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
           })
           const draft = JSON.stringify(result.output, null, 2)
           candidates.push({
@@ -1319,7 +1320,7 @@ async function executeSequentialMasterAgentPlan(
             prepared: prepared.prepared,
             budget,
             callLabel: '创作规则 Skill',
-            maxOutputTokens: skill.maxOutputTokens,
+            maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
           })
           const draft = JSON.stringify(result.output, null, 2)
           candidates.push({
@@ -1371,7 +1372,7 @@ async function executeSequentialMasterAgentPlan(
             prepared: prepared.prepared,
             budget,
             callLabel: '角色状态演化 Skill',
-            maxOutputTokens: skill.maxOutputTokens,
+            maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
           })
           const draft = serializeCharacterLifecycleCandidateV1(result.output, prepared.snapshot)
           candidates.push({
@@ -1429,7 +1430,7 @@ async function executeSequentialMasterAgentPlan(
             prepared: prepared.prepared,
             budget,
             callLabel: '已有角色定向补全 Skill',
-            maxOutputTokens: skill.maxOutputTokens,
+            maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
           })
           const draft = serializeCharacterSupplementCandidateV1(
             result.output,
@@ -1492,7 +1493,7 @@ async function executeSequentialMasterAgentPlan(
             prepared: prepared.prepared,
             budget,
             callLabel: '角色领域 Agent',
-            maxOutputTokens: skill.maxOutputTokens,
+            maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
           })
           const draft = JSON.stringify(result.output, null, 2)
           candidates.push({
@@ -1563,7 +1564,7 @@ async function executeSequentialMasterAgentPlan(
           prepared: prepared.prepared,
           budget,
           callLabel: '灵感领域 Agent',
-          maxOutputTokens: skill.maxOutputTokens,
+          maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
         })
         const draft = JSON.stringify(result.output, null, 2)
         candidates.push({
@@ -1598,7 +1599,7 @@ async function executeSequentialMasterAgentPlan(
           const observed = observeMasterRawModelV1(task, prepared.runRaw, input.executionTrace)
           assertModelEvidenceSaved = observed.assertSaved
           const startedAt = Date.now()
-          const result = await runBudgetedGenerationNode({ node: { ...prepared.node, run: async messages => (await observed.runRaw(messages)).output }, prepared: prepared.prepared, budget, callLabel: '场景细纲 Agent', maxOutputTokens: skill.maxOutputTokens })
+          const result = await runBudgetedGenerationNode({ node: { ...prepared.node, run: async messages => (await observed.runRaw(messages)).output }, prepared: prepared.prepared, budget, callLabel: '场景细纲 Agent', maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) })
           const draft = result.output
           const creativeArtifact = await createDetailedOutlineCreativeArtifactV1({ raw: draft, operation: 'enhanced', narrativeBrief: prepared.narrativeBrief, qualityMode: useAIConfigStore.getState().creativeQualityMode, modelIdentity: prepared.modelIdentity, inputText: prepared.prepared.messages.map(message => message.content).join('\n'), durationMs: Date.now() - startedAt })
           candidates.push({ payload: { version: 1, taskId: task.id, agentId: task.agentId, skillId: skill.id as AgentSkillId, executionBinding, label: prepared.label, contextSources: prepared.contextSources, contextEvidence: prepared.contextEvidence, baseSnapshot: prepared.snapshot, workspaceScope: scope, dependsOnTaskIds: task.dependsOn, generator: prepared.modelIdentity, creativeArtifact, narrativeBrief: prepared.narrativeBrief }, draft, runtimeNode: prepared.node, runtimeOutput: result.output, contextGatewayRuntime: { execution: prepared.assembled.contextGatewayExecution, assembled: prepared.assembled, renderedRequest: prepared.prepared.messages, rawResponse: draft } })
@@ -1626,7 +1627,7 @@ async function executeSequentialMasterAgentPlan(
             prepared: prepared.prepared,
             budget,
             callLabel: '故事线进度映射 Skill',
-            maxOutputTokens: skill.maxOutputTokens,
+            maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
           })
           const draft = JSON.stringify(result.output, null, 2)
           candidates.push({
@@ -1673,7 +1674,7 @@ async function executeSequentialMasterAgentPlan(
             prepared: prepared.prepared,
             budget,
             callLabel: '角色变更影响与中途重规划 Skill',
-            maxOutputTokens: skill.maxOutputTokens,
+            maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
           })
           const draft = serializeCharacterRevisionCandidateV1(result.output)
           candidates.push({
@@ -1719,7 +1720,7 @@ async function executeSequentialMasterAgentPlan(
             prepared: prepared.prepared,
             budget,
             callLabel: '角色驱动卷章编排 Skill',
-            maxOutputTokens: skill.maxOutputTokens,
+            maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
             validate: output => validateDomainCandidateCanon({
               agentId: task.agentId,
               projectId: input.projectId,
