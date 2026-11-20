@@ -4,6 +4,8 @@ import { test, expect } from '@playwright/test'
  * local response fixture. Normal author UI and real provider acceptance stay separate. */
 test('two native tabs adopt one selection once and terminal repair preserves later author edits after reload', async ({ page }, info) => {
   await page.goto('./')
+  // The synthetic local service advertises its actual finite loaded allocation.
+  await page.route('**/fixture-adoption/api/v1/models', route => route.fulfill({ json: { models: [{ type: 'llm', key: 'fixture-model', loaded_instances: [{ config: { context_length: 131072 } }] }] } }))
   const setup = await page.evaluate(async () => {
     const load = new Function('path', 'return import(path)')
     const f = await (await load('/storyforge/tests/helpers/ttrpg-open-design.ts')).createSavedOpenDesignFixtureV1()
@@ -26,7 +28,7 @@ test('two native tabs adopt one selection once and terminal repair preserves lat
     const load = new Function('path', 'return import(path)'), api = await load('/storyforge/src/lib/ttrpg/open-authoring-design.ts')
     return api.generateTtrpgOpenAuthoringDesignCandidateV1({ scope: input.scope, revision: input.revision,
       request: { schema: 'storyforge.ttrpg-open-authoring-design-request', version: 1, instruction: '起草三种压力节奏', sections: ['pressure'] },
-      aiConfig: { provider: 'custom', model: 'fixture-model', baseUrl: `${location.origin}/fixture-adoption/v1`, apiKey: 'fixture-only', temperature: 0.7, maxTokens: 16000, contextWindow: 131072 } })
+      aiConfig: { provider: 'custom', model: 'fixture-model', baseUrl: `${location.origin}/fixture-adoption/v1`, apiKey: 'fixture-only', temperature: 0.7, maxTokens: 16000 } })
   }, setup)
   const other = await page.context().newPage(); await other.goto('./')
   const adoption = { scope: setup.scope, runId: candidate.runId, candidateHash: candidate.candidateHash,
