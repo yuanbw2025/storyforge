@@ -153,6 +153,7 @@ describe('AGENT-1 27.1-d · ChatCopilot 灵感反推闭环', () => {
     expect(runAI).toHaveBeenCalledOnce()
     expect(parseInspirationVersions((await db.inspirationWorkspaces.get(row.id!))?.versions)).toHaveLength(0)
 
+    if (!('storyCore' in generated.output)) throw new Error('Expected single-world reverse fixture')
     const edited = {
       ...generated.output,
       storyCore: { ...generated.output.storyCore, theme: '身份与记忆' },

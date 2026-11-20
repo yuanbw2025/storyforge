@@ -15,12 +15,14 @@ assertOfflineReferenceEntry(registry)
 const local = await import(pathToFileURL(join(process.env.STORYFORGE_LOCAL_API_HOME || join(homedir(), '.config/storyforge/api'), 'lib/local-api.mjs')).href)
 const { profile, apiKey } = local.loadProfile(process.argv[3] || 'agnes-primary', { purpose: 'comparison' })
 const server = await createServer({ server: { middlewareMode: true, hmr: false }, optimizeDeps: { noDiscovery: true, include: [] }, appType: 'custom' })
+/** @param {Parameters<import('node:crypto').Hash['update']>[0]} value */
 const hash = value => createHash('sha256').update(value).digest('hex')
 let calls = 0
 try {
   await mkdir(output, { recursive: false })
   // Extract only the production prompt builder: importing the copilot would initialize browser stores.
-  const { WORLDVIEW_GENERATABLE_FIELD_SPECS: specs } = await server.ssrLoadModule('/src/lib/registry/field-registry.ts')
+  /** @type {Array<{field:string, aiGeneration:{label:string, maxChars:number}}>} */
+  const specs = (await server.ssrLoadModule('/src/lib/registry/field-registry.ts')).WORLDVIEW_GENERATABLE_FIELD_SPECS
   const { worldviewFieldContentGuidanceV1 } = await server.ssrLoadModule('/src/lib/creation/worldview-content-skill.ts')
   const WORLDVIEW_AGENT_FIELD_CAPABILITIES = new Map(specs.map(spec => [spec.field, spec.aiGeneration]))
   const WORLDVIEW_AGENT_FIELD_LABELS = Object.fromEntries(specs.map(spec => [spec.field, spec.aiGeneration.label]))
@@ -40,10 +42,14 @@ try {
   const inspirationStudy = positioningStudy || process.env.PREPARATION_EVAL_STUDY === 'inspiration'
   const editorialStudy = process.env.PREPARATION_EVAL_STUDY === 'editorial'
   const preparation = inspirationStudy ? await server.ssrLoadModule('/src/lib/inspiration/preparation.ts') : null
+  function preparationRuntime() {
+    if (!preparation) throw Error('Inspiration evaluation runtime unavailable')
+    return preparation
+  }
   const { TOOL_PROMPT_SEEDS } = (inspirationStudy || editorialStudy) ? await server.ssrLoadModule('/src/lib/ai/prompt-seeds-tools.ts') : { TOOL_PROMPT_SEEDS: [] }
   const { renderPrompt } = (inspirationStudy || editorialStudy) ? await server.ssrLoadModule('/src/lib/ai/prompt-engine.ts') : { renderPrompt: null }
   const positioningBaseline = positioningStudy ? JSON.parse(await readFile('tests/fixtures/preparation-worldview/baseline-positioning.json', 'utf8')) : null
-  const inspirationBaseline = TOOL_PROMPT_SEEDS.find(seed => seed.moduleKey === 'inspiration.reverse')
+  const inspirationBaseline = TOOL_PROMPT_SEEDS.find((/** @type {{moduleKey:string}} */ seed) => seed.moduleKey === 'inspiration.reverse')
   const fixture = worldEntriesStudy ? 'tests/fixtures/preparation-worldview/world-entry-cases.json' : positioningStudy ? (process.env.PREPARATION_EVAL_HOLDOUT === '1' ? 'tests/fixtures/preparation-worldview/positioning-holdout.json' : 'tests/fixtures/preparation-worldview/positioning-cases.json') : editorialStudy ? 'tests/fixtures/preparation-worldview/editorial-cases.json' : inspirationStudy ? 'tests/fixtures/preparation-worldview/inspiration-cases.json' : 'tests/fixtures/preparation-worldview/cases.json'
   if (inspirationStudy) {
     sourceHashes['src/lib/inspiration/preparation.ts'] = hash(await readFile('src/lib/inspiration/preparation.ts'))
@@ -62,9 +68,14 @@ try {
   if (editorialStudy) {
     for (const p of ['src/lib/creation/preparation-content-skill.ts', 'src/lib/style/learning-agent.ts', 'src/lib/ai/prompt-seeds-tools.ts', 'src/lib/ai/prompt-seeds-core.ts', fixture, 'tests/fixtures/preparation-worldview/baseline-style-research.json']) sourceHashes[p] = hash(await readFile(p))
   }
+  /**
+   * @param {(typeof import('../tests/fixtures/preparation-worldview/editorial-cases.json'))[number]} c
+   * @param {'old'|'new'} variant
+   */
   function editorialMessages(c, variant) {
+    if (!editorial) throw Error('Editorial evaluation runtime unavailable')
     const templates = variant === 'old' ? editorialBaseline.seeds : [...TOOL_PROMPT_SEEDS, ...CORE_PROMPT_SEEDS]
-    const template = templates.find(seed => seed.moduleKey === c.module)
+    const template = templates.find((/** @type {{moduleKey:string}} */ seed) => seed.moduleKey === c.module)
     let messages = renderPrompt(template, c.vars).messages
     if (c.kind === 'learn') messages = editorial.appendPreparationSystemGuidance(messages, editorialBaseline.styleProtocol)
     if (variant === 'new' && c.kind === 'research') {
@@ -81,8 +92,13 @@ try {
   }
   const allCases = JSON.parse(await readFile(fixture, 'utf8'))
   const selectedIds = process.env.PREPARATION_EVAL_CASES?.split(',')
-  if (selectedIds?.some(id => !allCases.some(c => c.id === id))) throw Error('Unknown case selection')
-  const cases = selectedIds ? allCases.filter(c => selectedIds.includes(c.id)) : allCases
+  if (selectedIds?.some(id => !allCases.some((/** @type {{id:string}} */ c) => c.id === id))) throw Error('Unknown case selection')
+  const cases = selectedIds ? allCases.filter((/** @type {{id:string}} */ c) => selectedIds.includes(c.id)) : allCases
+  /**
+   * @param {string} id
+   * @param {Array<{role:'system'|'user'|'assistant', content:string}>} messages
+   * @param {number} maxTokens
+   */
   async function request(id, messages, maxTokens, structured = false) {
     if (calls > 0) await new Promise(done => setTimeout(done, 8000))
     if (++calls > REFERENCE_QUALITY_MAX_CALLS) throw Error('Call cap exceeded')
@@ -102,36 +118,37 @@ try {
   }
   for (const [index, c] of cases.entries()) {
     const input = { targetField: c.field, mode: 'create', snapshot: { foundationState: c.context ? 'partial' : 'empty' }, projectName: '原创评测' }
+    /** @type {Record<string,string>} */
     const materials = {}
-    for (const variant of index % 2 ? ['new', 'old'] : ['old', 'new']) {
+    for (const variant of /** @type {Array<'old'|'new'>} */ (index % 2 ? ['new', 'old'] : ['old', 'new'])) {
       const system = (inspirationStudy || editorialStudy || worldEntriesStudy) ? '' : variant === 'old' ? oldBuilder(input) : buildWorldviewFieldSystemV1(input)
-      if (worldEntriesStudy && c.kind === 'manifest') {
+      if (worldEntries && c.kind === 'manifest') {
         materials[variant] = worldEntries.build(c, variant)
         await writeFile(join(output, c.id + '-' + variant + '.json'), JSON.stringify({ id: c.id + '-' + variant, kind: 'derived-manifest', model: null, text: materials[variant] }, null, 2))
         console.log(c.id + '-' + variant + ' derived without model')
         continue
       }
-      const messages = worldEntriesStudy ? worldEntries.build(c, variant) : editorialStudy ? editorialMessages(c, variant) : inspirationStudy
-        ? variant === 'new' ? preparation.buildInspirationPreparationPrompt(c.mode, c.context, c.request)
+      const messages = worldEntries ? worldEntries.build(c, variant) : editorialStudy ? editorialMessages(c, variant) : inspirationStudy
+        ? variant === 'new' ? preparationRuntime().buildInspirationPreparationPrompt(c.mode, c.context, c.request)
           : positioningStudy ? renderPrompt(positioningBaseline.seed, { ...c.oldVars, userHint: c.request }).messages
             : renderPrompt(inspirationBaseline, { projectName: '原创评测', genres: '', inspiration: c.context, userHint: c.request }).messages
         : [{ role: 'system', content: system }, { role: 'user', content: '【作者要求】\n' + c.request + '\n【正式上下文】\n' + (c.context || '无') }]
       materials[variant] = await request(c.id + '-' + variant, messages, 6000, !worldEntriesStudy && !positioningStudy && (!editorialStudy || c.kind === 'rules'))
     }
     let pairValid = true
-    for (const variant of ['old', 'new']) {
+    for (const variant of /** @type {const} */ (['old', 'new'])) {
       const raw = materials[variant].trim().replace(/^```json\s*|\s*```$/g, '')
-      try { if (worldEntriesStudy) {
+      try { if (worldEntries) {
         const parsed = worldEntries.validate(c, materials[variant])
         const normalized = typeof parsed === 'string' ? parsed : JSON.stringify(parsed)
         if (c.kind !== 'manifest') await writeFile(join(output, c.id + '-' + variant + '.candidate.json'), JSON.stringify({ parser: 'current-production', text: normalized, originalResponseRetained: true }, null, 2))
         materials[variant] = normalized
-      } else if (editorialStudy) { if (c.kind === 'rules') { const parsed = JSON.parse(raw); if (parsed.field !== 'writingStyle' || typeof parsed.value !== 'string') throw Error() } else if (c.kind === 'learn') parseStyle(raw); else if (!raw.trim()) throw Error() } else if (inspirationStudy) { if (variant === 'new') preparation.parseInspirationPreparationDraft(raw, c.mode); else if (positioningStudy) { if (!raw.trim()) throw Error() } else { const parsed = JSON.parse(raw); if (!parsed.worldview || !parsed.storyCore || !Array.isArray(parsed.characters)) throw Error() } } else { const parsed = parseCandidate(raw); if (parsed.field !== c.field) throw Error() } }
+      } else if (editorialStudy) { if (c.kind === 'rules') { const parsed = JSON.parse(raw); if (parsed.field !== 'writingStyle' || typeof parsed.value !== 'string') throw Error() } else if (c.kind === 'learn') parseStyle(raw); else if (!raw.trim()) throw Error() } else if (inspirationStudy) { if (variant === 'new') preparationRuntime().parseInspirationPreparationDraft(raw, c.mode); else if (positioningStudy) { if (!raw.trim()) throw Error() } else { const parsed = JSON.parse(raw); if (!parsed.worldview || !parsed.storyCore || !Array.isArray(parsed.characters)) throw Error() } } else { const parsed = parseCandidate(raw); if (parsed.field !== c.field) throw Error() } }
       catch (error) { await writeFile(join(output, c.id + '-' + variant + '.validation-failure.json'), JSON.stringify({ error: 'invalid-candidate', reason: error instanceof Error ? error.message : 'Unknown parse failure', originalRetained: true })); pairValid = false; console.log(c.id + '-' + variant + ' invalid; retained without repair') }
     }
     if (!pairValid || !c.apply) continue // Other fixed cases remain independent; no retry of an invalid candidate.
     // Same downstream instruction, whole material, equal output allowance; no instruction confound.
-    for (const variant of ['old', 'new']) await request(c.id + '-apply-' + variant, [{ role: 'system', content: worldEntriesStudy && (c.kind === 'history' || c.kind === 'manifest') ? '你是小说资料编辑。只完成本次准备笔记任务，材料状态与创作提议分开，不声称已执行检索。' : '你是小说作者。按任务写场景，设定是候选材料，不能擅自改动作者明确规则；不要附分析。' }, { role: 'user', content: c.apply + '\n【准备材料】\n' + materials[variant] }], 1600)
+    for (const variant of /** @type {const} */ (['old', 'new'])) await request(c.id + '-apply-' + variant, [{ role: 'system', content: worldEntriesStudy && (c.kind === 'history' || c.kind === 'manifest') ? '你是小说资料编辑。只完成本次准备笔记任务，材料状态与创作提议分开，不声称已执行检索。' : '你是小说作者。按任务写场景，设定是候选材料，不能擅自改动作者明确规则；不要附分析。' }, { role: 'user', content: c.apply + '\n【准备材料】\n' + materials[variant] }], 1600)
   }
-  await writeFile(join(output, 'manifest.json'), JSON.stringify({ study: worldEntriesStudy ? 'world-entries' : positioningStudy ? 'positioning' : editorialStudy ? 'editorial' : inspirationStudy ? 'inspiration' : 'worldview', calls, ...(worldEntriesStudy ? { evaluationCompilerTarget: worldEntries.compilerTarget } : {}), selectedCaseIds: cases.map(c => c.id), model: profile.modelOrCapability, baselineCommit: worldEntriesStudy ? worldEntries.baselineCommit : positioningStudy ? positioningBaseline.commit : editorialStudy ? editorialBaseline.commit : baseline.commit, sourceHashes, limitations: 'Exploratory developer reading; no human author/reader study; single sample per condition; no literary or market guarantee.' }, null, 2))
+  await writeFile(join(output, 'manifest.json'), JSON.stringify({ study: worldEntriesStudy ? 'world-entries' : positioningStudy ? 'positioning' : editorialStudy ? 'editorial' : inspirationStudy ? 'inspiration' : 'worldview', calls, ...(worldEntries ? { evaluationCompilerTarget: worldEntries.compilerTarget } : {}), selectedCaseIds: cases.map((/** @type {{id:string}} */ c) => c.id), model: profile.modelOrCapability, baselineCommit: worldEntries ? worldEntries.baselineCommit : positioningStudy ? positioningBaseline.commit : editorialStudy ? editorialBaseline.commit : baseline.commit, sourceHashes, limitations: 'Exploratory developer reading; no human author/reader study; single sample per condition; no literary or market guarantee.' }, null, 2))
 } finally { await server.close() }

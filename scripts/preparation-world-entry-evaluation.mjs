@@ -1,6 +1,14 @@
 // Pure evaluation composition. Transport and call budget remain in the registered evaluator.
 import { readFile } from 'node:fs/promises'
 import ts from 'typescript'
+/**
+ * @typedef {{kind:'full', mode:'single'|'multiworld', args:{projectName:string, genres:string, inspiration:string, userHint:string}}
+ * | {kind:'suggest'|'expand', context:unknown}
+ * | {kind:'history', mode:string, context:unknown}
+ * | {kind:'codex', operation:'extract'|'enrich', args:Record<string,unknown>, fields:unknown}
+ * | {kind:'manifest', profile:{entries?:Record<string,{historicalAnchors?:string,fictionalAdaptations?:string}>}, options:unknown}} WorldEntryCase
+ */
+/** @param {import('vite').ViteDevServer} server */
 export async function createWorldEntryEvaluationRuntime(server) {
   const baseline = JSON.parse(await readFile('tests/fixtures/preparation-worldview/baseline-world-entry-sources.json', 'utf8'))
   const [reverse, world, history, codex, manifest, ruleTypes, historyTypes, prompt, preparation, structured, workspace] = await Promise.all([
@@ -9,8 +17,8 @@ export async function createWorldEntryEvaluationRuntime(server) {
     '/src/lib/types/world-rules.ts', '/src/lib/types/history.ts', '/src/lib/ai/prompt-engine.ts',
     '/src/lib/inspiration/preparation.ts', '/src/lib/agent/structured-output-pipeline.ts', '/src/lib/inspiration/workspace.ts',
   ].map(path => server.ssrLoadModule(path)))
-  const stub = { getState: () => ({ getActive: key => {
-    const seed = baseline.seeds.find(seed => seed.moduleKey === key)
+  const stub = { getState: () => ({ getActive: (/** @type {string} */ key) => {
+    const seed = baseline.seeds.find((/** @type {{moduleKey:string}} */ seed) => seed.moduleKey === key)
     if (!seed) throw Error('Missing frozen template: ' + key)
     return seed
   } }) }
@@ -26,6 +34,10 @@ export async function createWorldEntryEvaluationRuntime(server) {
   return {
     baselineCommit: baseline.commit,
     compilerTarget: 'ES2020',
+    /**
+     * @param {WorldEntryCase} c
+     * @param {'old'|'new'} variant
+     */
     build(c, variant) {
       const builder = variant === 'old' ? old : current
       if (c.kind === 'full') return (c.mode === 'multiworld' ? builder.multi : builder.reverse)(c.args.projectName, c.args.genres, c.args.inspiration, c.args.userHint)
@@ -41,6 +53,10 @@ export async function createWorldEntryEvaluationRuntime(server) {
       }
       throw Error('Unknown world entry fixture kind')
     },
+    /**
+     * @param {WorldEntryCase} c
+     * @param {string} raw
+     */
     validate(c, raw) {
       if (c.kind === 'full') {
         const result = full.parse(raw, c.mode)
