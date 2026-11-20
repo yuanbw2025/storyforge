@@ -1,3 +1,4 @@
+import { usePromptStore } from '../../src/stores/prompt'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
@@ -491,4 +492,21 @@ it.each(['project', 'reference'] as const)('022 freezes the original %s parse ta
   expect(await db.agentRuns.get(run.id!)).toEqual(run)
   expect(await readDocumentImportChunkEvidenceV1(f.input)).toMatchObject({ candidate, raw })
   expect(post).toHaveBeenCalledTimes(1)
+})
+
+
+it('031-F rejects a new complete frame before claiming even when its source fits alone, retaining original source identity', async () => {
+  const f = await fixture('reference'), promptState = usePromptStore.getState()
+  useAIConfigStore.getState().setConfig({ provider: 'deepseek', model: 'no-official-capacity-fixture' })
+  const active = promptState.getActive('import.parse-chunk')
+  const post = vi.fn(); vi.stubGlobal('fetch', post)
+  try {
+    usePromptStore.setState({ loaded: true, templates: [{ ...active, scope: 'user', isActive: true, systemPrompt: '动态完整框架'.repeat(4000) }] })
+    const original = await db.importSessions.get(f.input.sessionId)
+    await expect(createDocumentImportChunkCandidateV1(f.input)).rejects.toThrow('完整请求')
+    expect(post).not.toHaveBeenCalled()
+    expect(await db.agentRuns.count()).toBe(0)
+    expect(await db.importSessions.get(f.input.sessionId)).toEqual(original)
+    expect((await db.importSessions.get(f.input.sessionId))?.chunks[0].durableParse).toBeUndefined()
+  } finally { usePromptStore.setState(promptState) }
 })
