@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261119-035-repair-foundation-input-v5.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261120-035-repair-foundation-input-v6.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -1405,6 +1405,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261119-043-main-input-v1.json",
         "workPackage": "ISSUE-483",
         "note": "Preserved measured main before the two existing workStatus compression declarations."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261119-035-repair-foundation-input-v5.json",
+        "workPackage": "035-RF-input-v5",
+        "note": "Preserves the v5 repair-foundation input measurement before the integrated preparation/settings updates; no model or human acceptance implied."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -1728,6 +1733,8 @@
     "src/lib/import/document-parse-binding.ts",
     "src/lib/import/document-parse-durable.ts",
     "src/lib/import/pipeline.ts",
+    "src/lib/inspiration/preparation-contract.ts",
+    "src/lib/inspiration/preparation.ts",
     "src/lib/media/blob-store.ts",
     "src/lib/media/raster-image.ts",
     "src/lib/product-production/recovery-policy.ts",
@@ -1745,7 +1752,9 @@
     "src/lib/product-production/read-details.ts",
     "src/lib/ai/context-builder.ts",
     "src/lib/reference-analysis/context-selection.ts",
-    "src/lib/reference-analysis/content-skill.ts"
+    "src/lib/reference-analysis/content-skill.ts",
+    "src/lib/ai/prompt-seeds-reference.ts",
+    "src/lib/reference-analysis/prompt-library.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",
