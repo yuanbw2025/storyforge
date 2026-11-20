@@ -13,7 +13,8 @@ import { usePromptStore } from '../../stores/prompt'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
 import { resolveRequestConfig, type ChatResult } from '../ai/client'
 import { modelDispatchWasCancelledV1 } from '../ai/codex-transport'
-import { renderPrompt } from '../ai/prompt-engine'
+import { prepareModelCapacityV1, freezeModelCapacityV1 } from '../ai/model-capacity'
+import { buildDocumentParseFrameV1, assessDocumentParseRequestV1 } from './document-parse-request'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { executeFrozenFormalAIEntryV1, freezeFormalAIEntryBindingV1 } from '../agent/formal-ai-entry'
 import { getAgentSkillV1 } from '../agent/skill-registry'
@@ -33,7 +34,7 @@ import { readAgentRunArtifactExactV1 } from '../memory/artifact-store'
 import { assembleContext } from '../registry/assemble-context'
 import type { UnifiedParseResult, WorkspaceScope } from '../types'
 import type { ExactRunArtifactKindV1 } from '../types/memory-engineering'
-import { formatCodexImportCatalog, type CodexImportCategoryOption } from './codex-classification'
+import type { CodexImportCategoryOption } from './codex-classification'
 import { getChunkText } from './chunk-text-registry'
 import { normalizeUnified } from './unified-merge'
 
@@ -137,8 +138,10 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
   const skill = getAgentSkillV1(SKILL, 'inspiration')
   const metadata = { category: 'import.parse-chunk', projectId: input.projectId, contextOverflowPolicy: 'reject' as const,
     configOverrides: { maxTokens: skill.maxOutputTokens } }
-  const resolved = resolveRequestConfig(config, metadata)
-  if (!isAIConfigReady(resolved.config)) fail(getAIConfigRequiredMessage(resolved.config))
+  const routed = resolveRequestConfig(config, metadata)
+  if (!isAIConfigReady(routed.config)) fail(getAIConfigRequiredMessage(routed.config))
+  const resolved = { ...routed, config: await prepareModelCapacityV1(routed.config) }
+  freezeModelCapacityV1(resolved.config)
   // A fresh World may reach document import before opening Codex. Initialize its
   // built-in definitions through the store before the registered read-only source.
   if (session.importTarget === 'project') await useCodexStore.getState().ensureBuiltIns(scope)
@@ -153,15 +156,22 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
   const categoryText = assembled.segments[assembled.included.indexOf(CATEGORIES)]?.content
   if (session.importTarget === 'project' && !categoryText) fail('本次导入未能核对已登记词条类别。')
   const categories: Pick<CodexImportCategoryOption, 'ref' | 'fields' | 'label'>[] = categoryText ? JSON.parse(categoryText) : []
-  const { messages } = renderPrompt(usePromptStore.getState().getActive('import.parse-chunk'), {
-    chunkIndex: input.chunkIndex + 1, totalChunks: session.totalChunks, knownContext: '无：仅阅读本块已确认原文。',
-    codexCategoryCatalog: formatCodexImportCatalog(categories) || '不提供目录；请返回空的 codexCandidates。', rawDocument: text,
-  })
-  if (!messages.some(message => message.content.includes(text))) fail('原分块没有逐字进入请求。')
   const entryId = expectedParseEntryId(session)
   const formalEntry = entryId === 'import.reference-chunk.parse.private'
     ? await freezeFormalAIEntryBindingV1('import.reference-chunk.parse.private')
     : await freezeFormalAIEntryBindingV1('import.document-chunk.parse')
+  // Freeze the complete current frame, not a source-only/planner estimate. Any
+  // catalog/template/prior-context overhead is accounted before reserving an attempt.
+  const { messages, options: providerOptions } = buildDocumentParseFrameV1({
+    template: usePromptStore.getState().getActive('import.parse-chunk'), provider: resolved.config.provider,
+    chunkIndex: input.chunkIndex, totalChunks: session.totalChunks, sourceText: text, categories,
+    knownContext: '无：仅阅读本块已确认原文。',
+  })
+  if (!messages.some(message => message.content.includes(text))) fail('原分块没有逐字进入请求。')
+  const admission = assessDocumentParseRequestV1({ config: resolved.config, messages, options: providerOptions,
+    maxInputTokens: MAX_INPUT_TOKENS, maxOutputTokens: skill.maxOutputTokens })
+  if (!admission.fits) fail('完整请求超出当前模型或文档解析任务预算；未创建付费尝试，原文分块保持不变。')
+  const frozenResolution = { ...resolved, config: admission.config }
   input.signal?.throwIfAborted()
   const claimKey = await reserveImportChunkParseV1(session, input.chunkIndex)
   const runtimeBindingHash = await bindingHash(session, input.chunkIndex, claimKey)
@@ -211,17 +221,14 @@ export async function createDocumentImportChunkCandidateV1(input: ChunkInput & {
     throw retained.report
   }
   let raw: string
-  const providerOptions = resolved.config.provider === 'deepseek'
-    ? { responseFormat: 'json_object' as const, thinkingMode: 'disabled' as const }
-    : resolved.config.provider === 'custom' ? { responseFormat: 'json_object' as const } : undefined
   try {
     raw = entryId === 'import.reference-chunk.parse.private'
       ? await executeFrozenFormalAIEntryV1('import.reference-chunk.parse.private', formalEntry, skill,
       'src/lib/import/document-parse-durable.ts', messages, config, { ...metadata, category: 'import.parse-chunk' },
-      input.signal, result, providerOptions, resolved)
+      input.signal, result, providerOptions, frozenResolution)
       : await executeFrozenFormalAIEntryV1('import.document-chunk.parse', formalEntry, skill,
       'src/lib/import/document-parse-durable.ts', messages, config, { ...metadata, category: 'import.parse-chunk' },
-      input.signal, result, providerOptions, resolved)
+      input.signal, result, providerOptions, frozenResolution)
   } catch (error) {
     const retained = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
     if (modelDispatchWasCancelledV1(result) || result.requestLifecycle?.phase === 'pre-dispatch') {
