@@ -469,7 +469,7 @@
 
 /* 熔炉余烬 */
 :root[data-theme='ember'], .theme-sample[data-theme-swatch='ember'] {
-  --shell-art: url('../../ui-preview/assets/shell.jpg');
+  --shell-art: url('../assets/themes/ember-066/coal-photo.webp');
   color-scheme: dark;
   --sample-ink: #f5e6d3;
   --accent-foreground: #26120b;
@@ -499,8 +499,8 @@
   --editor-ink-strong: #f5e6d3;
   --editor-ink-muted: #d0b69c;
   --shell-base: #1a0f0a;
-  --shell-wash: #1a0f0aa6;
-  --main-background: #211611e6;
+  --shell-wash: #1a0f0a61;
+  --main-background: #211611e8;
   --hero-background: linear-gradient(90deg, #1a0f0ad9, #1a0f0a0d 90%);
   --preview-background: var(--shell-background);
   --preview-main-background: var(--main-background);
@@ -522,7 +522,7 @@
   --skin-shadow: #00000018;
   --surface-blur: none;
   --navigation-blur: none;
-  --shell-background: linear-gradient(100deg, #1a0f0af0, #1a0f0aa8), var(--shell-art) center top / cover no-repeat #1a0f0a;
+  --shell-background: linear-gradient(180deg, #1a0f0a 15%, #1a0f0ac4 60%, #1a0f0a12) center / auto no-repeat, var(--shell-art) center bottom / 100% auto no-repeat #1a0f0a;
   --success: #83cba2;
   --warning: #e7bc6b;
   --error: #f19d91;
@@ -541,6 +541,86 @@
   --editor-mark-purple: #48345b;
   --editor-mark-brown: #51412e;
   --editor-mark-ink: #38404a;
+}
+
+/* Ember materials decorate existing surfaces only: no extra layers, geometry or text styling. */
+:root[data-theme='ember'] .longform-app > .lf-top {
+  background-color: #1a0f0a;
+  background-image: linear-gradient(90deg, #1a0f0a 0%, #1a0f0a 18%, #1a0f0ad6 29%, #1a0f0a6e 55%, #1a0f0a47),
+    url('../assets/themes/ember-066/coal-photo.webp');
+  background-size: auto, 85% auto;
+  background-position: center, right 54%;
+  background-repeat: no-repeat;
+}
+
+:root[data-theme='ember'] .longform-app > .lf-sidebar {
+  background-color: #1a0f0a;
+  background-image: linear-gradient(180deg, #1a0f0af2 0%, #1a0f0ae6 34%, #1a0f0a50 48%, #1a0f0a00 67%),
+    url('../assets/themes/ember-066/sidebar-furnace.webp'),
+    url('../assets/themes/ember-066/coal-tall.webp'),
+    radial-gradient(ellipse at 30% 65%, #a9290a42, transparent 38%);
+  background-position: center, center 58%, center bottom, center;
+  background-size: auto, 100% auto, 100% auto, auto;
+  background-repeat: no-repeat;
+}
+
+:root[data-theme='ember'] .longform-app > .lf-main {
+  background-image: radial-gradient(ellipse at 93% 100%, #9a220b40, transparent 46%);
+}
+
+:root[data-theme='ember'] .longform-app .lf-body > .lf-steps {
+  background-image: linear-gradient(180deg, #302019e3 10%, #302019d1 68%, #30201994),
+    url('../assets/themes/ember-066/fire-engraving.webp'),
+    url('../assets/themes/ember-066/coal-photo.webp');
+  background-position: center, 55% 15%, center bottom;
+  background-size: auto, 700px 512px, auto 210px;
+  background-repeat: no-repeat, repeat, no-repeat;
+}
+
+/* Compose the preview's engraving and coal on the host background, without pseudo-elements
+   or changing the host's positioning, stacking context, border or clipping. */
+:root[data-theme='ember'] .longform-app .lf-content [data-workspace-ready] > main {
+  background-color: var(--bg-surface);
+  background-image: linear-gradient(#3020190f, #3020190f),
+    url('../assets/themes/ember-066/coal-bed.webp'),
+    linear-gradient(#30201938, #30201938),
+    url('../assets/themes/ember-066/fire-engraving.webp'),
+    linear-gradient(#30201994, #30201994),
+    url('../assets/themes/ember-066/carbon-texture.webp');
+  background-size: auto, min(100%, 1200px) auto, auto, 1040px 760px, auto, 480px 240px;
+  background-position: center, right bottom, center, right top, center, left top;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat, no-repeat, repeat;
+}
+
+/* Existing cards (including settings and other products) retain their color-typed tokens. */
+:root[data-theme='ember'] :is(.lf-paper, .theme-selector) {
+  background-image: linear-gradient(#302019d9, #302019d9),
+    url('../assets/themes/ember-066/fire-engraving.webp'),
+    url('../assets/themes/ember-066/carbon-texture.webp');
+  background-size: auto, 1040px 760px, 480px 240px;
+  background-position: center, right top, left top;
+  background-repeat: no-repeat, repeat, repeat;
+}
+
+/* Keep writing controls legible; native toggles, sliders, colors, files and buttons are excluded. */
+:root[data-theme='ember'] :is(
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']):not([type='button']):not([type='submit']):not([type='reset']):not([type='image']):not([type='hidden']),
+  textarea,
+  select
+) {
+  background-image: linear-gradient(90deg, #302019f0, #30201973),
+    url('../assets/themes/ember-066/fire-engraving.webp'),
+    url('../assets/themes/ember-066/carbon-texture.webp');
+  background-size: auto, 680px 497px, 480px 240px;
+  background-position: center, right 42%, left top;
+  background-repeat: no-repeat, repeat, repeat;
+}
+
+.theme-sample[data-theme-swatch='ember'] .theme-sample-paper {
+  background-image: linear-gradient(#302019b8, #302019b8), url('../assets/themes/ember-066/fire-engraving.webp');
+  background-size: auto, 96px 70px;
+  background-position: center, right top;
+  background-repeat: no-repeat, repeat;
 }
 
 /* 银蓝书房 */
