@@ -202,7 +202,8 @@ describe.each(['character', 'standalone'] as const)('SFQA-126 · %s author buffe
     await act(async () => { await expect(flushPendingEditsV1()).rejects.toThrow('其他页面') })
     const blocked = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(blocked)
     expect(blocked.defaultPrevented).toBe(true)
-    await act(async () => { await useStateCardStore.getState().updateCard(f.id, { lastChapterId: null }, { scope: f.scope }) })
+    await act(async () => { await useStateCardStore.getState().updateCard(f.id, { lastChapterId: undefined }, { scope: f.scope }) })
+    expect((await db.stateCards.get(f.id))?.lastChapterId).toBeNull()
     expect(valueInput().value).toBe(original)
     if (decision === 'reload') {
       await click('重载外部版本（舍弃本地输入）')

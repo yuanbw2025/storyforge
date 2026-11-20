@@ -71,7 +71,7 @@ describe('035 Work cover identity/CAS/lifecycle', () => {
     expect(await db.agentRunEvents.where('runId').equals(source.run.id).count()).toBe(eventsBefore)
     expect(await db.agentRunEvents.where('runId').equals(parent.run.id).count()).toBe(parentEventsBefore)
     await expect(renderWorkCoverV1({ scope, assetId: asset.id })).resolves.toMatchObject({ asset: { sourceRunId: source.run.id } })
-    await expect(exportProjectJSON(scope.projectId)).resolves.toMatchObject({ version: 19 })
+    await expect(exportProjectJSON(scope.projectId)).resolves.toMatchObject({ version: 20 })
     const unreferenced = await createAgentRunV1({ scope, contract })
     expect(await deleteAgentRunV1(scope, unreferenced.run.id)).toBe(true)
     await deleteWork(scope.workId)
@@ -224,7 +224,7 @@ describe('035 Work cover identity/CAS/lifecycle', () => {
     expect(receipt.originalAssetId).not.toBe(fixture.asset.id)
     expect((await db.workCoverDrafts.where('projectId').equals(projectId).first())!.pendingAdoptionJson).toBeNull()
     expect(await db.workCoverResponseBuffers.where('projectId').equals(projectId).count()).toBe(0)
-    await expect(exportProjectJSON(projectId)).resolves.toMatchObject({ version: 19 })
+    await expect(exportProjectJSON(projectId)).resolves.toMatchObject({ version: 20 })
   }, 20_000)
 
   it('rejects corrupt hash and cross-Work portable asset references before allocating a project', async () => {
@@ -244,6 +244,6 @@ describe('035 Work cover identity/CAS/lifecycle', () => {
     legacy.version = 18
     delete legacy.workCoverDrafts; delete legacy.workCoverAssets; delete legacy.workCoverAdoptions
     const converted = normalizeProjectBackup(legacy)
-    expect(converted).toMatchObject({ version: 19, workCoverDrafts: [], workCoverAssets: [], workCoverAdoptions: [] })
+    expect(converted).toMatchObject({ version: 20, workCoverDrafts: [], workCoverAssets: [], workCoverAdoptions: [] })
   })
 })

@@ -81,7 +81,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     validateImportRow: row => assertWorkCoverPortableRowV1('asset', row),
     mediaRef: { blobTable: 'mediaBlobObjects', field: 'blobObjectId' },
     exactArtifactRoots: [{ field: 'exactArtifactRefsJson', path: [] }],
-    sourceRunRetention: { field: 'sourceRunId' },
+    sourceRunRetention: { field: 'sourceRunId', additionalFields: ['materializationRunId'] },
     refs: [
       { kind: 'simple', field: 'id', target: 'workCoverDrafts[selectedAssetId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'workCoverDrafts[adoptedAssetId]', onDelete: 'setNull' },
@@ -95,6 +95,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require', requiredOnImport: true },
       { field: 'blobObjectId', remapVia: 'mediaBlobObjects', exportAs: '_blobObjectExportId', onUnmapped: 'require', sameWorkOnImport: true, requiredOnImport: true },
       { field: 'sourceRunId', remapVia: 'agentRuns', exportAs: '_sourceRunExportId', onUnmapped: 'require', sameWorkOnImport: true },
+      { field: 'materializationRunId', remapVia: 'agentRuns', exportAs: '_materializationRunExportId', onUnmapped: 'require', sameWorkOnImport: true },
       { field: 'parentAssetId', remapVia: 'workCoverAssets', exportAs: '_parentAssetExportId', onUnmapped: 'require', sameWorkOnImport: true, deferImport: true },
     ], note: 'Work封面不可变原图/成品；仅引用共享Blob，不进入世界引擎' },
   { table: db.workCoverDrafts, name: 'workCoverDrafts',
@@ -117,7 +118,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     owner: 'project', domainOwner: WORK_DOMAIN_OWNER, exportable: true, exportIdField: true, introducedBackupVersion: 19,
     validateImportRow: row => assertWorkCoverPortableRowV1('adoption', row),
     exactArtifactRoots: [{ field: 'exactArtifactRefsJson', path: [] }],
-    sourceRunRetention: { field: 'sourceRunId' },
+    sourceRunRetention: { field: 'sourceRunId', additionalFields: ['materializationRunId'] },
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require', requiredOnImport: true },
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require', requiredOnImport: true },
@@ -125,6 +126,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'originalAssetId', remapVia: 'workCoverAssets', exportAs: '_originalAssetExportId', onUnmapped: 'require', sameWorkOnImport: true, requiredOnImport: true },
       { field: 'finalAssetId', remapVia: 'workCoverAssets', exportAs: '_finalAssetExportId', onUnmapped: 'require', sameWorkOnImport: true, requiredOnImport: true },
       { field: 'sourceRunId', remapVia: 'agentRuns', exportAs: '_sourceRunExportId', onUnmapped: 'require', sameWorkOnImport: true },
+      { field: 'materializationRunId', remapVia: 'agentRuns', exportAs: '_materializationRunExportId', onUnmapped: 'require', sameWorkOnImport: true },
     ], note: '明确采用的原子幂等回执；不自动清除旧封面证据' },
   { table: db.workCoverResponseBuffers, name: 'workCoverResponseBuffers',
     owner: 'project', domainOwner: WORK_DOMAIN_OWNER, exportable: false,
@@ -1334,6 +1336,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'workCoverDrafts[lastRunId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'workCoverAssets[sourceRunId]', onDelete: 'keep' },
       { kind: 'simple', field: 'id', target: 'workCoverAdoptions[sourceRunId]', onDelete: 'keep' },
+      { kind: 'simple', field: 'id', target: 'workCoverAssets[materializationRunId]', onDelete: 'keep' },
+      { kind: 'simple', field: 'id', target: 'workCoverAdoptions[materializationRunId]', onDelete: 'keep' },
       { kind: 'simple', field: 'id', target: 'workCoverResponseBuffers[runId]', onDelete: 'cascade' },
 
     ],
