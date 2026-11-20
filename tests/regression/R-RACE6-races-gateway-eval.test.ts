@@ -1,4 +1,5 @@
 import { installEvalWebLocksFixtureV1 } from '../helpers/eval-web-locks'
+import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
@@ -447,7 +448,8 @@ describe.sequential('RACE-6 · races transcript + outcome eval', () => {
     ]
     const checkpoint = await runRacesGatewayEvalV1({
       modelIdentity: { provider: 'deepseek', model: 'deepseek-chat' },
-      generatorConfig: GENERATOR_CONFIG,
+      // Finite internal frozen-run input for this fake transport, not live capacity evidence.
+      generatorConfig: syntheticFrozenAllocationV1(GENERATOR_CONFIG, 32_768),
       graderIdentity: { provider: 'fixture', model: 'deterministic', promptVersion: 'test-grader-v1' },
       graderPreflight: preflightEvidence('fixture', 'deterministic', 'test-grader-v1'),
       fixtures,

@@ -2,6 +2,8 @@
 // fake AgentRun events. Native Node fallback ownership is exercised explicitly;
 // real browser LockManager/UI acceptance remains a separate required gate.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import Dexie from 'dexie'
 import { db } from '../../src/lib/db/schema'
 import type { Worldview } from '../../src/lib/types'
@@ -89,6 +91,8 @@ describe.sequential('C2b original paid prefixes and no-resend recovery', () => {
     await db.delete(); await db.open(); usagePromises = []
     useAIConfigStore.getState().setConfig({ provider: 'custom', apiKey: '', model: 'isolated-node-model',
       baseUrl: 'http://127.0.0.1:9/v1', temperature: .5, maxTokens: 8_000, contextWindow: 128_000 })
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 32_768)
     // Keep the actual process-local owner guard. The browser fallback correctly
     // refuses recovery without Web Locks; this native-only control is explicit.
     vi.stubGlobal('window', undefined)
@@ -97,7 +101,7 @@ describe.sequential('C2b original paid prefixes and no-resend recovery', () => {
       const pending = originalUsage.call(this, input); usagePromises.push(pending); return pending
     })
   })
-  afterEach(async () => { vi.unstubAllGlobals(); vi.restoreAllMocks(); await db.delete() })
+  afterEach(async () => { resetModelCapacityForTestsV1(); vi.unstubAllGlobals(); vi.restoreAllMocks(); await db.delete() })
 
   async function paid(f: Fixture, mode: Mode, id: string) {
     const before = await snapshot();
