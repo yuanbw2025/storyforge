@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 import { createServer } from 'vite'
-import { assertOfflineReferenceCapacityEntry } from './reference-quality-contract.mjs'
+import { assertOfflineReferenceCapacityEntry } from './reference-capacity-contract.mjs'
 const output = process.argv[2]
 if (!output?.startsWith('/') || output.startsWith(process.cwd() + '/')) throw Error('Use a new absolute directory outside Git')
 assertOfflineReferenceCapacityEntry(JSON.parse(await readFile('src/lib/agent/ai-entry-registry.json', 'utf8')))
