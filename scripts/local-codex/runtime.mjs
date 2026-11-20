@@ -221,7 +221,7 @@ export class CodexRuntime {
           reject(new Error(typeof reason === 'string' ? reason : '请求已取消；未完成内容不会成为正式候选。'))
         }
         signal.addEventListener('abort', abort, { once: true })
-        timer = setTimeout(() => abort('Codex 生成超过 20 分钟，已停止。'), 20 * 60_000)
+        if (input.capacityPolicy !== 'reference-service') timer = setTimeout(() => abort('Codex 生成超过 20 分钟，已停止。'), 20 * 60_000)
         const messages = new Map()
         const finalItems = new Set()
         const off = this.onEvent(({ method, params: p }) => {

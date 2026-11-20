@@ -146,7 +146,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
   const selected = selectSources(resolvedBase)
   await assertContextAnchors(resolvedBase, selected)
   const preparedConfig = input.modelConfig ? await prepareModelCapacityV1(input.modelConfig) : undefined
-  const inputBudget = deriveInputBudget(input, preparedConfig?.modelCapacity)
+  let inputBudget = deriveInputBudget(input, preparedConfig?.modelCapacity)
   const needsContinuity = selected.some(source => (
     source.key === 'previousChapterEnding'
     || source.key === 'chapterContinuityHandoff'
@@ -206,10 +206,15 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
     }
     // 单一源也不能突破整个请求预算。L0/protected 只表示不得整段丢弃，
     // 不表示可以绕过总窗口；截断会留下显式标记并进入 tokens 元数据。
+    const completeTaskBaseline = source.budgetTokens === null && ['referenceDerivedBaseline', 'referenceAnalysisPrivateChunk'].includes(source.key)
+    if (completeTaskBaseline) {
+      if (selected.length !== 1) throw new Error('完整任务基线必须由专项执行器单独装配。')
+      inputBudget = Math.max(1, estimateTokens(content))
+    }
     const sourceBudgetScale = Number.isFinite(input.sourceBudgetScale)
       ? Math.max(0.1, Math.min(1, input.sourceBudgetScale!))
       : 1
-    const scaledSourceBudget = Math.max(64, Math.floor(source.budgetTokens * sourceBudgetScale))
+    const scaledSourceBudget = completeTaskBaseline ? inputBudget : Math.max(64, Math.floor((source.budgetTokens ?? inputBudget) * sourceBudgetScale))
     const sourceBudgetTokens = Math.min(scaledSourceBudget, inputBudget)
     const originalTokens = estimateTokens(content)
     if (source.atomic && originalTokens > sourceBudgetTokens) {

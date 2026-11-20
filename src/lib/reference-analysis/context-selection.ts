@@ -1,17 +1,9 @@
-import { estimateTokens } from '../ai/context-budget'
 import { REFERENCE_APPLICATION_SKILL } from './content-skill'
 
-/** Budget whole evidence units, never prefixes that can lose a qualification. */
-export function selectReferenceMethods(units: string[], budgetTokens = 2000): string {
+/** Preserve all selected reference analysis units. Request-level reading is accounted for separately. */
+export function selectReferenceMethods(units: string[]): string {
   if (!units.length) return ''
-  const prefix = `【引用手法：选读材料，不代表全书已核实】\n${REFERENCE_APPLICATION_SKILL}\n`
-  const kept: string[] = []
-  // Reserve space for an honest coverage notice before packing.
-  for (const unit of units) {
-    if (estimateTokens(`${prefix}${kept.join('\n\n')}\n\n${unit}`) <= budgetTokens - 100) kept.push(unit)
-  }
-  const omitted = units.length - kept.length
-  return `${prefix}${kept.join('\n\n')}\n【覆盖：使用 ${kept.length}/${units.length} 条完整分析；${omitted ? `其余 ${omitted} 条未纳入本次预算，不得据此推断不存在。完整证据见作品分析版本。` : '没有截取句首或省略条目。'}】`
+  return `【引用手法：完整已选分析材料，不代表全书事实已核实】\n${REFERENCE_APPLICATION_SKILL}\n${units.join('\n\n')}\n【覆盖：使用 ${units.length}/${units.length} 条完整分析；没有按应用固定条数或长度省略。实际生成任务的选读范围另见 Context Manifest。】`
 }
 
 /** Interleave first, last, middle to avoid always preferring the opening. */

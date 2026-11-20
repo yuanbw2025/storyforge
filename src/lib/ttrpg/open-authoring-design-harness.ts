@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { prepareModelCapacityV1 } from '../ai/model-capacity'
 /** One explicit S2 request. Exact raw output is durable before parsing.
  * Recovery materializes retained bytes only; it never obtains a send permit. */
@@ -239,8 +240,8 @@ export async function generateTtrpgOpenAuthoringDesignCandidateV1(input: {
 }
 async function generateOwned(input: Parameters<typeof generateTtrpgOpenAuthoringDesignCandidateV1>[0]): Promise<TtrpgOpenAuthoringDesignCandidateV1> {
   const request = parseTtrpgOpenAuthoringDesignRequestV1(input.request), profile = ttrpgOpenDesignProfileV1(request.sections)
-  const skill = getAgentSkillV1(profile.skillId), outputBudget = profile.maxOutputTokens
-  if (outputBudget !== skill.maxOutputTokens) fail('登记的设计容量与本次分区不一致；尚未发送请求')
+  const skill = getAgentSkillV1(profile.skillId), outputBudget = requireFixedBudgetValueV1(profile.maxOutputTokens)
+  if (outputBudget !== requireFixedBudgetValueV1(skill.maxOutputTokens)) fail('登记的设计容量与本次分区不一致；尚未发送请求')
   usesRuleRefs(skill.id, skill.promptVersion)
   if (!input.runAI && !input.aiConfig) fail('请先配置现有 AI 连接')
   const basisAssembly = await assembleContext({ projectId: input.scope.projectId, scope: input.scope,
@@ -426,7 +427,7 @@ async function materialize(input: { scope: WorkspaceScope; runId: number }): Pro
     || usage.inputTokens + usage.outputTokens !== usage.totalTokens)
   const inputTokens = usage && !invalidUsage ? usage.inputTokens : evidence.messages.reduce((sum, item) => sum + estimateTokens(item.content), 0)
   const outputTokens = usage && !invalidUsage ? usage.outputTokens : estimateTokens(output)
-  const overBudget = inputTokens > snapshot.contract.budget.maxInputTokens || outputTokens > snapshot.contract.budget.maxOutputTokens
+  const overBudget = inputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens) || outputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens)
   const context = { request: evidence.request, base: evidence.source.settings.openAuthoring, readWorldResourceKeys: evidence.readResourceKeys,
     ruleRefs: frozenRuleRefs(snapshot, evidence) }
   const creative = await runCreativeExecutionV1<TtrpgOpenAuthoringDesignProposalsV1 | null>({ initialMessages: evidence.messages,
@@ -439,7 +440,7 @@ async function materialize(input: { scope: WorkspaceScope; runId: number }): Pro
       } catch (error) { return { status: 'blocked', output: null, editableText: '', validFragments: [], rejectedFragments: [], assumptions: [],
         issues: [createCreativeIssueV1({ code: invalidUsage || overBudget ? 'ttrpg-design-budget' : 'ttrpg-design-protocol', path: '$', message: error instanceof Error ? error.message : String(error), disposition: 'blocking', action: 'edit' })] } }
     }, buildRepairMessages: () => fail('本次请求不授权自动修复'), budget: new AgentTeamBudgetTracker('expanded'), callLabel: '原设计回答解析',
-    maxOutputTokens: snapshot.contract.budget.maxOutputTokens, qualityMode: 'economy', modelIdentity: evidence.modelIdentity, canonEvidenceRefs: [`source-plan:${evidence.source.sourcePlan.planHash}`] })
+    maxOutputTokens: requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens), qualityMode: 'economy', modelIdentity: evidence.modelIdentity, canonEvidenceRefs: [`source-plan:${evidence.source.sourcePlan.planHash}`] })
   if (!metadata || metadata.value.durationMs == null) creative.artifact.callEvidence[0].latencyMs = null
   const body: Omit<TtrpgOpenAuthoringDesignCandidateV1, 'candidateHash'> = { schema: CANDIDATE, version: 1, portable: false, runId: input.runId, requestArtifactHash: retained.hash,
     rawResponseHash: rawHash, sourceBasisHash: evidence.source.basisHash, proposals: creative.output, artifact: creative.artifact }
@@ -474,7 +475,7 @@ export async function readTtrpgOpenAuthoringDesignReviewV1(input: { scope: Works
   try { await assertTtrpgOpenAuthoringDesignSourceCurrentV1(evidence.source) }
   catch (error) { current = false; staleReason = error instanceof Error ? error.message : String(error) }
   return { candidate, source: evidence.source, request: evidence.request, readWorldResourceKeys: evidence.readResourceKeys,
-    runStatus: snapshot.run.status, current, staleReason, handoffPending, maxOutputTokens: snapshot.contract.budget.maxOutputTokens, ruleRefs: frozenRuleRefs(snapshot, evidence),
+    runStatus: snapshot.run.status, current, staleReason, handoffPending, maxOutputTokens: requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens), ruleRefs: frozenRuleRefs(snapshot, evidence),
     adoptionAllowed: snapshot.contract.executionBindings?.some(binding => binding.stepId === STEP && binding.version === 2
       && binding.writeTargets.some(target => target.table === 'ttrpgAuthoringDrafts' && target.mode === 'author-confirmed' && target.fields.includes('settingsJson'))
       && binding.formalEntry && JSON.parse(binding.formalEntry.bindingJson).adoptAllowed === true) === true }

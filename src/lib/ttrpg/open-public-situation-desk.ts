@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 /** Player-host desk: explicit once delegation, opaque candidate, original-run recovery. Reads never mutate. */
 import type { TtrpgOpenSituationDeskInputV1 } from './open-situation-desk-service'
 import { loadTtrpgOpenMemoryReadStateV1 } from './open-memory-read-state'
@@ -102,7 +103,7 @@ export async function requestTtrpgOpenPublicSituationDeskV1(input: Input & Trans
   if (!page?.canRequest) throw new Error(page?.unavailable ?? '只有当前真人主持可以请求共同局势。')
   if (!input.aiConfig && !input.runAI) throw new Error('请先配置明确的模型。')
   const loaded = await loadTtrpgOpenMemoryReadStateV1({ ...input, reader: { kind: 'human', viewerKey: input.viewerKey } })
-  const maximumOutputTokens = Math.min(getAgentSkillV1('prose.ttrpg-open-public-situation-propose').maxOutputTokens, loaded.content.campaign.runtimePolicy.maximumOutputTokens)
+  const maximumOutputTokens = Math.min(requireFixedBudgetValueV1(getAgentSkillV1('prose.ttrpg-open-public-situation-propose').maxOutputTokens), loaded.content.campaign.runtimePolicy.maximumOutputTokens)
   const resolved = input.aiConfig ? resolveRequestConfig(input.aiConfig, { category: 'runtime.ttrpg-open.public-situation-propose', projectId: input.scope.projectId,
     configOverrides: { maxTokens: maximumOutputTokens }, contextOverflowPolicy: 'reject' }) : null
   const modelIdentity = input.runAI ? { provider: 'test-adapter', model: 'injected' } : { provider: resolved!.config.provider, model: resolved!.config.model }

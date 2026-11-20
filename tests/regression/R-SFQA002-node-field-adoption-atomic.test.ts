@@ -137,6 +137,11 @@ describe.sequential('D4a native first intent and attributable field write', () =
     const generated = await runAuthoringGraph({ flow }); await Promise.allSettled(usage)
     if (!generated.run.id || !generated.candidates.field.signature || generated.run.status !== 'completed') throw new Error('FIXTURE_READINESS: public complete signed field candidate missing')
     const nodeRunId = generated.run.id
+    if (family === 'story') {
+      const producer = await selectedRun(scope, nodeRunId, 0)
+      expect(producer.contract.budget.serviceCapacityOnly).toBe(true)
+      expect(producer.contract.budget.maxOutputTokens).toBeGreaterThan(4096)
+    }
     let input = { scope, flow, runId: nodeRunId, nodeId: 'field', selectedVariantIndex: 0, draft: generated.candidates.field.output }
     const choose = async (index: number, edited?: string) => {
       const row = await reviseAuthoringCandidate({ flow, runId: nodeRunId, nodeId: 'field', selectedVariantIndex: index,

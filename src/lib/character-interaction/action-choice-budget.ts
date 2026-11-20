@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 /** System-owned event metadata, never part of the model's action object. An
  * absent version preserves the historical two-call action/review allowance. */
 export function parseChatActionChoiceVersionV1(value: unknown): 1 | undefined {
@@ -13,7 +14,7 @@ export function chatReviewedActionAllowanceV1(value: unknown): 2 | 3 {
  * Skill or a model-provided cost. The transaction checks the same run prefix. */
 export function chatActionChoiceVersionForContractV1(contract: {
   executionBindings?: ReadonlyArray<{stepId: string; skillId: string; promptVersion: string}>
-  budget: {maxModelCalls: number; maxAttemptsPerStep: number}
+  budget: {maxModelCalls: number | null; maxAttemptsPerStep: number}
 }): 1 | undefined {
   const bindings = contract.executionBindings ?? []
   const choices = bindings.filter(binding => binding.stepId === 'interaction:action-choice')
@@ -34,7 +35,7 @@ export function chatActionChoiceVersionForContractV1(contract: {
     || ['chat-narrative-action-v70', 'chat-narrative-action-v71', 'chat-narrative-action-v72'].includes(actions[0].promptVersion) && reviews[0].promptVersion !== 'chat-narrative-action-review-v42'
     || actions[0].promptVersion === 'chat-narrative-action-v65' && reviews[0].promptVersion !== 'chat-narrative-action-review-v40'
     || reviews[0].skillId !== 'character.chat-narrative-action-review'
-    || contract.budget.maxModelCalls !== 3 || contract.budget.maxAttemptsPerStep !== 1) {
+    || requireFixedBudgetValueV1(contract.budget.maxModelCalls) !== 3 || contract.budget.maxAttemptsPerStep !== 1) {
     throw new Error('[chat-action-choice] 行动选择步骤与冻结预算合同不一致')
   }
   return 1

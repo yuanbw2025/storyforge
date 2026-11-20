@@ -161,7 +161,7 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
     expect(await buildRefAnalysisContext([referenceId])).not.toContain('只完成一块')
   })
 
-  it('版本上限不会静默裁剪 active/ready/analyzing', async () => {
+  it('超过旧6版本数量仍可新增，不自动删除任何历史或断点原文', async () => {
     const { projectId, referenceId } = await seedProjectAndReference()
     await createActiveRun(projectId, referenceId, '稳定基准版')
     for (let index = 0; index < 5; index++) {
@@ -178,7 +178,7 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
         sourceText: 'x',
       })
     }
-    await expect(createReferenceAnalysisRun({
+    const next = await createReferenceAnalysisRun({
       referenceId,
       depth: 'quick',
       sourceFilename: 'overflow.txt',
@@ -189,7 +189,11 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
       usageScope: 'analysis-only',
       rightsConfirmed: true,
       sourceText: 'x',
-    })).rejects.toThrow('最多保留 6 个版本')
+    })
+    expect(next.version).toBe(7)
+    const all = await listReferenceAnalysisRuns(referenceId)
+    expect(all).toHaveLength(7)
+    for (const run of all.filter(run => run.version > 1)) expect(await readReferenceAnalysisSource(run.id!)).toBe('x')
   })
 
   it('删除参考原子清理版本、分块、断点原文和创作规则引用', async () => {

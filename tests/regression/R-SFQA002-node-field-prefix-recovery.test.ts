@@ -10,6 +10,7 @@ import type { Worldview } from '../../src/lib/types'
 import { readOwnedRows } from '../../src/lib/workspace/scope'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import { useAIConfigStore } from '../../src/stores/ai-config'
+import { usePromptStore } from '../../src/stores/prompt'
 import { useNodeFlowStore } from '../../src/stores/node-flow'
 import { useWorldviewStore } from '../../src/stores/worldview'
 import { AUTHORING_NODE_BY_ID, defaultConfigForTemplate } from '../../src/lib/node-authoring/catalog'
@@ -89,6 +90,8 @@ describe.sequential('C2b original paid prefixes and no-resend recovery', () => {
   let usagePromises: Promise<unknown>[]
   beforeEach(async () => {
     await db.delete(); await db.open(); usagePromises = []
+    // Model generation is measured after the app has initialized builtin templates.
+    await usePromptStore.getState().init()
     useAIConfigStore.getState().setConfig({ provider: 'custom', apiKey: '', model: 'isolated-node-model',
       baseUrl: 'http://127.0.0.1:9/v1', temperature: .5, maxTokens: 8_000, contextWindow: 128_000 })
     resetModelCapacityForTestsV1()

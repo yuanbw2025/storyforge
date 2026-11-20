@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
 import { chat, type ChatResult } from '../ai/client'
 import type { AgentRunRecord, AgentEvent, AgentConversation, AIConfig, ChatMessage, MotionDramaPromptStageV1, WorkspaceScope } from '../types'
@@ -74,7 +75,7 @@ function contract(scope: WorkspaceScope, stage: MotionDramaPromptStageV1) {
     scope: { projectId: scope.projectId, worldGroupId: null },
     permissions: { contextSourceKeys: [...skill.contextSourceKeys], writeTargets: skill.writeTargets.map(target => ({ table: target.table, fields: [...target.fields], mode: 'author-confirmed' as const })) },
     executionBindings: [{ stepId: step, ...createAgentSkillExecutionBindingV1(skill) }],
-    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 64_000, maxOutputTokens: skill.maxOutputTokens * 2, maxAttemptsPerStep: 2, maxProtocolErrors: 1 },
+    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 64_000, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) * 2, maxAttemptsPerStep: 2, maxProtocolErrors: 1 },
     acceptance: [
       { id: `${step}.candidate`, kind: 'output-present' as const, required: true },
       { id: `${step}.author`, kind: 'author-confirmed' as const, required: true },
@@ -345,7 +346,7 @@ export async function generateMotionDramaCandidateV1(input: { scope: WorkspaceSc
     snapshot = await authorizeMotionModelRequest(roots.scope, snapshot, input.stage, attempt, contextManifest.manifestHash, roots.adaptation, roots.production)
     const result: ChatResult = {}
     let output: string
-    try { output = await (runAI ? runAI.call(callbackReceiver, messages) : chat(messages, input.aiConfig!, { category: config.category, projectId: roots.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, input.signal, result)) }
+    try { output = await (runAI ? runAI.call(callbackReceiver, messages) : chat(messages, input.aiConfig!, { category: config.category, projectId: roots.scope.projectId, configOverrides: { maxTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) }, contextOverflowPolicy: 'reject' }, input.signal, result)) }
     catch (error) {
       const failed = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
       unavailableResponse = failed

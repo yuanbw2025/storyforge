@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 /** Checks the original local Run, exact human input artifact and current authority before a domain command. */
 import type { WorkspaceScope } from '../types'
 import { db } from '../db/schema'
@@ -82,9 +83,9 @@ export async function verifyTtrpgOpenPublicSituationAuthorizationV1(input: {
     || snapshot.contract.executionBindings?.length !== 1 || binding?.version !== 2 || binding.skillId !== TTRPG_OPEN_PUBLIC_SITUATION_SKILL_V1
     || binding.formalEntry?.entryId !== TTRPG_OPEN_PUBLIC_SITUATION_ENTRY_V1 || binding.writeTargets.length
     || canonicalStringify(binding.contextSourceKeys) !== canonicalStringify([TTRPG_OPEN_PUBLIC_SITUATION_SOURCE_V1])
-    || snapshot.contract.budget.maxModelCalls !== 1 || snapshot.contract.budget.maxToolCalls !== 0 || snapshot.contract.budget.maxAttemptsPerStep !== 1
-    || snapshot.contract.budget.maxInputTokens !== grant.budget.maximumInputTokens || snapshot.contract.budget.maxOutputTokens !== binding.maxOutputTokens
-    || grant.budget.maximumOutputTokens > binding.maxOutputTokens
+    || requireFixedBudgetValueV1(snapshot.contract.budget.maxModelCalls) !== 1 || snapshot.contract.budget.maxToolCalls !== 0 || snapshot.contract.budget.maxAttemptsPerStep !== 1
+    || requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens) !== grant.budget.maximumInputTokens || requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens) !== requireFixedBudgetValueV1(binding.maxOutputTokens)
+    || grant.budget.maximumOutputTokens > requireFixedBudgetValueV1(binding.maxOutputTokens)
     || snapshot.contract.runtimeBindingHash !== await ttrpgOpenCallBindingHashV1({ sessionKey: b.sessionKey, actorKey: 'gm', authorizationEpochKey: epochKey,
       admissionStateHash: grant.admissionStateHash, visibilityHash: b.sourceVisibilityHash, runtimeSourceHash: b.runtimeSourceHash })
     || snapshot.projection.steps[TTRPG_OPEN_PUBLIC_SITUATION_STEP_V1]?.status !== (input.phase === 'adopt' ? 'awaiting_confirmation' : 'running')

@@ -74,7 +74,7 @@ export function chatNarrativeOutcomeRulesV1(version: string | undefined): string
 
 export function assertChatControlHandoffBindingsV1(contract: {
   executionBindings?: ReadonlyArray<{stepId: string; skillId: string; promptVersion: string}>
-  budget: {maxModelCalls: number; maxAttemptsPerStep: number}
+  budget: {maxModelCalls: number | null; maxAttemptsPerStep: number}
 }, handoff?: ChatControlHandoffV1): void {
   const bindings = contract.executionBindings ?? []
   const producer = bindings.find(binding => binding.stepId === 'interaction:runtime-candidate')?.promptVersion

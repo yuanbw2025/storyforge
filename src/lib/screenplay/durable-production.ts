@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import Dexie from 'dexie'
 import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
 import { chat, type ChatResult } from '../ai/client'
@@ -391,7 +392,7 @@ function contract(scope: WorkspaceScope, stage: ScreenplayProfessionalStageV1) {
     scope: { projectId: scope.projectId, worldGroupId: null },
     permissions: { contextSourceKeys: [...skill.contextSourceKeys], writeTargets: skill.writeTargets.map(target => ({ table: target.table, fields: [...target.fields], mode: 'author-confirmed' as const })) },
     executionBindings: [{ stepId: config.stepId, ...createAgentSkillExecutionBindingV1(skill) }],
-    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 48_000, maxOutputTokens: skill.maxOutputTokens * 2, maxAttemptsPerStep: 2, maxProtocolErrors: 1 },
+    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 48_000, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) * 2, maxAttemptsPerStep: 2, maxProtocolErrors: 1 },
     acceptance: [
       { id: `${config.stepId}.candidate`, kind: 'output-present' as const, required: true },
       { id: `${config.stepId}.author`, kind: 'author-confirmed' as const, required: true },
@@ -483,7 +484,7 @@ export async function generateScreenplayProfessionalCandidateV1(input: {
     snapshot = await append(input.scope, snapshot, 'model.requested', { stepId: config.stepId, attempt, bindingHash: await hashCanonicalValue(snapshot.contract.executionBindings?.[0]) })
     const result: ChatResult = {}
     let output: string
-    try { output = await (runAI ? runAI.call(callbackReceiver, attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: config.category, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, input.signal, result)) }
+    try { output = await (runAI ? runAI.call(callbackReceiver, attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: config.category, projectId: input.scope.projectId, configOverrides: { maxTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) }, contextOverflowPolicy: 'reject' }, input.signal, result)) }
     catch (error) {
       const failed = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
       try { snapshot = await append(input.scope, failed.snapshot, 'run.paused', { reason: `screenplay-${input.stage}-model-outcome-unknown`, recoverable: false }) }

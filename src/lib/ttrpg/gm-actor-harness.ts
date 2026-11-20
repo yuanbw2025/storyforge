@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { parseStructuredOutputV1, StructuredOutputPipelineErrorV1 } from '../agent/structured-output-pipeline';
 import { assertTtrpgNoRestrictedTextV1 } from './information-boundary';
 import { assertTtrpgCompleteContextV1 } from './prompt-context';
@@ -269,7 +270,7 @@ function contract(input: {
       maxModelCalls: 2,
       maxToolCalls: 0,
       maxInputTokens: 36_000,
-      maxOutputTokens: skill.maxOutputTokens * 2,
+      maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) * 2,
       maxAttemptsPerStep: 2,
     },
     acceptance: [

@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import {z} from 'zod'
 import type {ChatResult} from '../ai/client'
 import {estimateTokens} from '../ai/context-budget'
@@ -47,7 +48,7 @@ export async function recordChatActionOutputBudgetV1(input: {
   const receipt = {
     schema: 'storyforge.chat-action-output-budget', version: 1, stepId,
     bindingHash: requested.payload.bindingHash, outputHash: await hashCanonicalValue(input.output), provider, model,
-    requestedOutputTokens: boundedChatOutputTokensV1(input.injected ? undefined : input.aiConfig?.maxTokens, binding.maxOutputTokens),
+    requestedOutputTokens: boundedChatOutputTokensV1(input.injected ? undefined : input.aiConfig?.maxTokens, requireFixedBudgetValueV1(binding.maxOutputTokens)),
     transportLimit: input.injected ? 'test-adapter' : provider === 'codex' ? 'not-sent' : 'requested-unverified',
     usage: usage ? {inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens} : null,
     estimatedVisibleOutputTokens: estimateTokens(input.output),
@@ -91,7 +92,7 @@ export async function readChatActionOutputBudgetV1(scope: WorkspaceScope, snapsh
     const {stepId: _step, ...executionBinding} = primary
     if (event.sequence <= rawEvents[0].sequence || receipt.stepId !== stepId || receipt.bindingHash !== requested.payload.bindingHash
       || receipt.outputHash !== outputHash || receipt.estimatedVisibleOutputTokens !== estimateTokens(output)
-      || receipt.requestedOutputTokens > binding.maxOutputTokens
+      || receipt.requestedOutputTokens > requireFixedBudgetValueV1(binding.maxOutputTokens)
       || snapshot.contract.runtimeBindingHash !== await hashCanonicalValue({executionBinding,
         modelIdentity: {provider: receipt.provider, model: receipt.model, transport: 'chat-v1'}})
       || receipt.transportLimit !== (receipt.provider === 'test-adapter' ? 'test-adapter' : receipt.provider === 'codex' ? 'not-sent' : 'requested-unverified')) fail('输出用量凭据与原请求不一致')
@@ -102,6 +103,6 @@ export async function readChatActionOutputBudgetV1(scope: WorkspaceScope, snapsh
     if (accountedOutputTokens > receipt.requestedOutputTokens) fail(`本步骤输出用量 ${accountedOutputTokens} tokens 超出 ${receipt.requestedOutputTokens} 预算；原响应已保留，停止后续调用及采用`)
   }
   const accountedOutputTokens = calls.reduce((sum, call) => sum + call.accountedOutputTokens, 0)
-  if (calls.length > snapshot.contract.budget.maxModelCalls || accountedOutputTokens > snapshot.contract.budget.maxOutputTokens) fail('累计输出超出冻结预算；原响应已保留，停止后续调用及采用')
-  return {version: 1 as const, calls, accountedOutputTokens, maximumOutputTokens: snapshot.contract.budget.maxOutputTokens}
+  if (calls.length > requireFixedBudgetValueV1(snapshot.contract.budget.maxModelCalls) || accountedOutputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens)) fail('累计输出超出冻结预算；原响应已保留，停止后续调用及采用')
+  return {version: 1 as const, calls, accountedOutputTokens, maximumOutputTokens: requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens)}
 }

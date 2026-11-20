@@ -198,13 +198,16 @@ function assertFrozenGatewayPolicyV1(definition: AgentSkillDefinitionV2): void {
     'maxReadCalls', 'maxRetrievedTokens', 'maxPlanningSteps', 'maxPlanningModelTokens',
     'allowOriginalRead', 'additionalReadToolNames',
   ]
-  const allowed = [...required, 'requiredWriteTargets']
+  const allowed = [...required, 'requiredWriteTargets', 'retrievalBudgetMode']
   if (required.some(key => !Object.prototype.hasOwnProperty.call(gateway, key))
     || Object.keys(gateway).some(key => !allowed.includes(key))
     || gateway.version !== 1
     || !['shadow', 'required'].includes(gateway.rollout)
     || typeof gateway.allowOriginalRead !== 'boolean') {
     failV2(`${definition.id} 的冻结 Context Gateway policy 结构无效`)
+  }
+  if (gateway.retrievalBudgetMode !== undefined && gateway.retrievalBudgetMode !== 'model-capacity') {
+    failV2(`${definition.id} 的冻结 Context Gateway retrievalBudgetMode 无效`)
   }
   if (gateway.requiredWriteTargets !== undefined && (
     !Array.isArray(gateway.requiredWriteTargets)

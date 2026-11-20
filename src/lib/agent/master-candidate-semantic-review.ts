@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from './finite-budget'
 import { estimateTokens } from '../ai/context-budget'
 import { chat, resolveRequestConfig } from '../ai/client'
 import { assembleContext } from '../registry/assemble-context'
@@ -513,7 +514,7 @@ export async function runMasterCandidateSemanticReviewV1(input: {
     sourceKeys,
     modelConfig: input.reviewerConfig, provider: input.reviewerConfig.provider,
     model: input.reviewerConfig.model,
-    inputBudgetMaxTokens: policy.maxInputTokens,
+    inputBudgetMaxTokens: requireFixedBudgetValueV1(policy.maxInputTokens),
     sourceBudgetScale: policy.sourceBudgetScale,
     inspirationFragmentIds: input.selectedFragmentIds,
     inspirationMode: input.inspirationMode,
@@ -538,7 +539,7 @@ export async function runMasterCandidateSemanticReviewV1(input: {
   const reservation = input.budget.reserveCall({
     label: `${skill.label} · ${input.taskId}`,
     messages,
-    maxOutputTokens: skill.maxOutputTokens,
+    maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
   })
   let settled = false
   let raw: string

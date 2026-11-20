@@ -1,3 +1,6 @@
+import { getModelCapacityV1 } from '../../src/lib/ai/model-capacity'
+import { parseAgentRunContractV1 } from '../../src/lib/agent/run/contract'
+import type { AIConfig } from '../../src/lib/types'
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
@@ -101,20 +104,58 @@ describe.sequential('R-HARNESS74 · 参考分析派生 durable 候选与双投�
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => { vi.restoreAllMocks(); db.close() })
 
-  it('rejects an oversized complete baseline before dispatch instead of cutting its evidence', async () => {
+  it('完整处理超过旧来源额度的基线，不裁剪、不据旧额度拒绝', async () => {
     const fixture = await seed('预算保护')
     const first = await db.referenceChunkAnalysis.where('analysisRunId').equals(fixture.analysisRunId).first()
     await db.referenceChunkAnalysis.update(first!.id!, {narrativeStyle: '证据'.repeat(30000)})
     let calls = 0
-    await expect(generateReferenceDerivedCandidateV1({
+    const generated = await generateReferenceDerivedCandidateV1({
       scope: fixture.scope, mode: 'summary', runId: fixture.analysisRunId,
-      runAI: async () => { calls++; return summaryResult() },
-    })).rejects.toThrow()
-    expect(calls).toBe(0)
+      runAI: async messages => { calls++; expect(messages.map(m => m.content).join('')).toContain('证据'.repeat(30000)); return summaryResult() },
+    })
+    expect(generated.snapshot.contract.budget).toMatchObject({ capacityPolicy: 'service', maxModelCalls: null, maxInputTokens: null, maxOutputTokens: null })
+    expect(calls).toBe(1)
     expect((await db.referenceAnalysisRuns.get(fixture.analysisRunId))?.analysisSummary).toBeUndefined()
   })
 
-  it('三注册表闭合，版本化分块 baseline 实际进入一次模型调用，确认前双表零写入', async () => {
+  it('实际小窗口下多批并形成跨范围综合，检查点恢复不重发已完成批次', async () => {
+    const fixture = await seed('分批恢复')
+    const first = await db.referenceChunkAnalysis.where('analysisRunId').equals(fixture.analysisRunId).first()
+    await db.referenceChunkAnalysis.update(first!.id!, { narrativeStyle: '前段身份与时序。'.repeat(1000) + '末段反证：同名不能归并身份。' })
+    const config: AIConfig = { provider: 'custom', model: 'reference-fixture', baseUrl: 'https://example.invalid/v1', apiKey: 'fixture', maxTokens: 4096, temperature: 0 }
+    config.modelCapacity = { ...getModelCapacityV1(config), confidence: 'service', totalWindow: null, inputLimit: 2600, outputLimit: 1800, outputLimitSource: 'service' }
+    let calls = 0
+    let batches = 0
+    const transport = async () => { calls++; return summaryResult('完整跨批身份反证') }
+    await expect(generateReferenceDerivedCandidateV1({ scope: fixture.scope, mode: 'summary', runId: fixture.analysisRunId,
+      aiConfig: config, runAI: transport,
+      onDurableBoundary: async boundary => { if (boundary === 'batch.checkpoint' && ++batches === 2) throw new Error('检查点后隔离中断') },
+    })).rejects.toThrow('隔离中断')
+    const pending = await readRecoverableReferenceDerivedRunV1({ scope: fixture.scope, analysisRunId: fixture.analysisRunId })
+    expect(pending).toMatchObject({ safeToResume: true, progress: true })
+    const savedCalls = calls
+    const generated = await generateReferenceDerivedCandidateV1({ scope: fixture.scope, mode: 'summary', runId: fixture.analysisRunId,
+      aiConfig: config, runAI: transport, resumeRunId: pending!.snapshot.run.id,
+    })
+    expect(calls).toBeGreaterThan(savedCalls)
+    expect(generated.snapshot.run.id).toBe(pending!.snapshot.run.id)
+    expect(generated.snapshot.contract.budget.maxModelCalls).toBeNull()
+    expect(generated.candidate.execution!.requestHashes).toHaveLength(calls)
+    expect(new Set(generated.candidate.execution!.requestHashes).size).toBe(calls)
+    expect(generated.candidate.execution!.responseHashes).toHaveLength(calls)
+    expect(generated.candidate.resultJson).toContain('跨范围关系综合')
+    expect(generated.candidate.execution!.ranges[0].start).toBe(0)
+    const boundedForgery = structuredClone(generated.snapshot.contract)
+    boundedForgery.budget.maxModelCalls = 999999
+    expect(() => parseAgentRunContractV1(boundedForgery)).toThrow('固定额度')
+    const otherSource = structuredClone(generated.snapshot.contract)
+    otherSource.permissions.contextSourceKeys = ['projectInfo']
+    expect(() => parseAgentRunContractV1(otherSource)).toThrow()
+    await adoptReferenceDerivedCandidateV1({ scope: fixture.scope, runId: generated.snapshot.run.id })
+    expect((await db.referenceAnalysisRuns.get(fixture.analysisRunId))?.analysisSummary).toBe(generated.candidate.resultJson)
+  })
+
+  it('三注册表闭合，完整基线能容纳时一次完成，确认前双表零写入', async () => {
     expect(CONTEXT_SOURCE_BY_KEY.get('referenceDerivedBaseline')).toMatchObject({ ownerFrom: 'work', protectedFromTrim: true })
     expect(PROJECT_TABLES.find(item => item.name === 'referenceAnalysisRuns')).toMatchObject({ exportable: true })
     expect(PROJECT_TABLES.find(item => item.name === 'referenceChunkAnalysis')).toMatchObject({ exportable: true })
@@ -174,6 +215,28 @@ describe.sequential('R-HARNESS74 · 参考分析派生 durable 候选与双投�
       ],
     })
     expect(() => parseReferenceDerivedResultStrictV1('characters', duplicate, characterBaseline)).toThrow('重复角色')
+  })
+
+  it('完整保留超过旧篇幅和角色数量限制的合法候选，仍拒绝空字段', async () => {
+    const fixture = await seed('不截取')
+    const summaryBaseline = await readReferenceDerivedBaselineV1({
+      scope: fixture.scope, runId: fixture.analysisRunId, mode: 'summary',
+    })
+    const long = '跨章证据与相反解释；'.repeat(1500) + '末段反证不可丢失'
+    const summary = JSON.stringify({ narrativeStyle: long, characterCraft: long })
+    expect(parseReferenceDerivedResultStrictV1('summary', summary, summaryBaseline).resultJson).toBe(summary)
+    const characterBaseline = await readReferenceDerivedBaselineV1({
+      scope: fixture.scope, runId: fixture.analysisRunId, mode: 'characters',
+    })
+    const characters = Array.from({ length: 123 }, (_, index) => ({
+      name: `${index}号人物${'长身份'.repeat(80)}`, role: '关系和职责'.repeat(80),
+      summary: long, analysis: long,
+    }))
+    const parsed = parseReferenceDerivedResultStrictV1('characters', JSON.stringify({ characters }), characterBaseline)
+    expect(parsed.resultJson).toBe(JSON.stringify(characters))
+    expect(() => parseReferenceDerivedResultStrictV1('characters', JSON.stringify({
+      characters: [{ ...characters[0], analysis: ' ' }],
+    }), characterBaseline)).toThrow('为空')
   })
 
   it('候选 checkpoint 后可恢复；模型请求或响应未知窗口不会自动重试', async () => {

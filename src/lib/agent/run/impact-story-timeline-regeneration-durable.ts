@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import Dexie from 'dexie'
 import { chat, resolveRequestConfig, type ChatResult } from '../../ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../ai/config-readiness'
@@ -348,7 +349,7 @@ function contract(input: {
       maxModelCalls: 1,
       maxToolCalls: 0,
       maxInputTokens: 16_000,
-      maxOutputTokens: Math.min(skill.maxOutputTokens, 2_000),
+      maxOutputTokens: Math.min(requireFixedBudgetValueV1(skill.maxOutputTokens), 2_000),
       maxAttemptsPerStep: 1,
       maxProtocolErrors: 0,
     },

@@ -17,6 +17,8 @@
 
 每个 `CONTEXT_SOURCES` 条目至少应表达：稳定 key、owner、允许作用域、revision/版本来源、预算类别、加载器和可见性。正式 Skill 声明读取的 source keys；运行时生成 Context Manifest，记录实际选择、哈希、预算与遗漏。
 
+拆书的 `referenceDerivedBaseline`、`referenceAnalysisPrivateChunk` 以 `budgetTokens:null` 表示完整任务基线，任务 Manifest 不冒充单次模型读取；每次真实请求另存准确消息、来源根、范围和阶段。`references` 的同值表示取消来源自身固定额度，仍由调用任务的权限、选择与实际请求容量决定读什么。原文、原答与派生压缩材料分别留存；未覆盖完整范围不能声明全份分析完成。
+
 上下文选择按以下层次进行：
 
 1. 任务、产品、世界/作品/实例作用域和硬约束；

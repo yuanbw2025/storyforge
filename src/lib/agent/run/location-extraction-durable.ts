@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../finite-budget'
 import { chat } from '../../ai/client'
 import {
   buildLocationExtractPromptFromContext,
@@ -739,7 +740,7 @@ export async function readRecoverableLocationExtractionV1(input: {
       return {
         snapshot,
         nextCallIndex: 0,
-        totalCalls: snapshot.contract.budget.maxModelCalls,
+        totalCalls: requireFixedBudgetValueV1(snapshot.contract.budget.maxModelCalls),
         safeToResume: false,
       }
     }

@@ -24,6 +24,16 @@ import {
 } from '../../src/lib/outline/harness'
 
 describe('WEH-0A · Skill → formal Run 单向派生', () => {
+  it('故事核心的服务容量 Gateway 策略可冻结并恢复，未知模式仍拒绝', async () => {
+    const binding = await createAgentSkillExecutionBindingV2(getAgentSkillV1('world-origin.story-core'))
+    await expect(assertAgentSkillExecutionBindingIntegrityV2(binding)).resolves.toBeUndefined()
+    const definition = JSON.parse(binding.skillDefinitionJson)
+    expect(definition.contextGateway.retrievalBudgetMode).toBe('model-capacity')
+    definition.contextGateway.retrievalBudgetMode = 'unsupported'
+    await expect(assertAgentSkillExecutionBindingIntegrityV2({ ...binding,
+      skillDefinitionJson: canonicalStringify(definition) })).rejects.toThrow('retrievalBudgetMode 无效')
+  })
+
   it('正文的 Work 与 Canon Provider 进入同一 Gateway packet，Blueprint 与 POV 认知由该 packet 投影', async () => {
     const withoutPerspective = await resolveProseGenerationExecutionBindingV2({ operation: 'generate' })
     const withPerspective = await resolveProseGenerationExecutionBindingV2({

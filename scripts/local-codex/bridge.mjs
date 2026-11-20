@@ -30,22 +30,21 @@ function publicReceipt({ hash, ...record }) {
 }
 async function readBody(req) {
   if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) throw new Error('仅接受 JSON 请求。')
-  let length = 0; const chunks = []
+  const chunks = []
   for await (const chunk of req) {
-    length += chunk.length
-    if (length > 2 * 1024 * 1024) throw new Error('请求超过 2 MiB 限制。')
     chunks.push(chunk)
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8'))
 }
 export function validateInput(input) {
-  if (!input || !UUID.test(input.id) || typeof input.model !== 'string' || !input.model.trim() || input.model.length > 200
-    || !Array.isArray(input.messages) || !input.messages.length || input.messages.length > 500
+  if (!input || !UUID.test(input.id) || typeof input.model !== 'string' || !input.model.trim() || (input.capacityPolicy !== 'reference-service' && input.model.length > 200)
+    || !Array.isArray(input.messages) || !input.messages.length || (input.capacityPolicy !== 'reference-service' && input.messages.length > 500)
     || input.messages.some(m => !m || !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string')
     || (input.outputSchema != null && (typeof input.outputSchema !== 'object' || Array.isArray(input.outputSchema)))
     || (input.responseFormat != null && input.responseFormat !== 'json_object')
+    || (input.capacityPolicy !== undefined && input.capacityPolicy !== 'reference-service')
     || (input.receiptRetention !== undefined && input.receiptRetention !== DURABLE_RETENTION)
-    || Object.keys(input).some(k => !['id', 'model', 'messages', 'outputSchema', 'responseFormat', 'receiptRetention'].includes(k))) throw new Error('无效的 Codex 文本请求。')
+    || Object.keys(input).some(k => !['id', 'model', 'messages', 'outputSchema', 'responseFormat', 'receiptRetention', 'capacityPolicy'].includes(k))) throw new Error('无效的 Codex 文本请求。')
   return input
 }
 
@@ -67,6 +66,7 @@ export function createBridge({ runtime = new CodexRuntime(), journalDir = join(h
     const saved = JSON.parse(readFileSync(file, 'utf8'))
     if (!Array.isArray(saved) || saved.some(r => !r || !UUID.test(r.id) || !Number.isFinite(r.createdAt) || typeof r.text !== 'string'
       || (r.receiptRetention !== undefined && r.receiptRetention !== DURABLE_RETENTION)
+      || (r.capacityPolicy !== undefined && r.capacityPolicy !== 'reference-service')
       || (r.ownerAcknowledgedAt != null && !Number.isFinite(r.ownerAcknowledgedAt))) || new Set(saved.map(r => r.id)).size !== saved.length) throw new Error('Invalid receipt journal')
     records = new Map(saved.map(r => [r.id, {
       ...r, ...(!TERMINAL.has(r.status) ? { status: 'unknown', error: '服务重启，先前请求结果未知；不会自动重发。' } : {}),
@@ -98,7 +98,6 @@ export function createBridge({ runtime = new CodexRuntime(), journalDir = join(h
         if (TERMINAL.has(record.status)) return
         Object.assign(record, update)
         if (update.dispatched) record.status = 'running'
-        if (Buffer.byteLength(record.text, 'utf8') > 2 * 1024 * 1024) { record.text = ''; controller.abort() }
         // Persist the dispatch boundary and final items, never prompts or credentials.
         if (update.dispatched || update.usage || Date.now() - savedAt >= 250) { persist(); savedAt = Date.now() }
       }, controller.signal)
@@ -138,12 +137,13 @@ export function createBridge({ runtime = new CodexRuntime(), journalDir = join(h
         const hash = createHash('sha256').update(JSON.stringify(input)).digest('hex')
         const existing = records.get(input.id)
         if (existing) return send(res, existing.hash === hash ? 200 : 409, existing.hash === hash ? { id: input.id } : { error: '请求编号已用于不同内容。' })
-        if (input.receiptRetention === DURABLE_RETENTION && [...records.values()].filter(pinned).length >= 32) {
+        if (input.capacityPolicy !== 'reference-service' && input.receiptRetention === DURABLE_RETENTION && [...records.values()].filter(record => pinned(record) && record.capacityPolicy !== 'reference-service').length >= 32) {
           return send(res, 409, { error: '已有 32 条待原作品回收的 Codex 回执；请核对原记录后继续，不会删除旧答复或自动重发。' })
         }
-        if (active.size >= 32) return send(res, 409, { error: 'Codex 待处理请求已达 32 条。请等待或取消已有请求；不会自动重试。' })
+        if (input.capacityPolicy !== 'reference-service' && [...active.keys()].filter(id => records.get(id)?.capacityPolicy !== 'reference-service').length >= 32) return send(res, 409, { error: 'Codex 待处理请求已达 32 条。请等待或取消已有请求；不会自动重试。' })
         const record = { id: input.id, hash, model: input.model, createdAt: Date.now(), status: 'accepted', text: '', dispatched: false,
-          ...(input.receiptRetention === DURABLE_RETENTION ? { receiptRetention: DURABLE_RETENTION } : {}) }
+          ...(input.receiptRetention === DURABLE_RETENTION ? { receiptRetention: DURABLE_RETENTION } : {}),
+          ...(input.capacityPolicy ? { capacityPolicy: input.capacityPolicy } : {}) }
         records.set(input.id, record)
         try { persist() } catch { records.delete(input.id); storageFailed = true; throw new Error('无法保存请求记录，未发送模型请求。') }
         const controller = new AbortController(); active.set(input.id, controller)

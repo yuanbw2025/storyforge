@@ -1138,8 +1138,8 @@ export interface ContextSource {
   layer: ContextLayer
   /** Logical owner resolved before the registered reader runs. */
   ownerFrom?: DomainOwnerKind
-  /** Approximate per-source soft cap. Adapters can still return less. */
-  budgetTokens: number
+  /** null removes the per-source ceiling. Reference task baselines remain complete; other sources use the current request budget. */
+  budgetTokens: number | null
   /** NS-1: assembleContext 总预算裁剪时不得整段删除。 */
   protectedFromTrim?: boolean
   /** Sources remain byte-complete: protected overflow fails; optional sources may be dropped whole, never sliced. */

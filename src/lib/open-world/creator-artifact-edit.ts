@@ -1,3 +1,4 @@
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { readTextOpenWorldObservedTokenPairV1 } from "./production-usage"
 import { assertCurrentProductEntryV1 } from '../product/product-catalog'
 import Dexie from 'dexie'
@@ -895,7 +896,7 @@ async function prepareGeneration(input: {
       resolvedConfig = resolveRequestConfig(input.aiConfig, {
         category: 'authoring.text-open-world-creator-artifact-edit',
         projectId: input.selection.scope.projectId,
-        configOverrides: { maxTokens: executionBinding.maxOutputTokens },
+        configOverrides: { maxTokens: requireFixedBudgetValueV1(executionBinding.maxOutputTokens) },
         contextOverflowPolicy: 'reject',
       })
       if (!isAIConfigReady(resolvedConfig.config)) {
@@ -1128,8 +1129,8 @@ async function assertCreatorEditModelInputEvidenceV1(input: {
     || manifest.attempt !== 1
     || manifest.scope.projectId !== input.snapshot.run.projectId
     || manifest.scope.worldGroupId !== (input.snapshot.run.worldGroupId ?? null)
-    || manifest.inputBudget > input.snapshot.contract.budget.maxInputTokens
-    || manifest.totalInputTokens > input.snapshot.contract.budget.maxInputTokens
+    || manifest.inputBudget > requireFixedBudgetValueV1(input.snapshot.contract.budget.maxInputTokens)
+    || manifest.totalInputTokens > requireFixedBudgetValueV1(input.snapshot.contract.budget.maxInputTokens)
     || !sameJson(
       manifest.sources.map(source => source.key),
       input.snapshot.contract.permissions.contextSourceKeys,
@@ -1281,8 +1282,8 @@ async function isExplicitlyReplaceableCreatorEditRunV1(
         || failure.retryable !== failed[0]!.payload.retryable
         || stepFailed[0]!.payload.category !== modelFailureCategoryV1(failure)
         || (failure.usage && (
-          failure.usage.inputTokens > snapshot.contract.budget.maxInputTokens
-          || failure.usage.outputTokens > snapshot.contract.budget.maxOutputTokens
+          failure.usage.inputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens)
+          || failure.usage.outputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens)
         ))) {
         fail('replacement-evidence', '模型失败 Artifact、预算与终态事件不一致')
       }
@@ -1308,8 +1309,8 @@ async function isExplicitlyReplaceableCreatorEditRunV1(
       || !(result.sequence < response.sequence && response.sequence < responded[0]!.sequence)) {
       fail('replacement-evidence', '不可用模型输出的 tool-result/raw-response/responded 不闭合')
     }
-    let provenUnusable = durableResult.usage.inputTokens > snapshot.contract.budget.maxInputTokens
-      || durableResult.usage.outputTokens > snapshot.contract.budget.maxOutputTokens
+    let provenUnusable = durableResult.usage.inputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens)
+      || durableResult.usage.outputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens)
     if (!provenUnusable) {
       try {
         const parsed = parseTextOpenWorldCreatorArtifactEditModelOutputV1(
@@ -2445,8 +2446,8 @@ async function assertCheckpointEvidence(
     || manifest.scope.worldGroupId !== (snapshot.run.worldGroupId ?? null)) {
     fail('evidence', 'ContextManifest 正文 hash、Run、步骤或作用域不一致')
   }
-  if (manifest.inputBudget > snapshot.contract.budget.maxInputTokens
-    || manifest.totalInputTokens > snapshot.contract.budget.maxInputTokens) {
+  if (manifest.inputBudget > requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens)
+    || manifest.totalInputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens)) {
     fail('evidence', 'ContextManifest token 预算超过 Run Contract')
   }
   if (!sameJson(
@@ -2495,8 +2496,8 @@ async function assertCheckpointEvidence(
     || candidate.modelEvidence.outputHash !== response.payload.contentHash
     || !sameJson(candidate.modelEvidence.contextManifestHashes, [manifest.manifestHash])
     || candidate.modelUsage.modelCalls !== 1
-    || candidate.modelUsage.inputTokens > snapshot.contract.budget.maxInputTokens
-    || candidate.modelUsage.outputTokens > snapshot.contract.budget.maxOutputTokens) {
+    || candidate.modelUsage.inputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens)
+    || candidate.modelUsage.outputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens)) {
     fail('evidence', 'Agent 修改的模型 Artifact、用量或 ContextManifest envelope 不闭合')
   }
   const historicalIntake = await readHistoricalCreatorEditIntakeAuthorityV1({
@@ -2911,7 +2912,7 @@ async function resolveAgentPatch(input: {
     (total, message) => total + estimateTokens(message.content),
     0,
   )
-  if (estimatedPromptTokens > input.snapshot.contract.budget.maxInputTokens) {
+  if (estimatedPromptTokens > requireFixedBudgetValueV1(input.snapshot.contract.budget.maxInputTokens)) {
     fail('model-budget', '完整 rendered request 在模型调用前已超过 Run Contract 输入预算')
   }
   const requestContent = canonicalStringify({
@@ -2973,8 +2974,8 @@ async function resolveAgentPatch(input: {
         || exactArtifactEvent(snapshot, 'raw-response') !== null
         || eventFor(snapshot, 'model.responded').length !== 0
         || (failure.usage && (
-          failure.usage.inputTokens > snapshot.contract.budget.maxInputTokens
-          || failure.usage.outputTokens > snapshot.contract.budget.maxOutputTokens
+          failure.usage.inputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens)
+          || failure.usage.outputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens)
         ))) {
         fail('model-result', '已持久化模型失败证据与当前运行绑定不一致')
       }
@@ -3194,8 +3195,8 @@ async function resolveAgentPatch(input: {
     fail('model-evidence', 'model.responded 与 raw-response 不一致')
   }
   const modelUsage = durableResult.usage
-  if (modelUsage.inputTokens > snapshot.contract.budget.maxInputTokens
-    || modelUsage.outputTokens > snapshot.contract.budget.maxOutputTokens) {
+  if (modelUsage.inputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxInputTokens)
+    || modelUsage.outputTokens > requireFixedBudgetValueV1(snapshot.contract.budget.maxOutputTokens)) {
     fail('model-output-unusable', '模型实际 token 用量超过 Run Contract 预算')
   }
   let patch: TextOpenWorldCreatorEditPatchV1
@@ -4646,8 +4647,8 @@ async function recoverTextOpenWorldCreatorArtifactEditKnownModelResultV1(input: 
       || exactArtifactEvent(input.snapshot, 'raw-response') !== null
       || eventFor(input.snapshot, 'model.responded').length !== 0
       || (failureResult.usage && (
-        failureResult.usage.inputTokens > input.snapshot.contract.budget.maxInputTokens
-        || failureResult.usage.outputTokens > input.snapshot.contract.budget.maxOutputTokens
+        failureResult.usage.inputTokens > requireFixedBudgetValueV1(input.snapshot.contract.budget.maxInputTokens)
+        || failureResult.usage.outputTokens > requireFixedBudgetValueV1(input.snapshot.contract.budget.maxOutputTokens)
       ))) {
       fail('known-result-recovery', '持久化模型失败与冻结模型绑定、预算或事件形态不一致')
     }
