@@ -1,6 +1,6 @@
 import { keepIntegrityReadAlive } from '../db/transaction-integrity'
 import { sha256 } from '@noble/hashes/sha2.js'
-import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
+import { canonicalStringify } from '../agent/run/hash'
 import { CONTEXT_SOURCES } from '../registry/context-sources'
 import type {
   ContextAccessPolicyV1,
@@ -10,7 +10,7 @@ import type {
   ContextSourceRefV1,
   FrozenResourceScopeV1,
 } from '../registry/types'
-import { normalizeContextAccessPolicyV1 } from './contracts'
+import { contextAccessPolicyHashV1, normalizeContextAccessPolicyV1 } from './contracts'
 import type { WorldQueryAccessV1 } from '../types/world-query'
 
 export const MAX_SOURCE_CAPABILITIES_PER_RESOURCE = 64
@@ -116,7 +116,7 @@ export async function createContextGatewayToolSessionV1(input: {
     scope: Object.freeze({ ...input.scope }),
     scopeFingerprint: fingerprints[0],
     policy,
-    policyHash: await keepIntegrityReadAlive(hashCanonicalValue(policy)),
+    policyHash: await keepIntegrityReadAlive(contextAccessPolicyHashV1(policy)),
     providers: Object.freeze(providers),
     resourceKeyAllowList: allowedResourceKeys,
     resourceKeyDenyList: excluded,

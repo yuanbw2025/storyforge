@@ -1,7 +1,7 @@
 import { estimateTokens } from '../ai/context-budget'
 import type { ChatMessage } from '../types'
 
-export const AGENT_TEAM_BUDGET_PROFILES = ['economy', 'balanced', 'expanded'] as const
+export const AGENT_TEAM_BUDGET_PROFILES = ['economy', 'balanced', 'expanded', 'service-capacity'] as const
 export type AgentTeamBudgetProfile = typeof AGENT_TEAM_BUDGET_PROFILES[number]
 
 export interface AgentTeamBudgetPolicy {
@@ -25,6 +25,8 @@ export interface AgentTeamCallReservation {
 }
 
 const POLICIES: Record<AgentTeamBudgetProfile, AgentTeamBudgetPolicy> = {
+  // Zero denotes no application quota for this explicit mode; per-request service capacity still applies.
+  'service-capacity': { profile: 'service-capacity', maxTokens: 0, maxCalls: 0, maxCanonRetries: 1 },
   economy: { profile: 'economy', maxTokens: 80_000, maxCalls: 7, maxCanonRetries: 1 },
   balanced: { profile: 'balanced', maxTokens: 160_000, maxCalls: 7, maxCanonRetries: 1 },
   expanded: { profile: 'expanded', maxTokens: 240_000, maxCalls: 7, maxCanonRetries: 1 },
@@ -75,10 +77,10 @@ export class AgentTeamBudgetTracker {
         && restored.maxCanonRetries === this.policy.maxCanonRetries
       const validUsage = Number.isInteger(restored.usedTokens)
         && restored.usedTokens >= 0
-        && restored.usedTokens <= this.policy.maxTokens
+        && (profile === 'service-capacity' || restored.usedTokens <= this.policy.maxTokens)
         && Number.isInteger(restored.calls)
         && restored.calls >= 0
-        && restored.calls <= this.policy.maxCalls
+        && (profile === 'service-capacity' || restored.calls <= this.policy.maxCalls)
         && Number.isInteger(restored.canonRetries)
         && restored.canonRetries >= 0
         && restored.canonRetries <= this.policy.maxCanonRetries
@@ -99,7 +101,7 @@ export class AgentTeamBudgetTracker {
     const estimatedInputTokens = input.messages
       .reduce((sum, message) => sum + estimateTokens(message.content), 0)
     const reservedOutputTokens = Math.max(1, Math.floor(input.maxOutputTokens))
-    if (this.calls + 1 > this.policy.maxCalls) {
+    if (this.policy.profile !== 'service-capacity' && this.calls + 1 > this.policy.maxCalls) {
       throw new AgentTeamBudgetExceededError(
         `本轮 Agent 团队已达到 ${this.policy.maxCalls} 次模型调用上限，已在发起“${input.label}”前停止。`,
       )
@@ -114,7 +116,7 @@ export class AgentTeamBudgetTracker {
       + outstandingTokens
       + estimatedInputTokens
       + reservedOutputTokens
-    if (projected > this.policy.maxTokens) {
+    if (this.policy.profile !== 'service-capacity' && projected > this.policy.maxTokens) {
       throw new AgentTeamBudgetExceededError(
         `本轮 Agent 团队预算不足：已用约 ${this.usedTokens.toLocaleString()} tokens，`
         + `“${input.label}”最坏还需约 ${(estimatedInputTokens + reservedOutputTokens).toLocaleString()}，`

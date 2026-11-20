@@ -1,3 +1,4 @@
+import { STORY_CORE_CONTENT_METHODS, STORY_CORE_MODE_METHODS, storyCoreMethodFlags } from '../../../lib/creation/story-core-content-skill'
 import { INSPIRATION_PREPARATION_MODES, INSPIRATION_PREPARATION_LABELS, INSPIRATION_PREPARATION_MODULES } from '../../../lib/inspiration/preparation-contract'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
@@ -83,6 +84,8 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
 
   // 本地编辑状态（draft），只在选中模板变化时同步
   const [draft, setDraft] = useState<PromptTemplate | null>(template)
+  const [storyField, setStoryField] = useState('concept')
+  const [storyMode, setStoryMode] = useState('create')
   const [dirty, setDirty] = useState(false)
   const [baseModuleKey, setBaseModuleKey] = useState(template?.moduleKey)
   const draftRef = useRef(draft)
@@ -98,17 +101,17 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
   const preview = useMemo(() => {
     if (!draft) return null
     try {
-      const previewVars = { ...PREVIEW_VARS }
+      const previewVars: Record<string, string | number> = { ...PREVIEW_VARS, ...(draft.moduleKey === 'story.generate' ? { ...storyCoreMethodFlags(storyField, storyMode), dimension: storyField, generationMode: storyMode, currentValue: '（此处为当前字段原文样例）' } : {}) }
       for (const binding of draft.variableBindings ?? []) {
         if (previewVars[binding.variable] == null || previewVars[binding.variable] === '') {
           previewVars[binding.variable] = `（示例：${binding.label}）`
         }
       }
-      return renderPrompt(draft, previewVars)
+      return renderPrompt(draft, previewVars, { parameterValues: draft.moduleKey === 'story.generate' ? {} : undefined })
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
     }
-  }, [draft])
+  }, [draft, storyField, storyMode])
 
   if (!template || !draft || template.id !== draft.id) {
     return (
@@ -449,6 +452,10 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
         </div>
       ) : null}
 
+      {draft.moduleKey === 'story.generate' && <div className="flex gap-2 text-sm">
+        <label>预览字段 <select aria-label="预览故事核心字段" value={storyField} onChange={event => setStoryField(event.target.value)}>{Object.keys(STORY_CORE_CONTENT_METHODS).map(key => <option key={key}>{key}</option>)}</select></label>
+        <label>预览操作 <select aria-label="预览故事核心操作" value={storyMode} onChange={event => setStoryMode(event.target.value)}>{Object.keys(STORY_CORE_MODE_METHODS).map(key => <option key={key}>{key}</option>)}</select></label>
+      </div>}
       {/* 实时预览 */}
       <div className="bg-bg-surface border border-border rounded-xl p-4">
         <div className="flex items-center justify-between mb-2">

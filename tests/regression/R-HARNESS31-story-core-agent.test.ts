@@ -142,7 +142,7 @@ describe.sequential('R-HARNESS31 · 故事核心 Agent Skill 与受治理采纳'
     const generated = await runGenerationNode(prepared.node, prepared.prepared)
 
     expect(generated.gate?.status).toBe('pass')
-    expect(prepared.contextSources).toEqual(['ragSelection'])
+    expect(prepared.contextSources).toEqual(['ragSelection', 'workAuthoringIntent'])
     expect(prepared.contextEvidence.inputStateSourceKeys)
       .toEqual(expect.arrayContaining(['worldview', 'storyCore']))
     expect(prepared.contextEvidence.inputState).toMatchObject({
@@ -197,7 +197,7 @@ describe.sequential('R-HARNESS31 · 故事核心 Agent Skill 与受治理采纳'
       handling: 'create-from-request',
       consideredSourceKeys: ['worldview', 'storyCore'],
     })
-    expect(prepared.contextSources).toEqual(['ragSelection'])
+    expect(prepared.contextSources).toEqual(['ragSelection', 'workAuthoringIntent'])
     expect(prompt).toContain('失忆的守灯人')
     expect(prompt).toContain('下游反推证据')
     expect(prompt).toContain('反推当前目标字段')
@@ -309,6 +309,7 @@ describe.sequential('R-HARNESS31 · 故事核心 Agent Skill 与受治理采纳'
         worldGroupId: null,
         authorRequest: task.instruction,
         skillId: task.skillId,
+        promptExecution: task.promptExecution,
       }, { runAI: async () => JSON.stringify(candidate()) })
       if (prepared.contextGatewayExecution) {
         await options.executionTrace?.contextGatewayPrepared?.(task, {
@@ -333,6 +334,7 @@ describe.sequential('R-HARNESS31 · 故事核心 Agent Skill 与受治理采纳'
           workspaceScope: scope,
           teamBudgetEvidence: options.budget.snapshot(),
           generator: prepared.modelIdentity,
+          promptExecutionEvidence: prepared.promptExecutionEvidence,
         },
         draft: JSON.stringify(generated.output, null, 2),
         runtimeNode: prepared.node,

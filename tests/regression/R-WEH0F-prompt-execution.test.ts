@@ -96,8 +96,7 @@ describe('WEH-0F Prompt execution contract', () => {
     const overLimit = '超长'.repeat(4_100)
     expect(() => formatWorldviewFieldGenerationRequestV1({ field: 'races', mode: 'expand', hint: overLimit }))
       .toThrow('没有截断')
-    expect(() => formatStoryCoreGenerationRequestV1({ field: 'theme', mode: 'expand', hint: overLimit }))
-      .toThrow('没有截断')
+    expect(formatStoryCoreGenerationRequestV1({ field: 'theme', mode: 'expand', hint: overLimit })).toContain(overLimit)
     expect(() => formatCharacterGenerationRequestV1({ hint: overLimit })).toThrow('没有截断')
   })
 

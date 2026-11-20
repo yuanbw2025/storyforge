@@ -249,6 +249,8 @@ export interface AgentRunContractV1 {
     }
   }
   budget: {
+    /** Service capacity governs requests; zero aggregate counters are not quotas. */
+    serviceCapacityOnly?: true
     maxModelCalls: number
     maxToolCalls: number
     maxInputTokens: number

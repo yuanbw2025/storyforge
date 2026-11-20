@@ -1,3 +1,7 @@
+import { workAuthoringIntentResourceKeyV1 } from '../context-gateway/work-intent-provider'
+import { usePromptStore } from '../../stores/prompt'
+import { storyCoreMethodFlags } from '../creation/story-core-content-skill'
+import { prepareModelCapacityV1, getModelCapacityV1, modelInputBudgetV1 } from '../ai/model-capacity'
 import { resolveFieldGenerationRequestModeV1 } from './field-generation-request-mode'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
@@ -54,6 +58,7 @@ import {
 } from './context-gateway-input'
 import { parseStructuredOutputV1 } from './structured-output-pipeline'
 import {
+  freezePromptExecutionOptionsV1,
   renderFrozenPromptExecutionV1,
   type PromptExecutionEvidenceV1,
   type PromptExecutionOptionsV1,
@@ -128,7 +133,7 @@ export const STORY_CORE_FIELD_LABELS = Object.fromEntries(
 ) as Record<StoryCoreField, string>
 
 const MODE_INSTRUCTIONS: Record<StoryCoreFieldOperationV1, string> = {
-  create: '目标字段为空：创建可直接审阅的作者意图摘要，不得返回占位说明。',
+  create: '目标字段为空：创建可审阅的具体故事候选，不得返回占位说明。',
   expand: '保留目标字段当前已有事实和方向，在其基础上补足因果、约束与具体性。',
   rewrite: '允许重写目标字段，但必须遵守其他已确认字段和正式上下文，不得顺手改写它们。',
   polish: '只优化目标字段的表达、逻辑顺序和可读性，除非作者明确要求，不新增重大设定。',
@@ -185,7 +190,6 @@ async function readSnapshot(
 function assertAuthorRequest(value: string): string {
   const request = value.trim()
   if (request.length < 2) throw new Error('请至少输入 2 个字符的故事核心要求。')
-  if (request.length > 1_000) throw new Error('单次故事核心要求不能超过 1000 个字符。')
   return request
 }
 
@@ -220,7 +224,7 @@ export function parseStoryCoreCandidateDraft(draft: string): StoryCoreCopilotCan
       schemaId: 'story-core-candidate.v1',
       target: 'storyCores.field',
       root: 'object',
-      maxChars: 35_000,
+      maxChars: Infinity,
       allowedRootFields: ['field', 'value'],
       requiredRootFields: ['field', 'value'],
       unknownRootFieldMessage: '故事核心候选只能包含 field 和 value。',
@@ -236,10 +240,7 @@ export function parseStoryCoreCandidateDraft(draft: string): StoryCoreCopilotCan
         throw new Error(`故事核心候选 ${field}.value 至少需要 2 个字符。`)
       }
       const fieldValue = source.value.trim()
-      const capability = STORY_CORE_FIELD_CAPABILITIES.get(field)!
-      if (fieldValue.length > capability.maxChars) {
-        throw new Error(`故事核心候选 ${field}.value 超过 ${capability.maxChars} 字符。`)
-      }
+
       return { field, value: fieldValue }
     },
   })
@@ -405,10 +406,11 @@ export async function prepareStoryCoreCopilot(
     throw new Error(`故事核心字段 ${targetField} 不支持 ${requestedMode} 模式。`)
   }
   const routingCategory = input.routingCategory ?? 'agent.world-foundation.story-core'
-  const config = input.configOverride ?? resolveRequestConfig(
+  const config = await prepareModelCapacityV1(input.configOverride ?? resolveRequestConfig(
     useAIConfigStore.getState().config,
     { category: routingCategory },
-  ).config
+  ).config)
+  const capacityBudget = modelInputBudgetV1(getModelCapacityV1(config), input.generationOverrides?.maxTokens ?? config.maxTokens)
   const contextProfile = input.contextProfile ?? 'balanced'
   const contextPolicy = resolveAgentContextPolicy(skill.contextTaskKind, contextProfile)
   const compression = input.contextCompressionRuntime
@@ -435,19 +437,20 @@ export async function prepareStoryCoreCopilot(
         skill,
         scope: scope!,
         worldGroupId,
-        budgetTokens: Math.min(contextPolicy.maxInputTokens, skill.contextGateway!.maxRetrievedTokens),
+        budgetTokens: capacityBudget.inputBudget,
         query: `${STORY_CORE_FIELD_LABELS[targetField]} ${requestedMode}；检查已有世界观、角色、故事线和大纲作为兼容或反推证据。\n${request}`,
         ...(targetResourceKey ? {
-          mandatoryResourceKeys: [targetResourceKey],
+          mandatoryResourceKeys: [workAuthoringIntentResourceKeyV1(work), targetResourceKey],
+          mandatoryFullResourceKeys: [workAuthoringIntentResourceKeyV1(work)],
           mandatoryOriginalResourceKeys: [targetResourceKey],
           targetResourceKeys: [targetResourceKey],
-        } : {}),
+        } : { mandatoryResourceKeys: [workAuthoringIntentResourceKeyV1(work)], mandatoryFullResourceKeys: [workAuthoringIntentResourceKeyV1(work)] }),
         additionalReadsEnabled: false,
         signal: input.signal,
       })
     : undefined
   const assembled = contextGatewayExecution
-    ? assembleContextGatewayPacketV1(contextGatewayExecution, contextPolicy.maxInputTokens)
+    ? assembleContextGatewayPacketV1(contextGatewayExecution, capacityBudget.inputBudget)
     : await assembleContext({
         projectId: input.projectId,
         scope,
@@ -455,7 +458,7 @@ export async function prepareStoryCoreCopilot(
         modelConfig: config, provider: config.provider,
         model: config.model,
         sourceKeys: [...skill.contextSourceKeys],
-        inputBudgetMaxTokens: contextPolicy.maxInputTokens,
+        inputBudgetMaxTokens: capacityBudget.inputBudget,
         sourceBudgetScale: contextPolicy.sourceBudgetScale,
         sourceTransformer: compression?.sourceTransformer,
       })
@@ -488,10 +491,16 @@ export async function prepareStoryCoreCopilot(
     generationOverrides: input.generationOverrides,
     signal: input.signal,
   }
-  if (input.promptExecution) {
+  {
+    if (!input.promptExecution && !usePromptStore.getState().loaded) await usePromptStore.getState().init()
+    const promptExecution = input.promptExecution ?? await freezePromptExecutionOptionsV1({
+      request: { version: 1, moduleKey: 'story.generate' },
+      template: usePromptStore.getState().getActive('story.generate'),
+    })
     const rendered = await renderFrozenPromptExecutionV1({
-      options: input.promptExecution,
+      options: promptExecution,
       context: {
+        ...storyCoreMethodFlags(targetField, nodeInput.mode),
         projectName: work.title,
         genres: work.genres.join('/'),
         dimension: STORY_CORE_FIELD_LABELS[targetField],
@@ -512,14 +521,12 @@ export async function prepareStoryCoreCopilot(
       ],
     })
     const generationOverrides = {
-      maxTokens: 6_000,
+      maxTokens: capacityBudget.outputBudget,
       temperature: 0.5,
       ...rendered.generationOverrides,
       ...input.generationOverrides,
     }
-    if ((generationOverrides.maxTokens ?? 0) > skill.maxOutputTokens) {
-      throw new Error(`Prompt 请求输出 ${generationOverrides.maxTokens} tokens，超过 Skill 上限 ${skill.maxOutputTokens}；已在模型调用前阻止。`)
-    }
+
     nodeInput.frozenPromptMessages = rendered.messages
     nodeInput.promptExecutionEvidence = {
       ...rendered.evidence,
@@ -569,7 +576,7 @@ export function createStoryCoreCopilotNode(
       category: input.routingCategory,
       projectId: input.projectId,
       configOverrides: {
-        maxTokens: input.generationOverrides?.maxTokens ?? 6_000,
+        maxTokens: input.generationOverrides?.maxTokens ?? modelInputBudgetV1(getModelCapacityV1(input.config), input.config.maxTokens).outputBudget,
         temperature: input.generationOverrides?.temperature ?? 0.5,
       },
       contextOverflowPolicy: 'reject' as const,
@@ -619,8 +626,5 @@ export function formatStoryCoreGenerationRequestV1(input: {
   const hint = (input.hint ?? '').trim()
   if (hint) parts.push(`作者要求：${hint}`)
   const request = parts.join('\n')
-  if (request.length > 8_000) {
-    throw new Error('故事核心作者要求超过 8000 字符；没有截断，已在模型调用前阻止。')
-  }
   return request
 }

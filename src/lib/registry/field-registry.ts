@@ -140,31 +140,31 @@ export type WorldviewGeneratableField = typeof WORLDVIEW_GENERATABLE_FIELD_SPECS
 export const STORY_CORE_GENERATABLE_FIELD_SPECS = [
   {
     target: 'storyCores', field: 'logline', type: 'longtext', labels: ['一句话故事'], sanitize: trimString,
-    aiGeneration: { version: 1, domain: 'story-intent', label: '一句话故事', kind: 'text', directDependencies: ['concept', 'centralConflict', 'mainPlot'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 1_000, temporaryAssumptions: 'forbidden' },
+    aiGeneration: { version: 1, domain: 'story-intent', label: '一句话故事', kind: 'text', directDependencies: ['concept', 'centralConflict', 'mainPlot'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: Infinity, temporaryAssumptions: 'forbidden' },
   },
   {
     target: 'storyCores', field: 'concept', type: 'longtext', labels: ['故事概念'], sanitize: trimString,
-    aiGeneration: { version: 1, domain: 'story-intent', label: '故事概念', kind: 'text', directDependencies: [], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 4_000, temporaryAssumptions: 'forbidden' },
+    aiGeneration: { version: 1, domain: 'story-intent', label: '故事概念', kind: 'text', directDependencies: [], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: Infinity, temporaryAssumptions: 'forbidden' },
   },
   {
     target: 'storyCores', field: 'theme', type: 'longtext', labels: ['主题'], sanitize: trimString,
-    aiGeneration: { version: 1, domain: 'story-intent', label: '故事主题', kind: 'text', directDependencies: ['concept'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 4_000, temporaryAssumptions: 'forbidden' },
+    aiGeneration: { version: 1, domain: 'story-intent', label: '故事主题', kind: 'text', directDependencies: ['concept'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: Infinity, temporaryAssumptions: 'forbidden' },
   },
   {
     target: 'storyCores', field: 'centralConflict', type: 'longtext', labels: ['核心冲突'], sanitize: trimString,
-    aiGeneration: { version: 1, domain: 'story-intent', label: '核心冲突', kind: 'text', directDependencies: ['concept', 'theme'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 12_000, temporaryAssumptions: 'forbidden' },
+    aiGeneration: { version: 1, domain: 'story-intent', label: '核心冲突', kind: 'text', directDependencies: ['concept', 'theme'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: Infinity, temporaryAssumptions: 'forbidden' },
   },
   {
     target: 'storyCores', field: 'plotPattern', type: 'longtext', labels: ['情节模式'], sanitize: trimString,
-    aiGeneration: { version: 1, domain: 'story-intent', label: '故事模式', kind: 'text', directDependencies: ['centralConflict'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 4_000, temporaryAssumptions: 'forbidden' },
+    aiGeneration: { version: 1, domain: 'story-intent', label: '故事模式', kind: 'text', directDependencies: ['centralConflict'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: Infinity, temporaryAssumptions: 'forbidden' },
   },
   {
     target: 'storyCores', field: 'mainPlot', type: 'longtext', labels: ['主线', '故事主线'], sanitize: trimString,
-    aiGeneration: { version: 1, domain: 'story-intent', label: '故事主线意图', kind: 'text', directDependencies: ['centralConflict', 'plotPattern'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'forbidden' },
+    aiGeneration: { version: 1, domain: 'story-intent', label: '故事主线意图', kind: 'text', directDependencies: ['centralConflict', 'plotPattern'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: Infinity, temporaryAssumptions: 'forbidden' },
   },
   {
     target: 'storyCores', field: 'subPlots', type: 'longtext', labels: ['复线'], sanitize: trimString,
-    aiGeneration: { version: 1, domain: 'story-intent', label: '故事复线意图', kind: 'text', directDependencies: ['mainPlot', 'centralConflict'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'forbidden' },
+    aiGeneration: { version: 1, domain: 'story-intent', label: '故事复线意图', kind: 'text', directDependencies: ['mainPlot', 'centralConflict'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: Infinity, temporaryAssumptions: 'forbidden' },
   },
 ] as const satisfies readonly FieldSpec[]
 

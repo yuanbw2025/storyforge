@@ -429,7 +429,7 @@ function parseAgentRunContractV1Base(
     permissionsRecord.contextSourceKeys,
     'contract.permissions.contextSourceKeys',
   ).map((item, index) => readString(item, `contract.permissions.contextSourceKeys[${index}]`, { max: 120 }))
-  const toolOnly = readRecord(record.budget, 'contract.budget').maxModelCalls === 0
+  const toolOnly = readRecord(record.budget, 'contract.budget').maxModelCalls === 0 && readRecord(record.budget, 'contract.budget').serviceCapacityOnly !== true
   if (contextSourceKeys.length === 0 && !toolOnly) {
     failSchema('invalid_permission', 'contract.permissions.contextSourceKeys', '不得为空')
   }
@@ -608,8 +608,10 @@ function parseAgentRunContractV1Base(
 
   const budgetRecord = readRecord(record.budget, 'contract.budget')
   const requiredBudgetKeys = ['maxModelCalls', 'maxToolCalls', 'maxInputTokens', 'maxOutputTokens', 'maxAttemptsPerStep'] as const
-  const budgetKeys = [...requiredBudgetKeys, 'maxReplans', 'maxToolResultTokens', 'maxProtocolErrors'] as const
+  const budgetKeys = [...requiredBudgetKeys, 'serviceCapacityOnly', 'maxReplans', 'maxToolResultTokens', 'maxProtocolErrors'] as const
   assertExactKeys(budgetRecord, budgetKeys, requiredBudgetKeys, 'contract.budget')
+
+  if (budgetRecord.serviceCapacityOnly !== undefined && budgetRecord.serviceCapacityOnly !== true) failSchema('invalid_budget', 'contract.budget.serviceCapacityOnly', '只能为 true')
 
   const acceptance = readArray(record.acceptance, 'contract.acceptance')
     .map((item, index) => readAcceptance(item, `contract.acceptance[${index}]`))
@@ -675,10 +677,11 @@ function parseAgentRunContractV1Base(
     ...(candidateSemanticReviewPolicy ? { candidateSemanticReviewPolicy } : {}),
     ...(automationAuthorization ? { automationAuthorization } : {}),
     budget: {
+      ...(budgetRecord.serviceCapacityOnly === true ? { serviceCapacityOnly: true as const } : {}),
       maxModelCalls: readInteger(budgetRecord.maxModelCalls, 'contract.budget.maxModelCalls', { min: 0 }),
       maxToolCalls: readInteger(budgetRecord.maxToolCalls, 'contract.budget.maxToolCalls', { min: toolOnly ? 1 : 0 }),
-      maxInputTokens: readInteger(budgetRecord.maxInputTokens, 'contract.budget.maxInputTokens', { min: toolOnly ? 0 : 1, ...(toolOnly ? { max: 0 } : {}) }),
-      maxOutputTokens: readInteger(budgetRecord.maxOutputTokens, 'contract.budget.maxOutputTokens', { min: toolOnly ? 0 : 1, ...(toolOnly ? { max: 0 } : {}) }),
+      maxInputTokens: readInteger(budgetRecord.maxInputTokens, 'contract.budget.maxInputTokens', { min: toolOnly || budgetRecord.serviceCapacityOnly === true ? 0 : 1, ...(toolOnly ? { max: 0 } : {}) }),
+      maxOutputTokens: readInteger(budgetRecord.maxOutputTokens, 'contract.budget.maxOutputTokens', { min: toolOnly || budgetRecord.serviceCapacityOnly === true ? 0 : 1, ...(toolOnly ? { max: 0 } : {}) }),
       maxAttemptsPerStep: readInteger(budgetRecord.maxAttemptsPerStep, 'contract.budget.maxAttemptsPerStep', { min: 1 }),
       ...(budgetRecord.maxReplans === undefined ? {} : {
         maxReplans: readInteger(budgetRecord.maxReplans, 'contract.budget.maxReplans', { min: 0 }),
@@ -813,7 +816,7 @@ function parseSkillBoundContract(
       'V2 Run permissions 必须等于所有 Skill binding 的实际写目标并集',
     )
   }
-  if (executionBindings.some(binding => binding.maxOutputTokens > base.budget.maxOutputTokens)) {
+  if (!base.budget.serviceCapacityOnly && executionBindings.some(binding => binding.maxOutputTokens > base.budget.maxOutputTokens)) {
     failSchema(
       'invalid_execution_binding',
       'contract.budget.maxOutputTokens',

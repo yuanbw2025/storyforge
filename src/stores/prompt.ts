@@ -1,3 +1,4 @@
+import { STORY_CORE_PREVIOUS_SEEDS } from '../lib/ai/story-core-seed-history'
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { PromptTemplate, PromptModuleKey } from '../lib/types/prompt'
@@ -89,7 +90,24 @@ export const usePromptStore = create<PromptStore>((set, get) => ({
             applicability: seed.applicability,
             updatedAt: now,
           }
-          await db.promptTemplates.update(old.id!, refreshed)
+          if (seed.moduleKey === 'story.generate' && (old.systemPrompt !== seed.systemPrompt || old.userPromptTemplate !== seed.userPromptTemplate)) {
+            const previous = STORY_CORE_PREVIOUS_SEEDS[seed.name]
+            const authorEdited = !previous || old.systemPrompt !== previous.systemPrompt || old.userPromptTemplate !== previous.userPromptTemplate
+              || JSON.stringify(old.parameters) !== JSON.stringify(seed.parameters)
+              || JSON.stringify(old.modelOverride) !== JSON.stringify(seed.modelOverride)
+              || JSON.stringify(old.examples) !== JSON.stringify(seed.examples)
+            // Preserve the exact prior template as a user-owned version. Edited
+            // built-ins keep their activation; untouched built-ins upgrade in place.
+            await db.transaction('rw', db.promptTemplates, async () => {
+              const latest = await db.promptTemplates.get(old.id!)
+              if (latest?.systemPrompt === seed.systemPrompt && latest.userPromptTemplate === seed.userPromptTemplate) return
+              const { id: _id, ...history } = old
+              await db.promptTemplates.add({ ...history, scope: 'user', name: `${old.name}（${authorEdited ? '保留的作者版本' : '升级前历史'}）`, isActive: authorEdited && old.isActive, updatedAt: now })
+              await db.promptTemplates.update(old.id!, { ...refreshed, ...(authorEdited ? { isActive: false } : {}) })
+            })
+          } else {
+            await db.promptTemplates.update(old.id!, refreshed)
+          }
         }
       }
     }
