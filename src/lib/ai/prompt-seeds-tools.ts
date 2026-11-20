@@ -880,7 +880,7 @@ type 含义：traversal=穿越目标，instance=副本，parallel=平行世界�
 {{sourceText}}
 
 请拆分为可确认写入的词条。`,
-    variables: ['categoryName', 'fieldSchema', 'existingEntries', 'supplementTags', 'sourceText'],
+    variables: ["categoryName","fieldSchema","existingEntries","supplementTags","sourceText","codex_mineral","codex_herb","codex_beast","codex_race","codex_faction","codex_city","codex_artifact","codex_natStructure","codex_natDimension","codex_natTerrain","codex_natWater","codex_natClimate","codex_humEra","codex_humEvent","codex_humSociety","codex_humPolitics","codex_humEconomy","codex_humCulture","codex_humConflict","codex_originPower","codex_originDeity","codex_custom"],
     isActive: true,
   },
 
@@ -915,7 +915,7 @@ type 含义：traversal=穿越目标，instance=副本，parallel=平行世界�
 {{supplementTags}}
 
 请生成可单独确认的 AI 新建词条建议。`,
-    variables: ['baselineContext', 'worldContext', 'authorRequest', 'supplementTags'],
+    variables: ["baselineContext","worldContext","authorRequest","supplementTags","codex_mineral","codex_herb","codex_beast","codex_race","codex_faction","codex_city","codex_artifact","codex_natStructure","codex_natDimension","codex_natTerrain","codex_natWater","codex_natClimate","codex_humEra","codex_humEvent","codex_humSociety","codex_humPolitics","codex_humEconomy","codex_humCulture","codex_humConflict","codex_originPower","codex_originDeity","codex_custom"],
     isActive: true,
   },
 
@@ -1058,7 +1058,7 @@ type 含义：traversal=穿越目标，instance=副本，parallel=平行世界�
 【地点】{{sceneLocation}}{{/if}}
 
 请按本轮所选研究任务组织资料分析、研究计划或场景建议。`,
-    variables: ['worldContext', 'historyContext', 'worldRulesContext', 'scene', 'sceneEra', 'sceneLocation'],
+    variables: ["worldContext","historyContext","worldRulesContext","scene","sceneEra","sceneLocation","research_scene_empty","research_scene_sources","research_plan_empty","research_plan_sources","research_sources_empty","research_sources_sources"],
     isActive: true,
   },
 

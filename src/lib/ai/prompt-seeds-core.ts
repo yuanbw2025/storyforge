@@ -188,7 +188,7 @@ const CORE_PROMPT_BASE_SEEDS: PromptSeed[] = [
 用户补充说明：{{userHint}}{{/if}}{{#if isSummary}}
 
 请将上述世界观浓缩为 200-400 字的精华摘要，后续 AI 写作时会作为核心上下文参考。{{/if}}`,
-    variables: ['projectName', 'genres', 'dimension', 'worldContext', 'worldRulesContext', 'userHint', 'isSummary'],
+    variables: ["projectName","genres","dimension","worldContext","worldRulesContext","userHint","isSummary","field_worldOrigin","field_powerHierarchy","field_divineDesign","field_worldStructure","field_worldDimensions","field_continentLayout","field_mountainsRivers","field_climateByRegion","field_naturalResourceOverview","field_naturalResources","field_races","field_factionLayout","field_regionDimensions","field_politicsOverview","field_economyOverview","field_cultureOverview","field_internalConflicts","field_itemDesign"],
     parameters: [
       { key: 'tone', label: '基调', type: 'select',
         options: ['严肃', '史诗', '抒情', '硬核', '轻奇幻'],
