@@ -28,6 +28,8 @@ const entrypoints = [
   // AGENT-1 Phase 27.1-a/b is a headless public boundary for tools and the read-only AgentRunner.
   // Keep it independently testable without eagerly bundling the future copilot into the current UI.
   'src/lib/agent/index.ts',
+  // 064 F0 is a headless target-conflict contract; durable/UI admission joins in a later slice.
+  'src/lib/agent/candidate-target-scope.ts',
   // 035 independently reviewed Work-cover foundation: upload decoding, atomic
   // Blob/Asset persistence and Draft CAS. Remove after the card input is wired.
   'src/lib/work-cover/assets.ts',
