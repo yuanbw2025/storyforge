@@ -74,7 +74,7 @@ export default function InspirationPanel({ project }: Props) {
   const [promptEdits, setPromptEdits] = useState<Record<string, { parameters: Record<string, unknown>; system: string | null; user: string | null }>>({})
   const promptEdit = promptEdits[preparationModuleKey ?? ''] ?? { parameters: {}, system: null, user: null }
   const updatePromptEdit = (patch: Partial<typeof promptEdit>) => {
-    if (preparationModuleKey) setPromptEdits(current => ({ ...current, [preparationModuleKey]: { ...promptEdit, ...patch } }))
+    if (preparationModuleKey) setPromptEdits(current => ({ ...current, [preparationModuleKey]: { ...(current[preparationModuleKey] ?? { parameters: {}, system: null, user: null }), ...patch } }))
   }
   const generateWithPrompt = () => handleGenerate(preparationModuleKey ? {
     version: 1, moduleKey: preparationModuleKey, parameterValues: promptEdit.parameters,

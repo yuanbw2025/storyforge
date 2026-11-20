@@ -157,10 +157,13 @@ describe('R-HARNESS34 · 分步骤灵感面板接入 inspiration.reverse Skill',
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(system, '本轮可见System修改')
       system.dispatchEvent(new Event('input', { bubbles: true }))
+      const user = details.querySelectorAll('textarea')[1]
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(user, '本轮可见User修改')
+      user.dispatchEvent(new Event('input', { bubbles: true }))
     })
     const generate = [...host.querySelectorAll('button')].find(button => button.textContent?.trim() === INSPIRATION_PREPARATION_LABELS[mode])!
     await act(async () => generate.click())
-    expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ moduleKey: INSPIRATION_PREPARATION_MODULES[mode], systemOverride: '本轮可见System修改' }))
+    expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ moduleKey: INSPIRATION_PREPARATION_MODULES[mode], systemOverride: '本轮可见System修改', userOverride: '本轮可见User修改' }))
     expect(usePromptStore.getState().getActive(INSPIRATION_PREPARATION_MODULES[mode]).systemPrompt).toBe(before)
   })
 
