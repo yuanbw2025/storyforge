@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-20 · Feedback progress
+
+- Opt in per report and use “My feedback” to view acknowledgment, investigation, merge awaiting release, and verified repair versions. Notices are deduplicated, with explicit read receipts, offline catch-up, and withdrawal. See [Bug report](/en/feedback/bug) for use and retention limits; source: [#545](https://github.com/yuanbw2025/storyforge/pull/545).
+
 ## November 19, 2026 · Optional world-map art enhancement
 
 - Sketch, illustrated, and continuous-painting maps can use their native rendering directly or request an enhancement candidate through a reference-image connection. Image and writing connections can be selected separately; text-only, vision-only, and text-to-image-only connections cannot repaint the map.

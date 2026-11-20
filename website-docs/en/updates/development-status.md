@@ -2,7 +2,7 @@
 
 ## 2026-11-20 · Feedback progress notifications (#541)
 
-Implementation has started for in-app “My feedback”: per-report opt-in, reviewed public progress, verified repair versions, offline catch-up, and read receipts. Client and platform are verified separately; this work is not merged, deployed, or formally released yet. Older reports without opt-in are not claimed automatically, and immediate delivery while the app is closed is not guaranteed.
+Implementation has started for in-app “My feedback”: per-report opt-in, reviewed public progress, verified repair versions, offline catch-up, and read receipts. The client is merged through [PR #545](https://github.com/yuanbw2025/storyforge/pull/545), and the platform is deployed with live readback verified. Formal client packages still await release acceptance. Older reports without opt-in are not claimed automatically, and immediate delivery while the app is closed is not guaranteed.
 
 ## November 19, 2026 · Integrated-source deduplication and unfinished work
 
