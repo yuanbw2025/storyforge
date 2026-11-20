@@ -28,8 +28,8 @@ on:
 permissions:
   contents: read
 env:
-  PREVIOUS_CLIENT_REF: 869a9ba79457da10d787c78165173b95e71d2825
-  PREVIOUS_CLIENT_VERSION: 4.0.7
+  PREVIOUS_CLIENT_REF: 41a6e8652499e0805f44798fbd54ca39d3c51234
+  PREVIOUS_CLIENT_VERSION: 4.0.8
   # Public build-time coordinates only. The sharing UI stays hidden until the
   # production service is verified and STORYFORGE_COMMUNITY_SHARING is set to 1.
   VITE_STORYFORGE_COMMUNITY_SHARING: ${{ vars.STORYFORGE_COMMUNITY_SHARING }}
