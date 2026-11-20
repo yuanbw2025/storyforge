@@ -63,7 +63,7 @@
 | `relation.extract` | 1 | 内置-角色关系提取 | 从大纲摘要和章节正文中自动提取角色间的关系。 | `projectName` `characterList` `outlineSummary` `chapterContent` |
 | `plot.character-driven` | 1 | 内置-角色驱动剧情 | 根据角色初始状态与目标状态，AI 生成中间情节推演（卷/章大纲结构）。 | `projectName` `genres` `worldContext` `storyCore` `existingOutline` `characterArcs` `userHint` `worldRulesContext` |
 | `plot.character-revision` | 1 | 内置-角色变更影响分析 | 分析创作中途的角色变化，把已写区、过渡区和未写区分开，并输出可审查的大纲 patch。 | `revisionContext` |
-| `reference.analyze` | 1 | 内置-拆书细读 | 七领域、六尺度的证据细读。正式功能另外附加完整原文、来源边界和JSON输出合同；此处调整分析方法。 | — |
+| `reference.analyze` | 1 | 内置-拆书细读 | 七领域、六尺度的证据细读。正式功能另外附加完整原文、来源边界和JSON输出合同；此处调整分析方法。 | `deepAnalysis` `quickAnalysis` |
 | `reference.summary` | 1 | 内置-拆书已读范围综合 | 综合登记的分块分析。正式功能另附基线与严格输出合同；修改不会直接写入作品。 | — |
 | `reference.characters` | 1 | 内置-拆书人物归并 | 保留证据与身份边界的人物归并；正式功能另附登记基线和角色JSON合同。 | — |
 | `reference.application` | 1 | 内置-拆书方法原创运用 | 引用参考方法时的创作指导；不能改变当前任务的权限、来源或采纳合同。 | — |
@@ -596,4 +596,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `5a182765b`
+生成时间基准:commit `61c6c5684`

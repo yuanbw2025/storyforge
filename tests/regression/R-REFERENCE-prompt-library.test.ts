@@ -25,6 +25,7 @@ it('installs four reference templates and refreshes built-ins without overwritin
   const messages = referenceChunkMessages({runId: 1, ref: {title: '材料', type: 'story'} as any, depth: 'deep', totalChunks: 1, maxTokens: 8192,
     chunk: {index: 0, text: '不可丢掉的完整原文', startChar: 0, endChar: 10, charCount: 10}})
   expect(messages[0].content).toContain('只研究人物互动的作者指令')
+  expect(messages.map(m => m.content).join('\n')).not.toContain('重要方法给短原创例和失效例')
   expect(messages[0].content).toContain('固定交付协议')
   expect(messages[1].content).toContain('作者要求保留静默。')
   expect(messages[1].content).toContain('不可丢掉的完整原文')

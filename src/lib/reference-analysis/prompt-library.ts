@@ -1,13 +1,14 @@
 import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from '../ai/prompt-engine'
+import type { PromptVariableContext } from '../types'
 import type { PromptModuleKey } from '../types/prompt'
 
 type ReferencePromptKey = Extract<PromptModuleKey, `reference.${string}`>
 
 /** Same active-template resolver as the library; defaults work before store initialization. */
-export function readReferenceLibraryPrompt(key: ReferencePromptKey) {
+export function readReferenceLibraryPrompt(key: ReferencePromptKey, context: PromptVariableContext = {}) {
   const template = usePromptStore.getState().getActive(key)
-  const { messages } = renderPrompt(template, {})
+  const { messages } = renderPrompt(template, context)
   return {
     system: messages.filter(message => message.role === 'system').map(message => message.content).join('\n'),
     task: messages.filter(message => message.role === 'user').map(message => message.content).join('\n'),
