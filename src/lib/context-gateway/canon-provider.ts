@@ -1208,7 +1208,7 @@ async function validatedScope(scope: FrozenResourceScopeV1) {
 
 export async function canonScopeFingerprintV1(scope: FrozenResourceScopeV1): Promise<string> {
   await validatedScope(scope)
-  return hashCanonProjection({ version: 1, referenceGuidance: readReferenceApplicationGuidance(), scope: {
+  return hashCanonProjection({ version: 1, scope: {
     projectId: scope.projectId,
     worldId: scope.worldId,
     workId: scope.workId,

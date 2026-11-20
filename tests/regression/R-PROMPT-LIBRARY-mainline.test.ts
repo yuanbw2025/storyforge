@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { CRAFT_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds-craft'
 import { SYSTEM_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds'
 import { NOVEL_CONTENT_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds-novel'
 import { usePromptStore } from '../../src/stores/prompt'
@@ -130,7 +131,7 @@ describe('小说创作 Prompt 内容回归主模板体系', () => {
 
     const templates = await db.promptTemplates.toArray()
     const migrated = templates.find(template => template.name === NOVEL_CONTENT_PROMPT_SEEDS[0].name)
-    expect(templates).toHaveLength(238)
+    expect(templates).toHaveLength(SYSTEM_PROMPT_SEEDS.length + NOVEL_CONTENT_PROMPT_SEEDS.length + CRAFT_PROMPT_SEEDS.length)
     expect(migrated?.moduleKey).toBe('story.brief')
     expect(migrated?.isActive).toBe(true)
   })

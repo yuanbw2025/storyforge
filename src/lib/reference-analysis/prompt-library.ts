@@ -1,7 +1,15 @@
+import { invalidateContextGatewayCacheV1 } from '../context-gateway/provider-cache'
 import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from '../ai/prompt-engine'
 import type { PromptVariableContext } from '../types'
 import type { PromptModuleKey } from '../types/prompt'
+
+// Template changes are configuration mutations, not a new scope identity.
+// Keep historical scope hashes stable while fencing reads made during a switch.
+const stopTemplateCacheInvalidation = usePromptStore.subscribe((state, previous) => {
+  if (state.templates !== previous.templates) invalidateContextGatewayCacheV1('reference-template-change')
+})
+if (import.meta.hot) import.meta.hot.dispose(stopTemplateCacheInvalidation)
 
 type ReferencePromptKey = Extract<PromptModuleKey, `reference.${string}`>
 
