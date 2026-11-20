@@ -1,3 +1,4 @@
+import { syntheticFrozenAllocationV1 } from '../helpers/model-capacity-fixture'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
@@ -15,9 +16,9 @@ import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 beforeEach(async () => {
   await db.delete(); await db.open()
-  useAIConfigStore.setState({ config: { provider: 'openai', model: 'sfqa067-synthetic',
+  useAIConfigStore.setState({ config: syntheticFrozenAllocationV1({ provider: 'openai', model: 'sfqa067-synthetic',
     baseUrl: 'https://sfqa067.invalid/v1', apiKey: 'fixture-only', temperature: 0,
-    maxTokens: 4_096, contextWindow: 32_768 }, presets: [], taskRoutes: {} })
+    maxTokens: 4_096 }, 32_768, 4_096), presets: [], taskRoutes: {} })
 })
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); db.close() })
 
