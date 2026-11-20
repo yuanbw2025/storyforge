@@ -126,11 +126,11 @@ function normalizeNullableOverride(value: unknown, label: string, max = MAX_PROM
   return result.trim() ? result : null
 }
 
-function normalizeParameterValues(value: unknown): Record<string, unknown> | undefined {
+function normalizeParameterValues(value: unknown, unbounded = false): Record<string, unknown> | undefined {
   if (value === undefined) return undefined
   if (!isRecord(value)) fail('parameterValues 必须是对象')
   const entries = Object.entries(value)
-  if (entries.length > 64) fail('parameterValues 最多允许 64 项')
+  if (!unbounded && entries.length > 64) fail('parameterValues 最多允许 64 项')
   const normalized: Record<string, unknown> = {}
   for (const [key, item] of entries) {
     if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(key)) fail(`参数名 ${key} 无效`)
@@ -140,11 +140,11 @@ function normalizeParameterValues(value: unknown): Record<string, unknown> | und
       && typeof item !== 'number'
       && typeof item !== 'boolean'
     ) fail(`参数 ${key} 只允许字符串、数字、布尔值或 null`)
-    if (typeof item === 'string' && item.length > 20_000) fail(`参数 ${key} 超过 20000 字符`)
+    if (!unbounded && typeof item === 'string' && item.length > 20_000) fail(`参数 ${key} 超过 20000 字符`)
     if (typeof item === 'number' && !Number.isFinite(item)) fail(`参数 ${key} 不是有限数字`)
     normalized[key] = item
   }
-  if (JSON.stringify(normalized).length > MAX_PROMPT_PARAMETER_JSON_CHARS_V1) {
+  if (!unbounded && JSON.stringify(normalized).length > MAX_PROMPT_PARAMETER_JSON_CHARS_V1) {
     fail(`parameterValues 总长度超过 ${MAX_PROMPT_PARAMETER_JSON_CHARS_V1} 字符`)
   }
   return normalized
@@ -281,7 +281,7 @@ function snapshotTemplate(
         ...(assertFiniteNumber(template.modelOverride.temperature, 'template.temperature', 0, 2) === undefined
           ? {}
           : { temperature: template.modelOverride.temperature }),
-        ...(assertFiniteNumber(template.modelOverride.maxTokens, 'template.maxTokens', 1, 2_000_000) === undefined
+        ...(assertFiniteNumber(template.modelOverride.maxTokens, 'template.maxTokens', 1, expectedModuleKey === 'story.generate' ? Infinity : 2_000_000) === undefined
           ? {}
           : { maxTokens: template.modelOverride.maxTokens }),
       }
@@ -312,11 +312,11 @@ function snapshotTemplate(
 
 export function createPromptExecutionRequestV1(input: Omit<PromptExecutionRequestV1, 'version'>): PromptExecutionRequestV1 {
   const moduleKey = normalizeModuleKey(input.moduleKey)
-  const parameterValues = normalizeParameterValues(input.parameterValues)
+  const parameterValues = normalizeParameterValues(input.parameterValues, moduleKey === 'story.generate')
   const systemOverride = normalizeNullableOverride(input.systemOverride, 'systemOverride', moduleKey === 'story.generate' ? Infinity : MAX_PROMPT_OVERRIDE_CHARS_V1)
   const userOverride = normalizeNullableOverride(input.userOverride, 'userOverride', moduleKey === 'story.generate' ? Infinity : MAX_PROMPT_OVERRIDE_CHARS_V1)
   const temperature = assertFiniteNumber(input.temperature, 'temperature', 0, 2)
-  const maxTokens = assertFiniteNumber(input.maxTokens, 'maxTokens', 1, 2_000_000)
+  const maxTokens = assertFiniteNumber(input.maxTokens, 'maxTokens', 1, moduleKey === 'story.generate' ? Infinity : 2_000_000)
   return {
     version: 1,
     moduleKey,

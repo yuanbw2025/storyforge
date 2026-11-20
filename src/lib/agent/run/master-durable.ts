@@ -1675,7 +1675,7 @@ async function readPersistedCandidates(input: {
     if (payload.contextSources.some(source => !allowedSources.has(source))) {
       fail(`候选事件 ${event.id} 使用了契约未授权的上下文源`)
     }
-    if (event.content.length > MAX_CANDIDATE_CHARS) fail(`候选事件 ${event.id} 超出持久化上限`)
+    if (payload.skillId !== 'world-origin.story-core' && event.content.length > MAX_CANDIDATE_CHARS) fail(`候选事件 ${event.id} 超出持久化上限`)
     const expectedHash = await computeCandidateHash(payload, event.content)
     if (expectedHash !== payload.candidateHash) fail(`候选事件 ${event.id} candidateHash 校验失败`)
     const semanticRequired = input.snapshot.contract.candidateSemanticReviewPolicy
@@ -2452,7 +2452,7 @@ export async function runDurableMasterAgentPlanV1(
         candidateHash: undefined,
       }
       const draft = candidate.draft
-      if (!draft || draft.length > MAX_CANDIDATE_CHARS) fail(`主 Agent 任务 ${task.id} 候选长度无效`)
+      if (!draft || (payload.skillId !== 'world-origin.story-core' && draft.length > MAX_CANDIDATE_CHARS)) fail(`主 Agent 任务 ${task.id} 候选长度无效`)
       const outputHash = await hashCanonicalValue(candidate.runtimeOutput)
       const gatewayRequired = isMasterCandidateContextGatewayRequiredV1(payload)
       let contextManifestHash: string | null = null

@@ -1,10 +1,11 @@
 import { createMasterAgentPlan } from '../../src/lib/agent/orchestrator'
-import { parseMasterAgentPlanV1 } from '../../src/lib/agent/run/master-durable'
+import { getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
+import { parseMasterAgentPlanV1, runDurableMasterAgentPlanV1, restoreMasterAgentCandidatesV1 } from '../../src/lib/agent/run/master-durable'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { createContextAccessPolicyFromSkillV1 } from '../../src/lib/context-gateway/skill-policy'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import { contextAccessPolicyHashV1 } from '../../src/lib/context-gateway/contracts'
-import { beforeEach, afterEach, describe, expect, it } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import { usePromptStore } from '../../src/stores/prompt'
@@ -19,7 +20,7 @@ const seed = SYSTEM_PROMPT_SEEDS.find(item => item.moduleKey === 'story.generate
 const template = { ...seed, createdAt: 1, updatedAt: 1 }
 describe.sequential('故事核心可编辑方法与实际请求', () => {
   beforeEach(async () => { await db.delete(); await db.open(); usePromptStore.setState({ templates: [], loaded: false }) })
-  afterEach(() => { db.close() })
+  afterEach(() => { vi.unstubAllGlobals(); db.close() })
   it('服务容量模式不受旧七次或总 token 额度影响，可恢复计量，权限改变仍使 hash 改变', async () => {
     let tracker = new AgentTeamBudgetTracker('service-capacity')
     for (let index = 0; index < 12; index++) {
@@ -31,6 +32,17 @@ describe.sequential('故事核心可编辑方法与实际请求', () => {
     const policy = createContextAccessPolicyFromSkillV1(getAgentSkillV1('world-origin.story-core'))
     expect(await contextAccessPolicyHashV1(policy)).toBe(await contextAccessPolicyHashV1({ ...policy, maxRetrievedTokens: 2000000 }))
     expect(await contextAccessPolicyHashV1(policy)).not.toBe(await contextAccessPolicyHashV1({ ...policy, allowedSourceKeys: ['ragSelection'] }))
+  })
+  it('大候选可进入durable并恢复，不受旧120K持久化长度限制', async () => {
+    const { project, scope } = await seedCurrentWorkspace('长候选')
+    const value = '完整故事核心候选。'.repeat(20000)
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ field: 'concept', value }) } }] }), { status: 200 })))
+    const conversation = await getOrCreateAgentConversation({ projectId: project.id!, scope, worldGroupId: null, purpose: 'story-core-generation' })
+    const plan = parseMasterAgentPlanV1({ summary: '故事核心', workflow: { version: 1, workflowId: 'single-domain-direct', reasonCodes: ['single-explicit-domain'] }, tasks: [{ id: 'large-core', agentId: 'world-origin', skillId: 'world-origin.story-core', instruction: '目标字段=concept；生成模式=expand。', dependsOn: [] }] })
+    const run = await runDurableMasterAgentPlanV1({ scope, worldGroupId: null, conversationId: conversation.id!, plan })
+    const restored = await restoreMasterAgentCandidatesV1({ scope, runId: run.runId })
+    expect(JSON.parse(restored.candidates[0].draft).value).toBe(value)
+    expect(await db.storyCores.count()).toBe(0)
   })
   it('七字段、四种模式和所有类型包只选择本次方法，不把未选分支发送出去', () => {
     for (const item of SYSTEM_PROMPT_SEEDS.filter(item => item.moduleKey === 'story.generate')) {
