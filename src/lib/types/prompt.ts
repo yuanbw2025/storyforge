@@ -4,8 +4,25 @@
  * 当前 PromptTemplate / Workflow 持久化协议。
  */
 
-/** 当前提示词模块标识全集。 */
+/** 已退役的拆书模板标识，仅为已保存记录的导入导出兼容保留。 */
+export const RETIRED_PROMPT_MODULE_KEYS = [
+  'reference.analyze',
+  'reference.summary',
+  'reference.characters',
+  'reference.application',
+] as const
+
+export function isRetiredPromptModuleKey(key: string): boolean {
+  return RETIRED_PROMPT_MODULE_KEYS.some(retired => retired === key)
+}
+
+/** 持久化提示词模块标识全集；退役标识不再提供配置入口。 */
 export const PROMPT_MODULE_KEYS = [
+  // 仅保留历史数据的类型与导入导出兼容，不注册 seed 或执行入口。
+  'reference.analyze',
+  'reference.summary',
+  'reference.characters',
+  'reference.application',
   // 世界观
   'worldview.dimension',
   // 角色
@@ -68,10 +85,6 @@ export const PROMPT_MODULE_KEYS = [
   // —— STORY-1 / CF-12 角色变更影响分析 ——
   'plot.character-revision',
   // —— Phase 26.4 灵感反推 ——
-  'reference.analyze',
-  'reference.summary',
-  'reference.characters',
-  'reference.application',
   'inspiration.reverse',
   'inspiration.reverse.multiworld',
   'inspiration.prepare.organize',

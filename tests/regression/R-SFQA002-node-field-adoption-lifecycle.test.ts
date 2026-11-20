@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import Dexie from 'dexie'
 import type { NodeRunRecord } from '../../src/lib/types'
 import { db } from '../../src/lib/db/schema'
@@ -24,12 +26,14 @@ describe.sequential('002 field author lifecycle through the actual public Node r
     vi.stubGlobal('window', undefined)
     useAIConfigStore.getState().setConfig({ provider: 'custom', apiKey: '', model: 'isolated-node-lifecycle',
       baseUrl: 'http://127.0.0.1:9/v1', temperature: .5, maxTokens: 8_000, contextWindow: 128_000 })
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 32_768)
     const original = usageLog.recordUsage
     vi.spyOn(usageLog, 'recordUsage').mockImplementation(function (this: unknown, input) {
       const pending = original.call(this, input); usage.push(pending); return pending
     })
   })
-  afterEach(async () => { await Promise.allSettled(usage); vi.restoreAllMocks(); vi.unstubAllGlobals(); await db.delete() })
+  afterEach(async () => { resetModelCapacityForTestsV1(); await Promise.allSettled(usage); vi.restoreAllMocks(); vi.unstubAllGlobals(); await db.delete() })
 
   async function fixture(family: QualityNodeFieldFamily, count = 2, unknownLast = false) {
     const f = await createQualityNodeFieldFlow(family, count), sends: string[] = []

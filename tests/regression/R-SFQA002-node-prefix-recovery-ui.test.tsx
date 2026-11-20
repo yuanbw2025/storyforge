@@ -3,6 +3,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router'
 import Dexie from 'dexie'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { seedModelAllocationFixtureV1 } from '../helpers/model-capacity-fixture'
+import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { db } from '../../src/lib/db/schema'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import { useAIConfigStore } from '../../src/stores/ai-config'
@@ -72,8 +74,11 @@ describe.sequential('SFQA002 saved field prefixes in the actual React workspace'
     })
     useAIConfigStore.getState().setConfig({ provider: 'custom', apiKey: 'synthetic-node-prefix-ui', model: 'isolated-node-model',
       baseUrl: 'http://127.0.0.1:9/v1', temperature: .5, maxTokens: 8_000, contextWindow: 128_000 })
+    resetModelCapacityForTestsV1()
+    await seedModelAllocationFixtureV1(useAIConfigStore.getState().config, 32_768)
   })
   afterEach(async () => {
+    resetModelCapacityForTestsV1()
     await act(async () => { root?.unmount(); root = null })
     host.remove(); restoreLocks(); vi.unstubAllGlobals(); vi.restoreAllMocks()
     await db.delete(); localStorage.clear()

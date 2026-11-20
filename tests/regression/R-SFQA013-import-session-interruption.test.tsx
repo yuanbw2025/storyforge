@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { getChunkText } from '../../src/lib/import/chunk-text-registry'
-import { chunkDocument, quickHash } from '../../src/lib/import/chunker'
+import { chunkDocument, quickHash, planAdaptiveDocumentParseChunksV1 } from '../../src/lib/import/chunker'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 import * as importAuthority from '../../src/stores/import-session'
 import * as modelEvidence from '../../src/lib/agent/run/creation-response-evidence'
@@ -361,4 +361,18 @@ describe('BUG020 frozen import upgrade recovery', () => {
     expect(await db.agentRunArtifacts.toArray()).toEqual(artifacts)
     expect(request).not.toHaveBeenCalled()
   })
+})
+
+
+it('031-F opt-in planning leaves an existing50000-character plan and its source identity untouched', async () => {
+  const original = '原'.repeat(60_000), legacy = chunkDocument(original, { targetChars: 50_000 })
+  expect(legacy.map(chunk => [chunk.startChar, chunk.endChar])).toEqual([[0, 50_000], [49_500, 60_000]])
+  const before = JSON.stringify(legacy)
+  const hashes = await Promise.all(legacy.map(chunk => hashImportChunkTextV1(chunk.text)))
+  const adaptive = planAdaptiveDocumentParseChunksV1(original, chunk => chunk.charCount <= 1200)
+  expect(adaptive.map(chunk => chunk.text).join('')).toBe(original)
+  expect(adaptive.length).toBeGreaterThan(legacy.length)
+  expect(JSON.stringify(chunkDocument(original, { targetChars: 50_000 }))).toBe(before)
+  expect(await Promise.all(legacy.map(chunk => hashImportChunkTextV1(chunk.text)))).toEqual(hashes)
+  expect(request).not.toHaveBeenCalled()
 })

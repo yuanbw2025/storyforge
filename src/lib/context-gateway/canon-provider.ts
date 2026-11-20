@@ -1,4 +1,4 @@
-import { readReferenceApplicationGuidance } from '../reference-analysis/prompt-library'
+import { REFERENCE_APPLICATION_SKILL } from '../reference-analysis/content-skill'
 import Dexie, { type Transaction } from 'dexie'
 import { estimateTokens } from '../ai/context-budget'
 import { CHAPTER_TEXT_NORMALIZATION_VERSION, getChapterDerivedMemoryStatus, normalizeChapterText, sha256Text } from '../ai/chapter-memory/text-normalization'
@@ -804,7 +804,7 @@ async function genericResources(
   // sufficient full-record mandatory read; its open fields remain selectable.
   const bodyFields = new Set(enabledFields.length ? enabledFields : fields)
   const recordFields = fields.filter(current => bodyFields.has(current))
-  const body = [`【${spec.resourceIdentity.label} / ${title}】`, ...(spec.name === 'references' ? [readReferenceApplicationGuidance()] : []), ...recordFields.map(current => `${current.label}：${current.presented}`)].join('\n')
+  const body = [`【${spec.resourceIdentity.label} / ${title}】`, ...(spec.name === 'references' ? [REFERENCE_APPLICATION_SKILL] : []), ...recordFields.map(current => `${current.label}：${current.presented}`)].join('\n')
   const preferred = recordFields.find(current => ['summary', 'description', 'overview', 'logline', 'progressNote'].includes(current.key)) ?? recordFields[0]
   const record = await makeDescriptor({
     spec,
@@ -814,7 +814,7 @@ async function genericResources(
     title: `${spec.resourceIdentity.label} · ${title}`,
     shortSummary: preferred.presented,
     fullContent: body,
-    focusedContent: spec.name === 'references' ? `${readReferenceApplicationGuidance()}\n${preferred.presented}` : preferred.presented,
+    focusedContent: spec.name === 'references' ? `${REFERENCE_APPLICATION_SKILL}\n${preferred.presented}` : preferred.presented,
     sourceRefs: refsByField.flatMap((refs, index) => bodyFields.has(fields[index]) ? refs : []),
     relations,
     authority: conservativeAuthority(fieldAuthorities.filter((_, index) => bodyFields.has(fields[index]))),
@@ -829,7 +829,7 @@ async function genericResources(
     title: `${title} · ${current.label}`,
     shortSummary: current.presented,
     fullContent: spec.name === 'references' && ['analysisSummary', 'importedData'].includes(current.key)
-      ? `${readReferenceApplicationGuidance()}\n${current.presented}` : current.presented,
+      ? `${REFERENCE_APPLICATION_SKILL}\n${current.presented}` : current.presented,
     originalTokenEstimate: estimateTokens(current.exact),
     sourceRefs: refsByField[index],
     relations: [{ kind: 'parent', targetResourceKey: recordKey(spec, row), direction: 'outgoing' }, ...relations],
@@ -1323,7 +1323,7 @@ async function catalogPage(input: ResourceListInputV1 | ResourceSearchInputV1): 
   const timeRange = 'query' in input ? input.timeRange : undefined
   assertTimeRangeFilter(timeRange)
   const specs = resourceSpecs()
-  const catalogTables = scopeTransactionTables(...specs.map(spec => spec.table), db.retrievalChunks, db.narrativeSummaryNodes, db.promptTemplates)
+  const catalogTables = scopeTransactionTables(...specs.map(spec => spec.table), db.retrievalChunks, db.narrativeSummaryNodes)
   const catalogTableNames = catalogTables.map(table => table.name)
   const catalogEpoch = contextGatewayTableMutationEpochV1(catalogTableNames)
   const requestHash = await hashCanonProjection({

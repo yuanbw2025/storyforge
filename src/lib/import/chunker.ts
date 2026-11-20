@@ -217,3 +217,76 @@ export function quickHash(text: string): string {
   const hex = (n: number) => (n >>> 0).toString(16).padStart(8, '0')
   return hex(h2) + hex(h1) + '-' + text.length.toString(36)
 }
+
+
+/** Opt-in foundation for NEW plans only. Legacy chunkDocument/recovery stays unchanged.
+ * Offsets are UTF-16 code units into the exact decoded string, NOT file byte offsets.
+ * No gaps, trimming or overlap. fits must inspect the whole actual rendered request.
+ * Binary probing is conservative: nonmonotonic estimates have no maximum-size guarantee.
+ * Every chosen range is checked again with the final total; a changed frame fails visibly.
+ */
+export function planAdaptiveDocumentParseChunksV1(
+  text: string,
+  fits: (chunk: ChunkPlan, totalChunks: number) => boolean,
+): ChunkPlan[] {
+  if (!text.length) return []
+  const upperTotal = text.length
+  const make = (startChar: number, endChar: number, index: number): ChunkPlan => ({
+    index, startChar, endChar, charCount: endChar - startChar,
+    label: `区段 ${index + 1}`, text: text.slice(startChar, endChar),
+  })
+  if (!fits(make(0, 0, 0), upperTotal)) throw new Error('文档解析的完整空请求框架已超预算，不能通过缩小原文解决。')
+  const safeEnd = (end: number): number => {
+    if (end > 0 && end < text.length) {
+      const before = text.charCodeAt(end - 1), after = text.charCodeAt(end)
+      if ((before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff)
+        || (before === 13 && after === 10)) return end - 1
+    }
+    return end
+  }
+  // Independent matchers: do not mutate the legacy regex's lastIndex or its paid plan semantics.
+  const chapters: number[] = [], paragraphs: number[] = []
+  const heading = new RegExp(NOVEL_CHAPTER_REGEX.source, NOVEL_CHAPTER_REGEX.flags)
+  let match: RegExpExecArray | null
+  while ((match = heading.exec(text)) !== null) chapters.push(match.index)
+  const paragraph = /\r?\n[^\S\r\n]*(?:\r?\n)+/g
+  while ((match = paragraph.exec(text)) !== null) paragraphs.push(match.index + match[0].length)
+  const lastAtMost = (points: number[], limit: number) => {
+    let low = 0, high = points.length - 1, found = -1
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2)
+      if (points[mid] <= limit) { found = points[mid]; low = mid + 1 } else high = mid - 1
+    }
+    return found
+  }
+  const chunks: ChunkPlan[] = []
+  let start = 0
+  while (start < text.length) {
+    const index = chunks.length
+    let best = text.length
+    if (!fits(make(start, best, index), upperTotal)) {
+      const minimum = safeEnd(start + 1) > start ? start + 1 : start + 2
+      if (minimum > text.length || !fits(make(start, minimum, index), upperTotal)) {
+        throw new Error(`第 ${index + 1} 块的完整最小请求无法容纳原文；未丢弃或重发任何分块。`)
+      }
+      best = minimum
+      let low = minimum + 1, high = text.length - 1
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2), end = safeEnd(mid)
+        if (end <= start) { low = mid + 1; continue }
+        if (fits(make(start, end, index), upperTotal)) { best = Math.max(best, end); low = mid + 1 } else high = mid - 1
+      }
+      const chapterEnd = lastAtMost(chapters, best), paragraphEnd = lastAtMost(paragraphs, best)
+      const preferred = chapterEnd > start ? chapterEnd : paragraphEnd > start ? paragraphEnd : best
+      if (preferred > start && safeEnd(preferred) === preferred && fits(make(start, preferred, index), upperTotal)) best = preferred
+    }
+    const chunk = make(start, best, index)
+    if (best <= start || !fits(chunk, upperTotal)) throw new Error('文档解析请求框架已变化；分块计划未生效。')
+    chunks.push(chunk)
+    start = best
+  }
+  for (const chunk of chunks) {
+    if (!fits(chunk, chunks.length)) throw new Error('文档解析最终请求框架已变化；分块计划未生效。')
+  }
+  return chunks
+}
