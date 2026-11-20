@@ -1,3 +1,4 @@
+import { INSPIRATION_PREPARATION_MODES, INSPIRATION_PREPARATION_LABELS } from '../../../lib/inspiration/preparation-contract'
 import { useState } from 'react'
 import { ChevronRight, ChevronDown, Star, User } from 'lucide-react'
 import type { PromptTemplate } from '../../../lib/types/prompt'
@@ -5,6 +6,7 @@ import type { PromptTemplate } from '../../../lib/types/prompt'
 /** moduleKey 的 UI 分组规则：第一个 . 之前的部分 */
 const GROUP_LABELS: Record<string, { label: string; emoji: string; order: number }> = {
   reference: { label: '拆书与参考', emoji: '📚', order: 14 },
+  inspiration: { label: '灵感与创作定位', emoji: '💡', order: 0 },
   worldview:  { label: '世界观',  emoji: '🌍', order: 1 },
   research:   { label: '研究考证', emoji: '🔎', order: 2 },
   character:  { label: '角色',    emoji: '🧙', order: 3 },
@@ -26,6 +28,8 @@ const SUB_LABELS: Record<string, string> = {
   summary: '已读范围综合',
   characters: '人物归并',
   application: '原创运用',
+  reverse: '完整反推', 'reverse.multiworld': '多世界完整反推',
+  ...Object.fromEntries(INSPIRATION_PREPARATION_MODES.map(mode => [`prepare.${mode}`, INSPIRATION_PREPARATION_LABELS[mode]])),
   dimension:    '维度生成',
   generate:     '完整生成',
   volume:       '卷级',

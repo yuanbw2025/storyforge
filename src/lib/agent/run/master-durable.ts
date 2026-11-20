@@ -1,3 +1,4 @@
+import { INSPIRATION_PREPARATION_MODULES, inspirationPreparationModeFromRequest } from '../../inspiration/preparation'
 import Dexie from 'dexie'
 import type {
   AgentEvent,
@@ -472,8 +473,14 @@ function readRequiredSkillId(
 function promptModuleForPlanTaskV1(
   agentId: DomainAgentId,
   skillId: AgentSkillId | undefined,
+  instruction: string,
 ): GovernedPromptModuleKeyV1 | null {
   const skill = resolveAgentSkillV1(agentId, skillId)
+  if (skill.id === 'inspiration.prepare') return INSPIRATION_PREPARATION_MODULES[inspirationPreparationModeFromRequest(instruction)]
+  if (skill.id === 'inspiration.reverse') {
+    const mode = /灵感反推模式=(single|multiworld)\b/.exec(instruction)?.[1]
+    if (mode) return mode === 'multiworld' ? 'inspiration.reverse.multiworld' : 'inspiration.reverse'
+  }
   if (skill.executionMode === 'worldview-field') return 'worldview.dimension'
   if (skill.executionMode === 'story-core') return 'story.generate'
   if (agentId === 'character' && skill.executionMode === 'create') return 'character.generate'
@@ -583,7 +590,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       skillId,
       '主 Agent 计划任务 ' + id,
     )
-    const expectedPromptModule = promptModuleForPlanTaskV1(agentId, skillId)
+    const expectedPromptModule = promptModuleForPlanTaskV1(agentId, skillId, instruction)
     const promptExecution = item.promptExecution === undefined
       ? undefined
       : expectedPromptModule

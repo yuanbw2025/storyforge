@@ -8,11 +8,11 @@
 
 ## 一、Prompt 模板清单（PromptModuleKey 事实源）
 
-共 69 个唯一 moduleKey，214 条内置模板定义。
+共 74 个唯一 moduleKey，219 条内置模板定义。
 
 | moduleKey | 模板数 | 代表名称 | 说明 | 读取变量 |
 |---|---:|---|---|---|
-| `worldview.dimension` | 6 | 内置-世界观维度生成 | 为世界观的单个维度（地理/历史/社会/文化/经济/规则/摘要）生成内容。 | `projectName` `genres` `dimension` `worldContext` `worldRulesContext` `userHint` `isSummary` |
+| `worldview.dimension` | 6 | 内置-世界观维度生成 | 为世界观的单个维度（地理/历史/社会/文化/经济/规则/摘要）生成内容。 | `projectName` `genres` `dimension` `worldContext` `worldRulesContext` `userHint` `isSummary` `field_worldOrigin` `field_powerHierarchy` `field_divineDesign` `field_worldStructure` `field_worldDimensions` `field_continentLayout` `field_mountainsRivers` `field_climateByRegion` `field_naturalResourceOverview` `field_naturalResources` `field_races` `field_factionLayout` `field_regionDimensions` `field_politicsOverview` `field_economyOverview` `field_cultureOverview` `field_internalConflicts` `field_itemDesign` |
 | `character.generate` | 6 | 内置-角色完整设计 | 基于世界观和已有角色，设计一个新角色的完整资料。 | `projectName` `genres` `worldContext` `existingCharacters` `userHint` |
 | `character.dimension` | 1 | 内置-角色维度补全 | 为指定角色的某个维度（背景/性格/能力等）补充约 200-400 字的细节。 | `characterName` `characterInfo` `worldContext` `dimension` |
 | `outline.volume` | 8 | 内置-卷级大纲生成 | 基于世界观与故事核心生成全书的卷级大纲。 | `projectName` `genres` `targetWordCount` `worldContext` `storyCore` `characterContext` `worldRulesContext` `existingVolumesContext` `userHint` |
@@ -69,14 +69,19 @@
 | `reference.application` | 1 | 内置-拆书方法原创运用 | 引用参考方法时的创作指导；不能改变当前任务的权限、来源或采纳合同。 | — |
 | `inspiration.reverse` | 1 | 内置-灵感反推 | 用户写碎片想法，AI 反向生成世界观草稿、故事核心、初始角色卡。 | `projectName` `genres` `inspiration` `userHint` |
 | `inspiration.reverse.multiworld` | 1 | 内置-多世界灵感反推 | 多世界题材：用户给出带有多个世界意图的灵感，AI 顺着思路反推故事主线 + 多个世界 + 角色。 | `projectName` `genres` `inspiration` `userHint` |
+| `inspiration.prepare.organize` | 1 | 内置-灵感准备-轻量整理 | 为当前作品生成可编辑确认的轻量整理准备稿。 | `inspiration` `userHint` |
+| `inspiration.prepare.compare` | 1 | 内置-灵感准备-方向比较 | 为当前作品生成可编辑确认的方向比较准备稿。 | `inspiration` `userHint` |
+| `inspiration.prepare.deepen` | 1 | 内置-灵感准备-局部深化 | 为当前作品生成可编辑确认的局部深化准备稿。 | `inspiration` `userHint` |
+| `inspiration.prepare.position-open` | 1 | 内置-灵感准备-创作定位·方向未定 | 为当前作品生成可编辑确认的创作定位·方向未定准备稿。 | `inspiration` `userHint` |
+| `inspiration.prepare.position-defined` | 1 | 内置-灵感准备-创作定位·方向明确 | 为当前作品生成可编辑确认的创作定位·方向明确准备稿。 | `inspiration` `userHint` |
 | `world-group.suggest` | 1 | 内置-AI建议世界 | 诸天流/无限流等多世界题材，根据故事概念和已有世界建议新的世界组。 | `projectName` `genres` `concept` `existingWorlds` `userHint` |
 | `world-group.expand` | 1 | 内置-AI扩写世界 | 根据世界的草稿描述，扩展出完整的世界观设定。 | `worldName` `worldType` `draft` `otherWorlds` `storyCore` `userHint` |
 | `inventory.extract` | 1 | 内置-物品栏提取 | 从章节正文提取各角色的物品获得/消耗事件，构建按角色归属的物品栏。 | `knownItemNames` `characterNames` `chapterTitle` `chapterText` |
-| `codex.extract` | 1 | 内置-词条拆分提取 | 把整段世界观内容拆成当前分类下可确认写入的结构化词条。 | `categoryName` `fieldSchema` `existingEntries` `supplementTags` `sourceText` |
-| `codex.enrich` | 1 | 内置-词条创意补全 | 根据已登记世界 Canon 为当前分类提出新词条建议。 | `baselineContext` `worldContext` `authorRequest` `supplementTags` |
+| `codex.extract` | 1 | 内置-词条拆分提取 | 把整段世界观内容拆成当前分类下可确认写入的结构化词条。 | `categoryName` `fieldSchema` `existingEntries` `supplementTags` `sourceText` `codex_mineral` `codex_herb` `codex_beast` `codex_race` `codex_faction` `codex_city` `codex_artifact` `codex_natStructure` `codex_natDimension` `codex_natTerrain` `codex_natWater` `codex_natClimate` `codex_humEra` `codex_humEvent` `codex_humSociety` `codex_humPolitics` `codex_humEconomy` `codex_humCulture` `codex_humConflict` `codex_originPower` `codex_originDeity` `codex_custom` |
+| `codex.enrich` | 1 | 内置-词条创意补全 | 根据已登记世界 Canon 为当前分类提出新词条建议。 | `baselineContext` `worldContext` `authorRequest` `supplementTags` `codex_mineral` `codex_herb` `codex_beast` `codex_race` `codex_faction` `codex_city` `codex_artifact` `codex_natStructure` `codex_natDimension` `codex_natTerrain` `codex_natWater` `codex_natClimate` `codex_humEra` `codex_humEvent` `codex_humSociety` `codex_humPolitics` `codex_humEconomy` `codex_humCulture` `codex_humConflict` `codex_originPower` `codex_originDeity` `codex_custom` |
 | `location.extract` | 1 | 内置-重要地点提取 | 从已写正文中提取反复出现或推动剧情的重要地点候选。 | `existingEntries` `allowedTags` `sourceText` |
 | `story-timeline.extract` | 1 | 内置-故事年表提取 | 从章节正文提取剧情大事，构建故事进程年表（区别于世界背景历史）。 | `chapterTitle` `chapterText` |
-| `scene.verify` | 1 | 内置-场景考证 | 用户描述当前场景，AI 结合世界观/历史年表/世界规则给出符合背景的细节、时代错乱警示与情节灵感。 | `worldContext` `historyContext` `worldRulesContext` `scene` `sceneEra` `sceneLocation` |
+| `scene.verify` | 1 | 内置-场景考证 | 用户描述当前场景，AI 结合世界观/历史年表/世界规则给出符合背景的细节、时代错乱警示与情节灵感。 | `worldContext` `historyContext` `worldRulesContext` `scene` `sceneEra` `sceneLocation` `research_scene_empty` `research_scene_sources` `research_plan_empty` `research_plan_sources` `research_sources_empty` `research_sources_sources` |
 | `history.consult` | 1 | 内置-历史考据 agent | 历史年表条目的考据 agent。挑剔但合作，绝不顺着作者的错误假设编造细节；尊重作者已声明的艺术改造/架空范围。 | `itemMeta` `finalText` `conceptNote` `consultPrompt` `worldContext` |
 | `history.storm` | 1 | 内置-头脑风暴 agent | 历史年表条目的头脑风暴 agent。围绕作者已设定的方向发散可写素材，尊重作者声明的艺术改造范围。 | `itemMeta` `finalText` `conceptNote` `stormPrompt` `worldContext` |
 | `style.learn` | 1 | 内置-文风学习 | 从用户已定稿/润色的章节中,总结出其个人写作文风画像,供后续章节生成参考。 | `sampleCount` `sampleWords` `samples` `revisionPairs` `calibrationFeedback` `userHint` |
@@ -419,8 +424,8 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:859` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:967` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:872` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:980` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:438` |
 | `canon.narrative.extract` | `src/lib/agent/run/narrative-annotation-durable.ts:218` |
@@ -470,8 +475,8 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/character-revision-copilot.ts:796 · chat`
 - `src/lib/agent/character-supplement-copilot.ts:582 · chat`
 - `src/lib/agent/context-compression.ts:355 · chat`
-- `src/lib/agent/creative-rules-copilot.ts:449 · chat`
-- `src/lib/agent/inspiration-copilot.ts:358 · chat`
+- `src/lib/agent/creative-rules-copilot.ts:448 · chat`
+- `src/lib/agent/inspiration-copilot.ts:389 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
 - `src/lib/agent/outline-copilot.ts:521 · chat`
 - `src/lib/agent/outline-copilot.ts:773 · chat`
@@ -485,7 +490,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/story-arc-copilot.ts:1712 · chat`
 - `src/lib/agent/story-core-copilot.ts:580 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
-- `src/lib/agent/worldview-field-copilot.ts:943 · chat`
+- `src/lib/agent/worldview-field-copilot.ts:952 · chat`
 - `src/lib/character-interaction/harness.ts:899 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:73 · chat`
 - `src/lib/character-interaction/situation-harness.ts:189 · chat`
@@ -596,4 +601,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `61c6c5684`
+生成时间基准:commit `9fbc2e57b`

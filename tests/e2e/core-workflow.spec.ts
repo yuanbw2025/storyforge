@@ -1673,12 +1673,21 @@ for (const preparation of [false, true]) test(`${preparation ? '创作定位' : 
       maxTokens: 0,
     }))
   })
+  // This synthetic service has a finite allocation, read by the real capacity parser.
+  await page.route('http://localhost:1234/api/ps', route => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ models: [{ model: 'inspiration-copilot-e2e', context_length: 64000 }] }),
+  }))
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
     const body = route.request().postDataJSON() as {
       messages?: Array<{ role: string; content: string }>
     }
     const combined = body.messages?.map(message => message.content).join('\n') ?? ''
     expect(combined).not.toContain('你只把用户目标拆成幕后领域任务')
+    if (preparation) {
+      expect(combined).toContain(generationCalls === 0 ? 'E2E本轮临时定位指令' : 'E2E作者激活定位指令')
+      expect(combined).toContain('E2E作者User')
+      expect(combined).not.toContain('作者可从世界、人物、片段或已有稿任一起步')
+    }
     generationCalls += 1
     expect(combined).toContain('退潮后城市从海床升起')
     await route.fulfill({
@@ -1698,7 +1707,24 @@ for (const preparation of [false, true]) test(`${preparation ? '创作定位' : 
   await openCleanHome(page)
   await createProject(page, 'E2E 灵感副驾确认闭环')
   await openWorkspaceLeaf(page, '灵感反推')
-  if (preparation) await page.getByLabel('灵感任务').selectOption('position-defined')
+  if (preparation) {
+    await page.evaluate(async () => {
+      const load = new Function('path', 'return import(path)')
+      const { usePromptStore } = await load('/storyforge/src/stores/prompt.ts')
+      const store = usePromptStore.getState()
+      const seed = store.getActive('inspiration.prepare.position-defined')
+      const id = await store.cloneTemplate(seed.id, 'E2E作者激活定位模板')
+      const template = usePromptStore.getState().templates.find((t: { id: number }) => t.id === id)
+      await store.saveTemplate({ ...template, systemPrompt: 'E2E作者激活定位指令', userPromptTemplate: 'E2E作者User {{inspiration}} {{userHint}}' })
+      await store.setActive(id)
+    })
+    await page.getByLabel('灵感任务').selectOption('position-defined')
+    await expect(page.getByText('当前模板：', { exact: true })).toBeVisible()
+    await expect(page.getByText('E2E作者激活定位模板', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: /当前模板：/ }).click()
+    await page.getByText('高级：临时修改 Prompt 文字（不写回模板）', { exact: true }).click()
+    await page.locator('details').filter({ hasText: '高级：临时修改 Prompt 文字' }).locator('textarea').first().fill('E2E本轮临时定位指令')
+  }
   await page.getByPlaceholder(/随便写点什么/).fill('退潮后城市从海床升起，守灯人听见潮汐钟。')
   await page.getByPlaceholder('碎片标题（可选）').fill('潮汐灯塔')
   await page.getByRole('button', { name: /加入素材库/ }).click()

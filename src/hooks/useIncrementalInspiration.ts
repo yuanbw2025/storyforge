@@ -1,3 +1,4 @@
+import type { PromptExecutionRequestV1 } from '../lib/agent/prompt-execution'
 import { isInspirationPreparationMode, parseInspirationPreparationDraft, type InspirationPreparationMode, type InspirationPreparationResult } from '../lib/inspiration/preparation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInspirationWorkspaceStore } from '../stores/inspiration-workspace'
@@ -228,7 +229,7 @@ export function useIncrementalInspiration(
     }
   }
 
-  const generate = async () => {
+  const generate = async (promptExecution?: PromptExecutionRequestV1) => {
     if (workspace.loading) return
     const operationView = viewKey
     if (inspiration.trim().length > MAX_INSPIRATION_FRAGMENT_CHARS) {
@@ -252,7 +253,7 @@ export function useIncrementalInspiration(
     onGenerationStarted()
 
     const request = [
-      isInspirationPreparationMode(mode) ? `灵感准备任务=${mode}。基于所选素材生成准备候选。` : '基于作者选择的灵感碎片生成结构化灵感反推候选。',
+      isInspirationPreparationMode(mode) ? `灵感准备任务=${mode}。基于所选素材生成准备候选。` : `灵感反推模式=${mode}。基于作者选择的灵感碎片生成结构化灵感反推候选。`,
       userHint.trim() ? '作者补充要求：' + userHint.trim() : '',
     ].filter(Boolean).join('\n')
     await copilot.submitTargetedRequest(request, {
@@ -260,6 +261,7 @@ export function useIncrementalInspiration(
       skillId: isInspirationPreparationMode(mode) ? 'inspiration.prepare' : 'inspiration.reverse',
       instruction: request,
       inspirationFragmentIds: [...selectedIds],
+      ...(promptExecution ? { promptExecution } : {}),
     })
   }
 

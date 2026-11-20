@@ -1,3 +1,4 @@
+import { INSPIRATION_PREPARATION_MODULES, inspirationPreparationModeFromRequest } from '../inspiration/preparation'
 import { INSPIRATION_PREPARATION_LABELS, isInspirationPreparationMode } from '../inspiration/preparation'
 import { CHARACTER_DIMENSIONS } from '../character/character-dimensions'
 import { useDetailedOutlineStore } from '../../stores/detailed-outline'
@@ -411,17 +412,29 @@ export interface MasterAgentReplanFailureV1 {
 }
 
 function governedPromptModuleForTaskV1(
-  task: Pick<MasterAgentTask, 'agentId' | 'skillId'>,
+  task: Pick<MasterAgentTask, 'agentId' | 'skillId' | 'instruction'>,
 ): GovernedPromptModuleKeyV1 | null {
   const skill = resolveAgentSkillV1(task.agentId, task.skillId)
+  if (skill.id === 'inspiration.prepare') return INSPIRATION_PREPARATION_MODULES[inspirationPreparationModeFromRequest(task.instruction)]
+  if (skill.id === 'inspiration.reverse') {
+    const mode = /灵感反推模式=(single|multiworld)\b/.exec(task.instruction)?.[1]
+    if (mode) return mode === 'multiworld' ? 'inspiration.reverse.multiworld' : 'inspiration.reverse'
+  }
   if (skill.executionMode === 'worldview-field') return 'worldview.dimension'
   if (skill.executionMode === 'story-core') return 'story.generate'
   if (task.agentId === 'character' && skill.executionMode === 'create') return 'character.generate'
   return null
 }
 
-async function freezeMasterAgentPlanPromptsV1(plan: MasterAgentPlan): Promise<MasterAgentPlan> {
-  const tasks = await Promise.all(plan.tasks.map(async task => {
+async function freezeMasterAgentPlanPromptsV1(plan: MasterAgentPlan, projectId: number): Promise<MasterAgentPlan> {
+  const tasks = await Promise.all(plan.tasks.map(async originalTask => {
+    let task = originalTask
+    if (task.agentId === 'inspiration' && resolveAgentSkillV1(task.agentId, task.skillId).id === 'inspiration.reverse'
+      && !/灵感反推模式=(single|multiworld)\b/.test(task.instruction)) {
+      const project = await db.projects.get(projectId)
+      if (!project) throw new Error('项目不存在。')
+      task = { ...task, instruction: `灵感反推模式=${project.enableMultiWorld ? 'multiworld' : 'single'}。\n${task.instruction}` }
+    }
     const expectedModuleKey = governedPromptModuleForTaskV1(task)
     if (!expectedModuleKey) {
       if (task.promptExecution !== undefined) {
@@ -771,11 +784,11 @@ export async function createMasterAgentPlan(input: {
         : '按固定领域任务执行一次受治理候选生成。',
       tasks: [task],
       workflow,
-    })
+    }, input.projectId)
   }
   const planningOnly = input.freeDiscussion || input.planningOnly || /(?:先|只)(?:聊|讨论|梳理|确认)|(?:暂时|先)?(?:不要|别|不)(?:生成|创作|执行|开始)/.test(request)
   if (!planningOnly && getMasterWorkflowV1(workflow).planner === 'skip') {
-    return freezeMasterAgentPlanPromptsV1(await bindLongformPlanTargetsV1(fallbackPlan(request, workflow), input))
+    return freezeMasterAgentPlanPromptsV1(await bindLongformPlanTargetsV1(fallbackPlan(request, workflow), input), input.projectId)
   }
   const config = resolveRequestConfig(
     useAIConfigStore.getState().config,
@@ -885,7 +898,7 @@ export async function createMasterAgentPlan(input: {
     }
     const sanitized = sanitizePlan(raw, request, workflow)
     const proposal = planningOnly ? await prepareLongformStartProposalV1(sanitized, planningScope, input.worldGroupId) : sanitized
-    const plan = await freezeMasterAgentPlanPromptsV1(await bindLongformPlanTargetsV1(proposal, input))
+    const plan = await freezeMasterAgentPlanPromptsV1(await bindLongformPlanTargetsV1(proposal, input), input.projectId)
     return planningOnly ? { ...plan, phase: 'proposal' } : plan
   } catch (error) {
     if (reservation && !settled) input.budget!.settleFailedCall(reservation)
@@ -893,7 +906,7 @@ export async function createMasterAgentPlan(input: {
     if (input.signal?.aborted) throw error
     if (planningOnly) throw error
     console.warn('[master-agent] 计划模型失败，使用确定性路由降级：', error)
-    return freezeMasterAgentPlanPromptsV1(await bindLongformPlanTargetsV1(fallbackPlan(request, workflow), input))
+    return freezeMasterAgentPlanPromptsV1(await bindLongformPlanTargetsV1(fallbackPlan(request, workflow), input), input.projectId)
   }
 }
 
@@ -1540,6 +1553,7 @@ async function executeSequentialMasterAgentPlan(
           skillId: skill.id as AgentSkillId,
           routingCategory: AGENT_ROLE_CATEGORIES.inspiration,
           contextProfile,
+          promptExecution: task.promptExecution,
           contextCompressionRuntime,
           signal: input.signal,
         })
@@ -1560,6 +1574,7 @@ async function executeSequentialMasterAgentPlan(
             skillId: skill.id as AgentSkillId,
             executionBinding,
             label: skill.id === 'inspiration.prepare' ? '灵感准备版本' : '灵感反推版本',
+            promptExecutionEvidence: task.promptExecution ? prepared.promptExecutionEvidence : undefined,
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
             baseSnapshot: prepared.snapshot,

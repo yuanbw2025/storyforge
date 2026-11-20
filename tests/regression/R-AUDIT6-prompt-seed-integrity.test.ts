@@ -8,11 +8,11 @@ function seedDigest(): string {
 
 describe('AUDIT-6 · 提示词领域拆分完整性', () => {
   it('聚合后的模板数量、顺序和内容保持逐字段一致', () => {
-    expect(SYSTEM_PROMPT_SEEDS).toHaveLength(96)
-    // 新增4个拆书/参考模板；其余已有顺序与内容保留。
+    expect(SYSTEM_PROMPT_SEEDS).toHaveLength(101)
+    // 保留主干5种准备动作及创作方法，另加入4个拆书/参考模板。
     // WORLD-1 导入分类、STORY-1 中途重规划、FB-5 互动校准与 CM-1
     // 增量融合边界与 Q06 章节任务/承接/作者停笔约束都属于有序系统模板契约。
-    expect(seedDigest()).toBe('b2474279ae9ffafda3e2db8f1c76a0ad870977791ac1a29685883f5b70f021c8')
+    expect(seedDigest()).toBe('fb4791fb2223bca0a666c960f3a2307ffb2e4c2b23ec273ab9f4823d03975b51')
   })
 
   it('分块导入把固定分类目录放在变化的块序号和滚动上下文之前，保留可缓存前缀', () => {

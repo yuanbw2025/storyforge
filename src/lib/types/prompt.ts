@@ -74,6 +74,11 @@ export const PROMPT_MODULE_KEYS = [
   'reference.application',
   'inspiration.reverse',
   'inspiration.reverse.multiworld',
+  'inspiration.prepare.organize',
+  'inspiration.prepare.compare',
+  'inspiration.prepare.deepen',
+  'inspiration.prepare.position-open',
+  'inspiration.prepare.position-defined',
   // —— Phase 25.4 多世界 ——
   'world-group.suggest',
   'world-group.expand',
