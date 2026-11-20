@@ -22,6 +22,16 @@
 .longform-app > .lf-sidebar nav :is(button, a) { padding: 9px 10px; margin: 0; border-radius: 9px; font-size: 13px; line-height: 1.5; gap: 7px; }
 .longform-app > .lf-sidebar footer { padding: 12px 4px 0; }
 .longform-app > .lf-sidebar footer p { margin-top: 8px; }
+@media (min-width: 651px) {
+  :root .longform-app[data-longform-layout] { --workspace-nav-width: 96px; }
+  .longform-app[data-longform-layout] > .lf-sidebar { min-width: 0; padding-inline: 6px; }
+  .longform-app[data-longform-layout] > .lf-sidebar h1 { margin-inline: 0; }
+  .longform-app[data-longform-layout] > .lf-sidebar nav button { min-width: 0; padding-inline: 3px; white-space: nowrap; }
+  .longform-app[data-longform-layout] > .lf-sidebar .lf-current { min-width: 0; max-width: 100%; padding-inline: 4px; }
+  .longform-app[data-longform-layout] > .lf-sidebar .lf-current span {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+}
 .longform-app > .lf-main { border-radius: 12px 0 0 0; }
 .longform-app > .lf-main > .lf-heading {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px;
