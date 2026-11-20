@@ -1,4 +1,4 @@
-import { CheckCircle, ScrollText, Wifi, WifiOff } from 'lucide-react'
+import { CheckCircle, Wifi, WifiOff } from 'lucide-react'
 import { AI_PROXY_ENDPOINTS } from '../../lib/ai/proxy-endpoints'
 import type { AIProvider } from '../../lib/types'
 import type { TestResult } from '../../stores/ai-config'
@@ -8,11 +8,8 @@ interface Props {
   result: TestResult | null
   configReady: boolean
   provider: AIProvider
-  logCount: number
-  showLogs: boolean
   isDevelopment: boolean
   onTest: () => void
-  onToggleLogs: () => void
 }
 
 export default function AIConnectionTestSection({
@@ -20,11 +17,8 @@ export default function AIConnectionTestSection({
   result,
   configReady,
   provider,
-  logCount,
-  showLogs,
   isDevelopment,
   onTest,
-  onToggleLogs,
 }: Props) {
   const showCorsHint = result && !result.ok
     && (result.message.includes('CORS') || result.message.includes('网络错误'))
@@ -44,11 +38,6 @@ export default function AIConnectionTestSection({
             <Wifi className="w-4 h-4" />
           )}
           {testing ? '测试中...' : '测试最小连接'}
-        </button>
-        <button onClick={onToggleLogs} aria-pressed={showLogs}
-          className="flex items-center gap-1.5 px-3 py-2 text-text-muted hover:text-text-secondary text-sm transition-colors">
-          <ScrollText className="w-4 h-4" />
-          日志 {logCount > 0 && `(${logCount})`}
         </button>
       </div>
       {result && (
