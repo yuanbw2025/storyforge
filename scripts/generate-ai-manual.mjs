@@ -121,7 +121,7 @@ function extractModuleKeys() {
   const retired = source.statements.flatMap(node => ts.isVariableStatement(node)
     ? [...node.declarationList.declarations].filter(item => ts.isIdentifier(item.name)
       && item.name.text === 'RETIRED_PROMPT_MODULE_KEYS')
-    : []).flatMap(item => stringArrayValue(ts.isAsExpression(item.initializer)
+    : []).flatMap(item => stringArrayValue(item.initializer && ts.isAsExpression(item.initializer)
       ? item.initializer.expression : item.initializer))
   return readPromptModuleKeys(source).filter(key => !retired.includes(key))
 }
