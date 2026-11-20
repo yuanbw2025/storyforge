@@ -1,3 +1,4 @@
+import { rememberFeedback, acknowledgeFeedback } from './followup-storage'
 import { APP_BUILD_ID } from '../version'
 import { safeFailureBuild, parseFailureEvent, type FailureEvent } from '../diagnostics/failure-summary'
 import { diagnosticDetailsSupported, diagnosticWireError } from './diagnostic-wire'
@@ -30,6 +31,7 @@ export interface ClientFeedback {
     references: string
     extra: string
   }
+  followup?: { token: string }
   attachments?: FeedbackImage[]
 }
 export function clientMetadata(): ClientMetadata {
@@ -48,10 +50,11 @@ export async function submitClientFeedback(body: ClientFeedback): Promise<string
   let wire = feedbackWires.get(body)
   if (!wire) {
     wire = (async () => {
-      if (body.details || body.attachments?.length) {
+      if (body.details || body.attachments?.length || body.followup) {
         const response = await fetch(CLIENT_SUPPORT_URL + '/capabilities', { credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error', signal: AbortSignal.timeout(2000) })
-        const capabilities = response.ok ? await response.json() as { feedbackForm?: number; feedbackImages?: number } : null
-        if (capabilities?.feedbackForm !== 2 || (body.attachments?.length && capabilities.feedbackImages !== 1)) throw new Error('反馈服务尚未支持完整表单或截图，草稿已保留。请稍后重试。')
+        const capabilities = response.ok ? await response.json() as { feedbackForm?: number; feedbackImages?: number; feedbackFollowup?: number } : null
+        if (((body.details || body.attachments?.length) && capabilities?.feedbackForm !== 2) || (body.attachments?.length && capabilities?.feedbackImages !== 1)) throw new Error('反馈服务尚未支持完整表单或截图，草稿已保留。请稍后重试。')
+        if (body.followup && capabilities?.feedbackFollowup !== 1) throw new Error('反馈服务尚未支持进展跟进。草稿已保留，可取消接收进展后按原方式提交。')
       }
       const extended = await diagnosticDetailsSupported(CLIENT_SUPPORT_URL)
       return { ...body, ...(body.diagnostics ? { diagnostics: body.diagnostics.map(row => diagnosticWireError(row, extended)) } : {}) }
@@ -61,6 +64,7 @@ export async function submitClientFeedback(body: ClientFeedback): Promise<string
   const negotiated = await wire.catch(error => { feedbackWires.delete(body); throw error })
   const prepared = { ...negotiated, ...(negotiated.diagnostics ? { diagnostics: negotiated.diagnostics.map(row => diagnosticWireError(row, true)) } : {}) }
   // Manual reports are sent once per click. An unknown outcome retains the same id on retry.
+  if (body.followup) await rememberFeedback(body.id, body.followup.token, body.title)
   const response = await fetch(CLIENT_SUPPORT_URL + '/feedback', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'omit',
     referrerPolicy: 'no-referrer', redirect: 'error', signal: AbortSignal.timeout(15_000), body: JSON.stringify(prepared),
@@ -68,7 +72,12 @@ export async function submitClientFeedback(body: ClientFeedback): Promise<string
   const result: unknown = await response.json().catch(() => null)
   if (response.ok && result && typeof result === 'object' && 'accepted' in result && result.accepted === true
     && 'id' in result && result.id === body.id
-    && (!body.attachments?.length || ('attachmentCount' in result && result.attachmentCount === body.attachments.length))) return body.id
+    && (!body.attachments?.length || ('attachmentCount' in result && result.attachmentCount === body.attachments.length))) {
+    // The credential was durably saved before POST. A failed acknowledgment
+    // write leaves a queryable pending receipt rather than resubmitting content.
+    if (body.followup) await acknowledgeFeedback(body.id).catch(() => undefined)
+    return body.id
+  }
   const code = result && typeof result === 'object' && 'error' in result ? result.error : ''
   if (code === 'REMOVE_CREDENTIALS') throw new Error('内容中可能包含密钥，请删除凭证后重新提交。')
   if (response.status === 429) throw new Error('提交次数较多，请稍后重试；填写内容已保留。')
