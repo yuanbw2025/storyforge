@@ -8,7 +8,7 @@ vi.mock('../../src/hooks/useAIStream', () => ({ useAIStream: () => ({ start: moc
 vi.mock('../../src/stores/world-group', () => ({ useWorldGroupStore: (selector: (state: { activeGroupId: null }) => unknown) => selector({ activeGroupId: null }) }))
 vi.mock('../../src/components/shared/AutoResizeTextarea', () => ({ default: ({ minRows: _minRows, ...props }: Record<string, unknown>) => createElement('textarea', props) }))
 import SceneVerifyPanel from '../../src/components/scene/SceneVerifyPanel'
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 let host: HTMLDivElement, root: ReturnType<typeof createRoot>
 const project = { id: 1, activeWorldId: 11, activeWorkId: 12, enableMultiWorld: false } as Project
 const assembled = { text: '【作者本轮提供资料，未核验】兰桥木船摘录', included: ['manualText'], segments: [{ label: '本次作者资料', content: '兰桥木船摘录' }], sourceEvidence: [{ key: 'manualText', delivery: 'full' }] }

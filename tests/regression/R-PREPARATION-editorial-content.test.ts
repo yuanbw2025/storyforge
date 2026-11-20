@@ -38,7 +38,7 @@ describe('准备内容方法进入实际模板路径', () => {
     expect(planned).toContain('制订研究计划')
     expect(planned).toContain('【本轮已选择任务】研究计划')
     const reviewed = buildSceneVerifyPrompt({ worldContext: '作者提供的原文', historyContext: '', worldRulesContext: '', scene: '码头生活', researchMode: 'sources', hasSuppliedSources: true })
-    expect(reviewed.at(-1)?.content).toContain('已有资料审读：只交资料各自支持的内容')
+    expect(reviewed[reviewed.length - 1]?.content).toContain('已有资料审读：只交资料各自支持的内容')
     expect(JSON.stringify(usePromptStore.getState().templates)).toBe(before)
   })
   it('正式学习没有样本和改稿对照时仍在模型前拒绝', async () => {
