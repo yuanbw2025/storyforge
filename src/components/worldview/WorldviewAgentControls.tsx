@@ -1,5 +1,5 @@
 import { getModelCapacityLimitsV1 } from '../../lib/ai/model-capacity'
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Loader2, Sparkles, Trash2 } from 'lucide-react'
 import type { PendingMasterCandidate } from '../agent/useMasterCopilot'
 import { useMasterCopilot } from '../agent/useMasterCopilot'
@@ -14,8 +14,21 @@ import type { FieldGenerationMode } from '../../lib/ai/field-generation-context'
 import type { Project } from '../../lib/types'
 import HarnessEvidencePanel from '../agent/HarnessEvidencePanel'
 import { useAIConfigStore } from '../../stores/ai-config'
-import WorldviewFieldCandidateReview from './WorldviewFieldCandidateReview'
+import WorldviewFieldCandidateReview, { isWorldviewReviewViewV1, worldviewReviewSessionKeyV1, worldviewEditorSessionKeyV1, readWorldviewEditorSessionKeyV1, type WorldviewReviewViewV1, type WorldviewEditorCompositionV1 } from './WorldviewFieldCandidateReview'
+import { db } from '../../lib/db/schema'
+import { assertRecordInScope } from '../../lib/workspace/scope'
 import CopilotGenerationStatus from '../agent/CopilotGenerationStatus'
+
+/** Parent invocation fence; caller ownership was verified independently above. */
+export function acceptWorldviewEditorCompositionV1(value: unknown, live: WorldviewReviewViewV1, current: {viewKey:string;epoch:number}|null) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== 5
+    || Object.keys(value).some(key => !['version','sessionKey','candidateEventId','compositionActive','tailPending'].includes(key))) return null
+  const state = value as WorldviewEditorCompositionV1, editor = readWorldviewEditorSessionKeyV1(state.sessionKey)
+  if (!editor || live.status !== 'verified' || state.version !== 1 || editor.viewKey !== live.sessionKey
+    || current?.viewKey === live.sessionKey && editor.epoch < current.epoch || state.candidateEventId !== live.eventId
+    || typeof state.compositionActive !== 'boolean' || typeof state.tailPending !== 'boolean') return null
+  return {state,editor}
+}
 
 export default function WorldviewAgentControls({
   field,
@@ -51,6 +64,67 @@ export default function WorldviewAgentControls({
   const [customOutputTokens, setCustomOutputTokens] = useState(WORLDVIEW_FIELD_DEFAULT_OUTPUT_TOKENS_V1)
   const candidateEventId = candidate?.event.id
   const visibleDraft = copilot.readVisibleCandidateDraft(candidateEventId)
+  // The child cannot certify its own current World/Work/group. Read only the
+  // actual existing conversation, never getOrCreate or mutate an owner record.
+  const viewIdentity = {
+    projectId: project.id ?? 0, worldId: project.activeWorldId ?? 0, workId: project.activeWorkId ?? 0,
+    worldGroupId: project.enableMultiWorld ? activeGroupId : null, field,
+    eventId: candidateEventId ?? 0, conversationId: candidate?.event.conversationId ?? 0,
+    taskId: candidate?.payload.taskId ?? '', runId: candidate?.payload.runId ?? 0,
+    runStepId: candidate?.payload.runStepId ?? '', runGeneration: candidate?.payload.runGeneration ?? 0,
+    skillId: candidate?.payload.skillId ?? '',
+  }
+  const viewKey = worldviewReviewSessionKeyV1(viewIdentity)
+  const member = candidate && copilot.pendingCandidates.some(item => item.event.id === candidate.event.id
+    && item.event.conversationId === candidate.event.conversationId && item.payload.taskId === candidate.payload.taskId
+    && item.payload.runId === candidate.payload.runId && item.payload.runStepId === candidate.payload.runStepId
+    && item.payload.runGeneration === candidate.payload.runGeneration)
+  const shapeValid = !!candidate && !!member && (!project.enableMultiWorld || Number.isSafeInteger(activeGroupId) && Number(activeGroupId) > 0)
+    && isWorldviewReviewViewV1(candidate, { ...viewIdentity, version: 'worldview-review-view-v1', status: 'verified', generation: 1, sessionKey: viewKey })
+  const lookupGeneration = useRef(0)
+  const [ownerProof, setOwnerProof] = useState<{ key: string; generation: number; verified: boolean }>({ key: '', generation: 0, verified: false })
+  const viewBinding: WorldviewReviewViewV1 = { ...viewIdentity, version: 'worldview-review-view-v1', sessionKey: viewKey,
+    status: shapeValid && ownerProof.key === viewKey && ownerProof.generation === lookupGeneration.current && ownerProof.verified ? 'verified' : 'unknown', generation: ownerProof.generation }
+  const [compositionState, setCompositionState] = useState<WorldviewEditorCompositionV1 | null>(null)
+  const compositionRef = useRef<WorldviewEditorCompositionV1 | null>(null)
+  const editorEpoch = useRef<{ viewKey: string; epoch: number } | null>(null)
+  if (editorEpoch.current?.viewKey !== viewKey) { compositionRef.current = null; editorEpoch.current = null }
+  const liveView = useRef<{ binding: WorldviewReviewViewV1; busy: boolean; hasDraft: boolean; candidate?: PendingMasterCandidate } | null>(null)
+  liveView.current = { binding: viewBinding, busy: copilot.busy, hasDraft: !!visibleDraft, candidate }
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+  useEffect(() => {
+    let active = true
+    const generation = ++lookupGeneration.current
+    if (liveView.current) liveView.current.binding.status = 'unknown'
+    setOwnerProof({ key: viewKey, generation, verified: false })
+    if (shapeValid) void (async () => {
+      const row = await db.agentConversations.get(viewIdentity.conversationId)
+      const scope = { projectId: viewIdentity.projectId, worldId: viewIdentity.worldId, workId: viewIdentity.workId }
+      const verified = !!row && row.projectId === scope.projectId && row.workId === scope.workId
+        && row.purpose === 'master-authoring' && row.status === 'active' && (row.worldGroupId ?? null) === viewIdentity.worldGroupId
+        && await assertRecordInScope(scope, 'agentConversations', row, { owner: 'work' })
+      if (active && lookupGeneration.current === generation && liveView.current?.binding.sessionKey === viewKey)
+        setOwnerProof({ key: viewKey, generation, verified })
+    })().catch(() => { if (active && lookupGeneration.current === generation) setOwnerProof({ key: viewKey, generation, verified: false }) })
+    return () => { active = false }
+  }, [viewKey, shapeValid, viewIdentity.conversationId, viewIdentity.projectId, viewIdentity.worldId, viewIdentity.workId, viewIdentity.worldGroupId])
+  const onEditorCompositionStateChange = useCallback((state: WorldviewEditorCompositionV1) => {
+    const live = liveView.current
+    if (!mounted.current || !live) return
+    const accepted = acceptWorldviewEditorCompositionV1(state, live.binding, editorEpoch.current)
+    if (!accepted) return
+    editorEpoch.current = accepted.editor
+    compositionRef.current = accepted.state
+    setCompositionState(accepted.state)
+  }, [])
+  const currentSession = (allowComposition = false, allowDraft = true) => {
+    const live = liveView.current, composition = compositionRef.current
+    return mounted.current && live?.binding.sessionKey === viewKey && live.binding.status === 'verified' && !!live.candidate && isWorldviewReviewViewV1(live.candidate, live.binding) && !live.busy
+      && (allowDraft || !live.hasDraft) && (allowComposition || !composition || editorEpoch.current?.viewKey !== viewKey || !composition.compositionActive && !composition.tailPending)
+  }
+  const compositionLocked = editorEpoch.current?.viewKey === viewKey && compositionState?.sessionKey === worldviewEditorSessionKeyV1(viewKey, editorEpoch.current.epoch) && (compositionState.compositionActive || compositionState.tailPending)
+  const candidateBlocked = copilot.busy || viewBinding.status !== 'verified' || compositionLocked
   const aiConfig = useAIConfigStore(state => state.config)
   const modelCap = getModelCapacityLimitsV1(aiConfig).maxOutput
   const configuredCap = aiConfig.maxTokens > 0 ? aiConfig.maxTokens : modelCap
@@ -211,11 +285,13 @@ export default function WorldviewAgentControls({
             candidate={candidate}
             busy={copilot.busy || visibleDraft?.status === 'discarding'}
             visibleDraft={visibleDraft}
+            viewBinding={viewBinding}
+            onEditorCompositionStateChange={onEditorCompositionStateChange}
             onUpdate={(content, rawValue) => {
-              if (candidateEventId != null) void copilot.updateCandidate(candidateEventId, content, { rawValue })
+              if (candidateEventId != null && currentSession(true)) void copilot.updateCandidate(candidateEventId, content, { rawValue })
             }}
             onInvalidEdit={(rawValue, error) => {
-              if (candidateEventId != null) void copilot.updateCandidate(candidateEventId, rawValue, { rawValue, error })
+              if (candidateEventId != null && currentSession(true)) void copilot.updateCandidate(candidateEventId, rawValue, { rawValue, error })
             }}
           />
           {visibleDraft && (
@@ -224,8 +300,8 @@ export default function WorldviewAgentControls({
                 {visibleDraft.error ?? (visibleDraft.status === 'discarding' ? '正在读取已保存候选…' : '正在保存当前候选编辑…')}
               </p>
               <button type="button" className="text-text-secondary underline disabled:opacity-50"
-                disabled={copilot.busy || visibleDraft.status === 'discarding'}
-                onClick={() => { if (candidateEventId != null) void copilot.discardVisibleCandidateDraft(candidateEventId) }}>
+                disabled={candidateBlocked || visibleDraft.status === 'discarding'}
+                onClick={() => { if (candidateEventId != null && currentSession()) void copilot.discardVisibleCandidateDraft(candidateEventId) }}>
                 放弃未保存修改
               </button>
             </div>
@@ -238,8 +314,8 @@ export default function WorldviewAgentControls({
           <div className="mt-3 flex justify-end gap-2">
             <button
               type="button"
-              disabled={copilot.busy}
-              onClick={() => { void copilot.rejectCandidate(candidate) }}
+              disabled={candidateBlocked}
+              onClick={() => { if (currentSession()) void copilot.rejectCandidate(candidate) }}
               className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-text-muted hover:bg-bg-hover hover:text-text-primary rounded disabled:opacity-50"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -247,8 +323,8 @@ export default function WorldviewAgentControls({
             </button>
             <button
               type="button"
-              disabled={copilot.busy || Boolean(visibleDraft)}
-              onClick={() => { void onAdopted(candidate) }}
+              disabled={candidateBlocked || Boolean(visibleDraft)}
+              onClick={() => { if (currentSession(false, false)) void onAdopted(candidate) }}
               className="flex items-center gap-1 bg-accent px-3 py-1.5 text-xs text-white hover:opacity-90 rounded disabled:opacity-50"
             >
               {copilot.busy
