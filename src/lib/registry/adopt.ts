@@ -748,7 +748,7 @@ async function adoptSingleton(
 
 /** Shared singleton persistence after the caller has validated its exact scope,
  * references and native transaction. World authoring does not bypass adopt. */
-async function persistRegisteredSingletonPatchV1(
+function persistRegisteredSingletonPatchV1(
   tableSpec: TableSpec,
   target: { id?: number } | null | undefined,
   patch: Record<string, unknown>,
@@ -759,17 +759,20 @@ async function persistRegisteredSingletonPatchV1(
 ): Promise<{ id: number; fields: string[] } | undefined> {
   const now = Date.now()
   if (target?.id != null) {
-    const count = await registeredAdoptionTable(owner, tableSpec.table).update(target.id, { ...patch, updatedAt: now })
-    if (requireExistingUpdate && !count) throw new Error('[adopt] 单例目标已不存在')
-    const written = { id: target.id, fields: Object.keys(patch) }
-    result.written.push(written)
-    return written
+    const id = target.id
+    return registeredAdoptionTable(owner, tableSpec.table).update(id, { ...patch, updatedAt: now }).then(count => {
+      if (requireExistingUpdate && !count) throw new Error('[adopt] 单例目标已不存在')
+      const written = { id, fields: Object.keys(patch) }
+      result.written.push(written)
+      return written
+    })
   }
   const row = createRow(now)
-  if (row) {
-    const id = await registeredAdoptionTable(owner, tableSpec.table).add(row) as number
-    result.written.push({ id, fields: Object.keys(patch) })
-  }
+  if (!row) return Dexie.Promise.resolve(undefined)
+  return registeredAdoptionTable(owner, tableSpec.table).add(row).then(id => {
+    result.written.push({ id: id as number, fields: Object.keys(patch) })
+    return undefined
+  })
 }
 
 async function adoptCollection(
