@@ -10,10 +10,16 @@
  */
 
 import { create } from 'zustand'
-import type { Table, UpdateSpec } from 'dexie'
-import type { WorkspaceScope } from '../lib/types'
+import Dexie, { type Table, type Transaction, type UpdateSpec } from 'dexie'
+import type { History, WorkspaceScope, WorldOwnerScope } from '../lib/types'
+import {
+  copyHistoryAuthorOriginV1, copyHistoryAuthorSelectionV1, copyHistoryTextPatchV1,
+  historyAuthorRecordV1, HISTORY_TEXT_DEFAULTS_V1,
+  type HistoryAuthorOriginV1, type HistoryAuthorPartitionV1, type HistoryAuthorSelectionV1, type HistoryTextPatchV1,
+} from '../lib/types/history'
 import { db } from '../lib/db/schema'
-import { assertRecordInScope, getTableSpec, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { assertRecordInScope, getTableSpec, readOwnedRows, readOwnedRowsInTransactionV1, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { resolveHistoryWorkAuthorScopeV1, resolveWorldAuthoringOwnershipV1 } from '../lib/workspace/ownership'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
 const now = () => Date.now()
@@ -49,13 +55,58 @@ export type ProjectSingletonStore<K extends string, T extends ProjectScopedRecor
   save: (data: Partial<T>, scope?: WorkspaceScopeLike) => Promise<void>
 } & { [P in K]: T | null }
 
-interface FactoryOptions<K extends string, T extends ProjectScopedRecord> {
+export interface HistoryAuthorSingletonStateV1 {
+  loadedHistoryAuthorOrigin: HistoryAuthorOriginV1 | null
+  loadedHistoryAuthorSelection: HistoryAuthorSelectionV1 | null
+  loadForHistoryAuthorV1: (input: { origin: HistoryAuthorOriginV1; selection: HistoryAuthorSelectionV1 }) => Promise<void>
+  saveForHistoryAuthorV1: (input: { origin: HistoryAuthorOriginV1; selection: HistoryAuthorPartitionV1; patch: HistoryTextPatchV1 }) => Promise<void>
+}
+
+interface FactoryOptions<K extends string, T extends ProjectScopedRecord, HistoryAuthoring extends boolean> {
   /** Dexie 表名，例如 `'geographies'` */
   table: DbTableKey
   /** 暴露到 store state 的字段名，例如 `'geography'` */
   key: K
   /** 新建记录时用到的默认字段（不含 id/projectId/createdAt/updatedAt） */
   defaults: Omit<T, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>
+  /** Only the history singleton opts in; existing factory callers keep their API. */
+  historyAuthoring?: HistoryAuthoring
+}
+
+function historyRootTransactionV1(): Transaction | undefined {
+  let transaction = Dexie.currentTransaction
+  while (transaction?.parent) transaction = transaction.parent
+  return transaction?.db === db && transaction.mode === 'readwrite' && transaction.active ? transaction : undefined
+}
+
+function historyRootCompletionV1(root: Transaction): Promise<void> {
+  const completion = new Dexie.Promise<void>((resolve, reject) => {
+    root.on('complete', resolve)
+    root.on('abort', () => reject(root.idbtrans.error ?? new Error('历史保存的原事务已回滚')))
+  })
+  void completion.catch(() => undefined)
+  return completion
+}
+
+function assertHistoryTransactionV1(transaction: Transaction, native: IDBTransaction, tables: readonly Table[], write = false): void {
+  let root = transaction
+  while (root.parent) root = root.parent
+  if (transaction.db !== db || !transaction.active || !native || transaction.idbtrans !== native
+    || root.db !== db || !root.active || root.idbtrans !== native || (write && transaction.mode !== 'readwrite')
+    || tables.some(table => !transaction.storeNames.includes(table.name) || !native.objectStoreNames.contains(table.name))) {
+    throw new Error('历史保存或读取的原事务已失效或缺少作用域表')
+  }
+  const current = Dexie.currentTransaction
+  if (current && (current.db !== db || current.idbtrans !== native)) throw new Error('历史保存或读取的原事务已变化')
+}
+
+function sameHistoryOriginV1(left: HistoryAuthorOriginV1, right: HistoryAuthorOriginV1): boolean {
+  return left.kind === right.kind && left.scope.projectId === right.scope.projectId && left.scope.worldId === right.scope.worldId
+    && (left.kind !== 'work' || right.kind === 'work' && left.scope.workId === right.scope.workId)
+}
+
+function sameHistorySelectionV1(left: HistoryAuthorSelectionV1, right: HistoryAuthorSelectionV1): boolean {
+  return left.kind === right.kind && (left.kind === 'all' || right.kind === 'partition' && left.worldGroupId === right.worldGroupId)
 }
 
 /**
@@ -67,19 +118,35 @@ interface FactoryOptions<K extends string, T extends ProjectScopedRecord> {
  *    - 已有记录 → `update(id, { ...data, updatedAt })`
  *    - 没记录但传了 `projectId` → 用 defaults + data `add(...)`，拿回 id 回填 state
  */
-export function createProjectSingletonStore<K extends string, T extends ProjectScopedRecord>(
-  options: FactoryOptions<K, T>,
+export function createProjectSingletonStore<K extends string, T extends ProjectScopedRecord, HistoryAuthoring extends boolean = false>(
+  options: FactoryOptions<K, T, HistoryAuthoring>,
 ) {
   const { table, key, defaults } = options
+  const historyAuthoring = options.historyAuthoring === true
+  if (historyAuthoring && (table !== 'histories' || key !== 'history')) throw new Error('历史作者接口只允许历史单例启用')
   // 必要的强转：TS 无法从字符串 key 静态推导出 `db[table]` 的元素类型，
   // 但运行时 Dexie 会保证 table 里存的是 T。调用方在 `table` 字段上受
   // `DbTableKey` 约束，不会传错表名；记录类型交给返回类型控制。
   const getTable = () => (db as unknown as Record<string, Table<T, number>>)[table]
 
-  type State = ProjectSingletonStore<K, T>
+  type State = ProjectSingletonStore<K, T> & (HistoryAuthoring extends true ? HistoryAuthorSingletonStateV1 : unknown)
 
   return create<State>((set, get) => {
     let loadRequest = 0
+    let historyView: { request: number; origin: HistoryAuthorOriginV1; selection: HistoryAuthorSelectionV1 } | null = null
+    const historyAdmissions = new Map<number, Promise<void>>()
+    // Reserve registration order at API invocation, before a legacy numeric
+    // scope can finish resolving. A slot waits only for target registration,
+    // never for its write/parent commit. Keep the legacy pending lookup slot
+    // separate: a named call must not acknowledge its unresolved Work failure.
+    const admitHistoryWrite = (projectId: number, register: () => Promise<{ write: Promise<void> }>) => {
+      const previous = historyAdmissions.get(projectId) ?? Promise.resolve()
+      const admitted = Dexie.Promise.resolve(previous).catch(() => undefined).then(register)
+      const tail = admitted.then(() => undefined, () => undefined)
+      historyAdmissions.set(projectId, tail)
+      void tail.then(() => { if (historyAdmissions.get(projectId) === tail) historyAdmissions.delete(projectId) })
+      return admitted
+    }
     const sameScope = (left: WorkspaceScope | null, right: WorkspaceScope) =>
       left?.projectId === right.projectId && left.worldId === right.worldId && left.workId === right.workId
     const initialState = {
@@ -88,14 +155,162 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
       loadError: null,
       loadedScope: null,
       activeWorldGroupId: null,
+      ...(historyAuthoring ? { loadedHistoryAuthorOrigin: null, loadedHistoryAuthorSelection: null } : {}),
     } as unknown as State
+
+    const authorTables = (origin: HistoryAuthorOriginV1): Table[] => [
+      db.projects, db.worlds, db.worldGroups, db.histories, ...(origin.kind === 'work' ? [db.works] : []),
+    ]
+    const resolveAuthor = (origin: HistoryAuthorOriginV1, transaction: Transaction): Promise<WorldOwnerScope> => {
+      if (origin.kind === 'world') return resolveWorldAuthoringOwnershipV1(origin.scope, transaction).then(result => result.scope)
+      return resolveHistoryWorkAuthorScopeV1(origin.scope, transaction)
+    }
+    const readAuthorPartition = (origin: HistoryAuthorOriginV1, selection: HistoryAuthorSelectionV1, transaction: Transaction): Promise<{ scope: WorldOwnerScope; record: History | null }> => {
+      const native = transaction.idbtrans
+      const check = () => assertHistoryTransactionV1(transaction, native, authorTables(origin))
+      check()
+      return resolveAuthor(origin, transaction).then(scope => {
+        check()
+        if (selection.kind === 'all') return { scope, record: null }
+        const groupId = selection.worldGroupId
+        const group = groupId == null ? Dexie.Promise.resolve(true)
+          : readOwnedRowsInTransactionV1<{ id?: number }>(transaction, scope, 'worldGroups', { owner: 'world' })
+            .then(groups => groups.some(row => row.id === groupId))
+        return group.then(valid => {
+          check()
+          if (!valid) throw new Error('历史分区不属于指定 World')
+          return readOwnedRowsInTransactionV1<History>(transaction, scope, 'histories', { owner: 'world' }).then(rows => {
+            check()
+            const matches = rows.filter(row => (row.worldGroupId ?? null) === groupId)
+            if (matches.length > 1) throw new Error('该历史分区有多条单例记录，请先核对原始数据')
+            return { scope, record: matches[0] ?? null }
+          })
+        })
+      })
+    }
+    const readCommittedAuthor = (origin: HistoryAuthorOriginV1, selection: HistoryAuthorSelectionV1) =>
+      db.transaction('r', authorTables(origin), () => {
+        const transaction = Dexie.currentTransaction
+        if (!transaction) throw new Error('历史读取缺少原事务')
+        // Every helper returns the Dexie chain; no native async bridge can let
+        // the original native transaction finish between owner and row reads.
+        return readAuthorPartition(origin, selection, transaction).then(result => result.record)
+      })
+    const ownsAuthorView = (request: number, origin: HistoryAuthorOriginV1, selection: HistoryAuthorSelectionV1) =>
+      request === loadRequest && historyView?.request === request
+      && sameHistoryOriginV1(historyView.origin, origin) && sameHistorySelectionV1(historyView.selection, selection)
+    const publishAuthor = (request: number, origin: HistoryAuthorOriginV1, selection: HistoryAuthorSelectionV1, record: History | null) => {
+      if (!ownsAuthorView(request, origin, selection)) return
+      set({
+        [key]: record, loading: false, loadError: null,
+        loadedScope: origin.kind === 'work' ? { ...origin.scope } : null,
+        activeWorldGroupId: selection.kind === 'partition' ? selection.worldGroupId : null,
+        loadedHistoryAuthorOrigin: copyHistoryAuthorOriginV1(origin),
+        loadedHistoryAuthorSelection: copyHistoryAuthorSelectionV1(selection),
+      } as unknown as Partial<State>)
+    }
+    const failAuthorLoad = (request: number, error: unknown) => {
+      if (request === loadRequest) set({ loading: false, loadedScope: null,
+        loadedHistoryAuthorOrigin: null, loadError: error instanceof Error ? error.message : String(error) } as unknown as Partial<State>)
+    }
+    const authorActions: HistoryAuthorSingletonStateV1 = {
+      loadedHistoryAuthorOrigin: null,
+      loadedHistoryAuthorSelection: null,
+      loadForHistoryAuthorV1: input => {
+        try {
+          historyAuthorRecordV1(input, ['origin', 'selection'], '读取')
+          const origin = copyHistoryAuthorOriginV1(input.origin)
+          const selection = copyHistoryAuthorSelectionV1(input.selection)
+          const prior = historyView
+          const preserve = prior && sameHistoryOriginV1(prior.origin, origin) && sameHistorySelectionV1(prior.selection, selection)
+          const request = ++loadRequest
+          historyView = { request, origin, selection }
+          set({ loading: true, loadError: null, loadedScope: null, loadedHistoryAuthorOrigin: null,
+            loadedHistoryAuthorSelection: copyHistoryAuthorSelectionV1(selection), ...(!preserve ? { [key]: null } : {}) } as unknown as Partial<State>)
+          const root = historyRootTransactionV1()
+          const completion = root ? historyRootCompletionV1(root) : null
+          return readCommittedAuthor(origin, selection).then(record => {
+            if (completion) {
+              void completion.then(() => Dexie.ignoreTransaction(() => readCommittedAuthor(origin, selection))).then(committed => {
+                publishAuthor(request, origin, selection, committed)
+              }).catch(error => failAuthorLoad(request, error))
+            } else publishAuthor(request, origin, selection, record)
+          }).catch(error => { failAuthorLoad(request, error); throw error })
+        } catch (error) { return Dexie.Promise.reject(error) }
+      },
+      saveForHistoryAuthorV1: input => {
+        try {
+          historyAuthorRecordV1(input, ['origin', 'selection', 'patch'], '保存')
+          const origin = copyHistoryAuthorOriginV1(input.origin)
+          const selection = copyHistoryAuthorSelectionV1(input.selection)
+          if (selection.kind !== 'partition') throw new Error('历史一览为只读，不能保存')
+          const patch = copyHistoryTextPatchV1(input.patch)
+          const tables = authorTables(origin)
+          const ambient = Dexie.currentTransaction
+          if (ambient && (ambient.db !== db || ambient.mode !== 'readwrite' || !ambient.active
+            || tables.some(table => !ambient.storeNames.includes(table.name)))) throw new Error('历史保存缺少原写事务或完整作用域表')
+          const native = ambient?.idbtrans
+          const root = historyRootTransactionV1()
+          const completion = root ? historyRootCompletionV1(root) : null
+          const request = loadRequest
+          const targetKey = `project-singleton:histories:${origin.scope.projectId}:${origin.scope.worldId}:${selection.worldGroupId ?? 'default'}`
+          const persist = () => {
+            // A captured caller transaction must not turn into a detached write.
+            if (ambient && native) assertHistoryTransactionV1(ambient, native, tables, true)
+            const write = (transaction: Transaction) => {
+              const originalNative = transaction.idbtrans
+              const check = () => assertHistoryTransactionV1(transaction, originalNative, tables, true)
+              check()
+              return readAuthorPartition(origin, selection, transaction).then(({ scope, record: current }) => {
+                check()
+                const history = transaction.table<History, number>(getTableSpec('histories').table.name)
+                const ts = now()
+                if (current?.id != null) {
+                  return history.update(current.id, { ...patch, updatedAt: ts }).then(written => {
+                    check()
+                    if (!written) throw new Error('历史保存目标已不存在')
+                  })
+                }
+                return history.add(stampNewRecord(scope, 'histories', {
+                  ...HISTORY_TEXT_DEFAULTS_V1, ...patch, projectId: scope.projectId, worldGroupId: selection.worldGroupId,
+                  createdAt: ts, updatedAt: ts,
+                }, { owner: 'world' })).then(() => { check() })
+              })
+            }
+            if (ambient) return write(ambient)
+            return db.transaction('rw', tables, () => {
+              const transaction = Dexie.currentTransaction
+              if (!transaction) throw new Error('历史保存缺少原事务')
+              return write(transaction)
+            })
+          }
+          // Serialize the formal target across both APIs. A separate fieldset
+          // identity keeps another field's success from acknowledging failed text.
+          const admitted = admitHistoryWrite(origin.scope.projectId, () => Dexie.Promise.resolve({
+            write: coordinatePendingEditV1({ key: targetKey, persist }),
+          }))
+          const written = admitted.then(slot => slot.write)
+          const committed = written.then(() => completion ?? Dexie.Promise.resolve())
+            .then(() => Dexie.ignoreTransaction(() => readCommittedAuthor(origin, selection))).then(record => {
+              publishAuthor(request, origin, selection, record)
+            })
+          void committed.catch(() => undefined)
+          const pending = coordinatePendingEditV1({ key: `history-author-fields:${targetKey}:${Object.keys(patch).sort().join('+')}`, persist: () => committed })
+          // Parent code must be able to continue and commit/abort. Its completion
+          // remains registered with the pending-edit barrier independently.
+          return root ? written : pending
+        } catch (error) { return Dexie.Promise.reject(error) }
+      },
+    }
 
     return {
       ...initialState,
 
       loadAll: async (scopeInput: WorkspaceScopeLike, worldGroupId: number | null = null) => {
         const request = ++loadRequest
-        set({ loading: true, loadError: null, loadedScope: null, activeWorldGroupId: worldGroupId } as Partial<State> as State)
+        historyView = null
+        set({ loading: true, loadError: null, loadedScope: null, activeWorldGroupId: worldGroupId,
+          ...(historyAuthoring ? { loadedHistoryAuthorOrigin: null, loadedHistoryAuthorSelection: null } : {}) } as Partial<State> as State)
         try {
           const scope = await resolveScopeLike(scopeInput)
           const owner = getTableSpec(String(table)).domainOwner?.defaultOwner
@@ -141,7 +356,7 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
             }
             const publish = (record: T) => {
               const current = get()
-              if (request === loadRequest && !current.loading && sameScope(current.loadedScope, scope)
+              if (request === loadRequest && historyView === null && !current.loading && sameScope(current.loadedScope, scope)
                 && (current.activeWorldGroupId === groupId
                   || (current.activeWorldGroupId == null && memoryCurrent?.id === record.id))) {
                 set({ [key]: record } as unknown as Partial<State> as State)
@@ -195,12 +410,15 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
         })
         // Admit in call order even when a numeric project must first read its active pointers.
         // The lookup slot only awaits registration. Actual write failures belong to the owner slot.
+        const register = async () => ({ write: writeForOwner(typeof scopeInput === 'number' ? await scopePromise : scopeInput) })
+        const historyAdmission = historyAuthoring ? admitHistoryWrite(pendingProjectId, register) : null
         const admitted = await coordinatePendingEditV1({
           key: `project-singleton-lookup:${String(table)}:${pendingProjectId}`,
-          persist: async () => ({ write: writeForOwner(typeof scopeInput === 'number' ? await scopePromise : scopeInput) }),
+          persist: () => historyAdmission ?? register(),
         })
         await admitted.write
       },
-    }
+      ...(historyAuthoring ? authorActions : {}),
+    } as State
   })
 }

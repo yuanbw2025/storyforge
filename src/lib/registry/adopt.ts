@@ -11,11 +11,17 @@ import {
   stampNewRecord,
 } from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
+import {
+  copyHistoryAuthorOriginV1, copyHistoryAuthorSelectionV1, copyHistoryTextPatchV1,
+  historyAuthorRecordV1, HISTORY_TEXT_DEFAULTS_V1,
+  type History,
+} from '../types/history'
+import { resolveWorldAuthoringOwnershipV1 } from '../workspace/ownership'
 import { hashChapterText, sha256Text, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../ai/chapter-memory/text-normalization'
 import { PROJECT_TABLES, REGISTRY_BY_NAME } from './project-tables'
 import { FIELD_BY_TARGET } from './field-registry'
 import { ADOPTION_BY_TARGET } from './adoption-schema'
-import type { AdoptInput, AdoptResult, CollectionAdoptionSpec, FieldSpec, TableSpec } from './types'
+import type { AdoptInput, AdoptResult, AdoptWorldHistoryTextInputV1, CollectionAdoptionSpec, FieldSpec, TableSpec } from './types'
 import { normalizeCharacterAxes } from '../character/character-axes'
 import {
   refreshSettingAssertionSourceStatus,
@@ -102,7 +108,10 @@ function runRegisteredAdoptionTransaction<T>(owner: CallerOwnedAdoptionV1 | unde
   return body()
 }
 
-export async function adopt(input: AdoptInput, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult> {
+export function adopt(input: AdoptWorldHistoryTextInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
+export function adopt(input: AdoptInput, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult>
+export async function adopt(input: AdoptInput | AdoptWorldHistoryTextInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult> {
+  if (isWorldHistoryAdoptionV1(input)) return adoptWorldHistoryTextV1(input, owner)
   assertCallerAdoptionTransaction(owner, owner ? callerOwnedAdoptionEffectTablesV1(input.target) : [])
   if (owner && (!CALLER_OWNED_ADOPTION_TARGETS_V1.has(input.target) || input.narrativeCandidate || input.compareAndSet ||
     ADOPTION_BY_TARGET.get(input.target)?.writePolicy))
@@ -174,6 +183,50 @@ export async function adopt(input: AdoptInput, owner?: CallerOwnedAdoptionV1): P
   const isCollection = scopedInput.mode === 'add' || scopedInput.mode === 'add-many' || scopedInput.mode === 'merge-diffs'
   if (isCollection) return adoptCollection(scopedInput, fieldSpecs, tableSpec, result, owner)
   return adoptSingleton(scopedInput, fieldSpecs, tableSpec, result, owner)
+}
+
+function isWorldHistoryAdoptionV1(input: AdoptInput | AdoptWorldHistoryTextInputV1): input is AdoptWorldHistoryTextInputV1 {
+  // Either new-only key selects strict admission, including malformed hybrids.
+  return Object.prototype.hasOwnProperty.call(input, 'ownerScope') || Object.prototype.hasOwnProperty.call(input, 'selection')
+}
+
+/** Explicit new World admission; generic Work transaction helpers are not a
+ * substitute for the actual group/root reads made by this branch. */
+export function worldHistoryAdoptionTransactionTablesV1(): Table[] {
+  return [db.projects, db.worlds, db.worldGroups, REGISTRY_BY_NAME.get('histories')!.table]
+}
+
+async function adoptWorldHistoryTextV1(input: AdoptWorldHistoryTextInputV1, owner?: CallerOwnedAdoptionV1): Promise<AdoptResult> {
+  historyAuthorRecordV1(input, ['target', 'ownerScope', 'selection', 'mode', 'data'], '采纳')
+  if (input.target !== 'histories' || input.mode !== 'replace') throw new Error('[adopt] World 历史只允许单例文字 replace')
+  const origin = copyHistoryAuthorOriginV1({ version: 1, kind: 'world', scope: input.ownerScope })
+  const selection = copyHistoryAuthorSelectionV1(input.selection)
+  if (selection.kind !== 'partition') throw new Error('[adopt] 历史一览为只读')
+  const data = copyHistoryTextPatchV1(input.data)
+  const tableSpec = REGISTRY_BY_NAME.get('histories')!
+  const fieldSpecs = FIELD_BY_TARGET.get('histories') ?? []
+  const result = emptyResult()
+  // An explicitly selected empty string clears author text. Old generic/Work
+  // normalization intentionally keeps its established empty-string behavior.
+  const patch = normalizeAndValidate(data, fieldSpecs, result, { preserveEmptyStrings: true })
+  if (!patch) return result
+  const tables = worldHistoryAdoptionTransactionTablesV1()
+  assertCallerAdoptionTransaction(owner, tables)
+  await runRegisteredAdoptionTransaction(owner, tables, async () => {
+    const { scope } = await awaitCallerAdoptionRead(owner, () => resolveWorldAuthoringOwnershipV1(origin.scope))
+    const groupId = selection.worldGroupId
+    if (groupId != null && !await awaitCallerAdoptionRead(owner, async () =>
+      assertRecordInScope(scope, 'worldGroups', await db.worldGroups.get(groupId), { owner: 'world' }))) {
+      throw new Error('[adopt] 历史分区不属于指定 World')
+    }
+    const matches = (await awaitCallerAdoptionRead(owner, () => readOwnedRows<History>(scope, 'histories', { owner: 'world' })))
+      .filter(row => (row.worldGroupId ?? null) === groupId)
+    if (matches.length > 1) throw new Error('[adopt] 该历史分区有多条单例记录，请先核对原始数据')
+    await persistRegisteredSingletonPatchV1(tableSpec, matches[0], patch, result, owner, ts =>
+      stampNewRecord(scope, 'histories', { ...HISTORY_TEXT_DEFAULTS_V1, ...patch,
+        projectId: scope.projectId, worldGroupId: groupId, createdAt: ts, updatedAt: ts }, { owner: 'world' }), true)
+  })
+  return result
 }
 
 /**
@@ -672,12 +725,7 @@ async function adoptSingleton(
       }
     }
 
-    const now = Date.now()
-    if (target?.id != null) {
-      await registeredAdoptionTable(owner, tableSpec.table).update(target.id, { ...patch, updatedAt: now } as any)
-      updated = { id: target.id, fields: Object.keys(patch) }
-      result.written.push(updated)
-    } else {
+    updated = await persistRegisteredSingletonPatchV1(tableSpec, target, patch, result, owner, now => {
       const candidate = {
         ...defaultSingletonRow(input.target),
         projectId: input.projectId,
@@ -686,18 +734,45 @@ async function adoptSingleton(
         createdAt: now,
         updatedAt: now,
       }
-      if (adoption && !applyRequired(candidate, input.data, adoption, result)) return
-      const row = stampNewRecord(input.scope!, input.target, candidate,
+      if (adoption && !applyRequired(candidate, input.data, adoption, result)) return null
+      return stampNewRecord(input.scope!, input.target, candidate,
         { owner: tableSpec.domainOwner?.defaultOwner === 'world' ? 'world' : 'work' })
-      const id = await registeredAdoptionTable(owner, tableSpec.table).add(row as any) as number
-      result.written.push({ id, fields: Object.keys(patch) })
-    }
+    })
   })
   const written = updated
   if (written) {
     await awaitCallerAdoptionRead(owner, () => refreshCanonSourceAfterWrite(input.target, input.projectId, written.id, written.fields))
   }
   return result
+}
+
+/** Shared singleton persistence after the caller has validated its exact scope,
+ * references and native transaction. World authoring does not bypass adopt. */
+function persistRegisteredSingletonPatchV1(
+  tableSpec: TableSpec,
+  target: { id?: number } | null | undefined,
+  patch: Record<string, unknown>,
+  result: AdoptResult,
+  owner: CallerOwnedAdoptionV1 | undefined,
+  createRow: (now: number) => Record<string, unknown> | null,
+  requireExistingUpdate = false,
+): Promise<{ id: number; fields: string[] } | undefined> {
+  const now = Date.now()
+  if (target?.id != null) {
+    const id = target.id
+    return registeredAdoptionTable(owner, tableSpec.table).update(id, { ...patch, updatedAt: now }).then(count => {
+      if (requireExistingUpdate && !count) throw new Error('[adopt] 单例目标已不存在')
+      const written = { id, fields: Object.keys(patch) }
+      result.written.push(written)
+      return written
+    })
+  }
+  const row = createRow(now)
+  if (!row) return Dexie.Promise.resolve(undefined)
+  return registeredAdoptionTable(owner, tableSpec.table).add(row).then(id => {
+    result.written.push({ id: id as number, fields: Object.keys(patch) })
+    return undefined
+  })
 }
 
 async function adoptCollection(
