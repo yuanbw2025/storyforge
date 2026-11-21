@@ -1,5 +1,25 @@
 # Pending development and branch audit
 
+## November 21, 2026 · Merged scope and unfinished work
+
+Review from successful baseline `1040c4b6` through `b4f8bff0` initially enumerated **120 branches, 30 worktrees (including detached), and 7 with uncommitted status**; 32 heads are outside main ancestry. Stable patches/net files were compared. Only [PR #525](https://github.com/yuanbw2025/storyforge/pull/525), exact candidate comparison pending performance acceptance, was open. This task does not merge it.
+
+- Input sizing, natural-field saving, safe Markdown, retired history producers, developer-tool visibility and theme source branches have mainline patch equivalents and are not missing features. Chat planning has historical commits but no net files. Non-equivalent sources such as `fix/inspiration-template-config-059-20261120` require implementation review against #531/#556 rather than commit-count claims.
+- `feat/worldview-exact-diff-common-main-054-20261120` and related comparison branches await #525; merged pure target-conflict contract #543 is not comparison UI. Local contracts/variants including `feat/worldview-expansion-contract-a1-20261119`, `feat/power-authoring-contract-048-a1-20261119` and `fix/candidate-target-policy-064-20261120` remain for review.
+- `feat/work-cover-035-20261118` generation/recovery follow-ups remain unfinished; #508 only delivers repair proof/index/backup foundations. `feat/markdown-authoring-prototype-20261118` is not a mounted full editor; #515 covers five natural-field readers. `feat/luniang-3d-20261118` has four local commits and 6,303 untracked art/project entries: observations only, with no private assets published or acceptance claimed.
+
+| Branch with uncommitted status | Observed scope | Handling/limits |
+| --- | --- | --- |
+| `fix/codex-extraction-frontier-053-20261119` | Nine extraction UI/contract/registry/test entries | Uncommitted, not a completed extraction protocol |
+| `feat/codex-extraction-budget-v2-b01-20261121` | 31 extraction budget/contract/manual entries | Uncommitted; distinguish from merged capacity fixes |
+| `feat/history-world-archive-a0-061-20261121` | 28 history/export/contract/test entries | Pure contracts at head are merged; follow-ups do not establish an import writer |
+| `fix/bug-audit-20261117` | Six feedback/attachment/test entries | Merged source patches deduplicated; working state retained |
+| `fix/client-release-4.0.8-20261117` | Five old release-workflow/package/notes entries | v4.0.8 is published; local remnants are not another release |
+| `feat/community-works-library-20261029` | Two tool temporary/connection entries | Contents private, not features |
+| `feat/luniang-3d-20261118` | 6,303 untracked entries | Scope only; not committed, uploaded or cleaned |
+
+#561's partitioned history-author API and #562's workspace-backup-root/review contracts are merged foundations. Complete 061 UI/AI and production import writers remain future work. This task did not modify this development or author checkouts.
+
 ## 2026-11-20 · Feedback progress notifications (#541)
 
 Implementation has started for in-app “My feedback”: per-report opt-in, reviewed public progress, verified repair versions, offline catch-up, and read receipts. The client is merged through [PR #545](https://github.com/yuanbw2025/storyforge/pull/545), and the platform is deployed with live readback verified. Formal client packages still await release acceptance. Older reports without opt-in are not claimed automatically, and immediate delivery while the app is closed is not guaranteed.

@@ -1,5 +1,11 @@
 # Troubleshooting
 
+## November 21: feedback drafts, diagnostics and entry points
+
+Bug and Feature drafts independently retain follow-up choices and unknown requests. Success clears only the current draft; the next feedback starts without follow-up selected. A successful feature submission does not clear another pending bug's diagnostic preview. Retrying preserves the original ID, credential and request content. Based on #550.
+
+See [bug reports](/en/feedback/bug) for My feedback, progress alerts, offline catch-up and stopping follow-up. Explicitly disabled trace preferences remain respected; bounded local diagnostics do not enable automatic reporting. Ordinary settings hide developer logs/Harness tools while retaining connection tests, proxy, feedback and storage. The former onboarding link is now labelled Example library without changing its target. The Ember theme adds matching charcoal/engraved materials without changing work data. Based on #527/#532/#535/#545/#560.
+
 ## November 19: feedback forms and screenshot drafts
 
 Problems and suggestions provides complete Bug / Feature forms with screenshot selection/paste, preview and removal. Limits are three images, 2 MiB each and 4 MiB total. Check images for private manuscripts, keys and account data. Cancellation retains the page draft; failure/unknown outcomes retain the ID, text and image bytes. Check the receipt before explicitly retrying; no automatic resend under a new ID. Unsupported older backends block new fields/images rather than reporting success. Based on #488.

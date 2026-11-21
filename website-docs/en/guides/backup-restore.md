@@ -1,5 +1,11 @@
 # Saving, backup, and recovery
 
+## November 21: mainline database v16 / backup v20
+
+Cover-repair proof foundations add materialization indexes and same-work dual-source-run retention at database v16/backup v20, explicitly retaining v19 and existing legacy boundaries. Tasks referenced by cover assets/adoption history remain protected; full cover generation/UI is not delivered. Based on #508.
+
+**Released v4.0.8's fixed source remains database v14/backup v18.** Do not infer installer formats from mainline versions. Keep old backups and avoid opening upgraded databases with older programs; verify rollback in isolated copies. Root1/Root2 review contracts have no production import writer and add no restore operation. Based on #562; see [compatibility](/en/updates/compatibility).
+
 ## November 19: mainline database v15 / backup v19
 
 Mainline adds Work-owned cover draft, asset and adoption-history lifecycles: database v15 and complete backup export v19, accepting validated v14–v19 imports. Cover records/Blobs restore with their work; temporary response buffers are excluded. Source tasks referenced by cover history cannot be directly deleted. Explicit adoption remains required; this does not open a complete AI-cover feature. Based on #492.

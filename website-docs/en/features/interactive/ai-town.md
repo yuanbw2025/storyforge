@@ -5,6 +5,10 @@ lastVerified: 2026-11-13
 ---
 # Epilogue AI town
 
+## November 21: source-consultation readback
+
+When source consultation and saved-draft hydration finish in the same batch, newly loaded world-resource selections are no longer overwritten by old empty selections. Work switching/explicit loading still update the target form. Confirm saving after changing sources; frozen worlds and formal start remain unchanged. Based on [#519](https://github.com/yuanbw2025/storyforge/pull/519).
+
 ## November 13: saving, recovery and usage checks
 
 Runtime actions such as resident movement use the product's available-action entry points, rejecting mismatched destinations, permissions or versions. A generic event entry cannot replace these checks. Saved branches keep complete events and original session ownership; late results do not enter another save. Sources: [#316](https://github.com/yuanbw2025/storyforge/pull/316), [#326](https://github.com/yuanbw2025/storyforge/pull/326).

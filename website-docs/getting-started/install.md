@@ -1,27 +1,33 @@
 # 安装与启动
 
+## 11月21日：正式 v4.0.8 与 Arch 桌面包
+
+[v4.0.8](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.8) 已正式发布，新增 Arch Linux x86_64 桌面 `StoryForge-4.0.8-arch-x64.pkg.tar.zst`。下载并核对 `SHA256SUMS.txt` 后，在 Arch 使用 `sudo pacman -U StoryForge-4.0.8-arch-x64.pkg.tar.zst`，由系统确认安装；其他 Linux 可继续便携 ZIP。包内启动项、图标与应用内下载更新沿既有入口，首次 Arch 版本没有旧版覆盖升级结论，不代表全部 Wayland/GPU 配置已验收。
+
+Windows、两种 Mac、Android 和四平台便携包均在同一正式页。升级前保存并导出完整备份，覆盖安装并保留用户目录。v4.0.9 仍是草稿，反馈跟进等后续客户端内容等待正式发行。日期与固定源码见[兼容说明](/updates/compatibility)。
+
 ## 11月19日：主干安装行为与 Arch 准备
 
 主干将用户协议放在设置底部，默认折叠、可离线阅读，不再强制首启勾选；查看协议不自动开启上报。主题卡片和设置标题更紧凑。已发布 v4.0.7 的首启流程仍按该版本执行。依据 #467/#468。
 
 Arch Linux x86_64 桌面 `.pkg.tar.zst` 与 pacman 安装、更新验证已进入 v4.0.8 准备，当前尚未正式发行；v4.0.7 的 Linux 下载仍选择便携 ZIP。不要从草稿版本推断可下载包，见[版本兼容](/updates/compatibility)。依据 #476。
 
-从[最新版本下载页](https://github.com/yuanbw2025/storyforge/releases/latest)选择客户端安装包或便携 ZIP。Windows 和 Mac 可安装桌面客户端，Android 使用 APK；Linux 使用便携 ZIP。便携包自带运行环境和内置媒资，无需先安装开发环境。
+从[最新版本下载页](https://github.com/yuanbw2025/storyforge/releases/latest)选择客户端安装包或便携 ZIP。Windows 和 Mac 可安装桌面客户端，Android 使用 APK；Arch x86_64 可用桌面包，其他 Linux 使用便携 ZIP。便携包自带运行环境和内置媒资，无需先安装开发环境。
 
 ## Windows / macOS / Android 客户端 {#开发中的-windows-android-客户端}
 
-[v4.0.7](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.7) 已于 2026-11-13 正式发布，提供桌面安装器、Android APK 与四平台便携 ZIP。iOS 本次暂缓。从 v4.0.5 升级前请保存编辑并导出完整备份，详见[版本兼容](/updates/compatibility)。
+[v4.0.8](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.8) 已正式发布，提供桌面安装器、Arch 桌面包、Android APK 与四平台便携 ZIP。iOS 本次暂缓。从 v4.0.5 升级前请保存编辑并导出完整备份，详见[版本兼容](/updates/compatibility)。
 
 | 设备 | 下载文件 | 安装方式 |
 |---|---|---|
-| Windows x64 | `StoryForge-4.0.7-windows-x64-setup.exe` | 运行安装器 |
-| Mac，M 系列芯片 | `StoryForge-4.0.7-macos-arm64.dmg` | 将 StoryForge 拖入“应用程序” |
-| Mac，Intel 芯片 | `StoryForge-4.0.7-macos-x64.dmg` | 将 StoryForge 拖入“应用程序” |
-| Android | `StoryForge-4.0.7-android.apk` | 允许该下载来源安装应用，再确认安装 |
+| Windows x64 | `StoryForge-4.0.8-windows-x64-setup.exe` | 运行安装器 |
+| Mac，M 系列芯片 | `StoryForge-4.0.8-macos-arm64.dmg` | 将 StoryForge 拖入“应用程序” |
+| Mac，Intel 芯片 | `StoryForge-4.0.8-macos-x64.dmg` | 将 StoryForge 拖入“应用程序” |
+| Android | `StoryForge-4.0.8-android.apk` | 允许该下载来源安装应用，再确认安装 |
 
 Windows 安装器尚无发布者证书；macOS 使用本地签名，尚未通过 Apple 公证。系统可能要求明确允许打开。请先核对官方发行来源及校验值，不要关闭系统整体安全防护。
 
-首次启动请阅读并同意《用户协议》，其中包含个人信息与隐私保护条款；设置中可再次查阅。在“通用设置 → 问题与建议”可主动提交 Bug 或功能建议。
+用户协议位于设置底部，可展开离线阅读；查看协议不自动开启上报。在“通用设置 → 问题与建议”可主动提交 Bug 或功能建议。
 
 客户端启动后检查更新，设置中也提供“检查更新”“下载更新”“安装更新”。保存编辑并结束生成任务后再安装：Windows 运行安装器；Android 需系统确认；macOS 打开已下载并校验的 DMG，由您替换“应用程序”里的旧版。检查或下载失败不影响继续使用当前版本。
 

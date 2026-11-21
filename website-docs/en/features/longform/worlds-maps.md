@@ -1,5 +1,13 @@
 # Multiple worlds, locations, and maps
 
+## November 21: saving and reading five natural-world fields
+
+Longform World structure, Territorial dimensions, Landform distribution, Mountains/rivers and Regional climate display actual local-save status. Saved locally appears only after a committed database write and matching readback. New drafts, IME tail events and late acknowledgements cannot falsely signal success; failed saves retain text for retry. Based on #511.
+
+These five fields support safe Markdown reading with View source, Copy source and explicit source editing. Selection, double-click, links and horizontal scrolling remain reading actions. Raw HTML stays literal, images do not load, and code/tables scroll within the panel. Return to reading only after matching save acknowledgement. Other fields, chapter prose and a complete Markdown editor are outside this delivery. Based on #515.
+
+Even when edited state text returns to its original value, external changes retain the conflict decision until explicit reload, replace, conflict-free save or discard; metadata refresh cannot silently close editing. Based on #510.
+
 ## November 19: 2D atlas and three visual styles
 
 Choose Sketch map / Illustrated map / Continuous painting in the world map. Sketch uses paper and line symbols; Illustrated offers Chinese or European assets. Existing settings produce a bounded geometry candidate for review and explicit adoption. Styles share the layout without adding geographic facts. Based on #493/#495/#501.

@@ -1,5 +1,13 @@
 # Versions, upgrades, and data compatibility
 
+## November 21, 2026 · Released v4.0.8 and later mainline
+
+[v4.0.8](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.8) was published at **16:02 UTC on November 19, 2026 (00:02 Beijing time on November 20)**, tagged at `41a6e8652499e0805f44798fbd54ca39d3c51234`, using **database v14 / complete backup v18**. Twelve assets include the new Arch x86_64 desktop package, Windows, both Macs, Android, four portable ZIPs and checksum/update metadata. v4.0.9 remains an unpublished draft with no formal publication date.
+
+Mainline review reaches `b4f8bff0`; cover foundations now use **database v16 / backup v20**, not the fixed package formats above. Five-field saving/safe Markdown, preparation/story-core methods, reference capacity, feedback follow-up and pure history/workspace contracts are bounded by their actual merged scopes. Complete cover runner/UI, chapter-wide Markdown and exact candidate comparison remain unfinished.
+
+Keep original complete backups before upgrading. Older programs must not directly open upgraded databases. Reverting newer mainline requires isolated copies/compatible backups; map enhancement images need separate base-map packages. Older dated sections retain their historical facts.
+
 ## November 19, 2026 · Mainline v15/v19 and the v4.0.8 draft
 
 The latest formal public release remains v4.0.7 (fixed `869a9ba7`, database v14, backup v18). v4.0.8 and v4.0.6 are unpublished drafts with no formal publication dates. Mainline `a06d83ba` adds cover-storage foundations at database v15/backup v19, validating v14–v19 imports. Keep original-environment backups; older programs must not directly open upgraded databases.

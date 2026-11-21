@@ -1,5 +1,11 @@
 # Install and launch
 
+## November 21: released v4.0.8 and Arch desktop package
+
+[v4.0.8](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.8) adds the Arch Linux x86_64 desktop package `StoryForge-4.0.8-arch-x64.pkg.tar.zst`. Download and verify `SHA256SUMS.txt`, then run `sudo pacman -U StoryForge-4.0.8-arch-x64.pkg.tar.zst` on Arch and confirm installation. Other Linux systems retain portable ZIPs. Launcher/icons/in-app update downloads use existing entries. The first Arch release has no older Arch upgrade conclusion and does not establish support for every Wayland/GPU setup.
+
+Windows, both Macs, Android and four portable targets are on the same release page. Save and export a complete backup before replacing the app while retaining its user directory. v4.0.9 remains a draft; later client features such as feedback follow-up await formal publication. See [compatibility](/en/updates/compatibility) for dates and fixed source.
+
 ## November 19: mainline startup and Arch preparation
 
 Mainline places the offline-readable agreement in a collapsed settings footer instead of a mandatory first-launch checkbox. Viewing it does not enable reporting. Theme cards and headings are more compact. Released v4.0.7 retains its own startup flow. Based on #467/#468.
@@ -10,18 +16,18 @@ Choose an installer or portable ZIP from the [latest release page](https://githu
 
 ## Windows / macOS / Android clients {#windows-android-clients-in-development}
 
-[v4.0.7](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.7), published on November 13, 2026, provides desktop installers, an Android APK, and four portable ZIP targets. iOS is deferred. Before upgrading from v4.0.5, save edits and export a complete backup; see [version compatibility](/en/updates/compatibility).
+[v4.0.8](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.8) provides desktop installers, an Arch desktop package, an Android APK, and four portable ZIP targets. iOS is deferred. Before upgrading from v4.0.5, save edits and export a complete backup; see [version compatibility](/en/updates/compatibility).
 
 | Device | File | Installation |
 |---|---|---|
-| Windows x64 | `StoryForge-4.0.7-windows-x64-setup.exe` | Run the installer |
-| Apple Silicon Mac | `StoryForge-4.0.7-macos-arm64.dmg` | Drag StoryForge into Applications |
-| Intel Mac | `StoryForge-4.0.7-macos-x64.dmg` | Drag StoryForge into Applications |
-| Android | `StoryForge-4.0.7-android.apk` | Allow installation from the download source and confirm |
+| Windows x64 | `StoryForge-4.0.8-windows-x64-setup.exe` | Run the installer |
+| Apple Silicon Mac | `StoryForge-4.0.8-macos-arm64.dmg` | Drag StoryForge into Applications |
+| Intel Mac | `StoryForge-4.0.8-macos-x64.dmg` | Drag StoryForge into Applications |
+| Android | `StoryForge-4.0.8-android.apk` | Allow installation from the download source and confirm |
 
 The Windows installer has no publisher certificate; macOS uses an ad-hoc signature without Apple notarization. The operating system may ask you to explicitly allow opening. Obtain the package from the official release and verify its checksum first; do not disable system-wide protections.
 
-Read and accept the unified User Agreement at first launch; it includes privacy and information-handling terms and remains accessible in settings. Submit a problem or suggestion from General settings → Problems and suggestions.
+The User Agreement is available offline in the settings footer; viewing it does not enable reporting. Submit a problem or suggestion from General settings → Problems and suggestions.
 
 The clients check for updates after startup. Settings also provides Check for updates, Download update, and Install update. Save edits and finish generation first. Windows runs its installer; Android requires system confirmation; macOS opens the downloaded, verified DMG so you can replace the app in Applications. Failed checks or downloads leave the existing app available.
 

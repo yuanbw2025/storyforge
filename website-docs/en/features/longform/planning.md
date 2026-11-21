@@ -1,5 +1,13 @@
 # Longform: settings, characters, and story design
 
+## November 21: preparation actions and story core
+
+Choose organization, direction comparison, focused deepening or uncertain/defined creative positioning instead of always running full reverse planning. Edit and confirm a preparation version for the same work; it does not automatically rewrite worlds, characters, story core or synopsis. Full reverse planning retains single-/multi-world modes. Based on #526/#531.
+
+The seven story-core fields preview methods by field/operation. Panel, copilot and default calls use the same prompt-library configuration. Active author templates and per-run System/User edits enter actual requests; edited built-ins and user templates are retained. Old fixed requirement/candidate lengths are removed for story core, while actual service capacity, author output preferences and source permissions remain. This is not removal of budgets across all modules. Based on #556.
+
+The humanity page no longer duplicates history navigation. Use Worlds and settings → Historical timeline for formal history. Existing records/manual compatibility reads remain without automatic deletion. Outer longform navigation is narrower; the mobile drawer keeps its behavior. Based on #539/#540/#559.
+
 ## November 19: library, setting layout and input sizes
 
 The library displays an existing cover or placeholder, wraps long titles and groups secondary actions under More actions. Cover uploads are previews until explicitly saved for the current work; a complete AI-cover generation UI is not delivered here. Based on #480.
