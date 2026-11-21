@@ -1,5 +1,9 @@
 # Import existing fiction and references
 
+## November 21: complete-request preflight
+
+Document parsing checks the rendered prompt, category catalog, prior context and provider options against capacity, not only source length. Rejection retains original text and frozen recovery ranges. New range-planning/workspace-backup-root/import-review pure contracts are foundations without a production import writer, not a new World-only import entry. Based on #538/#562.
+
 ## November 19: original chapters and extraction recovery
 
 New original-work imports detect chapter headings line by line and retain prefaces and original character ranges. Without headings, continuous chunks remain the fallback; existing works are not rewritten. TXT/MD files remain limited to 5 MiB and originals to 5,000,000 UTF-16 characters. Successful extraction/chapter detection does not prove complete model analysis. Based on #479.

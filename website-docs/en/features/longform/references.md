@@ -1,5 +1,13 @@
 # Project references, work analysis, and retrieval
 
+## November 21: complete reference material and layered continuation
+
+Close reading, synthesis, character consolidation and original application retain complete source entries instead of hiding later evidence by early-block counts, short-string limits or similar sentence openings. Synthesis states its read scope. Old reports are not rewritten automatically; review candidates before choosing the active version. Based on #521.
+
+Reference analysis batches/layers dynamically against actual service capacity, preserving complete originals, leaf analyses, raw responses at each layer and source evidence. Known checkpoints can continue; incomplete work is explicitly marked. Former fixed source/output/chunk/version-count and automatic-reclamation limits are removed for this feature, not service-capacity limits. Unknown requests, permission/balance failures and stale results are not silently resent. Based on #558.
+
+**Reference analysis uses built-in code instructions and requires no reference-prompt setup.** The four templates introduced by #534 were withdrawn by #536. Historical author templates remain compatible with import/export but no longer drive reference analysis. Inspiration and the five preparation actions retain configurable templates. Review results against your own material; synthesis is not original prose.
+
 ## November 13: saving, recovery and usage checks
 
 Document parsing first saves a recoverable candidate; only author confirmation writes to its original work. Replacing a file, changing its source or switching works prevents old results from overwriting a new target. Reference analysis keeps private sources separate and does not automatically merge existing characters. Reloading/continuing a failed task restores its original attempt, raw reply and usage; insufficient balance or an unknown outcome does not trigger another paid send. Sources: [#307](https://github.com/yuanbw2025/storyforge/pull/307), [#386](https://github.com/yuanbw2025/storyforge/pull/386), [#403](https://github.com/yuanbw2025/storyforge/pull/403).

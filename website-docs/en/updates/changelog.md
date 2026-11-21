@@ -1,5 +1,16 @@
 # Changelog
 
+## November 21, 2026 · Save/read workflows, preparation and reference analysis
+
+- **Saving/reading:** five natural fields confirm committed local saves/readback and provide safe Markdown, view/copy source and explicit editing; state conflicts retain author decisions. See [natural fields](/en/features/longform/worlds-maps) (#510/#511/#515).
+- **Preparation/story core:** organization/comparison/deepening/positioning run independently with action-specific templates; seven story-core fields use active author templates without hidden appended methods. See [planning](/en/features/longform/planning), [prompts](/en/guides/using-prompts) (#526/#531/#556).
+- **References:** retain complete sources/later evidence, layer against actual service capacity and preserve checkpoints/raw responses. Final behavior uses built-in code methods; intermediate reference-template entries were withdrawn. See [references](/en/features/longform/references) (#521/#534/#536/#558).
+- **Maps/town:** procedural styles support independently selected reference-image connections and explicit enhancement adoption; isolated local caches require separate base-map packages for transfer. Town hydration preserves newly loaded source selection. See [maps](/en/features/longform/worlds-maps), [town](/en/features/interactive/ai-town) (#507/#517/#519).
+- **Entries/feedback:** narrower sidebar, retired duplicate humanity history, clearer example link and hidden ordinary developer tools; feedback follow-up and independent draft/unknown-request recovery; Ember materials. See [planning](/en/features/longform/planning), [troubleshooting](/en/guides/troubleshooting), [bugs](/en/feedback/bug) (#527/#532/#535/#539/#540/#545/#550/#559/#560).
+- **Release/foundations:** released v4.0.8 adds Arch desktop; v4.0.9 remains pending. Mainline cover foundations use database v16/backup v20. Import preflight, target conflicts, history-author APIs and backup review contracts are foundations only. See [installation](/en/getting-started/install), [backups](/en/guides/backup-restore), [compatibility](/en/updates/compatibility), [development](/en/updates/development-status) (#508/#538/#543/#561/#562).
+
+Review covers `1040c4b6…b4f8bff0`. Release sharding, strict types, capacity fixtures, manual initialization and measurement receipts are not additional product features (#509/#512/#514/#516/#520/#522/#523/#524/#530/#533/#537/#542/#548/#552/#554/#555/#557).
+
 ## 2026-11-20 · Feedback progress
 
 - Opt in per report and use “My feedback” to view acknowledgment, investigation, merge awaiting release, and verified repair versions. Notices are deduplicated, with explicit read receipts, offline catch-up, and withdrawal. See [Bug report](/en/feedback/bug) for use and retention limits; source: [#545](https://github.com/yuanbw2025/storyforge/pull/545).

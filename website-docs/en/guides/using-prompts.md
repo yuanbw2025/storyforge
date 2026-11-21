@@ -1,5 +1,11 @@
 # Using Prompts and creative methods
 
+## November 21: application templates versus method documents
+
+Organization, comparison, deepening and uncertain/defined positioning each have a prompt-library module; configuration/examples follow the current action. World/history/rule/style/research/entry methods live in editable built-in templates and respect the author's active version without hidden appended methods. Temporary System/User edits belong to the current session; recovered candidates use the frozen request. Based on #531/#556.
+
+User templates and activation remain intact. System checks still enforce protocol fields, permissions, sources and budgets. Reference analysis is an exception using built-in code methods; see [references](/en/features/longform/references). Copyable knowledge-base methods are not automatically installed as application templates.
+
 The knowledge base's Prompt materials are method assets to read, copy, and adapt. They are not the same entry as the app's default Prompts, model settings, or formal generation actions.
 
 ## Choose the current task
