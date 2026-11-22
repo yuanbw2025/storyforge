@@ -17,7 +17,7 @@ import { estimateTtrpgOpenRuntimeFallbackInputV1 } from './open-runtime-wire-bud
 import { computeKnownCostUsd } from '../ai/usage-log'
 import { executeFrozenFormalAIEntryV1 } from '../agent/formal-ai-entry'
 import { projectFrozenAgentSkillDefinitionV1 } from '../agent/execution-binding'
-import { parseStructuredOutputV1 } from '../agent/structured-output-pipeline'
+import { parseStructuredOutputV2 } from '../agent/structured-output-pipeline'
 import { parseCreativeArtifactV1, parseCreativeAssumptionV1, type CreativeArtifactIssueV1, type CreativeAssumptionV1 } from '../agent/creative-reliability'
 import { createCreativeIssueV1 } from '../agent/creative-execution'
 import { readInstanceAgentRunV1, appendAgentRunEventV1 } from '../agent/run/event-store'
@@ -103,9 +103,9 @@ function parseSemanticIntent(output: string, binding: {
   actorKey: string; intentKey: string; inputRevision: string; source: TtrpgOpenIntentV1['source']
   visibleRefs: Set<string>; visibleResources: Set<string>
 }): TtrpgOpenIntentV1 {
-  return parseStructuredOutputV1({ raw: output,
-    contract: { version: 1, schemaId: 'storyforge.ttrpg-open-semantic-intent', target: 'runtime-candidate', root: 'object',
-      maxChars: 120_000, allowedRootFields: ['goal', 'method', 'targetRefs', 'declaredResources', 'declaredAssumptions', 'requestedOutcome'],
+  return parseStructuredOutputV2({ raw: output,
+    contract: { version: 2, schemaId: 'storyforge.ttrpg-open-semantic-intent', target: 'runtime-candidate', root: 'object',
+      sizePolicy: 'task-content-unbounded', allowedRootFields: ['goal', 'method', 'targetRefs', 'declaredResources', 'declaredAssumptions', 'requestedOutcome'],
       requiredRootFields: ['goal', 'method', 'targetRefs', 'declaredResources', 'declaredAssumptions', 'requestedOutcome'] },
     parse: value => {
       const fields = value as Record<string, unknown>

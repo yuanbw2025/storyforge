@@ -8,6 +8,7 @@ import { readyOpenTtrpgSessionV1, openEnvelopeV1, OPEN_HUMAN_VIEWER } from '../h
 import { generateTtrpgOpenIntentCandidateV1, executeTtrpgOpenIntentRequestV1,
   readTtrpgOpenIntentCandidateV1, recoverTtrpgOpenRuntimeCandidateV1 } from '../../src/lib/ttrpg/open-intent-harness'
 import { prepareTtrpgOpenIntentInputV1 } from '../../src/lib/ttrpg/open-intent-input'
+import { parseTtrpgOpenIntentV1 } from '../../src/lib/ttrpg/open-intent'
 import { startTtrpgOpenEpochV1, startTtrpgOpenIntentCandidateOperationV1, changeTtrpgSafetyStatus } from '../../src/lib/ttrpg/runtime-commands'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
 import { readInstanceAgentRunV1 } from '../../src/lib/agent/run/event-store'
@@ -50,11 +51,18 @@ describe('R-TTRPGOPEN1 governed one-send intent transport and recoverable candid
     const {candidateHash,...body}=generated.candidate
     expect(await hashCanonicalValue(body)).toBe(candidateHash)
     expect(await readAgentRunArtifactExactV1({projectId:fixture.scope.projectId,artifactKind:'raw-response',contentHash:generated.candidate.rawResponseHash})).toBe(raw)
-    // This patch preserves retained bytes, not the old semantic parser/budget
-    // policy. A large invalid/non-admissible result must still never act.
-    expect(generated.candidate.intent).toBeNull();expect(generated.candidate.artifact.status).toBe('blocked')
-    expect(generated.candidate.artifact.issues.some(i=>i.code==='ttrpg-open-intent-protocol')).toBe(true)
-    expect(generated.candidate.artifact.validFragments).toEqual([]);expect(generated.candidate.artifact.rejectedFragments).toEqual([])
+    // The parser accepts complete valid JSON regardless of whitespace size.
+    // This fixture's separate explicit 800-token allowance still blocks action.
+    expect(generated.candidate.artifact.status).toBe('blocked')
+    expect(generated.candidate.artifact.issues.some(i=>i.code==='ttrpg-open-intent-protocol')).toBe(kind==='invalid-text')
+    if(kind==='invalid-text') {
+      expect(generated.candidate.intent).toBeNull();expect(generated.candidate.artifact.validFragments).toEqual([])
+    } else {
+      expect(generated.candidate.intent?.goal).toBe('【JSON原答首】调查河港')
+      expect(generated.candidate.artifact.validFragments).toHaveLength(1)
+      expect(generated.candidate.artifact.issues.some(i=>i.code==='ttrpg-open-intent-budget')).toBe(true)
+    }
+    expect(generated.candidate.artifact.rejectedFragments).toEqual([])
     await expect(readTtrpgOpenIntentCandidateV1({...read,viewerKey:'viewer.not-the-author'})).rejects.toThrow()
     const after=await readProductRuntimeState(fixture.sessionId)
     expect(after.entities).toEqual(before.entities);expect(after.ttrpg!.checks).toEqual(before.ttrpg!.checks)
@@ -67,6 +75,52 @@ describe('R-TTRPGOPEN1 governed one-send intent transport and recoverable candid
     expect(runAI).toHaveBeenCalledOnce()
     const snapshot=await readInstanceAgentRunV1(fixture.scope,generated.prepared.runId)
     expect(snapshot.events.some(e=>e.type==='confirmation.recorded'||e.type==='runtime.candidate.adopted')).toBe(false)
+    expect((await readProductRuntimeState(fixture.sessionId)).ttrpg!.openRun!.operations).toEqual([])
+  })
+
+  it('keeps complete long semantic fields and every declared reference and assumption without changing old valid values', () => {
+    const references=Array.from({length:17},(_,index)=>`known.${index}`)
+    const text='完整行动说明'.repeat(500)+'【尾部条件】'
+    const value={intentKey:'intent.large',clarificationThreadKey:'intent.large',actorKey:'hero',
+      ...JSON.parse(output),goal:text,method:text,requestedOutcome:text,targetRefs:references,declaredResources:references,
+      declaredAssumptions:Array.from({length:101},(_,index)=>`${index}:${text}`),source:'player',inputRevision:'a'.repeat(64)}
+    const parsed=parseTtrpgOpenIntentV1(value)
+    expect(parsed).toEqual(value);expect(parseTtrpgOpenIntentV1(JSON.stringify(parsed))).toEqual(value)
+    expect(()=>parseTtrpgOpenIntentV1({...value,targetRefs:[...references,references[0]]})).toThrow('重复')
+    expect(()=>parseTtrpgOpenIntentV1({...value,declaredAssumptions:[...value.declaredAssumptions,123]})).toThrow('字符串')
+    expect(()=>parseTtrpgOpenIntentV1({...value,unexpected:true})).toThrow('字段不精确')
+    expect(()=>parseTtrpgOpenIntentV1({...value,requestedOutcome:123})).toThrow('字符串')
+  })
+
+  it('retains long semantic content and assumptions through the actual harness without granting action beyond its allowance',async()=>{
+    const {fixture,input,resume}=await setup()
+    const fields={...JSON.parse(output),goal:'完整首部'+('行动背景'.repeat(31_000))+'完整尾部',
+      declaredAssumptions:Array.from({length:101},(_,index)=>`猜测${index}:${'未证实'.repeat(700)}`)}
+    const raw=JSON.stringify(fields),runAI=vi.fn(async()=>raw)
+    const generated=await generateTtrpgOpenIntentCandidateV1({...input,runAI})
+    expect(generated.candidate.intent?.goal).toBe(fields.goal)
+    expect(generated.candidate.intent?.declaredAssumptions).toEqual(fields.declaredAssumptions)
+    expect(generated.candidate.artifact.assumptions.map(row=>row.text)).toEqual(fields.declaredAssumptions)
+    expect(generated.candidate.artifact.issues.some(issue=>issue.code==='ttrpg-open-intent-protocol')).toBe(false)
+    expect(generated.candidate.artifact.issues.some(issue=>issue.code==='ttrpg-open-intent-budget')).toBe(true)
+    expect(generated.candidate.artifact.originalText).toBe(raw)
+    db.close();await db.open()
+    expect(await readTtrpgOpenIntentCandidateV1(resume(generated.prepared))).toEqual(generated.candidate)
+    expect(await recoverTtrpgOpenRuntimeCandidateV1(resume(generated.prepared))).toEqual(generated.candidate)
+    expect(await executeTtrpgOpenIntentRequestV1({...resume(generated.prepared),runAI})).toEqual({status:'not-sent'})
+    expect(runAI).toHaveBeenCalledOnce()
+    expect((await readProductRuntimeState(fixture.sessionId)).ttrpg!.openRun!.operations).toEqual([])
+  })
+
+  it.each(['targetRefs','declaredResources'] as const)('rejects a forbidden %s tail in complete long JSON and preserves the original',async field=>{
+    const {fixture,input}=await setup()
+    const raw=JSON.stringify({...JSON.parse(output),goal:'行动背景'.repeat(31_000)+'完整尾部',
+      [field]:['secret.unread-tail']})
+    const runAI=vi.fn(async()=>raw),generated=await generateTtrpgOpenIntentCandidateV1({...input,runAI})
+    expect(generated.candidate.intent).toBeNull()
+    expect(generated.candidate.artifact.issues.some(issue=>issue.code==='ttrpg-open-intent-protocol')).toBe(true)
+    expect(generated.candidate.artifact.originalText).toBe(raw)
+    expect(runAI).toHaveBeenCalledOnce()
     expect((await readProductRuntimeState(fixture.sessionId)).ttrpg!.openRun!.operations).toEqual([])
   })
 
