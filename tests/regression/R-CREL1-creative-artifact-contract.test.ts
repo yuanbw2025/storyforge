@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { runCreativeExecutionV1 } from '../../src/lib/agent/creative-execution'
+import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
+import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import {
   creativeArtifactCanAdoptV1,
   parseCreativeArtifactV1,
@@ -58,6 +61,60 @@ function artifact(overrides: Partial<CreativeArtifactV1> = {}): CreativeArtifact
 }
 
 describe('R-CREL1 · creative artifact contract', () => {
+  it('preserves long content and fragments without changing the artifact format', async () => {
+    const text = '长稿'.repeat(60_001) + '完整尾标'
+    const fragment = '片段'.repeat(20_001) + '片段尾标'
+    const original = artifact()
+    expect(parseCreativeArtifactV1(original)).toEqual(original)
+    expect(await hashCanonicalValue(parseCreativeArtifactV1(original))).toBe(await hashCanonicalValue(original))
+    const parsed = parseCreativeArtifactV1(artifact({
+      originalText: text,
+      editableText: text,
+      validFragments: [{ version: 1, id: 'long-fragment', path: '$', text: fragment, status: 'valid', issueCodes: [] }],
+    }))
+    const restored = parseCreativeArtifactV1(JSON.parse(JSON.stringify(parsed)))
+    expect(restored.originalText).toBe(text)
+    expect(restored.editableText).toBe(text)
+    expect(restored.validFragments[0].text).toBe(fragment)
+    expect(restored.version).toBe(1)
+    expect(restored.policyVersion).toBe('creative-reliability-v1')
+  })
+
+  it('retains the complete physical response through real creative execution and artifact readback', async () => {
+    const raw = '稿'.repeat(200_001) + '执行完整尾标'
+    let calls = 0
+    const result = await runCreativeExecutionV1({
+      initialMessages: [{ role: 'user', content: 'isolated long visible-response fixture' }],
+      runRaw: async () => {
+        calls += 1
+        return { output: raw, durationMs: 0 }
+      },
+      parse: text => ({ status: 'ready', output: text, editableText: text,
+        validFragments: [{ version: 1, id: 'body', path: '$', text, status: 'valid', issueCodes: [] }],
+        rejectedFragments: [], issues: [], assumptions: [] }),
+      buildRepairMessages: () => { throw new Error('ready fixture must not request repair') },
+      budget: new AgentTeamBudgetTracker('expanded'),
+      callLabel: 'long visible response', maxOutputTokens: 1024, qualityMode: 'economy',
+      modelIdentity: { provider: 'fixture', model: 'long-visible-fixture' },
+    })
+    expect(calls).toBe(1)
+    expect(result.output).toBe(raw)
+    expect(result.draft).toBe(raw)
+    expect(result.artifact.originalText).toBe(raw)
+    expect(result.artifact.editableText).toBe(raw)
+    expect(result.artifact.validFragments[0].text).toBe(raw)
+    expect(result.artifact.callEvidence[0].outputHash).toBe(await hashCanonicalValue(raw))
+    expect(parseCreativeArtifactV1(JSON.parse(JSON.stringify(result.artifact)))).toEqual(result.artifact)
+  })
+
+  it('still rejects content type, envelope, source identity and call hash corruption', () => {
+    expect(() => parseCreativeArtifactV1({ ...artifact(), originalText: 123 })).toThrow('必须是字符串')
+    expect(() => parseCreativeArtifactV1({ ...artifact(), editableText: null })).toThrow('必须是字符串')
+    expect(() => parseCreativeArtifactV1({ ...artifact(), unexpected: true })).toThrow('字段必须严格')
+    expect(() => parseCreativeArtifactV1(artifact({ canonEvidenceRefs: ['same-source', 'same-source'] }))).toThrow('重复')
+    expect(() => parseCreativeArtifactV1(artifact({ callEvidence: [{ ...artifact().callEvidence[0], outputHash: 'not-a-hash' }] }))).toThrow('outputHash')
+  })
+
   it('accepts ready and warning artifacts while keeping manual repair non-adoptable', () => {
     expect(parseCreativeArtifactV1(artifact()).status).toBe('ready')
     expect(creativeArtifactCanAdoptV1(artifact())).toBe(true)

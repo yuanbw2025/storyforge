@@ -39,7 +39,6 @@ export interface CreativeExecutionResultV1<TOutput> {
   artifact: CreativeArtifactV1
 }
 
-const MAX_ARTIFACT_TEXT_CHARS = 120_000
 
 export function createCreativeIssueV1(input: {
   code: string
@@ -286,8 +285,8 @@ export async function runCreativeExecutionV1<TOutput>(input: {
     policyVersion: 'creative-reliability-v1',
     status: outcome.status,
     qualityMode: input.qualityMode,
-    originalText: first.output.slice(0, MAX_ARTIFACT_TEXT_CHARS),
-    editableText: outcome.editableText.slice(0, MAX_ARTIFACT_TEXT_CHARS),
+    originalText: first.output,
+    editableText: outcome.editableText,
     validFragments: outcome.validFragments,
     rejectedFragments: outcome.rejectedFragments,
     issues: outcome.issues,

@@ -791,9 +791,7 @@ export function parseStructuredOutputRunEvidenceV1(value: unknown): StructuredOu
       || attempt.target !== value.target
       || !['ready', 'usable-with-warnings', 'manual-repair', 'blocked'].includes(attempt.status as string)
       || typeof attempt.originalText !== 'string'
-      || attempt.originalText.length > 240_000
       || typeof attempt.normalizedText !== 'string'
-      || attempt.normalizedText.length > 240_000
       || !Array.isArray(attempt.normalizationSteps)
       || !Array.isArray(attempt.issues)
     ) throw new Error(`结构化输出运行证据 attempts[${index}].evidence 无效。`)
