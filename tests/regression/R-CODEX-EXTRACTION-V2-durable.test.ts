@@ -6,9 +6,11 @@ import { assertRecordInScope, stampNewRecord } from '../../src/lib/workspace/sco
 import type { AIConfig, CodexCategory } from '../../src/lib/types'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { usePromptStore } from '../../src/stores/prompt'
-import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { addCurrentWorkFixtureV1, seedCurrentWorkspace } from '../helpers/current-workspace'
 import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
+import * as codexPrompts from '../../src/lib/ai/adapters/structured-extract-adapter'
+import * as runHashes from '../../src/lib/agent/run/hash'
 import * as artifacts from '../../src/lib/memory/artifact-store'
 import * as events from '../../src/lib/agent/run/event-store'
 import * as adoption from '../../src/lib/registry/adopt'
@@ -338,7 +340,12 @@ describe.sequential('B01 C09–C18/C21/C23/C24/C29/C30 · exact durable chain', 
     }
     const generated = await generateCodexExtractionCandidateV2({ ...f, request })
     expect(posts).toHaveLength(3)
-    expect(JSON.parse(posts[2]).messages.some((message: { content: string }) => message.content.startsWith('【本次实际发送的同Root已验证草稿，非Canon】') && message.content.includes('北辰联邦'))).toBe(true)
+    const sentMessages = JSON.parse(posts[2]).messages as Array<{ role: string; content: string }>
+    expect(sentMessages.filter(message => message.role === 'system')).toHaveLength(1)
+    expect(sentMessages[0].role).toBe('system')
+    const progressHeader = '【本次实际发送的同Root已验证草稿，非Canon】\n'
+    const sentProgress = JSON.parse(sentMessages[0].content.slice(sentMessages[0].content.indexOf(progressHeader) + progressHeader.length).split('\n\n')[0])
+    expect(sentProgress.names).toContain('北辰联邦'); expect(sentProgress.rootHash).toBe(generated.candidate.rootHash)
     const read = await readCodexExtractionStateV2({ scope: f.scope, runId: generated.snapshot.run.id })
     expect(read.materials.root.productionPolicy?.version).toBe('codex-production-source-units-and-drafts-v1')
     expect(read.plan.frames.map(frame => original.slice(frame.startChar, frame.endChar)).join('')).toBe(original)
@@ -367,8 +374,12 @@ describe.sequential('B01 C09–C18/C21/C23/C24/C29/C30 · exact durable chain', 
     })))
     const generated = await generateCodexExtractionCandidateV2({ ...f, request: { ...f.request, sourceText: first + '\n\n' + second } })
     expect(posts).toHaveLength(3)
-    const sent = JSON.parse(posts[2]).messages.find((message: { content: string }) => message.content.startsWith('【本次实际发送的同Root已验证草稿，非Canon】'))
-    expect(sent.content).toContain('北辰联邦'); expect(sent.content).toContain('南辰共和国')
+    const sentMessages = JSON.parse(posts[2]).messages as Array<{ role: string; content: string }>
+    expect(sentMessages.filter(message => message.role === 'system')).toHaveLength(1)
+    expect(sentMessages[0].role).toBe('system')
+    const progressHeader = '【本次实际发送的同Root已验证草稿，非Canon】\n'
+    const sentProgress = JSON.parse(sentMessages[0].content.slice(sentMessages[0].content.indexOf(progressHeader) + progressHeader.length).split('\n\n')[0])
+    expect(sentProgress.names).toEqual(names); expect(sentProgress.rootHash).toBe(generated.candidate.rootHash)
     const read = await readCodexExtractionStateV2({ scope: f.scope, runId: generated.snapshot.run.id })
     expect(read.candidate?.entries).toEqual(generated.candidate.entries)
     expect(read.candidate?.entries.map(row => row.name)).toEqual(names)
@@ -404,7 +415,8 @@ describe.sequential('B01 C09–C18/C21/C23/C24/C29/C30 · exact durable chain', 
 
   it('keeps absent-policy Root/hash/raw readable but exposes attention instead of resplitting a paid legacy incomplete answer', async () => {
     const f = await seed(), posts = http('[{"name":"unfinished', 'length'), original = rootContracts.createCodexExtractionRootV2
-    const legacy = vi.spyOn(rootContracts, 'createCodexExtractionRootV2').mockImplementation(value => original({ ...value, newProductionPolicy: false }))
+    const legacy = vi.spyOn(rootContracts, 'createCodexExtractionRootV2').mockImplementation(async value => original({ ...value, newProductionPolicy: false,
+      promptTemplateHash: await hashCanonicalValue({ protocol: 'codex-extract-v4', template: codexPrompts.readCodexExtractPromptTemplateSnapshotV1() }) }))
     await expect(generateCodexExtractionCandidateV2(f)).rejects.toThrow('旧提取策略')
     legacy.mockRestore()
     const runId = await soleRun(), before = await readCodexExtractionStateV2({ scope: f.scope, runId })
@@ -441,6 +453,98 @@ describe.sequential('B01 C09–C18/C21/C23/C24/C29/C30 · exact durable chain', 
       codexExtractionProgressV2: { ...context.codexExtractionProgressV2, verifiedResultHashes: [read.responses[0].ref.contentHash] } } })).rejects.toThrow()
     await expect(registeredContext.captureRegisteredContextSourceV2({ sourceKey: 'codexExtractionProgressV2', context: { ...context,
       codexExtractionProgressV2: { ...context.codexExtractionProgressV2, verifiedResultHashes: [read.results[0].ref.contentHash, read.results[0].ref.contentHash] } } })).rejects.toThrow()
+  })
+
+  it.each(['unchanged', 'category', 'schema', 'activeWork', 'cancel'] as const)('rechecks the specific post-manifest persistence await before dispatch (%s)', async mode => {
+    const f = await seed(), posts = http(), controller = new AbortController()
+    const other = mode === 'activeWork' ? await addCurrentWorkFixtureV1({ projectId: f.scope.projectId,
+      worldId: f.scope.worldId!, create: { title: '另一真实作品', kind: 'novel', novelProfile: 'long' } }) : null
+    const originalSave = artifacts.recordAgentRunArtifactV1
+    let seamReached = false
+    const mutation = vi.spyOn(artifacts, 'recordAgentRunArtifactV1').mockImplementation(async value => {
+      const saved = await originalSave(value)
+      if (!seamReached && value.artifactKind === 'context-manifest') {
+        seamReached = true
+        if (mode === 'category') await db.codexCategories.update(f.request.categoryId, { name: '作者刚修改的分类' })
+        if (mode === 'schema') await db.codexCategories.update(f.request.categoryId, {
+          fieldSchema: JSON.stringify([{ key: 'fresh', label: '刚确认的新字段', type: 'text' }]) })
+        if (mode === 'activeWork') await db.projects.update(f.scope.projectId, { activeWorkId: other!.id! })
+        if (mode === 'cancel') controller.abort()
+      }
+      return saved
+    })
+    let failure: unknown
+    try { await generateCodexExtractionCandidateV2({ ...f, signal: controller.signal }) } catch (error) { failure = error }
+    mutation.mockRestore()
+    expect(seamReached).toBe(true)
+    const read = await readCodexExtractionStateV2({ scope: f.scope, runId: await soleRun() })
+    expect(read.materials.source.rawText).toBe(sourceText)
+    expect(read.materials.root.productionPolicy).toBeDefined()
+    expect(read.plan.frames).toHaveLength(1)
+    expect(await db.codexEntries.count()).toBe(0)
+    if (mode === 'unchanged') { expect(failure).toBeUndefined(); expect(posts).toHaveLength(1); expect(read.candidate).not.toBeNull() }
+    else { expect(posts, 'No mock POST after the specifically tested post-manifest stale/cancel mutation').toHaveLength(0); expect(failure).toBeDefined() }
+  })
+
+  it.each(['pending', 'unknown', 'complete'] as const)('keeps a saved true-policy v4 frozen wire immutable after the v5 envelope change (%s)', async mode => {
+    const f = await seed(), originalHash = runHashes.hashCanonicalValue
+    const originalRender = codexPrompts.buildCodexExtractPromptFromRegisteredContextV2
+    // Historical fixture admission only. Never rewrite an already stored Root,
+    // plan or wire: freeze the v4 protocol and its original four-message shape.
+    const oldProtocol = vi.spyOn(runHashes, 'hashCanonicalValue').mockImplementation(value => {
+      const body = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
+      return originalHash(body?.protocol === 'codex-extract-v5' && 'template' in body ? { ...body, protocol: 'codex-extract-v4' } : value)
+    })
+    const oldRender = vi.spyOn(codexPrompts, 'buildCodexExtractPromptFromRegisteredContextV2').mockImplementation(input => {
+      const legacy = originalRender({ ...input, productionPolicy: false })
+      if (!input.productionPolicy) return legacy
+      expect(input.progressContext).toBeUndefined()
+      return [...legacy.slice(0, -1), { role: 'system' as const, content: "本次新Root原文单元/草稿聚合策略：已有Canon禁止重建或覆盖；同Root已验证草稿不是Canon。summary可一句概括，description按来源完整整理事实、条件、例外和禁例，不以概括代替详细整理，不设默认篇幅或字数配额，不增加来源外内容。后文同名新事实须继续输出，name使用本段逐字名称，或本次实际发送且可追溯到原文的已验证草稿原名；指代不清返回空数组并保留原答供核对。新事实引文仍只能来自本段原文。text/longtext字段保留各段完整表述和条件，不以字符串不同断言语义冲突；number/select单值不同时保原答等待作者处理，禁止覆盖。标签与引文没有软件条数或长度配额。" },
+        { role: 'system' as const, content: "输出严格JSON数组；字段与类型、provenance和importance约束保持。每条所给引文必须逐字来自当前待拆分原文；名称必须来自当前原文或本次实际发送的同Root已验证草稿。不要借用登记Canon或其它运行名称。tags关闭时必须[]，开启时按内容需要；引文可为空或省略，无软件长度/数量配额。信息不足不编造，不以省略尾部冒充覆盖完成。" }]
+    })
+    const posts = mode === 'unknown' ? [] as string[] : http()
+    if (mode === 'unknown') vi.stubGlobal('fetch', vi.fn(withSyntheticCustomMetadata(async (_input, init) => {
+      posts.push(String(init?.body)); throw new TypeError('synthetic v4 HTTP result unknown')
+    })))
+    const originalSave = artifacts.recordAgentRunArtifactV1
+    const stop = vi.spyOn(artifacts, 'recordAgentRunArtifactV1').mockImplementation(async value => {
+      if (mode === 'pending' && value.artifactKind === 'context-manifest') throw new Error('freeze before first v4 dispatch')
+      if (mode === 'complete' && JSON.parse(value.content).version === 'codex-call-usage-v2') throw new Error('freeze v4 raw before usage')
+      return originalSave(value)
+    })
+    try { await expect(generateCodexExtractionCandidateV2(f)).rejects.toThrow() }
+    finally { stop.mockRestore(); oldRender.mockRestore(); oldProtocol.mockRestore() }
+    const runId = await soleRun(), before = await readCodexExtractionStateV2({ scope: f.scope, runId })
+    expect(before.materials.root.productionPolicy).toBeDefined()
+    if (mode === 'unknown') { expect(before.responses).toHaveLength(1); expect(before.responses[0].body.response.completion).toBe('unknown') }
+    expect(before.materials.root.promptTemplateHash).toBe(await originalHash({ protocol: 'codex-extract-v4', template: codexPrompts.readCodexExtractPromptTemplateSnapshotV1() }))
+    const frozenHashes = new Set([before.rootRef.contentHash, before.sourceRef.contentHash, before.baselineRef.contentHash,
+      before.planRef.contentHash, ...before.plan.frames.flatMap(frame => [frame.frameHash, frame.wireFrameHash]), ...before.responses.map(row => row.ref.contentHash)])
+    const frozenBytes = async () => (await db.agentRunArtifacts.where('projectId').equals(f.scope.projectId).toArray())
+      .filter(row => frozenHashes.has(row.contentHash)).map(row => ({ contentHash: row.contentHash, content: row.content, byteLength: row.byteLength }))
+    const bytesBefore = await frozenBytes()
+    const wire = (await db.agentRunArtifacts.where('projectId').equals(f.scope.projectId).toArray())
+      .find(row => row.contentHash === before.plan.frames[0].wireFrameHash)!
+    if (typeof wire.content !== 'string') throw new Error('Historical v4 wire fixture must preserve its serialized request')
+    expect(JSON.parse(wire.content).messages.map((message: { role: string }) => message.role)).toEqual(['system', 'user', 'system', 'system'])
+    const currentRenderer = vi.spyOn(codexPrompts, 'buildCodexExtractPromptFromRegisteredContextV2')
+    if (mode === 'complete') {
+      const recovered = await resumeCodexExtractionCandidateV2({ scope: f.scope, runId })
+      const current = await readCodexExtractionStateV2({ scope: f.scope, runId })
+      await saveCodexExtractionAuthorDraftV2({ scope: f.scope, runId, expectedLastSequence: current.snapshot.projection.lastSequence,
+        entries: [{ ...recovered.candidate.entries[0], description: '作者在保存原答基础上明确修订。' }], selectedIndexes: [0] })
+      await adoptCodexExtractionCandidateV2({ scope: f.scope, runId, selectedIndexes: [0] })
+      expect(await db.codexEntries.count()).toBe(1)
+    } else {
+      await expect(resumeCodexExtractionCandidateV2({ scope: f.scope, runId, aiConfig: f.aiConfig }))
+        .rejects.toThrow(mode === 'pending' ? '模板已变化' : '已保存原答未可靠完成')
+      expect(await db.codexEntries.count()).toBe(0)
+    }
+    const after = await readCodexExtractionStateV2({ scope: f.scope, runId })
+    expect(after.materials.root).toEqual(before.materials.root)
+    expect(after.plan).toEqual(before.plan); expect(after.responses).toEqual(before.responses)
+    expect(await frozenBytes()).toEqual(bytesBefore)
+    expect(currentRenderer).not.toHaveBeenCalled(); expect(posts).toHaveLength(mode === 'pending' ? 0 : 1)
   })
 
   it('recovers a saved complete paid answer and adopts it under frozen evidence after the active template changes, with zero new POST', async () => {

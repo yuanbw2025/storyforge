@@ -1,3 +1,4 @@
+import { usePromptStore } from '../../src/stores/prompt'
 import { describe, expect, it, vi } from 'vitest'
 import * as workspaceScope from '../../src/lib/workspace/scope'
 import * as runEvents from '../../src/lib/agent/run/event-store'
@@ -12,7 +13,7 @@ import { freezeFormalAIEntryBindingV1 } from '../../src/lib/agent/formal-ai-entr
 import { parseAgentRunContractV1, parseAgentRunContractV2, parseAgentRunContractV3, readRunBudgetSemanticsV2 } from '../../src/lib/agent/run/contract'
 import { canonicalStringify, hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { CONTEXT_SOURCES } from '../../src/lib/registry/context-sources'
-import { codexEntryTransportOptionsV2, parseCodexAuthorDraftV2, parseCodexEntriesStrictV1, parseCodexEntriesStrictV2 } from '../../src/lib/ai/adapters/structured-extract-adapter'
+import { buildCodexExtractPromptFromRegisteredContextV2, codexEntryTransportOptionsV2, parseCodexAuthorDraftV2, parseCodexEntriesStrictV1, parseCodexEntriesStrictV2 } from '../../src/lib/ai/adapters/structured-extract-adapter'
 
 const hash = 'a'.repeat(64)
 const allocation = { version: 'task-budget-allocation-v2' as const, mode: 'adaptive-plan' as const, planHash: hash,
@@ -235,6 +236,40 @@ describe('B01 C06/C07/C08/C09/C16/C17/C22/C25/C26/C30 · separate existing diale
     const options = codexEntryTransportOptionsV2({ provider: 'agnes', model: 'agnes-2.5-flash' }, [], { operation: 'extract', supplementTags: true })
     expect(JSON.stringify(options)).not.toContain('maxLength')
     expect(JSON.stringify(options)).not.toContain('maxItems')
+  })
+
+  it('puts the complete production contract in one effective system message without moving original material or weakening validation', async () => {
+    const original = usePromptStore.getState().templates
+    const authorSystem = '作者自定义系统全文：不能改变这个世界的基础规则。'
+    const sourceText = '雾钟矿的合法采集量每队每日10枚，残片同样计数。\n'.repeat(600) + '原文尾部：朔日停止回放。'
+    const progressContext = '{"name":"雾钟矿","verified":"同Root已验证未采用草稿"}'
+    try {
+      usePromptStore.setState({ templates: [{ id: 987654, scope: 'user', moduleKey: 'codex.extract', promptType: 'generate',
+        name: 'one-system real-provider regression', description: '', systemPrompt: authorSystem,
+        userPromptTemplate: '【待拆分内容】\n{{sourceText}}', variables: ['sourceText'], isActive: true, createdAt: 1, updatedAt: 1 }] })
+      const messages = buildCodexExtractPromptFromRegisteredContextV2({ sourceText, baselineContext: '{}', supplementTags: true,
+        progressContext, productionPolicy: true })
+      const effectiveSystems = messages.filter(message => message.role === 'system')
+      expect(effectiveSystems).toHaveLength(1)
+      expect(messages[0]).toBe(effectiveSystems[0])
+      // A provider retaining its first OR last system sees exactly this same complete contract.
+      const effective = effectiveSystems[0].content
+      expect(effective).toContain(authorSystem)
+      expect(effective).toContain(progressContext)
+      expect(effective).toContain('name/icon/summary/description/fields/tags/importance/provenance')
+      expect(effective).toContain('description 完整整理该实体在原文所有位置的事实')
+      expect(effective).toContain('无依据省略该 key')
+      expect(messages.filter(message => message.role === 'user')).toEqual([{ role: 'user', content: `【待拆分内容】\n${sourceText}` }])
+      const oldRoot = buildCodexExtractPromptFromRegisteredContextV2({ sourceText, baselineContext: '{}', supplementTags: true })
+      expect(oldRoot[0]).toEqual({ role: 'system', content: authorSystem })
+      expect(await hashCanonicalValue(oldRoot)).toBe('2272b40e13d13292489f8a8434afadd8cc67e1f3d3a0125c53338be4e3991300')
+      expect(buildCodexExtractPromptFromRegisteredContextV2({ sourceText, baselineContext: '{}', supplementTags: true, productionPolicy: false })).toEqual(oldRoot)
+      expect(oldRoot[oldRoot.length - 1].content).toContain('task-request-v2 原文提取合同')
+      const observedInvalidShape = [{ name: '雾钟矿', category: '矿物灵材', fields: { rank: '凡品' }, tags: [],
+        provenance: [{ type: 'excerpt', value: '雾钟矿的合法采集量每队每日10枚，残片同样计数。' }] }]
+      expect(() => parseCodexEntriesStrictV2(JSON.stringify(observedInvalidShape), [],
+        { operation: 'extract', sourceText, supplementTags: true })).toThrow()
+    } finally { usePromptStore.setState({ templates: original }) }
   })
 
   it('grounds model names and supplied quotes in sent original range, retaining schema/finite/ref/type rejection', () => {

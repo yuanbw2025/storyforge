@@ -69,6 +69,30 @@ describe('B01 frozen source units and verified sameRoot draft projection', () =>
     expect(parseCodexEntriesStrictV2(JSON.stringify([next]), [], { operation: 'extract', sourceText: current, verifiedProgressNames })).toEqual([next])
     expect(() => parseCodexEntriesStrictV2(JSON.stringify([next]), [], { operation: 'extract', sourceText: current })).toThrow('名称')
     expect(verifiedProgressNames).toEqual(['北辰联邦', '南辰共和国'])
+    const sentProgress = '【本次实际发送的同Root已验证草稿，非Canon】\n' + rawText
+    const embedded = ['作者完整系统指令', sentProgress, '完整提取输出合同'].join('\n\n')
+    const inspectMessages = async (messages: Array<{ role: string; content: string }>) => {
+      const nextWire = { messages }, hash = await hashCanonicalValue(nextWire)
+      artifacts.set(hash, nextWire)
+      return readSentCodexProgressNamesV1({ ...input, frame: { ...input.frame, wireFrameHash: hash,
+        request: { messagesHash: await hashCanonicalValue(messages) } } })
+    }
+    await expect(inspectMessages([{ role: 'system', content: embedded }, { role: 'user', content: current }])).resolves.toEqual(verifiedProgressNames)
+    // Preserve an author's odd trailing newline; match the exact local block boundaries without trimming.
+    await expect(inspectMessages([{ role: 'system', content: '作者系统原文\n\n\n' + sentProgress + '\n\n输出合同' },
+      { role: 'user', content: current }])).resolves.toEqual(verifiedProgressNames)
+    for (const messages of [
+      [{ role: 'user', content: sentProgress }], [{ role: 'tool', content: sentProgress }],
+      [{ role: 'user', content: embedded }], [{ role: 'tool', content: embedded }],
+      [{ role: 'user', content: current }, { role: 'system', content: embedded }],
+      [{ role: 'system', content: embedded }, { role: 'system', content: '另一系统消息' }],
+      [{ role: 'system', content: '前缀' + sentProgress }], [{ role: 'system', content: sentProgress + '后缀' }],
+      [{ role: 'system', content: ['作者指令', sentProgress.slice(0, -1), '输出合同'].join('\n\n') }],
+      [{ role: 'system', content: ['作者指令', rawText, '输出合同'].join('\n\n') }],
+      [{ role: 'system', content: '作者指令\n' + sentProgress + '\n输出合同' }],
+      [{ role: 'system', content: [sentProgress, sentProgress].join('\n\n') }],
+    ]) await expect(inspectMessages(messages)).rejects.toThrow('实际发送')
+
     const other = { ...next, name: '南辰共和国' }
     expect(parseCodexEntriesStrictV2(JSON.stringify([next, other]), [], { operation: 'extract', sourceText: current, verifiedProgressNames })).toEqual([next, other])
     expect(() => parseCodexEntriesStrictV2(JSON.stringify([{ ...next, name: '凭空新增国' }]), [], { operation: 'extract', sourceText: current, verifiedProgressNames })).toThrow('名称')

@@ -31,6 +31,8 @@ vi.mock('../../src/components/codex/CodexEntryDetail', () => ({ default: () => n
 import CodexPanel from '../../src/components/codex/CodexPanel'
 import * as workspaceScope from '../../src/lib/workspace/scope'
 import * as rootContracts from '../../src/lib/agent/run/codex-extraction-v2-contract'
+import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
+import { readCodexExtractPromptTemplateSnapshotV1 } from '../../src/lib/ai/adapters/structured-extract-adapter'
 import { addCurrentWorkFixtureV1 } from '../helpers/current-workspace'
 
 const reactActGlobal: typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean } = globalThis
@@ -185,7 +187,8 @@ describe.sequential('B01 C03/C13/C16/C17/C19/C23 · actual pending/recovery UI',
 
   it('restores an actual absent-policy frozen V2 Root after ordinary defaults change without rewriting it or POSTing again', async () => {
     const f = await fixture(), posts = transport(), original = rootContracts.createCodexExtractionRootV2
-    const legacy = vi.spyOn(rootContracts, 'createCodexExtractionRootV2').mockImplementation(value => original({ ...value, newProductionPolicy: false }))
+    const legacy = vi.spyOn(rootContracts, 'createCodexExtractionRootV2').mockImplementation(async value => original({ ...value, newProductionPolicy: false,
+      promptTemplateHash: await hashCanonicalValue({ protocol: 'codex-extract-v4', template: readCodexExtractPromptTemplateSnapshotV1() }) }))
     const generated = await generateCodexExtractionCandidateV2(f)
     legacy.mockRestore()
     const before = await readCodexExtractionStateV2({ scope: f.scope, runId: generated.snapshot.run.id })

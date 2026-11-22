@@ -359,7 +359,7 @@ async function captureMaterialsV2(scope: WorkspaceScope, request: {
   if (formatCodexExtractionBaselineV1(baselineState) !== baseline.rawText) throw new Error('捕获期间分类基线发生变化。')
   const root = await createCodexExtractionRootV2({ source, baseline,
     baselineStateHash: await hashCanonicalValue(baselineState),
-    promptTemplateHash: await hashCanonicalValue({ protocol: 'codex-extract-v4', template: readCodexExtractPromptTemplateSnapshotV1() }),
+    promptTemplateHash: await hashCanonicalValue({ protocol: 'codex-extract-v5', template: readCodexExtractPromptTemplateSnapshotV1() }),
     supplementTags: frozenRequest.supplementTags, newProductionPolicy: true })
   return { root, source, baseline, baselineState }
 }
@@ -369,7 +369,7 @@ async function assertFreshMaterialsV2(materials: RuntimeMaterialsV2, requireCurr
   const current = await readCodexExtractionBaselineV1({ scope: materials.root.scope,
     categoryId: materials.root.categoryId, worldGroupId: materials.root.worldGroupId })
   if (await hashCanonicalValue(current) !== materials.root.baselineStateHash
-    || requireCurrentTemplate && await hashCanonicalValue({ protocol: 'codex-extract-v4', template: readCodexExtractPromptTemplateSnapshotV1() }) !== materials.root.promptTemplateHash) throw new Error('来源分类或模板已变化；保留已有原答，不继续发送。')
+    || requireCurrentTemplate && await hashCanonicalValue({ protocol: materials.root.productionPolicy ? 'codex-extract-v5' : 'codex-extract-v4', template: readCodexExtractPromptTemplateSnapshotV1() }) !== materials.root.promptTemplateHash) throw new Error('来源分类或模板已变化；保留已有原答，不继续发送。')
 }
 async function prepareFrontierV2(input: {
   materials: RuntimeMaterialsV2; config: AIConfig; pending: Array<{ startChar: number; endChar: number }>
@@ -581,6 +581,18 @@ async function continueCodexExtractionV2(input: CodexExtractionContinuationInput
         state.callRefs.push(callRef)
         await cursor.checkpoint(state)
         await cursor.append('model.requested', { stepId: CODEX_EXTRACTION_STEP_V2, attempt: 1, bindingHash: callId })
+        if (materials.root.productionPolicy) {
+          // Persistence above yields to author changes. Recheck the existing
+          // source, owner and Run gates after that specific await window.
+          await assertFreshMaterialsV2(materials)
+          const project = await db.projects.get(scope.projectId)
+          if (project?.activeWorldId !== scope.worldId || project.activeWorkId !== scope.workId) throw new Error('原作品已切换；不派发当前提取请求。')
+          const latest = await readAgentRunV1(scope, cursor.snapshot.run.id)
+          cursor.assertPrefix(latest)
+          if (latest.projection.state !== 'running') throw new Error('当前Run不在可派发状态。')
+          input.signal?.throwIfAborted()
+          frozenRequest.assertCurrent()
+        }
       },
       onPublicDelta: async delta => {
         const ref = await cursor.record({ artifactKind: 'raw-response', stepId: CODEX_EXTRACTION_STEP_V2, attempt: 1,

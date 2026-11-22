@@ -137,8 +137,24 @@ export async function readSentCodexProgressNamesV1(input: {
   if (canonicalStringify(names) !== canonicalStringify(progress.names)) throw new Error('草稿名称与准确结果引用不一致。')
   const wire = await input.read('rendered-request', input.frame.wireFrameHash)
   if (await hashCanonicalValue(wire) !== input.frame.wireFrameHash || !Array.isArray(wire.messages)
-    || await hashCanonicalValue(wire.messages) !== input.frame.request.messagesHash
-    || !wire.messages.some(message => message && typeof message === 'object'
-      && (message as Record<string, unknown>).content === '【本次实际发送的同Root已验证草稿，非Canon】\n' + capture.rawText)) throw new Error('该草稿未出现在本次实际发送的消息中。')
+    || await hashCanonicalValue(wire.messages) !== input.frame.request.messagesHash) throw new Error('该草稿未出现在本次实际发送的消息中。')
+  const sentProgress = '【本次实际发送的同Root已验证草稿，非Canon】\n' + capture.rawText
+  const systems = wire.messages.filter(message => message && typeof message === 'object'
+    && (message as Record<string, unknown>).role === 'system') as Array<Record<string, unknown>>
+  const standalone = systems.some(message => message.content === sentProgress)
+  // The v5 envelope keeps this complete captured JSON as one exact paragraph
+  // in its sole leading system. No substring, trimming or reserialization proof.
+  let leadingMatches = 0
+  if (systems.length === 1 && wire.messages[0] === systems[0] && typeof systems[0].content === 'string') {
+    const content = systems[0].content
+    let start = content.indexOf(sentProgress)
+    while (start !== -1) {
+      const end = start + sentProgress.length
+      if ((start === 0 || content.slice(start - 2, start) === '\n\n')
+        && (end === content.length || content.slice(end, end + 2) === '\n\n')) leadingMatches++
+      start = content.indexOf(sentProgress, end)
+    }
+  }
+  if (!standalone && leadingMatches !== 1) throw new Error('该草稿未出现在本次实际发送的消息中。')
   return [...new Set(names)]
 }
