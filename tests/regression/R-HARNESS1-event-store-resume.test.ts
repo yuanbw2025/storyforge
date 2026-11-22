@@ -1,4 +1,5 @@
 import Dexie from 'dexie'
+import { Blob as StreamableBlob } from 'node:buffer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
@@ -19,7 +20,10 @@ import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { addCurrentWorldFixtureV1, currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
 import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { createProjectJSONBlob, readProjectJSONFile } from '../../src/lib/export/json-file'
 import { updateWorkspace } from '../../src/lib/workspace/works'
+import { AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1 } from '../../src/lib/agent/run/checkpoint-contract'
+import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
@@ -530,6 +534,84 @@ describe('R-HARNESS1-event-store-resume · durable run ledger', () => {
     await expect(readLatestVerifiedAgentRunCheckpointV1(fixture.scope, snapshot.run.id, {
       maximumResumePayloadBytes: 32,
     })).rejects.toMatchObject({ code: 'checkpoint_resume_budget' })
+  })
+
+  it('long multibyte checkpoint survives persistence, export/import and exact readback; tampering still rolls back', async () => {
+    const fixture = await createWorkspace('长检查点完整往返')
+    const created = await createAgentRunV1({ scope: fixture.scope, worldGroupId: fixture.worldGroupId,
+      contract: contract({ projectId: fixture.scope.projectId, worldGroupId: fixture.worldGroupId,
+        outlineNodeId: fixture.outlineNodeId }) })
+    const resumePayload = { head: '【完整首部】',
+      material: '界'.repeat(Math.floor(AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1 / 3) + 1),
+      tail: '【完整尾部：禁止遗漏】' }
+    const exactJson = JSON.stringify(resumePayload)
+    expect(new TextEncoder().encode(exactJson).byteLength).toBeGreaterThan(AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1)
+    const expectedHash = await hashCanonicalValue(resumePayload)
+    const saved = await createAgentRunCheckpointV1({ scope: fixture.scope, runId: created.run.id, resumePayload })
+    expect(saved.checkpoint.resumePayloadHash).toBe(expectedHash)
+    const local = await readLatestVerifiedAgentRunCheckpointV1(fixture.scope, created.run.id)
+    expect(await hashCanonicalValue(local?.resumePayload)).toBe(expectedHash)
+    expect(await verifyAgentRunCheckpointV1(fixture.scope, saved.checkpoint.id)).toBe(true)
+    // A caller's explicit diagnostic bound is still deterministic and cannot truncate.
+    await expect(readLatestVerifiedAgentRunCheckpointV1(fixture.scope, created.run.id, {
+      maximumResumePayloadBytes: 32,
+    })).rejects.toMatchObject({ code: 'checkpoint_resume_budget' })
+    const backup = await exportProjectJSON(fixture.scope.projectId)
+    const file = createProjectJSONBlob(backup)
+    // Same downloaded bytes and reader as the real UI; happy-dom Blob has no stream().
+    const readable = new StreamableBlob([await file.arrayBuffer()])
+    const parsed = await readProjectJSONFile(readable as unknown as Blob)
+    const importedId = await importProjectJSON(parsed)
+    const project = await db.projects.get(importedId)
+    const run = await db.agentRuns.where('projectId').equals(importedId).first()
+    if (!project?.activeWorldId || !project.activeWorkId || !run?.id) throw new Error('Imported checkpoint owner missing')
+    const importedScope = { projectId: importedId, worldId: project.activeWorldId, workId: project.activeWorkId }
+    const restored = await readLatestVerifiedAgentRunCheckpointV1(importedScope, run.id)
+    expect(await hashCanonicalValue(restored?.resumePayload)).toBe(expectedHash)
+    expect(restored?.checkpoint.resumePayloadHash).toBe(expectedHash)
+    expect(await db.chapters.count()).toBe(0)
+    const original = await readLatestVerifiedAgentRunCheckpointV1(fixture.scope, created.run.id)
+    expect(original?.checkpoint.checkpointHash).toBe(saved.checkpoint.checkpointHash)
+    const broken = structuredClone(backup)
+    if (!broken.agentRunCheckpoints[0]) throw new Error('Checkpoint missing from actual export')
+    broken.agentRunCheckpoints[0].resumePayloadJson = JSON.stringify({ ...resumePayload, material: '被篡改' })
+    const counts = [await db.projects.count(), await db.agentRuns.count(), await db.agentRunCheckpoints.count()]
+    await expect(importProjectJSON(broken)).rejects.toThrow()
+    expect([await db.projects.count(), await db.agentRuns.count(), await db.agentRunCheckpoints.count()]).toEqual(counts)
+    expect(await hashCanonicalValue((await readLatestVerifiedAgentRunCheckpointV1(fixture.scope, created.run.id))?.resumePayload)).toBe(expectedHash)
+  })
+
+  it.each([
+    { payload: 0, invalidJsonField: 0 },
+    { payload: false, invalidJsonField: false },
+    { payload: 0, invalidJsonField: [0] },
+  ])('rejects non-string checkpoint JSON without relying on a hash mismatch: $invalidJsonField', async ({ payload, invalidJsonField }) => {
+    const fixture = await createWorkspace('检查点字段类型')
+    const created = await createAgentRunV1({ scope: fixture.scope, worldGroupId: fixture.worldGroupId,
+      contract: contract({ projectId: fixture.scope.projectId, worldGroupId: fixture.worldGroupId,
+        outlineNodeId: fixture.outlineNodeId }) })
+    const saved = await createAgentRunCheckpointV1({ scope: fixture.scope, runId: created.run.id, resumePayload: payload })
+    const backup = await exportProjectJSON(fixture.scope.projectId)
+    const row = backup.agentRunCheckpoints[0]
+    if (!row) throw new Error('Checkpoint missing from actual export')
+    expect(row.resumePayloadJson).toBe(JSON.stringify(payload))
+    // Deliberately corrupt only the externally supplied field type. In JS,
+    // JSON.parse(0/false/[0]) would yield the original payload and same hashes.
+    ;(row as unknown as Record<string, unknown>).resumePayloadJson = invalidJsonField
+    expect(row.resumePayloadHash).toBe(saved.checkpoint.resumePayloadHash)
+    expect(row.checkpointHash).toBe(saved.checkpoint.checkpointHash)
+    const counts = [await db.projects.count(), await db.agentRuns.count(), await db.agentRunCheckpoints.count()]
+    await expect(importProjectJSON(backup)).rejects.toThrow('恢复载荷必须是 JSON 字符串')
+    expect([await db.projects.count(), await db.agentRuns.count(), await db.agentRunCheckpoints.count()]).toEqual(counts)
+    // The native read boundary rejects the same type error, then reads the
+    // original valid scalar again after exact local fixture restoration.
+    await db.agentRunCheckpoints.update(saved.checkpoint.id, { resumePayloadJson: invalidJsonField as unknown as string })
+    await expect(readLatestVerifiedAgentRunCheckpointV1(fixture.scope, created.run.id))
+      .rejects.toMatchObject({ code: 'checkpoint_resume_json' })
+    await db.agentRunCheckpoints.update(saved.checkpoint.id, { resumePayloadJson: JSON.stringify(payload) })
+    const restored = await readLatestVerifiedAgentRunCheckpointV1(fixture.scope, created.run.id)
+    expect(restored?.resumePayload).toBe(payload)
+    expect(restored?.checkpoint.checkpointHash).toBe(saved.checkpoint.checkpointHash)
   })
 
   it('契约修订递增 generation，并使旧检查点明确失效', async () => {

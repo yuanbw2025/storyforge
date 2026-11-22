@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createHash } from 'node:crypto'
 import { createProjectJSONBlob, readProjectJSONFile } from '../../src/lib/export/json-file'
 
 function chunkedFile(text: string, chunkSize: number): Blob {
@@ -71,6 +72,48 @@ describe('project backup file serialization', () => {
   ])('rejects malformed or ambiguous backups before import: %s', async text => {
     await expect(readProjectJSONFile(chunkedFile(text, 2))).rejects.toThrow()
   })
+
+  it('reads an actual streamed record beyond the former 128 MiB character ceiling without a whole-file text read', async () => {
+    const bodyLength = 128 * 1024 * 1024 + 1
+    const head = '【首部】', tail = '【尾部】'
+    const encoder = new TextEncoder(), block = encoder.encode('x'.repeat(64 * 1024))
+    const prefix = encoder.encode('{"records":[{"payload":"' + head)
+    const suffix = encoder.encode(tail + '"}]}')
+    const expected = createHash('sha256').update(head)
+    for (let offset = 0; offset < bodyLength; offset += block.length) {
+      expected.update(block.subarray(0, Math.min(block.length, bodyLength - offset)))
+    }
+    expected.update(tail)
+    let phase = 0, remaining = bodyLength
+    const text = vi.fn(() => { throw new Error('whole-file text must not be used') })
+    const file = {
+      text,
+      stream: () => new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (phase === 0) { phase = 1; controller.enqueue(prefix); return }
+          if (remaining > 0) {
+            const length = Math.min(remaining, block.length)
+            controller.enqueue(block.subarray(0, length)); remaining -= length; return
+          }
+          if (phase === 1) { phase = 2; controller.enqueue(suffix); return }
+          controller.close()
+        },
+      }),
+    } as unknown as Blob
+    const parsed = await readProjectJSONFile(file)
+    if (!parsed || typeof parsed !== 'object' || !('records' in parsed) || !Array.isArray(parsed.records)) {
+      throw new Error('Full record array missing')
+    }
+    const first: unknown = parsed.records[0]
+    if (!first || typeof first !== 'object' || !('payload' in first) || typeof first.payload !== 'string') {
+      throw new Error('Full record payload missing')
+    }
+    expect(first.payload.length).toBe(bodyLength + head.length + tail.length)
+    expect(first.payload.slice(0, head.length)).toBe(head)
+    expect(first.payload.slice(-tail.length)).toBe(tail)
+    expect(createHash('sha256').update(first.payload).digest('hex')).toBe(expected.digest('hex'))
+    expect(text).not.toHaveBeenCalled()
+  }, 60_000)
 
   it('preserves prototype-looking keys as data without changing the object prototype', async () => {
     const parsed = await readProjectJSONFile(chunkedFile('{"__proto__":{"polluted":true}}', 1))
