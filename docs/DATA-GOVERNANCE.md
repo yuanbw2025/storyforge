@@ -204,7 +204,7 @@ Narrative IR 的 owner、事实/信念/意图/假设隔离、字段证据、时�
 - immutable release 按 content hash 读取；不得读取“最新草稿”替代锁定版本。世界衍生产品还必须核对 `WorldReference`、`ProductSourcePlan`、`ProductSourceManifest` 与 ProductRelease 谱系一致。
 - 事务内不能等待可能导致 Dexie 提前提交的外部异步工作；先准备数据，再开启最小事务。
 - schema v13 引入跑团记忆和可重建的世界索引缓存，并保留 v11 插件快照。现行备份格式和可导入版本见本节的 `CURRENT_BACKUP_VERSION` 说明。只有 v16 备份可按跑团记忆表登记的 `optionalInBackupVersions` 省略该表。恢复保留原有记录和作者确认状态，拒绝缺失必需表、篡改或未知版本的备份。导入后的插件保持停用。
-- 导入不信任外部 JSON；先解析、校验、规划映射，再原子提交。首页与工作区的 JSON 文件入口复用 `readProjectJSONFile()` 分段读取；项目总大小不得退回单字符串读取或仅在首页设置额外上限。单记录限制与备份信任校验继续生效。
+- 导入不信任外部 JSON；先解析、校验、规划映射，再原子提交。首页与工作区的 JSON 文件入口复用 `readProjectJSONFile()` 分段读取；项目总大小不得退回单字符串读取或仅在首页设置额外上限。单条记录仍按完整 JSON、UTF-8、登记 schema、owner、引用及哈希校验；不因项目预设的字符或 JSON 字节配额拒绝已保存的有效长内容，实际引擎或存储失败须明确报错且不修改原库。
 
 ## 9. 验收
 

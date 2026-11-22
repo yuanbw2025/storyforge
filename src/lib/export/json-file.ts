@@ -39,22 +39,18 @@ export async function readProjectJSONFile(file: Blob): Promise<unknown> {
   let array: unknown[] | null = null
   let tokenKind: 'key' | 'value' | null = null
   let fragments: string[] = []
-  let tokenLength = 0
   let depth = 0
   let quoted = false
   let escaped = false
   const fail = (): never => { throw new Error('备份文件不是完整、合法的 JSON 对象。') }
   const append = (text: string) => {
-    tokenLength += text.length
-    // One record is bounded independently of project size and stays well
-    // below the engine's string limit even when other tables are enormous.
-    if (tokenLength > 128 * 1024 * 1024) throw new Error('备份单条记录超过 128 MiB 字符限制。')
+    // Retain every fragment. JSON/UTF-8 integrity is validated below; actual
+    // engine/storage failure stays visible and cannot truncate a valid record.
     fragments.push(text)
   }
   const finish = () => {
     const value: unknown = JSON.parse(fragments.join(''))
     fragments = []
-    tokenLength = 0
     if (tokenKind === 'key') {
       if (typeof value !== 'string') return fail()
       if (Object.prototype.hasOwnProperty.call(result, value)) fail()
