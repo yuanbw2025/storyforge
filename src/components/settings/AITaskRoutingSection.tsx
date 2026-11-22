@@ -148,7 +148,7 @@ export default function AITaskRoutingSection({
                   <option key={profile} value={profile}>{meta.label}</option>
                 ))}
             </select>
-            <span className="ai-team-selected-detail text-text-muted">{TEAM_BUDGET_META[teamBudgetProfile].description}；覆盖编排、生成与一次 Canon 打回，到限后停止调用。</span>
+            <span className="ai-team-selected-detail text-text-muted">{TEAM_BUDGET_META[teamBudgetProfile].description}；用于编辑器、独立审校、修订和采纳后处理等任务的流程额度，不代表模型的上下文窗口。新主 Agent 的规划与生成按服务实际容量执行；历史运行沿用各自冻结的预算。</span>
           </label>
         </div>
       </section>

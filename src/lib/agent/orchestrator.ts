@@ -545,7 +545,7 @@ function sanitizePlan(
   const ids = new Set<string>()
   const explicitlyRequested = classifyRequestedDomainIdsV1(request)
   let removedUnrequestedTask = false
-  for (const item of rawTasks.slice(0, 5)) {
+  for (const item of rawTasks) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue
     const source = item as Record<string, unknown>
     if (!DOMAIN_AGENT_IDS.includes(source.agentId as DomainAgentId)) continue
@@ -576,7 +576,7 @@ function sanitizePlan(
       instruction,
       requestContext: { originalRequest: request, plannerInstruction: instruction },
       dependsOn: Array.isArray(source.dependsOn)
-        ? source.dependsOn.filter((value): value is string => typeof value === 'string').slice(0, 5)
+        ? source.dependsOn.filter((value): value is string => typeof value === 'string')
         : [],
       ...(agentId === 'prose' && perspectiveCharacterId !== undefined ? { perspectiveCharacterId } : {}),
     })
@@ -588,9 +588,6 @@ function sanitizePlan(
   if (tasks.length === 1) {
     tasks[0].instruction = request
     tasks[0].skillId = selectAgentSkillIdV1(tasks[0].agentId, request)
-  }
-  if (tasks.some(task => task.skillId !== 'world-origin.story-core' && (task.instruction.length > 8_000 || task.requestContext!.originalRequest.length > 8_000 || task.requestContext!.plannerInstruction.length > 8_000))) {
-    throw new Error('创作任务超过 8000 字符，请缩短后重试；不会截断作者要求。')
   }
   const knownIds = new Set(tasks.map(task => task.id))
   tasks.forEach(task => {
@@ -626,7 +623,7 @@ function sanitizePlan(
       : removedUnrequestedTask
       ? '已按你的要求只保留本轮明确要做的任务，请确认下方计划。'
       : typeof raw.summary === 'string' && raw.summary.trim()
-      ? raw.summary.trim().slice(0, 500)
+      ? raw.summary.trim()
       : '主 Agent 已拆分本轮创作任务。',
     tasks,
     workflow: stagedProse || repeatedDomain ? { version: 1, workflowId: 'staged-author-confirmed', reasonCodes: ['multiple-explicit-domains'] } : workflow,
@@ -737,15 +734,12 @@ export async function createMasterAgentPlan(input: {
       ? undefined
       : parseStoryArcMutationRequestV1(pinned.storyArcMutationRequest)
     const instruction = pinned.instruction.trim()
-    if (pinnedSkillId !== 'world-origin.story-core' && instruction.length > 8_000) {
-      throw new Error('固定领域任务的作者要求超过 8000 字符；已在模型调用前阻止，请缩短后重试。')
-    }
     const task: MasterAgentTask = {
       id: pinned.id ?? `${pinned.agentId}-targeted`,
       agentId: pinned.agentId,
       skillId: pinnedSkillId,
       instruction,
-      dependsOn: [...new Set(pinned.dependsOn ?? [])].slice(0, 5),
+      dependsOn: [...new Set(pinned.dependsOn ?? [])],
       ...(pinned.perspectiveCharacterId !== undefined
         ? { perspectiveCharacterId: pinned.perspectiveCharacterId }
         : {}),
@@ -842,7 +836,7 @@ export async function createMasterAgentPlan(input: {
 大纲依赖本轮新生成的世界或角色任务；正文依赖本轮新生成的大纲、世界或角色任务。只输出 JSON：
 {"summary":"给用户的简短计划","tasks":[{"id":"稳定ID","agentId":"world-origin|character|inspiration|outline|prose","instruction":"给分 Agent 的完整要求","dependsOn":[]}]}。
 只有用户明确指定正文叙事视角且项目状态能确认角色 ID 时，正文任务才可额外填写 perspectiveCharacterId；不要猜测，缺省则不注入角色认知。
-同一领域可以有多个任务。每个世界任务只处理一个明确字段，每个角色任务只处理一个角色，新建与补全必须明确区分；用 instruction 明确各自目标。同领域的后续任务必须依赖前一个，采纳后再生成下一项。每阶段最多 5 个任务；
+同一领域可以有多个任务。每个世界任务只处理一个明确字段，每个角色任务只处理一个角色，新建与补全必须明确区分；用 instruction 明确各自目标。同领域的后续任务必须依赖前一个，采纳后再生成下一项。按作者目标与实际依赖完整列出所需任务；
 若作者已明确本次正文目标但作品还没有任何章节，可提出一个 prose 任务；系统会在待确认计划中补充最小卷章保存位置，不要求补齐故事核心、世界或角色。只讨论、否定生成或没有获得明确写入目标时 tasks 必须为空；不要把“不要生成角色”等禁令变成任务。对已有正文的改写请求说明可前往正文编辑器的对照改写入口。summary 使用清楚的中文，保留作者的创作自由。
 不要输出 Markdown。`,
   }, {
@@ -996,12 +990,12 @@ dependsOn，不能新增、删除或改名任务，不能改变 agentId、skillI
       if (typeof patch.id !== 'string' || !affected.has(patch.id)) continue
       const task = byId.get(patch.id)!
       const instruction = typeof patch.instruction === 'string'
-        ? patch.instruction.trim().slice(0, 1_000)
+        ? patch.instruction.trim()
         : ''
       const dependsOn = Array.isArray(patch.dependsOn)
         ? [...new Set(patch.dependsOn.filter((item): item is string => (
             typeof item === 'string' && item !== task.id && knownTaskIds.has(item)
-          )))].slice(0, 5)
+          )))]
         : task.dependsOn
       if (!instruction) continue
       if (instruction !== task.instruction || JSON.stringify(dependsOn) !== JSON.stringify(task.dependsOn)) {
@@ -1013,7 +1007,7 @@ dependsOn，不能新增、删除或改名任务，不能改变 agentId、skillI
     const plan: MasterAgentPlan = {
       ...input.plan,
       summary: typeof raw.summary === 'string' && raw.summary.trim()
-        ? raw.summary.trim().slice(0, 500)
+        ? raw.summary.trim()
         : `${input.plan.summary}（已根据失败证据有限重规划）`,
       tasks: input.plan.tasks.map(task => byId.get(task.id)!),
     }
@@ -1111,9 +1105,7 @@ async function executeSequentialMasterAgentPlan(
   const outputs = new Map<string, string>()
   const runtimeAssumptions = new Map<string, CreativeAssumptionV1[]>()
   const contextProfiles = useAIConfigStore.getState().agentContextProfiles
-  const budget = input.budget?.policy.profile === 'service-capacity' ? input.budget : input.plan.tasks.some(task => resolveAgentSkillV1(task.agentId, task.skillId).executionMode === 'story-core') ? new AgentTeamBudgetTracker('service-capacity') : input.budget ?? new AgentTeamBudgetTracker(
-    useAIConfigStore.getState().agentTeamBudgetProfile,
-  )
+  const budget = input.budget ?? new AgentTeamBudgetTracker('service-capacity')
   for (const [taskId, output] of Object.entries(input.completedTaskOutputs ?? {})) {
     if (output.trim()) outputs.set(taskId, output)
   }
@@ -1993,9 +1985,7 @@ function compareCandidateBudgetEvidence(
 async function executeFanOutMasterAgentPlan(
   input: ExecuteMasterAgentPlanInput,
 ): Promise<ExecutedMasterCandidate[]> {
-  const budget = input.budget?.policy.profile === 'service-capacity' ? input.budget : input.plan.tasks.some(task => resolveAgentSkillV1(task.agentId, task.skillId).executionMode === 'story-core') ? new AgentTeamBudgetTracker('service-capacity') : input.budget ?? new AgentTeamBudgetTracker(
-    useAIConfigStore.getState().agentTeamBudgetProfile,
-  )
+  const budget = input.budget ?? new AgentTeamBudgetTracker('service-capacity')
   const outputs = new Map<string, string>()
   const runtimeAssumptions = new Map<string, CreativeAssumptionV1[]>()
   for (const [taskId, output] of Object.entries(input.completedTaskOutputs ?? {})) {

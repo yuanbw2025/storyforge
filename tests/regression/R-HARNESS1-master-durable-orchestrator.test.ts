@@ -11,6 +11,7 @@ import {
   parseMasterAgentPlanV1,
   restoreMasterAgentCandidatesV1,
   runDurableMasterAgentPlanV1,
+  type MasterAgentDurableDependenciesV1,
 } from '../../src/lib/agent/run/master-durable'
 import {
   beginMasterAgentCandidateAdoptionV1,
@@ -18,11 +19,12 @@ import {
   recoverPendingMasterAgentAdoptionsV1,
 } from '../../src/lib/agent/run/master-adoption'
 import { adoptMasterCandidate } from '../../src/lib/agent/orchestrator'
+import { selectAgentSkillIdV1 } from '../../src/lib/agent/workflow-catalog'
 import { adoptGeneratedOutlineItems } from '../../src/lib/outline/adopt-generation'
 import { prepareOutlineCopilot } from '../../src/lib/agent/outline-copilot'
-import { prepareProseCopilot } from '../../src/lib/agent/prose-copilot'
+import { prepareProseCopilot, runProseCreativeReliabilityV1 } from '../../src/lib/agent/prose-copilot'
 import { adopt } from '../../src/lib/registry/adopt'
-import { countWords } from '../../src/lib/utils/html'
+import { countWords, htmlToPlainText } from '../../src/lib/utils/html'
 import { plainTextToHtml } from '../../src/lib/utils/html'
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { readLatestVerifiedAgentRunCheckpointV1 } from '../../src/lib/agent/run/checkpoint'
@@ -32,12 +34,13 @@ import {
   resetHarnessFaultInjectionV1,
 } from '../../src/lib/agent/dev-fault-injection'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
-import type { MasterAgentPlan } from '../../src/lib/agent/orchestrator'
+import type { ExecutedMasterCandidate, MasterAgentPlan } from '../../src/lib/agent/orchestrator'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { prepareRequiredMasterGatewayFixtureV1 } from '../helpers/master-agent-gateway'
 import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { readAgentRunArtifactExactV1 } from '../../src/lib/memory/artifact-store'
 import {
   currentWorldOriginCandidateFixtureV1,
   currentWorldOriginDraftV1,
@@ -202,6 +205,71 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
     })).toThrow('perspectiveCharacterId 无效')
   })
 
+  it('持久计划读入保留超过五个任务、六条依赖、长摘要及完整长文本', () => {
+    const instruction = `基础要求。${'完整细节。'.repeat(1_700)}尾部约束：禁止遗失。`
+    const upstreamIds = Array.from({ length: 6 }, (_, index) => `world-${index + 1}`)
+    const original: MasterAgentPlan = {
+      summary: `${'完整计划说明。'.repeat(100)}摘要尾部。`,
+      tasks: [
+        ...upstreamIds.map(id => ({
+          id, agentId: 'world-origin' as const, skillId: 'world-origin.worldview-field' as const,
+          instruction, dependsOn: [],
+          requestContext: { originalRequest: instruction, plannerInstruction: instruction },
+        })),
+        { id: 'hero', agentId: 'character', skillId: 'character.create', instruction, dependsOn: upstreamIds },
+      ],
+      workflow: SEQUENTIAL_WORKFLOW,
+    }
+    const parsed = parseMasterAgentPlanV1(original)
+    expect(parsed).toEqual(original)
+    expect(parsed.tasks[6].dependsOn).toHaveLength(6)
+    expect(parsed.tasks[0].requestContext?.originalRequest).toBe(instruction)
+  })
+
+  it('持久计划读入接受长的无环依赖链', () => {
+    const tasks: MasterAgentPlan['tasks'] = Array.from({ length: 2_048 }, (_, index) => ({
+      id: `world-${index}`, agentId: 'world-origin', skillId: 'world-origin.worldview-field',
+      instruction: `补充第 ${index} 项世界来源。`,
+      dependsOn: index === 0 ? [] : [`world-${index - 1}`],
+    }))
+    const parsed = parseMasterAgentPlanV1({ summary: '完整依赖链。', tasks, workflow: SEQUENTIAL_WORKFLOW })
+    expect(parsed.tasks).toEqual(tasks)
+  })
+
+  it.each([
+    { label: '重复任务 ID', mutate: (value: MasterAgentPlan) => { value.tasks[1].id = value.tasks[0].id }, error: '重复任务 ID' },
+    { label: '不存在的依赖', mutate: (value: MasterAgentPlan) => { value.tasks[1].dependsOn = ['missing-task'] }, error: '依赖不存在的任务' },
+    { label: '自身依赖', mutate: (value: MasterAgentPlan) => { value.tasks[0].dependsOn = [value.tasks[0].id] }, error: '不得依赖自身' },
+    { label: '循环依赖', mutate: (value: MasterAgentPlan) => { value.tasks[0].dependsOn = [value.tasks[1].id] }, error: '循环依赖' },
+    { label: '空白任务内容', mutate: (value: MasterAgentPlan) => { value.tasks[0].instruction = ' \n\t ' }, error: 'instruction' },
+    { label: '空白摘要', mutate: (value: MasterAgentPlan) => { value.summary = ' \n\t ' }, error: 'summary' },
+  ])('取消内容配额后严格读入仍拒绝$label', ({ mutate, error }) => {
+    const invalid = plan()
+    mutate(invalid)
+    expect(() => parseMasterAgentPlanV1(invalid)).toThrow(error)
+  })
+
+  it('旧冻结计划的空白、换行和固定哈希保持兼容', async () => {
+    const legacy: MasterAgentPlan = {
+      summary: '  历史计划\r\n保留缩进  ',
+      tasks: [
+        {
+          id: 'world-1', agentId: 'world-origin', skillId: 'world-origin.worldview-field',
+          instruction: ' \n建立潮汐世界。\t ', dependsOn: [],
+          requestContext: { originalRequest: ' 作者原话\r\n尾部留白 ', plannerInstruction: ' \t保留规划原文\n ' },
+        },
+        {
+          id: 'character-1', agentId: 'character', skillId: 'character.create',
+          instruction: '  根据世界来源生成守灯人。\n', dependsOn: ['world-1'],
+        },
+      ],
+      workflow: SEQUENTIAL_WORKFLOW,
+    }
+    expect(parseMasterAgentPlanV1(legacy)).toEqual(legacy)
+    // 固定值来自修改前 reader 的原样文本与 canonical JSON，不随新实现重新生成期望值。
+    expect(await hashMasterAgentPlanV1(legacy)).toBe('f977315cb8fc6a4c8fa056c9290f0a4667123b27ee3ddf38bca1f4fda9fb1ce7')
+  })
+
   it('从三注册表派生多领域契约，候选只写入对话和 run ledger', async () => {
     const fixture = await createWorkspace('契约')
     const evidence = new AgentTeamBudgetTracker('balanced').snapshot()
@@ -244,6 +312,41 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
     expect(ledger.events.map(event => event.type)).toContain('candidate.persisted')
     expect(JSON.stringify(ledger)).not.toContain('潮汐由沉睡的海神')
     expect(result.candidates.every(candidate => candidate.payload.contextManifestHash?.length === 64)).toBe(true)
+  })
+
+  it('新运行默认无内部总额度，超过七次和旧最高总量后仍保留候选及恢复证据', async () => {
+    const fixture = await createWorkspace('实际容量新运行')
+    const conversation = await getOrCreateAgentConversation({
+      projectId: fixture.scope.projectId, scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId, purpose: 'master-authoring',
+    })
+    const execute = vi.fn(async (options: any) => {
+      for (let index = 0; index < 8; index += 1) {
+        const reservation = options.budget.reserveCall({
+          label: `已完成资料处理${index}`,
+          messages: [{ role: 'user', content: '完整材料'.repeat(20_000) }],
+          maxOutputTokens: 100,
+        })
+        options.budget.settleCall(reservation, '已完成资料处理')
+      }
+      return fakeExecutor({ calls: vi.fn() })(options)
+    })
+    const result = await runDurableMasterAgentPlanV1({
+      scope: fixture.scope, worldGroupId: fixture.worldGroupId,
+      conversationId: conversation.id, plan: plan(),
+    }, { execute: execute as any })
+    expect(result.budgetEvidence).toMatchObject({ profile: 'service-capacity', calls: 10 })
+    expect(result.budgetEvidence.usedTokens).toBeGreaterThan(240_000)
+    expect(result.projection.state).toBe('awaiting_confirmation')
+    expect(result.candidates).toHaveLength(2)
+    const restored = await restoreMasterAgentCandidatesV1({ scope: fixture.scope, runId: result.runId })
+    expect(restored.candidates).toHaveLength(2)
+    expect(restored.budgetEvidence).toEqual(result.budgetEvidence)
+    const reread = await restoreMasterAgentCandidatesV1({ scope: fixture.scope, runId: result.runId })
+    expect(reread.budgetEvidence).toEqual(result.budgetEvidence)
+    expect(execute).toHaveBeenCalledOnce()
+    expect(await db.worldviews.count()).toBe(0)
+    expect(await db.characters.count()).toBe(0)
   })
 
   it('候选持久化前故障零候选，持久化后故障保留可恢复候选且不写 Canon', async () => {
@@ -333,6 +436,10 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
     expect(resumedCalls).toHaveBeenCalledTimes(1)
     expect(resumedCalls).toHaveBeenCalledWith('character-1')
     expect(resumed.budgetEvidence.calls).toBe(2)
+    const afterResume = await readAgentRunV1(fixture.scope, run.id!)
+    expect(resumed.budgetEvidence.profile).toBe('balanced')
+    expect(afterResume.run.contractHash).toBe(before.run.contractHash)
+    expect(afterResume.contract.budget.serviceCapacityOnly).toBeUndefined()
     expect(await db.worldviews.count()).toBe(0)
     expect(await db.characters.count()).toBe(0)
   })
@@ -701,6 +808,156 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
     expect(await recoverPendingMasterAgentAdoptionsV1(fixture.scope))
       .toEqual({ recoveredRunIds: [], failed: [] })
     expect(await db.outlineNodes.where('type').equals('chapter').count()).toBe(2)
+  })
+
+  it('超过20万字符的正文经过真实trace持久化、恢复和默认采用，保留全文且仍拒绝篡改', async () => {
+    const fixture = await createWorkspace('长正文正式候选')
+    const now = Date.now()
+    const volumeId = await db.outlineNodes.add(stampNewRecord(fixture.scope, 'outlineNodes', {
+      projectId: fixture.scope.projectId, worldGroupId: fixture.worldGroupId, parentId: null, type: 'volume',
+      title: '第一卷', summary: '守灯人寻找潮汐钟。', order: 0, createdAt: now, updatedAt: now,
+    }, { owner: 'work' }))
+    const chapterOutlineId = await db.outlineNodes.add(stampNewRecord(fixture.scope, 'outlineNodes', {
+      projectId: fixture.scope.projectId, worldGroupId: fixture.worldGroupId, parentId: volumeId, type: 'chapter',
+      title: '第一章', summary: '守灯人推开木门，沿海堤寻找铜铃。', order: 0, createdAt: now, updatedAt: now,
+    }, { owner: 'work' }))
+    await stampCurrentFixtureResourceUidsV1(fixture.scope.projectId)
+    // 正文非空白字数及显式作者目标都超过20万，不能靠空白计数差绕过门。
+    const paragraph = '守灯人沿海堤前行，把铜铃交给邮差，又转身寻找下一条线索。'
+    const raw = '【首部】守灯人推开木门，决定沿海堤寻找铜铃。\n'
+      + Array.from({ length: 1_000 }, (_, index) => `第${index + 1}次潮汐。${paragraph.repeat(8)}`).join('\n')
+      + '\n【尾部】邮差交还铜铃，守灯人带着新的线索离开。'
+    const wordCount = countWords(raw)
+    expect(raw.length).toBeGreaterThan(200_000)
+    expect(wordCount).toBeGreaterThan(200_000)
+    const instruction = `写第一章正文，目标字数${wordCount}字，保留完整首尾和段落。`
+    const skillId = selectAgentSkillIdV1('prose', instruction)
+    expect(skillId).toBe('prose.generate')
+    const runAI = vi.fn(async () => raw)
+    const prepared = await prepareProseCopilot({
+      projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId,
+      authorRequest: instruction, skillId, parameterValues: { wordCount },
+    }, { runAI })
+    expect(prepared.input.parameterValues?.wordCount).toBe(wordCount)
+    expect(prepared.prepared.messages.map(message => message.content).join('\n')).toContain(instruction)
+    const execute: NonNullable<MasterAgentDurableDependenciesV1['execute']> = async options => {
+      const budget = options.budget
+      const trace = options.executionTrace
+      if (!budget || !trace?.taskStarted || !trace.contextGatewayPrepared
+        || !trace.modelCallRequested || !trace.modelCallReturned || !trace.candidateReady) {
+        throw new Error('长正文测试必须进入正式Master预算和完整trace')
+      }
+      const { taskStarted, contextGatewayPrepared, modelCallRequested, modelCallReturned, candidateReady } = trace
+      const task = options.plan.tasks[0]
+      expect(options.scope).toEqual(fixture.scope)
+      await taskStarted(task)
+      const gateway = {
+        execution: prepared.contextGatewayExecution,
+        assembled: prepared.input.assembled,
+        renderedRequest: prepared.renderedRequest,
+      }
+      await contextGatewayPrepared(task, gateway)
+      let callIndex = 0
+      const runRaw: typeof prepared.runRaw = async (messages, result = {}) => {
+        callIndex += 1
+        await modelCallRequested(task, { callIndex, messages })
+        result.finishReason = 'stop'
+        const response = await prepared.runRaw(messages, result)
+        await modelCallReturned(task, { callIndex, raw: response.output, result })
+        return response
+      }
+      const result = await runProseCreativeReliabilityV1({
+        prepared: { ...prepared, runRaw }, budget, qualityMode: 'economy',
+      })
+      expect(result.draft).toBe(raw)
+      expect(result.artifact.originalText).toBe(raw)
+      expect(result.artifact.editableText).toBe(raw)
+      expect(result.artifact.validFragments[0]?.text).toBe(raw)
+      expect(result.artifact.issues.some(issue => issue.code.startsWith('prose-length-'))).toBe(false)
+      const candidate: ExecutedMasterCandidate = {
+        payload: {
+          version: 1, taskId: task.id, agentId: task.agentId, skillId: task.skillId,
+          label: prepared.label, contextSources: prepared.contextSources, contextEvidence: prepared.contextEvidence,
+          baseSnapshot: prepared.snapshot, workspaceScope: fixture.scope,
+          proseOperation: prepared.operation, proseOutlineNodeId: prepared.outlineNodeId,
+          perspectiveCharacterId: prepared.perspectiveCharacterId, dependsOnTaskIds: task.dependsOn,
+          creativeArtifact: result.artifact, narrativeBrief: prepared.input.narrativeBrief,
+          informationBoundary: prepared.informationBoundary,
+        },
+        draft: result.draft, runtimeNode: prepared.node, runtimeOutput: result.output,
+        contextGatewayRuntime: { ...gateway, rawResponse: result.artifact },
+      }
+      await candidateReady(task, candidate)
+      return [candidate]
+    }
+    const executeSpy = vi.fn(execute)
+    const conversation = await getOrCreateAgentConversation({
+      projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId,
+      purpose: 'master-authoring',
+    })
+    const result = await runDurableMasterAgentPlanV1({
+      scope: fixture.scope, worldGroupId: fixture.worldGroupId, conversationId: conversation.id,
+      plan: {
+        summary: '完整生成第一章正文。',
+        tasks: [{ id: 'prose-1', agentId: 'prose', skillId, instruction, dependsOn: [] }],
+        workflow: DIRECT_WORKFLOW,
+      },
+    }, { execute: executeSpy })
+    expect(result.projection.state).toBe('awaiting_confirmation')
+    expect(result.budgetEvidence).toMatchObject({ profile: 'service-capacity', calls: 1 })
+    expect(await db.chapters.count()).toBe(0)
+    expect(result.candidates).toHaveLength(1)
+    const candidate = result.candidates[0]
+    const candidateEventId = candidate.event.id
+    const frozenHash = candidate.payload.candidateHash
+    if (candidateEventId == null || !frozenHash) throw new Error('正式长候选缺少持久身份')
+    const frozenPayload = candidate.event.payload
+    expect(candidate.draft).toBe(raw)
+    expect(candidate.event.content).toBe(raw)
+    expect(frozenHash).toMatch(/^[a-f0-9]{64}$/)
+    const ledger = await readAgentRunV1(fixture.scope, result.runId)
+    const rawEvent = ledger.events.find(event => event.type === 'evidence.artifact.recorded'
+      && event.payload.artifactKind === 'raw-response')
+    if (rawEvent?.type !== 'evidence.artifact.recorded') throw new Error('正式trace未保存原响应')
+    const rawEvidence: unknown = JSON.parse(await readAgentRunArtifactExactV1({
+      projectId: fixture.scope.projectId, artifactKind: 'raw-response', contentHash: rawEvent.payload.contentHash,
+    }))
+    if (!rawEvidence || typeof rawEvidence !== 'object' || !('raw' in rawEvidence)) {
+      throw new Error('正式原响应工件结构无效')
+    }
+    expect(rawEvidence.raw).toBe(raw)
+    const restored = await restoreMasterAgentCandidatesV1({ scope: fixture.scope, runId: result.runId })
+    expect(restored.candidates[0].draft).toBe(raw)
+    expect(restored.candidates[0].payload.candidateHash).toBe(frozenHash)
+    expect(restored.candidates[0].payload.creativeArtifact?.originalText).toBe(raw)
+    expect(restored.budgetEvidence).toEqual(result.budgetEvidence)
+
+    // 仅测试夹具篡改持久行；取消长度门不允许跳过既有candidateHash校验。
+    await db.agentEvents.update(candidateEventId, { content: `${raw}\n非法追加` })
+    await expect(restoreMasterAgentCandidatesV1({ scope: fixture.scope, runId: result.runId }))
+      .rejects.toThrow('candidateHash 校验失败')
+    expect(await db.chapters.count()).toBe(0)
+    await db.agentEvents.update(candidateEventId, { content: raw })
+    const restoredAgain = await restoreMasterAgentCandidatesV1({ scope: fixture.scope, runId: result.runId })
+    expect(restoredAgain.candidates[0].payload.candidateHash).toBe(frozenHash)
+
+    const ref = { scope: fixture.scope, runId: result.runId, candidateEventId, worldGroupId: fixture.worldGroupId }
+    // 不传runtime，强制走刷新后的正式恢复采用入口和默认业务写入器。
+    const adopted = await commitMasterAgentCandidateAdoptionV1(ref)
+    const chapter = await db.chapters.where('outlineNodeId').equals(chapterOutlineId).first()
+    if (!chapter) throw new Error('正式采用没有写入目标正文')
+    expect(htmlToPlainText(chapter.content)).toBe(raw)
+    expect(chapter.wordCount).toBe(wordCount)
+    expect(chapter).toMatchObject({ workId: fixture.scope.workId })
+    expect(Object.prototype.hasOwnProperty.call(chapter, 'worldId')).toBe(false)
+    expect(await db.chapters.count()).toBe(1)
+    expect((await commitMasterAgentCandidateAdoptionV1(ref)).adoptionHash).toBe(adopted.adoptionHash)
+    expect(await db.chapters.count()).toBe(1)
+    const stored = await db.agentEvents.get(candidateEventId)
+    expect(stored?.content).toBe(raw)
+    expect(stored?.payload).toBe(frozenPayload)
+    expect(runAI).toHaveBeenCalledOnce()
+    expect(executeSpy).toHaveBeenCalledOnce()
   })
 
   it('完整正文已经写入时恢复只补齐采纳证据，部分正文则 fail-closed', async () => {

@@ -275,7 +275,6 @@ describe.sequential('R-HARNESS31 · 故事核心 Agent Skill 与受治理采纳'
       scope,
       worldGroupId: null,
       plan: plan(),
-      budget: new AgentTeamBudgetTracker('balanced'),
     })
 
     expect(fetchMock).toHaveBeenCalledOnce()
@@ -387,6 +386,54 @@ describe.sequential('R-HARNESS31 · 故事核心 Agent Skill 与受治理采纳'
     expect(tampered.codes).toContain('story-core-1:post-state-mismatch')
   })
 
+  it('显式有限预算保留既有规划计数，故事核心在真实直执行和durable路径均不得另建预算绕过', async () => {
+    const { project, scope } = await createWorkspace()
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const budget = new AgentTeamBudgetTracker('balanced')
+    const planning = budget.reserveCall({ label: '此前规划', messages: [{ role: 'user', content: '已完成的规划' }], maxOutputTokens: 100 })
+    budget.settleCall(planning, '规划结果')
+    const before = budget.snapshot()
+    expect(before).toMatchObject({ profile: 'balanced', calls: 1 })
+    await expect(executeMasterAgentPlan({
+      projectId: project.id!, scope, worldGroupId: null, plan: plan(), budget,
+    })).rejects.toThrow('本轮 Agent 团队预算不足')
+    expect(budget.snapshot()).toEqual(before)
+    expect(fetchMock).not.toHaveBeenCalled()
+    const conversation = await getOrCreateAgentConversation({ projectId: scope.projectId, scope, worldGroupId: null, purpose: 'story-core-generation' })
+    await expect(runDurableMasterAgentPlanV1({
+      scope, worldGroupId: null, conversationId: conversation.id!, plan: plan(), budget,
+    })).rejects.toThrow('本轮 Agent 团队预算不足')
+    expect(budget.snapshot()).toEqual(before)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect((await db.storyCores.toCollection().first())?.logline)
+      .toBe('守灯人追查一枚不属于任何人的记忆盐晶。')
+  })
+
+  it('故事核心复用已含规划用量的同一tracker，生成和恢复均不重置调用记录', async () => {
+    const { scope } = await createWorkspace()
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify(candidate()) } }],
+      usage: { prompt_tokens: 31, completion_tokens: 23, total_tokens: 54 },
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const budget = new AgentTeamBudgetTracker('service-capacity')
+    for (let index = 0; index < 8; index += 1) {
+      const call = budget.reserveCall({ label: `此前规划${index}`, messages: [{ role: 'user', content: '已完成的规划' }], maxOutputTokens: 100 })
+      budget.settleCall(call, '规划结果')
+    }
+    const before = budget.snapshot()
+    const conversation = await getOrCreateAgentConversation({ projectId: scope.projectId, scope, worldGroupId: null, purpose: 'story-core-generation' })
+    const result = await runDurableMasterAgentPlanV1({ scope, worldGroupId: null, conversationId: conversation.id!, plan: plan(), budget })
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(budget.snapshot().calls).toBe(9)
+    expect(result.budgetEvidence).toEqual(budget.snapshot())
+    expect(result.budgetEvidence.usedTokens).toBeGreaterThan(before.usedTokens)
+    const restored = await restoreMasterAgentCandidatesV1({ scope, runId: result.runId })
+    expect(restored.candidates).toHaveLength(1)
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
   it('真实 durable 主 Agent 候选冻结 content revision，上游变化后标旧且不写目标字段', async () => {
     const { project, scope } = await createWorkspace()
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
@@ -401,7 +448,6 @@ describe.sequential('R-HARNESS31 · 故事核心 Agent Skill 与受治理采纳'
       worldGroupId: null,
       conversationId: conversation.id!,
       plan: plan(),
-      budget: new AgentTeamBudgetTracker('balanced'),
     })
     const restored = await restoreMasterAgentCandidatesV1({ scope, runId: run.runId })
     const durableCandidate = restored.candidates[0]

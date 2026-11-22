@@ -421,8 +421,8 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:873` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:981` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:867` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:975` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:438` |
 | `canon.narrative.extract` | `src/lib/agent/run/narrative-annotation-durable.ts:218` |
@@ -477,8 +477,8 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/master-candidate-semantic-review.ts:602 · chat`
 - `src/lib/agent/outline-copilot.ts:521 · chat`
 - `src/lib/agent/outline-copilot.ts:773 · chat`
-- `src/lib/agent/prose-copilot.ts:704 · chat`
-- `src/lib/agent/prose-copilot.ts:985 · chat`
+- `src/lib/agent/prose-copilot.ts:702 · chat`
+- `src/lib/agent/prose-copilot.ts:959 · chat`
 - `src/lib/agent/run/codex-extraction-durable.ts:831 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:515 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:588 · chat`
@@ -599,4 +599,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `b2e5f9416`
+生成时间基准:commit `8d7605551`

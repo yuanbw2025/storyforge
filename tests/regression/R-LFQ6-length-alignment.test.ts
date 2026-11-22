@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { usePromptStore } from '../../src/stores/prompt'
 import { CORE_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds-core'
 import { buildChapterContentRequestV1, buildContinueRequestV1 } from '../../src/lib/ai/adapters/chapter-adapter'
-import { proseLengthExpectationV1 } from '../../src/lib/prose/length-observation'
+import { observeProseLengthV1, parseProseLengthObservationV1, proseLengthExpectationV1 } from '../../src/lib/prose/length-observation'
+import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 
 const original = usePromptStore.getState()
 const seed = (key: 'chapter.content' | 'chapter.continue') => ({ ...CORE_PROMPT_SEEDS.find(item => item.moduleKey === key)!, createdAt: 1, updatedAt: 1 })
@@ -87,5 +88,94 @@ describe('LFQ6 · 作者明确篇幅与实际模板一致', () => {
     expect(proseLengthExpectationV1('本章字数：600～900字')).toMatchObject({ min: 600, max: 900 })
     expect(proseLengthExpectationV1('600～900字，关灯停笔')).toMatchObject({ min: 600, max: 900 })
     expect(proseLengthExpectationV1('续写正文，篇幅控制在600至900字')).toMatchObject({ min: 600, max: 900 })
+  })
+
+  it.each([
+    { label: '作者目标', request: '只写250001字。', parameter: undefined, count: 250_001,
+      expected: { version: 1, source: 'author', min: 200_000, max: 300_002, target: 250_001 } },
+    { label: '作者区间', request: '写300001至400001字。', parameter: undefined, count: 350_001,
+      expected: { version: 1, source: 'author', min: 300_001, max: 400_001, target: null } },
+    { label: '作者下限', request: '至少300000字。', parameter: undefined, count: 300_001,
+      expected: { version: 1, source: 'author', min: 300_000, max: null, target: null } },
+    { label: '作者上限', request: '最多500000字。', parameter: undefined, count: 300_001,
+      expected: { version: 1, source: 'author', min: null, max: 500_000, target: null } },
+    { label: '参数目标', request: '', parameter: 300_001, count: 300_001,
+      expected: { version: 1, source: 'parameter', min: 240_000, max: 360_002, target: 300_001 } },
+  ])('$label超过20万仍完整观察并往返读取', ({ request, parameter, count, expected }) => {
+    const expectation = proseLengthExpectationV1(request, parameter)
+    expect(expectation).toEqual(expected)
+    const observation = observeProseLengthV1('字'.repeat(count), expectation, 'stop')
+    expect(observation).toMatchObject({ wordCount: count, status: 'within', message: null, expectation: expected })
+    expect(parseProseLengthObservationV1(JSON.parse(JSON.stringify(observation)))).toEqual(observation)
+  })
+
+  it('18万目标派生21.6万提示上限仍可往返，未改变20%语义', () => {
+    const expectation = proseLengthExpectationV1('只写180000字。')
+    expect(expectation).toEqual({ version: 1, source: 'author', min: 144_000, max: 216_000, target: 180_000 })
+    const within = observeProseLengthV1('字'.repeat(180_000), expectation)
+    expect(parseProseLengthObservationV1(within)).toEqual(within)
+    const short = observeProseLengthV1('字'.repeat(100_000), expectation)
+    expect(short.status).toBe('short')
+    expect(short.message).toContain('提示范围 144000～216000')
+    expect(parseProseLengthObservationV1(short)).toEqual(short)
+  })
+
+  it('可表示的极大范围与单边要求仍有效，20%派生越出安全整数时显式拒绝', () => {
+    for (const request of [
+      '不少于9007199254740991字。',
+      '不超过9007199254740991字。',
+      '9007199254740990至9007199254740991字。',
+    ]) {
+      const expectation = proseLengthExpectationV1(request)
+      expect(expectation).not.toBeNull()
+      const observation = observeProseLengthV1('字', expectation)
+      expect(parseProseLengthObservationV1(observation)).toEqual(observation)
+    }
+    expect(proseLengthExpectationV1('', 7_505_999_378_950_825)).toEqual({
+      version: 1, source: 'parameter', min: 6_004_799_503_160_660,
+      max: 9_007_199_254_740_990, target: 7_505_999_378_950_825,
+    })
+    expect(() => proseLengthExpectationV1('', 7_505_999_378_950_826)).toThrow('安全整数')
+    expect(() => proseLengthExpectationV1(`只写${Number.MAX_SAFE_INTEGER}字。`)).toThrow('安全整数')
+  })
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
+    '观察记录仍拒绝非正或非安全整数目标%s', target => {
+      const observation = observeProseLengthV1('字', proseLengthExpectationV1('只写600字。'))
+      expect(() => parseProseLengthObservationV1({
+        ...observation, expectation: { ...observation.expectation, target },
+      })).toThrow('篇幅要求无效')
+    },
+  )
+
+  it('伪造状态或文案、未知字段及非法范围仍不能通过记录校验', () => {
+    const observation = observeProseLengthV1('字', proseLengthExpectationV1('只写600字。'))
+    const expectation = observation.expectation
+    if (!expectation) throw new Error('测试要求必须存在')
+    const invalid = [
+      { ...observation, status: 'within' },
+      { ...observation, message: '伪造提示' },
+      { ...observation, extra: true },
+      { ...observation, wordCount: -1 },
+      { ...observation, wordCount: Number.MAX_SAFE_INTEGER + 1 },
+      { ...observation, expectation: { ...expectation, extra: true } },
+      { ...observation, expectation: { ...expectation, source: 'forged' } },
+      { ...observation, expectation: { ...expectation, min: 721, max: 720 } },
+      { ...observation, expectation: { ...expectation, min: null, max: null } },
+      { ...observation, expectation: { ...expectation, min: -1 } },
+      { ...observation, expectation: { ...expectation, max: Number.POSITIVE_INFINITY } },
+    ]
+    for (const value of invalid) expect(() => parseProseLengthObservationV1(value)).toThrow()
+  })
+
+  it('旧合法观察的数值、文案及固定哈希保持兼容', async () => {
+    const legacy = {
+      version: 1, wordCount: 200, status: 'short', finishReason: null,
+      expectation: { version: 1, source: 'author', min: 480, max: 720, target: 600 },
+      message: '目标约 600 字（提示范围 480～720），当前 200 字，篇幅不足。这是篇幅提示，不能据此判断文学质量；请检查场景任务，再决定采用或修改。',
+    }
+    const parsed = parseProseLengthObservationV1(legacy)
+    expect(parsed).toEqual(legacy)
+    expect(await hashCanonicalValue(parsed)).toBe('d2d44fcd9d6bb401ca8f91613c394fe0310c71674e264c59ab970a2509362a47')
   })
 })

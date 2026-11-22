@@ -62,7 +62,6 @@ export default function ChatCopilotPanel({
   const activeWork = useActiveWork(project)
   const copilot = useMasterCopilot({ project, worldGroupId })
   const creativeQualityMode = useAIConfigStore((state) => state.creativeQualityMode)
-  const teamBudgetProfile = useAIConfigStore((state) => state.agentTeamBudgetProfile)
   const [showDetails, setShowDetails] = useState(false)
   const [discussionMode, setDiscussionMode] = useState<'plan' | 'free'>(initialDiscussionMode)
   const [discussionSource, setDiscussionSource] = useState<'none' | 'worldview' | 'characters' | 'story-core'>('none')
@@ -122,10 +121,10 @@ export default function ChatCopilotPanel({
         ? estimateCreativeRunPreviewV1({
             request: previewRequest,
             qualityMode: creativeQualityMode,
-            teamBudgetProfile,
+            teamBudgetProfile: 'service-capacity',
           })
         : null,
-    [creativeQualityMode, previewRequest, teamBudgetProfile],
+    [creativeQualityMode, previewRequest],
   )
 
   useEffect(() => {
@@ -339,14 +338,13 @@ export default function ChatCopilotPanel({
             </details>
             {runPreview && copilot.pendingCandidates.length === 0 && (
               <details aria-label="本轮调用预估" className="text-xs text-text-muted">
-                <summary className="cursor-pointer">调用预估与预算上限</summary>
+                <summary className="cursor-pointer">调用预估与服务容量</summary>
                 <p>
                   本轮预计 {runPreview.artifactCount} 份可编辑候选：
                   {runPreview.artifactLabels.join('、') || '先讨论明确目标'}
                 </p>
                 <p>
-                  通常 {runPreview.usualModelCalls} 次模型调用；本轮硬上限 {runPreview.hardMaxModelCalls} 次 /{' '}
-                  {runPreview.hardMaxTokens.toLocaleString()} tokens。
+                  通常 {runPreview.usualModelCalls} 次模型调用，仅供参考；本轮按服务实际容量执行。
                 </p>
                 <p>只有可定位的结构问题才允许定向修复；不会为主观质量自动重试。</p>
                 {runPreview.deferredArtifactLabels.length > 0 && (

@@ -30,7 +30,6 @@ import { verifyMasterAgentRunV1 } from '../../lib/agent/run/master-verification'
 import type { AgentEvent, Project, WorkspaceScope } from '../../lib/types'
 import { parseAgentEventPayload } from '../../lib/types'
 import { AgentTeamBudgetTracker } from '../../lib/agent/team-budget'
-import { useAIConfigStore } from '../../stores/ai-config'
 import { revalidateStoryArcCreativeDraftV1 } from '../../lib/agent/story-arc-copilot'
 import { revalidateOutlineCreativeDraftV1 } from '../../lib/agent/outline-copilot'
 import { revalidateProseCreativeDraftV1 } from '../../lib/agent/prose-copilot'
@@ -452,9 +451,9 @@ export function useMasterCopilot(input: {
         scope: workspaceScope,
       })
       await reload(conversationId)
-      const teamBudget = new AgentTeamBudgetTracker(
-        useAIConfigStore.getState().agentTeamBudgetProfile,
-      )
+      // New authoring starts use the actual provider capacity. Keep one tracker
+      // from planning through execution so its accounting is never reset.
+      const teamBudget = new AgentTeamBudgetTracker('service-capacity')
       let plan = options?.confirmedPlan ? { ...options.confirmedPlan, phase: undefined } : await createMasterAgentPlan({
         projectId: project.id!,
         scope: workspaceScope,
@@ -530,8 +529,9 @@ export function useMasterCopilot(input: {
         role: 'assistant',
           content: [
           `本阶段已生成 ${candidates.length} 份候选。请检查、编辑并决定是否采纳。`,
-          `本轮团队约使用 ${durable.budgetEvidence.usedTokens.toLocaleString()} / `
-          + `${durable.budgetEvidence.maxTokens.toLocaleString()} tokens，`
+          (durable.budgetEvidence.profile === 'service-capacity'
+            ? `本轮团队约使用 ${durable.budgetEvidence.usedTokens.toLocaleString()} tokens，`
+            : `本轮团队约使用 ${durable.budgetEvidence.usedTokens.toLocaleString()} / ${durable.budgetEvidence.maxTokens.toLocaleString()} tokens，`)
           + `${durable.budgetEvidence.calls} 次调用，`
           + `Canon 受控打回 ${durable.budgetEvidence.canonRetries} 次。`,
           ].join(' '),
