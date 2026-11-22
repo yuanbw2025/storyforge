@@ -2,6 +2,7 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Project } from '../../src/lib/types'
+import { db } from '../../src/lib/db/schema'
 
 const mocks = vi.hoisted(() => ({
   loadAll: vi.fn(async () => undefined),
@@ -54,7 +55,13 @@ vi.mock('../../src/lib/ai/client', () => ({
 
 vi.mock('../../src/lib/workspace/scope', () => ({ resolveScopeLike: mocks.resolveScopeLike }))
 vi.mock('../../src/lib/agent/run/codex-extraction-durable', () => ({
+  readPendingCodexExtractionCandidateV2: vi.fn(async () => null),
+  readRecoverableCodexExtractionV2: vi.fn(async () => null),
+  // New starts are production V2; legacy saved pending/recovery cases below remain V1.
   generateCodexExtractionCandidateV1: mocks.generate,
+  generateCodexExtractionCandidateV2: mocks.generate,
+  adoptCodexExtractionCandidateV2: mocks.adopt,
+  abandonCodexExtractionV2: mocks.abandon,
   generateCodexEnrichmentCandidateV1: mocks.generateEnrichment,
   readPendingCodexExtractionCandidateV1: mocks.readPending,
   readRecoverableCodexExtractionV1: mocks.readRecoverable,
@@ -125,9 +132,11 @@ async function renderBasePanel() {
 }
 
 beforeEach(() => {
+  // This UI-only suite supplies the active Project row; actual DB ownership is covered by V2 panel tests.
+  vi.spyOn(db.projects, 'get').mockResolvedValue(project)
   mocks.readPending.mockResolvedValue(null)
   mocks.readRecoverable.mockResolvedValue(null)
-  mocks.generate.mockResolvedValue({ snapshot: { run: { id: 70 } }, candidate })
+  mocks.generate.mockResolvedValue({ snapshot: { run: { id: 70 }, projection: { lastSequence: 1 } }, candidate })
   mocks.generateEnrichment.mockResolvedValue({
     snapshot: { run: { id: 75 } },
     candidate: {
@@ -136,11 +145,12 @@ beforeEach(() => {
       entries: [{ ...extracted, name: '听潮使', evidenceQuotes: [], provenance: 'ai-created-suggestion' }],
     },
   })
-  mocks.resume.mockResolvedValue({ snapshot: { run: { id: 70 } }, candidate })
+  mocks.resume.mockResolvedValue({ snapshot: { run: { id: 70 }, projection: { lastSequence: 1 } }, candidate })
   mocks.adopt.mockResolvedValue({ written: 1 })
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   vi.clearAllMocks()
   while (mounted.length) {
     const item = mounted.pop()!
@@ -185,7 +195,7 @@ describe('R-HARNESS70 · Codex durable 提取 UI', () => {
     expect(review!.textContent).toContain(extracted.fields.habitat)
     expect(mocks.adopt).not.toHaveBeenCalled()
     await act(async () => button(host, '写入所选 1 项').click())
-    expect(mocks.adopt).toHaveBeenCalledWith({ scope, runId: 70, selectedIndexes: [0] })
+    expect(mocks.adopt).toHaveBeenCalledWith({ scope, runId: 70, selectedIndexes: [0], entries: [extracted] })
     expect(mocks.addEntry).not.toHaveBeenCalled()
   })
 
@@ -231,11 +241,11 @@ describe('R-HARNESS70 · Codex durable 提取 UI', () => {
   })
 
   it('零候选有可见确认入口，不会把运行锁死在弹窗中', async () => {
-    mocks.generate.mockResolvedValue({ snapshot: { run: { id: 73 } }, candidate: { ...candidate, entries: [] } })
+    mocks.generate.mockResolvedValue({ snapshot: { run: { id: 73 }, projection: { lastSequence: 1 } }, candidate: { ...candidate, entries: [] } })
     const host = await renderPanel()
     await act(async () => button(host, '开始拆分').click())
     await vi.waitFor(() => expect(host.textContent).toContain('未识别出新增词条'))
     await act(async () => button(host, '确认无新增词条').click())
-    expect(mocks.adopt).toHaveBeenCalledWith({ scope, runId: 73, selectedIndexes: [] })
+    expect(mocks.adopt).toHaveBeenCalledWith({ scope, runId: 73, selectedIndexes: [], entries: [] })
   })
 })

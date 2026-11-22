@@ -22,10 +22,11 @@ import type {
   AgentRunStepExecutionBindingV1,
   AgentRunWriteMode,
   AgentRunWriteTargetV1,
+  RunBudgetAllocationV2,
 } from '../../types/agent-run'
 import { canonicalStringify, hashCanonicalValue } from './hash'
 import { readAgentRunContractJsonV1 } from './checkpoint-contract'
-import { assertAgentSkillExecutionBindingIntegrityV2 } from '../execution-binding'
+import { assertAgentSkillExecutionBindingIntegrityV2, parseTaskRequestBindingV2 } from '../execution-binding'
 import {
   assertExactKeys,
   assertUnique,
@@ -239,8 +240,9 @@ function readExecutionBindingV2(value: unknown, path: string): AgentRunStepExecu
     'writeTargets',
     'maxOutputTokens',
     'formalEntry',
+    'taskRequest',
   ] as const
-  assertExactKeys(record, keys, keys.filter(key => key !== 'formalEntry'), path)
+  assertExactKeys(record, keys, keys.filter(key => !['formalEntry','taskRequest'].includes(key)), path)
   if (record.version !== 2 || record.skillVersion !== 2) {
     failSchema('unsupported_version', path, '仅支持 execution binding v2 / Skill snapshot v2')
   }
@@ -314,9 +316,12 @@ function readExecutionBindingV2(value: unknown, path: string): AgentRunStepExecu
     contextSourceKeys,
     optionalContextActivations,
     writeTargets,
-    maxOutputTokens: record.maxOutputTokens === null && ['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk'].includes(String(record.skillId))
+    maxOutputTokens: record.taskRequest !== undefined
+      ? readInteger(record.maxOutputTokens, `${path}.maxOutputTokens`, { min: 0 })
+      : record.maxOutputTokens === null && ['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk'].includes(String(record.skillId))
       ? null : readInteger(record.maxOutputTokens, `${path}.maxOutputTokens`, { min: 1 }),
     ...(formalEntry ? { formalEntry } : {}),
+    ...(record.taskRequest === undefined ? {} : { taskRequest: parseTaskRequestBindingV2(record.taskRequest, String(record.skillId)) }),
   }
 }
 
@@ -341,6 +346,7 @@ function readParentLineage(value: unknown, path: string): AgentRunParentLineageV
 function parseAgentRunContractV1Base(
   value: unknown,
   bindingCarriedBySkillSnapshot: boolean,
+  adaptiveAllocation?: RunBudgetAllocationV2,
 ): AgentRunContractV1 {
   const record = readRecord(value, 'contract')
   assertExactKeys(
@@ -430,7 +436,7 @@ function parseAgentRunContractV1Base(
     permissionsRecord.contextSourceKeys,
     'contract.permissions.contextSourceKeys',
   ).map((item, index) => readString(item, `contract.permissions.contextSourceKeys[${index}]`, { max: 120 }))
-  const toolOnly = readRecord(record.budget, 'contract.budget').maxModelCalls === 0 && readRecord(record.budget, 'contract.budget').serviceCapacityOnly !== true
+  const toolOnly = !adaptiveAllocation && readRecord(record.budget, 'contract.budget').maxModelCalls === 0 && readRecord(record.budget, 'contract.budget').serviceCapacityOnly !== true
   if (contextSourceKeys.length === 0 && !toolOnly) {
     failSchema('invalid_permission', 'contract.permissions.contextSourceKeys', '不得为空')
   }
@@ -634,7 +640,7 @@ function parseAgentRunContractV1Base(
   const readCeiling = (value: unknown, path: string, min: number, zeroForToolOnly = true) => {
     if (serviceManaged && value === null) return null
     if (serviceManaged) failSchema('invalid_budget', path, '服务容量任务不得携带应用层固定额度')
-    return readInteger(value, path, { min, ...(toolOnly && zeroForToolOnly ? { max: 0 } : {}) })
+    return readInteger(value, path, { min: adaptiveAllocation ? 0 : min, ...(toolOnly && zeroForToolOnly ? { max: 0 } : {}) })
   }
 
 
@@ -825,7 +831,20 @@ function parseSkillBoundContract(
   const baseShape = { ...record, version: 1 } as Record<string, unknown>
   delete baseShape.executionBindings
   if (expectedVersion === 3) delete baseShape.executionBoundary
-  const base = parseAgentRunContractV1Base(baseShape, true)
+  const budgetRecord = readRecord(record.budget, 'contract.budget')
+  const allocation = budgetRecord.allocation === undefined ? undefined : parseTaskRunBudgetAllocationV2(budgetRecord.allocation)
+  if (allocation) {
+    if (budgetRecord.capacityPolicy !== undefined || budgetRecord.serviceCapacityOnly !== undefined
+      || record.runtimeBindingHash === undefined || executionBindings.length !== 1
+      || executionBindings.some(binding => binding.skillId !== 'world-origin.codex-extract.v2'
+        || binding.taskRequest?.planHash !== allocation.planHash)) failSchema('invalid_budget', 'contract.budget.allocation', '完整请求预算必须绑定准确新Skill和plan，不能混入旧服务模式')
+    const { allocation: _allocation, ...legacyFields } = budgetRecord
+    baseShape.budget = legacyFields
+  } else if (executionBindings.some(binding => binding.taskRequest !== undefined)) {
+    failSchema('invalid_budget', 'contract.budget', '完整请求绑定缺少同一plan预算语义')
+  }
+  const base = parseAgentRunContractV1Base(baseShape, true, allocation)
+  if (allocation) base.budget = { ...base.budget, allocation }
   const permissionSources = [...new Set(base.permissions.contextSourceKeys)].sort()
   const bindingSources = [...new Set(executionBindings.flatMap(binding => binding.contextSourceKeys))].sort()
   if (JSON.stringify(permissionSources) !== JSON.stringify(bindingSources)) {
@@ -848,7 +867,7 @@ function parseSkillBoundContract(
     !['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk'].includes(binding.skillId))) {
     failSchema('invalid_budget', 'contract.budget.capacityPolicy', '服务容量策略仅用于已登记拆书 Skill')
   }
-  if (executionBindings.some(binding => binding.maxOutputTokens === null
+  if (!allocation && executionBindings.some(binding => binding.maxOutputTokens === null
     ? base.budget.capacityPolicy !== 'service'
     : !base.budget.serviceCapacityOnly && base.budget.maxOutputTokens !== null && binding.maxOutputTokens > base.budget.maxOutputTokens)) {
     failSchema(
@@ -915,4 +934,44 @@ export async function acceptAgentRunContract(value: unknown): Promise<AcceptedAg
   if (record.version === 2) return acceptAgentRunContractV2(value)
   if (record.version === 3) return acceptAgentRunContractV3(value)
   failSchema('unsupported_version', 'contract.version', '仅支持版本 1、2 或 3')
+}
+
+/** Structure only. Runtime also verifies exact plan/material membership and its
+ * numeric forecast before dispatch; a profile string is never an authority. */
+export function parseTaskRunBudgetAllocationV2(value: unknown): RunBudgetAllocationV2 {
+  const row = readRecord(value, 'budget.allocation')
+  const keys = ['version','mode','planHash','inputBasis','outputBasis','modelCallsBasis','hardConstraints']
+  assertExactKeys(row, keys, keys, 'budget.allocation')
+  if (row.version !== 'task-budget-allocation-v2' || row.mode !== 'adaptive-plan') failSchema('invalid_budget', 'budget.allocation', '预算分派版本无效')
+  let hardConstraints: RunBudgetAllocationV2['hardConstraints'] = null
+  if (row.hardConstraints !== null) {
+    const hard = readRecord(row.hardConstraints, 'budget.allocation.hardConstraints')
+    const hardKeys = ['version','sourceEvidenceHash','maxModelCalls','maxInputTokens','maxOutputTokens','maxCostUsd']
+    assertExactKeys(hard, hardKeys, hardKeys, 'budget.allocation.hardConstraints')
+    if (hard.version !== 'explicit-author-consumption-v2') failSchema('invalid_budget', 'budget.allocation.hardConstraints', '缺少明确作者消费约束身份')
+    const integer = (key: string) => hard[key] === null ? null : readInteger(hard[key], `budget.allocation.hardConstraints.${key}`, { min: 0 })
+    hardConstraints = { version: 'explicit-author-consumption-v2', sourceEvidenceHash: readHash(hard.sourceEvidenceHash, 'hardConstraints.sourceEvidenceHash'),
+      maxModelCalls: integer('maxModelCalls'), maxInputTokens: integer('maxInputTokens'), maxOutputTokens: integer('maxOutputTokens'),
+      maxCostUsd: hard.maxCostUsd === null ? null : readNonNegativeNumber(hard.maxCostUsd, 'hardConstraints.maxCostUsd') }
+  }
+  return { version: 'task-budget-allocation-v2', mode: 'adaptive-plan', planHash: readHash(row.planHash, 'budget.allocation.planHash'),
+    inputBasis: readString(row.inputBasis, 'budget.allocation.inputBasis', { max: 500 }),
+    outputBasis: readString(row.outputBasis, 'budget.allocation.outputBasis', { max: 500 }),
+    modelCallsBasis: readString(row.modelCallsBasis, 'budget.allocation.modelCallsBasis', { max: 500 }), hardConstraints }
+}
+export function readRunBudgetSemanticsV2(contract: AgentRunContract):
+  | { mode: 'adaptive-plan'; allocation: RunBudgetAllocationV2 }
+  | { mode: 'reference-service' }
+  | { mode: 'existing-service-capacity-only' }
+  | { mode: 'legacy-fixed' } {
+  if (contract.budget.allocation !== undefined) {
+    const allocation = parseTaskRunBudgetAllocationV2(contract.budget.allocation)
+    if (contract.version === 1 || contract.budget.capacityPolicy !== undefined || contract.budget.serviceCapacityOnly !== undefined
+      || contract.executionBindings.length !== 1 || contract.executionBindings[0].skillId !== 'world-origin.codex-extract.v2'
+      || contract.executionBindings[0].taskRequest?.planHash !== allocation.planHash) throw new Error('新预算语义与执行绑定不匹配。')
+    return { mode: 'adaptive-plan', allocation }
+  }
+  if (contract.budget.capacityPolicy === 'service') return { mode: 'reference-service' }
+  if (contract.budget.serviceCapacityOnly === true) return { mode: 'existing-service-capacity-only' }
+  return { mode: 'legacy-fixed' }
 }

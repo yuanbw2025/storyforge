@@ -1,3 +1,4 @@
+import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { prepareModelCapacityV1, getModelCapacityV1, modelInputBudgetV1, type ModelCapacityV1 } from '../ai/model-capacity'
 /** assembleContext · 当前唯一上下文装配入口。 */
 import Dexie from 'dexie'
@@ -484,4 +485,72 @@ function trimToFit(
   }
 
   return { kept, trimmed }
+}
+
+/** Registered host material capture is separate from model assembly. It uses
+ * the same reader, exact owner, anchors and enablement; no token override. */
+export async function captureRegisteredContextSourceV2(input: {
+  sourceKey: 'manualText' | 'codexExtractionBaseline' | 'codexExtractionProgressV2'
+  context: Pick<AssembleContextInput, 'projectId' | 'scope' | 'worldGroupId' | 'codexCategoryId' | 'manualSourceText' | 'codexExtractionProgressV2'>
+}) {
+  input = structuredClone(input)
+  const source = CONTEXT_SOURCE_BY_KEY.get(input.sourceKey)
+  if (!source?.fullCapture || source.fullCapture.version !== 'registered-host-full-v2') throw new Error('来源未登记完整捕获能力。')
+  if (!input.context.scope) throw new Error('完整来源捕获需要冻结真实作品作用域。')
+  const originalScope = Object.freeze({ ...input.context.scope })
+  const resolved: AssembleContextInput = { ...input.context, scope: originalScope, sourceKeys: [input.sourceKey] }
+  const scope = await resolveReadScope(resolved)
+  if (scope.projectId !== originalScope.projectId || scope.worldId !== originalScope.worldId || scope.workId !== originalScope.workId) {
+    throw new Error('来源作用域不能追随当前活动作品改绑。')
+  }
+  await assertContextAnchors(resolved, [source])
+  if (!requirementsMet(source, resolved) || source.enabled && !await source.enabled(resolved)) throw new Error('当前来源不满足登记读取条件。')
+  const rawText = await source.read(resolved)
+  await assertContextAnchors(resolved, [source])
+  if (!rawText.trim()) throw new Error('登记来源没有可捕获的完整内容。')
+  const body = {
+    version: 'registered-context-source-capture-v2' as const,
+    protocolVersion: source.fullCapture.version,
+    sourceKey: input.sourceKey, sourceVersion: source.fullCapture.sourceVersion,
+    scope: { ...scope }, worldGroupId: input.context.worldGroupId ?? null,
+    categoryId: input.context.codexCategoryId ?? null,
+    rawText, rawUTF16Length: rawText.length, rawBodyHash: await hashContextSource(rawText),
+  }
+  // Canonical JSON preserves the raw UTF16 domain (including CRLF and unpaired
+  // code units). Its capture hash is not the old reader's authority/version hash.
+  const sourceAuthorityHash = await hashCanonicalValue({ sourceKey: body.sourceKey, sourceVersion: body.sourceVersion,
+    scope: body.scope, worldGroupId: body.worldGroupId, categoryId: body.categoryId, rawBodyHash: body.rawBodyHash })
+  const envelope = { ...body, sourceAuthorityHash }
+  return Object.freeze({ ...envelope, captureHash: await hashCanonicalValue(envelope) })
+}
+
+/** Render only a frozen registered range for a physical request. Full source
+ * remains in its capture; the manifest honestly marks range delivery. */
+export async function assembleCapturedCodexContextV2(input: {
+  source: Awaited<ReturnType<typeof captureRegisteredContextSourceV2>>
+  baseline: Awaited<ReturnType<typeof captureRegisteredContextSourceV2>>
+  progress?: Awaited<ReturnType<typeof captureRegisteredContextSourceV2>>
+  startChar: number
+  endChar: number
+}): Promise<AssembleContextResult> {
+  const source = structuredClone(input.source), baseline = structuredClone(input.baseline), progress = input.progress && structuredClone(input.progress)
+  if (source.sourceKey !== 'manualText' || baseline.sourceKey !== 'codexExtractionBaseline'
+    || !Number.isSafeInteger(input.startChar) || !Number.isSafeInteger(input.endChar)
+    || input.startChar < 0 || input.endChar <= input.startChar || input.endChar > source.rawText.length) throw new Error('登记原文范围无效。')
+  const rows = [{ capture: source, text: source.rawText.slice(input.startChar, input.endChar) }, { capture: baseline, text: baseline.rawText },
+    ...(progress ? [{ capture: progress, text: progress.rawText }] : [])]
+  for (const row of rows) {
+    const { captureHash, ...body } = row.capture
+    if (await hashCanonicalValue(body) !== captureHash || canonicalStringify(row.capture.scope) !== canonicalStringify(source.scope)) throw new Error('登记材料已经变化或越过原作品。')
+  }
+  const segments: ContextSegment[] = rows.map(row => ({ label: row.capture.sourceKey, layer: 'L0',
+    content: row.text, tokens: estimateTokens(row.text), trimmable: false }))
+  const total = segments.reduce((sum, segment) => sum + segment.tokens, 0)
+  return { text: rows.map(row => row.text).join('\n\n'), segments,
+    included: rows.map(row => row.capture.sourceKey), omitted: [], trimmed: [], totalInputTokens: total,
+    inputBudget: Math.max(1, total), overBudgetBeforeTrim: false, overBudgetAfterTrim: false,
+    sourceEvidence: rows.map(row => ({ key: row.capture.sourceKey, status: 'included',
+      delivery: row.text === row.capture.rawText ? 'full' : 'truncated', sourceHash: row.capture.rawBodyHash,
+      originalCharacters: row.capture.rawUTF16Length, inputCharacters: row.text.length,
+      originalTokens: estimateTokens(row.capture.rawText), inputTokens: estimateTokens(row.text) })) }
 }

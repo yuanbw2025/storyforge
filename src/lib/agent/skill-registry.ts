@@ -236,6 +236,8 @@ export interface AgentSkillContextGatewayPolicyV1 {
 }
 
 export interface AgentSkillDefinitionV1 {
+  /** Exact registered consumers only; no implicit migration of old Skills. */
+  requestPolicy?: 'task-request-v2'
   version: 1
   id: string
   agentId: RegisteredAgentId
@@ -1656,6 +1658,57 @@ export const AGENT_SKILLS = [
       'R-HARNESS70-codex-extraction-durable',
       'R-RACE5-codex-extraction-enrichment',
       'R-CODEX1-gateway-provenance',
+    ],
+  },
+  {
+    version: 1,
+    id: 'world-origin.codex-extract.v2',
+    agentId: 'world-origin',
+    defaultForAgent: false,
+    label: 'Codex 完整来源词条抽取 V2',
+    owner: 'world-foundation-agent',
+    requestPolicy: 'task-request-v2',
+    promptVersion: 'codex-extract-v4',
+    executionMode: 'codex-extract',
+    contextTaskKind: 'agent-world-origin',
+    readToolNames: [],
+    contextSourceKeys: ['manualText', 'codexExtractionBaseline'],
+    optionalContextSourceKeys: ['codexExtractionProgressV2'],
+    inputPolicy: {
+      sourceKeys: ['manualText', 'codexExtractionBaseline'],
+      states: {
+        empty: { handling: 'require-upstream', instruction: '缺少作者来源或登记分类基线时不调用模型。' },
+        partial: { handling: 'require-upstream', instruction: '必须同时冻结作者来源、目标分类 schema 和同类既有词条。' },
+        complete: { handling: 'grounded-transform', instruction: '只按当前分类字段闭集拆分可确认词条，不写入未选候选。' },
+      },
+    },
+    // Compatibility metadata only; V2 registered full captures are never compressed.
+    contextCompression: compressionPolicy(['manualText', 'codexExtractionBaseline', 'codexExtractionProgressV2']),
+    contextGateway: {
+      version: 1,
+      rollout: 'required',
+      requiredWriteTargets: CODEX_CANDIDATE_WRITE_FIELDS.map(field => `codexEntries.${field}`),
+      providerSourceKeys: [],
+      allowedResourceKinds: ['codex-entry'],
+      allowedDepths: ['index', 'summary', 'focused', 'full', 'original'],
+      maxReadCalls: 2,
+      maxRetrievedTokens: 20_000,
+      maxPlanningSteps: 2,
+      maxPlanningModelTokens: 8_000,
+      allowOriginalRead: true,
+      additionalReadToolNames: [],
+    },
+    maxOutputTokens: 4_000,
+    writeTargets: [{
+      table: 'codexEntries',
+      fields: [...CODEX_CANDIDATE_WRITE_FIELDS],
+    }],
+    // Registration/contract review date only. Listed V2 regressions are NOT RUN.
+    lastVerifiedAt: '2026-11-21',
+    regressionTests: [
+      'R-CODEX-EXTRACTION-V2-durable',
+      'R-CODEX-EXTRACTION-V2-budget-plan',
+      'R-AI-REQUEST-V2',
     ],
   },
   {
@@ -6174,6 +6227,56 @@ export function validateAgentSkillContextEvidenceV1(
   }
 }
 
+/** Structural admission only: immutable full captures are not Gateway providers.
+ * Frozen callers must not consult the live registry to validate this profile. */
+export function assertCodexFullCaptureProfileV2(
+  definition: Readonly<Omit<AgentSkillDefinitionV1, 'version'> & {
+    version: 1 | 2
+    sourceDefinitionVersion?: 1
+    resolvedToolSourceKeys?: readonly string[]
+  }>,
+): boolean {
+  if (definition.id !== 'world-origin.codex-extract.v2' && definition.requestPolicy !== 'task-request-v2') return false
+  function fail(part: string): never { throw new Error(`Agent Skill ${definition.id} 的 full-capture profile ${part} 无效`) }
+  const exact = (value: unknown, expected: readonly string[]) => Array.isArray(value)
+    && value.length === expected.length && value.every((item, index) => item === expected[index])
+  if (definition.id !== 'world-origin.codex-extract.v2' || definition.requestPolicy !== 'task-request-v2'
+    || definition.agentId !== 'world-origin' || definition.owner !== 'world-foundation-agent'
+    || definition.executionMode !== 'codex-extract' || definition.contextTaskKind !== 'agent-world-origin'
+    || definition.defaultForAgent !== false) fail('identity')
+  if (definition.version !== 1 && definition.version !== 2) fail('version')
+  if (definition.version === 2 && (definition.sourceDefinitionVersion !== 1
+    || !Object.prototype.hasOwnProperty.call(definition, 'resolvedToolSourceKeys')
+    || !exact(definition.resolvedToolSourceKeys, []))) fail('resolvedToolSourceKeys')
+  if (!exact(definition.contextSourceKeys, ['manualText', 'codexExtractionBaseline'])
+    || !exact(definition.optionalContextSourceKeys, ['codexExtractionProgressV2'])
+    || !exact(definition.inputPolicy?.sourceKeys, ['manualText', 'codexExtractionBaseline'])
+    || !exact(definition.contextCompression?.sourceKeys, ['manualText', 'codexExtractionBaseline', 'codexExtractionProgressV2'])) fail('sources')
+  for (const [state, handling] of [['empty', 'require-upstream'], ['partial', 'require-upstream'], ['complete', 'grounded-transform']] as const) {
+    const policy = definition.inputPolicy?.states?.[state]
+    if (!policy || policy.handling !== handling || typeof policy.instruction !== 'string'
+      || !policy.instruction.trim() || policy.instruction.length > 400) fail('inputPolicy')
+  }
+  if (!exact(definition.readToolNames, [])) fail('readToolNames')
+  const gateway = definition.contextGateway
+  if (!gateway) fail('Gateway')
+  const gatewayKeys = ['version', 'rollout', 'requiredWriteTargets', 'providerSourceKeys', 'allowedResourceKinds',
+    'allowedDepths', 'maxReadCalls', 'maxRetrievedTokens', 'maxPlanningSteps', 'maxPlanningModelTokens',
+    'allowOriginalRead', 'additionalReadToolNames']
+  if (!exact(Object.keys(gateway).sort(), [...gatewayKeys].sort())
+    || gateway.version !== 1 || gateway.rollout !== 'required'
+    || !exact(gateway.providerSourceKeys, []) || !exact(gateway.additionalReadToolNames, [])
+    || !exact(gateway.allowedResourceKinds, ['codex-entry'])
+    || !exact(gateway.allowedDepths, ['index', 'summary', 'focused', 'full', 'original'])
+    || gateway.allowOriginalRead !== true) fail('Gateway')
+  if (!Array.isArray(definition.writeTargets) || definition.writeTargets.length !== 1) fail('writeTargets')
+  const target = definition.writeTargets[0]
+  if (!target || !exact(Object.keys(target).sort(), ['fields', 'table']) || 'adoptionExtension' in target || target.table !== 'codexEntries'
+    || !exact(target.fields, CODEX_CANDIDATE_WRITE_FIELDS)) fail('writeTargets')
+  if (!exact(gateway.requiredWriteTargets, CODEX_CANDIDATE_WRITE_FIELDS.map(field => `codexEntries.${field}`))) fail('requiredWriteTargets')
+  return true
+}
+
 export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
@@ -6214,6 +6317,7 @@ export function validateAgentSkillDefinitionsV1(
   const ids = new Set<string>()
   const defaultAgents = new Set<RegisteredAgentId>()
   for (const skill of definitions) {
+    const fullCapture = assertCodexFullCaptureProfileV2(skill)
     if (skill.version !== 1) throw new Error(`Agent Skill ${skill.id} 版本不受支持`)
     if (ids.has(skill.id)) throw new Error(`Agent Skill ID 重复：${skill.id}`)
     ids.add(skill.id)
@@ -6305,7 +6409,7 @@ export function validateAgentSkillDefinitionsV1(
       if (gateway.version !== 1 || gateway.rollout !== 'required') {
         throw new Error(`Agent Skill ${skill.id} 的 Context Gateway 版本或 rollout 无效`)
       }
-      if (!gateway.providerSourceKeys.length
+      if (!Array.isArray(gateway.providerSourceKeys) || (!fullCapture && !gateway.providerSourceKeys.length)
         || new Set(gateway.providerSourceKeys).size !== gateway.providerSourceKeys.length) {
         throw new Error(`Agent Skill ${skill.id} 的 Context Gateway provider source 无效`)
       }
@@ -6333,7 +6437,7 @@ export function validateAgentSkillDefinitionsV1(
           throw new Error(`Agent Skill ${skill.id} 的 Context Gateway ${key} 无效`)
         }
       }
-      if (!gateway.additionalReadToolNames.length
+      if (!Array.isArray(gateway.additionalReadToolNames) || (!fullCapture && !gateway.additionalReadToolNames.length)
         || new Set(gateway.additionalReadToolNames).size !== gateway.additionalReadToolNames.length) {
         throw new Error(`Agent Skill ${skill.id} 的 Context Gateway 追加读取工具无效`)
       }

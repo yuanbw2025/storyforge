@@ -85,7 +85,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 175 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 176 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -205,9 +205,10 @@
 | `searchResults` | 项目内搜索结果 | world | L2 | 2200 |
 | `workAuthoringIntent` | 作者确认的作品意图与文风 | project | L0 | 6000 |
 | `ragSelection` | 作者选择的资料字段 | manual | L0 | 100000 |
-| `manualText` | 用户指定内容 | manual | L0 | 100000 |
+| `manualText` | 用户指定内容 | manual | L0 | 100000（旧装配参考；V2完整捕获不以此截原文） |
 | `documentImportCodexCategories` | 文档导入已登记词条类别目录 | world | L0 | 8000 |
-| `codexExtractionBaseline` | Codex 目标分类与既有词条闭集 | world | L0 | 8000 |
+| `codexExtractionProgressV2` | 同一提取Run已验证草稿进度（非Canon） | project | L0 | 8000（旧装配参考；V2完整捕获不以此截原文） |
+| `codexExtractionBaseline` | Codex 目标分类与既有词条闭集 | world | L0 | 8000（旧装配参考；V2完整捕获不以此截原文） |
 | `historyAgentBaseline` | 历史 Agent 正式输入基线 | world | L0 | 12000 |
 | `referenceAnalysisPrivateChunk` | 已确认的本机参考分析原文块 | project | L0 | 完整任务基线 |
 | `referenceDerivedBaseline` | 参考分析派生 Agent 正式输入基线 | project | L0 | 完整任务基线 |
@@ -265,7 +266,7 @@
 | `characterFacts` | 该角色的剧情事实 | project | L1 | 1500 |
 | `characterPassages` | 该角色的正文表现 | project | L1 | 2500 |
 
-> 层级裁剪顺序:超预算时 L3 → L2 → L1 依次裁剪,L0 永不裁剪。
+> 既有装配按来源完整性与层级处理预算；声明 fullCapture 的 V2 host 捕获完整保留原文，随后按真实完整请求安排选送。该声明不扩大 owner、来源或原文读取权限。
 
 ## 三、AI 可写字段（FIELD_REGISTRY · adopt 写什么）
 
@@ -506,10 +507,11 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 72 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。
+共 73 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
+| `world.codex.extract.v2` | `world-origin.codex-extract.v2` | `codex.extract` | formal / durable-run | `codex-extraction-candidate-v2` | `codexEntries` | `src/lib/agent/run/codex-extraction-v2-runtime.ts` |
 | `world.map.paint-preview` | `world-origin.map-config` | `geography.world-map-paint` | auxiliary / authoring-draft / image | `map-paint-image-preview` | 禁止 | `src/lib/world-map/atlas/paint-preview.ts` |
 | `node.worldview.field` | `world-origin.worldview-field` | `worldview.dimension` | formal / durable-run | `node-worldview-field-candidate` | `worldviews` | `src/lib/node-authoring/field-producer.ts` |
 | `node.story-core.field` | `world-origin.story-core` | `story.core` | formal / durable-run | `node-story-core-field-candidate` | `storyCores` | `src/lib/node-authoring/field-producer.ts` |
@@ -597,4 +599,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `1c6cb8aa1`
+生成时间基准:commit `bef4ebc25`

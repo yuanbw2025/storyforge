@@ -992,6 +992,18 @@ export async function generateCodexEnrichmentCandidateV1(input: {
   })
 }
 
+/** Exact identities only: a V2 Run must never enter a legacy parser/fallback. */
+function isLegacyCodexRunV1(contractJson: unknown): boolean {
+  if (typeof contractJson !== 'string') return false
+  try {
+    const contract: unknown = JSON.parse(contractJson)
+    if (!contract || typeof contract !== 'object' || !('executionBindings' in contract)
+      || !Array.isArray(contract.executionBindings)) return false
+    return contract.executionBindings.some((binding: unknown) => binding && typeof binding === 'object'
+      && 'skillId' in binding && ['world-origin.codex-extract','world-origin.codex-enrich'].includes(String(binding.skillId)))
+  } catch { return false }
+}
+
 export async function readRecoverableCodexExtractionV1(input: {
   scope: WorkspaceScope
   categoryId?: number
@@ -1008,10 +1020,7 @@ export async function readRecoverableCodexExtractionV1(input: {
   const rows = (await readOwnedRows<any>(input.scope, 'agentRuns', { owner: 'work' }))
     .filter(row => (
       (row.status === 'running' || row.status === 'paused')
-      && (
-        row.contractJson?.includes('world-origin.codex-extract')
-        || row.contractJson?.includes('world-origin.codex-enrich')
-      )
+      && isLegacyCodexRunV1(row.contractJson)
     ))
     .sort((left, right) => (right.id ?? 0) - (left.id ?? 0))
   for (const row of rows) {
@@ -1106,10 +1115,7 @@ export async function readPendingCodexExtractionCandidateV1(input: {
   const rows = (await readOwnedRows<any>(input.scope, 'agentRuns', { owner: 'work' }))
     .filter(row => (
       ['awaiting_confirmation', 'running', 'verifying'].includes(row.status)
-      && (
-        row.contractJson?.includes('world-origin.codex-extract')
-        || row.contractJson?.includes('world-origin.codex-enrich')
-      )
+      && isLegacyCodexRunV1(row.contractJson)
     ))
     .sort((left, right) => (right.id ?? 0) - (left.id ?? 0))
   for (const row of rows) {
@@ -1429,6 +1435,7 @@ export async function abandonCodexExtractionV1(input: {
   runId: number
 }): Promise<AgentRunSnapshotV1> {
   let snapshot = await readAgentRunV1(input.scope, input.runId)
+  if (!isLegacyCodexRunV1(snapshot.run.contractJson)) throw new Error('该运行需要其准确版本的弃用入口。')
   if (snapshot.projection.state === 'completed' || snapshot.projection.state === 'cancelled' || snapshot.projection.state === 'failed') {
     return snapshot
   }
@@ -1445,4 +1452,59 @@ export async function abandonCodexExtractionV1(input: {
     })
   }
   return append(input.scope, snapshot, 'run.cancelled', { reason: 'author-abandoned-codex-extraction' })
+}
+
+export {
+  generateCodexExtractionCandidateV2,
+  resumeCodexExtractionCandidateV2,
+  readCodexExtractionStateV2,
+  saveCodexExtractionAuthorDraftV2,
+  adoptCodexExtractionCandidateV2,
+  abandonCodexExtractionV2,
+} from './codex-extraction-v2-runtime'
+
+export type { BlockedCodexExtractionRunV2 } from './codex-extraction-v2-runtime'
+type CodexLookupFilterV2 = { scope: WorkspaceScope; categoryId?: number; worldGroupId?: number | null }
+type CodexLookupOptionsV2 = { onBlockedRun?: (blocked: import('./codex-extraction-v2-runtime').BlockedCodexExtractionRunV2) => void }
+
+/** Freeze filters before the first await. One bad original remains visible as
+ * its own readonly diagnostic without taking an unrelated history's slot. */
+async function lookupCodexExtractionV2(input: CodexLookupFilterV2, mode: 'pending' | 'recoverable', options?: CodexLookupOptionsV2) {
+  const scope = Object.freeze({ ...input.scope }), categoryId = input.categoryId
+  const filterGroup = Object.prototype.hasOwnProperty.call(input, 'worldGroupId'), worldGroupId = input.worldGroupId ?? null
+  const reportBlocked = options?.onBlockedRun
+  if (categoryId !== undefined && (!Number.isSafeInteger(categoryId) || categoryId < 1)
+    || filterGroup && worldGroupId !== null && (!Number.isSafeInteger(worldGroupId) || worldGroupId < 1)) throw new Error('V2查询目标无效。')
+  const { readCodexExtractionStateV2, inspectCodexExtractionRunForLookupV2, isCodexExtractionLookupCandidateV2 } = await import('./codex-extraction-v2-runtime')
+  const rows = (await readOwnedRows<import('../../types/agent-run').AgentRunRecord>(scope, 'agentRuns', { owner: 'work' }))
+    .sort((left, right) => (right.id ?? 0) - (left.id ?? 0))
+  let selected: Awaited<ReturnType<typeof readCodexExtractionStateV2>> | null = null
+  for (const row of rows) {
+    if (!row.id || !['planned','running','paused','awaiting_confirmation','verifying'].includes(row.status)) continue
+    if (!await isCodexExtractionLookupCandidateV2(scope, row)) continue
+    const metadata = await inspectCodexExtractionRunForLookupV2({ scope, runId: row.id })
+    if (metadata.kind === 'unrelated') continue
+    if (metadata.kind === 'blocked') { reportBlocked?.(metadata.blocked); continue }
+    // This target is from the original verified root/binding, not this UI's
+    // filter or objective text. Do not open another category's full raw/draft.
+    if (categoryId !== undefined && metadata.target.categoryId !== categoryId
+      || filterGroup && metadata.target.worldGroupId !== worldGroupId) continue
+    let read: Awaited<ReturnType<typeof readCodexExtractionStateV2>>
+    try {
+      read = await readCodexExtractionStateV2({ scope, runId: row.id })
+      if (read.materials.root.categoryId !== metadata.target.categoryId || read.materials.root.worldGroupId !== metadata.target.worldGroupId) throw new Error('target changed during readonly lookup')
+    } catch { reportBlocked?.(metadata.blockedOnReadFailure); continue }
+    const eligible = mode === 'pending' ? Boolean(read.candidate) && ['awaiting_confirmation','running','verifying'].includes(read.snapshot.projection.state)
+      : !read.candidate && ['planned','running','paused'].includes(read.snapshot.projection.state)
+    if (eligible && !selected) selected = read
+  }
+  return selected
+}
+
+/** V2 lookup never asks a V1 parser to infer a product from a substring. */
+export async function readPendingCodexExtractionCandidateV2(input: CodexLookupFilterV2, options?: CodexLookupOptionsV2) {
+  return lookupCodexExtractionV2(input, 'pending', options)
+}
+export async function readRecoverableCodexExtractionV2(input: CodexLookupFilterV2, options?: CodexLookupOptionsV2) {
+  return lookupCodexExtractionV2(input, 'recoverable', options)
 }

@@ -1,3 +1,6 @@
+import type { ContextMaterialAllocationV2, ExplicitAuthorConsumptionConstraintsV2 } from '../../types/agent-run'
+import { freezeAIRequestAssessmentContextV2, prepareAIRequestV2 } from '../../ai/client'
+import { codexEntryTransportOptionsV2 } from '../../ai/adapters/structured-extract-adapter'
 import type { AIConfig, ChatMessage } from '../../types'
 import type { CodexFieldDef } from '../../types/codex'
 import { describeResolvedAIRequestSettingsV1, estimateChatRequestOptionsTokens, resolveRequestConfig,
@@ -96,4 +99,30 @@ export function assertCodexExtractionRequestBudgetV1(messages: readonly ChatMess
   const tokens = estimateTokens(JSON.stringify(messages)) + estimateChatRequestOptionsTokens(binding.responseOptions ?? undefined)
     + estimateTokens(JSON.stringify({ model: binding.settings.model, stream: binding.settings.stream, parameters: binding.settings.parameters })) + 3
   if (tokens > binding.inputBudgetTokens) throw new CodexExtractionRequestBudgetErrorV1()
+}
+
+/** Explicit V2 preparation never enters the V1 32K/4K allocator. Every frame
+ * freezes its actual route/native id before the product plan and contract. */
+export async function prepareCodexExtractionRequestV2(input: {
+  config: AIConfig
+  fields: readonly CodexFieldDef[]
+  supplementTags: boolean
+  material: ContextMaterialAllocationV2
+  explicitConstraints: ExplicitAuthorConsumptionConstraintsV2 | null
+}) {
+  const requested = structuredClone(input.config), meta = { category: 'codex.extract' }
+  const resolution = structuredClone(resolveRequestConfig(requested, meta)), guard = guardBody(resolution)
+  const policy = { operation: 'extract' as const, supplementTags: input.supplementTags }
+  const options = codexEntryTransportOptionsV2(resolution.config, input.fields, policy) ?? {}
+  const assertCurrent = () => { if (guardBody(resolveRequestConfig(requested, meta)) !== guard) throw new CodexExtractionRequestChangedErrorV1() }
+  const assessmentContext = await freezeAIRequestAssessmentContextV2(resolution)
+  assertCurrent()
+  return { resolution, options, assessmentContext, assertCurrent,
+    prepare: async (messages: readonly ChatMessage[]) => {
+      assertCurrent()
+      const freshContext = await freezeAIRequestAssessmentContextV2(resolution)
+      assertCurrent()
+      return prepareAIRequestV2({ resolution, assessmentContext: freshContext, messages, stream: false,
+        options, contextMaterial: input.material, lengthPlan: null, explicitConstraints: input.explicitConstraints })
+    } }
 }

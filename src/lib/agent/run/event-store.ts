@@ -456,6 +456,7 @@ async function verifyMaterializedProjection(
   if (
     run.status !== projection.state
     || run.generation !== projection.generation
+    || run.contractHash !== projection.contractHash
     || run.lastSequence !== projection.lastSequence
     || (run.terminalReceiptHash ?? null) !== (projection.terminalReceiptHash ?? null)
   ) {

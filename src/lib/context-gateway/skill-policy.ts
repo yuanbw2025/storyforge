@@ -1,3 +1,5 @@
+import type { ContextMaterialAllocationV2 } from '../types/agent-run'
+import { hashCanonicalValue } from '../agent/run/hash'
 import type { AgentSkillDefinitionV1 } from '../agent/skill-registry'
 import { AGENT_TOOL_BY_NAME } from '../agent/tool-registry'
 import { CONTEXT_SOURCE_BY_KEY } from '../registry/context-sources'
@@ -104,4 +106,19 @@ export function contextGatewayAdditionalReadToolNamesForSkillV1(
   skill: AgentSkillDefinitionV1,
 ): readonly string[] {
   return [...assertAgentSkillContextGatewayPolicyV1(skill).additionalReadToolNames]
+}
+
+/** Same Skill permissions, finite captured material quantities. The material
+ * digest is checked here; caller-supplied model-window flags confer no grant. */
+export async function createContextAccessPolicyForExecutionV2(
+  skill: AgentSkillDefinitionV1, material: ContextMaterialAllocationV2,
+  excludedResourceKinds: readonly ContextResourceKind[] = [],
+): Promise<ContextAccessPolicyV1> {
+  if (skill.id !== 'world-origin.codex-extract.v2' || skill.requestPolicy !== 'task-request-v2') fail('完整资料策略只适用于准确登记的新提取Skill')
+  const { allocationHash, ...body } = material
+  if (body.version !== 'context-material-allocation-v2' || body.captureProtocolVersion !== 'registered-host-full-v2'
+    || !Number.isSafeInteger(body.inputTokenForecast) || body.inputTokenForecast < 0
+    || await hashCanonicalValue(body) !== allocationHash) fail('完整资料分配hash或数量无效')
+  const declared = createContextAccessPolicyForExecutionV1(skill, excludedResourceKinds)
+  return { ...declared, maxRetrievedTokens: Math.max(1, body.inputTokenForecast) }
 }

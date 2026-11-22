@@ -1,3 +1,5 @@
+import type { ContextMaterialAllocationV2 } from '../types/agent-run'
+import { createContextAccessPolicyForExecutionV2 } from './skill-policy'
 import { ensureLocalNarrativeIndexV1 } from '../retrieval/retrieval'
 import { prepareModelCapacityV1, modelInputBudgetV1, type ModelCapacityV1 } from '../ai/model-capacity'
 import type { AIConfig } from '../types'
@@ -66,6 +68,7 @@ export type ContextGatewayExecutionPathV1 =
   | 'deterministic-fallback'
 
 export interface ExecuteContextGatewayInputV1 {
+  taskRequestV2?: { material: ContextMaterialAllocationV2 }
   modelConfig?: AIConfig
   skill: AgentSkillDefinitionV1
   scope: WorkspaceScope
@@ -168,8 +171,8 @@ function frozenScope(input: ExecuteContextGatewayInputV1): FrozenResourceScopeV1
   }
 }
 
-function narrowedAccessPolicy(input: ExecuteContextGatewayInputV1): ContextAccessPolicyV1 {
-  const declared = createContextAccessPolicyForExecutionV1(input.skill, input.excludedResourceKinds)
+function narrowedAccessPolicy(input: ExecuteContextGatewayInputV1, materialPolicy?: ContextAccessPolicyV1): ContextAccessPolicyV1 {
+  const declared = materialPolicy ?? createContextAccessPolicyForExecutionV1(input.skill, input.excludedResourceKinds)
   const override = input.accessPolicyOverride
   if (!override) return declared
   const subset = <T>(values: readonly T[], allowed: readonly T[]) => values.every(value => allowed.includes(value))
@@ -407,7 +410,8 @@ async function validatedAgentRead(
 export async function executeContextGatewayV1(
   input: ExecuteContextGatewayInputV1,
 ): Promise<ContextGatewayExecutionV1> {
-  const prepared = input.modelConfig ? await prepareModelCapacityV1(input.modelConfig) : undefined
+  const materialPolicy = input.taskRequestV2 ? await createContextAccessPolicyForExecutionV2(input.skill, input.taskRequestV2.material, input.excludedResourceKinds) : undefined
+  const prepared = !materialPolicy && input.modelConfig ? await prepareModelCapacityV1(input.modelConfig) : undefined
   const modelBudget = prepared?.modelCapacity ? {
     capacity: prepared.modelCapacity,
     inputBudget: Math.max(1, modelInputBudgetV1(prepared.modelCapacity, prepared.maxTokens).inputBudget - 1024),
@@ -415,7 +419,7 @@ export async function executeContextGatewayV1(
   input = { ...input, ...(modelBudget ? { budgetTokens: Math.min(input.budgetTokens ?? Infinity, modelBudget.inputBudget) } : {}) }
   delete input.modelConfig
   const gatewayPolicy = assertAgentSkillContextGatewayPolicyV1(input.skill)
-  const declaredAccessPolicy = narrowedAccessPolicy(input)
+  const declaredAccessPolicy = narrowedAccessPolicy(input, materialPolicy)
   const accessPolicy = declaredAccessPolicy.retrievalBudgetMode === 'model-capacity' && modelBudget
     ? { ...declaredAccessPolicy, maxRetrievedTokens: modelBudget.inputBudget }
     : declaredAccessPolicy
