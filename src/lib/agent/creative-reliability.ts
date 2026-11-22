@@ -114,10 +114,6 @@ export interface CreativeArtifactV1 {
   repair: CreativeRepairEvidenceV1 | null
 }
 
-const MAX_ISSUES = 200
-const MAX_FRAGMENTS = 200
-const MAX_ASSUMPTIONS = 100
-
 function fail(message: string): never {
   throw new Error(`创作产物合同无效：${message}`)
 }
@@ -151,8 +147,10 @@ function readEnum<T extends string | number>(value: unknown, values: readonly T[
   return value as T
 }
 
-function readStringArray(value: unknown, label: string, max = 100): string[] {
-  if (!Array.isArray(value) || value.length > max) fail(`${label} 必须是最多 ${max} 项的数组`)
+function readStringArray(value: unknown, label: string): string[] {
+  // Keep every retained reference; validate its identity and uniqueness rather
+  // than imposing a quota on the source material or review findings.
+  if (!Array.isArray(value)) fail(`${label} 必须是数组`)
   const result = value.map((item, index) => readString(item, `${label}[${index}]`, 500))
   if (new Set(result).size !== result.length) fail(`${label} 不能包含重复项`)
   return result
@@ -193,9 +191,9 @@ function parseIssue(value: unknown, index: number): CreativeArtifactIssueV1 {
     severity: readEnum(value.severity, CREATIVE_ISSUE_SEVERITIES, `issues[${index}].severity`),
     disposition: readEnum(value.disposition, CREATIVE_ISSUE_DISPOSITIONS, `issues[${index}].disposition`),
     path: readString(value.path, `issues[${index}].path`, 500),
-    message: readString(value.message, `issues[${index}].message`, 1_000),
+    message: readString(value.message, `issues[${index}].message`, Number.POSITIVE_INFINITY),
     suggestedAction: readEnum(value.suggestedAction, CREATIVE_ISSUE_ACTIONS, `issues[${index}].suggestedAction`),
-    evidenceRefs: readStringArray(value.evidenceRefs, `issues[${index}].evidenceRefs`, 50),
+    evidenceRefs: readStringArray(value.evidenceRefs, `issues[${index}].evidenceRefs`),
     deterministic: value.deterministic,
   }
 }
@@ -210,7 +208,7 @@ function parseFragment(value: unknown, index: number, label: string): CreativeAr
     path: readString(value.path, `${label}[${index}].path`, 500),
     text: readArtifactContent(value.text, `${label}[${index}].text`),
     status: readEnum(value.status, ['valid', 'rejected'] as const, `${label}[${index}].status`),
-    issueCodes: readStringArray(value.issueCodes, `${label}[${index}].issueCodes`, 50),
+    issueCodes: readStringArray(value.issueCodes, `${label}[${index}].issueCodes`),
   }
 }
 
@@ -223,10 +221,10 @@ export function parseCreativeAssumptionV1(value: unknown, index = 0): CreativeAs
   return {
     version: 1,
     id: readString(value.id, `assumptions[${index}].id`, 120),
-    text: readString(value.text, `assumptions[${index}].text`, 2_000),
-    derivedFrom: readStringArray(value.derivedFrom, `assumptions[${index}].derivedFrom`, 50),
+    text: readString(value.text, `assumptions[${index}].text`, Number.POSITIVE_INFINITY),
+    derivedFrom: readStringArray(value.derivedFrom, `assumptions[${index}].derivedFrom`),
     confidence: readEnum(value.confidence, ['low', 'medium', 'high'] as const, `assumptions[${index}].confidence`),
-    conflictsWith: readStringArray(value.conflictsWith, `assumptions[${index}].conflictsWith`, 50),
+    conflictsWith: readStringArray(value.conflictsWith, `assumptions[${index}].conflictsWith`),
     status: readEnum(
       value.status,
       ['provisional', 'author-confirmed', 'rejected'] as const,
@@ -290,7 +288,7 @@ function parseRepair(value: unknown): CreativeRepairEvidenceV1 | null {
   return {
     version: 1,
     sourceTextHash: readHash(value.sourceTextHash, 'repair.sourceTextHash')!,
-    targetIssueCodes: readStringArray(value.targetIssueCodes, 'repair.targetIssueCodes', 100),
+    targetIssueCodes: readStringArray(value.targetIssueCodes, 'repair.targetIssueCodes'),
     callIndex: 2,
     result: readEnum(value.result, ['repaired', 'partial', 'failed'] as const, 'repair.result'),
   }
@@ -323,14 +321,14 @@ export function parseCreativeArtifactV1(value: unknown): CreativeArtifactV1 {
   if (value.version !== 1 || value.policyVersion !== 'creative-reliability-v1') {
     fail('version 或 policyVersion 不支持')
   }
-  if (!Array.isArray(value.issues) || value.issues.length > MAX_ISSUES) fail('issues 数量无效')
-  if (!Array.isArray(value.validFragments) || value.validFragments.length > MAX_FRAGMENTS) {
+  if (!Array.isArray(value.issues)) fail('issues 必须是数组')
+  if (!Array.isArray(value.validFragments)) {
     fail('validFragments 数量无效')
   }
-  if (!Array.isArray(value.rejectedFragments) || value.rejectedFragments.length > MAX_FRAGMENTS) {
+  if (!Array.isArray(value.rejectedFragments)) {
     fail('rejectedFragments 数量无效')
   }
-  if (!Array.isArray(value.assumptions) || value.assumptions.length > MAX_ASSUMPTIONS) {
+  if (!Array.isArray(value.assumptions)) {
     fail('assumptions 数量无效')
   }
   if (!Array.isArray(value.callEvidence) || value.callEvidence.length < 1 || value.callEvidence.length > 2) {
@@ -373,7 +371,7 @@ export function parseCreativeArtifactV1(value: unknown): CreativeArtifactV1 {
     rejectedFragments,
     issues,
     assumptions,
-    canonEvidenceRefs: readStringArray(value.canonEvidenceRefs, 'canonEvidenceRefs', 200),
+    canonEvidenceRefs: readStringArray(value.canonEvidenceRefs, 'canonEvidenceRefs'),
     callEvidence,
     repair,
   }
@@ -414,7 +412,7 @@ export function parseCreativeAudioArtifactV1(value: unknown): CreativeAudioArtif
   const evidence = { inputArtifactHash: readHash(value.evidence.inputArtifactHash, 'audio.inputArtifactHash')!,
     contextManifestHash: readHash(value.evidence.contextManifestHash, 'audio.contextManifestHash')!,
     rawResponseArtifactHash: readHash(value.evidence.rawResponseArtifactHash, 'audio.rawResponseArtifactHash')! }
-  if (!Array.isArray(value.issues) || value.issues.length > MAX_ISSUES) fail('音频 issues 数量无效')
+  if (!Array.isArray(value.issues)) fail('音频 issues 必须是数组')
   const issues = value.issues.map(parseIssue), status = readEnum(value.status, CREATIVE_ARTIFACT_STATUSES, 'audio.status')
   assertArtifactStatus(status, issues)
   if (!isRecord(value.requestEvidence)) fail('音频只保留本次原请求，不授予 repair 或重试')

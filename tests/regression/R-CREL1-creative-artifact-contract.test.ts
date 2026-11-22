@@ -107,6 +107,56 @@ describe('R-CREL1 · creative artifact contract', () => {
     expect(parseCreativeArtifactV1(JSON.parse(JSON.stringify(result.artifact)))).toEqual(result.artifact)
   })
 
+  it('retains every fragment, assumption and evidence reference through execution and readback', async () => {
+    const refs = Array.from({ length: 201 }, (_, index) => `source:${index}`)
+    const issueCodes = Array.from({ length: 201 }, (_, index) => `warning.${index}`)
+    const message = '完整复核说明'.repeat(300) + '说明尾标'
+    const assumption = '未核实的角色猜测'.repeat(300) + '猜测尾标'
+    const issues = issueCodes.map(code => warningIssue({ code, message, evidenceRefs: refs }))
+    const validFragments = Array.from({ length: 201 }, (_, index) => ({
+      version: 1 as const, id: `valid.${index}`, path: '$', text: `片段${index}`,
+      status: 'valid' as const, issueCodes,
+    }))
+    const rejectedFragments = validFragments.map((fragment, index) => ({
+      ...fragment, id: `rejected.${index}`, status: 'rejected' as const,
+    }))
+    const assumptions = Array.from({ length: 101 }, (_, index) => ({
+      version: 1 as const, id: `assumption.${index}`, text: assumption,
+      derivedFrom: refs, confidence: 'low' as const, conflictsWith: refs,
+      status: 'provisional' as const,
+    }))
+    let calls = 0
+    const result = await runCreativeExecutionV1({
+      initialMessages: [{ role: 'user', content: '完整候选与复核资料' }],
+      runRaw: async () => { calls += 1; return { output: '完整候选原答', durationMs: 0 } },
+      parse: text => ({ status: 'usable-with-warnings', output: text, editableText: text,
+        validFragments, rejectedFragments, issues, assumptions }),
+      buildRepairMessages: () => { throw new Error('advisory review must not request repair') },
+      budget: new AgentTeamBudgetTracker('expanded'), callLabel: 'complete candidate review',
+      maxOutputTokens: 1024, qualityMode: 'economy', modelIdentity: { provider: 'fixture', model: 'review-fixture' },
+      canonEvidenceRefs: refs,
+    })
+    expect(calls).toBe(1)
+    const retained = parseCreativeArtifactV1(result.artifact)
+    const restored = parseCreativeArtifactV1(JSON.parse(JSON.stringify(retained)))
+    expect(restored.validFragments).toEqual(validFragments)
+    expect(restored.rejectedFragments).toEqual(rejectedFragments)
+    expect(restored.issues).toEqual(issues)
+    expect(restored.assumptions).toEqual(assumptions)
+    expect(restored.canonEvidenceRefs).toEqual(refs)
+    expect(await hashCanonicalValue(restored)).toBe(await hashCanonicalValue(retained))
+    expect(creativeArtifactCanAdoptV1(restored)).toBe(true)
+    expect(() => parseCreativeArtifactV1({ ...retained,
+      issues: [...issues, warningIssue({ code: 'late-blocker', disposition: 'blocking' })],
+    })).toThrow('不能有 blocking')
+    expect(() => parseCreativeArtifactV1({ ...retained,
+      assumptions: [...assumptions, assumptions[0]],
+    })).toThrow('assumptions 包含重复身份')
+    expect(() => parseCreativeArtifactV1({ ...retained,
+      canonEvidenceRefs: [...refs, 123],
+    })).toThrow('必须是字符串')
+  })
+
   it('still rejects content type, envelope, source identity and call hash corruption', () => {
     expect(() => parseCreativeArtifactV1({ ...artifact(), originalText: 123 })).toThrow('必须是字符串')
     expect(() => parseCreativeArtifactV1({ ...artifact(), editableText: null })).toThrow('必须是字符串')
@@ -174,12 +224,13 @@ describe('R-CREL1 · creative artifact contract', () => {
       repair: {
         version: 1,
         sourceTextHash: HASH,
-        targetIssueCodes: ['creative-json-invalid'],
+        targetIssueCodes: Array.from({ length: 201 }, (_, index) => `creative-json-invalid.${index}`),
         callIndex: 2,
         result: 'repaired',
       },
     })
     expect(parseCreativeArtifactV1(repaired).callEvidence).toHaveLength(2)
+    expect(parseCreativeArtifactV1(repaired).repair?.targetIssueCodes).toEqual(repaired.repair!.targetIssueCodes)
 
     expect(() => parseCreativeArtifactV1(artifact({
       callEvidence: repaired.callEvidence,
