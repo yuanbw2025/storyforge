@@ -2,7 +2,7 @@ import type { WorldReleaseSemanticContentV4 } from '../types/narrative-release'
 import type { NarrativeCompilationResultV1, NarrativeIncrementalBaseV1 } from './narrative-incremental'
 import { canonicalNarrativeJsonV1, hashNarrativeValueV1 } from './narrative-json'
 
-export const NARRATIVE_COMPILE_WORKER_BUDGET_V1 = Object.freeze({ inputBytes: 32 * 1024 * 1024, timeoutMs: 60_000 })
+export const NARRATIVE_COMPILE_WORKER_BUDGET_V1 = Object.freeze({ timeoutMs: 60_000 })
 export type NarrativeCompileProgressV1 = 'worker-started' | 'inline-fallback'
 function aborted(): Error { return new DOMException('叙事世界编译已取消，原封存保留', 'AbortError') }
 
@@ -31,7 +31,6 @@ export async function compileNarrativeReleaseInWorkerV1(input: Omit<WorldRelease
   if (options.signal?.aborted) throw aborted()
   const bytes = canonicalNarrativeJsonV1(input)
   const baseline = options.baseline && JSON.parse(canonicalNarrativeJsonV1(options.baseline)) as NarrativeIncrementalBaseV1 | undefined
-  if (new TextEncoder().encode(bytes).byteLength + (baseline ? new TextEncoder().encode(canonicalNarrativeJsonV1(baseline)).byteLength : 0) > NARRATIVE_COMPILE_WORKER_BUDGET_V1.inputBytes) throw Error('[narrative-worker] 捕获内容超过后台编译预算')
   const frozen = JSON.parse(bytes) as typeof input
   let result: NarrativeCompilationResultV1
   if (typeof Worker === 'undefined') {

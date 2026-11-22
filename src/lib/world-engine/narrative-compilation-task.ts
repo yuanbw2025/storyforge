@@ -6,7 +6,6 @@ import { agentRunScopeTransactionTablesV1, appendAgentRunEventV1, appendAgentRun
   createAgentRunV1, readAgentRunV1, readVerifiedAgentRunInTransactionV1, withAgentRunMutationLockV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
 import { createAgentRunCheckpointV1, createAgentRunCheckpointInTransactionV1, readLatestVerifiedAgentRunCheckpointV1,
   beginAgentRunRecoveryV1, completeAgentRunRecoveryV1 } from '../agent/run/checkpoint'
-import { AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1, agentRunUtf8ByteLengthV1 } from '../agent/run/checkpoint-contract'
 import { parseAgentRunEventV1 } from '../agent/run/event-schema'
 import { captureWorldReleaseInputV4, type WorldReleaseInputV4 } from './narrative-release-capture'
 import type { NarrativeDomainCompilerV4 } from '../types/narrative-release'
@@ -38,9 +37,6 @@ async function bindingHash(state: NarrativeCompilationCheckpointV1) {
 function append<T extends AgentRunEventTypeV1>(scope: WorkspaceScope, run: AgentRunSnapshotV1, type: T, payload: AgentRunEventPayloadByTypeV1[T]) {
   return appendAgentRunEventV1({ scope, runId: run.run.id, expectedLastSequence: run.projection.lastSequence, type, payload })
 }
-function assertPayloadBudget(state: NarrativeCompilationCheckpointV1): void {
-  if (agentRunUtf8ByteLengthV1(canonicalNarrativeJsonV1(state)) > AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1) throw Error('[narrative-compile-task] 完整检查点超过 32 MiB，未截断原文或结果')
-}
 async function assertSourceCurrent(state: NarrativeCompilationCheckpointV1): Promise<void> {
   const current = await captureWorldReleaseInputV4({ scope: state.scope, selectedTables: state.selectedTables,
     includeWorkSources: state.includeWorkSources, compilerVersion: state.input.compilerVersion })
@@ -64,7 +60,6 @@ export async function createNarrativeCompilationTaskV1(input: { scope: Workspace
     if (JSON.parse(revision.manifestJson).version !== 4) throw Error('[narrative-compile-task] 增量比较只接受已冻结的叙事 v4 修订')
     state.baseline = { version: 1, manifestJson: revision.manifestJson, contentHash: revision.contentHash }
   }
-  assertPayloadBudget(state)
   let run = await createAgentRunV1({ scope: request.scope, contract: {
     version: 1, objective: OBJECTIVE, workflowKind: 'plan-execute',
     scope: { projectId: request.scope.projectId, worldGroupId: null }, runtimeBindingHash: await bindingHash(state),
@@ -136,7 +131,6 @@ async function finish(run: AgentRunSnapshotV1, state: NarrativeCompilationCheckp
     ...(result.update ? { impactPlanHash: result.update.impact.planHash, operationKey: result.update.impact.operationKey } : {}) }
   const receiptHash = await hashNarrativeValueV1(receipt)
   const completed = { ...state, result: storedResult, receipt, receiptHash }
-  assertPayloadBudget(completed)
   return withAgentRunMutationLockV1(run.run.id, () => db.transaction('rw', agentRunScopeTransactionTablesV1(run.run.id, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints), async () => {
     let current = await readVerifiedAgentRunInTransactionV1(state.scope, run.run.id)
     if (current.projection.lastSequence !== run.projection.lastSequence || current.projection.state !== 'running') throw Error('[narrative-compile-task] 编译记录已被另一窗口推进或取消')
