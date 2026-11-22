@@ -147,11 +147,7 @@ export const MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1 = 'master-agent-plan'
 export const MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1 = 1 as const
 export const MAX_MASTER_AGENT_REPLANS_V1 = 1
 
-const MAX_PLAN_TASKS = 5
-const MAX_PLAN_SUMMARY_CHARS = 500
 const MAX_TASK_ID_CHARS = 80
-const MAX_TASK_INSTRUCTION_CHARS = 8_000
-const MAX_CANDIDATE_CHARS = 120_000
 
 export interface MasterAgentPlanCheckpointV1 {
   version: typeof MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1
@@ -230,6 +226,12 @@ function readString(value: unknown, label: string, max: number): string {
   if (typeof value !== 'string' || !value.trim() || value.length > max) {
     fail(`${label} 无效`)
   }
+  return value
+}
+
+/** User/model task content has no application character quota. Keep exact bytes for frozen hashes. */
+function readTaskContentText(value: unknown, label: string): string {
+  if (typeof value !== 'string' || !value.trim()) fail(`${label} 无效`)
   return value
 }
 
@@ -491,28 +493,37 @@ function promptModuleForPlanTaskV1(
 
 function assertAcyclic(plan: MasterAgentPlan): void {
   const byId = new Map(plan.tasks.map(task => [task.id, task]))
-  const visiting = new Set<string>()
-  const visited = new Set<string>()
-  const visit = (id: string): void => {
-    if (visiting.has(id)) fail('主 Agent 计划包含循环依赖')
-    if (visited.has(id)) return
-    const task = byId.get(id)
-    if (!task) fail(`主 Agent 计划依赖不存在的任务 ${id}`)
-    visiting.add(id)
-    task.dependsOn.forEach(visit)
-    visiting.delete(id)
-    visited.add(id)
+  const remaining = new Map<string, number>()
+  const dependents = new Map<string, string[]>()
+  for (const task of plan.tasks) {
+    remaining.set(task.id, task.dependsOn.length)
+    for (const dependency of task.dependsOn) {
+      if (!byId.has(dependency)) fail(`主 Agent 计划依赖不存在的任务 ${dependency}`)
+      const children = dependents.get(dependency) ?? []
+      children.push(task.id)
+      dependents.set(dependency, children)
+    }
   }
-  plan.tasks.forEach(task => visit(task.id))
+  const queue = plan.tasks.filter(task => remaining.get(task.id) === 0).map(task => task.id)
+  let visited = 0
+  for (let cursor = 0; cursor < queue.length; cursor++) {
+    visited++
+    for (const child of dependents.get(queue[cursor]) ?? []) {
+      const count = remaining.get(child)! - 1
+      remaining.set(child, count)
+      if (count === 0) queue.push(child)
+    }
+  }
+  if (visited !== plan.tasks.length) fail('主 Agent 计划包含循环依赖')
 }
 
 /** Strictly validates the persisted plan instead of trusting a UI plan object. */
 export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
   if (!isRecord(value)) fail('主 Agent 计划必须是对象')
   assertKeysWithOptional(value, ['summary', 'tasks', 'workflow'], [], '主 Agent 计划')
-  const summary = readString(value.summary, '主 Agent 计划 summary', MAX_PLAN_SUMMARY_CHARS)
-  if (!Array.isArray(value.tasks) || value.tasks.length < 1 || value.tasks.length > MAX_PLAN_TASKS) {
-    fail(`主 Agent 计划任务数必须在 1-${MAX_PLAN_TASKS} 之间`)
+  const summary = readTaskContentText(value.summary, '主 Agent 计划 summary')
+  if (!Array.isArray(value.tasks) || value.tasks.length < 1) {
+    fail('主 Agent 计划必须包含非空任务数组')
   }
   const ids = new Set<string>()
   const tasks: MasterAgentTask[] = value.tasks.map((item, index) => {
@@ -530,12 +541,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       fail(`主 Agent 计划包含未知领域 ${String(item.agentId)}`)
     }
     const agentId = item.agentId as DomainAgentId
-    const instructionLimit = item.skillId === 'world-origin.story-core' ? Infinity : MAX_TASK_INSTRUCTION_CHARS
-    const instruction = readString(
-      item.instruction,
-      `主 Agent 计划任务 ${id}.instruction`,
-      instructionLimit,
-    )
+    const instruction = readTaskContentText(item.instruction, `主 Agent 计划任务 ${id}.instruction`)
     if (!Array.isArray(item.dependsOn) || item.dependsOn.some(dep => typeof dep !== 'string')) {
       fail(`主 Agent 计划任务 ${id}.dependsOn 无效`)
     }
@@ -545,8 +551,8 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       if (!isRecord(item.requestContext)) fail('任务 requestContext 必须是对象')
       assertExactKeys(item.requestContext, ['originalRequest', 'plannerInstruction'], '任务 requestContext')
       requestContext = {
-        originalRequest: readString(item.requestContext.originalRequest, '任务原始要求', instructionLimit),
-        plannerInstruction: readString(item.requestContext.plannerInstruction, '任务规划解读', instructionLimit),
+        originalRequest: readTaskContentText(item.requestContext.originalRequest, '任务原始要求'),
+        plannerInstruction: readTaskContentText(item.requestContext.plannerInstruction, '任务规划解读'),
       }
     }
     if (dependsOn.includes(id)) fail(`主 Agent 计划任务 ${id} 不得依赖自身`)
@@ -1675,7 +1681,6 @@ async function readPersistedCandidates(input: {
     if (payload.contextSources.some(source => !allowedSources.has(source))) {
       fail(`候选事件 ${event.id} 使用了契约未授权的上下文源`)
     }
-    if (payload.skillId !== 'world-origin.story-core' && event.content.length > MAX_CANDIDATE_CHARS) fail(`候选事件 ${event.id} 超出持久化上限`)
     const expectedHash = await computeCandidateHash(payload, event.content)
     if (expectedHash !== payload.candidateHash) fail(`候选事件 ${event.id} candidateHash 校验失败`)
     const semanticRequired = input.snapshot.contract.candidateSemanticReviewPolicy
@@ -1895,7 +1900,9 @@ export async function runDurableMasterAgentPlanV1(
       resolveAgentSkillV1(task.agentId, task.skillId).executionMode === 'story-core' && !task.promptExecution
         ? { ...task, promptExecution: await freezePromptExecutionOptionsV1({ request: { version: 1, moduleKey: 'story.generate' }, template: usePromptStore.getState().getActive('story.generate') }) }
         : task)) }
-    budget = plan.tasks.some(task => resolveAgentSkillV1(task.agentId, task.skillId).executionMode === 'story-core') ? new AgentTeamBudgetTracker('service-capacity') : input.budget ?? new AgentTeamBudgetTracker('balanced')
+    // The supplied tracker already accounts for planning; preserve its identity
+    // and usage. Frozen recovery below retains the historical profile as-is.
+    budget = input.budget ?? new AgentTeamBudgetTracker('service-capacity')
     const evidence = budget.snapshot()
     const contract = buildMasterAgentRunContractV1({
       scope: input.scope,
@@ -1976,7 +1983,11 @@ export async function runDurableMasterAgentPlanV1(
   if (restored.latestBudget.profile !== budget.policy.profile) {
     fail('恢复的团队预算证据与当前策略不一致')
   }
-  budget = new AgentTeamBudgetTracker(restored.latestBudget.profile, restored.latestBudget)
+  if (resumed) {
+    budget = new AgentTeamBudgetTracker(restored.latestBudget.profile, restored.latestBudget)
+  } else if (canonicalStringify(budget.snapshot()) !== canonicalStringify(restored.latestBudget)) {
+    fail('新运行团队用量与已冻结证据不一致')
+  }
   if (resumed && ['paused', 'running', 'recovering'].includes(snapshot.projection.state)
     && masterRunAwaitsSourceAuthorizationV1(snapshot)) {
     // A checkpoint proves what was already paid and saved. It does not
@@ -2452,7 +2463,7 @@ export async function runDurableMasterAgentPlanV1(
         candidateHash: undefined,
       }
       const draft = candidate.draft
-      if (!draft || (payload.skillId !== 'world-origin.story-core' && draft.length > MAX_CANDIDATE_CHARS)) fail(`主 Agent 任务 ${task.id} 候选长度无效`)
+      if (!draft) fail(`主 Agent 任务 ${task.id} 候选长度无效`)
       const outputHash = await hashCanonicalValue(candidate.runtimeOutput)
       const gatewayRequired = isMasterCandidateContextGatewayRequiredV1(payload)
       let contextManifestHash: string | null = null

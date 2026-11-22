@@ -110,6 +110,11 @@ describe('AUDIT-6 / HEALTH-4 · AI 设置分区', () => {
       proseContext.dispatchEvent(new Event('change', { bubbles: true }))
     })
     expect(onSetContextProfile).toHaveBeenCalledWith('agent-prose', 'lean')
+    expect(host.textContent).toContain('用于编辑器、独立审校、修订和采纳后处理等任务的流程额度')
+    expect(host.textContent).toContain('不代表模型的上下文窗口')
+    expect(host.textContent).toContain('新主 Agent 的规划与生成按服务实际容量执行')
+    expect(host.textContent).toContain('历史运行沿用各自冻结的预算')
+    expect(host.textContent).not.toContain('覆盖编排、生成与一次 Canon 打回')
     const teamBudget = host.querySelector<HTMLSelectElement>('select[aria-label="主 Agent 团队总预算"]')!
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!

@@ -11,7 +11,7 @@ import {
   type ProseCopilotInput,
 } from '../../src/lib/agent/prose-copilot'
 import { adoptMasterCandidate } from '../../src/lib/agent/orchestrator'
-import { appendAgentEvent, getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
+import { appendAgentEvent, getOrCreateAgentConversation, readAgentEvents } from '../../src/lib/agent/conversations'
 import { db } from '../../src/lib/db/schema'
 import {
   adoptGenerationNodeOutput,
@@ -24,10 +24,18 @@ import { useAIConfigStore } from '../../src/stores/ai-config'
 import { buildNarrativeBriefV1 } from '../../src/lib/agent/narrative-brief'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
+import { hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
 
 const longDraft = (marker: string) => (
   `${marker}。退潮后的盐海露出黑色礁脊，守灯人沿着潮痕走向沉默的钟楼。`
   + '风把旧誓言送回岸边，他意识到这次选择会改变整座港城的命运。'.repeat(3)
+)
+
+const oversizedDraft = (marker: string) => (
+  `【${marker}首部】守灯人推开木门，决定沿海堤寻找铜铃。`
+  + '守灯人沿海堤前行，把铜铃交给邮差，又转身寻找下一条线索。'.repeat(10_000)
+  + `【${marker}尾部】邮差交还铜铃，守灯人带着新的线索离开。`
 )
 
 async function seedProject(): Promise<{
@@ -557,9 +565,108 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
     expect(chapter?.content).toContain('续写确认稿')
   })
 
-  it('短候选和超长候选在写入前阻断', () => {
+  it('超过20万字符的真实候选保全首尾和输出hash，持久恢复后才由作者采纳', async () => {
+    const { project, firstId } = await seedProject()
+    const scope = await resolveScopeLike(project.id!)
+    const text = oversizedDraft('模型长稿')
+    const runAI = vi.fn(async () => text)
+    const prepared = await prepareProseCopilot({ projectId: project.id!, scope,
+      worldGroupId: null, authorRequest: '写第一章正文' }, { runAI })
+    // Establish Canon after deterministic preparation/index repair, before any model response.
+    const worldBefore = await db.worldviews.toArray()
+    const result = await runProseCreativeReliabilityV1({ prepared,
+      budget: new AgentTeamBudgetTracker('service-capacity'), qualityMode: 'economy' })
+    expect(runAI).toHaveBeenCalledOnce()
+    expect(result.draft).toBe(text)
+    expect(result.artifact.originalText).toBe(text)
+    expect(result.artifact.editableText).toBe(text)
+    expect(result.artifact.validFragments[0]?.text).toBe(text)
+    expect(result.artifact.issues.some(issue => issue.disposition === 'blocking')).toBe(false)
+    expect(result.artifact.callEvidence[0].outputHash).toBe(await hashCanonicalValue(text))
+    expect(await db.chapters.count()).toBe(0)
+    expect(await db.worldviews.toArray()).toEqual(worldBefore)
+
+    const conversation = await getOrCreateAgentConversation({ projectId: project.id!, scope,
+      worldGroupId: null, purpose: 'prose-copilot' })
+    const payload = { version: 1 as const, taskId: 'prose-complete-long', agentId: 'prose' as const,
+      skillId: 'prose.generate' as const,
+      label: prepared.label, contextSources: prepared.contextSources, baseSnapshot: prepared.snapshot,
+      proseOperation: 'generate' as const, proseOutlineNodeId: firstId, creativeArtifact: result.artifact }
+    const saved = await appendAgentEvent({ projectId: project.id!, scope, conversationId: conversation.id!,
+      kind: 'candidate', content: text, payload })
+    const restored = (await readAgentEvents(conversation.id!, scope)).find(event => event.id === saved.id)!
+    expect(restored.content).toBe(text)
+    expect(await hashChapterText(restored.content)).toBe(await hashChapterText(text))
+    const restoredPayload = JSON.parse(restored.payload) as typeof payload
+    expect(restoredPayload.creativeArtifact.editableText).toBe(text)
+    expect(restoredPayload.creativeArtifact.validFragments[0]?.text).toBe(text)
+    expect(await db.chapters.count()).toBe(0)
+
+    await adoptMasterCandidate({ projectId: project.id!, scope, worldGroupId: null,
+      event: restored, payload: restoredPayload, draft: restored.content })
+    const chapter = await db.chapters.where('outlineNodeId').equals(firstId).first()
+    expect(chapter?.content).toContain('【模型长稿首部】')
+    expect(chapter?.content).toContain('【模型长稿尾部】')
+    expect(await hashChapterText(chapter!.content)).toBe(await hashChapterText(text))
+    expect(await db.worldviews.toArray()).toEqual(worldBefore)
+    expect(runAI).toHaveBeenCalledOnce()
+  })
+
+  it('作者编辑超过20万字符仅本地复验且不改写原模型证据或截短片段', async () => {
+    const { project } = await seedProject()
+    const original = longDraft('原模型初稿')
+    const runAI = vi.fn(async () => original)
+    const prepared = await prepareProseCopilot({ projectId: project.id!, worldGroupId: null,
+      authorRequest: '写第一章正文' }, { runAI })
+    const generated = await runProseCreativeReliabilityV1({ prepared,
+      budget: new AgentTeamBudgetTracker('service-capacity'), qualityMode: 'economy' })
+    const text = oversizedDraft('作者长改稿')
+    const edited = revalidateProseCreativeDraftV1({ draft: text,
+      informationBoundary: prepared.informationBoundary, previousArtifact: generated.artifact })
+    expect(edited.editableText).toBe(text)
+    expect(edited.validFragments[0]?.text).toBe(text)
+    expect(edited.originalText).toBe(original)
+    expect(edited.callEvidence).toEqual(generated.artifact.callEvidence)
+    expect(edited.callEvidence[0].outputHash).toBe(await hashCanonicalValue(original))
+    expect(edited.issues.some(issue => issue.disposition === 'blocking')).toBe(false)
+    expect(await db.chapters.count()).toBe(0)
+    expect(runAI).toHaveBeenCalledOnce()
+  })
+
+  it('长失败响应及作者无效改稿完整保留，重复provider框架仍阻止采纳且不隐藏重发', async () => {
+    const { project } = await seedProject()
+    const part = oversizedDraft('同一开篇')
+    const raw = `${part}
+
+</think>
+
+${part}
+【完整失败尾部】`
+    const runAI = vi.fn(async () => raw)
+    const prepared = await prepareProseCopilot({ projectId: project.id!, worldGroupId: null,
+      authorRequest: '写第一章正文' }, { runAI })
+    const result = await runProseCreativeReliabilityV1({ prepared,
+      budget: new AgentTeamBudgetTracker('service-capacity'), qualityMode: 'economy' })
+    expect(runAI).toHaveBeenCalledOnce()
+    expect(result.artifact.status).toBe('manual-repair')
+    expect(result.artifact.editableText).toBe(raw)
+    expect(result.artifact.rejectedFragments[0]?.text).toBe(raw)
+    expect(result.artifact.issues.some(issue => issue.code === 'prose-duplicate-provider-frame')).toBe(true)
+    expect(result.artifact.callEvidence[0].outputHash).toBe(await hashCanonicalValue(raw))
+    const edited = revalidateProseCreativeDraftV1({ draft: raw,
+      informationBoundary: prepared.informationBoundary, previousArtifact: result.artifact })
+    expect(edited.status).toBe('manual-repair')
+    expect(edited.editableText).toBe(raw)
+    expect(edited.rejectedFragments[0]?.text).toBe(raw)
+    expect(edited.callEvidence).toEqual(result.artifact.callEvidence)
+    expect(await db.chapters.count()).toBe(0)
+  })
+
+  it('保留最小正文结构门，超过原20万字符的合法候选完整通过', () => {
     expect(() => parseProseCandidateDraft('太短')).toThrow('至少需要')
-    expect(() => parseProseCandidateDraft('长'.repeat(200_001))).toThrow('不能超过')
+    const text = oversizedDraft('解析')
+    expect(text.length).toBeGreaterThan(200_000)
+    expect(parseProseCandidateDraft(text)).toBe(text)
   })
 
   it('候选生成后章纲或正文发生变化会拒绝旧候选', async () => {

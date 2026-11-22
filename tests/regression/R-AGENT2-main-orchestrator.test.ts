@@ -80,6 +80,69 @@ describe('AGENT-2 · 主 Agent 编排与持久会话', () => {
     })
   })
 
+  it('模型规划保留超过五个任务、六条依赖及完整长要求，同时保留授权过滤', async () => {
+    const tail = '末尾硬约束：守灯人永远不能拥有魔法。'
+    const request = `建立潮汐世界，并设计一个守灯人主角。${'参考材料。'.repeat(1_700)}${tail}`
+    const instruction = `补充世界起源。${'具体约束。'.repeat(1_700)}${tail}`
+    const summary = `${'说明各项任务的实际依赖。'.repeat(80)}计划尾部也必须保留。`
+    const upstreamIds = Array.from({ length: 6 }, (_, index) => `world-${index + 1}`)
+    const complete = vi.fn(async () => JSON.stringify({
+      summary,
+      tasks: [
+        ...upstreamIds.map(id => ({ id, agentId: 'world-origin', instruction, dependsOn: [] })),
+        { id: 'hero', agentId: 'character', instruction: `设计守灯人主角。${instruction}`, dependsOn: [...upstreamIds, 'missing', 'hero'] },
+        { id: 'unrequested', agentId: 'outline', instruction: '规划卷纲', dependsOn: [] },
+        { id: 'unknown', agentId: 'unknown-domain', instruction: '越权任务', dependsOn: [] },
+        { id: 'world-1', agentId: 'world-origin', instruction: '重复 ID 不得覆盖原任务', dependsOn: [] },
+      ],
+    }))
+    const result = await createMasterAgentPlan({ projectId: project.id!, worldGroupId: null, request }, { complete })
+
+    expect(complete).toHaveBeenCalledOnce()
+    expect(result.tasks.map(task => task.id)).toEqual([...upstreamIds, 'hero'])
+    expect(result.summary).toBe('已按你的要求只保留本轮明确要做的任务，请确认下方计划。')
+    expect(result.tasks[0].instruction).toBe(instruction)
+    expect(result.tasks[6].dependsOn).toEqual(upstreamIds)
+    expect(result.tasks.every(task => task.requestContext?.originalRequest === request)).toBe(true)
+    expect(result.tasks[0].requestContext?.plannerInstruction).toBe(instruction)
+    expect(result.tasks[6].instruction).toBe(`设计守灯人主角。${instruction}`)
+    expect(result.workflow?.workflowId).toBe('staged-author-confirmed')
+  })
+
+  it('完全授权的计划保留长摘要及尾部，不应用旧500字符裁剪', async () => {
+    const summary = `${'说明各项任务的实际依赖。'.repeat(80)}计划尾部也必须保留。`
+    expect(summary.length).toBeGreaterThan(500)
+    const complete = vi.fn(async () => JSON.stringify({
+      summary,
+      tasks: [
+        { id: 'world-1', agentId: 'world-origin', instruction: '补充世界起源。', dependsOn: [] },
+        { id: 'hero', agentId: 'character', instruction: '设计守灯人主角。', dependsOn: ['world-1'] },
+      ],
+    }))
+    const result = await createMasterAgentPlan({
+      projectId: project.id!, worldGroupId: null, request: '建立潮汐世界，并设计一个守灯人主角。',
+    }, { complete })
+    expect(complete).toHaveBeenCalledOnce()
+    expect(result.tasks.map(task => task.id)).toEqual(['world-1', 'hero'])
+    expect(result.summary).toBe(summary)
+  })
+
+  it('固定的非故事核心任务保留长指令，错误领域与 Skill 绑定仍在执行前拒绝', async () => {
+    const instruction = `设计守灯人主角。${'人物细节。'.repeat(1_700)}末尾要求：不得改名。`
+    const complete = vi.fn(async () => JSON.stringify({ tasks: [] }))
+    const result = await createMasterAgentPlan({
+      projectId: project.id!, worldGroupId: null, request: '设计一个守灯人主角',
+      pinnedTask: { agentId: 'character', skillId: 'character.create', instruction },
+    }, { complete })
+    expect(result.tasks).toHaveLength(1)
+    expect(result.tasks[0].instruction).toBe(instruction)
+    await expect(createMasterAgentPlan({
+      projectId: project.id!, worldGroupId: null, request: '设计一个守灯人主角',
+      pinnedTask: { agentId: 'character', skillId: 'outline.volumes', instruction },
+    }, { complete })).rejects.toThrow()
+    expect(complete).not.toHaveBeenCalled()
+  })
+
   it('主 Agent 编排使用独立模型预设并记录实际路由', async () => {
     const globalConfig = {
       ...useAIConfigStore.getState().config,

@@ -10,7 +10,7 @@ import {
 import { appendAgentRunEventV1, readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { classifyAgentRunFailureV1 } from '../../src/lib/agent/run/failure-policy'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
-import type { MasterAgentPlan } from '../../src/lib/agent/orchestrator'
+import { createMasterAgentReplanV1, type MasterAgentPlan } from '../../src/lib/agent/orchestrator'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { prepareRequiredMasterGatewayFixtureV1 } from '../helpers/master-agent-gateway'
 import { resolveAgentSkillV1 } from '../../src/lib/agent/skill-registry'
@@ -151,6 +151,68 @@ describe.sequential('R-HARNESS24 · 有限重规划与局部 stale', { timeout: 
     expect(sameTransient.fingerprint).toBe(transient.fingerprint)
     expect(protocol).toMatchObject({ category: 'protocol', action: 'retry' })
     expect(stale).toMatchObject({ category: 'stale-input', action: 'replan', retryable: false })
+  })
+
+  it('模型重规划保留长指令、长摘要和六条有效依赖，并忽略未授权分支修改', async () => {
+    const upstreamIds = Array.from({ length: 6 }, (_, index) => `world-${index + 1}`)
+    const original: MasterAgentPlan = {
+      summary: '先完成六项设定，再设计守灯人。',
+      tasks: [
+        ...upstreamIds.map(id => ({
+          id, agentId: 'world-origin' as const, skillId: 'world-origin.worldview-field' as const,
+          instruction: `保留 ${id} 的原始要求。`, dependsOn: [],
+        })),
+        { id: 'hero', agentId: 'character', skillId: 'character.create', instruction: '旧角色策略。', dependsOn: upstreamIds },
+      ],
+      workflow: { version: 1, workflowId: 'multi-domain-sequential', reasonCodes: ['multiple-explicit-domains'] },
+    }
+    const instruction = `改用新的角色策略。${'必须保留的细节。'.repeat(220)}末尾硬约束：不得改名。`
+    const summary = `${'完整说明本次修订原因。'.repeat(80)}修订摘要尾部。`
+    const budget = new AgentTeamBudgetTracker('service-capacity')
+    const complete = vi.fn(async () => JSON.stringify({
+      summary,
+      tasks: [
+        { id: 'hero', instruction, dependsOn: [...upstreamIds, 'missing', 'hero'] },
+        { id: 'world-1', instruction: '不得执行的越权上游修改', dependsOn: [] },
+      ],
+    }))
+    const revised = await createMasterAgentReplanV1({
+      projectId: 1, plan: original, budget,
+      failures: [{ taskId: 'hero', code: 'provider_transient', category: 'transient', fingerprint: 'f'.repeat(64) }],
+    }, { complete })
+
+    expect(complete).toHaveBeenCalledOnce()
+    expect(revised.summary).toBe(summary)
+    expect(revised.tasks[6].instruction).toBe(instruction)
+    expect(revised.tasks[6].dependsOn).toEqual(upstreamIds)
+    expect(revised.tasks.slice(0, 6)).toEqual(original.tasks.slice(0, 6))
+    expect(original.tasks[6].instruction).toBe('旧角色策略。')
+    expect(budget.snapshot().calls).toBe(1)
+  })
+
+  it('重规划继续拒绝循环依赖，错误结果不会隐藏重发', async () => {
+    const budget = new AgentTeamBudgetTracker('service-capacity')
+    const complete = vi.fn(async () => JSON.stringify({
+      summary: '非法循环。',
+      tasks: [{ id: 'character-1', instruction: '改用新的策略。', dependsOn: ['outline-1'] }],
+    }))
+    await expect(createMasterAgentReplanV1({
+      projectId: 1, plan: plan(), budget,
+      failures: [{ taskId: 'character-1', code: 'provider_transient', category: 'transient', fingerprint: 'f'.repeat(64) }],
+    }, { complete })).rejects.toThrow('循环依赖')
+    expect(complete).toHaveBeenCalledOnce()
+    expect(budget.snapshot().calls).toBe(1)
+  })
+
+  it('未知失败任务在重规划请求前拒绝且不消耗调用', async () => {
+    const budget = new AgentTeamBudgetTracker('service-capacity')
+    const complete = vi.fn(async () => '{}')
+    await expect(createMasterAgentReplanV1({
+      projectId: 1, plan: plan(), budget,
+      failures: [{ taskId: 'missing', code: 'provider_transient', category: 'transient', fingerprint: 'f'.repeat(64) }],
+    }, { complete })).rejects.toThrow('未知任务')
+    expect(complete).not.toHaveBeenCalled()
+    expect(budget.snapshot().calls).toBe(0)
   })
 
   it('同一失败第二次出现后自动换代，只重跑失败分支并显式保留上游候选', async () => {

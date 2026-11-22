@@ -154,7 +154,6 @@ interface ProseCopilotDependencies {
 }
 
 const MIN_PROSE_CHARS = 80
-const MAX_PROSE_CHARS = 200_000
 
 export class ProseCopilotStaleError extends Error {
   constructor(message = '目标章节或正文已在候选生成后发生变化。为保护作者手稿，请重新生成候选。') {
@@ -190,7 +189,6 @@ export function parseProseCandidateDraft(draft: string): string {
   if (frame) throw new Error(frame.message)
   const value = draft.replace(/^```(?:markdown|text)?\s*/i, '').replace(/\s*```$/, '').trim()
   if (value.length < MIN_PROSE_CHARS) throw new Error(`正文候选至少需要 ${MIN_PROSE_CHARS} 个字符。`)
-  if (value.length > MAX_PROSE_CHARS) throw new Error(`正文候选不能超过 ${MAX_PROSE_CHARS} 个字符。`)
   return value
 }
 
@@ -742,31 +740,7 @@ function parseProseCreativeOutcomeV1(
   raw: string,
   prepared: PreparedProseCopilot,
 ): CreativeParseOutcomeV1<string> {
-  if (raw.length > MAX_PROSE_CHARS) {
-    const issue = createCreativeIssueV1({
-      code: 'prose-response-too-large',
-      path: '$',
-      message: `正文响应超过 ${MAX_PROSE_CHARS} 字符，不能安全持久化。`,
-      disposition: 'blocking',
-      action: 'replan',
-    })
-    return {
-      status: 'blocked',
-      output: raw.slice(0, MAX_PROSE_CHARS),
-      editableText: raw.slice(0, MAX_PROSE_CHARS),
-      validFragments: [],
-      rejectedFragments: [{
-        version: 1,
-        id: 'prose-response',
-        path: '$',
-        text: raw.slice(0, 40_000),
-        status: 'rejected',
-        issueCodes: [issue.code],
-      }],
-      issues: [issue],
-      assumptions: prepared.input.narrativeBrief.assumptions,
-    }
-  }
+
   try {
     const output = parseProseCandidateDraft(raw)
     const gateIssues = candidateIssues(output, prepared.informationBoundary)
@@ -807,7 +781,7 @@ function parseProseCreativeOutcomeV1(
         version: 1,
         id: 'prose:body',
         path: '$',
-        text: output.slice(0, 40_000),
+        text: output,
         status: 'valid',
         issueCodes: [],
       }],
@@ -832,7 +806,7 @@ function parseProseCreativeOutcomeV1(
         version: 1,
         id: 'prose-response',
         path: '$',
-        text: raw.slice(0, 40_000),
+        text: raw,
         status: 'rejected',
         issueCodes: [issue.code],
       }],
@@ -934,7 +908,7 @@ export function revalidateProseCreativeDraftV1(input: {
       version: 1,
       id: 'prose:body',
       path: '$',
-      text: output.slice(0, 40_000),
+      text: output,
       status: 'valid',
       issueCodes: [],
     }]
@@ -950,7 +924,7 @@ export function revalidateProseCreativeDraftV1(input: {
       version: 1,
       id: 'prose-author-draft',
       path: '$',
-      text: input.draft.slice(0, 40_000),
+      text: input.draft,
       status: 'rejected',
       issueCodes: issues.map(issue => issue.code),
     }]
@@ -958,7 +932,7 @@ export function revalidateProseCreativeDraftV1(input: {
   return parseCreativeArtifactV1({
     ...input.previousArtifact,
     status,
-    editableText: input.draft.slice(0, MAX_PROSE_CHARS),
+    editableText: input.draft,
     validFragments,
     rejectedFragments,
     issues,

@@ -20,7 +20,7 @@ export interface ProseLengthObservationV1 {
 /** A declared range is exact. A single target uses a visible 20% advisory
  * tolerance; literary quality and acceptance remain author decisions. */
 export function proseLengthExpectationV1(authorRequest: string, parameter?: unknown): ProseLengthExpectationV1 | null {
-  const valid = (number: number) => Number.isSafeInteger(number) && number > 0 && number <= 200_000
+  const valid = (number: number) => Number.isSafeInteger(number) && number > 0
   // Only explicit request clauses are length controls. A character's letter,
   // a quotation or a report about a previous chapter is narrative input.
   const leading = '(?:^|[。！？\\n，,；;])\\s*(?:请\\s*)?(?:(?:本轮|本章|正文|这章|章节)\\s*(?:请\\s*)?)?'
@@ -42,7 +42,12 @@ export function proseLengthExpectationV1(authorRequest: string, parameter?: unkn
   const targetMatch = lastMatch(expression('(\\d+)\\s*字(?!\\s*的(?:信|纸条|短信|标语))', true))
   const number = targetMatch ? Number(targetMatch[1]) : Number(parameter)
   if (!valid(number)) return null
-  return { version: 1, source: targetMatch ? 'author' : 'parameter', min: Math.max(1, Math.floor(number * 0.8)), max: Math.ceil(number * 1.2), target: number }
+  // Calculate the existing 20% tolerance exactly, without rounding an unsafe ceiling.
+  const target = BigInt(number)
+  const min = Number(target * 4n / 5n)
+  const max = (target * 6n + 4n) / 5n
+  if (max > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('正文篇幅目标的提示范围超出安全整数范围。')
+  return { version: 1, source: targetMatch ? 'author' : 'parameter', min: Math.max(1, min), max: Number(max), target: number }
 }
 
 export function observeProseLengthV1(text: string, expectation: ProseLengthExpectationV1 | null, finishReason: string | null = null): ProseLengthObservationV1 {
@@ -74,7 +79,7 @@ export function parseProseLengthObservationV1(value: unknown): ProseLengthObserv
   if (row.expectation !== null) {
     const exp = row.expectation
     if (!exact(exp, ['version', 'source', 'min', 'max', 'target']) || exp.version !== 1 || !['author', 'parameter'].includes(exp.source)
-      || [exp.min, exp.max, exp.target].some(number => number !== null && (!Number.isSafeInteger(number) || number <= 0 || number > 200_000))
+      || [exp.min, exp.max, exp.target].some(number => number !== null && (!Number.isSafeInteger(number) || number <= 0))
       || (exp.min === null && exp.max === null)
       || (exp.min !== null && exp.max !== null && exp.min > exp.max)) throw new Error('正文篇幅要求无效。')
   }
