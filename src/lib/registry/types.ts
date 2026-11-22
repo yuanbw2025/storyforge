@@ -1173,6 +1173,9 @@ export interface ContextSource {
   /** Host-only exact capture uses this same registered reader and its owner/anchor gates.
    * This is a material protocol version, never a model budget or read permission. */
   fullCapture?: { version: 'registered-host-full-v2'; sourceVersion: string }
+  /** Product full recipes enter only through an explicit selection/capture;
+   * legacy callers that omit sourceKeys keep their original default readers. */
+  explicitSelectionOnly?: boolean
   /** CTXG resource navigation extension. It is the only Provider registration point. */
   resources?: ContextResourceProviderV1
   /** Instance role providers refuse broad reads without the kernel's exact resource allow-list. */

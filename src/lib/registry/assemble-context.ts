@@ -421,7 +421,7 @@ async function assertContextAnchors(input: AssembleContextInput, selected: Conte
 }
 
 function selectSources(input: AssembleContextInput): ContextSource[] {
-  if (!input.sourceKeys?.length) return CONTEXT_SOURCES
+  if (!input.sourceKeys?.length) return CONTEXT_SOURCES.filter(source => !source.explicitSelectionOnly)
   return input.sourceKeys
     .map(key => CONTEXT_SOURCE_BY_KEY.get(key))
     .filter((source): source is ContextSource => !!source)
@@ -518,10 +518,10 @@ export async function captureRegisteredContextSourceV2(input: {
   }
   // Canonical JSON preserves the raw UTF16 domain (including CRLF and unpaired
   // code units). Its capture hash is not the old reader's authority/version hash.
-  const sourceAuthorityHash = await hashCanonicalValue({ sourceKey: body.sourceKey, sourceVersion: body.sourceVersion,
-    scope: body.scope, worldGroupId: body.worldGroupId, categoryId: body.categoryId, rawBodyHash: body.rawBodyHash })
+  const sourceAuthorityHash = await hashContextSource(canonicalStringify({ sourceKey: body.sourceKey, sourceVersion: body.sourceVersion,
+    scope: body.scope, worldGroupId: body.worldGroupId, categoryId: body.categoryId, rawBodyHash: body.rawBodyHash }))
   const envelope = { ...body, sourceAuthorityHash }
-  return Object.freeze({ ...envelope, captureHash: await hashCanonicalValue(envelope) })
+  return Object.freeze({ ...envelope, captureHash: await hashContextSource(canonicalStringify(envelope)) })
 }
 
 /** Render only a frozen registered range for a physical request. Full source

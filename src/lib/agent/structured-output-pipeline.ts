@@ -52,6 +52,40 @@ export interface StructuredOutputContractV1 {
   missingRootFieldMessage?: string
 }
 
+export interface StructuredOutputContractV2 {
+  version: 2
+  schemaId: string
+  target: string
+  root: 'object' | 'array'
+  sizePolicy: 'task-content-unbounded'
+  allowedRootFields?: readonly string[]
+  requiredRootFields?: readonly string[]
+  unknownRootFieldMessage?: string
+  missingRootFieldMessage?: string
+}
+
+type StructuredOutputContract = StructuredOutputContractV1 | StructuredOutputContractV2
+
+function assertStructuredOutputContractV2(contract: StructuredOutputContractV2): void {
+  const required = ['version', 'schemaId', 'target', 'root', 'sizePolicy']
+  const allowed = [...required, 'allowedRootFields', 'requiredRootFields', 'unknownRootFieldMessage', 'missingRootFieldMessage']
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract)
+    || required.some(key => !Object.prototype.hasOwnProperty.call(contract, key))
+    || Object.keys(contract).some(key => !allowed.includes(key))
+    || contract.version !== 2 || contract.sizePolicy !== 'task-content-unbounded'
+    || typeof contract.schemaId !== 'string' || !contract.schemaId.trim()
+    || typeof contract.target !== 'string' || !contract.target.trim()
+    || !['object', 'array'].includes(contract.root)) throw new Error('结构化输出V2合同无效。')
+  for (const list of [contract.allowedRootFields, contract.requiredRootFields]) {
+    if (list !== undefined && (!Array.isArray(list) || list.some(item => typeof item !== 'string' || !item)
+      || new Set(list).size !== list.length)) throw new Error('结构化输出V2字段闭集无效。')
+  }
+  if (contract.allowedRootFields && contract.requiredRootFields?.some(key => !contract.allowedRootFields!.includes(key))) throw new Error('结构化输出V2必需字段超出闭集。')
+  for (const message of [contract.unknownRootFieldMessage, contract.missingRootFieldMessage]) {
+    if (message !== undefined && typeof message !== 'string') throw new Error('结构化输出V2错误说明无效。')
+  }
+}
+
 export interface StructuredOutputAttemptEvidenceV1 {
   version: 1
   schemaId: string
@@ -155,7 +189,7 @@ function evidence(input: Omit<StructuredOutputAttemptEvidenceV1, 'version'>): St
   return { version: 1, ...input }
 }
 
-function contractShape(contract: StructuredOutputContractV1): StructuredOutputContractShapeV1 {
+function contractShape(contract: StructuredOutputContract): StructuredOutputContractShapeV1 {
   return {
     root: contract.root,
     allowedRootFields: contract.allowedRootFields ? [...contract.allowedRootFields] : null,
@@ -375,7 +409,7 @@ function escapeObviouslyInternalJsonQuotes(text: string): string | null {
  */
 function mergeSingleAllowedObjectTail(
   text: string,
-  contract: StructuredOutputContractV1,
+  contract: StructuredOutputContract,
 ): string | null {
   if (contract.root !== 'object' || !contract.allowedRootFields) return null
   const balanced = firstBalancedJson(text, 'object')
@@ -407,7 +441,7 @@ function mergeSingleAllowedObjectTail(
  */
 function unescapeAllowedRootFields(
   text: string,
-  contract: StructuredOutputContractV1,
+  contract: StructuredOutputContract,
 ): string | null {
   if (contract.root !== 'object' || !contract.allowedRootFields) return null
   const stack: Array<'object' | 'array'> = []
@@ -462,7 +496,7 @@ function unescapeAllowedRootFields(
 }
 
 function fail(input: {
-  contract: StructuredOutputContractV1
+  contract: StructuredOutputContract
   originalText: string
   normalizedText: string
   steps: StructuredOutputNormalizationStepV1[]
@@ -509,9 +543,9 @@ function schemaIssue(error: unknown): Omit<StructuredOutputIssueV1, 'version' | 
   }
 }
 
-export function evaluateStructuredOutputV1<T>(input: {
+function evaluateStructuredOutput<T>(input: {
   raw: string
-  contract: StructuredOutputContractV1
+  contract: StructuredOutputContract
   parse: (value: unknown) => T
 }): StructuredOutputEvaluationV1<T> {
   const { contract } = input
@@ -537,7 +571,7 @@ export function evaluateStructuredOutputV1<T>(input: {
       },
     })
   }
-  if (originalText.length > contract.maxChars) {
+  if (contract.version === 1 && originalText.length > contract.maxChars) {
     fail({
       contract, originalText, normalizedText, steps, status: 'blocked',
       issue: {
@@ -686,6 +720,32 @@ export function evaluateStructuredOutputV1<T>(input: {
   })
   if (output && typeof output === 'object') evidenceByOutput.set(output as object, attemptEvidence)
   return { output, evidence: attemptEvidence }
+}
+
+export function evaluateStructuredOutputV1<T>(input: {
+  raw: string
+  contract: StructuredOutputContractV1
+  parse: (value: unknown) => T
+}): StructuredOutputEvaluationV1<T> {
+  if (input.contract.version !== 1) throw new Error('旧结构化输出入口不能借用V2合同。')
+  return evaluateStructuredOutput(input)
+}
+
+export function evaluateStructuredOutputV2<T>(input: {
+  raw: string
+  contract: StructuredOutputContractV2
+  parse: (value: unknown) => T
+}): StructuredOutputEvaluationV1<T> {
+  assertStructuredOutputContractV2(input.contract)
+  return evaluateStructuredOutput(input)
+}
+
+export function parseStructuredOutputV2<T>(input: {
+  raw: string
+  contract: StructuredOutputContractV2
+  parse: (value: unknown) => T
+}): T {
+  return evaluateStructuredOutputV2(input).output
 }
 
 export function parseStructuredOutputV1<T>(input: {

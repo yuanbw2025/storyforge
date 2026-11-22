@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import Dexie from 'dexie'
 import { db } from '../../src/lib/db/schema'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { AIConfig, CodexCategory } from '../../src/lib/types'
@@ -26,6 +27,33 @@ beforeEach(async () => { await db.delete(); await db.open(); resetModelCapacityF
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); db.close() })
 
 describe('B01 C01/C03/C04/C05/C09/C12/C22/C24/C26 · material and range plan', () => {
+  it.each([false, true])('keeps full capture hashes and subsequent writes in the actual caller transaction (rollback=%s)', async rollback => {
+    const { scope } = await seedCurrentWorkspace('完整捕获原生事务')
+    const rawText = ' \r\n原始😀\ud800尾部\n '
+    const context = { projectId: scope.projectId, scope, worldGroupId: null, manualSourceText: rawText }
+    const outside = await captureRegisteredContextSourceV2({ sourceKey: 'manualText', context })
+    const project = await db.projects.get(scope.projectId)
+    if (!project) throw new Error('隔离测试项目未创建')
+    const original = crypto.subtle.digest.bind(crypto.subtle)
+    vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (algorithm, data) => {
+      await new Promise(resolve => setTimeout(resolve, 10))
+      return original(algorithm, data)
+    })
+    const operation = db.transaction('rw', db.tables, async () => {
+      const transaction = Dexie.currentTransaction
+      expect(transaction).not.toBeNull()
+      const captured = await captureRegisteredContextSourceV2({ sourceKey: 'manualText', context })
+      expect(captured).toEqual(outside)
+      expect(captured.rawText).toBe(rawText)
+      expect(Dexie.currentTransaction).toBe(transaction)
+      await db.projects.update(scope.projectId, { updatedAt: project.updatedAt + 1 })
+      if (rollback) throw new Error('完整捕获后主动回滚')
+    })
+    if (rollback) await expect(operation).rejects.toThrow('完整捕获后主动回滚')
+    else await operation
+    expect((await db.projects.get(scope.projectId))?.updatedAt).toBe(project.updatedAt + (rollback ? 0 : 1))
+  })
+
   it('keeps each capacity dimension unknown unless current actual-service evidence proves it', () => {
     expect(assess(facts(null), 1000000).decision).toBe('uncertain')
     expect(assess(facts(fact(8)), 9).decision).toBe('proved-overflow')

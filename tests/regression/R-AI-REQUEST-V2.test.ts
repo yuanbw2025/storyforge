@@ -7,6 +7,7 @@ import { getLogs } from '../../src/lib/ai/logger'
 import { setUsageLoggingEnabled } from '../../src/lib/ai/usage-log'
 import { resetModelCapacityForTestsV1 } from '../../src/lib/ai/model-capacity'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
+import { resolveTaskLengthPlanV1 } from '../../src/lib/ai/author-length-intent'
 import { sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
 import { bindPreparedRequestObserversV2, chat, createAIRequestAssessorV2, freezeAIRequestAssessmentContextV2,
   prepareAIRequestV2, preparedRequestDispatchGuardV2, readPreparedNativeRequestRefV2, readPreparedRequestFrameV2,
@@ -88,6 +89,31 @@ beforeEach(async () => {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('B01 C01/C02/C03/C10/C15/C20/C25/C27 · prepared request identity', () => {
+  it('binds a frozen typed length plan into policy identity while Codex still refuses a non-null plan before POST', async () => {
+    const fetchMock = vi.fn(async () => json({ choices: [{ message: { content: '[]' }, finish_reason: 'stop' }] }))
+    vi.stubGlobal('fetch', fetchMock)
+    const resolution = resolveRequestConfig(config, meta)
+    const assessmentContext = await fixtureAssessment(resolution)
+    const contextMaterial = await material()
+    const lengthPlan = resolveTaskLengthPlanV1({ taskKind: 'setting-field', operation: 'create' })
+    const request = await prepareAIRequestV2({ resolution, assessmentContext, messages, options: {}, stream: false,
+      contextMaterial, lengthPlan, explicitConstraints: null })
+    const expectedHash = await hashCanonicalValue({ profile: 'task-request-v2', materialAllocationHash: contextMaterial.allocationHash,
+      lengthPlan, explicitConstraints: null })
+    expect(request.evidence.policyHash).toBe(expectedHash)
+    const nullPlan = await prepareAIRequestV2({ resolution, assessmentContext, messages, options: {}, stream: false,
+      contextMaterial, lengthPlan: null, explicitConstraints: null })
+    expect(nullPlan.evidence.policyHash).not.toBe(expectedHash)
+    if (lengthPlan.mode !== 'automatic') throw new Error('测试要求自动计划')
+    lengthPlan.referenceWords = 1
+    expect(request.evidence.policyHash).toBe(expectedHash)
+    const bound = bindPreparedRequestObserversV2(request.handle, { beforeDispatch: async () => undefined, onPublicResponse: async () => undefined })
+    await expect(chat(messages, config, meta, undefined, {}, { preparedRequestV2: bound }, resolution)).rejects.toThrow()
+    expect(fetchMock).not.toHaveBeenCalled()
+    await expect(prepareAIRequestV2({ resolution, assessmentContext, messages, options: {}, stream: false, contextMaterial,
+      lengthPlan: { ...lengthPlan, unexpectedPermission: true } as never, explicitConstraints: null })).rejects.toThrow()
+  })
+
   it('unknown capacity admits the entire 20k CJK request and omits an invented output cap', async () => {
     const long = [{ role: 'user' as const, content: ' \r\n' + '原文😀\r\n'.repeat(4000) + '尾段 ' }]
     const row = await prepared(config, long), frame = readPreparedRequestFrameV2(row.handle)
