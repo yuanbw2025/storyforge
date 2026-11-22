@@ -56,6 +56,37 @@ function createNode(input: {
 }
 
 describe('WEH-0E structured output execution', () => {
+  it('round-trips complete structured evidence above the old readback cap without weakening identity checks', async () => {
+    const value = '文'.repeat(240_001) + '证据完整尾标'
+    const raw = JSON.stringify({ field: 'races', value })
+    // V1 forward admission still uses the exact caller-declared boundary.
+    const node = createNode({ outputs: [raw], maxChars: raw.length })
+    const result = await runBudgetedGenerationNode({
+      node, prepared: prepareGenerationNode(node, { context: 'isolated long evidence fixture' }),
+      budget: new AgentTeamBudgetTracker('expanded'), callLabel: 'long evidence roundtrip', maxOutputTokens: 1024,
+    })
+    const evidence = result.structuredOutputEvidence!
+    const restored = parseStructuredOutputRunEvidenceV1(JSON.parse(JSON.stringify(evidence)))
+    expect(result.output.value).toBe(value)
+    expect(restored).toEqual(evidence)
+    expect(restored.attempts[0].evidence.originalText).toBe(raw)
+    expect(restored.attempts[0].evidence.normalizedText).toBe(raw)
+    expect(restored.version).toBe(1)
+
+    const wrongType = JSON.parse(JSON.stringify(evidence))
+    wrongType.attempts[0].evidence.originalText = 123
+    expect(() => parseStructuredOutputRunEvidenceV1(wrongType)).toThrow('evidence')
+    const wrongTarget = JSON.parse(JSON.stringify(evidence))
+    wrongTarget.attempts[0].evidence.target = 'worldviews.history'
+    expect(() => parseStructuredOutputRunEvidenceV1(wrongTarget)).toThrow('evidence')
+    const wrongCall = JSON.parse(JSON.stringify(evidence))
+    wrongCall.attempts[0].callIndex = 2
+    expect(() => parseStructuredOutputRunEvidenceV1(wrongCall)).toThrow('身份')
+    const wrongShape = JSON.parse(JSON.stringify(evidence))
+    wrongShape.attempts[0].evidence.contractShape.requiredRootFields.push('outside-allowed-fields')
+    expect(() => parseStructuredOutputRunEvidenceV1(wrongShape)).toThrow('contractShape')
+  })
+
   it('只确定性转义字符串内误写的引号，不把截断 JSON 静默补全为成功', async () => {
     const seenMessages: ChatMessage[][] = []
     const quoteNode = createNode({
