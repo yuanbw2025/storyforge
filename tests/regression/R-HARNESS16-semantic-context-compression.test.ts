@@ -89,6 +89,77 @@ function transformInput(content: string, targetTokens: number) {
 }
 
 describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
+  it('显式服务容量策略在已有八次调用后仍允许必要压缩，并保留锚点与实耗', async () => {
+    const content = sourceText()
+    const targetTokens = 1_400
+    const anchors = extractContextCompressionAnchorsV1({ content, targetTokens })
+    const budget = new AgentTeamBudgetTracker('service-capacity')
+    for (let index = 0; index < 8; index++) {
+      const reservation = budget.reserveCall({
+        label: `此前已完成调用 ${index + 1}`,
+        messages: [{ role: 'user', content: '已登记的任务材料' }],
+        maxOutputTokens: 1,
+      })
+      budget.settleCall(reservation, '已完成')
+    }
+    const complete = vi.fn(async () => validResponse(anchors))
+    const transformed = await session({ content, targetTokens, complete, budget,
+      requiredFutureModelCalls: 2 }).sourceTransformer(transformInput(content, targetTokens))
+
+    expect(complete).toHaveBeenCalledOnce()
+    expect(transformed).toMatchObject({ delivery: 'compressed',
+      compression: { outcome: 'verified', attempts: 1, coveredAnchorCount: anchors.length } })
+    for (const anchor of anchors) expect(transformed!.content).toContain(anchor.quote)
+    expect(budget.snapshot()).toMatchObject({ profile: 'service-capacity', calls: 9 })
+  })
+
+  it('普通零调用快照及伪造的服务标签不能授予服务容量模式的压缩调用', async () => {
+    const content = sourceText()
+    const targetTokens = 1_400
+    for (const profile of ['balanced', 'service-capacity'] as const) {
+      const budget = new AgentTeamBudgetTracker('balanced')
+      const original = budget.snapshot()
+      const snapshot = vi.spyOn(budget, 'snapshot').mockReturnValue({ ...original, profile, maxCalls: 0 })
+      const complete = vi.fn(async () => '不得被调用')
+      try {
+        const transformed = await session({ content, targetTokens, complete, budget })
+          .sourceTransformer(transformInput(content, targetTokens))
+        expect(complete).not.toHaveBeenCalled()
+        expect(transformed?.compression).toMatchObject({ outcome: 'fallback', attempts: 0 })
+      } finally {
+        snapshot.mockRestore()
+      }
+    }
+  })
+
+  it('旧有限策略耗尽后仍不得追加压缩模型调用', async () => {
+    const content = sourceText()
+    const targetTokens = 1_400
+    const budget = new AgentTeamBudgetTracker('balanced')
+    for (let index = 0; index < budget.policy.maxCalls; index++) {
+      const reservation = budget.reserveCall({ label: '旧有限任务已完成调用',
+        messages: [{ role: 'user', content: '原冻结任务材料' }], maxOutputTokens: 1 })
+      budget.settleCall(reservation, '已完成')
+    }
+    const complete = vi.fn(async () => '不得被调用')
+    const transformed = await session({ content, targetTokens, complete, budget })
+      .sourceTransformer(transformInput(content, targetTokens))
+    expect(complete).not.toHaveBeenCalled()
+    expect(transformed?.compression).toMatchObject({ outcome: 'fallback', attempts: 0 })
+  })
+
+  it('服务容量策略不将未知派发结果转换成自动重发', async () => {
+    const content = sourceText()
+    const targetTokens = 1_400
+    const budget = new AgentTeamBudgetTracker('service-capacity')
+    const complete = vi.fn(async () => { throw new Error('unknown transport outcome') })
+    const transformed = await session({ content, targetTokens, complete, budget })
+      .sourceTransformer(transformInput(content, targetTokens))
+    expect(complete).toHaveBeenCalledOnce()
+    expect(transformed?.compression).toMatchObject({ outcome: 'fallback', attempts: 1 })
+    expect(budget.snapshot().calls).toBe(1)
+  })
+
   it('经模型压缩后仍逐字保留规则、时间与认知边界，并进入 Skill/Manifest durable 证据', async () => {
     const content = sourceText()
     const targetTokens = 1_400

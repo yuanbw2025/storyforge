@@ -114,8 +114,6 @@ export interface CreativeArtifactV1 {
   repair: CreativeRepairEvidenceV1 | null
 }
 
-const MAX_ARTIFACT_TEXT_CHARS = 120_000
-const MAX_FRAGMENT_TEXT_CHARS = 40_000
 const MAX_ISSUES = 200
 const MAX_FRAGMENTS = 200
 const MAX_ASSUMPTIONS = 100
@@ -141,6 +139,11 @@ function readString(value: unknown, label: string, max = 2_000, allowEmpty = fal
   if (!allowEmpty && !normalized) fail(`${label} 不能为空`)
   if (normalized.length > max) fail(`${label} 超过 ${max} 字符`)
   return normalized
+}
+
+function readArtifactContent(value: unknown, label: string): string {
+  if (typeof value !== 'string') fail(`${label} 必须是字符串`)
+  return value
 }
 
 function readEnum<T extends string | number>(value: unknown, values: readonly T[], label: string): T {
@@ -205,7 +208,7 @@ function parseFragment(value: unknown, index: number, label: string): CreativeAr
     version: 1,
     id: readString(value.id, `${label}[${index}].id`, 120),
     path: readString(value.path, `${label}[${index}].path`, 500),
-    text: readString(value.text, `${label}[${index}].text`, MAX_FRAGMENT_TEXT_CHARS, true),
+    text: readArtifactContent(value.text, `${label}[${index}].text`),
     status: readEnum(value.status, ['valid', 'rejected'] as const, `${label}[${index}].status`),
     issueCodes: readStringArray(value.issueCodes, `${label}[${index}].issueCodes`, 50),
   }
@@ -364,8 +367,8 @@ export function parseCreativeArtifactV1(value: unknown): CreativeArtifactV1 {
     policyVersion: 'creative-reliability-v1',
     status,
     qualityMode: readEnum(value.qualityMode, CREATIVE_QUALITY_MODES, 'qualityMode'),
-    originalText: readString(value.originalText, 'originalText', MAX_ARTIFACT_TEXT_CHARS, true),
-    editableText: readString(value.editableText, 'editableText', MAX_ARTIFACT_TEXT_CHARS, true),
+    originalText: readArtifactContent(value.originalText, 'originalText'),
+    editableText: readArtifactContent(value.editableText, 'editableText'),
     validFragments,
     rejectedFragments,
     issues,
