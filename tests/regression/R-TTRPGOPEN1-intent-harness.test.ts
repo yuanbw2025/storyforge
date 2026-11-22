@@ -1,10 +1,14 @@
+import * as creativeArtifacts from '../../src/lib/agent/creative-reliability'
+import {sha256Text} from '../../src/lib/ai/chapter-memory/text-normalization'
+import {hashCanonicalValue} from '../../src/lib/agent/run/hash'
+import {exportProjectJSON,importProjectJSON} from '../../src/lib/export/json-export'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { readyOpenTtrpgSessionV1, openEnvelopeV1, OPEN_HUMAN_VIEWER } from '../helpers/open-ttrpg-session'
 import { generateTtrpgOpenIntentCandidateV1, executeTtrpgOpenIntentRequestV1,
-  readTtrpgOpenIntentCandidateV1 } from '../../src/lib/ttrpg/open-intent-harness'
+  readTtrpgOpenIntentCandidateV1, recoverTtrpgOpenRuntimeCandidateV1 } from '../../src/lib/ttrpg/open-intent-harness'
 import { prepareTtrpgOpenIntentInputV1 } from '../../src/lib/ttrpg/open-intent-input'
-import { startTtrpgOpenEpochV1, changeTtrpgSafetyStatus } from '../../src/lib/ttrpg/runtime-commands'
+import { startTtrpgOpenEpochV1, startTtrpgOpenIntentCandidateOperationV1, changeTtrpgSafetyStatus } from '../../src/lib/ttrpg/runtime-commands'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
 import { readInstanceAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { readAgentRunArtifactExactV1 } from '../../src/lib/memory/artifact-store'
@@ -12,9 +16,15 @@ import type { ChatResult } from '../../src/lib/ai/client'
 import type { ChatMessage } from '../../src/lib/types'
 
 const output = JSON.stringify({ goal: '调查河港', method: '观察岸边', targetRefs: [], declaredResources: [], declaredAssumptions: [], requestedOutcome: null })
+
+const completeLargeRaw = (kind:'invalid-text'|'valid-json') => kind==='invalid-text'
+  ? '【原答首😀】'+('a😀\r\n'.repeat(27000))+'【原答尾🧭】'
+  : JSON.stringify({...JSON.parse(output),goal:'【JSON原答首】调查河港',requestedOutcome:'记录结果【JSON原答尾】'})
+    .replace(',"method":',',\n'+(' \t\n'.repeat(45000))+'"method":')
+
 describe('R-TTRPGOPEN1 governed one-send intent transport and recoverable candidates', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
-  afterEach(() => db.close())
+  afterEach(() => { vi.restoreAllMocks();vi.unstubAllGlobals();db.close() })
   async function setup() {
     const fixture = await readyOpenTtrpgSessionV1('open semantic candidate', pkg => {
       pkg.ttrpg!.campaign.runtimePolicy.enabled = true
@@ -28,6 +38,81 @@ describe('R-TTRPGOPEN1 governed one-send intent transport and recoverable candid
       sessionId: fixture.sessionId, viewerKey: OPEN_HUMAN_VIEWER, ...prepared })
     return { fixture, input, resume }
   }
+
+  it.each(['invalid-text','valid-json'] as const)('retains >120k %s original/editable/raw bytes and hashes through the real harness, reopen and local recovery without another send',async kind=>{
+    const {fixture,input,resume}=await setup(),raw=completeLargeRaw(kind),before=await readProductRuntimeState(fixture.sessionId)
+    expect(raw.length).toBeGreaterThan(120000)
+    const runAI=vi.fn(async()=>raw),generated=await generateTtrpgOpenIntentCandidateV1({...input,runAI}),read=resume(generated.prepared)
+    expect(runAI).toHaveBeenCalledOnce()
+    expect(generated.candidate.artifact.originalText).toBe(raw);expect(generated.candidate.artifact.editableText).toBe(raw)
+    expect(generated.candidate.rawResponseHash).toBe(await sha256Text(raw))
+    expect(generated.candidate.artifact.callEvidence[0].outputHash).toBe(generated.candidate.rawResponseHash)
+    const {candidateHash,...body}=generated.candidate
+    expect(await hashCanonicalValue(body)).toBe(candidateHash)
+    expect(await readAgentRunArtifactExactV1({projectId:fixture.scope.projectId,artifactKind:'raw-response',contentHash:generated.candidate.rawResponseHash})).toBe(raw)
+    // This patch preserves retained bytes, not the old semantic parser/budget
+    // policy. A large invalid/non-admissible result must still never act.
+    expect(generated.candidate.intent).toBeNull();expect(generated.candidate.artifact.status).toBe('blocked')
+    expect(generated.candidate.artifact.issues.some(i=>i.code==='ttrpg-open-intent-protocol')).toBe(true)
+    expect(generated.candidate.artifact.validFragments).toEqual([]);expect(generated.candidate.artifact.rejectedFragments).toEqual([])
+    await expect(readTtrpgOpenIntentCandidateV1({...read,viewerKey:'viewer.not-the-author'})).rejects.toThrow()
+    const after=await readProductRuntimeState(fixture.sessionId)
+    expect(after.entities).toEqual(before.entities);expect(after.ttrpg!.checks).toEqual(before.ttrpg!.checks)
+    expect(after.ttrpg!.openRun!.worldTime).toEqual(before.ttrpg!.openRun!.worldTime);expect(after.ttrpg!.openRun!.operations).toEqual([])
+    await expect(startTtrpgOpenIntentCandidateOperationV1({...await openEnvelopeV1(fixture.sessionId,'fullraw.invalid-adopt'),...read,candidateHash,decision:'start'})).rejects.toThrow()
+    db.close();await db.open()
+    expect(await readTtrpgOpenIntentCandidateV1(read)).toEqual(generated.candidate)
+    expect(await recoverTtrpgOpenRuntimeCandidateV1(read)).toEqual(generated.candidate)
+    expect(await executeTtrpgOpenIntentRequestV1({...read,runAI})).toEqual({status:'not-sent'})
+    expect(runAI).toHaveBeenCalledOnce()
+    const snapshot=await readInstanceAgentRunV1(fixture.scope,generated.prepared.runId)
+    expect(snapshot.events.some(e=>e.type==='confirmation.recorded'||e.type==='runtime.candidate.adopted')).toBe(false)
+    expect((await readProductRuntimeState(fixture.sessionId)).ttrpg!.openRun!.operations).toEqual([])
+  })
+
+  it('keeps a genuinely retained legacy clipped candidate and its saved hash unchanged instead of regenerating it with the new full-text default',async()=>{
+    const {fixture,input,resume}=await setup(),raw=completeLargeRaw('invalid-text'),original=creativeArtifacts.parseCreativeArtifactV1
+    // Emulate only the exact historical caller clipping before its real
+    // artifact/Manifest/candidate/checkpoint writes; no alternate runner.
+    const oldCaller=vi.spyOn(creativeArtifacts,'parseCreativeArtifactV1').mockImplementation(value=>{
+      const row=value as Record<string,unknown>
+      return original(row?.originalText===raw?{...row,originalText:raw.slice(0,120000),editableText:raw.slice(0,120000)}:value)
+    })
+    const runAI=vi.fn(async()=>raw),generated=await generateTtrpgOpenIntentCandidateV1({...input,runAI})
+    oldCaller.mockRestore()
+    expect(generated.candidate.artifact.originalText).toHaveLength(120000)
+    const oldHash=generated.candidate.candidateHash,read=resume(generated.prepared)
+    db.close();await db.open()
+    const recovered=await recoverTtrpgOpenRuntimeCandidateV1(read)
+    expect(recovered).toEqual(generated.candidate);expect(recovered!.candidateHash).toBe(oldHash)
+    expect(await readAgentRunArtifactExactV1({projectId:fixture.scope.projectId,artifactKind:'raw-response',contentHash:generated.candidate.rawResponseHash})).toBe(raw)
+    expect(await executeTtrpgOpenIntentRequestV1({...read,runAI})).toEqual({status:'not-sent'});expect(runAI).toHaveBeenCalledOnce()
+  })
+
+  it('exports/imports the full original and editable candidate bytes without granting an imported request paid or adoption authority',async()=>{
+    const {fixture,input,resume}=await setup(),raw=completeLargeRaw('invalid-text'),runAI=vi.fn(async()=>raw)
+    const generated=await generateTtrpgOpenIntentCandidateV1({...input,runAI}),snapshot=await readInstanceAgentRunV1(fixture.scope,generated.prepared.runId)
+    let candidateArtifactHash:string|undefined
+    for(const e of snapshot.events)if(e.type==='evidence.artifact.recorded'&&e.payload.artifactKind==='source-snapshot'){
+      const body=JSON.parse(await readAgentRunArtifactExactV1({projectId:fixture.scope.projectId,artifactKind:'source-snapshot',contentHash:e.payload.contentHash}))
+      if(body.schema==='storyforge.ttrpg-open-intent-candidate'&&body.candidateHash===generated.candidate.candidateHash)candidateArtifactHash=e.payload.contentHash
+    }
+    expect(candidateArtifactHash).toBeTruthy()
+    const projectId=await importProjectJSON(await exportProjectJSON(fixture.scope.projectId)),session=(await db.productRuntimeSessions.where('projectId').equals(projectId).toArray())[0]
+    const imported=(await db.agentRuns.where('productRuntimeSessionId').equals(session.id!).toArray())[0]
+    expect(imported.portableRuntimeOriginJson).toBeTruthy()
+    const saved=JSON.parse(await readAgentRunArtifactExactV1({projectId,artifactKind:'source-snapshot',contentHash:candidateArtifactHash!}))
+    expect(saved.candidateHash).toBe(generated.candidate.candidateHash)
+    expect(saved.artifact.originalText).toBe(raw);expect(saved.artifact.editableText).toBe(raw)
+    expect(saved.artifact.callEvidence).toEqual(generated.candidate.artifact.callEvidence)
+    expect(await readAgentRunArtifactExactV1({projectId,artifactKind:'raw-response',contentHash:generated.candidate.rawResponseHash})).toBe(raw)
+    const read={...resume(generated.prepared),scope:{projectId,worldId:session.worldId!,workId:session.workId!},sessionId:session.id!,runId:imported.id!}
+    const before=await readProductRuntimeState(session.id!)
+    await expect(readTtrpgOpenIntentCandidateV1(read)).rejects.toThrow(/导入|历史/)
+    await expect(executeTtrpgOpenIntentRequestV1({...read,runAI})).rejects.toThrow()
+    expect(await readProductRuntimeState(session.id!)).toEqual(before);expect(runAI).toHaveBeenCalledOnce()
+  },30000)
+
   it('stores raw text and CreativeArtifact before human review, restores the same candidate without another send', async () => {
     const { fixture, input, resume } = await setup()
     const before = await readProductRuntimeState(fixture.sessionId)

@@ -1,3 +1,5 @@
+import {readAgentRunArtifactExactV1} from '../../src/lib/memory/artifact-store'
+import {sha256Text} from '../../src/lib/ai/chapter-memory/text-normalization'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { readyOpenTtrpgSessionV1, openEnvelopeV1, OPEN_HUMAN_VIEWER } from '../helpers/open-ttrpg-session'
@@ -36,6 +38,13 @@ describe('R-TTRPGOPEN1 durable human clarification of an original semantic candi
     expect((await review()).review).toMatchObject({ route: 'needs-clarification',canConfirm: false,canClarify: true,attempts: 0 })
     const event = await clarifyTtrpgOpenIntentCandidateV1({ ...await base(),selection,expectedCount: 0 })
     const after = await readProductRuntimeState(f.sessionId),entry = after.ttrpg!.openRun!.coordination.calls[0].intentClarifications![0]
+    const retained=await readTtrpgOpenIntentCandidateV1({scope:f.scope,sessionId:f.sessionId,viewerKey:OPEN_HUMAN_VIEWER,runId:g.prepared.runId,requestKey:g.prepared.requestKey})
+    const raw=await readAgentRunArtifactExactV1({projectId:f.scope.projectId,artifactKind:'raw-response',contentHash:g.candidate.rawResponseHash})
+    expect(retained).toEqual(g.candidate)
+    expect(retained!.artifact.originalText).toBe(raw);expect(retained!.artifact.editableText).toBe(g.candidate.artifact.editableText)
+    expect(await sha256Text(raw)).toBe(g.candidate.rawResponseHash)
+    expect(retained!.artifact.callEvidence).toEqual(g.candidate.artifact.callEvidence)
+
     expect(entry).toMatchObject({ candidateHash: g.candidate.candidateHash,attempt: 1,selection })
     expect(after.entities).toEqual(before.entities);expect(after.ttrpg!.checks).toEqual(before.ttrpg!.checks)
     expect(after.ttrpg!.openRun!.worldTime).toEqual(before.ttrpg!.openRun!.worldTime);expect(after.ttrpg!.openRun!.operations).toEqual([])
