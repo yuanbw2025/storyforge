@@ -316,8 +316,11 @@ export async function executeFrozenFormalAIEntryV1(
   }
   if (binding.outputModality !== undefined) fail(`${entryId} 音频入口不得借用文本模型执行器`)
   if (frozenSkill.requestPolicy === 'task-request-v2' || binding.entryId === 'world.codex.extract.v2') {
-    if (binding.entryId !== 'world.codex.extract.v2' || frozenSkill.id !== 'world-origin.codex-extract.v2'
-      || frozenSkill.requestPolicy !== 'task-request-v2' || caller !== 'src/lib/agent/run/codex-extraction-v2-runtime.ts'
+    const exactProduct = (binding.entryId === 'world.codex.extract.v2' && frozenSkill.id === 'world-origin.codex-extract.v2'
+      && caller === 'src/lib/agent/run/codex-extraction-v2-runtime.ts')
+      || (binding.entryId === 'world.worldview-field.v2' && frozenSkill.id === 'world-origin.worldview-field.v2'
+        && caller === 'src/lib/agent/run/worldview-field-v2-durable.ts')
+    if (!exactProduct || frozenSkill.requestPolicy !== 'task-request-v2'
       || !options?.preparedRequestV2 || !frozenResolution) fail('新正式入口需要准确的冻结完整请求，不能回落旧客户端')
     const guard = preparedRequestDispatchGuardV2(options.preparedRequestV2)
     if (result?.beforeModelDispatch && result.beforeModelDispatch !== guard) fail('新正式入口的发送守卫不匹配')

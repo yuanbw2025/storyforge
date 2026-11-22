@@ -1,4 +1,5 @@
-import { splitLongformPlanAtChapterV1, persistLongformContinuationV1, publishLongformContinuationV1 } from '../../lib/agent/longform-stage-queue'
+import type { TaskLengthPlanV1 } from '../../lib/types/agent-run'
+import { persistLongformContinuationV1, publishLongformContinuationV1 } from '../../lib/agent/longform-stage-queue'
 import { prepareMasterChapterPostAdoptionV1, recoverLongformPhaseHandoffV1 } from '../../lib/agent/master-post-adoption'
 import { revalidateDetailedOutlineCreativeDraftV1 } from '../../lib/agent/detailed-outline-copilot'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -19,14 +20,21 @@ import {
 } from '../../lib/agent/orchestrator'
 import {
   findResumableMasterAgentRunV1,
-  runDurableMasterAgentPlanV1,
-} from '../../lib/agent/run/master-durable'
-import {
-  commitMasterAgentCandidateAdoptionV1,
-  recoverPendingMasterAgentAdoptionsV1,
-  rejectMasterAgentCandidateV1,
-} from '../../lib/agent/run/master-adoption'
-import { verifyMasterAgentRunV1 } from '../../lib/agent/run/master-verification'
+  projectWorldviewImportedHistoryV2,
+  formatMasterBudgetSummaryV2,
+  findEndableWorldviewRunV2,
+  endWorldviewMasterRunV2,
+  findWorldviewReceivedRunV2,
+  readWorldviewReceivedContentV2,
+  type EndableWorldviewRunV2,
+  type WorldviewReceivedRunV2,
+  admitPreparedMasterPlanV2,
+  runMasterWithWorldviewV2 as runDurableMasterAgentPlanV1,
+  adoptMasterWithWorldviewV2 as commitMasterAgentCandidateAdoptionV1,
+  rejectMasterWithWorldviewV2 as rejectMasterAgentCandidateV1,
+  recoverMasterWithWorldviewV2 as recoverPendingMasterAgentAdoptionsV1,
+  verifyMasterWithWorldviewV2 as verifyMasterAgentRunV1,
+} from '../../lib/agent/run/master-worldview-v2'
 import type { AgentEvent, Project, WorkspaceScope } from '../../lib/types'
 import { parseAgentEventPayload } from '../../lib/types'
 import { AgentTeamBudgetTracker } from '../../lib/agent/team-budget'
@@ -221,10 +229,14 @@ export function useMasterCopilot(input: {
   const [conversationId, setConversationId] = useState<number | null>(null)
   const [events, setEvents] = useState<AgentEvent[]>([])
   const [authorRequest, setAuthorRequest] = useState('')
+  const [activeTaskLengthPlan, setActiveTaskLengthPlan] = useState<TaskLengthPlanV1 | null>(null)
+  const [activeLengthProgress, setActiveLengthProgress] = useState<{rounds:number;words:number;status:string}|null>(null)
   const [activeRequest, setActiveRequest] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [recoveryAvailable, setRecoveryAvailable] = useState(false)
+  const [endableWorldviewRun,setEndableWorldviewRun] = useState<EndableWorldviewRunV2|null>(null)
+  const [receivedWorldviewRun, setReceivedWorldviewRun] = useState<WorldviewReceivedRunV2 | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [, refreshVisibleCandidateDraft] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
@@ -249,9 +261,15 @@ export function useMasterCopilot(input: {
   ), [])
 
   const reload = useCallback(async (id: number) => {
-    const rows = await readAgentEvents(id, workspaceScope)
-    if (activeCandidateScope.current === scopeKey) setEvents(overlayLocalCandidateDrafts(rows))
-  }, [overlayLocalCandidateDrafts, scopeKey, workspaceScope])
+    const rows = await projectWorldviewImportedHistoryV2(workspaceScope,await readAgentEvents(id, workspaceScope))
+    const endable = workspaceScope ? await findEndableWorldviewRunV2({scope:workspaceScope,conversationId:id}) : null
+    const received = workspaceScope ? await findWorldviewReceivedRunV2({ scope: workspaceScope, conversationId: id, worldGroupId }) : null
+    if (activeCandidateScope.current === scopeKey) {
+      setEvents(overlayLocalCandidateDrafts(rows))
+      setEndableWorldviewRun(endable)
+      setReceivedWorldviewRun(received)
+    }
+  }, [overlayLocalCandidateDrafts, scopeKey, workspaceScope, worldGroupId])
 
   useEffect(() => {
     if (conversationId == null || typeof window === 'undefined') return
@@ -293,6 +311,10 @@ export function useMasterCopilot(input: {
     setEvents([])
     setAuthorRequest('')
     setActiveRequest(null)
+    setActiveTaskLengthPlan(null)
+    setActiveLengthProgress(null)
+    setEndableWorldviewRun(null)
+    setReceivedWorldviewRun(null)
     setBusy(MASTER_COPILOT_SCOPE_OWNERS.has(scopeKey))
     setRecoveryAvailable(false)
     setError(null)
@@ -313,7 +335,11 @@ export function useMasterCopilot(input: {
         }
       }
       if (workspaceScope && !MASTER_COPILOT_SCOPE_OWNERS.has(scopeKey)) await recoverLongformPhaseHandoffV1(workspaceScope, conversation.id!)
-      let rows = await readAgentEvents(conversation.id!, workspaceScope)
+      const endable = workspaceScope ? await findEndableWorldviewRunV2({scope:workspaceScope,conversationId:conversation.id!}) : null
+      if(active && activeCandidateScope.current===scopeKey)setEndableWorldviewRun(endable)
+      const received = workspaceScope ? await findWorldviewReceivedRunV2({ scope: workspaceScope, conversationId: conversation.id!, worldGroupId }) : null
+      if (active && activeCandidateScope.current === scopeKey) setReceivedWorldviewRun(received)
+      let rows = await projectWorldviewImportedHistoryV2(workspaceScope,await readAgentEvents(conversation.id!, workspaceScope))
       if (!rows.length) {
         await appendAgentEvent({
           projectId: project.id!,
@@ -323,7 +349,7 @@ export function useMasterCopilot(input: {
           content: '直接告诉我你想完成什么。我会理解目标、调用需要的领域 Agent，并把结果统一交给你确认。',
           scope: workspaceScope,
         })
-        rows = await readAgentEvents(conversation.id!, workspaceScope)
+        rows = await projectWorldviewImportedHistoryV2(workspaceScope,await readAgentEvents(conversation.id!, workspaceScope))
       }
       if (active) {
         setEvents(overlayLocalCandidateDrafts(rows))
@@ -437,6 +463,8 @@ export function useMasterCopilot(input: {
     abortRef.current = controller
     setBusy(true)
     setActiveRequest(request)
+    setActiveTaskLengthPlan(null)
+    setActiveLengthProgress(null)
     setError(null)
     if (requestOverride === undefined) setAuthorRequest('')
     try {
@@ -478,7 +506,7 @@ export function useMasterCopilot(input: {
         delete plan.phase
         await appendAgentEvent({ projectId: project.id!, conversationId, kind: 'plan', content: '作者确认开始本轮计划', payload: { type: 'longform-plan-started-v1' }, scope: workspaceScope })
       }
-      const stages = splitLongformPlanAtChapterV1(plan)
+      const stages = await admitPreparedMasterPlanV2(plan)
       plan = stages.current
       if (stages.remaining && workspaceScope) await persistLongformContinuationV1(workspaceScope, conversationId, plan, stages.remaining)
       await appendAgentEvent({
@@ -510,6 +538,8 @@ export function useMasterCopilot(input: {
         budget: teamBudget,
         signal: controller.signal,
         onTask: recordTask,
+        onLengthPlan: plan => { if (activeCandidateScope.current === scopeKey) setActiveTaskLengthPlan(plan) },
+        onLengthProgress: progress => { if (activeCandidateScope.current === scopeKey) setActiveLengthProgress(progress) },
       })
       const candidates = durable.candidates.map(candidate => ({
         payload: candidate.payload,
@@ -529,11 +559,7 @@ export function useMasterCopilot(input: {
         role: 'assistant',
           content: [
           `本阶段已生成 ${candidates.length} 份候选。请检查、编辑并决定是否采纳。`,
-          (durable.budgetEvidence.profile === 'service-capacity'
-            ? `本轮团队约使用 ${durable.budgetEvidence.usedTokens.toLocaleString()} tokens，`
-            : `本轮团队约使用 ${durable.budgetEvidence.usedTokens.toLocaleString()} / ${durable.budgetEvidence.maxTokens.toLocaleString()} tokens，`)
-          + `${durable.budgetEvidence.calls} 次调用，`
-          + `Canon 受控打回 ${durable.budgetEvidence.canonRetries} 次。`,
+          formatMasterBudgetSummaryV2(durable.budgetEvidence),
           ].join(' '),
           scope: workspaceScope,
       })
@@ -637,6 +663,8 @@ export function useMasterCopilot(input: {
         runId,
         signal: controller.signal,
         onTask: recordTask,
+        onLengthPlan: plan => { if (activeCandidateScope.current === scopeKey) setActiveTaskLengthPlan(plan) },
+        onLengthProgress: progress => { if (activeCandidateScope.current === scopeKey) setActiveLengthProgress(progress) },
       })
       for (const candidate of result.candidates) {
         if (candidate.event.id != null && candidate.runtime) {
@@ -858,6 +886,8 @@ export function useMasterCopilot(input: {
               runId: persistedCandidate.payload.runId!,
               signal: controller.signal,
               onTask: recordTask,
+        onLengthPlan: plan => { if (activeCandidateScope.current === scopeKey) setActiveTaskLengthPlan(plan) },
+        onLengthProgress: progress => { if (activeCandidateScope.current === scopeKey) setActiveLengthProgress(progress) },
             })
             const generated = advanced.candidates.filter(item => (
               item.event.id != null
@@ -995,18 +1025,47 @@ export function useMasterCopilot(input: {
     finally { releaseMasterCopilotScope(scopeKey, owner) }
   }, [busy, loading, pendingCandidates.length, conversationId, workspaceScope, scopeKey, project.id, reload])
 
+  const endInterruptedWorldviewRun = useCallback(async () => {
+    if(busy||conversationId==null||!workspaceScope||!endableWorldviewRun||pendingCandidates.length)return
+    const expected={...endableWorldviewRun}
+    const scopeOwner=claimMasterCopilotScope(scopeKey)
+    if(!scopeOwner)return
+    setBusy(true);setError(null)
+    try {
+      await endWorldviewMasterRunV2({scope:workspaceScope,conversationId,worldGroupId,...expected})
+      if(activeCandidateScope.current===scopeKey){setRecoveryAvailable(false);setEndableWorldviewRun(null)}
+    } catch(cause) {
+      if(activeCandidateScope.current===scopeKey)setError(errorMessage(cause))
+    } finally {
+      releaseMasterCopilotScope(scopeKey,scopeOwner)
+      if(activeCandidateScope.current===scopeKey)setBusy(false)
+      try {await reload(conversationId)} catch(cause) {if(activeCandidateScope.current===scopeKey)setError(errorMessage(cause))}
+      notifyMasterCopilotSync(scopeKey)
+    }
+  },[busy,conversationId,workspaceScope,endableWorldviewRun,pendingCandidates.length,scopeKey,worldGroupId,reload])
+  const readReceivedWorldviewContent = useCallback(async () => {
+    if (!workspaceScope || conversationId == null || !receivedWorldviewRun) return null
+    const content = await readWorldviewReceivedContentV2({ scope: workspaceScope, conversationId, worldGroupId, ...receivedWorldviewRun })
+    return activeCandidateScope.current === scopeKey ? content : null
+  }, [workspaceScope, conversationId, worldGroupId, receivedWorldviewRun, scopeKey])
   const stop = useCallback(() => abortRef.current?.abort(), [])
 
   return {
     savePlanningSummary,
     authorRequest,
     activeRequest,
+    activeTaskLengthPlan,
+    activeLengthProgress,
     setAuthorRequest,
     events,
     pendingCandidates,
     busy,
     loading,
     recoveryAvailable,
+    endableWorldviewRun,
+    endInterruptedWorldviewRun,
+    receivedWorldviewRun,
+    readReceivedWorldviewContent,
     error,
     submit,
     discuss,

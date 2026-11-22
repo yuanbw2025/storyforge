@@ -160,6 +160,11 @@ export async function updateAgentEventCandidate(
   } catch {
     payload = null
   }
+  if (payload?.skillId === 'world-origin.worldview-field.v2') {
+    if (!scope || scope.projectId !== projectId) throw new Error('新世界基座编辑需要原作品作用域。')
+    const { reviseWorldviewMasterCandidateV2 } = await import('./run/worldview-field-v2-durable')
+    return reviseWorldviewMasterCandidateV2({scope,eventId,draft:content})
+  }
   if (payload && options?.revalidateCreativeArtifact && payload.creativeArtifact) {
     payload = {
       ...payload,

@@ -17,8 +17,9 @@ import { PROMPT_MODULE_KEYS, RETIRED_PROMPT_MODULE_KEYS } from '../../src/lib/ty
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
-type ManualContextRow = { key: string; label: string; scope: string; layer: string; budgetTokens: number | null; fullCaptureVersion: 'registered-host-full-v2' | null }
+type ManualContextRow = { key: string; label: string; scope: string; layer: string; budgetTokens: number | null; fullCaptureVersion: 'registered-host-full-v2' | null; explicitSelectionOnly: boolean }
 const fullCaptureBudgetNote = '（旧装配参考；V2完整捕获不以此截原文）'
+const explicitSelectionNote = '（仅显式任务选用）'
 
 // This test reads the rendered table and the actual runtime registry. It does
 // not import the generator/parser: the same omission in both cannot pass.
@@ -28,11 +29,11 @@ function assertContextManualMatchesRuntime(manual: string): void {
   const header = '| key | 标签 | 作用域 | 层级 | 预算(token) |'
   expect(tableLines.filter(line => line === header), '来源表必须有唯一完整表头').toHaveLength(1)
   const rows: ManualContextRow[] = tableLines.filter(line => line !== header && !/^\|(?:[-: ]+\|)+$/.test(line)).map(line => {
-    const match = line.match(/^\| `([^`]+)` \| ([^|]*) \| ([^|]*) \| ([^|]*) \| (\d+|完整任务基线|按请求容量选读)(（旧装配参考；V2完整捕获不以此截原文）)? \|$/)
+    const match = line.match(/^\| `([^`]+)` \| ([^|]*) \| ([^|]*) \| ([^|]*) \| (\d+|完整任务基线|按请求容量选读)(（旧装配参考；V2完整捕获不以此截原文）)?(（仅显式任务选用）)? \|$/)
     if (!match) throw new Error(`上下文来源行包含未知格式、预算或注记：${line}`)
     return { key: match[1] ?? '', label: match[2] ?? '', scope: match[3] ?? '', layer: match[4] ?? '',
       budgetTokens: ['完整任务基线', '按请求容量选读'].includes(match[5] ?? '') ? null : Number(match[5]),
-      fullCaptureVersion: match[6] ? 'registered-host-full-v2' : null }
+      fullCaptureVersion: match[6] ? 'registered-host-full-v2' : null, explicitSelectionOnly: Boolean(match[7]) }
   })
   const keys = rows.map(row => row.key)
   expect(new Set(keys).size, '上下文表不能含重复 key').toBe(keys.length)
@@ -45,7 +46,7 @@ function assertContextManualMatchesRuntime(manual: string): void {
     }
     expect(byKey.get(source.key), `来源 ${source.key} 的元数据、旧装配预算与完整捕获声明`).toEqual({ key: source.key,
       label: source.label, scope: source.scope, layer: source.layer, budgetTokens: source.budgetTokens,
-      fullCaptureVersion: source.fullCapture?.version ?? null })
+      fullCaptureVersion: source.fullCapture?.version ?? null, explicitSelectionOnly: source.explicitSelectionOnly === true })
   }
 }
 
@@ -132,6 +133,22 @@ describe('Phase 3.1 · AI 说明书自动生成', () => {
     expect(() => assertContextManualMatchesRuntime(manual.replace(plain, forged)), '非完整捕获来源不能伪装成 V2 full capture').toThrow()
     expect(() => assertContextManualMatchesRuntime(addLine(sourceLine('manualText'))), '重复真实来源不能被 Map 合并掩盖').toThrow()
     expect(() => assertContextManualMatchesRuntime(addLine('| `SFQA141-unknown-note` | 未登记 | runtime | L0 | 8000（未知规则） |')), '未知格式行不能静默跳过').toThrow()
+  })
+
+  it('显式产品完整来源注记与实际选择元数据独立匹配，既有shared来源不得伪装', () => {
+    const manual = fs.readFileSync(path.join(root, 'docs/AI-FUNCTIONS-MANUAL.generated.md'), 'utf8')
+    const explicit = CONTEXT_SOURCES.filter(source => source.explicitSelectionOnly)
+    expect(explicit.map(source => source.key).sort()).toEqual(['worldviewFieldBaselineV2', 'worldviewFieldContextV2'].sort())
+    assertContextManualMatchesRuntime(manual)
+    for (const source of explicit) {
+      const line = manual.split('\n').find(row => row.startsWith(`| \`${source.key}\` |`))!
+      expect(line).toContain(explicitSelectionNote)
+      expect(() => assertContextManualMatchesRuntime(manual.replace(line, line.replace(explicitSelectionNote, '')))).toThrow()
+      expect(() => assertContextManualMatchesRuntime(manual.replace(line, line.replace(explicitSelectionNote, '（未登记选源规则）')))).toThrow()
+    }
+    const shared = manual.split('\n').find(row => row.startsWith('| `manualText` |'))!
+    expect(shared).not.toContain(explicitSelectionNote)
+    expect(() => assertContextManualMatchesRuntime(manual.replace(shared, shared.replace(/ \|$/, `${explicitSelectionNote} |`)))).toThrow()
   })
 
   it('semantic.md 引用的 moduleKey 必须真实存在(防 key 漂移)', () => {

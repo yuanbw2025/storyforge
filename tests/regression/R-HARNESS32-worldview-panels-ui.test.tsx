@@ -1,5 +1,5 @@
 import StoryCorePanel from '../../src/components/worldview/StoryCorePanel'
-import { act, createElement } from 'react'
+import { act, createElement, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Project } from '../../src/lib/types'
@@ -137,7 +137,7 @@ function candidate(field: string, label: string, value: unknown = `候选的${la
   }
 }
 
-async function renderPanel(component: Parameters<typeof createElement>[0], props: Record<string, unknown> = {}) {
+async function renderPanel(component: ComponentType<{ project: Project }>, props: Record<string, unknown> = {}) {
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)
@@ -235,7 +235,7 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
     await act(async () => generateButton(raceField).click())
     expect(mocks.copilot.submitTargetedRequest).toHaveBeenLastCalledWith(
       expect.stringContaining('目标字段=races'),
-      expect.objectContaining({ agentId: 'world-origin', skillId: 'world-origin.worldview-field' }),
+      expect.objectContaining({ agentId: 'world-origin', skillId: 'world-origin.worldview-field.v2', targetField: 'races', authorLengthIntent: null }),
     )
   })
 

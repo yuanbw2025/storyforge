@@ -278,7 +278,14 @@ export function checkRegistry(): RegistryValidationResult {
     if (source.scope !== 'manual' && !source.ownerFrom) {
       errors.push(`CONTEXT_SOURCES 必须登记 ownerFrom: ${source.key}`)
     }
-    if (source.budgetTokens === null ? !['referenceDerivedBaseline', 'referenceAnalysisPrivateChunk', 'references'].includes(source.key) : source.budgetTokens <= 0) {
+    const completeWorldviewSource = source.explicitSelectionOnly === true && source.layer === 'L0'
+      && source.protectedFromTrim === true && source.atomic === true && source.requiresWorldGroupId === true
+      && source.fullCapture?.version === 'registered-host-full-v2'
+      && (source.key === 'worldviewFieldBaselineV2' && source.scope === 'world' && source.ownerFrom === 'world'
+        && source.fullCapture.sourceVersion === 'worldview-field-baseline-full-v2'
+        || source.key === 'worldviewFieldContextV2' && source.scope === 'project' && source.ownerFrom === 'work'
+        && source.fullCapture.sourceVersion === 'worldview-field-constraints-full-v2')
+    if (source.budgetTokens === null ? !['referenceDerivedBaseline', 'referenceAnalysisPrivateChunk', 'references'].includes(source.key) && !completeWorldviewSource : source.budgetTokens <= 0) {
       errors.push(`CONTEXT_SOURCES budgetTokens 必须为正数: ${source.key}`)
     }
     if (source.resources) {

@@ -114,7 +114,7 @@ export async function createContextAccessPolicyForExecutionV2(
   skill: AgentSkillDefinitionV1, material: ContextMaterialAllocationV2,
   excludedResourceKinds: readonly ContextResourceKind[] = [],
 ): Promise<ContextAccessPolicyV1> {
-  if (skill.id !== 'world-origin.codex-extract.v2' || skill.requestPolicy !== 'task-request-v2') fail('完整资料策略只适用于准确登记的新提取Skill')
+  if (!['world-origin.codex-extract.v2', 'world-origin.worldview-field.v2'].includes(skill.id) || skill.requestPolicy !== 'task-request-v2') fail('完整资料策略只适用于准确登记的新提取Skill')
   const { allocationHash, ...body } = material
   if (body.version !== 'context-material-allocation-v2' || body.captureProtocolVersion !== 'registered-host-full-v2'
     || !Number.isSafeInteger(body.inputTokenForecast) || body.inputTokenForecast < 0

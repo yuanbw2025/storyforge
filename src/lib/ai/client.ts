@@ -955,7 +955,10 @@ async function dispatchPreparedRequestV2(
   const bound = options.preparedRequestV2!, state = boundRequestsV2.get(bound)
   const { preparedRequestV2: _handle, ...actualOptions } = options
   const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
-  if (!state || state.attempted || !state.guard || !state.observer || options.capacityPolicy || state.lengthPlan !== null || meta?.category !== 'codex.extract'
+  if (!state || state.attempted || !state.guard || !state.observer || options.capacityPolicy || (meta?.category === 'codex.extract' ? state.lengthPlan !== null
+      : meta?.category === 'agent.world-origin.worldview-field.v2'
+        ? state.lengthPlan === null || !['setting-field','setting-set','short-field'].includes(state.lengthPlan.taskKind)
+        : true)
     || requestGuardV2(resolved) !== requestGuardV2(state.assessment.resolution)
     || canonicalStringify(messages) !== canonicalStringify(state.messages)
     || canonicalStringify(actualOptions) !== canonicalStringify(state.options)

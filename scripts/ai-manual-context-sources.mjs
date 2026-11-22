@@ -4,7 +4,7 @@ import ts from 'typescript'
 
 /** @typedef {import('typescript').SourceFile} SourceFile */
 /** @typedef {import('typescript').Node} Node */
-/** @typedef {{key: string, label: string, scope: string, layer: string, budget: string}} ContextRow */
+/** @typedef {{key: string, label: string, scope: string, layer: string, budget: string, explicitSelectionOnly?: true}} ContextRow */
 
 /** @param {SourceFile} source @param {Node} node @param {string} key @param {string} reason @returns {never} */
 function fail(source, node, key, reason) {
@@ -96,6 +96,10 @@ export function readStaticContextSources(sourcePath) {
     return constant(target, target, imported.item.propertyName?.text ?? imported.item.name.text, key, next, true)
   }
 
+  const fullProductSources = new Map([
+    ['worldviewFieldBaselineV2', 'worldview-field-baseline-full-v2'],
+    ['worldviewFieldContextV2', 'worldview-field-constraints-full-v2'],
+  ])
   const source = load(sourcePath), registry = declarations(source, 'CONTEXT_SOURCES')
   const binding = registry[0]
   if (registry.length !== 1 || !binding || !binding.node.initializer
@@ -122,13 +126,32 @@ export function readStaticContextSources(sourcePath) {
     if (computed) fail(source, computed, key, 'computed source members are unsupported')
     if (!key.trim() || keys.has(key)) fail(source, element, key, 'empty or duplicate source key')
     keys.add(key)
+    const selectionMembers = element.properties.filter(item => !ts.isSpreadAssignment(item) && propertyName(item.name) === 'explicitSelectionOnly')
+    let explicitSelectionOnly = false
+    if (selectionMembers.length) {
+      if (selectionMembers.length !== 1 || !ts.isPropertyAssignment(selectionMembers[0])) fail(source, element, key, 'requires one literal explicitSelectionOnly property')
+      const selection = unwrap(selectionMembers[0].initializer)
+      if (selection.kind !== ts.SyntaxKind.TrueKeyword && selection.kind !== ts.SyntaxKind.FalseKeyword) fail(source, selection, key, 'explicitSelectionOnly must be a literal boolean')
+      explicitSelectionOnly = selection.kind === ts.SyntaxKind.TrueKeyword
+    }
+    const expectedVersion = fullProductSources.get(key)
+    if (explicitSelectionOnly && !expectedVersion) fail(source, element, key, 'explicit-only selection is restricted to registered product full recipes')
+    if (expectedVersion) {
+      if (!explicitSelectionOnly) fail(source, element, key, 'product full recipes require explicitSelectionOnly: true')
+      const capture = unwrap(property(element, 'fullCapture', source, key))
+      if (!ts.isObjectLiteralExpression(capture) || capture.properties.some(item => ts.isSpreadAssignment(item) || ts.isComputedPropertyName(item.name))) fail(source, capture, key, 'requires a literal fullCapture protocol without spreads or computed members')
+      const version = unwrap(property(capture, 'version', source, key)), sourceVersion = unwrap(property(capture, 'sourceVersion', source, key))
+      if (!ts.isStringLiteral(version) || version.text !== 'registered-host-full-v2' || !ts.isStringLiteral(sourceVersion) || sourceVersion.text !== expectedVersion) fail(source, capture, key, 'product full recipe version does not match its registered key')
+    }
+    /** @type {{explicitSelectionOnly?: true}} */
+    const selectionMetadata = explicitSelectionOnly ? { explicitSelectionOnly: true } : {}
     const budgetExpression = property(element, 'budgetTokens', source, key)
     if (budgetExpression.kind === ts.SyntaxKind.NullKeyword) {
-      if (!['referenceDerivedBaseline', 'referenceAnalysisPrivateChunk', 'references'].includes(key)) fail(source, budgetExpression, key, 'complete task budget is restricted to registered reference executors')
-      return { key, label: text('label', key), scope: text('scope', key), layer: text('layer', key), budget: key === 'references' ? '按请求容量选读' : '完整任务基线' }
+      if (!['referenceDerivedBaseline', 'referenceAnalysisPrivateChunk', 'references'].includes(key) && !expectedVersion) fail(source, budgetExpression, key, 'complete task budget is restricted to registered reference executors')
+      return { key, label: text('label', key), scope: text('scope', key), layer: text('layer', key), budget: key === 'references' ? '按请求容量选读' : '完整任务基线', ...selectionMetadata }
     }
     const budget = number(source, budgetExpression, key, new Set())
     if (!Number.isSafeInteger(budget) || budget <= 0) fail(source, budgetExpression, key, 'budget must be a positive safe integer')
-    return { key, label: text('label', key), scope: text('scope', key), layer: text('layer', key), budget: String(budget) }
+    return { key, label: text('label', key), scope: text('scope', key), layer: text('layer', key), budget: String(budget), ...selectionMetadata }
   })
 }

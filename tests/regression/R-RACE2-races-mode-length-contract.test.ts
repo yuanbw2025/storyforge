@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
@@ -7,6 +6,8 @@ import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import {
   parseWorldviewFieldOutputBudgetV1,
+  parseWorldviewFieldCandidateDraft,
+  parseWorldviewFieldCandidateDraftV2,
   prepareWorldviewFieldCopilot,
   resolveWorldviewFieldOperationV1,
   resolveWorldviewFieldOutputBudgetV1,
@@ -124,12 +125,12 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
     })).rejects.toThrow('模型调用前明确拒绝')
   })
 
-  it('UI 明示 default/custom、有限 cap 与 LONGOUT 未启用，并把自定义值写入 Prompt Run', () => {
-    const source = readFileSync('src/components/worldview/WorldviewAgentControls.tsx', 'utf8')
-    expect(source).toContain("useState<'default' | 'custom'>")
-    expect(source).toContain("{ maxTokens: customOutputTokens }")
-    expect(source).toContain('Run 内始终冻结为有限值')
-    expect(source).toContain('LONGOUT 分段协议')
+  it('新普通入口的 V2 接受长字段；旧 V1 预算与解析只保历史语义', () => {
+    // The real controls→host intent interaction is covered by R-WORLDVIEW-FIELD-V2-ui.
+    const value = '种族条款。'.repeat(7000) + '完整尾标'
+    const raw = JSON.stringify({ field: 'races', value })
+    expect(parseWorldviewFieldCandidateDraftV2(raw).value).toBe(value)
+    expect(() => parseWorldviewFieldCandidateDraft(raw)).toThrow()
   })
 
   it('provider 以 finish_reason=length 停止时，即使正文可解析也不能冒充完整候选', async () => {

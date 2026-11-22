@@ -410,10 +410,10 @@ function buildMarkdown() {
   lines.push('| key | 标签 | 作用域 | 层级 | 预算(token) |')
   lines.push('|---|---|---|---|---|')
   for (const s of sources) {
-    lines.push(`| \`${s.key}\` | ${s.label} | ${s.scope} | ${s.layer} | ${s.budget}${s.fullCaptureVersion ? '（旧装配参考；V2完整捕获不以此截原文）' : ''} |`)
+    lines.push(`| \`${s.key}\` | ${s.label} | ${s.scope} | ${s.layer} | ${s.budget}${s.fullCaptureVersion ? '（旧装配参考；V2完整捕获不以此截原文）' : ''}${s.explicitSelectionOnly ? '（仅显式任务选用）' : ''} |`)
   }
   lines.push('')
-  lines.push('> 既有装配按来源完整性与层级处理预算；声明 fullCapture 的 V2 host 捕获完整保留原文，随后按真实完整请求安排选送。该声明不扩大 owner、来源或原文读取权限。')
+  lines.push('> 既有装配按来源完整性与层级处理预算；声明 fullCapture 的 V2 host 捕获完整保留原文，随后按真实完整请求安排选送。该声明不扩大 owner、来源或原文读取权限。标注“仅显式任务选用”的产品完整来源不会进入缺省选源，须由登记任务显式选择。')
   lines.push('')
 
   // 三、可写字段

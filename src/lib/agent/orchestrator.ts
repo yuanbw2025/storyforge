@@ -213,7 +213,13 @@ import {
 export { DOMAIN_AGENT_IDS }
 export type { DomainAgentId }
 
+import type { AuthorLengthIntentV1 } from '../types/agent-run'
+import type { WorldviewFieldPromptV2, WorldviewFieldCandidateMetadataV2 } from './worldview-field-v2-contract'
+
 export interface MasterAgentTask {
+  targetField?: WorldviewAgentField
+  authorLengthIntent?: AuthorLengthIntentV1 | null
+  worldviewFieldPromptV2?: WorldviewFieldPromptV2
   id: string
   agentId: DomainAgentId
   /** Every durable task freezes one exact current Skill identity. */
@@ -262,6 +268,7 @@ export interface MasterCandidateDependencyBindingV1 {
 }
 
 export interface MasterCandidatePayload {
+  worldviewFieldV2?: WorldviewFieldCandidateMetadataV2
   version: 1
   taskId: string
   agentId: DomainAgentId
@@ -389,6 +396,8 @@ interface PlannerDependencies {
 }
 
 export interface PinnedMasterAgentTaskV1 {
+  targetField?: WorldviewAgentField
+  authorLengthIntent?: AuthorLengthIntentV1 | null
   agentId: DomainAgentId
   skillId?: AgentSkillId
   instruction: string
@@ -671,6 +680,22 @@ export async function createMasterAgentPlan(input: {
   if (input.pinnedTask) {
     const pinned = input.pinnedTask
     const pinnedSkillId = pinned.skillId ?? selectAgentSkillIdV1(pinned.agentId, request)
+    if (pinnedSkillId === 'world-origin.worldview-field.v2') {
+      const { parseWorldviewFieldTaskV2, freezeWorldviewFieldPromptV2 } = await import('./worldview-field-v2-contract')
+      const allowed = ['id','agentId','skillId','instruction','dependsOn','targetField','authorLengthIntent','promptExecution']
+      if (Object.keys(pinned).some(key => !allowed.includes(key)) || pinned.agentId !== 'world-origin'
+        || !Object.prototype.hasOwnProperty.call(pinned,'authorLengthIntent') || !pinned.targetField
+        || pinned.dependsOn?.length) throw new Error('世界基座 V2 仅接受严格单字段固定任务和作者篇幅意图（自动为 null）。')
+      const task = await parseWorldviewFieldTaskV2({ id:pinned.id ?? 'world-origin-targeted', agentId:'world-origin',
+        skillId:pinnedSkillId, instruction:pinned.instruction.trim(), dependsOn:[], targetField:pinned.targetField,
+        authorLengthIntent:pinned.authorLengthIntent,
+        worldviewFieldPromptV2:await freezeWorldviewFieldPromptV2(usePromptStore.getState().getActive('worldview.dimension'),
+          pinned.promptExecution ?? {version:1,moduleKey:'worldview.dimension'}) })
+      return {summary:'按作者要求生成一个世界基座字段；篇幅由真实字段和原稿安排。',tasks:[task],
+        workflow:{version:1,workflowId:'single-domain-direct',reasonCodes:['single-explicit-domain']}}
+    }
+    if (pinned.authorLengthIntent !== undefined || pinned.targetField !== undefined) throw new Error('旧 Skill 不能借用世界基座 V2 任务字段。')
+
     if (pinned.agentId !== 'inspiration' && pinned.inspirationFragmentIds !== undefined) {
       throw new Error('只有灵感领域任务可以固定灵感碎片。')
     }
