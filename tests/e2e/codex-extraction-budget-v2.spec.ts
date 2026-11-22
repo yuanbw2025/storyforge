@@ -28,8 +28,9 @@ async function installSyntheticHTTP(page: Page, posts: string[], unknown = false
 async function openResourceExtractor(page: Page, category?: string) {
   await openLongformLeaf(page, '自然环境')
   await page.getByRole('button').filter({ hasText: /自然资源$/ }).last().click()
-  if (category) await page.getByRole('button').filter({ hasText: category }).last().click()
+  if (category) await page.getByText(category, { exact: true }).last().click()
   await page.getByRole('button', { name: 'AI 从内容拆分词条', exact: true }).click()
+  if (category) await expect(page.getByRole('heading', { name: `AI 原文提取「${category}」`, exact: true })).toBeVisible()
 }
 async function setup(page: Page, unknown = false, controls: SyntheticHTTPControls = {}) {
   await page.addInitScript(() => {
@@ -45,8 +46,13 @@ async function setup(page: Page, unknown = false, controls: SyntheticHTTPControl
   const projectId = Number(new URL(page.url()).pathname.match(/workspace\/(\d+)/)![1])
   expect(new URL(page.url()).searchParams.has('codexExtractionV2')).toBe(false)
   await openResourceExtractor(page)
-  await page.getByPlaceholder('粘贴或编辑要拆分的整段设定内容', { exact: true }).fill(sourceText)
-  return { projectId, posts }
+  const sourceInput = page.getByPlaceholder('粘贴或编辑要拆分的整段设定内容', { exact: true })
+  await sourceInput.fill(sourceText)
+  // HTML textarea value normalizes CRLF before React receives author input.
+  // Freeze this actual boundary value; all other whitespace and full tail stay.
+  const admittedText = await sourceInput.inputValue()
+  expect(admittedText).toBe(sourceText.replace(/\r\n/g, '\n'))
+  return { projectId, posts, admittedText }
 }
 /** Native readonly IndexedDB inspection works for both cold production bundles
  * and the dev server; it never imports a service or writes author data. */
@@ -77,12 +83,12 @@ async function reopenWithoutNewStartFlag(page: Page) {
 
 test('B01 C03/C17/C19: full source → actual wire → pending → author draft → refresh with start off → explicit adopt', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
-  const { projectId, posts } = await setup(page)
+  const { projectId, posts, admittedText } = await setup(page)
   await page.getByRole('button', { name: '开始拆分', exact: true }).click()
   await expect(page.locator('[aria-label="候选1名称"]')).toHaveValue('响盐矿')
   expect(posts).toHaveLength(1)
   const body = JSON.parse(posts[0])
-  expect(body.messages.some((row: { content: string }) => row.content.includes(sourceText))).toBe(true)
+  expect(body.messages.some((row: { content: string }) => row.content.includes(admittedText))).toBe(true)
   expect(body).not.toHaveProperty('max_tokens'); expect(body).not.toHaveProperty('capacityPolicy')
   expect(await formalRows(page, projectId)).toEqual([])
   await page.getByText('编辑作者稿', { exact: true }).click()
@@ -92,7 +98,7 @@ test('B01 C03/C17/C19: full source → actual wire → pending → author draft 
   await expect(page.getByText('作者稿尚未保存', { exact: false })).toHaveCount(0)
   await reopenWithoutNewStartFlag(page)
   await expect(page.locator('[aria-label="候选1名称"]')).toHaveValue('作者命名的响盐矿')
-  await expect(page.getByPlaceholder('粘贴或编辑要拆分的整段设定内容', { exact: true })).toHaveValue(sourceText)
+  await expect(page.getByPlaceholder('粘贴或编辑要拆分的整段设定内容', { exact: true })).toHaveValue(admittedText)
   expect(await formalRows(page, projectId)).toEqual([])
   await page.getByRole('button', { name: '写入所选 1 项', exact: true }).click()
   await expect.poll(async () => (await formalRows(page, projectId)).length).toBe(1)
@@ -102,12 +108,12 @@ test('B01 C03/C17/C19: full source → actual wire → pending → author draft 
 })
 
 test('B01 C13/C15/C19: unknown HTTP preserves original input and never offers a resend as recovery', async ({ page }) => {
-  const { projectId, posts } = await setup(page, true)
+  const { projectId, posts, admittedText } = await setup(page, true)
   await page.getByRole('button', { name: '开始拆分', exact: true }).click()
   await expect(page.getByText('先核对已存原答和原请求；未知结果不会重新发送。', { exact: false })).toBeVisible()
   expect(posts).toHaveLength(1)
   await reopenWithoutNewStartFlag(page)
-  await expect(page.getByPlaceholder('粘贴或编辑要拆分的整段设定内容', { exact: true })).toHaveValue(sourceText)
+  await expect(page.getByPlaceholder('粘贴或编辑要拆分的整段设定内容', { exact: true })).toHaveValue(admittedText)
   await expect(page.getByRole('button', { name: '核对原请求并继续', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '开始拆分', exact: true })).toBeDisabled()
   expect(posts).toHaveLength(1); expect(await formalRows(page, projectId)).toEqual([])
@@ -119,14 +125,17 @@ test('B01 native two-page same-target admission and explicit abandonment while t
   const barrier = new Promise<void>(resolve => { release = resolve })
   let replies = 0
   const controls: SyntheticHTTPControls = { beforeReply: () => ++replies === 1 ? barrier : Promise.resolve() }
-  const { projectId, posts } = await setup(page, false, controls)
+  const { projectId, posts, admittedText } = await setup(page, false, controls)
   const other = await context.newPage()
   try {
     await installSyntheticHTTP(other, posts, false, controls)
     await other.goto(page.url())
     await openResourceExtractor(other)
-    const otherSource = sourceText + '\n第二页尚未提交的补充输入。'
-    await other.getByPlaceholder('粘贴或编辑要拆分的整段设定内容', { exact: true }).fill(otherSource)
+    const otherSource = admittedText + '\n第二页尚未提交的补充输入。'
+    const otherInput = other.getByPlaceholder('粘贴或编辑要拆分的整段设定内容', { exact: true })
+    await otherInput.fill(otherSource)
+    const otherAdmittedText = await otherInput.inputValue()
+    expect(otherAdmittedText).toBe(otherSource)
     await expect(other.getByRole('button', { name: '开始拆分', exact: true })).toBeEnabled()
     await page.getByRole('button', { name: '开始拆分', exact: true }).click()
     await expect.poll(() => posts.length).toBe(1)
@@ -134,7 +143,7 @@ test('B01 native two-page same-target admission and explicit abandonment while t
       .filter(lock => lock.name?.startsWith('storyforge:codex-extraction-start-v2:storyforge-core:')).length)).toBe(0)
     await other.getByRole('button', { name: '开始拆分', exact: true }).click()
     await expect(other.getByText('原提取运行尚未处理完毕或证据待核验；本页输入与原件已保留，不重新发送。', { exact: true })).toBeVisible()
-    await expect(other.getByPlaceholder('粘贴或编辑要拆分的整段设定内容', { exact: true })).toHaveValue(otherSource)
+    await expect(otherInput).toHaveValue(otherAdmittedText)
     expect(posts).toHaveLength(1)
     expect(await ownedRows(page, 'agentRuns', projectId)).toHaveLength(1)
     expect(await formalRows(page, projectId)).toEqual([])
@@ -145,7 +154,7 @@ test('B01 native two-page same-target admission and explicit abandonment while t
     await openResourceExtractor(other)
     await other.getByRole('button', { name: '放弃旧运行', exact: true }).click()
     await expect(other.getByRole('button', { name: '开始拆分', exact: true })).toBeEnabled()
-    await other.getByPlaceholder('粘贴或编辑要拆分的整段设定内容', { exact: true }).fill(otherSource)
+    await otherInput.fill(otherAdmittedText)
     await other.getByRole('button', { name: '开始拆分', exact: true }).click()
     await expect(other.locator('[aria-label="候选1名称"]')).toHaveValue('响盐矿')
     expect(posts).toHaveLength(2)
