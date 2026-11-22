@@ -17,24 +17,35 @@ import { PROMPT_MODULE_KEYS, RETIRED_PROMPT_MODULE_KEYS } from '../../src/lib/ty
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
-type ManualContextRow = { key: string; label: string; scope: string; layer: string; budgetTokens: number | null }
+type ManualContextRow = { key: string; label: string; scope: string; layer: string; budgetTokens: number | null; fullCaptureVersion: 'registered-host-full-v2' | null }
+const fullCaptureBudgetNote = '（旧装配参考；V2完整捕获不以此截原文）'
 
 // This test reads the rendered table and the actual runtime registry. It does
 // not import the generator/parser: the same omission in both cannot pass.
 function assertContextManualMatchesRuntime(manual: string): void {
   const section = manual.split('## 二、上下文源清单')[1]?.split('\n## 三、')[0] ?? ''
-  const rows: ManualContextRow[] = section.split('\n').flatMap(line => {
-    const match = line.match(/^\| `([^`]+)` \| ([^|]*) \| ([^|]*) \| ([^|]*) \| (\d+|完整任务基线|按请求容量选读) \|$/)
-    return match ? [{ key: match[1] ?? '', label: match[2] ?? '', scope: match[3] ?? '',
-      layer: match[4] ?? '', budgetTokens: ['完整任务基线', '按请求容量选读'].includes(match[5] ?? '') ? null : Number(match[5]) }] : []
+  const tableLines = section.split('\n').filter(line => line.startsWith('|'))
+  const header = '| key | 标签 | 作用域 | 层级 | 预算(token) |'
+  expect(tableLines.filter(line => line === header), '来源表必须有唯一完整表头').toHaveLength(1)
+  const rows: ManualContextRow[] = tableLines.filter(line => line !== header && !/^\|(?:[-: ]+\|)+$/.test(line)).map(line => {
+    const match = line.match(/^\| `([^`]+)` \| ([^|]*) \| ([^|]*) \| ([^|]*) \| (\d+|完整任务基线|按请求容量选读)(（旧装配参考；V2完整捕获不以此截原文）)? \|$/)
+    if (!match) throw new Error(`上下文来源行包含未知格式、预算或注记：${line}`)
+    return { key: match[1] ?? '', label: match[2] ?? '', scope: match[3] ?? '', layer: match[4] ?? '',
+      budgetTokens: ['完整任务基线', '按请求容量选读'].includes(match[5] ?? '') ? null : Number(match[5]),
+      fullCaptureVersion: match[6] ? 'registered-host-full-v2' : null }
   })
   const keys = rows.map(row => row.key)
   expect(new Set(keys).size, '上下文表不能含重复 key').toBe(keys.length)
   expect([...keys].sort(), '完整来源表必须独立匹配实际运行时注册表').toEqual(CONTEXT_SOURCES.map(source => source.key).sort())
   const byKey = new Map(rows.map(row => [row.key, row]))
   for (const source of CONTEXT_SOURCES) {
-    expect(byKey.get(source.key), `来源 ${source.key} 的元数据与预算`).toEqual({ key: source.key,
-      label: source.label, scope: source.scope, layer: source.layer, budgetTokens: source.budgetTokens })
+    if (source.fullCapture) {
+      expect(source.fullCapture.version, `来源 ${source.key} 的捕获版本`).toBe('registered-host-full-v2')
+      expect(source.fullCapture.sourceVersion.trim(), `来源 ${source.key} 的实际源版本`).not.toBe('')
+    }
+    expect(byKey.get(source.key), `来源 ${source.key} 的元数据、旧装配预算与完整捕获声明`).toEqual({ key: source.key,
+      label: source.label, scope: source.scope, layer: source.layer, budgetTokens: source.budgetTokens,
+      fullCaptureVersion: source.fullCapture?.version ?? null })
   }
 }
 
@@ -73,7 +84,8 @@ describe('Phase 3.1 · AI 说明书自动生成', () => {
 
     const manualText = CONTEXT_SOURCES.find(source => source.key === 'manualText')
     expect(manualText?.budgetTokens).toBe(100_000)
-    expect(manual).toContain('| `manualText` | 用户指定内容 | manual | L0 | 100000 |')
+    expect(manualText?.fullCapture).toEqual({ version: 'registered-host-full-v2', sourceVersion: 'manualText-full-v2' })
+    expect(manual).toContain(`| \`manualText\` | 用户指定内容 | manual | L0 | 100000${fullCaptureBudgetNote} |`)
     expect(manual).toContain('| `fact-ledger` | `temporalFacts` | `FACT_PREDICATE_REGISTRY + PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` |')
   })
 
@@ -100,6 +112,26 @@ describe('Phase 3.1 · AI 说明书自动生成', () => {
     }
     const unknown = manual.replace('\n## 三、', '\n| `SFQA141-unknown` | 未登记 | runtime | L0 | 8000 |\n\n## 三、')
     expect(() => assertContextManualMatchesRuntime(unknown), '增加未知 key 应失败').toThrow()
+  })
+
+  it('完整捕获注记逐来源核验且拒绝遗漏、伪造、未知注记和重复行', () => {
+    const manual = fs.readFileSync(path.join(root, 'docs/AI-FUNCTIONS-MANUAL.generated.md'), 'utf8')
+    const captureSources = CONTEXT_SOURCES.filter(source => source.fullCapture !== undefined)
+    expect(captureSources.length).toBeGreaterThan(0)
+    const sourceLine = (key: string) => manual.split('\n').find(line => line.startsWith(`| \`${key}\` |`))!
+    const addLine = (line: string) => manual.replace('\n## 三、', `\n${line}\n\n## 三、`)
+    for (const source of captureSources) {
+      const line = sourceLine(source.key)
+      expect(line).toContain(fullCaptureBudgetNote)
+      expect(() => assertContextManualMatchesRuntime(manual.replace(line, line.replace(fullCaptureBudgetNote, ''))), `遗漏 ${source.key} 捕获声明`).toThrow()
+      expect(() => assertContextManualMatchesRuntime(manual.replace(line, line.replace(fullCaptureBudgetNote, '（未知捕获规则）'))), `未知 ${source.key} 注记`).toThrow()
+    }
+    const ordinary = CONTEXT_SOURCES.find(source => source.fullCapture === undefined && typeof source.budgetTokens === 'number')!
+    const plain = sourceLine(ordinary.key)
+    const forged = plain.replace(/ \|$/, `${fullCaptureBudgetNote} |`)
+    expect(() => assertContextManualMatchesRuntime(manual.replace(plain, forged)), '非完整捕获来源不能伪装成 V2 full capture').toThrow()
+    expect(() => assertContextManualMatchesRuntime(addLine(sourceLine('manualText'))), '重复真实来源不能被 Map 合并掩盖').toThrow()
+    expect(() => assertContextManualMatchesRuntime(addLine('| `SFQA141-unknown-note` | 未登记 | runtime | L0 | 8000（未知规则） |')), '未知格式行不能静默跳过').toThrow()
   })
 
   it('semantic.md 引用的 moduleKey 必须真实存在(防 key 漂移)', () => {
