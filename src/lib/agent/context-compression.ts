@@ -279,7 +279,8 @@ export function createAgentContextCompressionSessionV1(input: {
 
   const canCall = (): boolean => {
     const snapshot = input.runtime.budget.snapshot()
-    return snapshot.calls + 1 + input.runtime.requiredFutureModelCalls <= snapshot.maxCalls
+    return input.runtime.budget.policy.profile === 'service-capacity'
+      || snapshot.calls + 1 + input.runtime.requiredFutureModelCalls <= snapshot.maxCalls
   }
 
   const transform: ContextSourceTransformer = async (
