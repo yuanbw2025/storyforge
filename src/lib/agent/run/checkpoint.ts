@@ -21,10 +21,7 @@ import {
   hashAgentRunProjectionBodyV1,
   replayAgentRunEventsV1,
 } from './projection'
-import {
-  AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1,
-  agentRunUtf8ByteLengthV1,
-} from './checkpoint-contract'
+import { agentRunUtf8ByteLengthV1 } from './checkpoint-contract'
 
 interface CheckpointHashBodyV1 {
   version: 1
@@ -78,6 +75,9 @@ async function waitForHash(value: unknown): Promise<string> {
 
 function parseResumePayload(checkpoint: AgentRunCheckpointRecord): unknown | null {
   if (checkpoint.resumePayloadJson == null) return null
+  if (typeof checkpoint.resumePayloadJson !== 'string') {
+    fail('checkpoint_resume_json', '检查点恢复载荷必须是 JSON 字符串')
+  }
   try {
     return JSON.parse(checkpoint.resumePayloadJson)
   } catch {
@@ -155,8 +155,8 @@ async function verifyCheckpointAgainstSnapshot(
     || replayProjectionHash !== checkpoint.projectionHash
   ) fail('checkpoint_projection_hash', '检查点投影与事件重放不一致')
 
-  const maximumResumePayloadBytes = options.maximumResumePayloadBytes
-    ?? (snapshot.contract.budget.capacityPolicy === 'service' ? null : AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1)
+  // Only an explicit caller read boundary applies; stored model material has no default text quota.
+  const maximumResumePayloadBytes = options.maximumResumePayloadBytes ?? null
   if (maximumResumePayloadBytes !== null && (!Number.isSafeInteger(maximumResumePayloadBytes) || maximumResumePayloadBytes < 0)) {
     fail('checkpoint_resume_budget', '检查点恢复载荷预算无效')
   }
@@ -228,10 +228,6 @@ export async function createAgentRunCheckpointInTransactionV1(input: {
   const resumePayloadJson = input.resumePayload === undefined
     ? null
     : canonicalStringify(input.resumePayload)
-  if (input.snapshot.contract.budget.capacityPolicy !== 'service' && resumePayloadJson != null
-    && agentRunUtf8ByteLengthV1(resumePayloadJson) > AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1) {
-    fail('checkpoint_resume_budget', '检查点恢复载荷超过安全写入预算')
-  }
   const resumePayloadHash = input.resumePayload === undefined
     ? null
     : await waitForHash(input.resumePayload)

@@ -6,6 +6,7 @@ import {
 import { AgentRunSchemaError } from '../../src/lib/agent/run/schema-utils'
 import { parseAgentRunEventV1 } from '../../src/lib/agent/run/event-schema'
 import { canonicalStringify } from '../../src/lib/agent/run/hash'
+import { sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
 import { AGENT_RUN_MAXIMUM_CONTRACT_JSON_BYTES_V1, readAgentRunContractJsonV1 } from '../../src/lib/agent/run/checkpoint-contract'
 
 function validContract() {
@@ -81,17 +82,18 @@ it('a valid large contract remains readable in accepted and revised ledger event
   }
 })
 
-it('bounds contract snapshots by UTF-8 bytes and still rejects empty/non-string snapshots', () => {
+it('retains long contract snapshot strings and still rejects empty/non-string snapshots', () => {
   const maximum = AGENT_RUN_MAXIMUM_CONTRACT_JSON_BYTES_V1
   expect(() => readAgentRunContractJsonV1('', 'contract')).toThrow('必须是非空字符串')
   expect(() => readAgentRunContractJsonV1({}, 'contract')).toThrow('必须是非空字符串')
-  expect(() => readAgentRunContractJsonV1('x'.repeat(maximum + 1), 'contract')).toThrow('长度不得超过')
+  const ascii = 'x'.repeat(maximum + 1)
+  expect(readAgentRunContractJsonV1(ascii, 'contract').length).toBe(ascii.length)
   const multibyte = '汉'.repeat(Math.floor(maximum / 3) + 1)
   expect(multibyte.length).toBeLessThan(maximum)
-  expect(() => readAgentRunContractJsonV1(multibyte, 'contract')).toThrow('UTF-8 大小不得超过')
+  expect(readAgentRunContractJsonV1(multibyte, 'contract').length).toBe(multibyte.length)
 })
 
-it('rejects a structurally valid oversized contract before acceptance and hashing', async () => {
+it('accepts a structurally valid long contract with every binding intact and a readable ledger event', async () => {
   const source = validContract()
   const bindingJson = JSON.stringify({ note: '汉'.repeat(62_000) })
   const oversized = {
@@ -102,8 +104,24 @@ it('rejects a structurally valid oversized contract before acceptance and hashin
       formalEntry: { version: 1, entryId: 'outline.generate', bindingJson, bindingHash: 'c'.repeat(64) },
     })),
   }
-  expect(() => parseAgentRunContractV1(oversized)).toThrow('UTF-8 大小不得超过')
-  await expect(acceptAgentRunContractV1(oversized)).rejects.toThrow('UTF-8 大小不得超过')
+  const parsed = parseAgentRunContractV1(oversized)
+  expect(parsed.executionBindings?.length).toBe(190)
+  const accepted = await acceptAgentRunContractV1(oversized)
+  const contractJson = canonicalStringify(accepted.contract)
+  expect(new TextEncoder().encode(contractJson).byteLength).toBeGreaterThan(AGENT_RUN_MAXIMUM_CONTRACT_JSON_BYTES_V1)
+  expect(accepted.contractHash).toMatch(/^[a-f0-9]{64}$/)
+  const lastBinding = accepted.contract.executionBindings?.[189]
+  if (!lastBinding?.formalEntry) throw new Error('Final long binding missing')
+  expect(lastBinding.formalEntry.bindingJson.length).toBe(bindingJson.length)
+  expect(await sha256Text(lastBinding.formalEntry.bindingJson)).toBe(await sha256Text(bindingJson))
+  const event = parseAgentRunEventV1({
+    version: 1, runId: 9, sequence: 1, generation: 1, projectId: 7,
+    worldGroupId: null, contractHash: accepted.contractHash, type: 'contract.accepted',
+    createdAt: 1_786_111_000_002, payload: { contractJson },
+  })
+  if (event.type !== 'contract.accepted') throw new Error('Accepted contract event missing')
+  expect(event.payload.contractJson.length).toBe(contractJson.length)
+  expect(await sha256Text(event.payload.contractJson)).toBe(accepted.contractHash)
 })
 
 describe('R-HARNESS0-contract-schema · RunContractV1', () => {
