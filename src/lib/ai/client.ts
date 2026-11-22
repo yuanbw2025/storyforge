@@ -785,6 +785,7 @@ interface AssessmentStateV2 {
   now: number
 }
 interface PreparedStateV2 {
+  lengthPlan: import('../types/agent-run').TaskLengthPlanV1 | null
   assessment: AssessmentStateV2
   messages: ChatMessage[]
   options: ChatRequestOptions
@@ -886,12 +887,14 @@ export async function prepareAIRequestV2(input: {
   stream: false
   options: ChatRequestOptions
   contextMaterial: ContextMaterialAllocationV2
-  lengthPlan: null
+  lengthPlan: import('../types/agent-run').TaskLengthPlanV1 | null
   explicitConstraints: ExplicitAuthorConsumptionConstraintsV2 | null
 }): Promise<{ handle: PreparedAIRequestV2Handle; evidence: AIRequestEvidenceV2 }> {
   const state = assessmentsV2.get(input.assessmentContext)
   if (!state || requestGuardV2(state.resolution) !== requestGuardV2(input.resolution)
-    || input.stream !== false || input.lengthPlan !== null) throw new Error('准备请求的路由或产品模式不匹配。')
+    || input.stream !== false) throw new Error('准备请求的路由或产品模式不匹配。')
+  const lengthPlan = input.lengthPlan === null ? null
+    : (await import('./author-length-intent')).parseTaskLengthPlanV1(input.lengthPlan)
   const options = plainOptionsV2(input.options), messages = structuredClone([...input.messages])
   const material = structuredClone(input.contextMaterial)
   const { allocationHash, ...materialBody } = material
@@ -916,13 +919,13 @@ export async function prepareAIRequestV2(input: {
     messagesHash: await hashCanonicalValue(messages), optionsHash: await hashCanonicalValue(options), wireBodyHash,
     requestHash: await hashCanonicalValue({ routeHash: state.routeHash, wireBodyHash }),
     policyHash: await hashCanonicalValue({ profile: 'task-request-v2', materialAllocationHash: material.allocationHash,
-      lengthPlan: null, explicitConstraints: input.explicitConstraints }),
+      lengthPlan, explicitConstraints: input.explicitConstraints }),
     inputMeasurement: assessed.inputMeasurement, wireOutputTokens: assessed.wireOutputTokens,
     forecastOutputTokens: estimateTokens(JSON.stringify(messages)), wireOutputBasis: assessed.wireOutputBasis,
     forecastBasis: 'source-token-estimate-v1', sentParameters: assessed.sentParameters,
   }
   const handle = requestOpaqueV2<PreparedAIRequestV2Handle>()
-  preparedRequestsV2.set(handle, { assessment: state, messages, options, wire: assessed.wire,
+  preparedRequestsV2.set(handle, { lengthPlan, assessment: state, messages, options, wire: assessed.wire,
     output: assessed.wireOutputTokens, ...(native ? { native: native.handle, nativeBinding: native.binding } : {}), evidence: structuredClone(evidence), attempted: false })
   return { handle, evidence }
 }
@@ -952,7 +955,7 @@ async function dispatchPreparedRequestV2(
   const bound = options.preparedRequestV2!, state = boundRequestsV2.get(bound)
   const { preparedRequestV2: _handle, ...actualOptions } = options
   const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
-  if (!state || state.attempted || !state.guard || !state.observer || options.capacityPolicy || meta?.category !== 'codex.extract'
+  if (!state || state.attempted || !state.guard || !state.observer || options.capacityPolicy || state.lengthPlan !== null || meta?.category !== 'codex.extract'
     || requestGuardV2(resolved) !== requestGuardV2(state.assessment.resolution)
     || canonicalStringify(messages) !== canonicalStringify(state.messages)
     || canonicalStringify(actualOptions) !== canonicalStringify(state.options)

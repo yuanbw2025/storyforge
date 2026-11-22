@@ -23,6 +23,7 @@ export function renderPrompt(
   options?: {
     /** 运行时覆盖参数值（user 在创作区临时调整时用） */
     parameterValues?: Record<string, unknown>
+    contentPolicy?: 'task-content-unbounded-v2'
     /** 运行时覆盖 system / user 模板（临时微调，不写回） */
     overrides?: { systemPrompt?: string; userPromptTemplate?: string }
   },
@@ -62,8 +63,10 @@ export function renderPrompt(
   // P15: 拼接示例（few-shot）到 user prompt 末尾
   // - good 示例：作者标记的"输出风格参考"
   // - bad 示例：作者标记的"避免的输出"
-  const goodExamples = (template.examples?.good || []).filter(e => e.text.trim()).slice(0, 3)
-  const badExamples = (template.examples?.bad || []).filter(e => e.text.trim()).slice(0, 2)
+  const allGoodExamples = (template.examples?.good || []).filter(e => e.text.trim())
+  const allBadExamples = (template.examples?.bad || []).filter(e => e.text.trim())
+  const goodExamples = options?.contentPolicy === 'task-content-unbounded-v2' ? allGoodExamples : allGoodExamples.slice(0,3)
+  const badExamples = options?.contentPolicy === 'task-content-unbounded-v2' ? allBadExamples : allBadExamples.slice(0,2)
   if (goodExamples.length > 0 || badExamples.length > 0) {
     const parts: string[] = ['', '---', '【参考示例】']
     if (goodExamples.length > 0) {
