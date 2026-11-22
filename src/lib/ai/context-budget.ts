@@ -1,3 +1,4 @@
+import type { CapacityFactV2, ModelCapacityFactsV2 } from '../types/agent-run'
 import { getModelCapacityV1, modelInputBudgetV1, type ModelCapacityV1 } from './model-capacity'
 /**
  * 上下文窗口预算管理
@@ -384,4 +385,40 @@ export function getBudgetBgClass(ratio: number): string {
   if (ratio >= 0.8) return 'bg-warning'
   if (ratio >= 0.6) return 'bg-yellow-400'
   return 'bg-success'
+}
+
+/** Full wire accounting is separate from a service capacity fact. Estimates
+ * never prove an overflow, even when a known window is numerically smaller. */
+export interface CompleteRequestMeasurementV2 {
+  tokens: number
+  method: string
+  version: string
+  reliability: 'exact' | 'estimate'
+}
+export interface RequestCapacityDecisionV2 {
+  decision: 'fit' | 'proved-overflow' | 'uncertain'
+  reason: 'unknown-capacity' | 'estimated-input' | 'input-limit' | 'shared-window' | 'within-evidenced-limits'
+}
+export function assessCompleteRequestCapacityV2(input: {
+  capacity: ModelCapacityFactsV2
+  measurement: CompleteRequestMeasurementV2
+  wireOutputTokens: number | null
+  now: number
+}): RequestCapacityDecisionV2 {
+  const { measurement, wireOutputTokens, now } = input
+  if (!Number.isSafeInteger(measurement.tokens) || measurement.tokens < 0 || !measurement.method || !measurement.version
+    || !['exact', 'estimate'].includes(measurement.reliability)
+    || !(wireOutputTokens === null || Number.isSafeInteger(wireOutputTokens) && wireOutputTokens > 0)) {
+    throw new Error('完整请求计量无效。')
+  }
+  const current = (fact: CapacityFactV2) => fact && fact.basis !== 'declared-model'
+    && fact.verifiedAt <= now && fact.expiresAt > now ? fact.tokens : null
+  const independent = current(input.capacity.inputTokens), shared = current(input.capacity.contextTokens)
+  if (independent === null && shared === null) return { decision: 'uncertain', reason: 'unknown-capacity' }
+  if (measurement.reliability !== 'exact') return { decision: 'uncertain', reason: 'estimated-input' }
+  if (independent !== null && measurement.tokens > independent) return { decision: 'proved-overflow', reason: 'input-limit' }
+  if (shared !== null && measurement.tokens + (wireOutputTokens ?? 0) > shared) return { decision: 'proved-overflow', reason: 'shared-window' }
+  // An omitted output parameter does not establish a total-window reserve.
+  if (shared !== null && wireOutputTokens === null) return { decision: 'uncertain', reason: 'unknown-capacity' }
+  return { decision: 'fit', reason: 'within-evidenced-limits' }
 }

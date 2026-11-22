@@ -1,5 +1,5 @@
 import type { AgentSkillDefinitionV1 } from './skill-registry'
-import { resolveAgentSkillContextSourceKeysV1 } from './skill-registry'
+import { assertCodexFullCaptureProfileV2, resolveAgentSkillContextSourceKeysV1 } from './skill-registry'
 import { getAgentToolSchemaSnapshotV1 } from './tool-registry'
 import { canonicalStringify, hashCanonicalValue } from './run/hash'
 import type {
@@ -8,6 +8,7 @@ import type {
   AgentSkillExecutionBindingV1,
   AgentSkillExecutionBindingV2,
   AgentRunWriteMode,
+  TaskRequestBindingV2,
 } from '../types/agent-run'
 import type { AssembleContextResult } from '../registry/types'
 
@@ -31,8 +32,27 @@ export interface AgentSkillWriteSelectionV2 {
 }
 
 export interface CreateAgentSkillExecutionBindingV2Input {
+  taskRequest?: TaskRequestBindingV2
+  outputForecastTokens?: number
   optionalContextActivations?: readonly AgentOptionalContextActivationV2[]
   writeTargets?: readonly AgentSkillWriteSelectionV2[]
+}
+
+export function parseTaskRequestBindingV2(value: unknown, skillId: string): TaskRequestBindingV2 {
+  const row = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+  if (skillId !== 'world-origin.codex-extract.v2'
+    || Object.keys(row).sort().join('|') !== ['version','planHash','materialAllocationHash'].sort().join('|')
+    || row.version !== 'task-request-binding-v2' || typeof row.planHash !== 'string' || !/^[a-f0-9]{64}$/.test(row.planHash)
+    || typeof row.materialAllocationHash !== 'string' || !/^[a-f0-9]{64}$/.test(row.materialAllocationHash)) throw new Error('完整请求Skill绑定无效。')
+  return { version: 'task-request-binding-v2', planHash: row.planHash, materialAllocationHash: row.materialAllocationHash }
+}
+function taskRequestPolicyBodyV2(definition: AgentSkillDefinitionV2, taskRequest?: TaskRequestBindingV2) {
+  if (definition.requestPolicy === 'task-request-v2') {
+    if (definition.id !== 'world-origin.codex-extract.v2' || !taskRequest) failV2('新请求策略缺少准确产品plan/material绑定')
+    return { ...contextAccessPolicyBodyV2(definition), taskRequest: parseTaskRequestBindingV2(taskRequest, definition.id) }
+  }
+  if (definition.requestPolicy !== undefined || taskRequest !== undefined) failV2('旧Skill不能借用完整请求策略')
+  return contextAccessPolicyBodyV2(definition)
 }
 
 function failV2(message: string): never {
@@ -131,6 +151,7 @@ export async function createAgentSkillExecutionBindingV2(
   skill: AgentSkillDefinitionV1,
   input: CreateAgentSkillExecutionBindingV2Input = {},
 ): Promise<AgentSkillExecutionBindingV2> {
+  assertCodexFullCaptureProfileV2(skill)
   const definition = toSkillDefinitionV2(skill)
   const skillDefinitionJson = canonicalStringify(definition)
   const activations = normalizeActivations(skill, input.optionalContextActivations ?? [])
@@ -141,20 +162,24 @@ export async function createAgentSkillExecutionBindingV2(
     ...skill.optionalContextSourceKeys.filter(sourceKey => activated.has(sourceKey)),
   ]
   const writeTargets = normalizeWriteTargets(skill, input.writeTargets ?? [])
+  const taskRequest = input.taskRequest ? parseTaskRequestBindingV2(input.taskRequest, skill.id) : undefined
+  const policyBody = taskRequestPolicyBodyV2(definition, taskRequest)
+  if (taskRequest && (!Number.isSafeInteger(input.outputForecastTokens) || input.outputForecastTokens! < 0)) failV2('任务输出预估无效')
   return {
     version: 2,
     skillId: skill.id,
     skillVersion: 2,
     skillDefinitionJson,
     skillDefinitionHash: await hashCanonicalValue(definition),
-    contextAccessPolicyHash: await hashCanonicalValue(contextAccessPolicyBodyV2(definition)),
+    contextAccessPolicyHash: await hashCanonicalValue(policyBody),
     promptVersion: skill.promptVersion,
     toolSchemaVersion: AGENT_TOOL_SCHEMA_VERSION_V1,
     toolSchemaHash: AGENT_TOOL_SCHEMA_HASH_V1,
     contextSourceKeys,
     optionalContextActivations: activations,
     writeTargets,
-    maxOutputTokens: skill.maxOutputTokens,
+    maxOutputTokens: taskRequest ? input.outputForecastTokens! : skill.maxOutputTokens,
+    ...(taskRequest ? { taskRequest } : {}),
   }
 }
 
@@ -191,6 +216,7 @@ export function projectFrozenAgentSkillDefinitionV1(
 }
 
 function assertFrozenGatewayPolicyV1(definition: AgentSkillDefinitionV2): void {
+  const fullCapture = assertCodexFullCaptureProfileV2(definition)
   const gateway = definition.contextGateway
   if (gateway == null) return
   const required = [
@@ -220,7 +246,8 @@ function assertFrozenGatewayPolicyV1(definition: AgentSkillDefinitionV2): void {
     ['allowedDepths', gateway.allowedDepths],
     ['additionalReadToolNames', gateway.additionalReadToolNames],
   ] as const) {
-    if (!Array.isArray(values) || values.length === 0
+    const permitsEmpty = fullCapture && (label === 'providerSourceKeys' || label === 'additionalReadToolNames')
+    if (!Array.isArray(values) || (!permitsEmpty && values.length === 0)
       || values.some(value => typeof value !== 'string' || !value)
       || new Set(values).size !== values.length) {
       failV2(`${definition.id} 的冻结 Context Gateway ${label} 无效`)
@@ -260,10 +287,12 @@ export async function assertAgentSkillExecutionBindingIntegrityV2(
   if (await hashCanonicalValue(definition) !== binding.skillDefinitionHash) {
     failV2(`${label} skillDefinitionHash 不匹配`)
   }
-  if (await hashCanonicalValue(contextAccessPolicyBodyV2(definition)) !== binding.contextAccessPolicyHash) {
+  if (await hashCanonicalValue(taskRequestPolicyBodyV2(definition, binding.taskRequest)) !== binding.contextAccessPolicyHash) {
     failV2(`${label} contextAccessPolicyHash 不匹配`)
   }
-  if (definition.promptVersion !== binding.promptVersion || definition.maxOutputTokens !== binding.maxOutputTokens) {
+  if (definition.promptVersion !== binding.promptVersion
+    || (binding.taskRequest ? !Number.isSafeInteger(binding.maxOutputTokens) || binding.maxOutputTokens! < 0
+      : definition.maxOutputTokens !== binding.maxOutputTokens)) {
     failV2(`${label} Prompt 或输出预算未绑定到 Skill snapshot`)
   }
   const activations = normalizeActivations(definition, binding.optionalContextActivations)

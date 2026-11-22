@@ -27,14 +27,19 @@ export function isLocalCodexHost(): boolean {
   return import.meta.env.MODE !== 'android' && typeof location !== 'undefined' && ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
 }
 export async function codexRequest<T>(path: string, body?: unknown): Promise<T> {
+  return codexSerializedRequest<T>(path, body === undefined ? undefined : JSON.stringify(body))
+}
+
+/** Shared host/headers/error boundary; prepared native requests keep exact bytes. */
+async function codexSerializedRequest<T>(path: string, wire?: string): Promise<T> {
   assertGenerationAvailable()
   if (!isLocalCodexHost()) throw new Error('Codex 订阅连接需要本机运行 StoryForge；线上静态站点不能直接调用本机登录。')
   let response: Response
   try {
     response = await fetch(`${CODEX_BASE_URL}${path}`, {
-      method: body === undefined ? 'GET' : 'POST', cache: 'no-store', credentials: 'omit',
-      headers: { 'X-StoryForge-Codex': '1', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(45_000),
+      method: wire === undefined ? 'GET' : 'POST', cache: 'no-store', credentials: 'omit',
+      headers: { 'X-StoryForge-Codex': '1', ...(wire === undefined ? {} : { 'Content-Type': 'application/json' }) },
+      ...(wire === undefined ? {} : { body: wire }), signal: AbortSignal.timeout(45_000),
     })
   } catch { throw new Error('本机 Codex 服务未响应。已提交的请求可能仍在运行，请到设置中的请求记录检查；不会自动重发。') }
   if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('本机连接服务不可用。请更新 StoryForge 并运行 npm run dev 或 npm run preview；保持原来的地址和端口以访问原有手稿。')
@@ -111,8 +116,56 @@ export async function assertModelDispatchGuardV1(result: ChatResult, signal?: Ab
 }
 
 /** One ID, one submission. Polling reads receipts; it never resubmits inference. */
+/** Host-only preparation is distinct from the legacy reference policy argument. */
+export interface NativeCodexAssessmentContextV2 { readonly nativeAssessmentV2: unique symbol }
+export interface NativePreparedRequestV2Handle { readonly nativePreparedV2: unique symbol }
+const nativeAssessmentV2 = new WeakMap<NativeCodexAssessmentContextV2, { id: string; model: string; preparedWire?: string; dispatched?: true }>()
+const nativePreparedV2 = new WeakMap<NativePreparedRequestV2Handle, {
+  context: NativeCodexAssessmentContextV2; wire: string; binding: Readonly<CodexRequestRefV1>
+}>()
+function nativeOpaqueV2<T extends object>(): T {
+  return Object.freeze(Object.defineProperty(Object.create(null), 'toJSON', {
+    value: () => { throw new Error('本机准备句柄不得序列化。') },
+  })) as T
+}
+export async function freezeNativeCodexAssessmentV2(model: string): Promise<NativeCodexAssessmentContextV2> {
+  const status = await codexRequest<CodexStatus>('/status')
+  if (status.state !== 'ready') throw new Error('请先连接本机 Codex 登录。')
+  if (!model.trim() || model.length > 200) throw new Error('本机 Codex 模型身份无效。')
+  const context = nativeOpaqueV2<NativeCodexAssessmentContextV2>()
+  nativeAssessmentV2.set(context, { id: crypto.randomUUID(), model })
+  return context
+}
+/** Pure synchronous serializer used by both range assessment and final prepare. */
+export function serializeNativeCodexAssessmentV2(
+  context: NativeCodexAssessmentContextV2, messages: readonly ChatMessage[],
+  outputSchema?: Record<string, unknown>, responseFormat?: 'json_object',
+): string {
+  const state = nativeAssessmentV2.get(context)
+  if (!state) throw new Error('本机请求准备身份无效。')
+  if (responseFormat && outputSchema) throw new Error('不能同时声明两种本机结构协议。')
+  return JSON.stringify({ id: state.id, model: state.model, messages,
+    receiptRetention: CODEX_DURABLE_RECEIPT_RETENTION_V1,
+    ...(outputSchema ? { outputSchema } : {}), ...(responseFormat ? { responseFormat } : {}) })
+}
+export async function prepareNativeCodexRequestV2(
+  context: NativeCodexAssessmentContextV2, messages: readonly ChatMessage[],
+  outputSchema?: Record<string, unknown>, responseFormat?: 'json_object',
+): Promise<{ handle: NativePreparedRequestV2Handle; wire: string; binding: Readonly<CodexRequestRefV1> }> {
+  const state = nativeAssessmentV2.get(context)
+  if (!state) throw new Error('本机请求准备身份无效。')
+  const wire = serializeNativeCodexAssessmentV2(context, messages, outputSchema, responseFormat)
+  if (state.dispatched || state.preparedWire !== undefined && state.preparedWire !== wire) throw new Error('同一本机请求身份不能改绑或重发。')
+  state.preparedWire = wire
+  const binding: Readonly<CodexRequestRefV1> = Object.freeze({ version: 1, provider: 'codex',
+    requestId: state.id, model: state.model, requestHash: await sha256Text(wire), requestHashAlgorithm: CODEX_REQUEST_HASH_ALGORITHM_V1 })
+  const handle = nativeOpaqueV2<NativePreparedRequestV2Handle>()
+  nativePreparedV2.set(handle, { context, wire, binding })
+  return { handle, wire, binding }
+}
+
 export async function* streamCodex(
-  messages: ChatMessage[], model: string, signal?: AbortSignal, result?: ChatResult, outputSchema?: Record<string, unknown>, responseFormat?: 'json_object', capacityPolicy?: 'reference-service',
+  messages: ChatMessage[], model: string, signal?: AbortSignal, result?: ChatResult, outputSchema?: Record<string, unknown>, responseFormat?: 'json_object', capacityPolicy?: 'reference-service', preparedRequestV2?: NativePreparedRequestV2Handle,
 ): AsyncGenerator<string> {
   if (result) {
     result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }
@@ -126,16 +179,22 @@ export async function* streamCodex(
     }
     throw new DOMException('请求已取消', 'AbortError')
   }
-  const status = await codexRequest<CodexStatus>('/status')
-  if (status.state !== 'ready') throw new Error(status.message || '请在设置中连接本机 Codex 的 ChatGPT 登录。')
-  if (!model.trim()) throw new Error('请先刷新 Codex 模型目录并选择模型。')
-  const id = crypto.randomUUID()
+  const prepared = preparedRequestV2 ? nativePreparedV2.get(preparedRequestV2) : undefined
+  if (preparedRequestV2 && (!prepared || nativeAssessmentV2.get(prepared.context)?.dispatched || capacityPolicy
+    || prepared.binding.model !== model
+    || serializeNativeCodexAssessmentV2(prepared.context, messages, outputSchema, responseFormat) !== prepared.wire)) {
+    throw new Error('本机冻结请求与实际派发参数不一致，未发送。')
+  }
+  if (!prepared) {
+    const status = await codexRequest<CodexStatus>('/status')
+    if (status.state !== 'ready') throw new Error(status.message || '请在设置中连接本机 Codex 的 ChatGPT 登录。')
+    if (!model.trim()) throw new Error('请先刷新 Codex 模型目录并选择模型。')
+  }
+  const id = prepared?.binding.requestId ?? crypto.randomUUID()
   const onPrepared = result?.onCodexRequestPrepared
-  // Freeze exact wire bytes before an async persistence hook. A caller changing
-  // its message/schema objects while that hook waits must not change the POST.
-  const wire = JSON.stringify({ id, model, messages, ...(onPrepared ? { receiptRetention: CODEX_DURABLE_RECEIPT_RETENTION_V1 } : {}),
+  const wire = prepared?.wire ?? JSON.stringify({ id, model, messages, ...(onPrepared ? { receiptRetention: CODEX_DURABLE_RECEIPT_RETENTION_V1 } : {}),
     ...(outputSchema ? { outputSchema } : {}), ...(responseFormat ? { responseFormat } : {}), ...(capacityPolicy ? { capacityPolicy } : {}) })
-  const binding: Readonly<CodexRequestRefV1> = Object.freeze({ version: 1, provider: 'codex', requestId: id, model,
+  const binding: Readonly<CodexRequestRefV1> = prepared?.binding ?? Object.freeze({ version: 1, provider: 'codex', requestId: id, model,
     requestHash: await sha256Text(wire), requestHashAlgorithm: CODEX_REQUEST_HASH_ALGORITHM_V1 })
   if (result) result.localCodexRequest = binding
   let terminal = false; let submitted = false; let observed = ''
@@ -146,12 +205,18 @@ export async function* streamCodex(
     if (result?.beforeModelDispatch) await assertModelDispatchGuardV1(result, signal)
     if (signal?.aborted) throw new DOMException('请求已取消', 'AbortError')
     // A lost acceptance response is an unknown result, never pre-dispatch safe-to-retry.
+    if (prepared) {
+      const assessment = nativeAssessmentV2.get(prepared.context)
+      if (!assessment || assessment.dispatched) throw new Error('原本机请求已经进入派发，不能重发。')
+      assessment.dispatched = true
+    }
     submitted = true
     if (result) result.requestLifecycle = { phase: 'request-dispatched', responseStatus: null }
-    await codexRequest('/requests', JSON.parse(wire))
+    if (prepared) await codexSerializedRequest('/requests', wire)
+    else await codexRequest('/requests', JSON.parse(wire))
     while (true) {
       if (signal?.aborted) throw new DOMException('请求已取消', 'AbortError')
-      const receipt = onPrepared ? await readBoundCodexReceiptV1(binding) : await codexRequest<CodexReceipt>(`/requests/${id}`)
+      const receipt = onPrepared || prepared ? await readBoundCodexReceiptV1(binding) : await codexRequest<CodexReceipt>(`/requests/${id}`)
       if (receipt.usage && result) result.usage = receipt.usage
       if (['failed', 'cancelled', 'unknown'].includes(receipt.status)) {
         terminal = true

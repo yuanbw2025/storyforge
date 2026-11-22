@@ -3,6 +3,7 @@ import { bytesToHex } from '@noble/hashes/utils.js'
 import type { AIConfig } from '../types'
 import { targetsOfficialProvider } from './provider-model-lifecycle'
 import { normalizeOpenAIBaseUrl } from './openai-endpoint'
+import type { CapacityFactV2, ModelCapacityFactsV2 } from '../types/agent-run'
 
 /** Private connection identities are hashed; receipts never contain endpoints or credentials. */
 export interface ModelCapacityV1 {
@@ -178,4 +179,50 @@ export function modelInputBudgetV1(capacity: ModelCapacityV1, requestedOutput = 
   const inputBudget = Math.floor(physicalInput - safetyMargin)
   if (inputBudget < 1) throw new Error('本次输出预留后没有足够输入空间，请降低输出长度后重试。')
   return { inputBudget, outputBudget, safetyMargin }
+}
+
+/** Project the existing connection-bound facts without turning its conservative
+ * policy into service evidence. No discovery, IO or cache mutation occurs here. */
+export function projectModelCapacityFactsV2(
+  config: AIConfig, routeHash: string, now = Date.now(),
+): ModelCapacityFactsV2 {
+  if (!/^[a-f0-9]{64}$/.test(routeHash)) throw new Error('请求路由身份无效。')
+  const snapshot = getModelCapacityV1(config, now)
+  const valid = bound(config, snapshot) && snapshot.expiresAt > now && snapshot.verifiedAt <= now
+  const basis = valid && snapshot.confidence === 'service' ? 'service'
+    : valid && snapshot.confidence === 'official' && targetsOfficialProvider(config) ? 'official-endpoint' : null
+  const fact = (tokens: number | null, evidenced = true): CapacityFactV2 =>
+    basis && evidenced && positive(tokens) ? Object.freeze({ tokens, basis,
+      sourceId: snapshot.source, verifiedAt: snapshot.verifiedAt, expiresAt: snapshot.expiresAt }) : null
+  // A matching catalog name on a proxy is a declaration only. It cannot prove
+  // that proxy's configured window, and never inherits policy output values.
+  const declared = !basis && !targetsOfficialProvider(config) ? OFFICIAL[`${config.provider}:${config.model}`] : undefined
+  const declarationExpiry = declared ? Math.min(EXPIRES, declared.expiresAt ?? EXPIRES) : 0
+  const declaredFact = (tokens: number | null): CapacityFactV2 => declared && declarationExpiry > now && positive(tokens)
+    ? Object.freeze({ tokens, basis: 'declared-model', sourceId: declared.source, verifiedAt: VERIFIED, expiresAt: declarationExpiry }) : null
+  return Object.freeze({ version: 2, routeHash,
+    contextTokens: fact(snapshot.totalWindow) ?? declaredFact(declared?.totalWindow ?? null),
+    inputTokens: fact(snapshot.inputLimit) ?? declaredFact(declared?.inputLimit ?? null),
+    outputTokens: fact(snapshot.outputLimit, snapshot.outputLimitSource !== 'policy') ?? declaredFact(declared?.outputLimit ?? null),
+  })
+}
+
+/** Historical parsing checks representation; freshness is a dispatch decision. */
+export function parseModelCapacityFactsV2(value: unknown): ModelCapacityFactsV2 {
+  const row = record(value)
+  if (Object.keys(row).sort().join('|') !== ['contextTokens','inputTokens','outputTokens','routeHash','version'].sort().join('|')
+    || row.version !== 2 || typeof row.routeHash !== 'string' || !/^[a-f0-9]{64}$/.test(row.routeHash)) throw new Error('逐维模型能力证据无效。')
+  const parse = (value: unknown): CapacityFactV2 => {
+    if (value === null) return null
+    const item = record(value)
+    if (Object.keys(item).sort().join('|') !== ['tokens','basis','sourceId','verifiedAt','expiresAt'].sort().join('|')
+      || !positive(item.tokens) || !['service','official-endpoint','declared-model'].includes(String(item.basis))
+      || typeof item.sourceId !== 'string' || !item.sourceId || item.sourceId.length > 2000
+      || !Number.isSafeInteger(item.verifiedAt) || !Number.isSafeInteger(item.expiresAt)
+      || Number(item.expiresAt) <= Number(item.verifiedAt)) throw new Error('逐维模型能力事实无效。')
+    return { tokens: item.tokens, basis: item.basis as NonNullable<CapacityFactV2>['basis'],
+      sourceId: item.sourceId, verifiedAt: Number(item.verifiedAt), expiresAt: Number(item.expiresAt) }
+  }
+  return { version: 2, routeHash: row.routeHash,
+    contextTokens: parse(row.contextTokens), inputTokens: parse(row.inputTokens), outputTokens: parse(row.outputTokens) }
 }

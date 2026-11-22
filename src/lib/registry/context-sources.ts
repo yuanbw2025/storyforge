@@ -3307,6 +3307,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
   },
   {
     key: 'manualText',
+    fullCapture: { version: 'registered-host-full-v2', sourceVersion: 'manualText-full-v2' },
     label: '用户指定内容',
     scope: 'manual',
     layer: 'L0',
@@ -3339,7 +3340,17 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     },
   },
   {
+    key: 'codexExtractionProgressV2',
+    label: '同一提取Run已验证草稿进度（非Canon）',
+    scope: 'project', ownerFrom: 'work', layer: 'L0', budgetTokens: 8_000,
+    protectedFromTrim: true, requiresWorldGroupId: true,
+    fullCapture: { version: 'registered-host-full-v2', sourceVersion: 'codexExtractionProgressV2-full-v2' },
+    enabled: input => input.codexExtractionProgressV2 !== undefined,
+    read: readRegisteredCodexProgressV2,
+  },
+  {
     key: 'codexExtractionBaseline',
+    fullCapture: { version: 'registered-host-full-v2', sourceVersion: 'codexExtractionBaseline-full-v2' },
     label: 'Codex 目标分类与既有词条闭集',
     scope: 'world',
     layer: 'L0',
@@ -4044,4 +4055,105 @@ export const CONTEXT_SOURCES: ContextSource[] = [
 export const CONTEXT_SOURCE_BY_KEY: ReadonlyMap<string, ContextSource> = new Map(
   CONTEXT_SOURCES.map(source => [source.key, source] as const),
 )
-import {canonicalStringify} from '../agent/run/hash'
+import {canonicalStringify, hashCanonicalValue} from '../agent/run/hash'
+
+/** Host selector is untrusted. This registered reader alone resolves exact
+ * same-Run draft predecessors, including their original range and response. */
+async function readRegisteredCodexProgressV2(input: import('./types').AssembleContextInput): Promise<string> {
+  const selector = input.codexExtractionProgressV2 && structuredClone(input.codexExtractionProgressV2)
+  const scope = input.scope && { ...input.scope }
+  if (!scope || !selector || Object.keys(selector).sort().join('|') !== ['runId','rootHash','verifiedResultHashes'].sort().join('|')
+    || !Array.isArray(selector.verifiedResultHashes) || !Number.isSafeInteger(selector.runId) || selector.runId < 1
+    || !/^[a-f0-9]{64}$/.test(selector.rootHash) || !selector.verifiedResultHashes.length
+    || new Set(selector.verifiedResultHashes).size !== selector.verifiedResultHashes.length
+    || selector.verifiedResultHashes.some(hash => !/^[a-f0-9]{64}$/.test(hash))) throw new Error('提取草稿来源定位无效。')
+  // Dynamic imports resolve already initialized primitives, never the product
+  // runtime. This avoids a registry -> runtime -> registry initialization cycle.
+  const { readAgentRunV1 } = await import('../agent/run/event-store')
+  const { readAgentRunArtifactExactV1 } = await import('../memory/artifact-store')
+  const { parseCodexEntriesStrictV2 } = await import('../ai/adapters/structured-extract-adapter')
+  const { readCodexExtractionBaselineV1 } = await import('../codex/extraction')
+  const { sha256Text } = await import('../ai/chapter-memory/text-normalization')
+  const { assertCodexProductionPolicyV1, readSentCodexProgressNamesV1 } = await import('../agent/run/codex-extraction-v2-source-units')
+  const snapshot = await readAgentRunV1(scope, selector.runId)
+  if (snapshot.run.workId !== scope.workId || snapshot.run.productRuntimeSessionId != null
+    || snapshot.contract.version !== 3 || snapshot.contract.budget.allocation?.mode !== 'adaptive-plan'
+    || !snapshot.contract.executionBindings.some(binding => binding.skillId === 'world-origin.codex-extract.v2'
+      && binding.taskRequest?.planHash === snapshot.contract.budget.allocation?.planHash)
+    || ['cancelled','failed','completed'].includes(snapshot.projection.state)) throw new Error('提取草稿不属于当前真实Work或准确执行profile。')
+  const skillBinding = snapshot.contract.executionBindings.find(binding => binding.skillId === 'world-origin.codex-extract.v2')!
+  const frozenSkill = JSON.parse(skillBinding.skillDefinitionJson) as Record<string, unknown>
+  if (!Array.isArray(frozenSkill.optionalContextSourceKeys) || !frozenSkill.optionalContextSourceKeys.includes('codexExtractionProgressV2')) throw new Error('冻结Skill没有声明该可选草稿来源。')
+  const read = async (artifactKind: import('../types/memory-engineering').ExactRunArtifactKindV1, hash: string) => {
+    const event = snapshot.events.find(event => event.type === 'evidence.artifact.recorded'
+      && event.payload.artifactKind === artifactKind && event.payload.contentHash === hash)
+    if (!event || event.type !== 'evidence.artifact.recorded') throw new Error('草稿引用未在同一Run提交。')
+    const text = await readAgentRunArtifactExactV1({ projectId: scope.projectId, artifactKind, contentHash: hash })
+    if (await sha256Text(text) !== hash || new TextEncoder().encode(text).byteLength !== event.payload.byteLength) throw new Error('草稿准确工件已变化。')
+    return { body: JSON.parse(text) as Record<string, unknown>, event }
+  }
+  const root = (await read('source-snapshot', selector.rootHash)).body
+  if (root.version !== 'codex-extraction-root-v2' || root.portable !== false || root.lengthPlan !== null
+    || canonicalStringify(root.scope) !== canonicalStringify(scope) || root.worldGroupId !== (input.worldGroupId ?? null)
+    || root.categoryId !== input.codexCategoryId) throw new Error('提取草稿root/分类/世界目标不匹配。')
+  const planHash = snapshot.contract.budget.allocation!.planHash
+  const plan = (await read('tool-result', planHash)).body
+  if (plan.version !== 'codex-extraction-plan-v2' || plan.rootHash !== selector.rootHash
+    || !Array.isArray(plan.frames) || !Array.isArray(plan.predecessorResultHashes)) throw new Error('当前计划不接纳该草稿root。')
+  const source = (await read('source-snapshot', String(root.sourceCaptureHash))).body
+  if (source.sourceKey !== 'manualText' || typeof source.rawText !== 'string'
+    || canonicalStringify(source.scope) !== canonicalStringify(scope)) throw new Error('缺少原作品的准确来源。')
+  const baseline = await readCodexExtractionBaselineV1({ scope, categoryId: input.codexCategoryId!, worldGroupId: input.worldGroupId ?? null })
+  if (await hashCanonicalValue(baseline) !== root.baselineStateHash) throw new Error('登记分类或既有词条已变化，草稿进度不能继续读取。')
+  if (root.productionPolicy) assertCodexProductionPolicyV1(root.productionPolicy as import('../agent/run/codex-extraction-v2-source-units').CodexProductionPolicyV1, source.rawText)
+  const previous = new Map<string, readonly import('../ai/adapters/structured-extract-adapter').ExtractedCodexEntry[]>()
+  const names: string[] = [], results: Array<Record<string, unknown>> = []
+  let previousSequence = 0
+  for (const hash of selector.verifiedResultHashes) {
+    const { body: result, event } = await read('tool-result', hash)
+    if (event.sequence <= previousSequence || result.version !== 'codex-extraction-verified-result-v2'
+      || result.runId !== selector.runId || result.rootHash !== selector.rootHash
+      || result.generation !== event.generation || result.contractHash !== event.contractHash
+      || (result.planHash !== planHash && !plan.predecessorResultHashes.includes(hash))
+      || typeof result.frameHash !== 'string' || !Array.isArray(result.entries)
+      || !result.responseRef || typeof result.responseRef !== 'object') throw new Error('草稿结果的顺序、代际、合同或前缀不一致。')
+    const frame = (await read('rendered-request', result.frameHash)).body
+    if (frame.version !== 'codex-extraction-frame-v2' || frame.rootHash !== selector.rootHash
+      || !Number.isSafeInteger(frame.startChar) || !Number.isSafeInteger(frame.endChar)
+      || Number(frame.startChar) < 0 || Number(frame.endChar) > source.rawText.length || Number(frame.endChar) <= Number(frame.startChar)) throw new Error('草稿原始来源范围无效。')
+    const actualSource = source.rawText.slice(Number(frame.startChar), Number(frame.endChar))
+    if (await hashCanonicalValue(actualSource) !== frame.sourceRangeHash) throw new Error('草稿实际发送原文范围已变化。')
+    const responseRef = result.responseRef as Record<string, unknown>
+    if (responseRef.artifactKind !== 'raw-response' || typeof responseRef.contentHash !== 'string') throw new Error('草稿缺少准确原答引用。')
+    const raw = (await read('raw-response', responseRef.contentHash)).body
+    if (raw.version !== 'codex-extraction-response-v2' || raw.runId !== selector.runId || raw.rootHash !== selector.rootHash
+      || raw.frameHash !== result.frameHash || raw.callId !== result.callId || raw.generation !== result.generation
+      || raw.contractHash !== result.contractHash
+      || !snapshot.events.some(event => event.type === 'model.requested' && event.payload.bindingHash === result.callId
+        && event.generation === result.generation && event.contractHash === result.contractHash)
+      || !raw.response || typeof raw.response !== 'object') throw new Error('草稿与原答身份不一致。')
+    const response = raw.response as Record<string, unknown>
+    if (response.completion !== 'complete' || typeof response.text !== 'string' || await sha256Text(response.text) !== raw.rawTextHash) throw new Error('草稿原答并未可靠完成。')
+    const verifiedProgressNames = root.productionPolicy ? await readSentCodexProgressNamesV1({
+      runId: selector.runId, rootHash: selector.rootHash, scope, sourceText: source.rawText,
+      frame: frame as unknown as Parameters<typeof readSentCodexProgressNamesV1>[0]['frame'], previous,
+      read: async (kind, hash) => (await read(kind, hash)).body,
+    }) : undefined
+    const entries = parseCodexEntriesStrictV2(response.text, baseline.category.fields,
+      { operation: 'extract', sourceText: actualSource, supplementTags: root.supplementTags === true,
+        ...(verifiedProgressNames ? { verifiedProgressNames } : {}) })
+    if (canonicalStringify(entries) !== canonicalStringify(result.entries)) throw new Error('草稿不是准确原答的已验证结果。')
+    previous.set(hash, entries)
+    names.push(...entries.map(entry => entry.name))
+    results.push({ contentHash: hash, sequence: event.sequence, generation: event.generation, contractHash: event.contractHash,
+      frameHash: result.frameHash, callId: result.callId, responseRef: result.responseRef,
+      startChar: frame.startChar, endChar: frame.endChar, sourceRangeHash: frame.sourceRangeHash,
+      ...(root.productionPolicy ? { entries } : {}) })
+    previousSequence = event.sequence
+  }
+  const current = await readAgentRunV1(scope, selector.runId)
+  if (current.projection.lastSequence !== snapshot.projection.lastSequence || current.projection.contractHash !== snapshot.projection.contractHash) throw new Error('读取草稿期间Run已变化。')
+  return canonicalStringify({ version: 'codex-extraction-progress-context-v2', scope, runId: selector.runId,
+    generation: snapshot.projection.generation, contractHash: snapshot.projection.contractHash, rootHash: selector.rootHash,
+    results, names, authority: 'draft-not-canon' })
+}

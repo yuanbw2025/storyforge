@@ -96,6 +96,12 @@ export interface AgentOptionalContextActivationV2 {
  * stored as JSON so an accepted run remains auditable after the live registry
  * changes without creating a second editable registry.
  */
+export interface TaskRequestBindingV2 {
+  version: 'task-request-binding-v2'
+  planHash: string
+  materialAllocationHash: string
+}
+
 export interface AgentSkillExecutionBindingV2 {
   version: 2
   skillId: string
@@ -110,6 +116,7 @@ export interface AgentSkillExecutionBindingV2 {
   optionalContextActivations: AgentOptionalContextActivationV2[]
   writeTargets: AgentRunWriteTargetV1[]
   maxOutputTokens: number | null
+  taskRequest?: TaskRequestBindingV2
 }
 
 export interface AgentRunStepExecutionBindingV2 extends AgentSkillExecutionBindingV2 {
@@ -249,6 +256,8 @@ export interface AgentRunContractV1 {
     }
   }
   budget: {
+    /** Parsed only on the exact V2/V3 extraction profile; public V1 rejects it. */
+    allocation?: RunBudgetAllocationV2
     /** Explicit reference task policy: null token/call ceilings are service-managed, never numeric sentinels. */
     capacityPolicy?: 'service'
     maxModelCalls: number | null
@@ -842,3 +851,98 @@ export type AgentRunProjectionBodyV1 = Omit<
   AgentRunProjectionV1,
   'runId' | 'projectId' | 'worldGroupId' | 'contractHash'
 >
+
+/** B01 shared data only. Extraction always carries lengthPlan:null. */
+export type LengthBasisV1 = 'final-text' | 'additional-text'
+export type LengthTaskKindV1 =
+  | 'setting-field' | 'setting-set' | 'chapter' | 'volume' | 'work' | 'short-field'
+export type LengthOperationV1 =
+  | 'create' | 'expand' | 'rewrite' | 'polish' | 'continue' | 'correct' | 'name'
+export type AuthorLengthQuantifierV1 =
+  | 'approximate' | 'exact' | 'range' | 'at-least' | 'at-most'
+export interface AuthorLengthIntentV1 {
+  version: 1
+  targetWords: number | null
+  minWords: number | null
+  maxWords: number | null
+  basis: LengthBasisV1
+  source: 'control' | 'instruction' | 'parameter'
+  quantifier: AuthorLengthQuantifierV1
+  acceptance: { minWords: number | null; maxWords: number | null }
+}
+export interface TaskLengthArrangementV1 {
+  version: 1
+  basis: 'confirmed-outline' | 'confirmed-work-target' | 'task-semantics' | 'preserve-original'
+  sourceKeys: readonly string[]
+}
+export interface TaskLengthComponentV1 {
+  componentKey: string
+  taskKind: LengthTaskKindV1
+  referenceWords: number | null
+}
+export interface TaskLengthPlanCommonV1 {
+  version: 1
+  taskKind: LengthTaskKindV1
+  operation: LengthOperationV1
+  basis: LengthBasisV1
+  countingVersion: 'non-whitespace-utf16-v1'
+  arrangement: TaskLengthArrangementV1
+}
+export type TaskLengthPlanV1 = TaskLengthPlanCommonV1 & (
+  | {
+      mode: 'automatic'
+      referenceWords: number | null
+      components: readonly TaskLengthComponentV1[]
+      intent?: never
+    }
+  | {
+      mode: 'explicit'
+      intent: AuthorLengthIntentV1
+      referenceWords?: never
+      components?: never
+    }
+)
+
+/** A null dimension means unknown, not a fallback quota or an unlimited service. */
+export type CapacityFactV2 = null | {
+  tokens: number
+  basis: 'service' | 'official-endpoint' | 'declared-model'
+  sourceId: string
+  verifiedAt: number
+  expiresAt: number
+}
+export interface ModelCapacityFactsV2 {
+  version: 2
+  routeHash: string
+  contextTokens: CapacityFactV2
+  inputTokens: CapacityFactV2
+  outputTokens: CapacityFactV2
+}
+export interface ContextMaterialAllocationV2 {
+  version: 'context-material-allocation-v2'
+  authorityHash: string
+  capturedSourceHashes: readonly string[]
+  selectedSourceHashes: readonly string[]
+  readPlanHash: string
+  inputTokenForecast: number
+  captureProtocolVersion: 'registered-host-full-v2'
+  allocationHash: string
+}
+/** Only an explicit author constraint can create a hard consumption limit. */
+export interface ExplicitAuthorConsumptionConstraintsV2 {
+  version: 'explicit-author-consumption-v2'
+  sourceEvidenceHash: string
+  maxModelCalls: number | null
+  maxInputTokens: number | null
+  maxOutputTokens: number | null
+  maxCostUsd: number | null
+}
+export interface RunBudgetAllocationV2 {
+  version: 'task-budget-allocation-v2'
+  mode: 'adaptive-plan'
+  planHash: string
+  inputBasis: string
+  outputBasis: string
+  modelCallsBasis: string
+  hardConstraints: ExplicitAuthorConsumptionConstraintsV2 | null
+}

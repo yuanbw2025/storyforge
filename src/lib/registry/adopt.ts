@@ -73,7 +73,7 @@ function callerOwnedAdoptionEffectTablesV1(target: string): Table[] {
   return CANON_SOURCE_TABLES.has(target as CanonAssertionSourceTable) ? [db.temporalFacts] : []
 }
 
-const CALLER_OWNED_ADOPTION_TARGETS_V1 = new Set(['worldviews', 'geographies', 'histories', 'characters', 'outlineNodes'])
+const CALLER_OWNED_ADOPTION_TARGETS_V1 = new Set(['worldviews', 'geographies', 'histories', 'characters', 'outlineNodes', 'codexEntries'])
 
 interface CallerOwnedAdoptionV1 {
   /** Strictly opt in to an already active caller-owned write transaction. */

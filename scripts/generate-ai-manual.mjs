@@ -151,7 +151,19 @@ function extractSeeds() {
 
 // ── ③ CONTEXT_SOURCES ──
 function extractContextSources() {
+  const captures = new Map()
+  visit(parseSource('src/lib/registry/context-sources.ts'), node => {
+    if (!ts.isObjectLiteralExpression(node)) return
+    const key = stringValue(objectProperty(node, 'key')?.initializer)
+    const capability = objectProperty(node, 'fullCapture')?.initializer
+    if (!key || !capability) return
+    if (!ts.isObjectLiteralExpression(capability)
+      || stringValue(objectProperty(capability, 'version')?.initializer) !== 'registered-host-full-v2'
+      || !stringValue(objectProperty(capability, 'sourceVersion')?.initializer)) throw new Error(`来源 ${key} 的完整捕获声明不是静态版本事实`)
+    captures.set(key, 'registered-host-full-v2')
+  })
   return readStaticContextSources(path.join(root, 'src/lib/registry/context-sources.ts'))
+    .map(source => ({ ...source, fullCaptureVersion: captures.get(source.key) }))
 }
 
 // ── ④ FIELD_REGISTRY 可写字段(target → field 列表) ──
@@ -398,10 +410,10 @@ function buildMarkdown() {
   lines.push('| key | 标签 | 作用域 | 层级 | 预算(token) |')
   lines.push('|---|---|---|---|---|')
   for (const s of sources) {
-    lines.push(`| \`${s.key}\` | ${s.label} | ${s.scope} | ${s.layer} | ${s.budget} |`)
+    lines.push(`| \`${s.key}\` | ${s.label} | ${s.scope} | ${s.layer} | ${s.budget}${s.fullCaptureVersion ? '（旧装配参考；V2完整捕获不以此截原文）' : ''} |`)
   }
   lines.push('')
-  lines.push('> 层级裁剪顺序:超预算时 L3 → L2 → L1 依次裁剪,L0 永不裁剪。')
+  lines.push('> 既有装配按来源完整性与层级处理预算；声明 fullCapture 的 V2 host 捕获完整保留原文，随后按真实完整请求安排选送。该声明不扩大 owner、来源或原文读取权限。')
   lines.push('')
 
   // 三、可写字段

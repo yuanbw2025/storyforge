@@ -3,6 +3,7 @@ import { AGENT_SKILL_BY_ID, type AgentSkillDefinitionV1 } from './skill-registry
 import {
   chat,
   streamChat,
+  preparedRequestDispatchGuardV2,
   type AICallMeta,
   type AIRequestConfigResolution,
   type ChatRequestOptions,
@@ -314,6 +315,13 @@ export async function executeFrozenFormalAIEntryV1(
     fail(`${entryId} 的冻结入口、Skill、category 或 caller 权限不匹配`)
   }
   if (binding.outputModality !== undefined) fail(`${entryId} 音频入口不得借用文本模型执行器`)
+  if (frozenSkill.requestPolicy === 'task-request-v2' || binding.entryId === 'world.codex.extract.v2') {
+    if (binding.entryId !== 'world.codex.extract.v2' || frozenSkill.id !== 'world-origin.codex-extract.v2'
+      || frozenSkill.requestPolicy !== 'task-request-v2' || caller !== 'src/lib/agent/run/codex-extraction-v2-runtime.ts'
+      || !options?.preparedRequestV2 || !frozenResolution) fail('新正式入口需要准确的冻结完整请求，不能回落旧客户端')
+    const guard = preparedRequestDispatchGuardV2(options.preparedRequestV2)
+    if (result?.beforeModelDispatch && result.beforeModelDispatch !== guard) fail('新正式入口的发送守卫不匹配')
+  } else if (options?.preparedRequestV2) fail('旧正式入口不能借用新完整请求句柄')
   const governedMeta: FormalAICallMetaV1 = { ...meta, formalEntryId: binding.entryId }
   return chat(messages, config, governedMeta, signal, result, options, frozenResolution)
 }

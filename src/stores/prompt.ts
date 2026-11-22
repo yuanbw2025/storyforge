@@ -90,7 +90,23 @@ export const usePromptStore = create<PromptStore>((set, get) => ({
             applicability: seed.applicability,
             updatedAt: now,
           }
-          if (seed.moduleKey === 'story.generate' && (old.systemPrompt !== seed.systemPrompt || old.userPromptTemplate !== seed.userPromptTemplate)) {
+          if (seed.moduleKey === 'codex.extract') {
+            // Archive every overwritten seed-owned field, not just prompt text.
+            // Latest-row comparison makes concurrent init idempotent; a user
+            // edit since our read is a CAS failure, never silently overwritten.
+            const keys = (Object.keys(refreshed) as Array<keyof PromptTemplate>).filter(key => key !== 'updatedAt')
+            const same = (row: PromptTemplate, expected: Partial<PromptTemplate>) => keys.every(key => JSON.stringify(row[key]) === JSON.stringify(expected[key]))
+            await db.transaction('rw', db.promptTemplates, async () => {
+              const latest = await db.promptTemplates.get(old.id!)
+              if (!latest || latest.scope !== 'system' || latest.name !== old.name || latest.moduleKey !== old.moduleKey) throw new Error('拆分模板已变化；原模板保留，请重新载入。')
+              if (same(latest, refreshed)) return
+              if (JSON.stringify(latest) !== JSON.stringify(old)) throw new Error('拆分模板被其他编辑修改；未覆盖，请重新载入。')
+              const { id: _id, ...history } = latest
+              await db.promptTemplates.add({ ...history, scope: 'user', name: `${latest.name}（升级前历史）`, isActive: false })
+              // isActive is intentionally absent: preserve the exact selection.
+              await db.promptTemplates.update(latest.id!, refreshed)
+            })
+          } else if (seed.moduleKey === 'story.generate' && (old.systemPrompt !== seed.systemPrompt || old.userPromptTemplate !== seed.userPromptTemplate)) {
             const previous = STORY_CORE_PREVIOUS_SEEDS[seed.name]
             const authorEdited = !previous || old.systemPrompt !== previous.systemPrompt || old.userPromptTemplate !== previous.userPromptTemplate
               || JSON.stringify(old.parameters) !== JSON.stringify(seed.parameters)

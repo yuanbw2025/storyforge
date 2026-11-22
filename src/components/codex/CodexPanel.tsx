@@ -4,7 +4,7 @@
  * 三栏：领域分类树（左） → 词条列表（中） → 词条详情表单（右，由 fieldSchema 驱动）。
  * 支持内置分类播种、自定义分类增删、词条 CRUD、词条间 ref 关联。
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Plus, Trash2, EyeOff, Eye, FolderPlus, Boxes, Settings2, X,
   Sparkles, Loader2,
@@ -15,7 +15,7 @@ import {
   parseFieldSchema, filterCodexEntriesByWorld,
   type CodexDomain, type CodexCategory, type CodexEntry,
 } from '../../lib/types/codex'
-import type { Project } from '../../lib/types'
+import type { Project, WorkspaceScope } from '../../lib/types'
 import { useDialog } from '../shared/Dialog'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useWorldGroupStore } from '../../stores/world-group'
@@ -24,12 +24,17 @@ import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config
 import type { ExtractedCodexEntry } from '../../lib/ai/adapters/structured-extract-adapter'
 import { useToast } from '../shared/Toast'
 import { resolveScopeLike } from '../../lib/workspace/scope'
+import { db } from '../../lib/db/schema'
+import { CodexExtractionAdmissionUnavailableV2 } from '../../lib/agent/run/codex-extraction-v2-contract'
 import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import {
   abandonCodexExtractionV1,
+  abandonCodexExtractionV2, adoptCodexExtractionCandidateV2, generateCodexExtractionCandidateV2,
+  readPendingCodexExtractionCandidateV2, readRecoverableCodexExtractionV2, resumeCodexExtractionCandidateV2,
+  saveCodexExtractionAuthorDraftV2,
+  type BlockedCodexExtractionRunV2,
   adoptCodexExtractionCandidateV1,
   generateCodexEnrichmentCandidateV1,
-  generateCodexExtractionCandidateV1,
   readPendingCodexExtractionCandidateV1,
   readRecoverableCodexExtractionV1,
   resumeCodexExtractionCandidateV1,
@@ -38,6 +43,8 @@ import CodexCategoryFieldsEditor from './CodexCategoryFieldsEditor'
 import CodexEntryDetail from './CodexEntryDetail'
 
 interface Props {
+  /** Deprecated compatibility prop; ordinary new extraction uses frozen V2 admission. */
+  experimentalExtractionV2?: boolean
   project: Project
   /** B3:嵌入自然/人文面板时锁定领域并隐藏顶部切换标签(独立面板不传=完整两栏切换) */
   fixedDomain?: CodexDomain
@@ -86,15 +93,19 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
   // 词条排序方式:order=手动顺序 / importance=重要度降序 / pinyin=拼音首字母
   const [sortMode, setSortMode] = useState<'order' | 'importance' | 'pinyin'>('order')
   const [extractOpen, setExtractOpen] = useState(false)
+  const [extractSessionEpoch, setExtractSessionEpoch] = useState(0)
   const [candidateOperation, setCandidateOperation] = useState<'extract' | 'enrich'>('extract')
   const [extractText, setExtractText] = useState('')
   const [supplementTags, setSupplementTags] = useState(true)
   const [extracting, setExtracting] = useState(false)
+  const [admitting, setAdmitting] = useState(false)
   const [candidates, setCandidates] = useState<ExtractedCodexEntry[]>([])
   const [selectedCandidates, setSelectedCandidates] = useState<Set<number>>(new Set())
   const [selectionFrozen, setSelectionFrozen] = useState(false)
   const [extractRunId, setExtractRunId] = useState<number | null>(null)
   const [recoverable, setRecoverable] = useState<{
+    version?: 2
+    canReadOriginal?: boolean
     runId: number
     nextCallIndex: number
     totalCalls: number
@@ -102,6 +113,54 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
     requiresNewRequestBinding?: boolean
   } | null>(null)
   const [extractError, setExtractError] = useState<string | null>(null)
+  const [blockedRuns, setBlockedRuns] = useState<BlockedCodexExtractionRunV2[]>([])
+  const [candidateVersion, setCandidateVersion] = useState<1 | 2>(1)
+  const [draftDirty, setDraftDirty] = useState(false)
+  const [authorEdited, setAuthorEdited] = useState<Set<number>>(new Set())
+  const extractionEpoch = useRef(0)
+  const [v2Prefix, setV2Prefix] = useState<number | null>(null)
+  const extractionOwner = useRef<WorkspaceScope | null>(null)
+  const generationAbort = useRef<AbortController | null>(null)
+  const extractionView = useRef({ project, loadedScope, loading, loadError })
+  extractionView.current = { project, loadedScope, loading, loadError }
+  const newStartAdmission = useRef<{ operation: 'extract' | 'enrich'; version: 1 | 2; scope: WorkspaceScope } | null>(null)
+  const pendingAdmission = useRef<{ epoch: number; scope: WorkspaceScope } | null>(null)
+  const assertExtractionScope = useCallback(async (expected: WorkspaceScope) => {
+    const check = () => {
+      const view = extractionView.current
+      if (view.loading || view.loadError || [expected.projectId, expected.worldId, expected.workId].some(id => !Number.isSafeInteger(id) || id < 1)
+        || view.project.id !== expected.projectId || view.project.activeWorldId !== expected.worldId || view.project.activeWorkId !== expected.workId
+        || view.loadedScope?.projectId !== expected.projectId || view.loadedScope.worldId !== expected.worldId || view.loadedScope.workId !== expected.workId) {
+        throw new Error('请回到已加载的原作品再处理；输入和已保存候选仍保留，不创建或转挂运行。')
+      }
+    }
+    check()
+    const actual = await resolveScopeLike({ ...expected })
+    check()
+    if (actual.projectId !== expected.projectId || actual.worldId !== expected.worldId || actual.workId !== expected.workId) throw new Error('原作品作用域已变化。')
+    const storedProject = await db.projects.get(expected.projectId)
+    check()
+    if (storedProject?.activeWorldId !== expected.worldId || storedProject.activeWorkId !== expected.workId) throw new Error('原作品活动指针已变化；输入保留，不创建运行。')
+    return { ...expected }
+  }, [])
+  const extractionScope = useCallback(async () => {
+    const original = extractionOwner.current ?? extractionView.current.loadedScope
+    if (!original) throw new Error('当前入口没有已核验的原作品；输入保留，不创建运行。')
+    const expected = await assertExtractionScope({ ...original })
+    extractionOwner.current = expected
+    return expected
+  }, [assertExtractionScope])
+  useEffect(() => {
+    const original = pendingAdmission.current?.scope ?? extractionOwner.current
+    if (original && (original.projectId !== projectId || original.worldId !== project.activeWorldId || original.workId !== project.activeWorkId)) {
+      extractionEpoch.current++
+      pendingAdmission.current = null
+      newStartAdmission.current = null
+      setAdmitting(false)
+      generationAbort.current?.abort()
+      setExtractError('作品已切换；本页输入不会转挂新作品，未保存的编辑请先复制保留。')
+    }
+  }, [projectId, project.activeWorldId, project.activeWorkId])
 
   const authorScope = useMemo(() => project.activeWorldId && project.activeWorkId
     ? { projectId, worldId: project.activeWorldId, workId: project.activeWorkId } : projectId,
@@ -236,7 +295,8 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
     if (activeEntryId === entry.id) setActiveEntryId(null)
   }
 
-  const openExtractor = (operation: 'extract' | 'enrich') => {
+  const openExtractor = async (operation: 'extract' | 'enrich') => {
+    if (extracting || admitting) return
     if (operation === 'extract' && typeof extractionSourceText !== 'string') {
       toast.error('拆分来源文本格式异常，请先恢复上游字段。')
       return
@@ -245,6 +305,32 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
       toast.error('世界数据尚未加载完成，请稍后再试。')
       return
     }
+    const epoch = ++extractionEpoch.current
+    newStartAdmission.current = null
+    setAdmitting(true)
+    let owner: WorkspaceScope
+    try {
+      const loaded = extractionView.current.loadedScope
+      if (!loaded) throw new Error('当前入口没有原作品；输入保留，不创建运行。')
+      pendingAdmission.current = { epoch, scope: { ...loaded } }
+      owner = await assertExtractionScope({ ...loaded })
+    } catch (error) {
+      if (epoch === extractionEpoch.current) toast.error(error instanceof Error ? error.message : '原作品尚未就绪，输入已保留。')
+      return
+    } finally {
+      if (pendingAdmission.current?.epoch === epoch) pendingAdmission.current = null
+      if (epoch === extractionEpoch.current) setAdmitting(false)
+    }
+    if (epoch !== extractionEpoch.current) return
+    const admission = { operation, version: operation === 'extract' ? 2 as const : 1 as const, scope: Object.freeze({ ...owner }) }
+    newStartAdmission.current = Object.freeze(admission)
+    setExtractSessionEpoch(epoch)
+    extractionOwner.current = { ...owner }
+    setAuthorEdited(new Set())
+    setCandidateVersion(admission.version)
+    setDraftDirty(false)
+    setV2Prefix(null)
+    setBlockedRuns([])
     setCandidateOperation(operation)
     setExtractText(operation === 'extract' ? extractionSourceText : '')
     setCandidates([])
@@ -256,151 +342,178 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
     setExtractOpen(true)
   }
 
-  useEffect(() => {
-    if (!extractOpen || !activeCat?.id || !scopeReady) return
-    let active = true
-    void resolveScopeLike(projectId).then(async scope => {
-      const filter = {
-        scope, categoryId: activeCat.id!, worldGroupId: scopedWorldGroupId ?? null,
-        operation: candidateOperation,
-      }
-      const pending = await readPendingCodexExtractionCandidateV1(filter)
-      return { pending, recoverable: pending ? null : await readRecoverableCodexExtractionV1(filter) }
-    }).then(result => {
-      if (!active) return
-      if (result.pending) {
-        setExtractRunId(result.pending.snapshot.run.id)
-        setCandidates(result.pending.candidate.entries)
-        setExtractText((result.pending.candidate.plan.request.operation ?? 'extract') === 'extract'
-          ? result.pending.candidate.plan.request.sourceText
-          : result.pending.candidate.plan.request.authorRequest)
-        setSupplementTags(result.pending.candidate.plan.request.supplementTags)
-        setSelectedCandidates(new Set(
-          result.pending.selectedIndexes ?? result.pending.candidate.entries.map((_, index) => index),
-        ))
-        setSelectionFrozen(result.pending.selectedIndexes != null)
-      } else if (result.recoverable) {
-        setRecoverable({
-          runId: result.recoverable.snapshot.run.id,
-          nextCallIndex: result.recoverable.nextCallIndex,
-          totalCalls: result.recoverable.totalCalls,
-          safeToResume: result.recoverable.safeToResume && !result.recoverable.requiresNewRequestBinding,
-          requiresNewRequestBinding: result.recoverable.requiresNewRequestBinding,
-        })
-        if (result.recoverable.request) {
-          setExtractText((result.recoverable.request.operation ?? 'extract') === 'extract'
-            ? result.recoverable.request.sourceText
-            : result.recoverable.request.authorRequest ?? '')
-          setSupplementTags(result.recoverable.request.supplementTags)
+  const reconciliationCategoryId = activeCat?.id
+  const reconcileExtractionState = useCallback(async (options?: { stillCurrent?: () => boolean; preserveLocalDraft?: boolean }) => {
+    const epoch = extractionEpoch.current
+    const stillCurrent = () => epoch === extractionEpoch.current && (options?.stillCurrent?.() ?? true)
+    if (!reconciliationCategoryId || !scopeReady) return
+    const scope = await extractionScope()
+    if (!stillCurrent()) return
+    const filter = { scope, categoryId: reconciliationCategoryId, worldGroupId: scopedWorldGroupId ?? null }
+    if (candidateOperation === 'extract') {
+      const blocked = new Map<number, BlockedCodexExtractionRunV2>()
+      const lookup = { onBlockedRun: (run: BlockedCodexExtractionRunV2) => { blocked.set(run.runId, run) } }
+      const pending = await readPendingCodexExtractionCandidateV2(filter, lookup)
+      if (!stillCurrent()) return
+      setBlockedRuns([...blocked.values()])
+      if (pending?.candidate) {
+        setCandidateVersion(2); setExtractRunId(pending.snapshot.run.id); setRecoverable(null)
+        if (options?.preserveLocalDraft && !pending.selectionFrozen) {
+          setSelectionFrozen(false); setV2Prefix(pending.snapshot.projection.lastSequence); return
         }
+        setCandidates(pending.draft?.entries ?? pending.candidate.entries)
+        setAuthorEdited(new Set((pending.draft?.editPaths ?? []).map(path => Number(path.split('.')[1]))))
+        setExtractText(pending.materials.source.rawText); setSupplementTags(pending.materials.root.supplementTags)
+        setSelectedCandidates(new Set(pending.intent?.review.selectedIndexes ?? pending.candidate.entries.map((_, index) => index)))
+        setSelectionFrozen(pending.selectionFrozen); setV2Prefix(pending.snapshot.projection.lastSequence); setDraftDirty(false)
+        return
       }
-    }).catch(error => {
-      if (active) setExtractError(error instanceof Error ? error.message : 'Codex 提取运行恢复失败')
-    })
-    return () => { active = false }
-  }, [activeCat?.id, candidateOperation, extractOpen, projectId, scopeReady, scopedWorldGroupId])
-
-  const reconcileExtractionState = async () => {
-    if (!activeCat?.id || !scopeReady) return
-    const scope = await resolveScopeLike(projectId)
-    const filter = {
-      scope, categoryId: activeCat.id, worldGroupId: scopedWorldGroupId ?? null,
-      operation: candidateOperation,
+      const recovery = await readRecoverableCodexExtractionV2(filter, lookup)
+      if (!stillCurrent()) return
+      setBlockedRuns([...blocked.values()])
+      if (recovery) {
+        setCandidateVersion(2); setExtractRunId(null); setCandidates([]); setSelectionFrozen(false)
+        setExtractText(recovery.materials.source.rawText); setSupplementTags(recovery.materials.root.supplementTags)
+        const pendingCalls = recovery.calls.filter(call => !recovery.results.some(result => result.body.callId === call.body.callId))
+        const canPostprocess = (call: typeof pendingCalls[number]) => recovery.responses.some(row => row.body.callId === call.body.callId
+          && ['complete','incomplete'].includes(row.body.response.completion))
+        const unknownHTTP = pendingCalls.some(call => !call.body.nativeRequest && !canPostprocess(call))
+        setRecoverable({ version: 2, runId: recovery.snapshot.run.id, nextCallIndex: recovery.results.length,
+          totalCalls: recovery.plan.frames.length, safeToResume: !unknownHTTP && ['running','planned'].includes(recovery.snapshot.projection.state),
+          canReadOriginal: pendingCalls.some(call => Boolean(call.body.nativeRequest)), requiresNewRequestBinding: false })
+        setV2Prefix(recovery.snapshot.projection.lastSequence)
+        return
+      }
     }
-    const pending = await readPendingCodexExtractionCandidateV1(filter)
+    const legacyFilter = { ...filter, operation: candidateOperation }
+    const pending = await readPendingCodexExtractionCandidateV1(legacyFilter)
+    if (!stillCurrent()) return
     if (pending) {
-      setExtractRunId(pending.snapshot.run.id)
-      setRecoverable(null)
-      setCandidates(pending.candidate.entries)
-      setExtractText((pending.candidate.plan.request.operation ?? 'extract') === 'extract'
-        ? pending.candidate.plan.request.sourceText
-        : pending.candidate.plan.request.authorRequest)
+      setCandidateVersion(1); setExtractRunId(pending.snapshot.run.id); setRecoverable(null); setCandidates(pending.candidate.entries)
+      setExtractText((pending.candidate.plan.request.operation ?? 'extract') === 'extract' ? pending.candidate.plan.request.sourceText : pending.candidate.plan.request.authorRequest)
       setSupplementTags(pending.candidate.plan.request.supplementTags)
-      setSelectedCandidates(new Set(
-        pending.selectedIndexes ?? pending.candidate.entries.map((_, index) => index),
-      ))
+      setSelectedCandidates(new Set(pending.selectedIndexes ?? pending.candidate.entries.map((_, index) => index)))
       setSelectionFrozen(pending.selectedIndexes != null)
       return
     }
-    setExtractRunId(null)
-    setCandidates([])
-    setSelectedCandidates(new Set())
-    setSelectionFrozen(false)
-    const recovery = await readRecoverableCodexExtractionV1(filter)
-    setRecoverable(recovery ? {
-      runId: recovery.snapshot.run.id,
-      nextCallIndex: recovery.nextCallIndex,
-      totalCalls: recovery.totalCalls,
-      safeToResume: recovery.safeToResume && !recovery.requiresNewRequestBinding,
-      requiresNewRequestBinding: recovery.requiresNewRequestBinding,
-    } : null)
+    setExtractRunId(null); setCandidates([]); setSelectedCandidates(new Set()); setSelectionFrozen(false)
+    const recovery = await readRecoverableCodexExtractionV1(legacyFilter)
+    if (!stillCurrent()) return
+    setRecoverable(recovery ? { runId: recovery.snapshot.run.id, nextCallIndex: recovery.nextCallIndex, totalCalls: recovery.totalCalls,
+      safeToResume: recovery.safeToResume && !recovery.requiresNewRequestBinding, requiresNewRequestBinding: recovery.requiresNewRequestBinding } : null)
     if (recovery?.request) {
-      setExtractText((recovery.request.operation ?? 'extract') === 'extract'
-        ? recovery.request.sourceText
-        : recovery.request.authorRequest ?? '')
+      setCandidateVersion(1)
+      setExtractText((recovery.request.operation ?? 'extract') === 'extract' ? recovery.request.sourceText : recovery.request.authorRequest ?? '')
       setSupplementTags(recovery.request.supplementTags)
     }
-  }
+  }, [reconciliationCategoryId, candidateOperation, extractionScope, scopeReady, scopedWorldGroupId])
+  useEffect(() => {
+    if (!extractOpen || !reconciliationCategoryId || !scopeReady) return
+    const epoch = extractionEpoch.current
+    let active = true
+    // Read-only consumers have their own immutable scope/ref checks. React's
+    // epoch/cleanup suppress stale view updates without altering durable data.
+    void reconcileExtractionState({ stillCurrent: () => active }).catch(error => { if (active && epoch === extractionEpoch.current) setExtractError(error instanceof Error ? error.message : 'Codex 提取运行恢复失败') })
+    return () => { active = false }
+  }, [extractOpen, extractSessionEpoch, reconciliationCategoryId, reconcileExtractionState, scopeReady, projectId, project.activeWorldId, project.activeWorkId, loadedScope?.projectId, loadedScope?.worldId, loadedScope?.workId])
 
+  const blocksCurrentExtraction = candidateOperation === 'extract' && blockedRuns.some(run => !run.target
+    || run.target.categoryId === activeCatId && run.target.worldGroupId === (scopedWorldGroupId ?? null))
   const handleExtractEntries = async () => {
-    if (!activeCat || !extractText.trim()) return
+    if (admitting || pendingAdmission.current || extracting || !activeCat || !extractText.trim() || blocksCurrentExtraction) return
     const effectiveConfig = resolveRequestConfig(aiConfig, {
       category: candidateOperation === 'extract' ? 'codex.extract' : 'codex.enrich',
     }).config
     if (!isAIConfigReady(effectiveConfig)) { toast.error(getAIConfigRequiredMessage(effectiveConfig)); return }
+    // A new dispatch owns the view; an older empty lookup cannot erase its candidate.
+    const epoch = ++extractionEpoch.current
     setExtracting(true)
     setExtractError(null)
     try {
-      const shared = {
-        scope: await resolveScopeLike(projectId), aiConfig,
+      const admission = newStartAdmission.current
+      if (!admission || admission.operation !== candidateOperation || admission.version !== (candidateOperation === 'extract' ? 2 : 1)) throw new Error('缺少本次新请求授权；输入已保留，不借用旧授权或降级发送。')
+      if (candidateOperation === 'extract') {
+        // Re-read before either V1 or V2 starts. A readonly lookup failure is
+        // never converted into permission to replace a possibly paid request.
+        const scope = await extractionScope(), blocked: BlockedCodexExtractionRunV2[] = []
+        const filter = { scope, categoryId: activeCat.id!, worldGroupId: scopedWorldGroupId ?? null }
+        const lookup = { onBlockedRun: (run: BlockedCodexExtractionRunV2) => { blocked.push(run) } }
+        const pending = await readPendingCodexExtractionCandidateV2(filter, lookup)
+        const recovery = await readRecoverableCodexExtractionV2(filter, lookup)
+        const legacyPending = await readPendingCodexExtractionCandidateV1({ ...filter, operation: 'extract' })
+        const legacyRecovery = await readRecoverableCodexExtractionV1({ ...filter, operation: 'extract' })
+        await extractionScope()
+        if (epoch !== extractionEpoch.current) return
+        setBlockedRuns([...new Map(blocked.map(run => [run.runId, run])).values()])
+        if (pending || recovery || legacyPending || legacyRecovery || blocked.some(run => !run.target || run.target.categoryId === filter.categoryId && run.target.worldGroupId === filter.worldGroupId)) {
+          // This page has not dispatched: preserve its edited input rather than
+          // auto-restoring a different tab's paid source over it.
+          setExtractError('原提取运行尚未处理完毕或证据待核验；本页输入与原件已保留，不重新发送。')
+          return
+        }
       }
-      const generated = candidateOperation === 'extract'
-        ? await generateCodexExtractionCandidateV1({
-            ...shared,
-            request: {
-              categoryId: activeCat.id!, worldGroupId: scopedWorldGroupId ?? null,
-              sourceText: extractText, supplementTags,
-            },
-          })
-        : await generateCodexEnrichmentCandidateV1({
-            ...shared,
-            request: {
-              categoryId: activeCat.id!, worldGroupId: scopedWorldGroupId ?? null,
-              authorRequest: extractText, supplementTags,
-            },
-          })
+      if (candidateOperation === 'extract') {
+        const frozenScope = await assertExtractionScope(admission.scope)
+        if (epoch !== extractionEpoch.current) return
+        const controller = new AbortController(); generationAbort.current = controller
+        const generated = await generateCodexExtractionCandidateV2({ scope: frozenScope, aiConfig,
+          request: { categoryId: activeCat.id!, worldGroupId: scopedWorldGroupId ?? null, sourceText: extractText, supplementTags }, signal: controller.signal })
+        if (epoch !== extractionEpoch.current) return
+        setCandidateVersion(2); setExtractRunId(generated.snapshot.run.id); setRecoverable(null); setCandidates(generated.candidate.entries)
+        setSelectedCandidates(new Set(generated.candidate.entries.map((_, index) => index))); setSelectionFrozen(false)
+        setV2Prefix(generated.snapshot.projection.lastSequence); setDraftDirty(false)
+        return
+      }
+      const shared = {
+        scope: await extractionScope(), aiConfig,
+      }
+      const generated = await generateCodexEnrichmentCandidateV1({
+        ...shared,
+        request: { categoryId: activeCat.id!, worldGroupId: scopedWorldGroupId ?? null, authorRequest: extractText, supplementTags },
+      })
+      if (epoch !== extractionEpoch.current) return
       setExtractRunId(generated.snapshot.run.id)
       setRecoverable(null)
       setCandidates(generated.candidate.entries)
       setSelectedCandidates(new Set(generated.candidate.entries.map((_, index) => index)))
       setSelectionFrozen(false)
-      if (!generated.candidate.entries.length) toast.info(candidateOperation === 'extract'
-        ? 'AI 未从这段内容中识别出可独立登记的词条。'
-        : 'AI 未提出可单独确认的新词条建议。')
+      if (!generated.candidate.entries.length) toast.info('AI 未提出可单独确认的新词条建议。')
     } catch (error) {
+      if (epoch !== extractionEpoch.current) return
       setExtractError(error instanceof Error ? error.message : 'Codex 词条提取失败')
+      if (error instanceof CodexExtractionAdmissionUnavailableV2) return
       try {
         await reconcileExtractionState()
       } catch { /* Preserve original failure. */ }
     } finally {
+      generationAbort.current = null
       setExtracting(false)
     }
   }
 
   const handleResumeExtraction = async () => {
-    if (!recoverable?.safeToResume || extracting) return
+    if (!recoverable || (!recoverable.safeToResume && !recoverable.canReadOriginal) || extracting) return
+    const epoch = extractionEpoch.current
     setExtracting(true)
     setExtractError(null)
     try {
+      if (recoverable.version === 2) {
+        await resumeCodexExtractionCandidateV2({ scope: await extractionScope(), runId: recoverable.runId, aiConfig })
+        if (epoch !== extractionEpoch.current) return
+        await reconcileExtractionState()
+        return
+      }
       const resumed = await resumeCodexExtractionCandidateV1({
-        scope: await resolveScopeLike(projectId), runId: recoverable.runId, aiConfig,
+        scope: await extractionScope(), runId: recoverable.runId, aiConfig,
       })
+      if (epoch !== extractionEpoch.current) return
       setExtractRunId(resumed.snapshot.run.id)
       setRecoverable(null)
       setCandidates(resumed.candidate.entries)
       setSelectedCandidates(new Set(resumed.candidate.entries.map((_, index) => index)))
       setSelectionFrozen(false)
     } catch (error) {
+      if (epoch !== extractionEpoch.current) return
       setExtractError(error instanceof Error ? error.message : '继续 Codex 提取失败')
       try { await reconcileExtractionState() } catch { /* Preserve original failure. */ }
     } finally {
@@ -409,22 +522,25 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
   }
 
   const handleAdoptCandidates = async () => {
-    if (!activeCat || !scopeReady || extractRunId == null) return
+    if (!activeCat || !scopeReady || extractRunId == null || extracting) return
+    const epoch = extractionEpoch.current
     setExtracting(true)
+    if (candidateVersion === 2) setSelectionFrozen(true)
     setExtractError(null)
     let result: Awaited<ReturnType<typeof adoptCodexExtractionCandidateV1>>
     try {
-      result = await adoptCodexExtractionCandidateV1({
-        scope: await resolveScopeLike(projectId),
-        runId: extractRunId,
-        selectedIndexes: [...selectedCandidates],
-      })
+      const frozenScope = await extractionScope()
+      result = candidateVersion === 2 ? await adoptCodexExtractionCandidateV2({ scope: frozenScope, runId: extractRunId,
+        selectedIndexes: [...selectedCandidates], entries: structuredClone(candidates) }) : await adoptCodexExtractionCandidateV1({
+        scope: frozenScope, runId: extractRunId, selectedIndexes: [...selectedCandidates] })
     } catch (error) {
+      if (epoch !== extractionEpoch.current) { setExtracting(false); return }
       setExtractError(error instanceof Error ? error.message : 'Codex 词条采纳失败')
-      try { await reconcileExtractionState() } catch { /* Preserve original failure. */ }
+      try { await reconcileExtractionState({ preserveLocalDraft: candidateVersion === 2 }) } catch { /* Preserve original failure. */ }
       setExtracting(false)
       return
     }
+    if (epoch !== extractionEpoch.current) { setExtracting(false); return }
     setExtractOpen(false)
     setExtractRunId(null)
     setCandidates([])
@@ -442,9 +558,21 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
   const handleAbandonExtraction = async (close = true) => {
     const runId = extractRunId ?? recoverable?.runId
     if (runId == null || extracting) return
+    if (candidateVersion === 2 && draftDirty && !await dialog.confirm({ title: '作者稿尚未保存',
+      message: '关闭后本页未保存的编辑会丢失；已保存的原答和草稿仍保留。', confirmText: '放弃本页编辑', tone: 'danger' })) return
+    const original = extractionOwner.current
+    if (close && original && (original.worldId !== project.activeWorldId || original.workId !== project.activeWorkId)) {
+      setExtractOpen(false); return
+    }
+    const epoch = extractionEpoch.current
     setExtracting(true)
     try {
-      await abandonCodexExtractionV1({ scope: await resolveScopeLike(projectId), runId })
+      if (candidateVersion === 2) {
+        await abandonCodexExtractionV2({ scope: await extractionScope(), runId })
+      } else {
+        await abandonCodexExtractionV1({ scope: await extractionScope(), runId })
+      }
+      if (epoch !== extractionEpoch.current) return
       setExtractRunId(null)
       setRecoverable(null)
       setCandidates([])
@@ -453,10 +581,30 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
       setExtractError(null)
       if (close) setExtractOpen(false)
     } catch (error) {
+      if (epoch !== extractionEpoch.current) return
       setExtractError(error instanceof Error ? error.message : '放弃 Codex 提取失败')
     } finally {
       setExtracting(false)
     }
+  }
+
+  const updateCandidateDraft = (index: number, patch: Partial<ExtractedCodexEntry>) => {
+    if (candidateVersion !== 2 || selectionFrozen || extracting) return
+    setCandidates(previous => previous.map((entry, at) => at === index ? { ...entry, ...patch } : entry))
+    setAuthorEdited(previous => new Set([...previous, index])); setDraftDirty(true)
+  }
+  const handleSaveCandidateDraft = async () => {
+    if (candidateVersion !== 2 || selectionFrozen || extracting || extractRunId == null || v2Prefix == null) return
+    const epoch = extractionEpoch.current
+    setExtracting(true); setExtractError(null)
+    try {
+      const saved = await saveCodexExtractionAuthorDraftV2({ scope: await extractionScope(), runId: extractRunId,
+        expectedLastSequence: v2Prefix, entries: structuredClone(candidates), selectedIndexes: [...selectedCandidates] })
+      if (epoch !== extractionEpoch.current) return
+      setCandidates(saved.draft.entries); setV2Prefix(saved.snapshot.projection.lastSequence); setDraftDirty(false)
+      setAuthorEdited(new Set(saved.draft.editPaths.map(path => Number(path.split('.')[1]))))
+    } catch (error) { if (epoch === extractionEpoch.current) setExtractError(error instanceof Error ? error.message : '作者稿未保存，请保留本页编辑。') }
+    finally { setExtracting(false) }
   }
 
   return (
@@ -660,16 +808,24 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-semibold text-text-primary">
-                  {candidateOperation === 'extract' ? 'AI 逐字证据拆分' : 'AI 创意补全建议'}「{activeCat.name}」
+                  {candidateOperation === 'extract' ? (candidateVersion === 2 ? 'AI 原文提取' : 'AI 逐字证据拆分') : 'AI 创意补全建议'}「{activeCat.name}」
                 </h3>
                 <p className="text-xs text-text-muted">
                   {candidateOperation === 'extract'
-                    ? '抽取只允许原文中有逐字引文的词条。'
+                    ? candidateVersion === 2 ? '名称须来自本次原文；提供引文时逐字核验。' : '抽取只允许原文中有逐字引文的词条。'
                     : '补全可创造新内容，但会明确标记为“AI 新建建议”。'}
                   候选确认后才原子写入，两种运行分别确认。
                 </p>
               </div>
-              <button disabled={extracting} className="disabled:opacity-40" onClick={() => {
+              <button aria-label="关闭词条提取" disabled={extracting} className="disabled:opacity-40" onClick={() => {
+                if (admitting) {
+                  extractionEpoch.current++
+                  pendingAdmission.current = null
+                  newStartAdmission.current = null
+                  setAdmitting(false)
+                  setExtractOpen(false)
+                  return
+                }
                 if (extracting) return
                 if (selectionFrozen) setExtractOpen(false)
                 else if (extractRunId != null || recoverable) void handleAbandonExtraction(true)
@@ -687,30 +843,43 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
                 disabled={extractRunId != null || recoverable != null} className="mt-0.5 accent-accent disabled:opacity-60" />
               <span>AI 补充词条标签 <span className="text-amber-400">⚠ 会增加少量 token 消耗</span></span>
             </label>
-            <button onClick={handleExtractEntries} disabled={extracting || !extractText.trim() || extractRunId != null || recoverable != null}
+            <button onClick={handleExtractEntries} disabled={admitting || !newStartAdmission.current || extracting || !extractText.trim() || extractRunId != null || recoverable != null || blocksCurrentExtraction}
               className="px-3 py-1.5 bg-accent text-white rounded-lg text-sm disabled:opacity-40 inline-flex items-center gap-1.5">
               {extracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {extracting
                 ? candidateOperation === 'extract' ? 'AI 拆分中…' : 'AI 补全中…'
                 : candidateOperation === 'extract' ? '开始拆分' : '生成补全建议'}
             </button>
+            {candidateVersion === 2 && extracting && generationAbort.current && !selectionFrozen && <button
+              onClick={() => generationAbort.current?.abort()} className="rounded border border-border px-3 py-1.5 text-xs">停止生成并保留已存稿</button>}
             {recoverable && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-text-secondary">
                 <p>
                   已恢复分块进度 {recoverable.nextCallIndex}/{recoverable.totalCalls}。
-                  {recoverable.requiresNewRequestBinding ? '旧计划未冻结实际模型配置，输入已保留；请结束旧运行后明确开始新的提取。'
+                  {recoverable.version === 2 ? '先核对已存原答和原请求；未知结果不会重新发送。' : recoverable.requiresNewRequestBinding ? '旧计划未冻结实际模型配置，输入已保留；请结束旧运行后明确开始新的提取。'
                     : recoverable.safeToResume ? '可从下一分块继续，不重复已有模型调用。' : '模型结果不可判定，系统不会自动重试。'}
                 </p>
                 <div className="mt-2 flex gap-2">
-                  {recoverable.safeToResume && (
+                  {(recoverable.safeToResume || recoverable.canReadOriginal) && (
                     <button onClick={() => void handleResumeExtraction()} disabled={extracting}
-                      className="rounded bg-accent px-2.5 py-1 text-white disabled:opacity-40">继续提取</button>
+                      className="rounded bg-accent px-2.5 py-1 text-white disabled:opacity-40">{recoverable.version === 2 ? '核对原请求并继续' : '继续提取'}</button>
                   )}
                   <button onClick={() => void handleAbandonExtraction(false)} disabled={extracting}
                     className="rounded border border-border px-2.5 py-1 text-text-muted disabled:opacity-40">放弃旧运行</button>
                 </div>
               </div>
             )}
+            {blockedRuns.length > 0 && <aside aria-label="原提取运行只读阻塞记录" className="rounded border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-text-secondary">
+              <p>原运行只读阻塞记录（{blockedRuns.length}）：原件和进度保留，以下记录不提供重新发送或改动操作。</p>
+              {blocksCurrentExtraction && <p>本分类或目标未核验的原运行尚未解决，当前不能开始新的提取。</p>}
+              {blockedRuns.slice(0, 8).map(run => <details key={`${run.scope.workId}:${run.runId}`} className="mt-2">
+                <summary>运行 {run.runId} · {run.target ? `分类 ${run.target.categoryId} / 分组 ${run.target.worldGroupId ?? '默认'}` : '目标未核验'}</summary>
+                <p>{run.message}</p><p>原作品 {run.scope.workId} · 已核验前缀 {run.lastSequence ?? '未知'} · 原证据引用 {run.evidenceRefCount}</p>
+                <ul>{run.originalRefs.map((ref, index) => <li key={index}><code>{ref.artifactKind}: {ref.contentHash}</code></li>)}</ul>
+                {run.evidenceRefCount > run.originalRefs.length && <p>此处仅列部分引用；全部原始记录继续保留。</p>}
+              </details>)}
+              {blockedRuns.length > 8 && <p>此处仅显示最近 8 条阻塞记录。</p>}
+            </aside>}
             {extractError && <p className="rounded bg-error/10 p-2 text-xs text-error">{extractError}</p>}
             {extractRunId != null && (
               <div className="space-y-2 border-t border-border pt-3">
@@ -725,7 +894,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
                   </p>
                 )}
                 {candidates.map((item, index) => (
-                  <label key={`${item.name}-${index}`} className="flex gap-3 p-3 border border-border rounded-lg bg-bg-base">
+                  <div key={index}><label className="flex gap-3 p-3 border border-border rounded-lg bg-bg-base">
                     <input type="checkbox" checked={selectedCandidates.has(index)} disabled={selectionFrozen} onChange={() => {
                       setSelectedCandidates(prev => {
                         const next = new Set(prev)
@@ -760,8 +929,42 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
                       {item.tags.length > 0 && <div className="mt-1 text-[10px] text-accent">{item.tags.map(t => `#${t}`).join(' ')}</div>}
                     </div>
                   </label>
+                  {candidateVersion === 2 && (
+                    <details className="mt-1 rounded border border-border p-3 text-xs text-text-secondary">
+                      <summary className="cursor-pointer text-accent">{authorEdited.has(index) ? '作者编辑稿 · 修改后按人工内容采用' : '编辑作者稿'}</summary>
+                      <div className="mt-2 grid gap-2">
+                        <label>名称<input aria-label={`候选${index + 1}名称`} value={item.name} disabled={selectionFrozen || extracting}
+                          onChange={event => updateCandidateDraft(index, { name: event.target.value })} className="block w-full rounded border border-border bg-bg-base p-2" /></label>
+                        <label>简介<textarea aria-label={`候选${index + 1}简介`} value={item.summary} disabled={selectionFrozen || extracting}
+                          onChange={event => updateCandidateDraft(index, { summary: event.target.value })} className="block w-full rounded border border-border bg-bg-base p-2" /></label>
+                        <label>详细描述<textarea aria-label={`候选${index + 1}描述`} value={item.description} rows={5} disabled={selectionFrozen || extracting}
+                          onChange={event => updateCandidateDraft(index, { description: event.target.value })} className="block w-full rounded border border-border bg-bg-base p-2" /></label>
+                        {parseFieldSchema(activeCat.fieldSchema).filter(field => field.type !== 'ref').map(field => <label key={field.key}>{field.label}
+                          <textarea value={item.fields[field.key] ?? ''} disabled={selectionFrozen || extracting} onChange={event => {
+                            const fields = { ...item.fields }; if (event.target.value.trim()) fields[field.key] = event.target.value; else delete fields[field.key]
+                            updateCandidateDraft(index, { fields })
+                          }} className="block w-full rounded border border-border bg-bg-base p-2" /></label>)}
+                        <label>图标<input value={item.icon} disabled={selectionFrozen || extracting} onChange={event => updateCandidateDraft(index, { icon: event.target.value })}
+                          className="ml-2 rounded border border-border bg-bg-base p-1" /></label>
+                        <label>重要度<input type="number" min={0} max={5} value={item.importance} disabled={selectionFrozen || extracting}
+                          onChange={event => updateCandidateDraft(index, { importance: Number(event.target.value) })} className="ml-2 rounded border border-border bg-bg-base p-1" /></label>
+                        {item.tags.map((tag, at) => <label key={at}>标签 {at + 1}<input value={tag} disabled={selectionFrozen || extracting}
+                          onChange={event => updateCandidateDraft(index, { tags: item.tags.map((value, i) => i === at ? event.target.value : value) })} className="ml-2 rounded border border-border bg-bg-base p-1" />
+                          <button disabled={selectionFrozen || extracting} onClick={() => updateCandidateDraft(index, { tags: item.tags.filter((_, i) => i !== at) })}>移除</button></label>)}
+                        <button disabled={selectionFrozen || extracting} onClick={() => updateCandidateDraft(index, { tags: [...item.tags, ''] })}>添加标签</button>
+                        {(item.evidenceQuotes ?? []).map((quote, at) => <label key={at}>原文引文 {at + 1}<textarea value={quote} disabled={selectionFrozen || extracting}
+                          onChange={event => updateCandidateDraft(index, { evidenceQuotes: (item.evidenceQuotes ?? []).map((value, i) => i === at ? event.target.value : value) })} className="block w-full rounded border border-border bg-bg-base p-2" />
+                          <button disabled={selectionFrozen || extracting} onClick={() => updateCandidateDraft(index, { evidenceQuotes: (item.evidenceQuotes ?? []).filter((_, i) => i !== at) })}>移除引文</button></label>)}
+                        <button disabled={selectionFrozen || extracting} onClick={() => updateCandidateDraft(index, { evidenceQuotes: [...(item.evidenceQuotes ?? []), ''] })}>添加原文引文</button>
+                      </div>
+                    </details>
+                  )}
+                  </div>
                 ))}
+                {candidateVersion === 2 && draftDirty && <p className="text-xs text-amber-400">作者稿尚未保存；可保存草稿或直接确认采用当前内容。刷新前请先保存。</p>}
                 <div className="flex justify-end gap-2">
+                  {candidateVersion === 2 && !selectionFrozen && <button onClick={() => void handleSaveCandidateDraft()} disabled={extracting || !draftDirty}
+                    className="rounded border border-border px-3 py-1.5 text-xs disabled:opacity-40">保存作者稿</button>}
                   {!selectionFrozen && (
                     <button onClick={() => void handleAbandonExtraction(true)} disabled={extracting}
                       className="px-3 py-1.5 text-xs text-text-muted disabled:opacity-40">否决并关闭</button>

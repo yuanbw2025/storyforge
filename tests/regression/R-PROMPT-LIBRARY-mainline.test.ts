@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { CRAFT_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds-craft'
 import { SYSTEM_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds'
@@ -16,7 +16,7 @@ describe('小说创作 Prompt 内容回归主模板体系', () => {
     usePromptStore.setState({ templates: [], loaded: false })
   })
 
-  afterEach(() => db.close())
+  afterEach(() => { vi.restoreAllMocks(); db.close() })
 
   it('完整纳入 118 条系统模板，且默认不抢占激活模板', () => {
     expect(NOVEL_CONTENT_PROMPT_SEEDS).toHaveLength(118)
@@ -135,4 +135,45 @@ describe('小说创作 Prompt 内容回归主模板体系', () => {
     expect(migrated?.moduleKey).toBe('story.brief')
     expect(migrated?.isActive).toBe(true)
   })
+  it('archives every overwritten codex system field as inactive history while preserving active IDs and user templates, idempotently', async () => {
+    await usePromptStore.getState().init()
+    const seed = (await db.promptTemplates.toArray()).find(row => row.moduleKey === 'codex.extract' && row.scope === 'system')!
+    await db.promptTemplates.update(seed.id!, { systemPrompt: '作者旧规则：1-5条引文', description: '作者说明', isActive: false,
+      parameters: [{ key: '旧参数', label: '旧参数', type: 'number', default: 0.25 }], examples: { good: [{ id: 'old-example', text: '旧输入与输出', source: 'user-marked', createdAt: 1 }] } })
+    const old = (await db.promptTemplates.get(seed.id!))!
+    const { id: _id, ...copy } = old
+    const userId = await db.promptTemplates.add({ ...copy, name: '我的拆分', scope: 'user', isActive: true })
+    const user = await db.promptTemplates.get(userId)
+    usePromptStore.setState({ loaded: false })
+    await usePromptStore.getState().init()
+    const rows = await db.promptTemplates.toArray(), history = rows.filter(row => row.name === old.name + '（升级前历史）')
+    expect(history).toHaveLength(1)
+    expect(history[0]).toEqual({ ...copy, id: history[0].id, scope: 'user', name: old.name + '（升级前历史）', isActive: false })
+    expect((await db.promptTemplates.get(seed.id!))?.isActive).toBe(false)
+    expect(await db.promptTemplates.get(userId)).toEqual(user)
+    expect(usePromptStore.getState().getActive('codex.extract').id).toBe(userId)
+    usePromptStore.setState({ loaded: false }); await usePromptStore.getState().init()
+    expect((await db.promptTemplates.toArray()).filter(row => row.name === old.name + '（升级前历史）')).toHaveLength(1)
+    const builtIn = SYSTEM_PROMPT_SEEDS.find(row => row.moduleKey === 'codex.extract')!
+    expect(builtIn.systemPrompt).not.toMatch(/2-5|1-5/)
+  })
+
+  it('rolls back codex refresh if history cannot commit, and refuses to overwrite a concurrently edited latest row', async () => {
+    await usePromptStore.getState().init()
+    const seed = (await db.promptTemplates.toArray()).find(row => row.moduleKey === 'codex.extract' && row.scope === 'system')!
+    await db.promptTemplates.update(seed.id!, { systemPrompt: '旧稿，不能丢' })
+    const old = await db.promptTemplates.get(seed.id!)
+    const fail = vi.spyOn(db.promptTemplates, 'add').mockRejectedValueOnce(new Error('history write failed'))
+    usePromptStore.setState({ loaded: false })
+    await expect(usePromptStore.getState().init()).rejects.toThrow('history write failed')
+    expect(await db.promptTemplates.get(seed.id!)).toEqual(old)
+    fail.mockRestore()
+    const original = db.promptTemplates.toArray.bind(db.promptTemplates)
+    vi.spyOn(db.promptTemplates, 'toArray').mockImplementationOnce(() => original().then(stale =>
+      db.promptTemplates.update(seed.id!, { systemPrompt: '并发作者最新稿' }).then(() => stale)))
+    await expect(usePromptStore.getState().init()).rejects.toThrow('其他编辑修改')
+    expect((await db.promptTemplates.get(seed.id!))?.systemPrompt).toBe('并发作者最新稿')
+    expect((await original()).filter(row => row.name === seed.name + '（升级前历史）')).toHaveLength(0)
+  })
+
 })

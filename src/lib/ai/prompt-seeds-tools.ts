@@ -855,12 +855,12 @@ type 含义：traversal=穿越目标，instance=副本，parallel=平行世界�
 
 规则：
 1. 只提取属于当前分类的实体或概念；不要把段落标题、泛称、空洞概念当成词条
-2. 已有同名词条不要重复生成；同一实体只输出一次
-3. name 简洁稳定，summary 一句话说明，description 保留关键设定与限制
+2. 已登记 Canon 同名词条不要重复生成；同一原文单元内同一实体输出一次，同Root已验证未采用草稿允许补充后文新事实
+3. name 简洁稳定，summary 可用一句话概括；description 必须按来源完整整理该词条的事实、适用条件、例外和禁例，合并保留分散在原文各处的同实体事实，不能用 summary 代替详细整理。不设默认篇幅或字数配额，不增加来源没有的内容
 4. fields 只能使用给定字段 schema 的 key；没有依据的字段不要编造
 5. importance 为 0-5；越影响主线越高
-6. supplementTags 为“是”时生成 2-5 个简短检索标签，否则 tags 必须是 []
-7. evidenceQuotes 必须有 1-5 条完全来自待拆分内容的逐字引文；名称也必须在原文中出现
+6. supplementTags 为“是”时按内容需要生成简短检索标签，不设置软件条数配额；否则 tags 必须是 []
+7. evidenceQuotes 只能使用当前待拆分内容的逐字引文，不设条数配额；名称来自当前原文，或新Root合同明确允许且本次实际发送的同Root已验证草稿原名，指代不清不编造
 8. provenance 必须固定为 "verbatim-extraction"
 
 输出严格 JSON 数组：

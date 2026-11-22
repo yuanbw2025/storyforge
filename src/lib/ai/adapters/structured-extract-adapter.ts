@@ -357,3 +357,181 @@ export function parseLocations(raw: string): ExtractedLocation[] {
 }
 
 export { splitExtractionText }
+
+/** V2 retains field/type/provenance constraints without application content quotas.
+ * Only the exact actually sent original range can ground names and quotes. */
+function parseCodexEntriesCoreV2(
+  raw: string,
+  allowedFields: readonly string[] | readonly CodexFieldDef[],
+  evidencePolicy: { operation: 'extract' | 'enrich'; sourceText: string; supplementTags?: boolean; verifiedProgressNames?: readonly string[] },
+  authorDraft: boolean,
+): ExtractedCodexEntry[] {
+  const source = wholeJSONContainerTextV1(raw, '词条提取候选')
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(source)
+  } catch {
+    throw new Error('词条提取输出不是严格 JSON。')
+  }
+  if (!Array.isArray(parsed)) throw new Error('词条提取输出必须是 JSON 数组。')
+  const fieldDefs = new Map<string, CodexFieldDef>()
+  for (const value of allowedFields) {
+    const field = typeof value === 'string' ? { key: value, label: value, type: 'text' as const } : value
+    fieldDefs.set(field.key, field)
+  }
+  const exactKeys = [
+    'name', 'icon', 'summary', 'description', 'fields', 'tags', 'importance',
+    'evidenceQuotes', 'provenance',
+  ] as const
+  const names = new Set<string>()
+  return parsed.map((value, index) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(`词条候选 ${index + 1} 不是对象。`)
+    }
+    const row = value as Record<string, unknown>
+    const requiredKeys = exactKeys.filter(key => key !== 'evidenceQuotes')
+    if (requiredKeys.some(key => !Object.prototype.hasOwnProperty.call(row, key))
+      || Object.keys(row).some(key => !exactKeys.includes(key as typeof exactKeys[number]))) {
+      throw new Error(`词条候选 ${index + 1} 字段不在允许闭集。`)
+    }
+    if (
+      typeof row.name !== 'string' || !row.name.trim()
+      || typeof row.icon !== 'string'
+      || typeof row.summary !== 'string' || !row.summary.trim()
+      || typeof row.description !== 'string' || !row.description.trim()
+      || !row.fields || typeof row.fields !== 'object' || Array.isArray(row.fields)
+      || !Array.isArray(row.tags)
+      || !Number.isInteger(row.importance) || (row.importance as number) < 0 || (row.importance as number) > CODEX_LIMITS.importance
+      || (row.evidenceQuotes !== undefined && (!Array.isArray(row.evidenceQuotes)
+        || row.evidenceQuotes.some(quote => typeof quote !== 'string' || !quote.trim())))
+      || !['verbatim-extraction', 'ai-created-suggestion'].includes(String(row.provenance))
+    ) throw new Error(`词条候选 ${index + 1} 字段类型或范围无效。`)
+    const normalizedName = row.name.trim().toLocaleLowerCase()
+    if (names.has(normalizedName)) throw new Error(`词条候选 ${index + 1} 名称重复。`)
+    names.add(normalizedName)
+    const fields: Record<string, string> = {}
+    for (const [key, fieldValue] of Object.entries(row.fields as Record<string, unknown>)) {
+      const field = fieldDefs.get(key)
+      if (!field) throw new Error(`词条候选 ${index + 1} 包含未登记字段 ${key}。`)
+      if (typeof fieldValue !== 'string' || !fieldValue.trim()) {
+        throw new Error(`词条候选 ${index + 1} 字段 ${key} 的值无效。`)
+      }
+      const normalized = fieldValue.trim()
+      if (field.type === 'ref') throw new Error(`词条候选 ${index + 1} 不得伪造引用字段 ${key}。`)
+      if (field.type === 'number' && !Number.isFinite(Number(normalized))) {
+        throw new Error(`词条候选 ${index + 1} 数值字段 ${key} 无效。`)
+      }
+      if (field.type === 'select' && field.options?.length && !field.options.includes(normalized)) {
+        throw new Error(`词条候选 ${index + 1} 枚举字段 ${key} 不在登记选项内。`)
+      }
+      fields[key] = normalized
+    }
+    const tags = row.tags.map((tag, tagIndex) => {
+      if (typeof tag !== 'string' || !tag.trim()) {
+        throw new Error(`词条候选 ${index + 1} 标签 ${tagIndex + 1} 无效。`)
+      }
+      return tag.trim()
+    })
+    if (new Set(tags.map(tag => tag.toLocaleLowerCase())).size !== tags.length) {
+      throw new Error(`词条候选 ${index + 1} 标签重复。`)
+    }
+    if (evidencePolicy.supplementTags === false && tags.length) throw new Error('作者未启用补充标签。')
+    const evidenceQuotes = ((row.evidenceQuotes ?? []) as string[]).map(quote => quote.trim())
+    if (evidencePolicy.operation === 'extract') {
+      if (row.provenance !== 'verbatim-extraction') {
+        throw new Error(`词条候选 ${index + 1} 缺少逐字抽取来源。`)
+      }
+      if (evidenceQuotes.some(quote => !evidencePolicy.sourceText.includes(quote))) {
+        throw new Error(`词条候选 ${index + 1} 的来源引文不存在于原文。`)
+      }
+      if (!authorDraft && !evidencePolicy.sourceText.includes(row.name.trim()) && !evidencePolicy.verifiedProgressNames?.includes(row.name.trim())) {
+        throw new Error(`词条候选 ${index + 1} 的名称未在原文中出现。`)
+      }
+    } else if (row.provenance !== 'ai-created-suggestion' || evidenceQuotes.length !== 0) {
+      throw new Error(`词条候选 ${index + 1} 的 AI 新建 provenance 无效。`)
+    }
+    return {
+      name: row.name.trim(),
+      icon: row.icon.trim(),
+      summary: row.summary.trim(),
+      description: row.description.trim(),
+      fields,
+      tags,
+      importance: row.importance as number,
+      evidenceQuotes,
+      provenance: row.provenance as ExtractedCodexEntry['provenance'],
+    }
+  })
+}
+
+export function parseCodexEntriesStrictV2(
+  raw: string, fields: readonly string[] | readonly CodexFieldDef[],
+  policy: { operation: 'extract' | 'enrich'; sourceText: string; supplementTags?: boolean; verifiedProgressNames?: readonly string[] },
+): ExtractedCodexEntry[] { return parseCodexEntriesCoreV2(raw, fields, policy, false) }
+
+/** Author edits are a separate manual draft, never a rewritten model identity.
+ * Renames may differ, while supplied quotes must still belong to original text. */
+export function parseCodexAuthorDraftV2(
+  raw: string, fields: readonly CodexFieldDef[], policy: { sourceText: string; supplementTags: boolean },
+): ExtractedCodexEntry[] { return parseCodexEntriesCoreV2(raw, fields, { sourceText: policy.sourceText, operation: 'extract' }, true) }
+
+/** Array-root schema stays on the provider already supporting that protocol.
+ * No retry without schema, maxLength/maxItems quota, or json_object coercion. */
+export function codexEntryTransportOptionsV2(
+  config: Pick<AIConfig, 'provider' | 'model'> | undefined,
+  fields: readonly CodexFieldDef[],
+  policy: { operation: 'extract' | 'enrich'; supplementTags: boolean },
+): ChatRequestOptions | undefined {
+  if (config?.provider !== 'agnes' || config.model !== 'agnes-2.5-flash') return undefined
+  const text = { type: 'string', minLength: 1 }
+  const properties = Object.fromEntries(fields.filter(field => field.type !== 'ref').map(field => [field.key, {
+    ...text,
+    ...(field.type === 'select' && field.options?.length ? { enum: [...field.options] } : {}),
+    ...(field.type === 'number' ? { pattern: '^[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?$' } : {}),
+  }]))
+  return { thinkingMode: 'disabled', jsonSchema: { name: 'storyforge_codex_entries_v2', strict: true, schema: {
+    type: 'array', items: { type: 'object', additionalProperties: false,
+      required: ['name', 'icon', 'summary', 'description', 'fields', 'tags', 'importance', 'provenance'],
+      properties: {
+        name: text, icon: { type: 'string' }, summary: text, description: text,
+        fields: { type: 'object', additionalProperties: false, properties },
+        tags: { type: 'array', uniqueItems: true, items: text,
+          ...(policy.supplementTags ? {} : { maxItems: 0 }) },
+        importance: { type: 'integer', minimum: 0, maximum: 5 },
+        evidenceQuotes: { type: 'array', items: text,
+          ...(policy.operation === 'extract' ? {} : { maxItems: 0 }) },
+        provenance: { type: 'string', enum: [policy.operation === 'extract' ? 'verbatim-extraction' : 'ai-created-suggestion'] },
+      },
+    },
+  } } }
+}
+
+export function buildCodexExtractPromptFromRegisteredContextV2(input: {
+  sourceText: string
+  baselineContext: string
+  categoryBuiltInKey?: string | null
+  supplementTags: boolean
+  progressContext?: string
+  productionPolicy?: boolean
+}): ChatMessage[] {
+  const template = usePromptStore.getState().getActive('codex.extract')
+  const messages = renderPrompt(template, {
+    ...codexContentTemplateVariablesV1(input.categoryBuiltInKey),
+    categoryName: input.baselineContext,
+    fieldSchema: '按完整登记基线的字段闭集填写；ref字段省略，select取登记选项，number是有限数值字符串。',
+    existingEntries: input.progressContext ?? '已有同类名称以完整登记基线为准；不得重复输出。',
+    supplementTags: input.supplementTags ? '是' : '否', sourceText: input.sourceText,
+  }).messages
+  if (input.productionPolicy) {
+    const system = messages.filter(message => message.role === 'system').map(message => message.content)
+    if (input.progressContext) system.push('【本次实际发送的同Root已验证草稿，非Canon】\n' + input.progressContext)
+    system.push('本次新Root原文单元/草稿聚合策略：已有Canon禁止重建或覆盖；同Root已验证草稿不是Canon。summary可一句概括，description按来源完整整理事实、条件、例外和禁例，不以概括代替详细整理，不设默认篇幅或字数配额，不增加来源外内容。后文同名新事实须继续输出，name使用本段逐字名称，或本次实际发送且可追溯到原文的已验证草稿原名；指代不清返回空数组并保留原答供核对。新事实引文仍只能来自本段原文。text/longtext字段保留各段完整表述和条件，不以字符串不同断言语义冲突；number/select单值不同时保原答等待作者处理，禁止覆盖。标签与引文没有软件条数或长度配额。')
+    system.push('【当前提取输出合同】每项必须包含 name/icon/summary/description/fields/tags/importance/provenance，可选 evidenceQuotes。provenance 必须是字符串 "verbatim-extraction"，不是引文对象或数组；引文放 evidenceQuotes 字符串数组。不得添加 category 或其它未登记顶层字段。description 完整整理该实体在原文所有位置的事实，逐一保留数值、日期、触发和失效条件、用途、权限、例外及禁例；分类自定义字段容纳不下的事实仍放 description，不用标签、引文或概括代替。fields 的选项不是来源事实，无依据省略该 key，不补默认等级或稀有度。')
+    system.push('输出严格JSON数组；字段与类型、provenance和importance约束保持。每条所给引文必须逐字来自当前待拆分原文；名称必须来自当前原文或本次实际发送的同Root已验证草稿。不要借用登记Canon或其它运行名称。tags关闭时必须[]，开启时按内容需要；引文可为空或省略，无软件长度/数量配额。信息不足不编造，不以省略尾部冒充覆盖完成。')
+    system.push("【输出数据结构】输出数组元素形状为 {\"name\":\"逐字实体名\",\"icon\":\"\",\"summary\":\"简明概括\",\"description\":\"完整事实与全部条件、例外、禁例\",\"fields\":{},\"tags\":[],\"importance\":0,\"evidenceQuotes\":[],\"provenance\":\"verbatim-extraction\"}。name、summary、description为非空字符串，icon为字符串，fields为仅含登记非ref键的对象且值为有来源依据的字符串，tags及可选evidenceQuotes为字符串数组，importance为0至5整数。示例只说明结构，不是内容，不得照抄示例名称或描述。")
+    // Keep the author instructions and complete production contract together
+    // in the leading system message; original user material stays unchanged.
+    return [{ role: 'system', content: system.join('\n\n') }, ...messages.filter(message => message.role !== 'system')]
+  }
+  return [...messages, { role: 'system', content: '本次为 task-request-v2 原文提取合同：输出严格JSON数组；每项含name/icon/summary/description/fields/tags/importance/provenance，可选evidenceQuotes字符串数组。名称及提供的每条引文必须逐字位于本次实际发送的待拆分原文。provenance固定verbatim-extraction。fields仅登记非ref字段；importance为0～5整数。tags关闭时为[]，开启时没有应用层最少或最多数量。引文可为空或省略。没有应用层name/描述/字段/标签/引文长度或条数配额；模板中历史软件配额不作为本次上限，作者的内容目标仍须遵守。基线或此前草稿不是原文证据，信息不足返回[]，不编造、不省略原文尾部来冒充覆盖完成。' }]
+}

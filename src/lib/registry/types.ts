@@ -687,6 +687,9 @@ export interface AssembleContextInput {
   worldGroupId?: number | null
   /** HARNESS-70: trusted target category for the registered Codex extraction baseline. */
   codexCategoryId?: number
+  /** Same-Run verified draft predecessors; the registered reader verifies
+   * owner, event membership, original ranges and root before exact reads. */
+  codexExtractionProgressV2?: { runId: number; rootHash: string; verifiedResultHashes: readonly string[] }
   /** HARNESS-73: trusted target for the registered history consultation baseline. */
   historyAgentMode?: 'consult' | 'storm'
   historyAgentTargetKind?: 'event' | 'keyword'
@@ -1167,6 +1170,9 @@ export interface ContextSource {
   /** 规划尚未创建正文 Chapter 时，允许用 outlineNodeId 作为规范章序边界。 */
   acceptsOutlineNodeAsChapterBoundary?: boolean
   enabled?: (input: AssembleContextInput) => boolean | Promise<boolean>
+  /** Host-only exact capture uses this same registered reader and its owner/anchor gates.
+   * This is a material protocol version, never a model budget or read permission. */
+  fullCapture?: { version: 'registered-host-full-v2'; sourceVersion: string }
   /** CTXG resource navigation extension. It is the only Provider registration point. */
   resources?: ContextResourceProviderV1
   /** Instance role providers refuse broad reads without the kernel's exact resource allow-list. */
