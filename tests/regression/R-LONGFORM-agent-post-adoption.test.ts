@@ -151,7 +151,7 @@ describe.sequential('longform main Agent chapter post-adoption handoff', () => {
     expect(model).toHaveBeenCalledOnce()
     expect(model.mock.calls[0]).toEqual([
       'prose.chapter.memory', expect.any(Array), useAIConfigStore.getState().config,
-      { category: 'chapter.memory', projectId: fixture.project.id!, configOverrides: { maxTokens: 8_000 }, contextOverflowPolicy: 'reject' },
+      { category: 'chapter.memory', projectId: fixture.project.id!, contextOverflowPolicy: 'reject' },
       undefined, undefined, { responseFormat: 'json_object' },
     ])
     expect((await db.chapters.get(chapter.id!))?.summary).toContain('查验旧信')

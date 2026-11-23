@@ -2,6 +2,8 @@ import { db } from '../db/schema'
 import { propagateChapterEditStale } from '../consistency/impact-analysis'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { computeKnownCostUsd } from '../ai/usage-log'
+import { estimateTokens } from '../ai/context-budget'
+import { normalizeChapterText } from '../ai/chapter-memory/text-normalization'
 import type {
   PostAdoptionBudgetV1,
   PostAdoptionPolicyV1,
@@ -143,16 +145,44 @@ export async function updateWorkPostAdoptionSettingsV1(input: {
   return settings
 }
 
+/** Token envelope for the whole chapter post-adoption task, derived from the
+ * actual material each selected step consumes. Fixed per-call defaults
+ * (24k input / 8k output) are intentionally absent: the estimate follows the
+ * manuscript, not a stale quota. Output forecasts describe the structured
+ * evidence the steps are expected to emit; they never cap dispatch. */
+async function postAdoptionMaterialFor(
+  scope: WorkspaceScope,
+  chapterId: number,
+  modelRoutes: PostAdoptionAuthorizationSnapshotV1['modelRoutes'],
+): Promise<{ chapterInputTokens: number; organizationOutputTokens: number; memoryOutputTokens: number }> {
+  const chapter = await db.chapters.get(chapterId)
+  if (!chapter || !await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) {
+    throw new Error('章后预算测算找不到当前作品的来源章节。')
+  }
+  // Both model steps read the full chapter text once plus their own prompt
+  // scaffold; the chapter dominates the envelope for real manuscripts.
+  const chapterInputTokens = Math.max(1_000, estimateTokens(normalizeChapterText(chapter.content ?? '')) + 2_000)
+  const route = (taskType: 'organization' | 'memory') => modelRoutes.find(item => item.taskType === taskType)
+  return {
+    chapterInputTokens,
+    // Seven-domain verbatim-evidence JSON scales with the chapter; the
+    // forecast ceiling only keeps the authorization math finite.
+    organizationOutputTokens: route('organization') ? Math.min(64_000, Math.max(2_000, Math.floor(chapterInputTokens / 2))) : 0,
+    memoryOutputTokens: route('memory') ? Math.min(32_000, Math.max(2_000, Math.floor(chapterInputTokens / 4))) : 0,
+  }
+}
+
 function estimateFor(
   settings: ResolvedPostAdoptionSettingsV1,
   modelRoutes: PostAdoptionAuthorizationSnapshotV1['modelRoutes'],
+  material: { chapterInputTokens: number; organizationOutputTokens: number; memoryOutputTokens: number },
 ) {
   const modelCalls = Number(settings.taskTypes.includes('organization'))
     + Number(settings.taskTypes.includes('memory'))
-  const inputMax = Number(settings.taskTypes.includes('organization')) * 24_000
-    + Number(settings.taskTypes.includes('memory')) * 24_000
-  const outputMax = Number(settings.taskTypes.includes('organization')) * 8_000
-    + Number(settings.taskTypes.includes('memory')) * 8_000
+  const inputMax = Number(settings.taskTypes.includes('organization')) * material.chapterInputTokens
+    + Number(settings.taskTypes.includes('memory')) * material.chapterInputTokens
+  const outputMax = Number(settings.taskTypes.includes('organization')) * material.organizationOutputTokens
+    + Number(settings.taskTypes.includes('memory')) * material.memoryOutputTokens
   const inputMin = Math.min(inputMax, modelCalls * 1_000)
   const outputMin = Math.min(outputMax, modelCalls * 300)
   const selectedRoutes = modelRoutes.filter(route => settings.taskTypes.includes(route.taskType))
@@ -207,6 +237,7 @@ export async function buildPostAdoptionAuthorizationSnapshotV1(input: {
       }
     })
   const settingsHash = await hashCanonicalValue(normalized)
+  const material = await postAdoptionMaterialFor(input.scope, input.chapterId, modelRoutes)
   const taskKey = await hashCanonicalValue({
     version: 1,
     workId: input.scope.workId,
@@ -214,6 +245,11 @@ export async function buildPostAdoptionAuthorizationSnapshotV1(input: {
     sourceTextHash: input.sourceTextHash,
     settingsHash,
     modelRoutes,
+    material: {
+      chapterInputTokens: material.chapterInputTokens,
+      organizationOutputTokens: material.organizationOutputTokens,
+      memoryOutputTokens: material.memoryOutputTokens,
+    },
   })
   return {
     ...normalized,
@@ -222,7 +258,7 @@ export async function buildPostAdoptionAuthorizationSnapshotV1(input: {
     chapterId: input.chapterId,
     sourceTextHash: input.sourceTextHash,
     modelRoutes,
-    estimate: estimateFor(normalized, modelRoutes),
+    estimate: estimateFor(normalized, modelRoutes, material),
   }
 }
 
