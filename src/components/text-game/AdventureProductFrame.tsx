@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import ProductFrame from '../navigation/ProductFrame'
 import type { Project } from '../../lib/types'
+import './adventure-layout.css'
 
 export default function AdventureProductFrame(props: {
   projects: Project[]
@@ -16,7 +17,7 @@ export default function AdventureProductFrame(props: {
 }) {
   return <ProductFrame product="adventure" title="文字冒险" page={props.page}
     productPath={props.libraryPath} navigationLabel="文字冒险制作导航"
-    className="adventure-product-page" navigation={props.navigation}>
+    className="adventure-product-page adventure-compact-ui" navigation={props.navigation}>
     <div className="adventure-workspace-toolbar">
       <nav aria-label="文字冒险导航">
         <Link to={props.libraryPath} aria-current={!props.producing ? 'page' : undefined}>作品与试玩</Link>

@@ -61,6 +61,7 @@ export default function AdventureLibrary(props: {
 }) {
   const store = useAdventureGamePlayerStore()
   const [detailKey, setDetailKey] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
   const [localError, setLocalError] = useState('')
   const mounted = useRef(true)
   useEffect(() => {
@@ -79,7 +80,8 @@ export default function AdventureLibrary(props: {
       edition: `正式版本 · ${item.release.version}`, error: item.error,
     })),
   ], [store.previews, store.releases])
-  const items = editions.filter((item, index) => editions.findIndex(candidate => candidate.title === item.title) === index)
+  const allItems = editions.filter((item, index) => editions.findIndex(candidate => candidate.title === item.title) === index)
+  const items = allItems.filter(item => item.title.includes(search))
   const detail = editions.find(item => item.key === detailKey)
   const featured = detail ?? items.find(item => item.manifest && !item.error)
   const matchingSessions = featured ? store.sessions.filter(session => featured.source.kind === 'build'
@@ -105,6 +107,11 @@ export default function AdventureLibrary(props: {
       {detail ? <button className="adventure-text-button" onClick={() => setDetailKey(null)}><ArrowLeft />返回全部游戏</button>
         : <><span className="adventure-eyebrow">STORYFORGE / INTERACTIVE FICTION</span><h1>下一段故事，由你选择。</h1><p>走进一个世界，让每一次选择留下回响。</p></>}
     </div>
+    {!detail && <div className="adventure-library-tools">
+      <input aria-label="搜索文字冒险" placeholder="搜索作品名称" value={search} onChange={event => setSearch(event.target.value)} />
+      <span>{items.length} / {allItems.length} 部作品</span>
+      {search && <button className="adventure-library-clear" onClick={() => setSearch('')}>清除搜索</button>}
+    </div>}
     {(props.error || localError) && <div role="alert" className="adventure-alert"><p>{localError || props.error}</p>
       <button className="adventure-secondary" onClick={() => void store.load(props.scope, store.worldGroupId, true)}>刷新作品库</button>
     </div>}
@@ -142,7 +149,7 @@ export default function AdventureLibrary(props: {
           <div className="adventure-book-art"><Cover item={item} scope={props.scope} /><span>{String(index + 1).padStart(2, '0')}</span><ArrowUpRight /></div>
           <div className="adventure-book-copy"><small>{item.edition}</small><h3>{item.title}</h3><p>{item.error ? '版本校验未通过，查看详情' : synopsis(item)}</p><span>查看作品 <ChevronRight /></span></div>
         </button></article>)}
-        {!items.length && <div className="adventure-library-empty"><Compass /><h3>故事正等待启程</h3><p>在创作工作台完成可验证试玩或发布后，作品就会出现在这里。</p></div>}
+        {!items.length && <div className="adventure-library-empty" role="status"><Compass /><h3>{allItems.length ? '没有匹配的作品' : '故事正等待启程'}</h3><p>{allItems.length ? '试试其他名称，或清除搜索查看全部作品。' : '在创作工作台完成可验证试玩或发布后，作品就会出现在这里。'}</p></div>}
       </section>
       {!!store.sessions.length && <details className="adventure-saved-journeys"><summary><Save />冒险存档<span>{store.sessions.length} 份存档</span></summary>
         <div>{store.sessions.map(session => <article key={session.id}><button disabled={store.loading || store.busy} onClick={() => void open(session.id!)}><strong>{session.title}</strong><small>{new Date(session.updatedAt).toLocaleString('zh-CN')} · {store.completedSessionEndingKeys[session.id!] ? '已通关' : '可继续'}</small></button><button aria-label="删除冒险存档" onClick={() => void props.onRemoveSession(session.id!, session.title)}><Trash2 /></button></article>)}</div>
