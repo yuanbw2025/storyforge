@@ -318,7 +318,7 @@ function readExecutionBindingV2(value: unknown, path: string): AgentRunStepExecu
     writeTargets,
     maxOutputTokens: record.taskRequest !== undefined
       ? readInteger(record.maxOutputTokens, `${path}.maxOutputTokens`, { min: 0 })
-      : record.maxOutputTokens === null && ['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk'].includes(String(record.skillId))
+      : record.maxOutputTokens === null && ['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk', 'prose.organize.v2', 'prose.memory.v2'].includes(String(record.skillId))
       ? null : readInteger(record.maxOutputTokens, `${path}.maxOutputTokens`, { min: 1 }),
     ...(formalEntry ? { formalEntry } : {}),
     ...(record.taskRequest === undefined ? {} : { taskRequest: parseTaskRequestBindingV2(record.taskRequest, String(record.skillId)) }),
