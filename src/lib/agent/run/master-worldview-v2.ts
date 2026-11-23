@@ -7,7 +7,9 @@ import { verifyMasterAgentRunV1 } from './master-verification'
 import { readAgentRunV1 } from './event-store'
 import type { WorkspaceScope } from '../../types'
 import type { MasterAgentPlan } from '../orchestrator'
-import { splitLongformPlanAtChapterV1 } from '../longform-stage-queue'
+import { splitLongformPlanAtChapterV1, publishLongformContinuationV1 } from '../longform-stage-queue'
+import { prepareMasterChapterPostAdoptionV1, recoverLongformPhaseHandoffV1 } from '../master-post-adoption'
+import { readAgentEvents } from '../conversations'
 import { parseMasterWorkflowSelectionV1 } from '../workflow-catalog'
 import { parseWorldviewFieldTaskV2 } from '../worldview-field-v2-contract'
 import { isWorldviewFieldPlanV2, isWorldviewFieldRunV2, runWorldviewFieldMasterV2,
@@ -68,4 +70,24 @@ export function formatMasterBudgetSummaryV2(evidence:import('../team-budget').Ag
     return tokens + `${evidence.calls} 次调用，Canon 受控打回 ${evidence.canonRetries} 次。`
   }
   return `本轮 ${evidence.calls} 次调用；实际输入 ${evidence.observedInputTokens ?? '服务未报告'} tokens，实际输出 ${evidence.observedOutputTokens ?? '服务未报告'} tokens。`
+}
+
+
+/** Chapter phase handoffs belong to the legacy longform protocol. The exact
+ * worldview product has its own checkpoint and no chapter continuation. Read
+ * the owned Run contract before choosing a parser; never infer from numeric IDs
+ * or turn an unreadable record into a silently accepted checkpoint. */
+export async function recoverMasterPhaseHandoffWithWorldviewV2(scope: WorkspaceScope, conversationId: number): Promise<void> {
+  const events = await readAgentEvents(conversationId, scope)
+  const last = [...events].reverse().find(event => event.kind === 'candidate' && event.durableRunId != null)
+  if (last?.durableRunId != null && isWorldviewFieldRunV2(await readAgentRunV1(scope, last.durableRunId))) return
+  return recoverLongformPhaseHandoffV1(scope, conversationId)
+}
+export async function publishMasterContinuationWithWorldviewV2(scope: WorkspaceScope, runId: number): Promise<boolean> {
+  if (isWorldviewFieldRunV2(await readAgentRunV1(scope, runId))) return false
+  return publishLongformContinuationV1(scope, runId)
+}
+export async function prepareMasterPostAdoptionWithWorldviewV2(input: Parameters<typeof prepareMasterChapterPostAdoptionV1>[0]): Promise<string[]> {
+  if (isWorldviewFieldRunV2(await readAgentRunV1(input.scope, input.runId))) return []
+  return prepareMasterChapterPostAdoptionV1(input)
 }

@@ -1,6 +1,5 @@
 import type { TaskLengthPlanV1 } from '../../lib/types/agent-run'
-import { persistLongformContinuationV1, publishLongformContinuationV1 } from '../../lib/agent/longform-stage-queue'
-import { prepareMasterChapterPostAdoptionV1, recoverLongformPhaseHandoffV1 } from '../../lib/agent/master-post-adoption'
+import { persistLongformContinuationV1 } from '../../lib/agent/longform-stage-queue'
 import { revalidateDetailedOutlineCreativeDraftV1 } from '../../lib/agent/detailed-outline-copilot'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -29,6 +28,9 @@ import {
   type EndableWorldviewRunV2,
   type WorldviewReceivedRunV2,
   admitPreparedMasterPlanV2,
+  recoverMasterPhaseHandoffWithWorldviewV2 as recoverLongformPhaseHandoffV1,
+  publishMasterContinuationWithWorldviewV2 as publishLongformContinuationV1,
+  prepareMasterPostAdoptionWithWorldviewV2 as prepareMasterChapterPostAdoptionV1,
   runMasterWithWorldviewV2 as runDurableMasterAgentPlanV1,
   adoptMasterWithWorldviewV2 as commitMasterAgentCandidateAdoptionV1,
   rejectMasterWithWorldviewV2 as rejectMasterAgentCandidateV1,

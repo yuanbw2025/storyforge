@@ -207,6 +207,61 @@ describe.sequential('B02 C1–C6 · ordinary UI task to same-client durable cand
       worldGroupId: null, runId: run.id!, field: 'races' })).rejects.toThrow('字段')
   }, 30000)
 
+  it('ordinary hook restores an edited multi-round candidate after remount and completes adoption without a legacy chapter handoff or extra POST', async () => {
+    const f = await fixture(), project = (await db.projects.get(f.scope.projectId))!
+    const sent = http([40, 60, 80, 100].map(words => '甲'.repeat(words)))
+    let finished = false, adoption: Promise<unknown> | undefined
+    function FullOrdinaryControls() {
+      const copilot = useMasterCopilot({ project, worldGroupId: null })
+      const candidate = copilot.pendingCandidates.find(item => item.payload.worldviewField === 'worldOrigin')
+      return createElement(WorldviewAgentControls, { field: 'worldOrigin', project, activeGroupId: null, copilot, candidate,
+        hasOtherPendingCandidates: false, onRunningChange: running => { finished = !running },
+        onAdopted: async pending => { adoption = copilot.adoptCandidate(pending); await adoption } })
+    }
+    const mount = () => mountControls(createElement(ToastProvider, null, createElement(DialogProvider, null, createElement(FullOrdinaryControls))))
+    await mount(); await waitFor(() => expect(button('AI 生成').disabled).toBe(false))
+    await click('重写')
+    await act(async () => {
+      const select = document.querySelector<HTMLSelectElement>('[aria-label="篇幅安排"]')!
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(select, 'exact')
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await act(async () => {
+      const input = document.querySelector<HTMLInputElement>('[aria-label="目标字数"]')!
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '100')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await click('AI 生成'); await waitFor(() => expect(finished).toBe(true), { timeout: 15000 })
+    expect(sent.posts).toHaveLength(4)
+    const run = (await db.agentRuns.toArray())[0], rawBefore = (await db.agentRunArtifacts.toArray()).filter(row => row.artifactKind === 'raw-response')
+    const edited = '甲'.repeat(100) + '\n作者已经保存的补注。'
+    await act(async () => {
+      const editor = document.querySelector<HTMLTextAreaElement>('[aria-label="世界来源候选内容"]')!
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(editor, edited)
+      editor.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await waitFor(async () => {
+      const row = (await db.agentEvents.toArray()).find(event => event.kind === 'candidate')!
+      expect(JSON.parse(row.content).value).toBe(edited)
+      expect(button('采纳').disabled).toBe(false)
+    })
+    await unmountControls(); await mount()
+    await waitFor(() => expect(document.querySelector<HTMLTextAreaElement>('[aria-label="世界来源候选内容"]')?.value).toBe(edited), { timeout: 15000 })
+    expect(document.body.textContent).not.toContain('主 Agent 计划检查点')
+    expect(sent.posts).toHaveLength(4)
+    await click('采纳'); expect(adoption).toBeDefined(); await act(async () => { await adoption })
+    await waitFor(async () => expect((await readAgentRunV1(f.scope, run.id!)).projection.state).toBe('completed'))
+    expect((await db.worldviews.get(f.worldviewId))?.worldOrigin).toBe(edited)
+    expect(document.querySelector('[aria-label="世界来源候选内容"]')).toBeNull()
+    expect(document.body.textContent).not.toContain('章后流程尚未完成')
+    expect(await db.chapters.count()).toBe(0); expect(await db.agentRuns.count()).toBe(1)
+    expect((await db.agentRunArtifacts.toArray()).filter(row => row.artifactKind === 'raw-response')).toEqual(rawBefore)
+    const final = await readAgentRunV1(f.scope, run.id!)
+    expect(final.projection.terminalReceiptHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(final.events.filter(event => event.type === 'model.requested')).toHaveLength(4)
+    expect(sent.posts).toHaveLength(4)
+  }, 30000)
+
   it.each(['mixed','forged-v2','old-forged'] as const)('the real hook refuses %s plans before a Run or model POST',async kind=>{
     const f=await fixture(),project=(await db.projects.get(f.scope.projectId))!,sent=http(['must-not-send'])
     let plan=structuredClone(f.plan)
