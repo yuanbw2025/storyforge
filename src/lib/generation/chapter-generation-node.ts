@@ -2,6 +2,7 @@ import type { UseAIStreamReturn } from '../../hooks/useAIStream'
 import type { ChatMessage } from '../types'
 import type { AIRequestConfigResolution, StreamResult } from '../ai/client'
 import type { GenerationGateResult, GenerationNode } from './generation-node'
+import type { PreparedChapterStreamV2 } from '../agent/formal-ai-entry'
 
 export type ChapterGenerationOperation = 'generate' | 'continue'
 
@@ -28,6 +29,7 @@ export function createChapterGenerationNode(input: {
   generationOverrides?: { temperature?: number; maxTokens?: number }
   frozenResolution?: AIRequestConfigResolution
   streamResult?: StreamResult
+  preparedRequest?: PreparedChapterStreamV2
 }): GenerationNode<ChatMessage[], string> {
   const { operation, category, projectId, chapterIdentity, ai, gate } = input
   const modelOptions = input.generationOverrides ? { configOverrides: { ...input.generationOverrides } } : {}
@@ -37,9 +39,13 @@ export function createChapterGenerationNode(input: {
     editableInput: true,
     assembleInput: messages => messages.map(message => ({ ...message })),
     run: async messages => {
-      const output = category === 'chapter.content'
-        ? await ai.start(messages, undefined, { formalEntryId: 'prose.chapter.generate', category: 'chapter.content', projectId, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none', ...modelOptions }, input.frozenResolution, input.streamResult)
-        : await ai.start(messages, undefined, { formalEntryId: 'prose.chapter.continue', category: 'chapter.continue', projectId, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none', ...modelOptions }, input.frozenResolution, input.streamResult)
+      const output = input.preparedRequest
+        ? category === 'chapter.content'
+          ? await ai.start(messages, undefined, { formalEntryId: 'prose.chapter.generate.v2', category: 'chapter.content', projectId, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none', ...modelOptions }, input.frozenResolution, input.streamResult, input.preparedRequest)
+          : await ai.start(messages, undefined, { formalEntryId: 'prose.chapter.continue.v2', category: 'chapter.continue', projectId, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none', ...modelOptions }, input.frozenResolution, input.streamResult, input.preparedRequest)
+        : category === 'chapter.content'
+          ? await ai.start(messages, undefined, { formalEntryId: 'prose.chapter.generate', category: 'chapter.content', projectId, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none', ...modelOptions }, input.frozenResolution, input.streamResult)
+          : await ai.start(messages, undefined, { formalEntryId: 'prose.chapter.continue', category: 'chapter.continue', projectId, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none', ...modelOptions }, input.frozenResolution, input.streamResult)
       const completion = input.streamResult?.completion
       if (completion && completion !== 'complete') throw new InterruptedChapterGenerationErrorV1(output, completion)
       return output

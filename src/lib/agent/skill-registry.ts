@@ -3002,6 +3002,30 @@ export const AGENT_SKILLS = [
     regressionTests: ['R-LFQ6-scene-feedback', 'R-WEH0-skill-runtime-contract', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS9-information-boundary', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
+    version: 1, id: 'prose.generate.v2', agentId: 'prose', defaultForAgent: false,
+    label: '章节正文完整生成 V2', owner: 'prose-agent', requestPolicy: 'task-request-v2',
+    promptVersion: 'prose-task-full-length-v2', executionMode: 'generate', contextTaskKind: 'agent-prose',
+    readToolNames: [], contextSourceKeys: PROSE_CONTEXT_SOURCE_KEYS, optionalContextSourceKeys: [],
+    inputPolicy: PROSE_INPUT_POLICY, contextCompression: PROSE_COMPRESSION_POLICY,
+    // Finite material allocation is mandatory at execution; these compatibility
+    // values never authorize a model call or become a new text quota.
+    contextGateway: { ...PROSE_CONTEXT_GATEWAY_POLICY, retrievalBudgetMode: 'model-capacity', maxReadCalls: 1, maxRetrievedTokens: 1,
+      maxPlanningSteps: 1, maxPlanningModelTokens: 1, additionalReadToolNames: [] },
+    maxOutputTokens: null, writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'] }],
+    lastVerifiedAt: '2026-11-23', regressionTests: ['R-PROSE-LENGTH-V2-request', 'R-PROSE-LENGTH-V2-wire'],
+  },
+  {
+    version: 1, id: 'prose.continue.v2', agentId: 'prose', defaultForAgent: false,
+    label: '章节正文完整续写 V2', owner: 'prose-agent', requestPolicy: 'task-request-v2',
+    promptVersion: 'prose-task-full-length-v2', executionMode: 'continue', contextTaskKind: 'agent-prose',
+    readToolNames: [], contextSourceKeys: PROSE_CONTEXT_SOURCE_KEYS, optionalContextSourceKeys: [],
+    inputPolicy: PROSE_INPUT_POLICY, contextCompression: PROSE_COMPRESSION_POLICY,
+    contextGateway: { ...PROSE_CONTEXT_GATEWAY_POLICY, retrievalBudgetMode: 'model-capacity', maxReadCalls: 1, maxRetrievedTokens: 1,
+      maxPlanningSteps: 1, maxPlanningModelTokens: 1, additionalReadToolNames: [] },
+    maxOutputTokens: null, writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'] }],
+    lastVerifiedAt: '2026-11-23', regressionTests: ['R-PROSE-LENGTH-V2-request', 'R-PROSE-LENGTH-V2-wire'],
+  },
+  {
     version: 1,
     id: 'prose.generate',
     agentId: 'prose',
@@ -6334,9 +6358,41 @@ export function assertWorldviewFullCaptureProfileV2(definition: Parameters<typeo
   }
   return true
 }
+/** Only these two chapter operations can use task-request allocation. Frozen
+ * legacy prose Skills keep their previous permissions and request semantics. */
+export function assertProseTaskProfileV2(definition: Parameters<typeof assertCodexFullCaptureProfileV2>[0]): boolean {
+  if (!['prose.generate.v2', 'prose.continue.v2'].includes(definition.id)) return false
+  const eq = (value: unknown, expected: readonly unknown[]) => Array.isArray(value)
+    && value.length === expected.length && value.every((item, index) => item === expected[index])
+  const gate = definition.contextGateway
+  if (definition.agentId !== 'prose' || definition.owner !== 'prose-agent' || definition.defaultForAgent !== false
+    || definition.requestPolicy !== 'task-request-v2' || definition.promptVersion !== 'prose-task-full-length-v2'
+    || definition.executionMode !== (definition.id === 'prose.continue.v2' ? 'continue' : 'generate')
+    || definition.contextTaskKind !== 'agent-prose' || definition.maxOutputTokens !== null || ![1, 2].includes(definition.version)
+    || definition.version === 2 && (definition.sourceDefinitionVersion !== 1 || !eq(definition.resolvedToolSourceKeys, []))
+    || !eq(definition.contextSourceKeys, PROSE_CONTEXT_SOURCE_KEYS) || !eq(definition.optionalContextSourceKeys, [])
+    || !eq(definition.readToolNames, []) || !eq(definition.inputPolicy.sourceKeys, PROSE_INPUT_POLICY.sourceKeys)
+    || !eq(definition.contextCompression.sourceKeys, PROSE_CONTEXT_SOURCE_KEYS)
+    || !gate || gate.version !== 1 || gate.rollout !== 'required' || gate.allowOriginalRead !== true
+    || !eq(gate.providerSourceKeys, PROSE_CONTEXT_GATEWAY_POLICY.providerSourceKeys)
+    || !eq(gate.allowedResourceKinds, PROSE_CONTEXT_GATEWAY_POLICY.allowedResourceKinds)
+    || !eq(gate.allowedDepths, PROSE_CONTEXT_GATEWAY_POLICY.allowedDepths)
+    || !eq(gate.additionalReadToolNames, []) || gate.retrievalBudgetMode !== 'model-capacity' || gate.maxReadCalls !== 1 || gate.maxRetrievedTokens !== 1
+    || gate.maxPlanningSteps !== 1 || gate.maxPlanningModelTokens !== 1
+    || !eq(gate.requiredWriteTargets, ['chapters.content', 'chapters.wordCount'])
+    || definition.writeTargets.length !== 1 || definition.writeTargets[0].table !== 'chapters'
+    || 'adoptionExtension' in definition.writeTargets[0] || !eq(definition.writeTargets[0].fields, ['content', 'wordCount'])) {
+    throw new Error('正文 V2 完整请求 profile 无效。')
+  }
+  for (const state of ['empty', 'partial', 'complete'] as const) {
+    if (definition.inputPolicy.states[state]?.handling !== PROSE_INPUT_POLICY.states[state].handling) throw new Error('正文 V2 输入权限无效。')
+  }
+  return true
+}
 export function assertRegisteredFullCaptureProfileV2(definition: Parameters<typeof assertCodexFullCaptureProfileV2>[0]): boolean {
-  return definition.id === 'world-origin.worldview-field.v2'
-    ? assertWorldviewFullCaptureProfileV2(definition) : assertCodexFullCaptureProfileV2(definition)
+  return definition.id === 'world-origin.worldview-field.v2' ? assertWorldviewFullCaptureProfileV2(definition)
+    : ['prose.generate.v2', 'prose.continue.v2'].includes(definition.id) ? assertProseTaskProfileV2(definition)
+      : assertCodexFullCaptureProfileV2(definition)
 }
 
 export function validateAgentSkillDefinitionsV1(
@@ -6397,7 +6453,7 @@ export function validateAgentSkillDefinitionsV1(
     if (!/^\d{4}-\d{2}-\d{2}$/.test(skill.lastVerifiedAt)) {
       throw new Error(`Agent Skill ${skill.id} 的 lastVerifiedAt 无效`)
     }
-    if (skill.maxOutputTokens === null ? !['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk', 'world-origin.worldview-field.v2'].includes(skill.id) : !Number.isInteger(skill.maxOutputTokens) || skill.maxOutputTokens < 1) {
+    if (skill.maxOutputTokens === null ? !['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk', 'world-origin.worldview-field.v2', 'prose.generate.v2', 'prose.continue.v2'].includes(skill.id) : !Number.isInteger(skill.maxOutputTokens) || skill.maxOutputTokens < 1) {
       throw new Error(`Agent Skill ${skill.id} 的输出预算无效`)
     }
     if (skill.regressionTests.length === 0) throw new Error(`Agent Skill ${skill.id} 缺少回归证据`)
