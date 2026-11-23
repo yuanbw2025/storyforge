@@ -1,3 +1,77 @@
 .town-author-app .town-settings{grid-column:1/-1}.town-author-app .town-check{display:flex;align-items:center;gap:10px;padding:10px 0}.town-author-app .lf-paper fieldset{min-width:0;margin:16px 0}.town-author-app [hidden]{display:none!important}.town-author-app .town-runtime{min-width:0;border-radius:28px;overflow:hidden;background:var(--skin-paper, #f9f8f1);border:1px solid var(--skin-border, #d2dfce);--color-bg-base:#f9f8f1;--color-bg-surface:#f5f6ec}.town-runtime>div{flex-direction:column!important}.town-runtime>div>aside{width:100%!important;border-bottom:1px solid var(--skin-border, #d2dfce)}.town-runtime button{border-radius:14px}.town-runtime article{border-radius:20px}.town-runtime h1,.town-runtime h2{font-family:var(--lf-serif)}.town-runtime .town-history-grid{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}.town-settings textarea{min-height:110px}.town-object{margin:14px 0;padding:18px;border:1px solid var(--skin-border, #d2dfce);border-radius:18px}.town-author-app pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}.town-author-app fieldset:disabled{opacity:.65}@media(max-width:700px){.town-author-app .lf-paper{padding:20px}.town-runtime main{padding:12px}.town-runtime .town-history-grid{grid-template-columns:1fr}}
 
 .town-object table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}.town-object th,.town-object td{text-align:left;padding:10px;border-bottom:1px solid var(--skin-border, #d2dfce)}.town-object ul{padding-left:20px;list-style:disc}.town-object-value{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8}
+
+/* BUG027: town-private authoring shell. Do not resize the map or transcript. */
+.town-author-app .lf-heading{padding:12px 20px 0}
+.town-author-app .town-heading-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px;min-width:0}
+.town-author-app .town-heading-line h2{margin:0 0 8px}
+.town-author-app .town-current-title{min-width:0;overflow-wrap:anywhere;font-size:16px;color:var(--skin-muted, #537765)}
+.town-author-app .lf-body{padding:12px 20px;gap:16px}
+.town-author-app .avg-phases{gap:8px;margin:0 0 8px}
+.town-author-app .avg-phases button{padding:7px 14px}
+.town-author-app .lf-paper{padding:16px;margin-bottom:12px;border-radius:16px;min-width:0;overflow-wrap:anywhere}
+.town-author-app .lf-paper h3{margin-bottom:8px}
+.town-author-app .lf-paper p{margin-bottom:8px}
+.town-author-app .lf-paper fieldset{margin:10px 0}
+.town-author-app .lf-current{overflow-wrap:anywhere}
+.town-author-app .avg-actions{gap:8px;margin:10px 0;flex-wrap:wrap}
+.town-author-app .lf-action{padding:9px 16px}
+.town-author-app .avg-form{gap:14px;min-width:0}
+.town-author-app .town-plan-form>label{grid-column:1/-1;max-width:560px}
+.town-author-app .town-settings>p,.town-author-app .town-settings>label:has(textarea){grid-column:1/-1}
+.town-author-app .town-settings>fieldset{align-self:start}
+.town-author-app .town-check{padding:6px 0}
+.town-author-app .town-settings textarea{min-height:110px}
+.town-author-app .town-settings>label.town-name-field{grid-column:auto}
+.town-author-app .town-settings .town-name-field textarea{min-height:52px;height:52px}
+.town-author-app .lf-content :is(input,textarea,select){max-width:100%;box-sizing:border-box}
+.town-author-app .avg-source{gap:12px;flex-wrap:wrap;padding:10px 0}
+.town-author-app .avg-source>div{min-width:0;flex:1 1 220px}
+.town-author-app .avg-source h4{overflow-wrap:anywhere}
+.town-author-app .avg-source>.lf-action{flex-shrink:0}
+.town-author-app .avg-consult{gap:14px;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)}
+.town-author-app .avg-consult>*{min-width:0}
+.town-author-app .avg-production>div{padding:14px;border-radius:16px}
+.town-author-app .town-object{padding:12px;margin:10px 0;border-radius:12px;min-width:0}
+.town-author-app .town-object-value{max-width:100%;overflow-x:auto}
+.town-author-app .lf-library-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:12px;margin-bottom:12px}
+.town-author-app .lf-library-grid article{min-width:0;margin:0;overflow-wrap:anywhere}
+.town-author-app .lf-library-grid :is(img,audio){max-width:100%;max-height:240px;object-fit:contain}
+.town-author-app .town-library-tools{margin-bottom:12px;min-width:0}
+.town-author-app .town-library-tools .avg-actions{margin:0 0 8px}
+.town-author-app .town-library-tools input[aria-label="搜索小镇"]{width:320px;flex:0 1 320px;margin:0}
+.town-author-app .town-library-hint,.town-author-app .town-library-empty{font-size:14px;line-height:1.7;margin:6px 0}
+.town-author-app .town-library-empty .lf-action{margin-left:8px}
+.town-author-app .town-library-card{display:flex;flex-direction:column;align-items:start}
+.town-author-app .town-library-card h3{overflow-wrap:anywhere}
+.town-author-app .town-library-card .avg-actions{margin-top:auto;padding-top:8px}
+/* Restyle the unchanged shared gallery only within the town's own wrapper. */
+.town-author-app .town-community [data-testid="community-prototype-gallery"]{margin:0}
+.town-author-app .town-community [data-testid="community-prototype-gallery"]>header{padding:12px;gap:10px}
+.town-author-app .town-community [data-testid="community-prototype-gallery"]>div.grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,480px),1fr));padding:12px;gap:12px}
+.town-author-app .town-community article{display:grid;grid-template-columns:144px minmax(0,1fr);align-items:start;min-width:0}
+.town-author-app .town-community article>img{width:100%;height:auto;aspect-ratio:4/3;object-fit:cover}
+.town-author-app .town-community article>div{min-width:0;padding:12px}
+.town-author-app .town-community article>div>div.grid{margin-top:8px;gap:6px}
+.town-author-app .town-community article>div>div.grid img{max-height:64px;object-fit:cover}
+.town-author-app .town-community article :is(strong,p,li,small){overflow-wrap:anywhere}
+.town-author-app .town-community :is(p,li,small,header>span){font-size:13px;line-height:1.65}
+.town-author-app .town-community article ul{margin-top:8px;grid-template-columns:minmax(0,1fr)}
+.town-author-app .town-community article button{font-size:14px;margin-top:10px}
+@media(max-width:1000px){
+  .town-author-app .avg-consult{grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:650px){
+  .town-author-app .lf-heading{padding:10px 12px 0}
+  .town-author-app .lf-body{padding:10px 12px;gap:10px}
+  .town-author-app .lf-paper{padding:14px}
+  .town-author-app .lf-mobile-controls{padding:0 0 4px}
+  .town-author-app .avg-form{grid-template-columns:minmax(0,1fr)}
+  .town-author-app .town-community article{grid-template-columns:minmax(0,1fr)}
+  .town-author-app .town-library-tools input[aria-label="搜索小镇"]{width:auto;flex:1 1 180px}
+  .town-author-app .town-community [data-testid="community-prototype-gallery"]>header{display:grid;grid-template-columns:20px minmax(0,1fr)}
+  .town-author-app .town-community [data-testid="community-prototype-gallery"]>header>span{grid-column:2;justify-self:start}
+  .town-author-app .town-community article>img{height:80px;aspect-ratio:auto}
+  .town-author-app .town-community article>div>div.grid img{max-height:52px}
+}
