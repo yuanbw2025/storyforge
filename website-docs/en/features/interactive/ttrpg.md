@@ -1,9 +1,13 @@
 ---
 productId: upper.ttrpg
 status: preview
-lastVerified: 2026-11-13
+lastVerified: 2026-11-23
 ---
 # TTRPGs and AI game mastering
+
+## November 23: full intent-candidate responses
+
+New open-TTRPG intent candidates retain complete returned original/editable text instead of only the first 120k characters. Historical bytes/hashes stay unchanged. Invalid long replies remain reviewable, reload does not redispatch, and manual clarification preserves the model original. Restoring full backup content grants no execution authority; semantic parsing, rules and author confirmation still apply. Based on #571; broader semantic-intent follow-up #574 remains unmerged and is not counted here.
 
 ## November 19: draft deletion and libraries
 

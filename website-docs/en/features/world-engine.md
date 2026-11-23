@@ -1,9 +1,15 @@
 ---
 productId: world-engine
 status: released
-lastVerified: 2026-11-13
+lastVerified: 2026-11-23
 ---
 # World engine
+
+## November 23: compiling long sealed-world sources
+
+Mainline world compilation no longer rejects full sources, incremental baselines or result checkpoints at the former 32 MiB content cap. Sealing/publication still require author action. Actual transfer/storage/compilation failures preserve checkpoints and old releases for cancellation or explicit recovery, without hidden resend or silently changing executors after a dispatched Worker fails.
+
+Compilation remains deterministic with no model call. Source/result hashes, versions and final-write checks remain; original works, world ownership and media are unchanged. Sharing packages retain independent capacity/structure rules. Large-package engineering checks are not memory/performance acceptance on every device. Based on #575.
 
 ## November 19: prioritize the editor
 
