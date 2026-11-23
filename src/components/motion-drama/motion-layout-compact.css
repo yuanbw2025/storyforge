@@ -1,0 +1,107 @@
+/* 024: scoped to the motion-materials UI; no shared geometry or product logic. */
+.motion-materials-app .lf-content { overflow: visible; }
+.motion-materials-app.motion-materials-app .lf-content:has(>.mm-subnav) { gap: 12px; }
+.motion-materials-app :is(section, article, fieldset, label, main) { min-width: 0; }
+.motion-materials-app :is(h2, h3, h4, h5, p, small, summary) { overflow-wrap: anywhere; }
+.motion-materials-app .lf-content :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea) { padding: 7px 10px; }
+.motion-materials-app select { min-width: 0; max-width: 28rem; text-overflow: ellipsis; }
+.motion-materials-app .motion-hero { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 18px; padding: 14px 16px; border-radius: 14px; }
+.motion-materials-app .motion-hero h2 { font-size: 22px; line-height: 1.4; margin: 0; }
+.motion-materials-app .motion-hero-tags { margin-top: 8px; gap: 6px; }
+.motion-materials-app .motion-hero-tags span { font-size: 13px; padding: 3px 8px; }
+.motion-materials-app .motion-episode-switch { border: 0; padding: 0; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.motion-materials-app .motion-episode-switch select { width: auto; max-width: 10rem; font-size: 14px; }
+.motion-materials-app .motion-source-state { font-size: 13px; }
+.motion-materials-app .motion-workbench { padding: 12px 0; }
+.motion-materials-app .motion-stage-head { flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.motion-materials-app .motion-stage-head>div { min-width: 0; }
+.motion-materials-app .motion-stage-head h3 { font-size: 22px; margin: 0; }
+.motion-materials-app .motion-stage-head p { margin: 5px 0 0; font-size: 14px; }
+.motion-materials-app .motion-stage-head .motion-primary { padding: 8px 14px; }
+.motion-materials-app .mm-edit-actions { flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.motion-materials-app .mm-edit-actions button { margin: 0; padding: 8px 14px; }
+.motion-materials-app .mm-edit-actions small { font-size: 13px; }
+.motion-materials-app :is(.motion-bible-grid article, .motion-source-summary, .motion-assets article, .motion-storyboard article, .motion-provider-grid article, .motion-execution-pack, .motion-script-scene, .motion-quality-score, .motion-hook, .motion-beats article) { padding: 14px; border-radius: 14px; }
+.motion-materials-app .motion-source-summary h4 { margin: 8px 0; }
+.motion-materials-app .motion-source-summary p { font-size: 14px; }
+.motion-materials-app .motion-source-summary dl { flex-wrap: wrap; gap: 12px 20px; }
+.motion-materials-app .motion-source-summary :is(dt, dd) { font-size: 14px; }
+.motion-materials-app .mm-source-units { margin-top: 12px; }
+.motion-materials-app .mm-source-units article { padding: 10px 0; border-bottom: 1px solid var(--skin-border); }
+.motion-materials-app .mm-source-units h4 { margin: 0 0 6px; }
+.motion-materials-app .motion-bible-grid { gap: 12px; }
+.motion-materials-app .motion-assets { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.motion-materials-app .motion-asset-copy { padding: 12px 0 0; }
+.motion-materials-app .motion-asset-copy h4 { margin: 6px 0; }
+.motion-materials-app .motion-asset-copy p { font-size: 14px; }
+.motion-materials-app .motion-asset-visual.audio audio { max-width: 100%; }
+.motion-materials-app .mm-material-filters, .motion-materials-app .mm-library-tools { gap: 10px; margin: 12px 0; }
+.motion-materials-app .mm-material-filters input { flex: 0 1 24rem; min-width: 0; }
+.motion-materials-app .motion-rights { margin: 12px 0; padding: 12px; border-radius: 12px; }
+.motion-materials-app .motion-storyboard>article { margin: 12px 0; }
+.motion-materials-app .motion-storyboard h4 { margin: 6px 0; }
+.motion-materials-app .motion-storyboard p { font-size: 14px; }
+.motion-materials-app .mm-frames { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; margin-top: 12px; }
+.motion-materials-app .mm-frames select { min-width: 0; max-width: 100%; }
+.motion-materials-app .mm-frame-empty { min-height: 120px; }
+.motion-materials-app .motion-upload { overflow-wrap: anywhere; }
+.motion-materials-app .motion-scenes>article { padding: 14px; margin-bottom: 12px; }
+.motion-materials-app .motion-scenes :is(header, footer) { flex-wrap: wrap; gap: 8px; }
+.motion-materials-app .motion-scenes h4 { overflow-wrap: anywhere; }
+.motion-materials-app .mm-ir-list article, .motion-materials-app .mm-episode-grid article, .motion-materials-app .mm-tasks, .motion-materials-app .mm-release { padding: 14px; margin-bottom: 12px; border-radius: 14px; }
+.motion-materials-app .mm-ir-list h4, .motion-materials-app .mm-episode-grid h4 { font-size: 20px; margin: 0 0 8px; }
+.motion-materials-app .mm-ir-list h5 { margin-top: 12px; }
+.motion-materials-app .mm-episode-grid { gap: 12px; }
+.motion-materials-app .motion-provider-grid { gap: 12px; }
+.motion-materials-app .motion-provider-grid article>div { flex-wrap: wrap; }
+.motion-materials-app .motion-execution-pack>header { padding: 14px; gap: 12px; flex-wrap: wrap; }
+.motion-materials-app .motion-execution-shots { padding: 12px; gap: 12px; }
+.motion-materials-app .motion-execution-shots>article { padding: 12px; }
+.motion-materials-app .motion-execution-shots pre { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+.motion-materials-app .motion-run-checklist { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); padding: 12px 12px 12px 30px; }
+.motion-materials-app .motion-quality-score { gap: 12px; }
+.motion-materials-app .motion-quality-score dl { gap: 10px; }
+.motion-materials-app .motion-quality-score :is(dt, dd) { overflow-wrap: anywhere; }
+.motion-materials-app .motion-author-note { padding: 12px; gap: 10px; }
+.motion-materials-app .motion-author-note label { min-width: 0; }
+.motion-materials-app .mm-fields { gap: 12px 16px; margin: 12px 0; }
+.motion-materials-app .mm-fields>.mm-fields { grid-column: 1 / -1; margin: 0; }
+.motion-materials-app .mm-fields label { min-width: 0; gap: 5px; }
+.motion-materials-app .mm-fields :is(input, select, textarea) { width: 100%; }
+.motion-materials-app .mm-field-list { padding: 12px !important; border-radius: 12px; }
+.motion-materials-app .mm-field-item { padding: 10px 0; }
+.motion-materials-app .mm-field-list button { padding: 7px 12px; margin: 6px 6px 0 0; }
+.motion-materials-app .motion-empty { min-height: 140px; padding: 18px; }
+.motion-materials-app :is(.motion-candidate, .motion-prompt-library) { border-radius: 14px; padding: 0; }
+.motion-materials-app .motion-prompt-library>textarea { margin: 12px 14px; width: calc(100% - 28px); }
+.motion-materials-app .motion-prompt-library>label { padding: 0 14px; }
+.motion-materials-app :is(.motion-candidate, .motion-prompt-library) :is(header, footer) { padding: 12px 14px; gap: 10px; flex-wrap: wrap; }
+.motion-materials-app .motion-candidate h3 { font-size: 22px; margin: 5px 0; }
+.motion-materials-app .mm-candidate-content { padding: 12px 14px; }
+.motion-materials-app .motion-prompt-controls { min-width: 0; padding: 12px 14px; gap: 10px; }
+.motion-materials-app .motion-prompt-controls select { max-width: 100%; width: 100%; }
+.motion-materials-app .motion-prompt-meta { padding: 0 14px; flex-wrap: wrap; gap: 8px; }
+.motion-materials-app .mm-books { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 14px; }
+.motion-materials-app .mm-books .lf-paper { padding: 16px; }
+.motion-materials-app .mm-cover { padding: 16px; min-height: 110px; border-radius: 12px; }
+.motion-materials-app .mm-cover h3 { overflow-wrap: anywhere; margin: 8px 0; }
+.motion-materials-app .mm-library-tools input { flex: 0 1 24rem; min-width: 0; }
+.motion-materials-app .mm-book-actions { gap: 10px; margin: 12px 0 0; }
+/* Validation errors must stay actionable above the candidate/prompt modal backdrop. */
+.motion-materials-app .motion-error { z-index: 1300; max-width: calc(100vw - 24px); overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .motion-materials-app .motion-hero { grid-template-columns: minmax(0, 1fr); padding: 12px; gap: 10px; }
+  .motion-materials-app .motion-episode-switch { justify-content: flex-start; }
+  .motion-materials-app .motion-stage-head { flex-direction: row; align-items: center; }
+  .motion-materials-app .motion-workbench { padding: 12px 0; }
+  .motion-materials-app .motion-bible-grid { grid-template-columns: minmax(0, 1fr); }
+  .motion-materials-app .motion-quality-score { grid-template-columns: minmax(0, 1fr); }
+  .motion-materials-app .motion-quality-score dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .motion-materials-app .motion-execution-shots>article>header { grid-template-columns: minmax(0, 1fr); }
+  .motion-materials-app .motion-execution-shots>article>header>em { grid-column: 1; }
+  .motion-materials-app .motion-slot-map>div { grid-template-columns: 24px minmax(0, 1fr); }
+  .motion-materials-app .motion-slot-map>div>p { grid-column: 2; }
+  .motion-materials-app .motion-slot-map>div>em { grid-column: 2; }
+  .motion-materials-app .motion-handoff { grid-template-columns: minmax(0, 1fr); }
+  .motion-materials-app .motion-dialogue p { grid-template-columns: minmax(0, 1fr); }
+}
