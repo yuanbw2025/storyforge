@@ -1,9 +1,13 @@
 ---
 productId: independent.shortform
 status: released
-lastVerified: 2026-09-20
+lastVerified: 2026-11-23
 ---
 # Short fiction
+
+## November 23: compact tabs and title editing
+
+Edit the work title/synopsis in the header toolbar with existing save handlers. Ten authoring tabs and secondary version-backup, additional-requirement and find/replace pages use tighter spacing. Chapter generation uses a compact dropdown and mobile forms use one column. Candidate editing/reload recovery/explicit adoption retain existing paths; layout changes do not generate or rewrite prose. Based on #580.
 
 For standalone stories of roughly 5,000–25,000 Chinese characters across 3–8 chapters. Entry: Short fiction → Library → New short fiction (短篇 → 作品库 → 新建短篇). The current engineering loop includes creation, review, targeted rewriting, versions, and export.
 

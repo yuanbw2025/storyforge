@@ -1,5 +1,13 @@
 # Multiple worlds, locations, and maps
 
+## November 23: setting-field length and recovery
+
+World-setting fields admitted to V2 use complete registered sources and support Automatic/task-based, Approximate, Exact or Range length intent. Expansion uses the counting-basis choices shown in the panel. Check actual panel counts rather than model-reported word counts.
+
+When explicit intent is unmet, internal revisions must improve deviation. Complete rounds/the best draft remain with actual round/count indicators, without a fixed revision-count quota. No progress or unknown outcomes retain existing content; unknown requests are not automatically resent. Review/edit unmet drafts before explicit adoption or rejection. Recovery uses the original setting-task identity and preserves raw responses. Received text that failed candidate validation is view-only, not adoptable. Based on #578.
+
+This scope covers setting fields, not a completed redesign of prose, post-chapter work, all products or every source limit. Historical runs/node compatibility remain, as do author confirmation, scope/version and stale checks.
+
 ## November 21: saving and reading five natural-world fields
 
 Longform World structure, Territorial dimensions, Landform distribution, Mountains/rivers and Regional climate display actual local-save status. Saved locally appears only after a committed database write and matching readback. New drafts, IME tail events and late acknowledgements cannot falsely signal success; failed saves retain text for retry. Based on #511.

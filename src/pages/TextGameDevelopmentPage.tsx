@@ -1,4 +1,5 @@
 import '../components/text-game/adventure-showcase.css'
+import '../components/text-game/open-world-layout.css'
 import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import AdventureProductFrame from '../components/text-game/AdventureProductFrame'
@@ -339,6 +340,6 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
     </section>}
   </>
   return openWorld
-    ? <ProductFrame product={base} title={title} page={page.label} navigation={navigation}>{studio}</ProductFrame>
+    ? <ProductFrame product={base} title={title} page={page.label} navigation={navigation} className="open-world-product-page">{studio}</ProductFrame>
     : adventureFrame(<ErrorBoundary key={`${pageId}:${projectId}:${workId}`}>{studio}</ErrorBoundary>)
 }

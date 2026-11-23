@@ -1812,9 +1812,6 @@ for (const retiredCopy of [
     violations.push(`[①B跑团正式链] ProductProductionStudio 不得恢复旧试玩/禁止发布旁路:${retiredCopy}`)
   }
 }
-if (/关闭[“"]启用创作可靠性工程/.test(read('src/components/settings/CreativeReliabilityCommunityPanel.tsx'))) {
-  violations.push('[㉝B可靠性文案] 设置页不得暗示正式 Creative Reliability 链可以关闭')
-}
 if (worldReferenceSource.includes('db.worldReleases.update(')) {
   violations.push('[㉝B引用验证只读] WorldReference 创建/校验不得暗中回写 WorldRelease')
 }

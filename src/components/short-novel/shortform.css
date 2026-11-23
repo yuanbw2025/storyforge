@@ -20,3 +20,63 @@
 .shortform-app .short-stage-main .short-fields input,.shortform-app .short-stage-main .short-fields textarea,.shortform-app .short-stage-main .short-fields select,.shortform-app .short-stage-heading textarea{font-family:inherit;font-size:15px;line-height:1.85;background:var(--skin-elevated, #fffef9);border-radius:13px;padding:13px 15px}
 .shortform-app .lf-sidebar nav button[aria-current]{background:linear-gradient(95deg,var(--skin-selected, #cbdcc6),var(--skin-selected, #e0e5ce));color:var(--skin-selected-ink, #244842)}
 @media(max-width:650px){.shortform-app .short-studio-top{padding:18px}.shortform-app .short-studio-top h2{font-size:24px}.shortform-app .short-studio button{font-size:13px}.shortform-app .short-stage-main .short-fields textarea{min-height:110px}}
+
+/* Short-form workspace: one page heading and a compact authoring surface. */
+.shortform-app .lf-heading{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;padding:10px 18px;border-bottom:1px solid var(--border)}
+.shortform-app .lf-heading h2{font-size:22px;margin:0;flex-shrink:0}
+.short-work-tools{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;margin-left:auto}
+.short-work-tools>span{max-width:24ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted)}
+.shortform-app .lf-action{padding:6px 12px;border-radius:8px;font-size:13px}
+.shortform-app .lf-body{padding:12px 18px;gap:12px}
+.shortform-app .lf-paper{padding:16px;border-radius:12px;margin-bottom:12px}
+.shortform-app .lf-paper h3{font-size:19px;margin-bottom:10px}
+.shortform-app .lf-paper p{margin-bottom:10px;line-height:1.65;overflow-wrap:anywhere}
+.shortform-app .short-studio-top{padding:6px 0;margin-bottom:6px;border:0;border-radius:0;background:transparent;gap:12px;flex-direction:row}
+.shortform-app .short-studio-top p{font-size:13px;margin:0}
+.shortform-app .short-progress{display:flex;align-items:center;gap:10px;width:auto;max-width:100%;text-align:left}
+.shortform-app .short-progress>div{width:80px;margin:0}
+.shortform-app .short-progress small{font-size:11px}
+.shortform-app .short-stage-heading,.shortform-app .short-json-editor,.shortform-app .short-candidate,.shortform-app .short-chapter-run,.shortform-app .short-review,.shortform-app .short-release,.shortform-app .short-task-list,.shortform-app .short-embedded{padding:14px;border-radius:12px;margin:0 0 12px}
+.shortform-app .short-stage-tools{padding:0;margin:0 0 8px;border:0;background:transparent;box-shadow:none;gap:8px;align-items:center}
+.shortform-app .short-stage-tools:has(>.short-instruction:only-child){display:block}
+.shortform-app .short-stage-tools:empty{display:none}
+.short-instruction{width:100%;min-width:0}
+.short-instruction summary{cursor:pointer;color:var(--text-muted);font-size:13px;padding:4px 0}
+.shortform-app .short-instruction label{width:100%;margin-top:6px}
+.shortform-app .short-instruction textarea{min-height:72px;resize:vertical}
+.shortform-app .short-studio button{padding:6px 12px;min-height:34px;border-radius:8px}
+.shortform-app .short-fields{gap:12px 16px;margin:12px 0}
+.shortform-app .short-fields label{gap:5px;font-size:13px;min-width:0}
+.shortform-app .short-fields .wide{grid-column:auto}
+.shortform-app .short-fields [data-short-field=premise],.shortform-app .short-fields [data-short-field=storyPromise],.shortform-app .short-fields [data-short-field=content],.shortform-app .short-fields [data-short-field=summary],.shortform-app .short-fields [data-short-field=evidence]{grid-column:1/-1}
+.shortform-app .short-fields input,.shortform-app .short-fields select,.shortform-app .short-fields textarea,.shortform-app .short-stage-main .short-fields input,.shortform-app .short-stage-main .short-fields select,.shortform-app .short-stage-main .short-fields textarea,.shortform-app .short-stage-heading textarea{padding:8px 10px;border-radius:8px;font-size:14px;line-height:1.65}
+.shortform-app .short-fields textarea,.shortform-app .short-stage-main .short-fields textarea{min-height:80px;resize:vertical}
+.shortform-app .short-candidate .short-fields textarea[aria-label="候选正文"]{min-height:420px}
+.shortform-app .short-chapter-card{padding:12px 0}
+.shortform-app .short-chapter-card h4{font-size:17px;margin:0 0 8px}
+.shortform-app .short-chapter-run>div{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-top:8px}
+.shortform-app .short-chapter-run>header,.shortform-app .short-json-editor>header,.shortform-app .short-review>header,.shortform-app .short-release>header,.shortform-app .short-candidate>header{flex-wrap:wrap}
+.shortform-app .short-row-actions,.shortform-app .short-choose{gap:10px;margin-top:10px}
+.shortform-app .short-settings>div{padding:0;height:auto;overflow:visible}
+.shortform-app .lf-content>details{margin-top:12px}
+.shortform-app .short-chapter-run:has(.short-chapter-picker){display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px}
+.shortform-app .short-chapter-run:has(.short-chapter-picker)>header{flex:1 1 100%}
+.shortform-app .short-chapter-run>.short-chapter-picker{display:block;flex:1;min-width:0;margin:0}
+.short-chapter-picker label{display:flex;align-items:center;gap:8px}
+.short-chapter-picker select{min-width:0;flex:1}
+.shortform-app .short-chapter-run:has(.short-chapter-picker)>footer{margin:0}
+.shortform-app .short-embedded>header{justify-content:flex-start;margin-bottom:8px}
+@media(max-width:650px){
+  .shortform-app .lf-heading{padding:8px 12px;gap:6px 10px}
+  .shortform-app .lf-heading h2{font-size:20px}
+  .shortform-app .lf-mobile-controls{padding:0;margin-left:auto}
+  .short-work-tools{order:3;flex-basis:100%;margin-left:0;font-size:12px}
+  .short-work-tools>span{max-width:100%;flex:1 1 100%}
+  .shortform-app .lf-body{padding:10px}
+  .shortform-app .short-fields{grid-template-columns:minmax(0,1fr);gap:10px}
+  .shortform-app .short-progress{flex-wrap:wrap;justify-content:flex-end;gap:5px;font-size:11px}
+  .shortform-app .short-progress>div{width:50px}
+  .shortform-app .short-stage-heading,.shortform-app .short-json-editor,.shortform-app .short-candidate,.shortform-app .short-chapter-run,.shortform-app .short-review,.shortform-app .short-release,.shortform-app .short-task-list,.shortform-app .short-embedded{padding:12px}
+  .shortform-app .short-stage-tools{padding:0;flex-direction:row}
+  .shortform-app .short-embedded .sf-step-sidebar{max-height:120px}
+}

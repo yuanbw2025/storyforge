@@ -1,5 +1,13 @@
 # Import existing fiction and references
 
+## November 23: full-source entry extraction
+
+Longform setting-to-entry extraction uses recoverable V2 runs: send complete source first, splitting frozen paragraph units only on actual capacity/incomplete-output evidence. A root aggregates only genuinely dispatched, verifiable sources. Field conflicts, cross-run or forged sources block progress; established Canon is not automatically overwritten.
+
+Candidates, author edits and raw responses share one evidence chain. Reload recovery of paid responses does not resend. New tasks and unsent legacy-template requests are checked separately; old unknown requests are not resent and originals remain unchanged. Resolve cross-page task exclusion before explicitly abandoning/restarting. Based on #567.
+
+Shared candidate paths retain valid long fragments, assumptions, references and review issues without old count caps losing tails. Identity/reference/blocking/adoption checks remain. Independent product limits are not universally removed. Based on #565/#573.
+
 ## November 21: complete-request preflight
 
 Document parsing checks the rendered prompt, category catalog, prior context and provider options against capacity, not only source length. Rejection retains original text and frozen recovery ranges. New range-planning/workspace-backup-root/import-review pure contracts are foundations without a production import writer, not a new World-only import entry. Based on #538/#562.
