@@ -92,6 +92,8 @@ import RagEntrySelector from '../retrieval/RagEntrySelector'
 import { useDialog } from '../shared/Dialog'
 import { useToast } from '../shared/Toast'
 import { useActiveWork } from '../../hooks/useActiveWork'
+import { useNavigate } from 'react-router'
+import { isLongformMarkdownAdmissionV1, resolveNodeAuthoringChapterHandoffV1 } from '../../lib/authoring/longform-markdown-admission'
 
 const NODE_WIDTH = 238
 const NODE_HEIGHT = 168
@@ -551,6 +553,7 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
   const activeWork = useActiveWork(props.project)
   const dialog = useDialog()
   const toast = useToast()
+  const navigate = useNavigate()
   const storedFlows = useNodeFlowStore(state => state.flows)
   const loadedProjectId = useNodeFlowStore(state => state.projectId)
   const loadedWorkId = useNodeFlowStore(state => state.workId)
@@ -578,6 +581,7 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
   const abortRef = useRef<AbortController | null>(null)
   const [mobilePane, setMobilePane] = useState('canvas')
   const [saveError, setSaveError] = useState('')
+  const [handoffError, setHandoffError] = useState('')
   const [adopting, setAdopting] = useState(false)
   const adoptingRef = useRef(false)
   const dirtyRef = useRef(false)
@@ -1022,6 +1026,32 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
       ?? Math.max(0, selectedCandidate.variants?.findIndex(item => item === selectedCandidate.output) ?? 0)
     : 0
   const selectedArtifact = selectedCandidate?.creativeArtifacts?.[selectedVariantIndex]
+  const longformMarkdownAdmitted = isLongformMarkdownAdmissionV1({
+    workspacePurpose: props.project.workspacePurpose,
+    workKind: activeWork?.kind,
+    novelProfile: activeWork?.novelProfile,
+  })
+  const selectedNodeIsAdoptedProse = selectedCandidate?.status === 'adopted' && selectedCandidate.domain?.kind === 'prose'
+  const selectedNodeIsLiveChapterBinding = selectedNode?.binding?.mode === 'live'
+  const canOpenChapterInEditor = Boolean(scope && canAuthor && longformMarkdownAdmitted && selectedNode && (selectedNodeIsAdoptedProse || selectedNodeIsLiveChapterBinding))
+  const openChapterInEditor = async () => {
+    if (!scope || !selectedNode || !activeWork) return
+    setHandoffError('')
+    try {
+      // 跳转前先落盘待编辑，失败即阻断，不带着未保存草稿切章。
+      await flushPendingEditsV1()
+      const target = await resolveNodeAuthoringChapterHandoffV1({
+        scope,
+        project: props.project,
+        work: activeWork,
+        node: selectedNode,
+        candidate: selectedCandidate ?? null,
+      })
+      navigate(target)
+    } catch (cause) {
+      setHandoffError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }
   return <div data-node-pane={mobilePane} className="node-workspace flex h-[760px] min-h-[560px] max-h-[calc(100vh-180px)] flex-col overflow-hidden bg-bg-base">
     {!canAuthor && <p role="status" className="border-b border-border p-3 text-sm text-text-secondary">节点创作尚未开放；当前为只读查看，可恢复已保存结果和原回执。</p>}
     <header className="node-workspace-header flex min-h-12 shrink-0 items-center gap-2 border-b border-border bg-bg-surface px-3"><Workflow className="h-4 w-4 text-accent" /><input disabled={!canAuthor} aria-label="节点图名称" value={draft.name} onChange={event => { setDraft({ ...draft, name: event.target.value }); setDirty(true); dirtyRef.current = true }} className="node-flow-name w-56 rounded border border-transparent bg-transparent px-2 py-1 text-sm font-medium text-text-primary hover:border-border focus:border-accent focus:outline-none" /><span className="text-[10px] text-text-muted">{saving ? '保存中…' : dirty ? '待保存' : '已保存'}</span><div className="ml-auto flex items-center gap-2"><button type="button" disabled={!canAuthor} onClick={() => void save(true).catch(() => undefined)} className="inline-flex items-center gap-1 rounded px-2 py-1.5 text-xs text-text-secondary hover:bg-bg-hover"><Save className="h-3.5 w-3.5" />保存</button>{isRunning ? <><button type="button" onClick={pauseRun} title="暂停运行" aria-label="暂停运行" className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-1.5 text-xs text-amber-800"><Pause className="h-3.5 w-3.5" />暂停</button><button type="button" onClick={cancelRun} title="取消运行" aria-label="取消运行" className="inline-flex items-center gap-1 rounded bg-error/10 px-2 py-1.5 text-xs text-error"><CircleStop className="h-3.5 w-3.5" />取消</button></> : run?.status === 'running' ? <button type="button" onClick={() => void recoverRun()} className="rounded bg-accent px-3 py-1.5 text-xs text-white">恢复已保存结果</button> : run?.status === 'paused' || run?.status === 'failed' ? <>{recoverableFieldPrefix && <button type="button" onClick={() => void recoverRun()} className="rounded bg-accent px-3 py-1.5 text-xs text-white">恢复已保存结果</button>}<button type="button" disabled={!canAuthor} onClick={() => void runGraph(undefined, 'resume')} className="inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"><RotateCcw className="h-3.5 w-3.5" />继续运行</button></> : <button type="button" disabled={!canAuthor} onClick={() => void runGraph()} className="inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"><Play className="h-3.5 w-3.5" />运行全部</button>}</div></header>
@@ -1048,6 +1078,7 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
             <div className="mb-2 flex items-center justify-between">
               <span className="text-[10px] font-semibold text-text-secondary">候选输出</span>
               <div className="flex items-center gap-2">
+                {canOpenChapterInEditor && <button type="button" onClick={() => void openChapterInEditor()} className="rounded border border-accent px-2 py-1 text-[10px] font-medium text-accent hover:bg-accent/10">在正文编辑器打开</button>}
                 {selectedCandidate?.variants && selectedCandidate.variants.length > 1 && (
                   <label className="flex items-center gap-1 text-[10px] text-text-muted">
                     <span>候选</span>
@@ -1069,6 +1100,7 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
               </div>
             </div>
             {selectedNodeId && freshness[selectedNodeId]?.status === 'stale' && <p role="status" className="mb-2 text-sm text-warning">输入或来源已变化；旧结果保留，请核对后重新运行。</p>}
+            {handoffError && <p role="alert" className="mb-2 text-sm text-error">{handoffError}</p>}
             {selectedCandidate ? <>
               <p className="mb-2 text-xs text-text-secondary">{selectedNode?.binding?.mode === 'live' ? '当前资料的读取快照' : selectedCandidate.domain?.kind === 'quality-review' ? '阅读报告只读；在节点设置中打开问题与修订。' : selectedCandidate.domain?.kind === 'quality-revision' ? (selectedCandidate.status === 'adopted' ? '已写入作品；再次修改请生成新候选。' : selectedCandidate.status === 'rejected' ? '已拒绝；原稿保留。' : '范围修订候选只读；前后对照与复核在节点设置中。确认采纳后才写回。') : selectedCandidate.status === 'adopted' ? '已写入作品；再次修改请生成新候选。' : selectedCandidate.status === 'rejected' ? '已拒绝；保留原始证据，未写入作品。' : selectedAdoption ? selectedAdoption.message : savedFieldReadOnly ? '已保存候选只读核对；来源是否仍有效尚未核验，未写入作品。' : '候选尚未写入作品，修改会自动保存。'}</p>
               {selectedCandidate.errors?.length ? <div role="alert" className="mb-2 text-sm text-error">{selectedCandidate.errors.join('；')}</div> : null}
