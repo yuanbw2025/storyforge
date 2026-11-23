@@ -203,7 +203,7 @@ export async function runChapterPostAdoptionV1(input: {
           const attempt = snapshot.projection.steps[stepId].attempt
           const rendered = await recordAgentRunArtifactV1({ scope, runId: snapshot.run.id, stepId, attempt, expectedLastSequence: snapshot.projection.lastSequence, artifactKind: 'rendered-request', content: JSON.stringify({ promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4, messages, requestSettings: organizationRequestSettings }) })
           updateSnapshot(rendered.snapshot)
-          const raw = await executeRegisteredAIEntryV1('prose.chapter.organize', messages, aiConfig, {
+          const raw = await executeRegisteredAIEntryV1('prose.chapter.organize.v2', messages, aiConfig, {
             category: 'chapter.organize', projectId: project.id!,
             contextOverflowPolicy: 'reject', transportRetryPolicy: 'none',
           }, signal, undefined, organizationOptions, organizationResolution)
@@ -281,7 +281,7 @@ export async function runChapterPostAdoptionV1(input: {
       const memoryResult = await runChapterMemoryTask({
         signal,
         projectId: project.id!,
-        call: messages => executeRegisteredAIEntryV1('prose.chapter.memory', messages, aiConfig, { category: 'chapter.memory', projectId: project.id!, contextOverflowPolicy: 'reject' }, signal, undefined, { responseFormat: 'json_object' }),
+        call: messages => executeRegisteredAIEntryV1('prose.chapter.memory.v2', messages, aiConfig, { category: 'chapter.memory', projectId: project.id!, contextOverflowPolicy: 'reject' }, signal, undefined, { responseFormat: 'json_object' }),
         chapterId: task.chapterId,
         chapterTitle: task.chapterTitle,
         chapterContent: task.chapterContent,

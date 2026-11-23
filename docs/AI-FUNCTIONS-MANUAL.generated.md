@@ -547,8 +547,8 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `prose.selection.polish` | `prose.selection-edit` | `chapter.polish` | auxiliary / authoring-draft | `selection-polish-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
 | `prose.selection.expand` | `prose.selection-edit` | `chapter.expand` | auxiliary / authoring-draft | `selection-expand-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
 | `prose.selection.deai` | `prose.selection-edit` | `chapter.deai` | auxiliary / authoring-draft | `selection-rewrite-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
-| `prose.chapter.memory` | `prose.memory` | `chapter.memory` | formal / durable-run | `chapter-memory-candidate` | `chapters` | `src/components/editor/ChapterEditor.tsx`<br/>`src/lib/prose/post-adoption-runner.ts` |
-| `prose.chapter.organize` | `prose.organize` | `chapter.organize` | formal / durable-run | `chapter-organization-candidate` | `stateCards`<br/>`temporalFacts`<br/>`itemLedger`<br/>`storyTimelineEvents`<br/>`characterRelations`<br/>`foreshadows`<br/>`storylineProgress`<br/>`storylineCrossings`<br/>`storyArcs` | `src/components/editor/ChapterEditor.tsx`<br/>`src/lib/prose/post-adoption-runner.ts` |
+| `prose.chapter.memory.v2` | `prose.memory.v2` | `chapter.memory` | formal / durable-run | `chapter-memory-candidate-v2` | `chapters` | `src/lib/prose/post-adoption-runner.ts`<br/>`src/components/editor/ChapterEditor.tsx` |
+| `prose.chapter.organize.v2` | `prose.organize.v2` | `chapter.organize` | formal / durable-run | `chapter-organization-candidate-v2` | `stateCards`<br/>`temporalFacts`<br/>`itemLedger`<br/>`storyTimelineEvents`<br/>`characterRelations`<br/>`foreshadows`<br/>`storylineProgress`<br/>`storylineCrossings`<br/>`storyArcs` | `src/lib/prose/post-adoption-runner.ts`<br/>`src/components/editor/ChapterEditor.tsx` |
 | `prose.review.quality` | `prose.quality-review` | `review.quality` | auxiliary / durable-run | `quality-review-report` | 禁止 | `src/lib/prose/quality-transport.ts` |
 | `prose.review.anti-ai` | `prose.quality-review` | `review.anti-ai` | auxiliary / durable-run | `anti-ai-review-report` | 禁止 | `src/lib/prose/quality-transport.ts` |
 | `prose.review.readability` | `prose.quality-review` | `review.readability` | auxiliary / durable-run | `readability-review-report` | 禁止 | `src/lib/prose/quality-transport.ts` |
@@ -604,4 +604,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `bfdca55df`
+生成时间基准:commit `b892c66c1`

@@ -61,8 +61,12 @@ export const CHAPTER_POST_ADOPTION_STEP_IDS_V1 = {
 
 export type ChapterPostAdoptionStepIdV1 = typeof CHAPTER_POST_ADOPTION_STEP_IDS_V1[keyof typeof CHAPTER_POST_ADOPTION_STEP_IDS_V1]
 
-const ORGANIZATION_SKILL_V1 = getAgentSkillV1('prose.organize', 'prose')
-const MEMORY_SKILL_V1 = getAgentSkillV1('prose.memory', 'prose')
+// New runs bind the capacity-managed V2 skills; historical V1 contracts keep
+// their original skill identity through the version-tolerant binding assert.
+const ORGANIZATION_SKILL_V1 = getAgentSkillV1('prose.organize.v2', 'prose')
+const ORGANIZATION_SKILL_V1_LEGACY = getAgentSkillV1('prose.organize', 'prose')
+const MEMORY_SKILL_V1 = getAgentSkillV1('prose.memory.v2', 'prose')
+const MEMORY_SKILL_V1_LEGACY = getAgentSkillV1('prose.memory', 'prose')
 const CONSISTENCY_SKILL_V1 = getAgentSkillV1('prose.consistency', 'prose')
 const PROSE_TERMINAL_VERIFIERS_V1 = new Set<string>([
   PROSE_GENERATION_VERIFIER_SET_V2,
@@ -192,8 +196,12 @@ function assertChapterPostAdoptionExecutionBindingsV1(snapshot: AgentRunSnapshot
     if (!organization) throw new Error('正文后处理缺少七域整理 Skill/Prompt 执行绑定。')
     const { stepId: _organizationStepId, ...organizationBinding } = organization
     if (organizationBinding.version !== 1) throw new Error('正文后处理当前只接受历史 V1 Skill 执行绑定。')
-    const organizationSkill = organizationBinding.promptVersion === 'chapter-organization-v1'
-      ? { ...ORGANIZATION_SKILL_V1, label: '章节六域证据整理', promptVersion: 'chapter-organization-v1' }
+    // Frozen historical runs keep their original V1 skill identity; only
+    // runs created after the V2 registration bind the capacity-managed skills.
+    const organizationSkill = organizationBinding.skillId === ORGANIZATION_SKILL_V1_LEGACY.id
+      ? (organizationBinding.promptVersion === 'chapter-organization-v1'
+        ? { ...ORGANIZATION_SKILL_V1_LEGACY, label: '章节六域证据整理', promptVersion: 'chapter-organization-v1' }
+        : ORGANIZATION_SKILL_V1_LEGACY)
       : ORGANIZATION_SKILL_V1
     assertAgentSkillExecutionBindingV1(organizationBinding, organizationSkill, '章节七域整理执行绑定')
   }
@@ -201,7 +209,9 @@ function assertChapterPostAdoptionExecutionBindingsV1(snapshot: AgentRunSnapshot
     if (!memory) throw new Error('正文后处理缺少章节记忆 Skill/Prompt 执行绑定。')
     const { stepId: _memoryStepId, ...memoryBinding } = memory
     if (memoryBinding.version !== 1) throw new Error('正文后处理当前只接受历史 V1 Skill 执行绑定。')
-    assertAgentSkillExecutionBindingV1(memoryBinding, MEMORY_SKILL_V1, '章节记忆执行绑定')
+    const memorySkill = memoryBinding.skillId === MEMORY_SKILL_V1_LEGACY.id
+      ? MEMORY_SKILL_V1_LEGACY : MEMORY_SKILL_V1
+    assertAgentSkillExecutionBindingV1(memoryBinding, memorySkill, '章节记忆执行绑定')
   }
   const consistency = bindings.get(CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency)
   const requiresConsistency = selected.has('consistency')

@@ -1746,7 +1746,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       }
     }
 
-    const organizationResolution = resolveRequestConfig(aiConfig, { category: 'chapter.organize', projectId: project.id!, configOverrides: { maxTokens: 8_000 }, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none' })
+    const organizationResolution = resolveRequestConfig(aiConfig, { category: 'chapter.organize', projectId: project.id!, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none' })
     const effectiveConfig = organizationResolution.config
     const organizationOptions = chapterOrganizationRequestOptionsV1(effectiveConfig)
     const organizationRequestSettings = describeResolvedAIRequestSettingsV1(organizationResolution, false, organizationOptions)
@@ -1780,7 +1780,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         chapterId: currentChapter.id,
         outlineNodeId: currentChapter.outlineNodeId,
         sourceKeys: [...CHAPTER_ORGANIZATION_SOURCE_KEYS_V1],
-        inputBudgetMaxTokens: 24_000,
+        modelConfig: effectiveConfig, provider: effectiveConfig.provider,
+        model: effectiveConfig.model,
       })
       const contextManifest = await createContextManifestFromAssemblyV1({
         runId: durableSnapshot.run.id,
@@ -1847,8 +1848,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           if (!durableSnapshot) throw new Error('整理本章缺少有效的运行记录。')
           const rendered = await recordAgentRunArtifactV1({ scope: workspaceScope, runId: durableSnapshot.run.id, stepId: CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1, attempt: 1, expectedLastSequence: durableSnapshot.projection.lastSequence, artifactKind: 'rendered-request', content: JSON.stringify({ promptVersion: CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4, messages, requestSettings: organizationRequestSettings }) })
           durableSnapshot = rendered.snapshot
-          const raw = await executeRegisteredAIEntryV1('prose.chapter.organize', messages, aiConfig, {
-            category: 'chapter.organize', projectId: project.id!, configOverrides: { maxTokens: 8_000 },
+          const raw = await executeRegisteredAIEntryV1('prose.chapter.organize.v2', messages, aiConfig, {
+            category: 'chapter.organize', projectId: project.id!,
             contextOverflowPolicy: 'reject', transportRetryPolicy: 'none',
           }, controller.signal, undefined, organizationOptions, organizationResolution)
           const response = await recordAgentRunArtifactV1({ scope: workspaceScope, runId: durableSnapshot.run.id, stepId: CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1, attempt: 1, expectedLastSequence: durableSnapshot.projection.lastSequence, artifactKind: 'raw-response', content: raw })
@@ -2543,7 +2544,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       const result = await runChapterMemoryTask({
         projectId: project.id!,
         ...task,
-        call: messages => executeRegisteredAIEntryV1('prose.chapter.memory', messages, aiConfig, {
+        call: messages => executeRegisteredAIEntryV1('prose.chapter.memory.v2', messages, aiConfig, {
           category: 'chapter.memory',
           projectId: project.id!,
         }, undefined, undefined, { responseFormat: 'json_object' }),
