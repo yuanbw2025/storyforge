@@ -1,5 +1,5 @@
 import { db } from '../../db/schema'
-import type { Chapter, ChatMessage, WorkspaceScope } from '../../types'
+import type { Chapter, ChatMessage, PromptTemplate, WorkspaceScope } from '../../types'
 import type { TaskLengthPlanV1, ContextMaterialAllocationV2, AgentRunEventTypeV1, AgentRunEventPayloadByTypeV1 } from '../../types/agent-run'
 import type { UseAIStreamReturn } from '../../../hooks/useAIStream'
 import { useAIConfigStore } from '../../../stores/ai-config'
@@ -85,6 +85,15 @@ export interface RunProseLengthTaskV2 {
 function exact(value: unknown, keys: string[], label: string): asserts value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).sort().join('|') !== keys.sort().join('|')) throw new Error(`${label} 字段无效。`)
 }
+/** getActive falls back to a seed copy stamped with Date.now() while the store
+ * is not yet loaded, and loaded rows carry their own id/timestamps. Freeze the
+ * rendering-relevant content only; identity fields would make identical
+ * templates look changed between preparation and dispatch. */
+async function templateContentHashV2(template: PromptTemplate): Promise<string> {
+  const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...body } = template
+  return hashCanonicalValue(body)
+}
+
 async function refFor(artifactKind: ProseTaskRefV2['artifactKind'], text: string): Promise<ProseTaskRefV2> {
   return { artifactKind, contentHash: await sha256Text(text), byteLength: new TextEncoder().encode(text).byteLength }
 }
@@ -147,7 +156,7 @@ async function assertFresh(root: Root, context: FrozenContext, template = true) 
   const boundary = await buildChapterInformationBoundaryV1({ scope: root.scope, chapterId: root.chapterId, outlineNodeId: root.outlineNodeId,
     worldGroupId: root.worldGroupId, perspectiveCharacterId: root.informationBoundary.perspectiveCharacterId ?? null })
   if (boundary.manifestHash !== root.informationBoundary.manifestHash) throw new Error('正文信息边界已变化。')
-  if (template && await hashCanonicalValue(usePromptStore.getState().getActive(category(root))) !== root.templateHash) throw new Error('本次正文模板已变化，不继续付费修订。')
+  if (template && await templateContentHashV2(usePromptStore.getState().getActive(category(root))) !== root.templateHash) throw new Error('本次正文模板已变化，不继续付费修订。')
   const session = await createContextGatewayToolSessionV1({ scope: { ...root.scope, worldGroupId: root.worldGroupId, chapterId: root.chapterId,
     characterId: root.informationBoundary.perspectiveCharacterId ?? null }, policy: createContextAccessPolicyForExecutionV1(getAgentSkillV1(skillId(root), 'prose')), freezeProviderReads: true })
   if (session.scopeFingerprint !== context.execution.contextPacket.scopeFingerprint || session.policyHash !== context.execution.contextPacket.policyHash) throw new Error('正文来源作用域或读取策略已变化。')
@@ -484,7 +493,7 @@ async function runProseLengthTaskCoreV2(input: RunProseLengthTaskV2): Promise<Pr
         chapterId: task.chapterId, outlineNodeId: chapter.outlineNodeId, operation: task.operation, chapterTitle: task.chapterTitle,
         lengthPlan: parseTaskLengthPlanV1(task.lengthPlan), contentRevision: structuredClone(task.contentRevision), informationBoundary: structuredClone(task.informationBoundary),
         perspectiveFromChapter: task.perspectiveFromChapter ?? true, sourceTextHash: await hashChapterText(chapter.content ?? ''), baselineRef, contextRef, messagesRef,
-        templateHash: await hashCanonicalValue(usePromptStore.getState().getActive(task.operation === 'continue' ? 'chapter.continue' : 'chapter.content')),
+        templateHash: await templateContentHashV2(usePromptStore.getState().getActive(task.operation === 'continue' ? 'chapter.continue' : 'chapter.content')),
         material, temperature: task.temperature ?? null }
       const root: Root = { ...body, rootHash: await hashCanonicalValue(body) }
       await assertFresh(root, context); input.signal?.throwIfAborted()

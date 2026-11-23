@@ -675,10 +675,14 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     const closed = ['completed', 'cancelled', 'failed', 'recovery_required'].includes(result.snapshot.projection.state)
     if (result.disposition === 'raw-only' || closed) {
       if (!matchesProseView(scope, result.root.chapterId)) return
+      let tokenUsage: Awaited<ReturnType<typeof readProseGenerationObservedUsageV1>> = null
+      try { tokenUsage = await readProseGenerationObservedUsageV1({ scope, runId: result.runId, attempt: 1 }) }
+      catch { /* A foreign or unreadable run keeps its saved original without inventing metering. */ }
+      if (!matchesProseView(scope, result.root.chapterId)) return
       setProseTaskRecord(result)
       setProseCandidate(null); proseCandidateRef.current = null
       proseSnapshotRef.current = result.snapshot
-      restoreAI({ output: result.text, operation: result.root.operation, error: result.reason, tokenUsage: null })
+      restoreAI({ output: result.text, operation: result.root.operation, error: result.reason, tokenUsage })
       return
     }
     const published = await publishProseLengthTaskCandidateV2({ scope, result })
