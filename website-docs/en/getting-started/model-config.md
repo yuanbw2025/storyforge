@@ -1,5 +1,11 @@
 # Models and APIs
 
+## November 23: service capacity and complete-content boundaries
+
+New tasks using the admitted service-capacity policy no longer truncate plans/materials at old software call-count, item-count or candidate-length quotas. Necessary semantic compression no longer mistakes this policy's zero software quota for exhausted calls. Actual service windows/output capability, permissions, balance and author authorization remain; unknown capacity stays unknown, not unlimited or free. Explicit finite caller budgets, accumulated usage and frozen historical constraints still apply. Based on #566/#567/#569.
+
+Applicable paths retain complete returned raw responses, author edits and structured evidence including their tails. Disconnected/incomplete responses keep their actual status without fabricated missing content. Independent products' explicit limits are not universally removed. See [settings](/en/features/longform/worlds-maps) and [imports](/en/guides/import) for length and recovery.
+
 ## November 19: automatic capacity and compact configuration
 
 Context capacity is discovered from evidence for the actual selected connection; the manual window field is removed. Preview and dispatch share input/output allocations. If capacity is unknown or insufficient, check the connection and model rather than entering a larger number. Task routing, provider/key/endpoint fields and the main Agent's six roles use compact rows, stacking on narrow screens and wrapping long names while retaining saved choices. Based on #469/#470/#471/#472.

@@ -1,5 +1,11 @@
 # Versions, upgrades, and data compatibility
 
+## November 23, 2026 · Mainline complete-content fixes
+
+The latest formal release remains v4.0.8 (`41a6e865`, database v14/backup v18); v4.0.9 is still an unpublished draft. Mainline `36e749cf` uses database v16/backup v20. This round's JSON/candidate/compilation-envelope fixes do not add schema or backup-format versions.
+
+Setting V2/extraction, shared complete-content handling and shortform layout are bounded by their actual merged scope. This is not removal of every product, sharing-package, prose/post-chapter or model-service limit. Historical finite budgets and explicit caller resume limits remain. Keep original backups; older programs must not directly open newer databases. See individual guides and [development](/en/updates/development-status) for unmerged follow-ups.
+
 ## November 21, 2026 · Released v4.0.8 and later mainline
 
 [v4.0.8](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.8) was published at **16:02 UTC on November 19, 2026 (00:02 Beijing time on November 20)**, tagged at `41a6e8652499e0805f44798fbd54ca39d3c51234`, using **database v14 / complete backup v18**. Twelve assets include the new Arch x86_64 desktop package, Windows, both Macs, Android, four portable ZIPs and checksum/update metadata. v4.0.9 remains an unpublished draft with no formal publication date.

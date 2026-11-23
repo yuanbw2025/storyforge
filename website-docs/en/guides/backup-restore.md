@@ -1,5 +1,11 @@
 # Saving, backup, and recovery
 
+## November 23: long-run and complete JSON round trips
+
+Mainline removes default 32 MiB run/checkpoint content envelopes and the default single-record JSON-file read cap so valid complete originals survive consistent write/recovery/backup paths. Explicit caller resume limits remain checked. Formats stay database v16/backup v20 without a new migration. Non-string resume content and invalid identity/reference/hash are rejected; damaged imports remain atomic. Based on #572.
+
+Real browser memory, disk quotas and read failures can still stop operations. Retain original backups/checkpoints and recover explicitly from the error; do not alter hashes or delete originals to bypass checks. Separate world-sharing outer/decode limits are not universally removed.
+
 ## November 21: mainline database v16 / backup v20
 
 Cover-repair proof foundations add materialization indexes and same-work dual-source-run retention at database v16/backup v20, explicitly retaining v19 and existing legacy boundaries. Tasks referenced by cover assets/adoption history remain protected; full cover generation/UI is not delivered. Based on #508.

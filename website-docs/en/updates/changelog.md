@@ -1,5 +1,15 @@
 # Changelog
 
+## November 23, 2026 · Complete content, setting length and shortform layout
+
+- **Long content:** applicable paths retain complete returned responses, author edits, plans and structured-candidate tails without old shared content/count caps. Explicit finite budgets, identity/reference/stale checks and no resend of unknown requests remain. See [models](/en/getting-started/model-config), [planning](/en/features/longform/planning) (#565/#566/#569/#573).
+- **Setting fields:** complete sources, length intent, actual counting, improving revisions and best-draft recovery/explicit adoption. See [settings/maps](/en/features/longform/worlds-maps) (#570 foundation, #578 product delivery).
+- **Entries/TTRPG:** full-source extraction uses V2 with evidence-based splitting and no reload redispatch; intent originals retain their tails while semantic follow-ups remain unmerged. See [imports](/en/guides/import), [TTRPG](/en/features/interactive/ttrpg) (#567/#571, not #574).
+- **Backups/world compilation:** remove default long-JSON/checkpoint/compilation content caps while retaining explicit caller limits, atomic import, real resource failures and separate sharing rules. Formats are unchanged. See [backups](/en/guides/backup-restore), [world engine](/en/features/world-engine) (#572/#575).
+- **UI:** compact shortform header editing/tabs/secondary pages/chapter dropdown; retire reliability scoring while retaining old local records and Bug/Feature feedback. See [shortform](/en/features/shortform), [troubleshooting](/en/guides/troubleshooting) (#579/#580). #576/#577 align save acceptance with whole-area leave/source editing, not additional features.
+
+Review covers `cafb4359…36e749cf`; #564/#568 only archive traffic. See [compatibility](/en/updates/compatibility) and [development](/en/updates/development-status) for formal versions and unfinished scope.
+
 ## November 21, 2026 · Save/read workflows, preparation and reference analysis
 
 - **Saving/reading:** five natural fields confirm committed local saves/readback and provide safe Markdown, view/copy source and explicit editing; state conflicts retain author decisions. See [natural fields](/en/features/longform/worlds-maps) (#510/#511/#515).
