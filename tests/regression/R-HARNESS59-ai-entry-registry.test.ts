@@ -88,8 +88,8 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
     // SFQA-022/044 added the two governed import candidate entries and the
     // auxiliary private reference analysis entry; every registry row still has
     // one real AST binding. B01 adds one formal V2 Codex binding and call.
-    expect(output).toContain('74 bindings / 77 calls')
-    expect(output).toContain('formal 50, auxiliary 17, evaluation 6, experimental 1')
+    expect(output).toContain('76 bindings / 78 calls')
+    expect(output).toContain('formal 52, auxiliary 17, evaluation 6, experimental 1')
   })
 
   it('B02 binds its sole physical durable caller and refuses the old helper path or an unprepared request without a POST', async () => {
@@ -114,7 +114,7 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
 
   it('唯一注册表严格解析且每项连接 Skill、执行器、候选和调用方', () => {
     expect(registry.version).toBe(2)
-    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(74)
+    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(76)
     for (const retiredId of ['world.setting.lookup.qa', 'world.setting.lookup.extract']) {
       expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.some(entry => entry.entryId === retiredId)).toBe(false)
     }
@@ -185,9 +185,9 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
     expect(() => parseFormalAIEntryRegistryV1(full)).not.toThrow()
     expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.some((entry) => entry.entryId.startsWith('longform.voice'))).toBe(false)
     delete full.limitedTransports
-    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(74)
-    const legacy = { ...full, entries: full.entries.filter((entry: Entry) => !['ttrpg.open.local-voice', 'ttrpg.open.brief', 'ttrpg.open.situation-propose', 'ttrpg.open.public-situation-propose', 'ttrpg.open.entity-propose', 'ttrpg.open.common-oracle-interpret', 'ttrpg.open.authoring-design', 'ttrpg.open.authoring-design.full', 'world.codex.extract.v2', 'world.worldview-field.v2'].includes(entry.entryId)) }
-    // The historical fixture predates both V2 product entries as well as the eight TTRPG entries.
+    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(76)
+    const legacy = { ...full, entries: full.entries.filter((entry: Entry) => !['ttrpg.open.local-voice', 'ttrpg.open.brief', 'ttrpg.open.situation-propose', 'ttrpg.open.public-situation-propose', 'ttrpg.open.entity-propose', 'ttrpg.open.common-oracle-interpret', 'ttrpg.open.authoring-design', 'ttrpg.open.authoring-design.full', 'world.codex.extract.v2', 'world.worldview-field.v2', 'prose.chapter.generate.v2', 'prose.chapter.continue.v2'].includes(entry.entryId)) }
+    // The historical fixture predates the V2 product entries as well as the eight TTRPG entries.
     expect(parseFormalAIEntryRegistryV1(legacy).entries).toHaveLength(64)
     expect(legacy.entries.some((entry: Entry) => entry.entryId === 'world.codex.extract.v2')).toBe(false)
     expect(legacy.entries.some((entry: Entry) => entry.entryId === 'world.worldview-field.v2')).toBe(false)

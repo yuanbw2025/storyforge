@@ -29,7 +29,8 @@ import {
   staleAgentRunVerificationV1,
   type AgentRunSnapshotV1,
 } from './event-store'
-import { PROSE_GENERATION_VERIFIER_SET_V2, PROSE_GENERATION_VERIFIER_SET_V3 } from './prose-generation-durable'
+import { PROSE_GENERATION_VERIFIER_SET_V2, PROSE_GENERATION_VERIFIER_SET_V3, PROSE_GENERATION_VERIFIER_SET_V4,
+  isProseGenerationRunV4, readLatestProseGenerationCandidateV1, verifyProseGenerationRunV1 } from './prose-generation-durable'
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { hashCanonicalValue } from './hash'
 import { CHAPTER_ORGANIZATION_WRITE_TARGETS_CURRENT_V1 } from './chapter-organization-authority'
@@ -66,6 +67,7 @@ const CONSISTENCY_SKILL_V1 = getAgentSkillV1('prose.consistency', 'prose')
 const PROSE_TERMINAL_VERIFIERS_V1 = new Set<string>([
   PROSE_GENERATION_VERIFIER_SET_V2,
   PROSE_GENERATION_VERIFIER_SET_V3,
+  PROSE_GENERATION_VERIFIER_SET_V4,
 ])
 
 export const CHAPTER_POST_ADOPTION_SOURCE_KEYS_V1 = Object.freeze([...new Set([
@@ -328,6 +330,12 @@ async function verifiedPostAdoptionParentRelation(input: {
   }
   if (parent.contract.scope.chapterIds?.length === 1 && parent.contract.scope.chapterIds[0] === input.chapterId
     && parent.contract.verificationPlan.some(step => step.kind === 'terminal' && PROSE_TERMINAL_VERIFIERS_V1.has(step.verifier))) {
+    if (isProseGenerationRunV4(parent)) {
+      const candidate = await readLatestProseGenerationCandidateV1({ scope: input.scope, chapterId: input.chapterId, runId: input.parent.runId })
+      if (!candidate?.taskLengthV2 || candidate.expectedContentHash !== input.parent.artifactHash) throw new Error('正文 V4 父证明与本章真实采纳产物不一致。')
+      const verified = await verifyProseGenerationRunV1({ scope: input.scope, runId: input.parent.runId, candidate, snapshot: parent })
+      if (verified.receiptHash !== input.parent.receiptHash) throw new Error('正文 V4 父回执不一致。')
+    }
     return CHAPTER_POST_ADOPTION_PARENT_RELATION_V1
   }
   const { restoreMasterAgentCandidatesV1 } = await import('./master-durable')

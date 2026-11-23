@@ -1,4 +1,3 @@
-import { getModelCapacityLimitsV1 } from '../../lib/ai/model-capacity'
 import { readStateCardFields, StateFieldsParseError } from '../../lib/types/state-card'
 import { prepareChapterPostAdoptionV1, runChapterPostAdoptionV1, type ChapterPostAdoptionTaskV1 } from '../../lib/prose/post-adoption-runner'
 import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react'
@@ -13,7 +12,13 @@ import { createAISessionKey } from '../../stores/ai-generation-session'
 import { useAutoSave } from '../../hooks/useAutoSave'
 import { buildChapterStatusPatchV1, createChapterEditorDraftBufferV1, shouldPersistChapterEditorContentV1 } from '../../lib/authoring/chapter-editor-save'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
-import { buildChapterContentRequestV1, buildContinueRequestV1, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
+import { buildChapterTaskRequestV2, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
+import AuthorLengthControl from '../shared/AuthorLengthControl'
+import { AUTOMATIC_AUTHOR_LENGTH_V1, resolveTaskLengthPlanV1, type AuthorLengthControlValueV1 } from '../../lib/ai/author-length-intent'
+import type { TaskLengthPlanV1 } from '../../lib/types/agent-run'
+import { runProseLengthTaskV2, publishProseLengthTaskCandidateV2, readProseLengthTaskV2,
+  findLatestProseLengthTaskV2, isProseLengthTaskExecutingV2, stopProseLengthTaskV2, endProseLengthTaskV2,
+  type ProseLengthTaskResultV2 } from '../../lib/agent/run/prose-length-task-v2'
 import { propagateChapterEditStale, buildEditImpactGraphV1, type EditImpactGraphV1 } from '../../lib/consistency/impact-analysis'
 import {
   buildImpactRemediationPlanV1,
@@ -24,11 +29,9 @@ import {
   buildImpactHandoffV2,
 } from '../../lib/consistency/impact-handoff'
 import { runChapterMemoryTask } from '../../lib/ai/chapter-memory/run-chapter-memory'
-import { prepareContinuityContext } from '../../lib/ai/chapter-memory/continuity-context'
 import { isPlanReconciliationReviewCurrent, saveChapterPlanReconciliationReview } from '../../lib/ai/chapter-memory/plan-reconciliation'
 import { findNextCanonicalChapter, findPreviousCanonicalChapter } from '../../lib/ai/chapter-memory/canonical-chapter-sequence'
 import { resolveRequestConfig, describeResolvedAIRequestSettingsV1, type AIRequestConfigResolution, type StreamResult } from '../../lib/ai/client'
-import { observeProseLengthV1, proseLengthExpectationV1 } from '../../lib/prose/length-observation'
 import { observeSeparatedProseFrameV1 } from '../../lib/prose/provider-frame-observation'
 import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
 import { chapterOrganizationRequestOptionsV1, CHAPTER_ORGANIZATION_MODEL_PROMPT_VERSION_V4 } from '../../lib/agent/chapter-organization-model'
@@ -55,19 +58,15 @@ import {
 } from '../../lib/utils/html'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import ChapterPostAdoptionSettingsPanel from './ChapterPostAdoptionSettingsPanel'
-import ContextBudgetBar from '../shared/ContextBudgetBar'
 import { useDialog } from '../shared/Dialog'
 import { useReviewResultStore } from '../../stores/review-result'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { analyzeContextSegments, calculateBudget, estimateTokens, type ContextBudget } from '../../lib/ai/context-budget'
 import {
   prepareGenerationNode,
-  runGenerationNode,
   type PreparedGenerationNode,
 } from '../../lib/generation/generation-node'
 import {
   createChapterGenerationNode,
-  InterruptedChapterGenerationErrorV1,
   type ChapterGenerationCategory,
   type ChapterGenerationOperation,
 } from '../../lib/generation/chapter-generation-node'
@@ -146,8 +145,7 @@ import {
 import { createContextManifestFromAssemblyV1 } from '../../lib/agent/run/context-manifest'
 import { readAgentRunV1, type AgentRunSnapshotV1 } from '../../lib/agent/run/event-store'
 import { buildChapterPostAdoptionResumePlanV1 } from '../../lib/agent/run/chapter-post-adoption-resume'
-import { hashChapterText, normalizeChapterText } from '../../lib/ai/chapter-memory/text-normalization'
-import { hashCanonicalValue } from '../../lib/agent/run/hash'
+import { hashChapterText } from '../../lib/ai/chapter-memory/text-normalization'
 import { flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 import {
   assertWorkspaceContentRevisionFreshV1,
@@ -202,25 +200,16 @@ import {
   type ResolvedPostAdoptionSettingsV1,
 } from '../../lib/prose/post-adoption-policy'
 import {
-  beginProseGenerationGatewayStepV1,
   commitProseGenerationAdoptionV1,
-  createProseGenerationDurableRunV1,
-  failProseGenerationStepV1,
-  finalizeProseGenerationGatewayStepV1,
-  hashProseGenerationCandidateV1,
   isProseGenerationCandidateCurrentV1,
   markProseGenerationStaleV1,
-  persistProseGenerationCandidateV1,
   reviseProseGenerationCandidateV1,
   readLatestProseGenerationCandidateV1,
-  recordProseGenerationCandidateV1,
   rejectProseGenerationCandidateV1,
   recoverProseGenerationCandidateV1,
-  recordInterruptedProseGenerationV1,
   readLatestInterruptedProseGenerationV1,
   readProseGenerationObservedUsageV1,
   resolveProseGenerationExecutionBindingV2,
-  PROSE_GENERATION_STEP_ID_V1,
   type ProseGenerationCandidateV1,
 } from '../../lib/agent/run/prose-generation-durable'
 import { AgentTeamBudgetTracker } from '../../lib/agent/team-budget'
@@ -259,6 +248,7 @@ function LazyPanelFallback() {
 type MemoryTaskType = 'write' | 'plan' | 'review'
 
 interface PendingChapterGeneration {
+  lengthPlan: TaskLengthPlanV1
   generationOverrides?: { temperature?: number; maxTokens?: number }
   operation: ChapterGenerationOperation
   category: ChapterGenerationCategory
@@ -312,6 +302,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const editorChapterIdRef = useRef(currentChapter?.id)
   const loadedEditorChapterIdRef = useRef<number | null>(null)
   editorChapterIdRef.current = currentChapter?.id
+  const proseViewOwnerRef = useRef({ projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId })
+  proseViewOwnerRef.current = { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }
+  const matchesProseView = useCallback((scope: WorkspaceScope, chapterId: number) => editorChapterIdRef.current === chapterId
+    && proseViewOwnerRef.current.projectId === scope.projectId && proseViewOwnerRef.current.worldId === scope.worldId
+    && proseViewOwnerRef.current.workId === scope.workId, [])
   const chapterDraftsRef = useRef<ReturnType<typeof createChapterEditorDraftBufferV1> | null>(null)
   if (!chapterDraftsRef.current) {
     const projectId = project.id
@@ -351,6 +346,18 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [editorWorkspaceScope, setEditorWorkspaceScope] = useState<WorkspaceScope | null>(null)
   const [showContext, setShowContext] = useState(false)
   const [customInstruction, setCustomInstruction] = useState('')
+  const [authorLength, setAuthorLength] = useState<AuthorLengthControlValueV1>(AUTOMATIC_AUTHOR_LENGTH_V1)
+  const [activeLengthPlan, setActiveLengthPlan] = useState<TaskLengthPlanV1 | null>(null)
+  const [proseTaskBusy, setProseTaskBusy] = useState(false)
+  const [proseTaskRecord, setProseTaskRecord] = useState<ProseLengthTaskResultV2 | null>(null)
+  const [proseTaskProgress, setProseTaskProgress] = useState<{ scope: WorkspaceScope; runId: number; rounds: number; words: number; status: string } | null>(null)
+  const proseTaskRef = useRef<{ controller: AbortController; chapterId: number } | null>(null)
+  const freezeChapterLengthPlan = (operation: ChapterGenerationOperation) => {
+    const basis = operation === 'continue' ? 'additional-text' : 'final-text'
+    return resolveTaskLengthPlanV1({ taskKind: 'chapter', operation: operation === 'continue' ? 'continue' : 'create',
+      basis, control: { ...authorLength, basis }, instruction: customInstruction,
+      arrangement: { version: 1, basis: 'confirmed-outline', sourceKeys: ['ragSelection'] } })
+  }
   const [impactInfo, setImpactInfo] = useState<string | null>(null)
   const [analyzingImpact, setAnalyzingImpact] = useState(false)
   const [impactGraph, setImpactGraph] = useState<EditImpactGraphV1 | null>(null)
@@ -407,6 +414,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     currentChapter?.id ?? outlineNodeId ?? 'unselected',
   ))
   const restoreAI = ai.restore
+  const proseStreamRef = useRef(ai)
+  proseStreamRef.current = ai
   const stateAI = useAIStream()
   const editorRef = useRef<RichEditorHandle>(null)
   const organizationAbortRef = useRef<AbortController | null>(null)
@@ -415,7 +424,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const proseCandidateRef = useRef<ProseGenerationCandidateV1 | null>(null)
   const proseSnapshotRef = useRef<AgentRunSnapshotV1 | null>(null)
   const consistencyRunRef = useRef<ConsistencyAgentRun | null>(null)
-  const memoryRebuildInFlightRef = useRef(new Set<number>())
   const creatingChapterForOutlineRef = useRef(new Set<number>())
   // Phase A1: 自动流程标记
   const [autoProcessing, setAutoProcessing] = useState<'idle' | 'extracting' | 'memory'>('idle')
@@ -424,7 +432,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [showNotePanel, setShowNotePanel] = useState(false)
   const [showSettingsLookup, setShowSettingsLookup] = useState(false)
   const [compareSourceHtml, setCompareSourceHtml] = useState<string | null>(null)
-  const [contextBudget, setContextBudget] = useState<ContextBudget | null>(null)
   const [transparentMode, setTransparentMode] = useState(false)
   const [pendingGeneration, setPendingGeneration] = useState<PendingChapterGeneration | null>(null)
   const [proseCandidate, setProseCandidate] = useState<ProseGenerationCandidateV1 | null>(null)
@@ -664,12 +671,39 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     return () => { active = false }
   }, [currentChapter?.id, currentChapter?.outlineNodeId, project.id])
 
+  const displayProseTaskResult = useCallback(async (scope: WorkspaceScope, result: ProseLengthTaskResultV2) => {
+    const closed = ['completed', 'cancelled', 'failed', 'recovery_required'].includes(result.snapshot.projection.state)
+    if (result.disposition === 'raw-only' || closed) {
+      if (!matchesProseView(scope, result.root.chapterId)) return
+      let tokenUsage: Awaited<ReturnType<typeof readProseGenerationObservedUsageV1>> = null
+      try { tokenUsage = await readProseGenerationObservedUsageV1({ scope, runId: result.runId, attempt: 1 }) }
+      catch { /* A foreign or unreadable run keeps its saved original without inventing metering. */ }
+      if (!matchesProseView(scope, result.root.chapterId)) return
+      setProseTaskRecord(result)
+      setProseCandidate(null); proseCandidateRef.current = null
+      proseSnapshotRef.current = result.snapshot
+      restoreAI({ output: result.text, operation: result.root.operation, error: result.reason, tokenUsage })
+      return
+    }
+    const published = await publishProseLengthTaskCandidateV2({ scope, result })
+    if (!matchesProseView(scope, result.root.chapterId)) return
+    const tokenUsage = await readProseGenerationObservedUsageV1({ scope, runId: result.runId, attempt: 1 })
+    if (!matchesProseView(scope, result.root.chapterId)) return
+    setProseTaskRecord(null)
+    setProseCandidate(published.candidate); proseCandidateRef.current = published.candidate
+    proseSnapshotRef.current = published.snapshot
+    restoreAI({ output: published.candidate.outputText, operation: published.candidate.operation, tokenUsage })
+  }, [matchesProseView, restoreAI])
+
   // H7: durable prose candidates survive editor unmounts and browser refreshes.
   // Only restore candidates whose source chapter hash is still current; stale
   // output remains in the event ledger for audit but is never shown as adoptable.
   useEffect(() => {
     let active = true
     const chapterId = currentChapter?.id
+    if (ai.isStreaming || proseTaskRef.current?.chapterId === chapterId
+      || ai.operation && !['generate', 'continue'].includes(ai.operation) && !ai.operation.startsWith('prose-task.')) return () => { active = false }
+    setProseTaskRecord(null); setProseTaskProgress(null); setProseTaskBusy(false)
     if (!chapterId) {
       setProseCandidate(null)
       proseCandidateRef.current = null
@@ -688,13 +722,36 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       if (!active) return
       if (candidate && recovered?.projection.state === 'awaiting_confirmation') {
         const tokenUsage = await readProseGenerationObservedUsageV1({ scope, runId: candidate.durable.runId, attempt: candidate.durable.attempt })
-        if (!active || editorChapterIdRef.current !== chapterId) return
+        if (!active || !matchesProseView(scope, chapterId)) return
         setProseCandidate(candidate)
         proseCandidateRef.current = candidate
         restoreAI({ output: candidate.outputText, operation: candidate.operation, tokenUsage })
         proseSnapshotRef.current = recovered
         return
       }
+      const taskRunId = await findLatestProseLengthTaskV2(scope, chapterId)
+      if (!active || !matchesProseView(scope, chapterId)) return
+      if (taskRunId != null) {
+        try {
+          const stored = await readProseLengthTaskV2(scope, taskRunId)
+          if (!active || !matchesProseView(scope, chapterId) || stored.snapshot.projection.state === 'completed') return
+          setActiveLengthPlan(stored.root.lengthPlan)
+          const last = stored.history[stored.history.length - 1]
+          setProseTaskProgress({ scope, runId: taskRunId, rounds: stored.history.length, words: last?.round.observation.measuredWords ?? 0, status: 'stored' })
+          if (isProseLengthTaskExecutingV2(scope, taskRunId)) { setProseTaskBusy(true); return }
+          if (stored.state.resultRef) {
+            const result = await runProseLengthTaskV2({ scope, runId: taskRunId, ai: proseStreamRef.current })
+            if (active && matchesProseView(scope, chapterId)) await displayProseTaskResult(scope, result)
+          }
+        } catch (error) {
+          if (active && matchesProseView(scope, chapterId)) {
+            setProseTaskProgress({ scope, runId: taskRunId, rounds: 0, words: 0, status: 'verify-failed' })
+            setProseGenerationError(error instanceof Error ? error.message : '原正文运行需要核对；没有重新请求。')
+          }
+        }
+        return
+      }
+      if (ai.operation?.startsWith('prose-task.')) return
       const interrupted = await readLatestInterruptedProseGenerationV1({ scope, chapterId })
       if (active && editorChapterIdRef.current === chapterId && interrupted) restoreAI({ output: interrupted.outputText,
         operation: interrupted.operation, error: interrupted.message, tokenUsage: interrupted.observedUsage ?? null })
@@ -702,7 +759,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       if (active) console.warn('[ProseGeneration] durable candidate 恢复失败:', error)
     })
     return () => { active = false }
-  }, [currentChapter?.id, project.id, restoreAI])
+  }, [currentChapter?.id, project.id, project.activeWorldId, project.activeWorkId, restoreAI, displayProseTaskResult, matchesProseView, ai.isStreaming, ai.operation])
 
   // 字数（基于纯文本）
   const wordCount = useMemo(() => countWords(plainText), [plainText])
@@ -1262,7 +1319,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           projectId: scope.projectId, scope, chapterId: input.chapterId, outlineNodeId: input.outlineNodeId,
           worldGroupId: input.worldGroupId, operation: input.operation, authorRequest: input.authorRequest,
           citedReferenceIds: input.citedReferenceIds, perspectiveCharacterId: input.perspectiveCharacterId,
-          config: input.config, signal: controller.signal,
+          config: input.config, signal: controller.signal, ...(input.operation === 'review' ? {} : { taskRequestV2: true as const }),
         })
         if (!matchesScope(await resolveScopeLike(input.projectId))) throw new Error('作品已切换，请刷新当前章节预览。')
         if (active) setContextPreviewResult({ input, assembly })
@@ -1309,52 +1366,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
   // AI 操作 —— 所有 AI 交互都基于纯文本
   // Phase A2: 使用三层记忆构建器生成完整上下文
-  const rebuildChapterMemoryById = async (chapterId: number): Promise<void> => {
-    if (memoryRebuildInFlightRef.current.has(chapterId)) return
-    const chapter = await db.chapters.get(chapterId)
-    if (!chapter?.content?.trim()) return
-    const chapterTitle = nodes.find(node => node.id === chapter.outlineNodeId)?.title || chapter.title
-    memoryRebuildInFlightRef.current.add(chapterId)
-    try {
-      const result = await runChapterMemoryTask({
-        projectId: project.id!,
-        chapterId,
-        chapterTitle,
-        chapterContent: chapter.content,
-        call: messages => executeRegisteredAIEntryV1('prose.chapter.memory', messages, aiConfig, {
-          category: 'chapter.memory',
-          projectId: project.id!,
-        }, undefined, undefined, { responseFormat: 'json_object' }),
-      })
-      if (result.status === 'written') await refreshChapter(chapterId)
-    } catch (error) {
-      console.warn('[ChapterMemory] 惰性重建失败，继续使用 tail 降级:', error)
-    } finally {
-      memoryRebuildInFlightRef.current.delete(chapterId)
-    }
-  }
-
-  const prepareContinuityBeforeGeneration = async (): Promise<void> => {
-    if (!currentChapter?.id) return
-    const snapshot = await prepareContinuityContext({
-      projectId: project.id!,
-      chapterId: currentChapter.id,
-    })
-    if (snapshot.anomalies.length) {
-      console.warn('[ChapterMemory] 规范章节序列 anomalies:', snapshot.anomalies)
-    }
-    const predecessorId = snapshot.predecessor?.chapter.id
-    if (predecessorId != null && snapshot.memoryRebuildCandidateIds.includes(predecessorId)) {
-      // 直接前驱优先且同步补建；失败仍由真实 tail 保底。
-      await rebuildChapterMemoryById(predecessorId)
-    }
-    const recentMemoryIds = snapshot.memoryRebuildCandidateIds
-      .filter(id => id !== predecessorId)
-      .slice(-4)
-    // 先完成有界记忆补建，再冻结正文来源；后台写入会让刚生成的候选过期。
-    for (const chapterId of recentMemoryIds) await rebuildChapterMemoryById(chapterId)
-  }
-
   const buildFullWorldCtx = async (
     operation: 'generate' | 'continue',
     taskType: MemoryTaskType = 'write',
@@ -1376,6 +1387,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       chapterId: currentChapter.id,
       outlineNodeId: outlineNode.id,
       operation,
+      taskRequestV2: true,
       authorRequest: [customInstruction.trim(), outlineNode.title, outlineNode.summary, plainText.slice(-2_000)]
         .filter(Boolean).join('\n'),
       perspectiveCharacterId,
@@ -1385,23 +1397,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
     console.log(`[ContextGateway] ${taskType} 模式 — path:${assembled.contextGatewayExecution.path} selected:${assembled.contextGatewayExecution.retrievalTrace.mandatory.length + assembled.contextGatewayExecution.retrievalTrace.autoSelected.length} tokens:${assembled.totalInputTokens}`)
 
-    const maxContext = getModelCapacityLimitsV1(aiConfig).maxContext
-    const continuityBudgetTokens = maxContext <= 8_192 ? 3000 : maxContext <= 32_768 ? 6000 : 10_000
-    return {
-      text: assembled.text,
-      segments: assembled.segments,
-      assembled,
-      generationBinding,
-      characterContext: '',
-      worldRulesContext: '',
-      continuity: {
-        handoff: '',
-        planReconciliation: '',
-        previousTail: '',
-        recentSummaries: '',
-      },
-      continuityBudgetTokens,
-    }
+    return { text: assembled.text, segments: assembled.segments, assembled, generationBinding }
   }
 
   const chapterGenerationNode = (
@@ -1423,6 +1419,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     },
   })
 
+
   const runDurableChapterGeneration = async (input: {
     operation: ChapterGenerationOperation
     category: ChapterGenerationCategory
@@ -1432,205 +1429,76 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     generationBinding: AgentSkillExecutionBindingV2
     informationBoundary: InformationBoundaryManifestV1
     contentRevision: WorkspaceContentRevisionVectorV1
+    lengthPlan: TaskLengthPlanV1
     generationOverrides?: { temperature?: number; maxTokens?: number }
   }): Promise<void> => {
-    if (!currentChapter?.id || !input.assembled) {
-      throw new Error('正文生成缺少章节或受控上下文快照。')
+    if (!currentChapter?.id || !input.assembled || !('contextGatewayExecution' in input.assembled)) {
+      throw new Error('正文生成缺少真实章节或冻结 Gateway 资料。')
     }
+    // This pre-render binding checks source keys only. The formal V4 binding is
+    // created by the task runner after the final request has been prepared.
     assertAgentSkillBindingMatchesAssemblyV2(input.generationBinding, input.assembled, '正文生成')
     const chapterId = currentChapter.id
-    const chapterTitle = outlineNode?.title || currentChapter.title || '未知章节'
+    if (proseTaskRef.current?.chapterId === chapterId) throw new Error('本章正文任务仍在执行。')
     const scope = await resolveScopeLike(project.id!)
-    await assertWorkspaceContentRevisionFreshV1(input.contentRevision, {
-      scope,
-      worldGroupId: chapterWorldGroupId ?? null,
-    })
-    const sourceChapter = await db.chapters.get(chapterId)
-    if (!sourceChapter) throw new Error('正文生成开始前找不到章节。')
-    const sourceTextHash = await hashChapterText(sourceChapter.content ?? '')
-    const actualMessages = input.messages ?? input.prepared.messages
-    const frozenResolution = resolveRequestConfig(aiConfig, { category: input.category, projectId: project.id!, configOverrides: input.generationOverrides })
-    const requestSettings = describeResolvedAIRequestSettingsV1(frozenResolution, true)
-    const streamResult: StreamResult = {}
-    const frozenNode = chapterGenerationNode(input.operation, input.category, input.informationBoundary, input.generationOverrides, frozenResolution, streamResult)
-    const budget = new AgentTeamBudgetTracker(
-      useAIConfigStore.getState().agentTeamBudgetProfile,
-    )
-    const generationReservation = budget.reserveCall({
-      label: input.operation === 'continue' ? '正文续写' : '正文生成',
-      messages: actualMessages,
-      maxOutputTokens: input.generationOverrides?.maxTokens && input.generationOverrides.maxTokens > 0 ? input.generationOverrides.maxTokens : 16_000,
-    })
-    let generationSettled = false
-
-    const previousCandidate = proseCandidateRef.current
-    if (previousCandidate && await isProseGenerationCandidateCurrentV1(previousCandidate)) {
-      await markProseGenerationStaleV1({
-        scope,
-        runId: previousCandidate.durable.runId,
-        reason: '作者启动了新的正文生成；旧候选已被替代。',
-      })
-    }
-    setProseCandidate(null)
-    proseCandidateRef.current = null
-
-    let snapshot = await createProseGenerationDurableRunV1({
-      scope,
-      worldGroupId: chapterWorldGroupId ?? null,
-      chapterId,
-      operation: input.operation,
-      semanticReview: false,
-      perspectiveCharacterId,
-      generationBinding: input.generationBinding,
-    })
-    const begun = await beginProseGenerationGatewayStepV1({
-      scope,
-      snapshot,
-      worldGroupId: chapterWorldGroupId ?? null,
-      chapterId,
-      outlineNodeId: sourceChapter.outlineNodeId,
-      assembled: input.assembled,
-      messages: actualMessages,
-      requestSettings,
-      binding: {
-        operation: input.operation,
-        sourceTextHash,
-        promptHash: await hashCanonicalValue(actualMessages),
-        informationBoundaryHash: input.informationBoundary.manifestHash,
-      },
-      budgetReservationTokens: generationReservation.estimatedInputTokens
-        + generationReservation.reservedOutputTokens,
-    })
-    snapshot = begun.snapshot
-    const gatewayAttempt = begun.attempt
-    let gatewayManifestHash = ''
-    proseSnapshotRef.current = snapshot
-
-    let traceError: unknown = null
-    let persistedCandidate: ProseGenerationCandidateV1 | null = null
-    let result
+    const own = { controller: new AbortController(), chapterId }
+    proseTaskRef.current = own
+    setProseTaskBusy(true); setProseTaskRecord(null); setProseTaskProgress(null)
+    ai.setOperation('prose-task.' + input.operation)
     try {
-      result = await runGenerationNode(frozenNode, input.prepared, {
-        messages: input.messages,
-        deferStepSucceeded: true,
-        shadowTrace: {
-        beforeModel: async () => {},
-        modelResponded: async output => {
-          budget.settleCall(generationReservation, output)
-          generationSettled = true
-          const finalized = await finalizeProseGenerationGatewayStepV1({
-            scope,
-            snapshot,
-            attempt: gatewayAttempt,
-            output: String(output ?? ''),
-            lengthObservation: observeProseLengthV1(String(output ?? ''), proseLengthExpectationV1(customInstruction), streamResult.finishReason ?? null),
-            usedTokens: streamResult.usage?.totalTokens ?? generationReservation.estimatedInputTokens + estimateTokens(String(output ?? '')),
-            observedUsage: streamResult.usage ? { ...streamResult.usage } : null,
-          })
-          snapshot = finalized.snapshot
-          gatewayManifestHash = finalized.manifest.manifestHash
-          proseSnapshotRef.current = snapshot
-        },
-        candidateReady: async output => {
-          const outputText = String(output ?? '')
-          if (!outputText.trim()) throw new Error('模型没有返回可采纳的正文候选。')
-          const baseCandidate = {
-            lengthObservation: observeProseLengthV1(outputText, proseLengthExpectationV1(customInstruction), streamResult.finishReason ?? null),
-            version: 1 as const,
-            type: 'prose-generation-candidate' as const,
-            projectId: project.id!,
-            chapterId,
-            chapterTitle,
-            worldGroupId: chapterWorldGroupId ?? null,
-            operation: input.operation,
-            sourceTextHash,
-            contentRevision: input.contentRevision,
-            outputText,
-            outputTextHash: await hashCanonicalValue(outputText),
-            gatewayEvidenceVersion: 3 as const,
-            // 纯文本按编辑器相同的 HTML 转义计算 hash，保留字面标签与实体。
-            expectedContentHash: await hashChapterText(plainTextToHtml(
-              input.operation === 'continue'
-                ? [
-                    normalizeChapterText(sourceChapter.content ?? ''),
-                    normalizeProseForEditorV1(outputText),
-                  ].filter(Boolean).join('\n')
-                : normalizeProseForEditorV1(outputText),
-            )),
-            informationBoundaryHash: input.informationBoundary.manifestHash,
-            perspectiveCharacterId,
-            perspectiveFromChapter: true,
-            createdAt: Date.now(),
-          }
-          const candidateHash = await hashProseGenerationCandidateV1(baseCandidate)
-          if (!gatewayManifestHash) throw new Error('正文候选缺少已完成的 ContextManifestV3。')
-          const candidate: ProseGenerationCandidateV1 = {
-            ...baseCandidate,
-            durable: {
-              runId: snapshot.run.id,
-              stepId: PROSE_GENERATION_STEP_ID_V1,
-              attempt: 1,
-              contextManifestHash: gatewayManifestHash,
-              candidateHash,
-            },
-          }
-          await persistProseGenerationCandidateV1({ scope, candidate })
-          snapshot = await recordProseGenerationCandidateV1({
-            scope,
-            snapshot,
-            candidate,
-          })
-          proseSnapshotRef.current = snapshot
-          persistedCandidate = candidate
-          setProseCandidate(candidate)
-          proseCandidateRef.current = candidate
-          restoreAI({ output: outputText, operation: input.operation, tokenUsage: streamResult.usage ? { ...streamResult.usage } : null })
-        },
-        stepSucceeded: async () => {},
-        stepFailed: async failure => {
-          if (failure.error instanceof InterruptedChapterGenerationErrorV1) {
-            snapshot = await recordInterruptedProseGenerationV1({
-              scope, snapshot,
-              response: { version: 'prose-interrupted-response-v1', outputText: failure.error.output, completion: failure.error.completion,
-                message: failure.error.message, observedUsage: streamResult.usage ? { ...streamResult.usage } : null },
-            })
-          }
-          snapshot = await failProseGenerationStepV1({
-            scope,
-            snapshot,
-            code: failure.error instanceof Error ? failure.error.message : `${failure.phase}_failed`,
-            retryable: !(failure.error instanceof InterruptedChapterGenerationErrorV1),
-          })
-          proseSnapshotRef.current = snapshot
-          if (failure.error instanceof InterruptedChapterGenerationErrorV1 && failure.error.completion !== 'failed') {
-            restoreAI({ output: failure.error.output, operation: input.operation, error: failure.error.message,
-              tokenUsage: streamResult.usage ? { ...streamResult.usage } : null })
-          }
-        },
-        onTraceError: error => { traceError = error },
-        },
+      const previous = proseCandidateRef.current
+      if (previous && await isProseGenerationCandidateCurrentV1(previous)) await markProseGenerationStaleV1({
+        scope, runId: previous.durable.runId, reason: '作者明确开始新的正文任务；旧稿仍保留。',
       })
-    } catch (error) {
-      if (!generationSettled) budget.settleFailedCall(generationReservation)
-      throw error
-    }
-    if (result.gate?.status === 'blocked') {
-      setProseGenerationError(result.gate.issues.map(issue => issue.message).join('；'))
-      return
-    }
-    if (traceError || !persistedCandidate) {
-      snapshot = await failProseGenerationStepV1({
-        scope,
-        snapshot,
-        code: traceError instanceof Error ? traceError.message : 'prose_candidate_not_persisted',
-        retryable: true,
+      setProseCandidate(null); proseCandidateRef.current = null
+      const result = await runProseLengthTaskV2({ scope, ai, signal: own.controller.signal,
+        task: { chapterId, chapterTitle: outlineNode?.title || currentChapter.title || '未命名章节',
+          worldGroupId: chapterWorldGroupId ?? null, operation: input.operation,
+          messages: input.messages ?? input.prepared.messages, assembled: input.assembled as ProseGatewayAssemblyV1,
+          lengthPlan: input.lengthPlan, contentRevision: input.contentRevision, informationBoundary: input.informationBoundary,
+          temperature: input.generationOverrides?.temperature, perspectiveFromChapter: true },
+        onProgress: progress => { if (matchesProseView(scope, chapterId) && proseTaskRef.current === own) setProseTaskProgress({ ...progress, scope }) },
       })
-      proseSnapshotRef.current = snapshot
-      setProseGenerationError(
-        traceError instanceof Error ? traceError.message : '正文候选没有进入 durable ledger。',
-      )
-      throw traceError instanceof Error ? traceError : new Error('正文候选没有进入 durable ledger。')
+      await displayProseTaskResult(scope, result)
+    } finally {
+      ai.setOperation(input.operation)
+      if (proseTaskRef.current === own) { proseTaskRef.current = null; setProseTaskBusy(false) }
     }
+  }
+
+  const stopCurrentProseTask = () => {
+    const active = proseTaskRef.current
+    if (active && active.chapterId === currentChapter?.id) active.controller.abort()
+    if (proseTaskProgress) stopProseLengthTaskV2(proseTaskProgress.scope, proseTaskProgress.runId)
+    ai.stop()
+  }
+  const resumeStoredProseTask = async () => {
+    if (!proseTaskProgress || !currentChapter?.id) return
+    const { scope, runId } = proseTaskProgress
+    let stored: Awaited<ReturnType<typeof readProseLengthTaskV2>>
+    try { stored = await readProseLengthTaskV2(scope, runId) }
+    catch (error) { setProseGenerationError(error instanceof Error ? error.message : '原运行不能恢复；没有重新请求。'); return }
+    const own = { controller: new AbortController(), chapterId: currentChapter.id }
+    proseTaskRef.current = own; setProseTaskBusy(true); setProseGenerationError('')
+    ai.setOperation('prose-task.' + stored.root.operation)
+    try {
+      const result = await runProseLengthTaskV2({ scope, runId, ai, signal: own.controller.signal,
+        onProgress: progress => { if (matchesProseView(scope, own.chapterId)) setProseTaskProgress({ ...progress, scope }) } })
+      await displayProseTaskResult(scope, result)
+    } catch (error) { setProseGenerationError(error instanceof Error ? error.message : '原任务恢复未完成；原件保留。') }
+    finally { ai.setOperation(stored.root.operation); if (proseTaskRef.current === own) { proseTaskRef.current = null; setProseTaskBusy(false) } }
+  }
+  const endStoredProseTask = async () => {
+    const scope = proseTaskRecord?.root.scope ?? proseTaskProgress?.scope
+    const runId = proseTaskRecord?.runId ?? proseTaskProgress?.runId
+    if (!scope || !runId) return
+    try {
+      const latest = await readAgentRunV1(scope, runId)
+      const snapshot = await endProseLengthTaskV2({ scope, runId, expectedLastSequence: latest.projection.lastSequence })
+      if (proseTaskRecord) setProseTaskRecord({ ...proseTaskRecord, snapshot })
+      else setProseTaskProgress(null)
+      setProseGenerationError('原任务已明确结束，原答保留；现在可以明确开始新任务。')
+    } catch (error) { setProseGenerationError(error instanceof Error ? error.message : '原任务未能结束；没有重新请求。') }
   }
 
   const runPreparedChapterGeneration = (
@@ -1643,8 +1511,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     informationBoundary?: InformationBoundaryManifestV1,
     contentRevision?: WorkspaceContentRevisionVectorV1,
     generationOverrides?: { temperature?: number; maxTokens?: number },
+    lengthPlan?: TaskLengthPlanV1,
   ) => {
-    if (!informationBoundary || !generationBinding || !contentRevision) {
+    if (!informationBoundary || !generationBinding || !contentRevision || !lengthPlan) {
       setProseGenerationError('正文生成缺少 Skill 或信息边界快照，已阻止模型调用。')
       return
     }
@@ -1657,7 +1526,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       assembled,
       generationBinding,
       informationBoundary,
-      contentRevision, generationOverrides,
+      contentRevision, generationOverrides, lengthPlan,
     }).catch(error => {
       console.error('[ChapterEditor] 生成节点执行失败:', error)
       setProseGenerationError(error instanceof Error ? error.message : '正文生成执行失败。')
@@ -1673,7 +1542,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     informationBoundary: InformationBoundaryManifestV1,
     contentRevision: WorkspaceContentRevisionVectorV1,
     generationOverrides?: { temperature?: number; maxTokens?: number },
+    lengthPlan?: TaskLengthPlanV1,
   ) => {
+    if (!lengthPlan) { setProseGenerationError('正文任务缺少冻结篇幅计划。'); return }
     const node = chapterGenerationNode(operation, category, informationBoundary, generationOverrides)
     const prepared = prepareGenerationNode(node, messages)
     if (transparentMode) {
@@ -1685,7 +1556,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         assembled,
         generationBinding,
         informationBoundary,
-        contentRevision, generationOverrides,
+        contentRevision, generationOverrides, lengthPlan,
       })
       return
     }
@@ -1698,11 +1569,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       assembled,
       generationBinding,
       informationBoundary,
-      contentRevision, generationOverrides,
+      contentRevision, generationOverrides, lengthPlan,
     )
   }
 
   const handleGenerate = async () => {
+    if (proseTaskBusy || proseTaskProgress && !proseCandidate && (!proseTaskRecord || !['completed', 'cancelled', 'failed'].includes(proseTaskRecord.snapshot.projection.state))) { setProseGenerationError('请先核对、恢复或明确结束本章原任务。'); return }
     if (stateCardIssue) { setProseGenerationError(stateCardIssue); return }
     if (!outlineNode) return
     setProseGenerationError('')
@@ -1713,8 +1585,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       return
     }
     try {
+      const lengthPlan = freezeChapterLengthPlan('generate')
+      setActiveLengthPlan(lengthPlan)
       await persistCurrentEditorContent()
-      await prepareContinuityBeforeGeneration()
       const scope = await resolveScopeLike(project.id!)
       const contentRevision = await captureWorkspaceContentRevisionV1({
         scope,
@@ -1722,13 +1595,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       })
       const {
         text: fullCtx,
-        segments: assembledSegments,
         assembled,
         generationBinding,
-        characterContext,
-        worldRulesContext,
-        continuity,
-        continuityBudgetTokens,
       } = await buildFullWorldCtx('generate', 'write')
       await assertWorkspaceContentRevisionFreshV1(contentRevision, {
         scope,
@@ -1741,29 +1609,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         worldGroupId: chapterWorldGroupId ?? null,
         perspectiveCharacterId,
       })
-      const promptRequest = buildChapterContentRequestV1(
-        outlineNode.title,
-        outlineNode.summary,
-        fullCtx,
-        characterContext,
-        continuity.previousTail,
-        worldRulesContext,
-        [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
-          .filter(Boolean)
-          .join('\n'),
-        { continuity, continuityBudgetTokens, requiredGatewayContext: assembled.text },
-      )
+      const promptRequest = buildChapterTaskRequestV2({
+        operation: 'generate', lengthPlan, chapterTitle: outlineNode.title, chapterSummary: outlineNode.summary,
+        gatewayContext: fullCtx,
+        userHint: [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()].filter(Boolean).join('\n'),
+      })
 
       const messages = promptRequest.messages
-      // Phase 21.3: 计算上下文预算
-      const segments = analyzeContextSegments([
-        { label: 'System Prompt', content: messages.find(m => m.role === 'system')?.content || '', layer: 'L0' },
-        { label: '章节大纲', content: outlineNode.summary || '', layer: 'L1' },
-        ...assembledSegments,
-        { label: 'User Prompt', content: messages.find(m => m.role === 'user')?.content || '', layer: 'L1' },
-      ])
-      setContextBudget(calculateBudget(aiConfig.provider, aiConfig.model, segments, aiConfig))
-
       prepareOrRunChapterGeneration(
         'generate',
         'chapter.content',
@@ -1771,7 +1623,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         assembled,
         generationBinding,
         informationBoundary,
-        contentRevision, promptRequest.modelOverride,
+        contentRevision, promptRequest.modelOverride, lengthPlan,
       )
     } catch (error) {
       setProseGenerationError(error instanceof Error ? error.message : '正文生成准备失败。')
@@ -1779,6 +1631,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleContinue = async () => {
+    if (proseTaskBusy || proseTaskProgress && !proseCandidate && (!proseTaskRecord || !['completed', 'cancelled', 'failed'].includes(proseTaskRecord.snapshot.projection.state))) { setProseGenerationError('请先核对、恢复或明确结束本章原任务。'); return }
     if (stateCardIssue) { setProseGenerationError(stateCardIssue); return }
     if (!plainText || !outlineNode) return
     setProseGenerationError('')
@@ -1789,8 +1642,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       return
     }
     try {
+      const lengthPlan = freezeChapterLengthPlan('continue')
+      setActiveLengthPlan(lengthPlan)
       await persistCurrentEditorContent()
-      await prepareContinuityBeforeGeneration()
       const scope = await resolveScopeLike(project.id!)
       const contentRevision = await captureWorkspaceContentRevisionV1({
         scope,
@@ -1800,9 +1654,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         text: fullCtx,
         assembled,
         generationBinding,
-        characterContext,
-        continuity,
-        continuityBudgetTokens,
       } = await buildFullWorldCtx('continue', 'write')
       await assertWorkspaceContentRevisionFreshV1(contentRevision, {
         scope,
@@ -1815,16 +1666,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         worldGroupId: chapterWorldGroupId ?? null,
         perspectiveCharacterId,
       })
-      const ctxWithChars = characterContext ? `${fullCtx}\n\n【角色设定】\n${characterContext}` : fullCtx
-      const promptRequest = buildContinueRequestV1(
-        plainText,
-        outlineNode.summary,
-        ctxWithChars,
-        [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
-          .filter(Boolean)
-          .join('\n'),
-        { continuity, continuityBudgetTokens, requiredGatewayContext: assembled.text },
-      )
+      const promptRequest = buildChapterTaskRequestV2({
+        operation: 'continue', lengthPlan, chapterTitle: outlineNode.title, chapterSummary: outlineNode.summary,
+        gatewayContext: fullCtx, existingContent: plainText,
+        userHint: [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()].filter(Boolean).join('\n'),
+      })
       prepareOrRunChapterGeneration(
         'continue',
         'chapter.continue',
@@ -1832,7 +1678,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         assembled,
         generationBinding,
         informationBoundary,
-        contentRevision, promptRequest.modelOverride,
+        contentRevision, promptRequest.modelOverride, lengthPlan,
       )
     } catch (error) {
       setProseGenerationError(error instanceof Error ? error.message : '正文续写准备失败。')
@@ -3142,11 +2988,16 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         />
       )}
 
+      {compareSourceHtml == null && currentChapter?.id && <div className="rounded-lg border border-border bg-bg-surface p-3">
+        <AuthorLengthControl value={authorLength} onChange={setAuthorLength} disabled={ai.isStreaming || proseTaskBusy || Boolean(pendingGeneration)}
+          basis={activeLengthPlan?.basis ?? 'final-text'} plan={activeLengthPlan} />
+        <p className="mt-1 text-xs text-text-muted">生成统计本次完整正文；续写只统计新增片段，不计已有正文。</p>
+      </div>}
       {/* AI 工具栏 */}
       {compareSourceHtml == null && (
         <ChapterEditorToolbar
           chapterTitle={outlineNode?.title}
-          isStreaming={ai.isStreaming}
+          isStreaming={ai.isStreaming || proseTaskBusy}
           hasText={!!plainText}
           organizingChapter={organizingChapter}
           hasOrganizationCandidate={Boolean(
@@ -3411,12 +3262,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         </label>
       </details>
 
-      {contextBudget && (
-        <div className="mb-2">
-          <ContextBudgetBar budget={contextBudget} compact={ai.isStreaming} />
-        </div>
-      )}
-
       {pendingGeneration && (
         <div className="mb-3 rounded-lg border border-accent/30 bg-accent/5 p-3">
           <PromptPreviewGate
@@ -3437,12 +3282,26 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
                 pending.informationBoundary,
                 pending.contentRevision,
                 pending.generationOverrides,
+                pending.lengthPlan,
               )
             }}
           />
         </div>
       )}
 
+      {proseTaskProgress && <div role="status" className="mb-3 rounded border border-border p-3 text-xs">
+        正文任务 #{proseTaskProgress.runId}：{proseTaskProgress.status === 'verify-failed' ? '原运行证据需核对，没有重新请求。' : <>已保存 {proseTaskProgress.rounds} 轮稿，当前计入 {proseTaskProgress.words} 字。</>}
+        {proseTaskBusy ? <button type="button" className="ml-2 text-accent" onClick={stopCurrentProseTask}>停止并保留原稿</button>
+          : !proseCandidate && !proseTaskRecord && <>
+            <button type="button" className="ml-2 text-accent" onClick={() => { void resumeStoredProseTask() }}>核对并恢复原任务</button>
+            <button type="button" className="ml-2 text-text-secondary" onClick={() => { void endStoredProseTask() }}>结束原任务并保留记录</button>
+          </>}
+      </div>}
+      {proseTaskRecord && <div role="status" className="mb-3 rounded border border-warning/30 bg-warning/5 p-3 text-xs">
+        <p>以下只读原答不是可采纳候选：{proseTaskRecord.reason}</p>
+        {!['completed', 'cancelled', 'failed'].includes(proseTaskRecord.snapshot.projection.state)
+          && <button type="button" className="mt-2 text-accent" onClick={() => { void endStoredProseTask() }}>结束未完成任务并保留原答</button>}
+      </div>}
       {proseGenerationError && (
         <div className="mb-3 rounded-lg border border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
           正文候选处理未完成：{proseGenerationError}
@@ -3451,8 +3310,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
       {proseCandidate && (
         <div data-testid="prose-explicit-review-notice" className="mb-3 border-l-2 border-l-accent bg-accent/5 px-3 py-2 text-xs text-text-secondary">
-          本次正文只调用模型生成一次，没有自动追加语义评审或整章重写。你可以先采纳这个可编辑候选；
-          需要深度评审时，再由你从评审入口显式发起并确认费用。
+          {proseCandidate.taskLengthV2
+            ? '本次正文按冻结篇幅计划生成，必要时内部修订；原答和最佳稿保留。字数检查不代表事实或文学质量通过，正式内容仍由作者确认。'
+            : '本次正文只调用模型生成一次，没有自动追加语义评审或整章重写。需要深度评审时，再从原评审入口明确发起。'}
         </div>
       )}
 
@@ -3462,16 +3322,20 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             <p>{observeSeparatedProseFrameV1(ai.output)!.message}</p>
             <button type="button" className="mt-2 rounded border border-border px-2 py-1" onClick={() => { void handleKeepSeparatedProse() }}>保留分隔后的正文供核对</button>
           </div>}
+          {proseCandidate?.taskLengthV2 && <p role="status" className="mb-2 rounded border border-warning/30 bg-warning/5 p-3 text-xs">
+            实测计入 {proseCandidate.taskLengthV2.observation.measuredWords} 字；{proseCandidate.taskLengthV2.reason}
+          </p>}
           {proseCandidate?.lengthObservation?.message && <p role="status" className="mb-2 rounded border border-warning/30 bg-warning/5 p-3 text-xs text-text-secondary">生成时：{proseCandidate.lengthObservation.message}</p>}
           <AIStreamOutput key={proseCandidate?.durable.runId ?? 'active-prose-output'} output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
             editable={!!proseCandidate && !proseCandidate.semanticReview}
             onSaveDraft={proseCandidate && !proseCandidate.semanticReview ? handleSaveProseCandidateDraft : undefined}
-            onStop={ai.stop}
-            onAccept={(
-              ai.operation === 'generate' || ai.operation === 'continue'
-            ) && !proseCandidate ? undefined : handleAcceptAI}
+            onStop={stopCurrentProseTask}
+            isFinalizing={proseTaskBusy && !ai.isStreaming}
+            onAccept={proseTaskBusy || proseTaskRecord || proseCandidate?.taskLengthV2?.disposition === 'needs-attention'
+              || ai.operation?.startsWith('prose-task.') || ((ai.operation === 'generate' || ai.operation === 'continue') && !proseCandidate)
+              ? undefined : handleAcceptAI}
             onDismiss={() => { void handleDismissAI() }}
-            onRetry={() => {
+            onRetry={proseTaskRecord || proseTaskBusy ? undefined : () => {
               if (ai.operation === 'generate') handleGenerate()
               else if (ai.operation === 'continue') handleContinue()
               else if (ai.operation === 'polish') handlePolish()

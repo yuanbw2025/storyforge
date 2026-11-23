@@ -13,6 +13,7 @@ import ChapterEditor from '../../src/components/editor/ChapterEditor'
 import { DialogProvider } from '../../src/components/shared/Dialog'
 import { ToastProvider } from '../../src/components/shared/Toast'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { installEvalWebLocksFixtureV1 } from '../helpers/eval-web-locks'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { useChapterStore } from '../../src/stores/chapter'
 import { useOutlineStore } from '../../src/stores/outline'
@@ -31,8 +32,9 @@ import {
 
 const config = { provider: 'agnes' as const, model: 'agnes-2.5-flash', baseUrl: 'https://example.invalid/v1',
   apiKey: 'synthetic-only', temperature: 0, maxTokens: 1000 }
-beforeEach(async () => { await db.delete(); await db.open(); clearLogs(); useAIConfigStore.setState({ config, taskRoutes: {} }) })
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); db.close() })
+let restoreLocks: (() => void) | undefined
+beforeEach(async () => { restoreLocks = installEvalWebLocksFixtureV1(); await db.delete(); await db.open(); clearLogs(); useAIConfigStore.setState({ config, taskRoutes: {} }) })
+afterEach(() => { restoreLocks?.(); vi.restoreAllMocks(); vi.unstubAllGlobals(); db.close() })
 
 it.each(['reader-error', 'abort'] as const)('142 real ReadableStream retains observed usage on %s', async terminal => {
   const controller = new AbortController()
@@ -263,12 +265,16 @@ it.each(['complete', 'interrupted', 'cancelled', 'no-usage'] as const)('actual C
       const runs = await db.agentRuns.where('workId').equals(f.scope.workId).toArray()
       const row = runs.find(value => {
         const contract = JSON.parse(value.contractJson)
-        return contract.executionBindings?.some((binding: { stepId: string }) => binding.stepId === 'prose-generation')
+        return contract.executionBindings?.some((binding: { skillId?: string }) => binding.skillId === 'prose.generate.v2')
       })
       if (!row?.id) return false
       runId = row.id
       const snapshot = await readAgentRunV1(f.scope, runId)
-      return ['awaiting_confirmation', 'failed'].includes(snapshot.projection.steps['prose-generation']?.status ?? '')
+      // B03: unconfirmed or stopped generations pause with the paid raw kept;
+      // only a confirmed complete draft reaches awaiting_confirmation.
+      return completed
+        ? snapshot.projection.steps['prose-generation']?.status === 'awaiting_confirmation'
+        : snapshot.projection.state === 'paused'
     })
     expect(fetch).toHaveBeenCalledTimes(1)
     await expect.poll(() => db.aiUsageLog.count()).toBe(hasUsage ? 1 : 0)
@@ -298,16 +304,18 @@ it.each(['complete', 'interrupted', 'cancelled', 'no-usage'] as const)('actual C
   }))
   const settled = snapshot.events.find(value => value.type === 'budget.settled' && value.payload.stepId === 'prose-generation')
   console.info('142 actual editor receipt', { terminal, stepStatus: snapshot.projection.steps['prose-generation']?.status,
-    rawVersion: raw.version, observedInOriginalAttempt: evidence.some(containsUsage),
+    runState: snapshot.projection.state, rawVersion: raw.version,
+    observedInOriginalAttempt: evidence.some(containsUsage),
     budgetTokens: settled?.type === 'budget.settled' ? settled.payload.tokens : null })
-  expect(raw.text ?? raw.outputText).toBe(output)
-  expect(snapshot.projection.steps['prose-generation']?.status).toBe(completed ? 'awaiting_confirmation' : 'failed')
+  expect(raw.version).toBe('prose-task-response-v2')
+  expect(raw.response.text).toBe(output)
+  expect(snapshot.projection.steps['prose-generation']?.status).toBe(completed ? 'awaiting_confirmation' : 'running')
+  expect(snapshot.projection.state).toBe(completed ? 'awaiting_confirmation' : 'paused')
   expect(evidence.some(containsUsage), 'provider usage must be retained in exact evidence of this run/step/attempt').toBe(hasUsage)
-  expect(raw.observedUsage).toEqual(hasUsage ? expectedUsage : null)
-  expect(raw.usageBasis).toBe(hasUsage ? 'provider-observed' : 'unknown')
-  expect(raw.budgetTokenBasis).toBe(completed ? hasUsage ? 'provider-observed' : 'estimated' : 'reserved')
-  if (completed && hasUsage) expect(settled?.type === 'budget.settled' ? settled.payload.tokens : null).toBe(38)
-  if (!completed) { expect(raw.completion).toBe(terminal === 'cancelled' ? 'cancelled' : 'unknown'); expect(settled).toBeUndefined() }
+  expect(raw.response.usage).toEqual(hasUsage ? expectedUsage : {})
+  if (hasUsage) expect(settled?.type === 'budget.settled' ? settled.payload.tokens : null).toBe(38)
+  else expect(settled).toBeUndefined()
+  if (!completed) expect(raw.response.completion).toBe('unknown')
   expect((await db.chapters.get(chapterId))?.content).toBe(originalBody)
   useAIGenerationSessionStore.setState({ sessions: {} })
   const recoveredHost = document.createElement('div'); document.body.append(recoveredHost)
@@ -446,7 +454,7 @@ it('switching the actual editor owner while a paid stream is pending retains raw
     await act(async () => button('开始生成')!.click())
     await settle(() => host.textContent?.includes(output) === true)
     const oldRun = (await db.agentRuns.where('workId').equals(f.scope.workId).toArray()).find(row =>
-      JSON.parse(row.contractJson).executionBindings?.some((binding: { stepId: string }) => binding.stepId === 'prose-generation'))
+      JSON.parse(row.contractJson).executionBindings?.some((binding: { skillId?: string }) => binding.skillId === 'prose.generate.v2'))
     runId = oldRun!.id!
     await act(async () => {
       await useOutlineStore.getState().loadAll(foreign.project.id!)
@@ -456,7 +464,8 @@ it('switching the actual editor owner while a paid stream is pending retains raw
     })
     await settle(() => !host.textContent?.includes(output))
     await act(async () => source.close())
-    await settle(async () => (await readAgentRunV1(f.scope, runId)).projection.steps['prose-generation']?.status === 'failed')
+    // The unconfirmed stream pauses the original run with the paid raw kept.
+    await settle(async () => (await readAgentRunV1(f.scope, runId)).projection.state === 'paused')
     expect(host.textContent).not.toContain(output)
     expect(host.querySelector('[title="输入 31 + 输出 7"]')).toBeNull()
     expect((await db.chapters.get(foreign.chapterId))?.content).toBe('<p></p>')
@@ -465,8 +474,14 @@ it('switching the actual editor owner while a paid stream is pending retains raw
     expect(fetch).toHaveBeenCalledTimes(1)
   } finally { await act(async () => root.unmount()); host.remove() }
   db.close(); await db.open()
-  expect(await readLatestInterruptedProseGenerationV1({ scope: f.scope, chapterId: f.chapterId })).toMatchObject({
-    outputText: output, observedUsage: expectedUsage, usageBasis: 'provider-observed', budgetTokenBasis: 'reserved', completion: 'unknown' })
+  const paused = await readAgentRunV1(f.scope, runId)
+  const rawEvent = [...paused.events].reverse().find(value => value.type === 'evidence.artifact.recorded'
+    && value.payload.stepId === 'prose-generation' && value.payload.artifactKind === 'raw-response')
+  if (!rawEvent || rawEvent.type !== 'evidence.artifact.recorded') throw new Error('owner-switch raw response evidence missing')
+  const raw = JSON.parse(await readAgentRunArtifactExactV1({ projectId: f.scope.projectId,
+    artifactKind: 'raw-response', contentHash: rawEvent.payload.contentHash }))
+  expect(raw.response.text).toBe(output)
+  expect(raw.response.usage).toEqual(expectedUsage)
   expect(await readProseGenerationObservedUsageV1({ scope: f.scope, runId, attempt: 1 })).toEqual(expectedUsage)
   await expect.poll(() => db.aiUsageLog.count()).toBe(1)
 }, 15_000)
