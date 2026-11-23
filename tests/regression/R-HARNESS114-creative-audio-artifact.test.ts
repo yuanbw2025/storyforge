@@ -31,6 +31,17 @@ describe('R-HARNESS114 explicit audio candidate reference contract', () => {
     expect(parseCreativeAudioArtifactV1(input)).toEqual(input)
     input.status = 'manual-repair'; expect(parseCreativeAudioArtifactV1(input).adoptionAllowed).toBe(false)
   })
+  it('retains all review findings and source references including a blocker after the former cutoff', () => {
+    const input = audio(), refs = Array.from({ length: 201 }, (_, index) => `source.${index}`)
+    input.issues = Array.from({ length: 201 }, (_, index) => ({ ...issue(), code: `review.${index}`,
+      message: '完整复核说明'.repeat(300) + '末尾说明', evidenceRefs: refs }))
+    input.issues.push({ ...issue(true), code: 'final-blocker' }); input.status = 'blocked'
+    const restored = parseCreativeAudioArtifactV1(JSON.parse(JSON.stringify(input)))
+    expect(restored).toEqual(input)
+    expect(restored.issues.at(-1)?.code).toBe('final-blocker')
+    expect(restored.adoptionAllowed).toBe(false); expect(restored.automaticRetryAllowed).toBe(false)
+    expect(() => parseCreativeAudioArtifactV1({ ...input, status: 'usable-with-warnings' })).toThrow('不能有 blocking')
+  })
   it.each([
     { originalText: 'must not truncate or inline an audio response as text' }, { base64: 'duplicate audio' }, { adoptionAllowed: true },
     { automaticRetryAllowed: true }, { humanListening: 'confirmed' }, { modality: 'text' }, { version: 2 },

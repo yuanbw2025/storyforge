@@ -53,11 +53,20 @@ async function read(page: Page, projectId: number, table: string) {
     return (await readOwnedRows(await resolveScopeLike(projectId), table))[0] ?? null
   }, { projectId, table })
 }
+async function openEditor(page: Page) {
+  const entry = page.getByRole('button', { name: '编辑源码', exact: true })
+    .or(page.locator('div.cursor-text:visible')).first()
+  await entry.click()
+}
+async function leaveField(page: Page) {
+  // Sizing controls belong to the field; Tab may only move focus internally.
+  await page.locator('.lf-world-toolbar h3:visible, h2:visible').first().click()
+}
 async function editFirst(page: Page, text: string) {
-  await page.locator('div.cursor-text:visible').first().click()
+  await openEditor(page)
   const editor = page.locator('textarea:visible').first()
   await editor.fill(text)
-  await editor.press('Tab')
+  await leaveField(page)
   await expect(editor).not.toBeVisible()
 }
 
@@ -72,7 +81,7 @@ test(`scalar author ${field} saves edits and clearing through its real UI and su
     await editFirst(page, text)
     await expect.poll(async () => (await read(page, projectId, table))?.[field]).toBe(text)
     await page.reload(); await openField(page, module, label)
-    await expect(page.locator('div.cursor-text:visible').first()).toHaveText(text)
+    await expect(page.locator('div.cursor-text:visible, [data-markdown-body]:visible').first()).toHaveText(text)
     await editFirst(page, '')
     await page.reload(); await openField(page, module, label)
     expect((await read(page, projectId, table))?.[field]).toBe('')
@@ -89,18 +98,20 @@ test(`rejected ${field} write keeps the draft and retries without a page crash`,
   await editFirst(page, '已保存的世界来源')
   await page.evaluate(async table => {
     const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
-    const original = db[table].update.bind(db[table])
-    db[table].update = async () => { throw new DOMException('隔离配额耗尽', 'QuotaExceededError') }
-    Object.assign(window, { restoreAuthorWrite: () => { db[table].update = original } })
+    // The confirmed natural-field writer uses the transaction's table, so a
+    // hook must reject the actual write rather than one db.table facade.
+    const rejectWrite = () => { throw new DOMException('隔离配额耗尽', 'QuotaExceededError') }
+    db[table].hook('updating', rejectWrite)
+    Object.assign(window, { restoreAuthorWrite: () => { db[table].hook('updating').unsubscribe(rejectWrite) } })
   }, table)
-  await page.locator('div.cursor-text:visible').first().click()
+  await openEditor(page)
   const editor = page.locator('textarea:visible').first()
-  await editor.fill('写入失败但必须保留的中文草稿'); await editor.press('Tab')
-  await expect(page.getByRole('alert').filter({ hasText: '隔离配额耗尽' })).toBeVisible()
+  await editor.fill('写入失败但必须保留的中文草稿'); await leaveField(page)
+  await expect(page.locator('[role=alert], [data-local-save-status=failed]').filter({ hasText: '隔离配额耗尽' })).toBeVisible()
   await expect(editor).toHaveValue('写入失败但必须保留的中文草稿')
   expect((await read(page, projectId, table))?.[field]).toBe('已保存的世界来源')
   await page.evaluate(() => { (window as unknown as { restoreAuthorWrite: () => void }).restoreAuthorWrite() })
-  await page.getByRole('button', { name: '重试保存', exact: true }).click()
+  await page.getByRole('button', { name: /^重试(?:保存)?$/ }).click()
   await expect(editor).not.toBeVisible()
   await page.reload(); await openField(page, module, label)
   expect((await read(page, projectId, table))?.[field]).toBe('写入失败但必须保留的中文草稿')
@@ -116,7 +127,7 @@ test('structured resource and divinity leaves retain siblings, support clearing,
   const editAt = async (index: number, value: string) => {
     await page.locator('div.cursor-text:visible').nth(index).click()
     const editor = page.locator('textarea:visible').first()
-    await editor.fill(value); await editor.press('Tab'); await expect(editor).not.toBeVisible()
+    await editor.fill(value); await leaveField(page); await expect(editor).not.toBeVisible()
   }
   await openField(page, '自然环境', '自然资源')
   await page.getByText('自然资源分类明细（原生结构）', { exact: true }).click()
@@ -129,7 +140,7 @@ test('structured resource and divinity leaves retain siblings, support clearing,
   await page.reload(); await openField(page, '自然环境', '自然资源')
   expect((await read(page, projectId, 'worldviews'))?.naturalResources).toEqual({ rareCreatures: '', herbs: '', minerals: '', others: '' })
   await openField(page, '世界起源', '神明与信仰')
-  const toggle = page.getByRole('checkbox', { name: '存在神明或宗教信仰' })
+  const toggle = page.getByRole('checkbox', { name: '包含神明或宗教信仰设定（神明是否存在可保留未知）', exact: true })
   await toggle.check()
   const divinity = { hasDivinity: true, divineRank: '凡俗与山神', divineNames: '守桥神', divineRules: '不得代替凡人选择' }
   for (const [index, value] of [divinity.divineRank, divinity.divineNames, divinity.divineRules].entries()) await editAt(index, value)
