@@ -21,6 +21,7 @@ import { useGistAutoBackup } from '../hooks/useGistAutoBackup'
 import { downloadJSON, exportProjectJSON } from '../lib/export/json-export'
 import '../components/longform/longform.css'
 import '../components/comic/comic-pages.css'
+import '../components/comic/comic-layout-compact.css'
 import { COMIC_PAGES, COMIC_GROUPS, COMIC_CONTENT_GROUPS, comicPageDescription } from '../components/comic/navigation'
 import ComicTargetFields from '../components/comic/ComicTargetFields'
 const Studio=lazy(()=>import('../components/comic/ComicStudio'))
