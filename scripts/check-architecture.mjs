@@ -543,12 +543,20 @@ if (!/buildDetailedOutlineGenerationRunContractV3[\s\S]*?version:\s*3[\s\S]*?exe
   || !/buildDetailedOutlineBatchRunContractV3[\s\S]*?version:\s*3[\s\S]*?executionBoundary:\s*'formal'/.test(detailedOutlineBatchDurableSource)) {
   violations.push('[⑬Skill运行契约] 单章与批量细纲正式 durable contract 必须冻结 V2 Skill/Gateway binding')
 }
+const proseTaskRunnerSource = read('src/lib/agent/run/prose-length-task-v2.ts')
 const proseNormalizationCalls = chapterEditorSource.match(/\bnormalizeProseForEditorV1\s*\(/g)?.length ?? 0
+const taskNormalizationCalls = proseTaskRunnerSource.match(/\bnormalizeProseForEditorV1\s*\(/g)?.length ?? 0
+const legacyExpectedNormalization = /expectedContentHash:\s*await hashChapterText\([\s\S]{0,500}normalizeProseForEditorV1\(outputText\)/.test(chapterEditorSource)
+const taskExpectedNormalization = /runProseLengthTaskV2\s*\(/.test(chapterEditorSource)
+  && /publishProseLengthTaskCandidateV2\s*\(/.test(chapterEditorSource)
+  && /import\s*\{[^}]*normalizeProseForEditorV1[^}]*\}\s*from\s*['"]\.\.\/\.\.\/utils\/html['"]/.test(proseTaskRunnerSource)
+  && /normalizeProseForEditorV1\(saved\.text\)/.test(proseTaskRunnerSource)
+  && /expectedContentHash:\s*await hashChapterText\(plainTextToHtml\(expected\)\)/.test(proseTaskRunnerSource)
 if (!/export function normalizeProseForEditorV1\s*\(/.test(htmlUtilsSource)
-  || proseNormalizationCalls < 3
-  || !/expectedContentHash:\s*await hashChapterText\([\s\S]{0,500}normalizeProseForEditorV1\(outputText\)/.test(chapterEditorSource)
+  || (legacyExpectedNormalization ? proseNormalizationCalls < 3 : proseNormalizationCalls < 1 || taskNormalizationCalls < 2)
+  || !legacyExpectedNormalization && !taskExpectedNormalization
   || !/plainTextToHtml\(normalizeProseForEditorV1\(text\)\)/.test(chapterEditorSource)
-  || /const\s+normalizeProse\s*=/.test(chapterEditorSource)) {
+  || /const\s+normalizeProse\s*=/.test(chapterEditorSource) || /const\s+normalizeProse\s*=/.test(proseTaskRunnerSource)) {
   violations.push('[⑬正文规范化单源] 候选预期哈希与编辑器采纳必须复用 lib/utils/html 的 normalizeProseForEditorV1')
 }
 

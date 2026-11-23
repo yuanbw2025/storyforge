@@ -226,7 +226,7 @@ async function result(cursor: ProseCursor, root: Root, state: State, selected: P
   disposition: ProseLengthTaskResultV2['disposition'], reason: string, save = true): Promise<ProseLengthTaskResultV2> {
   if (save) {
     state.resultRef = await cursor.record('tool-result', canonicalStringify({ selected, disposition, reason })); await cursor.checkpoint(state)
-    if (disposition === 'raw-only' && cursor.snapshot.projection.state === 'running') await cursor.append('run.paused', { reason: 'prose-length-stopped-with-preserved-raw' })
+    if (disposition === 'raw-only' && cursor.snapshot.projection.state === 'running') await cursor.append('run.paused', { reason: 'prose-length-stopped-with-preserved-raw', recoverable: false })
     else if (disposition === 'raw-only' && cursor.snapshot.projection.state === 'planned') await cursor.append('run.cancelled', { reason: 'prose-length-stopped-before-dispatch' })
   }
   const round = selected ? JSON.parse(await readExact(cursor.snapshot, selected)) as Round : null
