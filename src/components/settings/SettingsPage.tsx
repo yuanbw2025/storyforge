@@ -4,7 +4,6 @@ import { useLocation, useNavigate } from 'react-router'
 import AIConfigPanel from './AIConfigPanel'
 import ClientUpdatePanel from './ClientUpdatePanel'
 import { ClientLegalDocuments } from './ClientAgreement'
-import CreativeReliabilityCommunityPanel from './CreativeReliabilityCommunityPanel'
 import ProjectStorageWorkspacePanel from './ProjectStorageWorkspacePanel'
 import FailureFeedbackPanel from '../shared/FailureFeedbackPanel'
 import type { Project } from '../../lib/types'
@@ -51,7 +50,6 @@ export default function SettingsPage({
       <div className="mt-6">
         <ProjectStorageWorkspacePanel project={project} onOpenDataManagement={onOpenDataManagement} />
       </div>
-      <CreativeReliabilityCommunityPanel />
       <FailureFeedbackPanel />
       {import.meta.env.DEV && showDeveloperTools && HarnessEvalPanel && (
         <Suspense fallback={null}>
