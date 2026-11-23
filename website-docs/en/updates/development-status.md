@@ -1,5 +1,31 @@
 # Pending development and branch audit
 
+## November 23, 2026 · Capacity fixes and follow-up work
+
+Review from successful baseline `cafb4359` through `e91a0955` initially enumerated **138 branches, 36 worktrees (including detached), and 8 with uncommitted status**; 36 heads are outside main ancestry. Stable patches/net files were compared rather than equating commit counts with features.
+
+### Open PRs at the snapshot
+
+- [#525](https://github.com/yuanbw2025/storyforge/pull/525): exact candidate comparison pending performance acceptance, not delivered UI.
+- [#574](https://github.com/yuanbw2025/storyforge/pull/574): complete TTRPG semantic intent; merged #571 only retains raw responses and is not the semantic loop.
+- [#581](https://github.com/yuanbw2025/storyforge/pull/581): governed inspiration-template foundation 059-F, not a complete entry.
+During pre-merge refreshes, #582 AI-town and #583 screenplay layouts merged. Their [AI-town](/en/features/interactive/ai-town) and [screenplay](/en/features/screenplay) guides are synchronized; local sources are not recounted as separate development.
+
+#567 full-source extraction V2 and #578 setting-field V2 are merged; old extraction/budget/worldview foundations are not recounted as missing features. Complete cover runner/UI, unmounted Markdown editing, power contracts and exact-comparison follow-ups remain on their original branches. Validation variants such as `fix/ai-capacity-shared-validation-20261122` are not product features. Chat planning has no net files.
+
+| Branch with uncommitted status | Observed scope | Deduplication/limits |
+| --- | --- | --- |
+| `fix/ai-capacity-prose-20261123` | 23 prose/streaming/contract/test entries | Prose/post-chapter follow-up observations, not B02 completion |
+| `fix/codex-extraction-frontier-053-20261119` | Nine old extraction UI/contract/test entries | Separate from merged V2; remaining changes are not adopted |
+| `feat/codex-extraction-budget-v2-b01-20261121` | 31 contract/budget/manual entries | Source state retained; do not recount merged #567 |
+| `feat/history-world-archive-a0-061-20261121` | 30 history/export/contract entries | Merged pure contracts do not provide a production import writer |
+| `fix/bug-audit-20261117` | Six feedback/attachment/test entries | Merged source deduplicated; working state retained |
+| `fix/client-release-4.0.8-20261117` | Five old release-workflow/package/notes entries | Remnants are not a new release; compatibility records formal v4.0.8 |
+| `feat/community-works-library-20261029` | Two tool temporary/connection metadata entries | Contents private, not features |
+| `feat/luniang-3d-20261118` | 6,308 art/project/documentation status entries | Private assets unpublished; counts are not acceptance |
+
+Layouts from `fix/bug022-screenplay-layout-DSH-20261123` and `fix/bug027-town-layout-DSH-20261123` are now merged through #583/#582 respectively and are no longer counted as unfinished. This task does not commit, push, merge or clean this development.
+
 ## November 21, 2026 · Merged scope and unfinished work
 
 Review from successful baseline `1040c4b6` through `b4f8bff0` initially enumerated **120 branches, 30 worktrees (including detached), and 7 with uncommitted status**; 32 heads are outside main ancestry. Stable patches/net files were compared. Only [PR #525](https://github.com/yuanbw2025/storyforge/pull/525), exact candidate comparison pending performance acceptance, was open. This task does not merge it.
