@@ -3368,6 +3368,64 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'prose.organize.v2',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '章节七域证据整理 V2',
+    owner: 'prose-agent',
+    promptVersion: 'chapter-organization-v5',
+    executionMode: 'organize',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_ORGANIZATION_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_POST_ADOPTION_INPUT_POLICY,
+    contextCompression: PROSE_ORGANIZATION_COMPRESSION_POLICY,
+    // Capacity-managed output: the bound connection's evidenced model limit
+    // replaces the old fixed 8k application quota. This value never becomes
+    // a content or dispatch cap for the seven-domain evidence extraction.
+    maxOutputTokens: null,
+    writeTargets: [
+      { table: 'stateCards', fields: ['category', 'entityName', 'fields', 'lastChapterId'] },
+      { table: 'temporalFacts', fields: [], adoptionExtension: 'fact-ledger' },
+      { table: 'itemLedger', fields: ['itemName', 'action', 'quantity', 'heldByName', 'characterId', 'chapterId', 'chapterTitle', 'note'] },
+      { table: 'storyTimelineEvents', fields: ['title', 'storyTime', 'importance', 'description', 'chapterId', 'chapterTitle', 'order'] },
+      { table: 'characterRelations', fields: ['fromCharacterId', 'toCharacterId', 'relationType', 'label', 'description', 'isBidirectional'] },
+      { table: 'foreshadows', fields: ['status', 'plantChapterId', 'echoChapterIds', 'resolveChapterId', 'notes'] },
+      { table: 'storylineProgress', fields: ['arcId', 'currentStageId', 'status', 'progressNote', 'lastActiveChapterId', 'lastActiveChapterTitle', 'involvedEntities', 'evidenceQuote'] },
+      { table: 'storylineCrossings', fields: ['arcIdA', 'arcIdB', 'chapterId', 'chapterTitle', 'note', 'evidenceQuote'] },
+      { table: 'storyArcs', fields: ['name', 'type', 'description', 'stages'] },
+    ],
+    lastVerifiedAt: '2026-11-24',
+    regressionTests: ['R-CHAPTER-POST-ADOPTION-ENTRY-V2'],
+  },
+  {
+    version: 1,
+    id: 'prose.memory.v2',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '章节记忆与交接抽取 V2',
+    owner: 'prose-agent',
+    promptVersion: 'chapter-memory-v2',
+    executionMode: 'memory',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_MEMORY_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_POST_ADOPTION_INPUT_POLICY,
+    contextCompression: PROSE_MEMORY_COMPRESSION_POLICY,
+    // Capacity-managed output: summary/handoff/reconciliation length follows
+    // the chapter's actual information density; the old 8k quota is gone.
+    maxOutputTokens: null,
+    writeTargets: [{
+      table: 'chapters',
+      fields: ['summary', 'summarySourceTextHash', 'summaryTextNormalizationVersion', 'continuityHandoff', 'planReconciliation'],
+    }],
+    lastVerifiedAt: '2026-11-24',
+    regressionTests: ['R-CHAPTER-POST-ADOPTION-ENTRY-V2'],
+  },
+  {
+    version: 1,
     id: 'prose.organize',
     agentId: 'prose',
     defaultForAgent: false,
@@ -6453,7 +6511,7 @@ export function validateAgentSkillDefinitionsV1(
     if (!/^\d{4}-\d{2}-\d{2}$/.test(skill.lastVerifiedAt)) {
       throw new Error(`Agent Skill ${skill.id} 的 lastVerifiedAt 无效`)
     }
-    if (skill.maxOutputTokens === null ? !['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk', 'world-origin.worldview-field.v2', 'prose.generate.v2', 'prose.continue.v2'].includes(skill.id) : !Number.isInteger(skill.maxOutputTokens) || skill.maxOutputTokens < 1) {
+    if (skill.maxOutputTokens === null ? !['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk', 'world-origin.worldview-field.v2', 'prose.generate.v2', 'prose.continue.v2', 'prose.organize.v2', 'prose.memory.v2'].includes(skill.id) : !Number.isInteger(skill.maxOutputTokens) || skill.maxOutputTokens < 1) {
       throw new Error(`Agent Skill ${skill.id} 的输出预算无效`)
     }
     if (skill.regressionTests.length === 0) throw new Error(`Agent Skill ${skill.id} 缺少回归证据`)
