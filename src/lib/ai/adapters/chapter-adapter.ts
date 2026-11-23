@@ -1,4 +1,6 @@
 import type { ChatMessage, PromptTemplate } from '../../types'
+import type { TaskLengthPlanV1 } from '../../types/agent-run'
+import { describeTaskLengthPlanV1, parseTaskLengthPlanV1 } from '../author-length-intent'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../prompt-engine'
 import {
@@ -28,6 +30,70 @@ export interface RunOptions {
 export interface ChapterPromptRequestV1 {
   messages: ChatMessage[]
   modelOverride?: { temperature?: number; maxTokens?: number }
+}
+
+export interface ChapterPromptRequestV2 extends ChapterPromptRequestV1 {
+  version: 'chapter-task-prompt-v2'
+  lengthPlan: TaskLengthPlanV1
+}
+
+/** New chapter starts use the already selected Gateway packet exactly once.
+ * The legacy adapter below remains a reader/renderer for frozen old requests. */
+export function buildChapterTaskRequestV2(input: {
+  operation: 'generate' | 'continue'
+  lengthPlan: TaskLengthPlanV1
+  chapterTitle: string
+  chapterSummary: string
+  gatewayContext: string
+  existingContent?: string
+  userHint?: string
+  parameterValues?: Record<string, unknown>
+  overrides?: RunOptions['overrides']
+}): ChapterPromptRequestV2 {
+  const plan = parseTaskLengthPlanV1(input.lengthPlan)
+  if (plan.taskKind !== 'chapter' || plan.operation !== (input.operation === 'continue' ? 'continue' : 'create')
+    || plan.basis !== (input.operation === 'continue' ? 'additional-text' : 'final-text')) {
+    throw new Error('正文任务与冻结篇幅计划不匹配。')
+  }
+  const template = usePromptStore.getState().getActive(input.operation === 'continue' ? 'chapter.continue' : 'chapter.content')
+  const key = input.operation === 'continue' ? 'continueLength' : 'chapterLength'
+  const parameterValues = input.parameterValues ? { ...input.parameterValues }
+    : Object.fromEntries((template.parameters ?? []).map(item => [item.key, item.default]))
+  const described = describeTaskLengthPlanV1(plan)
+  if (template.parameters?.some(item => item.key === key)) {
+    // The managed template variable cannot reintroduce its 2500/1500 default.
+    // This is text guidance, never a transport max-output value.
+    parameterValues[key] = plan.mode === 'automatic' ? `按任务安排${plan.referenceWords === null ? '' : `（约${plan.referenceWords}仅作参考，无上限）`}`
+      : plan.intent.acceptance.minWords === null ? `≤${plan.intent.acceptance.maxWords}`
+        : plan.intent.acceptance.maxWords === null ? `≥${plan.intent.acceptance.minWords}`
+          : plan.intent.acceptance.minWords === plan.intent.acceptance.maxWords ? String(plan.intent.acceptance.minWords)
+            : `${plan.intent.acceptance.minWords}～${plan.intent.acceptance.maxWords}`
+  }
+  const rendered = renderPrompt(template, {
+    chapterTitle: input.chapterTitle, chapterSummary: input.chapterSummary,
+    worldContext: '（见本轮必读资料）', characters: '', worldRulesContext: '', previousChapterEnding: '',
+    existingContent: input.existingContent ?? '', userHint: input.userHint ?? '',
+  }, { parameterValues, overrides: input.overrides, contentPolicy: 'task-content-unbounded-v2' })
+  let messages = appendSimplifiedChineseOutputConstraint(rendered.messages)
+  messages = deliverAuthorHint(messages, input.userHint)
+  messages = deliverRequiredGatewayContext(messages, input.gatewayContext)
+  // A custom template may omit existingContent; continuation still receives the
+  // entire current draft, not a fixed 3000-character prefix/tail approximation.
+  if (input.operation === 'continue' && input.existingContent
+    && !messages.some(message => message.content.includes(input.existingContent!))) {
+    messages.push({ role: 'user', content: `【当前正文全文 · 仅续写其后新增片段】\n${input.existingContent}` })
+  }
+  messages.push({ role: 'system', content: [
+    `【本次生效篇幅计划】${described}`,
+    '本计划优先于系统模板的默认字数建议；自动参考不是下限或上限，不为凑数注水或截稿。',
+    input.operation === 'continue' ? '本次只统计新增片段，不重复或改写当前正文。' : '只统计本次完整正文，不统计解释、计数说明或元数据。',
+    SCENE_EXECUTION_GUIDANCE_V1,
+    '输出前核对本章任务终点、场景职责、禁止项和角色认知；未完成的内容应继续补全，不凭达到参考字数省略必要场景。',
+  ].join('\n') })
+  // Preserve sampling, but a template default is not author consumption consent.
+  const temperature = rendered.modelOverride?.temperature
+  return { version: 'chapter-task-prompt-v2', lengthPlan: plan, messages,
+    ...(temperature === undefined ? {} : { modelOverride: { temperature } }) }
 }
 
 const QUARANTINED_GENERATION_MARKERS = ['未来计划', '尚未发生', '异世界档案']

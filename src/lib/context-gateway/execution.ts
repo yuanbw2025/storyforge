@@ -7,7 +7,7 @@ import { estimateTokens } from '../ai/context-budget'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { AGENT_TOOL_SCHEMA_HASH_V1 } from '../agent/execution-binding'
 import { runReadOnlyAgent, type AgentModelAdapter, type ReadOnlyAgentResult } from '../agent/runner'
-import type { AgentSkillDefinitionV1 } from '../agent/skill-registry'
+import { assertProseTaskProfileV2, type AgentSkillDefinitionV1 } from '../agent/skill-registry'
 import type { AgentToolResult } from '../agent/types'
 import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { CONTEXT_SOURCES } from '../registry/context-sources'
@@ -26,6 +26,7 @@ import type {
 import type { WorkspaceScope } from '../types'
 import {
   createContextGatewayContractSnapshotV1,
+  contextAccessPolicyHashV1,
   createContextPacketV1,
   createContextSufficiencyReportV1,
   createRetrievalTraceV1,
@@ -410,8 +411,11 @@ async function validatedAgentRead(
 export async function executeContextGatewayV1(
   input: ExecuteContextGatewayInputV1,
 ): Promise<ContextGatewayExecutionV1> {
+  const proseTask = assertProseTaskProfileV2(input.skill)
   const materialPolicy = input.taskRequestV2 ? await createContextAccessPolicyForExecutionV2(input.skill, input.taskRequestV2.material, input.excludedResourceKinds) : undefined
-  const prepared = !materialPolicy && input.modelConfig ? await prepareModelCapacityV1(input.modelConfig) : undefined
+  // A V2 chapter collects its finite selected material before preparing the
+  // complete model request. Legacy fallback windows are not service evidence.
+  const prepared = !materialPolicy && !proseTask && input.modelConfig ? await prepareModelCapacityV1(input.modelConfig) : undefined
   const modelBudget = prepared?.modelCapacity ? {
     capacity: prepared.modelCapacity,
     inputBudget: Math.max(1, modelInputBudgetV1(prepared.modelCapacity, prepared.maxTokens).inputBudget - 1024),
@@ -428,7 +432,7 @@ export async function executeContextGatewayV1(
     // Repair derived caches before opening the immutable catalog read session.
     await ensureLocalNarrativeIndexV1({ projectId: input.scope.projectId, scope: input.scope })
   }
-  const session = await createContextGatewayToolSessionV1({
+  let session = await createContextGatewayToolSessionV1({
     scope: frozenScope(input),
     policy: accessPolicy,
     allowedResourceKeys: input.allowedResourceKeys,
@@ -437,6 +441,20 @@ export async function executeContextGatewayV1(
     excludedRecordResourceKeys: input.excludedRecordResourceKeys,
   })
   const catalog = await collectCatalog(session)
+  if (proseTask) {
+    // Quantities come from this frozen catalog, including its actual reference
+    // and framing metadata. This is a local collection forecast, not a model
+    // window or a replacement project quota. Provider guards/scope stay exact.
+    const collectionTokens = catalog.descriptors.reduce((sum, descriptor) => sum
+      + Math.max(0, ...Object.values(descriptor.tokenEstimate).filter((value): value is number => typeof value === 'number'))
+      + estimateTokens(canonicalStringify(descriptor)), 0)
+    if (!Number.isSafeInteger(collectionTokens)) fail('material-size', '当前资料量无法可靠计数，请保留来源。')
+    const policy = Object.freeze({ ...session.policy, maxRetrievedTokens: Math.max(1, collectionTokens) })
+    // Metadata discovery has issued no read capabilities. Reuse the same frozen
+    // providers and guards; never reopen them against a potentially newer scope.
+    session = { ...session, policy, policyHash: await contextAccessPolicyHashV1(policy) }
+    input = { ...input, budgetTokens: policy.maxRetrievedTokens }
+  }
   const readsAllowed = input.additionalReadsEnabled !== false
     && input.additionalReadModel != null
     && gatewayPolicy.additionalReadToolNames.length > 0
@@ -499,7 +517,7 @@ export async function executeContextGatewayV1(
     const binding = bindingFor(session, decision.sourceKey)
     if (mandatoryOriginalKeys.has(decision.resourceKey)) {
       const refs = descriptor.sourceRefs
-      if (!refs.length || refs.length > MAX_SOURCE_CAPABILITIES_PER_RESOURCE
+      if (!refs.length || !proseTask && refs.length > MAX_SOURCE_CAPABILITIES_PER_RESOURCE
         || new Set(refs.map(ref => canonicalStringify(ref))).size !== refs.length) {
         fail('mandatory-original-ambiguous', `原文证据为空、重复或超过单资源引用上限: ${decision.resourceKey}`)
       }
@@ -547,9 +565,9 @@ export async function executeContextGatewayV1(
       scope: session.scope,
       resourceKey: decision.resourceKey,
       depth: decision.depth,
-      maxTokens: Math.max(1, Math.min(remaining, decision.estimatedTokens || remaining)),
+      maxTokens: proseTask ? remaining : Math.max(1, Math.min(remaining, decision.estimatedTokens || remaining)),
     })
-    if (input.mandatoryFullResourceKeys?.includes(decision.resourceKey) && read.contentHash !== descriptor.contentHash) {
+    if ((input.mandatoryFullResourceKeys?.includes(decision.resourceKey) || proseTask && decision.depth === 'full') && read.contentHash !== descriptor.contentHash) {
       fail('mandatory-full-incomplete', `${decision.resourceKey} 完整资料超出检索或模型预算，拒绝静默截断`)
     }
     if (descriptor.contentHash !== decision.contentHash
@@ -777,6 +795,7 @@ export async function assertContextGatewayCandidateAdoptableV1(input: {
   attempt: number
   candidateHash: string
   contextManifestHash?: string
+  sourceGeneration?: number
   excludedResourceKinds?: readonly ContextResourceDescriptorV1['kind'][]
 }): Promise<{ mode: 'registry-context' } | { mode: 'required'; manifestHash: string; freshnessHash: string }> {
   if (!isContextGatewayRequiredForWriteTargetV1(input.skill, input.writeTarget)) {
@@ -789,6 +808,7 @@ export async function assertContextGatewayCandidateAdoptableV1(input: {
     stepId: input.stepId,
     attempt: input.attempt,
     candidateHash: input.candidateHash,
+    ...(input.sourceGeneration === undefined ? {} : { sourceGeneration: input.sourceGeneration }),
   })
   if (verified.manifest.manifestHash !== input.contextManifestHash) {
     fail('candidate-manifest-mismatch', '候选声明的 Context Manifest 与 exact evidence 不一致')
