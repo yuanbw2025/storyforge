@@ -19,9 +19,6 @@ storageMocks.pick.mockImplementation(async () => storageMocks.selected)
 vi.mock('../../src/components/settings/AIConfigPanel', () => ({
   default: () => createElement('div', { 'data-testid': 'ai-config-placeholder' }),
 }))
-vi.mock('../../src/components/settings/CreativeReliabilityCommunityPanel', () => ({
-  default: () => createElement('div', { 'data-testid': 'community-placeholder' }),
-}))
 vi.mock('../../src/components/settings/HarnessEvalPanel', () => ({
   default: () => createElement('div', { 'data-testid': 'harness-placeholder' }),
 }))
