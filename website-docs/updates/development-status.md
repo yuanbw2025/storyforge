@@ -2,14 +2,14 @@
 
 ## 2026-11-23 · 容量修正与后续任务
 
-从成功基线 `cafb4359` 核对至 `36e749cf`；初始完整枚举 **138分支、36工作区（含detached）、8个有未提交状态的工作区**，36个head尚非main祖先。逐稳定补丁与文件净差去重，没有按领先提交数宣布新功能。
+从成功基线 `cafb4359` 核对至 `e91a0955`；初始完整枚举 **138分支、36工作区（含detached）、8个有未提交状态的工作区**，36个head尚非main祖先。逐稳定补丁与文件净差去重，没有按领先提交数宣布新功能。
 
 ### 当前开放PR
 
 - [#525](https://github.com/yuanbw2025/storyforge/pull/525)：精确候选对照，性能待验；不是已交付UI。
 - [#574](https://github.com/yuanbw2025/storyforge/pull/574)：完整跑团语义意图；已合入#571只保留原答，不重复计为语义闭环。
 - [#581](https://github.com/yuanbw2025/storyforge/pull/581)：灵感模板治理基础059-F；仅前置，不宣称完整入口。
-- 提交前复核新增 [#582](https://github.com/yuanbw2025/storyforge/pull/582) AI小镇布局与 [#583](https://github.com/yuanbw2025/storyforge/pull/583) 剧本布局；均待合并，与下列本地来源分别登记，不重复计为已交付。
+合并前复核时，#582 AI小镇与 #583 剧本布局已先后合入，已同步[AI小镇](/features/interactive/ai-town)与[剧本](/features/screenplay)使用说明，不重复计算本地来源。
 
 #567完整词条V2与#578设定单字段已合入，相关旧提取/预算及世界观前置来源不重复算遗漏功能。封面完整runner/UI、未挂载Markdown编辑器、力量契约与精确对照后续仍按各自原分支保留；`fix/ai-capacity-shared-validation-20261122` 等验证变体不算新产品能力。聊天规划无净文件增量。
 
@@ -24,7 +24,7 @@
 | `feat/community-works-library-20261029` | 2项工具临时/连接元数据 | 不公开内容、不计功能 |
 | `feat/luniang-3d-20261118` | 6308项美术/工程及说明状态 | 私有素材未公开，不凭数量声称验收完成 |
 
-另有 `fix/bug022-screenplay-layout-DSH-20261123`、`fix/bug027-town-layout-DSH-20261123` 本地布局提交尚无主干补丁等价，现有对应集成PR #583/#582，保留待核对，不宣传已交付。本任务不提交、推送、合并或清理这些开发。
+`fix/bug022-screenplay-layout-DSH-20261123` 与 `fix/bug027-town-layout-DSH-20261123` 的布局已分别由 #583/#582 合入主干，不再算未交付。本任务不提交、推送、合并或清理这些开发。
 
 ## 2026-11-21 · 合并范围与待完成工作
 

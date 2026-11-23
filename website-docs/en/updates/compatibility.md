@@ -2,7 +2,7 @@
 
 ## November 23, 2026 · Mainline complete-content fixes
 
-The latest formal release remains v4.0.8 (`41a6e865`, database v14/backup v18); v4.0.9 is still an unpublished draft. Mainline `36e749cf` uses database v16/backup v20. This round's JSON/candidate/compilation-envelope fixes do not add schema or backup-format versions.
+The latest formal release remains v4.0.8 (`41a6e865`, database v14/backup v18); v4.0.9 is still an unpublished draft. Mainline `e91a0955` uses database v16/backup v20. This round's JSON/candidate/compilation-envelope fixes do not add schema or backup-format versions.
 
 Setting V2/extraction, shared complete-content handling and shortform layout are bounded by their actual merged scope. This is not removal of every product, sharing-package, prose/post-chapter or model-service limit. Historical finite budgets and explicit caller resume limits remain. Keep original backups; older programs must not directly open newer databases. See individual guides and [development](/en/updates/development-status) for unmerged follow-ups.
 

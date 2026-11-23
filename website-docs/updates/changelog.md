@@ -6,9 +6,9 @@
 - **设定单字段**：完整来源、篇幅意图、实际计数、持续改善的修订与最佳稿恢复/明确采纳闭环。见[设定与地图](/features/longform/worlds-maps)（#570前置、#578产品交付）。
 - **词条与跑团**：完整来源词条提取接入V2任务，按实际证据细分、刷新恢复不重发；跑团意图原稿保留完整尾部，后续语义入口仍待合并。见[导入](/guides/import)、[跑团](/features/interactive/ttrpg)（#567/#571，不将#574算作已交付）。
 - **备份与世界编译**：默认长JSON/检查点包络及编译内容帽撤下，明确调用方限制、原子导入、真实资源故障与独立分享包规则仍有效，格式不变。见[备份](/guides/backup-restore)、[世界引擎](/features/world-engine)（#572/#575）。
-- **界面**：短篇页眉编辑、页签/二级页与逐章下拉更紧凑；退役可靠性评分入口，原本机记录和Bug/建议入口保留。见[短篇](/features/shortform)、[排查](/guides/troubleshooting)（#579/#580）。保存验收#576/#577按当前外部失焦与源码编辑控件核对，不另算新功能。
+- **界面**：短篇页眉编辑、页签/二级页与逐章下拉更紧凑；AI小镇作品库搜索、制作页与手机表单更紧凑，剧本编辑优先并可展开版本/导出；退役可靠性评分入口，原本机记录和Bug/建议入口保留。见[短篇](/features/shortform)、[排查](/guides/troubleshooting)、[AI小镇](/features/interactive/ai-town)、[剧本](/features/screenplay)（#579/#580/#582/#583）。保存验收#576/#577按当前外部失焦与源码编辑控件核对，不另算新功能。
 
-核对 `cafb4359…36e749cf`；#564/#568仅流量归档。正式版及各未交付范围见[兼容](/updates/compatibility)与[开发记录](/updates/development-status)。
+核对 `cafb4359…e91a0955`；#564/#568仅流量归档。正式版及各未交付范围见[兼容](/updates/compatibility)与[开发记录](/updates/development-status)。
 
 ## 2026-11-21 · 保存阅读、准备与参考分析
 

@@ -1,9 +1,13 @@
 ---
 productId: upper.ai-town
 status: preview
-lastVerified: 2026-11-13
+lastVerified: 2026-11-23
 ---
 # Epilogue AI town
+
+## November 23: library search and compact authoring
+
+New and search sit in the library toolbar. Use Clear search when no work matches; an empty library still offers a new production plan or community works. Current page/work titles remain visible with long-title wrapping. Forms, actions and community cards use tighter spacing, with single-column mobile forms. Player name retains its editable, resizable textarea and original 1,000-character limit. Work versions and life saves remain separate; source selection, explicit start, save-conflict handling and publication keep their existing rules. Based on [#582](https://github.com/yuanbw2025/storyforge/pull/582).
 
 ## November 21: source-consultation readback
 

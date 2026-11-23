@@ -6,9 +6,9 @@
 - **Setting fields:** complete sources, length intent, actual counting, improving revisions and best-draft recovery/explicit adoption. See [settings/maps](/en/features/longform/worlds-maps) (#570 foundation, #578 product delivery).
 - **Entries/TTRPG:** full-source extraction uses V2 with evidence-based splitting and no reload redispatch; intent originals retain their tails while semantic follow-ups remain unmerged. See [imports](/en/guides/import), [TTRPG](/en/features/interactive/ttrpg) (#567/#571, not #574).
 - **Backups/world compilation:** remove default long-JSON/checkpoint/compilation content caps while retaining explicit caller limits, atomic import, real resource failures and separate sharing rules. Formats are unchanged. See [backups](/en/guides/backup-restore), [world engine](/en/features/world-engine) (#572/#575).
-- **UI:** compact shortform header editing/tabs/secondary pages/chapter dropdown; retire reliability scoring while retaining old local records and Bug/Feature feedback. See [shortform](/en/features/shortform), [troubleshooting](/en/guides/troubleshooting) (#579/#580). #576/#577 align save acceptance with whole-area leave/source editing, not additional features.
+- **UI:** compact shortform header editing/tabs/secondary pages/chapter dropdown; compact AI-town library search/authoring/mobile forms and writing-first screenplay with expandable version/export tools; retire reliability scoring while retaining old local records and Bug/Feature feedback. See [shortform](/en/features/shortform), [troubleshooting](/en/guides/troubleshooting), [AI town](/en/features/interactive/ai-town) , [screenplay](/en/features/screenplay) (#579/#580/#582/#583). #576/#577 align save acceptance with whole-area leave/source editing, not additional features.
 
-Review covers `cafb4359…36e749cf`; #564/#568 only archive traffic. See [compatibility](/en/updates/compatibility) and [development](/en/updates/development-status) for formal versions and unfinished scope.
+Review covers `cafb4359…e91a0955`; #564/#568 only archive traffic. See [compatibility](/en/updates/compatibility) and [development](/en/updates/development-status) for formal versions and unfinished scope.
 
 ## November 21, 2026 · Save/read workflows, preparation and reference analysis
 
