@@ -1,0 +1,66 @@
+/* BUG029: only the text-adventure frame uses this opt-in class. Never size the reading stage here. */
+.adventure-product-page.adventure-compact-ui .lf-heading{padding:12px 20px 0;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.adventure-product-page.adventure-compact-ui .lf-heading>small{display:none} /* duplicate of the visible page heading */
+.adventure-product-page.adventure-compact-ui .lf-heading h2{margin:0}
+.adventure-product-page.adventure-compact-ui .product-frame-content{padding:12px 20px;min-width:0}
+.adventure-product-page.adventure-compact-ui .adventure-workspace-toolbar{padding:0 0 12px;gap:8px 16px}
+.adventure-product-page.adventure-compact-ui .adventure-workspace-toolbar nav{gap:12px}
+.adventure-product-page.adventure-compact-ui .adventure-workspace-toolbar nav a{font-size:14px;padding:6px 0}
+.adventure-product-page.adventure-compact-ui .adventure-workspace-select{min-width:0;padding:0;font-size:14px}
+.adventure-product-page.adventure-compact-ui .adventure-workspace-select select{width:260px;max-width:100%;min-width:0;font-size:14px}
+.adventure-product-page.adventure-compact-ui .adventure-page-empty,.adventure-product-page.adventure-compact-ui .adventure-page-loading{padding:18px;min-width:0;border:1px solid var(--border);border-radius:12px}
+.adventure-product-page.adventure-compact-ui .adventure-page-empty p{margin:8px 0;font-size:16px;line-height:1.8}
+.adventure-product-page.adventure-compact-ui .adventure-page-empty .adventure-eyebrow{color:var(--text-secondary);font-size:13px;letter-spacing:1px}
+.adventure-product-page.adventure-compact-ui .product-frame-content>.lf-paper{padding:16px;margin-bottom:12px;border-radius:14px;min-width:0;overflow-wrap:anywhere}
+.adventure-product-page.adventure-compact-ui .product-frame-content>.lf-paper :is(h2,h3){margin:0 0 8px}
+.adventure-product-page.adventure-compact-ui .product-frame-content>.lf-paper p{margin:6px 0}
+.adventure-product-page.adventure-compact-ui .product-frame-content>.lf-paper :is(input,textarea,select){max-width:100%;box-sizing:border-box}
+.adventure-product-page.adventure-compact-ui .product-frame-content>.lf-paper>div{min-width:0}
+.adventure-product-page.adventure-compact-ui .adventure-showcase{min-height:0;max-width:none;margin:0;padding:20px;border-radius:14px}
+.adventure-product-page.adventure-compact-ui .adventure-shelf-heading{margin-bottom:16px}
+.adventure-product-page.adventure-compact-ui .adventure-shelf-heading h1{margin:8px 0}
+.adventure-product-page.adventure-compact-ui .adventure-library-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin:12px 0}
+.adventure-product-page.adventure-compact-ui .adventure-library-tools input{width:320px;max-width:100%;min-width:0;padding:10px 12px;font-size:16px;background:#15282d;color:var(--shelf-ink);border:1px solid #c4c5aa66;border-radius:6px}
+.adventure-product-page.adventure-compact-ui .adventure-library-tools span{font-size:14px;color:var(--shelf-muted)}
+.adventure-product-page.adventure-compact-ui .adventure-library-clear{border:1px solid #c4c5aa66;border-radius:6px;padding:8px 12px;font-size:14px;color:var(--shelf-ink)}
+.adventure-product-page.adventure-compact-ui .adventure-feature{min-height:0}
+.adventure-product-page.adventure-compact-ui .adventure-feature-copy{padding:20px;width:70%;max-width:none;min-width:0}
+.adventure-product-page.adventure-compact-ui .adventure-feature h2{margin-bottom:12px;overflow-wrap:anywhere}
+.adventure-product-page.adventure-compact-ui .adventure-edition{margin-bottom:12px;font-size:13px}
+.adventure-product-page.adventure-compact-ui .adventure-feature-description{display:block;margin-bottom:12px;font-size:15px;line-height:1.8;max-width:640px;overflow:visible}
+.adventure-product-page.adventure-compact-ui .adventure-story-tags{margin-bottom:14px;font-size:13px;gap:12px}
+.adventure-product-page.adventure-compact-ui .adventure-feature-actions :is(.adventure-primary,.adventure-secondary){font-size:14px!important;padding:10px 16px;white-space:normal}
+.adventure-product-page.adventure-compact-ui .adventure-feature-number{right:16px;bottom:14px}
+.adventure-product-page.adventure-compact-ui .adventure-section-heading{margin:20px 0 12px;gap:12px;flex-wrap:wrap}
+.adventure-product-page.adventure-compact-ui .adventure-section-heading>span{font-size:14px}
+.adventure-product-page.adventure-compact-ui .adventure-book-grid{gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.adventure-product-page.adventure-compact-ui .adventure-book-grid>article{min-width:0}
+.adventure-product-page.adventure-compact-ui .adventure-book-grid>article:only-child>button{grid-template-columns:180px minmax(0,1fr)}
+.adventure-product-page.adventure-compact-ui .adventure-book-art{aspect-ratio:auto;height:140px}
+.adventure-product-page.adventure-compact-ui .adventure-book-copy,.adventure-product-page.adventure-compact-ui .adventure-book-grid>article:only-child .adventure-book-copy{padding:14px;min-width:0}
+.adventure-product-page.adventure-compact-ui .adventure-book-copy h3{overflow-wrap:anywhere}
+.adventure-product-page.adventure-compact-ui .adventure-book-copy :is(p,small,span){font-size:14px}
+.adventure-product-page.adventure-compact-ui .adventure-library-empty{padding:16px;text-align:left;font-size:15px;min-width:0}
+.adventure-product-page.adventure-compact-ui .adventure-library-empty>svg{height:28px;width:28px}
+.adventure-product-page.adventure-compact-ui .adventure-detail-footer{gap:20px;padding:18px 0}
+.adventure-product-page.adventure-compact-ui .adventure-detail-footer p{font-size:15px}
+.adventure-product-page.adventure-compact-ui .adventure-saved-journeys{margin-top:16px}
+.adventure-product-page.adventure-compact-ui .adventure-saved-journeys summary{padding:14px 0}
+.adventure-product-page.adventure-compact-ui .adventure-saved-journeys article{min-width:0;flex-wrap:wrap}
+.adventure-product-page.adventure-compact-ui .adventure-saved-journeys strong{font-size:14px;overflow-wrap:anywhere}
+.adventure-product-page.adventure-compact-ui .adventure-shelf-footer{margin-top:14px;padding:16px 0;gap:14px;flex-wrap:wrap}
+@media(max-width:640px){
+  .adventure-product-page.adventure-compact-ui .lf-heading{padding:10px 12px 0}
+  .adventure-product-page.adventure-compact-ui .product-frame-content{padding:10px 12px}
+  .adventure-product-page.adventure-compact-ui .adventure-workspace-select{width:100%}
+  .adventure-product-page.adventure-compact-ui .adventure-workspace-select select{flex:1;width:auto}
+  .adventure-product-page.adventure-compact-ui .adventure-showcase{padding:14px}
+  .adventure-product-page.adventure-compact-ui .adventure-feature-copy{width:100%;padding:18px}
+  .adventure-product-page.adventure-compact-ui .adventure-feature>.adventure-cover{bottom:0;left:0;opacity:.25}
+  .adventure-product-page.adventure-compact-ui .adventure-feature::after{background:linear-gradient(90deg,#10262be8,#10262b9c)}
+  .adventure-product-page.adventure-compact-ui .adventure-library-tools input{width:100%;max-width:320px}
+  .adventure-product-page.adventure-compact-ui .adventure-feature-actions button{flex:1 1 auto;white-space:normal}
+  .adventure-product-page.adventure-compact-ui .adventure-book-grid>article:only-child>button{display:flex}
+  .adventure-product-page.adventure-compact-ui .adventure-book-art{height:120px}
+  .adventure-product-page.adventure-compact-ui .adventure-detail-footer{grid-template-columns:minmax(0,1fr);gap:10px}
+}
