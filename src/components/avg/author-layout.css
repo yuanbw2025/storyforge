@@ -1,0 +1,61 @@
+/* BUG028: AVG-private layout. avg.css is shared with other authoring products. */
+.avg-author-app .lf-heading{padding:12px 20px 0}
+.avg-author-app .avg-heading-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px;min-width:0}
+.avg-author-app .avg-heading-line h2{margin:0 0 8px}
+.avg-author-app .avg-current-title{min-width:0;overflow-wrap:anywhere;font-size:16px;color:var(--skin-muted, #537765)}
+.avg-author-app .lf-current{overflow-wrap:anywhere}
+.avg-author-app .lf-body{padding:12px 20px;gap:16px}
+.avg-author-app .avg-phases{gap:8px;margin:0 0 8px}
+.avg-author-app .avg-phases button{padding:7px 14px}
+/* Only authoring panels: the player stage and dialogue retain their own sizing. */
+.avg-author-app:not([data-avg-page="play"]):not([data-avg-page="history"]) .lf-paper{padding:16px;margin-bottom:12px;border-radius:16px;min-width:0;overflow-wrap:anywhere}
+.avg-author-app:not([data-avg-page="play"]):not([data-avg-page="history"]) .lf-paper h3{margin-bottom:8px}
+.avg-author-app:not([data-avg-page="play"]):not([data-avg-page="history"]) .lf-paper p{margin-bottom:8px}
+.avg-author-app .avg-actions{gap:8px;margin:10px 0;flex-wrap:wrap}
+.avg-author-app .lf-action{padding:9px 16px}
+.avg-author-app .avg-form{gap:14px;min-width:0}
+.avg-author-app .avg-form>label:has(textarea){grid-column:1/-1}
+.avg-author-app .avg-form :is(input,textarea,select){max-width:100%;box-sizing:border-box}
+.avg-author-app .avg-form select{width:100%;max-width:420px}
+.avg-author-app .avg-form textarea{min-height:120px}
+.avg-author-app .avg-source{gap:12px;flex-wrap:wrap;padding:10px 0}
+.avg-author-app .avg-source>div{min-width:0;flex:1 1 220px}
+.avg-author-app .avg-source h4{overflow-wrap:anywhere}
+.avg-author-app .avg-source>.lf-action{flex-shrink:0}
+.avg-author-app .avg-consult{gap:14px;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)}
+.avg-author-app .avg-consult>*{min-width:0}
+.avg-author-app .avg-production>div{padding:14px;border-radius:16px}
+.avg-author-app .avg-assembly{gap:12px}
+.avg-author-app .avg-assembly-row{gap:12px;padding:10px 0}
+.avg-author-app .avg-editor-card{padding:16px;margin:12px 0;border-radius:16px;min-width:0}
+.avg-author-app .avg-editor-card :is(input,textarea,select){max-width:100%;box-sizing:border-box}
+.avg-author-app .lf-library-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:12px;margin-bottom:12px}
+.avg-author-app .lf-library-grid article{min-width:0;margin:0;overflow-wrap:anywhere}
+.avg-author-app .avg-library-tools{margin-bottom:12px;min-width:0}
+.avg-author-app .avg-library-tools .avg-actions{margin:0 0 8px}
+.avg-author-app .avg-library-tools input[aria-label="搜索 AVG"]{width:320px;flex:0 1 320px;margin:0;max-width:100%}
+.avg-author-app .avg-library-hint,.avg-author-app .avg-library-empty{font-size:14px;line-height:1.7;margin:6px 0}
+.avg-author-app .avg-library-empty .lf-action{margin-left:8px}
+.avg-author-app .avg-library-card{display:flex;flex-direction:column;align-items:start}
+.avg-author-app .avg-library-card .avg-actions{margin-top:auto;padding-top:8px}
+/* The unchanged shared example component is compact only inside this wrapper. */
+.avg-author-app .avg-examples .example-library{margin-block:12px}
+.avg-author-app .avg-examples .example-heading{gap:12px;margin-bottom:12px}
+.avg-author-app .avg-examples .example-heading h3{margin:0 0 6px}
+.avg-author-app .avg-examples .example-game{grid-template-columns:200px minmax(0,1fr);gap:16px;align-items:start}
+.avg-author-app .avg-examples .example-game>img{max-width:100%;height:140px;object-fit:cover;border-radius:12px}
+.avg-author-app .avg-examples .example-game>div{min-width:0}
+.avg-author-app .avg-examples .example-game p{margin:8px 0;line-height:1.8}
+@media(max-width:1000px){
+  .avg-author-app .avg-consult{grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:650px){
+  .avg-author-app .lf-heading{padding:10px 12px 0}
+  .avg-author-app .lf-body{padding:10px 12px;gap:10px}
+  .avg-author-app .lf-mobile-controls{padding:0 0 4px}
+  .avg-author-app:not([data-avg-page="play"]):not([data-avg-page="history"]) .lf-paper{padding:14px}
+  .avg-author-app .avg-form{grid-template-columns:minmax(0,1fr)}
+  .avg-author-app .avg-library-tools input[aria-label="搜索 AVG"]{width:auto;flex:1 1 180px}
+  .avg-author-app .avg-examples .example-game{grid-template-columns:minmax(0,1fr);gap:12px}
+  .avg-author-app .avg-examples .example-game>img{width:100%;height:100px}
+}
