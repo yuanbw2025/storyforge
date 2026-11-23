@@ -1427,6 +1427,31 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'world-origin.worldview-field.v2', agentId: 'world-origin', defaultForAgent: false,
+    label: '世界基座单字段完整生成 V2', owner: 'world-foundation-agent', requestPolicy: 'task-request-v2',
+    promptVersion: 'worldview-field-full-length-v2', executionMode: 'worldview-field', contextTaskKind: 'agent-world-origin',
+    readToolNames: [], contextSourceKeys: ['manualText', 'worldviewFieldBaselineV2', 'worldviewFieldContextV2'], optionalContextSourceKeys: [],
+    inputPolicy: { sourceKeys: ['manualText', 'worldviewFieldBaselineV2', 'worldviewFieldContextV2'], states: {
+      empty: { handling: 'require-upstream', instruction: '必须冻结作者要求和真实目标基线。' },
+      partial: { handling: 'require-upstream', instruction: '完整捕获必要正式来源后才可生成。' },
+      complete: { handling: 'grounded-transform', instruction: '保全部已确认边界，按实际任务和篇幅计划生成一个字段。' },
+    } },
+    // Compatibility metadata: this exact full-capture consumer never invokes compression.
+    contextCompression: compressionPolicy(['manualText', 'worldviewFieldBaselineV2', 'worldviewFieldContextV2']),
+    contextGateway: { version: 1, rollout: 'required',
+      requiredWriteTargets: WORLDVIEW_GENERATABLE_FIELD_SPECS.map(spec => `worldviews.${spec.field}`),
+      providerSourceKeys: [], allowedResourceKinds: ['worldview-field', 'story-core-field', 'fact'],
+      allowedDepths: ['index', 'summary', 'focused', 'full', 'original'],
+      maxReadCalls: 3, maxRetrievedTokens: 1, maxPlanningSteps: 1, maxPlanningModelTokens: 1,
+      allowOriginalRead: true, additionalReadToolNames: [],
+    },
+    maxOutputTokens: null,
+    writeTargets: [{ table: 'worldviews', fields: WORLDVIEW_GENERATABLE_FIELD_SPECS.map(spec => spec.field) }],
+    // Source/contract review date only; this inert proposal has not run tests.
+    lastVerifiedAt: '2026-11-22', regressionTests: ['R-WORLDVIEW-FIELD-V2'],
+  },
+  {
+    version: 1,
     id: 'world-origin.worldview-field',
     agentId: 'world-origin',
     defaultForAgent: true,
@@ -6277,6 +6302,43 @@ export function assertCodexFullCaptureProfileV2(
   return true
 }
 
+
+/** Frozen structural admission for this one product, not an empty-provider grant
+ * by prefix/requestPolicy. It reads no mutable registry entry. */
+export function assertWorldviewFullCaptureProfileV2(definition: Parameters<typeof assertCodexFullCaptureProfileV2>[0]): boolean {
+  if (definition.id !== 'world-origin.worldview-field.v2') return false
+  const eq = (value: unknown, expected: readonly unknown[]) => Array.isArray(value)
+    && value.length === expected.length && value.every((item, index) => item === expected[index])
+  const sources = ['manualText', 'worldviewFieldBaselineV2', 'worldviewFieldContextV2']
+  const fields = WORLDVIEW_GENERATABLE_FIELD_SPECS.map(spec => spec.field)
+  const gate = definition.contextGateway
+  if (definition.agentId !== 'world-origin' || definition.owner !== 'world-foundation-agent'
+    || definition.requestPolicy !== 'task-request-v2' || definition.executionMode !== 'worldview-field'
+    || definition.promptVersion !== 'worldview-field-full-length-v2' || definition.contextTaskKind !== 'agent-world-origin'
+    || definition.defaultForAgent !== false || definition.maxOutputTokens !== null || ![1,2].includes(definition.version)
+    || definition.version === 2 && (definition.sourceDefinitionVersion !== 1 || !eq(definition.resolvedToolSourceKeys, []))
+    || !eq(definition.contextSourceKeys, sources) || !eq(definition.optionalContextSourceKeys, [])
+    || !eq(definition.readToolNames, []) || !eq(definition.inputPolicy.sourceKeys, sources)
+    || !eq(definition.contextCompression.sourceKeys, sources)
+    || !gate || gate.version !== 1 || gate.rollout !== 'required'
+    || !eq(gate.providerSourceKeys, []) || !eq(gate.additionalReadToolNames, [])
+    || !eq(gate.allowedResourceKinds, ['worldview-field','story-core-field','fact'])
+    || !eq(gate.allowedDepths, ['index','summary','focused','full','original']) || gate.allowOriginalRead !== true
+    || !eq(gate.requiredWriteTargets, fields.map(field => `worldviews.${field}`))
+    || definition.writeTargets.length !== 1 || definition.writeTargets[0].table !== 'worldviews'
+    || 'adoptionExtension' in definition.writeTargets[0] || !eq(definition.writeTargets[0].fields, fields)) throw new Error('世界基座 V2 完整来源 profile 无效。')
+  for (const state of ['empty','partial','complete'] as const) {
+    const item = definition.inputPolicy.states[state]
+    if (!item || item.handling !== (state === 'complete' ? 'grounded-transform' : 'require-upstream')
+      || typeof item.instruction !== 'string' || !item.instruction.trim() || item.instruction.length > 400) throw new Error('世界基座 V2 输入策略无效。')
+  }
+  return true
+}
+export function assertRegisteredFullCaptureProfileV2(definition: Parameters<typeof assertCodexFullCaptureProfileV2>[0]): boolean {
+  return definition.id === 'world-origin.worldview-field.v2'
+    ? assertWorldviewFullCaptureProfileV2(definition) : assertCodexFullCaptureProfileV2(definition)
+}
+
 export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
@@ -6317,7 +6379,7 @@ export function validateAgentSkillDefinitionsV1(
   const ids = new Set<string>()
   const defaultAgents = new Set<RegisteredAgentId>()
   for (const skill of definitions) {
-    const fullCapture = assertCodexFullCaptureProfileV2(skill)
+    const fullCapture = assertRegisteredFullCaptureProfileV2(skill)
     if (skill.version !== 1) throw new Error(`Agent Skill ${skill.id} 版本不受支持`)
     if (ids.has(skill.id)) throw new Error(`Agent Skill ID 重复：${skill.id}`)
     ids.add(skill.id)
@@ -6335,7 +6397,7 @@ export function validateAgentSkillDefinitionsV1(
     if (!/^\d{4}-\d{2}-\d{2}$/.test(skill.lastVerifiedAt)) {
       throw new Error(`Agent Skill ${skill.id} 的 lastVerifiedAt 无效`)
     }
-    if (skill.maxOutputTokens === null ? !['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk'].includes(skill.id) : !Number.isInteger(skill.maxOutputTokens) || skill.maxOutputTokens < 1) {
+    if (skill.maxOutputTokens === null ? !['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk', 'world-origin.worldview-field.v2'].includes(skill.id) : !Number.isInteger(skill.maxOutputTokens) || skill.maxOutputTokens < 1) {
       throw new Error(`Agent Skill ${skill.id} 的输出预算无效`)
     }
     if (skill.regressionTests.length === 0) throw new Error(`Agent Skill ${skill.id} 缺少回归证据`)

@@ -85,7 +85,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 176 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 178 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -235,6 +235,8 @@
 | `chapterContinuityHandoff` | 全局直接前驱连续性交接 | chapter | L1 | 1600 |
 | `previousPlanReconciliation` | 前章计划正文对账 | chapter | L1 | 1400 |
 | `recentChapterSummaries` | 当前世界最近已验证摘要 | chapter | L1 | 2200 |
+| `worldviewFieldBaselineV2` | 单字段完整世界基线 V2 | world | L0 | 完整任务基线（旧装配参考；V2完整捕获不以此截原文）（仅显式任务选用） |
+| `worldviewFieldContextV2` | 单字段正式约束完整来源 V2 | project | L0 | 完整任务基线（旧装配参考；V2完整捕获不以此截原文）（仅显式任务选用） |
 | `worldview` | 世界观 | world | L2 | 8000 |
 | `geography` | 地理环境 | world | L2 | 3000 |
 | `storyCore` | 故事核心 | project | L1 | 4000 |
@@ -266,7 +268,7 @@
 | `characterFacts` | 该角色的剧情事实 | project | L1 | 1500 |
 | `characterPassages` | 该角色的正文表现 | project | L1 | 2500 |
 
-> 既有装配按来源完整性与层级处理预算；声明 fullCapture 的 V2 host 捕获完整保留原文，随后按真实完整请求安排选送。该声明不扩大 owner、来源或原文读取权限。
+> 既有装配按来源完整性与层级处理预算；声明 fullCapture 的 V2 host 捕获完整保留原文，随后按真实完整请求安排选送。该声明不扩大 owner、来源或原文读取权限。标注“仅显式任务选用”的产品完整来源不会进入缺省选源，须由登记任务显式选择。
 
 ## 三、AI 可写字段（FIELD_REGISTRY · adopt 写什么）
 
@@ -421,8 +423,8 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:867` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:975` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:892` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:1000` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:438` |
 | `canon.narrative.extract` | `src/lib/agent/run/narrative-annotation-durable.ts:218` |
@@ -487,7 +489,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/story-arc-copilot.ts:1712 · chat`
 - `src/lib/agent/story-core-copilot.ts:587 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
-- `src/lib/agent/worldview-field-copilot.ts:953 · chat`
+- `src/lib/agent/worldview-field-copilot.ts:1066 · chat`
 - `src/lib/character-interaction/harness.ts:900 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:74 · chat`
 - `src/lib/character-interaction/situation-harness.ts:190 · chat`
@@ -507,10 +509,11 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 73 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。
+共 74 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
+| `world.worldview-field.v2` | `world-origin.worldview-field.v2` | `agent.world-origin.worldview-field.v2` | formal / durable-run | `worldview-field-candidate-v2` | `worldviews` | `src/lib/agent/run/worldview-field-v2-durable.ts` |
 | `world.codex.extract.v2` | `world-origin.codex-extract.v2` | `codex.extract` | formal / durable-run | `codex-extraction-candidate-v2` | `codexEntries` | `src/lib/agent/run/codex-extraction-v2-runtime.ts` |
 | `world.map.paint-preview` | `world-origin.map-config` | `geography.world-map-paint` | auxiliary / authoring-draft / image | `map-paint-image-preview` | 禁止 | `src/lib/world-map/atlas/paint-preview.ts` |
 | `node.worldview.field` | `world-origin.worldview-field` | `worldview.dimension` | formal / durable-run | `node-worldview-field-candidate` | `worldviews` | `src/lib/node-authoring/field-producer.ts` |
@@ -599,4 +602,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `8d7605551`
+生成时间基准:commit `420f148b9`

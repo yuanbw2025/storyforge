@@ -98,14 +98,14 @@ function ScopedNaturalPanel({ project, activeGroupId, resizableInputs = false, c
     saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, ...patch }, authorScope)
 
   const pendingWorldviewCandidates = copilot.pendingCandidates.filter(candidate => (
-    candidate.payload.skillId === 'world-origin.worldview-field'
+    (['world-origin.worldview-field','world-origin.worldview-field.v2'] as const).some(id => id === candidate.payload.skillId)
   ))
   const pendingWorldviewField = pendingWorldviewCandidates[0]?.payload.worldviewField
   const pendingPanelKey = pendingWorldviewField
     ? NATURAL_PANEL_KEY_BY_AGENT_FIELD[pendingWorldviewField]
     : undefined
   const hasOtherPendingCandidates = copilot.pendingCandidates.some(candidate => (
-    candidate.payload.skillId !== 'world-origin.worldview-field'
+    !(['world-origin.worldview-field','world-origin.worldview-field.v2'] as const).some(id => id === candidate.payload.skillId)
   ))
   const streamingKeys = new Set<string>()
   const runningPanelKey = runningField ? NATURAL_PANEL_KEY_BY_AGENT_FIELD[runningField] : undefined

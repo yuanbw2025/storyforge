@@ -48,7 +48,7 @@ import {
   resolveAgentSkillV1,
   type AgentSkillId,
 } from './skill-registry'
-import { parseStructuredOutputV1 } from './structured-output-pipeline'
+import { parseStructuredOutputV1, parseStructuredOutputV2 } from './structured-output-pipeline'
 import {
   renderFrozenPromptExecutionV1,
   type PromptExecutionEvidenceV1,
@@ -526,6 +526,113 @@ export function parseWorldviewFieldCandidateDraft(draft: string): WorldviewField
   })
 }
 
+
+export function parseWorldviewFieldCandidateDraftV2(draft: string): WorldviewFieldCopilotCandidate {
+  return parseStructuredOutputV2({
+    raw: draft,
+    contract: {
+      version: 2,
+      sizePolicy: 'task-content-unbounded',
+      schemaId: 'worldview-field-candidate.v2',
+      target: 'worldviews.field',
+      root: 'object',
+      allowedRootFields: ['field', 'value', 'temporaryAssumptions'],
+      requiredRootFields: ['field', 'value'],
+      unknownRootFieldMessage: '世界基座候选只能包含 field、value、temporaryAssumptions。',
+      missingRootFieldMessage: '世界基座候选必须包含 field、value。',
+    },
+    parse: value => {
+      const source = value as Record<string, unknown>
+      exactKeys(
+        source,
+        source.temporaryAssumptions === undefined
+          ? ['field', 'value']
+          : ['field', 'value', 'temporaryAssumptions'],
+        '世界基座候选',
+      )
+      if (!WORLDVIEW_AGENT_FIELDS.includes(source.field as WorldviewAgentField)) {
+        throw new Error('世界基座候选 field 不在允许范围。')
+      }
+      const field = source.field as WorldviewAgentField
+      const capability = WORLDVIEW_AGENT_FIELD_CAPABILITIES.get(field)
+      if (!capability) throw new Error(`世界基座候选 ${field} 缺少可生成能力声明。`)
+      let temporaryAssumptions: string[] | undefined
+      if (source.temporaryAssumptions !== undefined) {
+        if (capability.temporaryAssumptions !== 'allowed') {
+          throw new Error(`世界基座候选 ${field} 不允许 temporaryAssumptions。`)
+        }
+        if (
+          !Array.isArray(source.temporaryAssumptions)
+          || source.temporaryAssumptions.some(item => (
+            typeof item !== 'string' || !item.trim()
+          ))
+        ) throw new Error('temporaryAssumptions 必须是非空文本数组。')
+        temporaryAssumptions = [...new Set(source.temporaryAssumptions.map(item => item.trim()))]
+      }
+      if (field === 'divineDesign') {
+        if (!source.value || typeof source.value !== 'object' || Array.isArray(source.value)) {
+          throw new Error('神明与信仰候选 value 必须是对象。')
+        }
+        const divine = source.value as Record<string, unknown>
+        exactKeys(divine, ['hasDivinity', 'divineRank', 'divineNames', 'divineRules'], '神明与信仰候选 value')
+        if (typeof divine.hasDivinity !== 'boolean') throw new Error('神明与信仰 hasDivinity 必须是布尔值。')
+        const divineRank = divine.divineRank
+        const divineNames = divine.divineNames
+        const divineRules = divine.divineRules
+        for (const [key, candidate] of Object.entries({ divineRank, divineNames, divineRules })) {
+          if (typeof candidate !== 'string') {
+            throw new Error(`神明与信仰 ${key} 必须是文本。`)
+          }
+        }
+        if (typeof divineRank !== 'string' || typeof divineNames !== 'string' || typeof divineRules !== 'string') {
+          throw new Error('神明与信仰文本字段无效。')
+        }
+        return {
+          field,
+          value: {
+            hasDivinity: divine.hasDivinity,
+            divineRank: divineRank.trim(),
+            divineNames: divineNames.trim(),
+            divineRules: divineRules.trim(),
+          },
+          ...(temporaryAssumptions?.length ? { temporaryAssumptions } : {}),
+        }
+      }
+      if (field === 'naturalResources') {
+        if (!source.value || typeof source.value !== 'object' || Array.isArray(source.value)) {
+          throw new Error('自然资源明细候选 value 必须是对象。')
+        }
+        const resources = source.value as Record<string, unknown>
+        exactKeys(resources, ['rareCreatures', 'herbs', 'minerals', 'others'], '自然资源明细候选 value')
+        for (const [key, candidate] of Object.entries(resources)) {
+          if (typeof candidate !== 'string') {
+            throw new Error(`自然资源明细 ${key} 必须是文本。`)
+          }
+        }
+        return {
+          field,
+          value: {
+            rareCreatures: (resources.rareCreatures as string).trim(),
+            herbs: (resources.herbs as string).trim(),
+            minerals: (resources.minerals as string).trim(),
+            others: (resources.others as string).trim(),
+          },
+          ...(temporaryAssumptions?.length ? { temporaryAssumptions } : {}),
+        }
+      }
+      if (typeof source.value !== 'string' || !source.value.trim()) {
+        throw new Error(`世界基座候选 ${field}.value 不能为空。`)
+      }
+      const fieldValue = source.value.trim()
+      return {
+        field,
+        value: fieldValue,
+        ...(temporaryAssumptions?.length ? { temporaryAssumptions } : {}),
+      }
+    },
+  })
+}
+
 function sameValue(left: WorldviewFieldValue, right: WorldviewFieldValue): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
 }
@@ -533,10 +640,11 @@ function sameValue(left: WorldviewFieldValue, right: WorldviewFieldValue): boole
 function candidateIssues(
   candidate: WorldviewFieldCopilotCandidate,
   input: Pick<WorldviewFieldCopilotInput, 'targetField' | 'snapshot'>,
+  parseDraft = parseWorldviewFieldCandidateDraft,
 ): GenerationGateIssue[] {
   let parsed: WorldviewFieldCopilotCandidate
   try {
-    parsed = parseWorldviewFieldCandidateDraft(JSON.stringify(candidate))
+    parsed = parseDraft(JSON.stringify(candidate))
   } catch (error) {
     return [{
       code: 'worldview-field-invalid-structure',
@@ -566,7 +674,7 @@ function outputContract(field: WorldviewAgentField): string {
     : `{"field":"${field}","value":"候选正文","temporaryAssumptions":["尚未成为正式设定的假设"]}`
 }
 
-function worldviewFieldHardSystem(input: WorldviewFieldCopilotInput): string {
+function worldviewFieldHardSystem(input: Pick<WorldviewFieldCopilotInput, 'targetField' | 'snapshot' | 'mode' | 'projectName'>): string {
   const capability = WORLDVIEW_AGENT_FIELD_CAPABILITIES.get(input.targetField)
   if (!capability) throw new Error(`世界基座字段 ${input.targetField} 缺少可生成能力声明。`)
   const dependencies = capability.directDependencies
@@ -629,18 +737,19 @@ async function adoptCandidate(input: {
   snapshot: WorldviewFieldCopilotSnapshot
   targetField: WorldviewAgentField
   candidate: WorldviewFieldCopilotCandidate
+  protocol?: 2
+  transaction?: import('dexie').Transaction
 }): Promise<AdoptResult> {
   const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
-  return db.transaction(
-    'rw',
-    scopeTransactionTables(db.worldviews, db.temporalFacts),
-    async () => {
-      const current = await readSnapshot(input.projectId, input.worldGroupId, scope)
+  const apply = async (transaction?: import('dexie').Transaction) => {
+      const current = input.protocol === 2
+        ? await readWorldviewFieldSnapshotV2(input.projectId, input.worldGroupId, scope)
+        : await readSnapshot(input.projectId, input.worldGroupId, scope)
       if (current.serialized !== input.snapshot.serialized) throw new WorldviewFieldCopilotStaleError()
       const issues = candidateIssues(input.candidate, {
         targetField: input.targetField,
         snapshot: current,
-      })
+      }, input.protocol === 2 ? parseWorldviewFieldCandidateDraftV2 : parseWorldviewFieldCandidateDraft)
       if (issues.length) throw new Error(issues.map(issue => issue.message).join('；'))
       const result = await adopt({
         projectId: input.projectId,
@@ -649,7 +758,7 @@ async function adoptCandidate(input: {
         target: 'worldviews',
         mode: 'replace',
         data: { [input.targetField]: input.candidate.value },
-      })
+      }, transaction ? { transaction } : undefined)
       if (
         result.written.length !== 1
         || result.unknown.length
@@ -659,8 +768,12 @@ async function adoptCandidate(input: {
         || !result.written[0]?.fields.includes(input.targetField)
       ) throw new Error('世界基座候选没有完整通过字段注册表校验，已回滚。')
       return result
-    },
-  )
+  }
+  if (input.transaction) {
+    if (input.protocol !== 2 || !input.transaction.active || input.transaction.mode !== 'readwrite') throw new Error('V2采用需要真实调用方事务。')
+    return apply(input.transaction)
+  }
+  return db.transaction('rw', scopeTransactionTables(db.worldviews, db.temporalFacts), async () => apply())
 }
 
 export { candidateIssues as worldviewFieldCandidateIssuesV1 }
@@ -1001,4 +1114,31 @@ export function formatWorldviewFieldGenerationRequestV1(input: {
     throw new Error('世界基座作者要求超过 8000 字符；没有截断，已在模型调用前阻止。')
   }
   return request
+}
+
+/** V2 ordinary author input has no application character quota. Legacy V1 stays unchanged. */
+export function formatWorldviewFieldGenerationRequestV2(input: Parameters<typeof formatWorldviewFieldGenerationRequestV1>[0]): string {
+  const parts = [`生成世界基座字段。目标字段=${input.field}；生成模式=${input.mode}。`]
+  const hint = (input.hint ?? '').trim()
+  if (hint) parts.push(`作者要求：${hint}`)
+  return parts.join('\n')
+}
+
+/** New explicit complete reader. Old readers/snapshots/hashes are untouched. */
+export async function readWorldviewFieldSnapshotV2(projectId: number, worldGroupId: number | null, scope: WorkspaceScope): Promise<WorldviewFieldCopilotSnapshot> {
+  if (scope.projectId !== projectId) throw new Error('世界基座来源作用域无效。')
+  const rows = await readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' })
+  const matching = rows.filter(row => (row.worldGroupId ?? null) === worldGroupId)
+  if (matching.length > 1) throw new Error('目标世界基线不唯一；不生成或覆盖。')
+  return snapshotOf(matching[0] ?? null)
+}
+export function worldviewFieldHardSystemV2(input: Pick<WorldviewFieldCopilotInput, 'targetField' | 'snapshot' | 'mode' | 'projectName'>): string {
+  return worldviewFieldHardSystem(input)
+}
+export async function adoptRestoredWorldviewFieldCandidateV2(input: {
+  projectId: number; scope: WorkspaceScope; worldGroupId: number | null
+  snapshot: WorldviewFieldCopilotSnapshot; targetField: WorldviewAgentField; draft: string
+  transaction: import('dexie').Transaction
+}): Promise<AdoptResult> {
+  return adoptCandidate({ ...input, protocol: 2, candidate: parseWorldviewFieldCandidateDraftV2(input.draft) })
 }

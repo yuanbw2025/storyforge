@@ -765,6 +765,11 @@ export async function recoverPendingMasterAgentAdoptionsV1(
     .filter(run => run.id != null && run.conversationId != null && ['running', 'paused'].includes(run.status))
   for (const run of runs) {
     try {
+      // The native V2 branch commits business state and confirmation atomically;
+      // its explicit façade finishes terminal receipts without legacy reparsing.
+      const candidateSnapshot = await readAgentRunV1(scope, run.id)
+      if (candidateSnapshot.contract.version === 3 && candidateSnapshot.contract.executionBindings.length === 1
+        && candidateSnapshot.contract.executionBindings[0].skillId === 'world-origin.worldview-field.v2') continue
       const restored = await restoreMasterAgentCandidatesV1({ scope, runId: run.id })
       if (!isMasterAgentRunWorkflowKindV1(restored.snapshot.contract.workflowKind)) continue
       let snapshot = restored.snapshot

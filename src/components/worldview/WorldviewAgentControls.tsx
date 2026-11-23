@@ -1,19 +1,20 @@
-import { getModelCapacityLimitsV1 } from '../../lib/ai/model-capacity'
-import { useState } from 'react'
+import AuthorLengthControl from '../shared/AuthorLengthControl'
+import { AUTOMATIC_AUTHOR_LENGTH_V1, resolveAuthorLengthIntentV1, authorLengthInstructionNoticeV1,
+  type AuthorLengthControlValueV1 } from '../../lib/ai/author-length-intent'
+import { useEffect, useRef, useState } from 'react'
+import type { WorldviewReceivedContentV2 } from '../../lib/agent/run/master-worldview-v2'
 import { Check, Loader2, Sparkles, Trash2 } from 'lucide-react'
 import type { PendingMasterCandidate } from '../agent/useMasterCopilot'
 import { useMasterCopilot } from '../agent/useMasterCopilot'
 import AIFieldModeTabs from '../shared/AIFieldModeTabs'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import {
-  formatWorldviewFieldGenerationRequestV1,
-  WORLDVIEW_FIELD_DEFAULT_OUTPUT_TOKENS_V1,
+  formatWorldviewFieldGenerationRequestV2,
   type WorldviewAgentField,
 } from '../../lib/agent/worldview-field-copilot'
 import type { FieldGenerationMode } from '../../lib/ai/field-generation-context'
 import type { Project } from '../../lib/types'
 import HarnessEvidencePanel from '../agent/HarnessEvidencePanel'
-import { useAIConfigStore } from '../../stores/ai-config'
 import WorldviewFieldCandidateReview from './WorldviewFieldCandidateReview'
 import CopilotGenerationStatus from '../agent/CopilotGenerationStatus'
 
@@ -47,42 +48,59 @@ export default function WorldviewAgentControls({
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
   const [mode, setMode] = useState<FieldGenerationMode>('expand')
-  const [lengthMode, setLengthMode] = useState<'default' | 'custom'>('default')
-  const [customOutputTokens, setCustomOutputTokens] = useState(WORLDVIEW_FIELD_DEFAULT_OUTPUT_TOKENS_V1)
+  const [length, setLength] = useState<AuthorLengthControlValueV1>(AUTOMATIC_AUTHOR_LENGTH_V1)
+  const [receivedContent, setReceivedContent] = useState<WorldviewReceivedContentV2 | null>(null)
+  const [receivedError, setReceivedError] = useState<string | null>(null)
+  const [readingReceived, setReadingReceived] = useState(false)
+  const receivedReadOwner = useRef(0)
+  const receivedRunId = copilot.receivedWorldviewRun?.field === field ? copilot.receivedWorldviewRun.runId : null
+  useEffect(() => {
+    receivedReadOwner.current += 1
+    setReceivedContent(null); setReceivedError(null); setReadingReceived(false)
+    return () => { receivedReadOwner.current += 1 }
+  }, [receivedRunId, field, project.id, project.activeWorldId, project.activeWorkId, activeGroupId])
+  const readReceived = async () => {
+    const owner = ++receivedReadOwner.current
+    setReadingReceived(true); setReceivedError(null)
+    try {
+      const content = await copilot.readReceivedWorldviewContent()
+      if (receivedReadOwner.current === owner) setReceivedContent(content)
+    } catch (error) {
+      if (receivedReadOwner.current === owner) setReceivedError(error instanceof Error ? error.message : '暂时无法核对已收到的内容。')
+    } finally {
+      if (receivedReadOwner.current === owner) setReadingReceived(false)
+    }
+  }
   const candidateEventId = candidate?.event.id
   const visibleDraft = copilot.readVisibleCandidateDraft(candidateEventId)
-  const aiConfig = useAIConfigStore(state => state.config)
-  const modelCap = getModelCapacityLimitsV1(aiConfig).maxOutput
-  const configuredCap = aiConfig.maxTokens > 0 ? aiConfig.maxTokens : modelCap
-  const visibleEffectiveCap = Math.min(
-    modelCap,
-    configuredCap,
-    WORLDVIEW_FIELD_DEFAULT_OUTPUT_TOKENS_V1,
-  )
-  const lengthError = lengthMode === 'custom' && (
-    !Number.isSafeInteger(customOutputTokens)
-    || customOutputTokens < 1
-    || customOutputTokens > visibleEffectiveCap
-  )
-    ? `当前普通单次链路最多 ${visibleEffectiveCap.toLocaleString()} tokens；更长输出尚未启用 LONGOUT 分段协议。`
-    : ''
+  const basis = mode === 'expand' ? length.basis ?? 'additional-text' : 'final-text'
+  const effectiveLength: AuthorLengthControlValueV1 = { ...length, basis }
+  const changeMode = (next: FieldGenerationMode) => {
+    setMode(next)
+    setLength(current => ({ ...current, basis: next === 'expand' ? 'additional-text' : 'final-text' }))
+  }
+  let lengthError = ''
+  try { resolveAuthorLengthIntentV1({control:effectiveLength,basis,instruction:hint}) }
+  catch (error) { lengthError = error instanceof Error ? error.message : '篇幅要求无效。' }
 
   const handleGenerate = async () => {
     onRunningChange(true)
     try {
-      const request = formatWorldviewFieldGenerationRequestV1({
+      const request = formatWorldviewFieldGenerationRequestV2({
         field,
         mode,
         hint,
       })
       await copilot.submitTargetedRequest(request, {
         agentId: 'world-origin',
-        skillId: 'world-origin.worldview-field',
+        skillId: 'world-origin.worldview-field.v2',
+        targetField: field,
+        authorLengthIntent: resolveAuthorLengthIntentV1({control:effectiveLength,basis,instruction:hint,
+          explicitParameter:Object.prototype.hasOwnProperty.call(parameterValues,'wordCount') ? parameterValues.wordCount : undefined}),
         instruction: request,
         promptExecution: {
           version: 1,
           moduleKey: 'worldview.dimension',
-          ...(lengthMode === 'custom' ? { maxTokens: customOutputTokens } : {}),
           ...(Object.keys(parameterValues).length ? { parameterValues } : {}),
           ...(systemOverride === null ? {} : { systemOverride }),
           ...(userOverride === null ? {} : { userOverride }),
@@ -102,7 +120,7 @@ export default function WorldviewAgentControls({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <AIFieldModeTabs value={mode} onChange={setMode} />
+        <AIFieldModeTabs value={mode} onChange={changeMode} />
         <input
           value={hint}
           onChange={event => setHint(event.target.value)}
@@ -132,31 +150,13 @@ export default function WorldviewAgentControls({
         onUserOverrideChange={setUserOverride}
       />
 
-      <div className="flex flex-wrap items-center gap-2 rounded border border-border bg-bg-elevated px-3 py-2 text-xs">
-        <span className="text-text-secondary">输出长度</span>
-        <select
-          value={lengthMode}
-          onChange={event => setLengthMode(event.target.value as 'default' | 'custom')}
-          className="min-w-0 max-w-full rounded border border-border bg-bg-base px-2 py-1 text-text-primary"
-        >
-          <option value="default">默认（最多 {visibleEffectiveCap.toLocaleString()} tokens）</option>
-          <option value="custom">作者自定义</option>
-        </select>
-        {lengthMode === 'custom' && (
-          <input
-            aria-label="世界基座自定义输出 tokens"
-            type="number"
-            min={1}
-            step={100}
-            value={customOutputTokens}
-            onChange={event => setCustomOutputTokens(Number(event.target.value))}
-            className="w-28 rounded border border-border bg-bg-base px-2 py-1 text-right text-text-primary"
-          />
-        )}
-        <span className="text-[10px] text-text-muted">
-          “不限”按模型上限计算；Run 内始终冻结为有限值，不会静默截断或追加调用。
-        </span>
-      </div>
+      <AuthorLengthControl value={effectiveLength} onChange={setLength} disabled={copilot.busy}
+        basis={basis} allowBasisChoice={mode === 'expand'} plan={copilot.activeTaskLengthPlan}
+        notice={authorLengthInstructionNoticeV1(hint,basis)} />
+      {copilot.activeLengthProgress && <p role="status" className="text-xs text-text-secondary">
+        已保存 {copilot.activeLengthProgress.rounds} 轮完整稿，当前计入 {copilot.activeLengthProgress.words} 字。
+        {copilot.activeLengthProgress.status === 'revise-length' ? '正在按原要求调整字数…' : ''}
+      </p>}
 
       {lengthError && (
         <p className="rounded border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">
@@ -170,6 +170,25 @@ export default function WorldviewAgentControls({
         </p>
       )}
 
+      {!copilot.busy && copilot.endableWorldviewRun && !copilot.pendingCandidates.length && <div className="rounded border border-warning/30 bg-warning/5 px-3 py-2 text-xs">
+        <p>未完成任务 #{copilot.endableWorldviewRun.runId} 的原答和记录会保留；结束后可明确开始新任务，未知请求不会自动重发。</p>
+        <button type="button" onClick={() => { void copilot.endInterruptedWorldviewRun() }} className="mt-1 text-accent">结束此未完成任务</button>
+      </div>}
+      {receivedRunId != null && !copilot.busy && !copilot.pendingCandidates.length && <div className="rounded border border-border bg-bg-surface px-3 py-2 text-xs">
+        <button type="button" disabled={readingReceived} onClick={() => { void readReceived() }} className="text-accent">
+          {readingReceived ? '正在读取已收到的内容…' : '查看已收到的内容'}
+        </button>
+        <p className="mt-1 text-text-secondary">上次未完成任务 #{receivedRunId} 保存的公开内容仅供核对，不是可采纳候选。</p>
+        {receivedError && <p role="alert" className="mt-1 text-error">{receivedError}</p>}
+        {receivedContent && <div>
+          {receivedContent.kind === 'prefix' || receivedContent.completion !== 'complete'
+            ? <p role="status" className="mt-1 text-warning">回答未完整完成；以下仅为已经收到并保存的内容，不会自动重发。</p>
+            : <p className="mt-1 text-text-secondary">原答未通过候选校验，原文保留如下。</p>}
+          {receivedContent.text
+            ? <pre role="region" aria-label="已收到的原始内容" tabIndex={0} className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-base p-2">{receivedContent.text}</pre>
+            : <p className="mt-1 text-text-secondary">服务未返回可显示的公开正文。</p>}
+        </div>}
+      </div>}
       <CopilotGenerationStatus busy={copilot.busy && !copilot.pendingCandidates.length} onStop={copilot.stop} />
 
       {hasOtherPendingCandidates && (
@@ -230,6 +249,10 @@ export default function WorldviewAgentControls({
               </button>
             </div>
           )}
+          {candidate.payload.worldviewFieldV2 && <p role="status" className="mb-2 text-xs text-text-secondary">
+            当前计入 {candidate.payload.worldviewFieldV2.lengthObservation.measuredWords} 字；
+            {candidate.payload.worldviewFieldV2.reason}
+          </p>}
           <HarnessEvidencePanel
             contextEvidence={candidate.payload.contextEvidence}
             lifecycle={candidate.lifecycle}

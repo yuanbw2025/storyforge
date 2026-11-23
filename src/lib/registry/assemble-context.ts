@@ -489,8 +489,8 @@ function trimToFit(
 
 /** Registered host material capture is separate from model assembly. It uses
  * the same reader, exact owner, anchors and enablement; no token override. */
-export async function captureRegisteredContextSourceV2(input: {
-  sourceKey: 'manualText' | 'codexExtractionBaseline' | 'codexExtractionProgressV2'
+export async function captureRegisteredContextSourceV2<K extends 'manualText' | 'codexExtractionBaseline' | 'codexExtractionProgressV2' | 'worldviewFieldBaselineV2' | 'worldviewFieldContextV2'>(input: {
+  sourceKey: K
   context: Pick<AssembleContextInput, 'projectId' | 'scope' | 'worldGroupId' | 'codexCategoryId' | 'manualSourceText' | 'codexExtractionProgressV2'>
 }) {
   input = structuredClone(input)
@@ -553,4 +553,32 @@ export async function assembleCapturedCodexContextV2(input: {
       delivery: row.text === row.capture.rawText ? 'full' : 'truncated', sourceHash: row.capture.rawBodyHash,
       originalCharacters: row.capture.rawUTF16Length, inputCharacters: row.text.length,
       originalTokens: estimateTokens(row.capture.rawText), inputTokens: estimateTokens(row.text) })) }
+}
+
+/** Same full-capture protocol, closed recipe; all selected bytes are delivered.
+ * It cannot turn a different registered reader into an unbounded source. */
+export async function assembleCapturedWorldviewContextV2(captures: readonly Awaited<ReturnType<typeof captureRegisteredContextSourceV2>>[]): Promise<AssembleContextResult> {
+  const expected = ['manualText', 'worldviewFieldBaselineV2', 'worldviewFieldContextV2']
+  if (captures.length !== expected.length || captures.some((capture, index) => capture.sourceKey !== expected[index])) throw new Error('世界基座完整来源集合无效。')
+  const first = captures[0]
+  for (const capture of captures) {
+    const { captureHash, ...body } = capture
+    const versions = ['manualText-full-v2','worldview-field-baseline-full-v2','worldview-field-constraints-full-v2']
+    const sourceAuthorityHash = await hashCanonicalValue({ sourceKey:capture.sourceKey,sourceVersion:capture.sourceVersion,scope:capture.scope,
+      worldGroupId:capture.worldGroupId,categoryId:capture.categoryId,rawBodyHash:capture.rawBodyHash })
+    if (capture.version!=='registered-context-source-capture-v2'||capture.protocolVersion!=='registered-host-full-v2'
+      ||capture.sourceVersion!==versions[captures.indexOf(capture)]||capture.rawBodyHash!==await hashContextSource(capture.rawText)
+      ||sourceAuthorityHash!==capture.sourceAuthorityHash
+      ||await hashCanonicalValue(body) !== captureHash || canonicalStringify(capture.scope) !== canonicalStringify(first.scope)
+      || capture.worldGroupId !== first.worldGroupId || capture.rawUTF16Length !== capture.rawText.length) throw new Error('完整来源身份或范围不一致。')
+  }
+  const segments: ContextSegment[] = captures.map(capture => ({ label: capture.sourceKey, layer: 'L0',
+    content: capture.rawText, tokens: estimateTokens(capture.rawText), trimmable: false }))
+  const total = segments.reduce((sum, item) => sum + item.tokens, 0)
+  return { text: captures.map(capture => `【${capture.sourceKey} | ${capture.captureHash}】\n${capture.rawText}`).join('\n\n'),
+    segments, included: [...expected], omitted: [], trimmed: [], totalInputTokens: total, inputBudget: Math.max(1,total),
+    overBudgetBeforeTrim: false, overBudgetAfterTrim: false,
+    sourceEvidence: captures.map(capture => ({ key: capture.sourceKey, status: 'included', delivery: 'full', sourceHash: capture.rawBodyHash,
+      originalCharacters: capture.rawUTF16Length, inputCharacters: capture.rawUTF16Length,
+      originalTokens: estimateTokens(capture.rawText), inputTokens: estimateTokens(capture.rawText) })) }
 }

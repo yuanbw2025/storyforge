@@ -81,7 +81,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
     saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, ...patch }, authorScope)
 
   const pendingWorldviewCandidates = copilot.pendingCandidates.filter(candidate => (
-    candidate.payload.skillId === 'world-origin.worldview-field'
+    (['world-origin.worldview-field','world-origin.worldview-field.v2'] as const).some(id => id === candidate.payload.skillId)
   ))
   const pendingWorldviewField = pendingWorldviewCandidates[0]?.payload.worldviewField
   const pendingOriginKey = (Object.entries(AGENT_FIELD_BY_ORIGIN_KEY) as Array<[
@@ -89,7 +89,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
     WorldviewAgentField,
   ]>).find(([, field]) => field === pendingWorldviewField)?.[0]
   const hasOtherPendingCandidates = copilot.pendingCandidates.some(candidate => (
-    candidate.payload.skillId !== 'world-origin.worldview-field'
+    !(['world-origin.worldview-field','world-origin.worldview-field.v2'] as const).some(id => id === candidate.payload.skillId)
   ))
   const streamingKeys = new Set<string>()
   const pendingKeys = new Set<string>()

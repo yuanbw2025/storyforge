@@ -3717,6 +3717,24 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: async input => input.continuitySnapshot?.recentSummariesText || '',
   },
   {
+    key: 'worldviewFieldBaselineV2', label: '单字段完整世界基线 V2', scope: 'world', ownerFrom: 'world',
+    layer: 'L0', budgetTokens: null, protectedFromTrim: true, atomic: true, requiresWorldGroupId: true,
+    explicitSelectionOnly: true,
+    fullCapture: { version: 'registered-host-full-v2', sourceVersion: 'worldview-field-baseline-full-v2' },
+    read: async input => {
+      if (!worldviewFullSnapshotReaderV2 || !worldviewFullFieldsV2) await preloadWorldviewFullReadersV2()
+      const { serialized: _serialized, ...body } = await worldviewFullSnapshotReaderV2!(input.projectId, input.worldGroupId ?? null, input.scope!)
+      return JSON.stringify(body)
+    },
+  },
+  {
+    key: 'worldviewFieldContextV2', label: '单字段正式约束完整来源 V2', scope: 'project', ownerFrom: 'work',
+    layer: 'L0', budgetTokens: null, protectedFromTrim: true, atomic: true, requiresWorldGroupId: true,
+    explicitSelectionOnly: true,
+    fullCapture: { version: 'registered-host-full-v2', sourceVersion: 'worldview-field-constraints-full-v2' },
+    read: readWorldviewFieldFullConstraintsV2,
+  },
+  {
     key: 'worldview',
     label: '世界观',
     scope: 'world',
@@ -4156,4 +4174,51 @@ async function readRegisteredCodexProgressV2(input: import('./types').AssembleCo
   return canonicalStringify({ version: 'codex-extraction-progress-context-v2', scope, runId: selector.runId,
     generation: snapshot.projection.generation, contractHash: snapshot.projection.contractHash, rootHash: selector.rootHash,
     results, names, authority: 'draft-not-canon' })
+}
+
+/** Exact product recipe. Full rows are read through registered ownership; only
+ * confirmed Canon assertions enter. No L2/8000, .slice or formatted summary.
+ * Current worldview is delivered once by baseline, not repeated in this recipe. */
+async function readWorldviewFieldFullConstraintsV2(input: AssembleContextInput): Promise<string> {
+  if (!input.scope) throw new Error('完整世界约束需要真实作品作用域。')
+  const scope = input.scope, worldGroupId = input.worldGroupId ?? null
+  if (!worldviewFullFieldsV2 || !worldviewFullSnapshotReaderV2) await preloadWorldviewFullReadersV2()
+  const { FIELD_BY_TARGET, WORLDVIEW_GENERATABLE_FIELD_SPECS } = worldviewFullFieldsV2!
+  const fields = (target: string, rows: readonly Record<string, unknown>[]) => rows.map(row => Object.fromEntries(
+    (FIELD_BY_TARGET.get(target) ?? []).filter(field => Object.prototype.hasOwnProperty.call(row, field.field))
+      .map(field => [field.field, row[field.field]])))
+  const group = (row: Record<string, unknown>) => (row.worldGroupId ?? null) === worldGroupId
+  const work = await db.works.get(scope.workId)
+  if (!work || work.projectId !== scope.projectId || work.worldId !== scope.worldId) throw new Error('原作品不属于冻结世界。')
+  const storyCores = await readOwnedRows<Record<string, unknown>>(scope, 'storyCores', { owner: 'work' })
+  const creativeRules = await readOwnedRows<Record<string, unknown>>(scope, 'creativeRules', { owner: 'work' })
+  const powerSystems = (await readOwnedRows<Record<string, unknown>>(scope, 'powerSystems', { owner: 'world' })).filter(group)
+  const worldRulesProfiles = (await readOwnedRows<Record<string, unknown>>(scope, 'worldRulesProfiles', { owner: 'world' })).filter(group)
+  const assertions = await readCanonAssertions(scope.projectId, worldGroupId, scope)
+  const worldviewFields = new Set<string>(WORLDVIEW_GENERATABLE_FIELD_SPECS.map(spec => spec.field))
+  const worldviewRows = (await readOwnedRows<Record<string, unknown>>(scope, 'worldviews', { owner: 'world' })).filter(group)
+  const worldviewOtherFields = fields('worldviews', worldviewRows).map(row => Object.fromEntries(Object.entries(row).filter(([key]) => !worldviewFields.has(key))))
+  return JSON.stringify({ version: 'worldview-field-constraints-full-v2',
+    authority: 'confirmed-upstream-only', work: { title: work.title, genres: work.genres },
+    worldviewOtherFields, storyCores: fields('storyCores', storyCores), creativeRules: fields('creativeRules', creativeRules),
+    powerSystems: fields('powerSystems', powerSystems), worldRulesProfiles: fields('worldRulesProfiles', worldRulesProfiles),
+    canonAssertions: assertions })
+}
+
+/** These are the actual registered full recipe's read dependencies, consumed
+ * by the original atomic adopter; no product service keeps another table list. */
+export function worldviewFieldCaptureTransactionTablesV2() {
+  return [db.worldviews,db.storyCores,db.creativeRules,db.powerSystems,db.worldRulesProfiles,db.temporalFacts]
+}
+
+// Avoid a new registry→Copilot→Skill registry startup cycle. The ordinary
+// preflight/freshness read loads these pure readers outside any write txn;
+// the native adopter then uses cached functions, not dynamic imports in IDB.
+let worldviewFullSnapshotReaderV2: typeof import('../agent/worldview-field-copilot').readWorldviewFieldSnapshotV2 | undefined
+let worldviewFullFieldsV2: Pick<typeof import('./field-registry'),'FIELD_BY_TARGET'|'WORLDVIEW_GENERATABLE_FIELD_SPECS'> | undefined
+async function preloadWorldviewFullReadersV2():Promise<void> {
+  if(Dexie.currentTransaction)throw new Error('完整来源读者尚未准备；请先沿普通预检完整捕获，不在原生事务内冷加载模块。')
+  const [copilot,fields]=await Promise.all([import('../agent/worldview-field-copilot'),import('./field-registry')])
+  worldviewFullSnapshotReaderV2=copilot.readWorldviewFieldSnapshotV2
+  worldviewFullFieldsV2=fields
 }

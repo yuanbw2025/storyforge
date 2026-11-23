@@ -1,9 +1,13 @@
+import { observeAuthorLengthV1 } from '../../lib/ai/author-length-revision'
+import { worldviewTargetTextV2 } from '../../lib/agent/worldview-field-v2-contract'
+import type { WorldviewFieldCopilotSnapshot } from '../../lib/agent/worldview-field-copilot'
 import { useEffect, useMemo, useRef, useState, type CompositionEvent, type FormEvent, type UIEvent } from 'react'
 import { CTextarea } from '../shared/CompositionInput'
 import { inputAreaLayoutV1, worldviewInputAreaFieldV1 } from '../../lib/input-area-layout'
 import type { PendingMasterCandidate, VisibleMasterCandidateDraftV1 } from '../agent/useMasterCopilot'
 import {
   parseWorldviewFieldCandidateDraft,
+  parseWorldviewFieldCandidateDraftV2,
   type WorldviewFieldCopilotCandidate,
   type WorldviewFieldOperationV1,
 } from '../../lib/agent/worldview-field-copilot'
@@ -44,10 +48,24 @@ export default function WorldviewFieldCandidateReview({
   onInvalidEdit?: (rawValue: string, error: string) => void
   resizableInputs?: boolean
 }) {
+  const isV2 = candidate.payload.skillId === 'world-origin.worldview-field.v2'
+  const parseDraft = isV2 ? parseWorldviewFieldCandidateDraftV2 : parseWorldviewFieldCandidateDraft
+  const [frozenBaseline,setFrozenBaseline] = useState<WorldviewFieldCopilotSnapshot|null>(null)
+  const [baselineError,setBaselineError] = useState<string|null>(null)
+  useEffect(() => {
+    let active = true
+    setFrozenBaseline(null);setBaselineError(null)
+    if (isV2 && candidate.payload.workspaceScope && candidate.payload.runId != null) {
+      void import('../../lib/agent/run/worldview-field-v2-durable').then(module => module.restoreWorldviewFieldMasterV2(
+        candidate.payload.workspaceScope!,candidate.payload.runId!)).then(read => {if(active)setFrozenBaseline(read.baseline)})
+        .catch(error => {if(active)setBaselineError(error instanceof Error?error.message:'原稿读取失败。')})
+    }
+    return () => {active=false}
+  },[isV2,candidate.payload.runId,candidate.event.id,candidate.payload.workspaceScope])
   const parsed = useMemo(() => {
-    try { return parseWorldviewFieldCandidateDraft(candidate.event.content) }
+    try { return parseDraft(candidate.event.content) }
     catch { return null }
-  }, [candidate.event.content])
+  }, [candidate.event.content,parseDraft])
   const savedValue = typeof parsed?.value === 'string' ? parsed.value : JSON.stringify(parsed?.value ?? {}, null, 2)
   const layoutField = worldviewInputAreaFieldV1(parsed?.field ?? candidate.payload.worldviewField ?? '')
   const [localValue, setLocalValue] = useState(savedValue)
@@ -69,7 +87,7 @@ export default function WorldviewFieldCandidateReview({
     try {
       const value = parsed && typeof parsed.value !== 'string' ? JSON.parse(raw) : raw
       content = parsed ? serializeWithValue(parsed, value) : raw
-      const validated = parseWorldviewFieldCandidateDraft(content)
+      const validated = parseDraft(content)
       const field = parsed?.field ?? candidate.payload.worldviewField
       if (field && validated.field !== field) throw new Error('不能修改候选对应的世界字段。')
     } catch (cause) {
@@ -93,9 +111,23 @@ export default function WorldviewFieldCandidateReview({
     onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => edit(event.target.value),
   }
 
+  let lengthNotice: React.ReactNode = null
+  if (isV2 && parsed && frozenBaseline && candidate.payload.worldviewFieldV2) {
+    try {
+      const value = typeof parsed.value === 'string' ? draftValue : JSON.parse(draftValue)
+      const checked = parseDraft(serializeWithValue(parsed,value))
+      const measured = observeAuthorLengthV1({plan:candidate.payload.worldviewFieldV2.lengthPlan,
+        text:worldviewTargetTextV2(checked.value),representation:'plain-text',candidateKind:'complete-replacement',
+        baseline:{text:worldviewTargetTextV2(frozenBaseline.values[checked.field]),representation:'plain-text'}})
+      lengthNotice = <p role="status" className="text-xs text-text-secondary">当前全文 {measured.finalWords} 字，净新增 {measured.additionalWords} 字；
+        本次计入 {measured.measuredWords} 字（{measured.status === 'automatic' ? '自动参考，不设最高字数' : measured.status === 'within' ? '在作者范围内' : '尚未达到作者范围'}）。</p>
+    } catch { lengthNotice = <p role="status" className="text-xs text-warning">编辑中的对象未完成，保留原计数；修正结构后更新。</p> }
+  }
+  const evidenceNotice = <>{lengthNotice}{baselineError && <p role="alert" className="text-xs text-error">{baselineError}</p>}</>
   if (!parsed) {
     return (
       <div className="space-y-2">
+        {evidenceNotice}
         <p className="text-xs text-error">历史候选无法解析为字段 artifact；请修复结构后再采纳。</p>
         <CTextarea
           inputAreaLayout={inputAreaLayoutV1(resizableInputs, layoutField, 'raw')}
@@ -113,6 +145,7 @@ export default function WorldviewFieldCandidateReview({
   if (typeof parsed.value !== 'string') {
     return (
       <div className="space-y-1">
+        {evidenceNotice}
         <p className="text-[10px] text-text-muted">只编辑当前字段的 value 对象；外层 field 合同由 Harness 保管。</p>
         <CTextarea
           aria-label={`${candidate.payload.label}候选内容`}
@@ -127,7 +160,7 @@ export default function WorldviewFieldCandidateReview({
     )
   }
 
-  const original = String(baselineValue(candidate, parsed.field) ?? '')
+  const original = String((isV2 ? frozenBaseline?.values[parsed.field] : baselineValue(candidate, parsed.field)) ?? '')
   const operation: WorldviewFieldOperationV1 = candidate.payload.worldviewFieldOperation
     ?? (original.trim() ? 'expand' : 'create')
   const comparison = compareWorldviewTextBlocksV1(original, draftValue)
@@ -161,6 +194,7 @@ export default function WorldviewFieldCandidateReview({
 
   return (
     <div className="space-y-3">
+      {evidenceNotice}
       {parsed.temporaryAssumptions?.length ? (
         <div className="rounded border border-warning/30 bg-warning/5 px-3 py-2 text-xs">
           <p className="font-medium text-warning">本轮临时假设（不会随正文自动写入 Canon）</p>

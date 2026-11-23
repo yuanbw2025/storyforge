@@ -113,3 +113,53 @@ test('ordinary unrelated reader members stay unexecuted', t => {
   const file = fixture(t, { 'source.ts': text })
   assert.deepEqual(readStaticContextSources(file), [{ key: 'fixture', label: 'Fixture', scope: 'runtime', layer: 'L0', budget: '8000' }])
 })
+
+
+const productFullSources = [
+  ['worldviewFieldBaselineV2', 'worldview-field-baseline-full-v2'],
+  ['worldviewFieldContextV2', 'worldview-field-constraints-full-v2'],
+]
+const productSource = (key, version, selection = 'true') => `export const CONTEXT_SOURCES = [{
+  key: '${key}', label: 'Full product', scope: 'chapter', layer: 'L0', budgetTokens: null,
+  explicitSelectionOnly: ${selection}, fullCapture: {version:'registered-host-full-v2',sourceVersion:'${version}'},
+  read() { throw new Error('application reader must not execute') }
+}]`
+for (const [key, version] of productFullSources) {
+  test(`registered unbounded product source ${key} requires its exact explicit-only protocol`, t => {
+    const file = fixture(t, { 'source.ts': productSource(key, version) })
+    assert.deepEqual(readStaticContextSources(file), [{ key, label: 'Full product', scope: 'chapter', layer: 'L0', budget: '完整任务基线', explicitSelectionOnly: true }])
+  })
+}
+for (const selection of ['false', "'true'", '(() => true)()', 'undefined']) {
+  test(`reject non-literal or disabled product selection ${selection}`, t => {
+    const file = fixture(t, { 'source.ts': productSource('worldviewFieldBaselineV2', 'worldview-field-baseline-full-v2', selection) })
+    assert.throws(() => readStaticContextSources(file), /explicitSelectionOnly/)
+  })
+}
+for (const [name, alter] of [
+  ['missing explicit flag', value => value.replace('explicitSelectionOnly: true, ', '')],
+  ['duplicate explicit flag', value => value.replace('explicitSelectionOnly: true, ', 'explicitSelectionOnly: true, explicitSelectionOnly: false, ')],
+  ['getter explicit flag', value => value.replace('explicitSelectionOnly: true, ', 'get explicitSelectionOnly() {return true}, ')],
+  ['wrong source version', value => value.replace('worldview-field-baseline-full-v2', 'unknown-source-version')],
+  ['wrong protocol', value => value.replace('registered-host-full-v2', 'unknown-protocol')],
+  ['nested capture spread', value => value.replace("fullCapture: {version:", "fullCapture: {...extra,version:")],
+  ['computed capture version', value => value.replace("sourceVersion:'worldview-field-baseline-full-v2'", "sourceVersion:'worldview-field-baseline-full-v2', ['sourceVersion']:'other'")],
+  ['duplicate capture version', value => value.replace("version:'registered-host-full-v2'", "version:'registered-host-full-v2', version:'other'")],
+  ['unknown null source', value => value.replace('worldviewFieldBaselineV2', 'unknown-product')],
+  ['shared manual source cannot be relabelled', value => value.replace('worldviewFieldBaselineV2', 'manualText')],
+]) {
+  test(`reject product full recipe ${name}`, t => {
+    const file = fixture(t, { 'source.ts': alter(productSource('worldviewFieldBaselineV2', 'worldview-field-baseline-full-v2')) })
+    assert.throws(() => readStaticContextSources(file))
+  })
+}
+test('existing reference null exceptions and ordinary shared readers retain their static semantics', t => {
+  for (const key of ['referenceDerivedBaseline', 'referenceAnalysisPrivateChunk', 'references']) {
+    const file = fixture(t, { 'source.ts': source('null').replace("'fixture'", `'${key}'`) })
+    assert.equal(readStaticContextSources(file)[0]?.budget, key === 'references' ? '按请求容量选读' : '完整任务基线')
+    assert.equal(readStaticContextSources(file)[0]?.explicitSelectionOnly, undefined)
+  }
+  const file = fixture(t, { 'source.ts': source('100000').replace("'fixture'", "'manualText'") })
+  assert.equal(readStaticContextSources(file)[0]?.budget, '100000')
+  assert.equal(readStaticContextSources(file)[0]?.explicitSelectionOnly, undefined)
+})

@@ -1,5 +1,5 @@
 import type { AgentSkillDefinitionV1 } from './skill-registry'
-import { assertCodexFullCaptureProfileV2, resolveAgentSkillContextSourceKeysV1 } from './skill-registry'
+import { assertRegisteredFullCaptureProfileV2, resolveAgentSkillContextSourceKeysV1 } from './skill-registry'
 import { getAgentToolSchemaSnapshotV1 } from './tool-registry'
 import { canonicalStringify, hashCanonicalValue } from './run/hash'
 import type {
@@ -40,7 +40,7 @@ export interface CreateAgentSkillExecutionBindingV2Input {
 
 export function parseTaskRequestBindingV2(value: unknown, skillId: string): TaskRequestBindingV2 {
   const row = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
-  if (skillId !== 'world-origin.codex-extract.v2'
+  if (!['world-origin.codex-extract.v2', 'world-origin.worldview-field.v2'].includes(skillId)
     || Object.keys(row).sort().join('|') !== ['version','planHash','materialAllocationHash'].sort().join('|')
     || row.version !== 'task-request-binding-v2' || typeof row.planHash !== 'string' || !/^[a-f0-9]{64}$/.test(row.planHash)
     || typeof row.materialAllocationHash !== 'string' || !/^[a-f0-9]{64}$/.test(row.materialAllocationHash)) throw new Error('完整请求Skill绑定无效。')
@@ -48,7 +48,7 @@ export function parseTaskRequestBindingV2(value: unknown, skillId: string): Task
 }
 function taskRequestPolicyBodyV2(definition: AgentSkillDefinitionV2, taskRequest?: TaskRequestBindingV2) {
   if (definition.requestPolicy === 'task-request-v2') {
-    if (definition.id !== 'world-origin.codex-extract.v2' || !taskRequest) failV2('新请求策略缺少准确产品plan/material绑定')
+    if (!['world-origin.codex-extract.v2', 'world-origin.worldview-field.v2'].includes(definition.id) || !taskRequest) failV2('新请求策略缺少准确产品plan/material绑定')
     return { ...contextAccessPolicyBodyV2(definition), taskRequest: parseTaskRequestBindingV2(taskRequest, definition.id) }
   }
   if (definition.requestPolicy !== undefined || taskRequest !== undefined) failV2('旧Skill不能借用完整请求策略')
@@ -151,7 +151,7 @@ export async function createAgentSkillExecutionBindingV2(
   skill: AgentSkillDefinitionV1,
   input: CreateAgentSkillExecutionBindingV2Input = {},
 ): Promise<AgentSkillExecutionBindingV2> {
-  assertCodexFullCaptureProfileV2(skill)
+  assertRegisteredFullCaptureProfileV2(skill)
   const definition = toSkillDefinitionV2(skill)
   const skillDefinitionJson = canonicalStringify(definition)
   const activations = normalizeActivations(skill, input.optionalContextActivations ?? [])
@@ -216,7 +216,7 @@ export function projectFrozenAgentSkillDefinitionV1(
 }
 
 function assertFrozenGatewayPolicyV1(definition: AgentSkillDefinitionV2): void {
-  const fullCapture = assertCodexFullCaptureProfileV2(definition)
+  const fullCapture = assertRegisteredFullCaptureProfileV2(definition)
   const gateway = definition.contextGateway
   if (gateway == null) return
   const required = [

@@ -109,12 +109,12 @@ function ScopedHumanityPanel({ project, activeGroupId, resizableInputs = false }
     saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, [fieldName]: v }, authorScope)
 
   const pendingWorldviewCandidates = copilot.pendingCandidates.filter(candidate => (
-    candidate.payload.skillId === 'world-origin.worldview-field'
+    (['world-origin.worldview-field','world-origin.worldview-field.v2'] as const).some(id => id === candidate.payload.skillId)
   ))
   const pendingWorldviewField = pendingWorldviewCandidates[0]?.payload.worldviewField
   const pendingPanelKey = FIELDS.find(field => field.field === pendingWorldviewField)?.key
   const hasOtherPendingCandidates = copilot.pendingCandidates.some(candidate => (
-    candidate.payload.skillId !== 'world-origin.worldview-field'
+    !(['world-origin.worldview-field','world-origin.worldview-field.v2'] as const).some(id => id === candidate.payload.skillId)
   ))
   const streamingKeys = new Set<string>()
   const runningPanelKey = FIELDS.find(field => field.field === runningField)?.key

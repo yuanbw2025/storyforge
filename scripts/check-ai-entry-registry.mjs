@@ -213,6 +213,8 @@ const scannedFiles = [
   'src/lib/world-map/atlas/paint-preview.ts',
   // B01: the durable extractor is a formal service under the same literal binding gate.
   'src/lib/agent/run/codex-extraction-v2-runtime.ts',
+  // B02: exact durable full-field caller uses the same literal authority gate.
+  'src/lib/agent/run/worldview-field-v2-durable.ts',
   ...['src/components', 'src/hooks', 'src/pages', 'src/lib/generation', 'src/lib/outline'].flatMap(dir => walk(dir)),
   // DETAIL-1: this service is itself a formal generation entry and must not
   // remain outside the UI/generation scanners merely because it predates them.
