@@ -347,6 +347,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 | ID | 目标表 | 领域策略注册表 | 唯一入口 | 复审日期 |
 |---|---|---|---|---|
+| `inspiration-author-prompt-config` | `inspirationWorkspaces` | `PROJECT_TABLES + WorkspaceScope + inspiration/prompt-config V1 codec/hash + exact row/raw-config/revision CAS` | `src/stores/inspiration-workspace.ts` | 2027-02-20 |
 | `chat-authoring-draft-lifecycle` | `chatAuthoringDrafts` | `PROJECT_TABLES + WorkspaceScope + draft revision CAS + FIELD_REGISTRY roleProfilesJson/settingsJson/sourceUnitsJson + immutable identity/source/permission guard` | `src/lib/character-interaction/draft-service.ts`<br/>`src/lib/character-interaction/role-profile-store.ts`<br/>`src/lib/character-interaction/consultation-store.ts`<br/>`src/lib/character-interaction/source-unit-store.ts` | 2027-10-01 |
 | `ttrpg-authoring-draft-lifecycle` | `ttrpgAuthoringDrafts` | `parseTtrpgSettings + revision CAS + PROJECT_TABLES + ttrpg-open-authoring-design-v1 adopt writePolicy` | `src/lib/ttrpg/authoring-service.ts` | 2027-04-19 |
 | `ttrpg-human-memory-lifecycle` | `ttrpgNarrativeMemories` | `parseTtrpgOpenMemoryReceipt + verifyTtrpgOpenBriefCandidateProofV1 + verifyTtrpgOpenMemoryReceiptsV1 + E15 + PROJECT_TABLES` | `src/lib/ttrpg/runtime-commands.ts`<br/>`src/lib/ttrpg/runtime-branch.ts` | 2027-08-21 |
@@ -423,8 +424,8 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:892` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:1000` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:894` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:1002` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:438` |
 | `canon.narrative.extract` | `src/lib/agent/run/narrative-annotation-durable.ts:218` |
@@ -602,4 +603,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `420f148b9`
+生成时间基准:commit `ad75e7566`
