@@ -30,6 +30,10 @@ export function text(value: unknown, label: string, maximum = 20_000): string {
   if (!result || result.length > maximum) return fail(`${label}: 为空或过长`)
   return result
 }
+/** Narrative content keeps the same string/nonempty/NFC checks without a text quota. */
+export function contentText(value: unknown, label: string): string {
+  return text(value, label, Number.POSITIVE_INFINITY)
+}
 export function key(value: unknown, label: string): string {
   const result = text(value, label, 200)
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(result)) fail(`${label}: 非稳定 key`)

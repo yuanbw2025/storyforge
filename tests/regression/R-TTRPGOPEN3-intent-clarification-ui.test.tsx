@@ -66,7 +66,11 @@ describe('R-TTRPGOPEN3 original intent review and explicit human clarification',
     const save = vi.spyOn(table,'clarifyTtrpgOpenTableCandidateV2'),accept = vi.spyOn(table,'acceptTtrpgOpenTableCandidateV1')
     await act(x.render);await until(() => !!host.querySelector('fieldset[aria-label="补充行动意图"]'))
     expect(button('确认这份行动意图')).toBeUndefined()
-    await text('补充后的行动说明','改为独立观察公开情况');await text('补充后的期望结果','获取可复核的调查结果')
+    const goal='改为独立观察公开情况'+('背景说明'.repeat(600))+'【说明尾】'
+    const outcome='获取可复核的调查结果'+('结果条件'.repeat(600))+'【条件尾】'
+    expect(host.querySelector('textarea[aria-label="补充后的行动说明"]')!.hasAttribute('maxlength')).toBe(false)
+    expect(host.querySelector('textarea[aria-label="补充后的期望结果"]')!.hasAttribute('maxlength')).toBe(false)
+    await text('补充后的行动说明',goal);await text('补充后的期望结果',outcome)
     await choose('补充行动规则',o => o.value.includes('investigate'))
     await act(async () => { button('保存补充并重新核对')!.click();button('保存补充并重新核对')!.click() })
     await until(() => !!button('确认这份行动意图'))
@@ -74,7 +78,13 @@ describe('R-TTRPGOPEN3 original intent review and explicit human clarification',
     const summary = host.querySelector('[aria-label="已保存的人工澄清"]')!.textContent!
     expect(summary).toContain('改为独立观察公开情况');expect(summary).toContain('当前地点');expect(summary).toContain('获取可复核的调查结果')
     const state = await readProductRuntimeState(x.f.sessionId),record = state.ttrpg!.openRun!.coordination.calls[0].intentClarifications![0]
+    expect(record.selection.goal).toBe(goal);expect(record.selection.requestedOutcome).toBe(outcome)
     expect(state.entities).toEqual(before.entities);expect(state.ttrpg!.openRun!.operations).toEqual([])
+    await act(async()=>root.render(null));await act(x.render)
+    await until(()=>!!host.querySelector('[aria-label="已保存的人工澄清"]'))
+    expect(host.querySelector('[aria-label="已保存的人工澄清"]')!.textContent).toContain(goal)
+    expect(host.querySelector('[aria-label="已保存的人工澄清"]')!.textContent).toContain(outcome)
+    expect(x.runAI).toHaveBeenCalledOnce()
     await act(async () => { button('继续补充或修改')!.click() });expect(button('确认这份行动意图')).toBeUndefined()
     await act(async () => { button('取消本次编辑，保留已保存的补充')!.click() })
     await act(async () => { button('确认这份行动意图')!.click();button('确认这份行动意图')!.click() })
