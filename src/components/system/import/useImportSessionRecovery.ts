@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { extractTextFromFile, textLayerReportLineV1 } from '../../../lib/doc-parser'
+import { publishTextLayerNoticeV1 } from './ImportDocOverview'
 import { chunkDocument, quickHash } from '../../../lib/import/chunker'
 import type { ImportSession } from '../../../lib/types/import-session'
 import { hashImportChunkTextV1, hasFrozenImportIdentityV1, readImportSessionAuthorityV1, useImportSessionStore } from '../../../stores/import-session'
@@ -30,14 +31,17 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
       setUnfinished(unfinished)
       const session = unfinished ?? (reusable?.publishedReferenceId && reusable.analysisDepth === 'deep' ? reusable : null)
       if (!session?.id) {
+        publishTextLayerNoticeV1(null)
         setBlobRestored(false)
         return
       }
       if (!hasFrozenImportIdentityV1(session)) {
+        publishTextLayerNoticeV1(null)
         setBlobRestored(false)
         return
       }
       if (hasChunkTexts(session.id)) {
+        publishTextLayerNoticeV1(null)
         setBlobRestored(true)
         return
       }
@@ -56,11 +60,14 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
         if (cancelled) return
         if (result.status === 'empty') {
           // 不切块、不登记块文本、不产生候选：扫描件恢复只能停在原件。
-          setTextLayerBlocked(textLayerReportLineV1({ filename: row.filename, sizeBytes: row.blob.size, pageCount: result.pageCount, status: result.status }))
+          const notice = textLayerReportLineV1({ filename: row.filename, sizeBytes: row.blob.size, pageCount: result.pageCount, status: result.status })
+          setTextLayerBlocked(notice)
+          publishTextLayerNoticeV1(notice)
           setBlobRestored(false)
           return
         }
         setTextLayerBlocked(null)
+        publishTextLayerNoticeV1(null)
         const plans = chunkDocument(result.text, { targetChars: frozen.chunkSize })
         let matches = quickHash(result.text) === frozen.fileHash && plans.length === frozen.totalChunks
         for (const plan of plans) {
@@ -101,6 +108,8 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
     clearUnfinished: () => {
       setUnfinished(null)
       setBlobRestored(false)
+      setTextLayerBlocked(null)
+      publishTextLayerNoticeV1(null)
     },
     clearReusable: () => setReusable(null),
     markBlobRestored: () => setBlobRestored(true),

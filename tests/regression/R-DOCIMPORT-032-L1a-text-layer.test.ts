@@ -8,6 +8,7 @@ import {
 import { chunkDocument } from '../../src/lib/import/chunker'
 import { registerChunkTexts } from '../../src/lib/import/pipeline'
 import useImportDocumentPreparation from '../../src/components/system/import/useImportDocumentPreparation'
+import { ImportDocIntro, publishTextLayerNoticeV1 } from '../../src/components/system/import/ImportDocOverview'
 import useImportSessionRecovery from '../../src/components/system/import/useImportSessionRecovery'
 
 // 032-L1-a direct positives/negatives. PDF/DOCX readers are deterministic
@@ -81,6 +82,7 @@ beforeEach(() => {
   state.session = null
   state.frozen = null
   state.blob = null
+  publishTextLayerNoticeV1(null)
   vi.mocked(chunkDocument).mockClear()
   vi.mocked(registerChunkTexts).mockClear()
   vi.stubGlobal('fetch', fetchSpy)
@@ -182,6 +184,14 @@ describe('032-L1-a text-layer detection and original-file preservation', () => {
     expect(prep!.previewPlans).toBeNull()
     expect(chunkDocument).not.toHaveBeenCalled()
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('renders the recovery notice through the existing ImportDocIntro without changing ImportDocPanel', async () => {
+    const host = await mount(createElement(ImportDocIntro, { chunkSize: 50000 }))
+    await act(async () => { publishTextLayerNoticeV1(NO_TEXT_LAYER_NOTICE_V1) })
+    expect(host.querySelector('[role="status"]')?.textContent).toBe(NO_TEXT_LAYER_NOTICE_V1)
+    await act(async () => { publishTextLayerNoticeV1(null) })
+    expect(host.querySelector('[role="status"]')).toBeNull()
   })
 
   it('recovery hook stops before chunk registration or model calls when the restored original has no text layer', async () => {
