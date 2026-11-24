@@ -17,11 +17,13 @@ import {
   type AgentRunSnapshotV1,
 } from './event-store'
 import { canonicalStringify, hashCanonicalValue } from './hash'
+import { assertExactRunArtifactBodySafeV1 } from '../../memory/evidence-policy'
 import {
   hashAgentRunProjectionBodyV1,
   replayAgentRunEventsV1,
 } from './projection'
 import { agentRunUtf8ByteLengthV1 } from './checkpoint-contract'
+import { sha256Text } from '../../ai/chapter-memory/text-normalization'
 
 interface CheckpointHashBodyV1 {
   version: 1
@@ -29,6 +31,46 @@ interface CheckpointHashBodyV1 {
   throughSequence: number
   projectionHash: string
   resumePayloadHash: string | null
+}
+
+/** B20d: a checkpoint may store only this small content-addressed reference.
+ * The full resume payload body lives in the registered exact artifact table and
+ * is pinned by an evidence.artifact.recorded event in the same run. Old
+ * checkpoints keep storing their JSON inline; readers resolve either shape. */
+export interface AgentRunCheckpointArtifactRefV1 {
+  version: 1
+  kind: 'agent-run-checkpoint-artifact-v1'
+  artifactKind: 'tool-result'
+  contentHash: string
+  byteLength: number
+}
+
+function isCheckpointArtifactRefV1(value: unknown): value is AgentRunCheckpointArtifactRefV1 {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  return record.version === 1
+    && record.kind === 'agent-run-checkpoint-artifact-v1'
+    && record.artifactKind === 'tool-result'
+    && typeof record.contentHash === 'string' && /^[a-f0-9]{64}$/.test(record.contentHash)
+    && Number.isSafeInteger(record.byteLength) && (record.byteLength as number) > 0
+}
+
+const CHECKPOINT_ARTIFACT_KIND_V1 = 'tool-result' as const
+
+/** Peek whether this run's latest checkpoint stores a content-addressed
+ * reference. Callers keep the original narrow transaction table set for inline
+ * checkpoints and widen only when the reference actually has to be resolved. */
+async function checkpointUsesArtifactRefV1(runId: number): Promise<boolean> {
+  const row = await db.agentRunCheckpoints
+    .where('[runId+throughSequence]')
+    .between([runId, Dexie.minKey], [runId, Dexie.maxKey])
+    .last() as AgentRunCheckpointRecord | undefined
+  if (!row || row.resumePayloadJson == null) return false
+  try {
+    return isCheckpointArtifactRefV1(JSON.parse(row.resumePayloadJson))
+  } catch {
+    return false
+  }
 }
 
 export interface AgentRunRecoveryPlanV1 {
@@ -73,7 +115,7 @@ async function waitForHash(value: unknown): Promise<string> {
   return Dexie.waitFor(hashCanonicalValue(value))
 }
 
-function parseResumePayload(checkpoint: AgentRunCheckpointRecord): unknown | null {
+function parseStoredResumePayload(checkpoint: AgentRunCheckpointRecord): unknown | null {
   if (checkpoint.resumePayloadJson == null) return null
   if (typeof checkpoint.resumePayloadJson !== 'string') {
     fail('checkpoint_resume_json', '检查点恢复载荷必须是 JSON 字符串')
@@ -82,6 +124,42 @@ function parseResumePayload(checkpoint: AgentRunCheckpointRecord): unknown | nul
     return JSON.parse(checkpoint.resumePayloadJson)
   } catch {
     fail('checkpoint_resume_json', '检查点恢复载荷 JSON 已损坏')
+  }
+}
+
+/** Resolve a content-addressed checkpoint reference inside the caller's read
+ * transaction. The artifact must be pinned by this run's event ledger, still
+ * available (not pruned), and byte/hash exact; no partial or truncated body is
+ * ever returned as a resume state. */
+async function resolveCheckpointArtifactRefV1(
+  ref: AgentRunCheckpointArtifactRefV1,
+  projectId: number,
+  events: readonly { type: string; payload: unknown }[],
+): Promise<unknown> {
+  const pinned = events.some(event => {
+    if (event.type !== 'evidence.artifact.recorded') return false
+    const payload = event.payload as { artifactKind?: unknown; contentHash?: unknown; byteLength?: unknown }
+    return payload.artifactKind === ref.artifactKind
+      && payload.contentHash === ref.contentHash
+      && payload.byteLength === ref.byteLength
+  })
+  if (!pinned) fail('checkpoint_artifact_unpinned', '检查点工件没有本 Run 的登记事件')
+  const row = await db.agentRunArtifacts
+    .where('[projectId+artifactKind+contentHash]')
+    .equals([projectId, ref.artifactKind, ref.contentHash])
+    .first()
+  if (!row || row.retentionState !== 'available' || row.content == null) {
+    fail('checkpoint_artifact_missing', '检查点工件已裁剪或缺失')
+  }
+  const content = row.content
+  const contentHash = await Dexie.waitFor(sha256Text(content))
+  if (contentHash !== ref.contentHash || agentRunUtf8ByteLengthV1(content) !== ref.byteLength) {
+    fail('checkpoint_artifact_hash', '检查点工件全文 hash 或长度不匹配')
+  }
+  try {
+    return JSON.parse(content)
+  } catch {
+    fail('checkpoint_artifact_json', '检查点工件正文 JSON 已损坏')
   }
 }
 
@@ -164,11 +242,16 @@ async function verifyCheckpointAgainstSnapshot(
     && agentRunUtf8ByteLengthV1(checkpoint.resumePayloadJson) > maximumResumePayloadBytes) {
     fail('checkpoint_resume_budget', '检查点恢复载荷超过安全读取预算')
   }
-  const resumePayload = parseResumePayload(checkpoint)
-  const resumePayloadHash = resumePayload == null ? null : await waitForHash(resumePayload)
+  const storedResumePayload = parseStoredResumePayload(checkpoint)
+  const resumePayloadHash = storedResumePayload == null ? null : await waitForHash(storedResumePayload)
   if (resumePayloadHash !== (checkpoint.resumePayloadHash ?? null)) {
     fail('checkpoint_resume_hash', '检查点恢复载荷哈希不匹配')
   }
+  const resumePayload = isCheckpointArtifactRefV1(storedResumePayload)
+    ? (maximumResumePayloadBytes !== null && storedResumePayload.byteLength > maximumResumePayloadBytes
+      ? fail('checkpoint_resume_budget', '检查点恢复载荷超过安全读取预算')
+      : await resolveCheckpointArtifactRefV1(storedResumePayload, snapshot.run.projectId, snapshot.events))
+    : storedResumePayload
   const expectedCheckpointHash = await waitForHash(checkpointHashBody(checkpoint))
   if (expectedCheckpointHash !== checkpoint.checkpointHash) {
     fail('checkpoint_hash', '检查点内容哈希不匹配')
@@ -223,15 +306,79 @@ function recoveryPlan(
 export async function createAgentRunCheckpointInTransactionV1(input: {
   snapshot: AgentRunSnapshotV1
   resumePayload?: unknown
+  /** B20d opt-in: persist a large payload as a content-addressed exact
+   * artifact and store only the small reference in the checkpoint record. */
+  resumePayloadArtifact?: { content: unknown }
   now?: number
 }): Promise<{ checkpoint: AgentRunCheckpointRecord & { id: number }; snapshot: AgentRunSnapshotV1 }> {
-  const resumePayloadJson = input.resumePayload === undefined
+  let snapshot = input.snapshot
+  let storedResumePayload = input.resumePayload
+  if (input.resumePayloadArtifact) {
+    if (input.resumePayload !== undefined) fail('checkpoint_payload_conflict', '检查点不能同时写入内联和引用载荷')
+    const content = canonicalStringify(input.resumePayloadArtifact.content)
+    assertExactRunArtifactBodySafeV1({ artifactKind: CHECKPOINT_ARTIFACT_KIND_V1, body: content })
+    try {
+      assertExactRunArtifactBodySafeV1({ artifactKind: CHECKPOINT_ARTIFACT_KIND_V1, body: JSON.parse(content) })
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error
+    }
+    const contentHash = await Dexie.waitFor(sha256Text(content))
+    const byteLength = agentRunUtf8ByteLengthV1(content)
+    const existing = await db.agentRunArtifacts
+      .where('[projectId+artifactKind+contentHash]')
+      .equals([snapshot.run.projectId, CHECKPOINT_ARTIFACT_KIND_V1, contentHash])
+      .first()
+    if (existing) {
+      if (existing.retentionState !== 'available' || existing.content == null) fail('checkpoint_artifact_missing', '同 hash 检查点工件已裁剪')
+      if (existing.content !== content || existing.byteLength !== byteLength) fail('checkpoint_artifact_hash', '同 hash 检查点工件正文不一致')
+    } else {
+      const now = input.now ?? Date.now()
+      await db.agentRunArtifacts.add({
+        projectId: snapshot.run.projectId,
+        artifactKind: CHECKPOINT_ARTIFACT_KIND_V1,
+        contentHash,
+        encoding: 'utf-8',
+        byteLength,
+        content,
+        retentionState: 'available',
+        pruneReceiptJson: null,
+        pruneReceiptHash: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+    const payload = { artifactKind: CHECKPOINT_ARTIFACT_KIND_V1, contentHash, byteLength }
+    if (!snapshot.events.some(event => event.type === 'evidence.artifact.recorded'
+      && (event.payload as { artifactKind?: unknown; contentHash?: unknown; byteLength?: unknown }).artifactKind === payload.artifactKind
+      && (event.payload as { contentHash?: unknown }).contentHash === payload.contentHash
+      && (event.payload as { byteLength?: unknown }).byteLength === payload.byteLength)) {
+      snapshot = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, parseAgentRunEventV1({
+        version: 1,
+        runId: snapshot.run.id,
+        sequence: snapshot.projection.lastSequence + 1,
+        generation: snapshot.projection.generation,
+        projectId: snapshot.run.projectId,
+        worldGroupId: snapshot.run.worldGroupId ?? null,
+        contractHash: snapshot.run.contractHash,
+        type: 'evidence.artifact.recorded',
+        createdAt: input.now ?? Date.now(),
+        payload,
+      }))
+    }
+    storedResumePayload = {
+      version: 1,
+      kind: 'agent-run-checkpoint-artifact-v1',
+      artifactKind: CHECKPOINT_ARTIFACT_KIND_V1,
+      contentHash,
+      byteLength,
+    } satisfies AgentRunCheckpointArtifactRefV1
+  }
+  const resumePayloadJson = storedResumePayload === undefined
     ? null
-    : canonicalStringify(input.resumePayload)
-  const resumePayloadHash = input.resumePayload === undefined
+    : canonicalStringify(storedResumePayload)
+  const resumePayloadHash = storedResumePayload === undefined
     ? null
-    : await waitForHash(input.resumePayload)
-  const snapshot = input.snapshot
+    : await waitForHash(storedResumePayload)
   if (['completed', 'failed', 'cancelled', 'recovery_required'].includes(snapshot.projection.state)) {
     fail('checkpoint_terminal', `终态 ${snapshot.projection.state} 不能创建检查点`)
   }
@@ -275,14 +422,16 @@ export async function createAgentRunCheckpointV1(input: {
   runId: number
   productRuntimeSessionId?: number
   resumePayload?: unknown
+  resumePayloadArtifact?: { content: unknown }
   expectedLastSequence?: number
   now?: number
 }): Promise<{ checkpoint: AgentRunCheckpointRecord & { id: number }; snapshot: AgentRunSnapshotV1 }> {
+  const artifactTables = input.resumePayloadArtifact ? [db.agentRunArtifacts] : []
   return withAgentRunMutationLockV1(input.runId, () => db.transaction(
     'rw',
     input.productRuntimeSessionId == null
-      ? agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints)
-      : scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+      ? agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, ...artifactTables)
+      : scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, ...artifactTables),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
       if (
@@ -296,6 +445,7 @@ export async function createAgentRunCheckpointV1(input: {
       return createAgentRunCheckpointInTransactionV1({
         snapshot,
         resumePayload: input.resumePayload,
+        ...(input.resumePayloadArtifact ? { resumePayloadArtifact: input.resumePayloadArtifact } : {}),
         now: input.now,
       })
     },
@@ -311,11 +461,12 @@ export async function verifyAgentRunCheckpointV1(
   try {
     const run = await db.agentRunCheckpoints.get(checkpointId)
     if (!run) fail('checkpoint_not_found', '检查点不存在')
+    const artifactTables = await checkpointUsesArtifactRefV1(run.runId) ? [db.agentRunArtifacts] : []
     return await db.transaction(
       'r',
       productRuntimeSessionId == null
-        ? agentRunScopeTransactionTablesV1(run.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints)
-        : scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+        ? agentRunScopeTransactionTablesV1(run.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, ...artifactTables)
+        : scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, ...artifactTables),
       async () => {
         const checkpoint = await db.agentRunCheckpoints.get(checkpointId)
         if (!checkpoint || checkpoint.id == null) fail('checkpoint_not_found', '检查点不存在')
@@ -343,11 +494,12 @@ export async function readLatestVerifiedAgentRunCheckpointV1(
     maximumResumePayloadBytes?: number
   } = {},
 ): Promise<VerifiedAgentRunCheckpointV1 | null> {
+  const artifactTables = await checkpointUsesArtifactRefV1(runId) ? [db.agentRunArtifacts] : []
   return db.transaction(
     'r',
     options.owner === 'instance'
-      ? scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints)
-      : agentRunScopeTransactionTablesV1(runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+      ? scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, ...artifactTables)
+      : agentRunScopeTransactionTablesV1(runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, ...artifactTables),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(scope, runId)
       const checkpoint = await latestCheckpoint(runId)
@@ -373,11 +525,12 @@ export async function beginAgentRunRecoveryV1(input: {
   now?: number
 }): Promise<AgentRunRecoveryPlanV1> {
   const productRuntimeSessionId = input.productRuntimeSessionId
+  const artifactTables = await checkpointUsesArtifactRefV1(input.runId) ? [db.agentRunArtifacts] : []
   return withAgentRunMutationLockV1(input.runId, () => db.transaction(
     'rw',
     productRuntimeSessionId == null
-      ? agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints)
-      : scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+      ? agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, ...artifactTables)
+      : scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, ...artifactTables),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
       if (productRuntimeSessionId != null && snapshot.run.productRuntimeSessionId !== productRuntimeSessionId) fail('checkpoint_scope', '恢复开始的实例 owner 不匹配')
@@ -427,11 +580,12 @@ export async function completeAgentRunRecoveryV1(input: {
   now?: number
 }): Promise<AgentRunSnapshotV1> {
   const productRuntimeSessionId = input.productRuntimeSessionId
+  const artifactTables = await checkpointUsesArtifactRefV1(input.runId) ? [db.agentRunArtifacts] : []
   return withAgentRunMutationLockV1(input.runId, () => db.transaction(
     'rw',
     productRuntimeSessionId == null
-      ? agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints)
-      : scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+      ? agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, ...artifactTables)
+      : scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, ...artifactTables),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
       if (productRuntimeSessionId != null && snapshot.run.productRuntimeSessionId !== productRuntimeSessionId) fail('checkpoint_scope', '恢复完成的实例 owner 不匹配')
