@@ -39,6 +39,8 @@ import { recordAgentRunArtifactV1 } from '../../lib/memory/artifact-store'
 import { saveChapterOrganizationSelectionV1 } from '../../lib/agent/chapter-organization-selection'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { db } from '../../lib/db/schema'
+import { useActiveWork } from '../../hooks/useActiveWork'
+import { LongformMarkdownSessionV1, buildLongformMarkdownIdentityV1, longformMarkdownMountKeyV1, type LongformMarkdownEditorModeV1 } from '../../lib/editor/longform-markdown-session'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import { prepareProseGatewayAssemblyV1, type ProseGatewayAssemblyV1 } from '../../lib/prose/gateway-context'
 import { resolveChapterDisplayMeta } from '../../lib/outline/chapter-display'
@@ -299,6 +301,16 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [manualSaving, setManualSaving] = useState(false)
   const [manualSaveError, setManualSaveError] = useState('')
   const [hasPendingChapterDrafts, setHasPendingChapterDrafts] = useState(false)
+  // R8 生产挂载：仅已解析准入的独立长篇开放 Markdown 实时预览/源码模式。
+  const activeWork = useActiveWork(project)
+  const [markdownMode, setMarkdownMode] = useState<LongformMarkdownEditorModeV1>('richtext')
+  const [markdownError, setMarkdownError] = useState('')
+  const [markdownSwitching, setMarkdownSwitching] = useState(false)
+  const markdownHostRef = useRef<HTMLDivElement | null>(null)
+  const markdownSessionRef = useRef<LongformMarkdownSessionV1 | null>(null)
+  const markdownMountKeyRef = useRef('')
+  const markdownModeRef = useRef<LongformMarkdownEditorModeV1>('richtext')
+  const markdownAdmitted = LongformMarkdownSessionV1.canMount({ project, work: { kind: activeWork?.kind ?? null, novelProfile: activeWork?.novelProfile ?? null } })
   const editorChapterIdRef = useRef(currentChapter?.id)
   const loadedEditorChapterIdRef = useRef<number | null>(null)
   editorChapterIdRef.current = currentChapter?.id
@@ -1049,6 +1061,86 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   useAutoSave(content, useCallback(async () => {
     await flushChapterDrafts().catch(() => undefined)
   }, [flushChapterDrafts]))
+
+  // 打开章节时按 plan 用户交互合同裁决默认模式：既有非空章保持原富文本语义，
+  // 只有新空章才默认实时预览；打开本身不写库、不推进 revision。
+  // 这里不改会话键：换章引发的重建由会话生命周期 effect 的 cleanup 负责。
+  useEffect(() => {
+    setMarkdownMode(markdownAdmitted ? LongformMarkdownSessionV1.defaultModeFor(currentChapter?.content ?? '') : 'richtext')
+    setMarkdownError('')
+    // 只在换章/准入变化时重新裁决；content 每键变化不能重置模式或拆掉进行中的会话。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentChapter?.id, markdownAdmitted])
+
+  const markdownCmActive = markdownAdmitted && markdownMode !== 'richtext'
+  // 生命周期 effect 不能把 mode 放进依赖：否则每次源码↔预览都重建会话并丢掉撤销栈。
+  markdownModeRef.current = markdownMode
+
+  // R8 挂载：同章同准入只维持一份 CM 会话/state/history；离开 CM 或换章才销毁。
+  // 打开/滚动/光标/源码↔预览切换 0 章节更新：仅 html 实际变化才 stage 草稿。
+  useEffect(() => {
+    const host = markdownHostRef.current
+    if (!markdownCmActive || !host || !currentChapter?.id) return
+    const scope = editorWorkspaceScope
+    const chapterId = currentChapter.id
+    const chapterUid = currentChapter.ragDocumentId
+    if (!scope || !chapterUid) { setMarkdownError('章节稳定身份不可用，Markdown 模式未开启。'); return }
+    const mountKey = longformMarkdownMountKeyV1({ scope, chapterId })
+    if (markdownMountKeyRef.current === mountKey && markdownSessionRef.current) return
+    const baselineHtml = chapterDrafts.read(chapterId)?.html ?? currentChapter.content ?? ''
+    let session: LongformMarkdownSessionV1
+    try {
+      session = new LongformMarkdownSessionV1({
+        identity: buildLongformMarkdownIdentityV1(scope, chapterId, chapterUid),
+        html: baselineHtml,
+        parent: host,
+        onHtmlChange: (html, plainText) => stageEditorDraft(html, plainText),
+        onError: error => setMarkdownError(error.message),
+        onRichText: () => { setMarkdownSwitching(false) },
+        placeholder: '开始写作…',
+      })
+      session.setDisplayMode(markdownModeRef.current === 'source' ? 'source' : 'preview')
+    } catch (error) {
+      setMarkdownError(error instanceof Error ? error.message : 'Markdown 会话建立失败；已保留富文本。')
+      return
+    }
+    markdownSessionRef.current = session
+    markdownMountKeyRef.current = mountKey
+    setMarkdownError('')
+    return () => {
+      session.destroy()
+      if (markdownSessionRef.current === session) markdownSessionRef.current = null
+      if (markdownMountKeyRef.current === mountKey) markdownMountKeyRef.current = ''
+    }
+    // 重建只由换章/准入/CM 边界触发，绝不随显示模式或每键 content 重建。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markdownCmActive, currentChapter?.id, currentChapter?.ragDocumentId, editorWorkspaceScope])
+
+  // 源码↔实时预览：同一个 CM 会话/EditorState/history 只切显示，不重建、不写库。
+  useEffect(() => {
+    const session = markdownSessionRef.current
+    if (!session || !markdownCmActive) return
+    try {
+      session.setDisplayMode(markdownMode === 'source' ? 'source' : 'preview')
+    } catch (error) {
+      setMarkdownError(error instanceof Error ? error.message : '切换显示失败，当前草稿已保留。')
+    }
+  }, [markdownMode, markdownCmActive])
+
+  /** 富文本↔CM 是明确编辑边界：先 flush 草稿成功后再切模式；失败停留原模式。 */
+  const switchMarkdownMode = useCallback(async (next: LongformMarkdownEditorModeV1) => {
+    if (markdownSwitching || next === markdownMode) return
+    setMarkdownSwitching(true)
+    setMarkdownError('')
+    try {
+      await flushChapterDrafts()
+      setMarkdownMode(next)
+    } catch (error) {
+      setMarkdownError(error instanceof Error ? error.message : '草稿尚未保存成功，已停留当前模式。')
+    } finally {
+      setMarkdownSwitching(false)
+    }
+  }, [markdownSwitching, markdownMode, flushChapterDrafts])
 
   const outlineNode = currentChapter ? nodes.find(n => n.id === currentChapter.outlineNodeId) : null
   useEffect(() => {
@@ -3490,28 +3582,48 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           />
         </Suspense>
       ) : (
-      <div className="mx-auto max-w-3xl rounded-2xl border border-border bg-bg-elevated px-3 sm:px-8 py-8 shadow-theme-md">
-        <RichEditor
-          ref={editorRef}
-          value={content}
-          onChange={stageEditorDraft}
-          placeholder="开始写作..."
-          minHeight={560}
-          className="sf-manuscript-editor border-0 bg-transparent shadow-none"
-          entityReferences={entityReferences}
-          contentHeader={
-            <div className="mb-8 mt-8 text-center">
-              <p className="text-[11px] uppercase tracking-[0.28em] text-text-muted">
-                {chapterDisplay?.ordinal != null ? `第 ${chapterDisplay.ordinal} 章` : '正文'}
-              </p>
-              <h1 className="mt-4 font-serif text-3xl font-semibold tracking-wide text-text-primary">
-                {chapterDisplay?.title ?? currentChapter.title}
-              </h1>
-              <div className="mx-auto mt-5 h-px w-24 bg-border" />
+        <div className="mx-auto max-w-3xl rounded-2xl border border-border bg-bg-elevated px-3 sm:px-8 py-8 shadow-theme-md">
+          {markdownAdmitted && (
+            <div className="mb-4 flex flex-wrap items-center gap-2" role="group" aria-label="编辑模式">
+              {(['richtext', 'preview', 'source'] as const).map(mode => (
+                <button
+                  key={mode}
+                  type="button"
+                  disabled={markdownSwitching || manualSaving}
+                  aria-pressed={markdownMode === mode}
+                  onClick={() => { void switchMarkdownMode(mode) }}
+                  className={markdownMode === mode ? 'rounded px-2.5 py-1 text-xs bg-accent text-white' : 'rounded px-2.5 py-1 text-xs border border-border text-text-secondary hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-45'}
+                >
+                  {mode === 'richtext' ? '富文本' : mode === 'preview' ? '实时预览' : 'Markdown 源码'}
+                </button>
+              ))}
+              {markdownMode !== 'richtext' && <span className="text-[10px] text-text-muted">源码与实时预览共用同一撤销历史；切换到富文本会先保存草稿并开始新的撤销段。</span>}
+              {markdownError && <span role="alert" className="text-[10px] text-error">{markdownError}</span>}
             </div>
-          }
-        />
-      </div>
+          )}
+          {markdownAdmitted && markdownMode !== 'richtext'
+            ? <div ref={markdownHostRef} className="sf-manuscript-editor sf-md-session border-0 bg-transparent" aria-label="正文 Markdown 编辑区" />
+            : <RichEditor
+              ref={editorRef}
+              value={content}
+              onChange={stageEditorDraft}
+              placeholder="开始写作..."
+              minHeight={560}
+              className="sf-manuscript-editor border-0 bg-transparent shadow-none"
+              entityReferences={entityReferences}
+              contentHeader={
+                <div className="mb-8 mt-8 text-center">
+                  <p className="text-[11px] uppercase tracking-[0.28em] text-text-muted">
+                    {chapterDisplay?.ordinal != null ? `第 ${chapterDisplay.ordinal} 章` : '正文'}
+                  </p>
+                  <h1 className="mt-4 font-serif text-3xl font-semibold tracking-wide text-text-primary">
+                    {chapterDisplay?.title ?? currentChapter.title}
+                  </h1>
+                  <div className="mx-auto mt-5 h-px w-24 bg-border" />
+                </div>
+              }
+            />}
+        </div>
       )}
 
       {/* Phase 24.3: 选中文本浮动工具栏 */}
