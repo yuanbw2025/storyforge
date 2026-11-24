@@ -1,6 +1,8 @@
 import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
-import { chat, type ChatResult } from '../ai/client'
+import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
+import { evidencedInputBudgetV1, prepareModelCapacityV1 } from '../ai/model-capacity'
+import { useAIConfigStore } from '../../stores/ai-config'
 import type { AgentRunRecord, AgentEvent, AgentConversation, AIConfig, ChatMessage, MotionDramaPromptStageV1, WorkspaceScope } from '../types'
 import { db } from '../db/schema'
 import { assembleContext } from '../registry/assemble-context'
@@ -68,14 +70,37 @@ const STAGES: Record<MotionDramaPromptStageV1, { skillId: string; role: string; 
 
 function stepId(stage: MotionDramaPromptStageV1): string { return `motion-drama:${stage}` }
 
-function contract(scope: WorkspaceScope, stage: MotionDramaPromptStageV1) {
+/** B31c：漫剧前期阶段输入预算跟随已绑定连接的已证实容量（按本阶段最坏两次
+ * 输出预留），不再使用固定 64k 应用额度。容量未知时保留缺省下限，不放大作者
+ * 显式上限；请求级装配/准入继续兜底。 */
+const MOTION_DRAMA_STAGE_DEFAULT_INPUT_TOKENS_V1 = 64_000
+
+export async function motionDramaStageInputBudgetV1(input: {
+  aiConfig?: AIConfig
+  projectId: number
+  category: string
+  outputReservation: number
+}): Promise<number> {
+  const resolved = input.aiConfig
+    ?? resolveRequestConfig(useAIConfigStore.getState().config, { category: input.category, projectId: input.projectId }).config
+  try {
+    const prepared = await prepareModelCapacityV1(resolved)
+    const value = evidencedInputBudgetV1({ config: prepared, outputReservation: input.outputReservation })
+    if (value != null) return Math.max(MOTION_DRAMA_STAGE_DEFAULT_INPUT_TOKENS_V1, value)
+  } catch {
+    // 容量未证实（离线/未知模型）时退回缺省参考。
+  }
+  return MOTION_DRAMA_STAGE_DEFAULT_INPUT_TOKENS_V1
+}
+
+function contract(scope: WorkspaceScope, stage: MotionDramaPromptStageV1, inputBudgetTokens: number) {
   const config = STAGES[stage]; const skill = getAgentSkillV1(config.skillId); const step = stepId(stage)
   return {
     version: 1 as const, objective: `${config.role}完成漫剧前期生产阶段 ${stage}，只产出待作者确认候选`, workflowKind: 'plan-execute' as const,
     scope: { projectId: scope.projectId, worldGroupId: null },
     permissions: { contextSourceKeys: [...skill.contextSourceKeys], writeTargets: skill.writeTargets.map(target => ({ table: target.table, fields: [...target.fields], mode: 'author-confirmed' as const })) },
     executionBindings: [{ stepId: step, ...createAgentSkillExecutionBindingV1(skill) }],
-    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 64_000, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) * 2, maxAttemptsPerStep: 2, maxProtocolErrors: 1 },
+    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: inputBudgetTokens, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) * 2, maxAttemptsPerStep: 2, maxProtocolErrors: 1 },
     acceptance: [
       { id: `${step}.candidate`, kind: 'output-present' as const, required: true },
       { id: `${step}.author`, kind: 'author-confirmed' as const, required: true },
@@ -325,7 +350,11 @@ export async function generateMotionDramaCandidateV1(input: { scope: WorkspaceSc
   const roots = await prerequisites(input.scope, input.stage, input.episodeNumber)
   if (roots.production.currentEpisodeNumber !== input.episodeNumber) throw new Error('[motion-drama-run] 当前集已变化，请刷新')
   const config = STAGES[input.stage]; const skill = getAgentSkillV1(config.skillId); const step = stepId(input.stage)
-  let snapshot = await createAgentRunV1({ scope: roots.scope, worldGroupId: null, contract: contract(roots.scope, input.stage) })
+  const inputBudgetTokens = await motionDramaStageInputBudgetV1({
+    aiConfig: input.aiConfig, projectId: roots.scope.projectId, category: 'motion-drama.professional',
+    outputReservation: requireFixedBudgetValueV1(skill.maxOutputTokens) * 2,
+  })
+  let snapshot = await createAgentRunV1({ scope: roots.scope, worldGroupId: null, contract: contract(roots.scope, input.stage, inputBudgetTokens) })
   let phase = 'preparation'
   let responseObserved = false
   let unavailableResponse: Awaited<ReturnType<typeof recordUnavailableCreationResponseV1>> | undefined
@@ -333,7 +362,7 @@ export async function generateMotionDramaCandidateV1(input: { scope: WorkspaceSc
   await onTaskCreated?.call(callbackReceiver, Object.freeze({ runId: snapshot.run.id, generation: snapshot.projection.generation, lastSequence: snapshot.projection.lastSequence }))
   snapshot = await append(roots.scope, snapshot, 'step.scheduled', { stepId: step })
   snapshot = await append(roots.scope, snapshot, 'step.started', { stepId: step, attempt: 1 })
-  const assembled = await assembleContext({ projectId: roots.scope.projectId, scope: roots.scope, sourceKeys: [...skill.contextSourceKeys], adaptationProjectId: roots.adaptation.id, adaptationSourceManifestVersion: roots.adaptation.activeSourceManifestVersion, adaptationSourceUnitKeys: roots.sourceUnitKeys, modelConfig: input.aiConfig, provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 64_000 })
+  const assembled = await assembleContext({ projectId: roots.scope.projectId, scope: roots.scope, sourceKeys: [...skill.contextSourceKeys], adaptationProjectId: roots.adaptation.id, adaptationSourceManifestVersion: roots.adaptation.activeSourceManifestVersion, adaptationSourceUnitKeys: roots.sourceUnitKeys, modelConfig: input.aiConfig, provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: inputBudgetTokens })
   const contextManifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId: step, attempt: 1, projectId: roots.scope.projectId, worldGroupId: null, declaredSourceKeys: [...skill.contextSourceKeys], assembled, readerVersion: `motion-drama-${input.stage}-context-v1` })
   snapshot = await append(roots.scope, snapshot, 'context.assembled', { stepId: step, attempt: 1, manifestHash: contextManifest.manifestHash })
   const resolvedPrompt = await resolveMotionDramaPromptV1(roots.scope, input.stage, input.episodeNumber)
