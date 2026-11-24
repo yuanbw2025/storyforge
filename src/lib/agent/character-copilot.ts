@@ -449,8 +449,9 @@ export async function prepareCharacterCopilot(input: {
         `【Harness 登记的已有角色】\n${nodeInput.characterContext || '（暂无）'}`,
       ],
     })
+    // B20a：模板未设输出上限时不得伪造固定 6k；只有作者显式上限进入派发，
+    // 无上限按连接已核实容量执行（effectiveMaxTokens 如实为 null）。
     const generationOverrides = {
-      maxTokens: 6_000,
       temperature: nodeInput.config.temperature,
       ...rendered.generationOverrides,
       ...input.generationOverrides,
