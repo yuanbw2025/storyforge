@@ -45,6 +45,82 @@ export interface ExtractResult {
   rawChars: number
   /** 对于 PDF 会返回页数；docx 返回 undefined */
   pageCount?: number
+  /** 032-L1-a：显式的文本层状态。`empty` 表示源文件给不出可复制正文
+   * （扫描件 PDF／空 docx），必须由调用方拦截，不得当作解析成功继续送模型。 */
+  status: ExtractStatusV1
+  warnings: ExtractWarningV1[]
+  /** 判定依据，供报告展示"为什么判为不可解析"，阈值与实测值同源。 */
+  diagnostics: ExtractDiagnosticsV1
+}
+
+/** 032-L1-a 阈值：PDF 全篇非空白字符下限。低于此值视为"没有可复制文本层"
+ * （典型：仅页脚/水印的扫描件），而不是"内容很短"。 */
+export const TEXT_LAYER_MIN_TOTAL_UNITS_V1 = 32
+/** 032-L1-a 阈值：单页非空白字符下限。低于此值的页记为 sparse 页，
+ * 不作为空白判定的唯一依据，但会进报告，避免"有文字层却几乎读不到"。 */
+export const TEXT_LAYER_SPARSE_PAGE_UNITS_V1 = 8
+/** 032-L1-a 固定文案：作者侧必须看到的同一句话，不在组件里各写一份。 */
+export const NO_TEXT_LAYER_NOTICE_V1 = '未识别到可复制文本，已保留原件；请另附可复制文本或人工录入'
+
+export type ExtractStatusV1 = 'ok' | 'empty'
+export type ExtractWarningV1 =
+  | 'pdf-text-layer-empty' | 'pdf-text-layer-sparse'
+  | 'docx-text-empty' | 'docx-text-sparse'
+  | 'plain-text-empty'
+
+export interface ExtractDiagnosticsV1 {
+  /** 非空白字符数（不含空格/换行/制表）。 */
+  nonWhitespaceUnits: number
+  thresholdUnits: number
+  /** 0-based 稀疏页序号（仅 PDF）。 */
+  sparsePages: number[]
+}
+
+export function countNonWhitespaceUnitsV1(text: string): number {
+  return text.replace(/\s+/g, '').length
+}
+
+/** 纯判定：把"抽出来的文本"分成 ok / empty，并给出可展示的警告。
+ * 只做状态判定，不改文本、不截断、不重排。 */
+export function assessExtractionQualityV1(input: {
+  format: 'plain' | 'pdf' | 'docx'
+  text: string
+  pages?: readonly string[]
+}): { status: ExtractStatusV1; warnings: ExtractWarningV1[]; diagnostics: ExtractDiagnosticsV1 } {
+  const warnings: ExtractWarningV1[] = []
+  if (input.format === 'pdf') {
+    const pages = input.pages ?? []
+    const counts = pages.map(page => countNonWhitespaceUnitsV1(page))
+    const total = counts.reduce((sum, count) => sum + count, 0)
+    const sparsePages = counts.flatMap((count, index) => (count < TEXT_LAYER_SPARSE_PAGE_UNITS_V1 ? [index] : []))
+    // 全篇低于下限：视为没有文本层（扫描件），不当作"短文档"。
+    if (total < TEXT_LAYER_MIN_TOTAL_UNITS_V1) warnings.push('pdf-text-layer-empty')
+    else if (sparsePages.length) warnings.push('pdf-text-layer-sparse')
+    return {
+      status: total < TEXT_LAYER_MIN_TOTAL_UNITS_V1 ? 'empty' : 'ok',
+      warnings,
+      diagnostics: { nonWhitespaceUnits: total, thresholdUnits: TEXT_LAYER_MIN_TOTAL_UNITS_V1, sparsePages },
+    }
+  }
+  const units = countNonWhitespaceUnitsV1(input.text)
+  if (input.format === 'docx') {
+    if (units === 0) warnings.push('docx-text-empty')
+    else if (units < TEXT_LAYER_MIN_TOTAL_UNITS_V1) warnings.push('docx-text-sparse')
+    return { status: units === 0 ? 'empty' : 'ok', warnings, diagnostics: { nonWhitespaceUnits: units, thresholdUnits: TEXT_LAYER_MIN_TOTAL_UNITS_V1, sparsePages: [] } }
+  }
+  // 纯文本类（txt/md/csv）：只有真的空文件才算 empty；短文本保持既有可用行为。
+  if (units === 0) warnings.push('plain-text-empty')
+  return { status: units === 0 ? 'empty' : 'ok', warnings, diagnostics: { nonWhitespaceUnits: units, thresholdUnits: 0, sparsePages: [] } }
+}
+
+/** 报告行：固定文案 + 文件名/大小/页数/状态，四项都来自同一次抽取。 */
+export function textLayerReportLineV1(input: {
+  filename: string; sizeBytes: number; pageCount?: number; status: ExtractStatusV1
+}): string {
+  const mb = (input.sizeBytes / 1024 / 1024).toFixed(2)
+  const pages = input.pageCount == null ? '' : ` · ${input.pageCount} 页`
+  const status = input.status === 'empty' ? '无可复制文本' : '可解析'
+  return `${NO_TEXT_LAYER_NOTICE_V1}（文件 ${input.filename || '未命名'} · ${mb} MB${pages} · 状态 ${status}）`
 }
 
 /** 统一入口：给一个 File，返回提取到的纯文本 */
@@ -82,7 +158,8 @@ export async function extractTextFromFile(file: File): Promise<ExtractResult> {
     case 'md':
     case 'csv': {
       const text = await file.text()
-      return { text, rawChars: text.length }
+      // 文本逐字保留；只追加显式状态，不改内容与长度口径。
+      return { text, rawChars: text.length, ...assessExtractionQualityV1({ format: 'plain', text }) }
     }
     case 'pdf':  return extractPdf(file)
     case 'docx': return extractDocx(file)
@@ -104,7 +181,8 @@ async function extractPdf(file: File): Promise<ExtractResult> {
     pages.push(line)
   }
   const text = pages.join('\n\n')
-  return { text, rawChars: text.length, pageCount: pdf.numPages }
+  // 扫描件/图片型 PDF 的文本层为空：显式标记，交给调用方拦截，不在这里造内容。
+  return { text, rawChars: text.length, pageCount: pdf.numPages, ...assessExtractionQualityV1({ format: 'pdf', text, pages }) }
 }
 
 async function extractDocx(file: File): Promise<ExtractResult> {
@@ -112,5 +190,5 @@ async function extractDocx(file: File): Promise<ExtractResult> {
   const buf = await file.arrayBuffer()
   // mammoth.extractRawText 返回纯文本（不带样式）
   const { value } = await mammoth.extractRawText({ arrayBuffer: buf })
-  return { text: value, rawChars: value.length }
+  return { text: value, rawChars: value.length, ...assessExtractionQualityV1({ format: 'docx', text: value }) }
 }

@@ -28,6 +28,7 @@ export function ImportDocIntro({ chunkSize }: { chunkSize: number }) {
         </div>
         <div className="mt-2 text-[11px] text-text-muted leading-relaxed">
           ⚠️ 大文档会自动按「章节边界」或「段落 / 字符数」切块，每块约 {chunkSize.toLocaleString()} 字，AI 串行处理。<br />
+          🔍 扫描件或图片型 PDF 没有可复制文本层时不会进入解析：结果会明确提示「未识别到可复制文本，已保留原件」，原件仍可查看/下载，补上可复制文本后再开始。<br />
           ✨ <strong>上传后原文会自动存档到浏览器本地 IndexedDB</strong>，存档成功后，回到原世界和作品可以续跑；存档缺失时须重新上传同一文件。
         </div>
       </div>
