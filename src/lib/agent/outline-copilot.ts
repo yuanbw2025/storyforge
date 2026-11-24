@@ -521,8 +521,13 @@ export async function prepareOutlineCopilot(input: {
       : await chat(messages, config, {
           category: routingCategory,
           projectId: input.projectId,
+          // Only an explicit author limit caps the wire output; without one,
+          // dispatch follows the bound connection's evidenced capacity (B10d:
+          // the old fixed 8k/12k application quota is gone).
           configOverrides: {
-            maxTokens: input.generationOverrides?.maxTokens ?? (mode === 'volumes' ? 8_000 : 12_000),
+            ...(input.generationOverrides?.maxTokens != null
+              ? { maxTokens: input.generationOverrides.maxTokens }
+              : {}),
             ...(input.generationOverrides?.temperature != null
               ? { temperature: input.generationOverrides.temperature }
               : {}),
@@ -683,6 +688,8 @@ export async function runOutlineCreativeReliabilityV1(input: {
     validate: input.validate,
     budget: input.budget,
     callLabel: '大纲领域 Agent',
+    // Accounting forecast for the team-budget reservation only — derived from
+    // the task's structured output shape, never a dispatch or content cap.
     maxOutputTokens: input.prepared.input.generationOverrides?.maxTokens
       ?? (input.prepared.mode === 'volumes' ? 8_000 : 12_000),
     qualityMode: input.qualityMode,
