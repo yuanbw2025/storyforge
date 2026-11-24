@@ -486,7 +486,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/character-interaction/harness.ts:900 · chat`
 - `src/lib/character-interaction/memory-review-harness.ts:74 · chat`
 - `src/lib/character-interaction/situation-harness.ts:190 · chat`
-- `src/lib/comic/durable-production.ts:488 · chat`
+- `src/lib/comic/durable-production.ts:517 · chat`
 - `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:99 · chat`
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:22 · ai.start`
@@ -496,7 +496,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/open-world/harness.ts:150 · chat`
 - `src/lib/product-production/authoring-consultation.ts:175 · chat`
 - `src/lib/product-production/capabilities.ts:329 · chat`
-- `src/lib/screenplay/durable-production.ts:487 · chat`
+- `src/lib/screenplay/durable-production.ts:518 · chat`
 - `src/lib/ttrpg/gm-actor-harness.ts:482 · chat`
 - `src/lib/ttrpg/gm-harness.ts:551 · chat`
 
@@ -597,4 +597,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `40809f7f4`
+生成时间基准:commit `a2636eccc`

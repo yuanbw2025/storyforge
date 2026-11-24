@@ -161,6 +161,19 @@ export async function discoverModelCapacityV1(config: AIConfig, fetchImpl: typeo
   pending.set(key, operation)
   return operation
 }
+/** B31a/B31b/B21a：按已绑定连接的已证实容量推导单次请求输入预算（先预留输出
+ * 上限与安全边际）。容量不可用/未证实时返回 null，调用方保留其文档化的保守
+ * 缺省，不放大作者显式上限。 */
+export function evidencedInputBudgetV1(input: { config: AIConfig; outputReservation: number }): number | null {
+  if (!Number.isSafeInteger(input.outputReservation) || input.outputReservation <= 0) return null
+  try {
+    const value = Math.floor(modelInputBudgetV1(freezeModelCapacityV1(input.config), input.outputReservation).inputBudget)
+    return Number.isSafeInteger(value) && value > 0 ? value : null
+  } catch {
+    return null
+  }
+}
+
 export async function prepareModelCapacityV1(config: AIConfig): Promise<AIConfig> {
   const implicit = pinned.get(config)
   const snapshot = config.modelCapacity ?? (implicit && (durablePins.has(config) || implicit.expiresAt > Date.now()) ? implicit : undefined)

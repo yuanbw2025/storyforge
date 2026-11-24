@@ -1,7 +1,9 @@
 import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import Dexie from 'dexie'
 import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from '../agent/run/creation-response-evidence'
-import { chat, type ChatResult } from '../ai/client'
+import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
+import { evidencedInputBudgetV1, prepareModelCapacityV1 } from '../ai/model-capacity'
+import { useAIConfigStore } from '../../stores/ai-config'
 import type {
   AdaptationBriefV1,
   AgentRunRecord,
@@ -223,14 +225,37 @@ function requireStage(stage: ComicProfessionalStageV1, root: Awaited<ReturnType<
   if (['visual-continuity-review', 'page-review'].includes(stage) && !target.pages) throw new Error('[comic-run] 审查必须选择目标页')
 }
 
-function runContract(scope: WorkspaceScope, stage: ComicProfessionalStageV1) {
+/** B31b：漫画改编阶段输入预算跟随已绑定连接的已证实容量（按本阶段输出预留），
+ * 不再使用固定 48k 应用额度。容量未知时保留缺省下限，不放大作者显式上限；
+ * 请求级装配/准入继续兜底。 */
+const COMIC_STAGE_DEFAULT_INPUT_TOKENS_V1 = 48_000
+
+export async function comicStageInputBudgetV1(input: {
+  aiConfig?: import('../types').AIConfig
+  projectId: number
+  category: string
+  outputReservation: number
+}): Promise<number> {
+  const resolved = input.aiConfig
+    ?? resolveRequestConfig(useAIConfigStore.getState().config, { category: input.category, projectId: input.projectId }).config
+  try {
+    const prepared = await prepareModelCapacityV1(resolved)
+    const value = evidencedInputBudgetV1({ config: prepared, outputReservation: input.outputReservation })
+    if (value != null) return Math.max(COMIC_STAGE_DEFAULT_INPUT_TOKENS_V1, value)
+  } catch {
+    // 容量未证实（离线/未知模型）时退回缺省参考。
+  }
+  return COMIC_STAGE_DEFAULT_INPUT_TOKENS_V1
+}
+
+function runContract(scope: WorkspaceScope, stage: ComicProfessionalStageV1, inputBudgetTokens: number) {
   const config = STAGES[stage]; const skill = getAgentSkillV1(config.skillId); const stepId = `comic-professional:${stage}`
   return {
     version: 1 as const, objective: `${config.role}执行漫画专业生产阶段 ${stage}，产出候选并等待作者确认`, workflowKind: 'plan-execute' as const,
     scope: { projectId: scope.projectId, worldGroupId: null },
     permissions: { contextSourceKeys: [...skill.contextSourceKeys], writeTargets: skill.writeTargets.map(row => ({ table: row.table, fields: [...row.fields], mode: 'author-confirmed' as const })) },
     executionBindings: [{ stepId, ...createAgentSkillExecutionBindingV1(skill) }],
-    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 48_000, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens), maxAttemptsPerStep: 2, maxProtocolErrors: 1 },
+    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: inputBudgetTokens, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens), maxAttemptsPerStep: 2, maxProtocolErrors: 1 },
     acceptance: [{ id: `${stepId}.candidate`, kind: 'output-present' as const, required: true }, { id: `${stepId}.author`, kind: 'author-confirmed' as const, required: true }, { id: `${stepId}.post-state`, kind: 'post-state-matches' as const, required: true }],
     verificationPlan: [{ id: `${stepId}.terminal`, kind: 'terminal' as const, verifier: `comic-${stage}-terminal-v1`, criterionIds: [`${stepId}.candidate`, `${stepId}.author`, `${stepId}.post-state`] }],
     failurePolicy: { onProtocolError: 'retry' as const, onVerificationFailure: 'fail' as const, onStaleInput: 'pause-for-author' as const },
@@ -451,7 +476,11 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   ])
   requireStage(input.stage, selected.root, { facts: factRows.length, edges: edgeRows.length, decisions: decisionRows.length, beats: beatRows.length, plans: planRows.length, pages: pageCount, subjects: subjectRows.length }, { pages: selected.targetPages.length, panels: selected.targetPanels.length, issues: selected.targetIssues.length })
   const config = STAGES[input.stage]; const skill = getAgentSkillV1(config.skillId); const stepId = `comic-professional:${input.stage}`
-  let snapshot = await createAgentRunV1({ scope: input.scope, worldGroupId: null, contract: runContract(input.scope, input.stage) })
+  const inputBudgetTokens = await comicStageInputBudgetV1({
+    aiConfig: input.aiConfig, projectId: input.scope.projectId, category: 'comic.professional',
+    outputReservation: requireFixedBudgetValueV1(skill.maxOutputTokens),
+  })
+  let snapshot = await createAgentRunV1({ scope: input.scope, worldGroupId: null, contract: runContract(input.scope, input.stage, inputBudgetTokens) })
   let phase = 'preparation'
   let responseObserved = false
   let unavailableResponse: Awaited<ReturnType<typeof recordUnavailableCreationResponseV1>> | undefined
@@ -459,7 +488,7 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   await onTaskCreated?.call(callbackReceiver, Object.freeze({ runId: snapshot.run.id, generation: snapshot.projection.generation, lastSequence: snapshot.projection.lastSequence }))
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId }); snapshot = await append(input.scope, snapshot, 'step.started', { stepId, attempt: 1 })
   const inferredTargetPages = selected.targetPages.length ? selected.targetPages : selected.targetPanels.length ? selected.pages.filter(page => selected.targetPanels.some(panel => panel.pageId === page.id)) : ['visual-bible', 'image-request', 'visual-continuity-review', 'targeted-repair', 'page-review'].includes(input.stage) ? selected.pages : []
-  const assembled = await assembleContext({ projectId: input.scope.projectId, scope: input.scope, sourceKeys: [...skill.contextSourceKeys], adaptationProjectId: selected.root.id!, adaptationSourceManifestVersion: selected.root.activeSourceManifestVersion, adaptationSourceUnitKeys: selected.sourceUnitKeys, comicPageIds: inferredTargetPages.flatMap(row => row.id == null ? [] : [row.id]), modelConfig: input.aiConfig, provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 48_000 })
+  const assembled = await assembleContext({ projectId: input.scope.projectId, scope: input.scope, sourceKeys: [...skill.contextSourceKeys], adaptationProjectId: selected.root.id!, adaptationSourceManifestVersion: selected.root.activeSourceManifestVersion, adaptationSourceUnitKeys: selected.sourceUnitKeys, comicPageIds: inferredTargetPages.flatMap(row => row.id == null ? [] : [row.id]), modelConfig: input.aiConfig, provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: inputBudgetTokens })
   let activeContextManifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId, attempt: 1, projectId: input.scope.projectId, worldGroupId: null, declaredSourceKeys: [...skill.contextSourceKeys], assembled, readerVersion: `comic-${input.stage}-context-v1` })
   snapshot = await append(input.scope, snapshot, 'context.assembled', { stepId, attempt: 1, manifestHash: activeContextManifest.manifestHash })
   const targetKeys = [...selected.targetPages.map(row => row.stableKey), ...selected.targetPanels.map(row => row.stableKey), ...selected.targetIssues.map(row => row.stableKey)]
