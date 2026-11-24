@@ -35,7 +35,8 @@ import { getAgentSkillV1, resolveAgentSkillContextSourceKeysV1 } from '../skill-
 import { createAgentSkillExecutionBindingV2 } from '../execution-binding'
 import { freezeFormalAIEntryBindingV1 } from '../formal-ai-entry'
 import { createAgentRunV1, appendAgentRunEventV1, readAgentRunV1, type AgentRunSnapshotV1 } from './event-store'
-import { hashCanonicalValue } from './hash'
+import { canonicalStringify, hashCanonicalValue } from './hash'
+import { agentRunUtf8ByteLengthV1 } from './checkpoint-contract'
 import { createContextManifestFromAssemblyV1, createContextManifestV2FromV1 } from './context-manifest'
 import { recordContextGatewayPreflightEvidenceV1, finalizeContextGatewayAttemptEvidenceV1 } from '../../context-gateway/attempt-evidence'
 import { recordAgentRunArtifactV1 } from '../../memory/artifact-store'
@@ -69,6 +70,22 @@ interface QualityRevisionInputV1 {
   configOverride?: import('../../types').AIConfig
   generationOverrides?: { temperature?: number; maxTokens?: number }
   authorRequest?: string
+}
+
+/** B20d: a whole-chapter draft (source HTML + result HTML + patches) can far
+ * exceed an ordinary JSON blob. Small drafts keep the historical inline bytes;
+ * large drafts are stored as a content-addressed exact artifact and referenced
+ * by the checkpoint so the checkpoint record no longer grows with the chapter.
+ * This is a storage representation choice — nothing is truncated or capped. */
+export const QUALITY_REVISION_ARTIFACT_REF_MIN_BYTES_V1 = 1024 * 1024
+
+export function qualityRevisionCheckpointPayloadV1(input: { resumePayload: unknown }): {
+  resumePayload?: unknown
+  resumePayloadArtifact?: { content: unknown }
+} {
+  return agentRunUtf8ByteLengthV1(canonicalStringify(input.resumePayload)) >= QUALITY_REVISION_ARTIFACT_REF_MIN_BYTES_V1
+    ? { resumePayloadArtifact: { content: input.resumePayload } }
+    : { resumePayload: input.resumePayload }
 }
 
 export async function runQualityRevisionV1(input: QualityRevisionInputV1): Promise<QualityRevisionViewV1> {
@@ -129,7 +146,10 @@ async function runQualityRevisionLockedV1(input: QualityRevisionInputV1): Promis
     snapshot = await append(input.scope, snapshot, 'model.responded', { stepId: 'prose-generation', attempt: 1, outputHash: await hashCanonicalValue(raw) })
     snapshot = await append(input.scope, snapshot, 'budget.settled', { stepId: 'prose-generation', modelCalls: 1, toolCalls: 0, tokens: received.usage?.totalTokens ?? first.estimatedInputTokens + estimateTokens(raw) })
     const draft: QualityRevisionDraftV1 = { version: 'quality-revision-draft-v1', plan, sourceHtml, contentHtml: preview.contentHtml, outputText: preview.outputText, rawPatches: raw }
-    snapshot = (await createAgentRunCheckpointV1({ scope: input.scope, runId: snapshot.run.id, resumePayload: draft })).snapshot
+    snapshot = (await createAgentRunCheckpointV1({
+      scope: input.scope, runId: snapshot.run.id,
+      ...qualityRevisionCheckpointPayloadV1({ resumePayload: draft }),
+    })).snapshot
     const protectionError = qualityRevisionProtectionErrorV1(plan, preview.outputText)
     if (protectionError) throw new Error(protectionError)
     await assertWorkspaceContentRevisionFreshV1(revision, { scope: input.scope, worldGroupId: input.worldGroupId })
