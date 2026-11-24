@@ -1,10 +1,31 @@
+import { useSyncExternalStore } from 'react'
 import { Info } from 'lucide-react'
 import { FILE_LIMIT_HINTS } from '../../../lib/doc-parser'
 import type { ImportSession } from '../../../lib/types/import-session'
 
+/** 032-L1-a：恢复钩子与介绍区都在授权写集内，用一个只读外部快照把
+ * 固定提示送到真实界面；不要求修改 ImportDocPanel，也不新增平行入口。 */
+let textLayerNoticeV1: string | null = null
+const textLayerListeners = new Set<() => void>()
+export function publishTextLayerNoticeV1(notice: string | null) {
+  if (textLayerNoticeV1 === notice) return
+  textLayerNoticeV1 = notice
+  for (const listener of textLayerListeners) listener()
+}
+function subscribeTextLayerNoticeV1(listener: () => void) {
+  textLayerListeners.add(listener)
+  return () => { textLayerListeners.delete(listener) }
+}
+function readTextLayerNoticeV1() { return textLayerNoticeV1 }
+export function useTextLayerNoticeV1() {
+  return useSyncExternalStore(subscribeTextLayerNoticeV1, readTextLayerNoticeV1, readTextLayerNoticeV1)
+}
+
 export function ImportDocIntro({ chunkSize }: { chunkSize: number }) {
+  const textLayerNotice = useTextLayerNoticeV1()
   return (
     <div>
+      {textLayerNotice && <div role="status" className="mb-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning">{textLayerNotice}</div>}
       <h2 className="text-xl font-bold text-text-primary mb-1">📥 AI 分块文档解析</h2>
       <p className="text-sm text-text-muted">
         上传任意一份文档（设定集、成品小说、大纲草稿……甚至千万字长篇），AI 自动分块串行解析
