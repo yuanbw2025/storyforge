@@ -39,6 +39,7 @@ import {assertChatTurnActorV1} from './narrative-scheduling'
 import {buildInteractionContextWindow, type InteractionContextWindow} from './runtime'
 import {chatActionContextVersionsV1, usesChatActionBoundContextV1} from './context-selection'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
+import { evidencedInputBudgetV1, prepareModelCapacityV1 } from '../ai/model-capacity'
 import {CHAT_ACTION_OUTPUT_BUDGET_CRITERION_V1, hasChatActionOutputBudgetV1, recordChatActionOutputBudgetV1, readChatActionOutputBudgetV1} from './action-choice-output-budget'
 import {CHAT_ACTION_TERMINAL_VERIFIER_V2, readChatActionTerminalReceiptV1, retainChatActionTerminalReceiptV1} from './action-terminal-receipt'
 import { createAgentSkillExecutionBindingV1, createAgentSkillExecutionBindingV2 } from '../agent/execution-binding'
@@ -537,6 +538,28 @@ const narrativeGenerationLocks = new Set<number>()
 
 /** One paid attempt for an exact runtime head. Refresh recovers the saved run;
  * a new explicit trigger authorizes another attempt after failure/cancellation. */
+/** B36：角色运行时输入预算跟随已绑定连接的已证实容量（按本 Skill 输出预留），
+ * 不再固定 16k 应用额度截断历史与记忆。注入 adapter（runAI）沿用缺省参考，
+ * 真实连接在容量更大时按容量；未知/保守容量不得低于原参考，不放大作者上限。 */
+const CHAT_RUNTIME_DEFAULT_INPUT_TOKENS_V1 = 16_000
+
+export async function chatRuntimeInputBudgetV1(input: {
+  aiConfig: NonNullable<Parameters<typeof resolveRequestConfig>[0]>
+  projectId: number
+  category: string
+  outputReservation: number
+}): Promise<number> {
+  try {
+    const resolved = resolveRequestConfig(input.aiConfig, { category: input.category, projectId: input.projectId }).config
+    const prepared = await prepareModelCapacityV1(resolved)
+    const value = evidencedInputBudgetV1({ config: prepared, outputReservation: input.outputReservation })
+    if (value != null) return Math.max(CHAT_RUNTIME_DEFAULT_INPUT_TOKENS_V1, value)
+  } catch {
+    // 容量未证实（离线/未知模型）时退回缺省参考。
+  }
+  return CHAT_RUNTIME_DEFAULT_INPUT_TOKENS_V1
+}
+
 export async function generateInteractionRuntimeCandidateV1(input: InteractionRuntimeGenerationInputV1): Promise<{ snapshot: AgentRunSnapshotV1; candidate: InteractionRuntimeCandidateV1 }> {
   input = { ...input, scope: structuredClone(input.scope), ...(input.aiConfig === undefined ? {} : { aiConfig: structuredClone(input.aiConfig) }) }
   if ((await db.productRuntimeSessions.get(input.productRuntimeSessionId))?.kind === 'text-open-world') {
@@ -749,6 +772,19 @@ async function generateRuntimeCandidate(input: InteractionRuntimeGenerationInput
   await input.onRunCreated?.(snapshot.run.id)
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: INTERACTION_RUNTIME_STEP_ID_V1 })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: INTERACTION_RUNTIME_STEP_ID_V1, attempt: 1 })
+  // 行动选择族有冻结的选择/表达证据预算（manifest.inputBudget 与累计输入
+  // 不得超过 CHAT_ACTION_CHOICE_INPUT_TOKENS_V1）；其运行时上下文必须留在
+  // 同一上限内，否则已冻结的选择证据无法核验。其它技能按已证实容量推导。
+  const derivedChatInputBudget = !input.runAI && input.aiConfig
+    ? await chatRuntimeInputBudgetV1({
+      aiConfig: input.aiConfig, projectId: input.scope.projectId,
+      category: `runtime.${input.skillId}`,
+      outputReservation: requireFixedBudgetValueV1(skill.maxOutputTokens),
+    })
+    : CHAT_RUNTIME_DEFAULT_INPUT_TOKENS_V1
+  const chatInputBudgetTokens = actionChoice
+    ? Math.min(CHAT_ACTION_CHOICE_INPUT_TOKENS_V1, derivedChatInputBudget)
+    : derivedChatInputBudget
   try {
     const assembled = await assembleContext({
       projectId: input.scope.projectId,
@@ -764,7 +800,7 @@ async function generateRuntimeCandidate(input: InteractionRuntimeGenerationInput
       // this connection. Only the real chat transport admits its capacity.
       ...(!input.runAI && input.aiConfig ? {modelConfig: resolveRequestConfig(input.aiConfig, {category: `runtime.${input.skillId}`}).config,
         provider: input.aiConfig.provider, model: input.aiConfig.model} : {}),
-      inputBudgetMaxTokens: 16_000,
+      inputBudgetMaxTokens: chatInputBudgetTokens,
     })
     if (revision && !assembled.included.includes('chatActionRevision')) fail('缺少完整修订来源')
     if (!assembled.included.includes(sourceKey)) fail('角色运行时上下文为空')
