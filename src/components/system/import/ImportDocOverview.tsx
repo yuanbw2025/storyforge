@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { Info } from 'lucide-react'
 import { FILE_LIMIT_HINTS } from '../../../lib/doc-parser'
+import type { CsvGridV1 } from '../../../lib/import/csv-grid'
 import type { ImportSession } from '../../../lib/types/import-session'
 
 /** 032-L1-a：恢复钩子与介绍区都在授权写集内，用一个只读外部快照把
@@ -21,11 +22,27 @@ export function useTextLayerNoticeV1() {
   return useSyncExternalStore(subscribeTextLayerNoticeV1, readTextLayerNoticeV1, readTextLayerNoticeV1)
 }
 
+/** 032-L1-c：仅 csv 上传成功时出现的只读对照侧车快照；不进 AI/adopt/persistence。
+ * ImportDocIntro 通过 useCsvGridViewV1() 订阅，recovery/prep hook 通过 publishCsvGridViewV1() 发布。 */
+let csvGridViewV1: CsvGridV1 | null = null
+const csvGridListeners = new Set<() => void>()
+export function publishCsvGridViewV1(grid: CsvGridV1 | null) {
+  csvGridViewV1 = grid
+  for (const fn of csvGridListeners) fn()
+}
+function subscribeCsvGridViewV1(fn: () => void) { csvGridListeners.add(fn); return () => { csvGridListeners.delete(fn) } }
+export function useCsvGridViewV1() {
+  const snap = useSyncExternalStore(subscribeCsvGridViewV1, () => csvGridViewV1, () => csvGridViewV1)
+  return snap
+}
+
 export function ImportDocIntro({ chunkSize }: { chunkSize: number }) {
   const textLayerNotice = useTextLayerNoticeV1()
+  const csvGrid = useCsvGridViewV1()
   return (
     <div>
       {textLayerNotice && <div role="status" className="mb-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning">{textLayerNotice}</div>}
+      {csvGrid && <CsvPreviewCardV1 grid={csvGrid} />}
       <h2 className="text-xl font-bold text-text-primary mb-1">📥 AI 分块文档解析</h2>
       <p className="text-sm text-text-muted">
         上传任意一份文档（设定集、成品小说、大纲草稿……甚至千万字长篇），AI 自动分块串行解析
@@ -120,6 +137,39 @@ export function ImportReusableSessionBanner({
           忽略
         </button>
       </div>
+    </div>
+  )
+}
+
+/** 032-L1-c：CSV 行列只读对照卡片（仅展示，不写入任何持久化或 AI 链）。最多前 10 行 + 列数/ragged 提示。 */
+function CsvPreviewCardV1({ grid }: { grid: import('../../../lib/import/csv-grid').CsvGridV1 }) {
+  const previewRows = grid.rows.slice(0, 10)
+  return (
+    <div role="status" className="mb-2 rounded-lg border border-border bg-bg-surface p-3 text-xs">
+      <div className="flex items-center gap-2 mb-1.5 text-text-primary font-medium">
+        <span>📊 CSV 对照预览</span>
+        <span className="text-text-muted">共 {grid.columnCount} 列 · {grid.rows.length} 行</span>
+        {grid.hasHeaderRow && <span className="px-1.5 py-0.5 rounded bg-accent/10 text-accent text-[10px]">表头行已识别</span>}
+      </div>
+      {grid.raggedRows.length > 0 && (
+        <p className="mb-1 text-warning">⚠️ 下列行字段数与多数不一致（可能 ragged）：{grid.raggedRows.join(', ')}</p>
+      )}
+      {grid.quoteErrors && <p className="mb-1 text-warning">⚠️ 检测到未闭合引号字段，原文仍保留。</p>}
+      <table className="w-full border-collapse">
+        <thead>
+          <tr>{previewRows[0]?.map((cell, ci) => (
+            <th key={ci} className="border border-border px-2 py-1 text-left text-[11px] text-text-muted bg-bg-base font-mono">{cell || '—'}</th>
+          ))}</tr>
+        </thead>
+        <tbody>
+          {(grid.hasHeaderRow ? previewRows.slice(1) : previewRows).map((row, ri) => (
+            <tr key={ri}>{row.map((cell, ci) => (
+              <td key={ci} className="border border-border px-2 py-1 text-text-secondary font-mono whitespace-pre-wrap max-w-[220px] align-top">{cell || ''}</td>
+            ))}</tr>
+          ))}
+        </tbody>
+      </table>
+      {grid.rows.length > 10 && <p className="mt-1 text-text-muted">仅展示前 10 行；完整原文仍在 IndexedDB 中，可继续下载。</p>}
     </div>
   )
 }

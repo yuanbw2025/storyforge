@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { extractTextFromFile, textLayerReportLineV1, type ExtractResult } from '../../../lib/doc-parser'
+import type { CsvGridV1 } from '../../../lib/import/csv-grid'
+import { publishCsvGridViewV1 } from './ImportDocOverview'
 import { chunkDocument, type ChunkPlan } from '../../../lib/import/chunker'
 import { detectVolumeStructure, type VolumeDetectResult } from '../../../lib/import/volume-detector'
 
@@ -20,6 +22,8 @@ export default function useImportDocumentPreparation() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [volumeDetect, setVolumeDetect] = useState<VolumeDetectResult | null>(null)
   const [textLayerBlocked, setTextLayerBlocked] = useState<TextLayerBlockedV1 | null>(null)
+  /** 032-L1-c：仅 csv 成功抽取后出现的只读侧车快照，不进 AI/adopt/persistence。 */
+  const [csvGrid, setCsvGrid] = useState<CsvGridV1 | null>(null)
   const lastUploadedFile = useRef<File | null>(null)
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -40,9 +44,13 @@ export default function useImportDocumentPreparation() {
         // 不进入分块/候选/adopt，也不清掉已选文件：原件仍可由既有 saveBlob 路径存档。
         setTextLayerBlocked({ filename: file.name, sizeBytes: file.size, pageCount: result.pageCount, status: result.status, warnings: result.warnings })
         setFileError(textLayerReportLineV1({ filename: file.name, sizeBytes: file.size, pageCount: result.pageCount, status: result.status }))
+        setCsvGrid(null)
+        publishCsvGridViewV1(null)
         setRawText('')
         return
       }
+      setCsvGrid(result.csvGrid ?? null)
+      publishCsvGridViewV1(result.csvGrid ?? null)
       setRawText(result.text)
       const parts = [
         `文件 ${(file.size / 1024 / 1024).toFixed(2)} MB`,
@@ -61,7 +69,7 @@ export default function useImportDocumentPreparation() {
   }
 
   const handleRawTextChange = (text: string) => {
-    if (text.trim()) { setTextLayerBlocked(null); setFileError(null) }
+    if (text.trim()) { setTextLayerBlocked(null); setFileError(null); setCsvGrid(null); publishCsvGridViewV1(null) }
     setRawText(text)
     setPlans(null)
     lastUploadedFile.current = null
@@ -102,6 +110,7 @@ export default function useImportDocumentPreparation() {
     volumeDetect,
     previewPlans,
     textLayerBlocked,
+    csvGrid,
     handleFile,
     handleRawTextChange,
     prepareConfirmation,

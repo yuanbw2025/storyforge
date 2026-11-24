@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { extractTextFromFile, textLayerReportLineV1 } from '../../../lib/doc-parser'
-import { publishTextLayerNoticeV1 } from './ImportDocOverview'
+import type { CsvGridV1 } from '../../../lib/import/csv-grid'
+import { publishTextLayerNoticeV1, publishCsvGridViewV1 } from './ImportDocOverview'
 import { chunkDocument, quickHash } from '../../../lib/import/chunker'
 import type { ImportSession } from '../../../lib/types/import-session'
 import { hashImportChunkTextV1, hasFrozenImportIdentityV1, readImportSessionAuthorityV1, useImportSessionStore } from '../../../stores/import-session'
@@ -13,6 +14,8 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
   const [restoringBlob, setRestoringBlob] = useState(false)
   /** 032-L1-a：恢复出的原件没有可复制文本时，保留会话但不继续解析。 */
   const [textLayerBlocked, setTextLayerBlocked] = useState<string | null>(null)
+  /** 032-L1-c：仅 csv blob 恢复成功时出现的只读侧车快照，不进 AI/adopt/persistence。 */
+  const [csvGrid, setCsvGrid] = useState<CsvGridV1 | null>(null)
 
   useEffect(() => {
     if (!navigator.storage?.persist) return
@@ -63,11 +66,16 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
           const notice = textLayerReportLineV1({ filename: row.filename, sizeBytes: row.blob.size, pageCount: result.pageCount, status: result.status })
           setTextLayerBlocked(notice)
           publishTextLayerNoticeV1(notice)
+          setCsvGrid(null)
+          publishCsvGridViewV1(null)
           setBlobRestored(false)
           return
         }
         setTextLayerBlocked(null)
         publishTextLayerNoticeV1(null)
+        // 032-L1-c：仅 csv 且非 empty 时记录只读侧车；不改变 registerChunkTexts 输入（仍是 plainText）。
+        setCsvGrid(result.csvGrid ?? null)
+        publishCsvGridViewV1(result.csvGrid ?? null)
         const plans = chunkDocument(result.text, { targetChars: frozen.chunkSize })
         let matches = quickHash(result.text) === frozen.fileHash && plans.length === frozen.totalChunks
         for (const plan of plans) {
@@ -105,11 +113,14 @@ export default function useImportSessionRecovery(projectId: number, activeWorldI
     blobRestored,
     restoringBlob,
     textLayerBlocked,
+    csvGrid,
     clearUnfinished: () => {
       setUnfinished(null)
       setBlobRestored(false)
       setTextLayerBlocked(null)
       publishTextLayerNoticeV1(null)
+      setCsvGrid(null)
+      publishCsvGridViewV1(null)
     },
     clearReusable: () => setReusable(null),
     markBlobRestored: () => setBlobRestored(true),

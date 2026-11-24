@@ -8,6 +8,7 @@
  * AI 解析阶段仍会被 import-adapter 的 MAX_CHARS 再截断一次。
  */
 // Vite URL import — pdfjs 的 worker 必须走 URL 引入（仅 URL 字符串，不进主包）
+import { parseCsvGridV1, type CsvGridV1 } from './import/csv-grid'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 
 // pdfjs / mammoth 体积大（~870KB）且仅在用户导入文件时才需要，改为动态导入按需加载，
@@ -51,6 +52,8 @@ export interface ExtractResult {
   warnings: ExtractWarningV1[]
   /** 判定依据，供报告展示"为什么判为不可解析"，阈值与实测值同源。 */
   diagnostics: ExtractDiagnosticsV1
+  /** 032-L1-c：仅 csv 扩展名且 status===ok 时填入；纯只读对照侧车，不参与 AI/adopt/persistence。 */
+  csvGrid?: CsvGridV1
 }
 
 /** 032-L1-a 阈值：PDF 全篇非空白字符下限。低于此值视为"没有可复制文本层"
@@ -158,8 +161,14 @@ export async function extractTextFromFile(file: File): Promise<ExtractResult> {
     case 'md':
     case 'csv': {
       const text = await file.text()
+      const assessment = assessExtractionQualityV1({ format: 'plain', text })
       // 文本逐字保留；只追加显式状态，不改内容与长度口径。
-      return { text, rawChars: text.length, ...assessExtractionQualityV1({ format: 'plain', text }) }
+      const base = { text, rawChars: text.length, ...assessment }
+      // 032-L1-c：仅 CSV、且文本层非 empty 时追加只读侧车；不改变 plainText/adopt/AI 链。
+      if (ext === 'csv' && assessment.status === 'ok') {
+        return { ...base, csvGrid: parseCsvGridV1(text) }
+      }
+      return base
     }
     case 'pdf':  return extractPdf(file)
     case 'docx': return extractDocx(file)
