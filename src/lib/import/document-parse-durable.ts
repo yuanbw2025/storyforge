@@ -46,7 +46,9 @@ const SKILL = 'inspiration.document-import-parse'
  * application ceiling. The result stays an exact positive integer and is still
  * enforced by `assessDocumentParseRequestV1`, so an over-capacity chunk fails
  * deterministically before any paid dispatch. */
-function documentParseChunkInputBudgetV1(config: import('../types').AIConfig, skillMaxOutputTokens: number): number {
+const DOCUMENT_PARSE_DEFAULT_INPUT_TOKENS_V1 = 100_000
+
+export function documentParseChunkInputBudgetV1(config: import('../types').AIConfig, skillMaxOutputTokens: number): number {
   const capacity = freezeModelCapacityV1(config)
   const requestedOutput = Math.min(
     config.maxTokens > 0 ? config.maxTokens : skillMaxOutputTokens,
@@ -55,7 +57,9 @@ function documentParseChunkInputBudgetV1(config: import('../types').AIConfig, sk
   const budget = modelInputBudgetV1(capacity, requestedOutput)
   const value = Math.floor(budget.inputBudget)
   if (!Number.isSafeInteger(value) || value <= 0) fail('文档解析任务预算无效。')
-  return value
+  // 已证实容量更大时按容量；未知/保守容量不得低于原参考，避免把既有可用
+  // 分块压回更小窗口（固定值只是下限，不再是上限）。
+  return Math.max(DOCUMENT_PARSE_DEFAULT_INPUT_TOKENS_V1, value)
 }
 const ATTEMPT = 1
 const CATEGORIES = 'documentImportCodexCategories'
