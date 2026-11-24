@@ -520,8 +520,13 @@ export function createCharacterCopilotNode(
   const runAI = dependencies.runAI ?? (messages => chat(messages, input.config, {
     category: input.routingCategory ?? 'character.generate',
     projectId: input.projectId,
+    // B20a: only an explicit author limit caps the wire output; without one,
+    // dispatch follows the bound connection's evidenced capacity (the old
+    // fixed 6k application quota is gone).
     configOverrides: {
-      maxTokens: input.generationOverrides?.maxTokens ?? 6000,
+      ...(input.generationOverrides?.maxTokens != null
+        ? { maxTokens: input.generationOverrides.maxTokens }
+        : {}),
       ...(input.generationOverrides?.temperature != null
         ? { temperature: input.generationOverrides.temperature }
         : {}),

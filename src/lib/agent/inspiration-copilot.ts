@@ -390,7 +390,12 @@ export function createInspirationCopilotNode(
   const runAI = dependencies.runAI ?? (messages => chat(messages, input.config, {
     category: input.routingCategory ?? 'inspiration.reverse',
     projectId: input.projectId,
-    configOverrides: { maxTokens: 6000, ...input.generationOverrides },
+    // B20a: only an explicit author limit caps the wire output; without one,
+    // dispatch follows the bound connection's evidenced capacity (the old
+    // fixed 6k application quota is gone). renderFrozenPromptExecutionV1
+    // upstream already clamps template overrides against the Skill's
+    // registered maxOutputTokens before reaching here.
+    configOverrides: { ...input.generationOverrides },
     contextOverflowPolicy: 'reject',
   }, input.signal, undefined, isInspirationPreparationMode(input.mode) ? {
     ...(supportsVerifiedJsonObjectResponseForModelV1(input.config) ? { responseFormat: 'json_object' as const } : {}),
