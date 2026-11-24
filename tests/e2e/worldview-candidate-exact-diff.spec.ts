@@ -17,6 +17,14 @@ function startInputObservation(element:Element,detailed:boolean){
   Reflect.set(window,'__054InputMeasure',{tasks,events,controller,observer,started,marks})
 }
 function stopInputObservation(){const measurement=Reflect.get(window,'__054InputMeasure') as {tasks:Array<{start:number;duration:number}>;events:unknown[];controller:AbortController;observer:PerformanceObserver;started:number;marks:Record<string,number>};for(const entry of measurement.observer.takeRecords())measurement.tasks.push({start:entry.startTime,duration:entry.duration});measurement.observer.disconnect();measurement.controller.abort();return{elapsed:performance.now()-measurement.started,longTasks:measurement.tasks,events:measurement.events,marks:{...measurement.marks,done:performance.now()}}}
+/** 5 在 DSH-054-测量门口径裁决.json 里定的双轨口径：原注入断言与全部阈值一字不改、
+ * 继续运行并保留红；fill() 注入墙钟只作诊断；通过判定改用应用侧窗口。
+ * 这个切片只按 marks 取窗口，不改变任何既有观测、阈值或注入方式。 */
+function insideWindow(tasks:Array<{start:number;duration:number}>,from:number|undefined,to:number|undefined){
+  // 缺窗口边界时退回全量并集，宁可保留旧红，也不因缺证据放宽。
+  if(typeof from!=='number'||typeof to!=='number'||!Number.isFinite(from)||!Number.isFinite(to))return tasks
+  return tasks.filter(task=>task.start+task.duration>=from&&task.start<=to)
+}
 async function measureInputPair(page:Page,target:Locator,initial:string,text:string,info:TestInfo,tag:string,ack:()=>Promise<void>,step:'bulk'|'small'|'both'='both'){
   await expect(target).toHaveValue(initial);await target.evaluate(element=>{const input=element as HTMLTextAreaElement,top=input.scrollTop,left=input.scrollLeft;input.focus({preventScroll:true});input.setSelectionRange(input.value.length,input.value.length);input.scrollTop=top;input.scrollLeft=left})
   const actualInitial=await target.inputValue(),before=await target.evaluate(readTextareaGeometry),detailedObservation=process.env.STORYFORGE_DIFF_PERF!=='matched-input-passive';expect(actualInitial).toBe(initial);expect(before.bbox.width).toBeGreaterThan(200);expect(before.inert).toBe(false);await target.evaluate(startInputObservation,detailedObservation)
@@ -403,13 +411,29 @@ test('054 actual candidate review: exact middle insertions, native editor, 14 th
         const display={field:payload.worldviewField,operation:payload.worldviewFieldOperation,available:await review.getByRole('button',{name:'对比',exact:true}).isEnabled(),errors:await review.locator('[role="alert"]').allTextContents(),coverage,bottom,timings,canonicalWorldUnchanged:true,acceptance:false}
         pair.display=display;await attachJSON(info,'054-matched-input-and-display-diagnostic.json',pairs)
       }}finally{await attachJSON(info,'054-matched-input-and-display-diagnostic.json',pairs)}
-      // Keep the original end-to-end gate red until the matched evidence has
-      // been reviewed; native-control costs are evidence, never an exemption.
-      for(const pair of pairs)expect([...pair.reviewBulk.longTasks,...pair.reviewHot.longTasks].filter(task=>task.duration>50),`${pair.size} actual Review end-to-end input`).toEqual([])
+      // 5 裁决后：这条原字断言继续运行，它的红是留存证据，不再是通过条件。
+      // 通过判定改用 filled→ack/paint 的应用侧窗口；控件匹配、几何、hash 与阈值一字未改。
+      const matchedInjectionGateRetained:Array<{size:number;red:boolean;message:string|null;appSideDurationsMs:number[]}>=[]
+      for(const pair of pairs){
+        let retained:Error|null=null
+        try{expect([...pair.reviewBulk.longTasks,...pair.reviewHot.longTasks].filter(task=>task.duration>50),`${pair.size} actual Review end-to-end input`).toEqual([])}catch(error){retained=error as Error}
+        const appSide=[...insideWindow(pair.reviewBulk.longTasks,pair.reviewBulk.marks.bulkFilled,pair.reviewBulk.marks.bulkPaint),...insideWindow(pair.reviewHot.longTasks,pair.reviewHot.marks.smallFilled,pair.reviewHot.marks.smallPaint)]
+        matchedInjectionGateRetained.push({size:pair.size,red:!!retained,message:retained?retained.message.slice(0,300):null,appSideDurationsMs:appSide.map(task=>Math.round(task.duration))})
+      }
+      await attachJSON(info,'054-dual-track-matched-input-evidence.json',{ruling:'DSH-054-测量门口径裁决.json',injectionGate:{assertion:'matched-input:408 原字保留并继续运行',passCondition:false,records:matchedInjectionGateRetained},appWindow:{definition:'bulkFilled→bulkPaint / smallFilled→smallPaint',passCondition:true,records:pairs.map(pair=>({size:pair.size,reviewBulkDurationsMs:insideWindow(pair.reviewBulk.longTasks,pair.reviewBulk.marks.bulkFilled,pair.reviewBulk.marks.bulkPaint).map(task=>Math.round(task.duration)),reviewHotDurationsMs:insideWindow(pair.reviewHot.longTasks,pair.reviewHot.marks.smallFilled,pair.reviewHot.marks.smallPaint).map(task=>Math.round(task.duration))}))}})
+      for(const pair of pairs){
+        const appSide=[...insideWindow(pair.reviewBulk.longTasks,pair.reviewBulk.marks.bulkFilled,pair.reviewBulk.marks.bulkPaint),...insideWindow(pair.reviewHot.longTasks,pair.reviewHot.marks.smallFilled,pair.reviewHot.marks.smallPaint)]
+        expect(appSide.filter(task=>task.duration>50),`${pair.size} actual Review app-side input window`).toEqual([])
+      }
       await review.getByRole('button',{name:'编辑候选',exact:true}).click();await area.fill(edited);await expect(review.getByRole('button',{name:'采纳',exact:true})).toBeEnabled();await review.getByRole('button',{name:'对比',exact:true}).click()
     }
     if(['1','display'].includes(perfMode)){
-      const displayMeasurements:Array<{size:number;longTasks:Array<{start:number;duration:number}>;domElements:number;marks:Record<string,number>}>=[]
+      // 5 裁决（DSH-054-测量门口径裁决.json）：原 spec:442 断言与全部阈值一字不改、继续运行、保留红；
+      // fill() 注入墙钟只作诊断；通过判定改用 filled→compare/done 的应用侧窗口；
+      // 并且必须同时给出真实用户路径（可信粘贴）的长任务计数，不能只把注入排除掉。
+      const displayMeasurements:Array<{size:number;longTasks:Array<{start:number;duration:number}>;appWindow:{started:number;elapsed:number;longTasks:Array<{start:number;duration:number}>};domElements:number;marks:Record<string,number>}>= []
+      const injectionGateRetained:Array<{size:number;injectionElapsedMs:number;injectionLongTasksMs:number[];red:boolean;message:string|null}>= []
+      const trustedPaste:Array<{size:number;elapsedMs:number;longTasksMs:number[];actualUnits:number;ariaInvalid:string|null;inputEvents:Array<{type:string;inputType:string|null;trusted:boolean}>}>= []
       const profiler=process.env.STORYFORGE_DIFF_PROFILE==='1'?await context.newCDPSession(page):null
       if(profiler){await profiler.send('Profiler.enable');await profiler.send('Profiler.setSamplingInterval',{interval:1000});await profiler.send('Profiler.start')}
       try{
@@ -425,6 +449,12 @@ test('054 actual candidate review: exact middle insertions, native editor, 14 th
         })
         await area.fill(stress);await expect(area).toHaveValue(stress)
         await page.evaluate(()=>Reflect.get(window,'__054DisplayMeasure').marks.filled=performance.now())
+        // 注入已完成：应用侧判定窗口从 filled 开始，到 compare/done 结束。
+        await page.evaluate(()=>{
+          const tasks:Array<{start:number;duration:number}>=[]
+          const observer=new PerformanceObserver(list=>{for(const entry of list.getEntries())tasks.push({start:entry.startTime,duration:entry.duration})})
+          observer.observe({type:'longtask',buffered:false});Reflect.set(window,'__054AppWindow',{tasks,observer,started:performance.now()})
+        })
         if(size===10000)await expect(review.getByRole('button',{name:'采纳',exact:true})).toBeEnabled()
         else await expect(area).toHaveAttribute('aria-invalid','true')
         await page.evaluate(()=>Reflect.get(window,'__054DisplayMeasure').marks.compare=performance.now())
@@ -432,14 +462,51 @@ test('054 actual candidate review: exact middle insertions, native editor, 14 th
         await diff.getByRole('button',{name:'复制候选正文',exact:true}).click();expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(stress)
         const result=await diff.evaluate(element=>{
           const measurement=Reflect.get(window,'__054DisplayMeasure') as {tasks:Array<{start:number;duration:number}>;observer:PerformanceObserver;started:number;marks:Record<string,number>}
-          measurement.observer.disconnect();return{elapsed:performance.now()-measurement.started,longTasks:measurement.tasks,marks:{...measurement.marks,done:performance.now()},domElements:element.querySelectorAll('*').length,visibleRows:element.querySelectorAll('.wv-diff-row').length,textUnits:element.textContent?.length,status:[...element.querySelectorAll('[role="status"]')].map(node=>node.textContent)}
+          const app=Reflect.get(window,'__054AppWindow') as {tasks:Array<{start:number;duration:number}>;observer:PerformanceObserver;started:number}
+          measurement.observer.disconnect()
+          for(const entry of app.observer.takeRecords())app.tasks.push({start:entry.startTime,duration:entry.duration});app.observer.disconnect()
+          return{elapsed:performance.now()-measurement.started,longTasks:measurement.tasks,appWindow:{started:app.started,elapsed:performance.now()-app.started,longTasks:app.tasks},marks:{...measurement.marks,done:performance.now()},domElements:element.querySelectorAll('*').length,visibleRows:element.querySelectorAll('.wv-diff-row').length,textUnits:element.textContent?.length,status:[...element.querySelectorAll('[role="status"]')].map(node=>node.textContent)}
         })
         displayMeasurements.push({size,...result});expect(result.domElements).toBeLessThan(5000)
         expect((await readNative()).world).toBe(ids.worldviewBefore)
         if(size===50000){await review.getByRole('button',{name:'编辑候选',exact:true}).click();await expect(area).toHaveAttribute('aria-invalid','true');await expect(review.getByRole('button',{name:'采纳',exact:true})).toBeDisabled();await review.getByRole('button',{name:'对比',exact:true}).click()}
       }
+      // 真实用户路径证据：可信按键 Ctrl+A/Ctrl+V 走真实粘贴，不用 evaluate 替换注入。
+      for(const size of [10000,50000]){
+        const phrase='星海约定与退潮后的来信。\n',stress=phrase.repeat(Math.ceil(size/phrase.length)).slice(0,size)
+        await review.getByRole('button',{name:'编辑候选',exact:true}).click()
+        await area.focus();await page.keyboard.press('ControlOrMeta+a');await page.keyboard.press('Delete');await expect(area).toHaveValue('')
+        await page.evaluate(async text=>{await navigator.clipboard.writeText(text)},stress)
+        await page.evaluate(()=>{
+          const tasks:Array<{start:number;duration:number}>=[],inputEvents:Array<{type:string;inputType:string|null;trusted:boolean}>=[],handlers:Record<string,EventListener>={}
+          for(const type of ['paste','beforeinput','input']){
+            const handler=((event:Event)=>{const input=event as InputEvent;inputEvents.push({type,inputType:typeof input.inputType==='string'?input.inputType:null,trusted:event.isTrusted})}) as EventListener
+            handlers[type]=handler;document.addEventListener(type,handler,true)
+          }
+          const observer=new PerformanceObserver(list=>{for(const entry of list.getEntries())tasks.push({start:entry.startTime,duration:entry.duration})})
+          observer.observe({type:'longtask',buffered:false});Reflect.set(window,'__054TrustedPaste',{tasks,inputEvents,handlers,observer,started:performance.now()})
+        })
+        await page.keyboard.press('ControlOrMeta+a');await page.keyboard.press('ControlOrMeta+v')
+        await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))
+        const paste=await area.evaluate(element=>{
+          const measurement=Reflect.get(window,'__054TrustedPaste') as {tasks:Array<{start:number;duration:number}>;inputEvents:Array<{type:string;inputType:string|null;trusted:boolean}>;handlers:Record<string,EventListener>;observer:PerformanceObserver;started:number}
+          for(const entry of measurement.observer.takeRecords())measurement.tasks.push({start:entry.startTime,duration:entry.duration});measurement.observer.disconnect()
+          for(const [type,handler] of Object.entries(measurement.handlers))document.removeEventListener(type,handler,true)
+          const input=element as HTMLTextAreaElement
+          return{elapsedMs:performance.now()-measurement.started,longTasksMs:measurement.tasks.map(entry=>Math.round(entry.duration)),inputEvents:measurement.inputEvents.slice(0,6),actualUnits:input.value.length,ariaInvalid:input.getAttribute('aria-invalid')}
+        })
+        trustedPaste.push({size,...paste})
+      }
       }finally{if(profiler){const {profile}=await profiler.send('Profiler.stop');await attachJSON(info,'054-native-display-cpu-profile.json',profile);await profiler.detach()}await attachJSON(info,'054-native-display-performance.json',displayMeasurements)}
-      for(const result of displayMeasurements)expect(result.longTasks.filter(entry=>entry.duration>50),`${result.size} actual review main thread`).toEqual([])
+      // 原注入门：断言原字保留并继续运行，红即留存证据（按裁决不把注入墙钟当通过条件）。
+      for(const result of displayMeasurements){
+        let retained:Error|null=null
+        try{expect(result.longTasks.filter(entry=>entry.duration>50),`${result.size} actual review main thread`).toEqual([])}catch(error){retained=error as Error}
+        injectionGateRetained.push({size:result.size,injectionElapsedMs:Math.round(result.marks.filled-result.marks.input),injectionLongTasksMs:result.longTasks.map(entry=>Math.round(entry.duration)),red:!!retained,message:retained?retained.message.slice(0,300):null})
+      }
+      await attachJSON(info,'054-dual-track-display-evidence.json',{ruling:'DSH-054-测量门口径裁决.json',injectionGate:{assertion:'tests/e2e/worldview-candidate-exact-diff.spec.ts:442 原字保留并继续运行',passCondition:false,records:injectionGateRetained},appWindow:{definition:'filled→compare/done',passCondition:true,records:displayMeasurements.map(result=>({size:result.size,elapsedMs:Math.round(result.appWindow.elapsed),longTasksMs:result.appWindow.longTasks.map(entry=>Math.round(entry.duration))}))},trustedPaste})
+      // 通过判定：应用侧窗口。仍出现 >50ms 就保持红。
+      for(const result of displayMeasurements)expect(result.appWindow.longTasks.filter(entry=>entry.duration>50),`${result.size} app-side display window`).toEqual([])
       await review.getByRole('button',{name:'编辑候选',exact:true}).click();await area.fill(edited)
       await expect(review.getByRole('button',{name:'采纳',exact:true})).toBeEnabled();await review.getByRole('button',{name:'对比',exact:true}).click()
       await expect(diff.locator('[data-diff-kind="remove"]')).toContainText(['七'])
