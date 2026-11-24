@@ -41,6 +41,7 @@ import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config
 import { db } from '../../lib/db/schema'
 import { useActiveWork } from '../../hooks/useActiveWork'
 import { LongformMarkdownSessionV1, buildLongformMarkdownIdentityV1, longformMarkdownMountKeyV1, type LongformMarkdownEditorModeV1 } from '../../lib/editor/longform-markdown-session'
+import type { AuthoringPasteDraftV1 } from '../../lib/editor/authoring-document-adapter'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import { prepareProseGatewayAssemblyV1, type ProseGatewayAssemblyV1 } from '../../lib/prose/gateway-context'
 import { resolveChapterDisplayMeta } from '../../lib/outline/chapter-display'
@@ -310,6 +311,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const markdownSessionRef = useRef<LongformMarkdownSessionV1 | null>(null)
   const markdownMountKeyRef = useRef('')
   const markdownModeRef = useRef<LongformMarkdownEditorModeV1>('richtext')
+  // 大段粘贴必须由作者确认：确认前只有草稿，原稿与 sourceRevision 不变。
+  const [pendingPaste, setPendingPaste] = useState<{ text: string; cancel: () => void; draft: Promise<AuthoringPasteDraftV1> } | null>(null)
+  const [pasteBusy, setPasteBusy] = useState(false)
+  const pendingPasteRef = useRef<{ text: string; cancel: () => void; draft: Promise<AuthoringPasteDraftV1> } | null>(null)
   const markdownAdmitted = LongformMarkdownSessionV1.canMount({ project, work: { kind: activeWork?.kind ?? null, novelProfile: activeWork?.novelProfile ?? null } })
   const editorChapterIdRef = useRef(currentChapter?.id)
   const loadedEditorChapterIdRef = useRef<number | null>(null)
@@ -1106,6 +1111,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         onHtmlChange: (html, plainText) => stageEditorDraft(html, plainText),
         onError: error => setMarkdownError(error.message),
         onRichText: () => { setMarkdownSwitching(false) },
+        onLargePaste: pending => { pendingPasteRef.current = pending; setPendingPaste(pending) },
         placeholder: '开始写作…',
       })
       session.setDisplayMode(markdownModeRef.current === 'source' ? 'source' : 'preview')
@@ -1190,6 +1196,43 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     // 只在章行的已提交内容/版本变化时评估同步；会话自身编辑不回灌。
   }, [currentChapter?.content, currentChapter?.updatedAt, currentChapter?.id, markdownCmActive, project.id])
 
+
+  // 未决粘贴不得跨章或跨会话残留：换章/销毁时取消，内容仍在剪贴板。
+  useEffect(() => () => {
+    pendingPasteRef.current?.cancel()
+    pendingPasteRef.current = null
+    setPendingPaste(null)
+    setPasteBusy(false)
+  }, [currentChapter?.id, markdownCmActive])
+
+  /** 确认：把已预演的粘贴作为单事务写入，并进入既有草稿缓冲。 */
+  const confirmLargePaste = useCallback(async () => {
+    const pending = pendingPasteRef.current
+    const session = markdownSessionRef.current
+    if (!pending || !session || pasteBusy) return
+    setPasteBusy(true)
+    try {
+      const draft = await pending.draft
+      session.commitPaste(draft)
+      setMarkdownError('')
+    } catch (error) {
+      pending.cancel()
+      setMarkdownError(error instanceof Error ? error.message : '粘贴未能写入，原稿与草稿已保留。')
+    } finally {
+      pendingPasteRef.current = null
+      setPendingPaste(null)
+      setPasteBusy(false)
+    }
+  }, [pasteBusy])
+
+  /** 取消：不写入任何内容，草稿与 sourceRevision 保持原样。 */
+  const cancelLargePaste = useCallback(() => {
+    pendingPasteRef.current?.cancel()
+    pendingPasteRef.current = null
+    setPendingPaste(null)
+    setPasteBusy(false)
+    setMarkdownError('')
+  }, [])
 
   /** 富文本↔CM 是明确编辑边界：先 flush 草稿成功后再切模式；失败停留原模式。 */
   const switchMarkdownMode = useCallback(async (next: LongformMarkdownEditorModeV1) => {
@@ -3663,6 +3706,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
               ))}
               {markdownMode !== 'richtext' && <span className="text-[10px] text-text-muted">源码与实时预览共用同一撤销历史；切换到富文本会先保存草稿并开始新的撤销段。</span>}
               {markdownError && <span role="alert" className="text-[10px] text-error">{markdownError}</span>}
+            </div>
+          )}
+          {markdownAdmitted && markdownMode !== 'richtext' && pendingPaste && (
+            <div role="status" aria-label="大段粘贴确认" className="mb-2 flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+              <span>大段粘贴 {pendingPaste.text.length.toLocaleString()} 字符；确认后一次性写入并可撤销，取消则原稿不变。</span>
+              <button type="button" disabled={pasteBusy} onClick={() => { void confirmLargePaste() }} className="rounded bg-accent px-2 py-0.5 text-white disabled:opacity-45">{pasteBusy ? '写入中…' : '确认粘贴'}</button>
+              <button type="button" disabled={pasteBusy} onClick={cancelLargePaste} className="rounded border border-amber-400 px-2 py-0.5 disabled:opacity-45">取消粘贴</button>
             </div>
           )}
           {markdownAdmitted && markdownMode !== 'richtext'
