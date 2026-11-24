@@ -216,18 +216,19 @@ describe('B01 C06/C07/C08/C09/C16/C17/C22/C25/C26/C30 · separate existing diale
     expect(liveMap.get(newBinding.skillId)).toBe(saved)
   })
 
-  it('keeps Codex finite while admitting only the three reference and two exact worldview null-budget sources', () => {
+  it('keeps Codex finite while admitting only registered task-budget/exact null-budget sources', () => {
     expect(CONTEXT_SOURCES.filter(source => source.budgetTokens === null).map(source => source.key).sort())
-      .toEqual(['referenceAnalysisPrivateChunk','referenceDerivedBaseline','references','worldviewFieldBaselineV2','worldviewFieldContextV2'].sort())
+      .toEqual(['manualText','referenceAnalysisPrivateChunk','referenceDerivedBaseline','references','worldviewFieldBaselineV2','worldviewFieldContextV2'].sort())
     for (const [key, sourceVersion] of [['worldviewFieldBaselineV2', 'worldview-field-baseline-full-v2'], ['worldviewFieldContextV2', 'worldview-field-constraints-full-v2']]) {
       expect(CONTEXT_SOURCES.find(row => row.key === key)).toMatchObject({ budgetTokens: null, explicitSelectionOnly: true,
         fullCapture: { version: 'registered-host-full-v2', sourceVersion } })
     }
-    for (const key of ['manualText','codexExtractionBaseline']) {
-      const source = CONTEXT_SOURCES.find(row => row.key === key)!
-      expect(typeof source.budgetTokens).toBe('number')
-      expect(source.fullCapture?.version).toBe('registered-host-full-v2')
-    }
+    // manualText 是按任务请求预算的全文来源（B21a/B20b）；其余来源仍是数字预算。
+    expect(CONTEXT_SOURCES.find(row => row.key === 'manualText')).toMatchObject({ budgetTokens: null,
+      fullCapture: { version: 'registered-host-full-v2', sourceVersion: 'manualText-full-v2' } })
+    const baseline = CONTEXT_SOURCES.find(row => row.key === 'codexExtractionBaseline')!
+    expect(typeof baseline.budgetTokens).toBe('number')
+    expect(baseline.fullCapture?.version).toBe('registered-host-full-v2')
     expect(getAgentSkillV1('world-origin.codex-extract.v2').contextSourceKeys).toEqual(['manualText','codexExtractionBaseline'])
   })
 
