@@ -185,14 +185,38 @@ function contract(scope: WorkspaceScope, worldGroupId: number | null, node: Worl
   }
 }
 
+/**
+ * B34：世界地图的四类登记来源都是 L2 非原子来源，固定装配预算会静默裁剪它们，
+ * 而提示词只使用 assembled.text——地图证据可能在作者不知情的情况下丢失。
+ * 这里改为显式完整性门：任一登记来源未完整进入即失败且不发起模型生成（与
+ * worldview-expand 的既有守卫同策略），不做静默截断。
+ */
+export function assertWorldMapContextCompleteV1(input: {
+  included: readonly string[]
+  trimmed: readonly string[]
+  sourceEvidence?: ReadonlyArray<{ key: string; delivery?: string }>
+}): void {
+  const incomplete = WORLD_MAP_CONTEXT_SOURCE_KEYS_V1.filter(key => (
+    !input.included.includes(key)
+    || input.trimmed.includes(key)
+    || input.sourceEvidence?.some(source => source.key === key && source.delivery === 'truncated')
+  ))
+  if (incomplete.length) {
+    throw new Error(`世界地图登记来源未完整进入上下文预算：${incomplete.join('、')}；`
+      + '请缩小材料或改用更大上下文模型后重试，未发起模型生成。')
+  }
+}
+
 async function assembleWorldMapContext(scope: WorkspaceScope, worldGroupId: number | null) {
-  return assembleContext({
+  const assembled = await assembleContext({
     projectId: scope.projectId,
     scope,
     worldGroupId,
     sourceKeys: [...WORLD_MAP_CONTEXT_SOURCE_KEYS_V1],
     inputBudgetTokens: 30_000,
   })
+  assertWorldMapContextCompleteV1(assembled)
+  return assembled
 }
 
 async function promptEvidence(contextText: string, nodeName: string, atlas = false) {
