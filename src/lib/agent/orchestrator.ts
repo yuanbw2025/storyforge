@@ -1293,7 +1293,12 @@ async function executeSequentialMasterAgentPlan(
             prepared: prepared.prepared,
             budget,
             callLabel: '故事核心 Skill',
-            maxOutputTokens: prepared.input.generationOverrides!.maxTokens!,
+            // Accounting forecast from the prepared copilot (author-explicit
+            // limit or capacity-derived budget) — never a dispatch cap. The
+            // old non-null generationOverrides read silently became undefined
+            // (NaN reservation, bypassing the budget gate) once dispatch
+            // stopped carrying the capacity projection as an explicit quota.
+            maxOutputTokens: prepared.outputForecastTokens,
           })
           const draft = JSON.stringify(result.output, null, 2)
           candidates.push({
