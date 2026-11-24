@@ -3311,7 +3311,10 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     label: '用户指定内容',
     scope: 'manual',
     layer: 'L0',
-    budgetTokens: 100_000,
+    // B21a/B20b: 该来源不再携带固定 100k 应用额度。它按本次任务的请求预算
+    // （调用方的 inputBudgetTokens/模型已证实容量）参与装配，仍受请求级准入
+    // 与总窗口约束；固定额度不得成为永久原文上限。
+    budgetTokens: null,
     read: async input => input.manualSourceText || '',
   },
   {
