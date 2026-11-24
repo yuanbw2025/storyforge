@@ -29,7 +29,8 @@ import {
   staleAgentRunVerificationV1,
   type AgentRunSnapshotV1,
 } from './event-store'
-import { PROSE_GENERATION_VERIFIER_SET_V2, PROSE_GENERATION_VERIFIER_SET_V3 } from './prose-generation-durable'
+import { PROSE_GENERATION_VERIFIER_SET_V2, PROSE_GENERATION_VERIFIER_SET_V3, PROSE_GENERATION_VERIFIER_SET_V4,
+  isProseGenerationRunV4, readLatestProseGenerationCandidateV1, verifyProseGenerationRunV1 } from './prose-generation-durable'
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { hashCanonicalValue } from './hash'
 import { CHAPTER_ORGANIZATION_WRITE_TARGETS_CURRENT_V1 } from './chapter-organization-authority'
@@ -60,12 +61,17 @@ export const CHAPTER_POST_ADOPTION_STEP_IDS_V1 = {
 
 export type ChapterPostAdoptionStepIdV1 = typeof CHAPTER_POST_ADOPTION_STEP_IDS_V1[keyof typeof CHAPTER_POST_ADOPTION_STEP_IDS_V1]
 
-const ORGANIZATION_SKILL_V1 = getAgentSkillV1('prose.organize', 'prose')
-const MEMORY_SKILL_V1 = getAgentSkillV1('prose.memory', 'prose')
+// New runs bind the capacity-managed V2 skills; historical V1 contracts keep
+// their original skill identity through the version-tolerant binding assert.
+const ORGANIZATION_SKILL_V1 = getAgentSkillV1('prose.organize.v2', 'prose')
+const ORGANIZATION_SKILL_V1_LEGACY = getAgentSkillV1('prose.organize', 'prose')
+const MEMORY_SKILL_V1 = getAgentSkillV1('prose.memory.v2', 'prose')
+const MEMORY_SKILL_V1_LEGACY = getAgentSkillV1('prose.memory', 'prose')
 const CONSISTENCY_SKILL_V1 = getAgentSkillV1('prose.consistency', 'prose')
 const PROSE_TERMINAL_VERIFIERS_V1 = new Set<string>([
   PROSE_GENERATION_VERIFIER_SET_V2,
   PROSE_GENERATION_VERIFIER_SET_V3,
+  PROSE_GENERATION_VERIFIER_SET_V4,
 ])
 
 export const CHAPTER_POST_ADOPTION_SOURCE_KEYS_V1 = Object.freeze([...new Set([
@@ -190,8 +196,12 @@ function assertChapterPostAdoptionExecutionBindingsV1(snapshot: AgentRunSnapshot
     if (!organization) throw new Error('正文后处理缺少七域整理 Skill/Prompt 执行绑定。')
     const { stepId: _organizationStepId, ...organizationBinding } = organization
     if (organizationBinding.version !== 1) throw new Error('正文后处理当前只接受历史 V1 Skill 执行绑定。')
-    const organizationSkill = organizationBinding.promptVersion === 'chapter-organization-v1'
-      ? { ...ORGANIZATION_SKILL_V1, label: '章节六域证据整理', promptVersion: 'chapter-organization-v1' }
+    // Frozen historical runs keep their original V1 skill identity; only
+    // runs created after the V2 registration bind the capacity-managed skills.
+    const organizationSkill = organizationBinding.skillId === ORGANIZATION_SKILL_V1_LEGACY.id
+      ? (organizationBinding.promptVersion === 'chapter-organization-v1'
+        ? { ...ORGANIZATION_SKILL_V1_LEGACY, label: '章节六域证据整理', promptVersion: 'chapter-organization-v1' }
+        : ORGANIZATION_SKILL_V1_LEGACY)
       : ORGANIZATION_SKILL_V1
     assertAgentSkillExecutionBindingV1(organizationBinding, organizationSkill, '章节七域整理执行绑定')
   }
@@ -199,7 +209,9 @@ function assertChapterPostAdoptionExecutionBindingsV1(snapshot: AgentRunSnapshot
     if (!memory) throw new Error('正文后处理缺少章节记忆 Skill/Prompt 执行绑定。')
     const { stepId: _memoryStepId, ...memoryBinding } = memory
     if (memoryBinding.version !== 1) throw new Error('正文后处理当前只接受历史 V1 Skill 执行绑定。')
-    assertAgentSkillExecutionBindingV1(memoryBinding, MEMORY_SKILL_V1, '章节记忆执行绑定')
+    const memorySkill = memoryBinding.skillId === MEMORY_SKILL_V1_LEGACY.id
+      ? MEMORY_SKILL_V1_LEGACY : MEMORY_SKILL_V1
+    assertAgentSkillExecutionBindingV1(memoryBinding, memorySkill, '章节记忆执行绑定')
   }
   const consistency = bindings.get(CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency)
   const requiresConsistency = selected.has('consistency')
@@ -328,6 +340,12 @@ async function verifiedPostAdoptionParentRelation(input: {
   }
   if (parent.contract.scope.chapterIds?.length === 1 && parent.contract.scope.chapterIds[0] === input.chapterId
     && parent.contract.verificationPlan.some(step => step.kind === 'terminal' && PROSE_TERMINAL_VERIFIERS_V1.has(step.verifier))) {
+    if (isProseGenerationRunV4(parent)) {
+      const candidate = await readLatestProseGenerationCandidateV1({ scope: input.scope, chapterId: input.chapterId, runId: input.parent.runId })
+      if (!candidate?.taskLengthV2 || candidate.expectedContentHash !== input.parent.artifactHash) throw new Error('正文 V4 父证明与本章真实采纳产物不一致。')
+      const verified = await verifyProseGenerationRunV1({ scope: input.scope, runId: input.parent.runId, candidate, snapshot: parent })
+      if (verified.receiptHash !== input.parent.receiptHash) throw new Error('正文 V4 父回执不一致。')
+    }
     return CHAPTER_POST_ADOPTION_PARENT_RELATION_V1
   }
   const { restoreMasterAgentCandidatesV1 } = await import('./master-durable')

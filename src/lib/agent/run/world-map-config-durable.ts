@@ -26,6 +26,19 @@ import { createVerificationReceiptV1 } from './verification-receipt'
 import { canonicalStringify, hashCanonicalValue } from './hash'
 
 export const WORLD_MAP_CONFIG_STEP_ID_V1 = 'world-origin:map-config' as const
+
+/**
+ * B20a: the frozen contract budget is an accounting/governance ceiling, never a
+ * substitute for the author's own choice. `maxTokens: 0` means automatic, so it
+ * must stay automatic instead of being fabricated into a 6k dispatch cap; only
+ * an explicit author limit is narrowed by the contract ceiling.
+ */
+export function worldMapDraftDispatchConfigV1(config: AIConfig, contractCeiling: number | null): AIConfig {
+  const explicit = config.maxTokens
+  if (!Number.isInteger(explicit) || explicit <= 0) return config
+  if (contractCeiling === null || !Number.isSafeInteger(contractCeiling) || contractCeiling <= 0) return config
+  return { ...config, maxTokens: Math.min(explicit, contractCeiling) }
+}
 export const WORLD_MAP_CONFIG_VERIFIER_SET_V1 = 'world-map-config-terminal-v1' as const
 export const WORLD_MAP_CONTEXT_SOURCE_KEYS_V1 = ['worldview', 'geography', 'codex', 'locations'] as const
 
@@ -369,7 +382,7 @@ export async function generateWorldMapConfigCandidateV1(input: {
   try {
     await input.onDurableBoundary?.('model.requested', snapshot)
     const aiConfig = input.aiConfig && input.atlasDraft
-      ? { ...input.aiConfig, maxTokens: Math.min(input.aiConfig.maxTokens || 6000, snapshot.contract.budget.maxOutputTokens ?? 6000) }
+      ? worldMapDraftDispatchConfigV1(input.aiConfig, snapshot.contract.budget.maxOutputTokens)
       : input.aiConfig
     raw = await (input.runAI
       ? input.runAI(prompt.messages)

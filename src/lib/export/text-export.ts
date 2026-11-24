@@ -1,55 +1,10 @@
 import { saveFile } from '../platform/save-file'
 import { db } from '../db/schema'
 import type { OutlineNode, Chapter } from '../types'
-import { isHtml, htmlToPlainText } from '../utils/html'
+import { htmlToPlainText } from '../utils/html'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
 import { byOutlineOrderThenId, walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
 import { readOwnedRows, resolveReadScopeLike, scopeTransactionTables, type WorkspaceScopeLike } from '../workspace/scope'
-
-/** HTML → Markdown（简化规则，覆盖 TipTap StarterKit 产出的常见结构） */
-function htmlToMarkdown(html: string): string {
-  if (!html) return ''
-  if (!isHtml(html)) return html
-  let md = html
-  // 标题
-  md = md.replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, '\n\n## $1\n\n')
-  md = md.replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, '\n\n### $1\n\n')
-  md = md.replace(/<h4[^>]*>([\s\S]*?)<\/h4>/gi, '\n\n#### $1\n\n')
-  // 强调
-  md = md.replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, '**$1**')
-  md = md.replace(/<b[^>]*>([\s\S]*?)<\/b>/gi, '**$1**')
-  md = md.replace(/<em[^>]*>([\s\S]*?)<\/em>/gi, '*$1*')
-  md = md.replace(/<i[^>]*>([\s\S]*?)<\/i>/gi, '*$1*')
-  md = md.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, '`$1`')
-  // 引用
-  md = md.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (_, inner) => {
-    const text = inner.replace(/<[^>]+>/g, '').trim()
-    return text
-      .split('\n')
-      .map((l: string) => `> ${l}`)
-      .join('\n')
-  })
-  // 列表项
-  md = md.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '- $1\n')
-  md = md.replace(/<\/?(ul|ol)[^>]*>/gi, '\n')
-  // 分割线
-  md = md.replace(/<hr[^>]*\/?>/gi, '\n---\n')
-  // 段落与换行
-  md = md.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1\n\n')
-  md = md.replace(/<br\s*\/?>/gi, '\n')
-  // 清理剩余标签
-  md = md.replace(/<[^>]+>/g, '')
-  // 实体
-  md = md
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-  // 规整空行
-  md = md.replace(/\n{3,}/g, '\n\n')
-  return md.trim()
-}
 
 interface TextExportEntry {
   node: OutlineNode | null
@@ -117,19 +72,26 @@ async function prepareTextExport(scopeInput: WorkspaceScopeLike): Promise<{ titl
 /** 导出为 Markdown 格式 */
 export async function exportProjectMarkdown(scopeInput: WorkspaceScopeLike): Promise<string> {
   const { title, entries } = await prepareTextExport(scopeInput)
-  let md = `# ${title}\n\n`
+  const { serializeAuthoringMarkdownExportV1, MARKDOWN_HTML_FORMAT_BOUNDARY_V1 } = await import('../editor/authoring-markdown-export')
+  const header = `# ${title}\n\n`
+  let md = header
+  let containsHtml = false
   for (const { node, chapter, depth } of entries) {
     if (!node || node.type === 'chapter') {
       const heading = '#'.repeat(Math.min(6, Math.max(4, depth + 2)))
       md += `${heading} ${node?.title ?? chapter!.title}\n\n`
-      if (chapter?.content) md += `${htmlToMarkdown(chapter.content)}\n\n`
+      if (chapter?.content) {
+        const body = serializeAuthoringMarkdownExportV1(chapter.content)
+        md += `${body.markdown}\n\n`
+        containsHtml ||= body.containsHtml
+      }
       else if (node?.summary) md += `*（大纲：${node.summary}）*\n\n`
     } else {
       md += `${'#'.repeat(Math.min(6, depth + 2))} ${node.title}\n\n`
       if (node.type === 'volume' && node.summary) md += `> ${node.summary}\n\n`
     }
   }
-  return md.trim()
+  return (containsHtml ? header + MARKDOWN_HTML_FORMAT_BOUNDARY_V1 + '\n\n' + md.slice(header.length) : md).trim()
 }
 
 /** 导出为纯文本格式 */

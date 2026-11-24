@@ -318,7 +318,7 @@ function readExecutionBindingV2(value: unknown, path: string): AgentRunStepExecu
     writeTargets,
     maxOutputTokens: record.taskRequest !== undefined
       ? readInteger(record.maxOutputTokens, `${path}.maxOutputTokens`, { min: 0 })
-      : record.maxOutputTokens === null && ['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk'].includes(String(record.skillId))
+      : record.maxOutputTokens === null && ['inspiration.reference-summary', 'inspiration.reference-characters', 'inspiration.reference-analysis-private-chunk', 'prose.organize.v2', 'prose.memory.v2'].includes(String(record.skillId))
       ? null : readInteger(record.maxOutputTokens, `${path}.maxOutputTokens`, { min: 1 }),
     ...(formalEntry ? { formalEntry } : {}),
     ...(record.taskRequest === undefined ? {} : { taskRequest: parseTaskRequestBindingV2(record.taskRequest, String(record.skillId)) }),
@@ -836,7 +836,7 @@ function parseSkillBoundContract(
   if (allocation) {
     if (budgetRecord.capacityPolicy !== undefined || budgetRecord.serviceCapacityOnly !== undefined
       || record.runtimeBindingHash === undefined || executionBindings.length !== 1
-      || executionBindings.some(binding => !['world-origin.codex-extract.v2', 'world-origin.worldview-field.v2'].includes(binding.skillId)
+      || executionBindings.some(binding => !['world-origin.codex-extract.v2', 'world-origin.worldview-field.v2', 'prose.generate.v2', 'prose.continue.v2'].includes(binding.skillId)
         || binding.taskRequest?.planHash !== allocation.planHash)) failSchema('invalid_budget', 'contract.budget.allocation', '完整请求预算必须绑定准确新Skill和plan，不能混入旧服务模式')
     const { allocation: _allocation, ...legacyFields } = budgetRecord
     baseShape.budget = legacyFields
@@ -967,7 +967,7 @@ export function readRunBudgetSemanticsV2(contract: AgentRunContract):
   if (contract.budget.allocation !== undefined) {
     const allocation = parseTaskRunBudgetAllocationV2(contract.budget.allocation)
     if (contract.version === 1 || contract.budget.capacityPolicy !== undefined || contract.budget.serviceCapacityOnly !== undefined
-      || contract.executionBindings.length !== 1 || !['world-origin.codex-extract.v2', 'world-origin.worldview-field.v2'].includes(contract.executionBindings[0].skillId)
+      || contract.executionBindings.length !== 1 || !['world-origin.codex-extract.v2', 'world-origin.worldview-field.v2', 'prose.generate.v2', 'prose.continue.v2'].includes(contract.executionBindings[0].skillId)
       || contract.executionBindings[0].taskRequest?.planHash !== allocation.planHash) throw new Error('新预算语义与执行绑定不匹配。')
     return { mode: 'adaptive-plan', allocation }
   }

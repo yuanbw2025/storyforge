@@ -429,12 +429,12 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:438` |
 | `canon.narrative.extract` | `src/lib/agent/run/narrative-annotation-durable.ts:218` |
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:509` |
-| `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
-| `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
+| `chapter.content` | `src/lib/generation/chapter-generation-node.ts:44`<br/>`src/lib/generation/chapter-generation-node.ts:47` |
+| `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:45`<br/>`src/lib/generation/chapter-generation-node.ts:48` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:796`<br/>`src/lib/node-authoring/domain-execution.ts:855` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1879` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1857` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1847` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1725` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1703` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1693` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:559` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:660` |
@@ -478,13 +478,13 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 - `src/lib/agent/inspiration-copilot.ts:390 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:602 · chat`
 - `src/lib/agent/outline-copilot.ts:521 · chat`
-- `src/lib/agent/outline-copilot.ts:773 · chat`
-- `src/lib/agent/prose-copilot.ts:702 · chat`
-- `src/lib/agent/prose-copilot.ts:959 · chat`
+- `src/lib/agent/outline-copilot.ts:780 · chat`
+- `src/lib/agent/prose-copilot.ts:726 · chat`
+- `src/lib/agent/prose-copilot.ts:983 · chat`
 - `src/lib/agent/run/codex-extraction-durable.ts:831 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:515 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:588 · chat`
-- `src/lib/agent/run/short-novel-durable.ts:196 · chat`
+- `src/lib/agent/run/short-novel-durable.ts:213 · chat`
 - `src/lib/agent/story-arc-copilot.ts:1660 · chat`
 - `src/lib/agent/story-arc-copilot.ts:1712 · chat`
 - `src/lib/agent/story-core-copilot.ts:587 · chat`
@@ -509,7 +509,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 74 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。
+共 76 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio/image 分别使用冻结音频执行器或临时图片预览执行器，文本入口不补默认字段。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
@@ -539,14 +539,16 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `ttrpg.open.brief` | `prose.ttrpg-open-brief` | `runtime.ttrpg-open.brief` | formal / product-runtime | `storyforge.ttrpg-open-brief-candidate` | 禁止 | `src/lib/ttrpg/open-intent-harness.ts` |
 | `extensions.generate` | `extensions.generate` | `extension.generate` | formal / durable-run | `extension-record-candidate` | `extensionRecords` | `src/lib/extensions/ai-run.ts` |
 | `ai-town.authoring.consult` | `ai-town.consult.v1` | `authoring.ai-town-consult` | auxiliary / durable-run | `ai-town-settings-preview` | 禁止 | `src/lib/ai-town/consultation.ts` |
+| `prose.chapter.generate.v2` | `prose.generate.v2` | `chapter.content` | formal / durable-run | `chapter-task-draft-v2` | `chapters` | `src/lib/generation/chapter-generation-node.ts` |
+| `prose.chapter.continue.v2` | `prose.continue.v2` | `chapter.continue` | formal / durable-run | `chapter-task-continuation-v2` | `chapters` | `src/lib/generation/chapter-generation-node.ts` |
 | `prose.chapter.generate` | `prose.generate` | `chapter.content` | formal / durable-run | `chapter-draft` | `chapters` | `src/lib/generation/chapter-generation-node.ts` |
 | `prose.chapter.continue` | `prose.continue` | `chapter.continue` | formal / durable-run | `chapter-continuation-draft` | `chapters` | `src/lib/generation/chapter-generation-node.ts` |
 | `reference.analysis.private-chunk` | `inspiration.reference-analysis-private-chunk` | `reference.analysis` | auxiliary / authoring-draft | `private-reference-chunk-report` | 禁止 | `src/lib/reference-analysis/pipeline.ts` |
 | `prose.selection.polish` | `prose.selection-edit` | `chapter.polish` | auxiliary / authoring-draft | `selection-polish-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
 | `prose.selection.expand` | `prose.selection-edit` | `chapter.expand` | auxiliary / authoring-draft | `selection-expand-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
 | `prose.selection.deai` | `prose.selection-edit` | `chapter.deai` | auxiliary / authoring-draft | `selection-rewrite-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
-| `prose.chapter.memory` | `prose.memory` | `chapter.memory` | formal / durable-run | `chapter-memory-candidate` | `chapters` | `src/components/editor/ChapterEditor.tsx`<br/>`src/lib/prose/post-adoption-runner.ts` |
-| `prose.chapter.organize` | `prose.organize` | `chapter.organize` | formal / durable-run | `chapter-organization-candidate` | `stateCards`<br/>`temporalFacts`<br/>`itemLedger`<br/>`storyTimelineEvents`<br/>`characterRelations`<br/>`foreshadows`<br/>`storylineProgress`<br/>`storylineCrossings`<br/>`storyArcs` | `src/components/editor/ChapterEditor.tsx`<br/>`src/lib/prose/post-adoption-runner.ts` |
+| `prose.chapter.memory.v2` | `prose.memory.v2` | `chapter.memory` | formal / durable-run | `chapter-memory-candidate-v2` | `chapters` | `src/lib/prose/post-adoption-runner.ts`<br/>`src/components/editor/ChapterEditor.tsx` |
+| `prose.chapter.organize.v2` | `prose.organize.v2` | `chapter.organize` | formal / durable-run | `chapter-organization-candidate-v2` | `stateCards`<br/>`temporalFacts`<br/>`itemLedger`<br/>`storyTimelineEvents`<br/>`characterRelations`<br/>`foreshadows`<br/>`storylineProgress`<br/>`storylineCrossings`<br/>`storyArcs` | `src/lib/prose/post-adoption-runner.ts`<br/>`src/components/editor/ChapterEditor.tsx` |
 | `prose.review.quality` | `prose.quality-review` | `review.quality` | auxiliary / durable-run | `quality-review-report` | 禁止 | `src/lib/prose/quality-transport.ts` |
 | `prose.review.anti-ai` | `prose.quality-review` | `review.anti-ai` | auxiliary / durable-run | `anti-ai-review-report` | 禁止 | `src/lib/prose/quality-transport.ts` |
 | `prose.review.readability` | `prose.quality-review` | `review.readability` | auxiliary / durable-run | `readability-review-report` | 禁止 | `src/lib/prose/quality-transport.ts` |
@@ -602,4 +604,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `420f148b9`
+生成时间基准:commit `7ce391a99`

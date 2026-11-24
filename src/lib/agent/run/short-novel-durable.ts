@@ -1,4 +1,3 @@
-import { requireFixedBudgetValueV1 } from '../finite-budget'
 import { parseLegacyModelJsonV1 } from '../../ai/legacy-model-json'
 import { recordCreationModelRequestV1, recordCreationModelResponseV1, recordUnavailableCreationResponseV1 } from './creation-response-evidence'
 import { chat, type ChatResult } from '../../ai/client'
@@ -109,7 +108,26 @@ async function append(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, type:
   return appendAgentRunEventV1({ scope, runId: snapshot.run.id, type, payload, expectedLastSequence: snapshot.projection.lastSequence } as never)
 }
 
-function runContract(scope: WorkspaceScope, artifactKind: ShortNovelArtifactKindV1) {
+/** Run budget ceiling derived from the manuscript material and the work's
+ * whole-novel target, never a fixed 64k/8k quota. The declared envelope keeps
+ * the finite contract math valid; actual dispatch follows the bound model
+ * capacity, so the single response is never the work-total cap. */
+function runBudgetFor(manuscript: { sourceJson: string; work: { targetWordCount: number } }, skill: { maxOutputTokens: number | null }) {
+  const inputTokens = Math.max(4_000, Math.ceil(manuscript.sourceJson.length * 0.75) + 2_000)
+  const outputFloor = Math.max(4_000, skill.maxOutputTokens ?? 0)
+  return {
+    maxModelCalls: 1,
+    maxToolCalls: 0,
+    maxInputTokens: inputTokens,
+    // Whole-novel target words ≈ CJK output tokens; the step's structured
+    // forecast never becomes the work-total ceiling.
+    maxOutputTokens: Math.max(outputFloor, manuscript.work.targetWordCount),
+    maxAttemptsPerStep: 1,
+    maxProtocolErrors: 0,
+  }
+}
+
+function runContract(scope: WorkspaceScope, artifactKind: ShortNovelArtifactKindV1, manuscript: { sourceJson: string; work: { targetWordCount: number } }) {
   const config = ARTIFACT_CONFIG[artifactKind]
   const skill = getAgentSkillV1(config.skillId)
   return {
@@ -122,7 +140,7 @@ function runContract(scope: WorkspaceScope, artifactKind: ShortNovelArtifactKind
       writeTargets: skill.writeTargets.map(target => ({ table: target.table, fields: [...target.fields], mode: 'author-confirmed' as const })),
     },
     executionBindings: [{ stepId: config.stepId, ...createAgentSkillExecutionBindingV1(skill) }],
-    budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: 64_000, maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens), maxAttemptsPerStep: 1, maxProtocolErrors: 0 },
+    budget: runBudgetFor(manuscript, skill),
     acceptance: [
       { id: `${config.stepId}.candidate`, kind: 'output-present' as const, required: true },
       { id: `${config.stepId}.author`, kind: 'author-confirmed' as const, required: true },
@@ -171,7 +189,7 @@ export async function generateShortNovelCandidateV1<K extends ShortNovelArtifact
   const { production, manuscript, issue } = await assertPrerequisites(input)
   const config = ARTIFACT_CONFIG[input.artifactKind]
   const skill = getAgentSkillV1(config.skillId)
-  let snapshot = await createAgentRunV1({ scope: input.scope, worldGroupId: null, contract: runContract(input.scope, input.artifactKind) })
+  let snapshot = await createAgentRunV1({ scope: input.scope, worldGroupId: null, contract: runContract(input.scope, input.artifactKind, manuscript) })
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: config.stepId })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: config.stepId, attempt: 1 })
   try {
@@ -181,7 +199,6 @@ export async function generateShortNovelCandidateV1<K extends ShortNovelArtifact
       sourceKeys: [...skill.contextSourceKeys],
       modelConfig: input.aiConfig, provider: input.aiConfig?.provider,
       model: input.aiConfig?.model,
-      inputBudgetMaxTokens: 64_000,
     })
     const manifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId: config.stepId, attempt: 1, projectId: input.scope.projectId, worldGroupId: null, declaredSourceKeys: [...skill.contextSourceKeys], assembled, readerVersion: `${config.skillId}-context-v1` })
     snapshot = await append(input.scope, snapshot, 'context.assembled', { stepId: config.stepId, attempt: 1, manifestHash: manifest.manifestHash })
@@ -193,7 +210,7 @@ export async function generateShortNovelCandidateV1<K extends ShortNovelArtifact
     const result: ChatResult = {}
     let raw: string
     try {
-      raw = await (runAI ? runAI.call(callbackReceiver, messages) : chat(messages, input.aiConfig!, { category: config.category, projectId: input.scope.projectId, configOverrides: { maxTokens: requireFixedBudgetValueV1(skill.maxOutputTokens) }, contextOverflowPolicy: 'reject' }, input.signal, result))
+      raw = await (runAI ? runAI.call(callbackReceiver, messages) : chat(messages, input.aiConfig!, { category: config.category, projectId: input.scope.projectId, contextOverflowPolicy: 'reject' }, input.signal, result))
     } catch (error) {
       const failed = await recordUnavailableCreationResponseV1({ snapshot, request: prepared.request, result, error })
       try { snapshot = await append(input.scope, failed.snapshot, 'run.paused', { reason: `short-${input.artifactKind}-model-outcome-unknown`, recoverable: false }) }
