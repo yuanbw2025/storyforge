@@ -1,6 +1,7 @@
 import type { AgentToolJsonSchema, AgentToolJsonSchemaProperty } from './types'
 import { NARRATIVE_KINDS_V1 } from '../types/narrative-ir'
 import { NARRATIVE_INDEX_EDGE_KINDS_V1 } from '../types/narrative-index'
+import { WORLD_QUERY_LIMITS_V1 } from '../context-gateway/world-query-contract'
 
 const key: AgentToolJsonSchemaProperty = { type: 'string', minLength: 1, maxLength: 4000 }
 const keys: AgentToolJsonSchemaProperty = { type: 'array', items: key }
@@ -32,7 +33,9 @@ export const WORLD_QUERY_TOOL_SCHEMA_V1: AgentToolJsonSchema = {
     }, required: ['kinds', 'maxHops', 'maxNodes'], additionalProperties: false },
     causalDepth: { type: 'integer', minimum: 0, maximum: 3 },
     limit: { type: 'integer', minimum: 1, maximum: 20 },
-    maxTokens: { type: 'integer', minimum: 1024, maximum: 10000 },
+    // B20b: the ceiling is the provider contract's own token limit; the
+    // session policy still bounds every request (assertContextGatewayTokenRequestV1).
+    maxTokens: { type: 'integer', minimum: 1024, maximum: WORLD_QUERY_LIMITS_V1.maxTokens },
     cursor: { type: 'string', minLength: 1, maxLength: 8000 },
   },
 }
