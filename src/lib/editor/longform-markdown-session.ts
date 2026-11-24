@@ -1,7 +1,7 @@
 import type { Project, Work, WorkspaceScope } from '../types'
 import type { AuthoringDocumentIdentityV1, AuthoringPasteDraftV1 } from './authoring-document-adapter'
 import { AuthoringDocumentAdapterV1 } from './authoring-document-adapter'
-import { AuthoringMarkdownViewV1 } from './authoring-markdown-view'
+import { AuthoringMarkdownViewV1, type ToolbarSelectionProjectionV1, type ToolbarReplacementTargetV1 } from './authoring-markdown-view'
 import { isLongformMarkdownAdmissionV1 } from '../authoring/longform-markdown-admission'
 
 export type LongformMarkdownEditorModeV1 = 'richtext' | 'source' | 'preview'
@@ -66,6 +66,12 @@ export class LongformMarkdownSessionV1 {
   subscribeSelection(listener: () => void): () => void { return this.view.subscribeSelection(listener) }
   getSelectionSnapshot() { return this.view.getSelectionSnapshot() }
   getSelectionRect(): DOMRect | null { return this.view.getSelectionRect() }
+  /** 既有 FloatingToolbar 的 PM 坐标快照投影 + 本会话内部快照登记。 */
+  getToolbarSelectionV1(): ToolbarSelectionProjectionV1 { return this.view.getToolbarSelectionV1() }
+  /** 只按已登记 key 取回真实内部快照，再走 adapter 预演；不由 from/to 重建。 */
+  previewToolbarReplacementV1(target: ToolbarReplacementTargetV1, outputText: string): string | null {
+    return this.view.previewToolbarReplacementV1(target, outputText)
+  }
   commitExternalHtml(input: Parameters<AuthoringDocumentAdapterV1['commitExternalHtml']>[0]) { this.view.commitExternalHtml(input) }
   preparePaste(text: string, signal: AbortSignal): Promise<AuthoringPasteDraftV1> { return this.view.preparePaste(text, signal) }
   commitPaste(draft: AuthoringPasteDraftV1): void { this.view.commitPaste(draft) }

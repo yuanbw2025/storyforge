@@ -2,8 +2,15 @@ import { EditorState, StateEffect, StateField, type Range } from '@codemirror/st
 import { defaultKeymap, historyKeymap } from '@codemirror/commands'
 import { syntaxTree } from '@codemirror/language'
 import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, type DecorationSet, type ViewUpdate } from '@codemirror/view'
-import { AuthoringDocumentAdapterV1, type AuthoringPasteDraftV1 } from './authoring-document-adapter'
+import { AuthoringDocumentAdapterV1, type AuthoringPasteDraftV1, type AuthoringSelectionSnapshotV1 } from './authoring-document-adapter'
 import { parseAuthoringHtmlV1 } from './authoring-html-blocks'
+
+/** 投影给既有 FloatingToolbar 的选区快照（PM 坐标，不是 CM 源坐标）。 */
+export interface ToolbarSelectionProjectionV1 {
+  snapshot: { from: number; to: number; text: string; sourceHtml: string } | null
+  reason?: string
+}
+export interface ToolbarReplacementTargetV1 { from: number; to: number; text: string; sourceHtml: string }
 
 interface ProtectedViewV1 { from: number; to: number; key: number; hash: string; widget: ProtectedBlockWidgetV1 }
 class ProtectedBlockWidgetV1 extends WidgetType {
@@ -52,6 +59,8 @@ export class AuthoringMarkdownViewV1 {
   private compositionFrame = 0
   private destroyed = false
   private pasteAbort?: AbortController
+  /** 仅登记本会话由 mapSelection 签发的真实内部快照；key 用投影字段，禁止由 from/to 重建。 */
+  private toolbarSelections = new Map<string, AuthoringSelectionSnapshotV1>()
   private readonly readProtected: () => ProtectedViewV1[]
   private readonly protectedField: StateField<{ rows: readonly ProtectedViewV1[]; decorations: DecorationSet }>
 
@@ -256,8 +265,35 @@ export class AuthoringMarkdownViewV1 {
     if (!from || !to) return null
     return new DOMRect(Math.min(from.left, to.left), Math.min(from.top, to.top), Math.max(from.right, to.right) - Math.min(from.left, to.left), Math.max(from.bottom, to.bottom) - Math.min(from.top, to.top))
   }
+  /**
+   * 给既有 FloatingToolbar 的选区快照：内部走 adapter.mapSelection 得到 PM 坐标，
+   * 只投影 {from,to,text,sourceHtml}，绝不把 CM 源 pos 冒充 PM pos。同一份
+   * 真实 AuthoringSelectionSnapshotV1 暂存在本会话，供后续预演按 key 取回。
+   */
+  getToolbarSelectionV1(): ToolbarSelectionProjectionV1 {
+    this.assertLive()
+    const selection = this.view.state.selection
+    if (selection.ranges.length !== 1 || selection.main.empty) return { snapshot: null, reason: '请先选择可编辑的正文范围。' }
+    const mapped = this.adapter.mapSelection(selection.main.from, selection.main.to)
+    if (!mapped.ok) return { snapshot: null, reason: mapped.reason }
+    const { from, to, text, sourceHtml } = mapped.snapshot
+    const key = `${from}:${to}:${sourceHtml}:${text}`
+    if (this.toolbarSelections.size >= 32) this.toolbarSelections.clear()
+    this.toolbarSelections.set(key, mapped.snapshot)
+    return { snapshot: { from, to, text, sourceHtml } }
+  }
+
+  /** 只认本会话 mapSelection 登记过的内部快照；过期/保护块/语法边界由 adapter 返回 null。 */
+  previewToolbarReplacementV1(target: ToolbarReplacementTargetV1, outputText: string): string | null {
+    this.assertLive()
+    const key = `${target.from}:${target.to}:${target.sourceHtml}:${target.text}`
+    const snapshot = this.toolbarSelections.get(key)
+    if (!snapshot) return null
+    return this.adapter.previewReplacement(snapshot, outputText)
+  }
+
   destroy() {
     this.destroyed = true; cancelAnimationFrame(this.compositionFrame); this.pasteAbort?.abort()
-    this.listeners.clear(); this.widgets.clear(); this.view.destroy(); this.adapter.detachViewExtensions()
+    this.listeners.clear(); this.widgets.clear(); this.toolbarSelections.clear(); this.view.destroy(); this.adapter.detachViewExtensions()
   }
 }
