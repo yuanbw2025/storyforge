@@ -1,5 +1,6 @@
 import { requireFixedBudgetValueV1 } from '../finite-budget'
-import { chat } from '../../ai/client'
+import { chat, resolveRequestConfig } from '../../ai/client'
+import { evidencedInputBudgetV1, prepareModelCapacityV1 } from '../../ai/model-capacity'
 import {
   buildWorldExpandPromptFromRegisteredContextV1,
   parseWorldExpandOutputStrictV1,
@@ -199,10 +200,41 @@ function manualDraft(group: WorldGroup & { id: number }): string {
   ].join('\n')
 }
 
+/** B34：装配输入预算跟随绑定连接的已证实容量（预留本阶段输出），固定值仅作
+ * 未知/保守容量下限；绝不无限、也不删除完整性门。 */
+export const WORLDVIEW_EXPAND_DEFAULT_INPUT_TOKENS_V1 = 32_000
+
+export async function worldviewExpandInputBudgetV1(input: {
+  aiConfig?: AIConfig
+  projectId: number
+  outputReservation: number
+}): Promise<number> {
+  if (!input.aiConfig) return WORLDVIEW_EXPAND_DEFAULT_INPUT_TOKENS_V1
+  try {
+    const resolved = resolveRequestConfig(input.aiConfig, {
+      category: 'world-origin.worldview-expand', projectId: input.projectId,
+    }).config
+    const prepared = await prepareModelCapacityV1(resolved)
+    const value = evidencedInputBudgetV1({ config: prepared, outputReservation: input.outputReservation })
+    if (value != null) return Math.max(WORLDVIEW_EXPAND_DEFAULT_INPUT_TOKENS_V1, value)
+  } catch {
+    // 容量未证实（离线/未知模型）时退回缺省下限。
+  }
+  return WORLDVIEW_EXPAND_DEFAULT_INPUT_TOKENS_V1
+}
+
+/** 恢复/stale 重核使用冻结合同的预算，保证与生成时冻结值一致。 */
+export function frozenWorldviewExpandInputBudgetV1(snapshot: AgentRunSnapshotV1): number {
+  const value = (snapshot as unknown as { contract?: { budget?: { maxInputTokens?: unknown } } }).contract?.budget?.maxInputTokens
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+    ? value : WORLDVIEW_EXPAND_DEFAULT_INPUT_TOKENS_V1
+}
+
 async function assembleWorldviewExpandContext(
   scope: WorkspaceScope,
   group: WorldGroup & { id: number },
   sourceKeys: readonly string[] = WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS_V1,
+  inputBudgetTokens: number = WORLDVIEW_EXPAND_DEFAULT_INPUT_TOKENS_V1,
 ) {
   const assembled = await assembleContext({
     projectId: scope.projectId,
@@ -210,7 +242,7 @@ async function assembleWorldviewExpandContext(
     worldGroupId: group.id,
     sourceKeys: [...sourceKeys],
     manualSourceText: manualDraft(group),
-    inputBudgetTokens: 32_000,
+    inputBudgetTokens,
   })
   const requiredFullSources = ['manualText', 'worldview', 'worldRules']
   if (requiredFullSources.some(key => assembled.trimmed.includes(key) || assembled.sourceEvidence?.some(source => source.key === key && source.delivery === 'truncated'))) {
@@ -232,7 +264,7 @@ async function promptEvidence(contextText: string) {
   }
 }
 
-function contract(scope: WorkspaceScope, group: WorldGroup & { id: number }) {
+function contract(scope: WorkspaceScope, group: WorldGroup & { id: number }, inputBudgetTokens: number) {
   const skill = getAgentSkillV1('world-origin.worldview-expand', 'world-origin')
   return {
     version: 1 as const,
@@ -251,7 +283,7 @@ function contract(scope: WorkspaceScope, group: WorldGroup & { id: number }) {
     budget: {
       maxModelCalls: 1,
       maxToolCalls: 0,
-      maxInputTokens: 32_000,
+      maxInputTokens: inputBudgetTokens,
       maxOutputTokens: requireFixedBudgetValueV1(skill.maxOutputTokens),
       maxAttemptsPerStep: 1,
       maxProtocolErrors: 0,
@@ -360,12 +392,16 @@ function assertCandidateTarget(
   ) throw new Error('世界扩写候选与当前 World、Work 或世界组不匹配。')
 }
 
-async function currentEvidence(scope: WorkspaceScope, candidate: WorldviewExpandCandidateV1) {
+async function currentEvidence(
+  scope: WorkspaceScope,
+  candidate: WorldviewExpandCandidateV1,
+  inputBudgetTokens: number = WORLDVIEW_EXPAND_DEFAULT_INPUT_TOKENS_V1,
+) {
   const { group, worldview } = await readTarget(scope, candidate.worldGroupId)
   const groupSnapshot = worldGroupSnapshot(group)
   const viewSnapshot = worldviewSnapshot(worldview)
-  const full = await assembleWorldviewExpandContext(scope, group)
-  const external = await assembleWorldviewExpandContext(scope, group, ['manualText', 'worldGroups', 'storyCore'])
+  const full = await assembleWorldviewExpandContext(scope, group, WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS_V1, inputBudgetTokens)
+  const external = await assembleWorldviewExpandContext(scope, group, ['manualText', 'worldGroups', 'storyCore'], inputBudgetTokens)
   const prompt = await promptEvidence(full.text)
   const nonTargetFresh = await hashCanonicalValue(nonTargetWorldviewFields(viewSnapshot)) === candidate.worldviewNonTargetHash
   const recordIdentityFresh = candidate.worldviewRecordId == null
@@ -401,7 +437,7 @@ async function assertFreshBeforeWrite(
   snapshot: AgentRunSnapshotV1,
   candidate: WorldviewExpandCandidateV1,
 ): Promise<AgentRunSnapshotV1> {
-  const evidence = await currentEvidence(scope, candidate)
+  const evidence = await currentEvidence(scope, candidate, frozenWorldviewExpandInputBudgetV1(snapshot))
   if (
     evidence.groupFresh
     && evidence.baselineFresh
@@ -433,16 +469,21 @@ export async function generateWorldviewExpandCandidateV1(input: {
 }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: WorldviewExpandCandidateV1 }> {
   if (!input.runAI && !input.aiConfig) throw new Error('世界扩写生成缺少 AI 配置。')
   const { group, worldview } = await readTarget(input.scope, input.worldGroupId)
+  const inputBudgetTokens = await worldviewExpandInputBudgetV1({
+    aiConfig: input.aiConfig,
+    projectId: input.scope.projectId,
+    outputReservation: requireFixedBudgetValueV1(getAgentSkillV1('world-origin.worldview-expand', 'world-origin').maxOutputTokens),
+  })
   let snapshot = await createAgentRunV1({
     scope: input.scope,
     worldGroupId: input.worldGroupId,
-    contract: contract(input.scope, group),
+    contract: contract(input.scope, group, inputBudgetTokens),
   })
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: WORLDVIEW_EXPAND_STEP_ID_V1 })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: WORLDVIEW_EXPAND_STEP_ID_V1, attempt: 1 })
 
-  const assembled = await assembleWorldviewExpandContext(input.scope, group)
-  const external = await assembleWorldviewExpandContext(input.scope, group, ['manualText', 'worldGroups', 'storyCore'])
+  const assembled = await assembleWorldviewExpandContext(input.scope, group, WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS_V1, inputBudgetTokens)
+  const external = await assembleWorldviewExpandContext(input.scope, group, ['manualText', 'worldGroups', 'storyCore'], inputBudgetTokens)
   const manifest = await createContextManifestFromAssemblyV1({
     runId: snapshot.run.id,
     stepId: WORLDVIEW_EXPAND_STEP_ID_V1,
@@ -684,7 +725,7 @@ export async function adoptWorldviewExpandCandidateV1(input: {
   let intent = state.intent
   assertCandidateTarget(input.scope, input.worldGroupId, snapshot, candidate)
 
-  let evidence = await currentEvidence(input.scope, candidate)
+  let evidence = await currentEvidence(input.scope, candidate, frozenWorldviewExpandInputBudgetV1(snapshot))
   if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash && intent) {
     if (!evidence.expectedMatches || !evidence.groupFresh || !evidence.externalFresh || !evidence.templateFresh) {
       snapshot = await staleAgentRunVerificationV1({
@@ -734,11 +775,11 @@ export async function adoptWorldviewExpandCandidateV1(input: {
 
   let adoptionHash = snapshot.projection.steps[WORLDVIEW_EXPAND_STEP_ID_V1]?.adoptionHash
   if (!adoptionHash) {
-    evidence = await currentEvidence(input.scope, candidate)
+    evidence = await currentEvidence(input.scope, candidate, frozenWorldviewExpandInputBudgetV1(snapshot))
     if (!evidence.expectedMatches) {
       snapshot = await assertFreshBeforeWrite(input.scope, snapshot, candidate)
       await writeFormalValues(input.scope, candidate)
-      evidence = await currentEvidence(input.scope, candidate)
+      evidence = await currentEvidence(input.scope, candidate, frozenWorldviewExpandInputBudgetV1(snapshot))
     }
     if (!evidence.expectedMatches) {
       await pauseUnsafeRun(input.scope, snapshot, 'worldview-expand-formal-state-diverged')
@@ -758,7 +799,7 @@ export async function adoptWorldviewExpandCandidateV1(input: {
     await input.onDurableBoundary?.('adoption.committed', snapshot)
   }
 
-  evidence = await currentEvidence(input.scope, candidate)
+  evidence = await currentEvidence(input.scope, candidate, frozenWorldviewExpandInputBudgetV1(snapshot))
   if (!evidence.expectedMatches || !evidence.groupFresh || !evidence.externalFresh || !evidence.templateFresh) {
     await pauseUnsafeRun(input.scope, snapshot, 'worldview-expand-terminal-evidence-stale')
     throw new Error('正式写入后六字段、非目标字段或外部来源变化，本次回执不会通过终验。')
