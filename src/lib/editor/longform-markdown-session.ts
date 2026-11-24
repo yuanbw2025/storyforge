@@ -13,6 +13,8 @@ export interface LongformMarkdownSessionInputV1 {
   onHtmlChange: (html: string, plainText: string) => void
   onError: (error: Error) => void
   onRichText: () => void
+  /** 大段粘贴预览确认：视图在拦截粘贴时回传待确认草稿与取消句柄。 */
+  onLargePaste?: (pending: { text: string; cancel: () => void; draft: Promise<AuthoringPasteDraftV1> }) => void
   placeholder?: string
 }
 
@@ -34,6 +36,7 @@ export class LongformMarkdownSessionV1 {
       parent: input.parent,
       onError: input.onError,
       onRichText: input.onRichText,
+      onLargePaste: input.onLargePaste,
       placeholder: input.placeholder,
     })
   }
