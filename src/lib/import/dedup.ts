@@ -265,3 +265,67 @@ export function detectSameNameConflictsV1(input: SameNameConflictInputV1): SameN
 
   return items
 }
+
+// ── 5. Codex 词条候选同名汇总（032-L1-d-CODEX：只读提示，不改 adopt 语义） ──
+
+/** 与 applyCodexImportCandidates 的合并口径一致：同名已有词条只补空字段。 */
+export const CODEX_SAME_NAME_RULE_V1 = '同名已有词条只补空字段，不覆盖作者的非空内容；异名词条一律保留不动。'
+
+/** 与 codex-classification 的 normalizeName 同口径（NFKC + 去空白 + 小写）。 */
+function normalizeCodexNameV1(value: string): string {
+  return value.normalize('NFKC').replace(/\s+/g, '').toLowerCase()
+}
+
+export interface CodexSameNameConflictInputV1 {
+  /** 目标世界真实词条行（含 categoryId 与 worldGroupId），来自 readOwnedRows(scope,'codexEntries')。 */
+  existingEntries: ReadonlyArray<{ id?: number; categoryId: number; name: string; worldGroupId?: number | null }>
+  /** 本次待导入候选：categoryRef 必须已解析到具体分类 id，未解析的（null）按跳过处理。 */
+  incomingCandidates: ReadonlyArray<{ categoryRef: string; categoryId: number | null; name: string }>
+  /** 目标世界组；与既有写入口径 (entry.worldGroupId ?? null) === worldGroupId 对齐。 */
+  worldGroupId: number | null
+}
+
+export interface CodexSameNameConflictItemV1 {
+  kind: 'codex'
+  /** 候选原始 categoryRef（builtin:<key> 或 custom:<domain>:<token>），仅用于展示。 */
+  categoryRef: string
+  categoryId: number
+  incomingName: string
+  existingId?: number
+  existingName: string
+  hint: string
+}
+
+/**
+ * 纯检测：在同分类 + 同世界组内比较候选名与既有词条名。
+ *
+ * 匹配规则与 applyCodexImportCandidates 完全一致（同 categoryId、同 worldGroupId、
+ * normalizeName 相等）；不做任何 DB/adopt/写入动作。categoryId 为 null 的引用
+ * （builtin/custom 无法解析到当前目录）直接跳过，不误报。
+ */
+export function detectCodexSameNameConflictsV1(input: CodexSameNameConflictInputV1): CodexSameNameConflictItemV1[] {
+  const items: CodexSameNameConflictItemV1[] = []
+  if (!input.incomingCandidates.length) return items
+  const byCategory = new Map<number, Array<{ id?: number; name: string }>>()
+  for (const entry of input.existingEntries) {
+    if ((entry.worldGroupId ?? null) !== input.worldGroupId) continue
+    const bucket = byCategory.get(entry.categoryId)
+    if (bucket) bucket.push({ id: entry.id, name: entry.name })
+    else byCategory.set(entry.categoryId, [{ id: entry.id, name: entry.name }])
+  }
+  for (const candidate of input.incomingCandidates) {
+    const name = typeof candidate.name === 'string' ? candidate.name.trim() : ''
+    if (!name || candidate.categoryId == null) continue
+    const bucket = byCategory.get(candidate.categoryId)
+    if (!bucket) continue
+    const target = normalizeCodexNameV1(name)
+    const existing = bucket.find(entry => normalizeCodexNameV1(entry.name) === target)
+    if (!existing) continue
+    items.push({
+      kind: 'codex', categoryRef: candidate.categoryRef, categoryId: candidate.categoryId,
+      incomingName: name, existingId: existing.id, existingName: existing.name,
+      hint: CODEX_SAME_NAME_RULE_V1,
+    })
+  }
+  return items
+}
