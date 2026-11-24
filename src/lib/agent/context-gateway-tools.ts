@@ -28,7 +28,7 @@ import type {
 import { CONTEXT_RESOURCE_KINDS_V1 } from '../registry/types'
 import { CONTEXT_SOURCES } from '../registry/context-sources'
 import { authorWorldQueryV1 } from '../context-gateway/world-query-client'
-import { parseWorldQueryV1 } from '../context-gateway/world-query-contract'
+import { parseWorldQueryV1, WORLD_QUERY_LIMITS_V1 } from '../context-gateway/world-query-contract'
 import { WORLD_QUERY_TOOL_SCHEMA_V1 } from './world-query-tool-schema'
 import type {
   AgentToolDefinition,
@@ -495,7 +495,12 @@ async function executeWorldQuery(context: AgentToolExecutionContext, raw: Record
     claimContextGatewayReadCallV1(session)
     const binding = session.providers.find(item => item.source.key === 'worldRelease')
     if (!binding?.provider.queryWorldMetadata) throw new Error('已绑定 Provider 不支持叙事查询')
-    const maxTokens = integer(raw.maxTokens ?? Math.min(10000, session.policy.maxRetrievedTokens - session.usage.retrievedTokens), 'maxTokens', 1024, 10000)
+    // B20b: the per-call read budget follows this task's Gateway policy instead
+    // of a fixed 10k application cap. The default is the remaining policy budget;
+    // the ceiling is the provider contract's own limit. The policy assertion below
+    // still rejects any request beyond what remains for this task.
+    const remainingReadBudget = Math.max(0, session.policy.maxRetrievedTokens - session.usage.retrievedTokens)
+    const maxTokens = integer(raw.maxTokens ?? Math.min(WORLD_QUERY_LIMITS_V1.maxTokens, remainingReadBudget), 'maxTokens', 1024, WORLD_QUERY_LIMITS_V1.maxTokens)
     assertContextGatewayTokenRequestV1(session, maxTokens)
     // Absent optional tool fields become explicit null only here; malformed
     // discriminated unions remain rejected by the canonical codec.

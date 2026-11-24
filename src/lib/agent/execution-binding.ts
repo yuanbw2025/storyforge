@@ -13,10 +13,17 @@ import type {
 import type { AssembleContextResult } from '../registry/types'
 
 export const AGENT_EXECUTION_BINDING_VERSION_V1 = 1 as const
-export const AGENT_TOOL_SCHEMA_VERSION_V1 = 'agent-read-tools-v23-positioning-preparation-v1' as const
+export const AGENT_TOOL_SCHEMA_VERSION_V1 = 'agent-read-tools-v24-task-policy-read-budget-v1' as const
 // Updated only together with AGENT_TOOL_SCHEMA_VERSION_V1 after the runtime
 // snapshot and regression evidence have been reviewed.
-export const AGENT_TOOL_SCHEMA_HASH_V1 = '928c30e82de8cb1dfe69540e9ddf140b190c2cd189c501bcaff6731a06550874'
+export const AGENT_TOOL_SCHEMA_HASH_V1 = 'd060ce66d51a5ab840694f826d12f4792c4815171e384a8fff0001524d6df5ab'
+/** Frozen (version, hash) pairs that already-saved runs bound. Old runs resume
+ * under their own recorded identity; new runs freeze the current pair. A pair
+ * outside this history is still rejected (no blanket relaxation). */
+export const AGENT_TOOL_SCHEMA_BINDING_HISTORY_V1: readonly { version: string; hash: string }[] = Object.freeze([
+  { version: AGENT_TOOL_SCHEMA_VERSION_V1, hash: AGENT_TOOL_SCHEMA_HASH_V1 },
+  { version: 'agent-read-tools-v23-positioning-preparation-v1', hash: '928c30e82de8cb1dfe69540e9ddf140b190c2cd189c501bcaff6731a06550874' },
+])
 
 export type AgentSkillDefinitionV2 = Omit<AgentSkillDefinitionV1, 'version'> & {
   version: 2
@@ -370,8 +377,9 @@ export function assertAgentSkillExecutionBindingV1(
     || binding.skillId !== skill.id
     || binding.skillVersion !== skill.version
     || binding.promptVersion !== skill.promptVersion
-    || binding.toolSchemaVersion !== AGENT_TOOL_SCHEMA_VERSION_V1
-    || binding.toolSchemaHash !== AGENT_TOOL_SCHEMA_HASH_V1
+    || !AGENT_TOOL_SCHEMA_BINDING_HISTORY_V1.some(pair => (
+      pair.version === binding.toolSchemaVersion && pair.hash === binding.toolSchemaHash
+    ))
   ) throw new Error(`${label} 与当前 Skill/Prompt/Tool 版本不一致`)
 }
 
