@@ -1660,8 +1660,14 @@ export async function prepareStoryArcCopilot(
       : await chat(messages, config, {
           category: routingCategory,
           projectId: input.projectId,
+          // B20a: only an explicit author limit caps the wire output; without
+          // one, dispatch follows the bound connection's evidenced capacity
+          // (the old fixed 10k application quota is gone). The team-budget
+          // reservation (runStoryArcCreativeReliabilityV1) stays a forecast.
           configOverrides: {
-            maxTokens: input.generationOverrides?.maxTokens ?? 10_000,
+            ...(input.generationOverrides?.maxTokens != null
+              ? { maxTokens: input.generationOverrides.maxTokens }
+              : {}),
             temperature: input.generationOverrides?.temperature ?? 0.55,
           },
           contextOverflowPolicy: 'reject',
@@ -1712,8 +1718,12 @@ export function createStoryArcCopilotNode(
   const runAI = dependencies.runAI ?? (messages => chat(messages, input.config, {
     category: input.routingCategory,
     projectId: input.projectId,
+    // B20a: same rule as the prepared runRaw path — explicit author limits
+    // only; no fixed 10k wire quota on direct node construction.
     configOverrides: {
-      maxTokens: input.generationOverrides?.maxTokens ?? 10_000,
+      ...(input.generationOverrides?.maxTokens != null
+        ? { maxTokens: input.generationOverrides.maxTokens }
+        : {}),
       temperature: input.generationOverrides?.temperature ?? 0.55,
     },
     contextOverflowPolicy: 'reject',
