@@ -3748,18 +3748,70 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         chapterId={currentChapter.id}
         worldGroupId={chapterWorldGroupId}
         aiConfig={aiConfig}
-        getSelectionSnapshot={() => editorRef.current?.getSelectionSnapshot() ?? null}
+        getSelectionSnapshot={() => {
+          // CM 激活时把 adapter.mapSelection 的 PM 坐标投影给既有 FloatingToolbar，
+          // 不把 CM 源 pos 塞给 durable；非 CM 路径逐字沿用原 editorRef。
+          const session = markdownCmActive ? markdownSessionRef.current : null
+          return session ? session.getToolbarSelectionV1().snapshot ?? null : editorRef.current?.getSelectionSnapshot() ?? null
+        }}
         getSelectionRect={() => {
+          const session = markdownCmActive ? markdownSessionRef.current : null
+          const cmRect = session?.getSelectionRect()
+          if (cmRect) return cmRect
           const sel = window.getSelection()
           if (!sel || sel.isCollapsed || !sel.rangeCount) return null
           return sel.getRangeAt(0).getBoundingClientRect()
         }}
-        getCurrentHtml={() => editorRef.current?.getHTML() ?? content}
-        previewRangeReplacement={(from, to, text) => (
-          editorRef.current?.previewRangeReplacement(from, to, text) ?? null
-        )}
+        getCurrentHtml={() => {
+          const session = markdownCmActive ? markdownSessionRef.current : null
+          return session ? session.getHtml() : editorRef.current?.getHTML() ?? content
+        }}
+        previewRangeReplacement={(from, to, text) => {
+          const session = markdownCmActive ? markdownSessionRef.current : null
+          if (session) return session.previewToolbarReplacementV1({ from, to, text, sourceHtml: session.getHtml() }, text) ?? null
+          return editorRef.current?.previewRangeReplacement(from, to, text) ?? null
+        }}
         persistBeforeGenerate={persistCurrentEditorContent}
         onContentAdopted={(html, demotedFacts) => {
+          const session = markdownCmActive ? markdownSessionRef.current : null
+          if (session) {
+            // AI 局部编辑的 adopt() 已由既有 durable 完成 CAS 写库；这里只核实已提交
+            // 章行并把结果经同一 adapter 刷新活动 CM 会话，不 setContent、不第二次写库。
+            void (async () => {
+              try {
+                const committed = await db.chapters.get(currentChapter.id!)
+                if (!committed || committed.projectId !== project.id || committed.content !== html) {
+                  setMarkdownError('已采纳正文与当前章节回执不符，Markdown 会话未刷新，作者草稿已保留。')
+                  return
+                }
+                const reread = await db.chapters.get(currentChapter.id!)
+                if (!reread || reread.content !== committed.content || reread.updatedAt !== committed.updatedAt) {
+                  setMarkdownError('章节回执在采纳期间又发生变化，Markdown 会话未刷新，作者草稿已保留。')
+                  return
+                }
+                if (session.getHtml() !== html) {
+                  session.commitExternalHtml({
+                    identity: session.adapter.identity,
+                    sourceRevision: session.getSourceRevision(),
+                    baselineEpoch: session.adapter.baselineEpoch,
+                    sourceHtml: session.getHtml(),
+                    html: committed.content,
+                    receiptId: `chapter-commit:${currentChapter.id!}:${committed.updatedAt}`,
+                    origin: 'external-adopt',
+                  })
+                }
+                setMarkdownError('')
+                setImpactInfo(demotedFacts > 0
+                  ? `局部编辑已写入；${demotedFacts} 条失去逐字证据的确认事实已标为待复核。`
+                  : '局部编辑已写入并通过正文终验。')
+              } catch (error) {
+                // 回执/版本/基线不符或组合输入中：adapter 抛错，作者未保存草稿原样保留。
+                setMarkdownError(error instanceof Error ? error.message : '外部采纳未能刷新 Markdown 会话，作者草稿已保留。')
+              }
+            })()
+            return
+          }
+          // 非 CM 路径逐字沿用原 editorRef.setContent 链。
           editorRef.current?.setContent(html)
           setContent(html)
           setPlainText(htmlToPlainText(html))
