@@ -1,5 +1,7 @@
 import { assertTextOpenWorldSessionNewWorkV1 } from './source-admission'
-import { chat, type ChatResult } from '../ai/client'
+import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
+import { evidencedInputBudgetV1, prepareModelCapacityV1 } from '../ai/model-capacity'
+import { requireFixedBudgetValueV1 } from '../agent/finite-budget'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { getAgentSkillV1, type AgentSkillId } from '../agent/skill-registry'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
@@ -94,13 +96,36 @@ function parseDraft(skillId: OpenWorldRuntimeSkillIdV1, output: string): OpenWor
   return { kind: source.kind as OpenWorldExpressionCandidateV1['kind'], instanceKey: source.instanceKey == null ? null : source.instanceKey.trim(), title: source.title.trim(), text: source.text.trim(), dialogue: source.dialogue.trim(), evidenceEventSequences, assertedReferences }
 }
 
-function contract(input: { objective: string; boundary: Awaited<ReturnType<typeof captureOpenWorldRuntimeHarnessBoundaryV1>>; skillId: OpenWorldRuntimeSkillIdV1; runtimeBindingHash: string }) {
+/** B39：开放世界运行时输入预算跟随已绑定连接的已证实容量（预留本 Skill 输出），
+ * 不再固定 16k 应用额度。注入 adapter（runAI）沿用缺省；未知/保守容量不低
+ * 于原参考，不放大作者上限；请求级装配/准入继续兜底。 */
+const OPEN_WORLD_RUNTIME_DEFAULT_INPUT_TOKENS_V1 = 16_000
+
+export async function openWorldRuntimeInputBudgetV1(input: {
+  aiConfig?: AIConfig
+  projectId: number
+  category: string
+  outputReservation: number
+}): Promise<number> {
+  if (!input.aiConfig) return OPEN_WORLD_RUNTIME_DEFAULT_INPUT_TOKENS_V1
+  try {
+    const resolved = resolveRequestConfig(input.aiConfig, { category: input.category, projectId: input.projectId }).config
+    const prepared = await prepareModelCapacityV1(resolved)
+    const value = evidencedInputBudgetV1({ config: prepared, outputReservation: input.outputReservation })
+    if (value != null) return Math.max(OPEN_WORLD_RUNTIME_DEFAULT_INPUT_TOKENS_V1, value)
+  } catch {
+    // 容量未证实（离线/未知模型）时退回缺省参考。
+  }
+  return OPEN_WORLD_RUNTIME_DEFAULT_INPUT_TOKENS_V1
+}
+
+function contract(input: { objective: string; boundary: Awaited<ReturnType<typeof captureOpenWorldRuntimeHarnessBoundaryV1>>; skillId: OpenWorldRuntimeSkillIdV1; runtimeBindingHash: string; inputBudgetTokens: number }) {
   const skill = getAgentSkillV1(input.skillId)
   return {
     version: 1 as const, objective: input.objective, workflowKind: 'direct-generation' as const, scope: input.boundary.scope,
     permissions: { contextSourceKeys: ['openWorldRuntime'], writeTargets: [] }, runtimeBindingHash: input.runtimeBindingHash,
     executionBindings: [{ stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(skill) }],
-    budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: 16_000, maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 1 },
+    budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: input.inputBudgetTokens, maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 1 },
     acceptance: [{ id: 'runtime.candidate', kind: 'output-present' as const, required: true }, { id: 'runtime.freshness', kind: 'deterministic-check' as const, required: true }, { id: 'runtime.read-only', kind: 'post-state-matches' as const, required: true }],
     verificationPlan: [{ id: 'runtime.terminal', kind: 'terminal' as const, verifier: OPEN_WORLD_RUNTIME_VERIFIER_SET_V1, criterionIds: ['runtime.candidate', 'runtime.freshness', 'runtime.read-only'] }],
     failurePolicy: { onProtocolError: 'fail' as const, onVerificationFailure: 'fail' as const, onStaleInput: 'pause-for-author' as const },
@@ -129,12 +154,17 @@ export async function generateOpenWorldRuntimeCandidateV1(input: {
   const boundary = await captureOpenWorldRuntimeHarnessBoundaryV1({ scope: input.scope, productRuntimeSessionId: input.productRuntimeSessionId })
   if (!input.runAI && !input.aiConfig) fail('缺少 AI 配置')
   const runtimeBindingHash = await hashCanonicalValue({ executionBinding: createAgentSkillExecutionBindingV1(skill), modelIdentity: input.runAI ? { provider: 'test-adapter', model: 'injected', transport: 'chat-v1' } : { provider: input.aiConfig?.provider, model: input.aiConfig?.model, transport: 'chat-v1' } })
-  let snapshot = await createAgentRunV1({ scope: input.scope, productRuntimeSessionId: input.productRuntimeSessionId, worldGroupId: boundary.scope.worldGroupId, contract: contract({ objective, boundary, skillId: input.skillId, runtimeBindingHash }) })
+  const runtimeInputBudget = await openWorldRuntimeInputBudgetV1({
+    aiConfig: input.aiConfig, projectId: input.scope.projectId,
+    category: `runtime.${input.skillId}`,
+    outputReservation: requireFixedBudgetValueV1(skill.maxOutputTokens),
+  })
+  let snapshot = await createAgentRunV1({ scope: input.scope, productRuntimeSessionId: input.productRuntimeSessionId, worldGroupId: boundary.scope.worldGroupId, contract: contract({ objective, boundary, skillId: input.skillId, runtimeBindingHash, inputBudgetTokens: runtimeInputBudget }) })
   await input.onRunCreated?.(snapshot.run.id)
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1 })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1, attempt: 1 })
   try {
-    const assembled = await assembleContext({ projectId: input.scope.projectId, scope: input.scope, worldGroupId: boundary.scope.worldGroupId, productRuntimeSessionId: input.productRuntimeSessionId, sourceKeys: ['openWorldRuntime'], modelConfig: input.aiConfig, provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 16_000 })
+    const assembled = await assembleContext({ projectId: input.scope.projectId, scope: input.scope, worldGroupId: boundary.scope.worldGroupId, productRuntimeSessionId: input.productRuntimeSessionId, sourceKeys: ['openWorldRuntime'], modelConfig: input.aiConfig, provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: runtimeInputBudget })
     if (!assembled.included.includes('openWorldRuntime')) fail('开放世界运行时上下文为空')
     await assertOpenWorldRuntimeHarnessFreshV1({ scope: input.scope, contractScope: snapshot.contract.scope })
     const contextManifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1, attempt: 1, projectId: input.scope.projectId, worldGroupId: boundary.scope.worldGroupId, declaredSourceKeys: ['openWorldRuntime'], assembled, readerVersion: 'text-open-world-player-view-v1' })
