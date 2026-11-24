@@ -892,7 +892,14 @@ export async function createMasterAgentPlan(input: {
       : await chat(messages, config, {
           category: 'agent.orchestrator',
           projectId: input.projectId,
-          configOverrides: { maxTokens: maxOutputTokens, temperature: input.freeDiscussion ? config.temperature : 0.2 },
+          // B10d：整卷/全书计划可能要枚举大量逐章任务，任务规划调用的 wire 输出
+          // 不再注入固定 1,800 配额（旧配额会在长计划上截断并退回确定性小计划，
+          // 形成事实上的章数上限）；按连接配置执行——作者显式上限优先，否则按
+          // 已核实模型容量自动取值。自由讨论保持其专用应答上限。
+          configOverrides: {
+            ...(input.freeDiscussion ? { maxTokens: maxOutputTokens } : {}),
+            temperature: input.freeDiscussion ? config.temperature : 0.2,
+          },
           contextOverflowPolicy: 'reject',
         }, input.signal)
     if (reservation) {
@@ -1000,7 +1007,9 @@ dependsOn，不能新增、删除或改名任务，不能改变 agentId、skillI
       : await chat(messages, config, {
           category: 'agent.orchestrator.replan',
           projectId: input.projectId,
-          configOverrides: { maxTokens: 1200, temperature: 0.1 },
+          // B10d：整卷/全书运行失败时受影响下游任务可能很多，重规划补丁不再
+          // 受固定 1,200 输出配额截断；按连接配置执行，预留仍是会计预测。
+          configOverrides: { temperature: 0.1 },
           contextOverflowPolicy: 'reject',
         }, input.signal)
     input.budget.settleCall(reservation, output)
