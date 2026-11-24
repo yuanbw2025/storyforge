@@ -57,11 +57,13 @@ function snapshot(overrides: Partial<TtrpgOpenIntentRoutingSnapshotV1> = {}): Tt
 }
 
 describe('R-TTRPGOPEN4 intent route', () => {
-  it('parses a closed intent and rejects unknown fields and oversized text', () => {
+  it('parses a closed intent with complete long content and still rejects unknown fields/invalid shapes', () => {
     const value = intent()
     expect(parseTtrpgOpenIntentV1(value)).toEqual(value)
     expect(() => parseTtrpgOpenIntentV1({ ...value, extra: true })).toThrow(/字段不精确/)
-    expect(() => parseTtrpgOpenIntentV1({ ...value, goal: 'x'.repeat(2_001) })).toThrow(/过长/)
+    // B35/B39：goal 等叙事内容不再有 2_000 字固定帽，完整长文可解析并往返。
+    const longValue = { ...value, goal: 'x'.repeat(2_001) }
+    expect(parseTtrpgOpenIntentV1(longValue)).toEqual(longValue)
     expect(() => parseTtrpgOpenIntentV1({ ...value, inputRevision: 'not-a-hash' })).toThrow(/hash/)
     expect(() => parseTtrpgOpenIntentV1({ ...value, source: 'companion:bad key' })).toThrow(/稳定 key/)
   })
